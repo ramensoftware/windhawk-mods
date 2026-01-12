@@ -4423,11 +4423,11 @@ void Wh_ModUninit()
 
     g_hookedInputSiteProcs.clear();
 
-    // TODO: move this to separate method and probably remove subclassing message from taskbar hook
     if (g_hTaskSwitchingWnd && g_isTaskSwitchingWindowSubclassed && IsWindow(g_hTaskSwitchingWnd))
     {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc);
         g_hTaskSwitchingWnd = NULL;
+        g_isTaskSwitchingWindowSubclassed = false;
     }
 }
 
