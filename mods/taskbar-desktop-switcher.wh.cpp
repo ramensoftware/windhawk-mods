@@ -4,7 +4,7 @@
 // @description     Modern, customizable desktop buttons with hover effects
 // @version         1.0
 // @author          Frqme
-// @github          Frqmelikescheese
+// @github         https://github.com/Frqmelikescheese
 // @include         explorer.exe
 // @compilerOptions -luser32 -lgdi32 -ldwmapi
 // ==/WindhawkMod==
