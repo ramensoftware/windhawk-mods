@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.7.0
+// @version         1.7.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -50,8 +50,8 @@ Restart explorer.exe to change the background color.⚠️
 * ⚠️The background effects do not affect most modern windows (UWP/WinUI), 
 apps with different front-end rendering (e.g Qt, Electron, Chromium etc.. programs) and native windows with hardcoded colors.⚠️
 
-⚠️In case parts of Windows UI colors remain modified after disabling the mod, 
-delete the HKEY_CURRENT_USER\Control Panel\Colors registry key and reboot.⚠️
+* ⚠️If parts of the Windows UI colors remain modified after disabling the modification, this is happening when new system colors are applied in a selected Windows custom theme.
+Changing the theme to the default and vice versa fixes the problem. As a last resort, you can delete the registry key HKEY_CURRENT_USER\Control Panel\Colors and reboot.⚠️
 
 * ❕The blur effect may show a bleeding effect at the edges of a window when maximized or snapped to the edge of the screen. 
 This is caused by default by the AccentBlur API.❕
@@ -330,8 +330,8 @@ static constexpr UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
 
 static constexpr UINT DEFAULT = 0; // DWMWCP_DEFAULT
 static constexpr UINT DONTROUND = 1; // DWMWCP_DONOTROUND
-static constexpr UINT ROUND = 2; // DWMWCP_ROUND
-static constexpr UINT SMALLROUND = 3; // DWMWCP_ROUNDSMALL
+//static constexpr UINT ROUND = 2; // DWMWCP_ROUND
+//static constexpr UINT SMALLROUND = 3; // DWMWCP_ROUNDSMALL
 
 // Get DPI value from the primary monitor without dependance to DPI-aware API
 // TODO: Get DPI per window monitor
@@ -350,7 +350,18 @@ UINT g_msgRainbowTimer = RegisterWindowMessage(L"Rainbow_effect");
 
 enum {
     RAINBOW_LOAD,
-    RAINBOW_UNLOAD
+    RAINBOW_UNLOAD,
+    RAINBOW_PAUSED,
+    RAINBOW_RESTART
+};
+
+struct RainbowData {
+    DOUBLE initialHue = 0.0;
+    DOUBLE baseTime = 0.0;        // when timer first started
+    DOUBLE pausedTotal = 0.0;     // accumulated paused duration
+    DOUBLE pausedStart = 0.0;     // when current pause began
+    BOOL isPaused = FALSE;
+    UINT_PTR timerId = 0;
 };
 
 std::wstring g_RainbowPropStr = L"Windhawk_TranslucentMod_Rainbow";
@@ -422,8 +433,8 @@ struct Settings{
 
     enum CORNERTYPE
     {
-        DefaultRounded,
-        NotRounded,
+        NotRounded = 1,
+        DefaultRounded = 2,
         SmallRounded = 3
     } CornerPref = DefaultRounded;
 
@@ -607,6 +618,30 @@ BOOL IsWindowEligible(HWND hWnd)
     return TRUE;
 }
 
+BOOL IsWindowMaximizedOrFullscreen(HWND hWnd)
+{
+    WINDOWPLACEMENT wp{.length = sizeof(WINDOWPLACEMENT)};
+
+    if (GetWindowPlacement(hWnd, &wp) && wp.showCmd == SW_SHOWMAXIMIZED)
+        return TRUE;
+
+    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMon)
+        return FALSE;
+
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfoW(hMon, &mi);
+
+    RECT windowRect{};
+    DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
+                          sizeof(windowRect));
+
+    if (EqualRect(&windowRect, &mi.rcMonitor))
+        return TRUE;
+
+    return FALSE;
+}
+
 enum AccentColorShade
 {
     SystemAccentColorLight3,
@@ -639,7 +674,7 @@ BOOL AccentPalette::LoadAccentPalette()
 
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kAccentRegPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
-        return false;
+        return FALSE;
 
     BYTE data[32] = {};
     DWORD dataSize = sizeof(data);
@@ -648,17 +683,90 @@ BOOL AccentPalette::LoadAccentPalette()
     if (RegQueryValueExW(hKey, kAccentPaletteValue, nullptr, &type, data, &dataSize) != ERROR_SUCCESS || type != REG_BINARY || dataSize < AccentColorCount * 4)
     {
         RegCloseKey(hKey);
-        return false;
+        return FALSE;
     }
 
     RegCloseKey(hKey);
 
-    for (int i = 0; i < AccentColorCount; ++i)
+    for (INT i = 0; i < AccentColorCount; ++i)
     {
         DWORD color = *reinterpret_cast<DWORD*>(&data[i * 4]);
         Colors[i] = color;
     }
-    return true;
+    return TRUE;
+}
+
+struct HSL
+{
+    DOUBLE h; // Hue:        0–360
+    DOUBLE s; // Saturation: 0–1
+    DOUBLE l; // Lightness:  0–1
+};
+
+static HSL RGBToHSL(COLORREF color)
+{
+    DOUBLE r = GetRValue(color) / 255.0;
+    DOUBLE g = GetGValue(color) / 255.0;
+    DOUBLE b = GetBValue(color) / 255.0;
+
+    DOUBLE maxc = std::max({ r, g, b });
+    DOUBLE minc = std::min({ r, g, b });
+    DOUBLE delta = maxc - minc;
+
+    HSL hsl{};
+    hsl.l = (maxc + minc) * 0.5;
+
+    if (delta == 0.0)
+    {
+        // Gray (no saturation)
+        hsl.h = 0.0;
+        hsl.s = 0.0;
+    }
+    else
+    {
+        // Saturation
+        hsl.s = (hsl.l > 0.5)
+            ? delta / (2.0 - maxc - minc)
+            : delta / (maxc + minc);
+
+        // Hue
+        if (maxc == r)
+            hsl.h = (g - b) / delta + (g < b ? 6.0 : 0.0);
+        else if (maxc == g)
+            hsl.h = (b - r) / delta + 2.0;
+        else
+            hsl.h = (r - g) / delta + 4.0;
+
+        hsl.h *= 60.0;
+    }
+
+    return hsl;
+}
+
+static COLORREF HSLToRGB(FLOAT h, FLOAT s, FLOAT l) {
+    FLOAT c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
+    FLOAT x = c * (1.0f - fabs(fmod(h / 60.0f, 2.0f) - 1.0f));
+    FLOAT m = l - c / 2.0f;
+
+    FLOAT r_prime, g_prime, b_prime;
+    if (0.0f <= h && h < 60.0f) {
+        r_prime = c; g_prime = x; b_prime = 0.0f;
+    } else if (60.0f <= h && h < 120.0f) {
+        r_prime = x; g_prime = c; b_prime = 0.0f;
+    } else if (120.0f <= h && h < 180.0f) {
+        r_prime = 0.0f; g_prime = c; b_prime = x;
+    } else if (180.0f <= h && h < 240.0f) {
+        r_prime = 0.0f; g_prime = x; b_prime = c;
+    } else if (240.0f <= h && h < 300.0f) {
+        r_prime = x; g_prime = 0.0f; b_prime = c;
+    } else {
+        r_prime = c; g_prime = 0.0f; b_prime = x;
+    }
+
+    BYTE r = static_cast<BYTE>((r_prime + m) * 255.0f);
+    BYTE g = static_cast<BYTE>((g_prime + m) * 255.0f);
+    BYTE b = static_cast<BYTE>((b_prime + m) * 255.0f);
+    return RGB(r, g, b);
 }
 
 BOOL GetAccentColor(COLORREF& outColor)
@@ -759,18 +867,11 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
                 COLORREF Transparent = DWMWA_COLOR_NONE;
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &Transparent, sizeof(COLORREF));
             }
-            else
+            else if (g_settings.BorderActiveColor != DWMWA_COLOR_DEFAULT)
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
         }
         else if (dwAttribute == DWMWA_WINDOW_CORNER_PREFERENCE && g_settings.BgType != g_settings.Default)
-        {
-            if (g_settings.CornerPref == g_settings.NotRounded)
-                return DwmSetWindowAttribute_orig(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DONTROUND , sizeof(UINT));
-            else if (g_settings.CornerPref == g_settings.DefaultRounded)
-                return DwmSetWindowAttribute_orig(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &ROUND , sizeof(UINT));
-            else if (g_settings.CornerPref == g_settings.SmallRounded)
-                return DwmSetWindowAttribute_orig(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &SMALLROUND , sizeof(UINT));
-        }
+            return DwmSetWindowAttribute_orig(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &g_settings.CornerPref , sizeof(UINT));
     }
             
     if(!IsWindowEligible(hWnd))
@@ -861,6 +962,7 @@ std::wstring GetThemeClass(HTHEME hTheme)
     return ret;
 }
 
+
 // Fix Alpha of DrawTextW
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L859
 INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, UINT format) 
@@ -878,7 +980,9 @@ INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, 
     bpParam.pBlendFunction = &bf;
     
     HDC hDC = nullptr;
-    HPAINTBUFFER pbuffer = BeginBufferedPaint(hdc, lprc, BPBF_TOPDOWNDIB, &bpParam, &hDC);
+    RECT PaintRect = *lprc;
+    InflateRect(&PaintRect, 2, 0);
+    HPAINTBUFFER pbuffer = BeginBufferedPaint(hdc, &PaintRect, BPBF_TOPDOWNDIB, &bpParam, &hDC);
     if (pbuffer && hDC)
     {
         g_DrawTextWithGlowEntry = TRUE;
@@ -888,10 +992,22 @@ INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, 
         SetBkColor(hDC, GetBkColor(hdc));
         SetTextAlign(hDC, GetTextAlign(hdc));
         SetTextCharacterExtra(hDC, GetTextCharacterExtra(hdc));
-        //SetTextColor(hDC, GetTextColor(hdc));
+        SetMapMode(hDC, GetMapMode(hdc));
+
+        COLORREF color = GetTextColor(hdc);
+        COLORREF GlowColor = 0xFFFFFFFF;
+        INT GlowIntesity = 32;
+        INT GlowRadius = 2;
+        INT UnknownGlowParam = 255;
+        HSL txtHsl = RGBToHSL(color);
+        if (txtHsl.l >= 0.35) {
+            GlowColor = 0xFF000000;
+            if (txtHsl.l <= 0.8 && txtHsl.s <= 0.5)
+                GlowIntesity = 16;
+        }
 
         hr = DrawTextWithGlow(hDC, lpchText, cchText, lprc, format,
-        GetTextColor(hdc), 0, 0, 0, 0,
+        color, GlowColor, GlowRadius, GlowIntesity, UnknownGlowParam,
         [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI
         {
             return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
@@ -905,7 +1021,7 @@ INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, 
     return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
 }
 
-BOOL WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp)
+BOOL WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp)
 {
     if (!lpdtp && !(format & DT_CALCRECT) && !g_DrawTextWithGlowEntry) {
 
@@ -926,7 +1042,13 @@ BOOL WINAPI HookedExtTextOutW(
     const INT* lpDx)
 {
     if (!hdc || (!lpString && options != ETO_OPAQUE) || g_DrawTextWithGlowEntry)
-        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);  
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    
+    if (options == (ETO_CLIPPED | ETO_OPAQUE) && lprect) {
+        RECT rect = *lprect;
+        auto ret = HookedDrawTextW(hdc, lpString, c, &rect, DT_LEFT | DT_TOP | DT_SINGLELINE);
+        return (ret) ? TRUE : FALSE;
+    }
 
     RECT textRect {0};
     SIZE textSize = {0};
@@ -1095,7 +1217,10 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iS
         bpParam.pBlendFunction = &bf;
         
         HDC hDC = nullptr;
-        HPAINTBUFFER pbuffer = BeginBufferedPaint(hdc, pRect, BPBF_TOPDOWNDIB, &bpParam, &hDC);
+        // Fit glow into text rectangle
+        RECT PaintRect = *pRect;
+        InflateRect(&PaintRect, 2, 0);
+        HPAINTBUFFER pbuffer = BeginBufferedPaint(hdc, &PaintRect, BPBF_TOPDOWNDIB, &bpParam, &hDC);
         if (pbuffer && hDC)
         {
             g_DrawTextWithGlowEntry = TRUE;
@@ -1109,9 +1234,23 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iS
 
             COLORREF color = pOptions->crText;
             GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &color);
+         
+            COLORREF GlowColor = 0xFFFFFFFF;
+            INT GlowIntesity = 32;
+            INT GlowRadius = 2;
+            INT UnknownGlowParam = 255;
+            HSL txtHsl = RGBToHSL(color);
+            if (txtHsl.l >= 0.35) {
+                GlowColor = 0xFF000000;
+                if (txtHsl.l <= 0.8 && txtHsl.s <= 0.5)
+                    GlowIntesity = 16;
+            }
+    
+            // Move the text so the glow doesn't get cut off
+            OffsetRect(pRect, 1, 0);
 
             hr = DrawTextWithGlow(hDC, pszText, cchText, pRect, dwTextFlags,
-                color, 0, 0, 0, 0, pOptions->pfnDrawTextCallback, pOptions->lParam);
+            color, GlowColor, GlowRadius, GlowIntesity, UnknownGlowParam, pOptions->pfnDrawTextCallback, pOptions->lParam);
 
             EndBufferedPaint(pbuffer, TRUE);
             g_DrawTextWithGlowEntry = FALSE;
@@ -1238,7 +1377,7 @@ VOID RevertSysColors()
     g_hTheme = nullptr;
 }
 
-static COLORREF GetCustomSysColor(int nIndex) 
+static COLORREF GetCustomSysColor(INT nIndex) 
 {
     if (nIndex == COLOR_SCROLLBAR || nIndex == COLOR_BACKGROUND || nIndex == COLOR_MENU ||
         nIndex == COLOR_WINDOW || nIndex == COLOR_INACTIVEBORDER || nIndex == COLOR_INFOBK ||
@@ -1277,11 +1416,11 @@ static COLORREF GetCustomSysColor(int nIndex)
     return GetSysColor_orig(nIndex);
 }
 
-COLORREF WINAPI HookedGetSysColor(int nIndex) {    
+COLORREF WINAPI HookedGetSysColor(INT nIndex) {    
     return GetCustomSysColor(nIndex);
 }
 
-HBRUSH WINAPI HookedGetSysColorBrush(int nIndex) {
+HBRUSH WINAPI HookedGetSysColorBrush(INT nIndex) {
     COLORREF color = GetCustomSysColor(nIndex);
     if (!g_cachedSysColorBrushes[nIndex])
         g_cachedSysColorBrushes[nIndex] = CreateSolidBrush(color);
@@ -1498,10 +1637,10 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
     {
         if (iPartId == 10) {
             if (g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
-                *pColor = (g_settings.BgType) ? RGB(0, 0, 0) : RGB(32, 32, 32);
+                *pColor = (g_settings.BgType) ? RGB(0, 0, 0) : (g_settings.FillBg) ? RGB(32, 32, 32) : *pColor;
         }
         else
-            *pColor = (g_settings.BgType) ? RGB(0, 0, 0) : RGB(32, 32, 32);
+            *pColor = (g_settings.BgType) ? RGB(0, 0, 0) : (g_settings.FillBg) ? RGB(32, 32, 32) : *pColor;
         return S_OK;
     }
     else if ((ThemeClassName == L"Toolbar") && iPropId == TMT_TEXTCOLOR)
@@ -4569,15 +4708,28 @@ HRESULT WINAPI HookedDrawThemeBackground(
         FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return S_OK;
     }
-    else if (ThemeClassName == L"Menu" && (iPartId == MENU_POPUPBACKGROUND || iPartId == MENU_POPUPBORDERS ||iPartId == MENU_POPUPGUTTER || 
-            iPartId == MENU_BARBACKGROUND || iPartId == MENU_BARITEM || iPartId == MENU_POPUPCHECKBACKGROUND || ((iPartId == MENU_POPUPITEM || iPartId == 27) && iStateId != 2)))
+    else if (ThemeClassName == L"Menu" && (iPartId == MENU_BARBACKGROUND || iPartId == MENU_BARITEM))
     {
         RECT clipRect{*pRect};
         if (pClipRect)
-            IntersectRect(&clipRect, &clipRect, pClipRect);
-        HBRUSH brush = g_settings.BgType ? CreateSolidBrush(RGB(0, 0, 0)) : CreateSolidBrush(RGB(32, 32, 32));
-        FillRect(hdc, &clipRect, brush);
-        DeleteObject(brush);
+            IntersectRect(&clipRect, pRect, pClipRect);
+        FillRect(hdc, &clipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        return S_OK;
+    }
+    else if (ThemeClassName == L"Menu" && (iPartId == MENU_POPUPBACKGROUND || iPartId == MENU_POPUPBORDERS || iPartId == MENU_POPUPGUTTER || 
+            ((iPartId == MENU_POPUPITEM || iPartId == 27) && iStateId != 2)))
+    {
+        
+        RECT clipRect{*pRect};
+        if (pClipRect)
+            IntersectRect(&clipRect, pRect, pClipRect);
+        if (g_settings.BgType)
+            FillRect(hdc, &clipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        else if (g_settings.FillBg) {
+            HBRUSH brush = CreateSolidBrush(RGB(32, 32, 32));
+            FillRect(hdc, &clipRect, brush);
+            DeleteObject(brush);
+        }
         return S_OK;
     }
     else if (ThemeClassName == L"Toolbar" && iPartId == 0) {
@@ -4691,7 +4843,7 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(
     return hr;
 }
 
-HRESULT WINAPI HookedGetThemeMargins(HTHEME hTheme, HDC hdc, int iPartId, int iStateId, int iPropId, RECT* prc, MARGINS *pMargins)
+HRESULT WINAPI HookedGetThemeMargins(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, INT iPropId, RECT* prc, MARGINS *pMargins)
 {
     std::wstring ThemeClassName = GetThemeClass(hTheme);
 
@@ -4827,7 +4979,7 @@ LRESULT CALLBACK FlyoutsSubclassProc(
                 SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
                 break;
             }
-            else if (!g_settings.BorderFlag || g_settings.BorderActiveColor != DWMWA_COLOR_NONE)
+            else if (!g_settings.BorderFlag || g_settings.BorderActiveColor == DWMWA_COLOR_DEFAULT)
                 break;
             
             HDC hdc = reinterpret_cast<HDC>(wParam);
@@ -4835,7 +4987,15 @@ LRESULT CALLBACK FlyoutsSubclassProc(
             RECT paintRect{};
             GetWindowRect(hWnd, &paintRect);
             OffsetRect(&paintRect, -paintRect.left, -paintRect.top);
-            FrameRect(hdc, &paintRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            
+            if (g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
+                FrameRect(hdc, &paintRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            else {
+                HBRUSH brush = CreateSolidBrush(g_settings.BorderActiveColor);
+                FrameRect(hdc, &paintRect, brush);
+                DeleteObject(brush);
+            }
+            
 
             return result;
         }
@@ -4848,17 +5008,16 @@ LRESULT CALLBACK FlyoutsSubclassProc(
                 SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
                 break;
             }
-            else if (!g_settings.BorderFlag || g_settings.BorderActiveColor != DWMWA_COLOR_NONE)
+            else if (!g_settings.BorderFlag || g_settings.BorderActiveColor == DWMWA_COLOR_DEFAULT)
                 break;
             
-            HDC hdc = reinterpret_cast<HDC>(wParam);
+            HDC hdc = GetWindowDC(hWnd);
             if (wParam != NULLREGION && wParam != ERROR)
 				SelectClipRgn(hdc, reinterpret_cast<HRGN>(wParam));
             
             RECT windowRect{};
             GetWindowRect(hWnd, &windowRect);
-            FrameRect(hdc, &windowRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
-            
+
             MENUBARINFO mbi{ sizeof(MENUBARINFO) };
             GetMenuBarInfo(hWnd, OBJID_CLIENT, 0, &mbi);
             MARGINS mr{ mbi.rcBar.left - windowRect.left, windowRect.right - mbi.rcBar.right, mbi.rcBar.top - windowRect.top, windowRect.bottom - mbi.rcBar.bottom };
@@ -4868,7 +5027,15 @@ LRESULT CALLBACK FlyoutsSubclassProc(
 			OffsetRect(&paintRect, -paintRect.left, -paintRect.top);
             ExcludeClipRect(hdc, paintRect.left + mr.cxLeftWidth, paintRect.top + mr.cyTopHeight, paintRect.right - mr.cxRightWidth, paintRect.bottom - mr.cyBottomHeight);
             PatBlt(hdc, paintRect.left, paintRect.top, paintRect.right-paintRect.left, paintRect.bottom-paintRect.top, BLACKNESS);
-        
+
+            if (g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
+                FrameRect(hdc, &paintRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            else {
+                HBRUSH brush = CreateSolidBrush(g_settings.BorderActiveColor);
+                FrameRect(hdc, &paintRect, brush);
+                DeleteObject(brush);
+            }
+
             return 0;
         }
         case MN_SIZEWINDOW:
@@ -4882,76 +5049,51 @@ LRESULT CALLBACK FlyoutsSubclassProc(
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-static COLORREF HSLToRGB(FLOAT h, FLOAT s, FLOAT l) {
-    FLOAT c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
-    FLOAT x = c * (1.0f - fabs(fmod(h / 60.0f, 2.0f) - 1.0f));
-    FLOAT m = l - c / 2.0f;
-
-    FLOAT r_prime, g_prime, b_prime;
-    if (0.0f <= h && h < 60.0f) {
-        r_prime = c; g_prime = x; b_prime = 0.0f;
-    } else if (60.0f <= h && h < 120.0f) {
-        r_prime = x; g_prime = c; b_prime = 0.0f;
-    } else if (120.0f <= h && h < 180.0f) {
-        r_prime = 0.0f; g_prime = c; b_prime = x;
-    } else if (180.0f <= h && h < 240.0f) {
-        r_prime = 0.0f; g_prime = x; b_prime = c;
-    } else if (240.0f <= h && h < 300.0f) {
-        r_prime = x; g_prime = 0.0f; b_prime = c;
-    } else {
-        r_prime = c; g_prime = 0.0f; b_prime = x;
-    }
-
-    BYTE r = static_cast<BYTE>((r_prime + m) * 255.0f);
-    BYTE g = static_cast<BYTE>((g_prime + m) * 255.0f);
-    BYTE b = static_cast<BYTE>((b_prime + m) * 255.0f);
-    return RGB(r, g, b);
-}
-
 VOID CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 {
     HWND WndHwnd= nullptr;
+    RainbowData* pRainbowWndData = nullptr;
     {
         std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
         for(auto& hWnd : g_rainbowWindows)
         {
-            HANDLE value = GetPropW(hWnd, g_RainbowPropStr.c_str());
-            if (value && (UINT_PTR)value == t_id)
+            RainbowData* pTempRainbowWndData = reinterpret_cast<RainbowData*>(
+                GetPropW(hWnd, g_RainbowPropStr.c_str()));
+            
+            if (pTempRainbowWndData && pTempRainbowWndData->timerId == t_id)
             {
                 WndHwnd = hWnd;
+                pRainbowWndData = pTempRainbowWndData;
                 break;
             }
         }
     }
 
-    if (WndHwnd)
+    if (!WndHwnd)
+        return;
+    
+    DOUBLE tNow = TimerGetSeconds();
+    DOUBLE effectiveTime = (tNow - pRainbowWndData->baseTime) - pRainbowWndData->pausedTotal;
+    DOUBLE wndHue = fmod(pRainbowWndData->initialHue + effectiveTime * g_settings.RainbowSpeed, 360.0);
+
+    if (g_settings.TitlebarRainbowFlag)
     {
-	    // Credits to @m417z
-        std::mt19937 gen((UINT_PTR)WndHwnd);
-        std::uniform_real_distribution<> distr(0.0, 360.0);
-        DOUBLE InitialHueOffset = distr(gen);
-
-        DOUBLE wndHue = fmod(InitialHueOffset + TimerGetSeconds() * g_settings.RainbowSpeed, 360.0);
-
+        COLORREF titlebarColor = HSLToRGB(wndHue, 1.0f, 0.5f); 
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
+    }
+    if (g_settings.CaptionRainbowFlag)
+    {
+        COLORREF captionColor;
         if (g_settings.TitlebarRainbowFlag)
-        {
-            COLORREF titlebarColor = HSLToRGB(wndHue, 1.0f, 0.5f); 
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
-        }
-        if (g_settings.CaptionRainbowFlag)
-        {
-            COLORREF captionColor;
-            if (g_settings.TitlebarRainbowFlag)
-                captionColor = HSLToRGB(fmod(wndHue + 120.0f, 360.0f), 1.0f, 0.5f);
-            else
-                captionColor = HSLToRGB(wndHue, 1.0f, 0.5f);
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
-        }
-        if (g_settings.BorderRainbowFlag)
-        {
-            COLORREF borderColor = HSLToRGB(wndHue, 1.0f, 0.5f);  
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
-        }
+            captionColor = HSLToRGB(fmod(wndHue + 120.0f, 360.0f), 1.0f, 0.5f);
+        else
+            captionColor = HSLToRGB(wndHue, 1.0f, 0.5f);
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
+    }
+    if (g_settings.BorderRainbowFlag)
+    {
+        COLORREF borderColor = HSLToRGB(wndHue, 1.0f, 0.5f);  
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
     }
 }
 
@@ -5006,11 +5148,32 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
             // Intercept flyouts
             if (!IsWindowClass(cwp->hwnd, MENUPOPUP_CLASS) && !IsWindowClass(cwp->hwnd, L"DropDown") && !IsWindowClass(cwp->hwnd, L"ViewControlClass"))
                 break;
-            AddFlyoutsSubclass(cwp->hwnd);           
+            AddFlyoutsSubclass(cwp->hwnd);
+        }
+        case WM_WINDOWPOSCHANGED:
+        {
+            if (!IsWindowEligible(cwp->hwnd))
+                break;
+
+            BOOL fullscreen = IsWindowMaximizedOrFullscreen(cwp->hwnd);
+            // hide colored borders on fullscreen/maximized windows
+            if (fullscreen) {
+                UINT borderType;
+                DwmGetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &borderType, sizeof(UINT));
+                if (borderType != DONTROUND)
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DONTROUND, sizeof(UINT));
+            }
+            else if (!fullscreen) {
+                UINT borderType;
+                DwmGetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &borderType, sizeof(UINT));
+                if (borderType != g_settings.CornerPref)
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &g_settings.CornerPref, sizeof(UINT));
+            }
+
             break;
         }
         case WM_ACTIVATE:
-        {     
+        {
             BOOL isMinimized = HIWORD(cwp->wParam);
             if (!isMinimized && IsWindowEligible(cwp->hwnd))
             {
@@ -5058,21 +5221,36 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
                 }
             }
             break;
-        }   
+        }
+        case WM_ENTERSIZEMOVE:
+        {
+            // Pause rainbow effects while the window is being moved/resized.
+            if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
+                SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_PAUSED, 0);
+            break;
+        }
+        case WM_EXITSIZEMOVE:
+        {
+            // Resume rainbow effects after move/resize ends.
+            if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
+                SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_RESTART, 0);
+            break;
+        }
         case WM_DESTROY:
         {       
-            HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
-            if (value)
+           RainbowData* pRainbowWndData = reinterpret_cast<RainbowData*>(RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str()));
+            if (!pRainbowWndData)
+                break;
+
+            if (KillTimer(NULL, pRainbowWndData->timerId))
             {
-                if (KillTimer(NULL, (UINT_PTR)value))
-                {
-                    std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-                    g_rainbowWindows.erase(cwp->hwnd);
-                    Wh_Log(L"Timer termination success for window: %p", cwp->hwnd);
-                }
-                else
-                    Wh_Log(L"[ERROR] Timer termination failure for window: %p", cwp->hwnd);
+                std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+                g_rainbowWindows.erase(cwp->hwnd);
+                Wh_Log(L"Timer termination success for window: %p", cwp->hwnd);
+                delete pRainbowWndData;
             }
+            else
+                Wh_Log(L"[ERROR] Timer termination failure for window: %p", cwp->hwnd);
 
             RemoveOrUnloadFlyoutSubclass(cwp->hwnd);
             break;
@@ -5085,34 +5263,92 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
                 {
                     case RAINBOW_LOAD:
                     {
-                        HANDLE value = GetPropW(cwp->hwnd, g_RainbowPropStr.c_str());
-                        if (!value)
+                        HANDLE Data = GetPropW(cwp->hwnd, g_RainbowPropStr.c_str());
+                        if (Data)
+                            break;
+                        
+                        RainbowData* pRainbowWndData = new RainbowData();
+                        DOUBLE now = TimerGetSeconds();
+                        
+                        std::mt19937 gen((UINT_PTR)cwp->hwnd);
+                        std::uniform_real_distribution<> distr(0.0, 360.0);
+                        pRainbowWndData->initialHue = distr(gen);
+                        pRainbowWndData->baseTime = now;
+                        pRainbowWndData->pausedTotal = 0.0;
+                        pRainbowWndData->pausedStart = 0.0;
+                        pRainbowWndData->isPaused = FALSE;                        
+
+                        pRainbowWndData->timerId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
+                        if (pRainbowWndData->timerId)
                         {
-                            UINT_PTR timersId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
-                            if (timersId)
+                            SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), reinterpret_cast<HANDLE>(pRainbowWndData));
                             {
-                                SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), (HANDLE)timersId);
-                                {
-                                    std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-                                    g_rainbowWindows.insert(cwp->hwnd);
-                                }
-                                Wh_Log(L"Timer set success for window: %p", cwp->hwnd);
+                                std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+                                g_rainbowWindows.insert(cwp->hwnd);
                             }
-                            else
-                                Wh_Log(L"[ERROR] Timer set failure for window: %p", cwp->hwnd);
+                            Wh_Log(L"Timer set success for window: %p", cwp->hwnd);
                         }
+                        else {
+                            Wh_Log(L"[ERROR] Timer set failure for window: %p", cwp->hwnd);
+                            delete pRainbowWndData;
+                        }
+                        
+                        break;
+                    }
+                    case RAINBOW_RESTART:
+                    {
+                        RainbowData* pRainbowWndData = reinterpret_cast<RainbowData*>(GetPropW(cwp->hwnd, g_RainbowPropStr.c_str()));
+                        if (!pRainbowWndData)
+                            break;
+
+                        DOUBLE now = TimerGetSeconds();
+                        if (pRainbowWndData->isPaused) {
+                            pRainbowWndData->pausedTotal += now - pRainbowWndData->pausedStart;
+                            pRainbowWndData->isPaused = FALSE;
+                        }
+                        
+                        if (!pRainbowWndData->timerId) {
+                            pRainbowWndData->timerId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
+                            if (!pRainbowWndData->timerId)
+                                Wh_Log(L"[ERROR] Timer restart failure for window: %p", cwp->hwnd);
+                        }
+
+                        break;
+                    }
+                    case RAINBOW_PAUSED:
+                    {
+                        RainbowData* pRainbowWndData = reinterpret_cast<RainbowData*>(GetPropW(cwp->hwnd, g_RainbowPropStr.c_str()));
+                        if (!pRainbowWndData)
+                            break;
+
+                        DOUBLE now = TimerGetSeconds();
+                        if (!pRainbowWndData->isPaused) {
+                            pRainbowWndData->pausedStart = now;
+                            pRainbowWndData->isPaused = TRUE;
+                        }
+                        
+                        if (pRainbowWndData->timerId) {
+                            if (KillTimer(NULL, (UINT_PTR)pRainbowWndData->timerId))
+                                pRainbowWndData->timerId = 0;
+                            else
+                                Wh_Log(L"[ERROR] Timer pause failure for window: %p", cwp->hwnd);
+                        }
+                            
                         break;
                     }
                     case RAINBOW_UNLOAD:
                     {
-                        HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
-                        if (value)
-                        {
-                            if (KillTimer(NULL, (UINT_PTR)value))
-                                Wh_Log(L"Timer unload success for window: %p", cwp->hwnd);
-                            else
-                                Wh_Log(L"[ERROR] Timer unload failure for window: %p", cwp->hwnd);
-                        }        
+                        RainbowData* pRainbowWndData = reinterpret_cast<RainbowData*>(RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str()));
+                        if (!pRainbowWndData)
+                            break;
+                                                    
+                        if (KillTimer(NULL, (UINT_PTR)pRainbowWndData->timerId))
+                            Wh_Log(L"Timer unload success for window: %p", cwp->hwnd);
+                        else
+                            Wh_Log(L"[ERROR] Timer unload failure for window: %p", cwp->hwnd);
+
+                        delete pRainbowWndData;
+    
                         break;
                     }
                 }
@@ -5184,7 +5420,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
     return TRUE;
 }
 
-BOOL WINAPI HookedTrackPopupMenuEx(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm)
+BOOL WINAPI HookedTrackPopupMenuEx(HMENU hMenu, UINT uFlags, INT x, INT y, HWND hWnd, LPTPMPARAMS lptpm)
 {
     // System tray popup menus
     AddWindowHookPerWindowThread(hWnd);
@@ -5215,16 +5451,6 @@ VOID HandleEffects(HWND hWnd)
     if (g_settings.ImmersiveDarkmode)
         DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(UINT));
 
-    if(g_settings.BorderFlag && !g_settings.BorderRainbowFlag)
-        EnableColoredBorder(hWnd);
-    
-    if (g_settings.CornerPref == g_settings.NotRounded)
-        SetCornerType(hWnd, DONTROUND);
-    else if (g_settings.CornerPref == g_settings.DefaultRounded)
-        SetCornerType(hWnd, ROUND);
-    else if (g_settings.CornerPref == g_settings.SmallRounded)
-        SetCornerType(hWnd, SMALLROUND);
-
     if(g_settings.BgType == g_settings.AccentBlurBehind)
         EnableBlurBehind(hWnd);
     else if (g_settings.BgType > g_settings.AccentBlurBehind)
@@ -5233,13 +5459,13 @@ VOID HandleEffects(HWND hWnd)
                 DwmMakeWindowTransparent(hWnd);
                 TriggerWindowNCRendering(hWnd);
         }
-        if(g_settings.BgType == g_settings.AcrylicSystemBackdrop)
-            SetSystemBackdrop(hWnd, TRANSIENTWINDOW);
-        else if(g_settings.BgType == g_settings.Mica)
-            SetSystemBackdrop(hWnd, MAINWINDOW);
-        else if(g_settings.BgType == g_settings.MicaAlt)
-            SetSystemBackdrop(hWnd, TABBEDWINDOW);
+        SetSystemBackdrop(hWnd, g_settings.BgType);
     }
+
+    if(g_settings.BorderFlag && !g_settings.BorderRainbowFlag)
+        EnableColoredBorder(hWnd);
+    
+    SetCornerType(hWnd, g_settings.CornerPref);
 }
 
 VOID NewWindowShown(HWND hWnd) 
@@ -5714,7 +5940,7 @@ VOID Wh_ModUninit(VOID)
     }
     
     RemoveOrUnloadWindowsHooks(TRUE);
-    RemoveOrUnloadFlyoutSubclass(nullptr, TRUE);
+    RemoveOrUnloadFlyoutSubclass(nullptr, TRUE);    
     ApplyForExistingWindows();
 }
 
@@ -5724,5 +5950,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
-
 
