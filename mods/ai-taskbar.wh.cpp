@@ -4,7 +4,7 @@
 // @description    An ai assistant built into your taskbar
 // @version        1.1
 // @author         Frqme
-// @github         [https://github.com/Frqmelikescheese](https://github.com/Frqmelikescheese)
+// @github         https://github.com/Frqmelikescheese
 // @include        explorer.exe
 // @compilerOptions -luser32 -lgdi32 -ldwmapi -lwinhttp -lcomctl32
 // ==/WindhawkMod==
