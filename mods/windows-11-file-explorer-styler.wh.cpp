@@ -3368,7 +3368,13 @@ void OnWindowCreated(HWND hWnd, PCSTR funcName) {
         Wh_Log(L"Initializing - Created window %08X via %S",
                (DWORD)(ULONG_PTR)hWnd, funcName);
         InitializeForCurrentThread();
-        InitializeSettingsAndTap();
+        HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
+            InitializeSettingsAndTap();
+            return 0;
+        }, nullptr, 0, nullptr);
+        if (hThread) {
+            CloseHandle(hThread);
+        }
     }
 }
 
