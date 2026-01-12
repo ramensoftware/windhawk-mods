@@ -3,7 +3,7 @@
 // @name           Win11 Notifications Glow Effect
 // @description    Injects an animated neon glow effect into the Windows 11 Notification glass layer
 // @version        1.0
-// @github         Frqmelikescheese
+// @github         https://github.com/Frqmelikescheese
 // @author         Frqme
 // @include        ShellExperienceHost.exe
 // @include        StartMenuExperienceHost.exe
