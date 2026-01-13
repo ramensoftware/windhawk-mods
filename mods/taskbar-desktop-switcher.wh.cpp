@@ -2,11 +2,30 @@
 // @id              taskbar-desktop-switcher
 // @name            Taskbar Desktop Switcher
 // @description     Modern, customizable desktop buttons with hover effects
-// @version         1.0
+// @version         1.1
 // @author          Frqme
-// @github         https://github.com/Frqmelikescheese
+// @github          https://github.com/Frqmelikescheese
 // @include         explorer.exe
 // @compilerOptions -luser32 -lgdi32 -ldwmapi
+//
+// @readme          # Taskbar Desktop Switcher
+// @readme
+// @readme          Adds a customizable widget to the taskbar allowing one-click switching between Virtual Desktops.
+// @readme
+// @readme          ## ⚠️ Important Requirement
+// @readme          **You must manually create the virtual desktops in Windows first.**
+// @readme          This mod acts as a controller, but it does not create the desktops system-side.
+// @readme
+// @readme          **How to use:**
+// @readme          1. Open Windows Task View (Win + Tab).
+// @readme          2. Create your desired number of desktops (e.g., 4).
+// @readme          3. In this mod's settings, set **"Number of Desktops"** to match (e.g., 4).
+// @readme          4. Use the X Offset settings to position the buttons where you want them on your taskbar.
+// @readme
+// @readme          ## Features
+// @readme          * **Customizable Look:** Adjust colors (Active, Hover, Normal), transparency, and rounded corners.
+// @readme          * **Sizing:** Change button width, height, and gap spacing.
+// @readme          * **Positioning:** Offset the widget from the left or bottom to fit your specific taskbar layout.
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
