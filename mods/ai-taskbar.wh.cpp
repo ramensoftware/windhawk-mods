@@ -44,6 +44,7 @@ static HWND g_hChat = NULL;
 static HWND g_hOut = NULL;
 static HWND g_hIn = NULL;
 static WNDPROC g_origInputProc = NULL;
+static HANDLE g_hMainThread = NULL;
 
 static int g_currentMode = 0; 
 static BOOL g_isOpen = FALSE;
@@ -316,6 +317,10 @@ LRESULT CALLBACK BtnProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             if (wParam == ID_TIMER_SYNC) UpdatePosition();
             break;
         }
+        case WM_DESTROY: {
+            PostQuitMessage(0);
+            break;
+        }
     }
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
@@ -349,16 +354,25 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
     if(g_apiKey.empty()) { 
-        MessageBox(NULL, L"Please set API Key", L"Windhawk", MB_OK | MB_TOPMOST); 
+        MessageBox(NULL, L"Please set API Key", L"Windhawk", MB_OK | MB_SYSTEMMODAL); 
         return FALSE; 
     }
-    CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
+    g_hMainThread = CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
     return TRUE;
 }
 
 void Wh_ModUninit() { 
     if (g_hBtn) SendMessage(g_hBtn, WM_CLOSE, 0, 0); 
     if (g_hChat) SendMessage(g_hChat, WM_CLOSE, 0, 0); 
+    
+    if (g_hMainThread) {
+        WaitForSingleObject(g_hMainThread, 3000);
+        CloseHandle(g_hMainThread);
+        g_hMainThread = NULL;
+    }
+    
+    UnregisterClass(L"WhChatV4", GetModuleHandle(NULL));
+    UnregisterClass(L"WhBtnV4", GetModuleHandle(NULL));
 }
 
 void Wh_ModSettingsChanged() { 
