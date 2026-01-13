@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-12T22:10:10.000Z</updated>
+    <updated>2026-01-13T20:40:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#7355e2851f5a14f838c11dac1ec707b01945eee8</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
+        <updated>2026-01-13T20:40:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarvolumecontrolperapp">Taskbar Volume Control Per-App</h1>
+<p>Control the per-app volume by scrolling over taskbar buttons on Windows 11.</p>
+<p>Scrolling over a taskbar button will adjust the volume of that specific
+application. A tooltip shows the current volume percentage, or "No audio
+session" if the app has no active audio.</p>
+<p>For controlling the overall system volume, check out the <a href="https://windhawk.net/mods/taskbar-volume-control">Taskbar Volume
+Control</a> mod.</p>
+<p><img src="https://i.imgur.com/56QHjUv.gif" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disappearing Tray Icons Fix 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-disappearing-tray-icons-fix#cbb50a1cb10d76cd7c499e02ddaa63a147f2f148</id>
@@ -460,22 +478,6 @@ Instead of forcing modifier keys to release, the mod now <strong>waits</strong> 
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.7.0]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#c9918094a04b37d798d37825c404fa78407ef589</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2026-01-04T12:04:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Expand translucent effects to flyouts (popup menus, tooltips, dropdown menu) (thanks to <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> project)</li>
-<li>Update readme, provide more useful information.</li>
-<li>Add a setting option to modify system colors and custom rendering option settings in process rules.</li>
-<li>Some custom theme additions/tweaks.</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>

@@ -7405,6 +7405,39 @@
                 "version": "1.2.2"
             }
         },
+        "taskbar-volume-control-per-app": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768336834000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768336834000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
+                "description": "Control the per-app volume by scrolling over taskbar buttons",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Volume Control Per-App",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-wheel-cycle": {
             "details": {
                 "defaultSorting": 29230,
