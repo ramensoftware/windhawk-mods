@@ -357,6 +357,7 @@ void Wh_ModUninit() {
     Wh_Log(L"Uninitialized");
 }
 
-void Wh_ModSettingsChanged() {
-    LoadSettings();
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    *bReload = TRUE;
+    return TRUE;
 }
