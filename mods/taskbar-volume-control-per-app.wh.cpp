@@ -2,14 +2,14 @@
 // @id              taskbar-volume-control-per-app
 // @name            Taskbar Volume Control Per-App
 // @description     Control the per-app volume by scrolling over taskbar buttons
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lcomctl32 -lntdll -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -27,28 +27,49 @@
 Control the per-app volume by scrolling over taskbar buttons on Windows 11.
 
 Scrolling over a taskbar button will adjust the volume of that specific
-application. A tooltip shows the current volume percentage, or "No audio
-session" if the app has no active audio.
+application. Ctrl+clicking on a taskbar button will toggle mute for that app. A
+tooltip shows the current volume percentage, or "No audio session" if the app
+has no active audio.
 
 For controlling the overall system volume, check out the [Taskbar Volume
-Control](https://windhawk.net/mods/taskbar-volume-control) mod.
+Control](https://windhawk.net/mods/taskbar-volume-control) mod. Note that both
+mods can be used simultaneously using one of these approaches:
+1. Configure Taskbar Volume Control to use a limited region, such as the system
+   tray area, while this mod handles the app-specific volume on the task
+   buttons.
+2. Configure one of the mods to require the Ctrl key for volume changes, so that
+   holding Ctrl while scrolling adjusts the app volume (this mod), and normal
+   scrolling adjusts the system volume (Taskbar Volume Control), or vice versa.
 
-![Demonstration](https://i.imgur.com/56QHjUv.gif)
+Note that if both mods are configured to act simultaneously, the Taskbar Volume
+Control mod takes precedence due to the way the mod works.
+
+![Demonstration](https://i.imgur.com/EVlnILh.gif)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- volumeChangeStep: 2
+- volumeChangeStep: 10
   $name: Volume change step
   $description: >-
     Allows to configure the volume change that will occur with each notch of
     mouse wheel movement.
+- ctrlClickToMute: true
+  $name: Ctrl + Click to mute
+  $description: >-
+    When enabled, Ctrl+clicking on a taskbar button will toggle the mute state
+    of the application.
 - ctrlScrollVolumeChange: false
   $name: Ctrl + Scroll to change volume
   $description: >-
     When enabled, scrolling the mouse wheel will only change the volume when
     the Ctrl key is held down.
+- terseFormat: false
+  $name: Terse format
+  $description: >-
+    When enabled, the tooltip shows a compact format with emojis instead of
+    text (e.g., "🔊 64%" instead of "Volume: 64%").
 - noAutomaticMuteToggle: false
   $name: No automatic mute toggle
   $description: >-
@@ -62,10 +83,15 @@ Control](https://windhawk.net/mods/taskbar-volume-control) mod.
 
 #include <atomic>
 #include <functional>
+#include <optional>
+#include <string>
+#include <unordered_map>
 
 #include <audiopolicy.h>
 #include <endpointvolume.h>
 #include <mmdeviceapi.h>
+#include <tlhelp32.h>
+#include <winternl.h>
 
 #undef GetCurrentTime
 
@@ -81,7 +107,9 @@ using namespace winrt::Windows::UI::Xaml;
 
 struct {
     int volumeChangeStep;
+    bool ctrlClickToMute;
     bool ctrlScrollVolumeChange;
+    bool terseFormat;
     bool noAutomaticMuteToggle;
 } g_settings;
 
@@ -224,12 +252,157 @@ bool ForEachAudioSession(DWORD targetPID,
     return foundSession;
 }
 
-// Adjust volume for all audio sessions matching the given process ID.
-// Returns the new volume level (0-100) or -1 if no sessions found.
-int AdjustAppVolume(DWORD targetPID, float fVolumeAdd) {
-    int newVolumePercent = -1;
+// Get the command line of a process from its handle.
+// Returns empty string on failure.
+std::wstring GetProcessCommandLine(HANDLE hProcess) {
+    PROCESS_BASIC_INFORMATION pbi;
+    ULONG returnLength;
+    NTSTATUS status = NtQueryInformationProcess(
+        hProcess, ProcessBasicInformation, &pbi, sizeof(pbi), &returnLength);
 
-    bool found = ForEachAudioSession(targetPID, [&](ISimpleAudioVolume* vol) {
+    if (!NT_SUCCESS(status) || !pbi.PebBaseAddress) {
+        return {};
+    }
+
+    PEB peb;
+    if (!ReadProcessMemory(hProcess, pbi.PebBaseAddress, &peb, sizeof(peb),
+                           nullptr)) {
+        return {};
+    }
+
+    RTL_USER_PROCESS_PARAMETERS params;
+    if (!ReadProcessMemory(hProcess, peb.ProcessParameters, &params,
+                           sizeof(params), nullptr)) {
+        return {};
+    }
+
+    std::wstring cmdLine(params.CommandLine.Length / sizeof(WCHAR), L'\0');
+    if (!ReadProcessMemory(hProcess, params.CommandLine.Buffer, cmdLine.data(),
+                           params.CommandLine.Length, nullptr)) {
+        return {};
+    }
+
+    return cmdLine;
+}
+
+// Find Chromium's audio subprocess for a given parent process.
+// Chromium-based browsers run audio in a separate utility process with
+// specific command line flags. Returns the audio subprocess PID or 0 if not
+// found.
+DWORD FindChromiumAudioSubprocessUncached(DWORD parentPID) {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+
+    DWORD audioSubprocessPID = 0;
+
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(pe32);
+
+    if (Process32First(snapshot, &pe32)) {
+        do {
+            if (pe32.th32ParentProcessID != parentPID) {
+                continue;
+            }
+
+            HANDLE hProcess =
+                OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
+                            FALSE, pe32.th32ProcessID);
+            if (!hProcess) {
+                continue;
+            }
+
+            std::wstring cmdLine = GetProcessCommandLine(hProcess);
+            CloseHandle(hProcess);
+
+            if (cmdLine.empty()) {
+                continue;
+            }
+
+            // Parse command line and check for Chromium audio service flags.
+            int argc = 0;
+            LPWSTR* argv = CommandLineToArgvW(cmdLine.c_str(), &argc);
+            if (!argv) {
+                continue;
+            }
+
+            bool isUtility = false;
+            bool isAudioService = false;
+            for (int i = 0; i < argc; i++) {
+                if (wcscmp(argv[i], L"--type=utility") == 0) {
+                    isUtility = true;
+                } else if (wcscmp(argv[i],
+                                  L"--utility-sub-type=audio.mojom."
+                                  L"AudioService") == 0) {
+                    isAudioService = true;
+                }
+            }
+
+            LocalFree(argv);
+
+            if (isUtility && isAudioService) {
+                audioSubprocessPID = pe32.th32ProcessID;
+                break;
+            }
+        } while (Process32Next(snapshot, &pe32));
+    }
+
+    CloseHandle(snapshot);
+    return audioSubprocessPID;
+}
+
+// Cache for Chromium audio subprocess lookups to avoid expensive repeated
+// process enumeration.
+struct ChromiumAudioSubprocessCache {
+    DWORD audioSubprocessPID;
+    ULONGLONG timestamp;
+};
+std::unordered_map<DWORD, ChromiumAudioSubprocessCache>
+    g_chromiumAudioSubprocessCache;
+constexpr ULONGLONG kChromiumCacheTTL = 5000;  // 5 seconds.
+
+DWORD FindChromiumAudioSubprocess(DWORD parentPID) {
+    ULONGLONG now = GetTickCount64();
+
+    // Check cache first.
+    auto it = g_chromiumAudioSubprocessCache.find(parentPID);
+    if (it != g_chromiumAudioSubprocessCache.end()) {
+        if (now - it->second.timestamp < kChromiumCacheTTL) {
+            return it->second.audioSubprocessPID;
+        }
+    }
+
+    // Cache miss or expired, do the lookup.
+    DWORD audioSubprocessPID = FindChromiumAudioSubprocessUncached(parentPID);
+
+    // Clean up expired entries.
+    for (auto cacheIt = g_chromiumAudioSubprocessCache.begin();
+         cacheIt != g_chromiumAudioSubprocessCache.end();) {
+        if (now - cacheIt->second.timestamp >= kChromiumCacheTTL) {
+            cacheIt = g_chromiumAudioSubprocessCache.erase(cacheIt);
+        } else {
+            ++cacheIt;
+        }
+    }
+
+    // Update cache.
+    g_chromiumAudioSubprocessCache[parentPID] = {audioSubprocessPID, now};
+
+    return audioSubprocessPID;
+}
+
+struct AppVolumeResult {
+    int volume;  // 0-100.
+    bool muted;
+};
+
+// Adjust volume for all audio sessions matching the given process ID.
+std::optional<AppVolumeResult> AdjustAppVolumeForPID(DWORD targetPID,
+                                                     float fVolumeAdd) {
+    std::optional<AppVolumeResult> result;
+
+    ForEachAudioSession(targetPID, [&](ISimpleAudioVolume* vol) {
         float currentVolume = 0.0f;
         HRESULT hr = vol->GetMasterVolume(&currentVolume);
         if (FAILED(hr)) {
@@ -245,26 +418,51 @@ int AdjustAppVolume(DWORD targetPID, float fVolumeAdd) {
 
         hr = vol->SetMasterVolume(newVolume, NULL);
         if (SUCCEEDED(hr)) {
-            newVolumePercent = (int)(newVolume * 100.0f + 0.5f);
+            AppVolumeResult r;
+            r.volume = (int)(newVolume * 100.0f + 0.5f);
 
             // Handle mute state based on volume.
             if (!g_settings.noAutomaticMuteToggle) {
                 if (newVolume < 0.005f) {
                     vol->SetMute(TRUE, NULL);
+                    r.muted = true;
                 } else {
                     vol->SetMute(FALSE, NULL);
+                    r.muted = false;
                 }
+            } else {
+                // Read actual mute state.
+                BOOL isMuted = FALSE;
+                r.muted = SUCCEEDED(vol->GetMute(&isMuted)) && isMuted;
             }
+
+            result = r;
         }
 
         return true;  // Continue to process all sessions.
     });
 
-    return found ? newVolumePercent : -1;
+    return result;
+}
+
+std::optional<AppVolumeResult> AdjustAppVolume(DWORD targetPID,
+                                               float fVolumeAdd) {
+    auto result = AdjustAppVolumeForPID(targetPID, fVolumeAdd);
+    if (result) {
+        return result;
+    }
+
+    // Try Chromium audio subprocess if no session found.
+    DWORD audioSubprocessPID = FindChromiumAudioSubprocess(targetPID);
+    if (audioSubprocessPID) {
+        result = AdjustAppVolumeForPID(audioSubprocessPID, fVolumeAdd);
+    }
+
+    return result;
 }
 
 // Get the current volume for a process (returns 0-100 or -1 if no session).
-int GetAppVolume(DWORD targetPID) {
+int GetAppVolumeForPID(DWORD targetPID) {
     int volumePercent = -1;
 
     ForEachAudioSession(targetPID, [&](ISimpleAudioVolume* vol) {
@@ -278,6 +476,59 @@ int GetAppVolume(DWORD targetPID) {
     });
 
     return volumePercent;
+}
+
+int GetAppVolume(DWORD targetPID) {
+    int result = GetAppVolumeForPID(targetPID);
+    if (result >= 0) {
+        return result;
+    }
+
+    // Try Chromium audio subprocess if no session found.
+    DWORD audioSubprocessPID = FindChromiumAudioSubprocess(targetPID);
+    if (audioSubprocessPID) {
+        result = GetAppVolumeForPID(audioSubprocessPID);
+    }
+
+    return result;
+}
+
+// Toggle mute state for a process. Returns new mute state, or nullopt if no
+// session.
+std::optional<bool> ToggleAppMuteForPID(DWORD targetPID) {
+    std::optional<bool> newMuteState;
+
+    ForEachAudioSession(targetPID, [&](ISimpleAudioVolume* vol) {
+        BOOL isMuted = FALSE;
+        HRESULT hr = vol->GetMute(&isMuted);
+        if (FAILED(hr)) {
+            return true;  // Continue to next session.
+        }
+
+        hr = vol->SetMute(!isMuted, NULL);
+        if (SUCCEEDED(hr)) {
+            newMuteState = !isMuted;
+        }
+
+        return true;  // Continue to process all sessions.
+    });
+
+    return newMuteState;
+}
+
+std::optional<bool> ToggleAppMute(DWORD targetPID) {
+    auto result = ToggleAppMuteForPID(targetPID);
+    if (result) {
+        return result;
+    }
+
+    // Try Chromium audio subprocess if no session found.
+    DWORD audioSubprocessPID = FindChromiumAudioSubprocess(targetPID);
+    if (audioSubprocessPID) {
+        result = ToggleAppMuteForPID(audioSubprocessPID);
+    }
+
+    return result;
 }
 
 HWND FindCurrentProcessTaskbarWnd() {
@@ -471,8 +722,9 @@ void* GetNativeTaskGroupFromWindowsUdkTaskGroup(void* windowsUdkTaskGroup) {
     return g_clickSentinel_TaskGroup;
 }
 
-void* GetWindowsUdkTaskItemFromTaskListButton(UIElement element) {
-    winrt::com_ptr<IUnknown> windowViewModel = nullptr;
+winrt::com_ptr<IUnknown> GetWindowsUdkTaskItemFromTaskListButton(
+    UIElement element) {
+    winrt::com_ptr<IUnknown> windowViewModel;
     TryGetItemFromContainer_TaskListWindowViewModel_Original(
         windowViewModel.put_void(), &element);
     if (!windowViewModel) {
@@ -482,7 +734,7 @@ void* GetWindowsUdkTaskItemFromTaskListButton(UIElement element) {
     winrt::com_ptr<IUnknown> windowsUdkTaskItem;
     TaskListWindowViewModel_get_TaskItem_Original(
         windowViewModel.get(), windowsUdkTaskItem.put_void());
-    return windowsUdkTaskItem.get();
+    return windowsUdkTaskItem;
 }
 
 void* GetWindowsUdkTaskGroupFromTaskListButton(UIElement element) {
@@ -519,10 +771,10 @@ HWND GetWindowFromTaskItem(void* taskItem) {
 // Tries to get from individual task item first, then from task group.
 DWORD GetProcessIdFromTaskListButton(UIElement element) {
     // First try to get from individual task item using sentinel pattern.
-    void* windowsUdkTaskItem = GetWindowsUdkTaskItemFromTaskListButton(element);
+    auto windowsUdkTaskItem = GetWindowsUdkTaskItemFromTaskListButton(element);
     if (windowsUdkTaskItem) {
         void* nativeTaskItem =
-            GetNativeTaskItemFromWindowsUdkTaskItem(windowsUdkTaskItem);
+            GetNativeTaskItemFromWindowsUdkTaskItem(windowsUdkTaskItem.get());
         if (nativeTaskItem) {
             HWND hWnd = GetWindowFromTaskItem(nativeTaskItem);
             if (hWnd) {
@@ -557,21 +809,10 @@ DWORD GetProcessIdFromTaskListButton(UIElement element) {
 }
 
 struct {
-    Controls::Primitives::Popup popup = nullptr;
-    FrameworkElement taskbarFrame = nullptr;
+    Controls::ToolTip tooltip = nullptr;
+    winrt::weak_ref<FrameworkElement> attachedElement;
     UINT_PTR hideTimer = 0;
 } g_volumeTooltipState;
-
-FrameworkElement FindTaskbarFrameAncestor(UIElement element) {
-    auto parent = Media::VisualTreeHelper::GetParent(element);
-    while (parent) {
-        if (winrt::get_class_name(parent) == L"Taskbar.TaskbarFrame") {
-            return parent.try_as<FrameworkElement>();
-        }
-        parent = Media::VisualTreeHelper::GetParent(parent);
-    }
-    return nullptr;
-}
 
 void CALLBACK HideVolumeTooltipTimerProc(HWND hwnd,
                                          UINT message,
@@ -580,49 +821,22 @@ void CALLBACK HideVolumeTooltipTimerProc(HWND hwnd,
     KillTimer(nullptr, g_volumeTooltipState.hideTimer);
     g_volumeTooltipState.hideTimer = 0;
 
-    if (g_volumeTooltipState.popup) {
-        g_volumeTooltipState.popup.IsOpen(false);
+    if (g_volumeTooltipState.tooltip) {
+        g_volumeTooltipState.tooltip.IsOpen(false);
     }
 }
 
 // Tooltip positioning offset from cursor in pixels.
 constexpr int kTooltipOffset = 12;
 
-void UpdateTooltipVerticalPosition() {
-    if (!g_volumeTooltipState.popup || !g_volumeTooltipState.taskbarFrame) {
+void ShowVolumeTooltip(FrameworkElement element, PCWSTR text) {
+    if (!element) {
         return;
     }
 
-    auto popup = g_volumeTooltipState.popup;
-    auto border = popup.Child().try_as<FrameworkElement>();
-    if (!border) {
-        return;
-    }
-
-    double taskbarHeight = g_volumeTooltipState.taskbarFrame.ActualHeight();
-    double tooltipHeight = border.ActualHeight();
-    popup.VerticalOffset((taskbarHeight - tooltipHeight) / 2);
-}
-
-void UpdateTooltipHorizontalPosition(double cursorX) {
-    if (!g_volumeTooltipState.popup) {
-        return;
-    }
-
-    g_volumeTooltipState.popup.HorizontalOffset(cursorX + kTooltipOffset);
-}
-
-void ShowVolumeTooltip(FrameworkElement taskbarFrame,
-                       double cursorX,
-                       PCWSTR text) {
-    if (!taskbarFrame) {
-        return;
-    }
-
-    // Create the popup if it doesn't exist.
-    if (!g_volumeTooltipState.popup) {
+    // Create the tooltip if it doesn't exist.
+    if (!g_volumeTooltipState.tooltip) {
         Controls::Border border;
-        border.IsHitTestVisible(false);
         border.Padding(ThicknessHelper::FromLengths(12, 6, 12, 6));
         border.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
 
@@ -630,21 +844,19 @@ void ShowVolumeTooltip(FrameworkElement taskbarFrame,
         textBlock.FontSize(12);
         border.Child(textBlock);
 
-        Controls::Primitives::Popup popup;
-        popup.IsHitTestVisible(false);
-        popup.Child(border);
+        Controls::ToolTip tooltip;
+        tooltip.Content(border);
+        tooltip.Placement(Controls::Primitives::PlacementMode::Mouse);
+        tooltip.Padding(ThicknessHelper::FromUniformLength(1));
+        tooltip.BorderThickness(ThicknessHelper::FromUniformLength(0));
+        tooltip.HorizontalOffset(kTooltipOffset);
+        tooltip.VerticalOffset(kTooltipOffset);
 
-        // Update vertical position when the border size changes.
-        border.SizeChanged(
-            [](auto&&, auto&&) { UpdateTooltipVerticalPosition(); });
-
-        g_volumeTooltipState.popup = popup;
+        g_volumeTooltipState.tooltip = tooltip;
     }
 
-    g_volumeTooltipState.taskbarFrame = taskbarFrame;
-
-    auto popup = g_volumeTooltipState.popup;
-    auto border = popup.Child().try_as<Controls::Border>();
+    auto tooltip = g_volumeTooltipState.tooltip;
+    auto border = tooltip.Content().try_as<Controls::Border>();
 
     // Update the text.
     if (auto textBlock = border.Child().try_as<Controls::TextBlock>()) {
@@ -663,17 +875,16 @@ void ShowVolumeTooltip(FrameworkElement taskbarFrame,
             Media::SolidColorBrush(winrt::Windows::UI::Colors::White()));
     }
 
-    // Set XamlRoot and position near cursor.
-    popup.XamlRoot(taskbarFrame.XamlRoot());
+    // Detach from previous element if different.
+    auto previousElement = g_volumeTooltipState.attachedElement.get();
+    if (previousElement && previousElement != element) {
+        Controls::ToolTipService::SetToolTip(previousElement, nullptr);
+    }
 
-    // Position horizontally offset from cursor.
-    UpdateTooltipHorizontalPosition(cursorX);
-
-    // Vertical position will be set by SizeChanged handler once measured.
-    // Set initial estimate for first display.
-    UpdateTooltipVerticalPosition();
-
-    popup.IsOpen(true);
+    // Attach tooltip to element and show it.
+    Controls::ToolTipService::SetToolTip(element, tooltip);
+    g_volumeTooltipState.attachedElement = element;
+    tooltip.IsOpen(true);
 
     // Reset the hide timer.
     if (g_volumeTooltipState.hideTimer) {
@@ -689,15 +900,18 @@ void HideVolumeTooltip() {
         g_volumeTooltipState.hideTimer = 0;
     }
 
-    if (g_volumeTooltipState.popup) {
-        g_volumeTooltipState.popup.IsOpen(false);
+    if (g_volumeTooltipState.tooltip) {
+        g_volumeTooltipState.tooltip.IsOpen(false);
     }
-}
 
-void CleanupVolumeTooltip() {
-    HideVolumeTooltip();
-    g_volumeTooltipState.popup = nullptr;
-    g_volumeTooltipState.taskbarFrame = nullptr;
+    // Detach tooltip from element.
+    auto element = g_volumeTooltipState.attachedElement.get();
+    if (element) {
+        Controls::ToolTipService::SetToolTip(element, nullptr);
+    }
+
+    g_volumeTooltipState.tooltip = nullptr;
+    g_volumeTooltipState.attachedElement = nullptr;
 }
 
 // Per-app volume wheel scroll handling.
@@ -759,22 +973,21 @@ int WINAPI TaskListButton_OnPointerWheelChanged_Hook(void* pThis, void* pArgs) {
     float volumeChange = (float)delta * step * (0.01f / WHEEL_DELTA);
 
     // Adjust the app's volume.
-    int newVolume = AdjustAppVolume(processId, volumeChange);
+    auto volumeResult = AdjustAppVolume(processId, volumeChange);
 
     // Show tooltip near cursor.
-    FrameworkElement taskbarFrame = FindTaskbarFrameAncestor(element);
-    if (taskbarFrame) {
-        auto point = args.GetCurrentPoint(taskbarFrame);
-        double cursorX = point.Position().X;
-
-        WCHAR tooltipText[64];
-        if (newVolume >= 0) {
-            swprintf_s(tooltipText, L"Volume: %d%%", newVolume);
-        } else {
-            wcscpy_s(tooltipText, L"No audio session");
-        }
-        ShowVolumeTooltip(taskbarFrame, cursorX, tooltipText);
+    WCHAR tooltipText[64];
+    if (!volumeResult) {
+        wcscpy_s(tooltipText,
+                 g_settings.terseFormat ? L"🔕" : L"No audio session");
+    } else if (volumeResult->muted) {
+        wcscpy_s(tooltipText, g_settings.terseFormat ? L"🔇" : L"Muted");
+    } else {
+        swprintf_s(tooltipText,
+                   g_settings.terseFormat ? L"🔊 %d%%" : L"Volume: %d%%",
+                   volumeResult->volume);
     }
+    ShowVolumeTooltip(element.try_as<FrameworkElement>(), tooltipText);
 
     // Mark event as handled.
     args.Handled(true);
@@ -807,16 +1020,22 @@ int WINAPI TaskListButton_OnPointerExited_Hook(void* pThis, void* pArgs) {
     return original();
 }
 
-using TaskListButton_OnPointerMoved_t = int(WINAPI*)(void* pThis, void* pArgs);
-TaskListButton_OnPointerMoved_t TaskListButton_OnPointerMoved_Original;
-int WINAPI TaskListButton_OnPointerMoved_Hook(void* pThis, void* pArgs) {
+using TaskListButton_OnPointerPressed_t = int(WINAPI*)(void* pThis,
+                                                       void* pArgs);
+TaskListButton_OnPointerPressed_t TaskListButton_OnPointerPressed_Original;
+int WINAPI TaskListButton_OnPointerPressed_Hook(void* pThis, void* pArgs) {
+    Wh_Log(L">");
+
     auto original = [=]() {
-        return TaskListButton_OnPointerMoved_Original(pThis, pArgs);
+        return TaskListButton_OnPointerPressed_Original(pThis, pArgs);
     };
 
-    // Only update if tooltip is currently shown.
-    if (!g_volumeTooltipState.popup || !g_volumeTooltipState.popup.IsOpen() ||
-        !g_volumeTooltipState.taskbarFrame) {
+    if (!g_settings.ctrlClickToMute) {
+        return original();
+    }
+
+    // Check if Ctrl is pressed.
+    if (GetKeyState(VK_CONTROL) >= 0) {
         return original();
     }
 
@@ -840,19 +1059,52 @@ int WINAPI TaskListButton_OnPointerMoved_Hook(void* pThis, void* pArgs) {
         return original();
     }
 
-    // Update horizontal position to follow cursor.
-    auto point = args.GetCurrentPoint(g_volumeTooltipState.taskbarFrame);
-    UpdateTooltipHorizontalPosition(point.Position().X);
+    // Get process ID from the taskbar button.
+    DWORD processId = GetProcessIdFromTaskListButton(element);
+    if (!processId) {
+        Wh_Log(L"Could not get process ID from taskbar button");
+        return original();
+    }
 
-    return original();
+    Wh_Log(L"Ctrl+click to toggle mute: PID=%u", processId);
+
+    // Toggle mute state.
+    auto newMuteState = ToggleAppMute(processId);
+
+    // Show tooltip near cursor.
+    WCHAR tooltipText[64];
+    if (!newMuteState) {
+        wcscpy_s(tooltipText,
+                 g_settings.terseFormat ? L"🔕" : L"No audio session");
+    } else if (*newMuteState) {
+        wcscpy_s(tooltipText, g_settings.terseFormat ? L"🔇" : L"Muted");
+    } else {
+        // Get current volume to display.
+        int volume = GetAppVolume(processId);
+        if (volume >= 0) {
+            swprintf_s(tooltipText,
+                       g_settings.terseFormat ? L"🔊 %d%%" : L"Volume: %d%%",
+                       volume);
+        } else {
+            wcscpy_s(tooltipText,
+                     g_settings.terseFormat ? L"🔕" : L"No audio session");
+        }
+    }
+    ShowVolumeTooltip(element.try_as<FrameworkElement>(), tooltipText);
+
+    // Mark event as handled to prevent normal click behavior.
+    args.Handled(true);
+    return 0;
 }
 
 void LoadSettings() {
     g_settings.volumeChangeStep = Wh_GetIntSetting(L"volumeChangeStep");
-    g_settings.noAutomaticMuteToggle =
-        Wh_GetIntSetting(L"noAutomaticMuteToggle");
+    g_settings.ctrlClickToMute = Wh_GetIntSetting(L"ctrlClickToMute");
     g_settings.ctrlScrollVolumeChange =
         Wh_GetIntSetting(L"ctrlScrollVolumeChange");
+    g_settings.terseFormat = Wh_GetIntSetting(L"terseFormat");
+    g_settings.noAutomaticMuteToggle =
+        Wh_GetIntSetting(L"noAutomaticMuteToggle");
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
@@ -869,9 +1121,9 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             TaskListButton_OnPointerExited_Hook,
         },
         {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
-            &TaskListButton_OnPointerMoved_Original,
-            TaskListButton_OnPointerMoved_Hook,
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void *))"},
+            &TaskListButton_OnPointerPressed_Original,
+            TaskListButton_OnPointerPressed_Hook,
         },
         {
             {LR"(struct winrt::Taskbar::TaskListWindowViewModel __cdecl TryGetItemFromContainer<struct winrt::Taskbar::TaskListWindowViewModel>(struct winrt::Windows::UI::Xaml::UIElement const &))"},
@@ -1031,7 +1283,7 @@ void Wh_ModUninit() {
         RunFromWindowThread(
             hTaskbarWnd,
             [](void*) {
-                CleanupVolumeTooltip();
+                HideVolumeTooltip();
                 SndVolUninit();
             },
             nullptr);
