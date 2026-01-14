@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-14T15:42:00.000Z</updated>
+    <updated>2026-01-14T18:50:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#44661b1433d48855610c53c44e7a936d3f584ae9</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
+        <updated>2026-01-14T18:50:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the tooltip being misplaced while only half of the content is displayed at the top of the taskbar.</li>
+<li>Fixed the tooltip being horizontally misplaced with some custom taskbar themes such as the DockLike taskbar theme.</li>
+<li>Added support for older Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Hotkey Cycle 1.0.0]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-hotkey-cycle#910d825f1c812f1f50da53a5d28c226581e0bf2e</id>
@@ -468,20 +483,6 @@ The mod now waits until the keyboard is completely idle before sending Ctrl+S. T
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide per monitor 1.0.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-per-monitor#242ebc0abbd768ac6dab8cf705673af01676fb7d</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-per-monitor"/>
-        <updated>2026-01-05T21:47:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the new taskbar auto-hide animation in Windows 11 preview builds (ViVeTool ID: 41356296).</li>
-<li>Added more details about monitor selection to the mod description.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
