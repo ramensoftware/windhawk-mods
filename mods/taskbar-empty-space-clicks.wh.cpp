@@ -1241,7 +1241,7 @@ bool IsDoubleTap();
 bool IsTripleTap();
 bool IsMultiTap();
 bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks);
-void SynthesizeTaskbarRightClick(POINT ptScreen);
+void SynthesizeTaskbarRightClick(const POINT &ptScreen);
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD);
 std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks);
 bool IsTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks);
@@ -3868,7 +3868,7 @@ bool IsMultiTap()
 }
 
 // Injects a synthetic right-click at specified screen position
-void SynthesizeTaskbarRightClick(POINT ptScreen)
+void SynthesizeTaskbarRightClick(const POINT &ptScreen)
 {
     LOG_TRACE();
 
