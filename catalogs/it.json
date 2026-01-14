@@ -7418,7 +7418,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1768416649000,
+                "updated": 1768420152000,
                 "users": 5
             },
             "metadata": {
@@ -7435,7 +7435,7 @@
                 ],
                 "name": "Taskbar Volume Control Per-App",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.2"
+                "version": "1.1.3"
             }
         },
         "taskbar-wheel-cycle": {
