@@ -2,7 +2,7 @@
 // @id              taskbar-volume-control-per-app
 // @name            Taskbar Volume Control Per-App
 // @description     Control the per-app volume by scrolling over taskbar buttons
-// @version         1.1.2
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -898,6 +898,7 @@ void UpdateTooltipPosition() {
     } else {
         // Main taskbar: use element-relative coordinates.
         double cursorX = g_volumeTooltipState.cursorX;
+        double cursorY = g_volumeTooltipState.cursorY;
 
         if (g_volumeTooltipState.rotationAngle == 0.0) {
             // Horizontal taskbar.
@@ -909,7 +910,7 @@ void UpdateTooltipPosition() {
         } else {
             // Vertical taskbar.
             popup.HorizontalOffset(kTooltipOffsetTaskbarEdge);
-            popup.VerticalOffset(cursorX + kTooltipOffset);
+            popup.VerticalOffset(cursorY + kTooltipOffset);
         }
     }
 }
