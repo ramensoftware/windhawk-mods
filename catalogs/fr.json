@@ -6477,7 +6477,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1768255810000,
+                "updated": 1768404477000,
                 "users": 27
             },
             "metadata": {
@@ -6493,7 +6493,7 @@
                 ],
                 "license": "MIT",
                 "name": "Disappearing Tray Icons Fix",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "taskbar-dock-animation": {
