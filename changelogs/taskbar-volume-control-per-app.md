@@ -1,3 +1,7 @@
+## 1.1.1 ([Jan 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0c5ede9a9249b0e88c3d82b48c263f6b24f03560/mods/taskbar-volume-control-per-app.wh.cpp))
+
+* Reverted to the in-taskbar tooltips, since the above-taskbar tooltips are hovered by thumbnails.
+
 ## 1.1 ([Jan 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b01400a9758db6ea150ee7d45a28863fbcaa28c8/mods/taskbar-volume-control-per-app.wh.cpp))
 
 * Added an option mute apps with Ctrl+click.

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-14T02:07:38.000Z</updated>
+    <updated>2026-01-14T09:01:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#0c5ede9a9249b0e88c3d82b48c263f6b24f03560</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
+        <updated>2026-01-14T09:01:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Reverted to the in-taskbar tooltips, since the above-taskbar tooltips are hovered by thumbnails.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-control-per-app#b01400a9758db6ea150ee7d45a28863fbcaa28c8</id>
@@ -451,37 +464,6 @@ The mod now waits until the keyboard is completely idle before sending Ctrl+S. T
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 1.2]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#3c7c9ac8e40174aaff1620d925bdceaaea56f1d4</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-01-05T00:35:26.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix Shift key interference during typing</p>
-<p>Problem:
-Version 1.1 forcibly released the Shift key before sending Ctrl+S. This caused issues when typing:</p>
-<ul>
-<li>Uppercase letters would randomly become lowercase</li>
-<li>Comma (Shift+period on some layouts) would become a period</li>
-<li>Any Shift+key combination could be interrupted mid-keystroke</li>
-</ul>
-<p>Solution:
-Instead of forcing modifier keys to release, the mod now <strong>waits</strong> for the user to naturally release Shift/Alt before triggering auto-save.</p>
-<h3 id="changes">Changes</h3>
-<ul>
-<li><strong>Removed forced key release</strong> — no longer sends synthetic Shift/Alt key-up events</li>
-<li><strong>Added retry mechanism</strong> — if Shift or Alt is pressed when save triggers, the mod waits and retries</li>
-<li><strong>Retry polling</strong> — checks every 100ms whether modifiers are released (up to 20 attempts = 2 seconds)</li>
-<li><strong>Graceful timeout</strong> — if modifiers are held for more than 2 seconds, skip this save (will save on next edit)</li>
-<li>Added <code>g_retryTimerId</code> and <code>g_retryCount</code> for retry state management</li>
-<li>Added <code>AreModifiersPressed()</code> helper function</li>
-<li>Added <code>TrySave()</code> function that handles retry logic</li>
-<li>Version bumped to 1.2</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>
