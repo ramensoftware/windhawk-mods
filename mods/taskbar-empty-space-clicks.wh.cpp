@@ -205,7 +205,7 @@ If your taskbar becomes fully occupied by open windows and pinned icons, there i
 
 ### Task Switching (Ctrl+Alt+Tab) window always reopens on consecutive triggers
 
-If you are using [Vertical Taskbar for Windows 11](https://windhawk.net/mods/taskbar-vertical) or [Taskbar on top for Windows 11](https://windhawk.net/mods/taskbar-on-top) mod, taskbar click detection might not work correctly when the Task Switching window is opened. As a workaround, you can install [Alt+Tab per monitor](https://windhawk.net/mods/alt-tab-per-monitor) that implicitly fixes the Task Switching window rect size so that the taskbar is not overlaid by it anymore.
+If you are using [Vertical Taskbar for Windows 11](https://windhawk.net/mods/taskbar-vertical) or [Taskbar on top for Windows 11](https://windhawk.net/mods/taskbar-on-top) mod, taskbar click detection might not work correctly when the Task Switching window is opened. See [here for more details](https://github.com/ramensoftware/windhawk-mods/issues/3007). As a workaround, you can install [Alt+Tab per monitor](https://windhawk.net/mods/alt-tab-per-monitor) that implicitly fixes the Task Switching window rect size so that the taskbar is not overlaid by it anymore.
 
 ### Selected app/window from Task Switching (Ctrl+Alt+Tab) window is not focused
 
@@ -618,7 +618,6 @@ static bool g_isExplorerPatcherDetected = false;
 static bool g_isContextMenuSuppressed = false;
 static DWORD g_contextMenuSuppressionTimestamp = 0;
 
-static const int g_mouseClickTimeoutMs = 200; // time to wait since the last time an action was executed
 static UINT_PTR gMouseClickTimer = (UINT_PTR)NULL;
 static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 
@@ -934,6 +933,8 @@ struct MouseClick
     // Constructs MouseClick from window message parameters and detects if click is on empty taskbar space
     MouseClick(const POINT &ptrPos, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position(ptrPos), timestamp(0), onEmptySpace(false), hWnd(hWnd)
     {
+        LOG_TRACE();
+
         timestamp = GetTickCount();
         auto pUIAutomation = g_comAPI.GetUIAutomation();
         if (!pUIAutomation)
@@ -1003,8 +1004,11 @@ struct MouseClick
         return pointerLocation;
     }
 
+    // based on GetMessageExtraInfo() value, determine whether the input came from mouse or touch/pen for legacy mouse messages
     static MouseClick::Type GetPointerTypeWin10(LPARAM lParam)
     {
+        LOG_TRACE();
+
         MouseClick::Type type = MouseClick::Type::INVALID;
 
         // legacy messages have information about pointer id stored in extra info (lparam)
@@ -1022,8 +1026,11 @@ struct MouseClick
         return type;
     }
 
+    // based on POINTER message WPARAM, determine whether the input came from mouse or touch/pen for new pointer messages
     static MouseClick::Type GetPointerTypeWin11(WPARAM wParam)
     {
+        LOG_TRACE();
+
         MouseClick::Type type = MouseClick::Type::INVALID;
 
         // Retrieve common pointer information to find out source of the click
@@ -1055,8 +1062,11 @@ struct MouseClick
         return type;
     }
 
+    // based on POINTER message WPARAM, determine which mouse button was clicked for new pointer messages
     static MouseClick::Button GetMouseButtonWin11(WPARAM wParam)
     {
+        LOG_TRACE();
+
         MouseClick::Button button = MouseClick::Button::INVALID;
         if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam))
         {
@@ -1081,8 +1091,11 @@ struct MouseClick
         return button;
     }
 
+    // based on legacy mouse message and WPARAM, determine which mouse button was clicked for legacy mouse messages
     static MouseClick::Button GetMouseButtonWin10(UINT uMsg, WPARAM wParam)
     {
+        LOG_TRACE();
+
         // button up messages seems really unreliable, so only process down and dblclk messages
         MouseClick::Button button = MouseClick::Button::INVALID;
         if ((uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK))
@@ -1107,6 +1120,8 @@ struct MouseClick
     // Returns bitmask of currently pressed modifier keys (Ctrl, Alt, Shift, Win)
     static uint32_t GetKeyModifiersState()
     {
+        LOG_TRACE();
+
         uint32_t currentKeyModifiersState = 0U;
         const auto LogKeyIfPressed = [&currentKeyModifiersState](const int &vkCode, const KeyModifier &keyModifier)
         {
@@ -1225,12 +1240,11 @@ bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick
 bool IsDoubleTap();
 bool IsTripleTap();
 bool IsMultiTap();
-bool IsKeyPressed(int vkCode);
 bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks);
 void SynthesizeTaskbarRightClick(POINT ptScreen);
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD);
 std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks);
-bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks);
+bool IsTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks);
 std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button = MouseClick::Button::INVALID);
 bool OnMouseClick(const MouseClick &click);
 bool GetTaskbarAutohideState();
@@ -1288,16 +1302,22 @@ UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclas
 
 BOOL SubclassTaskbarWindow(HWND hWnd)
 {
+    LOG_TRACE();
+
     return WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, NULL);
 }
 
 void UnsubclassTaskbarWindow(HWND hWnd)
 {
+    LOG_TRACE();
+
     SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
 }
 
 void SubclassTaskSwitchingWindow()
 {
+    LOG_TRACE();
+
     g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
     if (g_hTaskSwitchingWnd)
     {
@@ -1314,9 +1334,20 @@ void SubclassTaskSwitchingWindow()
     }
 }
 
+void UnsubclassTaskSwitchingWindow()
+{
+    LOG_TRACE();
+
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc);
+    g_hTaskSwitchingWnd = NULL;
+    g_isTaskSwitchingWindowSubclassed = false;
+}
+
 // Hooks InputSite window proc for Win11 taskbar pointer events
 bool HandleIdentifiedInputSiteWindow(HWND hWnd)
 {
+    LOG_TRACE();
+
     if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId)
     {
         return false;
@@ -1440,6 +1471,8 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
 // Checks if module is ExplorerPatcher based on filename
 bool IsExplorerPatcherModule(HMODULE module)
 {
+    LOG_TRACE();
+
     WCHAR moduleFilePath[MAX_PATH];
     switch (
         GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath)))
@@ -1468,6 +1501,8 @@ bool IsExplorerPatcherModule(HMODULE module)
 // Scans loaded modules for ExplorerPatcher and switches to Win10 mode
 void HandleLoadedExplorerPatcher()
 {
+    LOG_TRACE();
+
     HMODULE hMods[1024];
     DWORD cbNeeded;
     if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
@@ -1492,6 +1527,8 @@ void HandleLoadedExplorerPatcher()
 // Checks newly loaded module for ExplorerPatcher and switches to Win10 mode
 void HandleLoadedModuleIfExplorerPatcher(HMODULE module)
 {
+    LOG_TRACE();
+
     if (module && !((ULONG_PTR)module & 3))
     {
         if (IsExplorerPatcherModule(module))
@@ -1512,6 +1549,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags)
 {
+    LOG_TRACE();
+
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module)
     {
@@ -1524,6 +1563,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 // Finds main and secondary taskbar windows in current process
 std::tuple<HWND, std::unordered_set<HWND>> FindTaskbarWindows()
 {
+    LOG_TRACE();
+
     struct ENUM_WINDOWS_PARAM
     {
         HWND *hPrimary;
@@ -1883,8 +1924,11 @@ std::wstring VKToString(UINT vk)
 }
 #endif
 
+// GetClassName wrapper to avoid dealing C-style strings
 std::wstring GetClassNameString(HWND hWnd)
 {
+    LOG_TRACE();
+
     if (!hWnd)
     {
         LOG_ERROR(L"GetClassNameString called with NULL hWnd");
@@ -1900,8 +1944,11 @@ std::wstring GetClassNameString(HWND hWnd)
     return std::wstring(szClassName);
 }
 
+// GetWindowText wrapper to avoid dealing C-style strings
 std::wstring GetWindowTextString(HWND hWnd)
 {
+    LOG_TRACE();
+
     if (!hWnd)
     {
         LOG_ERROR(L"GetWindowTextString called with NULL hWnd");
@@ -2215,6 +2262,8 @@ bool UserClickedOnTaskViewItemOnTaskSwitchingWindow(const POINT &pt)
 // Handles mouse click on Task Switching window, returns true to suppress the click
 bool HandleTaskSwitchingWindowClick(const POINT &position)
 {
+    LOG_TRACE();
+
     bool supressClick = false;
     if (!UserClickedOnTaskViewItemOnTaskSwitchingWindow(position))
     {
@@ -2239,6 +2288,8 @@ bool HandleTaskSwitchingWindowClick(const POINT &position)
 // Converts key name string to KeyModifier enum
 KeyModifier GetKeyModifierFromName(const std::wstring &keyName)
 {
+    LOG_TRACE();
+
     if (keyName == L"lctrl")
         return KEY_MODIFIER_LCTRL;
     if (keyName == L"rctrl")
@@ -2260,8 +2311,9 @@ KeyModifier GetKeyModifierFromName(const std::wstring &keyName)
 // Splits semicolon-separated argument string into vector
 std::vector<std::wstring> SplitArgs(const std::wstring &args, const wchar_t delimiter = L';')
 {
+    LOG_TRACE();
+    
     std::vector<std::wstring> result;
-
     std::wstring args_ = stringtools::trim(args);
     if (args_.empty())
     {
@@ -2705,6 +2757,7 @@ void ShowDesktop()
 void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
 {
     LOG_TRACE();
+    
     if (keys.empty())
     {
         LOG_DEBUG(L"No virtual key codes to send");
@@ -3041,6 +3094,8 @@ void MediaPrev()
 // Clicks Start button using UIAutomation, handling Win10/Win11 differences
 bool ClickStartMenu()
 {
+    LOG_TRACE();
+
     const MouseClick &lastClick = g_mouseClickQueue[-1];
     if (!lastClick.onEmptySpace)
     {
@@ -3181,6 +3236,7 @@ bool ClickStartMenu()
 void OpenStartMenu()
 {
     LOG_TRACE();
+
     if (!ClickStartMenu()) // if user hide the start menu via other Windhawk mod, we can't click it
     {
         LOG_INFO(L"Sending Win keypress");
@@ -3218,6 +3274,8 @@ void OpenTaskManager(HWND taskbarhWnd)
 // Returns mute state of default audio device
 BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator)
 {
+    LOG_TRACE();
+
     // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
     const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
@@ -3331,6 +3389,8 @@ void HideIcons()
 void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2)
 {
+    LOG_TRACE();
+
     if (g_taskbarVersion != WIN_11)
     {
         LOG_INFO(L"Taskbar button combining is only supported on Windows 11 taskbar");
@@ -3518,6 +3578,8 @@ void ToggleTaskbarAlignment()
 // Parses command line into executable path and parameters
 std::tuple<std::wstring, std::wstring> ParseExecutableAndParameters(const std::wstring &command)
 {
+    LOG_TRACE();
+
     std::wstring executable = command;
     std::wstring parameters;
 
@@ -3571,6 +3633,7 @@ std::tuple<std::wstring, std::wstring> ParseExecutableAndParameters(const std::w
 void StartProcess(std::wstring command)
 {
     LOG_TRACE();
+
     if (command.empty())
     {
         LOG_DEBUG(L"Command is empty, nothing to start");
@@ -3643,6 +3706,8 @@ void StartProcess(std::wstring command)
 // Checks if window matches desired taskbar type (primary/secondary/all)
 bool IsCorrectTaskbarType(const std::wstring &taskbarTypeName, HWND hWnd)
 {
+    LOG_TRACE();
+
     bool isCorrectTaskbar = true;
     if (taskbarTypeName == L"primary")
     {
@@ -3658,6 +3723,8 @@ bool IsCorrectTaskbarType(const std::wstring &taskbarTypeName, HWND hWnd)
 // Determines if context menu should be suppressed for right-click triggers
 bool ShallSuppressContextMenu(const MouseClick &lastClick)
 {
+    LOG_TRACE();
+
     for (const auto &triggerAction : g_settings.triggerActions)
     {
         if (triggerAction.mouseTriggerName.find(L"right", 0) == 0)
@@ -3677,6 +3744,7 @@ bool ShallSuppressContextMenu(const MouseClick &lastClick)
 bool IsSingleClick(const MouseClick::Button button)
 {
     LOG_TRACE();
+
     const MouseClick &currentClick = g_mouseClickQueue[-1];
     return (currentClick.type == MouseClick::Type::MOUSE) && (currentClick.button == button);
 }
@@ -3711,6 +3779,7 @@ bool IsDoubleClick(const MouseClick::Button button, const MouseClick &previousCl
 bool IsDoubleClick(const MouseClick::Button button)
 {
     LOG_TRACE();
+
     return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]);
 }
 
@@ -3718,6 +3787,7 @@ bool IsDoubleClick(const MouseClick::Button button)
 bool IsTripleClick(const MouseClick::Button button)
 {
     LOG_TRACE();
+
     return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]) &&
            IsDoubleClick(button, g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
 }
@@ -3726,6 +3796,7 @@ bool IsTripleClick(const MouseClick::Button button)
 bool IsMultiClick(const MouseClick::Button button)
 {
     LOG_TRACE();
+
     return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]) &&
            IsDoubleClick(button, g_mouseClickQueue[-3], g_mouseClickQueue[-2]) &&
            IsDoubleClick(button, g_mouseClickQueue[-4], g_mouseClickQueue[-3]);
@@ -3734,6 +3805,7 @@ bool IsMultiClick(const MouseClick::Button button)
 bool IsSingleTap()
 {
     LOG_TRACE();
+
     const MouseClick &currentClick = g_mouseClickQueue[-1];
     return (currentClick.type == MouseClick::Type::TOUCH) && (currentClick.button == MouseClick::Button::LEFT);
 }
@@ -3771,6 +3843,7 @@ bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick
 bool IsDoubleTap()
 {
     LOG_TRACE();
+
     const MouseClick &previousClick = g_mouseClickQueue[-2];
     const MouseClick &currentClick = g_mouseClickQueue[-1];
     return IsDoubleTap(previousClick, currentClick);
@@ -3780,6 +3853,7 @@ bool IsDoubleTap()
 bool IsTripleTap()
 {
     LOG_TRACE();
+
     return IsDoubleTap(g_mouseClickQueue[-2], g_mouseClickQueue[-1]) && IsDoubleTap(g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
 }
 
@@ -3787,19 +3861,17 @@ bool IsTripleTap()
 bool IsMultiTap()
 {
     LOG_TRACE();
+
     return IsDoubleTap(g_mouseClickQueue[-2], g_mouseClickQueue[-1]) &&
            IsDoubleTap(g_mouseClickQueue[-3], g_mouseClickQueue[-2]) &&
            IsDoubleTap(g_mouseClickQueue[-4], g_mouseClickQueue[-3]);
 }
 
-bool IsKeyPressed(int vkCode)
-{
-    return (GetAsyncKeyState(vkCode) & 0x8000) != 0;
-}
-
 // Injects a synthetic right-click at specified screen position
 void SynthesizeTaskbarRightClick(POINT ptScreen)
 {
+    LOG_TRACE();
+
     LOG_DEBUG(L"Synthesizing right-click at %ld,%ld", ptScreen.x, ptScreen.y);
 
     SetCursorPos(ptScreen.x, ptScreen.y); // likely not necessary, but just to be sure
@@ -3822,6 +3894,8 @@ void SynthesizeTaskbarRightClick(POINT ptScreen)
 // Timer callback that executes action after double-click timeout expires
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
 {
+    LOG_TRACE();
+
     if (!KillTimer(NULL, gMouseClickTimer))
     {
         LOG_ERROR(L"Failed to kill triple click timer");
@@ -3852,6 +3926,8 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
 // Constructs trigger name string from click type, count and button
 std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button)
 {
+    LOG_TRACE();
+
     std::wstring mouseTriggerName;
     if (clickType == MouseClick::Type::MOUSE)
     {
@@ -3904,8 +3980,10 @@ std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numC
 }
 
 // Checks if a trigger with matching name and modifiers is defined in settings
-bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks)
+bool IsTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks)
 {
+    LOG_TRACE();
+
     for (const auto &triggerAction : g_settings.triggerActions)
     {
         if ((triggerAction.mouseTriggerName == mouseTriggerName) && triggerAction.actionExecutor)
@@ -3978,11 +4056,13 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
 // Returns action executor for detected click pattern, checking for higher-order triggers if requested
 std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks)
 {
+    LOG_TRACE();
+
     const auto isHigherOrderClickDefined = [&](const MouseClick::Type clickType, const int currentCount, const MouseClick::Button button)
     {
         for (int higherCount = currentCount + 1; higherCount <= 3; higherCount++)
         {
-            if (isTriggerDefined(GetActionName(clickType, higherCount, button), higherCount))
+            if (IsTriggerDefined(GetActionName(clickType, higherCount, button), higherCount))
             {
                 LOG_DEBUG(L"Higher order click action defined for %s, skipping lower order click",
                           GetActionName(MouseClick::Type::MOUSE, higherCount, button).c_str());
@@ -4425,9 +4505,7 @@ void Wh_ModUninit()
 
     if (g_hTaskSwitchingWnd && g_isTaskSwitchingWindowSubclassed && IsWindow(g_hTaskSwitchingWnd))
     {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc);
-        g_hTaskSwitchingWnd = NULL;
-        g_isTaskSwitchingWindowSubclassed = false;
+        UnsubclassTaskSwitchingWindow();
     }
 }
 
