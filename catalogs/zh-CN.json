@@ -8031,6 +8031,34 @@
                 "version": "2.1.0"
             }
         },
+        "virtual-desktop-hotkey-cycle": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768405320000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768405320000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Amrsatrio",
+                "description": "Makes Win+Ctrl+Left and Win+Ctrl+Right virtual desktop shortcuts loop through ends.",
+                "github": "https://github.com/Amrsatrio",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Virtual Desktop Hotkey Cycle",
+                "twitter": "https://twitter.com/amrsatrio",
+                "version": "1.0.0"
+            }
+        },
         "virtual-desktop-taskbar-order": {
             "details": {
                 "defaultSorting": 16776,

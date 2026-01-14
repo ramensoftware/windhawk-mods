@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-14T15:27:57.000Z</updated>
+    <updated>2026-01-14T15:42:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Hotkey Cycle 1.0.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-hotkey-cycle#910d825f1c812f1f50da53a5d28c226581e0bf2e</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-hotkey-cycle"/>
+        <updated>2026-01-14T15:42:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cyclingvirtualdesktophotkey">Cycling Virtual Desktop Hotkey</h1>
+<p>This simple mod makes Win+Ctrl+Left and Win+Ctrl+Right cycle to the last/first desktops when the current virtual desktop is the first/last, respectively.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Version: Windows 10 1507 and up</li>
+<li>Architecture: x64, ARM64</li>
+</ul>
+<p>Tested on Windows 11 24H2 x64 and ARM64.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Windows normally calls <code>CVirtualDesktopCollection::GetAdjacentVirtualDesktop</code> with a reference to the <strong>current</strong> virtual desktop. This method is implemented in <code>twinui.pcshell.dll</code> on Windows builds 17763 (1809) and newer, and in <code>twinui.dll</code> on builds prior to 17763. When there is no desktop in the requested direction (for example, pressing <strong>Win+Ctrl+Right</strong> on the last desktop), the function returns <code>TYPE_E_OUTOFBOUNDS</code>, which prevents further navigation.</p>
+<p>This mod hooks <code>GetAdjacentVirtualDesktop</code> and watches for that out-of-bounds result:</p>
+<ol>
+<li>The original function is called first with the current desktop (<code>pReference</code>).</li>
+<li>If it fails with <code>TYPE_E_OUTOFBOUNDS</code>, the mod checks how many virtual desktops exist.</li>
+<li>If more than one desktop is present, the function is called again with <code>pReference</code> set to <code>nullptr</code>.</li>
+</ol>
+<p>When <code>pReference</code> is <code>nullptr</code>, Windows interprets the request as:</p>
+<ul>
+<li><strong>Right / Down</strong>: return the <strong>first</strong> virtual desktop</li>
+<li><strong>Left / Up</strong>: return the <strong>last</strong> virtual desktop</li>
+</ul>
+<p>By reissuing the call this way, the mod effectively turns the standard virtual desktop hotkeys into a loop, allowing seamless cycling from end to beginning and vice versa.</p>]]></content>
+        <author>
+            <name>Amrsatrio</name>
+            <uri>https://github.com/Amrsatrio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disappearing Tray Icons Fix 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-disappearing-tray-icons-fix#632fd7eca32052974e780235c2ba000a8e459430</id>
@@ -450,19 +482,6 @@ The mod now waits until the keyboard is completely idle before sending Ctrl+S. T
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No MS Edge WebView2 for Copilot 1.1]]></title>
-        <id>https://windhawk.net/mods/xs-nomsedgewebview4copilot#85afec37f213d4fa5dbc28db36d2570f732ba152</id>
-        <link href="https://windhawk.net/mods/xs-nomsedgewebview4copilot"/>
-        <updated>2026-01-05T09:25:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Handles already running <code>msedgewebview2.exe</code> child processes now as well.</li>
-</ul>]]></content>
-        <author>
-            <name>Xetrill</name>
-            <uri>https://github.com/Xetrill</uri>
         </author>
     </entry>
 </feed>
