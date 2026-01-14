@@ -76,6 +76,8 @@ BOOL Wh_ModInit()
 {
     // twinui.pcshell.dll on 17763+
     // twinui.dll on <17763
+
+    // twinui.pcshell.dll, twinui.dll
     static const WindhawkUtils::SYMBOL_HOOK c_rgTwinUIPCShellHooks[] =
     {
         {
