@@ -2,7 +2,7 @@
 // @id              taskbar-volume-control-per-app
 // @name            Taskbar Volume Control Per-App
 // @description     Control the per-app volume by scrolling over taskbar buttons
-// @version         1.1.1
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -118,8 +118,8 @@ std::atomic<bool> g_taskbarViewDllLoaded;
 IMMDeviceEnumerator* g_pDeviceEnumerator;
 
 // Per-app volume: taskbar button integration.
-bool g_captureTaskGroup;
-void* g_capturedTaskGroup;
+thread_local bool g_captureTaskGroup;
+thread_local void* g_capturedTaskGroup;
 
 // Click sentinel pattern for getting native task item/group from WindowsUdk.
 WCHAR g_clickSentinel[] = L"click-sentinel";
@@ -629,21 +629,20 @@ using TryGetItemFromContainer_TaskListGroupViewModel_t =
 TryGetItemFromContainer_TaskListGroupViewModel_t
     TryGetItemFromContainer_TaskListGroupViewModel_Original;
 
-using TaskListGroupViewModel_IsRequestingAttention_t =
-    bool(WINAPI*)(void* pThis);
-TaskListGroupViewModel_IsRequestingAttention_t
-    TaskListGroupViewModel_IsRequestingAttention_Original;
+using TaskListGroupViewModel_IsMultiWindow_t = bool(WINAPI*)(void* pThis);
+TaskListGroupViewModel_IsMultiWindow_t
+    TaskListGroupViewModel_IsMultiWindow_Original;
 
-using ITaskGroup_IsRequestingAttention_t = bool(WINAPI*)(void* pThis);
-ITaskGroup_IsRequestingAttention_t ITaskGroup_IsRequestingAttention_Original;
-bool WINAPI ITaskGroup_IsRequestingAttention_Hook(void* pThis) {
+using ITaskGroup_IsRunning_t = bool(WINAPI*)(void* pThis);
+ITaskGroup_IsRunning_t ITaskGroup_IsRunning_Original;
+bool WINAPI ITaskGroup_IsRunning_Hook(void* pThis) {
     if (g_captureTaskGroup) {
         Wh_Log(L">");
         g_capturedTaskGroup = *(void**)pThis;
         return false;
     }
 
-    return ITaskGroup_IsRequestingAttention_Original(pThis);
+    return ITaskGroup_IsRunning_Original(pThis);
 }
 
 using CTaskGroup_GetNumItems_t = int(WINAPI*)(void* pThis);
@@ -747,8 +746,8 @@ void* GetWindowsUdkTaskGroupFromTaskListButton(UIElement element) {
 
     g_capturedTaskGroup = nullptr;
     g_captureTaskGroup = true;
-    TaskListGroupViewModel_IsRequestingAttention_Original(
-        (void**)groupViewModel.get() - 1);
+    TaskListGroupViewModel_IsMultiWindow_Original((void**)groupViewModel.get() -
+                                                  1);
     g_captureTaskGroup = false;
     return g_capturedTaskGroup;
 }
@@ -851,7 +850,7 @@ void CALLBACK HideVolumeTooltipTimerProc(HWND hwnd,
 
 // Tooltip positioning offset from cursor in pixels.
 constexpr int kTooltipOffset = 12;
-constexpr int kTooltipOffsetVerticalTaskbarEdge = 4;
+constexpr int kTooltipOffsetTaskbarEdge = 4;
 
 // Get rotation angle from element's parent RenderTransform.
 // Used to detect vertical taskbar orientation.
@@ -904,10 +903,12 @@ void UpdateTooltipPosition() {
             // Horizontal taskbar.
             double taskbarHeight = taskbarFrame.ActualHeight();
             popup.HorizontalOffset(cursorX + kTooltipOffset);
-            popup.VerticalOffset((taskbarHeight - tooltipHeight) / 2);
+            popup.VerticalOffset(
+                std::max((taskbarHeight - tooltipHeight) / 2,
+                         static_cast<double>(kTooltipOffsetTaskbarEdge)));
         } else {
             // Vertical taskbar.
-            popup.HorizontalOffset(kTooltipOffsetVerticalTaskbarEdge);
+            popup.HorizontalOffset(kTooltipOffsetTaskbarEdge);
             popup.VerticalOffset(cursorX + kTooltipOffset);
         }
     }
@@ -1074,8 +1075,13 @@ int WINAPI TaskListButton_OnPointerWheelChanged_Hook(void* pThis, void* pArgs) {
     auto [taskbarFrame, isOverflowPopup] = FindTaskbarFrameAncestor(element);
     if (taskbarFrame) {
         auto point = args.GetCurrentPoint(taskbarFrame);
-        double cursorX = point.Position().X;
-        double cursorY = point.Position().Y;
+        // Transform from taskbarFrame-relative to root-relative coordinates.
+        auto transform = taskbarFrame.TransformToVisual(nullptr);
+        auto rootPoint =
+            transform.TransformPoint({static_cast<float>(point.Position().X),
+                                      static_cast<float>(point.Position().Y)});
+        double cursorX = rootPoint.X;
+        double cursorY = rootPoint.Y;
 
         WCHAR tooltipText[64];
         if (!volumeResult) {
@@ -1158,8 +1164,13 @@ int WINAPI TaskListButton_OnPointerMoved_Hook(void* pThis, void* pArgs) {
     auto ancestorFrame = FindTaskbarFrameAncestor(element).element;
     if (ancestorFrame) {
         auto point = args.GetCurrentPoint(ancestorFrame);
-        g_volumeTooltipState.cursorX = point.Position().X;
-        g_volumeTooltipState.cursorY = point.Position().Y;
+        // Transform from ancestorFrame-relative to root-relative coordinates.
+        auto transform = ancestorFrame.TransformToVisual(nullptr);
+        auto rootPoint =
+            transform.TransformPoint({static_cast<float>(point.Position().X),
+                                      static_cast<float>(point.Position().Y)});
+        g_volumeTooltipState.cursorX = rootPoint.X;
+        g_volumeTooltipState.cursorY = rootPoint.Y;
     }
 
     UpdateTooltipPosition();
@@ -1222,8 +1233,13 @@ int WINAPI TaskListButton_OnPointerPressed_Hook(void* pThis, void* pArgs) {
     auto [taskbarFrame, isOverflowPopup] = FindTaskbarFrameAncestor(element);
     if (taskbarFrame) {
         auto point = args.GetCurrentPoint(taskbarFrame);
-        double cursorX = point.Position().X;
-        double cursorY = point.Position().Y;
+        // Transform from taskbarFrame-relative to root-relative coordinates.
+        auto transform = taskbarFrame.TransformToVisual(nullptr);
+        auto rootPoint =
+            transform.TransformPoint({static_cast<float>(point.Position().X),
+                                      static_cast<float>(point.Position().Y)});
+        double cursorX = rootPoint.X;
+        double cursorY = rootPoint.Y;
 
         WCHAR tooltipText[64];
         if (!newMuteState) {
@@ -1299,13 +1315,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             &TryGetItemFromContainer_TaskListGroupViewModel_Original,
         },
         {
-            {LR"(public: bool __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::IsRequestingAttention(void)const )"},
-            &TaskListGroupViewModel_IsRequestingAttention_Original,
+            {LR"(public: bool __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::IsMultiWindow(void)const )"},
+            &TaskListGroupViewModel_IsMultiWindow_Original,
         },
         {
-            {LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskGroup<struct winrt::WindowsUdk::UI::Shell::ITaskGroup>::IsRequestingAttention(void)const )"},
-            &ITaskGroup_IsRequestingAttention_Original,
-            ITaskGroup_IsRequestingAttention_Hook,
+            {LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskGroup<struct winrt::WindowsUdk::UI::Shell::ITaskGroup>::IsRunning(void)const )"},
+            &ITaskGroup_IsRunning_Original,
+            ITaskGroup_IsRunning_Hook,
         },
     };
 
