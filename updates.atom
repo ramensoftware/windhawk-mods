@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-13T20:40:34.000Z</updated>
+    <updated>2026-01-14T02:07:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#b01400a9758db6ea150ee7d45a28863fbcaa28c8</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
+        <updated>2026-01-14T02:07:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option mute apps with Ctrl+click.</li>
+<li>Added an option for a terse format, e.g., "🔊 64%" instead of "Volume: 64%".</li>
+<li>Improved the tooltips to be shown above the taskbar items. This also adds support for the vertical taskbar.</li>
+<li>Added support for Chromium browsers and Electron apps.</li>
+<li>Changed the default volume change step from 2 to 10.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-control-per-app#7355e2851f5a14f838c11dac1ec707b01945eee8</id>
@@ -465,19 +482,6 @@ Instead of forcing modifier keys to release, the mod now <strong>waits</strong> 
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#7b60e3a794333aa37dc8841ac9093f4c101074b8</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
-        <updated>2026-01-04T20:16:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to choose the grid arrangement, e.g. whether to fill each row before moving to the next, or to fill each column first. The default option is now "Row-first, left-to-right". You can change it to "Column-first, top-to-bottom" to revert to the behavior of the previous version.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
