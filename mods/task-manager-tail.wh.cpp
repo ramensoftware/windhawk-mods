@@ -39,9 +39,6 @@ moves the Task Manager button to the tail end of the list.
 - debounceTime: 300
   $name: Event Debounce Time (ms)
   $description: How long to wait after window events stop occurring before checking the taskbar.
-- enableLogging: false
-  $name: Enable Logging
-  $description: Show debug messages in the Windhawk log window.
 */
 // ==/WindhawkModSettings==
 
@@ -69,7 +66,6 @@ struct Settings {
     std::wstring targetClass;
     int moveDelay;
     int debounceTime;
-    bool enableLogging;
 } g_settings;
 
 // Global thread control
@@ -92,18 +88,6 @@ void LoadSettings() {
 
     g_settings.debounceTime = Wh_GetIntSetting(L"debounceTime");
     if (g_settings.debounceTime < 50) g_settings.debounceTime = 50;
-
-    g_settings.enableLogging = Wh_GetIntSetting(L"enableLogging");
-}
-
-void Log(const wchar_t* fmt, ...) {
-    if (!g_settings.enableLogging) return;
-    va_list args;
-    va_start(args, fmt);
-    wchar_t buffer[1024];
-    vswprintf(buffer, 1024, fmt, args);
-    va_end(args);
-    Wh_Log(L"%s", buffer);
 }
 
 // --- WinEvent Hook Callback ---
@@ -117,7 +101,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
 }
 
 void CycleTaskbarTab(HWND hwnd) {
-    Log(L"Cycling Taskbar Tab for HWND %p via ITaskbarList", hwnd);
+    Wh_Log(L"Cycling Taskbar Tab for HWND %p via ITaskbarList", hwnd);
 
     ITaskbarList* pTaskbarList = NULL;
     HRESULT hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_ITaskbarList, (void**)&pTaskbarList);
@@ -195,7 +179,7 @@ void CheckAndMove(IUIAutomation* pAutomation) {
                     if (targetIndex != -1 && static_cast<size_t>(targetIndex) < buttons.size() - 1) {
                         // Safety cooldown to prevent loops
                         if (GetTickCount() - g_lastAttemptTime > 1000) {
-                            Log(L"Target found at index %d (of %d). Moving...", targetIndex, buttons.size());
+                            Wh_Log(L"Target found at index %d (of %d). Moving...", targetIndex, (int)buttons.size());
                             if (hTargetWnd && IsWindow(hTargetWnd)) {
                                 if (g_settings.moveDelay > 0) Sleep(g_settings.moveDelay);
                                 CycleTaskbarTab(hTargetWnd);
@@ -219,7 +203,7 @@ void CheckAndMove(IUIAutomation* pAutomation) {
 }
 
 DWORD WINAPI BackgroundThread(LPVOID) {
-    Log(L"Task Manager Tail Thread Started");
+    Wh_Log(L"Task Manager Tail Thread Started");
     g_dwThreadId = GetCurrentThreadId();
 
     HRESULT hr = CoInitialize(NULL);
@@ -237,7 +221,7 @@ DWORD WINAPI BackgroundThread(LPVOID) {
         );
 
         if (hHook) {
-            Log(L"WinEventHook Registered. Waiting for events...");
+            Wh_Log(L"WinEventHook Registered. Waiting for events...");
             
             MSG msg;
             UINT_PTR debounceTimer = 0;
