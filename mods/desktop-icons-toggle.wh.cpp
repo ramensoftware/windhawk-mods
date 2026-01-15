@@ -2,7 +2,7 @@
 // @id              desktop-icons-toggle
 // @name            Desktop Icons Toggle
 // @description     Toggle desktop icons visibility with a configurable hotkey (default: Ctrl+Alt+D)
-// @version         1.3.5
+// @version         1.3.6
 // @author          Cinabutts
 // @github          https://github.com/Cinabutts
 // @include         explorer.exe
@@ -28,7 +28,7 @@ In other words Click Taskbar/Desktop THEN configured hotkey to toggle desktop ic
 - Configurable hotkey support (default: Ctrl+Alt+D).
 
 ## Settings
-- **Modifier Keys**: Configure which modifier keys (Ctrl, Alt) are required for the hotkey.
+- **Modifier Keys**: Configure which modifier keys (Ctrl, Alt, Shift) are required for the hotkey.
 - **Hotkey Character**: The character key to use (A-Z, 0-9).
 - **Hide icons on startup**: Automatically hide desktop icons when the mod loads or Explorer restarts.
 
@@ -46,9 +46,12 @@ In other words Click Taskbar/Desktop THEN configured hotkey to toggle desktop ic
     Automatically hide desktop icons when the mod loads or Explorer restarts. (The mod itself/this becomes the switch - Does not effect ↓ below)
 
      | Keep on for: On restart(Explorer or PC) icons are Hidden.
+     | Turn off for: On restart(Explorer or PC) icons are Shown.
+
 - modifierKeys:
   - Ctrl: true
   - Alt: true
+  - Shift: false
   $name: Modifier keys
   $description: >-
     A combination of modifier keys that must be pressed along with the hotkey character.
@@ -80,6 +83,7 @@ struct ModState {
     // Settings
     BOOL bUseCtrl;
     BOOL bUseAlt;
+    BOOL bUseShift;
     WCHAR cHotkeyChar;
     BOOL bHideOnStartup; 
 } g_state = {0};
@@ -136,14 +140,16 @@ BOOL IsHotkeyMatch(WPARAM wParam) {
     // Check modifier keys
     SHORT ctrlState = GetAsyncKeyState(VK_CONTROL);
     SHORT altState = GetAsyncKeyState(VK_MENU);
+    SHORT shiftState = GetAsyncKeyState(VK_SHIFT);
     BOOL ctrlPressed = (ctrlState & 0x8000) != 0;
     BOOL altPressed = (altState & 0x8000) != 0;
+    BOOL shiftPressed = (shiftState & 0x8000) != 0;
     
     // Must match the configured modifier combination exactly
-    BOOL modifiersMatch = (ctrlPressed == g_state.bUseCtrl) && (altPressed == g_state.bUseAlt);
+    BOOL modifiersMatch = (ctrlPressed == g_state.bUseCtrl) && (altPressed == g_state.bUseAlt) && (shiftPressed == g_state.bUseShift);
     
     if (modifiersMatch) {
-        Wh_Log(L"[HOOK] Hotkey match: Key=%lc, Ctrl=%d, Alt=%d", (wchar_t)wParam, ctrlPressed, altPressed);
+        Wh_Log(L"[HOOK] Hotkey match: Key=%lc, Ctrl=%d, Alt=%d, Shift=%d", (wchar_t)wParam, ctrlPressed, altPressed, shiftPressed);
     }
     
     return modifiersMatch;
@@ -336,6 +342,7 @@ void RestoreIconsToVisible() {
 void LoadSettings() {
     g_state.bUseCtrl = (BOOL)Wh_GetIntSetting(L"modifierKeys.Ctrl");
     g_state.bUseAlt = (BOOL)Wh_GetIntSetting(L"modifierKeys.Alt");
+    g_state.bUseShift = (BOOL)Wh_GetIntSetting(L"modifierKeys.Shift");
     g_state.bHideOnStartup = (BOOL)Wh_GetIntSetting(L"HideOnStartup");
     
     PCWSTR hotkeyCharStr = Wh_GetStringSetting(L"HotkeyChar");
@@ -349,14 +356,15 @@ void LoadSettings() {
     }
     
     // Ensure we have at least one modifier key
-    if (!g_state.bUseCtrl && !g_state.bUseAlt) {
+    if (!g_state.bUseCtrl && !g_state.bUseAlt && !g_state.bUseShift) {
         Wh_Log(L"[WARNING] No modifier keys selected, defaulting to Ctrl+Alt");
         g_state.bUseCtrl = TRUE;
         g_state.bUseAlt = TRUE;
+        g_state.bUseShift = FALSE;
     }
     
-    Wh_Log(L"[SETTINGS] Settings loaded - Ctrl: %d, Alt: %d, Key: %c, HideOnStart: %d", 
-           g_state.bUseCtrl, g_state.bUseAlt, g_state.cHotkeyChar, g_state.bHideOnStartup);
+    Wh_Log(L"[SETTINGS] Settings loaded - Ctrl: %d, Alt: %d, Shift: %d, Key: %c, HideOnStart: %d", 
+           g_state.bUseCtrl, g_state.bUseAlt, g_state.bUseShift, g_state.cHotkeyChar, g_state.bHideOnStartup);
 }
 
 // Windhawk mod initialization
