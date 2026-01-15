@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              passkey-popup-blocker
-// @name            "Sign in with a passkey" popup blocker 
-// @description     Blocks automatic Windows Security "Sign in with a passkey" popup in browser when you open login pages, even if you didn't click login by passkey. while manual click on "Login by passkey" button will work.
-// @version         2.0.0
+// @name            "Sign in with a passkey" popup blocker
+// @description     Blocks automatic Windows Security "Sign in with a passkey" popup in browser unless you explicitly click "Sign in".
+// @version         2.1.0
 // @author          mode0192
 // @github          https://github.com/mode0192
 // @include         msedge.exe
@@ -23,8 +23,8 @@
 // ==WindhawkModReadme==
 /*
 # Block "Sign in with a passkey" Popup
-## ⫸ Description:
-This mod blocks the annoying automatic Windows Security "Sign in with a passkey" popup that appears immediately when loading a login page where you have previously saved passkey for it, even if you didn't click login by passkey. It uses a **Smart Sensor** to distinguish between automated "Sign in by a passkey" and real user intent so it can appears.
+## ⫸ Description
+This mod blocks the annoying automatic Windows Security "Sign in with a passkey" popup that appears immediately when loading a login page where you have previously saved passkey for it, even if you didn't click login by passkey. It uses a **Smart Sensor** to distinguish between automated "Sign in by a passkey" and real user intent so it can appear.
 
 ‎‎‎‎‎‎‎‎ㅤ
 ## ⫸ Photos
@@ -34,10 +34,11 @@ This mod blocks the annoying automatic Windows Security "Sign in with a passkey"
 
 ‎‎‎‎‎‎‎‎ㅤ
 ## ⫸ Features
-* **Smart Blocking**: Silently blocks passkey prompts automatically appears on page load.
+* **Smart Blocking**: Silently blocks passkey prompts automatically appearing on page load.
 * **Intent Detection**: Instantly allows the popup if you have **Clicked** (also supports touch screen) or pressed **Enter/Space** on login by passkey in the last 0.5 seconds.
 * **Strict Page Logic**: Prevents clicks on a previous page (referrals) from triggering popups on the new page.
-* **Zero Latency**: Runs natively in the browser process (`DispatchMessageW` hook).
+* **Robust Input Hook**: Mod uses a reliable sensor (`PeekMessage`) instead of ('DispatchMessage') * fixes issues where the mod would stop working (blocking all passkeys) after closing and reopening the browser.
+* **Zero Latency**: Runs natively in the browser process.
 * **Privacy First**: Does not log keystrokes or transmit data.
 
 ‎‎‎‎‎‎‎‎ㅤ
@@ -70,7 +71,7 @@ The mod works with almost all Chromium-based and Gecko-based browsers:
 ‎‎‎‎‎‎‎‎ㅤ
 ## 🔒 Privacy & Security
 Transparency is critical for mods that handle input.
-* **No Keylogging**: The mod **does not** record what you type. It only listens for specific "submission" keys (`Enter`, `Space`) and generic Mouse Clicks (`WM_LBUTTONUP`) to update a simple timestamp.
+* **No Keylogging**: The mod **does not** record what you type. It only checks if an interaction occurred (Yes/No) and updates a timestamp.
 * **No Data Transmission**: The mod runs entirely locally. No data is sent to any server.
 * **Safety**: Passwords and usernames are never touched or inspected by this code.
 
@@ -81,6 +82,11 @@ Transparency is critical for mods that handle input.
 
 ‎‎‎‎‎‎‎‎ㅤ
 ## 📜 Changelog
+**2.1.0** (Jan 15, 2026)
+* Fixed: Critical bug where the mod blocked all passkeys (even manual clicks) after closing and reopening the browser.
+* Improved: Fixed compatibility conflicts with other mods (e.g., Edge Tab Manager blockers).
+* Tech: Switched from `DispatchMessage` to `PeekMessage` to correctly handle browser process restarts and background threads.
+
 **2.0.0** (Jan 10, 2026)
 * Fixed: Referrals to login page triggering the passkey popup
 * Added: Setting to change the Interaction timeout
@@ -110,7 +116,8 @@ static int g_AllowedLatencyMs = 500;
 // -----------------------------------------------------------------------------
 // Definitions
 // -----------------------------------------------------------------------------
-typedef LRESULT (WINAPI *DispatchMessageW_t)(CONST MSG *lpMsg);
+typedef BOOL (WINAPI *PeekMessageW_t)(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax, UINT wRemoveMsg);
+typedef BOOL (WINAPI *GetMessageW_t)(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax);
 typedef HRESULT (WINAPI *WebAuthNAuthenticatorGetAssertion_t)(
     HWND hWnd, 
     LPCWSTR pwszRpId, 
@@ -119,7 +126,8 @@ typedef HRESULT (WINAPI *WebAuthNAuthenticatorGetAssertion_t)(
     void** ppAssertion
 );
 
-DispatchMessageW_t pOriginalDispatchMessageW;
+PeekMessageW_t pOriginalPeekMessageW;
+GetMessageW_t pOriginalGetMessageW;
 WebAuthNAuthenticatorGetAssertion_t pOriginalGetAssertion;
 
 // -----------------------------------------------------------------------------
@@ -132,51 +140,68 @@ void LoadSettings()
 }
 
 // -----------------------------------------------------------------------------
-// Hook 1: The Reliable Sensor (DispatchMessageW)
+// Core Logic: Check Input
 // -----------------------------------------------------------------------------
-// This monitors the internal message loop.
-// to see what the browser is actually processing.
-LRESULT WINAPI DetourDispatchMessageW(CONST MSG *lpMsg)
-{
-    // A. Validation: Ensure message exists
-    if (lpMsg) {
-        
-        UINT msg = lpMsg->message;
-        bool isInteraction = false;
+void CheckInputMessage(CONST MSG *lpMsg) {
+    if (!lpMsg) return;
 
-        // B. Mouse Clicks (Button Release)
-        // We look for LBUTTONUP (Left Click Release) as this triggers buttons.
-        if (msg == WM_LBUTTONUP || msg == WM_RBUTTONUP || msg == WM_NCLBUTTONUP) {
+    UINT msg = lpMsg->message;
+    bool isInteraction = false;
+
+    // A. Mouse Clicks (Button Release)
+    if (msg == WM_LBUTTONUP || msg == WM_RBUTTONUP || msg == WM_NCLBUTTONUP) {
+        isInteraction = true;
+    }
+    // B. Keyboard (Strict - Enter/Space)
+    else if (msg == WM_KEYUP) {
+        if (lpMsg->wParam == VK_RETURN || lpMsg->wParam == VK_SPACE) {
             isInteraction = true;
-        }
-        
-        // C. Keyboard (Strict)
-        // Only count keys that actually submit forms (Enter or Space).
-        // Ignoring others saves resources and improves privacy.
-        else if (msg == WM_KEYUP) {
-            if (lpMsg->wParam == VK_RETURN || lpMsg->wParam == VK_SPACE) {
-                isInteraction = true;
-            }
-        }
-
-        // D. Touch Screens (Added Feature)
-        // If you use a laptop touch screen, this ensures it works too.
-        else if (msg == WM_POINTERUP) {
-            isInteraction = true;
-        }
-
-        // E. Update Timestamp
-        if (isInteraction) {
-            g_LastInteractionTime = GetTickCount();
         }
     }
+    // C. Touch Screens (Added Feature)
+    else if (msg == WM_POINTERUP) {
+        isInteraction = true;
+    }
 
-    // Always run the original function so the browser works normal!
-    return pOriginalDispatchMessageW(lpMsg);
+    if (isInteraction) {
+        g_LastInteractionTime = GetTickCount();
+    }
 }
 
 // -----------------------------------------------------------------------------
-// Hook 2: The Gatekeeper (WebAuthn)
+// Hook 1: The Robust Sensor (PeekMessageW)
+// -----------------------------------------------------------------------------
+// Changed to PeekMessageW from DispatchMessage to fix issues with browser restarts
+BOOL WINAPI DetourPeekMessageW(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax, UINT wRemoveMsg)
+{
+    // Run original first to get the message
+    BOOL result = pOriginalPeekMessageW(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax, wRemoveMsg);
+
+    // If we got a message, check it
+    if (result && lpMsg) {
+        CheckInputMessage(lpMsg);
+    }
+
+    return result;
+}
+
+// -----------------------------------------------------------------------------
+// Hook 2: The Backup Sensor (GetMessageW)
+// -----------------------------------------------------------------------------
+// Some loops use GetMessage instead of PeekMessage. We hook both to be safe.
+BOOL WINAPI DetourGetMessageW(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax)
+{
+    BOOL result = pOriginalGetMessageW(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
+
+    if (result != -1 && result != 0 && lpMsg) {
+        CheckInputMessage(lpMsg);
+    }
+
+    return result;
+}
+
+// -----------------------------------------------------------------------------
+// Hook 3: The Gatekeeper (WebAuthn)
 // -----------------------------------------------------------------------------
 HRESULT WINAPI DetourGetAssertion(
     HWND hWnd, 
@@ -189,13 +214,12 @@ HRESULT WINAPI DetourGetAssertion(
     DWORD currentTime = GetTickCount();
     DWORD timeSinceInteraction = currentTime - g_LastInteractionTime;
 
-    // --- CHECK ---
-    // If user clicked < [Configured Time] seconds ago -> ALLOW
+    // Check strict intent (Click/Enter within last 500ms (default))
     if (timeSinceInteraction < (DWORD)g_AllowedLatencyMs) {
         return pOriginalGetAssertion(hWnd, pwszRpId, pClientData, pAssertionOptions, ppAssertion);
     }
     
-    // Else -> BLOCK (Return Not Found)
+    // Otherwise Block
     return 0x80090011; 
 }
 
@@ -204,35 +228,30 @@ HRESULT WINAPI DetourGetAssertion(
 // -----------------------------------------------------------------------------
 BOOL Wh_ModInit()
 {
-    // 0. Load Settings
     LoadSettings();
 
-    // 1. Hook WebAuthn (The Popup)
+    // 1. Hook WebAuthn
     HMODULE hWebAuthn = LoadLibraryEx(L"webauthn.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hWebAuthn) return FALSE;
-
-    void* pFuncAddrAssertion = (void*)GetProcAddress(hWebAuthn, "WebAuthNAuthenticatorGetAssertion");
-    if (pFuncAddrAssertion) {
-        Wh_SetFunctionHook(
-            pFuncAddrAssertion,
-            (void*)DetourGetAssertion,
-            (void**)&pOriginalGetAssertion
-        );
-    } else {
-        return FALSE; 
+    if (hWebAuthn) {
+        void* pFunc = (void*)GetProcAddress(hWebAuthn, "WebAuthNAuthenticatorGetAssertion");
+        if (pFunc) {
+            Wh_SetFunctionHook(pFunc, (void*)DetourGetAssertion, (void**)&pOriginalGetAssertion);
+        }
     }
 
-    // 2. Hook User32 (The Input Sensor)
+    // 2. Hook Input Sources (User32)
     HMODULE hUser32 = GetModuleHandle(L"user32.dll");
     if (hUser32) {
-        // We go back to DispatchMessageW because it PROVED to be more reliable.
-        void* pFuncDispatch = (void*)GetProcAddress(hUser32, "DispatchMessageW");
-        if (pFuncDispatch) {
-             Wh_SetFunctionHook(
-                pFuncDispatch,
-                (void*)DetourDispatchMessageW,
-                (void**)&pOriginalDispatchMessageW
-            );
+        // Hook PeekMessageW (Most common loop method)
+        void* pFuncPeek = (void*)GetProcAddress(hUser32, "PeekMessageW");
+        if (pFuncPeek) {
+             Wh_SetFunctionHook(pFuncPeek, (void*)DetourPeekMessageW, (void**)&pOriginalPeekMessageW);
+        }
+
+        // Hook GetMessageW (Alternative loop method)
+        void* pFuncGet = (void*)GetProcAddress(hUser32, "GetMessageW");
+        if (pFuncGet) {
+             Wh_SetFunctionHook(pFuncGet, (void*)DetourGetMessageW, (void**)&pOriginalGetMessageW);
         }
     }
 
