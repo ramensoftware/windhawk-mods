@@ -3938,6 +3938,36 @@
                 "version": "1"
             }
         },
+        "keyboard-shortcut-actions": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768469651000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768469651000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -loleaut32 -lole32 -lversion",
+                "description": "Trigger custom actions with global keyboard shortcuts (hotkeys): show desktop, mute volume, open Task Manager, media controls, and more",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Keyboard Shortcut Actions",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "legacy-alt-tab": {
             "details": {
                 "defaultSorting": 1603,
