@@ -2,7 +2,7 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S
-// @version         1.5
+// @version         1.6
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
@@ -24,7 +24,7 @@ short delay.
 
 ## Features
 
-- Detects typing, backspace, delete, enter, and clipboard operations (Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+Y)
+- Detects typing, backspace, delete, enter, punctuation, and clipboard operations (Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+Y)
 - Configurable delay before saving
 - Optional minimum interval between saves to prevent excessive disk writes
 - Works with any locally saved Word document
@@ -343,7 +343,7 @@ bool IsEditingKey(WPARAM wParam) {
         return false;
     }
 
-    // Printable characters
+    // Printable ASCII characters (space to tilde)
     if (wParam >= 0x20 && wParam <= 0x7E) {
         return true;
     }
@@ -354,6 +354,24 @@ bool IsEditingKey(WPARAM wParam) {
         case VK_DELETE:
         case VK_RETURN:
         case VK_TAB:
+            return true;
+    }
+    
+    // OEM keys (punctuation: period, comma, brackets, etc.)
+    switch (wParam) {
+        case VK_OEM_1:      // ;: key
+        case VK_OEM_2:      // /? key
+        case VK_OEM_3:      // `~ key
+        case VK_OEM_4:      // [{ key
+        case VK_OEM_5:      // \| key
+        case VK_OEM_6:      // ]} key
+        case VK_OEM_7:      // '" key
+        case VK_OEM_8:      // misc
+        case VK_OEM_PLUS:   // =+ key
+        case VK_OEM_COMMA:  // ,< key
+        case VK_OEM_MINUS:  // -_ key
+        case VK_OEM_PERIOD: // .> key
+        case VK_OEM_102:    // additional key on non-US keyboards
             return true;
     }
 
@@ -398,7 +416,7 @@ void LoadSettings() {
 
 // Mod initialization
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave mod v1.5 initializing...");
+    Wh_Log(L"Word Local AutoSave mod v1.6 initializing...");
 
     // Store current process ID for foreground window check
     g_wordProcessId = GetCurrentProcessId();
