@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-15T09:48:28.000Z</updated>
+    <updated>2026-01-15T20:28:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Shell Flyout Positions 1.0]]></title>
+        <id>https://windhawk.net/mods/shell-flyout-positions#e66d236b36efa0de4ef4a64cc8f7c780dd7e3bf8</id>
+        <link href="https://windhawk.net/mods/shell-flyout-positions"/>
+        <updated>2026-01-15T20:28:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="shellflyoutpositions">Shell Flyout Positions</h1>
+<p>Customize the horizontal position of the Notification Center (Win+N) and action
+center (Win+A) on Windows 11.</p>
+<p>By default, Windows 11 displays the Notification Center and Action Center (Quick
+Settings) anchored to the right side of the screen. This mod allows you to
+change their horizontal alignment to the left or center, with an optional pixel
+shift for fine-tuning.</p>
+<p>This is especially useful when using custom taskbar themes that relocate the
+system tray area, as you can reposition these flyouts to match your custom
+layout.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA["Sign in with a passkey" popup blocker 2.1.0]]></title>
         <id>https://windhawk.net/mods/passkey-popup-blocker#ad6403b26bec3a55590affeea02bde5431709f49</id>
@@ -516,20 +536,6 @@ groups.</li>
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No Taskbar Item Glow 1.1.0]]></title>
-        <id>https://windhawk.net/mods/no-taskbar-item-glow#68106e1c12e32f7635a93c0e8dfecb69cb6a474f</id>
-        <link href="https://windhawk.net/mods/no-taskbar-item-glow"/>
-        <updated>2026-01-07T10:44:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix bug where glow would still render on stacked items</li>
-<li>Restructure mod to fit modern conventions</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
