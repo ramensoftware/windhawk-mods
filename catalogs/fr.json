@@ -7139,6 +7139,34 @@
                 "version": "1.1"
             }
         },
+        "taskbar-shadow-border": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768571999000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768571999000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lockframe",
+                "compilerOptions": "-lgdi32 -luser32 -ldwmapi",
+                "description": "Adds a customizable, floating shadow and border effect above the taskbar",
+                "github": "https://github.com/Lockframe",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Taskbar Shadow & Border",
+                "version": "1.0.0"
+            }
+        },
         "taskbar-show-desktop-button-aero-peek": {
             "details": {
                 "defaultSorting": 49610,

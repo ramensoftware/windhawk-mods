@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-16T13:25:39.000Z</updated>
+    <updated>2026-01-16T13:59:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Shadow & Border 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-shadow-border#329df29d64768f0cca292e319ff9ed8e083bf8eb</id>
+        <link href="https://windhawk.net/mods/taskbar-shadow-border"/>
+        <updated>2026-01-16T13:59:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarshadowborder">Taskbar Shadow &amp; Border</h1>
+<p>This mod adds a customizable drop shadow and border above the taskbar.</p>
+<p><img src="https://i.imgur.com/sGw2BaC.png" alt="" /></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 1.6]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#910f99823709334f1f4d6a886d50f323d2b87f39</id>
@@ -550,20 +563,6 @@ groups.</li>
         <author>
             <name>mode0192</name>
             <uri>https://github.com/mode0192</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.3]]></title>
-        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#7946c3ffec884c0c0323ebb020749f5226985114</id>
-        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
-        <updated>2026-01-09T18:08:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix bugs with ExplorerEx</li>
-<li>Fix infinite uninitializing</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
