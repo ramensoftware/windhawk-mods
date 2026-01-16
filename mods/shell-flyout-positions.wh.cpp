@@ -2,7 +2,7 @@
 // @id              shell-flyout-positions
 // @name            Shell Flyout Positions
 // @description     Customize the horizontal position of the Notification Center and Action Center on Windows 11
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -26,8 +26,8 @@
 /*
 # Shell Flyout Positions
 
-Customize the horizontal position of the Notification Center (Win+N) and action
-center (Win+A) on Windows 11.
+Customize the horizontal position of the Notification Center (Win+N) and Action
+Center (Win+A) on Windows 11.
 
 By default, Windows 11 displays the Notification Center and Action Center (Quick
 Settings) anchored to the right side of the screen. This mod allows you to
@@ -37,6 +37,8 @@ shift for fine-tuning.
 This is especially useful when using custom taskbar themes that relocate the
 system tray area, as you can reposition these flyouts to match your custom
 layout.
+
+![Screenshot](https://i.imgur.com/ezxArY1.png)
 */
 // ==/WindhawkModReadme==
 
@@ -85,15 +87,14 @@ enum class HorizontalAlignmentSetting {
     left,
 };
 
+struct ElementSettings {
+    HorizontalAlignmentSetting horizontalAlignment;
+    int horizontalShift;
+};
+
 struct {
-    struct {
-        HorizontalAlignmentSetting horizontalAlignment;
-        int horizontalShift;
-    } notificationCenter;
-    struct {
-        HorizontalAlignmentSetting horizontalAlignment;
-        int horizontalShift;
-    } actionCenter;
+    ElementSettings notificationCenter;
+    ElementSettings actionCenter;
 } g_settings;
 
 enum class Target {
@@ -159,6 +160,52 @@ std::wstring GetProcessFileName(DWORD dwProcessId) {
     return processFileName;
 }
 
+int CalculateAlignedX(const RECT& rcWork,
+                      int width,
+                      const ElementSettings& settings) {
+    int x;
+    switch (settings.horizontalAlignment) {
+        case HorizontalAlignmentSetting::right:
+            x = rcWork.right - width;
+            break;
+
+        case HorizontalAlignmentSetting::center:
+            x = rcWork.left + (rcWork.right - rcWork.left - width) / 2;
+            break;
+
+        case HorizontalAlignmentSetting::left:
+            x = rcWork.left;
+            break;
+    }
+
+    return x + settings.horizontalShift;
+}
+
+void RestoreWindowToDefault(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) {
+        return;
+    }
+
+    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(MONITORINFO),
+    };
+    if (!GetMonitorInfo(monitor, &monitorInfo)) {
+        return;
+    }
+
+    RECT rc;
+    if (!GetWindowRect(hWnd, &rc)) {
+        return;
+    }
+
+    int x = monitorInfo.rcWork.right - (rc.right - rc.left);
+
+    SetWindowPos(hWnd, nullptr, x, rc.top, rc.right - rc.left,
+                 rc.bottom - rc.top, SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
 DwmSetWindowAttribute_t DwmSetWindowAttribute_Original;
 HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
@@ -188,13 +235,12 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     }
 
     std::wstring processFileName = GetProcessFileName(processId);
-
     if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") != 0) {
         return original();
     }
 
     std::wstring threadDescription = GetThreadIdDescriptionAsString(threadId);
-    if (threadDescription == L"SharePickerUI") {
+    if (threadDescription != L"ActionCenter") {
         return original();
     }
 
@@ -215,32 +261,16 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     int cx = targetRect.right - targetRect.left;
     int cy = targetRect.bottom - targetRect.top;
 
-    int xNew;
-    switch (g_settings.notificationCenter.horizontalAlignment) {
-        case HorizontalAlignmentSetting::right:
-            xNew = monitorInfo.rcWork.right - cx;
-            break;
-
-        case HorizontalAlignmentSetting::center:
-            xNew =
-                monitorInfo.rcWork.left +
-                (monitorInfo.rcWork.right - monitorInfo.rcWork.left - cx) / 2;
-            break;
-
-        case HorizontalAlignmentSetting::left:
-            xNew = monitorInfo.rcWork.left;
-            break;
-    }
-
-    xNew += g_settings.notificationCenter.horizontalShift;
+    int xNew = CalculateAlignedX(monitorInfo.rcWork, cx,
+                                 g_settings.notificationCenter);
 
     if (xNew == x) {
         return original();
     }
 
-    x = xNew;
+    Wh_Log(L"Adjusting notification center: %d -> %d", x, xNew);
 
-    SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(hwnd, nullptr, xNew, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
 
     g_lastAdjustedNotificationCenterWindow = hwnd;
 
@@ -330,23 +360,7 @@ void AdjustCoreWindowPos(int* x, int* y, int width, int height) {
         return;
     }
 
-    switch (g_settings.actionCenter.horizontalAlignment) {
-        case HorizontalAlignmentSetting::right:
-            *x = monitorInfo.rcWork.right - width;
-            break;
-
-        case HorizontalAlignmentSetting::center:
-            *x = monitorInfo.rcWork.left +
-                 (monitorInfo.rcWork.right - monitorInfo.rcWork.left - width) /
-                     2;
-            break;
-
-        case HorizontalAlignmentSetting::left:
-            *x = monitorInfo.rcWork.left;
-            break;
-    }
-
-    *x += g_settings.actionCenter.horizontalShift;
+    *x = CalculateAlignedX(monitorInfo.rcWork, width, g_settings.actionCenter);
 }
 
 void ApplySettings() {
@@ -526,29 +540,7 @@ void Wh_ModBeforeUninit() {
     g_unloading = true;
 
     if (g_target == Target::Explorer) {
-        HWND hwnd = g_lastAdjustedNotificationCenterWindow;
-        if (hwnd && IsWindow(hwnd)) {
-            HMONITOR monitor =
-                MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-
-            MONITORINFO monitorInfo{
-                .cbSize = sizeof(MONITORINFO),
-            };
-            GetMonitorInfo(monitor, &monitorInfo);
-
-            RECT targetRect;
-            if (GetWindowRect(hwnd, &targetRect)) {
-                int x = targetRect.left;
-                int y = targetRect.top;
-                int cx = targetRect.right - targetRect.left;
-                int cy = targetRect.bottom - targetRect.top;
-
-                x = monitorInfo.rcWork.right - cx;
-
-                SetWindowPos(hwnd, nullptr, x, y, cx, cy,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-        }
+        RestoreWindowToDefault(g_lastAdjustedNotificationCenterWindow);
     } else if (g_target == Target::ShellExperienceHost ||
                g_target == Target::ShellHost) {
         CoreWindowUI::ApplySettings();
