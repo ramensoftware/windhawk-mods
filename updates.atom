@@ -2,12 +2,58 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-16T13:07:00.000Z</updated>
+    <updated>2026-01-16T13:25:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 1.6]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#910f99823709334f1f4d6a886d50f323d2b87f39</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-01-16T13:25:39.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="addsupportforpunctuationkeys">Add support for punctuation keys</h2>
+<h3 id="problem">Problem</h3>
+<p>Typing punctuation marks (period, comma, brackets, quotes, etc.) alone without any other characters would not trigger auto-save. While it's unclear who might need to save a document containing nothing but a lonely period contemplating its existence, it should still work.</p>
+<h3 id="rootcause">Root Cause</h3>
+<p>The <code>IsEditingKey()</code> function only checked for:</p>
+<ul>
+<li>ASCII printable characters in range 0x20-0x7E</li>
+<li>Special keys (Backspace, Delete, Enter, Tab)</li>
+</ul>
+<p>However, punctuation keys on most keyboards are OEM keys with virtual key codes outside the ASCII range:</p>
+<ul>
+<li><code>VK_OEM_PERIOD</code> (0xBE) - period/full stop</li>
+<li><code>VK_OEM_COMMA</code> (0xBC) - comma</li>
+<li>And other punctuation keys (0xBA-0xDF range)</li>
+</ul>
+<h3 id="solution">Solution</h3>
+<p>Added explicit handling for all OEM punctuation keys in <code>IsEditingKey()</code>.</p>
+<h3 id="changes">Changes</h3>
+<ul>
+<li><strong>Added OEM key detection in <code>IsEditingKey()</code></strong> — now recognizes all standard punctuation keys:</li>
+<li><code>VK_OEM_1</code> (;:)</li>
+<li><code>VK_OEM_2</code> (/?)</li>
+<li><code>VK_OEM_3</code> (<code>`~</code>)</li>
+<li><code>VK_OEM_4</code> ([{)</li>
+<li><code>VK_OEM_5</code> (\|)</li>
+<li><code>VK_OEM_6</code> (]})</li>
+<li><code>VK_OEM_7</code> ('")</li>
+<li><code>VK_OEM_8</code> (misc)</li>
+<li><code>VK_OEM_PLUS</code> (=+)</li>
+<li><code>VK_OEM_COMMA</code> (,&lt;)</li>
+<li><code>VK_OEM_MINUS</code> (-_)</li>
+<li><code>VK_OEM_PERIOD</code> (.&gt;)</li>
+<li><code>VK_OEM_102</code> (extra key on non-US keyboards)</li>
+<li><strong>Updated readme</strong> — added "punctuation" to the list of detected inputs</li>
+<li>Version bumped to 1.6</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Shell Flyout Positions 1.1]]></title>
         <id>https://windhawk.net/mods/shell-flyout-positions#32c7d48986dceaa8e938441e08509de1a00038c5</id>
@@ -518,24 +564,6 @@ groups.</li>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Up → New Window (Ctrl-click or Middle-click) 1.3]]></title>
-        <id>https://windhawk.net/mods/explorer-up-new-window#18de106a734f50c7f85bd828453ff27f839067d3</id>
-        <link href="https://windhawk.net/mods/explorer-up-new-window"/>
-        <updated>2026-01-08T19:22:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerupnewwindow">Explorer Up → New Window</h1>
-<p>Opens the parent folder in a <strong>new</strong> Explorer window when you:</p>
-<ul>
-<li><strong>Middle-click</strong> on the Up button</li>
-<li><strong>Ctrl + Left-click</strong> on the Up button</li>
-<li>Press <strong>Ctrl + Alt + Up</strong> keyboard shortcut</li>
-</ul>
-<p>Useful when you want to keep your current folder open while exploring the parent.</p>]]></content>
-        <author>
-            <name>Tobias Lind</name>
-            <uri>https://github.com/TobbeLino</uri>
         </author>
     </entry>
 </feed>

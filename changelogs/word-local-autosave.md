@@ -1,3 +1,45 @@
+## 1.6 ([Jan 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/910f99823709334f1f4d6a886d50f323d2b87f39/mods/word-local-autosave.wh.cpp))
+
+## Add support for punctuation keys
+
+### Problem
+
+Typing punctuation marks (period, comma, brackets, quotes, etc.) alone without any other characters would not trigger auto-save. While it's unclear who might need to save a document containing nothing but a lonely period contemplating its existence, it should still work.
+
+### Root Cause
+
+The `IsEditingKey()` function only checked for:
+- ASCII printable characters in range 0x20-0x7E
+- Special keys (Backspace, Delete, Enter, Tab)
+
+However, punctuation keys on most keyboards are OEM keys with virtual key codes outside the ASCII range:
+- `VK_OEM_PERIOD` (0xBE) - period/full stop
+- `VK_OEM_COMMA` (0xBC) - comma
+- And other punctuation keys (0xBA-0xDF range)
+
+### Solution
+
+Added explicit handling for all OEM punctuation keys in `IsEditingKey()`.
+
+### Changes
+
+- **Added OEM key detection in `IsEditingKey()`** — now recognizes all standard punctuation keys:
+  - `VK_OEM_1` (;:)
+  - `VK_OEM_2` (/?)
+  - `VK_OEM_3` (`` `~ ``)
+  - `VK_OEM_4` ([{)
+  - `VK_OEM_5` (\\|)
+  - `VK_OEM_6` (]})
+  - `VK_OEM_7` ('")
+  - `VK_OEM_8` (misc)
+  - `VK_OEM_PLUS` (=+)
+  - `VK_OEM_COMMA` (,<)
+  - `VK_OEM_MINUS` (-_)
+  - `VK_OEM_PERIOD` (.>)
+  - `VK_OEM_102` (extra key on non-US keyboards)
+- **Updated readme** — added "punctuation" to the list of detected inputs
+- Version bumped to 1.6
+
 ## 1.5 ([Jan 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/df9a07b7e0359a0c3074b69cd0be6353df6a09c8/mods/word-local-autosave.wh.cpp))
 
 ## Fix race condition with low save delay values
