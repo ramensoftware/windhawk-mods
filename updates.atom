@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-16T13:59:59.000Z</updated>
+    <updated>2026-01-16T15:39:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Tail 1.0]]></title>
+        <id>https://windhawk.net/mods/task-manager-tail#71ae3a2d03e2c2add11569aa9e4e64fc01843853</id>
+        <link href="https://windhawk.net/mods/task-manager-tail"/>
+        <updated>2026-01-16T15:39:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskmanagertail10">Task Manager Tail 1.0</h1>
+<p>This mod ensures that <strong>Task Manager</strong> always stays at the tail end of your taskbar on <strong>Windows 11</strong>.</p>
+<p>When you open or close other applications, this mod detects the change and automatically
+moves the Task Manager button to the tail end of the list.</p>
+<p><strong>Features:</strong></p>
+<ul>
+<li><strong>Event Driven:</strong> Uses lightweight hooks to detect window changes instantly.</li>
+<li><strong>Zero Polling:</strong> Does not waste CPU cycles checking the taskbar constantly.</li>
+<li><strong>Configurable:</strong> Supports non-English languages and other target applications.</li>
+</ul>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Shadow & Border 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-shadow-border#329df29d64768f0cca292e319ff9ed8e083bf8eb</id>
@@ -485,84 +505,6 @@ groups.</li>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA["Sign in with a passkey" popup blocker 2.0.0]]></title>
-        <id>https://windhawk.net/mods/passkey-popup-blocker#00fadbde61a8961e0566e701552f23c43c370227</id>
-        <link href="https://windhawk.net/mods/passkey-popup-blocker"/>
-        <updated>2026-01-10T13:20:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="blocksigninwithapasskeypopup">Block "Sign in with a passkey" Popup</h1>
-<h2 id="description">⫸ Description:</h2>
-<p>This mod blocks the annoying automatic Windows Security "Sign in with a passkey" popup that appears immediately when loading a login page where you have previously saved passkey for it, even if you didn't click login by passkey. It uses a <strong>Smart Sensor</strong> to distinguish between automated "Sign in by a passkey" and real user intent so it can appears.</p>
-<p>‎‎‎‎‎‎‎‎ㅤ</p>
-<h2 id="photos">⫸ Photos</h2>
-<h3 id="before">Before</h3>
-<p><img src="https://raw.githubusercontent.com/mode0192/windhawkimages/main/images/image1_small.jpg" alt="Automatic Passkeys images" /></p>
-<p>‎‎‎‎‎‎‎‎ㅤ</p>
-<h2 id="features">⫸ Features</h2>
-<ul>
-<li><strong>Smart Blocking</strong>: Silently blocks passkey prompts automatically appears on page load.</li>
-<li><strong>Intent Detection</strong>: Instantly allows the popup if you have <strong>Clicked</strong> (also supports touch screen) or pressed <strong>Enter/Space</strong> on login by passkey in the last 0.5 seconds.</li>
-<li><strong>Strict Page Logic</strong>: Prevents clicks on a previous page (referrals) from triggering popups on the new page.</li>
-<li><strong>Zero Latency</strong>: Runs natively in the browser process (<code>DispatchMessageW</code> hook).</li>
-<li><strong>Privacy First</strong>: Does not log keystrokes or transmit data.</li>
-</ul>
-<p>‎‎‎‎‎‎‎‎ㅤ</p>
-<h2 id="howtouse">⫸ How to Use</h2>
-<p>No configuration is needed. It works out of the box.</p>
-<p>| Action | Result |
-| :--- | :--- |
-| <strong>Open Login Page</strong> | The automatic popup is <strong>Blocked</strong> 🛑. |
-| <strong>Click "Sign in by passkey"</strong> | The popup is <strong>Allowed</strong> ✅. |
-| <strong>Hit Enter on "Sign in by passkey"</strong> | The popup is <strong>Allowed</strong> ✅. |
-| <strong>Click Link -> New Page Loads</strong> | The automatic popup is <strong>Blocked</strong> 🛑 (Interaction time expired during page load). |</p>
-<p>‎‎‎‎‎‎‎‎ㅤ</p>
-<h2 id="advancedsettings">⫸ Advanced Settings</h2>
-<p>You can now customize the strictness of the blocker in the <strong>Settings</strong> tab.</p>
-<ul>
-<li><strong>Interaction Timeout</strong>: Default is 500ms. <em>Only change this if the mod is blocking legitimate clicks for you.</em></li>
-</ul>
-<p>‎‎‎‎‎‎‎‎ㅤ</p>
-<h2 id="supportedbrowsers">⫸ Supported Browsers</h2>
-<p>The mod works with almost all Chromium-based and Gecko-based browsers:</p>
-<ul>
-<li><strong>Chrome</strong></li>
-<li><strong>Edge</strong></li>
-<li><strong>Firefox</strong> (and forks like Waterfox, Librewolf)</li>
-<li><strong>Brave</strong></li>
-<li><strong>Opera</strong> / <strong>Opera GX</strong></li>
-<li><strong>Vivaldi</strong></li>
-<li><strong>Thorium</strong></li>
-</ul>
-<p>‎‎‎‎‎‎‎‎ㅤ</p>
-<h2 id="privacysecurity">🔒 Privacy &amp; Security</h2>
-<p>Transparency is critical for mods that handle input.</p>
-<ul>
-<li><strong>No Keylogging</strong>: The mod <strong>does not</strong> record what you type. It only listens for specific "submission" keys (<code>Enter</code>, <code>Space</code>) and generic Mouse Clicks (<code>WM_LBUTTONUP</code>) to update a simple timestamp.</li>
-<li><strong>No Data Transmission</strong>: The mod runs entirely locally. No data is sent to any server.</li>
-<li><strong>Safety</strong>: Passwords and usernames are never touched or inspected by this code.</li>
-</ul>
-<p>‎‎‎‎‎‎‎‎ㅤ</p>
-<h2 id="credits">📄 Credits</h2>
-<ul>
-<li><strong>Author</strong>: <a href="https://github.com/mode0192">mode0192</a></li>
-<li><strong>License</strong>: CC BY-NC-SA 4.0 (Free for personal use, no commercial sale)</li>
-</ul>
-<p>‎‎‎‎‎‎‎‎ㅤ</p>
-<h2 id="changelog">📜 Changelog</h2>
-<p><strong>2.0.0</strong> (Jan 10, 2026)</p>
-<ul>
-<li>Fixed: Referrals to login page triggering the passkey popup</li>
-<li>Added: Setting to change the Interaction timeout</li>
-</ul>
-<p><strong>1.0.0</strong> (Jan 9, 2026)</p>
-<ul>
-<li>Initial release</li>
-</ul>]]></content>
-        <author>
-            <name>mode0192</name>
-            <uri>https://github.com/mode0192</uri>
         </author>
     </entry>
 </feed>
