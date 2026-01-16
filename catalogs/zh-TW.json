@@ -5819,7 +5819,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1768508931000,
+                "updated": 1768526637000,
                 "users": 0
             },
             "metadata": {
@@ -5838,7 +5838,7 @@
                 ],
                 "name": "Shell Flyout Positions",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "shrink-address-bar-height": {
