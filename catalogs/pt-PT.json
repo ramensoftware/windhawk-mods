@@ -5819,7 +5819,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1768526637000,
+                "updated": 1768568820000,
                 "users": 0
             },
             "metadata": {
@@ -5827,7 +5827,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-ldwmapi",
+                "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lshcore",
                 "description": "Customize the horizontal position of the Notification Center and Action Center on Windows 11",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -5838,7 +5838,7 @@
                 ],
                 "name": "Shell Flyout Positions",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.1"
             }
         },
         "shrink-address-bar-height": {

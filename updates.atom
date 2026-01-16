@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-16T01:23:57.000Z</updated>
+    <updated>2026-01-16T13:07:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Shell Flyout Positions 1.1]]></title>
+        <id>https://windhawk.net/mods/shell-flyout-positions#32c7d48986dceaa8e938441e08509de1a00038c5</id>
+        <link href="https://windhawk.net/mods/shell-flyout-positions"/>
+        <updated>2026-01-16T13:07:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added "Aligned to tray area" option to position flyouts aligned with the system tray area.</li>
+<li>Added "Same as Notification Center" option for Action Center to easily use the same settings for both panels.</li>
+<li>Improved horizontal shift values to scale correctly with display DPI settings.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Shell Flyout Positions 1.0.1]]></title>
         <id>https://windhawk.net/mods/shell-flyout-positions#1fb9a070b6ae6a9d702a0d23da8d39079fc0b5b3</id>
@@ -521,19 +536,6 @@ groups.</li>
         <author>
             <name>Tobias Lind</name>
             <uri>https://github.com/TobbeLino</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.7.2]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#1e21dfbca9fbd4a9acffc5f424d76c7896b7fec6</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2026-01-08T13:53:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a minor custom theme bug created in  v1.7.1</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>
