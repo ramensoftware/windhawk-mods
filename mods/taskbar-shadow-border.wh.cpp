@@ -2,7 +2,7 @@
 // @id              taskbar-shadow-border
 // @name            Taskbar Shadow & Border
 // @description     Adds a customizable, floating shadow and border effect above the taskbar
-// @version         1.0.0
+// @version         1.0.1
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         windhawk.exe
@@ -252,13 +252,7 @@ void DrawShadow(HWND hShadow, int width, int height, int opacity, int borderWidt
 void UpdateShadow(BOOL forceRedraw) {
     if (!g_hShadow) return;
     
-    // PATCH: Self-Healing Parenting (Fixes Startup Race)
-    HWND hCurrentParent = GetParent(g_hShadow);
-    HWND hShell = GetShellWindow();
-    if (hCurrentParent == NULL && hShell != NULL) {
-        // We loaded before Shell was ready; attach now to fix Z-Order
-        SetParent(g_hShadow, hShell);
-    }
+    // REMOVED: Self-Healing Parenting block. It broke "Always on Top".
 
     if (!g_hTaskbar || !IsWindow(g_hTaskbar)) {
         g_hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
@@ -333,10 +327,12 @@ void UpdateShadow(BOOL forceRedraw) {
     g_state.lastHiddenByFullScreen = false;
 
     // 5. Update Window Position
-    HWND zOrderTarget = alwaysOnTop ? g_hTaskbar : HWND_BOTTOM;
-    UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
-    if (alwaysOnTop) flags |= SWP_NOOWNERZORDER; 
+    // CHANGED: Simplified logic for Tool mode. 
+    // HWND_TOPMOST works reliably for separate processes to stay on top.
+    HWND zOrderTarget = alwaysOnTop ? HWND_TOPMOST : HWND_BOTTOM; 
 
+    UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER;
+    
     SetWindowPos(g_hShadow, zOrderTarget, shadowLeft, shadowTop, tbWidth, activeHeight, flags);
 
     // Only Redraw if visuals changed
@@ -441,14 +437,12 @@ DWORD WINAPI ShadowThreadProc(LPVOID lpParam) {
     wc.lpszClassName = g_szClassName;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     if (!RegisterClassEx(&wc)) return 1;
-
-    HWND hShell = GetShellWindow(); 
     
     g_hShadow = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName, L"TaskbarShadow",
         WS_POPUP, 0, 0, 10, 10,
-        hShell, // Attempt to attach on create. If NULL, Self-Healing in UpdateShadow fixes it.
+        NULL, // CHANGED: Pass NULL instead of hShell to make it a top-level window
         NULL, wc.hInstance, NULL
     );
 
