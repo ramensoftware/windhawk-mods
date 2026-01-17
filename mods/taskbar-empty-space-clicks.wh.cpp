@@ -2116,19 +2116,17 @@ HWND FindDesktopWindow()
     return hChildWnd;
 }
 
-// Finds Task Switching window with given class name in current process
-HWND FindSpecificTaskSwitchingWindow(const std::wstring &i_className, const std::wstring &i_windowName)
+// Finds Task Switching window (Alt+Tab)
+HWND FindTaskSwitchingWindow()
 {
     LOG_TRACE();
 
     struct ENUM_WINDOWS_PARAM
     {
         HWND hWnd;
-        std::wstring className;
-        std::wstring windowName;
     };
 
-    ENUM_WINDOWS_PARAM param = {NULL, i_className, i_windowName};
+    ENUM_WINDOWS_PARAM param = {NULL};
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
         {
@@ -2138,39 +2136,47 @@ HWND FindSpecificTaskSwitchingWindow(const std::wstring &i_className, const std:
             if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId())
                 return TRUE;
 
-            if (GetClassNameString(hWnd) != param.className)
+            const auto className = GetClassNameString(hWnd);
+            if (className.empty() || ((className != L"XamlExplorerHostIslandWindow") && (className != L"MultitaskingViewFrame")))
                 return TRUE;
 
-            // XamlExplorerHostIslandWindow is used as a host not just for the Task Switching window, but also for e.g. that laggy modern Window
-            // tiling crap on Win11 - so we need to check the window title as well
-            const auto windowName = GetWindowTextString(hWnd);
-            if (windowName.empty() || windowName != param.windowName)
-                return TRUE;
+            if (className == L"XamlExplorerHostIslandWindow") // Windows 11
+            {
+                // XamlExplorerHostIslandWindow is used as a host not just for the Task Switching window, but also for e.g. that laggy modern Window
+                // tiling crap on Win11 - so we need to indentify the window
+                DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+                if (!threadId)
+                    return TRUE;
 
-            LOG_DEBUG(L"Found %s (%s) window: 0x%08X", param.windowName.c_str(), param.className.c_str(), (DWORD)(ULONG_PTR)hWnd);
-            param.hWnd = hWnd;
+                HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, threadId);
+                if (!thread)
+                    return TRUE;
+
+                PWSTR threadDescription;
+                HRESULT hr = GetThreadDescription(thread, &threadDescription);
+                CloseHandle(thread);
+                if (FAILED(hr))
+                    return TRUE;
+
+                constexpr auto expectedThreadDescription = L"MultitaskingView";
+                const bool isMultitaskingView = wcscmp(threadDescription, expectedThreadDescription) == 0;
+                LocalFree(threadDescription);
+                if (!isMultitaskingView)
+                    return TRUE;
+
+                LOG_DEBUG(L"Found Win11 Task Switching window - class %s (thread desc: %s) : 0x%08X", className.c_str(), expectedThreadDescription, (DWORD)(ULONG_PTR)hWnd);
+            }
+            else
+            {
+                LOG_DEBUG(L"Found Win10 Task Switching window - class %s : 0x%08X", className.c_str(), (DWORD)(ULONG_PTR)hWnd);
+            }
+
+            param.hWnd = hWnd; // return the found window
             return FALSE;
         },
         (LPARAM)&param);
 
     return param.hWnd;
-}
-
-// Finds Task Switching window corresponding to current OS version
-HWND FindTaskSwitchingWindow()
-{
-    LOG_TRACE();
-
-    const std::wstring className = (g_osVersion == WIN_11) ? L"XamlExplorerHostIslandWindow" : L"MultitaskingViewFrame"; // dialog class on Win10
-    const std::wstring windowName = L"Task Switching";
-
-    HWND hWnd = FindSpecificTaskSwitchingWindow(className, windowName);
-    if (!hWnd && (g_osVersion == WIN_11) && g_isExplorerPatcherDetected)
-    {
-        // ExplorerPatcher offers to switch Alt+Tab dialog to Win10 style even on Win11
-        hWnd = FindSpecificTaskSwitchingWindow(L"MultitaskingViewFrame", windowName);
-    }
-    return hWnd;
 }
 
 // Checks if window is Shell_TrayWnd class
@@ -2312,7 +2318,7 @@ KeyModifier GetKeyModifierFromName(const std::wstring &keyName)
 std::vector<std::wstring> SplitArgs(const std::wstring &args, const wchar_t delimiter = L';')
 {
     LOG_TRACE();
-    
+
     std::vector<std::wstring> result;
     std::wstring args_ = stringtools::trim(args);
     if (args_.empty())
@@ -2757,7 +2763,7 @@ void ShowDesktop()
 void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
 {
     LOG_TRACE();
-    
+
     if (keys.empty())
     {
         LOG_DEBUG(L"No virtual key codes to send");
