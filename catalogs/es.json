@@ -7180,7 +7180,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1768571999000,
+                "updated": 1768662500000,
                 "users": 5
             },
             "metadata": {
@@ -7192,7 +7192,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Taskbar Shadow & Border",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "taskbar-show-desktop-button-aero-peek": {
