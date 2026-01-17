@@ -624,6 +624,12 @@ static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify 
 static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
 static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
 
+// Private API for window band (z-order band).
+// https://blog.adeltax.com/window-z-order-in-windows-10/
+using GetWindowBand_t = BOOL(WINAPI *)(HWND hWnd, PDWORD pdwBand);
+GetWindowBand_t pGetWindowBand = nullptr;
+constexpr DWORD ZBID_SYSTEM_TOOLS = 16;
+
 #pragma endregion // declarations
 
 struct WindhawkModSettings
@@ -2170,6 +2176,11 @@ HWND FindTaskSwitchingWindow()
             {
                 LOG_DEBUG(L"Found Win10 Task Switching window - class %s : 0x%08X", className.c_str(), (DWORD)(ULONG_PTR)hWnd);
             }
+
+            DWORD band = 0;
+            // expecting ZBID_SYSTEM_TOOLS band, see https://blog.adeltax.com/window-z-order-in-windows-10/
+            if (!pGetWindowBand || !pGetWindowBand(hWnd, &band) || (band != ZBID_SYSTEM_TOOLS)) 
+                return TRUE;
 
             param.hWnd = hWnd; // return the found window
             return FALSE;
@@ -4420,6 +4431,11 @@ BOOL Wh_ModInit()
     {
         LOG_ERROR(L"Failed to hook CreateWindowInBand, ModInit failed");
         return FALSE;
+    }
+    pGetWindowBand = (GetWindowBand_t)GetProcAddress(user32Module, "GetWindowBand");
+    if (!pGetWindowBand)
+    {
+        LOG_ERROR(L"Failed to get GetWindowBand address");
     }
 
     // autodetect Explorer Patcher on Windows 11 taskbar
