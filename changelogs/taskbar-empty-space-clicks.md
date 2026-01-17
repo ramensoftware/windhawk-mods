@@ -1,3 +1,12 @@
+## 2.5 ([Jan 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4878131bb6c969504ba404f7b38437d7d0eb5209/mods/taskbar-empty-space-clicks.wh.cpp))
+
+- added "Example presets" chapter to mod's description
+- extended "Troubleshooting and Hints" chapters in mod's description
+- Ctrl+Alt+Tab action reworked - now supports consecutive triggers without window constantly re-opening
+- added new action "Switch virtual desktop"
+- bugfixed file logger for Onedrive users
+- bugfixed touch/tap detection on Windows 10 taskbar
+
 ## 2.4 ([Dec 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d5d60e47eb69f50bfa9ea4dd394d884e95eaf823/mods/taskbar-empty-space-clicks.wh.cpp))
 
 - Implemented support for mouse side buttons (mouse4 and mouse5 buttons) - https://github.com/m1lhaus/windhawk-mods/issues/50
