@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-17T17:22:32.000Z</updated>
+    <updated>2026-01-20T08:03:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Unwanted Context Menu Items 1.1]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#9fa744387ad0d7a93c4d3804349fc37c177b8ae9</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-01-20T08:03:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a <strong>Custom Items</strong> setting allowing users to manually enter specific menu item names for removal.</li>
+<li>Added a feature to automatically clean up duplicate or consecutive separator lines in the context menu.</li>
+<li>Added a mechanism to automatically remove trailing separators.</li>
+<li>Expanded the list of removable items to include Windows Media Player options, system actions like "Refresh" and "Copy as path," and image tools like "Rotate left/right."</li>
+<li>Added support for filtering common actions like "Open," "Edit," and "Play."</li>
+<li>The mod now ignores ampersands (<code>&amp;</code>) in menu text to ensure items are caught regardless of keyboard shortcuts.</li>
+<li>Added logic to protect "Open with," "Open in Terminal," and "Edit with" from being accidentally removed.</li>
+<li>Added a hook for <code>TrackPopupMenu</code> to improve compatibility and implemented a safety limit for loading custom items.</li>
+<li>Added logging to track when custom items are successfully matched and removed.</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 2.5]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#4878131bb6c969504ba404f7b38437d7d0eb5209</id>
@@ -456,21 +477,6 @@ occurring while the taskbar is running.</p>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Thumbnail Minimum Size 1.2]]></title>
-        <id>https://windhawk.net/mods/disable-thumbnail-minimum-size#9a03d1edada2671f707184e04a78ad480d354b7d</id>
-        <link href="https://windhawk.net/mods/disable-thumbnail-minimum-size"/>
-        <updated>2026-01-11T09:17:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablethumbnailminimumsize">Disable Thumbnail Minimum Size</h1>
-<p>This mod disables the cutoff size used to display thumbnails in File Explorer.</p>
-<p>Images are cut off by default at 20 pixels, which means that views such as the details view, which use 16 pixel icons,
-will not show thumbnails for any items. The motivation behind this design choice is the extreme loss in quality making
-items nearly unrecognizable. However, it's good to have the option to display things as you would wish.</p>]]></content>
-        <author>
-            <name>Leymonaide</name>
-            <uri>https://github.com/Leymonaide</uri>
         </author>
     </entry>
 </feed>
