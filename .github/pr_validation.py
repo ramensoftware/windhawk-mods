@@ -626,7 +626,7 @@ def validate_symbol_hooks(path: Path):
     mod_source = path.read_text(encoding='utf-8')
     mod_source_lines = mod_source.splitlines()
 
-    p = r'^[ \t]*(?:const[ \t]+)?(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
+    p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
     for match in re.finditer(p, mod_source, re.MULTILINE):
         symbol_block_name = match.group(1)
 
