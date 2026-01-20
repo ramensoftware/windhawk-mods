@@ -13,9 +13,9 @@
 /*
 # Nilesoft Text Shrinker
 
-This mod allows the user to resize the text in Nilesoft Shell's context menu without affecting the glyphs, by using the `font` setting in `shell.nss` to resize the glyphs, and this mod to resize the font.
+This mod allows the user to resize the text in Nilesoft Shell's context menu without affecting the glyphs, by using the `font` setting in `theme.nss` to resize the glyphs, and this mod to resize the font.
 
-For it to work, the user MUST use a different font from `Segoe UI` in their `shell.nss` file, otherwise the mod may affect the `explorer.exe` process as a whole.
+For it to work, the user MUST use a different font from `Segoe UI` in their `theme.nss` file, otherwise the mod may affect the `explorer.exe` process as a whole.
 
 ![](https://i.imgur.com/Sb5S3g4.png)
 
@@ -266,3 +266,4 @@ void Wh_ModUninit() {
     if (g_hSmallFont) DeleteObject(g_hSmallFont);
 
 }
+
