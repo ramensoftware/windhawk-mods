@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-20T08:03:48.000Z</updated>
+    <updated>2026-01-20T10:09:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Nilesoft Text Shrinker 1.0.0]]></title>
+        <id>https://windhawk.net/mods/nilesoft-text-shrinker#a90b6af603d993de3518399d642b2240eef88966</id>
+        <link href="https://windhawk.net/mods/nilesoft-text-shrinker"/>
+        <updated>2026-01-20T10:09:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="nilesofttextshrinker">Nilesoft Text Shrinker</h1>
+<p>This mod allows the user to resize the text in Nilesoft Shell's context menu without affecting the glyphs, by using the <code>font</code> setting in <code>theme.nss</code> to resize the glyphs, and this mod to resize the font.</p>
+<p>For it to work, the user MUST use a different font from <code>Segoe UI</code> in their <code>theme.nss</code> file, otherwise the mod may affect the <code>explorer.exe</code> process as a whole.</p>
+<p><img src="https://i.imgur.com/Sb5S3g4.png" alt="" /></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Unwanted Context Menu Items 1.1]]></title>
         <id>https://windhawk.net/mods/remove-context-menu-items#9fa744387ad0d7a93c4d3804349fc37c177b8ae9</id>
@@ -447,36 +461,6 @@ occurring while the taskbar is running.</p>
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 1.5]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#df9a07b7e0359a0c3074b69cd0be6353df6a09c8</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-01-12T19:54:58.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="fixraceconditionwithlowsavedelayvalues">Fix race condition with low save delay values</h2>
-<h3 id="problem">Problem</h3>
-<p>Users with very low save delay settings (e.g., 100ms) still experienced random shortcut triggers (Ctrl+K, Ctrl+H, etc.). The 100ms quiet period was not sufficient because:</p>
-<ul>
-<li>Fast typing produces keystrokes every 50-100ms</li>
-<li>With save delay = 100ms and quiet period = 100ms, saves would trigger during active typing</li>
-<li>A key could be pressed in the microseconds between the final check and SendInput call</li>
-</ul>
-<h3 id="solution">Solution</h3>
-<ol>
-<li>Increased quiet period from 100ms to 250ms (longer than typical fast typing interval)</li>
-<li>Added a final safety check immediately before SendInput</li>
-</ol>
-<h3 id="changes">Changes</h3>
-<ul>
-<li><strong>Increased <code>QUIET_PERIOD_MS</code> from 100 to 250</strong> — ensures save only triggers during actual pauses in typing, not between keystrokes</li>
-<li><strong>Added final safety check in <code>SendCtrlS()</code></strong> — checks <code>AreAnyKeysPressed()</code> one more time right before calling <code>SendInput()</code>, aborts and reschedules if any key is detected</li>
-<li><strong>Added forward declaration for <code>RetryTimerProc</code></strong> — needed because <code>SendCtrlS()</code> now references it</li>
-<li>Version bumped to 1.5</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

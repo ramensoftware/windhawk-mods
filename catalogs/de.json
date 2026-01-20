@@ -4625,6 +4625,34 @@
                 "version": "1.0.1"
             }
         },
+        "nilesoft-text-shrinker": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768903760000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768903760000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lockframe",
+                "compilerOptions": "-lgdi32",
+                "description": "Forces menu text to be small regardless of icon size.",
+                "github": "https://github.com/Lockframe",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Nilesoft Text Shrinker",
+                "version": "1.0.0"
+            }
+        },
         "no-flash-window": {
             "details": {
                 "defaultSorting": 5330,
