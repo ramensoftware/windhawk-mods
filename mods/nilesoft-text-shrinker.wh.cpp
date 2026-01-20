@@ -4,7 +4,7 @@
 // @description     Forces menu text to be small regardless of icon size.
 // @version         1.0.0
 // @author          Lockframe
-// @github          https://www.github.com/Lockframe
+// @github          https://github.com/Lockframe
 // @include         explorer.exe
 // @compilerOptions -lgdi32
 // ==/WindhawkMod==
@@ -264,4 +264,5 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     if (g_hSmallFont) DeleteObject(g_hSmallFont);
+
 }
