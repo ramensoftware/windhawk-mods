@@ -120,13 +120,7 @@ Notes:
 #include <windows.h>
 #include <commctrl.h>   // ensures HIMAGELIST exists for uxtheme.h
 #include <uxtheme.h>
-#if __has_include(<windhawk_api.h>)
-#include <windhawk_api.h>
-#elif __has_include("windhawk_utils.h")
-#include "windhawk_utils.h"
-#else
-#error "windhawk_api.h not found"
-#endif
+#include <windhawk_utils.h>
 
 #include <UIAutomation.h>
 #include <objbase.h>

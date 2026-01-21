@@ -1,1 +1,10 @@
 node_modules/
+
+# Copilot/SpecStory private files
+.github/copilot-instructions.md
+.specstory/
+
+# VS Code local settings
+.vscode/settings.json
+include/windhawk_api.h
+.vscode/c_cpp_properties.json
