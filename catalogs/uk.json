@@ -8818,7 +8818,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1765307304000,
+                "updated": 1769028353000,
                 "users": 34
             },
             "metadata": {
@@ -8830,7 +8830,7 @@
                     "DbgX.Shell.exe"
                 ],
                 "name": "WinDbg No OleFlushClipboard",
-                "version": "0.1"
+                "version": "0.2"
             }
         },
         "windows-11-file-explorer-styler": {

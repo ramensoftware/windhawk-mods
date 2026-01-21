@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-21T20:20:07.000Z</updated>
+    <updated>2026-01-21T20:45:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinDbg No OleFlushClipboard 0.2]]></title>
+        <id>https://windhawk.net/mods/windbg-no-ole-flush-clipboard#18fb5e6bec28473be6b0e48626dbbd5594b16383</id>
+        <link href="https://windhawk.net/mods/windbg-no-ole-flush-clipboard"/>
+        <updated>2026-01-21T20:45:53.000Z</updated>
+        <content type="html"><![CDATA[<p>Added details to README.</p>]]></content>
+        <author>
+            <name>Nikita</name>
+            <uri>https://github.com/nikital</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1.4]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-control-per-app#7a831cf22a819dd2549b70aa3de1fd62394d7097</id>
@@ -425,23 +436,6 @@ space</a> mod by
         <updated>2026-01-14T09:01:57.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Reverted to the in-taskbar tooltips, since the above-taskbar tooltips are hovered by thumbnails.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#b01400a9758db6ea150ee7d45a28863fbcaa28c8</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
-        <updated>2026-01-14T02:07:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option mute apps with Ctrl+click.</li>
-<li>Added an option for a terse format, e.g., "🔊 64%" instead of "Volume: 64%".</li>
-<li>Improved the tooltips to be shown above the taskbar items. This also adds support for the vertical taskbar.</li>
-<li>Added support for Chromium browsers and Electron apps.</li>
-<li>Changed the default volume change step from 2 to 10.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
