@@ -120,17 +120,35 @@ Notes:
 #include <windows.h>
 #include <commctrl.h>   // ensures HIMAGELIST exists for uxtheme.h
 #include <uxtheme.h>
+#ifdef WH_EDITING
 #include <windhawk_utils.h>
+#else
+#include <windhawk_api.h>
+#endif
 
 #include <UIAutomation.h>
 #include <objbase.h>
 #include <oleauto.h>
 
+#ifndef WH_EDITING
 #include <atomic>
+#endif
 #include <thread>
 #include <string>
 #include <algorithm>
 #include <cmath>
+
+#ifndef Wh_GetStringSetting
+inline PCWSTR Wh_GetStringSetting(PCWSTR) { return L""; }
+#endif
+
+#ifndef Wh_FreeStringSetting
+inline void Wh_FreeStringSetting(PCWSTR) {}
+#endif
+
+#ifndef Wh_GetIntSetting
+inline int Wh_GetIntSetting(PCWSTR) { return 0; }
+#endif
 
 static constexpr wchar_t kHostClassName[] = L"WH_HoverTextMagnifierHost";
 
@@ -191,8 +209,21 @@ struct AppSettings {
     int opacity = 245;
 };
 
+struct AtomicBool {
+    volatile bool value;
+    AtomicBool(bool v = false) : value(v) {}
+    operator bool() const { return value; }
+    AtomicBool& operator=(bool v) { value = v; return *this; }
+};
+
+#ifndef WH_EDITING
+using AtomicBoolReal = std::atomic<bool>;
+#else
+using AtomicBoolReal = AtomicBool;
+#endif
+
 struct RuntimeState {
-    std::atomic<bool> running{false};
+    AtomicBoolReal running{false};
     std::thread worker;
     DWORD threadId = 0;
 
@@ -226,6 +257,10 @@ static int ClampInt(int v, int lo, int hi) {
     if (v < lo) return lo;
     if (v > hi) return hi;
     return v;
+}
+
+static int RoundToInt(float v) {
+    return (v >= 0.0f) ? (int)(v + 0.5f) : (int)(v - 0.5f);
 }
 
 static COLORREF ColorFromRGBInt(int rgb) {
@@ -363,7 +398,7 @@ static bool InitUIA() {
         return false;
     }
 
-    hr = CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g.uia));
+    hr = CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&g.uia);
     if (FAILED(hr) || !g.uia) {
         g.uiaReady = false;
         return false;
@@ -403,7 +438,7 @@ static bool TryExtractTextAtPoint(POINT pt, std::wstring& outText) {
     };
 
     IUIAutomationTextPattern2* tp2 = nullptr;
-    hr = el->GetCurrentPatternAs(UIA_TextPattern2Id, IID_PPV_ARGS(&tp2));
+    hr = el->GetCurrentPatternAs(UIA_TextPattern2Id, IID_IUIAutomationTextPattern2, (void**)&tp2);
     if (SUCCEEDED(hr) && tp2) {
         IUIAutomationTextRange* range = nullptr;
         hr = tp2->RangeFromPoint(pt, &range);
@@ -421,7 +456,7 @@ static bool TryExtractTextAtPoint(POINT pt, std::wstring& outText) {
     }
 
     IUIAutomationTextPattern* tp = nullptr;
-    hr = el->GetCurrentPatternAs(UIA_TextPatternId, IID_PPV_ARGS(&tp));
+    hr = el->GetCurrentPatternAs(UIA_TextPatternId, IID_IUIAutomationTextPattern, (void**)&tp);
     if (SUCCEEDED(hr) && tp) {
         IUIAutomationTextRange* range = nullptr;
         hr = tp->RangeFromPoint(pt, &range);
@@ -439,7 +474,7 @@ static bool TryExtractTextAtPoint(POINT pt, std::wstring& outText) {
     }
 
     IUIAutomationValuePattern* vp = nullptr;
-    hr = el->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&vp));
+    hr = el->GetCurrentPatternAs(UIA_ValuePatternId, IID_IUIAutomationValuePattern, (void**)&vp);
     if (SUCCEEDED(hr) && vp) {
         BSTR b = nullptr;
         vp->get_CurrentValue(&b);
@@ -516,8 +551,8 @@ static void UpdateMagnifierSource(HWND hwndMag, POINT pt, int w, int h) {
     float zoom = (float)g.cfg.zoomPercent / 100.0f;
     if (zoom < 1.0f) zoom = 1.0f;
 
-    int srcW = (int)std::round((float)w / zoom);
-    int srcH = (int)std::round((float)h / zoom);
+    int srcW = RoundToInt((float)w / zoom);
+    int srcH = RoundToInt((float)h / zoom);
 
     RECT work = GetWorkAreaForPoint(pt);
     LONG workL = work.left, workT = work.top, workR = work.right, workB = work.bottom;
