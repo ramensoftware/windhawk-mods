@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-notification-icon-spacing
-// @name            Taskbar tray icon spacing
-// @description     Reduce or increase the spacing between tray icons on the taskbar (Windows 11 only)
-// @version         1.1.2
+// @name            Taskbar tray icon spacing and grid
+// @description     Reduce or increase the spacing between tray icons on the taskbar, optionally have a grid of tray icons (Windows 11 only)
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -22,21 +22,25 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar tray icon spacing
+# Taskbar tray icon spacing and grid
 
-Reduce or increase the spacing between tray icons on the taskbar.
+Reduce or increase the spacing between tray icons on the taskbar, optionally
+have a grid of tray icons.
 
 Only Windows 11 version 22H2 or newer is currently supported. For older Windows
 versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
-![Tray icon width: 32](https://i.imgur.com/78eRcAJ.png) \
+![Tray icon width: 32](https://i.imgur.com/BGWZf6x.png) \
 *Tray icon width: 32 (Windows 11 default)*
 
-![Tray icon width: 24](https://i.imgur.com/4hgxHJ0.png) \
+![Tray icon width: 24](https://i.imgur.com/EIyWATk.png) \
 *Tray icon width: 24*
 
-![Tray icon width: 18](https://i.imgur.com/cErw24I.png) \
+![Tray icon width: 18](https://i.imgur.com/MPi1F3m.png) \
 *Tray icon width: 18*
+
+![Tray icon width: 18, rows: 2](https://i.imgur.com/zOUUTmb.png) \
+*Tray icon width: 18, rows: 2*
 */
 // ==/WindhawkModReadme==
 
@@ -45,6 +49,38 @@ versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 - notificationIconWidth: 24
   $name: Tray icon width
   $description: 'Windows 11 default: 32'
+- notificationIconRows: 1
+  $name: Tray icon rows
+  $description: >-
+    Allows having a grid of tray icons
+- gridArrangement: rowFirstLeftToRight
+  $name: Grid arrangement
+  $description: >-
+    The order in which tray icons are arranged when using multiple rows.
+    Row-first fills each row before moving to the next.
+    Column-first fills each column before moving to the next.
+    Examples with icons A-G and 2 rows:
+
+      Row-first, left-to-right:
+        A B C D
+        E F G
+
+      Column-first, top-to-bottom:
+        A C E G
+        B D F
+
+      Row-first, bottom row first:
+        E F G
+        A B C D
+
+      Column-first, bottom-to-top:
+        B D F
+        A C E G
+  $options:
+  - rowFirstLeftToRight: Row-first, left-to-right
+  - columnFirstTopToBottom: Column-first, top-to-bottom
+  - rowFirstBottomRowFirst: Row-first, bottom row first
+  - columnFirstBottomToTop: Column-first, bottom-to-top
 - overflowIconWidth: 32
   $name: Tray overflow icon width
   $description: >-
@@ -76,8 +112,17 @@ versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
 using namespace winrt::Windows::UI::Xaml;
 
+enum class GridArrangement {
+    rowFirstLeftToRight,
+    columnFirstTopToBottom,
+    rowFirstBottomRowFirst,
+    columnFirstBottomToTop,
+};
+
 struct {
     int notificationIconWidth;
+    int notificationIconRows;
+    GridArrangement gridArrangement;
     int overflowIconWidth;
     int overflowIconsPerRow;
 } g_settings;
@@ -91,16 +136,26 @@ using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
 
 std::list<FrameworkElementLoadedEventRevoker> g_autoRevokerList;
 
+winrt::weak_ref<FrameworkElement> g_notificationAreaIconsStackPanel;
 winrt::weak_ref<FrameworkElement> g_overflowRootGrid;
 
-HWND GetTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
 
-    DWORD processId = 0;
-    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
-        processId != GetCurrentProcessId()) {
-        return nullptr;
-    }
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
 }
@@ -238,7 +293,114 @@ void ApplyNotifyIconViewStyle(FrameworkElement notifyIconViewElement,
     }
 }
 
-bool ApplyNotifyIconsStyle(FrameworkElement notificationAreaIcons, int width) {
+void ApplyNotifyIconsStackPanelGridStyle(FrameworkElement stackPanel,
+                                         int rows,
+                                         int width) {
+    double itemHeight = 0;
+    if (rows > 1) {
+        double stackPanelHeight = stackPanel.ActualHeight();
+        double gap = stackPanelHeight - 16 * rows;
+        double gapPerItem = std::max(gap, 0.0) / (rows + 1);
+        // Force the gap to be an even number to prevent blurry icons.
+        int gapPerItemEven = static_cast<int>(gapPerItem) / 2 * 2;
+        itemHeight = 16 + gapPerItemEven;
+    }
+
+    // Count children first for row-first arrangements.
+    int childCount = Media::VisualTreeHelper::GetChildrenCount(stackPanel);
+    int cols = (childCount + rows - 1) / rows;
+
+    GridArrangement arrangement = g_settings.gridArrangement;
+
+    int indexIter = 0;
+    EnumChildElements(stackPanel, [width, rows, itemHeight, cols, arrangement,
+                                   &indexIter](FrameworkElement child) {
+        int index = indexIter++;
+
+        auto childClassName = winrt::get_class_name(child);
+        if (childClassName != L"Windows.UI.Xaml.Controls.ContentPresenter") {
+            Wh_Log(L"Unsupported class name %s of child",
+                   childClassName.c_str());
+            return false;
+        }
+
+        if (rows > 1) {
+            child.Height(itemHeight);
+
+            int col, row;
+            switch (arrangement) {
+                case GridArrangement::rowFirstLeftToRight:
+                    col = index % cols;
+                    row = index / cols;
+                    break;
+                case GridArrangement::columnFirstTopToBottom:
+                    col = index / rows;
+                    row = index % rows;
+                    break;
+                case GridArrangement::rowFirstBottomRowFirst:
+                    col = index % cols;
+                    row = (rows - 1) - (index / cols);
+                    break;
+                case GridArrangement::columnFirstBottomToTop:
+                    col = index / rows;
+                    row = (rows - 1) - (index % rows);
+                    break;
+            }
+
+            Media::TranslateTransform transform;
+
+            int xOffset = width * (col - index);
+            transform.X(xOffset);
+
+            double yOffset = itemHeight * row - itemHeight * (rows - 1) / 2;
+            transform.Y(yOffset);
+
+            child.RenderTransform(transform);
+        } else {
+            auto childDp = child.as<DependencyObject>();
+            childDp.ClearValue(FrameworkElement::HeightProperty());
+            childDp.ClearValue(UIElement::RenderTransformProperty());
+        }
+
+        return false;
+    });
+
+    if (rows > 1) {
+        int desiredWidth = width * ((indexIter + rows - 1) / rows);
+        stackPanel.Width(desiredWidth);
+    } else {
+        stackPanel.as<DependencyObject>().ClearValue(
+            FrameworkElement::WidthProperty());
+    }
+
+    g_notificationAreaIconsStackPanel = stackPanel;
+}
+
+void ApplyNotifyIconsStackPanelGridStyleOfIcon(
+    FrameworkElement notifyIconViewElement,
+    int rows,
+    int width) {
+    auto contentPresenter =
+        Media::VisualTreeHelper::GetParent(notifyIconViewElement)
+            .try_as<FrameworkElement>();
+    if (!contentPresenter || winrt::get_class_name(contentPresenter) !=
+                                 L"Windows.UI.Xaml.Controls.ContentPresenter") {
+        return;
+    }
+
+    auto stackPanel = Media::VisualTreeHelper::GetParent(contentPresenter)
+                          .try_as<FrameworkElement>();
+    if (!stackPanel || winrt::get_class_name(stackPanel) !=
+                           L"Windows.UI.Xaml.Controls.StackPanel") {
+        return;
+    }
+
+    ApplyNotifyIconsStackPanelGridStyle(stackPanel, rows, width);
+}
+
+bool ApplyNotifyIconsStyle(FrameworkElement notificationAreaIcons,
+                           int rows,
+                           int width) {
     FrameworkElement stackPanel = nullptr;
 
     FrameworkElement child = notificationAreaIcons;
@@ -271,6 +433,8 @@ bool ApplyNotifyIconsStyle(FrameworkElement notificationAreaIcons, int width) {
         ApplyNotifyIconViewStyle(notifyIconViewElement, width);
         return false;
     });
+
+    ApplyNotifyIconsStackPanelGridStyle(stackPanel, rows, width);
 
     return true;
 }
@@ -401,7 +565,7 @@ bool ApplyIconStackStyle(PCWSTR containerName,
     return true;
 }
 
-bool ApplyStyle(XamlRoot xamlRoot, int width) {
+bool ApplyStyle(XamlRoot xamlRoot, int rows, int width) {
     FrameworkElement systemTrayFrameGrid = nullptr;
 
     FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
@@ -421,7 +585,7 @@ bool ApplyStyle(XamlRoot xamlRoot, int width) {
         FindChildByName(systemTrayFrameGrid, L"NotificationAreaIcons");
     if (notificationAreaIcons) {
         somethingSucceeded |=
-            ApplyNotifyIconsStyle(notificationAreaIcons, width);
+            ApplyNotifyIconsStyle(notificationAreaIcons, rows, width);
     }
 
     FrameworkElement controlCenterButton =
@@ -489,6 +653,13 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
                 } else {
                     ApplyNotifyIconViewStyle(iconView,
                                              g_settings.notificationIconWidth);
+
+                    int rows =
+                        g_unloading ? 1 : g_settings.notificationIconRows;
+                    if (rows > 1) {
+                        ApplyNotifyIconsStackPanelGridStyleOfIcon(
+                            iconView, rows, g_settings.notificationIconWidth);
+                    }
                 }
             } else if (className == L"SystemTray.IconView") {
                 if (iconView.Name() == L"SystemTrayIcon") {
@@ -589,10 +760,28 @@ void WINAPI OverflowXamlIslandManager_InitializeIfNeeded_Hook(void* pThis) {
     ApplyOverflowStyle(overflowRootGrid);
 }
 
+using StackViewModel_UpdateIconIndexes_t = void(WINAPI*)(void* pThis);
+StackViewModel_UpdateIconIndexes_t StackViewModel_UpdateIconIndexes_Original;
+void WINAPI StackViewModel_UpdateIconIndexes_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    StackViewModel_UpdateIconIndexes_Original(pThis);
+
+    int rows = g_unloading ? 1 : g_settings.notificationIconRows;
+    if (rows > 1) {
+        if (auto stackPanel = g_notificationAreaIconsStackPanel.get()) {
+            ApplyNotifyIconsStackPanelGridStyle(
+                stackPanel, rows, g_settings.notificationIconWidth);
+        }
+    }
+}
+
 void* CTaskBand_ITaskListWndSite_vftable;
 
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+void* TaskbarHost_FrameHeight_Original;
 
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
@@ -622,12 +811,29 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         return nullptr;
     }
 
-    // Reference: TaskbarHost::FrameHeight
-    constexpr size_t kTaskbarElementIUnknownOffset = 0x40;
+    size_t taskbarElementIUnknownOffset = 0x48;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    // Just use the default offset which will hopefully work in most cases.
+#else
+#error "Unsupported architecture"
+#endif
 
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
-                      kTaskbarElementIUnknownOffset);
+                      taskbarElementIUnknownOffset);
 
     FrameworkElement taskbarElement = nullptr;
     taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
@@ -694,20 +900,37 @@ bool RunFromWindowThread(HWND hWnd,
 
 void LoadSettings() {
     g_settings.notificationIconWidth =
-        Wh_GetIntSetting(L"notificationIconWidth");
-    g_settings.overflowIconWidth = Wh_GetIntSetting(L"overflowIconWidth");
-    g_settings.overflowIconsPerRow = Wh_GetIntSetting(L"overflowIconsPerRow");
+        std::max(Wh_GetIntSetting(L"notificationIconWidth"), 1);
+    g_settings.notificationIconRows =
+        std::max(Wh_GetIntSetting(L"notificationIconRows"), 1);
+
+    PCWSTR gridArrangement = Wh_GetStringSetting(L"gridArrangement");
+    g_settings.gridArrangement = GridArrangement::rowFirstLeftToRight;
+    if (wcscmp(gridArrangement, L"columnFirstTopToBottom") == 0) {
+        g_settings.gridArrangement = GridArrangement::columnFirstTopToBottom;
+    } else if (wcscmp(gridArrangement, L"rowFirstBottomRowFirst") == 0) {
+        g_settings.gridArrangement = GridArrangement::rowFirstBottomRowFirst;
+    } else if (wcscmp(gridArrangement, L"columnFirstBottomToTop") == 0) {
+        g_settings.gridArrangement = GridArrangement::columnFirstBottomToTop;
+    }
+    Wh_FreeStringSetting(gridArrangement);
+
+    g_settings.overflowIconWidth =
+        std::max(Wh_GetIntSetting(L"overflowIconWidth"), 1);
+    g_settings.overflowIconsPerRow =
+        std::max(Wh_GetIntSetting(L"overflowIconsPerRow"), 1);
 }
 
 void ApplySettings() {
     struct ApplySettingsParam {
         HWND hTaskbarWnd;
+        int rows;
         int width;
     };
 
     Wh_Log(L"Applying settings");
 
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         Wh_Log(L"No taskbar found");
         return;
@@ -715,6 +938,7 @@ void ApplySettings() {
 
     ApplySettingsParam param{
         .hTaskbarWnd = hTaskbarWnd,
+        .rows = g_unloading ? 1 : g_settings.notificationIconRows,
         .width = g_unloading ? 32 : g_settings.notificationIconWidth,
     };
 
@@ -731,7 +955,7 @@ void ApplySettings() {
                 return;
             }
 
-            if (!ApplyStyle(xamlRoot, param.width)) {
+            if (!ApplyStyle(xamlRoot, param.rows, param.width)) {
                 Wh_Log(L"ApplyStyles failed");
             }
 
@@ -754,6 +978,11 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             {LR"(private: void __cdecl winrt::SystemTray::OverflowXamlIslandManager::InitializeIfNeeded(void))"},
             &OverflowXamlIslandManager_InitializeIfNeeded_Original,
             OverflowXamlIslandManager_InitializeIfNeeded_Hook,
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::StackViewModel::UpdateIconIndexes(void))"},
+            &StackViewModel_UpdateIconIndexes_Original,
+            StackViewModel_UpdateIconIndexes_Hook,
         },
     };
 
@@ -794,7 +1023,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 bool HookTaskbarDllSymbols() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -808,6 +1038,10 @@ bool HookTaskbarDllSymbols() {
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
             &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
         },
         {
             {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
