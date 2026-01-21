@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-20T10:09:20.000Z</updated>
+    <updated>2026-01-21T12:17:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Unwanted Context Menu Items 1.2]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#e666b3f39fd817f40bf16fea5b3558bd4dedac0e</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-01-21T12:17:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved the custom items engine to use substring matching. This allows users to remove items with dynamic suffixes (like "Move to OneDrive - [Name]") by simply entering the base text.</li>
+<li>Added specific strings to remove "Always keep on this device" and "Free up space" items that appear within OneDrive context submenus.</li>
+<li>Added a prominent warning to the Readme and Settings explaining that predefined toggles are optimized for English Windows.</li>
+<li>Added explicit examples (e.g., "Copy", "Cut", "Sort by") and tips in the Readme to help users understand how to use the Custom Items field for manual removal.</li>
+<li>Updated the GitHub link to point users to the official issues page for reporting spelling variations.</li>
+<li>Added a log message during mod initialization to remind users that predefined options are in English and to use Custom Items for other languages.</li>
+<li>Minor adjustments to the Readme structure and formatting for better readability within the Windhawk interface.</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Nilesoft Text Shrinker 1.0.0]]></title>
         <id>https://windhawk.net/mods/nilesoft-text-shrinker#a90b6af603d993de3518399d642b2240eef88966</id>
@@ -430,37 +449,6 @@ Control</a> mod.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disappearing Tray Icons Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-disappearing-tray-icons-fix#cbb50a1cb10d76cd7c499e02ddaa63a147f2f148</id>
-        <link href="https://windhawk.net/mods/taskbar-disappearing-tray-icons-fix"/>
-        <updated>2026-01-12T22:10:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disappearingtrayiconsfix">Disappearing Tray Icons Fix</h1>
-<p>Fixes system tray icons going missing in Windows 11 by rebroadcasting the
-<code>TaskbarCreated</code> window message.</p>
-<h2 id="theproblem">The Problem</h2>
-<p>Windows 11 has a known issue where system tray icons can randomly vanish (not
-just hide in the overflow area). This happens because:</p>
-<ol>
-<li>Apps register tray icons by calling <code>Shell_NotifyIcon</code></li>
-<li>When <code>explorer.exe</code> restarts or the shell initializes, it broadcasts
-<code>TaskbarCreated</code> to tell apps to re-register their icons</li>
-<li>Some apps miss this message due to race conditions, sleep/wake cycles, or
-timing issues</li>
-<li>Result: icons vanish completely with no way to recover except restarting
-the app</li>
-</ol>
-<h2 id="thesolution">The Solution</h2>
-<p>This mod detects when the taskbar is created and rebroadcasts the <code>TaskbarCreated</code>
-message after a defined delay, giving apps another chance to register their tray
-icons. This mod can also run a passive rebroadcast to catch bizarre instances of this
-occurring while the taskbar is running.</p>
-<p>Only the explorer.exe instance that owns the taskbar will activate this mod.</p>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
         </author>
     </entry>
 </feed>
