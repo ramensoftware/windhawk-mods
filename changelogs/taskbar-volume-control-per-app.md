@@ -1,3 +1,9 @@
+## 1.1.4 ([Jan 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7a831cf22a819dd2549b70aa3de1fd62394d7097/mods/taskbar-volume-control-per-app.wh.cpp))
+
+* Added support for some Chromium-based programs.
+* Updated the mod description to mention a workaround for some laptop touchpads.
+* Fixed the tooltip being misplaced while only half of the content is displayed at the top of the taskbar (the fix in v1.1.2 didn't work in all cases).
+
 ## 1.1.3 ([Jan 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1d32aa72d3460c7487ffe590ade4ba24b84a80af/mods/taskbar-volume-control-per-app.wh.cpp))
 
 * Fixed compatibility with the vertical taskbar.
