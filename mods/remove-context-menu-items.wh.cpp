@@ -2,7 +2,7 @@
 // @id              remove-context-menu-items
 // @name            Remove Unwanted Context Menu Items
 // @description     Removes unwanted items from file context menus with configurable options
-// @version         1.1
+// @version         1.2
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -15,7 +15,24 @@
 /*
 # Remove Unwanted Context Menu Items
 
+⚠️ **Language Notice:** The predefined toggle options are currently optimized for English Windows.
+
+- **Other Languages:** If you use Windows in a different language, please use the Custom Items field in the settings to manually enter the names of the items you wish to remove.
+- **Spelling Variations:** If your Windows is in English but uses different spellings (for example, "Favourites" instead of "Favorites") and the toggle doesn't work, please let me know on [GitHub](https://github.com/ramensoftware/windhawk-mods/issues) so I can add it to the predefined list!
+
+---
+
 This mod removes unwanted items from file context menus with configurable options.
+
+## Screenshots
+
+**Before and after right-clicking on an empty space:**
+
+![Before and after on empty space](https://i.imgur.com/xEyRTk1.png)
+
+**Before and after right-clicking a video file:**
+
+![Before and after on video file](https://i.imgur.com/CPNiFtQ.png)
 
 ## Features
 
@@ -43,19 +60,24 @@ Clean up your Windows context menus by removing bloatware and unwanted items:
 ### Custom Items
 You can also add your own custom menu items to remove by entering their text in the settings.
 
+**Examples for Custom Items:**
+- "Copy" - Removes the Copy option
+- "Cut" - Removes the Cut option
+- "Send to" - Removes the Send to submenu
+- "New" - Removes the New submenu
+- "Sort by" - Removes the Sort by option
+
+**Tip:** Right-click a file/folder, note the exact text of the menu item you want to remove (ignore keyboard shortcut letters like &), then add it to Custom Items.
+
 ## How it works
 The mod hooks into the context menu creation process and removes unwanted menu items by checking their text labels before they are displayed. It also automatically cleans up duplicate separator lines.
-
-## Screenshots
-
-![Empty Space](https://i.imgur.com/xEyRTk1.png)
-
-![Video File](https://i.imgur.com/CPNiFtQ.png)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+# NOTE: Predefined options below are in English only. For other languages, use Custom Items at the bottom.
+
 - removeOneDrive: true
   $name: Remove "Move to OneDrive"
 - removeCopilot: true
@@ -109,7 +131,7 @@ The mod hooks into the context menu creation process and removes unwanted menu i
 - customItems:
   - ""
   $name: Custom items to remove
-  $description: Add custom menu item names (e.g., "Copy", "Cut", "Send to")
+  $description: Enter menu item names in your language
 */
 // ==/WindhawkModSettings==
 
@@ -161,6 +183,8 @@ void InitializeMenuItems() {
     g_menuItems.clear();
     g_menuItems = {
         {L"Move to OneDrive", &g_settings.removeOneDrive},
+        {L"Always keep on this device", &g_settings.removeOneDrive}, // OneDrive submenu item
+        {L"Free up space", &g_settings.removeOneDrive}, // OneDrive submenu item
         {L"Ask Copilot", &g_settings.removeCopilot},
         {L"Scan with Microsoft Defender", &g_settings.removeDefender},
         {L"Create with Designer", &g_settings.removeDesigner},
@@ -409,6 +433,7 @@ void LoadSettings() {
 // Windhawk mod initialization
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing context menu cleaner mod");
+    Wh_Log(L"NOTE: Predefined options are in English. For other languages, use Custom Items in settings.");
     
     try {
         LoadSettings();
