@@ -30,7 +30,7 @@ participants are WinDbg, WPF, and SPICE's vdagent, where:
 
 This mod patches OleFlushClipboard to do nothing in WinDbg's UI process.
 
-A full technial writeup is available at:
+A full technical writeup is available at:
 https://www.island.io/blog/debugging-windbg-with-windbg-fixing-a-ctrl-c-ui-freeze
 
 */
