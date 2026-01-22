@@ -5005,7 +5005,7 @@
                     112
                 ],
                 "ratingUsers": 128,
-                "updated": 1766266742000,
+                "updated": 1769125595000,
                 "users": 9532
             },
             "metadata": {
@@ -5023,7 +5023,7 @@
                 ],
                 "name": "Customize Windows notifications placement",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "office-ui-reverter": {
