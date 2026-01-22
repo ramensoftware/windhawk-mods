@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-22T19:03:12.000Z</updated>
+    <updated>2026-01-22T20:51:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Unwanted Context Menu Items (Classic Menu Only) 1.4]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#11c097e75c59eeb5340544a328410e6d2e4c1eff</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-01-22T20:51:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added several new context menu items to the settings for easier removal:<ul>
+<li><code>Open in new tab</code> and <code>Open in new window</code></li>
+<li><code>Send with Quick Share</code></li>
+<li><code>Edit in Notepad</code></li>
+<li><code>Edit with Photos</code></li>
+<li><code>Edit with Paint</code></li>
+<li><code>NVIDIA Control Panel</code></li></ul></li>
+<li>Added more specific strings for common applications like VLC and Windows Media Player to ensure better coverage.</li>
+<li>Updated the <code>ShouldRemoveMenuItem</code> function to use <strong>exact string matching</strong> for predefined items.<ul>
+<li>This replaces the previous "contains" search logic, which required manual exclusions to avoid accidentally removing items like "Open with…" when "Open" was selected.</li></ul></li>
+<li>Reorganized the <code>WindhawkModSettings</code> block into categories (Bloatware items, Basic items, App-specific items) for better readability.</li>
+<li>Updated several existing item strings (e.g., "Scan with Microsoft Defender…") to include trailing ellipses for more accurate matching.</li>
+<li>Removed hardcoded "special case" logic for "Open" and "Edit" items, as the new exact matching system handles these natively without interfering with extended commands like "Open in Terminal."</li>
+<li>Fixed Issue <a href="https://github.com/ramensoftware/windhawk-mods/issues/3082">#3082</a></li>
+<li>Implementation of predefined toggle options for non-English versions of Windows. (High Priority)</li>
+<li>Planned compatibility for the modern Windows 11 context menu. (Low Priority)</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Live Overlay 1.0.1]]></title>
         <id>https://windhawk.net/mods/desktop-live-overlay#40fe2bf3797059c052a8099480df6dbd537fabd2</id>
@@ -451,21 +479,6 @@ space</a> mod by
         <updated>2026-01-14T19:49:12.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with the vertical taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#44661b1433d48855610c53c44e7a936d3f584ae9</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
-        <updated>2026-01-14T18:50:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the tooltip being misplaced while only half of the content is displayed at the top of the taskbar.</li>
-<li>Fixed the tooltip being horizontally misplaced with some custom taskbar themes such as the DockLike taskbar theme.</li>
-<li>Added support for older Windows 11 builds.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

@@ -1,3 +1,22 @@
+## 1.4 ([Jan 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/11c097e75c59eeb5340544a328410e6d2e4c1eff/mods/remove-context-menu-items.wh.cpp))
+
+* Added several new context menu items to the settings for easier removal:
+    * `Open in new tab` and `Open in new window`
+    * `Send with Quick Share`
+    * `Edit in Notepad`
+    * `Edit with Photos`
+    * `Edit with Paint`
+    * `NVIDIA Control Panel`
+* Added more specific strings for common applications like VLC and Windows Media Player to ensure better coverage.
+* Updated the `ShouldRemoveMenuItem` function to use **exact string matching** for predefined items.
+    * This replaces the previous "contains" search logic, which required manual exclusions to avoid accidentally removing items like "Open with..." when "Open" was selected.
+* Reorganized the `WindhawkModSettings` block into categories (Bloatware items, Basic items, App-specific items) for better readability.
+* Updated several existing item strings (e.g., "Scan with Microsoft Defender...") to include trailing ellipses for more accurate matching.
+* Removed hardcoded "special case" logic for "Open" and "Edit" items, as the new exact matching system handles these natively without interfering with extended commands like "Open in Terminal."
+* Fixed Issue [#3082](https://github.com/ramensoftware/windhawk-mods/issues/3082)
+* Implementation of predefined toggle options for non-English versions of Windows. (High Priority)
+* Planned compatibility for the modern Windows 11 context menu. (Low Priority)
+
 ## 1.3 ([Jan 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6429f0bef3712e84409553361f9b661bb2cae674/mods/remove-context-menu-items.wh.cpp))
 
 - Users can now add an asterisk (`*`) at the end of a custom item (e.g., `Open*`) to perform prefix matching. This allows removing multiple variations of a menu item with a single entry.
