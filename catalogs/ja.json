@@ -2019,6 +2019,39 @@
                 "version": "1.0.2"
             }
         },
+        "desktop-live-overlay": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769071374000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769071374000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -ldxgi -ld2d1 -ldwrite -ld3d11 -ldcomp -lwininet -lpdh -lpowrprof -lshcore -lshlwapi",
+                "description": "Display live, customizable content on the desktop behind icons. Perfect for showing time, date, system metrics, weather, and more.",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Desktop Live Overlay",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "desktop-watermark-tweaks": {
             "details": {
                 "defaultSorting": 2997,

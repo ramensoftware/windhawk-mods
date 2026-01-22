@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-21T20:45:53.000Z</updated>
+    <updated>2026-01-22T08:42:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Live Overlay 1.0]]></title>
+        <id>https://windhawk.net/mods/desktop-live-overlay#547af35db349111a8abf8cf1a961f625f5631ca4</id>
+        <link href="https://windhawk.net/mods/desktop-live-overlay"/>
+        <updated>2026-01-22T08:42:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopliveoverlay">Desktop Live Overlay</h1>
+<p>Display live, customizable content on the desktop behind icons. Perfect for
+showing time, date, system metrics, weather, and more.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li>Two customizable text lines with independent styling</li>
+<li>Dynamic patterns for time, date, system info, and weather</li>
+<li>Font family, size, weight, and style options per line</li>
+<li>Text color with transparency support</li>
+<li>Optional background with customizable color, padding, and corner radius</li>
+<li>Customizable positioning</li>
+</ul>
+<h3 id="supportedpatterns">Supported Patterns</h3>
+<p><strong>Time/Date:</strong></p>
+<ul>
+<li><code>%time%</code> - Current time</li>
+<li><code>%date%</code> - Current date</li>
+<li><code>%weekday%</code> - Day of week name</li>
+<li><code>%weekday_num%</code> - Day of week as number (1-7)</li>
+<li><code>%weeknum%</code> - Week number of year</li>
+<li><code>%dayofyear%</code> - Day of year (1-366)</li>
+<li><code>%timezone%</code> - Timezone offset (e.g., +02:00)</li>
+</ul>
+<p><strong>System Metrics:</strong></p>
+<ul>
+<li><code>%cpu%</code> - CPU usage percentage</li>
+<li><code>%ram%</code> - RAM usage percentage</li>
+<li><code>%battery%</code> - Battery percentage</li>
+<li><code>%battery_time%</code> - Battery time remaining</li>
+<li><code>%power%</code> - Power consumption in watts</li>
+<li><code>%upload_speed%</code> - Network upload speed</li>
+<li><code>%download_speed%</code> - Network download speed</li>
+<li><code>%total_speed%</code> - Combined network speed</li>
+<li><code>%disk_read%</code> - Disk read speed</li>
+<li><code>%disk_write%</code> - Disk write speed</li>
+<li><code>%disk_total%</code> - Combined disk I/O speed</li>
+<li><code>%gpu%</code> - GPU usage percentage</li>
+<li><code>%weather%</code> - Weather from <a href="https://wttr.in/">wttr.in</a></li>
+</ul>
+<p><strong>Other:</strong></p>
+<ul>
+<li><code>%newline%</code> or <code>%n%</code> - Line break</li>
+</ul>
+<p><img src="https://i.imgur.com/BW52sWf.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinDbg No OleFlushClipboard 0.2]]></title>
         <id>https://windhawk.net/mods/windbg-no-ole-flush-clipboard#18fb5e6bec28473be6b0e48626dbbd5594b16383</id>
@@ -427,19 +481,6 @@ space</a> mod by
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#0c5ede9a9249b0e88c3d82b48c263f6b24f03560</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
-        <updated>2026-01-14T09:01:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Reverted to the in-taskbar tooltips, since the above-taskbar tooltips are hovered by thumbnails.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
