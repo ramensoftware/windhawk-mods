@@ -2,7 +2,7 @@
 // @id              remove-context-menu-items
 // @name            Remove Unwanted Context Menu Items (Classic Menu Only)
 // @description     Removes unwanted items from file context menus with configurable options
-// @version         1.3
+// @version         1.4
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -65,19 +65,13 @@ You can also add your own custom menu items to remove by entering their text in 
 **Basic Usage (Exact Match):**
 - "Copy" - Removes only the "Copy" option (exact match)
 - "Cut" - Removes only the "Cut" option (exact match)
-- "Gérer" - Removes only "Gérer" (exact match, won't remove "Gérer l'accès")
+- "Open" - Removes only "Open" (exact match, won't remove "Open in new tab")
 
 **Wildcard Usage (Prefix Match):**
 Add an asterisk (*) at the end to match items that start with the given text:
-- "Open*" - Removes "Open", "Open with...", "Open in Terminal", etc.
+- "Open*" - Removes "Open", "Open with...", "Open in Terminal", "Open in new tab", etc.
 - "Move to OneDrive*" - Removes "Move to OneDrive", "Move to OneDrive - Personal", "Move to OneDrive - Company Name", etc.
-- "Gérer*" - Removes "Gérer", "Gérer l'accès", and any other items starting with "Gérer"
-
-**Examples:**
-- "Send to" - Removes only the exact "Send to" submenu
-- "Send to*" - Removes "Send to" and any variations like "Send to Mail Recipient"
-- "New" - Removes only the exact "New" submenu
-- "Sort by" - Removes only the exact "Sort by" option
+- "C*" - Removes all menu items that start with C ("Cut", "Copy", "Create shortcut"). Be careful!
 
 **Tip:** Right-click a file/folder, note the exact text of the menu item you want to remove (ignore keyboard shortcut letters like &), then add it to Custom Items. Use the asterisk (*) only if you want to remove multiple items with the same prefix.
 
@@ -90,6 +84,7 @@ The mod hooks into the context menu creation process and removes unwanted menu i
 /*
 # NOTE: Predefined options below are in English only. For other languages, use Custom Items at the bottom.
 
+# Items with default ON
 - removeOneDrive: true
   $name: Remove "Move to OneDrive"
 - removeCopilot: true
@@ -100,46 +95,66 @@ The mod hooks into the context menu creation process and removes unwanted menu i
   $name: Remove "Create with Designer"
 - removeClipchamp: true
   $name: Remove "Edit with Clipchamp"
-- removePrint: false
-  $name: Remove "Print"
-- removeFavorites: false
-  $name: Remove "Add to Favorites"
-- removeCast: false
-  $name: Remove "Cast to Device"
-- removeGiveAccess: false
-  $name: Remove "Give access to"
-- removeShare: false
-  $name: Remove "Share"
-- removeRestoreVersions: false
-  $name: Remove "Restore previous versions"
-- removeVLCPlaylist: false
-  $name: Remove "Add to VLC's media player's Playlist"
-- removeVLCPlay: false
-  $name: Remove "Play with VLC media player"
-- removeRefresh: false
-  $name: Remove "Refresh"
-- removeCustomizeFolder: false
-  $name: Remove "Customize this folder..."
-- removeCopyAsPath: false
-  $name: Remove "Copy as path"
+
+# Basic items (default OFF)
 - removeOpen: false
   $name: Remove "Open"
+- removeOpenInNewTab: false
+  $name: Remove "Open in new tab"
+- removeOpenInNewWindow: false
+  $name: Remove "Open in new window"
 - removeEdit: false
   $name: Remove "Edit"
 - removePlay: false
   $name: Remove "Play"
 - removePreview: false
   $name: Remove "Preview"
-- removeIncludeInLibrary: false
-  $name: Remove "Include in library"
+- removePrint: false
+  $name: Remove "Print"
+- removeShare: false
+  $name: Remove "Share"
+- removeRefresh: false
+  $name: Remove "Refresh"
+- removeCopyAsPath: false
+  $name: Remove "Copy as path"
+- removeCustomizeFolder: false
+  $name: Remove "Customize this folder..."
+- removeFavorites: false
+  $name: Remove "Add to Favorites"
 - removePinToStart: false
   $name: Remove "Pin to Start"
+- removeCast: false
+  $name: Remove "Cast to Device"
+- removeGiveAccess: false
+  $name: Remove "Give access to"
+- removeRestoreVersions: false
+  $name: Remove "Restore previous versions"
+- removeIncludeInLibrary: false
+  $name: Remove "Include in library"
+- removeRotate: false
+  $name: Remove "Rotate right" and "Rotate left"
+
+# Items with app names mentioned (default OFF)
+- removeSendWithQuickShare: false
+  $name: Remove "Send with Quick Share"
+- removeVLCPlaylist: false
+  $name: Remove "Add to VLC media player's Playlist"
+- removeVLCPlay: false
+  $name: Remove "Play with VLC media player"
 - removeAddToMediaPlayerQueue: false
   $name: Remove "Add to Media Player play queue"
 - removePlayWithMediaPlayer: false
   $name: Remove "Play with Media Player"
-- removeRotate: false
-  $name: Remove "Rotate right" and "Rotate left"
+- removeEditInNotepad: false
+  $name: Remove "Edit in Notepad"
+- removeEditWithPhotos: false
+  $name: Remove "Edit with Photos"
+- removeEditWithPaint: false
+  $name: Remove "Edit with Paint"
+- removeNvidiaControlPanel: false
+  $name: Remove "NVIDIA Control Panel"
+
+# Custom items
 - customItems:
   - ""
   $name: Custom items to remove
@@ -158,26 +173,33 @@ struct {
     bool removeDefender;
     bool removeDesigner;
     bool removeClipchamp;
-    bool removePrint;
-    bool removeFavorites;
-    bool removeCast;
-    bool removeGiveAccess;
-    bool removeShare;
-    bool removeRestoreVersions;
-    bool removeVLCPlaylist;
-    bool removeVLCPlay;
-    bool removeRefresh;
-    bool removeCustomizeFolder;
-    bool removeCopyAsPath;
     bool removeOpen;
+    bool removeOpenInNewTab;
+    bool removeOpenInNewWindow;
     bool removeEdit;
     bool removePlay;
     bool removePreview;
-    bool removeIncludeInLibrary;
+    bool removePrint;
+    bool removeShare;
+    bool removeSendWithQuickShare;
+    bool removeRefresh;
+    bool removeCopyAsPath;
+    bool removeCustomizeFolder;
+    bool removeFavorites;
     bool removePinToStart;
+    bool removeCast;
+    bool removeGiveAccess;
+    bool removeRestoreVersions;
+    bool removeIncludeInLibrary;
+    bool removeRotate;
+    bool removeVLCPlaylist;
+    bool removeVLCPlay;
     bool removeAddToMediaPlayerQueue;
     bool removePlayWithMediaPlayer;
-    bool removeRotate;
+    bool removeEditInNotepad;
+    bool removeEditWithPhotos;
+    bool removeEditWithPaint;
+    bool removeNvidiaControlPanel;
     std::vector<std::wstring> customItems;
 } g_settings;
 
@@ -198,33 +220,40 @@ void InitializeMenuItems() {
         {L"Always keep on this device", &g_settings.removeOneDrive}, // OneDrive submenu item
         {L"Free up space", &g_settings.removeOneDrive}, // OneDrive submenu item
         {L"Ask Copilot", &g_settings.removeCopilot},
-        {L"Scan with Microsoft Defender", &g_settings.removeDefender},
+        {L"Scan with Microsoft Defender...", &g_settings.removeDefender},
         {L"Create with Designer", &g_settings.removeDesigner},
         {L"Edit with Clipchamp", &g_settings.removeClipchamp},
+        {L"Open", &g_settings.removeOpen},
+        {L"Open in new tab", &g_settings.removeOpenInNewTab},
+        {L"Open in new window", &g_settings.removeOpenInNewWindow},
+        {L"Edit", &g_settings.removeEdit},
+        {L"Play", &g_settings.removePlay},
+        {L"Preview", &g_settings.removePreview},
         {L"Print", &g_settings.removePrint},
+        {L"Share", &g_settings.removeShare},
+        {L"Send with Quick Share", &g_settings.removeSendWithQuickShare},
+        {L"Refresh", &g_settings.removeRefresh},
+        {L"Copy as path", &g_settings.removeCopyAsPath},
+        {L"Customize this folder...", &g_settings.removeCustomizeFolder},
         {L"Add to Favorites", &g_settings.removeFavorites},
         {L"Add to favorites", &g_settings.removeFavorites},
         {L"Add to Favourites", &g_settings.removeFavorites},
         {L"Add to favourites", &g_settings.removeFavorites},
+        {L"Pin to Start", &g_settings.removePinToStart},
         {L"Cast to Device", &g_settings.removeCast},
         {L"Give access to", &g_settings.removeGiveAccess},
-        {L"Share", &g_settings.removeShare},
-        {L"Restore previous version", &g_settings.removeRestoreVersions},
-        {L"Add to VLC", &g_settings.removeVLCPlaylist},
-        {L"Play with VLC", &g_settings.removeVLCPlay},
-        {L"Refresh", &g_settings.removeRefresh},
-        {L"Customize this folder", &g_settings.removeCustomizeFolder},
-        {L"Copy as path", &g_settings.removeCopyAsPath},
-        {L"Open", &g_settings.removeOpen},
-        {L"Edit", &g_settings.removeEdit},
-        {L"Play", &g_settings.removePlay},
-        {L"Preview", &g_settings.removePreview},
+        {L"Restore previous versions", &g_settings.removeRestoreVersions},
         {L"Include in library", &g_settings.removeIncludeInLibrary},
-        {L"Pin to Start", &g_settings.removePinToStart},
+        {L"Rotate right", &g_settings.removeRotate},
+        {L"Rotate left", &g_settings.removeRotate},
+        {L"Add to VLC media player's Playlist", &g_settings.removeVLCPlaylist},
+        {L"Play with VLC media player", &g_settings.removeVLCPlay},
         {L"Add to Media Player play queue", &g_settings.removeAddToMediaPlayerQueue},
         {L"Play with Media Player", &g_settings.removePlayWithMediaPlayer},
-        {L"Rotate right", &g_settings.removeRotate},
-        {L"Rotate left", &g_settings.removeRotate}
+        {L"Edit in Notepad", &g_settings.removeEditInNotepad},
+        {L"Edit with Photos", &g_settings.removeEditWithPhotos},
+        {L"Edit with Paint", &g_settings.removeEditWithPaint},
+        {L"NVIDIA Control Panel", &g_settings.removeNvidiaControlPanel}
     };
 }
 
@@ -297,32 +326,19 @@ bool ShouldRemoveMenuItem(const std::wstring& text) {
     // Remove ampersands and normalize apostrophes for comparison
     std::wstring cleanText = NormalizeString(RemoveAmpersands(text));
     
-    // Check predefined items
+    // Check predefined items with exact matching
     for (const auto& item : g_menuItems) {
         if (*(item.enabled)) {
             std::wstring cleanItemText = NormalizeString(RemoveAmpersands(item.text));
             
-            // Special case: Only remove "Open" if it's not "Open with" or "Open in Terminal"
-            if (cleanItemText == L"Open" && 
-                (cleanText.find(L"Open with") != std::wstring::npos ||
-                 cleanText.find(L"Open in Terminal") != std::wstring::npos)) {
-                continue;
-            }
-            
-            // Special case: Only remove "Edit" if it's not "Edit with" or "Edit in"
-            if (cleanItemText == L"Edit" && 
-                (cleanText.find(L"Edit with") != std::wstring::npos || 
-                 cleanText.find(L"Edit in") != std::wstring::npos)) {
-                continue;
-            }
-            
-            if (cleanText.find(cleanItemText) != std::wstring::npos) {
+            // Exact match only
+            if (cleanText == cleanItemText) {
                 return true;
             }
         }
     }
     
-    // Check custom items with new exact/wildcard matching
+    // Check custom items with exact/wildcard matching
     for (const auto& customItem : g_settings.customItems) {
         if (!customItem.empty()) {
             std::wstring cleanCustomItem = NormalizeString(RemoveAmpersands(customItem));
@@ -451,26 +467,33 @@ void LoadSettings() {
     g_settings.removeDefender = Wh_GetIntSetting(L"removeDefender");
     g_settings.removeDesigner = Wh_GetIntSetting(L"removeDesigner");
     g_settings.removeClipchamp = Wh_GetIntSetting(L"removeClipchamp");
-    g_settings.removePrint = Wh_GetIntSetting(L"removePrint");
-    g_settings.removeFavorites = Wh_GetIntSetting(L"removeFavorites");
-    g_settings.removeCast = Wh_GetIntSetting(L"removeCast");
-    g_settings.removeGiveAccess = Wh_GetIntSetting(L"removeGiveAccess");
-    g_settings.removeShare = Wh_GetIntSetting(L"removeShare");
-    g_settings.removeRestoreVersions = Wh_GetIntSetting(L"removeRestoreVersions");
-    g_settings.removeVLCPlaylist = Wh_GetIntSetting(L"removeVLCPlaylist");
-    g_settings.removeVLCPlay = Wh_GetIntSetting(L"removeVLCPlay");
-    g_settings.removeRefresh = Wh_GetIntSetting(L"removeRefresh");
-    g_settings.removeCustomizeFolder = Wh_GetIntSetting(L"removeCustomizeFolder");
-    g_settings.removeCopyAsPath = Wh_GetIntSetting(L"removeCopyAsPath");
     g_settings.removeOpen = Wh_GetIntSetting(L"removeOpen");
+    g_settings.removeOpenInNewTab = Wh_GetIntSetting(L"removeOpenInNewTab");
+    g_settings.removeOpenInNewWindow = Wh_GetIntSetting(L"removeOpenInNewWindow");
     g_settings.removeEdit = Wh_GetIntSetting(L"removeEdit");
     g_settings.removePlay = Wh_GetIntSetting(L"removePlay");
     g_settings.removePreview = Wh_GetIntSetting(L"removePreview");
-    g_settings.removeIncludeInLibrary = Wh_GetIntSetting(L"removeIncludeInLibrary");
+    g_settings.removePrint = Wh_GetIntSetting(L"removePrint");
+    g_settings.removeShare = Wh_GetIntSetting(L"removeShare");
+    g_settings.removeSendWithQuickShare = Wh_GetIntSetting(L"removeSendWithQuickShare");
+    g_settings.removeRefresh = Wh_GetIntSetting(L"removeRefresh");
+    g_settings.removeCopyAsPath = Wh_GetIntSetting(L"removeCopyAsPath");
+    g_settings.removeCustomizeFolder = Wh_GetIntSetting(L"removeCustomizeFolder");
+    g_settings.removeFavorites = Wh_GetIntSetting(L"removeFavorites");
     g_settings.removePinToStart = Wh_GetIntSetting(L"removePinToStart");
+    g_settings.removeCast = Wh_GetIntSetting(L"removeCast");
+    g_settings.removeGiveAccess = Wh_GetIntSetting(L"removeGiveAccess");
+    g_settings.removeRestoreVersions = Wh_GetIntSetting(L"removeRestoreVersions");
+    g_settings.removeIncludeInLibrary = Wh_GetIntSetting(L"removeIncludeInLibrary");
+    g_settings.removeRotate = Wh_GetIntSetting(L"removeRotate");
+    g_settings.removeVLCPlaylist = Wh_GetIntSetting(L"removeVLCPlaylist");
+    g_settings.removeVLCPlay = Wh_GetIntSetting(L"removeVLCPlay");
     g_settings.removeAddToMediaPlayerQueue = Wh_GetIntSetting(L"removeAddToMediaPlayerQueue");
     g_settings.removePlayWithMediaPlayer = Wh_GetIntSetting(L"removePlayWithMediaPlayer");
-    g_settings.removeRotate = Wh_GetIntSetting(L"removeRotate");
+    g_settings.removeEditInNotepad = Wh_GetIntSetting(L"removeEditInNotepad");
+    g_settings.removeEditWithPhotos = Wh_GetIntSetting(L"removeEditWithPhotos");
+    g_settings.removeEditWithPaint = Wh_GetIntSetting(L"removeEditWithPaint");
+    g_settings.removeNvidiaControlPanel = Wh_GetIntSetting(L"removeNvidiaControlPanel");
     
     // Load custom items - with proper bounds checking
     g_settings.customItems.clear();
@@ -498,33 +521,28 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Initializing context menu cleaner mod");
     Wh_Log(L"NOTE: Predefined options are in English. For other languages, use Custom Items in settings.");
     
-    try {
-        LoadSettings();
-        
-        if (!Wh_SetFunctionHook(
-            (void*)TrackPopupMenuEx,
-            (void*)TrackPopupMenuEx_Hook,
-            (void**)&TrackPopupMenuEx_Original
-        )) {
-            Wh_Log(L"Failed to hook TrackPopupMenuEx");
-            return FALSE;
-        }
-        
-        if (!Wh_SetFunctionHook(
-            (void*)TrackPopupMenu,
-            (void*)TrackPopupMenu_Hook,
-            (void**)&TrackPopupMenu_Original
-        )) {
-            Wh_Log(L"Failed to hook TrackPopupMenu");
-            return FALSE;
-        }
-        
-        Wh_Log(L"Context menu cleaner mod initialized successfully");
-        return TRUE;
-    } catch (...) {
-        Wh_Log(L"Exception during initialization");
+    LoadSettings();
+    
+    if (!Wh_SetFunctionHook(
+        (void*)TrackPopupMenuEx,
+        (void*)TrackPopupMenuEx_Hook,
+        (void**)&TrackPopupMenuEx_Original
+    )) {
+        Wh_Log(L"Failed to hook TrackPopupMenuEx");
         return FALSE;
     }
+    
+    if (!Wh_SetFunctionHook(
+        (void*)TrackPopupMenu,
+        (void*)TrackPopupMenu_Hook,
+        (void**)&TrackPopupMenu_Original
+    )) {
+        Wh_Log(L"Failed to hook TrackPopupMenu");
+        return FALSE;
+    }
+    
+    Wh_Log(L"Context menu cleaner mod initialized successfully");
+    return TRUE;
 }
 
 // Settings changed callback
