@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              remove-context-menu-items
-// @name            Remove Unwanted Context Menu Items
+// @name            Remove Unwanted Context Menu Items (Classic Menu Only)
 // @description     Removes unwanted items from file context menus with configurable options
-// @version         1.2
+// @version         1.3
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -13,7 +13,9 @@
 
 // ==WindhawkModReadme==
 /*
-# Remove Unwanted Context Menu Items
+# Remove Unwanted Context Menu Items (Classic Menu Only)
+
+⚠️ **Windows 11 Users:** This mod currently works only with the classic context menu. Please install the **Classic context menu on Windows 11** mod to use this mod. Support for the modern Windows 11 context menu will be implemented soon.
 
 ⚠️ **Language Notice:** The predefined toggle options are currently optimized for English Windows.
 
@@ -60,17 +62,27 @@ Clean up your Windows context menus by removing bloatware and unwanted items:
 ### Custom Items
 You can also add your own custom menu items to remove by entering their text in the settings.
 
-**Examples for Custom Items:**
-- "Copy" - Removes the Copy option
-- "Cut" - Removes the Cut option
-- "Send to" - Removes the Send to submenu
-- "New" - Removes the New submenu
-- "Sort by" - Removes the Sort by option
+**Basic Usage (Exact Match):**
+- "Copy" - Removes only the "Copy" option (exact match)
+- "Cut" - Removes only the "Cut" option (exact match)
+- "Gérer" - Removes only "Gérer" (exact match, won't remove "Gérer l'accès")
 
-**Tip:** Right-click a file/folder, note the exact text of the menu item you want to remove (ignore keyboard shortcut letters like &), then add it to Custom Items.
+**Wildcard Usage (Prefix Match):**
+Add an asterisk (*) at the end to match items that start with the given text:
+- "Open*" - Removes "Open", "Open with...", "Open in Terminal", etc.
+- "Move to OneDrive*" - Removes "Move to OneDrive", "Move to OneDrive - Personal", "Move to OneDrive - Company Name", etc.
+- "Gérer*" - Removes "Gérer", "Gérer l'accès", and any other items starting with "Gérer"
+
+**Examples:**
+- "Send to" - Removes only the exact "Send to" submenu
+- "Send to*" - Removes "Send to" and any variations like "Send to Mail Recipient"
+- "New" - Removes only the exact "New" submenu
+- "Sort by" - Removes only the exact "Sort by" option
+
+**Tip:** Right-click a file/folder, note the exact text of the menu item you want to remove (ignore keyboard shortcut letters like &), then add it to Custom Items. Use the asterisk (*) only if you want to remove multiple items with the same prefix.
 
 ## How it works
-The mod hooks into the context menu creation process and removes unwanted menu items by checking their text labels before they are displayed. It also automatically cleans up duplicate separator lines.
+The mod hooks into the context menu creation process and removes unwanted menu items by checking their text labels before they are displayed. It also automatically cleans up duplicate separator lines. Custom items use exact matching by default for precision, with optional wildcard support for flexibility.
 */
 // ==/WindhawkModReadme==
 
@@ -131,7 +143,7 @@ The mod hooks into the context menu creation process and removes unwanted menu i
 - customItems:
   - ""
   $name: Custom items to remove
-  $description: Enter menu item names in your language
+  $description: Enter exact menu item names. Add * at the end for prefix matching (e.g., "Open*" removes all items starting with "Open")
 */
 // ==/WindhawkModSettings==
 
@@ -216,6 +228,29 @@ void InitializeMenuItems() {
     };
 }
 
+// Function to normalize string for comparison (handle different apostrophe types)
+std::wstring NormalizeString(const std::wstring& text) {
+    std::wstring result = text;
+    
+    // Replace all types of apostrophes with standard apostrophe
+    // ' (U+2019) RIGHT SINGLE QUOTATION MARK
+    // ' (U+2018) LEFT SINGLE QUOTATION MARK  
+    // ʼ (U+02BC) MODIFIER LETTER APOSTROPHE
+    // ´ (U+00B4) ACUTE ACCENT
+    // ` (U+0060) GRAVE ACCENT
+    
+    for (size_t i = 0; i < result.length(); i++) {
+        wchar_t c = result[i];
+        // Normalize various apostrophe-like characters to standard apostrophe (')
+        if (c == L'\u2019' || c == L'\u2018' || c == L'\u02BC' || 
+            c == L'\u00B4' || c == L'\u0060') {
+            result[i] = L'\'';
+        }
+    }
+    
+    return result;
+}
+
 // Function to remove ampersands from menu text (keyboard shortcuts)
 std::wstring RemoveAmpersands(const std::wstring& text) {
     std::wstring result;
@@ -227,15 +262,45 @@ std::wstring RemoveAmpersands(const std::wstring& text) {
     return result;
 }
 
+// Function to check if a custom item matches a menu text
+bool MatchesCustomItem(const std::wstring& menuText, const std::wstring& customItem) {
+    if (customItem.empty()) {
+        return false;
+    }
+    
+    // Check if the custom item ends with asterisk (wildcard)
+    bool useWildcard = (customItem.back() == L'*');
+    
+    std::wstring searchPattern = customItem;
+    if (useWildcard) {
+        // Remove the asterisk for comparison
+        searchPattern = customItem.substr(0, customItem.length() - 1);
+        
+        // Empty pattern after removing asterisk means match nothing
+        if (searchPattern.empty()) {
+            return false;
+        }
+        
+        // Check if menu text starts with the pattern (prefix match)
+        if (menuText.length() >= searchPattern.length()) {
+            return menuText.substr(0, searchPattern.length()) == searchPattern;
+        }
+        return false;
+    } else {
+        // Exact match required
+        return menuText == searchPattern;
+    }
+}
+
 // Function to check if a menu item should be removed
 bool ShouldRemoveMenuItem(const std::wstring& text) {
-    // Remove ampersands for comparison
-    std::wstring cleanText = RemoveAmpersands(text);
+    // Remove ampersands and normalize apostrophes for comparison
+    std::wstring cleanText = NormalizeString(RemoveAmpersands(text));
     
     // Check predefined items
     for (const auto& item : g_menuItems) {
         if (*(item.enabled)) {
-            std::wstring cleanItemText = RemoveAmpersands(item.text);
+            std::wstring cleanItemText = NormalizeString(RemoveAmpersands(item.text));
             
             // Special case: Only remove "Open" if it's not "Open with" or "Open in Terminal"
             if (cleanItemText == L"Open" && 
@@ -257,14 +322,12 @@ bool ShouldRemoveMenuItem(const std::wstring& text) {
         }
     }
     
-    // Check custom items
+    // Check custom items with new exact/wildcard matching
     for (const auto& customItem : g_settings.customItems) {
         if (!customItem.empty()) {
-            std::wstring cleanCustomItem = RemoveAmpersands(customItem);
+            std::wstring cleanCustomItem = NormalizeString(RemoveAmpersands(customItem));
             
-            // Try both substring match and exact match
-            if (cleanText.find(cleanCustomItem) != std::wstring::npos || 
-                cleanText == cleanCustomItem) {
+            if (MatchesCustomItem(cleanText, cleanCustomItem)) {
                 Wh_Log(L"Removing custom item: %s (matched: %s)", cleanText.c_str(), cleanCustomItem.c_str());
                 return true;
             }
