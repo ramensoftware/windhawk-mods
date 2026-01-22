@@ -1,3 +1,14 @@
+## 1.3 ([Jan 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6429f0bef3712e84409553361f9b661bb2cae674/mods/remove-context-menu-items.wh.cpp))
+
+- Users can now add an asterisk (`*`) at the end of a custom item (e.g., `Open*`) to perform prefix matching. This allows removing multiple variations of a menu item with a single entry.
+- Added a `NormalizeString` function to convert various Unicode apostrophe characters (e.g., \`, ‘, ’, ʼ, ´) to a standard straight apostrophe (`'`) for better matching reliability.
+- Updated documentation to clarify that the mod currently targets the classic context menu and recommends the "Classic context menu on Windows 11" mod for Win11 users.
+- Custom items now use exact matching by default for precision, with optional wildcard support handled via the new `MatchesCustomItem` helper.
+- Updated `ShouldRemoveMenuItem` to utilize both the new normalization and ampersand removal simultaneously for more robust string comparisons.
+- Improved handling of multi-language strings where special characters or non-standard punctuation previously caused matching to fail.
+- Development is underway to implement support for the modern (fluent) Windows 11 context menu.
+- Future updates will aim to expand the predefined toggle options to include most languages.
+
 ## 1.2 ([Jan 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e666b3f39fd817f40bf16fea5b3558bd4dedac0e/mods/remove-context-menu-items.wh.cpp))
 
 - Improved the custom items engine to use substring matching. This allows users to remove items with dynamic suffixes (like "Move to OneDrive - [Name]") by simply entering the base text.
