@@ -2,7 +2,7 @@
 // @id              disable-auto-reboot-updates
 // @name            Disable Auto Reboot for Windows Updates
 // @description     Prevents Windows from automatically rebooting when users are logged in
-// @version         1.2.1
+// @version         1.4.0
 // @author          Self Edit Technologies Inc
 // @github          https://github.com/selfedit
 // @homepage        https://www.self-edit.com
@@ -22,24 +22,21 @@ When disabled, the registry value is removed (or set to 0, depending on settings
 
 ## How It Works
 
-This mod modifies the Windows Update registry settings when loaded. It automatically
-detects which registry path exists on your system, or you can manually select one.
+This mod uses regedit to modify the Windows Update registry settings. It will prompt
+for UAC elevation when enabling or disabling the mod.
 
 ## Settings
 
-- **Registry Path**: Auto-detect (recommended) or manually choose a specific path
+- **Registry Path**: Choose which registry path to use
 - **Value when enabled**: Set to 1 (disable auto reboot) or 0 (allow auto reboot)
 - **Delete on disable**: Remove the value entirely or just set it to 0
 
 ## Registry Paths
 
-The mod can auto-detect which path exists on your system, or you can manually select:
-
-- **Group Policy AU**: `HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU`
+- **Group Policy AU** (recommended): `HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU`
 - **Windows Update Auto Update**: `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update`
-- **Legacy AU path**: `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Windows Update\Auto Update`
 
-**Note:** Requires Windhawk to run with administrator privileges.
+**Note:** Will prompt for UAC elevation to make registry changes.
 
 ## About
 
@@ -49,14 +46,12 @@ Developed by [Self Edit Technologies Inc](https://www.self-edit.com) - Web Devel
 
 // ==WindhawkModSettings==
 /*
-- registryPath: auto
+- registryPath: policiesAU
   $name: Registry Path
-  $description: Auto-detect will check which path exists on your system
+  $description: Select which registry path to modify
   $options:
-  - auto: Auto-detect (recommended)
-  - policiesAU: Group Policy WindowsUpdate AU
+  - policiesAU: Group Policy WindowsUpdate AU (recommended)
   - autoUpdate: Windows Update Auto Update
-  - legacyAU: Legacy AU path
 - enabledValue: 1
   $name: Value when enabled
   $description: Registry value to set (1 = prevent auto reboot, 0 = allow)
@@ -70,64 +65,22 @@ Developed by [Self Edit Technologies Inc](https://www.self-edit.com) - Web Devel
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-
-// Registry paths to check
-const WCHAR* PATHS[] = {
-    L"SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU",
-    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update",
-    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Windows Update\\Auto Update"
-};
-const int PATH_COUNT = 3;
+#include <shlobj.h>
+#include <stdio.h>
 
 struct {
     PCWSTR registryPath;
     DWORD enabledValue;
     BOOL deleteOnDisable;
-    const WCHAR* detectedPath;
 } settings;
 
-BOOL CheckPathExists(const WCHAR* path) {
-    HKEY hKey;
-    LONG result = RegOpenKeyExW(
-        HKEY_LOCAL_MACHINE,
-        path,
-        0,
-        KEY_READ,
-        &hKey
-    );
-    
-    if (result == ERROR_SUCCESS) {
-        RegCloseKey(hKey);
-        return TRUE;
-    }
-    return FALSE;
-}
-
-const WCHAR* DetectRegistryPath() {
-    for (int i = 0; i < PATH_COUNT; i++) {
-        if (CheckPathExists(PATHS[i])) {
-            Wh_Log(L"Auto-detected registry path: %s", PATHS[i]);
-            return PATHS[i];
-        }
-    }
-    
-    // Default to Group Policy path if none exist (will be created)
-    Wh_Log(L"No existing path found, will create: %s", PATHS[0]);
-    return PATHS[0];
-}
-
 const WCHAR* GetRegistryPath(PCWSTR pathSetting) {
-    // Handle empty string (first load) or explicit "auto" selection
-    if (pathSetting[0] == L'\0' || wcscmp(pathSetting, L"auto") == 0) {
-        return DetectRegistryPath();
-    } else if (wcscmp(pathSetting, L"policiesAU") == 0) {
-        return PATHS[0];
+    if (pathSetting[0] == L'\0' || wcscmp(pathSetting, L"policiesAU") == 0) {
+        return L"HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU";
     } else if (wcscmp(pathSetting, L"autoUpdate") == 0) {
-        return PATHS[1];
-    } else if (wcscmp(pathSetting, L"legacyAU") == 0) {
-        return PATHS[2];
+        return L"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update";
     } else {
-        return DetectRegistryPath();
+        return L"HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU";
     }
 }
 
@@ -135,92 +88,100 @@ void LoadSettings() {
     settings.registryPath = Wh_GetStringSetting(L"registryPath");
     settings.enabledValue = Wh_GetIntSetting(L"enabledValue");
     settings.deleteOnDisable = Wh_GetIntSetting(L"deleteOnDisable");
-    settings.detectedPath = GetRegistryPath(settings.registryPath);
+}
+
+BOOL RunRegFile(const WCHAR* regContent) {
+    // Get temp path
+    WCHAR tempPath[MAX_PATH];
+    if (GetTempPathW(MAX_PATH, tempPath) == 0) {
+        Wh_Log(L"GetTempPath failed");
+        return FALSE;
+    }
+
+    // Create temp .reg file path
+    WCHAR regFilePath[MAX_PATH];
+    wsprintfW(regFilePath, L"%s\\wh_autoreboot.reg", tempPath);
+
+    // Write the .reg file
+    HANDLE hFile = CreateFileW(regFilePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"CreateFile failed: %d", GetLastError());
+        return FALSE;
+    }
+
+    // Convert wide string to UTF-16 LE with BOM for .reg file
+    BYTE bom[] = {0xFF, 0xFE}; // UTF-16 LE BOM
+    DWORD written;
+    WriteFile(hFile, bom, sizeof(bom), &written, NULL);
+    
+    DWORD contentLen = (DWORD)(wcslen(regContent) * sizeof(WCHAR));
+    WriteFile(hFile, regContent, contentLen, &written, NULL);
+    CloseHandle(hFile);
+
+    Wh_Log(L"Created reg file: %s", regFilePath);
+
+    // Run regedit /s with elevation
+    SHELLEXECUTEINFOW sei = {0};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"runas";
+    sei.lpFile = L"regedit.exe";
+    
+    WCHAR params[MAX_PATH + 10];
+    wsprintfW(params, L"/s \"%s\"", regFilePath);
+    sei.lpParameters = params;
+    sei.nShow = SW_HIDE;
+
+    if (!ShellExecuteExW(&sei)) {
+        Wh_Log(L"ShellExecuteEx failed: %d", GetLastError());
+        DeleteFileW(regFilePath);
+        return FALSE;
+    }
+
+    // Wait for regedit to finish
+    if (sei.hProcess) {
+        WaitForSingleObject(sei.hProcess, 10000);
+        CloseHandle(sei.hProcess);
+    }
+
+    // Clean up temp file
+    DeleteFileW(regFilePath);
+    
+    Wh_Log(L"Registry updated successfully");
+    return TRUE;
 }
 
 BOOL SetRegistryValue(DWORD value) {
-    const WCHAR* regPath = settings.detectedPath;
-    HKEY hKey;
+    const WCHAR* regPath = GetRegistryPath(settings.registryPath);
     
-    LONG result = RegOpenKeyExW(
-        HKEY_LOCAL_MACHINE,
-        regPath,
-        0,
-        KEY_SET_VALUE,
-        &hKey
-    );
-    
-    if (result == ERROR_FILE_NOT_FOUND) {
-        result = RegCreateKeyExW(
-            HKEY_LOCAL_MACHINE,
-            regPath,
-            0,
-            NULL,
-            REG_OPTION_NON_VOLATILE,
-            KEY_SET_VALUE,
-            NULL,
-            &hKey,
-            NULL
-        );
-    }
-    
-    if (result == ERROR_SUCCESS) {
-        result = RegSetValueExW(
-            hKey,
-            L"NoAutoRebootWithLoggedOnUsers",
-            0,
-            REG_DWORD,
-            (BYTE*)&value,
-            sizeof(value)
-        );
-        RegCloseKey(hKey);
-        
-        if (result == ERROR_SUCCESS) {
-            Wh_Log(L"Registry set: %s\\NoAutoRebootWithLoggedOnUsers = %d", regPath, value);
-            return TRUE;
-        } else {
-            Wh_Log(L"Failed to set registry value. Error: %d", result);
-        }
-    } else {
-        Wh_Log(L"Failed to open/create registry key: %s. Error: %d", regPath, result);
-    }
-    
-    return FALSE;
+    WCHAR regContent[512];
+    wsprintfW(regContent, 
+        L"Windows Registry Editor Version 5.00\r\n\r\n"
+        L"[%s]\r\n"
+        L"\"NoAutoRebootWithLoggedOnUsers\"=dword:%08x\r\n",
+        regPath, value);
+
+    Wh_Log(L"Setting registry value to %d at %s", value, regPath);
+    return RunRegFile(regContent);
 }
 
 BOOL DeleteRegistryValue() {
-    const WCHAR* regPath = settings.detectedPath;
-    HKEY hKey;
+    const WCHAR* regPath = GetRegistryPath(settings.registryPath);
     
-    LONG result = RegOpenKeyExW(
-        HKEY_LOCAL_MACHINE,
-        regPath,
-        0,
-        KEY_SET_VALUE,
-        &hKey
-    );
-    
-    if (result == ERROR_SUCCESS) {
-        result = RegDeleteValueW(hKey, L"NoAutoRebootWithLoggedOnUsers");
-        RegCloseKey(hKey);
-        
-        if (result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND) {
-            Wh_Log(L"Registry value deleted: %s\\NoAutoRebootWithLoggedOnUsers", regPath);
-            return TRUE;
-        } else {
-            Wh_Log(L"Failed to delete registry value. Error: %d", result);
-        }
-    } else {
-        Wh_Log(L"Failed to open registry key for deletion: %s. Error: %d", regPath, result);
-    }
-    
-    return FALSE;
+    WCHAR regContent[512];
+    wsprintfW(regContent, 
+        L"Windows Registry Editor Version 5.00\r\n\r\n"
+        L"[%s]\r\n"
+        L"\"NoAutoRebootWithLoggedOnUsers\"=-\r\n",
+        regPath);
+
+    Wh_Log(L"Deleting registry value at %s", regPath);
+    return RunRegFile(regContent);
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init - Disable Auto Reboot mod");
     LoadSettings();
-    Wh_Log(L"Using registry path: %s", settings.detectedPath);
     return SetRegistryValue(settings.enabledValue);
 }
 
@@ -240,6 +201,5 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     Wh_FreeStringSetting(settings.registryPath);
     LoadSettings();
-    Wh_Log(L"Using registry path: %s", settings.detectedPath);
     SetRegistryValue(settings.enabledValue);
 }
