@@ -696,6 +696,41 @@ def validate_symbol_hooks(path: Path):
     return warnings
 
 
+def validate_specific_keywords(path: Path):
+    """Check for specific keywords in mod source code."""
+    warnings = 0
+
+    mod_source = path.read_text(encoding='utf-8')
+    mod_source_lines = mod_source.splitlines()
+
+    # Words to check (pattern, description)
+    keyword_patterns = [
+        (r'InternalWh', 'InternalWh'),
+        (r'WH_EDITING', 'WH_EDITING'),
+        (r'\bWH_MOD\b', 'WH_MOD'),
+        (r'GWL_WNDPROC', 'GWL_WNDPROC'),
+        (r'GWLP_WNDPROC', 'GWLP_WNDPROC'),
+        (r'Wh_FindFirstSymbol', 'Wh_FindFirstSymbol'),
+        (r'Wh_FindNextSymbol', 'Wh_FindNextSymbol'),
+        (r'Wh_FindCloseSymbol', 'Wh_FindCloseSymbol'),
+    ]
+
+    for line_num, line in enumerate(mod_source_lines, start=1):
+        for pattern, word in keyword_patterns:
+            if re.search(pattern, line):
+                # Skip GWL(P)_WNDPROC when used with GetWindowLong(Ptr)
+                if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
+                    r'GetWindowLong(Ptr)?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
+                ):
+                    continue
+
+                warnings += add_warning(
+                    path, line_num, f'Line requires manual inspection for "{word}"'
+                )
+
+    return warnings
+
+
 def test_run():
     if len(sys.argv) != 3:
         print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
@@ -707,6 +742,7 @@ def test_run():
     warnings = 0
     warnings += validate_metadata(path, pr_author)
     warnings += validate_symbol_hooks(path)
+    warnings += validate_specific_keywords(path)
     if warnings > 0:
         print(f'Got {warnings} warnings')
 
@@ -745,6 +781,7 @@ def main():
 
         path_warnings = validate_metadata(path, pr_author)
         path_warnings += validate_symbol_hooks(path)
+        path_warnings += validate_specific_keywords(path)
         warnings += path_warnings
 
         if path_warnings == 0:
