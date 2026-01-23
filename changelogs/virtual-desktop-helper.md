@@ -1,3 +1,7 @@
+## 2.1.1 ([Jan 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/980412439698cdb23bf0ce440781638a2e4a7cca/mods/virtual-desktop-helper.wh.cpp))
+
+There is no need to call InitializeVirtualDesktopAPI at module startup. it is initialized on demand anyway. fix https://github.com/ramensoftware/windhawk-mods/issues/3052
+
 ## 2.1.0 ([Dec 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bf674013e9b1ad958972eb0c5cc632aa1674f17e/mods/virtual-desktop-helper.wh.cpp))
 
 Add X (alongside E, N, Z) key option for "Switch to Next Desktop" hotkey, which cycles through virtual desktops in a wrap-around manner (1→2→3→...→1)

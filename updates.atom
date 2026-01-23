@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-22T23:46:35.000Z</updated>
+    <updated>2026-01-23T10:53:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 2.1.1]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#980412439698cdb23bf0ce440781638a2e4a7cca</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2026-01-23T10:53:58.000Z</updated>
+        <content type="html"><![CDATA[<p>There is no need to call InitializeVirtualDesktopAPI at module startup. it is initialized on demand anyway. fix https://github.com/ramensoftware/windhawk-mods/issues/3052</p>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Customize Windows notifications placement 1.2.1]]></title>
         <id>https://windhawk.net/mods/notifications-placement#7017c454dba9939cf7482cbc6c8a3ddda6a13ee1</id>
@@ -387,103 +398,6 @@ layout.</p>]]></content>
         <author>
             <name>mode0192</name>
             <uri>https://github.com/mode0192</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Keyboard Shortcut Actions 1.0]]></title>
-        <id>https://windhawk.net/mods/keyboard-shortcut-actions#c0d629173cff0ed3c96dcc8db1746d364ab55363</id>
-        <link href="https://windhawk.net/mods/keyboard-shortcut-actions"/>
-        <updated>2026-01-15T09:34:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="keyboardshortcutactions">Keyboard Shortcut Actions</h1>
-<p>This mod lets you assign global keyboard shortcuts to various actions. Configure
-hotkeys like <code>Ctrl+Alt+D</code> to show the desktop, <code>Ctrl+Alt+T</code> to open Task
-Manager, and more.</p>
-<h2 id="supportedactions">Supported actions:</h2>
-<ol>
-<li><strong>Show desktop</strong> - Toggle show/hide desktop</li>
-<li><strong>Ctrl+Alt+Tab</strong> - Opens Ctrl+Alt+Tab dialog</li>
-<li><strong>Task Manager</strong> - Opens Windows default Task Manager</li>
-<li><strong>Mute system volume</strong> - Toggle mute of system volume (all sound)</li>
-<li><strong>Taskbar auto-hide</strong> - Toggle Windows taskbar auto-hide feature</li>
-<li><strong>Win+Tab</strong> - Opens Win+Tab dialog</li>
-<li><strong>Hide desktop icons</strong> - Toggle show/hide of all desktop icons</li>
-<li><strong>Combine Taskbar buttons</strong> - Toggle combining of Taskbar buttons between two
-states</li>
-<li><strong>Toggle Taskbar alignment</strong> - Toggle taskbar icon alignment between left and
-center (Windows 11 only)</li>
-<li><strong>Open Start menu</strong> - Sends Win key press to open Start menu</li>
-<li><strong>Virtual key press</strong> - Sends virtual keypress (keyboard shortcut) to the
-system</li>
-<li><strong>Open application, path or URL</strong> - Starts arbitrary application executable,
-opens path in Explorer or URL in web browser</li>
-<li><strong>Media Play/Pause</strong> - Toggle play/pause for media playback</li>
-<li><strong>Media Next Track</strong> - Skip to next track</li>
-<li><strong>Media Previous Track</strong> - Skip to previous track</li>
-</ol>
-<h2 id="hotkeyformat">Hotkey format</h2>
-<p>Hotkeys are specified in the format: <code>Modifier+Modifier+Key</code></p>
-<p><strong>Modifiers:</strong> Alt, Ctrl, Shift, Win</p>
-<p><strong>Keys:</strong></p>
-<ul>
-<li>Letters: A-Z</li>
-<li>Numbers: 0-9</li>
-<li>Function keys: F1-F24</li>
-<li>Navigation: Home, End, PageUp, PageDown, Insert, Delete, Left, Right, Up, Down</li>
-<li>Common: Enter, Tab, Space, Backspace, Escape (or Esc), CapsLock, PrintScreen,
-Pause</li>
-<li>Numpad: Numpad0-Numpad9 (or Num0-Num9), NumLock, Add, Subtract, Multiply,
-Divide, Decimal</li>
-<li>Media: VolumeMute, VolumeUp, VolumeDown, MediaPlayPause, MediaNext, MediaPrev,
-MediaStop</li>
-<li>Modifier keys (for Virtual key press): LWin, RWin, LShift, RShift, LCtrl,
-RCtrl, LAlt, RAlt</li>
-<li>Some of the VK_* codes from <a href="https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes">Virtual-Key
-Codes</a></li>
-</ul>
-<p><strong>Examples:</strong></p>
-<ul>
-<li><code>Ctrl+Alt+D</code> - Ctrl + Alt + D</li>
-<li><code>Ctrl+Shift+F1</code> - Ctrl + Shift + F1</li>
-<li><code>Alt+Home</code> - Alt + Home</li>
-<li><code>Win+Numpad1</code> - Windows key + Numpad 1</li>
-</ul>
-<h2 id="additionalarguments">Additional arguments</h2>
-<p>Some actions support or require additional arguments. Arguments are separated by
-semicolons. For example: <code>arg1;arg2</code>.</p>
-<ol>
-<li>Show desktop - no additional arguments</li>
-<li>Ctrl+Alt+Tab - no additional arguments</li>
-<li>Task Manager - no additional arguments</li>
-<li>Mute system volume - no additional arguments</li>
-<li>Taskbar auto-hide - no additional arguments</li>
-<li>Win+Tab - no additional arguments</li>
-<li>Hide desktop icons - no additional arguments</li>
-<li>Combine Taskbar buttons - <code>priState1;priState2;secState1;secState2</code><ul>
-<li>States: <code>COMBINE_ALWAYS</code>, <code>COMBINE_WHEN_FULL</code>, <code>COMBINE_NEVER</code></li>
-<li>Example: <code>COMBINE_ALWAYS;COMBINE_NEVER;COMBINE_ALWAYS;COMBINE_NEVER</code></li></ul></li>
-<li>Toggle Taskbar alignment - no additional arguments</li>
-<li>Open Start menu - no additional arguments</li>
-<li>Virtual key press - <code>key1;key2;...;keyN</code> or <code>Modifier+Key</code><ul>
-<li>Example: <code>Win+E</code> (Win + E)</li>
-<li>Example: <code>Ctrl+Shift+Escape</code> (Ctrl + Shift + Escape)</li>
-<li>Example: <code>LCtrl;C</code> (Ctrl + C using separate keys)</li>
-<li>Uses the same key and modifier names as the hotkey format above</li></ul></li>
-<li>Open application, path or URL - <code>command</code><ul>
-<li>Example: <code>notepad.exe</code></li>
-<li>Example: <code>"C:\Program Files\App\app.exe" --arg</code></li>
-<li>Example: <code>https://example.com</code></li>
-<li>Example: <code>uac;C:\Windows\System32\cmd.exe</code> (run as admin)</li></ul></li>
-<li>Media Play/Pause - no additional arguments</li>
-<li>Media Next Track - no additional arguments</li>
-<li>Media Previous Track - no additional arguments</li>
-</ol>
-<h2 id="credits">Credits</h2>
-<p>The actions in this mod are based on the <a href="https://windhawk.net/mods/taskbar-empty-space-clicks">Click on empty taskbar
-space</a> mod by
-<a href="https://github.com/m1lhaus">m1lhaus</a>.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
