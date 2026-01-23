@@ -2,7 +2,7 @@
 // @id              explorer-tab-utility-window-hider
 // @name            Explorer Tab Utility Window Hider
 // @description     Hides the Explorer Tab Utility window completely, allowing it to run only in the background
-// @version         1.0.1
+// @version         1.0.2
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -14,7 +14,7 @@
 /*
 # Explorer Tab Utility Window Hider
 
-This mod prevents w4po's Explorer Tab Utility (https://github.com/w4po/ExplorerTabUtility) from showing its window at startup and all times. The program will continue to run in the background with all its functionality, but the configuration window will never appear.
+This mod prevents w4po's [Explorer Tab Utility](https://github.com/w4po/ExplorerTabUtility) from showing its window at startup and all times. The program will continue to run in the background with all its functionality, but the configuration window will never appear.
 
 ## How it works
 
@@ -37,6 +37,13 @@ HWND g_mainWindow = NULL;
 // Check if a window belongs to the main application window class
 bool IsMainAppWindow(HWND hWnd) {
     if (!hWnd) return false;
+
+    // Check if the window belongs to the current process
+    DWORD windowProcessId = 0;
+    GetWindowThreadProcessId(hWnd, &windowProcessId);
+    if (windowProcessId != GetCurrentProcessId()) {
+        return false;
+    }
 
     // Check window class name
     WCHAR className[256];
