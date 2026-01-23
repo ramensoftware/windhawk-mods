@@ -4435,11 +4435,12 @@
                     1
                 ],
                 "ratingUsers": 2,
-                "updated": 1758558792000,
+                "updated": 1769198021000,
                 "users": 77
             },
             "metadata": {
                 "author": "BCRTVKCS",
+                "compilerOptions": "-lcomctl32",
                 "description": "Blocks the Magnifier window creation, keeping zoom functionality with win+\"-\" and win+\"+\" keyboard shortcuts.",
                 "github": "https://github.com/bcrtvkcs",
                 "homepage": "https://grdigital.pro",
@@ -4448,7 +4449,7 @@
                 ],
                 "name": "Magnifier Headless Mode",
                 "twitter": "https://x.com/bcrtvkcs",
-                "version": "0.7.0"
+                "version": "0.9.5.2"
             }
         },
         "magnifier-mod": {

@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-23T14:49:51.000Z</updated>
+    <updated>2026-01-23T19:53:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Magnifier Headless Mode 0.9.5.2]]></title>
+        <id>https://windhawk.net/mods/magnifier-headless#1f5a98f4619528de6c38e30571fcd85a6c0e8bbe</id>
+        <link href="https://windhawk.net/mods/magnifier-headless"/>
+        <updated>2026-01-23T19:53:41.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>New Features:</strong></p>
+<ul>
+<li>Add thread-safe implementation and race condition fixes.</li>
+<li>Add comprehensive API hooks for complete window visibility control.</li>
+<li>Add window procedure interception for comprehensive message handling.</li>
+<li>Add comprehensive performance optimizations.</li>
+<li>Add comprehensive error handling and robustness improvements.</li>
+<li>fix compilation errors by replacing SEH with portable error handling.</li>
+<li>Eliminate mouse freeze and add ultra-fast cleanup.</li>
+<li>Block touch controls and document mouse freeze fix.</li>
+<li>Block Magnifier Touch window by title.</li>
+<li>Make Magnifier Touch overlay transparent instead of hiding.</li>
+<li>Hide touch overlay using off-screen position + 0x0 size.</li>
+<li>The appropriate version number has been assigned.</li>
+</ul>
+<p><strong>Bug Fixes:</strong></p>
+<ul>
+<li>Hide GDI+ helper windows.</li>
+<li>Hide CSPNotify and MSCTFIME helper windows.</li>
+<li>Correct CSpNotify case sensitivity.</li>
+<li>Revert broad window class patterns that broke zoom.</li>
+</ul>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Helper 2.1.2]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-helper#917fb6cede7d9079054a1e20be7c49eaff4cb569</id>
@@ -373,19 +405,6 @@ moves the Task Manager button to the tail end of the list.</p>
 <li>Added "Aligned to tray area" option to position flyouts aligned with the system tray area.</li>
 <li>Added "Same as Notification Center" option for Action Center to easily use the same settings for both panels.</li>
 <li>Improved horizontal shift values to scale correctly with display DPI settings.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shell Flyout Positions 1.0.1]]></title>
-        <id>https://windhawk.net/mods/shell-flyout-positions#1fb9a070b6ae6a9d702a0d23da8d39079fc0b5b3</id>
-        <link href="https://windhawk.net/mods/shell-flyout-positions"/>
-        <updated>2026-01-16T01:23:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod affecting unintended elements such as jump lists.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
