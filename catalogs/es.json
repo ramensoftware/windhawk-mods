@@ -2939,6 +2939,35 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-tab-utility-window-hider": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769200102000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769200102000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "BCRTVKCS",
+                "description": "Hides the Explorer Tab Utility window completely, allowing it to run only in the background",
+                "github": "https://github.com/bcrtvkcs",
+                "homepage": "https://grdigital.pro",
+                "include": [
+                    "ExplorerTabUtility.exe"
+                ],
+                "name": "Explorer Tab Utility Window Hider",
+                "twitter": "https://x.com/bcrtvkcs",
+                "version": "1.0.2"
+            }
+        },
         "explorer-tabs-session-saver": {
             "details": {
                 "defaultSorting": 1204,
