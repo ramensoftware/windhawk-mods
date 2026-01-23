@@ -14,6 +14,8 @@
 /*
 # Explorer Tab Utility Window Hider
 
+![Screenshot](https://i.imgur.com/bPrN2Xn.png)
+
 This mod prevents w4po's [Explorer Tab Utility](https://github.com/w4po/ExplorerTabUtility) from showing its window at startup and all times. The program will continue to run in the background with all its functionality, but the configuration window will never appear.
 
 ## How it works
