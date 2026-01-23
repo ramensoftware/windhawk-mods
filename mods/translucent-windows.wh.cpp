@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.7.2
+// @version         1.7.3
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -98,6 +98,11 @@ This is caused by default by the AccentBlur API.❕
   $description: >-
     Blending color with blur background.
      Color in hexadecimal ARGB format e.g. 3A232323
+- FlyoutsEffects: FALSE
+  $name: Flyout effects
+  $description: >-
+    Expand the effects to Win32 flyouts (context menus, dropdown menus, tooltips)
+     ✨It is recommended to enable this with both background translucent effects and Windows theme custom rendering.
 - ImmersiveDarkTitle: FALSE
   $name: Immersive darkmode titlebar
   $description: >-
@@ -370,7 +375,9 @@ std::unordered_set<HWND> g_rainbowWindows;
 
 thread_local BOOL g_DrawTextWithGlowEntry;
 
-typedef HRESULT(WINAPI* pDrawTextWithGlow)(HDC, LPCWSTR, UINT, const RECT*, DWORD, COLORREF, COLORREF, UINT, UINT, BOOL, DTT_CALLBACK_PROC, LPARAM);
+typedef HRESULT(WINAPI* pDrawTextWithGlow)(HDC hdcMem, wchar_t const* pszText, unsigned cch, RECT* prc, DWORD dwFlags, COLORREF crText,
+                                          COLORREF crGlow, unsigned nGlowRadius, unsigned nGlowIntensity, BOOL fPreMultiply,
+                                          DTT_CALLBACK_PROC pfnDrawTextCallback, LPARAM lParam);
 static auto DrawTextWithGlow = (pDrawTextWithGlow)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(126));
 
 // Detect system dark/light theme mode
@@ -399,6 +406,7 @@ struct Settings{
     BOOL SetSystemColors = FALSE;
     COLORREF AccentBlurBehindClr = 0x00000000;
     BOOL ImmersiveDarkmode = FALSE;
+    BOOL FlyoutsEffects = FALSE;
     BOOL ExtendFrame = FALSE;
     BOOL Unload = FALSE;
     BOOL TitlebarFlag = FALSE;
@@ -433,10 +441,11 @@ struct Settings{
 
     enum CORNERTYPE
     {
+        DefaultRound = 0,
         NotRounded = 1,
-        DefaultRounded = 2,
+        Rounded = 2,
         SmallRounded = 3
-    } CornerPref = DefaultRounded;
+    } CornerPref = DefaultRound;
 
 } g_settings;
 
@@ -588,37 +597,60 @@ BOOL IsWindowClass(HWND hWnd, LPCWSTR className)
     return GetWindowClass(hWnd) == className;
 }
 
+BOOL IsWindowCloaked(HWND hwnd) {
+    BOOL isCloaked = FALSE;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked,
+                                           sizeof(isCloaked))) &&
+           isCloaked;
+}
+
 BOOL IsWindowEligible(HWND hWnd) 
-{
-    if (IsWindowClass(hWnd, TOOLTIPS_CLASS) || IsWindowClass(hWnd, L"DropDown") || IsWindowClass(hWnd, L"ViewControlClass"))
+{    
+    BOOL isFlyoutWindow = IsWindowClass(hWnd, TOOLTIPS_CLASS) || IsWindowClass(hWnd, L"DropDown") || IsWindowClass(hWnd, L"ViewControlClass");
+    if (isFlyoutWindow && g_settings.FlyoutsEffects)
         return TRUE;   
     
     LONG_PTR styleEx = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
-
-    // Fixes Snipping Tool rec
-    if ((styleEx & WS_EX_NOACTIVATE) || (styleEx & WS_EX_TRANSPARENT))
-        return FALSE;
     
     HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
     if (hParentWnd && hParentWnd != GetDesktopWindow())
         return FALSE;
+    
+    BOOL hasTitleBar = (style & WS_CAPTION) == WS_CAPTION;
+    BOOL hasCaptionButtons = (style & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) != 0;
+    BOOL hasSystemMenu = (style & WS_SYSMENU) != 0;
+    BOOL hasThickFrame = (style & WS_THICKFRAME) == WS_THICKFRAME;
+    BOOL isWindowCEF = (IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0"));
 
-    BOOL hasTitleBar = (style & WS_BORDER) && (style & WS_DLGFRAME);
-
-    if (!hasTitleBar && ((styleEx & WS_EX_TOOLWINDOW) ||
-       (style & WS_POPUP) || (styleEx & WS_EX_APPWINDOW)))
+    //https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507
+    // Allow containers of Windows Store apps (WinStore.exe, Settings.exe, etc.)
+    // Allow also Chromium Embedded Framework (Brave.exe) created as cloaked.
+    if (IsWindowCloaked(hWnd) && !IsWindowClass(hWnd, L"ApplicationFrameWindow") && !isWindowCEF)
         return FALSE;
 
-    // Don't block CEF apps
-    if (!((IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0")) || style & WS_POPUP || styleEx & WS_EX_APPWINDOW || styleEx & WS_EX_DLGMODALFRAME)
-        && !(style & WS_THICKFRAME || style & WS_MINIMIZEBOX || style & WS_MAXIMIZEBOX || style & 0x00000080l)) // Firefox dialog
+    // Windows become disabled even when they are displayed (e.g. Recycle Bin) when a pop-up window opens in front.
+    if (!IsWindowEnabled(hWnd) && !IsWindowVisible(hWnd))
         return FALSE;
     
-    return TRUE;
+    // Pass ineligible CEF windows like Discord/Vencord
+    if (isWindowCEF && (hasCaptionButtons || hasTitleBar))
+        return TRUE;
+    // Fixes Snipping Tool recording
+    if ((styleEx & WS_EX_NOACTIVATE) || (styleEx & WS_EX_TRANSPARENT))
+        return FALSE;
+    // Most top-level windows
+    if ((style & WS_POPUPWINDOW) == WS_POPUPWINDOW || (style & WS_OVERLAPPEDWINDOW) == WS_OVERLAPPEDWINDOW 
+       || (styleEx & WS_EX_DLGMODALFRAME) == WS_EX_DLGMODALFRAME)
+            return TRUE;
+    // Overlapped windows like the Win32 progress window
+    if (hasTitleBar && hasSystemMenu && (hasCaptionButtons || hasThickFrame) )
+        return TRUE;
+
+    return FALSE;
 }
 
-BOOL IsWindowMaximizedOrFullscreen(HWND hWnd)
+BOOL IsWindowFullscreen(HWND hWnd)
 {
     WINDOWPLACEMENT wp{.length = sizeof(WINDOWPLACEMENT)};
 
@@ -696,6 +728,33 @@ BOOL AccentPalette::LoadAccentPalette()
     return TRUE;
 }
 
+static COLORREF HSLToRGB(FLOAT h, FLOAT s, FLOAT l) {
+    FLOAT c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
+    FLOAT x = c * (1.0f - fabs(fmod(h / 60.0f, 2.0f) - 1.0f));
+    FLOAT m = l - c / 2.0f;
+
+    FLOAT r_prime, g_prime, b_prime;
+    if (0.0f <= h && h < 60.0f) {
+        r_prime = c; g_prime = x; b_prime = 0.0f;
+    } else if (60.0f <= h && h < 120.0f) {
+        r_prime = x; g_prime = c; b_prime = 0.0f;
+    } else if (120.0f <= h && h < 180.0f) {
+        r_prime = 0.0f; g_prime = c; b_prime = x;
+    } else if (180.0f <= h && h < 240.0f) {
+        r_prime = 0.0f; g_prime = x; b_prime = c;
+    } else if (240.0f <= h && h < 300.0f) {
+        r_prime = x; g_prime = 0.0f; b_prime = c;
+    } else {
+        r_prime = c; g_prime = 0.0f; b_prime = x;
+    }
+
+    BYTE r = static_cast<BYTE>((r_prime + m) * 255.0f);
+    BYTE g = static_cast<BYTE>((g_prime + m) * 255.0f);
+    BYTE b = static_cast<BYTE>((b_prime + m) * 255.0f);
+    return RGB(r, g, b);
+}
+
+/*
 struct HSL
 {
     DOUBLE h; // Hue:        0–360
@@ -743,31 +802,29 @@ static HSL RGBToHSL(COLORREF color)
     return hsl;
 }
 
-static COLORREF HSLToRGB(FLOAT h, FLOAT s, FLOAT l) {
-    FLOAT c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
-    FLOAT x = c * (1.0f - fabs(fmod(h / 60.0f, 2.0f) - 1.0f));
-    FLOAT m = l - c / 2.0f;
 
-    FLOAT r_prime, g_prime, b_prime;
-    if (0.0f <= h && h < 60.0f) {
-        r_prime = c; g_prime = x; b_prime = 0.0f;
-    } else if (60.0f <= h && h < 120.0f) {
-        r_prime = x; g_prime = c; b_prime = 0.0f;
-    } else if (120.0f <= h && h < 180.0f) {
-        r_prime = 0.0f; g_prime = c; b_prime = x;
-    } else if (180.0f <= h && h < 240.0f) {
-        r_prime = 0.0f; g_prime = x; b_prime = c;
-    } else if (240.0f <= h && h < 300.0f) {
-        r_prime = x; g_prime = 0.0f; b_prime = c;
-    } else {
-        r_prime = c; g_prime = 0.0f; b_prime = x;
-    }
+// Lazy AI gen'd glow generator
+static COLORREF ComputeGlowHSL(COLORREF textColor)
+{
+    HSL hsl = RGBToHSL(textColor);
 
-    BYTE r = static_cast<BYTE>((r_prime + m) * 255.0f);
-    BYTE g = static_cast<BYTE>((g_prime + m) * 255.0f);
-    BYTE b = static_cast<BYTE>((b_prime + m) * 255.0f);
-    return RGB(r, g, b);
+    // --- Opposite lightness ---
+    float glowL = 1.0f - hsl.l;
+
+    // Clamp extremes (avoid harsh halos)
+    glowL = std::clamp(glowL, 0.10f, 0.90f);
+
+    // --- Suppress saturation ---
+    float glowS = hsl.s * 0.15f;
+
+    // If text is clearly colored → fully neutral glow
+    if (hsl.s > 0.25f)
+        glowS = 0.0f;
+
+    // Hue irrelevant when S ≈ 0
+    return HSLToRGB(hsl.h, glowS, glowL);
 }
+*/
 
 BOOL GetAccentColor(COLORREF& outColor)
 {
@@ -859,7 +916,7 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
 {
     // Popup menus (#32768) pass here by default to paint 
     // the window border and corners
-    if (IsWindowClass(hWnd, MENUPOPUP_CLASS))
+    if (IsWindowClass(hWnd, MENUPOPUP_CLASS) && g_settings.FlyoutsEffects)
     {
         if (dwAttribute == DWMWA_BORDER_COLOR && g_settings.BorderFlag)
         {
@@ -871,7 +928,7 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
         }
         else if (dwAttribute == DWMWA_WINDOW_CORNER_PREFERENCE && g_settings.BgType != g_settings.Default)
-            return DwmSetWindowAttribute_orig(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &g_settings.CornerPref , sizeof(UINT));
+                return DwmSetWindowAttribute_orig(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &g_settings.CornerPref , sizeof(UINT));
     }
             
     if(!IsWindowEligible(hWnd))
@@ -907,15 +964,12 @@ HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMar
     if(!IsWindowEligible(hWnd))
         [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
     
-    if(g_settings.ExtendFrame)
-    {
-        if (!IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS") )
-        {
-            static const MARGINS margins = {-1, -1, -1, -1};
-            [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
-        }
+    if(g_settings.ExtendFrame && !IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS")) {
+        static const MARGINS margins = {-1, -1, -1, -1};
+        [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
     }
-    [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
+    else
+        [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
 }
 
 HWND WINAPI HookedNtUserCreateWindowEx(DWORD dwExStyle,
@@ -962,7 +1016,6 @@ std::wstring GetThemeClass(HTHEME hTheme)
     return ret;
 }
 
-
 // Fix Alpha of DrawTextW
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L859
 INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, UINT format) 
@@ -994,20 +1047,23 @@ INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, 
         SetTextCharacterExtra(hDC, GetTextCharacterExtra(hdc));
         SetMapMode(hDC, GetMapMode(hdc));
 
-        COLORREF color = GetTextColor(hdc);
-        COLORREF GlowColor = 0xFFFFFFFF;
-        INT GlowIntesity = 32;
-        INT GlowRadius = 2;
-        INT UnknownGlowParam = 255;
-        HSL txtHsl = RGBToHSL(color);
-        if (txtHsl.l >= 0.35) {
-            GlowColor = 0xFF000000;
-            if (txtHsl.l <= 0.8 && txtHsl.s <= 0.5)
-                GlowIntesity = 16;
-        }
+        COLORREF TextColor = GetTextColor(hdc);
+        COLORREF GlowColor = 0;
+        UINT GlowIntensity = 0;
+        UINT GlowRadius = 0;
+        BOOL Premultiply = FALSE;
+        
+        // Glow blends with Desktop folders list view shadowed texts
+        // creating a very opaque effect
+        /* 
+        GlowColor = ComputeGlowHSL(textcolor);
+        GlowIntensity = GlowColor ? 32 : GlowIntensity;
+        GlowRadius = GlowIntensity ? 2 : GlowRadius;
+        Premultiply = TRUE;
+        */
 
         hr = DrawTextWithGlow(hDC, lpchText, cchText, lprc, format,
-        color, GlowColor, GlowRadius, GlowIntesity, UnknownGlowParam,
+        TextColor, GlowColor, GlowRadius, GlowIntensity, Premultiply,
         [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI
         {
             return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
@@ -1232,25 +1288,30 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iS
             SetTextCharacterExtra(hDC, GetTextCharacterExtra(hdc));
             //SetTextColor(hDC, GetTextColor(hdc));
 
-            COLORREF color = pOptions->crText;
-            GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &color);
-         
-            COLORREF GlowColor = 0xFFFFFFFF;
-            INT GlowIntesity = 32;
-            INT GlowRadius = 2;
-            INT UnknownGlowParam = 255;
-            HSL txtHsl = RGBToHSL(color);
-            if (txtHsl.l >= 0.35) {
-                GlowColor = 0xFF000000;
-                if (txtHsl.l <= 0.8 && txtHsl.s <= 0.5)
-                    GlowIntesity = 16;
-            }
-    
+            COLORREF TextColor = pOptions->crText;
+            GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &TextColor);
+
+            COLORREF GlowColor = 0;
+            UINT GlowIntensity = 0;
+            UINT GlowRadius = 0;
+            BOOL Premultiply = FALSE;
+            
+            // Text drawing with both alpha composited and text shadows 
+            // (DTT_COMPOSITED | DTT_SHADOWCOLOR | DTT_SHADOWTYPE | DTT_SHADOWOFFSET) doesn't seem to work wtih DrawThemeTextEx.
+            // Instead the internal DrawTextWithGlow is already used which composites the texts and also adds a glow effect.
+            // Unfortunately, not all text passes here for the HTHEME class to detect and handle.
+            /*
+            GlowColor = ComputeGlowHSL(textcolor);
+            GlowIntensity = GlowColor ? 32 : GlowIntensity;
+            GlowRadius = GlowIntensity ? 2 : GlowRadius;
+            Premultiply = GlowRadius ? TRUE : Premultiply;
+
             // Move the text so the glow doesn't get cut off
             OffsetRect(pRect, 1, 0);
+            */
 
             hr = DrawTextWithGlow(hDC, pszText, cchText, pRect, dwTextFlags,
-            color, GlowColor, GlowRadius, GlowIntesity, UnknownGlowParam, pOptions->pfnDrawTextCallback, pOptions->lParam);
+            TextColor, GlowColor, GlowRadius, GlowIntensity, Premultiply, pOptions->pfnDrawTextCallback, pOptions->lParam);
 
             EndBufferedPaint(pbuffer, TRUE);
             g_DrawTextWithGlowEntry = FALSE;
@@ -1305,7 +1366,7 @@ VOID CplDuiHook()
     {
         {
             {
-                    L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"
+                L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"
             },
             &Element_PaintBg,
             Element_PaintBgHook,
@@ -1359,6 +1420,10 @@ BOOL SetCurrentTheme(LPCWSTR themeclass)
     return (g_hTheme) ? TRUE : FALSE;
 }
 
+void ClearSysColorsRegKey() {
+    RegDeleteTreeW(HKEY_CURRENT_USER, L"Control Panel\\Colors");
+}
+
 VOID RevertSysColors()
 {
     if (!SetCurrentTheme(L"sysmetrics")) {
@@ -1375,6 +1440,8 @@ VOID RevertSysColors()
 
     CloseThemeData(g_hTheme);
     g_hTheme = nullptr;
+
+    ClearSysColorsRegKey();
 }
 
 static COLORREF GetCustomSysColor(INT nIndex) 
@@ -1498,7 +1565,6 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
 {
     HRESULT hr = GetThemeColor_orig(hTheme, iPartId, iStateId, iPropId, pColor);
     std::wstring ThemeClassName = GetThemeClass(hTheme);
-
     
     if (ThemeClassName == L"ItemsView" && iPropId == TMT_TEXTCOLOR && ((iPartId == 4 && iStateId == 1) || iPartId == 5))
     {
@@ -1582,7 +1648,7 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
         {
             *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(192, 192, 192) : *pColor;
             return S_OK;
-        }
+        }   
     }
     else if (ThemeClassName == L"Static")
     {
@@ -1637,10 +1703,10 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
     {
         if (iPartId == 10) {
             if (g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
-                *pColor = (g_settings.BgType) ? RGB(0, 0, 0) : (g_settings.FillBg) ? RGB(32, 32, 32) : *pColor;
+                *pColor = (g_settings.FlyoutsEffects) ? RGB(0, 0, 0) : (g_settings.FillBg) ? RGB(32, 32, 32) : *pColor;
         }
         else
-            *pColor = (g_settings.BgType) ? RGB(0, 0, 0) : (g_settings.FillBg) ? RGB(32, 32, 32) : *pColor;
+            *pColor = (g_settings.FlyoutsEffects) ? RGB(0, 0, 0) : (g_settings.FillBg) ? RGB(32, 32, 32) : *pColor;
         return S_OK;
     }
     else if ((ThemeClassName == L"Toolbar") && iPropId == TMT_TEXTCOLOR)
@@ -1670,8 +1736,19 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
     }
     else if (ThemeClassName == L"ChartView")
     {
-        if ((iPartId == 30 || iPartId == 31 || iPartId == 32) && iStateId == 1) {
-            *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(32, 102, 128);
+        if ((iPartId == 29 || iPartId == 30 || iPartId == 31 || iPartId == 32 || iPartId == 33) && iStateId == 1) {
+            if (iPropId == TMT_FILLCOLOR)
+                *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(96,205,255);
+            // Instead of the 1st byte of the DWORD/COLORREF variable, the last byte is used as the alpha of the fill color
+            else if (iPropId == TMT_ALPHALEVEL)
+                *pColor = RGB(255, 0, 0);
+            return S_OK;
+        }
+        if ((iPartId == 34) && iStateId == 1) {
+            if (iPropId == TMT_FILLCOLOR)
+                *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(96,205,255);
+            else if (iPropId == TMT_ALPHALEVEL)
+                *pColor = RGB(64, 0, 0);
             return S_OK;
         }
     }
@@ -1689,14 +1766,14 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
         {
             case 2: case 41:
             case 42:
-                *pColor = RGB(21, 21, 21);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(21, 21, 21) : *pColor;
                 break;
             case 3: case 20:
             case 26:
-                *pColor = RGB(0, 0, 0);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(0, 0, 0) : *pColor;
                 break;
             case 4:
-                *pColor = RGB(8, 4, 0);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(8, 4, 0) : *pColor;
                 break;
             case 5:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(20, 8, 0);
@@ -1731,31 +1808,31 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(140, 0, 0);
                 break;
             case 13:
-                *pColor = RGB(241, 112, 122);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(241, 112, 122) : *pColor;
                 break;
             case 14: case 15:
             case 16: case 17:
             case 18: case 19:
             case 24: case 25:
-                *pColor = RGB(255, 255, 255);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(255, 255, 255) : *pColor;
                 break;
-            case 21: *pColor = RGB(97, 113, 186); break;
-            case 22: *pColor = RGB(68, 79, 125); break;
-            case 23: *pColor = RGB(64, 64, 64); break;
-            case 27: *pColor = RGB(32, 36, 44); break;
-            case 28: *pColor = RGB(32, 40, 56); break;
-            case 29: *pColor = RGB(32, 44, 68); break;
-            case 30: *pColor = RGB(32, 48, 80); break;
-            case 31: *pColor = RGB(32, 52, 92); break;
-            case 32: *pColor = RGB(32, 52, 104); break;
-            case 33: *pColor = RGB(32, 60, 116); break;
-            case 34: *pColor = RGB(32, 64, 128); break;
-            case 35: *pColor = RGB(32, 68, 140); break;
-            case 36: *pColor = RGB(32, 72, 152); break;
-            case 37: *pColor = RGB(32, 76, 164); break;
-            case 38: *pColor = RGB(17, 125, 187); break;
-            case 39: *pColor = RGB(34, 38, 55); break;
-            case 40: *pColor = RGB(35, 45, 71); break;
+            case 21: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(97, 113, 186) : *pColor; break;
+            case 22: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(68, 79, 125) : *pColor; break;
+            case 23: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(64, 64, 64) : *pColor; break;
+            case 27: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 36, 44) : *pColor; break;
+            case 28: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 40, 56) : *pColor; break;
+            case 29: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 44, 68) : *pColor; break;
+            case 30: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 48, 80) : *pColor; break;
+            case 31: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 52, 92) : *pColor; break;
+            case 32: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 52, 104) : *pColor; break;
+            case 33: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 60, 116) : *pColor; break;
+            case 34: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 64, 128) : *pColor; break;
+            case 35: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 68, 140) : *pColor; break;
+            case 36: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 72, 152) : *pColor; break;
+            case 37: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 76, 164) : *pColor; break;
+            case 38: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(17, 125, 187) : *pColor; break;
+            case 39: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(34, 38, 55) : *pColor; break;
+            case 40: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(35, 45, 71) : *pColor; break;
         }
         return S_OK;
     }
@@ -4719,11 +4796,10 @@ HRESULT WINAPI HookedDrawThemeBackground(
     else if (ThemeClassName == L"Menu" && (iPartId == MENU_POPUPBACKGROUND || iPartId == MENU_POPUPBORDERS || iPartId == MENU_POPUPGUTTER || 
             ((iPartId == MENU_POPUPITEM || iPartId == 27) && iStateId != 2)))
     {
-        
         RECT clipRect{*pRect};
         if (pClipRect)
             IntersectRect(&clipRect, pRect, pClipRect);
-        if (g_settings.BgType)
+        if (g_settings.FlyoutsEffects)
             FillRect(hdc, &clipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         else if (g_settings.FillBg) {
             HBRUSH brush = CreateSolidBrush(RGB(32, 32, 32));
@@ -5145,95 +5221,127 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
     {
         case WM_CREATE:
         {
-            // Intercept flyouts
-            if (!IsWindowClass(cwp->hwnd, MENUPOPUP_CLASS) && !IsWindowClass(cwp->hwnd, L"DropDown") && !IsWindowClass(cwp->hwnd, L"ViewControlClass"))
-                break;
-            AddFlyoutsSubclass(cwp->hwnd);
-        }
-        case WM_WINDOWPOSCHANGED:
-        {
-            if (!IsWindowEligible(cwp->hwnd))
+            BOOL isFlyoutWindow = IsWindowClass(cwp->hwnd, MENUPOPUP_CLASS) || IsWindowClass(cwp->hwnd, L"DropDown") || IsWindowClass(cwp->hwnd, L"ViewControlClass");
+            if (!isFlyoutWindow || !g_settings.FlyoutsEffects)
                 break;
 
-            BOOL fullscreen = IsWindowMaximizedOrFullscreen(cwp->hwnd);
+            AddFlyoutsSubclass(cwp->hwnd);
+            break;
+        }
+        case WM_SIZE:
+        {
+            BOOL isFullscreen = IsWindowFullscreen(cwp->hwnd);
             // hide colored borders on fullscreen/maximized windows
-            if (fullscreen) {
+            if (isFullscreen) {
+                // Due to applying effects too early in NtUserCreateWindowEx
+                // effects are passed on to unelegible child windows such as fullscreen borderless DirectX windows
+                // e.g. Duckstation Qt emulator, PCSX2 Qt emulator, Windows Legacy Photos etc.
+                // providing a minimal filtering for unwanted windows.
+                LONG_PTR styleEx = GetWindowLongPtrW(cwp->hwnd, GWL_EXSTYLE);
+                LONG_PTR style = GetWindowLongPtrW(cwp->hwnd, GWL_STYLE);
+                
+                HWND hParentWnd = GetAncestor(cwp->hwnd, GA_PARENT);
+                if (hParentWnd && hParentWnd != GetDesktopWindow())
+                    break;
+
+                if (IsWindowCloaked(cwp->hwnd) || !IsWindowEnabled(cwp->hwnd))
+                    break;
+
+                if (style & WS_CHILD || (styleEx & WS_EX_NOACTIVATE) || (styleEx & WS_EX_TRANSPARENT))
+                    break;
+                
                 UINT borderType;
                 DwmGetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &borderType, sizeof(UINT));
                 if (borderType != DONTROUND)
                     DwmSetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DONTROUND, sizeof(UINT));
+
+                if (g_settings.BorderRainbowFlag)
+                    SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_PAUSED, 0);
             }
-            else if (!fullscreen) {
+            else if (IsWindowEligible(cwp->hwnd)) {
                 UINT borderType;
                 DwmGetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &borderType, sizeof(UINT));
-                if (borderType != g_settings.CornerPref)
+                if (borderType != g_settings.CornerPref) {
                     DwmSetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &g_settings.CornerPref, sizeof(UINT));
-            }
 
+                    if (g_settings.BorderRainbowFlag)
+                        SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_RESTART, 0);
+                }
+            }
             break;
         }
         case WM_ACTIVATE:
         {
             BOOL isMinimized = HIWORD(cwp->wParam);
-            if (!isMinimized && IsWindowEligible(cwp->hwnd))
-            {
-                WORD activationState = LOWORD(cwp->wParam);
+            if (isMinimized || !IsWindowEligible(cwp->hwnd))
+                break;
+            
+            WORD activationState = LOWORD(cwp->wParam);
 
-                if ((activationState == WA_ACTIVE || activationState == WA_CLICKACTIVE))
+            if ((activationState == WA_ACTIVE || activationState == WA_CLICKACTIVE))
+            {
+                if(g_settings.TitlebarFlag && !g_settings.TitlebarRainbowFlag)
                 {
-                    if(g_settings.TitlebarFlag && !g_settings.TitlebarRainbowFlag)
-                    {
-                        g_settings.g_TitlebarColor = g_settings.TitlebarActiveColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
-                    }
-                    if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
-                    {
-                        g_settings.g_CaptionColor = g_settings.CaptionActiveTextColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
-                    }
-                    if((g_settings.BorderFlag && !g_settings.BorderRainbowFlag))
-                    {
-                        g_settings.g_BorderColor = g_settings.BorderActiveColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
-                    }
+                    g_settings.g_TitlebarColor = g_settings.TitlebarActiveColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
                 }
-                else if (activationState == WA_INACTIVE)
+                if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
                 {
-                    // Workaround in order to bypass the neutral background color in SystemBackdrop effects on inactive windows
-                    //if (g_settings.BgType > g_settings.AccentBlurBehind)
-                        //DefWindowProcW(cwp->hwnd, WM_NCACTIVATE, TRUE, 0);
-                
-                    if(g_settings.TitlebarFlag && !g_settings.TitlebarRainbowFlag)
-                    {
-                        g_settings.g_TitlebarColor = g_settings.TitlebarInactiveColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
-                    }
-                    if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
-                    {
-                        g_settings.g_CaptionColor = g_settings.CaptionInactiveTextColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
-                    }
-                    if((g_settings.BorderFlag && !g_settings.BorderRainbowFlag))
-                    {
-                        g_settings.g_BorderColor = g_settings.BorderInactiveColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_BORDER_COLOR, &g_settings.BorderInactiveColor, sizeof(COLORREF));
-                    }
+                    g_settings.g_CaptionColor = g_settings.CaptionActiveTextColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
+                }
+                if((g_settings.BorderFlag && !g_settings.BorderRainbowFlag))
+                {
+                    g_settings.g_BorderColor = g_settings.BorderActiveColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
                 }
             }
+            else if (activationState == WA_INACTIVE)
+            {
+                // Workaround in order to bypass the neutral background color in SystemBackdrop effects on inactive windows
+                //if (g_settings.BgType > g_settings.AccentBlurBehind)
+                    //DefWindowProcW(cwp->hwnd, WM_NCACTIVATE, TRUE, 0);
+            
+                if(g_settings.TitlebarFlag && !g_settings.TitlebarRainbowFlag)
+                {
+                    g_settings.g_TitlebarColor = g_settings.TitlebarInactiveColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
+                }
+                if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
+                {
+                    g_settings.g_CaptionColor = g_settings.CaptionInactiveTextColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
+                }
+                if((g_settings.BorderFlag && !g_settings.BorderRainbowFlag))
+                {
+                    g_settings.g_BorderColor = g_settings.BorderInactiveColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_BORDER_COLOR, &g_settings.BorderInactiveColor, sizeof(COLORREF));
+                }
+            }
+
             break;
         }
         case WM_ENTERSIZEMOVE:
         {
+            if (!g_settings.BorderRainbowFlag && !g_settings.CaptionRainbowFlag && !g_settings.TitlebarRainbowFlag)
+                break;
+            
+            if (!IsWindowEligible(cwp->hwnd))
+                break;
+
             // Pause rainbow effects while the window is being moved/resized.
-            if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
-                SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_PAUSED, 0);
+            SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_PAUSED, 0);
             break;
         }
         case WM_EXITSIZEMOVE:
         {
+            if (!g_settings.BorderRainbowFlag && !g_settings.CaptionRainbowFlag && !g_settings.TitlebarRainbowFlag)
+                break;
+
+            if (!IsWindowEligible(cwp->hwnd))
+                break;
             // Resume rainbow effects after move/resize ends.
-            if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
-                SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_RESTART, 0);
+            SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_RESTART, 0);
             break;
         }
         case WM_DESTROY:
@@ -5371,7 +5479,6 @@ VOID AddWindowHookPerWindowThread(HWND hWnd)
             if (callWndProcHook) {
                 g_callWndProcHook = callWndProcHook;
                 g_allCallWndProcHooks.insert(callWndProcHook);
-                Wh_Log(L"SetWindowsHookEx succeeded for thread %u", dwThreadId);
             }
             else
                 Wh_Log(L"[ERROR] SetWindowsHookEx failed for thread %u", dwThreadId);
@@ -5429,14 +5536,20 @@ BOOL WINAPI HookedTrackPopupMenuEx(HMENU hMenu, UINT uFlags, INT x, INT y, HWND 
 
 static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {  
-    if (Msg == WM_DWMCOLORIZATIONCOLORCHANGED && g_settings.AccentColorize)
+    if (Msg == WM_DWMCOLORIZATIONCOLORCHANGED)
     {
         COLORREF oldAccentClr = g_settings.AccentColor;
         GetAccentColor(g_settings.AccentColor);
-        if (oldAccentClr != g_settings.AccentColor) {
+        if (oldAccentClr != g_settings.AccentColor) 
+        {            
+            if (g_settings.BorderActiveColor == oldAccentClr)
+                g_settings.BorderActiveColor = g_settings.AccentColor;
+            if (g_settings.BorderInactiveColor == oldAccentClr)
+                g_settings.BorderInactiveColor = g_settings.AccentColor;
             ColorizeSysColors();
             g_AccentPalette.LoadAccentPalette();
             g_cache.ClearCache();
+            g_IsSysThemeDarkMode = ShouldSystemUseDarkMode();
         }
     }
     return DefWindowProc_orig(hWnd, Msg, wParam, lParam);
@@ -5444,8 +5557,10 @@ static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, L
 
 VOID HandleEffects(HWND hWnd)
 {
-    if (g_settings.ExtendFrame && (!IsWindowClass(hWnd, TOOLTIPS_CLASS) && !IsWindowClass(hWnd, MENUPOPUP_CLASS) 
-        && !IsWindowClass(hWnd, L"DropDown") && !IsWindowClass(hWnd, L"ViewControlClass")))
+    BOOL isFlyoutWindow = (IsWindowClass(hWnd, TOOLTIPS_CLASS) || IsWindowClass(hWnd, MENUPOPUP_CLASS) 
+        || IsWindowClass(hWnd, L"DropDown") || IsWindowClass(hWnd, L"ViewControlClass"));
+
+    if (g_settings.ExtendFrame && !isFlyoutWindow)
             ApplyFrameExtension(hWnd);
 
     if (g_settings.ImmersiveDarkmode)
@@ -5455,9 +5570,9 @@ VOID HandleEffects(HWND hWnd)
         EnableBlurBehind(hWnd);
     else if (g_settings.BgType > g_settings.AccentBlurBehind)
     {
-        if (IsWindowClass(hWnd, TOOLTIPS_CLASS) || IsWindowClass(hWnd, MENUPOPUP_CLASS) || IsWindowClass(hWnd, L"DropDown")){
-                DwmMakeWindowTransparent(hWnd);
-                TriggerWindowNCRendering(hWnd);
+        if (isFlyoutWindow) {
+            DwmMakeWindowTransparent(hWnd);
+            TriggerWindowNCRendering(hWnd);
         }
         SetSystemBackdrop(hWnd, g_settings.BgType);
     }
@@ -5502,12 +5617,13 @@ VOID CustomRendering()
         WindhawkUtils::SetFunctionHook(GetSysColor, HookedGetSysColor, &GetSysColor_orig);
         WindhawkUtils::SetFunctionHook(GetSysColorBrush, HookedGetSysColorBrush, &GetSysColorBrush_orig);
     }
-    WindhawkUtils::SetFunctionHook(GetThemeMargins, HookedGetThemeMargins, &GetThemeMargins_orig);
     WindhawkUtils::SetFunctionHook(DrawTextW, HookedDrawTextW, &DrawTextW_orig);
     WindhawkUtils::SetFunctionHook(DrawTextExW, HookedDrawTextExW, &DrawTextExW_orig);
     WindhawkUtils::SetFunctionHook(ExtTextOutW, HookedExtTextOutW, &ExtTextOutW_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeText, HookedDrawThemeText, &DrawThemeText_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeTextEx, HookedDrawThemeTextEx, &DrawThemeTextEx_orig);
+    if (g_settings.FlyoutsEffects)
+        WindhawkUtils::SetFunctionHook(GetThemeMargins, HookedGetThemeMargins, &GetThemeMargins_orig);
 }
 
 VOID RestoreWindowCustomizations(HWND hWnd)
@@ -5531,7 +5647,7 @@ VOID RestoreWindowCustomizations(HWND hWnd)
     g_settings.CaptionActiveTextColor = DWMWA_COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, DWMWA_TEXT_COLOR , &g_settings.CaptionActiveTextColor, sizeof(COLORREF));
 
-    if (g_settings.CornerPref != g_settings.DefaultRounded)
+    if (g_settings.CornerPref != g_settings.Rounded)
         DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DEFAULT , sizeof(UINT));
 
     // Disabling AccentBlurBehind temp workaround
@@ -5696,7 +5812,7 @@ VOID ApplyHooks()
         DwmExpandFrameIntoClientAreaHook();
     if (g_settings.TitlebarFlag || g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.BgType != g_settings.Default)
         DwmSetWindowAttributeHook();
-    if (g_settings.BgType != g_settings.Default) {
+    if (g_settings.FlyoutsEffects) {
         // Intercept and subclass system tray popupmenus
         WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, HookedTrackPopupMenuEx, &TrackPopupMenuEx_orig);
     }
@@ -5751,7 +5867,7 @@ VOID LoadWindowProcessRules()
                 else if (0 == wcscmp(strCornerType, L"smallround"))
                     g_settings.CornerPref = g_settings.SmallRounded;
                 else
-                    g_settings.CornerPref = g_settings.DefaultRounded;
+                    g_settings.CornerPref = g_settings.Rounded;
                 
                 g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RuledPrograms[%d].RainbowSpeed", i));
 
@@ -5823,6 +5939,8 @@ VOID LoadSettings()
     
     GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"AccentBlurBehind")), g_settings.AccentBlurBehindClr);
 
+    g_settings.FlyoutsEffects = Wh_GetIntSetting(L"FlyoutsEffects");
+
     g_settings.ImmersiveDarkmode = Wh_GetIntSetting(L"ImmersiveDarkTitle");
     
     g_settings.ExtendFrame = Wh_GetIntSetting(L"ExtendFrame");
@@ -5833,7 +5951,7 @@ VOID LoadSettings()
     else if (0 == wcscmp(strCornerType, L"smallround"))
         g_settings.CornerPref = g_settings.SmallRounded;
     else
-        g_settings.CornerPref = g_settings.DefaultRounded;
+        g_settings.CornerPref = g_settings.Rounded;
 
     g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RainbowSpeed"));
 
@@ -5950,4 +6068,5 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
 
