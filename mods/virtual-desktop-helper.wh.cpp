@@ -2,7 +2,7 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, pin windows, and tile windows with customizable hotkeys
-// @version         2.1.0
+// @version         2.1.1
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -490,9 +490,6 @@ void LoadSettings() {
 // Virtual Desktop API Initialization
 //=============================================================================
 
-static const int API_INIT_MAX_RETRIES = 30;
-static const int API_INIT_RETRY_DELAY_MS = 1000;
-
 bool InitializeVirtualDesktopAPIOnce() {
   HRESULT hr = CoCreateInstance(CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER, IID_IServiceProvider,
                                 (void**)&g_pServiceProvider);
@@ -718,7 +715,7 @@ void FocusWindow(HWND hwnd) {
   SetForegroundWindow(hwnd);
 }
 
-bool GoToDesktopNum(int desktopNum) {
+bool GoToDesktopNum(int desktopNum, HWND preferredFocusHwnd = nullptr) {
   if (!InitializeVirtualDesktopAPI() || desktopNum <= 0) return false;
 
   // Save current desktop info for "previous desktop" feature
@@ -748,17 +745,29 @@ bool GoToDesktopNum(int desktopNum) {
   // Find window to focus on target desktop
   HWND windowToFocus = nullptr;
   if (hasTargetId) {
-    auto it = g_desktopFocusMap.find(targetDesktopId);
-    if (it != g_desktopFocusMap.end() && IsEligibleWindow(it->second)) {
-      GUID windowDesktopId;
-      if (g_pDesktopManager && SUCCEEDED(g_pDesktopManager->GetWindowDesktopId(it->second, &windowDesktopId))) {
-        if (IsEqualGUID(windowDesktopId, targetDesktopId)) {
-          windowToFocus = it->second;
+    // If requested, prefer focusing a specific window (e.g. the one that was just moved).
+    if (preferredFocusHwnd && IsEligibleWindow(preferredFocusHwnd) && g_pDesktopManager) {
+      GUID preferredDesktopId;
+      if (SUCCEEDED(g_pDesktopManager->GetWindowDesktopId(preferredFocusHwnd, &preferredDesktopId)) &&
+          IsEqualGUID(preferredDesktopId, targetDesktopId)) {
+        windowToFocus = preferredFocusHwnd;
+      }
+    }
+
+    if (!windowToFocus) {
+      auto it = g_desktopFocusMap.find(targetDesktopId);
+      if (it != g_desktopFocusMap.end() && IsEligibleWindow(it->second)) {
+        GUID windowDesktopId;
+        if (g_pDesktopManager && SUCCEEDED(g_pDesktopManager->GetWindowDesktopId(it->second, &windowDesktopId))) {
+          if (IsEqualGUID(windowDesktopId, targetDesktopId)) {
+            windowToFocus = it->second;
+          }
         }
       }
     }
+
     if (!windowToFocus) {
-      windowToFocus = FindWindowOnDesktop(targetDesktopId);
+      windowToFocus = FindWindowOnDesktop(targetDesktopId, preferredFocusHwnd);
     }
   }
 
@@ -784,6 +793,7 @@ bool GoToDesktopNum(int desktopNum) {
 
 bool SwitchToPreviousDesktop() {
   if (!g_hasPreviousDesktop) return false;
+  if (!InitializeVirtualDesktopAPI()) return false;
 
   GUID currentId;
   if (!GetCurrentDesktopId(&currentId) || IsEqualGUID(currentId, g_previousDesktopId)) {
@@ -1136,73 +1146,6 @@ void TileWindows() {
 }
 
 //=============================================================================
-// Background API Initialization Thread
-// Retries API initialization in background if initial attempt fails
-//=============================================================================
-
-static volatile bool g_apiInitInProgress = false;
-static volatile bool g_stopApiInitThread = false;
-static HANDLE g_hApiInitThread = nullptr;
-
-DWORD WINAPI ApiInitThreadProc(LPVOID) {
-  Wh_Log(L"Background API initialization thread started");
-
-  HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-  if (FAILED(coHr)) {
-    Wh_Log(L"Background thread CoInitializeEx failed: 0x%08X", coHr);
-    g_apiInitInProgress = false;
-    return 1;
-  }
-
-  for (int attempt = 1; attempt <= API_INIT_MAX_RETRIES; ++attempt) {
-    if (g_stopApiInitThread || g_bInitialized) break;
-
-    Wh_Log(L"API initialization attempt %d/%d", attempt, API_INIT_MAX_RETRIES);
-
-    if (InitializeVirtualDesktopAPIOnce()) {
-      g_bInitialized = true;
-      Wh_Log(L"API initialized successfully on attempt %d", attempt);
-      break;
-    }
-
-    if (attempt < API_INIT_MAX_RETRIES && !g_stopApiInitThread) {
-      for (int i = 0; i < 10 && !g_stopApiInitThread; ++i) {
-        Sleep(API_INIT_RETRY_DELAY_MS / 10);
-      }
-    }
-  }
-
-  if (!g_bInitialized && !g_stopApiInitThread) {
-    Wh_Log(L"API initialization failed after %d attempts", API_INIT_MAX_RETRIES);
-  }
-
-  CoUninitialize();
-  g_apiInitInProgress = false;
-  return 0;
-}
-
-void StartBackgroundApiInit() {
-  if (g_bInitialized || g_apiInitInProgress) return;
-
-  g_stopApiInitThread = false;
-  g_apiInitInProgress = true;
-  g_hApiInitThread = CreateThread(nullptr, 0, ApiInitThreadProc, nullptr, 0, nullptr);
-  if (!g_hApiInitThread) {
-    g_apiInitInProgress = false;
-  }
-}
-
-void StopBackgroundApiInit() {
-  g_stopApiInitThread = true;
-  if (g_hApiInitThread) {
-    WaitForSingleObject(g_hApiInitThread, 3000);
-    CloseHandle(g_hApiInitThread);
-    g_hApiInitThread = nullptr;
-  }
-  g_apiInitInProgress = false;
-}
-
-//=============================================================================
 // Hotkey Thread
 //=============================================================================
 
@@ -1213,16 +1156,14 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
   HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   Wh_Log(L"CoInitializeEx result: 0x%08X", coHr);
 
-  // Try once synchronously, if it fails, start background retry
-  if (!InitializeVirtualDesktopAPI()) {
-    Wh_Log(L"Initial API init failed, starting background retry thread");
-    StartBackgroundApiInit();
-  }
-
   // Create message queue and signal ready immediately
   MSG msg;
   PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE);
   SetEvent(g_hReadyEvent);
+
+  if (!InitializeVirtualDesktopAPI()) {
+    Wh_Log(L"Virtual Desktop API failed to initialize on startup");
+  }
 
   for (int i = 1; i <= g_maxDesktops; ++i) {
     RegisterHotKey(nullptr, HK_MOVE_BASE + i - 1, g_moveModifiers, '0' + i);
@@ -1249,10 +1190,32 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
         if (msg.message == WM_HOTKEY) {
           UINT hotkeyId = static_cast<UINT>(msg.wParam);
 
+          // TileWindows and Layout cycling don't require Virtual Desktop API
+          if (hotkeyId == HK_TILE) {
+            TileWindows();
+            continue;
+          }
+          if (hotkeyId == HK_LAYOUT) {
+            TileLayout currentLayout = GetCurrentDesktopLayout();
+            TileLayout newLayout =
+                static_cast<TileLayout>((static_cast<int>(currentLayout) + 1) % static_cast<int>(TileLayout::COUNT));
+            SetCurrentDesktopLayout(newLayout);
+            TileWindows();
+            continue;
+          }
+
+          // All other hotkeys require Virtual Desktop API
+          if (!g_bInitialized && !InitializeVirtualDesktopAPI()) {
+            Wh_Log(L"Hotkey ignored: API not initialized");
+            continue;
+          }
+
           if (hotkeyId >= HK_MOVE_BASE && hotkeyId < HK_MOVE_BASE + 9) {
             int desktopNum = hotkeyId - HK_MOVE_BASE + 1;
-            if (MoveActiveWindowToDesktopNum(desktopNum) && g_followMovedWindow) {
-              GoToDesktopNum(desktopNum);
+            HWND movedHwnd = GetForegroundWindow();
+            bool moved = MoveActiveWindowToDesktopNum(desktopNum);
+            if (moved && g_followMovedWindow) {
+              GoToDesktopNum(desktopNum, movedHwnd);
             }
           } else if (hotkeyId >= HK_SWITCH_BASE && hotkeyId < HK_SWITCH_BASE + 9) {
             GoToDesktopNum(hotkeyId - HK_SWITCH_BASE + 1);
@@ -1262,14 +1225,6 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
             SwitchToNextDesktop();
           } else if (hotkeyId == HK_PIN) {
             TogglePinWindow();
-          } else if (hotkeyId == HK_TILE) {
-            TileWindows();
-          } else if (hotkeyId == HK_LAYOUT) {
-            TileLayout currentLayout = GetCurrentDesktopLayout();
-            TileLayout newLayout =
-                static_cast<TileLayout>((static_cast<int>(currentLayout) + 1) % static_cast<int>(TileLayout::COUNT));
-            SetCurrentDesktopLayout(newLayout);
-            TileWindows();
           }
         }
       }
@@ -1310,8 +1265,6 @@ bool StartHotkeyThread() {
 }
 
 void StopHotkeyThread() {
-  StopBackgroundApiInit();
-
   // Signal thread to stop
   g_stopHotkeyThread = true;
 
@@ -1354,7 +1307,9 @@ void WhTool_ModSettingsChanged() {
   g_desktopFocusMap.clear();
   g_desktopLayoutMap.clear();
   LoadSettings();
-  StartHotkeyThread();
+  if (!StartHotkeyThread()) {
+    Wh_Log(L"Failed to restart hotkey thread after settings change");
+  }
 }
 
 //=============================================================================
