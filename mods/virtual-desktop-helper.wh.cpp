@@ -2,7 +2,7 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, pin windows, and tile windows with customizable hotkeys
-// @version         2.1.1
+// @version         2.1.2
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -537,6 +537,9 @@ bool InitializeVirtualDesktopAPIOnce() {
   return true;
 }
 
+void CleanupVirtualDesktopAPI();
+bool ReinitializeVirtualDesktopAPI();
+
 bool InitializeVirtualDesktopAPI() {
   if (g_bInitialized) return true;
 
@@ -545,6 +548,11 @@ bool InitializeVirtualDesktopAPI() {
     return true;
   }
   return false;
+}
+
+bool ReinitializeVirtualDesktopAPI() {
+  CleanupVirtualDesktopAPI();
+  return InitializeVirtualDesktopAPI();
 }
 
 void CleanupVirtualDesktopAPI() {
@@ -562,10 +570,22 @@ HRESULT CallManagerInternal(int vtableIndex, TResult* outResult) {
   if (UsesHMonitorParameter()) {
     auto pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, TResult*)>(g_pDesktopManagerInternal,
                                                                                          vtableIndex);
-    return pfn(g_pDesktopManagerInternal, nullptr, outResult);
+    HRESULT hr = pfn(g_pDesktopManagerInternal, nullptr, outResult);
+    if (FAILED(hr) && ReinitializeVirtualDesktopAPI()) {
+      // in case explorer.exe restarted
+      pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, TResult*)>(g_pDesktopManagerInternal,
+                                                                                      vtableIndex);
+      hr = pfn(g_pDesktopManagerInternal, nullptr, outResult);
+    }
+    return hr;
   } else {
     auto pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, TResult*)>(g_pDesktopManagerInternal, vtableIndex);
-    return pfn(g_pDesktopManagerInternal, outResult);
+    HRESULT hr = pfn(g_pDesktopManagerInternal, outResult);
+    if (FAILED(hr) && ReinitializeVirtualDesktopAPI()) {
+      pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, TResult*)>(g_pDesktopManagerInternal, vtableIndex);
+      hr = pfn(g_pDesktopManagerInternal, outResult);
+    }
+    return hr;
   }
 }
 
@@ -574,10 +594,20 @@ HRESULT CallManagerInternalWithArg(int vtableIndex, TArg arg) {
   if (UsesHMonitorParameter()) {
     auto pfn =
         GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, TArg)>(g_pDesktopManagerInternal, vtableIndex);
-    return pfn(g_pDesktopManagerInternal, nullptr, arg);
+    HRESULT hr = pfn(g_pDesktopManagerInternal, nullptr, arg);
+    if (FAILED(hr) && ReinitializeVirtualDesktopAPI()) {
+      pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, TArg)>(g_pDesktopManagerInternal, vtableIndex);
+      hr = pfn(g_pDesktopManagerInternal, nullptr, arg);
+    }
+    return hr;
   } else {
     auto pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, TArg)>(g_pDesktopManagerInternal, vtableIndex);
-    return pfn(g_pDesktopManagerInternal, arg);
+    HRESULT hr = pfn(g_pDesktopManagerInternal, arg);
+    if (FAILED(hr) && ReinitializeVirtualDesktopAPI()) {
+      pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, TArg)>(g_pDesktopManagerInternal, vtableIndex);
+      hr = pfn(g_pDesktopManagerInternal, arg);
+    }
+    return hr;
   }
 }
 
