@@ -2,12 +2,13 @@
 // @id              magnifier-headless
 // @name            Magnifier Headless Mode
 // @description     Blocks the Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
-// @version         0.9.4
+// @version         0.9.5
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
 // @homepage        https://grdigital.pro
 // @include         magnify.exe
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -58,6 +59,8 @@ The mod hooks multiple Windows API functions to ensure complete coverage:
 - `WH_CALLWNDPROC` hook - Detects Magnifier windows and applies subclassing automatically
 
 ## Technical Implementation
+- Uses `WindhawkUtils::SetWindowSubclassFromAnyThread` for safe multi-mod window subclassing
+- Compatible with other Windhawk mods that subclass the same window
 - Uses CRITICAL_SECTION for thread-safe global state management
 - Atomic operations (InterlockedExchange) for initialization flags
 - LRU cache (16 entries) with fast window detection and eviction strategy
@@ -87,9 +90,12 @@ The mod hooks multiple Windows API functions to ensure complete coverage:
 
 #include <windows.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <dwmapi.h>
+#include <commctrl.h>
 
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "comctl32.lib")
 
 // ===========================
 // THREAD-SAFE GLOBAL STATE
@@ -129,8 +135,8 @@ int g_cacheIndex = 0;
 // Window procedure hook handle
 HHOOK g_hCallWndProcHook = NULL;
 
-// Original window procedure and HWND for subclassed Magnifier window (protected by g_csGlobalState)
-WNDPROC g_OriginalMagnifierWndProc = NULL;
+// Subclassed Magnifier window HWND (protected by g_csGlobalState)
+// Using WindhawkUtils::SetWindowSubclassFromAnyThread for safe multi-mod subclassing
 HWND g_hSubclassedMagnifierWnd = NULL;
 
 // Helper: Safe enter/leave critical section
@@ -489,11 +495,13 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hWnd, DWORD dwAttribute, LPCVOID 
 
 // --- WINDOW PROCEDURE HOOK ---
 
-// Subclassed window procedure for Magnifier window (optimized with error handling)
-LRESULT CALLBACK MagnifierWndProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+// Subclassed window procedure for Magnifier window
+// Uses WindhawkUtils::SetWindowSubclassFromAnyThread for safe multi-mod subclassing
+// Note: WindhawkUtils uses a 5-parameter callback signature (without uIdSubclass)
+LRESULT CALLBACK MagnifierWndProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     // Validate window handle
     if (!SafeIsWindow(hWnd)) {
-        return 0;
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
     // Fast path: Handle high-frequency messages without logging
@@ -567,16 +575,24 @@ LRESULT CALLBACK MagnifierWndProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             return 0;
         }
         break;
+
+    case WM_NCDESTROY:
+        // Window is being destroyed, clean up subclass tracking
+        {
+            AutoCriticalSection lock(&g_csGlobalState);
+            if (g_hSubclassedMagnifierWnd == hWnd) {
+                g_hSubclassedMagnifierWnd = NULL;
+            }
+        }
+        break;
     }
 
-    // Call original window procedure for unhandled messages
-    if (g_OriginalMagnifierWndProc) {
-        return CallWindowProcW(g_OriginalMagnifierWndProc, hWnd, uMsg, wParam, lParam);
-    }
-    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+    // Call next subclass procedure in chain (or original window procedure)
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// CallWndProc hook to detect and subclass Magnifier windows (optimized with error handling)
+// CallWndProc hook to detect and subclass Magnifier windows
+// Uses WindhawkUtils::SetWindowSubclassFromAnyThread for safe multi-mod subclassing
 LRESULT CALLBACK CallWndProc_Hook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0 && g_lInitialized) {
         // Validate lParam
@@ -590,31 +606,31 @@ LRESULT CALLBACK CallWndProc_Hook(int nCode, WPARAM wParam, LPARAM lParam) {
         if (pCwp && SafeIsWindow(pCwp->hwnd) && IsMagnifierWindow(pCwp->hwnd)) {
             // Fast path: Check if already subclassed without lock
             if (g_hSubclassedMagnifierWnd != pCwp->hwnd) {
-                SetLastError(0);
-                WNDPROC currentProc = (WNDPROC)GetWindowLongPtrW(pCwp->hwnd, GWLP_WNDPROC);
-                DWORD dwError = GetLastError();
-
-                if (currentProc != MagnifierWndProc_Hook && currentProc != NULL) {
-                    // Thread-safe subclassing
-                    {
-                        AutoCriticalSection lock(&g_csGlobalState);
-                        // Double-check after acquiring lock
-                        if (g_hSubclassedMagnifierWnd != pCwp->hwnd) {
-                            g_OriginalMagnifierWndProc = currentProc;
-                            g_hSubclassedMagnifierWnd = pCwp->hwnd;
-                        }
+                // Thread-safe subclassing check
+                BOOL shouldSubclass = FALSE;
+                {
+                    AutoCriticalSection lock(&g_csGlobalState);
+                    if (g_hSubclassedMagnifierWnd != pCwp->hwnd) {
+                        g_hSubclassedMagnifierWnd = pCwp->hwnd;
+                        shouldSubclass = TRUE;
                     }
+                }
 
-                    // Attempt subclassing with error checking
-                    SetLastError(0);
-                    LONG_PTR result = SafeSetWindowLongPtrW(pCwp->hwnd, GWLP_WNDPROC, (LONG_PTR)MagnifierWndProc_Hook);
-                    dwError = GetLastError();
+                if (shouldSubclass) {
+                    // Use WindhawkUtils::SetWindowSubclassFromAnyThread for safe multi-mod subclassing
+                    // This method properly chains subclass procedures and works across threads
+                    BOOL result = WindhawkUtils::SetWindowSubclassFromAnyThread(
+                        pCwp->hwnd, MagnifierWndProc_Hook, 0);
 
-                    if (result != 0 || dwError == ERROR_SUCCESS) {
-                        Wh_Log(L"Magnifier Headless: Subclassed Magnifier window (HWND: 0x%p)", pCwp->hwnd);
+                    if (result) {
+                        Wh_Log(L"Magnifier Headless: Subclassed Magnifier window using SetWindowSubclassFromAnyThread (HWND: 0x%p)", pCwp->hwnd);
                     } else if (LOG_ERROR_DETAILS) {
-                        Wh_Log(L"Magnifier Headless: Failed to subclass window (HWND: 0x%p, error: %lu)",
-                               pCwp->hwnd, dwError);
+                        Wh_Log(L"Magnifier Headless: Failed to subclass window (HWND: 0x%p)", pCwp->hwnd);
+                        // Reset tracking on failure
+                        AutoCriticalSection lock(&g_csGlobalState);
+                        if (g_hSubclassedMagnifierWnd == pCwp->hwnd) {
+                            g_hSubclassedMagnifierWnd = NULL;
+                        }
                     }
                 }
             }
@@ -867,27 +883,14 @@ void Wh_ModUninit() {
         Wh_Log(L"Magnifier Headless: Window procedure hook removed.");
     }
 
-    // Restore original window procedure if subclassed
-    HWND hSubclassedWnd = NULL;
-    WNDPROC originalProc = NULL;
+    // Clear subclass tracking
+    // Note: WindhawkUtils::SetWindowSubclassFromAnyThread handles cleanup automatically
+    // when the mod is unloaded or the window is destroyed
     {
         AutoCriticalSection lock(&g_csGlobalState);
-        hSubclassedWnd = g_hSubclassedMagnifierWnd;
-        originalProc = g_OriginalMagnifierWndProc;
-        g_hSubclassedMagnifierWnd = NULL;
-        g_OriginalMagnifierWndProc = NULL;
-    }
-
-    if (hSubclassedWnd && SafeIsWindow(hSubclassedWnd) && originalProc) {
-        SetLastError(0);
-        LONG_PTR result = SafeSetWindowLongPtrW(hSubclassedWnd, GWLP_WNDPROC, (LONG_PTR)originalProc);
-        DWORD dwError = GetLastError();
-
-        if (result != 0 || dwError == ERROR_SUCCESS) {
-            Wh_Log(L"Magnifier Headless: Restored original WndProc for HWND 0x%p", hSubclassedWnd);
-        } else if (LOG_ERROR_DETAILS) {
-            Wh_Log(L"Magnifier Headless: Failed to restore WndProc for HWND 0x%p (error: %lu)",
-                   hSubclassedWnd, dwError);
+        if (g_hSubclassedMagnifierWnd) {
+            Wh_Log(L"Magnifier Headless: Subclass will be removed automatically (HWND: 0x%p)", g_hSubclassedMagnifierWnd);
+            g_hSubclassedMagnifierWnd = NULL;
         }
     }
 
