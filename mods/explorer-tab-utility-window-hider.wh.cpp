@@ -2,7 +2,7 @@
 // @id              explorer-tab-utility-window-hider
 // @name            Explorer Tab Utility Window Hider
 // @description     Hides the Explorer Tab Utility window completely, allowing it to run only in the background
-// @version         1.0.2
+// @version         1.0.3
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
