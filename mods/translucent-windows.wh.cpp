@@ -102,7 +102,7 @@ This is caused by default by the AccentBlur API.❕
   $name: Flyout effects
   $description: >-
     Expand the effects to Win32 flyouts (context menus, dropdown menus, tooltips)
-     ✨It is recommended to enable this with background translucent effects.
+     ✨It is recommended to enable this with both background translucent effects and Windows theme custom rendering.
 - ImmersiveDarkTitle: FALSE
   $name: Immersive darkmode titlebar
   $description: >-
@@ -6068,4 +6068,5 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
 
