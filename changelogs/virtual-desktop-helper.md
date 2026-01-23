@@ -1,3 +1,7 @@
+## 2.1.2 ([Jan 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/917fb6cede7d9079054a1e20be7c49eaff4cb569/mods/virtual-desktop-helper.wh.cpp))
+
+This fix makes the mod work properly after explorer.exe restarts. fix [#2855](https://github.com/ramensoftware/windhawk-mods/issues/2855)
+
 ## 2.1.1 ([Jan 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/980412439698cdb23bf0ce440781638a2e4a7cca/mods/virtual-desktop-helper.wh.cpp))
 
 There is no need to call InitializeVirtualDesktopAPI at module startup. it is initialized on demand anyway. fix https://github.com/ramensoftware/windhawk-mods/issues/3052
