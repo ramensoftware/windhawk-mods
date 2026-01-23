@@ -2952,7 +2952,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1769200102000,
+                "updated": 1769203899000,
                 "users": 0
             },
             "metadata": {
@@ -2965,7 +2965,7 @@
                 ],
                 "name": "Explorer Tab Utility Window Hider",
                 "twitter": "https://x.com/bcrtvkcs",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "explorer-tabs-session-saver": {

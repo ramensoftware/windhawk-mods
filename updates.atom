@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-23T20:28:22.000Z</updated>
+    <updated>2026-01-23T21:31:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Tab Utility Window Hider 1.0.3]]></title>
+        <id>https://windhawk.net/mods/explorer-tab-utility-window-hider#f016abc733a47b45faa02a0d8501a95304d96587</id>
+        <link href="https://windhawk.net/mods/explorer-tab-utility-window-hider"/>
+        <updated>2026-01-23T21:31:39.000Z</updated>
+        <content type="html"><![CDATA[<p>Screenshot added.</p>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Tab Utility Window Hider 1.0.2]]></title>
         <id>https://windhawk.net/mods/explorer-tab-utility-window-hider#306f1348cc3db05898442dd282beda876d87fd89</id>
@@ -373,19 +384,6 @@ moves the Task Manager button to the tail end of the list.</p>
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Shadow & Border 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-shadow-border#329df29d64768f0cca292e319ff9ed8e083bf8eb</id>
-        <link href="https://windhawk.net/mods/taskbar-shadow-border"/>
-        <updated>2026-01-16T13:59:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarshadowborder">Taskbar Shadow &amp; Border</h1>
-<p>This mod adds a customizable drop shadow and border above the taskbar.</p>
-<p><img src="https://i.imgur.com/sGw2BaC.png" alt="" /></p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>
