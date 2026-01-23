@@ -16,12 +16,15 @@ concurrency:
   group: deploy-static-content
   cancel-in-progress: true
 
+env:
+  PYTHONUTF8: '1'
+
 jobs:
   run:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Setup Python
@@ -39,11 +42,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/windhawk
-          key: v1-${{ runner.os }}-1.6.1
+          key: v1-${{ runner.os }}-1.7.3
       - name: Extract Windhawk
         if: steps.cache-windhawk.outputs.cache-hit != 'true'
         run: |
-          installer_url="https://github.com/ramensoftware/windhawk/releases/download/v1.6.1/windhawk_setup.exe"
+          installer_url="https://github.com/ramensoftware/windhawk/releases/download/v1.7.3/windhawk_setup.exe"
           installer_path="${{ runner.temp }}/windhawk_setup.exe"
           echo "Downloading $installer_url to $installer_path"
           curl -L "$installer_url" -o "$installer_path"
@@ -60,7 +63,11 @@ jobs:
           WINDHAWK_MODS_LAST_DEPLOY_PATH: ${{ runner.temp }}\last_deploy
           WINDHAWK_PATH: ${{ runner.temp }}\windhawk
       - name: Archive mod images
-        run: python scripts/archive_mod_images.py
+        run: |
+          # Copy last deployed images.
+          cp -R "${{ runner.temp }}/last_deploy/images" images
+          # Archive new images.
+          python scripts/archive_mod_images.py
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         with:

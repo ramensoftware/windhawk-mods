@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.8.1
+// @version         1.8.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -452,20 +452,20 @@ L"\n";
 #pragma endregion // "Details pane UIFILE replacements"
 #endif
 
-typedef struct tagDRIVEGROUPI18N
+typedef struct _DRVGRPSTRINGS
 {
-    LANGID lid;
-    WCHAR szHardDisks[256];
-    WCHAR szRemovable[256];
-    WCHAR szOther[256];
-    WCHAR szScanners[256];
-    WCHAR szPortableMedia[256];
-    WCHAR szPortable[256];
-} DRIVEGROUPI18N;
+    LANGID  langid;
+    LPCWSTR pszHardDisks;
+    LPCWSTR pszRemovable;
+    LPCWSTR pszOther;
+    LPCWSTR pszScanners;
+    LPCWSTR pszPortableMedia;
+    LPCWSTR pszPortable;
+} DRVGRPSTRINGS;
 
-typedef const DRIVEGROUPI18N *LPCDRIVEGROUPI18N;
+typedef const DRVGRPSTRINGS *LPCDRVGRPSTRINGS;
 
-typedef enum _DRIVEGROUP
+typedef enum _DRVGRP
 {
     DG_HARDDISKS = 0,
     DG_REMOVABLE,
@@ -473,10 +473,10 @@ typedef enum _DRIVEGROUP
     DG_SCANNERS,
     DG_PORTABLEMEDIA,
     DG_PORTABLE
-} DRIVEGROUP;
+} DRVGRP;
 
 #pragma region "Drive grouping localization"
-const DRIVEGROUPI18N g_driveGroupI18n[] = {
+constexpr DRVGRPSTRINGS c_rgDriveGroupStrings[] = {
     {
         MAKELANGID(LANG_ARABIC, SUBLANG_ARABIC_SAUDI_ARABIA),
         L"محركات الأقراص الثابتة",
@@ -795,27 +795,77 @@ const DRIVEGROUPI18N g_driveGroupI18n[] = {
 };
 #pragma endregion
 
-LPCDRIVEGROUPI18N GetCurrentDriveLocale(void)
+BYTE ParseHexChar(WCHAR c)
 {
-    LANGID lid = GetUserDefaultLangID();
+    if (c >= L'0' && c <= L'9')
+        return c - L'0';
 
-    /* So we can fallback to English without iterating again. */
-    LPCDRIVEGROUPI18N en = NULL;
+    if (c >= 'A' && c <= 'F')
+        return c - ('A' - 0xA);
 
-    for (UINT i = 0; i < ARRAYSIZE(g_driveGroupI18n); i++)
+    if (c >= 'a' && c <= 'f')
+        return c - ('a' - 0xA);
+
+    return 0;
+}
+
+LPCDRVGRPSTRINGS GetCurrentDriveLocale(void)
+{
+    ULONG ulNumLanguages;
+    WCHAR szLanguages[MAX_PATH];
+    DWORD cchLanguages = ARRAYSIZE(szLanguages);
+    szLanguages[0] = L'\0';
+    GetThreadPreferredUILanguages(MUI_LANGUAGE_ID, &ulNumLanguages, szLanguages, &cchLanguages);
+
+    // Primary lang ID match
+    LPCDRVGRPSTRINGS pdgsPrimaryMatch = nullptr;
+    // Full lang ID match
+    LPCDRVGRPSTRINGS pdgsFullMatch    = nullptr;
+
+    constexpr UINT EN_US_INDEX = 7;
+    static_assert(
+        c_rgDriveGroupStrings[EN_US_INDEX].langid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+        "Incorrect index for en-US drive group strings"
+    );
+
+    LANGID langid = 0;
+    for (ULONG i = 0; i < ulNumLanguages; i++)
     {
-        if (g_driveGroupI18n[i].lid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US))
+        LPWSTR pszLang = szLanguages + (i * 5);
+        langid = ParseHexChar(pszLang[0]) << 12
+            | ParseHexChar(pszLang[1]) << 8
+            | ParseHexChar(pszLang[2]) << 4
+            | ParseHexChar(pszLang[3]);
+
+        if (langid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US))
+            return &c_rgDriveGroupStrings[EN_US_INDEX];
+        
+        for (UINT i = 0; i < ARRAYSIZE(c_rgDriveGroupStrings); i++)
         {
-            en = g_driveGroupI18n + i;
+            LPCDRVGRPSTRINGS pdgsCurrent = &c_rgDriveGroupStrings[i];
+
+            if (PRIMARYLANGID(pdgsCurrent->langid) == PRIMARYLANGID(langid))
+            {
+                pdgsPrimaryMatch = pdgsCurrent;
+            }
+
+            if (pdgsCurrent->langid == langid)
+            {
+                pdgsFullMatch = pdgsCurrent;
+                break;
+            }
         }
 
-        if (g_driveGroupI18n[i].lid == lid)
-        {
-            return g_driveGroupI18n + i;
-        }
+        if (pdgsPrimaryMatch)
+            break;
     }
 
-    return en;
+    if (pdgsFullMatch)
+        return pdgsFullMatch;
+    if (pdgsPrimaryMatch)
+        return pdgsPrimaryMatch;
+
+    return &c_rgDriveGroupStrings[EN_US_INDEX];
 }
 
 /* Only available in Windows 10, version 1607 and later. */
@@ -2254,36 +2304,36 @@ HRESULT STDCALL CStorageSystemTypeCategorizer_GetCategoryInfo_hook(
     );
     if (SUCCEEDED(hr) && settings.classicgrouping)
     {
-        LPCDRIVEGROUPI18N dgi = GetCurrentDriveLocale();
-        LPCWSTR lpszOut = NULL;
+        LPCDRVGRPSTRINGS pdgs = GetCurrentDriveLocale();
+        LPCWSTR pszString = NULL;
 
-        if (dgi)
+        if (pdgs)
         {
-            switch ((DRIVEGROUP)dwCategoryId)
+            switch ((DRVGRP)dwCategoryId)
             {
                 case DG_HARDDISKS:
-                    lpszOut = dgi->szHardDisks;
+                    pszString = pdgs->pszHardDisks;
                     break;
                 case DG_REMOVABLE:
-                    lpszOut = dgi->szRemovable;
+                    pszString = pdgs->pszRemovable;
                     break;
                 case DG_OTHER:
-                    lpszOut = dgi->szOther;
+                    pszString = pdgs->pszOther;
                     break;
                 case DG_SCANNERS:
-                    lpszOut = dgi->szScanners;
+                    pszString = pdgs->pszScanners;
                     break;
                 case DG_PORTABLEMEDIA:
-                    lpszOut = dgi->szPortableMedia;
+                    pszString = pdgs->pszPortableMedia;
                     break;
                 case DG_PORTABLE:
-                    lpszOut = dgi->szPortable;
+                    pszString = pdgs->pszPortable;
                     break;
             }
 
-            if (lpszOut)
+            if (pszString)
             {
-                wcscpy(pci->wszName, lpszOut);
+                wcscpy(pci->wszName, pszString);
             }
         }
     }
