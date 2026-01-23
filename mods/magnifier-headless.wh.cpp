@@ -2,7 +2,7 @@
 // @id              magnifier-headless
 // @name            Magnifier Headless Mode
 // @description     Blocks the Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
-// @version         0.9.5
+// @version         0.9.7
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -95,7 +95,6 @@ The mod hooks multiple Windows API functions to ensure complete coverage:
 #include <commctrl.h>
 
 #pragma comment(lib, "dwmapi.lib")
-#pragma comment(lib, "comctl32.lib")
 
 // ===========================
 // THREAD-SAFE GLOBAL STATE
@@ -110,9 +109,6 @@ volatile HWND g_hHostWnd = NULL;
 
 // Atomic flag to track initialization status
 volatile LONG g_lInitialized = 0;
-
-// Process ID of magnify.exe for fast filtering
-DWORD g_dwMagnifyProcessId = 0;
 
 // HWND cache for fast magnifier window detection (protected by g_csGlobalState)
 #define MAX_CACHED_MAGNIFIER_WINDOWS 16
@@ -744,10 +740,6 @@ BOOL CALLBACK EnumWindowsProc_HideMagnifierWindows(HWND hwnd, LPARAM lParam) {
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Magnifier Headless: Initializing (performance-optimized version)...");
-
-    // Store current process ID for fast filtering
-    g_dwMagnifyProcessId = GetCurrentProcessId();
-    Wh_Log(L"Magnifier Headless: Running in process ID: %lu", g_dwMagnifyProcessId);
 
     // Initialize critical section first (before any hook operations)
     if (!InitializeCriticalSectionAndSpinCount(&g_csGlobalState, 0x400)) {
