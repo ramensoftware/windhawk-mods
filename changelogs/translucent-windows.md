@@ -1,3 +1,11 @@
+## 1.7.3 ([Jan 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a1eff912a93ab74e1e517d6842f725013c1f5062/mods/translucent-windows.wh.cpp))
+
+* Readjust window eligibility filtering
+* Remove text glow due to blending with Desktop shadowed texts
+* Add flyouts effect options setting
+* Fix custom theme and accent color reset when changing theme
+* Better solution to the issue with colored borders in full screen windows.
+
 ## 1.7.2 ([Jan 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1e21dfbca9fbd4a9acffc5f424d76c7896b7fec6/mods/translucent-windows.wh.cpp))
 
 * Fixed a minor custom theme bug created in  v1.7.1

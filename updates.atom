@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-23T19:53:41.000Z</updated>
+    <updated>2026-01-23T20:00:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.7.3]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#a1eff912a93ab74e1e517d6842f725013c1f5062</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2026-01-23T20:00:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Readjust window eligibility filtering</li>
+<li>Remove text glow due to blending with Desktop shadowed texts</li>
+<li>Add flyouts effect options setting</li>
+<li>Fix custom theme and accent color reset when changing theme</li>
+<li>Better solution to the issue with colored borders in full screen windows.</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Magnifier Headless Mode 0.9.5.2]]></title>
         <id>https://windhawk.net/mods/magnifier-headless#1f5a98f4619528de6c38e30571fcd85a6c0e8bbe</id>
@@ -394,21 +411,6 @@ moves the Task Manager button to the tail end of the list.</p>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shell Flyout Positions 1.1]]></title>
-        <id>https://windhawk.net/mods/shell-flyout-positions#32c7d48986dceaa8e938441e08509de1a00038c5</id>
-        <link href="https://windhawk.net/mods/shell-flyout-positions"/>
-        <updated>2026-01-16T13:07:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added "Aligned to tray area" option to position flyouts aligned with the system tray area.</li>
-<li>Added "Same as Notification Center" option for Action Center to easily use the same settings for both panels.</li>
-<li>Improved horizontal shift values to scale correctly with display DPI settings.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
