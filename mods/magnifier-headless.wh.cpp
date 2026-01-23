@@ -875,15 +875,16 @@ void Wh_ModUninit() {
         Wh_Log(L"Magnifier Headless: Window procedure hook removed.");
     }
 
-    // Clear subclass tracking
-    // Note: WindhawkUtils::SetWindowSubclassFromAnyThread handles cleanup automatically
-    // when the mod is unloaded or the window is destroyed
+    // Remove window subclass explicitly
+    // WindhawkUtils::SetWindowSubclassFromAnyThread does NOT handle cleanup automatically
     {
         AutoCriticalSection lock(&g_csGlobalState);
-        if (g_hSubclassedMagnifierWnd) {
-            Wh_Log(L"Magnifier Headless: Subclass will be removed automatically (HWND: 0x%p)", g_hSubclassedMagnifierWnd);
-            g_hSubclassedMagnifierWnd = NULL;
+        if (g_hSubclassedMagnifierWnd && SafeIsWindow(g_hSubclassedMagnifierWnd)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                g_hSubclassedMagnifierWnd, MagnifierWndProc_Hook);
+            Wh_Log(L"Magnifier Headless: Removed subclass from HWND 0x%p", g_hSubclassedMagnifierWnd);
         }
+        g_hSubclassedMagnifierWnd = NULL;
     }
 
     // Thread-safe cleanup
