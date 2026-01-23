@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
-// @version         1.3.9
+// @version         1.3.10
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -212,6 +212,13 @@ UINT_PTR g_copilotPosTimer;
 const UINT g_settingsChangedTaskbarMessage =
     RegisterWindowMessage(L"Windhawk_SettingsChangedTaskbarMessage_" WH_MOD_ID);
 
+// Private API for window band (z-order band).
+// https://blog.adeltax.com/window-z-order-in-windows-10/
+using GetWindowBand_t = BOOL(WINAPI*)(HWND hWnd, PDWORD pdwBand);
+GetWindowBand_t pGetWindowBand;
+
+constexpr DWORD ZBID_SYSTEM_TOOLS = 16;
+
 std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
     enum FEATURE_ENABLED_STATE {
         FEATURE_ENABLED_STATE_DEFAULT = 0,
@@ -322,9 +329,8 @@ bool GetMonitorRectDpiUnscaled(HMONITOR monitor, RECT* rc) {
 }
 
 int GetPrimaryMonitorHeightDpiUnscaled() {
-    const POINT ptZero = {0, 0};
     HMONITOR primaryMonitor =
-        MonitorFromPoint(ptZero, MONITOR_DEFAULTTOPRIMARY);
+        MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
     RECT monitorRect;
     if (!GetMonitorRectDpiUnscaled(primaryMonitor, &monitorRect)) {
         return 0;
@@ -402,9 +408,8 @@ TaskbarLocation GetTaskbarLocationForMonitor(HMONITOR monitor) {
         return g_settings.taskbarLocation;
     }
 
-    const POINT ptZero = {0, 0};
     HMONITOR primaryMonitor =
-        MonitorFromPoint(ptZero, MONITOR_DEFAULTTOPRIMARY);
+        MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
 
     return monitor == primaryMonitor ? g_settings.taskbarLocation
                                      : g_settings.taskbarLocationSecondary;
@@ -2441,9 +2446,6 @@ void ApplyExperienceButtonStyle(FrameworkElement toggleButtonElement) {
     float origin = g_unloading ? 0 : 0.5;
     iconElement.RenderTransformOrigin({origin, origin});
 
-    iconElement.MaxHeight(g_unloading ? std::numeric_limits<double>::infinity()
-                                      : 24);
-
     auto xamlRoot = toggleButtonElement.XamlRoot();
     if (xamlRoot) {
         try {
@@ -2622,13 +2624,13 @@ std::wstring GetProcessFileName(DWORD dwProcessId) {
 
     CloseHandle(hProcess);
 
-    PCWSTR processFileNameUpper = wcsrchr(processPath, L'\\');
-    if (!processFileNameUpper) {
+    PCWSTR processFileName = wcsrchr(processPath, L'\\');
+    if (!processFileName) {
         return std::wstring{};
     }
 
-    processFileNameUpper++;
-    return processFileNameUpper;
+    processFileName++;
+    return processFileName;
 }
 
 bool UpdateCopilotPosition() {
@@ -2815,18 +2817,10 @@ DragDropManager_ElementPointToScreenPoint_Hook(void* pThis,
         return ret;
     }
 
-    UINT taskbarDpi = GetDpiForWindow(hTaskbarWnd);
-
-    int taskbarHeight = MulDiv(taskbarRectNative.bottom - taskbarRectNative.top,
-                               96, taskbarDpi);
-
     // Adjust to account for the taskbar rotation.
     *ret = POINT{
-        taskbarRectNative.left +
-            MulDiv(taskbarHeight - (ret->y - taskbarRectNative.top), taskbarDpi,
-                   96),
-        taskbarRectNative.top +
-            MulDiv(ret->x - taskbarRectNative.left, taskbarDpi, 96),
+        taskbarRectNative.left + taskbarRectNative.bottom - ret->y,
+        taskbarRectNative.top + ret->x - taskbarRectNative.left,
     };
 
     return ret;
@@ -2859,23 +2853,12 @@ RECT* WINAPI DragDropManager_ScreenRectForElement_Hook(void* pThis,
         return ret;
     }
 
-    UINT taskbarDpi = GetDpiForWindow(hTaskbarWnd);
-
-    int taskbarHeight = MulDiv(taskbarRectNative.bottom - taskbarRectNative.top,
-                               96, taskbarDpi);
-
     // Adjust to account for the taskbar rotation.
     *ret = RECT{
-        taskbarRectNative.left +
-            MulDiv(taskbarHeight - (ret->bottom - taskbarRectNative.top),
-                   taskbarDpi, 96),
-        taskbarRectNative.top +
-            MulDiv(ret->left - taskbarRectNative.left, taskbarDpi, 96),
-        taskbarRectNative.left +
-            MulDiv(taskbarHeight - (ret->top - taskbarRectNative.top),
-                   taskbarDpi, 96),
-        taskbarRectNative.top +
-            MulDiv(ret->right - taskbarRectNative.left, taskbarDpi, 96),
+        taskbarRectNative.left + taskbarRectNative.bottom - ret->bottom,
+        taskbarRectNative.top + ret->left - taskbarRectNative.left,
+        taskbarRectNative.left + taskbarRectNative.bottom - ret->top,
+        taskbarRectNative.top + ret->right - taskbarRectNative.left,
     };
 
     return ret;
@@ -2938,7 +2921,7 @@ std::optional<CONTROLTYPEID> GetAutomationControlTypeFromXamlPopupWindow(
     std::optional<CONTROLTYPEID> result =
         [hWnd]() -> std::optional<CONTROLTYPEID> {
         winrt::com_ptr<IUIAutomation> automation =
-            winrt::create_instance<IUIAutomation>(CLSID_CUIAutomation);
+            winrt::try_create_instance<IUIAutomation>(CLSID_CUIAutomation);
         if (!automation) {
             return std::nullopt;
         }
@@ -3371,6 +3354,10 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         } else if (X > monitorInfo.rcWork.right - cx) {
             X = monitorInfo.rcWork.right - cx;
         }
+
+        if (cx > monitorInfo.rcWork.right - monitorInfo.rcWork.left) {
+            cx = monitorInfo.rcWork.right - monitorInfo.rcWork.left;
+        }
     } else {
         return original();
     }
@@ -3403,17 +3390,88 @@ BOOL WINAPI MoveWindow_Hook(HWND hWnd,
     }
 
     if (_wcsicmp(szClassName,
-                 L"Windows.UI.Composition.DesktopWindowContentBridge") != 0) {
+                 L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) {
+        if (!IsTaskbarWindow(GetAncestor(hWnd, GA_ROOT))) {
+            return original();
+        }
+
+        nWidth = nHeight;
+    } else if (_wcsicmp(szClassName, L"XamlExplorerHostIslandWindow") == 0) {
+        DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+        if (!threadId) {
+            return original();
+        }
+
+        if (GetThreadIdDescriptionAsString(threadId) != L"MultitaskingView") {
+            return original();
+        }
+
+        // The Alt+Tab window uses band ZBID_SYSTEM_TOOLS. The virtual desktop
+        // switcher uses band ZBID_IMMERSIVE_EDGY.
+        DWORD band = 0;
+        bool isAltTabWindow = pGetWindowBand && pGetWindowBand(hWnd, &band) &&
+                              band == ZBID_SYSTEM_TOOLS;
+
+        RECT rect{
+            .left = X,
+            .top = Y,
+            .right = X + nWidth,
+            .bottom = Y + nHeight,
+        };
+
+        HMONITOR monitor = MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
+
+        MONITORINFO monitorInfo{
+            .cbSize = sizeof(MONITORINFO),
+        };
+        GetMonitorInfo(monitor, &monitorInfo);
+
+        if (isAltTabWindow) {
+            // Make sure the Alt+Tab window doesn't overlap with the taskbar.
+            // This function seems to only be called for Alt+Tab. Win+Tab is
+            // created by CreateWindowInBand, and an inner child window is
+            // positioned with SetWindowPos. It'd be nice to handle that case
+            // too, maybe one day...
+            if (X < monitorInfo.rcWork.left) {
+                X = monitorInfo.rcWork.left;
+            } else if (X > monitorInfo.rcWork.right - nWidth) {
+                X = monitorInfo.rcWork.right - nWidth;
+            }
+
+            if (nWidth > monitorInfo.rcWork.right - monitorInfo.rcWork.left) {
+                nWidth = monitorInfo.rcWork.right - monitorInfo.rcWork.left;
+            }
+        } else {
+            // Handle the virtual desktop switcher, which shows up when hovering
+            // over the task view button in the taskbar. Note that X is still
+            // buggy, especially when the taskbar is on the right.
+            UINT monitorDpiX = 96;
+            UINT monitorDpiY = 96;
+            GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+
+            DWORD messagePos = GetMessagePos();
+            POINT pt{
+                GET_X_LPARAM(messagePos),
+                GET_Y_LPARAM(messagePos),
+            };
+
+            int marginY = MulDiv(12, monitorDpiY, 96);
+
+            Y = pt.y - nHeight / 2;
+            if (Y < monitorInfo.rcWork.top + marginY) {
+                Y = monitorInfo.rcWork.top + marginY;
+            } else if (Y > monitorInfo.rcWork.bottom - nHeight - marginY) {
+                Y = monitorInfo.rcWork.bottom - nHeight - marginY;
+            }
+        }
+    } else {
         return original();
     }
 
-    if (!IsTaskbarWindow(GetAncestor(hWnd, GA_ROOT))) {
-        return original();
-    }
+    Wh_Log(L"Adjusting pos for %s: %dx%d, %dx%d", szClassName, X, Y, X + nWidth,
+           Y + nHeight);
 
-    Wh_Log(L">");
-
-    return MoveWindow_Original(hWnd, X, Y, nHeight, nHeight, bRepaint);
+    return MoveWindow_Original(hWnd, X, Y, nWidth, nHeight, bRepaint);
 }
 
 using MapWindowPoints_t = decltype(&MapWindowPoints);
@@ -3554,7 +3612,7 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
                0) {
         std::wstring threadDescription =
             GetThreadIdDescriptionAsString(threadId);
-        if (threadDescription == L"SharePickerUI") {
+        if (threadDescription != L"ActionCenter") {
             return original();
         }
 
@@ -4216,14 +4274,18 @@ void AdjustCoreWindowSize(int x, int y, int* width, int* height) {
 }
 
 void AdjustCoreWindowPos(int* x, int* y, int width, int height) {
-    const POINT pt = {*x, *y};
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    RECT rc{
+        .left = *x,
+        .top = *y,
+        .right = *x + width,
+        .bottom = *y + height,
+    };
+    HMONITOR monitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
 
     UINT monitorDpiX = 96;
     UINT monitorDpiY = 96;
     GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
 
-    RECT rc;
     if (!GetMonitorRect(monitor, &rc)) {
         return;
     }
@@ -4828,6 +4890,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if (HMODULE user32Module = LoadLibraryEx(L"user32.dll", nullptr,
+                                             LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+        pGetWindowBand =
+            (GetWindowBand_t)GetProcAddress(user32Module, "GetWindowBand");
+    }
+
     WindhawkUtils::SetFunctionHook(GetWindowRect, GetWindowRect_Hook,
                                    &GetWindowRect_Original);
 
@@ -4843,12 +4911,13 @@ BOOL Wh_ModInit() {
     HMODULE dwmapiModule =
         LoadLibraryEx(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (dwmapiModule) {
-        FARPROC pDwmSetWindowAttribute =
-            GetProcAddress(dwmapiModule, "DwmSetWindowAttribute");
+        auto pDwmSetWindowAttribute =
+            (decltype(&DwmSetWindowAttribute))GetProcAddress(
+                dwmapiModule, "DwmSetWindowAttribute");
         if (pDwmSetWindowAttribute) {
-            WindhawkUtils::SetFunctionHook(
-                (decltype(&DwmSetWindowAttribute))pDwmSetWindowAttribute,
-                DwmSetWindowAttribute_Hook, &DwmSetWindowAttribute_Original);
+            WindhawkUtils::SetFunctionHook(pDwmSetWindowAttribute,
+                                           DwmSetWindowAttribute_Hook,
+                                           &DwmSetWindowAttribute_Original);
         }
     }
 
