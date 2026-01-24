@@ -2,7 +2,7 @@
 // @id              notifications-placement
 // @name            Customize Windows notifications placement
 // @description     Move notifications to another monitor or another corner of the screen
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -343,6 +343,8 @@ bool IsTargetCoreWindow(HWND hWnd) {
     // String resource: \ActionCenter\AC_ToastCenter_Title
     // The strings were collected from here:
     // https://github.com/m417z/windows-language-files
+
+    // clang-format off
     static const std::unordered_set<std::wstring> newNotificationStrings = {
         L"Nuwe kennisgewing", // AF-ZA
         L"አዲስ ማሳወቂያ", // AM-ET
@@ -433,6 +435,7 @@ bool IsTargetCoreWindow(HWND hWnd) {
         L"新通知", // ZH-CN
         L"新通知", // ZH-TW
     };
+    // clang-format on
 
     WCHAR szWindowText[256]{};
     if (GetWindowText(hWnd, szWindowText, ARRAYSIZE(szWindowText)) == 0 ||
@@ -714,15 +717,43 @@ void UpdateAnimationDirectionStyle() {
         return;
     }
 
-    FrameworkElement rootGridContent = nullptr;
-    child = launcherFrame;
-    if ((child = FindChildByName(child, L"FlexibleNormalToastView")) &&
-        (child = FindChildByName(child, L"MainGrid")) &&
-        (child = FindChildByName(child, L"RevealGrid2"))) {
-        rootGridContent = child;
-    }
+    auto origin = winrt::Windows::Foundation::Point{0.5, 0.5};
 
-    if (!rootGridContent) {
+    bool foundAnyRootGridContent = false;
+    EnumChildElements(launcherFrame, [&](FrameworkElement toastView) {
+        auto name = toastView.Name();
+        if (name.empty()) {
+            return false;  // continue enumeration
+        }
+
+        if (!name.starts_with(L"FlexibleNormalToastView") &&
+            !name.starts_with(L"FlexiblePriorityToastView")) {
+            return false;  // continue enumeration
+        }
+
+        FrameworkElement mainGrid = FindChildByName(toastView, L"MainGrid");
+        if (!mainGrid) {
+            return false;  // continue enumeration
+        }
+
+        FrameworkElement revealGrid2 =
+            FindChildByName(mainGrid, L"RevealGrid2");
+        if (!revealGrid2) {
+            return false;  // continue enumeration
+        }
+
+        Wh_Log(L"Applying transform to toast view %s", name.c_str());
+
+        Media::RotateTransform transform;
+        transform.Angle(-angle);
+        revealGrid2.RenderTransform(transform);
+        revealGrid2.RenderTransformOrigin(origin);
+
+        foundAnyRootGridContent = true;
+        return false;  // continue enumeration to find all matching children
+    });
+
+    if (!foundAnyRootGridContent) {
         Wh_Log(L"Failed to find root grid content");
         return;
     }
@@ -730,13 +761,7 @@ void UpdateAnimationDirectionStyle() {
     Media::RotateTransform transform;
     transform.Angle(angle);
     launcherFrame.RenderTransform(transform);
-    Media::RotateTransform transform2;
-    transform2.Angle(-angle);
-    rootGridContent.RenderTransform(transform2);
-
-    auto origin = winrt::Windows::Foundation::Point{0.5, 0.5};
     launcherFrame.RenderTransformOrigin(origin);
-    rootGridContent.RenderTransformOrigin(origin);
 
     g_customAnimationDirectionApplied = (angle != 0);
 }
