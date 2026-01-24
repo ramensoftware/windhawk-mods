@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.4.1
+// @version           1.4.2
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
@@ -49,6 +49,13 @@ Enables dark mode for all win32 menus to create a consistent UI. Requires Window
   $options:de-DE:
   - ForceDark: Immer
   - AllowDark: Systemeinstellung verwenden
+
+- TranslucentFlyoutsFix: false
+  $name: TranslucentFlyouts fix
+  $description: Fixes the menu border color when using TranslucentFlyouts.
+
+  $description:de-DE: Behebt Menü Farben wenn sie TranslucentFlyouts verwenden. 
+
 */
 // ==/WindhawkModSettings==
 
@@ -367,6 +374,7 @@ LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 decltype(&DefFrameProcA) DefFrameProcA_Original;
 LRESULT CALLBACK DefFrameProcA_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
     if(!IS_DARK_MODE(hWnd))
         return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
 
@@ -414,7 +422,13 @@ WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
 
     memcpy(buffer, lpInfo, lpInfo->cbSize);
     auto* infoCopy = reinterpret_cast<LPMENUINFO>(buffer);
-    infoCopy->hbrBack = CreateSolidBrush(DARK_MENU_COLOR); //Fixes https://github.com/MGGSK/DarkMenus/issues/18
+
+    //Fixes https://github.com/MGGSK/DarkMenus/issues/18
+    //Fixes https://github.com/MGGSK/DarkMenus/issues/26
+    if(Wh_GetIntSetting(L"TranslucentFlyoutsFix"))
+        infoCopy->hbrBack = GetStockBrush(BLACK_BRUSH); 
+    else
+        infoCopy->hbrBack = CreateSolidBrush(DARK_MENU_COLOR);
     return SetMenuInfo_Original(hMenu, infoCopy);
 }
 
@@ -521,7 +535,3 @@ void Wh_ModUninit()
         FreeLibrary(g_hUxtheme);
     }
 }
-
-
-
-
