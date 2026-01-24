@@ -2,7 +2,7 @@
 // @id              desktop-live-overlay
 // @name            Desktop Live Overlay
 // @description     Display live, customizable content on the desktop behind icons. Perfect for showing time, date, system metrics, weather, and more.
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -51,8 +51,12 @@ showing time, date, system metrics, weather, and more.
 * `%cpu%` - CPU usage percentage
 * `%ram%` - RAM usage percentage
 * `%battery%` - Battery percentage
-* `%battery_time%` - Battery time remaining
-* `%power%` - Power consumption in watts
+* `%battery_time%` - battery time remaining (charging time left / discharging
+  time left, in h:mm format). If the value is always zero, you might need to
+  enable battery time reporting in the BIOS.
+* `%power%` - battery power in watts (negative when discharging, positive when
+  charging). If the value is always zero, you might need to enable battery time
+  reporting in the BIOS.
 * `%upload_speed%` - Network upload speed
 * `%download_speed%` - Network download speed
 * `%total_speed%` - Combined network speed
@@ -241,6 +245,7 @@ using Microsoft::WRL::ComPtr;
 #define TIMER_ID_MSG_RECREATE_OVERLAY 2
 
 #define WM_APP_CLEANUP (WM_APP + 1)
+#define WM_APP_SETTINGS_CHANGED (WM_APP + 2)
 #define OVERLAY_WINDOW_CLASS (L"DesktopOverlay_" WH_MOD_ID)
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -304,6 +309,8 @@ Settings g_settings;
 // Format state.
 SYSTEMTIME g_formatTime;
 DWORD g_formatIndex = 0;
+DWORD g_metricsFormatIndex = 0;
+DWORD g_metricsLastFormatIndex = 0;
 
 FormattedString<FORMATTED_BUFFER_SIZE> g_timeFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_dateFormatted;
@@ -342,8 +349,9 @@ std::atomic<bool> g_weatherLoaded{false};
 std::atomic<bool> g_unloading{false};
 std::optional<std::wstring> g_weatherContent;
 
-// Cached result of whether system metrics are used (set during init).
+// Cached result of whether system metrics/weather are used (set during init).
 bool g_systemMetricsUsed = false;
+bool g_weatherUsed = false;
 
 // DirectX device objects (shared).
 ComPtr<ID3D11Device> g_d3dDevice;
@@ -824,9 +832,12 @@ bool IsSystemMetricsUsed() {
            IsPatternUsed(L"%gpu%");
 }
 
+bool IsWeatherUsed() {
+    return IsPatternUsed(L"%weather%");
+}
+
 void WeatherUpdateThreadInit() {
-    // Check if weather pattern is used in the text.
-    if (!IsPatternUsed(L"%weather%")) {
+    if (!g_weatherUsed) {
         return;
     }
 
@@ -956,6 +967,8 @@ void UninitMetrics() {
         g_diskWriteCounter = nullptr;
         g_gpuCounters.clear();
     }
+
+    g_metricsLastFormatIndex = 0;
 }
 
 PCWSTR GetTimeFormatted() {
@@ -1001,10 +1014,34 @@ PCWSTR GetWeekdayFormatted() {
     return g_weekdayFormatted.buffer;
 }
 
-PCWSTR GetCpuFormatted() {
-    if (g_cpuFormatted.formatIndex != g_formatIndex) {
+DWORD GetMetricsFormatIndex() {
+    FILETIME formatTimeFt{};
+    SystemTimeToFileTime(&g_formatTime, &formatTimeFt);
+    ULARGE_INTEGER formatTimeInt{
+        .LowPart = formatTimeFt.dwLowDateTime,
+        .HighPart = formatTimeFt.dwHighDateTime,
+    };
+
+    constexpr ULONGLONG kSecondIn100Ns = 10000000ULL;
+    int interval = (std::max)(1, (std::min)(60, g_settings.refreshInterval));
+    ULONGLONG intervalIn100Ns = kSecondIn100Ns * interval;
+    return static_cast<DWORD>(formatTimeInt.QuadPart / intervalIn100Ns);
+}
+
+void CollectMetricsDataIfNeeded() {
+    g_metricsFormatIndex = GetMetricsFormatIndex();
+    if (g_metricsLastFormatIndex != g_metricsFormatIndex) {
         if (g_metricsQuery) {
             PdhCollectQueryData(g_metricsQuery);
+        }
+        g_metricsLastFormatIndex = g_metricsFormatIndex;
+    }
+}
+
+PCWSTR GetCpuFormatted() {
+    CollectMetricsDataIfNeeded();
+    if (g_cpuFormatted.formatIndex != g_metricsFormatIndex) {
+        if (g_cpuCounter) {
             PDH_FMT_COUNTERVALUE val;
             if (PdhGetFormattedCounterValue(g_cpuCounter, PDH_FMT_DOUBLE,
                                             nullptr, &val) == ERROR_SUCCESS) {
@@ -1016,13 +1053,14 @@ PCWSTR GetCpuFormatted() {
         } else {
             wcscpy_s(g_cpuFormatted.buffer, L"-");
         }
-        g_cpuFormatted.formatIndex = g_formatIndex;
+        g_cpuFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_cpuFormatted.buffer;
 }
 
 PCWSTR GetRamFormatted() {
-    if (g_ramFormatted.formatIndex != g_formatIndex) {
+    CollectMetricsDataIfNeeded();
+    if (g_ramFormatted.formatIndex != g_metricsFormatIndex) {
         MEMORYSTATUSEX status{.dwLength = sizeof(status)};
         if (GlobalMemoryStatusEx(&status)) {
             swprintf_s(g_ramFormatted.buffer, L"%d%%",
@@ -1030,13 +1068,14 @@ PCWSTR GetRamFormatted() {
         } else {
             wcscpy_s(g_ramFormatted.buffer, L"-");
         }
-        g_ramFormatted.formatIndex = g_formatIndex;
+        g_ramFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_ramFormatted.buffer;
 }
 
 PCWSTR GetBatteryFormatted() {
-    if (g_batteryFormatted.formatIndex != g_formatIndex) {
+    CollectMetricsDataIfNeeded();
+    if (g_batteryFormatted.formatIndex != g_metricsFormatIndex) {
         SYSTEM_POWER_STATUS ps;
         if (GetSystemPowerStatus(&ps) && ps.BatteryLifePercent != 255) {
             swprintf_s(g_batteryFormatted.buffer, L"%d%%",
@@ -1044,13 +1083,14 @@ PCWSTR GetBatteryFormatted() {
         } else {
             wcscpy_s(g_batteryFormatted.buffer, L"-");
         }
-        g_batteryFormatted.formatIndex = g_formatIndex;
+        g_batteryFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_batteryFormatted.buffer;
 }
 
 PCWSTR GetBatteryTimeFormatted() {
-    if (g_batteryTimeFormatted.formatIndex != g_formatIndex) {
+    CollectMetricsDataIfNeeded();
+    if (g_batteryTimeFormatted.formatIndex != g_metricsFormatIndex) {
         DWORD totalSeconds = 0;
         SYSTEM_POWER_STATUS ps;
 
@@ -1074,13 +1114,14 @@ PCWSTR GetBatteryTimeFormatted() {
         DWORD hours = totalSeconds / 3600;
         DWORD minutes = (totalSeconds % 3600) / 60;
         swprintf_s(g_batteryTimeFormatted.buffer, L"%u:%02u", hours, minutes);
-        g_batteryTimeFormatted.formatIndex = g_formatIndex;
+        g_batteryTimeFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_batteryTimeFormatted.buffer;
 }
 
 PCWSTR GetPowerFormatted() {
-    if (g_powerFormatted.formatIndex != g_formatIndex) {
+    CollectMetricsDataIfNeeded();
+    if (g_powerFormatted.formatIndex != g_metricsFormatIndex) {
         SYSTEM_BATTERY_STATE batteryState{};
         NTSTATUS status =
             CallNtPowerInformation(SystemBatteryState, nullptr, 0,
@@ -1103,7 +1144,7 @@ PCWSTR GetPowerFormatted() {
         } else {
             wcscpy_s(g_powerFormatted.buffer, L"-");
         }
-        g_powerFormatted.formatIndex = g_formatIndex;
+        g_powerFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_powerFormatted.buffer;
 }
@@ -1147,40 +1188,39 @@ double QueryNetworkSpeed(const std::vector<PDH_HCOUNTER>& counters) {
 }
 
 PCWSTR GetUploadSpeedFormatted() {
-    if (g_uploadSpeedFormatted.formatIndex != g_formatIndex) {
-        if (g_metricsQuery && !g_uploadCounters.empty()) {
-            PdhCollectQueryData(g_metricsQuery);
+    CollectMetricsDataIfNeeded();
+    if (g_uploadSpeedFormatted.formatIndex != g_metricsFormatIndex) {
+        if (!g_uploadCounters.empty()) {
             double speed = QueryNetworkSpeed(g_uploadCounters);
             FormatTransferSpeed(speed, g_uploadSpeedFormatted.buffer,
                                 ARRAYSIZE(g_uploadSpeedFormatted.buffer));
         } else {
             wcscpy_s(g_uploadSpeedFormatted.buffer, L"-");
         }
-        g_uploadSpeedFormatted.formatIndex = g_formatIndex;
+        g_uploadSpeedFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_uploadSpeedFormatted.buffer;
 }
 
 PCWSTR GetDownloadSpeedFormatted() {
-    if (g_downloadSpeedFormatted.formatIndex != g_formatIndex) {
-        if (g_metricsQuery && !g_downloadCounters.empty()) {
-            PdhCollectQueryData(g_metricsQuery);
+    CollectMetricsDataIfNeeded();
+    if (g_downloadSpeedFormatted.formatIndex != g_metricsFormatIndex) {
+        if (!g_downloadCounters.empty()) {
             double speed = QueryNetworkSpeed(g_downloadCounters);
             FormatTransferSpeed(speed, g_downloadSpeedFormatted.buffer,
                                 ARRAYSIZE(g_downloadSpeedFormatted.buffer));
         } else {
             wcscpy_s(g_downloadSpeedFormatted.buffer, L"-");
         }
-        g_downloadSpeedFormatted.formatIndex = g_formatIndex;
+        g_downloadSpeedFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_downloadSpeedFormatted.buffer;
 }
 
 PCWSTR GetTotalSpeedFormatted() {
-    if (g_totalSpeedFormatted.formatIndex != g_formatIndex) {
-        if (g_metricsQuery &&
-            (!g_uploadCounters.empty() || !g_downloadCounters.empty())) {
-            PdhCollectQueryData(g_metricsQuery);
+    CollectMetricsDataIfNeeded();
+    if (g_totalSpeedFormatted.formatIndex != g_metricsFormatIndex) {
+        if (!g_uploadCounters.empty() || !g_downloadCounters.empty()) {
             double uploadSpeed = QueryNetworkSpeed(g_uploadCounters);
             double downloadSpeed = QueryNetworkSpeed(g_downloadCounters);
             FormatTransferSpeed(uploadSpeed + downloadSpeed,
@@ -1189,7 +1229,7 @@ PCWSTR GetTotalSpeedFormatted() {
         } else {
             wcscpy_s(g_totalSpeedFormatted.buffer, L"-");
         }
-        g_totalSpeedFormatted.formatIndex = g_formatIndex;
+        g_totalSpeedFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_totalSpeedFormatted.buffer;
 }
@@ -1208,39 +1248,39 @@ double QueryDiskSpeed(PDH_HCOUNTER counter) {
 }
 
 PCWSTR GetDiskReadSpeedFormatted() {
-    if (g_diskReadSpeedFormatted.formatIndex != g_formatIndex) {
-        if (g_metricsQuery && g_diskReadCounter) {
-            PdhCollectQueryData(g_metricsQuery);
+    CollectMetricsDataIfNeeded();
+    if (g_diskReadSpeedFormatted.formatIndex != g_metricsFormatIndex) {
+        if (g_diskReadCounter) {
             double speed = QueryDiskSpeed(g_diskReadCounter);
             FormatTransferSpeed(speed, g_diskReadSpeedFormatted.buffer,
                                 ARRAYSIZE(g_diskReadSpeedFormatted.buffer));
         } else {
             wcscpy_s(g_diskReadSpeedFormatted.buffer, L"-");
         }
-        g_diskReadSpeedFormatted.formatIndex = g_formatIndex;
+        g_diskReadSpeedFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_diskReadSpeedFormatted.buffer;
 }
 
 PCWSTR GetDiskWriteSpeedFormatted() {
-    if (g_diskWriteSpeedFormatted.formatIndex != g_formatIndex) {
-        if (g_metricsQuery && g_diskWriteCounter) {
-            PdhCollectQueryData(g_metricsQuery);
+    CollectMetricsDataIfNeeded();
+    if (g_diskWriteSpeedFormatted.formatIndex != g_metricsFormatIndex) {
+        if (g_diskWriteCounter) {
             double speed = QueryDiskSpeed(g_diskWriteCounter);
             FormatTransferSpeed(speed, g_diskWriteSpeedFormatted.buffer,
                                 ARRAYSIZE(g_diskWriteSpeedFormatted.buffer));
         } else {
             wcscpy_s(g_diskWriteSpeedFormatted.buffer, L"-");
         }
-        g_diskWriteSpeedFormatted.formatIndex = g_formatIndex;
+        g_diskWriteSpeedFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_diskWriteSpeedFormatted.buffer;
 }
 
 PCWSTR GetDiskTotalSpeedFormatted() {
-    if (g_diskTotalSpeedFormatted.formatIndex != g_formatIndex) {
-        if (g_metricsQuery && (g_diskReadCounter || g_diskWriteCounter)) {
-            PdhCollectQueryData(g_metricsQuery);
+    CollectMetricsDataIfNeeded();
+    if (g_diskTotalSpeedFormatted.formatIndex != g_metricsFormatIndex) {
+        if (g_diskReadCounter || g_diskWriteCounter) {
             double readSpeed = QueryDiskSpeed(g_diskReadCounter);
             double writeSpeed = QueryDiskSpeed(g_diskWriteCounter);
             FormatTransferSpeed(readSpeed + writeSpeed,
@@ -1249,7 +1289,7 @@ PCWSTR GetDiskTotalSpeedFormatted() {
         } else {
             wcscpy_s(g_diskTotalSpeedFormatted.buffer, L"-");
         }
-        g_diskTotalSpeedFormatted.formatIndex = g_formatIndex;
+        g_diskTotalSpeedFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_diskTotalSpeedFormatted.buffer;
 }
@@ -1267,15 +1307,15 @@ double QueryGpuUsage() {
 }
 
 PCWSTR GetGpuFormatted() {
-    if (g_gpuFormatted.formatIndex != g_formatIndex) {
-        if (g_metricsQuery && !g_gpuCounters.empty()) {
-            PdhCollectQueryData(g_metricsQuery);
+    CollectMetricsDataIfNeeded();
+    if (g_gpuFormatted.formatIndex != g_metricsFormatIndex) {
+        if (!g_gpuCounters.empty()) {
             double usage = QueryGpuUsage();
             swprintf_s(g_gpuFormatted.buffer, L"%d", (int)usage);
         } else {
             wcscpy_s(g_gpuFormatted.buffer, L"-");
         }
-        g_gpuFormatted.formatIndex = g_formatIndex;
+        g_gpuFormatted.formatIndex = g_metricsFormatIndex;
     }
     return g_gpuFormatted.buffer;
 }
@@ -1686,6 +1726,8 @@ void UninitDirectX() {
 ////////////////////////////////////////////////////////////////////////////////
 // Overlay rendering
 
+bool RecreateTextResources();
+
 bool CreateSwapChainResources(UINT width, UINT height) {
     HRESULT hr;
 
@@ -1787,6 +1829,33 @@ bool CreateSwapChainResources(UINT width, UINT height) {
     g_dpiScale = GetMonitorDpiScale(monitor);
     Wh_Log(L"DPI scale: %.2f", g_dpiScale);
 
+    if (!RecreateTextResources()) {
+        return false;
+    }
+
+    return true;
+}
+
+void ReleaseTextResources() {
+    g_backgroundBrush.Reset();
+    g_bottomLineTextBrush.Reset();
+    g_bottomLineTextFormat.Reset();
+    g_topLineTextBrush.Reset();
+    g_topLineTextFormat.Reset();
+}
+
+void ReleaseSwapChainResources() {
+    ReleaseTextResources();
+    g_compositionVisual.Reset();
+    g_compositionTarget.Reset();
+    g_compositionDevice.Reset();
+    g_dc.Reset();
+    g_swapChain.Reset();
+}
+
+bool RecreateTextResources() {
+    HRESULT hr;
+
     // Create top line text format.
     PCWSTR topFontFamily = g_settings.topLine.fontFamily.get();
     if (!topFontFamily || !*topFontFamily) {
@@ -1865,19 +1934,6 @@ bool CreateSwapChainResources(UINT width, UINT height) {
     }
 
     return true;
-}
-
-void ReleaseSwapChainResources() {
-    g_backgroundBrush.Reset();
-    g_bottomLineTextBrush.Reset();
-    g_bottomLineTextFormat.Reset();
-    g_topLineTextBrush.Reset();
-    g_topLineTextFormat.Reset();
-    g_compositionVisual.Reset();
-    g_compositionTarget.Reset();
-    g_compositionDevice.Reset();
-    g_dc.Reset();
-    g_swapChain.Reset();
 }
 
 bool ResizeSwapChain(UINT width, UINT height) {
@@ -2093,36 +2149,21 @@ void RenderOverlay() {
 // Refresh timer
 
 UINT GetNextUpdateTimeout() {
-    // Determine if we need per-second updates.
-    bool needsSecondsUpdate =
-        g_settings.showSeconds || g_systemMetricsUsed || !g_weatherLoaded;
-
-    // Get current time for alignment calculations.
     SYSTEMTIME time;
     GetLocalTime(&time);
 
-    int refreshInterval =
-        (std::max)(1, (std::min)(60, g_settings.refreshInterval));
+    // Add a small extra delay to make sure we are past the second/minute
+    // change.
+    constexpr UINT kExtraDelayMs = 200;
 
-    if (needsSecondsUpdate) {
-        if (refreshInterval == 1) {
-            // Align to the next second boundary.
-            return 1000 - time.wMilliseconds;
-        } else {
-            // Calculate time until next interval boundary.
-            int currentSecondInInterval = time.wSecond % refreshInterval;
-            int secondsUntilNext = refreshInterval - currentSecondInInterval;
-            if (secondsUntilNext == refreshInterval) {
-                // We're at the boundary, wait for next interval.
-                secondsUntilNext = refreshInterval;
-            }
-            return secondsUntilNext * 1000 - time.wMilliseconds;
-        }
-    } else {
-        // No seconds or system metrics - refresh every minute.
-        // Align to the next minute boundary.
-        return (60 - time.wSecond) * 1000 - time.wMilliseconds;
+    // Refresh every second when seconds, system metrics, or pending weather.
+    if (g_settings.showSeconds || g_systemMetricsUsed ||
+        (g_weatherUsed && !g_weatherLoaded)) {
+        return 1000 - time.wMilliseconds + kExtraDelayMs;
     }
+
+    // No seconds or system metrics - refresh every minute.
+    return (60 - time.wSecond) * 1000 - time.wMilliseconds + kExtraDelayMs;
 }
 
 void ScheduleNextUpdate() {
@@ -2169,6 +2210,7 @@ void HandleDisplayChange() {
 
 // Forward declarations.
 void CreateOverlayWindow();
+void ApplySettingsChanged();
 
 LRESULT CALLBACK OverlayWndProc(HWND hWnd,
                                 UINT uMsg,
@@ -2206,6 +2248,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd,
 
         case WM_APP_CLEANUP:
             DestroyWindow(hWnd);
+            return 0;
+
+        case WM_APP_SETTINGS_CHANGED:
+            ApplySettingsChanged();
             return 0;
     }
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
@@ -2533,13 +2579,17 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
     g_systemMetricsUsed = IsSystemMetricsUsed();
+    g_weatherUsed = IsWeatherUsed();
 
     if (!InitDirectX()) {
         Wh_Log(L"InitDirectX failed");
         return FALSE;
     }
 
-    InitMetrics();
+    if (g_systemMetricsUsed) {
+        InitMetrics();
+    }
+
     WeatherUpdateThreadInit();
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
@@ -2585,8 +2635,69 @@ void Wh_ModUninit() {
     UninitDirectX();
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void ApplySettingsChanged() {
     Wh_Log(L">");
-    *bReload = TRUE;
-    return TRUE;
+
+    // Save values needed for comparison before loading new settings.
+    bool oldWeatherUsed = g_weatherUsed;
+    std::wstring oldWeatherLocation = g_settings.weatherLocation.get();
+    std::wstring oldWeatherFormat = g_settings.weatherFormat.get();
+    WeatherUnits oldWeatherUnits = g_settings.weatherUnits;
+    int oldMonitor = g_settings.monitor;
+
+    // Load new settings.
+    LoadSettings();
+
+    // Reinitialize metrics to match new settings.
+    UninitMetrics();
+    g_systemMetricsUsed = IsSystemMetricsUsed();
+    if (g_systemMetricsUsed) {
+        InitMetrics();
+    }
+
+    // Check if weather usage or settings changed.
+    bool newWeatherUsed = IsWeatherUsed();
+    bool weatherSettingsChanged =
+        oldWeatherLocation != g_settings.weatherLocation.get() ||
+        oldWeatherFormat != g_settings.weatherFormat.get() ||
+        oldWeatherUnits != g_settings.weatherUnits;
+    if (oldWeatherUsed != newWeatherUsed ||
+        (newWeatherUsed && weatherSettingsChanged)) {
+        WeatherUpdateThreadUninit();
+        g_weatherUsed = newWeatherUsed;
+        if (g_weatherUsed) {
+            WeatherUpdateThreadInit();
+        }
+    }
+
+    // If overlay not created yet, skip visual updates.
+    if (!g_overlayWnd) {
+        return;
+    }
+
+    // Recreate text resources (fonts, brushes).
+    // This is cheap enough to always do.
+    ReleaseTextResources();
+    RecreateTextResources();
+
+    // Handle monitor change.
+    if (oldMonitor != g_settings.monitor) {
+        HandleDisplayChange();
+    }
+
+    // Reschedule timer and trigger immediate re-render.
+    RenderOverlay();
+    ScheduleNextUpdate();
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+
+    // Marshal to overlay window thread to avoid races with rendering/timers.
+    if (g_overlayWnd) {
+        SendMessage(g_overlayWnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    } else {
+        // No overlay yet, safe to apply directly.
+        ApplySettingsChanged();
+    }
 }
