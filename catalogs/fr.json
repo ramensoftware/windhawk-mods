@@ -1936,7 +1936,7 @@
                     228
                 ],
                 "ratingUsers": 260,
-                "updated": 1766486088000,
+                "updated": 1769256087000,
                 "users": 30173
             },
             "metadata": {
@@ -1948,7 +1948,7 @@
                     "*"
                 ],
                 "name": "Dark mode context menus",
-                "version": "1.4.1"
+                "version": "1.4.2"
             }
         },
         "dark-theme-browser-colors-fix": {

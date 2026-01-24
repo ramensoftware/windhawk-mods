@@ -1,3 +1,7 @@
+## 1.4.2 ([Jan 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ec19321d400b1a5e3d1531a16a34da8d0207065f/mods/dark-menus.wh.cpp))
+
+- Fixed https://github.com/MGGSK/DarkMenus/issues/26
+
 ## 1.4.1 ([Dec 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4301dbfbb94e430a66f346b5454ce0d7e03b77e3/mods/dark-menus.wh.cpp))
 
 - Fixed: Firefox crashes after update 1.4 (https://github.com/MGGSK/DarkMenus/issues/19)

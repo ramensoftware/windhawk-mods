@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-23T21:31:39.000Z</updated>
+    <updated>2026-01-24T12:01:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dark mode context menus 1.4.2]]></title>
+        <id>https://windhawk.net/mods/dark-menus#ec19321d400b1a5e3d1531a16a34da8d0207065f</id>
+        <link href="https://windhawk.net/mods/dark-menus"/>
+        <updated>2026-01-24T12:01:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed https://github.com/MGGSK/DarkMenus/issues/26</li>
+</ul>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Tab Utility Window Hider 1.0.3]]></title>
         <id>https://windhawk.net/mods/explorer-tab-utility-window-hider#f016abc733a47b45faa02a0d8501a95304d96587</id>
@@ -364,26 +377,6 @@ showing time, date, system metrics, weather, and more.</p>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Tail 1.0]]></title>
-        <id>https://windhawk.net/mods/task-manager-tail#71ae3a2d03e2c2add11569aa9e4e64fc01843853</id>
-        <link href="https://windhawk.net/mods/task-manager-tail"/>
-        <updated>2026-01-16T15:39:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskmanagertail10">Task Manager Tail 1.0</h1>
-<p>This mod ensures that <strong>Task Manager</strong> always stays at the tail end of your taskbar on <strong>Windows 11</strong>.</p>
-<p>When you open or close other applications, this mod detects the change and automatically
-moves the Task Manager button to the tail end of the list.</p>
-<p><strong>Features:</strong></p>
-<ul>
-<li><strong>Event Driven:</strong> Uses lightweight hooks to detect window changes instantly.</li>
-<li><strong>Zero Polling:</strong> Does not waste CPU cycles checking the taskbar constantly.</li>
-<li><strong>Configurable:</strong> Supports non-English languages and other target applications.</li>
-</ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
         </author>
     </entry>
 </feed>
