@@ -1,3 +1,7 @@
+## 1.2.2 ([Jan 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/85f51d53e9ea2f705298115536b21d80e8923028/mods/notifications-placement.wh.cpp))
+
+* Fixed notification content being rotated in some cases.
+
 ## 1.2.1 ([Jan 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7017c454dba9939cf7482cbc6c8a3ddda6a13ee1/mods/notifications-placement.wh.cpp))
 
 * Added detailed instructions for selecting a monitor to the mod description.

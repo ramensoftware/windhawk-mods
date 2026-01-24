@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-24T15:05:59.000Z</updated>
+    <updated>2026-01-24T15:13:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Customize Windows notifications placement 1.2.2]]></title>
+        <id>https://windhawk.net/mods/notifications-placement#85f51d53e9ea2f705298115536b21d80e8923028</id>
+        <link href="https://windhawk.net/mods/notifications-placement"/>
+        <updated>2026-01-24T15:13:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed notification content being rotated in some cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Live Overlay 1.0.2]]></title>
         <id>https://windhawk.net/mods/desktop-live-overlay#2b84edda50e9ac534b043e9ce138bc0842ccd1e1</id>
@@ -363,24 +376,6 @@ showing time, date, system metrics, weather, and more.</p>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 2.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#4878131bb6c969504ba404f7b38437d7d0eb5209</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2026-01-17T17:22:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>added "Example presets" chapter to mod's description</li>
-<li>extended "Troubleshooting and Hints" chapters in mod's description</li>
-<li>Ctrl+Alt+Tab action reworked - now supports consecutive triggers without window constantly re-opening</li>
-<li>added new action "Switch virtual desktop"</li>
-<li>bugfixed file logger for Onedrive users</li>
-<li>bugfixed touch/tap detection on Windows 10 taskbar</li>
-</ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>
