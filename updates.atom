@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-24T15:13:20.000Z</updated>
+    <updated>2026-01-24T21:54:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Live Overlay 1.0.3]]></title>
+        <id>https://windhawk.net/mods/desktop-live-overlay#051f9f44200b3b3db02b4b5b95f0c8b17680be06</id>
+        <link href="https://windhawk.net/mods/desktop-live-overlay"/>
+        <updated>2026-01-24T21:54:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with ExplorerPatcher.</li>
+<li>Fixed the mod slowing down explorer.exe processes on launch.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Customize Windows notifications placement 1.2.2]]></title>
         <id>https://windhawk.net/mods/notifications-placement#85f51d53e9ea2f705298115536b21d80e8923028</id>
@@ -355,27 +369,6 @@ showing time, date, system metrics, weather, and more.</p>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Unwanted Context Menu Items 1.1]]></title>
-        <id>https://windhawk.net/mods/remove-context-menu-items#9fa744387ad0d7a93c4d3804349fc37c177b8ae9</id>
-        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
-        <updated>2026-01-20T08:03:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a <strong>Custom Items</strong> setting allowing users to manually enter specific menu item names for removal.</li>
-<li>Added a feature to automatically clean up duplicate or consecutive separator lines in the context menu.</li>
-<li>Added a mechanism to automatically remove trailing separators.</li>
-<li>Expanded the list of removable items to include Windows Media Player options, system actions like "Refresh" and "Copy as path," and image tools like "Rotate left/right."</li>
-<li>Added support for filtering common actions like "Open," "Edit," and "Play."</li>
-<li>The mod now ignores ampersands (<code>&amp;</code>) in menu text to ensure items are caught regardless of keyboard shortcuts.</li>
-<li>Added logic to protect "Open with," "Open in Terminal," and "Edit with" from being accidentally removed.</li>
-<li>Added a hook for <code>TrackPopupMenu</code> to improve compatibility and implemented a safety limit for loading custom items.</li>
-<li>Added logging to track when custom items are successfully matched and removed.</li>
-</ul>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>
