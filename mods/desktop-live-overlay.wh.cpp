@@ -2,7 +2,7 @@
 // @id              desktop-live-overlay
 // @name            Desktop Live Overlay
 // @description     Display live, customizable content on the desktop behind icons. Perfect for showing time, date, system metrics, weather, and more.
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -306,6 +306,11 @@ struct FormattedString {
 
 Settings g_settings;
 
+// Initialization/unloading state.
+std::atomic<bool> g_lazyInitialized{false};
+std::atomic<bool> g_initSucceeded{false};
+std::atomic<bool> g_unloading{false};
+
 // Format state.
 SYSTEMTIME g_formatTime;
 DWORD g_formatIndex = 0;
@@ -346,7 +351,6 @@ HANDLE g_weatherUpdateThread = nullptr;
 HANDLE g_weatherUpdateStopEvent = nullptr;
 std::mutex g_weatherMutex;
 std::atomic<bool> g_weatherLoaded{false};
-std::atomic<bool> g_unloading{false};
 std::optional<std::wstring> g_weatherContent;
 
 // Cached result of whether system metrics/weather are used (set during init).
@@ -1611,6 +1615,13 @@ HWND GetWorkerW() {
         return nullptr;
     }
 
+    // Ensure Progman is in the current process.
+    DWORD progmanProcessId = 0;
+    GetWindowThreadProcessId(hProgman, &progmanProcessId);
+    if (progmanProcessId != GetCurrentProcessId()) {
+        return nullptr;
+    }
+
     // Send undocumented message to spawn WorkerW windows.
     SendMessage(hProgman, 0x052C, 0xD, 0);
     SendMessage(hProgman, 0x052C, 0xD, 1);
@@ -1665,6 +1676,42 @@ HWND GetWorkerW() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // DirectX initialization
+
+void RunDxgiWorkaroundForExplorerPatcher() {
+    auto dxgiModule = GetModuleHandle(L"dxgi.dll");
+    if (!dxgiModule) {
+        return;
+    }
+
+    WCHAR dxgiPath[MAX_PATH];
+    switch (GetModuleFileName(dxgiModule, dxgiPath, ARRAYSIZE(dxgiPath))) {
+        case 0:
+        case ARRAYSIZE(dxgiPath):
+            Wh_Log(L"GetModuleFileName failed: %u", GetLastError());
+            return;
+    }
+
+    WCHAR explorerPatcherDxgiPath[MAX_PATH];
+    GetWindowsDirectory(explorerPatcherDxgiPath,
+                        ARRAYSIZE(explorerPatcherDxgiPath));
+    wcscat_s(explorerPatcherDxgiPath, L"\\dxgi.dll");
+
+    if (_wcsicmp(dxgiPath, explorerPatcherDxgiPath) != 0) {
+        return;
+    }
+
+    Wh_Log(L"Detected ExplorerPatcher dxgi.dll");
+
+    auto dxgiDeclareAdapterRemovalSupport = (HRESULT(WINAPI*)())GetProcAddress(
+        dxgiModule, "DXGIDeclareAdapterRemovalSupport");
+    if (!dxgiDeclareAdapterRemovalSupport) {
+        Wh_Log(L"DXGIDeclareAdapterRemovalSupport not found");
+        return;
+    }
+
+    Wh_Log(L"Calling DXGIDeclareAdapterRemovalSupport");
+    dxgiDeclareAdapterRemovalSupport();
+}
 
 bool InitDirectX() {
     HRESULT hr;
@@ -2325,8 +2372,37 @@ void UnregisterOverlayWindowClass() {
     }
 }
 
+bool EnsureLazyInitialized() {
+    if (g_lazyInitialized.exchange(true)) {
+        return g_initSucceeded;
+    }
+
+    g_systemMetricsUsed = IsSystemMetricsUsed();
+    g_weatherUsed = IsWeatherUsed();
+
+    RunDxgiWorkaroundForExplorerPatcher();
+
+    if (!InitDirectX()) {
+        Wh_Log(L"InitDirectX failed");
+        return false;
+    }
+
+    if (g_systemMetricsUsed) {
+        InitMetrics();
+    }
+
+    WeatherUpdateThreadInit();
+
+    g_initSucceeded = true;
+    return true;
+}
+
 void CreateOverlayWindow() {
     if (g_overlayWnd) {
+        return;
+    }
+
+    if (!EnsureLazyInitialized()) {
         return;
     }
 
@@ -2578,19 +2654,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
-    g_systemMetricsUsed = IsSystemMetricsUsed();
-    g_weatherUsed = IsWeatherUsed();
-
-    if (!InitDirectX()) {
-        Wh_Log(L"InitDirectX failed");
-        return FALSE;
-    }
-
-    if (g_systemMetricsUsed) {
-        InitMetrics();
-    }
-
-    WeatherUpdateThreadInit();
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
                        (void**)&CreateWindowExW_Original);
@@ -2647,6 +2710,11 @@ void ApplySettingsChanged() {
 
     // Load new settings.
     LoadSettings();
+
+    // If lazy init hasn't completed successfully, just return.
+    if (!g_lazyInitialized || !g_initSucceeded) {
+        return;
+    }
 
     // Reinitialize metrics to match new settings.
     UninitMetrics();
