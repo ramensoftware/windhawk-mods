@@ -376,7 +376,6 @@ LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 decltype(&DefFrameProcA) DefFrameProcA_Original;
 LRESULT CALLBACK DefFrameProcA_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
     if(!IS_DARK_MODE(hWnd))
         return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
 
