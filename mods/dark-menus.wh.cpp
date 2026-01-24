@@ -18,6 +18,8 @@
 # Dark mode context menus
 Enables dark mode for all win32 menus to create a consistent UI. Requires Windows 10 build 18362 or later.
 
+#### ⚠️ You need to enable "TranslucentFlyoutsFix" in the mod settings if you use TranslucentFlyouts.
+
 ### Before:
 ![Before](https://i.imgur.com/bGRVJz8.png)
 ![MenubarBefore](https://raw.githubusercontent.com/MGGSK/DarkMenus/main/Images/menubar_before.png)
