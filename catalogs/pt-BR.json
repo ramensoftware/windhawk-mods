@@ -2032,7 +2032,7 @@
                     2
                 ],
                 "ratingUsers": 3,
-                "updated": 1769108592000,
+                "updated": 1769267159000,
                 "users": 44
             },
             "metadata": {
@@ -2049,7 +2049,7 @@
                 ],
                 "name": "Desktop Live Overlay",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "desktop-watermark-tweaks": {

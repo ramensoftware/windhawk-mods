@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-24T12:01:27.000Z</updated>
+    <updated>2026-01-24T15:05:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Live Overlay 1.0.2]]></title>
+        <id>https://windhawk.net/mods/desktop-live-overlay#2b84edda50e9ac534b043e9ce138bc0842ccd1e1</id>
+        <link href="https://windhawk.net/mods/desktop-live-overlay"/>
+        <updated>2026-01-24T15:05:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the refresh interval option to affect only system metrics, not clock seconds.</li>
+<li>Fixed the clock skipping seconds/minutes in some cases.</li>
+<li>Improved handling of settings changes. Previously, the mod was always reloaded. The update makes it faster and more stable.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dark mode context menus 1.4.2]]></title>
         <id>https://windhawk.net/mods/dark-menus#ec19321d400b1a5e3d1531a16a34da8d0207065f</id>
@@ -366,17 +381,6 @@ showing time, date, system metrics, weather, and more.</p>
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Shadow & Border 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-shadow-border#dfee3dbb6a0d3353b46b7dfb03e903734d12b7f7</id>
-        <link href="https://windhawk.net/mods/taskbar-shadow-border"/>
-        <updated>2026-01-17T15:08:20.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixed top-most setting</p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>
