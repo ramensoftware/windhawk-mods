@@ -2,7 +2,7 @@
 // @id              magnifier-headless
 // @name            Magnifier Headless Mode
 // @description     Blocks the Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
-// @version         0.9.5.2
+// @version         0.9.5.4
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -14,6 +14,9 @@
 // ==WindhawkModReadme==
 /*
 # Magnifier Headless Mode
+
+![Screenshot](https://i.imgur.com/m5w78pe.png)
+
 This mod blocks the Magnifier window from ever appearing, while keeping the zoom functionality (Win + `-` and Win + `+`) available. It also prevents the Magnifier from showing up in the taskbar.
 
 ## Features
@@ -368,7 +371,11 @@ LONG_PTR WINAPI SetWindowLongPtrW_Hook(HWND hWnd, int nIndex, LONG_PTR dwNewLong
         return SetWindowLongPtrW_Original ? SetWindowLongPtrW_Original(hWnd, nIndex, dwNewLong) : 0;
     }
 
-    // Touch overlay is handled via off-screen positioning, no special style handling needed
+    // Touch overlay: Enforce WS_EX_TOOLWINDOW to hide from Alt+Tab
+    if (IsTouchOverlayWindow(hWnd) && nIndex == GWL_EXSTYLE) {
+        dwNewLong &= ~WS_EX_APPWINDOW;
+        dwNewLong |= WS_EX_TOOLWINDOW;
+    }
 
     if (IsMagnifierWindow(hWnd)) {
         if (nIndex == GWL_STYLE) {
@@ -655,7 +662,10 @@ HWND WINAPI CreateWindowExW_Hook(
     // Check for touch overlay first (by window title)
     if (lpWindowName && wcsstr(lpWindowName, L"Magnifier Touch") != NULL) {
         isTouchOverlay = TRUE;
-        Wh_Log(L"Magnifier Headless: Detected Magnifier Touch window (title: %ls) - will move off-screen + 0x0 size", lpWindowName);
+        // Hide from Alt+Tab and Task Manager
+        dwExStyle &= ~WS_EX_APPWINDOW;
+        dwExStyle |= WS_EX_TOOLWINDOW;
+        Wh_Log(L"Magnifier Headless: Detected Magnifier Touch window (title: %ls) - hiding from Alt+Tab", lpWindowName);
     }
 
     // Check for other magnifier classes (only if not touch overlay)
@@ -678,13 +688,19 @@ HWND WINAPI CreateWindowExW_Hook(
                                   nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
     if (hwnd && isTouchOverlay) {
+        // Hide from Alt+Tab and Task Manager by forcing WS_EX_TOOLWINDOW after creation
+        if (SetWindowLongPtrW_Original && SafeIsWindow(hwnd)) {
+            LONG_PTR currentExStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            SetWindowLongPtrW_Original(hwnd, GWL_EXSTYLE, (currentExStyle & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW);
+        }
+
         // For touch overlay: Move off-screen (-32000, -32000) AND set size to 0x0 (safest)
         // This preserves zoom functionality while making the overlay completely invisible
         if (SetWindowPos_Original) {
             SetWindowPos_Original(hwnd, NULL, -32000, -32000, 0, 0,
                                  SWP_NOZORDER | SWP_NOACTIVATE);
-            Wh_Log(L"Magnifier Headless: Moved Magnifier Touch window off-screen with 0x0 size (HWND: 0x%p)", hwnd);
         }
+        Wh_Log(L"Magnifier Headless: Hid Magnifier Touch window from Alt+Tab (HWND: 0x%p)", hwnd);
     } else if (hwnd && isMagnifierClass) {
         // For other magnifier windows: Hide completely
         // Fast path: Read g_hHostWnd without lock (it's stable after init)
