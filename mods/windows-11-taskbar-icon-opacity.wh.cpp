@@ -3,7 +3,8 @@
 // @name            Windows 11 Taskbar Application Icon Opacity
 // @description     Adjust the opacity of taskbar application icons (Windows 11).
 // @version         1.0.0
-// @author          prpercival
+// @author          Preston Percival
+// @github          https://github.com/prpercival
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
