@@ -115,13 +115,13 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
   $name: Custom Font Name
 - customTextColor: "0xF5F5F5"
     $name: Custom Text Color
-    $description: Use hex like 0xRRGGBB or #RRGGBB
+    $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
 - customBackgroundColor: "0x141414"
     $name: Custom Background Color
-    $description: Use hex like 0xRRGGBB or #RRGGBB
+    $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
 - customBorderColor: "0x5A5A5A"
     $name: Custom Border Color
-    $description: Use hex like 0xRRGGBB or #RRGGBB
+    $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
 - customTextSize: 26
   $name: Custom Text Size (pt)
 
@@ -373,6 +373,23 @@ static bool TryParseColorSetting(PCWSTR value, int& outColor) {
     const wchar_t* p = value;
     while (*p && iswspace(*p)) ++p;
     if (!*p) return false;
+    if (wcsncmp(p, L"rgb", 3) == 0) {
+        const wchar_t* open = wcschr(p, L'(');
+        const wchar_t* close = wcschr(p, L')');
+        if (open && close && close > open) {
+            p = open + 1;
+        }
+    }
+
+    int r = -1, g = -1, b = -1;
+    if (swscanf_s(p, L"%d%*[, ]%d%*[, ]%d", &r, &g, &b) == 3) {
+        r = ClampInt(r, 0, 255);
+        g = ClampInt(g, 0, 255);
+        b = ClampInt(b, 0, 255);
+        outColor = (r << 16) | (g << 8) | b;
+        return true;
+    }
+
     if (*p == L'#') ++p;
 
     bool hasHexAlpha = false;
@@ -663,6 +680,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 bool wasDown = g.capsLockKeyDown.exchange(true);
                 if (!wasDown) {
                     g.capsLockToggleState = !g.capsLockToggleState;
+                    EnsureCapsLockOff();
                     // Log toggle state for debugging
                     // Wh_Log(L"CapsLock Toggled: %s", g.capsLockToggleState ? L"ON" : L"OFF");
                 }
@@ -1236,10 +1254,6 @@ static void TickUpdate() {
 
     bool triggerDown = IsTriggerDown(g.cfg.triggerKey);
     DWORD nowTick = GetTickCount();
-
-    if (g.cfg.triggerKey == TriggerKey::CapsLock) {
-        EnsureCapsLockOff();
-    }
 
     static bool dbgWasTriggerDown = false;
     if (triggerDown != dbgWasTriggerDown) {
