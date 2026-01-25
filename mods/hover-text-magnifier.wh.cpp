@@ -2,7 +2,7 @@
 // @id              hover-text-magnifier
 // @name            Hover Text Magnifier (macOS-style)
 // @description     On-cursor hover bubble with large text via UI Automation; optional pixel magnifier fallback.
-// @version         1.3.0
+// @version         1.3.1
 // @author          Math Shamenson
 // @github          https://github.com/insane66613
 // @license         MIT
@@ -246,6 +246,7 @@ struct RuntimeState {
 
     HHOOK hKeyboardHook = nullptr;
     std::atomic<bool> capsLockToggleState{false};
+    std::atomic<bool> capsLockKeyDown{false};
 
     HWND hwndHost = nullptr;
     HWND hwndMag = nullptr;
@@ -271,6 +272,9 @@ struct RuntimeState {
 
     // Debounce for text loss to prevent flicker
     DWORD lastValidTextTick = 0;
+    DWORD lastModeChangeTick = 0;
+    DWORD textStableSinceTick = 0;
+    bool textStableActive = false;
 
     float dpiScale = 1.0f;
     int effectiveBubbleWidth = 520;
@@ -553,6 +557,8 @@ static void LoadSettings() {
     g.cfg.textColor = 0xF5F5F5;
     g.cfg.borderColor = 0x5A5A5A;
     g.cfg.shadowColor = 0x000000;
+    g.cfg.borderWidth = 1;
+    g.cfg.textShadow = true;
     
     if (theme) {
         if (wcscmp(theme, L"light") == 0) {
@@ -620,10 +626,15 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     if (nCode == HC_ACTION) {
         KBDLLHOOKSTRUCT* p = (KBDLLHOOKSTRUCT*)lParam;
         if (g.cfg.triggerKey == TriggerKey::CapsLock && p->vkCode == VK_CAPITAL) {
-            if (wParam == WM_KEYDOWN) {
-                g.capsLockToggleState = !g.capsLockToggleState;
-                // Log toggle state for debugging
-                // Wh_Log(L"CapsLock Toggled: %s", g.capsLockToggleState ? L"ON" : L"OFF");
+            if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+                bool wasDown = g.capsLockKeyDown.exchange(true);
+                if (!wasDown) {
+                    g.capsLockToggleState = !g.capsLockToggleState;
+                    // Log toggle state for debugging
+                    // Wh_Log(L"CapsLock Toggled: %s", g.capsLockToggleState ? L"ON" : L"OFF");
+                }
+            } else if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+                g.capsLockKeyDown = false;
             }
             return 1; // Block the key
         }
@@ -633,7 +644,14 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
 static void InstallHooks() {
     if (!g.hKeyboardHook) {
-        g.hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandleW(nullptr), 0);
+        HMODULE hMod = nullptr;
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            (LPCWSTR)&LowLevelKeyboardProc,
+            &hMod
+        );
+
+        g.hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
         if (!g.hKeyboardHook) {
             Wh_Log(L"Failed to install keyboard hook. CapsLock toggle will not work.");
         }
@@ -657,11 +675,17 @@ static bool InitMagnification() {
     pfnMagSetWindowTransform = (PFNMAGSETWINDOWTRANSFORM)GetProcAddress(g.hMagnification, "MagSetWindowTransform");
     pfnMagSetWindowFilterList = (PFNMAGSETWINDOWFILTERLIST)GetProcAddress(g.hMagnification, "MagSetWindowFilterList");
 
-    if (!pfnMagInit || !pfnMagUninit || !pfnMagSetWindowSource || !pfnMagSetWindowTransform)
+    if (!pfnMagInit || !pfnMagUninit || !pfnMagSetWindowSource || !pfnMagSetWindowTransform) {
+        FreeLibrary(g.hMagnification);
+        g.hMagnification = nullptr;
         return false;
+    }
 
-    if (!pfnMagInit())
+    if (!pfnMagInit()) {
+        FreeLibrary(g.hMagnification);
+        g.hMagnification = nullptr;
         return false;
+    }
 
     g.magReady = true;
     return true;
@@ -1256,7 +1280,7 @@ static void TickUpdate() {
         if (!haveText) {
              // Hysteresis: If we lost text, check if we should debounce
             if (g.showingText && !g.currentText.empty() && 
-                (nowTick - g.lastValidTextTick < 300)) // 300ms grace period
+                (nowTick - g.lastValidTextTick < 800)) // 800ms grace period
             {
                 haveText = true;
                 text = g.currentText;
@@ -1266,6 +1290,15 @@ static void TickUpdate() {
             }
         } else {
             dbgLoggedNoText = false;
+        }
+
+        if (haveText) {
+            if (!g.textStableActive) {
+                g.textStableActive = true;
+                g.textStableSinceTick = nowTick;
+            }
+        } else {
+            g.textStableActive = false;
         }
     }
 
@@ -1283,9 +1316,10 @@ static void TickUpdate() {
     } else if (g.cfg.mode == Mode::MagnifierOnly) {
         showMag = (g.magReady && g.hwndMag != nullptr);
     } else { // Auto
-        if (haveText) {
+        if (haveText && g.textStableActive && (nowTick - g.textStableSinceTick >= 120)) {
             showText = true;
-        } else if (g.cfg.fallbackToMagnifier && wantMag && g.magReady && g.hwndMag) {
+        } else if (g.cfg.fallbackToMagnifier && wantMag && g.magReady && g.hwndMag &&
+                   (nowTick - g.lastValidTextTick >= 500)) {
             showMag = true;
         } else {
             if (g.cfg.hideWhenNoText) {
@@ -1308,6 +1342,17 @@ static void TickUpdate() {
         PositionBubbleNearCursor(g.hwndHost, pt, w, h);
         ApplyRoundedRegion(g.hwndHost, w, h, g.effectiveCornerRadius);
         EnsureVisibility(true);
+    }
+
+    bool wantModeChange = (showText != g.showingText) || (showMag != g.showingMag);
+    if (wantModeChange && (nowTick - g.lastModeChangeTick < 250)) {
+        showText = g.showingText;
+        showMag = g.showingMag;
+        if (showText) {
+            text = g.currentText;
+        }
+    } else if (wantModeChange) {
+        g.lastModeChangeTick = nowTick;
     }
 
     bool modeChanged = (showText != g.showingText) || (showMag != g.showingMag);
