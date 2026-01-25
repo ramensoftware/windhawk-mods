@@ -111,6 +111,14 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
     - 400: 400%
     - 500: 500%
 
+- textOpacity: 100
+    $name: Text Opacity (%)
+    $description: 0 = fully transparent, 100 = fully opaque
+
+- magnifierOpacity: 100
+    $name: Magnifier Opacity (%)
+    $description: 0 = fully transparent, 100 = fully opaque
+
 - customFontName: Segoe UI
   $name: Custom Font Name
 - customTextColor: "0xF5F5F5"
@@ -222,6 +230,8 @@ struct AppSettings {
 
     int opacity = 245;
     int autoHideDelayMs = 0;
+    int textOpacityPercent = 100;
+    int magnifierOpacityPercent = 100;
 };
 
 struct RuntimeState {
@@ -365,6 +375,22 @@ static COLORREF ColorFromRGBInt(int rgb) {
     int g = (rgb >> 8) & 0xFF;
     int b = rgb & 0xFF;
     return RGB(r, g, b);
+}
+
+static BYTE OpacityPercentToByte(int percent) {
+    int p = ClampInt(percent, 0, 100);
+    return (BYTE)RoundToInt((float)p * 255.0f / 100.0f);
+}
+
+static void ApplyOpacityForMode(bool showText, bool showMag) {
+    if (!g.hwndHost) return;
+
+    int percent = g.cfg.textOpacityPercent;
+    if (showMag && !showText) {
+        percent = g.cfg.magnifierOpacityPercent;
+    }
+
+    SetLayeredWindowAttributes(g.hwndHost, 0, OpacityPercentToByte(percent), LWA_ALPHA);
 }
 
 static bool TryParseColorSetting(PCWSTR value, int& outColor) {
@@ -652,6 +678,8 @@ static void LoadSettings() {
     g.cfg.fallbackToMagnifier = Wh_GetIntSetting(L"fallbackToMagnifier") != 0;
 
     g.cfg.opacity = 245; // Fixed for simplicity
+    g.cfg.textOpacityPercent = ClampInt(Wh_GetIntSetting(L"textOpacity"), 0, 100);
+    g.cfg.magnifierOpacityPercent = ClampInt(Wh_GetIntSetting(L"magnifierOpacity"), 0, 100);
     g.cfg.cornerRadius = 16;
     g.cfg.padding = 18;
     g.cfg.offsetX = 24; g.cfg.offsetY = 24;
@@ -1209,7 +1237,7 @@ static bool CreateWindows() {
     );
     if (!g.hwndHost) return false;
 
-    SetLayeredWindowAttributes(g.hwndHost, 0, (BYTE)g.cfg.opacity, LWA_ALPHA);
+    ApplyOpacityForMode(true, false);
 
     if (g.magReady) {
         g.hwndMag = CreateWindowExW(
@@ -1408,6 +1436,10 @@ static void TickUpdate() {
     g.showingText = showText;
     g.showingMag = showMag;
 
+    if (modeChanged) {
+        ApplyOpacityForMode(showText, showMag);
+    }
+
     if (showText) {
         g.currentText = text;
         if (g.hwndMag) ShowWindow(g.hwndMag, SW_HIDE);
@@ -1489,9 +1521,7 @@ static void WorkerThread() {
             if (msg.message == WM_APP_RELOAD_SETTINGS) {
                 LoadSettings();
                 if (g.cfg.triggerKey == TriggerKey::CapsLock) InstallHooks(); else UninstallHooks();
-                if (g.hwndHost) {
-                    SetLayeredWindowAttributes(g.hwndHost, 0, (BYTE)g.cfg.opacity, LWA_ALPHA);
-                }
+                ApplyOpacityForMode(g.showingText, g.showingMag);
             }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
