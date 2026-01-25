@@ -1532,43 +1532,14 @@ void WhTool_ModSettingsChanged() {
 // Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
-bool g_wrongProcess;
-bool g_shouldExitProcess;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
-    if (g_shouldExitProcess) {
-        // Just exit the main thread. Since we didn't start any worker threads
-        // (because initialization failed), this will naturally cause the process
-        // to exit when the last thread dies. This avoids aggressive ExitProcess
-        // calls that might race with the injector.
-        ExitThread(0);
-    }
-    // Wh_Log(L">");
+    Wh_Log(L">");
     ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-    // Safety check: Ensure we only run in windhawk.exe
-    // This protects against cases where the @include rule is ignored or overridden
-    WCHAR processPath[MAX_PATH];
-    DWORD processPathLen = GetModuleFileNameW(nullptr, processPath, ARRAYSIZE(processPath));
-    if (processPathLen == 0 || processPathLen >= ARRAYSIZE(processPath)) {
-        // If we can't reliably identify the host process, stay dormant to avoid unload issues.
-        g_wrongProcess = true;
-        return TRUE;
-    }
-
-    const WCHAR* processName = wcsrchr(processPath, L'\\');
-    processName = processName ? processName + 1 : processPath;
-    if (_wcsicmp(processName, L"windhawk.exe") != 0) {
-        // Quietly exit for non-Windhawk processes to prevent noise.
-        // Returning FALSE causes "Process prohibits dynamic code" in some sandboxed apps (e.g. Claude)
-        // because Windhawk attempts to unload the DLL. Returning TRUE keeps it loaded but dormant.
-        g_wrongProcess = true;
-        return TRUE;
-    }
-
     bool isService = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -1576,8 +1547,7 @@ BOOL Wh_ModInit() {
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
-        g_wrongProcess = true;
-        return TRUE;
+        return FALSE;
     }
 
     for (int i = 1; i < argc; i++) {
@@ -1600,9 +1570,7 @@ BOOL Wh_ModInit() {
     LocalFree(argv);
 
     if (isService) {
-        // Avoid unload attempts in the service process.
-        g_wrongProcess = true;
-        return TRUE;
+        return FALSE;
     }
 
     if (isCurrentToolModProcess) {
@@ -1610,26 +1578,16 @@ BOOL Wh_ModInit() {
             CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
-            g_shouldExitProcess = true;
+            ExitProcess(1);
         }
 
-        if (!g_shouldExitProcess && GetLastError() == ERROR_ALREADY_EXISTS) {
-            // This happens during mod reload if the old process hasn't exited yet.
-            // Log it so we know why we are terminating.
-            // ...
-            
-            DWORD waitRes = WaitForSingleObject(g_toolModProcessMutex, 2000);
-            if (waitRes == WAIT_OBJECT_0 || waitRes == WAIT_ABANDONED) {
-                 // Wh_Log(L"Previous instance exited/abandoned mutex. Proceeding.");
-            } else {
-                 Wh_Log(L"Previous instance still running after timeout. Exiting new instance.");
-                 g_shouldExitProcess = true;
-            }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
         }
 
-        if (!g_shouldExitProcess && !WhTool_ModInit()) {
-            Wh_Log(L"WhTool_ModInit failed");
-            g_shouldExitProcess = true;
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
         }
 
 
@@ -1645,9 +1603,7 @@ BOOL Wh_ModInit() {
     }
 
     if (isToolModProcess) {
-        // Another tool-mod process; stay dormant to avoid unload issues.
-        g_wrongProcess = true;
-        return TRUE;
+        return FALSE;
     }
 
     g_isToolModProcessLauncher = true;
@@ -1716,7 +1672,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher || g_wrongProcess) {
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
@@ -1724,7 +1680,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher || g_wrongProcess) {
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
