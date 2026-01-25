@@ -2,7 +2,7 @@
 // @id              hover-text-magnifier
 // @name            Hover Text Magnifier (macOS-style)
 // @description     On-cursor hover bubble with large text via UI Automation; optional pixel magnifier fallback.
-// @version         1.3.1
+// @version         1.3.2
 // @author          Math Shamenson
 // @github          https://github.com/insane66613
 // @license         MIT
@@ -112,24 +112,57 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
     - 500: 500%
 
 - textOpacity: 100
-    $name: Text Opacity (%)
-    $description: 0 = fully transparent, 100 = fully opaque
+  $name: Text Opacity (%)
+  $description: 0 = fully transparent, 100 = fully opaque
 
 - magnifierOpacity: 100
-    $name: Magnifier Opacity (%)
-    $description: 0 = fully transparent, 100 = fully opaque
+  $name: Magnifier Opacity (%)
+  $description: 0 = fully transparent, 100 = fully opaque
 
 - customFontName: Segoe UI
   $name: Custom Font Name
 - customTextColor: "0xF5F5F5"
-    $name: Custom Text Color
-    $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
+  $name: Custom Text Color
+  $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
+  $options:
+    - "0xFFFFFF": White
+    - "0xF5F5F5": Soft White
+    - "0xE6E6E6": Light Gray
+    - "0xC0C0C0": Silver
+    - "0x000000": Black
+    - "0xFFD700": Gold
+    - "0x00FFFF": Cyan
+    - "0x00FF00": Green
+    - "0xFF0000": Red
+    - "0x1E90FF": Dodger Blue
 - customBackgroundColor: "0x141414"
-    $name: Custom Background Color
-    $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
+  $name: Custom Background Color
+  $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
+  $options:
+    - "0x141414": Dark Gray
+    - "0x000000": Black
+    - "0x1E1E1E": Charcoal
+    - "0x2D2D2D": Slate
+    - "0x3A3A3A": Steel
+    - "0xFFFFFF": White
+    - "0xF4ECD8": Sepia
+    - "0x0B1D39": Midnight Blue
+    - "0x003B2F": Deep Green
+    - "0x2B0B3F": Deep Purple
 - customBorderColor: "0x5A5A5A"
-    $name: Custom Border Color
-    $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
+  $name: Custom Border Color
+  $description: Use hex (#RRGGBB or 0xRRGGBB) or RGB (255,255,255)
+  $options:
+    - "0x5A5A5A": Medium Gray
+    - "0x000000": Black
+    - "0xFFFFFF": White
+    - "0xCCCCCC": Light Gray
+    - "0xFFD700": Gold
+    - "0x00FFFF": Cyan
+    - "0x00FF00": Green
+    - "0xFF0000": Red
+    - "0x1E90FF": Dodger Blue
+    - "0x8A2BE2": Blue Violet
 - customTextSize: 26
   $name: Custom Text Size (pt)
 
