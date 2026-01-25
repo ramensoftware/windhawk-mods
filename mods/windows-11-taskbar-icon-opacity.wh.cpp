@@ -313,6 +313,7 @@ bool InstallHooks(HMODULE module) {
 
     Wh_Log(L"Installing hooks for module: %p", module);
 
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
