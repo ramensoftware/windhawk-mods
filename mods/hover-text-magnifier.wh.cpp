@@ -113,12 +113,15 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
 
 - customFontName: Segoe UI
   $name: Custom Font Name
-- customTextColor: 0xF5F5F5
-  $name: Custom Text Color (0xRRGGBB)
-- customBackgroundColor: 0x141414
-  $name: Custom Background Color (0xRRGGBB)
-- customBorderColor: 0x5A5A5A
-  $name: Custom Border Color (0xRRGGBB)
+- customTextColor: "0xF5F5F5"
+    $name: Custom Text Color
+    $description: Use hex like 0xRRGGBB or #RRGGBB
+- customBackgroundColor: "0x141414"
+    $name: Custom Background Color
+    $description: Use hex like 0xRRGGBB or #RRGGBB
+- customBorderColor: "0x5A5A5A"
+    $name: Custom Border Color
+    $description: Use hex like 0xRRGGBB or #RRGGBB
 - customTextSize: 26
   $name: Custom Text Size (pt)
 
@@ -149,6 +152,7 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
 #include <string>
 #include <algorithm>
 #include <cmath>
+#include <cwctype>
 
 
 static constexpr wchar_t kHostClassName[] = L"WH_HoverTextMagnifierHost";
@@ -361,6 +365,30 @@ static COLORREF ColorFromRGBInt(int rgb) {
     int g = (rgb >> 8) & 0xFF;
     int b = rgb & 0xFF;
     return RGB(r, g, b);
+}
+
+static bool TryParseColorSetting(PCWSTR value, int& outColor) {
+    if (!value) return false;
+
+    const wchar_t* p = value;
+    while (*p && iswspace(*p)) ++p;
+    if (!*p) return false;
+    if (*p == L'#') ++p;
+
+    bool hasHexAlpha = false;
+    for (const wchar_t* t = p; *t; ++t) {
+        if (iswspace(*t)) break;
+        if ((*t >= L'A' && *t <= L'F') || (*t >= L'a' && *t <= L'f')) {
+            hasHexAlpha = true;
+            break;
+        }
+    }
+
+    int base = hasHexAlpha ? 16 : 0; // base=0 honors 0x for hex, otherwise decimal
+    unsigned long parsed = wcstoul(p, nullptr, base);
+    if (parsed > 0xFFFFFFUL) parsed &= 0xFFFFFFUL;
+    outColor = (int)parsed;
+    return true;
 }
 
 static void FreeGraphicsResources() {
@@ -584,9 +612,22 @@ static void LoadSettings() {
              int cSize = Wh_GetIntSetting(L"customTextSize");
              if (cSize > 0) g.cfg.textPointSize = ClampInt(cSize, 5, 200);
 
-             g.cfg.textColor = Wh_GetIntSetting(L"customTextColor");
-             g.cfg.backgroundColor = Wh_GetIntSetting(L"customBackgroundColor");
-             g.cfg.borderColor = Wh_GetIntSetting(L"customBorderColor");
+             StringSetting cTextColor(L"customTextColor");
+             StringSetting cBackgroundColor(L"customBackgroundColor");
+             StringSetting cBorderColor(L"customBorderColor");
+
+             int parsedColor = 0;
+             if (TryParseColorSetting(cTextColor, parsedColor)) {
+                 g.cfg.textColor = parsedColor;
+             }
+
+             if (TryParseColorSetting(cBackgroundColor, parsedColor)) {
+                 g.cfg.backgroundColor = parsedColor;
+             }
+
+             if (TryParseColorSetting(cBorderColor, parsedColor)) {
+                 g.cfg.borderColor = parsedColor;
+             }
         }
     }
 
