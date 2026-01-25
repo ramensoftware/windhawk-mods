@@ -14,6 +14,8 @@
 
 // ==WindhawkModReadme==
 /*
+![Hover Text Magnifier](https://i.imgur.com/6f3FTJ6.png)
+
 **Hover Text Magnifier** is a powerful accessibility tool designed to make reading small text effortless, especially on large displays, TVs, or high-DPI monitors where you might sit at a distance.
 
 Inspired by the macOS feature, it displays a high-contrast, large-text bubble for whatever is under your mouse cursor. Unlike standard magnifiers that zoom the entire screen and require constant panning, this tool intelligently extracts the *text itself* and renders it clearly in a dedicated overlay.
@@ -109,13 +111,6 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
     - 400: 400%
     - 500: 500%
 
-- advancedSettings: false
-  $name: Show Advanced / Custom Settings
-  $description: Enable this to customize individual colors and fine-tune dimensions if 'Custom' theme is selected.
-
-- _sep1: ""
-  $name: "--- Advanced: Custom Appearance ---"
-
 - customFontName: Segoe UI
   $name: Custom Font Name
 - customTextColor: 0xF5F5F5
@@ -126,9 +121,6 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
   $name: Custom Border Color (0xRRGGBB)
 - customTextSize: 26
   $name: Custom Text Size (pt)
-
-- _sep2: ""
-  $name: "--- Advanced: Behavior ---"
 
 - hideWhenNoText: false
   $name: Hide bubble when no text is found
