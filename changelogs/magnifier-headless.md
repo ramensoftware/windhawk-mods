@@ -1,3 +1,7 @@
+## 0.9.5.4 ([Jan 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a0e7724e823c3e7f5c2643133115e7d966753652/mods/magnifier-headless.wh.cpp))
+
+This change ensures that the Magnifier touch overlay window is properly hidden from Alt+Tab switcher and Task Manager by enforcing the `WS_EX_TOOLWINDOW` extended window style. Also, a screenshot of the mod has been added to Windhawk Mod Readme.
+
 ## 0.9.5.2 ([Jan 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1f5a98f4619528de6c38e30571fcd85a6c0e8bbe/mods/magnifier-headless.wh.cpp))
 
 **New Features:**

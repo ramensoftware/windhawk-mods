@@ -4497,7 +4497,7 @@
                     1
                 ],
                 "ratingUsers": 2,
-                "updated": 1769198021000,
+                "updated": 1769374687000,
                 "users": 82
             },
             "metadata": {
@@ -4511,7 +4511,7 @@
                 ],
                 "name": "Magnifier Headless Mode",
                 "twitter": "https://x.com/bcrtvkcs",
-                "version": "0.9.5.2"
+                "version": "0.9.5.4"
             }
         },
         "magnifier-mod": {

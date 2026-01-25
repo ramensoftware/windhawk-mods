@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-25T20:24:20.000Z</updated>
+    <updated>2026-01-25T20:58:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Magnifier Headless Mode 0.9.5.4]]></title>
+        <id>https://windhawk.net/mods/magnifier-headless#a0e7724e823c3e7f5c2643133115e7d966753652</id>
+        <link href="https://windhawk.net/mods/magnifier-headless"/>
+        <updated>2026-01-25T20:58:07.000Z</updated>
+        <content type="html"><![CDATA[<p>This change ensures that the Magnifier touch overlay window is properly hidden from Alt+Tab switcher and Task Manager by enforcing the <code>WS_EX_TOOLWINDOW</code> extended window style. Also, a screenshot of the mod has been added to Windhawk Mod Readme.</p>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hover Text Magnifier (macOS-style) 1.3.2]]></title>
         <id>https://windhawk.net/mods/hover-text-magnifier#608636eae3c24e951825d546457ea9eb09050fe1</id>
@@ -368,25 +379,6 @@ showing time, date, system metrics, weather, and more.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Unwanted Context Menu Items 1.2]]></title>
-        <id>https://windhawk.net/mods/remove-context-menu-items#e666b3f39fd817f40bf16fea5b3558bd4dedac0e</id>
-        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
-        <updated>2026-01-21T12:17:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved the custom items engine to use substring matching. This allows users to remove items with dynamic suffixes (like "Move to OneDrive - [Name]") by simply entering the base text.</li>
-<li>Added specific strings to remove "Always keep on this device" and "Free up space" items that appear within OneDrive context submenus.</li>
-<li>Added a prominent warning to the Readme and Settings explaining that predefined toggles are optimized for English Windows.</li>
-<li>Added explicit examples (e.g., "Copy", "Cut", "Sort by") and tips in the Readme to help users understand how to use the Custom Items field for manual removal.</li>
-<li>Updated the GitHub link to point users to the official issues page for reporting spelling variations.</li>
-<li>Added a log message during mod initialization to remind users that predefined options are in English and to use Custom Items for other languages.</li>
-<li>Minor adjustments to the Readme structure and formatting for better readability within the Windhawk interface.</li>
-</ul>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>
