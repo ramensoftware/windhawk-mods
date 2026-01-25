@@ -2,7 +2,7 @@
 // @id              hover-text-magnifier
 // @name            Hover Text Magnifier (macOS-style)
 // @description     On-cursor hover bubble with large text via UI Automation; optional pixel magnifier fallback.
-// @version         1.2.0
+// @version         1.3.0
 // @author          Math Shamenson
 // @github          https://github.com/insane66613
 // @license         MIT
@@ -497,7 +497,6 @@ static void LoadSettings() {
     StringSetting trig(L"triggerKey");
     StringSetting mode(L"mode");
     StringSetting unit(L"textUnit");
-    StringSetting fontName(L"fontName");
 
     if (trig && wcscmp(trig, L"none") == 0) g.cfg.triggerKey = TriggerKey::None;
     else if (trig && wcscmp(trig, L"alt") == 0) g.cfg.triggerKey = TriggerKey::Alt;
@@ -685,12 +684,19 @@ static bool InitUIA() {
     } else if (hr == RPC_E_CHANGED_MODE) {
         g.comInitedHere = false;
     } else {
+        g.uiaReady = false;
+        g.uia = nullptr;
+        if (g.comInitedHere) {
+            CoUninitialize();
+            g.comInitedHere = false;
+        }
         return false;
     }
 
     hr = CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&g.uia);
     if (FAILED(hr) || !g.uia) {
         g.uiaReady = false;
+        g.uia = nullptr;
         if (g.comInitedHere) {
             CoUninitialize();
             g.comInitedHere = false;
