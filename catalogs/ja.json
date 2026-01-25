@@ -3832,6 +3832,39 @@
                 "version": "1.0"
             }
         },
+        "hover-text-magnifier": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769372660000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769372660000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86",
+                    "x86-64"
+                ],
+                "author": "Math Shamenson",
+                "compilerOptions": "-lgdi32 -luxtheme -lole32 -loleaut32 -luuid",
+                "description": "On-cursor hover bubble with large text via UI Automation; optional pixel magnifier fallback.",
+                "github": "https://github.com/insane66613",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Hover Text Magnifier (macOS-style)",
+                "version": "1.3.2"
+            }
+        },
         "icon-resource-redirect": {
             "details": {
                 "defaultSorting": 251000,

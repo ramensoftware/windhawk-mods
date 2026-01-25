@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-24T21:54:13.000Z</updated>
+    <updated>2026-01-25T20:24:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hover Text Magnifier (macOS-style) 1.3.2]]></title>
+        <id>https://windhawk.net/mods/hover-text-magnifier#608636eae3c24e951825d546457ea9eb09050fe1</id>
+        <link href="https://windhawk.net/mods/hover-text-magnifier"/>
+        <updated>2026-01-25T20:24:20.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/6f3FTJ6.png" alt="Hover Text Magnifier" /></p>
+<p><strong>Hover Text Magnifier</strong> is a powerful accessibility tool designed to make reading small text effortless, especially on large displays, TVs, or high-DPI monitors where you might sit at a distance.</p>
+<p>Inspired by the macOS feature, it displays a high-contrast, large-text bubble for whatever is under your mouse cursor. Unlike standard magnifiers that zoom the entire screen and require constant panning, this tool intelligently extracts the <em>text itself</em> and renders it clearly in a dedicated overlay.</p>
+<h2 id="whyusethis">Why use this?</h2>
+<ul>
+<li><strong>Distance Reading:</strong> Perfect for using a TV as a monitor from the couch. Read file names, menu items, and terminal commands without squinting or leaning forward.</li>
+<li><strong>Focus, Don't Zoom:</strong> Magnifying the whole screen can be disorienting. This keeps your context visible while making the specific target readable.</li>
+<li><strong>Reclaim Caps Lock:</strong> Make the most underutilized key on your keyboard useful again! Use Caps Lock as a toggle switch to turn text magnification on/off instantly—turning wasted keyboard real estate into a productivity tool.</li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Smart Text Extraction:</strong> Uses UI Automation to grab text from buttons, menus, and documents.</li>
+<li><strong>Seamless Fallback:</strong> If text isn't available (like in an image), it automatically switches to a pixel magnifier.</li>
+<li><strong>Dynamic Sizing:</strong> The bubble expands to fit single words or full paragraphs.</li>
+<li><strong>Customizable:</strong> Build for your eyes—choose from High Contrast, Dark, Sepia, or Light themes. Customizable fonts and sizes.</li>
+<li><strong>Trigger Modes:</strong> Hold Ctrl (default) or toggle with Caps Lock (blocks original Caps Lock function when active).</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<ul>
+<li><strong>Default:</strong> Hold <strong>Ctrl</strong> and hover over any text to see it magnified.</li>
+<li><strong>Toggle:</strong> Go to settings and set Trigger Key to <strong>CapsLock</strong>. Tap CapsLock to toggle the magnifier on/off permanently.</li>
+</ul>]]></content>
+        <author>
+            <name>Math Shamenson</name>
+            <uri>https://github.com/insane66613</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Live Overlay 1.0.3]]></title>
         <id>https://windhawk.net/mods/desktop-live-overlay#051f9f44200b3b3db02b4b5b95f0c8b17680be06</id>
@@ -355,20 +387,6 @@ showing time, date, system metrics, weather, and more.</p>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Nilesoft Text Shrinker 1.0.0]]></title>
-        <id>https://windhawk.net/mods/nilesoft-text-shrinker#a90b6af603d993de3518399d642b2240eef88966</id>
-        <link href="https://windhawk.net/mods/nilesoft-text-shrinker"/>
-        <updated>2026-01-20T10:09:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="nilesofttextshrinker">Nilesoft Text Shrinker</h1>
-<p>This mod allows the user to resize the text in Nilesoft Shell's context menu without affecting the glyphs, by using the <code>font</code> setting in <code>theme.nss</code> to resize the glyphs, and this mod to resize the font.</p>
-<p>For it to work, the user MUST use a different font from <code>Segoe UI</code> in their <code>theme.nss</code> file, otherwise the mod may affect the <code>explorer.exe</code> process as a whole.</p>
-<p><img src="https://i.imgur.com/Sb5S3g4.png" alt="" /></p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>
