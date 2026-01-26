@@ -2,7 +2,7 @@
 // @id              taskbar-shadow-border
 // @name            Taskbar Shadow & Border
 // @description     Adds a customizable, floating shadow and border effect above the taskbar
-// @version         1.0.1
+// @version         1.0.2
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         windhawk.exe
@@ -252,8 +252,6 @@ void DrawShadow(HWND hShadow, int width, int height, int opacity, int borderWidt
 void UpdateShadow(BOOL forceRedraw) {
     if (!g_hShadow) return;
     
-    // REMOVED: Self-Healing Parenting block. It broke "Always on Top".
-
     if (!g_hTaskbar || !IsWindow(g_hTaskbar)) {
         g_hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
         if (!g_hTaskbar) return;
@@ -309,6 +307,11 @@ void UpdateShadow(BOOL forceRedraw) {
     int shadowLeft = rcTaskbar.left;
     
     // 4. Dirty Check
+    // FIX: Get current actual style to ensure external changes (like Boot/Shell restarts)
+    // don't leave the internal state desynchronized.
+    LONG_PTR exStyle = GetWindowLongPtr(g_hShadow, GWL_EXSTYLE);
+    bool isActuallyTopMost = (exStyle & WS_EX_TOPMOST) != 0;
+
     if (!forceRedraw &&
         !g_state.lastHiddenByFullScreen && 
         g_state.lastX == shadowLeft &&
@@ -316,6 +319,7 @@ void UpdateShadow(BOOL forceRedraw) {
         g_state.lastW == tbWidth &&
         g_state.lastH == activeHeight &&
         g_state.lastTopMost == alwaysOnTop &&
+        (isActuallyTopMost == alwaysOnTop) && // <-- Added check: Reality must match Settings
         g_state.lastBorderWidth == activeBorderWidth &&
         g_state.lastBorderColor == activeBorderColor &&
         g_state.lastOpacity == activeOpacity &&
@@ -327,8 +331,6 @@ void UpdateShadow(BOOL forceRedraw) {
     g_state.lastHiddenByFullScreen = false;
 
     // 5. Update Window Position
-    // CHANGED: Simplified logic for Tool mode. 
-    // HWND_TOPMOST works reliably for separate processes to stay on top.
     HWND zOrderTarget = alwaysOnTop ? HWND_TOPMOST : HWND_BOTTOM; 
 
     UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER;
@@ -442,7 +444,7 @@ DWORD WINAPI ShadowThreadProc(LPVOID lpParam) {
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName, L"TaskbarShadow",
         WS_POPUP, 0, 0, 10, 10,
-        NULL, // CHANGED: Pass NULL instead of hShell to make it a top-level window
+        NULL, 
         NULL, wc.hInstance, NULL
     );
 
