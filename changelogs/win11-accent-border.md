@@ -1,3 +1,7 @@
+## 1.0.4 ([Jan 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e90d96a05be131b3f3454d75a52cb6dacde99660/mods/win11-accent-border.wh.cpp))
+
+- Added *Target special windows* setting that allows the mod to work properly with some applications that customize their windows (e.g. Flow Launcher).
+
 ## 1.0.3 ([Nov 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a5f2753114108d8032a62ddb858864a7aa39e27a/mods/win11-accent-border.wh.cpp))
 
 - Prevent apps from overwriting the border color.

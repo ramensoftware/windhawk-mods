@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-25T20:58:07.000Z</updated>
+    <updated>2026-01-26T10:11:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.4]]></title>
+        <id>https://windhawk.net/mods/win11-accent-border#e90d96a05be131b3f3454d75a52cb6dacde99660</id>
+        <link href="https://windhawk.net/mods/win11-accent-border"/>
+        <updated>2026-01-26T10:11:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <em>Target special windows</em> setting that allows the mod to work properly with some applications that customize their windows (e.g. Flow Launcher).</li>
+</ul>]]></content>
+        <author>
+            <name>Guerra24</name>
+            <uri>https://github.com/Guerra24</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Magnifier Headless Mode 0.9.5.4]]></title>
         <id>https://windhawk.net/mods/magnifier-headless#a0e7724e823c3e7f5c2643133115e7d966753652</id>
@@ -364,21 +377,6 @@ showing time, date, system metrics, weather, and more.</p>
         <author>
             <name>Nikita</name>
             <uri>https://github.com/nikital</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control Per-App 1.1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control-per-app#7a831cf22a819dd2549b70aa3de1fd62394d7097</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control-per-app"/>
-        <updated>2026-01-21T20:20:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for some Chromium-based programs.</li>
-<li>Updated the mod description to mention a workaround for some laptop touchpads.</li>
-<li>Fixed the tooltip being misplaced while only half of the content is displayed at the top of the taskbar (the fix in v1.1.2 didn't work in all cases).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

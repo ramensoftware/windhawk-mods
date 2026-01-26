@@ -8618,7 +8618,7 @@
                     47
                 ],
                 "ratingUsers": 54,
-                "updated": 1763504699000,
+                "updated": 1769422270000,
                 "users": 4095
             },
             "metadata": {
@@ -8633,7 +8633,7 @@
                     "*"
                 ],
                 "name": "Windows 11 Accent Window Border",
-                "version": "1.0.3"
+                "version": "1.0.4"
             }
         },
         "win11-custom-title-bar-colours": {
