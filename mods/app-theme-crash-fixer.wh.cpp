@@ -10,9 +10,9 @@
 // @compilerOptions -lntdll -lshlwapi -luxtheme
 // ==/WindhawkMod==
 
-// ==WindhawkModReadme==
 /*
- * # * App Theme Crash Fixer
+ * // ==WindhawkModReadme==
+ * # App Theme Crash Fixer
  *
  * This mod helps fix stability issues in specific applications when using third-party Windows themes (e.g., via SecureUXTheme or UltraUXThemePatcher).
  *
@@ -35,24 +35,24 @@
  * **Executable Name:** The process name (e.g., `program.exe`).
  * **Disable Visual Styles:** Check this if the app crashes on startup.
  * **Force Light Mode:** Check this if the app looks broken in Dark Mode.
+ * // ==/WindhawkModReadme==
  */
-// ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
 /*
+ * // ==WindhawkModSettings==
  * - apps:
- *  - - exeName: example.exe
- *      $name: Executable Name
- *      $description: The process name of the application (e.g., notepad.exe).
- *    - disableTheming: true
- *      $name: Disable Visual Styles
- *      $description: Forces the application to use Windows Classic styling. Recommended if the app crashes immediately with custom themes.
- *    - forceLight: true
- *      $name: Force Light Mode
- *      $description: Spoofs the registry to make the application believe Windows is in Light Mode.
- *  $name: Target Applications
+ *  - exeName: example.exe
+ *    $name: Executable Name
+ *    $description: The process name of the application (e.g., notepad.exe).
+ *    disableTheming: true
+ *    $name: Disable Visual Styles
+ *    $description: Forces the application to use Windows Classic styling. Recommended if the app crashes immediately with custom themes.
+ *    forceLight: true
+ *    $name: Force Light Mode
+ *    $description: Spoofs the registry to make the application believe Windows is in Light Mode.
+ *    $name: Target Applications
+ * // ==/WindhawkModSettings==
  */
-// ==/WindhawkModSettings==
 
 #include <ntdef.h>
 #include <ntstatus.h>
