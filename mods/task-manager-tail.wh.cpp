@@ -1,27 +1,38 @@
 // ==WindhawkMod==
 // @id              task-manager-tail
 // @name            Task Manager Tail
-// @description     Automatically keeps Task Manager (or other apps) at the end of the taskbar. (Windows 11)
-// @version         1.0
+// @description     Automatically keeps Task Manager (or other apps) at the end of the taskbar. (Windows 10 & 11)
+// @version         1.1
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
 // @include         windhawk.exe
-// @compilerOptions -luser32 -loleacc -loleaut32 -luuid -lole32
+// @compilerOptions -luser32 -loleacc -loleaut32 -luuid -lole32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Task Manager Tail 1.0
+# Task Manager Tail 1.1
 
-This mod ensures that **Task Manager** always stays at the tail end of your taskbar on **Windows 11**.
+This mod ensures that **Task Manager** always stays at the tail end of your taskbar on **Windows 10 and Windows 11**.
 
 When you open or close other applications, this mod detects the change and automatically
 moves the Task Manager button to the tail end of the list.
 
-**Features:**
+## Features
 - **Event Driven:** Uses lightweight hooks to detect window changes instantly.
 - **Zero Polling:** Does not waste CPU cycles checking the taskbar constantly.
 - **Configurable:** Supports non-English languages and other target applications.
+- **Cross-Platform:** Works on both Windows 10 and Windows 11.
+
+## Platform Notes
+
+**Windows 11:** Full functionality. Responds to all window open/close events.
+
+**Windows 10:** The target moves to the tail when new applications are opened.
+Due to Windows 10 taskbar limitations, closing apps or manual dragging may not
+immediately trigger a reposition - the target will return to the tail on the
+next app open event. This decision avoids polling, or alternatively parsing 
+many possible (continuous) user interaction event noise.
 */
 // ==/WindhawkModReadme==
 
@@ -56,6 +67,13 @@ moves the Task Manager button to the tail end of the list.
 // Custom Message to wake up the thread
 #define WM_TRIGGER_CHECK (WM_USER + 1)
 
+// Windows version enumeration
+enum class WinVersion {
+    Win10,
+    Win11,
+    Win11_24H2
+};
+
 struct UIAItem {
     IUIAutomationElement* element;
     BSTR name;
@@ -73,6 +91,128 @@ HANDLE g_hThread = NULL;
 DWORD g_dwThreadId = 0;
 volatile bool g_stopThread = false;
 DWORD g_lastAttemptTime = 0;
+WinVersion g_winVersion = WinVersion::Win11;
+
+// Forward declarations
+void CheckAndMoveWin10(IUIAutomation* pAutomation);
+
+//////////////////////////////////////////////////////////////////////////////
+// Windows 10: UIA Structure Changed Event Handler
+// This class receives events ONLY when the taskbar structure changes
+//////////////////////////////////////////////////////////////////////////////
+
+class TaskbarStructureChangedHandler : public IUIAutomationStructureChangedEventHandler {
+private:
+    LONG m_refCount;
+    IUIAutomation* m_pAutomation;
+
+public:
+    TaskbarStructureChangedHandler(IUIAutomation* pAutomation)
+        : m_refCount(1), m_pAutomation(pAutomation) {
+        if (m_pAutomation) m_pAutomation->AddRef();
+    }
+
+    ~TaskbarStructureChangedHandler() {
+        if (m_pAutomation) m_pAutomation->Release();
+    }
+
+    // IUnknown methods
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return InterlockedIncrement(&m_refCount);
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG count = InterlockedDecrement(&m_refCount);
+        if (count == 0) {
+            delete this;
+        }
+        return count;
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == IID_IUIAutomationStructureChangedEventHandler) {
+            *ppv = static_cast<IUIAutomationStructureChangedEventHandler*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    // IUIAutomationStructureChangedEventHandler method
+    HRESULT STDMETHODCALLTYPE HandleStructureChangedEvent(
+        IUIAutomationElement* pSender,
+        StructureChangeType changeType,
+        SAFEARRAY* pRuntimeId) override {
+
+        // Only care about children added/removed (new buttons appearing/disappearing)
+        if (changeType == StructureChangeType_ChildAdded ||
+            changeType == StructureChangeType_ChildRemoved ||
+            changeType == StructureChangeType_ChildrenReordered) {
+
+            Wh_Log(L"Win10: Taskbar structure changed (type=%d), triggering check", changeType);
+
+            // Post to our thread to do the actual check (avoid blocking the event)
+            if (g_dwThreadId != 0) {
+                PostThreadMessage(g_dwThreadId, WM_TRIGGER_CHECK, 0, 0);
+            }
+        }
+        return S_OK;
+    }
+};
+
+// Global handler reference for cleanup
+TaskbarStructureChangedHandler* g_pWin10Handler = NULL;
+IUIAutomationElement* g_pWin10TaskListElement = NULL;
+
+// Detect Windows version by checking explorer.exe file version
+WinVersion DetectWindowsVersion() {
+    WCHAR sysDir[MAX_PATH];
+    if (!GetSystemDirectoryW(sysDir, MAX_PATH)) {
+        Wh_Log(L"GetSystemDirectory failed, assuming Win11");
+        return WinVersion::Win11;
+    }
+
+    WCHAR explorerPath[MAX_PATH];
+    swprintf_s(explorerPath, L"%s\\..\\explorer.exe", sysDir);
+
+    DWORD dummy;
+    DWORD size = GetFileVersionInfoSizeW(explorerPath, &dummy);
+    if (!size) {
+        Wh_Log(L"GetFileVersionInfoSize failed, assuming Win11");
+        return WinVersion::Win11;
+    }
+
+    std::vector<BYTE> data(size);
+    if (!GetFileVersionInfoW(explorerPath, 0, size, data.data())) {
+        Wh_Log(L"GetFileVersionInfo failed, assuming Win11");
+        return WinVersion::Win11;
+    }
+
+    VS_FIXEDFILEINFO* info = NULL;
+    UINT len = 0;
+    if (!VerQueryValueW(data.data(), L"\\", (void**)&info, &len) || !info) {
+        Wh_Log(L"VerQueryValue failed, assuming Win11");
+        return WinVersion::Win11;
+    }
+
+    WORD major = HIWORD(info->dwFileVersionMS);
+    WORD minor = LOWORD(info->dwFileVersionMS);
+    WORD build = HIWORD(info->dwFileVersionLS);
+
+    Wh_Log(L"Detected Windows version: %d.%d.%d", major, minor, build);
+
+    if (build < 22000) {
+        Wh_Log(L"Running on Windows 10");
+        return WinVersion::Win10;
+    } else if (build < 26100) {
+        Wh_Log(L"Running on Windows 11");
+        return WinVersion::Win11;
+    } else {
+        Wh_Log(L"Running on Windows 11 24H2+");
+        return WinVersion::Win11_24H2;
+    }
+}
 
 void LoadSettings() {
     PCWSTR target = Wh_GetStringSetting(L"targetName");
@@ -90,12 +230,10 @@ void LoadSettings() {
     if (g_settings.debounceTime < 50) g_settings.debounceTime = 50;
 }
 
-// --- WinEvent Hook Callback ---
-void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, 
+// --- WinEvent Hook Callback (used for Win11) ---
+void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
                            LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
-    // Filter: We only care about top-level window events (OBJID_WINDOW)
     if (idObject == OBJID_WINDOW && idChild == CHILDID_SELF && g_dwThreadId != 0) {
-        // Post message to trigger check (debounced in main loop)
         PostThreadMessage(g_dwThreadId, WM_TRIGGER_CHECK, 0, 0);
     }
 }
@@ -105,12 +243,12 @@ void CycleTaskbarTab(HWND hwnd) {
 
     ITaskbarList* pTaskbarList = NULL;
     HRESULT hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_ALL, IID_ITaskbarList, (void**)&pTaskbarList);
-    
+
     if (SUCCEEDED(hr) && pTaskbarList) {
         hr = pTaskbarList->HrInit();
         if (SUCCEEDED(hr)) {
             pTaskbarList->DeleteTab(hwnd);
-            Sleep(200); // Wait for removal animation
+            Sleep(200);
             pTaskbarList->AddTab(hwnd);
             Sleep(50);
             pTaskbarList->ActivateTab(hwnd);
@@ -119,8 +257,107 @@ void CycleTaskbarTab(HWND hwnd) {
     }
 }
 
-void CheckAndMove(IUIAutomation* pAutomation) {
-    // Find the actual target window to move
+// Find the MSTaskListWClass element for Windows 10
+IUIAutomationElement* FindWin10TaskListElement(IUIAutomation* pAutomation) {
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (!hTray) return NULL;
+
+    HWND hRebar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
+    if (!hRebar) return NULL;
+
+    HWND hTaskSw = FindWindowExW(hRebar, NULL, L"MSTaskSwWClass", NULL);
+    if (!hTaskSw) return NULL;
+
+    HWND hTaskList = FindWindowExW(hTaskSw, NULL, L"MSTaskListWClass", NULL);
+    if (!hTaskList) return NULL;
+
+    IUIAutomationElement* pElement = NULL;
+    pAutomation->ElementFromHandle(hTaskList, &pElement);
+    return pElement;
+}
+
+// Windows 10 specific taskbar check
+void CheckAndMoveWin10(IUIAutomation* pAutomation) {
+    HWND hTargetWnd = FindWindowW(g_settings.targetClass.c_str(), NULL);
+    if (!hTargetWnd) return;
+
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (!hTray) return;
+
+    HWND hRebar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
+    if (!hRebar) return;
+
+    HWND hTaskSw = FindWindowExW(hRebar, NULL, L"MSTaskSwWClass", NULL);
+    if (!hTaskSw) return;
+
+    HWND hTaskList = FindWindowExW(hTaskSw, NULL, L"MSTaskListWClass", NULL);
+    if (!hTaskList) return;
+
+    IUIAutomationElement* pRoot = NULL;
+    HRESULT hr = pAutomation->ElementFromHandle(hTaskList, &pRoot);
+    if (FAILED(hr) || !pRoot) return;
+
+    IUIAutomationCondition* pTrueCondition = NULL;
+    pAutomation->CreateTrueCondition(&pTrueCondition);
+
+    IUIAutomationElementArray* pChildren = NULL;
+    pRoot->FindAll(TreeScope_Children, pTrueCondition, &pChildren);
+
+    if (pChildren) {
+        int count = 0;
+        pChildren->get_Length(&count);
+
+        std::vector<UIAItem> buttons;
+        int targetIndex = -1;
+
+        for (int i = 0; i < count; i++) {
+            IUIAutomationElement* pChild = NULL;
+            pChildren->GetElement(i, &pChild);
+            if (pChild) {
+                CONTROLTYPEID controlType;
+                pChild->get_CurrentControlType(&controlType);
+
+                if (controlType == UIA_ButtonControlTypeId) {
+                    UIAItem item;
+                    item.element = pChild;
+                    pChild->AddRef();
+                    pChild->get_CurrentName(&item.name);
+
+                    buttons.push_back(item);
+
+                    if (item.name && wcsstr(item.name, g_settings.targetName.c_str())) {
+                        targetIndex = (int)buttons.size() - 1;
+                    }
+                }
+                pChild->Release();
+            }
+        }
+
+        // Only act if found and NOT already at the end
+        if (targetIndex != -1 && static_cast<size_t>(targetIndex) < buttons.size() - 1) {
+            if (GetTickCount() - g_lastAttemptTime > 1000) {
+                Wh_Log(L"Win10: Target at index %d (of %d). Moving to end...", targetIndex, (int)buttons.size());
+                if (hTargetWnd && IsWindow(hTargetWnd)) {
+                    if (g_settings.moveDelay > 0) Sleep(g_settings.moveDelay);
+                    CycleTaskbarTab(hTargetWnd);
+                    g_lastAttemptTime = GetTickCount();
+                }
+            }
+        }
+
+        for (auto& b : buttons) {
+            if (b.name) SysFreeString(b.name);
+            if (b.element) b.element->Release();
+        }
+        pChildren->Release();
+    }
+
+    if (pTrueCondition) pTrueCondition->Release();
+    pRoot->Release();
+}
+
+// Windows 11 specific taskbar check (original implementation)
+void CheckAndMoveWin11(IUIAutomation* pAutomation) {
     HWND hTargetWnd = FindWindowW(g_settings.targetClass.c_str(), NULL);
     if (!hTargetWnd) return;
 
@@ -131,22 +368,21 @@ void CheckAndMove(IUIAutomation* pAutomation) {
     while (hChild) {
         wchar_t text[256] = {0};
         GetWindowTextW(hChild, text, 255);
-        
-        // Find the XAML Island containing the buttons
+
         if (wcsstr(text, L"DesktopWindowXamlSource")) {
             IUIAutomationElement* pRoot = NULL;
             HRESULT hr = pAutomation->ElementFromHandle(hChild, &pRoot);
             if (SUCCEEDED(hr) && pRoot) {
                 IUIAutomationCondition* pTrueCondition = NULL;
                 pAutomation->CreateTrueCondition(&pTrueCondition);
-                
+
                 IUIAutomationElementArray* pChildren = NULL;
                 pRoot->FindAll(TreeScope_Descendants, pTrueCondition, &pChildren);
-                
+
                 if (pChildren) {
                     int count = 0;
                     pChildren->get_Length(&count);
-                    
+
                     std::vector<UIAItem> buttons;
                     int targetIndex = -1;
 
@@ -156,16 +392,15 @@ void CheckAndMove(IUIAutomation* pAutomation) {
                         if (pChild) {
                             BSTR cls = NULL;
                             pChild->get_CurrentClassName(&cls);
-                            
+
                             if (cls && wcsstr(cls, L"TaskListButtonAutomationPeer")) {
                                 UIAItem item;
                                 item.element = pChild;
                                 pChild->AddRef();
                                 pChild->get_CurrentName(&item.name);
-                                
+
                                 buttons.push_back(item);
-                                
-                                // Check if this button matches our target name
+
                                 if (item.name && wcsstr(item.name, g_settings.targetName.c_str())) {
                                     targetIndex = (int)buttons.size() - 1;
                                 }
@@ -174,10 +409,8 @@ void CheckAndMove(IUIAutomation* pAutomation) {
                             pChild->Release();
                         }
                     }
-                    
-                    // If found and NOT at the end
+
                     if (targetIndex != -1 && static_cast<size_t>(targetIndex) < buttons.size() - 1) {
-                        // Safety cooldown to prevent loops
                         if (GetTickCount() - g_lastAttemptTime > 1000) {
                             Wh_Log(L"Target found at index %d (of %d). Moving...", targetIndex, (int)buttons.size());
                             if (hTargetWnd && IsWindow(hTargetWnd)) {
@@ -202,8 +435,17 @@ void CheckAndMove(IUIAutomation* pAutomation) {
     }
 }
 
+void CheckAndMove(IUIAutomation* pAutomation) {
+    if (g_winVersion == WinVersion::Win10) {
+        CheckAndMoveWin10(pAutomation);
+    } else {
+        CheckAndMoveWin11(pAutomation);
+    }
+}
 
-//Extra functions to work with Windhawk without injection
+//////////////////////////////////////////////////////////////////////////////
+// Background Thread - Different event sources for Win10 vs Win11
+//////////////////////////////////////////////////////////////////////////////
 
 DWORD WINAPI BackgroundThread(LPVOID) {
     Wh_Log(L"Task Manager Tail Thread Started");
@@ -214,45 +456,112 @@ DWORD WINAPI BackgroundThread(LPVOID) {
 
     IUIAutomation* pAutomation = NULL;
     hr = CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&pAutomation);
-    
-    if (SUCCEEDED(hr) && pAutomation) {
-        // Register WinEventHook for Window Creation/Destruction/Show/Hide
-        HWINEVENTHOOK hHook = SetWinEventHook(
+
+    if (FAILED(hr) || !pAutomation) {
+        Wh_Log(L"Failed to create UI Automation instance");
+        CoUninitialize();
+        return 1;
+    }
+
+    HWINEVENTHOOK hWinEventHook = NULL;
+
+    if (g_winVersion == WinVersion::Win10) {
+        // Windows 10: Use UIA StructureChangedEventHandler on the taskbar
+        Wh_Log(L"Win10: Setting up UIA StructureChangedEventHandler...");
+
+        g_pWin10TaskListElement = FindWin10TaskListElement(pAutomation);
+        if (g_pWin10TaskListElement) {
+            g_pWin10Handler = new TaskbarStructureChangedHandler(pAutomation);
+
+            hr = pAutomation->AddStructureChangedEventHandler(
+                g_pWin10TaskListElement,
+                TreeScope_Subtree,
+                NULL,  // No cache request
+                g_pWin10Handler
+            );
+
+            if (SUCCEEDED(hr)) {
+                Wh_Log(L"Win10: UIA StructureChangedEventHandler registered successfully!");
+            } else {
+                Wh_Log(L"Win10: Failed to register UIA handler (hr=0x%08X), falling back to WinEventHook", hr);
+                // Fall back to WinEventHook
+                g_pWin10Handler->Release();
+                g_pWin10Handler = NULL;
+                g_pWin10TaskListElement->Release();
+                g_pWin10TaskListElement = NULL;
+
+                hWinEventHook = SetWinEventHook(
+                    EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE,
+                    NULL, WinEventProc, 0, 0,
+                    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
+                );
+            }
+        } else {
+            Wh_Log(L"Win10: Could not find taskbar element, falling back to WinEventHook");
+            hWinEventHook = SetWinEventHook(
+                EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE,
+                NULL, WinEventProc, 0, 0,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
+            );
+        }
+    } else {
+        // Windows 11: Use WinEventHook (works well there)
+        hWinEventHook = SetWinEventHook(
             EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE,
             NULL, WinEventProc, 0, 0,
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
         );
 
-        if (hHook) {
-            Wh_Log(L"WinEventHook Registered. Waiting for events...");
-            
-            MSG msg;
-            UINT_PTR debounceTimer = 0;
-
-            while (!g_stopThread && GetMessage(&msg, NULL, 0, 0)) {
-                if (msg.message == WM_TRIGGER_CHECK) {
-                    // Debounce: Reset timer to fire after debounceTime
-                    if (debounceTimer) KillTimer(NULL, debounceTimer);
-                    debounceTimer = SetTimer(NULL, 0, g_settings.debounceTime, NULL);
-                }
-                else if (msg.message == WM_TIMER && msg.wParam == debounceTimer) {
-                    KillTimer(NULL, debounceTimer);
-                    debounceTimer = 0;
-                    CheckAndMove(pAutomation);
-                }
-                
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
-            UnhookWinEvent(hHook);
+        if (hWinEventHook) {
+            Wh_Log(L"Win11: WinEventHook Registered. Waiting for events...");
         }
-        pAutomation->Release();
     }
+
+    // Message loop with debouncing
+    MSG msg;
+    UINT_PTR debounceTimer = 0;
+
+    // Do an initial check
+    CheckAndMove(pAutomation);
+
+    while (!g_stopThread && GetMessage(&msg, NULL, 0, 0)) {
+        if (msg.message == WM_TRIGGER_CHECK) {
+            if (debounceTimer) KillTimer(NULL, debounceTimer);
+            debounceTimer = SetTimer(NULL, 0, g_settings.debounceTime, NULL);
+        }
+        else if (msg.message == WM_TIMER && msg.wParam == debounceTimer) {
+            KillTimer(NULL, debounceTimer);
+            debounceTimer = 0;
+            CheckAndMove(pAutomation);
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    // Cleanup
+    if (hWinEventHook) {
+        UnhookWinEvent(hWinEventHook);
+    }
+
+    if (g_pWin10Handler) {
+        pAutomation->RemoveStructureChangedEventHandler(g_pWin10TaskListElement, g_pWin10Handler);
+        g_pWin10Handler->Release();
+        g_pWin10Handler = NULL;
+    }
+
+    if (g_pWin10TaskListElement) {
+        g_pWin10TaskListElement->Release();
+        g_pWin10TaskListElement = NULL;
+    }
+
+    pAutomation->Release();
     CoUninitialize();
     return 0;
 }
 
 bool WhTool_ModInit() {
+    g_winVersion = DetectWindowsVersion();
     LoadSettings();
     g_stopThread = false;
     g_hThread = CreateThread(NULL, 0, BackgroundThread, NULL, 0, NULL);
@@ -274,18 +583,8 @@ void WhTool_ModSettingsChanged() {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
+// Windhawk tool mod implementation
+////////////////////////////////////////////////////////////////////////////////
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
