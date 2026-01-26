@@ -6306,19 +6306,19 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1768577968000,
+                "updated": 1769457458000,
                 "users": 72
             },
             "metadata": {
                 "author": "sb4ssman",
-                "compilerOptions": "-luser32 -loleacc -loleaut32 -luuid -lole32",
-                "description": "Automatically keeps Task Manager (or other apps) at the end of the taskbar. (Windows 11)",
+                "compilerOptions": "-luser32 -loleacc -loleaut32 -luuid -lole32 -lversion",
+                "description": "Automatically keeps Task Manager (or other apps) at the end of the taskbar. (Windows 10 & 11)",
                 "github": "https://github.com/sb4ssman",
                 "include": [
                     "windhawk.exe"
                 ],
                 "name": "Task Manager Tail",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "taskbar-auto-hide-keyboard-only": {
