@@ -2052,6 +2052,37 @@
                 "version": "1.0.3"
             }
         },
+        "desktop-no-view-menu": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769430530000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769430530000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "description": "Removes the \"View\" menu from the desktop context menu",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "GPL-3.0",
+                "name": "Desktop No View Menu",
+                "version": "1.0.0"
+            }
+        },
         "desktop-watermark-tweaks": {
             "details": {
                 "defaultSorting": 3087,
@@ -7304,7 +7335,7 @@
                     6
                 ],
                 "ratingUsers": 6,
-                "updated": 1768662500000,
+                "updated": 1769430737000,
                 "users": 88
             },
             "metadata": {
@@ -7316,7 +7347,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Taskbar Shadow & Border",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-show-desktop-button-aero-peek": {
@@ -9165,7 +9196,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1768569939000,
+                "updated": 1769430610000,
                 "users": 58
             },
             "metadata": {
@@ -9179,7 +9210,7 @@
                     "WINWORD.EXE"
                 ],
                 "name": "Word Local AutoSave",
-                "version": "1.6"
+                "version": "1.7"
             }
         },
         "xs-discord-control-registered-games": {

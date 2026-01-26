@@ -1,3 +1,16 @@
+## 1.7 ([Jan 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2e20ba2ff622362ea8165a3ec4852aeffdfaf51f/mods/word-local-autosave.wh.cpp))
+
+- Fixed accidental text alignment changes (Ctrl+L/E/R/J) caused by race condition
+- Increased quiet period from 250ms to 400ms for better shortcut conflict prevention
+- Added double key-state verification with 20ms delay before sending Ctrl+S
+- Added final quiet period check right before sending keystrokes
+- Fixed Ctrl key not being checked in AreAnyKeysPressed() - could cause Ctrl+S to overlap other Ctrl shortcuts
+- Added Windows key (Win) detection to prevent Win+S (Windows Search) conflicts
+- Added numpad number keys (0-9) and operators to trigger auto-save
+- Fixed potential timer leak in SendCtrlS() retry logic
+- Replaced range-based for loop with explicit checks for better compiler compatibility
+- Version bumped to 1.7
+
 ## 1.6 ([Jan 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/910f99823709334f1f4d6a886d50f323d2b87f39/mods/word-local-autosave.wh.cpp))
 
 ## Add support for punctuation keys
