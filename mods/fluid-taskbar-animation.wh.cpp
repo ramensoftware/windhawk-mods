@@ -664,13 +664,13 @@ HMODULE GetTaskbarViewModuleHandle() {
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         { { LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))" },
           &TaskbarFrame_OnPointerMoved_Original, TaskbarFrame_OnPointerMoved_Hook },
         { { LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerExited(void *))" },
           &TaskbarFrame_OnPointerExited_Original, TaskbarFrame_OnPointerExited_Hook },
     };
-    return HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks));
+    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
