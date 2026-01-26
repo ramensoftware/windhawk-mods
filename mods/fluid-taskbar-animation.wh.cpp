@@ -5,7 +5,7 @@
 // @description:zh-TW 為工作列圖示帶來流暢的 macOS 風格縮放動畫，高效能且無閃爍。
 // @version         1.4.1
 // @author          tky-kevin (based on work by Ph0en1x-dev)
-// @github          https://github.com/ramensoftware/windhawk-mods
+// @github          https://github.com/tky-kevin
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luser32
@@ -663,13 +663,14 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         { { LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))" },
           &TaskbarFrame_OnPointerMoved_Original, TaskbarFrame_OnPointerMoved_Hook },
         { { LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerExited(void *))" },
           &TaskbarFrame_OnPointerExited_Original, TaskbarFrame_OnPointerExited_Hook },
     };
-    return HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
+    return HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks));
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
