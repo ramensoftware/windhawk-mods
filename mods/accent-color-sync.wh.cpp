@@ -2,10 +2,10 @@
 // @id                  accent-color-sync
 // @name                Accent Color Sync
 // @description         Restores Control Panel color opacity functionality
-// @description:fr-FR   Retour de la fonctionnalité d'opacité des couleurs du Panneau de configuration
+// @description:fr-FR   Restaurer la fonctionnalité d'opacité des couleurs du Panneau de configuration
 // @description:es-ES   Recuperar la funcionalidad de opacidad de colores del Panel de control
 // @description:ja-JP   コントロールパネルの色の不透明度機能を復元する
-// @version             1.53
+// @version             1.6
 // @author              CatmanFan / Mr._Lechkar
 // @github              https://github.com/CatmanFan
 // @include             explorer.exe
@@ -88,16 +88,28 @@ Brings back the functionality of the Control Panel's "Color intensity" slider to
   - glass8: Glass8
   $options:ja-JP:
   - openglass: OpenGlass
-  - openglass1: OpenGlass（旧バージョン）
+  - openglass1: OpenGlass（古いバージョン）
   - glass8: Glass8
   $name: DWM software
   $name:fr-FR: Logiciel de modification du gestionnaire des fenêtres (DWM)
   $name:es-ES: Software de modificación de interfaz gráfica DWM
   $name:ja-JP: DWMカスタマイズソフトウェア
   $description: The application currently being used to implement the Aero shader.
-  $description:fr-FR: Choisir l'application qui est actuellement utilisée pour implémenter le shader Aero.
+  $description:fr-FR: Choisir l'application qui est actuellement utilisée pour implémenter le nuanceur Aero.
   $description:es-ES: La aplicación que se utiliza actualmente para implementar la funcionalidad de Aero.
   $description:ja-JP: Aeroシェーダー効果を反映するために現在使用されているアプリケーション
+- shader: win7
+  $options:
+  - win7: Windows 7
+  - winvista: Windows Vista
+  $name: Aero shader
+  $name:fr-FR: Nuanceur Aero
+  $name:es-ES: Sombreador Aero
+  $name:ja-JP: Aeroシェーダー
+  $description: The Aero shader to replicate.
+  $description:fr-FR: Le type du nuanceur Aero à repliquer.
+  $description:es-ES: El tipo de sombreador Aero que será replicado.
+  $description:ja-JP: 模倣されるAeroシェーダー
 */
 // ==/WindhawkModSettings==
 
@@ -129,6 +141,7 @@ const std::wstring dwmKey = L"SOFTWARE\\Microsoft\\Windows\\DWM";
 const std::wstring opacityValue = L"og_Opacity";
 
 enum class GlassSoftware { OpenGlassOld, OpenGlass, Glass8 };
+enum class Shader { Win7, WinVista };
 enum class WinVersion { None, Unsupported, Win10Legacy, Win10, Win11 };
 WinVersion winVer;
 
@@ -139,6 +152,7 @@ struct {
     bool fixedOpacitySet;
     bool boolTransparency;
     bool boolSyncDWM;
+    Shader shader;
 } settings;
 
 std::wstring balanceColor;
@@ -590,23 +604,35 @@ void calculateIntensity(DWORD self, bool opaque = FALSE)
         return;
     }
 
-    if (balance < 50) {
-        dwmSettings.color_balance = 5;
-        dwmSettings.blur_balance = 100 - balance;
-        dwmSettings.afterglow_balance = (100 - dwmSettings.color_balance) - dwmSettings.blur_balance;
-        return;
-    }
+    else {
+        switch (settings.shader) {
+            case Shader::WinVista:
+                dwmSettings.afterglow_balance = 0;
+                dwmSettings.color_balance = balance > 95 ? 95 : balance;
+                dwmSettings.blur_balance = 100 - dwmSettings.color_balance;
+                break;
 
-    if (balance >= 95) {
-        dwmSettings.afterglow_balance = 0;
-        dwmSettings.color_balance = balance - 25;
-        dwmSettings.blur_balance = 100 - dwmSettings.color_balance;
-        return;
-    }
+            case Shader::Win7:
+                if (balance < 50) {
+                    dwmSettings.color_balance = 5;
+                    dwmSettings.blur_balance = 100 - balance;
+                    dwmSettings.afterglow_balance = (100 - dwmSettings.color_balance) - dwmSettings.blur_balance;
+                    return;
+                }
 
-    dwmSettings.afterglow_balance = 95 - balance;
-    dwmSettings.blur_balance = 50 - ((balance - 50) >> 1);
-    dwmSettings.color_balance = 100 - dwmSettings.afterglow_balance - dwmSettings.blur_balance;
+                if (balance >= 95) {
+                    dwmSettings.afterglow_balance = 0;
+                    dwmSettings.color_balance = balance - 25;
+                    dwmSettings.blur_balance = 100 - dwmSettings.color_balance;
+                    return;
+                }
+
+                dwmSettings.afterglow_balance = 95 - balance;
+                dwmSettings.blur_balance = 50 - ((balance - 50) >> 1);
+                dwmSettings.color_balance = 100 - dwmSettings.afterglow_balance - dwmSettings.blur_balance;
+                break;
+        }
+    }
 }
 
 int opacity = -1;
@@ -959,6 +985,13 @@ BOOL LoadSettings()
     else
         settings.glassApp = GlassSoftware::OpenGlass;
     Wh_FreeStringSetting(glassAppName);
+
+	LPCWSTR shaderName = Wh_GetStringSetting(L"shader");
+    if (lstrcmpW(shaderName, L"winvista") == 0)
+        settings.shader = Shader::WinVista;
+    else
+        settings.shader = Shader::Win7;
+    Wh_FreeStringSetting(shaderName);
 
     settings.fixedOpacity = -1;
     if (Wh_GetIntSetting(L"fixedOpacity.enable") == 1) {

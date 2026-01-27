@@ -2,7 +2,7 @@
 // @id              chromium-native-titlebar
 // @name            Native titelebars in Chromium-based browsers
 // @description     Restore native titlebars in Edge and Chrome
-// @version         0.1.1
+// @version         0.1.2
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         chrome.exe
@@ -14,8 +14,10 @@
 
 // ==WindhawkModReadme==
 /*
+**! IMPORTANT !** This mod is outdated. It is recommended to use the mod
+**Titlebar For Everyone** by Ingran121 instead in all cases.
+
 This is a variation of the Chromium Frame Blackout Fix mod by Ingan121.
-Ingan121 is maybe currently working on a better mod, so this mod is an interim solution.
 The difference from the original mod is in intercepting also WM_NCCALCSIZE in addition
 to WM_NCPAINT message.
 Since the effect of this mod is unpredictable on other applications, by default only

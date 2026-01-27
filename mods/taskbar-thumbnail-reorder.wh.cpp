@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.1.2
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -419,8 +419,11 @@ bool MoveTaskInGroup(void* taskGroup, void* taskItemFrom, void* taskItemTo) {
 
         void* lpMMTaskListLongPtr = (void*)GetWindowLongPtr(hMMTaskListWnd, 0);
 
-        MoveTaskInTaskList(hMMTaskListWnd, lpMMTaskListLongPtr, taskGroup,
-                           taskItemFrom, taskItemTo);
+        if (!MoveTaskInTaskList(hMMTaskListWnd, lpMMTaskListLongPtr, taskGroup,
+                                taskItemFrom, taskItemTo)) {
+            Wh_Log(L"Failed to move task item in taskbar %08X",
+                   (DWORD)(DWORD_PTR)hMMTaskListWnd);
+        }
     };
 
     EnumThreadWindows(
@@ -452,23 +455,26 @@ bool MoveTaskInGroup(void* taskGroup, void* taskItemFrom, void* taskItemTo) {
 bool MoveItemsFromThumbnail(void* lpMMThumbnailLongPtr,
                             int indexFrom,
                             int indexTo) {
-    Wh_Log(L">");
+    Wh_Log(L"> %d->%d", indexFrom, indexTo);
 
     void* taskItemFrom =
         CTaskListThumbnailWnd__GetTaskItem(lpMMThumbnailLongPtr, indexFrom);
     if (!taskItemFrom) {
+        Wh_Log(L"Failed to get task item");
         return false;
     }
 
     void* taskItemTo =
         CTaskListThumbnailWnd__GetTaskItem(lpMMThumbnailLongPtr, indexTo);
     if (!taskItemTo) {
+        Wh_Log(L"Failed to get task item");
         return false;
     }
 
     if (!MoveTaskInGroup(
             CTaskListThumbnailWnd_GetTaskGroup(lpMMThumbnailLongPtr),
             taskItemFrom, taskItemTo)) {
+        Wh_Log(L"Failed to move task item");
         return false;
     }
 
@@ -524,7 +530,7 @@ LRESULT WINAPI CTaskListThumbnailWnd_v_WndProc_Hook(void* pThis,
                         lpMMThumbnailLongPtr);
                 int trackedIndex = CTaskListThumbnailWnd_GetHoverIndex(
                     lpMMThumbnailLongPtr_IExtendedUISwitcher);
-                if (trackedIndex != g_thumbDraggedIndex &&
+                if (trackedIndex >= 0 && trackedIndex != g_thumbDraggedIndex &&
                     MoveItemsFromThumbnail(lpMMThumbnailLongPtr,
                                            g_thumbDraggedIndex, trackedIndex)) {
                     g_thumbDraggedIndex = trackedIndex;
@@ -668,6 +674,7 @@ HRESULT WINAPI CTaskListWnd_HandleExtendedUIClick_Hook(void* pThis,
     Wh_Log(L">");
 
     if (g_reorderingXamlThumbnails) {
+        g_reorderingXamlThumbnails = false;
         return S_OK;
     }
 
@@ -763,7 +770,10 @@ void MoveItemsFromXAMLThumbnail(int indexFrom, int indexTo) {
         return;
     }
 
-    MoveTaskInGroup(taskGroupFrom, taskItemFrom, taskItemTo);
+    if (!MoveTaskInGroup(taskGroupFrom, taskItemFrom, taskItemTo)) {
+        Wh_Log(L"Failed to move task item");
+        return;
+    }
 }
 
 using TaskItemThumbnailList_OnPointerMoved_t = int(WINAPI*)(void* pThis,
@@ -775,8 +785,12 @@ int WINAPI TaskItemThumbnailList_OnPointerMoved_Hook(void* pThis, void* pArgs) {
         return TaskItemThumbnailList_OnPointerMoved_Original(pThis, pArgs);
     };
 
-    if (!GetCapture() ||
-        GetTickCount() - g_taskInclusionChangeLastTickCount <= 60) {
+    if (!GetCapture()) {
+        g_reorderingXamlThumbnails = false;
+        return original();
+    }
+
+    if (GetTickCount() - g_taskInclusionChangeLastTickCount <= 60) {
         return original();
     }
 
@@ -886,36 +900,6 @@ int WINAPI TaskItemThumbnailList_OnPointerMoved_Hook(void* pThis, void* pArgs) {
     return original();
 }
 
-using TaskItemThumbnailList_OnPointerReleased_t = int(WINAPI*)(void* pThis,
-                                                               void* pArgs);
-TaskItemThumbnailList_OnPointerReleased_t
-    TaskItemThumbnailList_OnPointerReleased_Original;
-int WINAPI TaskItemThumbnailList_OnPointerReleased_Hook(void* pThis,
-                                                        void* pArgs) {
-    Wh_Log(L">");
-
-    int ret = TaskItemThumbnailList_OnPointerReleased_Original(pThis, pArgs);
-
-    FrameworkElement element = nullptr;
-    ((IUnknown*)pThis)
-        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                         winrt::put_abi(element));
-
-    if (!element) {
-        return ret;
-    }
-
-    auto className = winrt::get_class_name(element);
-    Wh_Log(L"%s", className.c_str());
-
-    if (className == L"Taskbar.TaskItemThumbnailList" ||
-        className == L"Taskbar.TaskItemThumbnailScrollableList") {
-        g_reorderingXamlThumbnails = false;
-    }
-
-    return ret;
-}
-
 using DPA_GetPtr_t = decltype(&DPA_GetPtr);
 DPA_GetPtr_t DPA_GetPtr_Original;
 PVOID WINAPI DPA_GetPtr_Hook(HDPA hdpa, INT_PTR i) {
@@ -931,7 +915,8 @@ bool HookTaskbarSymbols() {
     if (g_winVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
     } else {
-        module = LoadLibrary(L"taskbar.dll");
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
@@ -1052,12 +1037,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             TaskItemThumbnailList_OnPointerMoved_Hook,
             true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
         },
-        {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskItemThumbnailList,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerReleased(void *))"},
-            &TaskItemThumbnailList_OnPointerReleased_Original,
-            TaskItemThumbnailList_OnPointerReleased_Hook,
-            true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
-        },
     };
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
@@ -1078,7 +1057,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
@@ -1356,7 +1336,7 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!g_taskbarViewDllLoaded) {
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");

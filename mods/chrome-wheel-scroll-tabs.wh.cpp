@@ -2,7 +2,7 @@
 // @id              chrome-wheel-scroll-tabs
 // @name            Chrome/Edge scroll tabs with mouse wheel
 // @description     Use the mouse wheel while hovering over the tab bar to switch between tabs
-// @version         1.1
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,6 +11,7 @@
 // @include         msedge.exe
 // @include         opera.exe
 // @include         brave.exe
+// @include         *\YandexBrowser\Application\browser.exe
 // @compilerOptions -lcomctl32 -lgdi32
 // ==/WindhawkMod==
 
@@ -28,7 +29,8 @@
 
 Use the mouse wheel while hovering over the tab bar to switch between tabs.
 
-Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave.
+Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave,
+Yandex Browser.
 
 ![demonstration](https://i.imgur.com/GWCsO70.gif)
 */
@@ -43,6 +45,17 @@ Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave.
   $description: >-
     Switch between tabs when the mouse's horizontal scroll wheel is tilted or
     rotated
+- scrollAreaLimit:
+  - pixelsFromTop: 0
+    $name: Pixels from top
+  - pixelsFromLeft: 0
+    $name: Pixels from left
+  $name: Scroll area limit
+  $description: >-
+    Optionally limit the area where the mouse wheel scrolls tabs. The mod has no
+    effect if the mouse is outside this area. This is useful in case the mod
+    incorrectly overrides the mouse wheel scrolling in areas where it shouldn't,
+    e.g. in the page content area. Set to zero to disable the limit.
 */
 // ==/WindhawkModSettings==
 
@@ -52,6 +65,8 @@ Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave.
 struct {
     bool reverseScrollingDirection;
     bool horizontalScrolling;
+    int scrollAreaLimitPixelsFromTop;
+    int scrollAreaLimitPixelsFromLeft;
 } g_settings;
 
 bool g_isEdge;
@@ -151,6 +166,31 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
         return false;
     }
 
+    RECT rect{};
+    GetWindowRect(hWnd, &rect);
+
+    UINT dpi = GetDpiForWindowWithFallback(hWnd);
+
+    if (int scrollAreaLimitPixelsFromTop =
+            g_settings.scrollAreaLimitPixelsFromTop) {
+        scrollAreaLimitPixelsFromTop =
+            MulDiv(scrollAreaLimitPixelsFromTop, dpi, 96);
+        if (yPos >= rect.top + scrollAreaLimitPixelsFromTop) {
+            Wh_Log(L"Mouse wheel event outside of the top scroll area limit");
+            return false;
+        }
+    }
+
+    if (int scrollAreaLimitPixelsFromLeft =
+            g_settings.scrollAreaLimitPixelsFromLeft) {
+        scrollAreaLimitPixelsFromLeft =
+            MulDiv(scrollAreaLimitPixelsFromLeft, dpi, 96);
+        if (xPos >= rect.left + scrollAreaLimitPixelsFromLeft) {
+            Wh_Log(L"Mouse wheel event outside of the left scroll area limit");
+            return false;
+        }
+    }
+
     switch (SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(xPos, yPos))) {
         case HTCLIENT:
         case HTCAPTION:
@@ -179,9 +219,6 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
     // Edge has a thin border around the web content which triggers the tab
     // scrolling. Ignore events which are very close to the window borders.
     if (g_isEdge) {
-        UINT dpi = GetDpiForWindowWithFallback(hWnd);
-        RECT rect{};
-        GetWindowRect(hWnd, &rect);
         if (MulDiv(xPos - rect.left, 96, dpi) <= 15 ||
             MulDiv(rect.right - xPos, 96, dpi) <= 15 ||
             MulDiv(rect.bottom - yPos, 96, dpi) <= 15) {
@@ -285,13 +322,24 @@ bool IsBrowserWindow(HWND hWnd) {
         return false;
     }
 
-    WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0 ||
-        wcsicmp(szClassName, L"Chrome_WidgetWin_1") != 0) {
+    WCHAR windowClassName[256];
+    if (!GetClassName(hWnd, windowClassName, ARRAYSIZE(windowClassName))) {
         return false;
     }
 
-    return true;
+    bool classNameMatch = false;
+    PCWSTR classNames[] = {
+        L"Chrome_WidgetWin_1",
+        L"YandexBrowser_WidgetWin_1",
+    };
+    for (PCWSTR className : classNames) {
+        if (_wcsicmp(windowClassName, className) == 0) {
+            classNameMatch = true;
+            break;
+        }
+    }
+
+    return classNameMatch;
 }
 
 BOOL CALLBACK InitialEnumBrowserWindowsFunc(HWND hWnd, LPARAM lParam) {
@@ -371,6 +419,10 @@ void LoadSettings() {
     g_settings.reverseScrollingDirection =
         Wh_GetIntSetting(L"reverseScrollingDirection");
     g_settings.horizontalScrolling = Wh_GetIntSetting(L"horizontalScrolling");
+    g_settings.scrollAreaLimitPixelsFromTop =
+        Wh_GetIntSetting(L"scrollAreaLimit.pixelsFromTop");
+    g_settings.scrollAreaLimitPixelsFromLeft =
+        Wh_GetIntSetting(L"scrollAreaLimit.pixelsFromLeft");
 }
 
 BOOL Wh_ModInit() {

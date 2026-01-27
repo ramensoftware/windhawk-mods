@@ -2,7 +2,7 @@
 // @id              taskbar-left-click-cycle
 // @name            Cycle through taskbar windows on click
 // @description     Makes clicking on combined taskbar items cycle through windows instead of opening thumbnail previews
-// @version         1.1.3
+// @version         1.1.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -74,6 +74,7 @@ std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
+bool g_shouldCycleWindowsHandled;
 bool g_inHandleWinNumHotKey;
 
 using ShouldCycleWindows_t = bool(WINAPI*)();
@@ -81,7 +82,9 @@ ShouldCycleWindows_t ShouldCycleWindows_Original;
 bool WINAPI ShouldCycleWindows_Hook() {
     Wh_Log(L">");
 
-    return true;
+    g_shouldCycleWindowsHandled = true;
+    bool ctrlKeyDown = GetKeyState(VK_CONTROL) < 0;
+    return !ctrlKeyDown;
 }
 
 using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(PVOID pThis);
@@ -113,7 +116,8 @@ void WINAPI CTaskListWnd__HandleClick_Hook(PVOID pThis,
     // 3 - Multiple combined items
     int groupType = CTaskBtnGroup_GetGroupType_Original(taskBtnGroup);
     if (groupType != 3) {
-        return original();
+        original();
+        return;
     }
 
     constexpr int kClick = 0;
@@ -130,7 +134,7 @@ void WINAPI CTaskListWnd__HandleClick_Hook(PVOID pThis,
         }
 
         Wh_Log(L"-> %d", newClickAction);
-    } else {
+    } else if (!g_shouldCycleWindowsHandled) {
         if (clickAction == kClick) {
             newClickAction = kCtrlClick;
         } else if (clickAction == kCtrlClick) {
@@ -192,7 +196,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
@@ -207,7 +212,8 @@ bool HookTaskbarSymbols() {
     if (g_winVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
     } else {
-        module = LoadLibrary(L"taskbar.dll");
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
@@ -487,7 +493,7 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!g_taskbarViewDllLoaded) {
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");

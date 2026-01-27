@@ -2,13 +2,13 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.1.9
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         *
-// @compilerOptions -lshlwapi
+// @compilerOptions -lcomctl32 -lole32 -loleaut32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -26,32 +26,38 @@
 Define alternative files for loading various resources (e.g. icons in
 imageres.dll) for simple theming without having to modify system files.
 
+**Note**: This mod requires Windhawk v1.6 or newer.
+
 ## Icon themes
 
 A collection of community contributed icon theme packs can be found in the
 [Resource Redirect icon
 themes](https://github.com/ramensoftware/resource-redirect-icon-themes)
-repository. An icon theme can be easily installed by downloading it and
-specifying its path in the mod's settings. For details, refer to the guide in
-the repository.
+repository. An icon theme can be selected in the mod's settings.
+
+An icon theme can also be installed manually by downloading it and specifying
+its path in the mod's settings. For details, refer to the guide in the
+repository.
 
 A short demonstration can be found [here on
 YouTube](https://youtu.be/irzVmKHB83E).
 
-## Theme folder
+## Theme paths
 
-A theme folder can be selected in the settings. It's a folder with alternative
-resource files, and the `theme.ini` file that contains redirection rules. For
-example, the `theme.ini` file may contain the following:
+Theme paths can be set in the settings. A theme path is a folder with
+alternative resource files, and the `theme.ini` file that contains redirection
+rules. For example, the `theme.ini` file may contain the following:
 
 ```
 [redirections]
 %SystemRoot%\explorer.exe=explorer.exe
-%SystemRoot%\system32\imageres.dll=imageres.dll
+%SystemRoot%\System32\imageres.dll=imageres.dll
 ```
 
 In this case, the folder must also contain the `explorer.exe`, `imageres.dll`
-files which will be used as the custom resource files.
+files which will be used as the redirection resource files.
+
+Alternatively, the theme path can be the `.ini` file itself.
 
 ## Supported resource types and loading methods
 
@@ -69,43 +75,260 @@ The mod supports the following resource types and loading methods:
   function.
 * DirectUI resources (usually `UIFILE` and `XML`) loaded with the
   `SetXMLFromResource` function.
+
+## Redirect all loaded resources (experimental)
+
+The option to redirect all resources can be enabled in the settings. In this
+case, redirection won't be limited to the resource types and loading methods
+listed above. This option might become the default in the future.
+
+## Choosing the redirected resource file
+
+For some files, Windows has additional .mui and/or .mun resource files. For
+example, when loading a resource from `%SystemRoot%\System32\imageres.dll`,
+Windows looks for the resource in these files, in order:
+
+* `%SystemRoot%\System32\en-US\imageres.dll.mui` - The language-specific file.
+  `en-US` may be different depending on the Windows language.
+* `%SystemRoot%\System32\imageres.dll` - The target file itself.
+* `%SystemRoot%\SystemResources\imageres.dll.mun` - The language-neutral file.
+
+For overriding resources, `imageres.dll` must be specified as the redirected
+resource file, not `imageres.dll.mui` or `imageres.dll.mun`, regardless of where
+the resources to be redirected are actually located.
+
+The resource lookup order then becomes:
+
+* `imageres_redirection.dll` (the redirection resource file specified in this
+  mod)
+* `imageres.dll.mui`
+* `imageres.dll`
+* `imageres.dll.mun`
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- themeFolder: ''
-  $name: Theme folder
-  $description: A folder with alternative resource files and theme.ini
+- iconTheme: ""
+  $name: Icon theme
+  $description: >-
+    The icon theme to use. For details, refer to the mod description.
+  $options:
+  - "": None
+  - All White Icons|themes/icons/niivu/All%20White%20Icons.zip: All White Icons (by niivu)
+  - Antu alt|themes/icons/niivu/antu%20alt.zip: Antu alt (by niivu)
+  - Antu|themes/icons/niivu/antu.zip: Antu (by niivu)
+  - Kuyen Alt|themes/icons/niivu/kuyen%20alt.zip: Kuyen Alt (by niivu)
+  - Kuyen|themes/icons/niivu/kuyen.zip: Kuyen (by niivu)
+  - ARC Symbolic|themes/icons/niivu/ARC%20Symbolic.zip: ARC Symbolic (by niivu)
+  - ARC|themes/icons/niivu/ARC.zip: ARC (by niivu)
+  - Arc Neutral Brown|themes/icons/niivu/arc-neutral%20brown.zip: Arc Neutral Brown (by niivu)
+  - Arc Neutral Grey|themes/icons/niivu/arc-neutral%20grey.zip: Arc Neutral Grey (by niivu)
+  - BananaOneUI|themes/icons/niivu/BANAANA%20OneUI.zip: BananaOneUI (by niivu)
+  - Big Sur DarkMode|themes/icons/niivu/Big%20Sur%20DarkMode.zip: Big Sur DarkMode (by niivu)
+  - Big Sur LightMode|themes/icons/niivu/Big%20Sur%20LightMode.zip: Big Sur LightMode (by niivu)
+  - Blanked DarkMode|themes/icons/niivu/blanked%20dark%20mode.zip: Blanked DarkMode (by niivu)
+  - Blanked LightMode|themes/icons/niivu/blanked%20light%20mode.zip: Blanked LightMode (by niivu)
+  - Bonny|themes/icons/niivu/bonny%20by%20niivu.zip: Bonny (by niivu)
+  - Bouquet|themes/icons/niivu/bouquet.zip: Bouquet (by niivu)
+  - Buuf|themes/icons/niivu/buuf.zip: Buuf (by niivu)
+  - CakeOS 2.0|themes/icons/niivu/cakeOS%202.0.zip: CakeOS 2.0 (by niivu)
+  - CakeOS Blue|themes/icons/niivu/Cake%20OS%20Blue.zip: CakeOS Blue (by niivu)
+  - CakeOS Green|themes/icons/niivu/Cake%20OS%20Green.zip: CakeOS Green (by niivu)
+  - CakeOS Orange|themes/icons/niivu/Cake%20OS%20Orange.zip: CakeOS Orange (by niivu)
+  - CakeOS Purple|themes/icons/niivu/Cake%20OS%20Purple.zip: CakeOS Purple (by niivu)
+  - CakeOS Red|themes/icons/niivu/Cake%20OS%20Red.zip: CakeOS Red (by niivu)
+  - Candy Original|themes/icons/niivu/candy%20original%20folders.zip: Candy Original (by niivu)
+  - Candy Outlined|themes/icons/niivu/candy%20outlined%20folders.zip: Candy Outlined (by niivu)
+  - Catppuccin|themes/icons/niivu/Catppuccin.zip: Catppuccin (by niivu)
+  - Catppuccin Blue|themes/icons/niivu/Catppuccin%20blue.zip: Catppuccin Blue (by niivu)
+  - Catppuccin Flamingo|themes/icons/niivu/Catppuccin%20flamingo.zip: Catppuccin Flamingo (by niivu)
+  - Catppuccin Green|themes/icons/niivu/Catppuccin%20green.zip: Catppuccin Green (by niivu)
+  - Catppuccin Latte|themes/icons/niivu/Catppuccin%20Latte.zip: Catppuccin Latte (by niivu)
+  - Catppuccin Lavender|themes/icons/niivu/Catppuccin%20lavender.zip: Catppuccin Lavender (by niivu)
+  - Catppuccin Maroon|themes/icons/niivu/Catppuccin%20maroon.zip: Catppuccin Maroon (by niivu)
+  - Catppuccin Mauve|themes/icons/niivu/Catppuccin%20mauve.zip: Catppuccin Mauve (by niivu)
+  - Catppuccin Mocha|themes/icons/niivu/Catppuccin%20Mocha.zip: Catppuccin Mocha (by niivu)
+  - Catppuccin Peach|themes/icons/niivu/Catppuccin%20peach.zip: Catppuccin Peach (by niivu)
+  - Catppuccin Pink|themes/icons/niivu/Catppuccin%20pink.zip: Catppuccin Pink (by niivu)
+  - Catppuccin Red|themes/icons/niivu/Catppuccin%20red.zip: Catppuccin Red (by niivu)
+  - Catppuccin Sky|themes/icons/niivu/Catppuccin%20sky.zip: Catppuccin Sky (by niivu)
+  - Catppuccin Teal|themes/icons/niivu/Catppuccin%20teal.zip: Catppuccin Teal (by niivu)
+  - Catppuccin Yellow|themes/icons/niivu/Catppuccin%20yellow.zip: Catppuccin Yellow (by niivu)
+  - Deepin Blue DarkMode|themes/icons/niivu/Deepin%20Blue%20-%20for%20dark%20themes.zip: Deepin Blue DarkMode (by niivu)
+  - Deepin Blue LightMode|themes/icons/niivu/Deepin%20Blue%20-%20for%20light%20themes.zip: Deepin Blue LightMode (by niivu)
+  - Deepin Brown DarkMode|themes/icons/niivu/Deepin%20Brown%20-%20for%20dark%20themes.zip: Deepin Brown DarkMode (by niivu)
+  - Deepin Brown LightMode|themes/icons/niivu/Deepin%20Brown%20-%20for%20light%20themes.zip: Deepin Brown LightMode (by niivu)
+  - Deepin Green DarkMode|themes/icons/niivu/Deepin%20Green%20-%20for%20dark%20themes.zip: Deepin Green DarkMode (by niivu)
+  - Deepin Green LightMode|themes/icons/niivu/Deepin%20Green%20-%20for%20light%20themes.zip: Deepin Green LightMode (by niivu)
+  - Deepin Slate DarkMode|themes/icons/niivu/Deepin%20Slate%20-%20for%20dark%20themes.zip: Deepin Slate DarkMode (by niivu)
+  - Deepin Slate LightMode|themes/icons/niivu/Deepin%20Slate%20-%20for%20light%20themes.zip: Deepin Slate LightMode (by niivu)
+  - Deepo|themes/icons/niivu/Deepo%20Icon%20pack.zip: Deepo (by niivu)
+  - Tango|themes/icons/niivu/Tango.zip: Tango (by niivu)
+  - Tangerine|themes/icons/niivu/Tangerine.zip: Tangerine (by niivu)
+  - Gnome|themes/icons/niivu/Gnome.zip: Gnome (by niivu)
+  - Cheser|themes/icons/niivu/Cheser.zip: Cheser (by niivu)
+  - Gnome Brave|themes/icons/niivu/Gnome%20Brave.zip: Gnome Brave (by niivu)
+  - Gnome Human|themes/icons/niivu/Gnome%20Human.zip: Gnome Human (by niivu)
+  - Gnome Noble|themes/icons/niivu/Gnome%20Noble.zip: Gnome Noble (by niivu)
+  - Gnome Wine|themes/icons/niivu/Gnome%20Wine.zip: Gnome Wine (by niivu)
+  - Gnome Wise|themes/icons/niivu/Gnome%20Wise.zip: Gnome Wise (by niivu)
+  - Elementary|themes/icons/niivu/Elementary.zip: Elementary (by niivu)
+  - Elementary New|themes/icons/niivu/Elementary%20NEW.zip: Elementary New (by niivu)
+  - Humanity|themes/icons/niivu/Humanity.zip: Humanity (by niivu)
+  - Everblush|themes/icons/niivu/Everblush.zip: Everblush (by niivu)
+  - Everforest|themes/icons/niivu/everforest.zip: Everforest (by niivu)
+  - Everforest Blank|themes/icons/niivu/everforest%20blank.zip: Everforest Blank (by niivu)
+  - Eyecandy|themes/icons/niivu/Eyecandy.zip: Eyecandy (by niivu)
+  - Faba|themes/icons/niivu/FABA.zip: Faba (by niivu)
+  - Faba Symbolic|themes/icons/niivu/FABA%20Symbolic.zip: Faba Symbolic (by niivu)
+  - Slate|themes/icons/niivu/SLATE.zip: Slate (by niivu)
+  - Slate Symbolic|themes/icons/niivu/SLATE%20Symbolic.zip: Slate Symbolic (by niivu)
+  - Fetch|themes/icons/niivu/Fetch.zip: Fetch (by niivu)
+  - Fluent|themes/icons/niivu/Fluent.zip: Fluent (by niivu)
+  - Fluent Keys Night|themes/icons/niivu/Fluent%20Keys%20Night.zip: Fluent Keys Night (by niivu)
+  - Fluent Keys Day|themes/icons/niivu/Fluent%20Keys%20Day.zip: Fluent Keys Day (by niivu)
+  - Flurry|themes/icons/niivu/FLURRY.zip: Flurry (by niivu)
+  - Gruvbox|themes/icons/niivu/Gruvbox.zip: Gruvbox (by niivu)
+  - Gruvbox Plus Olive|themes/icons/niivu/gruvbox%20plus%20-%20Olive.zip: Gruvbox Plus Olive (by niivu)
+  - Gruvbox Numix|themes/icons/niivu/Gruvbox%20numix.zip: Gruvbox Numix (by niivu)
+  - Haiku BeOS|themes/icons/niivu/Haiku%20BeOS.zip: Haiku BeOS (by niivu)
+  - Janguru Blue|themes/icons/niivu/janguru%20blue.zip: Janguru Blue (by niivu)
+  - Janguru BlueGrey|themes/icons/niivu/janguru%20bluegrey.zip: Janguru BlueGrey (by niivu)
+  - Janguru Brown|themes/icons/niivu/janguru%20brown.zip: Janguru Brown (by niivu)
+  - Janguru Green|themes/icons/niivu/janguru%20green.zip: Janguru Green (by niivu)
+  - Janguru Grey|themes/icons/niivu/janguru%20grey.zip: Janguru Grey (by niivu)
+  - Janguru Orange|themes/icons/niivu/janguru%20orange.zip: Janguru Orange (by niivu)
+  - koZ|themes/icons/niivu/koZ.zip: koZ (by niivu)
+  - Kripton Flatery|themes/icons/niivu/Kripton%20Flatery.zip: Kripton Flatery (by niivu)
+  - Linuxfx 11 AIO|themes/icons/niivu/Linuxfx-11-AIO.zip: Linuxfx 11 AIO (by niivu)
+  - Linuxfx 11 Lite|themes/icons/niivu/Linuxfx-11-lite.zip: Linuxfx 11 Lite (by niivu)
+  - Lol|themes/icons/niivu/lol.zip: Lol (by niivu)
+  - Lumicons Folders|themes/icons/niivu/Lumicons%20Folders.zip: Lumicons Folders (by niivu)
+  - Lumicons Symbols|themes/icons/niivu/Lumicons%20Symbols.zip: Lumicons Symbols (by niivu)
+  - macOSx|themes/icons/niivu/mac%20osx.zip: macOSx (by niivu)
+  - macOS Regular|themes/icons/niivu/macOS%20Regular.zip: macOS Regular (by niivu)
+  - macOS Blue|themes/icons/niivu/macOS%20blue.zip: macOS Blue (by niivu)
+  - macOS Yellow|themes/icons/niivu/macOS%20Yellow%20Folders.zip: macOS Yellow (by niivu)
+  - macOS DarkMode|themes/icons/niivu/macOS%20Dark%20Mode.zip: macOS DarkMode (by niivu)
+  - macOS LightMode|themes/icons/niivu/macOS%20Light%20Mode.zip: macOS LightMode (by niivu)
+  - macPac DarkMode|themes/icons/niivu/macpac%20darkmode.zip: macPac DarkMode (by niivu)
+  - macPac LightMode|themes/icons/niivu/macpac%20lightmode.zip: macPac LightMode (by niivu)
+  - Mechanical|themes/icons/niivu/mechanical.zip: Mechanical (by niivu)
+  - Minium2|themes/icons/niivu/MINIUM2.zip: Minium2 (by niivu)
+  - Nord Papirus|themes/icons/niivu/Nord%20Papirus.zip: Nord Papirus (by niivu)
+  - Nord Papirus NovaGalactic|themes/icons/niivu/Nord-Papirus-Nova-galactic.zip: Nord Papirus NovaGalactic (by niivu)
+  - Numix|themes/icons/niivu/numix.zip: Numix (by niivu)
+  - Numix Blue|themes/icons/niivu/numix-remix-blue.zip: Numix Blue (by niivu)
+  - Numix Green|themes/icons/niivu/numix-remix-green.zip: Numix Green (by niivu)
+  - Numix macOS|themes/icons/niivu/numix-remix-macos.zip: Numix macOS (by niivu)
+  - Numix Slate|themes/icons/niivu/numix-remix-slate.zip: Numix Slate (by niivu)
+  - Numix Windows|themes/icons/niivu/numix-remix-windows.zip: Numix Windows (by niivu)
+  - NUX|themes/icons/niivu/NUX.zip: NUX (by niivu)
+  - One Dark Pro|themes/icons/niivu/One%20Dark%20Pro.zip: One Dark Pro (by niivu)
+  - One Dark Pro Alt|themes/icons/niivu/One%20Dark%20Pro%20alt.zip: One Dark Pro Alt (by niivu)
+  - One UI4|themes/icons/niivu/OneUI4.zip: One UI4 (by niivu)
+  - OS X Minimalism|themes/icons/niivu/OS%20X%20Minimalism.zip: OS X Minimalism (by niivu)
+  - OS X Minimalism Symbolic|themes/icons/niivu/OS%20X%20Minimalism%20Symbolic.zip: OS X Minimalism Symbolic (by niivu)
+  - Paper|themes/icons/niivu/Paper.zip: Paper (by niivu)
+  - Papirus Black|themes/icons/niivu/Papirus%20Black.zip: Papirus Black (by niivu)
+  - Papirus BlueGrey|themes/icons/niivu/Papirus%20Blue%20Grey.zip: Papirus BlueGrey (by niivu)
+  - Papirus Blue|themes/icons/niivu/Papirus%20Blue.zip: Papirus Blue (by niivu)
+  - Papirus Brown|themes/icons/niivu/Papirus%20Brown.zip: Papirus Brown (by niivu)
+  - Papirus Deep Orange|themes/icons/niivu/Papirus%20Deep%20Orange.zip: Papirus Deep Orange (by niivu)
+  - Papirus Dracula|themes/icons/niivu/Papirus%20Dracula.zip: Papirus Dracula (by niivu)
+  - Papirus Grey|themes/icons/niivu/Papirus%20Grey.zip: Papirus Grey (by niivu)
+  - Papirus Magenta|themes/icons/niivu/Papirus%20Magenta.zip: Papirus Magenta (by niivu)
+  - Papirus Pink|themes/icons/niivu/Papirus%20Pink.zip: Papirus Pink (by niivu)
+  - Papirus Red|themes/icons/niivu/Papirus%20Red.zip: Papirus Red (by niivu)
+  - Papirus Solarized|themes/icons/niivu/Papirus%20Solarized.zip: Papirus Solarized (by niivu)
+  - Papirus Teal|themes/icons/niivu/Papirus%20Teal.zip: Papirus Teal (by niivu)
+  - Papirus Violet|themes/icons/niivu/Papirus%20Violet.zip: Papirus Violet (by niivu)
+  - Tokyo Night|themes/icons/niivu/Tokyo%20Night%20blank.zip: Tokyo Night (by niivu)
+  - Tokyo Night Papirus|themes/icons/niivu/Tokyo%20Night%20Papirus.zip: Tokyo Night Papirus (by niivu)
+  - Tokyo Night SE Papirus|themes/icons/niivu/Tokyo%20Night%20SE%20Papirus.zip: Tokyo Night SE Papirus (by niivu)
+  - Pink Folders|themes/icons/niivu/pink%20folders.zip: Pink Folders (by niivu)
+  - Post|themes/icons/niivu/post.zip: Post (by niivu)
+  - Pure Dark|themes/icons/niivu/Pure%20for%20dark%20or%20dark%20side%20panel%20themes.zip: Pure Dark (by niivu)
+  - Pure Light|themes/icons/niivu/Pure%20for%20light%20themes.zip: Pure Light (by niivu)
+  - Quixotic Day|themes/icons/niivu/Quixotic-SE%20Day%20AIO.zip: Quixotic Day (by niivu)
+  - Quixotic Dark|themes/icons/niivu/Quixotic-SE%20Dark%20AIO.zip: Quixotic Dark (by niivu)
+  - Quixotic Night|themes/icons/niivu/Quixotic-SE%20Night%20AIO.zip: Quixotic Night (by niivu)
+  - Rose Pine|themes/icons/niivu/Rose%20Pine.zip: Rose Pine (by niivu)
+  - Solarized Day AIO|themes/icons/niivu/solarized%20Day%20AIO.zip: Solarized Day AIO (by niivu)
+  - Solarized Night AIO|themes/icons/niivu/solarized%20Night%20AIO.zip: Solarized Night AIO (by niivu)
+  - Solus|themes/icons/niivu/Solus.zip: Solus (by niivu)
+  - Somatic Rebirth|themes/icons/niivu/Somatic%20Rebirth.zip: Somatic Rebirth (by niivu)
+  - Spaceshrooms Blue|themes/icons/niivu/space-shrooms-blue.zip: Spaceshrooms Blue (by niivu)
+  - Spaceshrooms Green|themes/icons/niivu/space-shrooms-green.zip: Spaceshrooms Green (by niivu)
+  - Spaceshrooms Yellow|themes/icons/niivu/space-shrooms-yellow.zip: Spaceshrooms Yellow (by niivu)
+  - Super Remix Blue|themes/icons/niivu/Super%20Remix%20Blue.zip: Super Remix Blue (by niivu)
+  - Super Remix Green|themes/icons/niivu/Super%20Remix%20Green.zip: Super Remix Green (by niivu)
+  - Super Remix Slate|themes/icons/niivu/Super%20Remix%20Slate.zip: Super Remix Slate (by niivu)
+  - Sweet Awesomeness|themes/icons/niivu/Sweet%20Awesomeness.zip: Sweet Awesomeness (by niivu)
+  - Sweetness Blue|themes/icons/niivu/Sweetness%20Blue%20folders.zip: Sweetness Blue (by niivu)
+  - Sweetness Neutral|themes/icons/niivu/Sweetness%20Neutral.zip: Sweetness Neutral (by niivu)
+  - Sweetness Original|themes/icons/niivu/Sweetness%20Original.zip: Sweetness Original (by niivu)
+  - Sweetness Pink|themes/icons/niivu/Sweetness%20Pink%20folders.zip: Sweetness Pink (by niivu)
+  - Sweetness Purple|themes/icons/niivu/Sweetness%20Purple%20folders.zip: Sweetness Purple (by niivu)
+  - Sweet Rainbow|themes/icons/niivu/Sweet-Rainbow.zip: Sweet Rainbow (by niivu)
+  - UOS|themes/icons/niivu/Uos%20Icon%20pack.zip: UOS (by niivu)
+  - Windows 11 New (default)|themes/icons/niivu/Windows%2011%20New%20%28default%29.zip: Windows 11 New (default) (by niivu)
+  - Windows 11 New Folders Blue|themes/icons/niivu/Windows%2011%20New%20Folders%20Blue.zip: Windows 11 New Folders Blue (by niivu)
+  - Windows 11 New Folders Green|themes/icons/niivu/Windows%2011%20New%20Folders%20Green.zip: Windows 11 New Folders Green (by niivu)
+  - Windows 11 New Folders Purple|themes/icons/niivu/Windows%2011%20New%20Folders%20Purple.zip: Windows 11 New Folders Purple (by niivu)
+  - Windows 11 New Folders Slate|themes/icons/niivu/Windows%2011%20New%20Folders%20Slate.zip: Windows 11 New Folders Slate (by niivu)
+  - Windows 11 New Folders Yellow|themes/icons/niivu/Windows%2011%20New%20Folders%20Yellow.zip: Windows 11 New Folders Yellow (by niivu)
+  - Pane7|themes/icons/ImSwordQueen/Pane7.zip: Pane7 (by ImSwordQueen)
+- themePaths: [""]
+  $name: Theme paths
+  $description: >-
+    Each path can be a folder with alternative resource files and the theme.ini
+    file, or the .ini theme file itself.
 - redirectionResourcePaths:
-  - - original: '%SystemRoot%\System32\imageres.dll'
-      $name: The original resource file
+  - - original: ""
+      $name: The redirected resource file
       $description: >-
-        The original file from which resources are loaded, can be a pattern
+        The original file from which resources are loaded. Can be a pattern
         where '*' matches any number of characters and '?' matches any single
-        character
-    - redirect: 'C:\my-themes\theme-1\imageres.dll'
-      $name: The custom resource file
-      $description: The custom resource file that will be used instead
+        character.
+    - redirect: ""
+      $name: The redirection resource file
+      $description: The custom resource file that will be used instead.
   $name: Redirection resource paths
 - allResourceRedirect: false
   $name: Redirect all loaded resources (experimental)
   $description: >-
     Try to redirect all loaded resources, not only the supported resources
-    that are listed in the description
+    that are listed in the description.
+- themeFolder: ""
+  $name: Theme folder (deprecated)
+  $description: >-
+    A folder with alternative resource files and theme.ini.
+
+    This option will be removed in the future, please use the new "Theme paths"
+    option above.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
+#include <initguid.h>
+
+#include <comutil.h>
 #include <psapi.h>
+#include <shldisp.h>
 #include <shlobj.h>
-#include <shlwapi.h>
+#include <winrt/base.h>
 
 #include <atomic>
+#include <filesystem>
 #include <functional>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -114,6 +337,7 @@ The mod supports the following resource types and loading methods:
 #endif
 
 struct {
+    WindhawkUtils::StringSetting iconTheme;
     bool allResourceRedirect;
 } g_settings;
 
@@ -132,6 +356,27 @@ std::shared_mutex g_redirectionResourceModulesMutex;
 std::unordered_map<std::wstring, HMODULE> g_redirectionResourceModules;
 
 std::atomic<DWORD> g_operationCounter;
+
+HANDLE g_clearCachePromptThread;
+std::atomic<HWND> g_clearCachePromptWindow;
+
+constexpr WCHAR kClearCachePromptTitle[] =
+    L"Resource Redirect - Windhawk";
+constexpr WCHAR kClearCachePromptText[] =
+    L"For some icons to be updated, the icon cache must be cleared. Do you "
+    L"want to clear the icon cache now?\n\nIcon cache files will be deleted, "
+    L"and Explorer will be restarted.";
+constexpr WCHAR kClearCacheCommand[] =
+    LR"(cmd /c "echo Terminating Explorer...)"
+    LR"( & taskkill /f /im explorer.exe)"
+    LR"( & timeout /t 1 /nobreak >nul)"
+    LR"( & del /f /q /a "%LocalAppData%\IconCache.db")"
+    LR"( & del /f /s /q /a "%LocalAppData%\Microsoft\Windows\Explorer\iconcache_*.db")"
+    LR"( & del /f /s /q /a "%LocalAppData%\Microsoft\Windows\Explorer\thumbcache_*.db")"
+    LR"( & timeout /t 1 /nobreak >nul)"
+    LR"( & start explorer.exe)"
+    LR"( & echo Starting Explorer...)"
+    LR"( & timeout /t 3 /nobreak >nul")";
 
 // https://github.com/tidwall/match.c
 //
@@ -1435,7 +1680,8 @@ void DirectUI_DUIXmlParser_SetDefaultHInstance(void* pThis, HMODULE hModule) {
     using DirectUI_DUIXmlParser_SetDefaultHInstance_t =
         void(__thiscall*)(void* pThis, HMODULE hModule);
     static DirectUI_DUIXmlParser_SetDefaultHInstance_t pSetDefaultHInstance = []() {
-        HMODULE duiModule = LoadLibrary(L"dui70.dll");
+        HMODULE duiModule =
+            LoadLibraryEx(L"dui70.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (duiModule) {
             PCSTR procName =
 #ifdef _WIN64
@@ -1807,7 +2053,424 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
     return TRUE;
 }
 
+bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH];
+    if (!GetWindowsDirectory(path, ARRAYSIZE(path))) {
+        Wh_Log(L"GetWindowsDirectory failed");
+        return false;
+    }
+
+    wcscat_s(path, MAX_PATH, L"\\explorer.exe");
+
+    return GetModuleHandle(path) == GetModuleHandle(nullptr);
+}
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+bool DoesCurrentProcessOwnTaskbar() {
+    return IsExplorerProcess() && FindCurrentProcessTaskbarWnd();
+}
+
+void PromptToClearCache() {
+    if (g_clearCachePromptThread) {
+        if (WaitForSingleObject(g_clearCachePromptThread, 0) != WAIT_OBJECT_0) {
+            return;
+        }
+
+        CloseHandle(g_clearCachePromptThread);
+    }
+
+    g_clearCachePromptThread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParameter) WINAPI -> DWORD {
+            TASKDIALOGCONFIG taskDialogConfig{
+                .cbSize = sizeof(taskDialogConfig),
+                .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
+                .dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON,
+                .pszWindowTitle = kClearCachePromptTitle,
+                .pszMainIcon = TD_INFORMATION_ICON,
+                .pszContent = kClearCachePromptText,
+                .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam,
+                                 LPARAM lParam, LONG_PTR lpRefData)
+                                  WINAPI -> HRESULT {
+                    switch (msg) {
+                        case TDN_CREATED:
+                            g_clearCachePromptWindow = hwnd;
+                            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                         SWP_NOMOVE | SWP_NOSIZE);
+                            break;
+
+                        case TDN_DESTROYED:
+                            g_clearCachePromptWindow = nullptr;
+                            break;
+                    }
+
+                    return S_OK;
+                },
+            };
+
+            static decltype(&TaskDialogIndirect) pTaskDialogIndirect = []() {
+                HMODULE hComctl32 = LoadLibraryEx(L"comctl32.dll", nullptr,
+                                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
+                if (!hComctl32) {
+                    Wh_Log(L"Failed to load comctl32.dll");
+                    return (decltype(&TaskDialogIndirect))nullptr;
+                }
+
+                return (decltype(&TaskDialogIndirect))GetProcAddress(
+                    hComctl32, "TaskDialogIndirect");
+            }();
+
+            int button;
+            if (pTaskDialogIndirect &&
+                SUCCEEDED(pTaskDialogIndirect(&taskDialogConfig, &button,
+                                              nullptr, nullptr)) &&
+                button == IDYES) {
+                WCHAR commandLine[ARRAYSIZE(kClearCacheCommand)];
+                memcpy(commandLine, kClearCacheCommand,
+                       sizeof(kClearCacheCommand));
+                STARTUPINFO si = {
+                    .cb = sizeof(si),
+                };
+                PROCESS_INFORMATION pi{};
+                if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE,
+                                  0, nullptr, nullptr, &si, &pi)) {
+                    CloseHandle(pi.hThread);
+                    CloseHandle(pi.hProcess);
+                }
+            }
+
+            return 0;
+        },
+        nullptr, 0, nullptr);
+}
+
+HANDLE LockTempFileExclusive(PCWSTR filePath, DWORD timeoutMs) {
+    HANDLE hFile =
+        CreateFile(filePath, GENERIC_READ | GENERIC_WRITE,
+                   FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+                   FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return INVALID_HANDLE_VALUE;
+    }
+
+    HANDLE hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!hEvent) {
+        CloseHandle(hFile);
+        return INVALID_HANDLE_VALUE;
+    }
+
+    OVERLAPPED ov = {
+        .hEvent = hEvent,
+    };
+
+    // Lock first byte only.
+    BOOL locked = LockFileEx(hFile, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &ov);
+    if (!locked) {
+        DWORD err = GetLastError();
+        if (err != ERROR_IO_PENDING) {
+            CloseHandle(hEvent);
+            CloseHandle(hFile);
+            return INVALID_HANDLE_VALUE;
+        }
+
+        DWORD waitResult = WaitForSingleObject(hEvent, timeoutMs);
+        if (waitResult != WAIT_OBJECT_0) {
+            CancelIo(hFile);
+            CloseHandle(hEvent);
+            CloseHandle(hFile);
+            return INVALID_HANDLE_VALUE;
+        }
+
+        DWORD bytesTransferred;
+        if (!GetOverlappedResult(hFile, &ov, &bytesTransferred, FALSE)) {
+            CloseHandle(hEvent);
+            CloseHandle(hFile);
+            return INVALID_HANDLE_VALUE;
+        }
+    }
+
+    CloseHandle(hEvent);
+    return hFile;
+}
+
+BOOL UnlockTempFileExclusive(HANDLE hFile) {
+    OVERLAPPED ov = {};
+    BOOL unlocked = UnlockFileEx(hFile, 0, 1, 0, &ov);
+    CloseHandle(hFile);
+    return unlocked;
+}
+
+HRESULT UnzipToFolder(BSTR zipFilePath, BSTR destinationPath) {
+    winrt::com_ptr<IShellDispatch> shellDispatch;
+    HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(shellDispatch.put()));
+    if (FAILED(hr))
+        return hr;
+
+    VARIANT zipFileVariant;
+    zipFileVariant.vt = VT_BSTR;
+    zipFileVariant.bstrVal = zipFilePath;
+
+    winrt::com_ptr<Folder> zipFile;
+    hr = shellDispatch->NameSpace(zipFileVariant, zipFile.put());
+    if (FAILED(hr))
+        return hr;
+    if (!zipFile)
+        return E_FAIL;
+
+    VARIANT destinationVariant;
+    destinationVariant.vt = VT_BSTR;
+    destinationVariant.bstrVal = destinationPath;
+
+    winrt::com_ptr<Folder> destination;
+    hr = shellDispatch->NameSpace(destinationVariant, destination.put());
+    if (FAILED(hr))
+        return hr;
+    if (!destination)
+        return E_FAIL;
+
+    winrt::com_ptr<FolderItems> zipFiles;
+    hr = zipFile->Items(zipFiles.put());
+    if (FAILED(hr))
+        return hr;
+    if (!zipFiles)
+        return E_FAIL;
+
+    LONG zipFilesCount;
+    hr = zipFiles->get_Count(&zipFilesCount);
+    if (FAILED(hr))
+        return hr;
+
+    // If the zip contains a single folder, select it to avoid an extra nesting.
+    if (zipFilesCount == 1) {
+        VARIANT index;
+        index.vt = VT_I4;
+        index.lVal = 0;
+
+        winrt::com_ptr<FolderItem> zipSubFolderItem;
+        hr = zipFiles->Item(index, zipSubFolderItem.put());
+        if (FAILED(hr))
+            return hr;
+        if (!zipSubFolderItem)
+            return E_FAIL;
+
+        VARIANT_BOOL isFolder;
+        hr = zipSubFolderItem->get_IsFolder(&isFolder);
+        if (FAILED(hr))
+            return hr;
+
+        if (isFolder) {
+            winrt::com_ptr<IDispatch> zipSubFolderDispatch;
+            hr = zipSubFolderItem->get_GetFolder(zipSubFolderDispatch.put());
+            if (FAILED(hr))
+                return hr;
+            if (!zipSubFolderDispatch)
+                return E_FAIL;
+
+            winrt::com_ptr<Folder> zipSubFolder;
+            hr = zipSubFolderDispatch->QueryInterface(
+                IID_PPV_ARGS(zipSubFolder.put()));
+            if (FAILED(hr))
+                return hr;
+            if (!zipSubFolder)
+                return E_FAIL;
+
+            hr = zipSubFolder->Items(zipFiles.put());
+            if (FAILED(hr))
+                return hr;
+            if (!zipFiles)
+                return E_FAIL;
+        }
+    }
+
+    winrt::com_ptr<IDispatch> zipFilesDispatch;
+    hr = zipFiles->QueryInterface(IID_PPV_ARGS(zipFilesDispatch.put()));
+    if (FAILED(hr))
+        return hr;
+    if (!zipFilesDispatch)
+        return E_FAIL;
+
+    VARIANT itemVariant;
+    itemVariant.vt = VT_DISPATCH;
+    itemVariant.pdispVal = zipFilesDispatch.get();
+
+    VARIANT options;
+    options.vt = VT_I4;
+    options.lVal = FOF_NO_UI;
+
+    return destination->CopyHere(itemVariant, options);
+}
+
+bool DownloadAndExtractIconTheme(std::wstring_view relativeUrl,
+                                 const std::filesystem::path& tempFilePath,
+                                 const std::filesystem::path& tempFolderPath,
+                                 const std::filesystem::path& targetPath) {
+    std::wstring url =
+        L"https://ramensoftware.github.io/resource-redirect-themes/";
+    url += relativeUrl;
+
+    WH_GET_URL_CONTENT_OPTIONS options{
+        .optionsSize = sizeof(options),
+        .targetFilePath = tempFilePath.c_str(),
+    };
+    const WH_URL_CONTENT* urlContent = Wh_GetUrlContent(url.c_str(), &options);
+    if (!urlContent) {
+        Wh_Log(L"Wh_GetUrlContent failed");
+        return false;
+    }
+
+    if (urlContent->statusCode != 200) {
+        Wh_Log(L"Wh_GetUrlContent returned %d", urlContent->statusCode);
+        return false;
+    }
+
+    Wh_FreeUrlContent(urlContent);
+
+    HRESULT hr = CoInitialize(nullptr);
+    if (SUCCEEDED(hr)) {
+        std::error_code ec;
+        std::filesystem::remove_all(tempFolderPath, ec);
+        std::filesystem::create_directories(tempFolderPath, ec);
+
+        hr = UnzipToFolder(_bstr_t(tempFilePath.c_str()),
+                           _bstr_t(tempFolderPath.c_str()));
+        if (FAILED(hr)) {
+            Wh_Log(L"UnzipToFolder returned 0x%08X", hr);
+        }
+
+        std::filesystem::rename(tempFolderPath, targetPath, ec);
+
+        CoUninitialize();
+    } else {
+        Wh_Log(L"CoInitialize returned 0x%08X", hr);
+    }
+
+    return SUCCEEDED(hr);
+}
+
+bool EnsureIconThemeAvailable(const std::filesystem::path& storagePath,
+                              const std::filesystem::path& targetPath,
+                              std::wstring_view themeName,
+                              std::wstring_view relativeUrl) {
+    std::error_code ec;
+    if (std::filesystem::is_directory(targetPath, ec)) {
+        return true;
+    }
+
+    WCHAR lastErrorThemeName[256];
+    Wh_GetStringValue(L"lastErrorThemeName", lastErrorThemeName,
+                      ARRAYSIZE(lastErrorThemeName));
+    if (lastErrorThemeName == themeName) {
+        FILETIME filetimeNow;
+        GetSystemTimeAsFileTime(&filetimeNow);
+        ULARGE_INTEGER timeNow{
+            .HighPart = filetimeNow.dwHighDateTime,
+            .LowPart = filetimeNow.dwLowDateTime,
+        };
+
+        ULARGE_INTEGER timeLastError{
+            .HighPart = (DWORD)Wh_GetIntValue(L"lastErrorTimeHigh", 0),
+            .LowPart = (DWORD)Wh_GetIntValue(L"lastErrorTimeLow", 0),
+        };
+
+        ULONGLONG elapsedSec =
+            (timeNow.QuadPart - timeLastError.QuadPart) / 10000000;
+        if (elapsedSec < 60 * 60 * 4) {
+            Wh_Log(L"Aborting due to error %u seconds ago", elapsedSec);
+            return false;
+        }
+    }
+
+    Wh_Log(L"Downloading from %.*s", static_cast<int>(relativeUrl.length()),
+           relativeUrl.data());
+
+    bool downloaded = false;
+    auto tempZip = storagePath / L"_temp.zip";
+    auto tempFolder = storagePath / L"_temp_extracted";
+    if (DownloadAndExtractIconTheme(relativeUrl, tempZip, tempFolder,
+                                    targetPath)) {
+        DeleteFile(tempZip.c_str());
+        downloaded = std::filesystem::is_directory(targetPath, ec);
+    }
+
+    if (!downloaded) {
+        FILETIME filetimeNow;
+        GetSystemTimeAsFileTime(&filetimeNow);
+        Wh_SetStringValue(L"lastErrorThemeName",
+                          std::wstring(themeName).c_str());
+        Wh_SetIntValue(L"lastErrorTimeHigh", (int)filetimeNow.dwHighDateTime);
+        Wh_SetIntValue(L"lastErrorTimeLow", (int)filetimeNow.dwLowDateTime);
+        return false;
+    }
+
+    return true;
+}
+
+std::wstring GetIconThemePath(std::wstring_view iconTheme) {
+    auto iconThemeSepIt = iconTheme.find(L"|");
+    if (iconThemeSepIt == iconTheme.npos) {
+        return std::wstring();
+    }
+
+    auto themeName = iconTheme.substr(0, iconThemeSepIt);
+    auto relativeUrl = iconTheme.substr(iconThemeSepIt + 1);
+
+    WCHAR storagePathBuffer[MAX_PATH];
+    if (!Wh_GetModStoragePath(storagePathBuffer,
+                              ARRAYSIZE(storagePathBuffer))) {
+        Wh_Log(L"Wh_GetModStoragePath failed");
+        return std::wstring();
+    }
+
+    const auto storagePath = std::filesystem::path{storagePathBuffer};
+
+    auto targetPath = storagePath / themeName;
+    std::error_code ec;
+    if (std::filesystem::is_directory(targetPath, ec)) {
+        return targetPath;
+    }
+
+    auto lockFilePath = storagePath / L"_lock";
+
+    HANDLE lockFile = LockTempFileExclusive(lockFilePath.c_str(), 30000);
+    if (!lockFile) {
+        Wh_Log(L"LockTempFileExclusive failed");
+        return std::wstring();
+    }
+
+    if (!EnsureIconThemeAvailable(storagePath, targetPath, themeName,
+                                  relativeUrl)) {
+        targetPath.clear();
+    }
+
+    UnlockTempFileExclusive(lockFile);
+    DeleteFile(lockFilePath.c_str());
+
+    return targetPath;
+}
+
 void LoadSettings() {
+    g_settings.iconTheme = WindhawkUtils::StringSetting::make(L"iconTheme");
     g_settings.allResourceRedirect = Wh_GetIntSetting(L"allResourceRedirect");
 
     std::unordered_map<std::wstring, std::vector<std::wstring>> paths;
@@ -1862,50 +2525,85 @@ void LoadSettings() {
         }
     };
 
-    PCWSTR themeFolder = Wh_GetStringSetting(L"themeFolder");
+    auto addRedirectionThemePath = [&addRedirectionPath](PCWSTR themePath) {
+        auto initialPath = std::filesystem::path{themePath};
 
-    if (*themeFolder) {
-        WCHAR themeIniFile[MAX_PATH];
-        ULONGLONG fileSize = 0;
-        if (PathCombine(themeIniFile, themeFolder, L"theme.ini")) {
-            WIN32_FILE_ATTRIBUTE_DATA fileAttr;
-            if (GetFileAttributesEx(themeIniFile, GetFileExInfoStandard,
-                                    &fileAttr)) {
-                ULARGE_INTEGER uli{
-                    .LowPart = fileAttr.nFileSizeLow,
-                    .HighPart = fileAttr.nFileSizeHigh,
-                };
-                fileSize = uli.QuadPart;
-            }
+        std::filesystem::path themeFolder;
+        std::filesystem::path themeIniFile;
+        if (std::filesystem::is_directory(initialPath)) {
+            themeFolder = initialPath;
+            themeIniFile = themeFolder / L"theme.ini";
+        } else {
+            themeIniFile = initialPath;
+            themeFolder = themeIniFile.parent_path();
         }
 
-        if (fileSize > sizeof("redirections")) {
-            std::wstring data(fileSize, L'\0');
-            DWORD result = GetPrivateProfileSection(
-                L"redirections", data.data(), data.size(), themeIniFile);
-            if (result != data.size() - 2) {
-                for (auto* p = data.data(); *p;) {
-                    auto* pNext = p + wcslen(p) + 1;
-                    auto* pEq = wcschr(p, L'=');
-                    if (pEq) {
-                        *pEq = L'\0';
+        auto fileSize = std::filesystem::file_size(themeIniFile);
 
-                        WCHAR redirectFile[MAX_PATH];
-                        if (PathCombine(redirectFile, themeFolder, pEq + 1)) {
-                            addRedirectionPath(p, redirectFile);
-                        }
-                    } else {
-                        Wh_Log(L"Skipping %s", p);
-                    }
+        std::wstring data(fileSize + 2, L'\0');
+        DWORD result = GetPrivateProfileSection(
+            L"redirections", data.data(), data.size(), themeIniFile.c_str());
+        if (!result || result == data.size() - 2) {
+            DWORD dwError = GetLastError();
+            Wh_Log(L"Error reading data from %s: %u", themeIniFile.c_str(),
+                   dwError);
+            return false;
+        }
 
-                    p = pNext;
-                }
+        for (auto* p = data.data(); *p;) {
+            auto* pNext = p + wcslen(p) + 1;
+            auto* pEq = wcschr(p, L'=');
+            if (pEq) {
+                *pEq = L'\0';
+
+                auto redirectFile = themeFolder / (pEq + 1);
+                addRedirectionPath(p, redirectFile.c_str());
             } else {
-                Wh_Log(L"Failed to read theme file");
+                Wh_Log(L"Skipping %s", p);
+            }
+
+            p = pNext;
+        }
+
+        return true;
+    };
+
+    if (*g_settings.iconTheme) {
+        std::wstring iconThemePath =
+            GetIconThemePath(g_settings.iconTheme.get());
+        if (!iconThemePath.empty()) {
+            try {
+                addRedirectionThemePath(iconThemePath.c_str());
+            } catch (const std::exception& ex) {
+                Wh_Log(L"Error: %S", ex.what());
             }
         }
     }
 
+    for (int i = 0;; i++) {
+        PCWSTR themePath = Wh_GetStringSetting(L"themePaths[%d]", i);
+        bool hasThemePath = *themePath;
+        if (hasThemePath) {
+            try {
+                addRedirectionThemePath(themePath);
+            } catch (const std::exception& ex) {
+                Wh_Log(L"Error: %S", ex.what());
+            }
+        }
+        Wh_FreeStringSetting(themePath);
+        if (!hasThemePath) {
+            break;
+        }
+    }
+
+    PCWSTR themeFolder = Wh_GetStringSetting(L"themeFolder");
+    if (*themeFolder) {
+        try {
+            addRedirectionThemePath(themeFolder);
+        } catch (const std::exception& ex) {
+            Wh_Log(L"Error: %S", ex.what());
+        }
+    }
     Wh_FreeStringSetting(themeFolder);
 
     for (int i = 0;; i++) {
@@ -1927,6 +2625,10 @@ void LoadSettings() {
             break;
         }
     }
+
+    // Reverse the order to allow later entries override earlier ones.
+    std::reverse(pathPatterns.begin(), pathPatterns.end());
+    std::reverse(pathPatternsA.begin(), pathPatternsA.end());
 
     std::unique_lock lock{g_redirectionResourcePathsMutex};
     g_redirectionResourcePaths = std::move(paths);
@@ -2045,7 +2747,8 @@ BOOL Wh_ModInit() {
 
     // All of these end up calling FindResourceEx, LoadResource, SizeofResource.
     if (!g_settings.allResourceRedirect) {
-        HMODULE shcoreModule = LoadLibrary(L"shcore.dll");
+        HMODULE shcoreModule =
+            LoadLibraryEx(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (shcoreModule) {
             FARPROC pSHCreateStreamOnModuleResourceW =
                 GetProcAddress(shcoreModule, (PCSTR)109);
@@ -2061,7 +2764,8 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Couldn't load shcore.dll");
         }
 
-        HMODULE duiModule = LoadLibrary(L"dui70.dll");
+        HMODULE duiModule =
+            LoadLibraryEx(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (duiModule) {
             PCSTR SetXMLFromResource_Name =
                 R"(?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z)";
@@ -2108,19 +2812,23 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-bool DoesTaskbarBelongToCurrentProcess() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    DWORD dwProcessId;
-    return hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) &&
-           dwProcessId == GetCurrentProcessId();
-}
-
 void Wh_ModUninit() {
     Wh_Log(L">");
 
     FreeAndClearRedirectedModules();
 
-    if (DoesTaskbarBelongToCurrentProcess()) {
+    HWND clearCachePromptWindow = g_clearCachePromptWindow;
+    if (clearCachePromptWindow) {
+        PostMessage(clearCachePromptWindow, WM_CLOSE, 0, 0);
+    }
+
+    if (g_clearCachePromptThread) {
+        WaitForSingleObject(g_clearCachePromptThread, INFINITE);
+        CloseHandle(g_clearCachePromptThread);
+        g_clearCachePromptThread = nullptr;
+    }
+
+    if (DoesCurrentProcessOwnTaskbar()) {
         // Let other processes some time to unload the mod.
         Sleep(400);
 
@@ -2132,6 +2840,7 @@ void Wh_ModUninit() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
+    auto prevIconTheme = std::move(g_settings.iconTheme);
     int prevAllResourceRedirect = g_settings.allResourceRedirect;
 
     LoadSettings();
@@ -2143,7 +2852,11 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     FreeAndClearRedirectedModules();
 
-    if (DoesTaskbarBelongToCurrentProcess()) {
+    if (DoesCurrentProcessOwnTaskbar()) {
+        if (wcscmp(g_settings.iconTheme, prevIconTheme) != 0) {
+            PromptToClearCache();
+        }
+
         // Let other processes some time to load the new config.
         Sleep(400);
 

@@ -2,11 +2,11 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.6.5
+// @version         1.8.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi -DWINVER=0x0A00
+// @compilerOptions -lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi -lversion -DWINVER=0x0A00
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -74,7 +74,7 @@ Feel free to try it on other versions, but it may not work.
 /*
 - alwayscpl: true
   $name: Seamlessly switch to Control Panel
-  $description: Allow Explorer to switch to Control Panel without closing and reopening.
+  $description: Allow Explorer to switch to Control Panel without closing and reopening. Will break certain pages with dark mode.
 - smalladdress: true
   $name: Small address bar
   $description: Reverts the address bar to the size it was before Windows 10, version 1909.
@@ -104,7 +104,7 @@ Feel free to try it on other versions, but it may not work.
   $description: Use the native list view control instead of the DirectUI ItemsView, like Windows Vista and before. This will break with dark mode enabled.
 - colheaders: false
   $name: Always show column headers
-  $description: Always show the column headers that normally only show in Details view, like Windows Vista.
+  $description: Always show the column headers that normally only show in the Details view, like Windows Vista.
 - npst: seven
   $name: Navigation pane style
   $description: Determines the style of the tree view on the left of the window.
@@ -114,22 +114,22 @@ Feel free to try it on other versions, but it may not work.
   - seven: Windows 7/8
 - nopins: true
   $name: Remove pins from Quick access
-  $description: Remove the pins that appear on the right of pinned items in Quick access on the navigation pane
+  $description: Remove the pin icon that appears on the right of pinned items in Quick access on the navigation pane
 - navbarglass: true
   $name: Glass on navigation bar
-  $description: Show glass on the navigation bar, like Windows Vista and 7. Enabling this option will also fix the bug where NavBar classes in MSSTYLES are swapped.
+  $description: Show a glass effect under the navigation bar, like Windows Vista and 7. Enabling this option will also fix the bug where Navbar classes in themes are swapped.
 - nocomposition: false
   $name: Disable composition
-  $description: Do not extend frames with navbar glass.
+  $description: Use the basic theme "glass" effect when "Glass on navigation bar" is enabled.
 - hidetitle: true
   $name: Hide window title and icon
-  $description: Hide the window title and icon on Explorer windows like Windows 7 and before.
+  $description: Hide the window title and icon on Explorer windows like Windows 7 and before. This will not apply to open/save dialogs, and you must re-open any Explorer windows for it to take effect.
 - noup: true
   $name: No up button
   $description: Remove the "Up" button like Windows Vista and 7.
 - aerotravel: true
   $name: Aero travel buttons
-  $description: Restores the Windows Vista/7 style for the back and forward buttons.
+  $description: Restores the Windows Vista/7 Aero-styled back and forward buttons.
 - detailspane: true
   $name: Details pane on bottom
   $description: Put the details pane on bottom, like Windows Vista and 7. You can hide the status bar natively through the View tab in the Folder Options dialog.
@@ -138,10 +138,19 @@ Feel free to try it on other versions, but it may not work.
   $description: Split drives and devices into separate groups (Hard Disk Drives, Devices with Removable Storage, etc.) like Windows 8.0 and before.
 - nopcfolders: true
   $name: Remove This PC folders
-  $description: Remove the folders from the This PC folder, like Windows 8.0 and before
+  $description: Remove the folders from the This PC folder, like Windows 8.0 and before.
 - vistasearchplaceholder: false
   $name: Windows Vista search box placeholder
   $description: Makes the search box always say just "Search", like it did in Windows Vista.
+- beta8navbarbg: false
+  $name: Windows 8 beta navigation bar background
+  $description: Changes the background of the navigation bar to match Windows 8 betas.
+- leftviews: false
+  $name: Views dropdown on left
+  $description: Moves the views dropdown to the left after the "Organize" button, like Windows Vista.
+- cmdbaricons: false
+  $name: Command bar icons
+  $description: Shows icons on all command bar items, like Windows Vista.
 */
 // ==/WindhawkModSettings==
 
@@ -211,6 +220,9 @@ struct
     bool             classicgrouping;
     bool             nopcfolders;
     bool             vistasearchplaceholder;
+    bool             beta8navbarbg;
+    bool             leftviews;
+    bool             cmdbaricons;
 } settings = { 0 };
 
 typedef HRESULT (WINAPI *VariantToBuffer_t)(LPVARIANT, void *, UINT);
@@ -440,20 +452,20 @@ L"\n";
 #pragma endregion // "Details pane UIFILE replacements"
 #endif
 
-typedef struct tagDRIVEGROUPI18N
+typedef struct _DRVGRPSTRINGS
 {
-    LANGID lid;
-    WCHAR szHardDisks[256];
-    WCHAR szRemovable[256];
-    WCHAR szOther[256];
-    WCHAR szScanners[256];
-    WCHAR szPortableMedia[256];
-    WCHAR szPortable[256];
-} DRIVEGROUPI18N;
+    LANGID  langid;
+    LPCWSTR pszHardDisks;
+    LPCWSTR pszRemovable;
+    LPCWSTR pszOther;
+    LPCWSTR pszScanners;
+    LPCWSTR pszPortableMedia;
+    LPCWSTR pszPortable;
+} DRVGRPSTRINGS;
 
-typedef const DRIVEGROUPI18N *LPCDRIVEGROUPI18N;
+typedef const DRVGRPSTRINGS *LPCDRVGRPSTRINGS;
 
-typedef enum _DRIVEGROUP
+typedef enum _DRVGRP
 {
     DG_HARDDISKS = 0,
     DG_REMOVABLE,
@@ -461,10 +473,10 @@ typedef enum _DRIVEGROUP
     DG_SCANNERS,
     DG_PORTABLEMEDIA,
     DG_PORTABLE
-} DRIVEGROUP;
+} DRVGRP;
 
 #pragma region "Drive grouping localization"
-const DRIVEGROUPI18N g_driveGroupI18n[] = {
+constexpr DRVGRPSTRINGS c_rgDriveGroupStrings[] = {
     {
         MAKELANGID(LANG_ARABIC, SUBLANG_ARABIC_SAUDI_ARABIA),
         L"محركات الأقراص الثابتة",
@@ -783,27 +795,77 @@ const DRIVEGROUPI18N g_driveGroupI18n[] = {
 };
 #pragma endregion
 
-LPCDRIVEGROUPI18N GetCurrentDriveLocale(void)
+BYTE ParseHexChar(WCHAR c)
 {
-    LANGID lid = GetUserDefaultLangID();
+    if (c >= L'0' && c <= L'9')
+        return c - L'0';
 
-    /* So we can fallback to English without iterating again. */
-    LPCDRIVEGROUPI18N en = NULL;
+    if (c >= 'A' && c <= 'F')
+        return c - ('A' - 0xA);
 
-    for (UINT i = 0; i < ARRAYSIZE(g_driveGroupI18n); i++)
+    if (c >= 'a' && c <= 'f')
+        return c - ('a' - 0xA);
+
+    return 0;
+}
+
+LPCDRVGRPSTRINGS GetCurrentDriveLocale(void)
+{
+    ULONG ulNumLanguages;
+    WCHAR szLanguages[MAX_PATH];
+    DWORD cchLanguages = ARRAYSIZE(szLanguages);
+    szLanguages[0] = L'\0';
+    GetThreadPreferredUILanguages(MUI_LANGUAGE_ID, &ulNumLanguages, szLanguages, &cchLanguages);
+
+    // Primary lang ID match
+    LPCDRVGRPSTRINGS pdgsPrimaryMatch = nullptr;
+    // Full lang ID match
+    LPCDRVGRPSTRINGS pdgsFullMatch    = nullptr;
+
+    constexpr UINT EN_US_INDEX = 7;
+    static_assert(
+        c_rgDriveGroupStrings[EN_US_INDEX].langid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+        "Incorrect index for en-US drive group strings"
+    );
+
+    LANGID langid = 0;
+    for (ULONG i = 0; i < ulNumLanguages; i++)
     {
-        if (g_driveGroupI18n[i].lid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US))
+        LPWSTR pszLang = szLanguages + (i * 5);
+        langid = ParseHexChar(pszLang[0]) << 12
+            | ParseHexChar(pszLang[1]) << 8
+            | ParseHexChar(pszLang[2]) << 4
+            | ParseHexChar(pszLang[3]);
+
+        if (langid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US))
+            return &c_rgDriveGroupStrings[EN_US_INDEX];
+        
+        for (UINT i = 0; i < ARRAYSIZE(c_rgDriveGroupStrings); i++)
         {
-            en = g_driveGroupI18n + i;
+            LPCDRVGRPSTRINGS pdgsCurrent = &c_rgDriveGroupStrings[i];
+
+            if (PRIMARYLANGID(pdgsCurrent->langid) == PRIMARYLANGID(langid))
+            {
+                pdgsPrimaryMatch = pdgsCurrent;
+            }
+
+            if (pdgsCurrent->langid == langid)
+            {
+                pdgsFullMatch = pdgsCurrent;
+                break;
+            }
         }
 
-        if (g_driveGroupI18n[i].lid == lid)
-        {
-            return g_driveGroupI18n + i;
-        }
+        if (pdgsPrimaryMatch)
+            break;
     }
 
-    return en;
+    if (pdgsFullMatch)
+        return pdgsFullMatch;
+    if (pdgsPrimaryMatch)
+        return pdgsPrimaryMatch;
+
+    return &c_rgDriveGroupStrings[EN_US_INDEX];
 }
 
 /* Only available in Windows 10, version 1607 and later. */
@@ -848,22 +910,28 @@ HRESULT THISCALL CSearchEditBox_HideSuggestions_hook(
 HRESULT (STDCALL *CSearchBox_SetCueAndTooltipText_orig)(void *, LPCWSTR, LPCWSTR) = nullptr;
 HRESULT STDCALL CSearchBox_SetCueAndTooltipText_hook(
     void    *pThis,
-    LPCWSTR  lpszText,
-    LPCWSTR  lpszUnused
+    LPCWSTR  pszCueText,
+    LPCWSTR  pszTooltipText
 )
 {
     if (settings.vistasearchplaceholder)
     {
-        lpszText = NULL;
+        pszCueText = NULL;
     }
     return CSearchBox_SetCueAndTooltipText_orig(
-        pThis, lpszText, lpszUnused
+        pThis, pszCueText, pszTooltipText
     );
 }
 
 #pragma region "Small address bar"
 
-#define CAddressBand_Window(pThis) *((HWND *)pThis + 9)
+#define CAddressBand__hwnd(pThis) *((HWND *)pThis + 9)
+
+#ifdef _WIN64
+#   define CAddressBand__hwndTools(pThis) *((HWND *)pThis + 29)
+#else
+#   define CAddressBand__hwndTools(pThis) *((HWND *)pThis + 31)
+#endif
 
 /* Fix address bar position and toolbar size */
 void (THISCALL *CAddressBand__PositionChildWindows_orig)(void *) = nullptr;
@@ -871,59 +939,59 @@ void THISCALL CAddressBand__PositionChildWindows_hook(
     void *pThis
 )
 {
-    HWND hWnd = CAddressBand_Window(pThis);
-    if (settings.tbst != TBST_DEFAULT && hWnd && IsWindow(hWnd))
+    if (settings.tbst != TBST_DEFAULT)
     {
-        HWND hProg = FindWindowExW(hWnd, NULL, L"msctls_progress32", NULL);
-        if (hProg)
+        HWND hwndTools = CAddressBand__hwndTools(pThis);
+        if (hwndTools)
         {
-            HWND hToolbar = FindWindowExW(hProg, NULL, L"ToolbarWindow32", NULL);
-            if (hToolbar)
+            TBBUTTONINFOW tbi;
+            tbi.cbSize = sizeof(TBBUTTONINFOW);
+            tbi.dwMask = TBIF_SIZE;
+
+            /* Spacer band that only gets added on classic. For some reason,
+               it's huge by default. */
+            tbi.cx = 2;
+            SendMessageW(hwndTools, TB_SETBUTTONINFOW, 203, (LPARAM)&tbi);
+
+            /* Dropdown width */
+            switch (settings.tbst)
             {
-                TBBUTTONINFOW tbi;
-                tbi.cbSize = sizeof(TBBUTTONINFOW);
-                tbi.dwMask = TBIF_SIZE;
+                case TBST_SEVEN:
+                    tbi.cx = ScaleForDPI(19);
+                    break;
+                case TBST_TEN:
+                    tbi.cx = ScaleForDPI(20);
+                    break;
+                case TBST_TENNEW:
+                    tbi.cx = ScaleForDPI(17);
+                    break;
+                case TBST_CUSTOM:
+                    tbi.cx = ScaleForDPI(settings.dropdownwidth);
+                    break;
+            }
+            SendMessageW(hwndTools, TB_SETBUTTONINFOW, 202, (LPARAM)&tbi);
 
-                /* Dropdown width */
-                switch (settings.tbst)
-                {
-                    case TBST_SEVEN:
-                        tbi.cx = ScaleForDPI(19);
-                        break;
-                    case TBST_TEN:
-                        tbi.cx = ScaleForDPI(20);
-                        break;
-                    case TBST_TENNEW:
-                        tbi.cx = ScaleForDPI(17);
-                        break;
-                    case TBST_CUSTOM:
-                        tbi.cx = ScaleForDPI(settings.dropdownwidth);
-                        break;
-                }
-                SendMessageW(hToolbar, TB_SETBUTTONINFOW, 202, (LPARAM)&tbi);
+            /* Refresh width */
+            switch (settings.tbst)
+            {
+                case TBST_SEVEN:
+                    tbi.cx = ScaleForDPI(25);
+                    break;
+                case TBST_TEN:
+                    tbi.cx = ScaleForDPI(20);
+                    break;
+                case TBST_TENNEW:
+                    tbi.cx = ScaleForDPI(17);
+                    break;
+                case TBST_CUSTOM:
+                    tbi.cx = ScaleForDPI(settings.refreshwidth);
+                    break;
+            }
 
-                /* Refresh width */
-                switch (settings.tbst)
-                {
-                    case TBST_SEVEN:
-                        tbi.cx = ScaleForDPI(25);
-                        break;
-                    case TBST_TEN:
-                        tbi.cx = ScaleForDPI(20);
-                        break;
-                    case TBST_TENNEW:
-                        tbi.cx = ScaleForDPI(17);
-                        break;
-                    case TBST_CUSTOM:
-                        tbi.cx = ScaleForDPI(settings.refreshwidth);
-                        break;
-                }
-
-                /* Toolbar buttons 100-102 are go, stop, and refresh respectively */
-                for (int i = 100; i <= 102; i++)
-                {
-                    SendMessageW(hToolbar, TB_SETBUTTONINFOW, i, (LPARAM)&tbi);
-                }                   
+            /* Toolbar buttons 100-102 are go, stop, and refresh respectively */
+            for (int i = 100; i <= 102; i++)
+            {
+                SendMessageW(hwndTools, TB_SETBUTTONINFOW, i, (LPARAM)&tbi);
             }
         }
     }
@@ -971,7 +1039,7 @@ bool ModernSearchFeatureEnabled(void)
 LRESULT (THISCALL *CAddressBand__AddressBandWndProc_orig)(void *, HWND, UINT, WPARAM, LPARAM) = nullptr;
 LRESULT THISCALL CAddressBand__AddressBandWndProc_hook(
     void   *pThis,
-    HWND    hWnd,
+    HWND    hwnd,
     UINT    uMsg,
     WPARAM  wParam,
     LPARAM  lParam
@@ -980,7 +1048,7 @@ LRESULT THISCALL CAddressBand__AddressBandWndProc_hook(
     if (settings.smalladdress && uMsg == WM_WINDOWPOSCHANGING && ModernSearchFeatureEnabled())
     {
         LPWINDOWPOS lpwp = (LPWINDOWPOS)lParam;
-        HWND hwSearch = FindWindowExW(GetParent(hWnd), NULL, L"UniversalSearchBand", NULL);
+        HWND hwSearch = FindWindowExW(GetParent(hwnd), NULL, L"UniversalSearchBand", NULL);
         if (hwSearch)
         {
             RECT rc;
@@ -992,14 +1060,14 @@ LRESULT THISCALL CAddressBand__AddressBandWndProc_hook(
     }
 
     return CAddressBand__AddressBandWndProc_orig(
-        pThis, hWnd, uMsg, wParam, lParam
+        pThis, hwnd, uMsg, wParam, lParam
     );
 }
 
 #ifdef _WIN64
-#   define CAddressList_ComboBox(pThis) *((HWND *)pThis + 3)
+#   define CAddressList__hwnd(pThis) *((HWND *)pThis + 3)
 #else
-#   define CAddressList_ComboBox(pThis) *((HWND *)pThis + 4)
+#   define CAddressList__hwnd(pThis) *((HWND *)pThis + 4)
 #endif
 
 void (THISCALL *CAddressList__InitCombobox_orig)(void *) = nullptr;
@@ -1010,7 +1078,7 @@ void THISCALL CAddressList__InitCombobox_hook(
     CAddressList__InitCombobox_orig(pThis);
     if (settings.smalladdress)
     {
-        HWND hWnd = CAddressList_ComboBox(pThis);
+        HWND hWnd = CAddressList__hwnd(pThis);
         if (hWnd)
         {
             SendMessageW(hWnd, 0x40E, 0, 8);
@@ -1023,13 +1091,13 @@ void THISCALL CAddressList__InitCombobox_hook(
 bool (THISCALL *CShellBrowser__ShouldShowRibbon_orig)(void *, void *) = nullptr;
 bool THISCALL CShellBrowser__ShouldShowRibbon_hook(
     void *pThis,
-    void *pShellItem
+    void *psiLocation
 )
 {
     return settings.noribbon
     ? false
     : CShellBrowser__ShouldShowRibbon_orig(
-        pThis, pShellItem
+        pThis, psiLocation
     );
 }
 
@@ -1068,11 +1136,11 @@ bool ExplorerHasRibbon(HWND hWnd)
 HWND (THISCALL *CNscTree__CreateTreeview_orig)(void *, HWND) = nullptr;
 HWND THISCALL CNscTree__CreateTreeview_hook(
     void *pThis,
-    HWND  hWnd
+    HWND  hwndParent
 )
 {
     HWND hRes = CNscTree__CreateTreeview_orig(
-        pThis, hWnd
+        pThis, hwndParent
     );
 
     if (settings.npst != NPST_DEFAULT && hRes)
@@ -1094,12 +1162,6 @@ HWND THISCALL CNscTree__CreateTreeview_hook(
 
     return hRes;
 }
-
-#ifdef _WIN64
-#define CNscTree_Window(pThis) *((HWND *)pThis + 47)
-#else
-#define CNscTree_Window(pThis) *((HWND *)pThis + 58)
-#endif
 
 /* Undocumented */
 #define TVM_SETTOPMARGIN (TV_FIRST+74)
@@ -1134,7 +1196,7 @@ void HandleTvItem(HWND hTreeView, LPTVITEMEXW lptvi)
 /* Set old height */
 SUBCLASSPROC CNscTree_s_SubClassTreeWndProc_orig = nullptr;
 LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
-    HWND      hWnd, 
+    HWND      hwnd, 
     UINT      uMsg,
     WPARAM    wParam,
     LPARAM    lParam,
@@ -1146,7 +1208,7 @@ LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
     {
         /* For some UNGODLY reason, other shit (StartIsBack++, folder dialog)
            use this same class so we have to get creative */
-        HWND hPar = GetParent(GetParent(hWnd));
+        HWND hPar = GetParent(GetParent(hwnd));
         if (hPar && IsWindow(hPar))
         {
             WCHAR szClass[256];
@@ -1160,10 +1222,10 @@ LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
                         {
                             LPTVINSERTSTRUCTW lpis = (LPTVINSERTSTRUCTW)lParam;
                             LPTVITEMEXW lptvi = &lpis->itemex;
-                            HTREEITEM hItem = (HTREEITEM)DefSubclassProc(hWnd, uMsg, wParam, lParam);
+                            HTREEITEM hItem = (HTREEITEM)DefSubclassProc(hwnd, uMsg, wParam, lParam);
                             lptvi->hItem = hItem;
                             /* The TVM_SETITEMW handle here already calls HandleTvItem, no need to here */
-                            TreeView_SetItem(hWnd, lptvi);
+                            TreeView_SetItem(hwnd, lptvi);
                             if (hItem)
                             {
                                 return (LRESULT)hItem;
@@ -1172,7 +1234,7 @@ LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
                         }
                         case TVM_SETITEMW:
                         {
-                            HandleTvItem(hWnd, (LPTVITEMEXW)lParam);
+                            HandleTvItem(hwnd, (LPTVITEMEXW)lParam);
                             break;
                         }
                         case TVM_SETITEMHEIGHT:
@@ -1203,14 +1265,14 @@ LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
     }
 
     return CNscTree_s_SubClassTreeWndProc_orig(
-        hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData
+        hwnd, uMsg, wParam, lParam, uIdSubclass, dwRefData
     );
 }
 
 #ifdef _WIN64
-#   define CNscTree_Indent(pThis)  *((DWORD *)pThis + 116)
+#   define CNscTree_m_logicalIndent(pThis)  *((DWORD *)pThis + 116)
 #else
-#   define CNscTree_Indent(pThis)  *((DWORD *)pThis + 75)
+#   define CNscTree_m_logicalIndent(pThis)  *((DWORD *)pThis + 75)
 #endif
 
 void (THISCALL *CNscTree_ScaleAndSetIndent_orig)(void *);
@@ -1222,7 +1284,7 @@ void THISCALL CNscTree_ScaleAndSetIndent_hook(
        seem to do anything there */
     if (settings.npst == NPST_SEVEN)
     {
-        CNscTree_Indent(pThis) = 10;
+        CNscTree_m_logicalIndent(pThis) = 10;
     }
     CNscTree_ScaleAndSetIndent_orig(pThis);
 }
@@ -1231,8 +1293,7 @@ void THISCALL CNscTree_ScaleAndSetIndent_hook(
 
 #pragma region "Navbar glass"
 
-#define CNavBar_Window(pThis) *((HWND *)pThis + 6)
-#define CNavBar_ThemeWindow(pThis) *((HWND *)pThis + 73)
+#define CNavBar__hwnd(pThis) *((HWND *)pThis + 6)
 
 using DwmExtendFrameIntoClientArea_t = decltype(&DwmExtendFrameIntoClientArea);
 DwmExtendFrameIntoClientArea_t DwmExtendFrameIntoClientArea_orig = nullptr;
@@ -1240,7 +1301,7 @@ DwmExtendFrameIntoClientArea_t DwmExtendFrameIntoClientArea_orig = nullptr;
 /* Re-impl of function from Windows 7 */
 void CNavBar__UpdateGlass(void *pThis)
 {
-    HWND hWnd = CNavBar_Window(pThis);
+    HWND hWnd = CNavBar__hwnd(pThis);
     if (hWnd && IsWindow(hWnd))
     {
         UINT dpi = GetDpiForWindow(hWnd);
@@ -1327,19 +1388,19 @@ HRESULT STDCALL CSeparatorBand_GetBandInfo_hook(
 
 WNDPROC CNavBar_s_SizableWndProc_orig = nullptr;
 LRESULT CALLBACK CNavBar_s_SizableWndProc_hook(
-    HWND   hWnd,
+    HWND   hwnd,
     UINT   uMsg,
     WPARAM wParam,
     LPARAM lParam
 )
 {
-    LRESULT res = CNavBar_s_SizableWndProc_orig(
-        hWnd, uMsg, wParam, lParam
+    LRESULT lRet = CNavBar_s_SizableWndProc_orig(
+        hwnd, uMsg, wParam, lParam
     );
 
     if (settings.navbarglass)
     {
-        void *pThis = (void *)GetWindowLongPtrW(hWnd, 0);
+        void *pThis = (void *)GetWindowLongPtrW(hwnd, 0);
         switch (uMsg)
         {
             case WM_SIZE:
@@ -1349,16 +1410,39 @@ LRESULT CALLBACK CNavBar_s_SizableWndProc_hook(
                     CNavBar__UpdateGlass(pThis);
                 }
                 break;
+            case WM_PAINT:
             case WM_NOTIFY:
                 if (pThis && lParam && ((LPNMHDR)lParam)->code == 0xFFFFFFF4)
                 {
                     CNavBar__UpdateGlass(pThis);
                 }
                 break;
+            case WM_ERASEBKGND:
+                if (!ExplorerHasRibbon(hwnd))
+                    return lRet;
         }
     }
 
-    return res;
+    if (settings.beta8navbarbg && uMsg == WM_ERASEBKGND)
+    {
+        HDC hdc = (HDC)wParam;
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+
+        // Windows 8 betas used some Ribbon API to get the background color,
+        // but it shouldn't ever change.
+        HBRUSH hbrBackground = CreateSolidBrush(RGB(223, 233, 244));
+        HBRUSH hbrBorder = CreateSolidBrush(RGB(186, 201, 219));
+
+        FillRect(hdc, &rc, hbrBackground);
+        rc.top = rc.bottom - 1;
+        FillRect(hdc, &rc, hbrBorder);
+        
+        DeleteObject(hbrBackground);
+        DeleteObject(hbrBorder);
+    }
+
+    return lRet;
 }
 
 /* Subclassed rebars */
@@ -1411,21 +1495,21 @@ LRESULT CALLBACK RebarSubclassWndProc(
     );
 }
 
-#define CNavBar_CNavBandSite_Window(pThis) *((HWND *)pThis + 17)
+#define CNavBar_CNavBandSite__hwnd(pThis) *((HWND *)pThis + 17)
 
 HRESULT (THISCALL *CNavBar_CNavBandSite__Initialize_orig)(void *, HWND) = nullptr;
 HRESULT THISCALL CNavBar_CNavBandSite__Initialize_hook(
     void *pThis,
-    HWND  hWndParent
+    HWND  hwndParent
 )
 {
     HRESULT hr = CNavBar_CNavBandSite__Initialize_orig(
-        pThis, hWndParent
+        pThis, hwndParent
     );
 
     if (settings.navbarglass && SUCCEEDED(hr))
     {
-        HWND hWnd = CNavBar_CNavBandSite_Window(pThis);
+        HWND hWnd = CNavBar_CNavBandSite__hwnd(pThis);
         if (hWnd && IsWindow(hWnd))
         {
             if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, RebarSubclassWndProc, NULL))
@@ -1454,7 +1538,7 @@ void THISCALL CNavBar__OnFrameStateChanged_hook(
 }
 
 /* Hide window icon and caption */
-#define CExplorerFrame_Window(pThis) *((HWND *)pThis + 1)
+#define CExplorerFrame__hwnd(pThis) *((HWND *)pThis + 1)
 
 void (THISCALL *CExplorerFrame__UpdateFrameState_orig)(void *) = nullptr;
 void THISCALL CExplorerFrame__UpdateFrameState_hook(
@@ -1462,9 +1546,9 @@ void THISCALL CExplorerFrame__UpdateFrameState_hook(
 )
 {
     CExplorerFrame__UpdateFrameState_orig(pThis);
-    if (settings.hidetitle)
+    if (settings.hidetitle && settings.noribbon)
     {
-        HWND hWnd = CExplorerFrame_Window(pThis);
+        HWND hWnd = CExplorerFrame__hwnd(pThis);
         if (hWnd && IsWindow(hWnd))
         {
             int attr = WTNCA_NODRAWCAPTION | WTNCA_NODRAWICON;
@@ -1481,64 +1565,58 @@ void THISCALL CExplorerFrame__UpdateFrameState_hook(
 HRESULT (THISCALL *CNavBar_ConstructNavBarThemeClassName_orig)(void *, WCHAR **) = nullptr;
 HRESULT THISCALL CNavBar_ConstructNavBarThemeClassName_hook(
     void   *pThis,
-    WCHAR **out
+    LPWSTR *ppszOut
 )
 {
     HRESULT hr = CNavBar_ConstructNavBarThemeClassName_orig(
-        pThis, out
+        pThis, ppszOut
     );
 
     if (settings.navbarglass && SUCCEEDED(hr))
     {
-        BOOL bDarkMode = FALSE;
-        if (wcsstr(*out, L"DarkMode"))
-        {
-            bDarkMode = TRUE;
-            wcscpy(*out, *out + 8);
-        }
+        const WCHAR c_szDarkMode[]       = L"DarkMode";
+        const WCHAR c_szMax[]            = L"Max";
+        const WCHAR c_szNavbar[]         = L"Navbar";
+        const WCHAR c_szInactive[]       = L"Inactive";
+        const WCHAR c_szComposited[]     = L"Composited";
+        constexpr size_t c_cchDarkMode   = sizeof("DarkMode") - 1;
+        constexpr size_t c_cchMax        = sizeof("Max") - 1;
+        constexpr size_t c_cchNavbar     = sizeof("Navbar") - 1;
+        constexpr size_t c_cchInactive   = sizeof("Inactive") - 1;
+        constexpr size_t c_cchComposited = sizeof("Composited") - 1;
 
-        if (wcsstr(*out, L"MaxInactive"))
-        {
-            wcscpy(*out + 3, *out + 11);
-        }
-        else if (wcsstr(*out, L"Inactive"))
-        {
-            wcscpy(*out, *out + 8);
-        }
-        else if (wcsstr(*out, L"Max"))
-        {
-            WCHAR szClass[256] = L"MaxInactive";
-            wcscat(szClass, *out + 3);
-            
-            CoTaskMemFree(*out);
-            *out = (WCHAR *)CoTaskMemAlloc((wcslen(szClass) + 1) * sizeof(WCHAR));
-            wcscpy(*out, szClass);
-        }
-        else
-        {
-            WCHAR szClass[256] = L"Inactive";
-            wcscat(szClass, *out);
-            
-            CoTaskMemFree(*out);
-            *out = (WCHAR *)CoTaskMemAlloc((wcslen(szClass) + 1) * sizeof(WCHAR));
-            wcscpy(*out, szClass);
-        }
+        bool fDarkMode = nullptr != wcsstr(*ppszOut, c_szDarkMode);
+        bool fMax = nullptr != wcsstr(*ppszOut, c_szMax);
+        // Inverted: This is because Windows inverts inactive class name for some reason.
+        bool fInactive = nullptr == wcsstr(*ppszOut, c_szInactive);
+        bool fComposited = !settings.nocomposition && nullptr != wcsstr(*ppszOut, c_szComposited);
 
-        if (bDarkMode)
-        {
-            WCHAR szClass[256] = L"DarkMode";
-            wcscat(szClass, *out);
+        size_t cchAlloc = c_cchNavbar + 1;
+        if (fDarkMode)
+            cchAlloc += c_cchDarkMode;
+        if (fMax)
+            cchAlloc += c_cchMax;
+        if (fInactive)
+            cchAlloc += c_cchInactive;
+        if (fComposited)
+            cchAlloc += c_cchComposited;
 
-            CoTaskMemFree(*out);
-            *out = (WCHAR *)CoTaskMemAlloc((wcslen(szClass) + 1) * sizeof(WCHAR));
-            wcscpy(*out, szClass);
-        }
+        LPWSTR pszClassName = (LPWSTR)CoTaskMemAlloc(cchAlloc * sizeof(WCHAR));
+        if (!pszClassName)
+            return E_OUTOFMEMORY;
+        CoTaskMemFree(*ppszOut);
+        *ppszOut = pszClassName;
 
-        LPWSTR pszComposited = wcsstr(*out, L"Composited");
-        if (settings.nocomposition && pszComposited)
-        {
-            *pszComposited = L'\0';
-        }
+        ZeroMemory(pszClassName, cchAlloc * sizeof(WCHAR));
+        if (fDarkMode)
+            wcscat(pszClassName, c_szDarkMode);
+        if (fMax)
+            wcscat(pszClassName, c_szMax);
+        if (fInactive)
+            wcscat(pszClassName, c_szInactive);
+        wcscat(pszClassName, c_szNavbar);
+        if (fComposited)
+            wcscat(pszClassName, c_szComposited);
     }
 
     return hr;
@@ -1571,9 +1649,9 @@ HRESULT STDCALL CUpBand_GetBandInfo_hook(
 
 #pragma region "Aero travel buttons"
 #ifdef _WIN64
-#define CTravelBand_Toolbar(pThis) *((HWND *)pThis + 16)
+#define CTravelBand__hwndTools(pThis) *((HWND *)pThis + 16)
 #else
-#define CTravelBand_Toolbar(pThis) *((HWND *)pThis + 18)
+#define CTravelBand__hwndTools(pThis) *((HWND *)pThis + 18)
 #endif
 
 #define MAP_RESOURCE(from, to)       \
@@ -1644,11 +1722,11 @@ HIMAGELIST WINAPI ImageList_LoadImageW_hook(
 }
 
 #ifdef _WIN64
-#define CTravelBand_himl(pThis) *((HIMAGELIST *)pThis + 31)
-#define CTravelBand_state(pThis) *((DWORD *)pThis + 48)
+#define CTravelBand__himlTravelBackground(pThis) *((HIMAGELIST *)pThis + 31)
+#define CTravelBand__iControlState(pThis) *((DWORD *)pThis + 48)
 #else
-#define CTravelBand_himl(pThis) *((HIMAGELIST *)pThis + 40)
-#define CTravelBand_state(pThis) *((DWORD *)pThis + 26)
+#define CTravelBand__himlTravelBackground(pThis) *((HIMAGELIST *)pThis + 40)
+#define CTravelBand__iControlState(pThis) *((DWORD *)pThis + 26)
 #endif
 
 LRESULT CALLBACK DrawTravelBackground(
@@ -1679,11 +1757,11 @@ LRESULT CALLBACK DrawTravelBackground(
 
         DrawThemeParentBackground(hWnd, ps.hdc, &ps.rcPaint);
 
-        HIMAGELIST himl = CTravelBand_himl(pThis);
+        HIMAGELIST himl = CTravelBand__himlTravelBackground(pThis);
         if (himl)
         {
             ImageList_Draw(
-                himl, CTravelBand_state(pThis), ps.hdc, settings.noribbon ? 1 : 5, 2, ILD_TRANSPARENT
+                himl, CTravelBand__iControlState(pThis), ps.hdc, settings.noribbon ? 1 : 5, 2, ILD_TRANSPARENT
             );
         }
 
@@ -1697,7 +1775,7 @@ LRESULT CALLBACK DrawTravelBackground(
 
 WNDPROC CTravelBand_s_TravelWndProc_orig = nullptr;
 LRESULT CALLBACK CTravelBand_s_TravelWndProc_hook(
-    HWND   hWnd,
+    HWND   hwnd,
     UINT   uMsg,
     WPARAM wParam,
     LPARAM lParam
@@ -1705,17 +1783,17 @@ LRESULT CALLBACK CTravelBand_s_TravelWndProc_hook(
 {
     if (settings.aerotravel && (uMsg == WM_PAINT || uMsg == WM_PRINTCLIENT))
     {
-        return DrawTravelBackground(hWnd, uMsg, wParam, lParam);
+        return DrawTravelBackground(hwnd, uMsg, wParam, lParam);
     }
 
     return CTravelBand_s_TravelWndProc_orig(
-        hWnd, uMsg, wParam, lParam
+        hwnd, uMsg, wParam, lParam
     );
 }
 
 std::vector<HWND> g_subclassedTravelbands;
 
-/* Fix spacing shit */
+/* Fix spacing */
 LRESULT CALLBACK TravelBandToolbarSubclassProc(
     HWND      hWnd,
     UINT      uMsg,
@@ -1724,12 +1802,15 @@ LRESULT CALLBACK TravelBandToolbarSubclassProc(
     DWORD_PTR dwRefData
 )
 {
+    if (uMsg == TB_SETBUTTONSIZE)
+    {
+        return DefSubclassProc(hWnd, TB_SETBUTTONSIZE, 0, 0);
+    }
+
     if (settings.aerotravel)
     {
         switch (uMsg)
         {
-            case TB_SETBUTTONSIZE:
-                return DefSubclassProc(hWnd, TB_SETBUTTONSIZE, 0, 0);
             case TB_SETPADDING:
                 return DefSubclassProc(hWnd, TB_SETPADDING, 0, MAKELPARAM(1, 0));
         }
@@ -1757,7 +1838,7 @@ void THISCALL CTravelBand__CreateTravelButtons_hook(
 )
 {
     CTravelBand__CreateTravelButtons_orig(pThis);
-    HWND hWnd = CTravelBand_Toolbar(pThis);
+    HWND hWnd = CTravelBand__hwndTools(pThis);
     if (hWnd && IsWindow(hWnd))
     {
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TravelBandToolbarSubclassProc, NULL))
@@ -1775,7 +1856,7 @@ void THISCALL CTravelBand__SetButtonImagesClassicMode_hook(
 {
     CTravelBand__SetButtonImagesClassicMode_orig(pThis);
 
-    HWND hWnd = CTravelBand_Toolbar(pThis);
+    HWND hWnd = CTravelBand__hwndTools(pThis);
     if (settings.aerotravel && hWnd && IsWindow(hWnd))
     {
         int x = settings.noribbon ? 2 : 6;
@@ -1858,24 +1939,24 @@ HRESULT STDCALL CTravelBand_GetBandInfo_hook(
 
 /* Fix state for travel band; not for Aero specifically, just in general */
 #ifdef _WIN64
-#   define CTravelBand_OpeningMenu(pThis) *((DWORD *)pThis + 61)
+#   define CTravelBand__fInDropDown(pThis) *((DWORD *)pThis + 61)
 #else
-#   define CTravelBand_OpeningMenu(pThis) *((DWORD *)pThis + 39)
+#   define CTravelBand__fInDropDown(pThis) *((DWORD *)pThis + 39)
 #endif
 
 void (THISCALL *CTravelBand__SetControlState_orig)(void *, int) = nullptr;
 void THISCALL CTravelBand__SetControlState_hook(
     void *pThis,
-    int   iStateId
+    int   iControlState
 )
 {
-    if (CTravelBand_OpeningMenu(pThis))
+    if (CTravelBand__fInDropDown(pThis))
     {
-        iStateId = 3;
+        iControlState = 3;
     }
 
     CTravelBand__SetControlState_orig(
-        pThis, iStateId
+        pThis, iControlState
     );
 }
 
@@ -1917,13 +1998,13 @@ DEFINE_GUID(CLSID_ControlPanelProcessExplorerHost, 0x5BD95610, 0x9434, 0x43C2, 0
 
 /* Stop Explorer from relaunching on CPL enter */
 bool (STDCALL *UseSeparateProcess_orig)(IShellItem *);
-bool STDCALL UseSeparateProcess_hook(IShellItem *psi)
+bool STDCALL UseSeparateProcess_hook(IShellItem *shellItem)
 {
     SHELLSTATEW ss = { 0 };
     SHGetSetSettings(&ss, SSF_SEPPROCESS, FALSE);
     // For whatever reason, it gets set to -1 when this option is enabled
     if (!settings.alwayscpl || ss.fSepProcess != 0)
-        return UseSeparateProcess_orig(psi);
+        return UseSeparateProcess_orig(shellItem);
     return false;
 }
 
@@ -1931,7 +2012,7 @@ bool STDCALL UseSeparateProcess_hook(IShellItem *psi)
 GUID *(THISCALL *CExplorerLauncher_GetHostFromTarget_orig)(void *, GUID *, LPCITEMIDLIST) = nullptr;
 GUID *THISCALL CExplorerLauncher_GetHostFromTarget_hook(
     void          *pThis,
-    GUID          *out,
+    GUID          *pclsid,
     LPCITEMIDLIST  pidl
 )
 {
@@ -1943,21 +2024,21 @@ GUID *THISCALL CExplorerLauncher_GetHostFromTarget_hook(
         {
             if (UseSeparateProcess_hook(psi))
             {
-                *out = CLSID_ControlPanelProcessExplorerHost;
+                *pclsid = CLSID_ControlPanelProcessExplorerHost;
                 psi->Release();
-                return out;
+                return pclsid;
             }
             psi->Release();
         }
     }
 
     return CExplorerLauncher_GetHostFromTarget_orig(
-        pThis, out, pidl
+        pThis, pclsid, pidl
     );
 }
 
 #ifdef _WIN64
-#   define CShellBrowser_Window(pThis) *((HWND *)pThis + 55)
+#   define CShellBrowser__bbd_ns_hwndFrame(pThis) *((HWND *)pThis + 55)
 
 static BOOL CALLBACK Aerexplorer_InvalidateAllChildren(HWND hWnd, LPARAM lParam)
 {
@@ -1971,9 +2052,12 @@ static BOOL CALLBACK Aerexplorer_InvalidateAllChildren(HWND hWnd, LPARAM lParam)
 void (STDCALL *CShellBrowser___OnRibbonVisibilityChange_orig)(void *pThis, int newState) = nullptr;
 void STDCALL CShellBrowser___OnRibbonVisibilityChange_hook(void *pThis, int newState)
 {
+    if (!settings.navbarglass)
+        return CShellBrowser___OnRibbonVisibilityChange_orig(pThis, newState);
+
     // We want to get the window of the shell browser, which is the DUIViewWndClassName
     // inside of the explorer window.
-    HWND hWnd = CShellBrowser_Window(pThis);
+    HWND hWnd = CShellBrowser__bbd_ns_hwndFrame(pThis);
 
     HWND hWndExplorerRoot = GetAncestor(hWnd, GA_ROOTOWNER);
     HWND hWndWorkerW = FindWindowExW(hWndExplorerRoot, NULL, L"WorkerW", NULL);
@@ -2006,14 +2090,14 @@ void STDCALL CShellBrowser___OnRibbonVisibilityChange_hook(void *pThis, int newS
 }
 #endif
 
-#pragma endregion // "Explorerframe.dll hooks"
+#pragma endregion // "ExplorerFrame.dll hooks"
 
 #pragma region "shell32.dll hooks"
 
 #ifdef _WIN64
-#   define CDefView_Window(pThis) *((HWND *)pThis + 79)
+#   define CDefView__hwndView(pThis) *((HWND *)pThis + 79)
 #else
-#   define CDefView_Window(pThis) *((HWND *)pThis + 89)
+#   define CDefView__hwndView(pThis) *((HWND *)pThis + 89)
 #endif
 
 /* Enable native list view */
@@ -2025,7 +2109,7 @@ BOOL THISCALL CDefView__UseItemsView_hook(
     if (settings.listview)
     {
         /* Fix for StartIsBack because I fucking hate Tihiy */
-        HWND hWnd = CDefView_Window(pThis);
+        HWND hWnd = CDefView__hwndView(pThis);
         if (hWnd)
         {
             WCHAR szClass[256];
@@ -2220,36 +2304,36 @@ HRESULT STDCALL CStorageSystemTypeCategorizer_GetCategoryInfo_hook(
     );
     if (SUCCEEDED(hr) && settings.classicgrouping)
     {
-        LPCDRIVEGROUPI18N dgi = GetCurrentDriveLocale();
-        LPCWSTR lpszOut = NULL;
+        LPCDRVGRPSTRINGS pdgs = GetCurrentDriveLocale();
+        LPCWSTR pszString = NULL;
 
-        if (dgi)
+        if (pdgs)
         {
-            switch ((DRIVEGROUP)dwCategoryId)
+            switch ((DRVGRP)dwCategoryId)
             {
                 case DG_HARDDISKS:
-                    lpszOut = dgi->szHardDisks;
+                    pszString = pdgs->pszHardDisks;
                     break;
                 case DG_REMOVABLE:
-                    lpszOut = dgi->szRemovable;
+                    pszString = pdgs->pszRemovable;
                     break;
                 case DG_OTHER:
-                    lpszOut = dgi->szOther;
+                    pszString = pdgs->pszOther;
                     break;
                 case DG_SCANNERS:
-                    lpszOut = dgi->szScanners;
+                    pszString = pdgs->pszScanners;
                     break;
                 case DG_PORTABLEMEDIA:
-                    lpszOut = dgi->szPortableMedia;
+                    pszString = pdgs->pszPortableMedia;
                     break;
                 case DG_PORTABLE:
-                    lpszOut = dgi->szPortable;
+                    pszString = pdgs->pszPortable;
                     break;
             }
 
-            if (lpszOut)
+            if (pszString)
             {
-                wcscpy(pci->wszName, lpszOut);
+                wcscpy(pci->wszName, pszString);
             }
         }
     }
@@ -2270,6 +2354,68 @@ FOLDERFLAGS THISCALL IViewSettings_GetFolderFlags_hook(
         ff &= ~FWF_NOHEADERINALLVIEWS;
     }
     return ff;
+}
+
+/* Views dropdown on left */
+
+BOOL (__fastcall *IsRightSideCommand_orig)(REFGUID);
+BOOL __fastcall IsRightSideCommand_hook(REFGUID rguidCmd)
+{
+    return settings.leftviews ? FALSE : IsRightSideCommand_orig(rguidCmd);
+}
+
+HRESULT (THISCALL *CCommandFolder__AppendRightSideCommands_orig)(void *, IUnknown *);
+HRESULT THISCALL CCommandFolder__AppendRightSideCommands_hook(void *pThis, IUnknown *punk)
+{
+    return settings.leftviews ? S_OK : CCommandFolder__AppendRightSideCommands_orig(pThis, punk);
+}
+
+HRESULT (THISCALL *CCommandFolder__AppendOrganizeCommand_orig)(void *, IUnknown *);
+HRESULT THISCALL CCommandFolder__AppendOrganizeCommand_hook(void *pThis, IUnknown *punk)
+{
+    HRESULT hr = CCommandFolder__AppendOrganizeCommand_orig(pThis, punk);
+    if (settings.leftviews && SUCCEEDED(hr))
+    {
+        hr = CCommandFolder__AppendRightSideCommands_orig(pThis, punk);
+    }
+    return hr;
+}
+
+/* Command bar icons */
+
+#ifdef _WIN64
+#   define ExplorerCommandItem_iconIndex(pThis)  *((DWORD *)pThis + 10)
+#else
+#   define ExplorerCommandItem_iconIndex(pThis)  *((DWORD *)pThis + 8)
+#endif
+
+void (THISCALL *CSplitButton_UpdateIcon_orig)(void *, int);
+void THISCALL CSplitButton_UpdateIcon_hook(
+    void *pThis,
+    int nIndex
+)
+{
+    if (!settings.cmdbaricons)
+        CSplitButton_UpdateIcon_orig(pThis, nIndex);
+}
+
+void (THISCALL *CSplitButton__UpdateDisplay_orig)(void *pThis, const struct ExplorerCommandItem *);
+void THISCALL CSplitButton__UpdateDisplay_hook(
+    void *pThis,
+    const struct ExplorerCommandItem *pItem
+)
+{
+    if (settings.cmdbaricons)
+    {
+        int nIndex = ExplorerCommandItem_iconIndex(pItem);
+        // The "Open" command on EXE files has no icon, unlike Vista.
+        // If that's the case, just grab the default document icon (the
+        // blank page)
+        if (nIndex == -1)
+            nIndex = Shell_GetCachedImageIndexW(L"shell32.dll", -1, 0);
+        CSplitButton_UpdateIcon_orig(pThis, nIndex);
+    }
+    CSplitButton__UpdateDisplay_orig(pThis, pItem);
 }
 
 #pragma endregion // "shell32.dll hooks"
@@ -2440,32 +2586,35 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
 
 #pragma endregion // "Hooks"
 
-#define LoadIntSetting(NAME)    settings.NAME = Wh_GetIntSetting(L ## #NAME)
-#define LoadStringSetting(NAME) settings.NAME = WindhawkUtils::StringSetting::make(L ## #NAME)
+#define LOAD_INT_SETTING(NAME)    settings.NAME = Wh_GetIntSetting(L ## #NAME)
+#define LOAD_STRING_SETTING(NAME) settings.NAME = WindhawkUtils::StringSetting::make(L ## #NAME)
 
 /* == M O D == */
 void LoadSettings(void)
 {
-    LoadIntSetting(alwayscpl);
-    LoadIntSetting(smalladdress);
-    LoadIntSetting(dropdownwidth);
-    LoadIntSetting(refreshwidth);
-    LoadIntSetting(oldsearch);
-    LoadIntSetting(noribbon);
-    LoadIntSetting(listview);
-    LoadIntSetting(colheaders);
-    LoadIntSetting(nopins);
-    LoadIntSetting(navbarglass);
-    LoadIntSetting(nocomposition);
-    LoadIntSetting(hidetitle);
-    LoadIntSetting(noup);
-    LoadIntSetting(aerotravel);
+    LOAD_INT_SETTING(alwayscpl);
+    LOAD_INT_SETTING(smalladdress);
+    LOAD_INT_SETTING(dropdownwidth);
+    LOAD_INT_SETTING(refreshwidth);
+    LOAD_INT_SETTING(oldsearch);
+    LOAD_INT_SETTING(noribbon);
+    LOAD_INT_SETTING(listview);
+    LOAD_INT_SETTING(colheaders);
+    LOAD_INT_SETTING(nopins);
+    LOAD_INT_SETTING(navbarglass);
+    LOAD_INT_SETTING(nocomposition);
+    LOAD_INT_SETTING(hidetitle);
+    LOAD_INT_SETTING(noup);
+    LOAD_INT_SETTING(aerotravel);
 #ifdef _WIN64
-    LoadIntSetting(detailspane);
+    LOAD_INT_SETTING(detailspane);
 #endif
-    LoadIntSetting(classicgrouping);
-    LoadIntSetting(nopcfolders);
-    LoadIntSetting(vistasearchplaceholder);
+    LOAD_INT_SETTING(classicgrouping);
+    LOAD_INT_SETTING(nopcfolders);
+    LOAD_INT_SETTING(vistasearchplaceholder);
+    LOAD_INT_SETTING(beta8navbarbg);
+    LOAD_INT_SETTING(leftviews);
+    LOAD_INT_SETTING(cmdbaricons);
 
     LPCWSTR szNpst = Wh_GetStringSetting(L"npst");
     if (0 == wcscmp(szNpst, L"vista"))
@@ -2506,6 +2655,39 @@ void LoadSettings(void)
     Wh_FreeStringSetting(szTbst);
 }
 
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen) 
+{ 
+    void *pFixedFileInfo = nullptr; 
+    UINT uPtrLen = 0; 
+
+    HRSRC hResource = 
+        FindResourceW(hModule, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION); 
+    if (hResource)
+    { 
+        HGLOBAL hGlobal = LoadResource(hModule, hResource); 
+        if (hGlobal)
+        { 
+            void *pData = LockResource(hGlobal); 
+            if (pData)
+            { 
+                if (!VerQueryValueW(pData, L"\\", &pFixedFileInfo, &uPtrLen)
+                || uPtrLen == 0)
+                { 
+                    pFixedFileInfo = nullptr; 
+                    uPtrLen = 0; 
+                } 
+            } 
+        } 
+    } 
+
+    if (puPtrLen)
+    { 
+        *puPtrLen = uPtrLen; 
+    } 
+  
+     return (VS_FIXEDFILEINFO *)pFixedFileInfo; 
+ } 
+
 /**
   * Loads comctl32.dll, version 6.0.
   * This uses an activation context that uses shell32.dll's manifest
@@ -2514,7 +2696,7 @@ void LoadSettings(void)
   */
 HMODULE LoadComCtlModule(void)
 {
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     ACTCTXW actCtx = { sizeof(actCtx) };
     actCtx.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID | ACTCTX_FLAG_HMODULE_VALID;
     actCtx.lpResourceName = MAKEINTRESOURCEW(124);
@@ -2522,517 +2704,535 @@ HMODULE LoadComCtlModule(void)
     HANDLE hActCtx = CreateActCtxW(&actCtx);
     ULONG_PTR ulCookie;
     ActivateActCtx(hActCtx, &ulCookie);
-    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+    HMODULE hComCtl = LoadLibraryExW(L"comctl32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    /**
+      * Certain processes will ignore the activation context and load
+      * comctl32.dll 5.82 anyway. If that occurs, just reject it.
+      */
+    VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(hComCtl, nullptr);
+    if (!pVerInfo || HIWORD(pVerInfo->dwFileVersionMS) < 6)
+    {
+        FreeLibrary(hComCtl);
+        hComCtl = NULL;
+    }
     DeactivateActCtx(0, ulCookie);
     ReleaseActCtx(hActCtx);
     FreeLibrary(hShell32);
     return hComCtl;
 }
 
+const WindhawkUtils::SYMBOL_HOOK explorerframeDllHooks[] = {
+    {
+        {
+            L"bool "
+            SSTDCALL
+            L" UseSeparateProcess(struct IShellItem *)"
+        },
+        &UseSeparateProcess_orig,
+        UseSeparateProcess_hook,
+        false
+    },
+    {
+        {
+            L"private: struct _GUID "
+            STHISCALL
+            L" CExplorerLauncher::GetHostFromTarget(struct _ITEMIDLIST_ABSOLUTE const *)"
+        },
+        &CExplorerLauncher_GetHostFromTarget_orig,
+        CExplorerLauncher_GetHostFromTarget_hook,
+        false
+    },
+    {
+        {
+            L"private: bool "
+            STHISCALL
+            L" CUniversalSearchBand::IsModernSearchBoxEnabled(void)"
+        },
+        &CUniversalSearchBand_IsModernSearchBoxEnabled_orig,
+        CUniversalSearchBand_IsModernSearchBoxEnabled_hook,
+        true
+    },
+    {
+        {
+            L"public: long "
+            STHISCALL
+            L" CSearchEditBox::HideSuggestions(void)"
+        },
+        &CSearchEditBox_HideSuggestions_orig,
+        CSearchEditBox_HideSuggestions_hook,
+        false
+    },
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CSearchBox::SetCueAndTooltipText(unsigned short const *,unsigned short const *)"
+        },
+        &CSearchBox_SetCueAndTooltipText_orig,
+        CSearchBox_SetCueAndTooltipText_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CAddressBand::_PositionChildWindows(void)"
+        },
+        &CAddressBand__PositionChildWindows_orig,
+        CAddressBand__PositionChildWindows_hook,
+        false
+    },
+    {
+        {
+#ifdef _WIN64
+            L"private: __int64 __cdecl CAddressBand::_AddressBandWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+#else
+            L"private: long __thiscall CAddressBand::_AddressBandWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
+#endif
+        },
+        &CAddressBand__AddressBandWndProc_orig,
+        CAddressBand__AddressBandWndProc_hook,
+        false
+    },
+    {
+        {
+            L"protected: virtual void "
+            STHISCALL
+            L" CAddressList::_InitCombobox(void)"
+        },
+        &CAddressList__InitCombobox_orig,
+        CAddressList__InitCombobox_hook,
+        false
+    },
+    {
+        {
+            L"private: bool "
+            STHISCALL
+            L" CShellBrowser::_ShouldShowRibbon(struct IShellItem *)"
+        },
+        &CShellBrowser__ShouldShowRibbon_orig,
+        CShellBrowser__ShouldShowRibbon_hook,
+        false
+    },
+    {
+        {
+            L"private: struct HWND__ * "
+            STHISCALL
+            L" CNscTree::_CreateTreeview(struct HWND__ *)"
+        },
+        &CNscTree__CreateTreeview_orig,
+        CNscTree__CreateTreeview_hook,
+        false
+    },
+    {
+        {
+#ifdef _WIN64
+            L"private: static __int64 __cdecl CNscTree::s_SubClassTreeWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,unsigned __int64,unsigned __int64)"
+#else
+            L"private: static long __stdcall CNscTree::s_SubClassTreeWndProc(struct HWND__ *,unsigned int,unsigned int,long,unsigned int,unsigned long)"
+#endif
+        },
+        &CNscTree_s_SubClassTreeWndProc_orig,
+        CNscTree_s_SubClassTreeWndProc_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CNscTree::ScaleAndSetIndent(void)"
+        },
+        &CNscTree_ScaleAndSetIndent_orig,
+        CNscTree_ScaleAndSetIndent_hook,
+        false
+    },
+    {
+        {
+            L"protected: void "
+            STHISCALL
+            L" CNavBar::_SetTheme(void)"
+        },
+        &CNavBar__SetTheme_orig,
+        CNavBar__SetTheme_hook,
+        false
+    },
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CSeparatorBand::GetBandInfo(unsigned long,unsigned long,struct DESKBANDINFO *)"
+        },
+        &CSeparatorBand_GetBandInfo_orig,
+        CSeparatorBand_GetBandInfo_hook,
+        false
+    },
+    {
+        {
+#ifdef _WIN64
+            L"protected: static __int64 __cdecl CNavBar::s_SizableWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+#else
+            L"protected: static long __stdcall CNavBar::s_SizableWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
+#endif
+        },
+        &CNavBar_s_SizableWndProc_orig,
+        CNavBar_s_SizableWndProc_hook,
+        false
+    },
+    {
+        {
+            L"protected: void "
+            STHISCALL
+            L" CNavBar::_OnFrameStateChanged(unsigned long)"
+        },
+        &CNavBar__OnFrameStateChanged_orig,
+        CNavBar__OnFrameStateChanged_hook,
+        false
+    },
+    {
+        {
+            L"protected: virtual long "
+            STHISCALL
+            L" CNavBar::CNavBandSite::_Initialize(struct HWND__ *)"
+        },
+        &CNavBar_CNavBandSite__Initialize_orig,
+        CNavBar_CNavBandSite__Initialize_hook,
+        false
+    },
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CUpBand::GetBandInfo(unsigned long,unsigned long,struct DESKBANDINFO *)"
+        },
+        &CUpBand_GetBandInfo_orig,
+        CUpBand_GetBandInfo_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CExplorerFrame::_UpdateFrameState(void)"
+        },
+        &CExplorerFrame__UpdateFrameState_orig,
+        CExplorerFrame__UpdateFrameState_hook,
+        false
+    },
+    {
+        {
+            L"protected: long "
+            STHISCALL
+            L" CNavBar::ConstructNavBarThemeClassName(unsigned short * *)"
+        },
+        &CNavBar_ConstructNavBarThemeClassName_orig,
+        CNavBar_ConstructNavBarThemeClassName_hook,
+        false
+    },
+    {
+        {
+#ifdef _WIN64
+            L"protected: static __int64 __cdecl CTravelBand::s_TravelWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+#else
+            L"protected: static long __stdcall CTravelBand::s_TravelWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
+#endif
+        },
+        &CTravelBand_s_TravelWndProc_orig,
+        CTravelBand_s_TravelWndProc_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CTravelBand::_CreateTravelButtons(void)"
+        },
+        &CTravelBand__CreateTravelButtons_orig,
+        CTravelBand__CreateTravelButtons_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CTravelBand::_SetButtonImagesClassicMode(void)"
+        },
+        &CTravelBand__SetButtonImagesClassicMode_orig,
+        CTravelBand__SetButtonImagesClassicMode_hook,
+        false
+    },
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CTravelBand::GetBandInfo(unsigned long,unsigned long,struct DESKBANDINFO *)"
+        },
+        &CTravelBand_GetBandInfo_orig,
+        CTravelBand_GetBandInfo_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CTravelBand::_SetControlState(int)"
+        },
+        &CTravelBand__SetControlState_orig,
+        CTravelBand__SetControlState_hook,
+        false
+    },
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CNscTree::SetStateImageList(struct _IMAGELIST *)"
+        },
+        &CNscTree_SetStateImageList_orig,
+        CNscTree_SetStateImageList_hook,
+        false
+    },
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CShellBrowser::GetFolderFlags(enum FOLDERFLAGS *,enum FOLDERFLAGS *)"
+        },
+        &CShellBrowser_GetFolderFlags_orig,
+        CShellBrowser_GetFolderFlags_hook,
+        false
+    },
+#ifdef _WIN64
+    {
+        {
+            L"private: void "
+            SSTDCALL
+            L" CShellBrowser::_OnRibbonVisibilityChange(enum CShellBrowser::ONRIBBONVISIBILITY_CHANGE)"
+        },
+        &CShellBrowser___OnRibbonVisibilityChange_orig,
+        CShellBrowser___OnRibbonVisibilityChange_hook,
+        false
+    }
+#endif
+};
+
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+    {
+        {
+            L"private: int "
+            STHISCALL
+            L" CDefView::_UseItemsView(void)"
+        },
+        &CDefView__UseItemsView_orig,
+        CDefView__UseItemsView_hook,
+        false
+    },
+#ifdef _WIN64
+    {
+        {
+            L"long __cdecl DUI_LoadUIFileFromResources(struct HINSTANCE__ *,unsigned int,unsigned short * *)"
+        },
+        &DUI_LoadUIFileFromResources_orig,
+        DUI_LoadUIFileFromResources_hook,
+        false
+    },
+#endif
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CStorageSystemTypeCategorizer::GetCategory(unsigned int,struct _ITEMID_CHILD const "
+#ifdef _WIN64
+            L"__unaligned "
+#endif
+            L"* const *,unsigned long *)"
+        },
+        &CStorageSystemTypeCategorizer_GetCategory_orig,
+        CStorageSystemTypeCategorizer_GetCategory_hook,
+        false
+    },
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CStorageSystemTypeCategorizer::CompareCategory(enum CATSORT_FLAGS,unsigned long,unsigned long)"
+        },
+        &CStorageSystemTypeCategorizer_CompareCategory_orig,
+        CStorageSystemTypeCategorizer_CompareCategory_hook,
+        false
+    },
+    {
+        {
+            L"public: virtual long "
+            SSTDCALL
+            L" CStorageSystemTypeCategorizer::GetCategoryInfo(unsigned long,struct CATEGORY_INFO *)"
+        },
+        &CStorageSystemTypeCategorizer_GetCategoryInfo_orig,
+        CStorageSystemTypeCategorizer_GetCategoryInfo_hook,
+        false
+    },
+    {
+        {
+            L"enum FOLDERFLAGS "
+            SSTDCALL
+            L" IViewSettings_GetFolderFlags(struct IViewSettings *)"
+        },
+        &IViewSettings_GetFolderFlags_orig,
+        IViewSettings_GetFolderFlags_hook,
+        false
+    },
+    {
+        {
+            L"int "
+            SSTDCALL
+            " IsRightSideCommand(struct _GUID const &)"
+        },
+        &IsRightSideCommand_orig,
+        IsRightSideCommand_hook,
+        false
+    },
+    {
+        {
+            L"private: long "
+            STHISCALL
+            " CCommandFolder::_AppendRightSideCommands(struct IUnknown *)"
+        },
+        &CCommandFolder__AppendRightSideCommands_orig,
+        CCommandFolder__AppendRightSideCommands_hook,
+        false
+    },
+    {
+        {
+            L"private: long "
+            STHISCALL
+            " CCommandFolder::_AppendOrganizeCommand(struct IUnknown *)"
+        },
+        &CCommandFolder__AppendOrganizeCommand_orig,
+        CCommandFolder__AppendOrganizeCommand_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CSplitButton::UpdateIcon(int)"
+        },
+        &CSplitButton_UpdateIcon_orig,
+        CSplitButton_UpdateIcon_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CSplitButton::_UpdateDisplay(struct ExplorerCommandItem const *)"
+        },
+        &CSplitButton__UpdateDisplay_orig,
+        CSplitButton__UpdateDisplay_hook,
+        false
+    }
+};
+
+// windows.storage.dll
+const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+    {
+        {
+            L"public: long "
+            STHISCALL
+            L" CObjectArray::AddItemsFromKeySkip(struct HKEY__ *,unsigned short const *,unsigned long,struct _GUID const &)"
+        },
+        &CObjectArray_AddItemsFromKeySkip_orig,
+        CObjectArray_AddItemsFromKeySkip_hook,
+        false
+    }
+};
+
+#define LOAD_MODULE_(module, varName)                                                          \
+    HMODULE varName = LoadLibraryExW(L ## #module ".dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32); \
+    if (!varName)                                                                              \
+    {                                                                                          \
+        Wh_Log(L"Failed to load " #module ".dll");                                             \
+        return FALSE;                                                                          \
+    }
+
+#define LOAD_MODULE(name) LOAD_MODULE_(name, name)
+
+#define LOAD_FUNCTION_(moduleVar, module, name)                           \
+    name = (name ## _t)GetProcAddress(moduleVar, #name);                  \
+    if (!name)                                                            \
+    {                                                                     \
+        Wh_Log(L"Failed to get address of " #name " in " #module ".dll"); \
+        return false;                                                     \
+    }
+
+#define LOAD_FUNCTION(module, name) LOAD_FUNCTION_(module, module, name)
+
+#define HOOK_SYMBOLS_(module, moduleVar, hooks)                                    \
+    if (!WindhawkUtils::HookSymbols(                                               \
+        moduleVar,                                                                 \
+        hooks,                                                                     \
+        ARRAYSIZE(hooks)                                                           \
+    ))                                                                             \
+    {                                                                              \
+        Wh_Log(L"Failed to hook one or more symbol functions in " #module ".dll"); \
+        return FALSE;                                                              \
+    }
+
+#define HOOK_SYMBOLS(module, hooks) HOOK_SYMBOLS_(module, module, hooks)
+
+#define HOOK_FUNCTION(function)               \
+    if (!Wh_SetFunctionHook(                  \
+        (void *)function,                     \
+        (void *)function ## _hook,            \
+        (void **)&function ## _orig           \
+    ))                                        \
+    {                                         \
+        Wh_Log(L"Failed to hook " #function); \
+        return FALSE;                         \
+    }
+
 BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    HMODULE hNtDll = LoadLibraryW(L"ntdll.dll");
-    if (hNtDll)
-    {
-        RtlQueryFeatureConfiguration = (RtlQueryFeatureConfiguration_t)GetProcAddress(hNtDll, "RtlQueryFeatureConfiguration");
-    }
+    LOAD_MODULE(ntdll)
+    LOAD_FUNCTION(ntdll, RtlQueryFeatureConfiguration)
 
-    HMODULE hPropsys = LoadLibraryW(L"propsys.dll");
-    if (hPropsys)
-    {
-        VariantToBuffer = (VariantToBuffer_t)GetProcAddress(hPropsys, "VariantToBuffer");
-    }
+    LOAD_MODULE(propsys)
+    LOAD_FUNCTION(propsys, VariantToBuffer)
 
-    HMODULE hExplorerFrame = LoadLibraryW(L"ExplorerFrame.dll");
-    if (!hExplorerFrame)
+    LOAD_MODULE(ExplorerFrame)
+    VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(ExplorerFrame, nullptr);
+    if (!pVerInfo || HIWORD(pVerInfo->dwFileVersionLS) > 21332)
     {
-        Wh_Log(L"Failed to load ExplorerFrame.dll");
+        Wh_Log(L"Rejecting invalid or Windows 11 ExplorerFrame.dll");
         return FALSE;
     }
+    HOOK_SYMBOLS(ExplorerFrame, explorerframeDllHooks)
 
-    const WindhawkUtils::SYMBOL_HOOK explorerframeDllHooks[] = {
-        {
-            {
-                L"bool "
-                SSTDCALL
-                L" UseSeparateProcess(struct IShellItem *)"
-            },
-            &UseSeparateProcess_orig,
-            UseSeparateProcess_hook,
-            false
-        },
-        {
-            {
-                L"private: struct _GUID "
-                STHISCALL
-                L" CExplorerLauncher::GetHostFromTarget(struct _ITEMIDLIST_ABSOLUTE const *)"
-            },
-            &CExplorerLauncher_GetHostFromTarget_orig,
-            CExplorerLauncher_GetHostFromTarget_hook,
-            false
-        },
-        {
-            {
-                L"private: bool "
-                STHISCALL
-                L" CUniversalSearchBand::IsModernSearchBoxEnabled(void)"
-            },
-            &CUniversalSearchBand_IsModernSearchBoxEnabled_orig,
-            CUniversalSearchBand_IsModernSearchBoxEnabled_hook,
-            true
-        },
-        {
-            {
-                L"public: long "
-                STHISCALL
-                L" CSearchEditBox::HideSuggestions(void)"
-            },
-            &CSearchEditBox_HideSuggestions_orig,
-            CSearchEditBox_HideSuggestions_hook,
-            false
-        },
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CSearchBox::SetCueAndTooltipText(unsigned short const *,unsigned short const *)"
-            },
-            &CSearchBox_SetCueAndTooltipText_orig,
-            CSearchBox_SetCueAndTooltipText_hook,
-            false
-        },
-        {
-            {
-                L"private: void "
-                STHISCALL
-                L" CAddressBand::_PositionChildWindows(void)"
-            },
-            &CAddressBand__PositionChildWindows_orig,
-            CAddressBand__PositionChildWindows_hook,
-            false
-        },
-        {
-            {
-#ifdef _WIN64
-                L"private: __int64 __cdecl CAddressBand::_AddressBandWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
-#else
-                L"private: long __thiscall CAddressBand::_AddressBandWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
-#endif
-            },
-            &CAddressBand__AddressBandWndProc_orig,
-            CAddressBand__AddressBandWndProc_hook,
-            false
-        },
-        {
-            {
-                L"protected: virtual void "
-                STHISCALL
-                L" CAddressList::_InitCombobox(void)"
-            },
-            &CAddressList__InitCombobox_orig,
-            CAddressList__InitCombobox_hook,
-            false
-        },
-        {
-            {
-                L"private: bool "
-                STHISCALL
-                L" CShellBrowser::_ShouldShowRibbon(struct IShellItem *)"
-            },
-            &CShellBrowser__ShouldShowRibbon_orig,
-            CShellBrowser__ShouldShowRibbon_hook,
-            false
-        },
-        {
-            {
-                L"private: struct HWND__ * "
-                STHISCALL
-                L" CNscTree::_CreateTreeview(struct HWND__ *)"
-            },
-            &CNscTree__CreateTreeview_orig,
-            CNscTree__CreateTreeview_hook,
-            false
-        },
-        {
-            {
-#ifdef _WIN64
-                L"private: static __int64 __cdecl CNscTree::s_SubClassTreeWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,unsigned __int64,unsigned __int64)"
-#else
-                L"private: static long __stdcall CNscTree::s_SubClassTreeWndProc(struct HWND__ *,unsigned int,unsigned int,long,unsigned int,unsigned long)"
-#endif
-            },
-            &CNscTree_s_SubClassTreeWndProc_orig,
-            CNscTree_s_SubClassTreeWndProc_hook,
-            false
-        },
-        {
-            {
-                L"private: void "
-                STHISCALL
-                L" CNscTree::ScaleAndSetIndent(void)"
-            },
-            &CNscTree_ScaleAndSetIndent_orig,
-            CNscTree_ScaleAndSetIndent_hook,
-            false
-        },
-        {
-            {
-                L"protected: void "
-                STHISCALL
-                L" CNavBar::_SetTheme(void)"
-            },
-            &CNavBar__SetTheme_orig,
-            CNavBar__SetTheme_hook,
-            false
-        },
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CSeparatorBand::GetBandInfo(unsigned long,unsigned long,struct DESKBANDINFO *)"
-            },
-            &CSeparatorBand_GetBandInfo_orig,
-            CSeparatorBand_GetBandInfo_hook,
-            false
-        },
-        {
-            {
-#ifdef _WIN64
-                L"protected: static __int64 __cdecl CNavBar::s_SizableWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
-#else
-                L"protected: static long __stdcall CNavBar::s_SizableWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
-#endif
-            },
-            &CNavBar_s_SizableWndProc_orig,
-            CNavBar_s_SizableWndProc_hook,
-            false
-        },
-        {
-            {
-                L"protected: void "
-                STHISCALL
-                L" CNavBar::_OnFrameStateChanged(unsigned long)"
-            },
-            &CNavBar__OnFrameStateChanged_orig,
-            CNavBar__OnFrameStateChanged_hook,
-            false
-        },
-        {
-            {
-                L"protected: virtual long "
-                STHISCALL
-                L" CNavBar::CNavBandSite::_Initialize(struct HWND__ *)"
-            },
-            &CNavBar_CNavBandSite__Initialize_orig,
-            CNavBar_CNavBandSite__Initialize_hook,
-            false
-        },
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CUpBand::GetBandInfo(unsigned long,unsigned long,struct DESKBANDINFO *)"
-            },
-            &CUpBand_GetBandInfo_orig,
-            CUpBand_GetBandInfo_hook,
-            false
-        },
-        {
-            {
-                L"private: void "
-                STHISCALL
-                L" CExplorerFrame::_UpdateFrameState(void)"
-            },
-            &CExplorerFrame__UpdateFrameState_orig,
-            CExplorerFrame__UpdateFrameState_hook,
-            false
-        },
-        {
-            {
-                L"protected: long "
-                STHISCALL
-                L" CNavBar::ConstructNavBarThemeClassName(unsigned short * *)"
-            },
-            &CNavBar_ConstructNavBarThemeClassName_orig,
-            CNavBar_ConstructNavBarThemeClassName_hook,
-            false
-        },
-        {
-            {
-#ifdef _WIN64
-                L"protected: static __int64 __cdecl CTravelBand::s_TravelWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
-#else
-                L"protected: static long __stdcall CTravelBand::s_TravelWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
-#endif
-            },
-            &CTravelBand_s_TravelWndProc_orig,
-            CTravelBand_s_TravelWndProc_hook,
-            false
-        },
-        {
-            {
-                L"private: void "
-                STHISCALL
-                L" CTravelBand::_CreateTravelButtons(void)"
-            },
-            &CTravelBand__CreateTravelButtons_orig,
-            CTravelBand__CreateTravelButtons_hook,
-            false
-        },
-        {
-            {
-                L"private: void "
-                STHISCALL
-                L" CTravelBand::_SetButtonImagesClassicMode(void)"
-            },
-            &CTravelBand__SetButtonImagesClassicMode_orig,
-            CTravelBand__SetButtonImagesClassicMode_hook,
-            false
-        },
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CTravelBand::GetBandInfo(unsigned long,unsigned long,struct DESKBANDINFO *)"
-            },
-            &CTravelBand_GetBandInfo_orig,
-            CTravelBand_GetBandInfo_hook,
-            false
-        },
-        {
-            {
-                L"private: void "
-                STHISCALL
-                L" CTravelBand::_SetControlState(int)"
-            },
-            &CTravelBand__SetControlState_orig,
-            CTravelBand__SetControlState_hook,
-            false
-        },
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CNscTree::SetStateImageList(struct _IMAGELIST *)"
-            },
-            &CNscTree_SetStateImageList_orig,
-            CNscTree_SetStateImageList_hook,
-            false
-        },
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CShellBrowser::GetFolderFlags(enum FOLDERFLAGS *,enum FOLDERFLAGS *)"
-            },
-            &CShellBrowser_GetFolderFlags_orig,
-            CShellBrowser_GetFolderFlags_hook,
-            false
-        },
-#ifdef _WIN64
-        {
-            {
-                L"private: void "
-                SSTDCALL
-                L" CShellBrowser::_OnRibbonVisibilityChange(enum CShellBrowser::ONRIBBONVISIBILITY_CHANGE)"
-            },
-            &CShellBrowser___OnRibbonVisibilityChange_orig,
-            CShellBrowser___OnRibbonVisibilityChange_hook,
-            false
-        }
-#endif
-    };
+    LOAD_MODULE(shell32)
+    HOOK_SYMBOLS(shell32, shell32DllHooks)
 
-    if (!WindhawkUtils::HookSymbols(
-        hExplorerFrame,
-        explorerframeDllHooks,
-        ARRAYSIZE(explorerframeDllHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook one or more symbol functions in ExplorerFrame.dll");
-        return FALSE;
-    }
+    LOAD_MODULE_(windows.storage, windows_storage)
+    HOOK_SYMBOLS_(windows.storage, windows_storage, windowsStorageHooks)
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
-    if (!hShell32)
-    {
-        Wh_Log(L"Failed to load shell32.dll");
-        return FALSE;
-    }
-
-    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
-        {
-            {
-                L"private: int "
-                STHISCALL
-                L" CDefView::_UseItemsView(void)"
-            },
-            &CDefView__UseItemsView_orig,
-            CDefView__UseItemsView_hook,
-            false
-        },
-#ifdef _WIN64
-        {
-            {
-                L"long __cdecl DUI_LoadUIFileFromResources(struct HINSTANCE__ *,unsigned int,unsigned short * *)"
-            },
-            &DUI_LoadUIFileFromResources_orig,
-            DUI_LoadUIFileFromResources_hook,
-            false
-        },
-#endif
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CStorageSystemTypeCategorizer::GetCategory(unsigned int,struct _ITEMID_CHILD const "
-#ifdef _WIN64
-                L"__unaligned "
-#endif
-                L"* const *,unsigned long *)"
-            },
-            &CStorageSystemTypeCategorizer_GetCategory_orig,
-            CStorageSystemTypeCategorizer_GetCategory_hook,
-            false
-        },
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CStorageSystemTypeCategorizer::CompareCategory(enum CATSORT_FLAGS,unsigned long,unsigned long)"
-            },
-            &CStorageSystemTypeCategorizer_CompareCategory_orig,
-            CStorageSystemTypeCategorizer_CompareCategory_hook,
-            false
-        },
-        {
-            {
-                L"public: virtual long "
-                SSTDCALL
-                L" CStorageSystemTypeCategorizer::GetCategoryInfo(unsigned long,struct CATEGORY_INFO *)"
-            },
-            &CStorageSystemTypeCategorizer_GetCategoryInfo_orig,
-            CStorageSystemTypeCategorizer_GetCategoryInfo_hook,
-            false
-        },
-        {
-            {
-                L"enum FOLDERFLAGS "
-                SSTDCALL
-                L" IViewSettings_GetFolderFlags(struct IViewSettings *)"
-            },
-            &IViewSettings_GetFolderFlags_orig,
-            IViewSettings_GetFolderFlags_hook,
-            false
-        }
-    };
-
-    if (!WindhawkUtils::HookSymbols(
-        hShell32,
-        shell32DllHooks,
-        ARRAYSIZE(shell32DllHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook one or more symbol functions in shell32.dll");
-        return FALSE;
-    }
-
-    HMODULE hStorage = LoadLibraryW(L"windows.storage.dll");
-    if (!hStorage)
-    {
-        Wh_Log(L"Failed to load windows.storage.dll");
-        return FALSE;
-    }
-
-    // windows.storage.dll
-    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
-        {
-            {
-                L"public: long "
-                STHISCALL
-                L" CObjectArray::AddItemsFromKeySkip(struct HKEY__ *,unsigned short const *,unsigned long,struct _GUID const &)"
-            },
-            &CObjectArray_AddItemsFromKeySkip_orig,
-            CObjectArray_AddItemsFromKeySkip_hook,
-            false
-        }
-    };
-
-    if (!WindhawkUtils::HookSymbols(
-        hStorage,
-        windowsStorageHooks,
-        ARRAYSIZE(windowsStorageHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook one or more symbol functions in windows.storage.dll");
-        return FALSE;
-    }
-
-    HMODULE hComCtl = LoadComCtlModule();
-    if (!hComCtl)
+    HMODULE comctl32 = LoadComCtlModule();
+    if (!comctl32)
     {
         Wh_Log(L"Failed to load comctl32.dll");
         return FALSE;
     }
 
-    if (!WindhawkUtils::Wh_SetFunctionHookT(
-        (ImageList_LoadImageW_t)GetProcAddress(hComCtl, "ImageList_LoadImageW"),
-        ImageList_LoadImageW_hook,
-        &ImageList_LoadImageW_orig
-    ))
-    {
-        Wh_Log(L"Failed to hook ImageList_LoadImageW");
-        return FALSE;
-    }
+    ImageList_LoadImageW_t ImageList_LoadImageW;
+    LOAD_FUNCTION(comctl32, ImageList_LoadImageW)
+    HOOK_FUNCTION(ImageList_LoadImageW)
 
-    if (!WindhawkUtils::Wh_SetFunctionHookT(
-        GetSystemMetricsForDpi,
-        GetSystemMetricsForDpi_hook,
-        &GetSystemMetricsForDpi_orig
-    ))
-    {
-        Wh_Log(L"Failed to hook GetSystemMetricsForDpi");
-        return FALSE;
-    }
+    HOOK_FUNCTION(GetSystemMetricsForDpi)
+    HOOK_FUNCTION(OpenThemeData)
+    HOOK_FUNCTION(DrawThemeParentBackground)
 
-    if (!WindhawkUtils::Wh_SetFunctionHookT(
-        OpenThemeData,
-        OpenThemeData_hook,
-        &OpenThemeData_orig
-    ))
-    {
-        Wh_Log(L"Failed to hook OpenThemeData");
-        return FALSE;
-    }
-
-    if (!WindhawkUtils::Wh_SetFunctionHookT(
-        DrawThemeParentBackground,
-        DrawThemeParentBackground_hook,
-        &DrawThemeParentBackground_orig
-    ))
-    {
-        Wh_Log(L"Failed to hook DrawThemeParentBackground");
-        return FALSE;
-    }
-
-    HMODULE hDwmapi = LoadLibraryW(L"dwmapi.dll");
-    if (!hDwmapi)
-    {
-        Wh_Log(L"Failed to load dwmapi.dll");
-        return FALSE;
-    }
-
-    if (!WindhawkUtils::Wh_SetFunctionHookT(
-        (DwmExtendFrameIntoClientArea_t)GetProcAddress(hDwmapi, "DwmExtendFrameIntoClientArea"),
-        DwmExtendFrameIntoClientArea_hook,
-        &DwmExtendFrameIntoClientArea_orig
-    ))
-    {
-        Wh_Log(L"Failed to hook DwmExtendFrameIntoClientArea");
-        return FALSE;
-    }
+    LOAD_MODULE(dwmapi)
+    DwmExtendFrameIntoClientArea_t DwmExtendFrameIntoClientArea;
+    LOAD_FUNCTION(dwmapi, DwmExtendFrameIntoClientArea)
+    HOOK_FUNCTION(DwmExtendFrameIntoClientArea)
 
     return TRUE;
 }

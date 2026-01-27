@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-tray-system-icon-tweaks
 // @name            Taskbar tray system icon tweaks
-// @description     Allows hiding system icons (volume, network, battery), the bell (always or when there are no new notifications), and the "Show desktop" button (Windows 11 only)
-// @version         1.2.2
+// @description     Allows hiding system icons: volume, network, battery, microphone, location/GPS, Studio Effects, language bar, bell (always or when there are no new notifications), and the "Show desktop" button (hide or set width)
+// @version         1.2.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -24,8 +24,11 @@
 /*
 # Taskbar tray system icon tweaks
 
-Allows hiding system icons (volume, network, battery), the bell (always or when
-there are no new notifications), and the "Show desktop" button.
+Allows hiding system icons: volume, network, battery, microphone, location/GPS,
+Studio Effects, language bar, bell (always or when there are no new
+notifications), and the "Show desktop" button (hide or set width).
+
+Only Windows 11 is supported.
 
 ![Demonstration](https://i.imgur.com/YfO676m.gif)
 */
@@ -43,6 +46,8 @@ there are no new notifications), and the "Show desktop" button.
   $name: Hide microphone icon
 - hideGeolocationIcon: false
   $name: Hide location (e.g. GPS) icon
+- hideStudioEffectsIcon: false
+  $name: Hide Studio Effects icon
 - hideLanguageBar: false
   $name: Hide language bar
 - hideLanguageSupplementaryIcons: false
@@ -65,6 +70,7 @@ there are no new notifications), and the "Show desktop" button.
 #include <atomic>
 #include <functional>
 #include <list>
+#include <string>
 
 #undef GetCurrentTime
 
@@ -90,6 +96,7 @@ struct {
     bool hideBatteryIcon;
     bool hideMicrophoneIcon;
     bool hideGeolocationIcon;
+    bool hideStudioEffectsIcon;
     bool hideLanguageBar;
     bool hideLanguageSupplementaryIcons;
     HideBellIcon hideBellIcon;
@@ -111,14 +118,23 @@ int64_t g_mainStackTextChangedToken;
 winrt::weak_ref<FrameworkElement> g_bellSystemTrayIconElement;
 int64_t g_bellAutomationNameChangedToken;
 
-HWND GetTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
 
-    DWORD processId = 0;
-    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
-        processId != GetCurrentProcessId()) {
-        return nullptr;
-    }
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
 }
@@ -230,6 +246,7 @@ enum class SystemTrayIconIdent {
     kBellFull,
     kBellFullDnd,
     kLanguage,
+    kStudioEffects,
 };
 
 SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
@@ -412,6 +429,9 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
         case L'\uEE75':  // (Maybe) HalfAlpha
         case L'\uEE76':  // (Maybe) HalfAlphaPrivateMode
             return SystemTrayIconIdent::kLanguage;
+
+        case L'\uEABC':
+            return SystemTrayIconIdent::kStudioEffects;
     }
 
     return SystemTrayIconIdent::kUnknown;
@@ -461,6 +481,10 @@ void ApplyMainStackIconViewStyle(FrameworkElement notifyIconViewElement) {
                 case SystemTrayIconIdent::kMicrophoneAndGeolocation:
                     hide = g_settings.hideMicrophoneIcon &&
                            g_settings.hideGeolocationIcon;
+                    break;
+
+                case SystemTrayIconIdent::kStudioEffects:
+                    hide = g_settings.hideStudioEffectsIcon;
                     break;
 
                 case SystemTrayIconIdent::kNone:
@@ -1206,6 +1230,8 @@ void* CTaskBand_ITaskListWndSite_vftable;
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
 
+void* TaskbarHost_FrameHeight_Original;
+
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
 
@@ -1234,12 +1260,29 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         return nullptr;
     }
 
-    // Reference: TaskbarHost::FrameHeight
-    constexpr size_t kTaskbarElementIUnknownOffset = 0x40;
+    size_t taskbarElementIUnknownOffset = 0x48;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    // Just use the default offset which will hopefully work in most cases.
+#else
+#error "Unsupported architecture"
+#endif
 
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
-                      kTaskbarElementIUnknownOffset);
+                      taskbarElementIUnknownOffset);
 
     FrameworkElement taskbarElement = nullptr;
     taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
@@ -1310,6 +1353,8 @@ void LoadSettings() {
     g_settings.hideBatteryIcon = Wh_GetIntSetting(L"hideBatteryIcon");
     g_settings.hideMicrophoneIcon = Wh_GetIntSetting(L"hideMicrophoneIcon");
     g_settings.hideGeolocationIcon = Wh_GetIntSetting(L"hideGeolocationIcon");
+    g_settings.hideStudioEffectsIcon =
+        Wh_GetIntSetting(L"hideStudioEffectsIcon");
     g_settings.hideLanguageBar = Wh_GetIntSetting(L"hideLanguageBar");
     g_settings.hideLanguageSupplementaryIcons =
         Wh_GetIntSetting(L"hideLanguageSupplementaryIcons");
@@ -1336,7 +1381,7 @@ void ApplySettings() {
 
     Wh_Log(L"Applying settings");
 
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         Wh_Log(L"No taskbar found");
         return;
@@ -1431,7 +1476,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 bool HookTaskbarDllSymbols() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -1445,6 +1491,10 @@ bool HookTaskbarDllSymbols() {
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
             &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
         },
         {
             {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
