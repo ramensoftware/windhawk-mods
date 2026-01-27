@@ -165,7 +165,7 @@ def get_mod_file_metadata(
 
 @cache
 def get_mod_author_data():
-    url = 'https://mods.windhawk.net/mod_author_data.json'
+    url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
     response = urllib.request.urlopen(url).read()
     return json.loads(response)
 
@@ -186,7 +186,7 @@ def is_valid_license_identifier(license_id: str):
 def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
     """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
     try:
-        url = f'https://mods.windhawk.net/mods/{mod_id}.wh.cpp'
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{mod_id}.wh.cpp'
         response = urllib.request.urlopen(url)
         content = response.read().decode('utf-8')
 
@@ -211,7 +211,7 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
 def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
     """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
     try:
-        url = f'https://mods.windhawk.net/mods/{mod_id}/versions.json'
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{mod_id}/versions.json'
         response = urllib.request.urlopen(url)
         data = json.loads(response.read())
         return [item['version'] for item in data]
