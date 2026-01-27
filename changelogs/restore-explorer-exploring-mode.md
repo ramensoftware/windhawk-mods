@@ -1,3 +1,8 @@
+## 1.1.0 ([Jan 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d2dfdeae3d10a9c1e78857810635f08061fa3afc/mods/restore-explorer-exploring-mode.wh.cpp))
+
+- Implement accurate new window behavior for "Open" and "Explore" verbs on folders
+- Clean up some of the settings' descriptions
+
 ## 1.0.3 ([Jan 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7946c3ffec884c0c0323ebb020749f5226985114/mods/restore-explorer-exploring-mode.wh.cpp))
 
 - Fix bugs with ExplorerEx
