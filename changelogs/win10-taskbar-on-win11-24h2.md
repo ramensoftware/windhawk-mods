@@ -1,3 +1,7 @@
+## 0.1.4 ([Jan 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/53d96781b3215f0a082908a2539cafe178e8895a/mods/win10-taskbar-on-win11-24h2.wh.cpp))
+
+Update mod name, description, and version
+
 ## 0.1.3 ([Oct 12, 2025](https://github.com/ramensoftware/windhawk-mods/blob/377bbbf75788fa473fd5621888e5e2da3bf83b77/mods/win10-taskbar-on-win11-24h2.wh.cpp))
 
 rename+wording

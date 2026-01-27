@@ -8618,7 +8618,7 @@
                     6
                 ],
                 "ratingUsers": 11,
-                "updated": 1760275945000,
+                "updated": 1769517159000,
                 "users": 263
             },
             "metadata": {
@@ -8627,13 +8627,13 @@
                 ],
                 "author": "Anixx",
                 "compilerOptions": "-lurlmon",
-                "description": "Installs Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024",
+                "description": "Installs Windows 10 taskbar on Windows 11 version 24H2, 25H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024",
                 "github": "https://github.com/Anixx",
                 "include": [
                     "userinit.exe"
                 ],
-                "name": "Win10 taskbar on Win11 24H2",
-                "version": "0.1.3"
+                "name": "Win10 taskbar on Win11 24H2 or 25H2",
+                "version": "0.1.4"
             }
         },
         "win11-accent-border": {

@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-26T19:57:38.000Z</updated>
+    <updated>2026-01-27T12:32:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.4]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#53d96781b3215f0a082908a2539cafe178e8895a</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
+        <updated>2026-01-27T12:32:39.000Z</updated>
+        <content type="html"><![CDATA[<p>Update mod name, description, and version</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Tail 1.1]]></title>
         <id>https://windhawk.net/mods/task-manager-tail#e13d4d201dc7549fc5cb852a3d19dc842d494feb</id>
@@ -313,34 +324,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Unwanted Context Menu Items (Classic Menu Only) 1.4]]></title>
-        <id>https://windhawk.net/mods/remove-context-menu-items#11c097e75c59eeb5340544a328410e6d2e4c1eff</id>
-        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
-        <updated>2026-01-22T20:51:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added several new context menu items to the settings for easier removal:<ul>
-<li><code>Open in new tab</code> and <code>Open in new window</code></li>
-<li><code>Send with Quick Share</code></li>
-<li><code>Edit in Notepad</code></li>
-<li><code>Edit with Photos</code></li>
-<li><code>Edit with Paint</code></li>
-<li><code>NVIDIA Control Panel</code></li></ul></li>
-<li>Added more specific strings for common applications like VLC and Windows Media Player to ensure better coverage.</li>
-<li>Updated the <code>ShouldRemoveMenuItem</code> function to use <strong>exact string matching</strong> for predefined items.<ul>
-<li>This replaces the previous "contains" search logic, which required manual exclusions to avoid accidentally removing items like "Open with…" when "Open" was selected.</li></ul></li>
-<li>Reorganized the <code>WindhawkModSettings</code> block into categories (Bloatware items, Basic items, App-specific items) for better readability.</li>
-<li>Updated several existing item strings (e.g., "Scan with Microsoft Defender…") to include trailing ellipses for more accurate matching.</li>
-<li>Removed hardcoded "special case" logic for "Open" and "Edit" items, as the new exact matching system handles these natively without interfering with extended commands like "Open in Terminal."</li>
-<li>Fixed Issue <a href="https://github.com/ramensoftware/windhawk-mods/issues/3082">#3082</a></li>
-<li>Implementation of predefined toggle options for non-English versions of Windows. (High Priority)</li>
-<li>Planned compatibility for the modern Windows 11 context menu. (Low Priority)</li>
-</ul>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>
