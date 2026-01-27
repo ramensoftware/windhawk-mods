@@ -70,7 +70,13 @@ Windows Registry Editor Version 5.00
 */
 // ==/WindhawkModSettings==
 
+// Hack for Windhawk <1.7
+#undef WINAPI
+#define WINAPI __attribute__((stdcall))
 #include <windhawk_utils.h>
+#undef WINAPI
+#define WINAPI __stdcall
+
 #include <initguid.h>
 #include <shlguid.h>
 #include <shlobj.h>
