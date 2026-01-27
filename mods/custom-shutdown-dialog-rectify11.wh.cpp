@@ -3,7 +3,7 @@
 // @name            Custom Shutdown Dialog (Rectify11)
 // @description     Replaces the classic Windows shutdown dialogs with a custom executable. Specifically optimized for Rectify11 to fix the "immediate self-close" bug by waiting for Alt+F4 release.
 // @version         1.1.0
-// @author          aubymori & osmanonurkoc
+// @author          osmanonurkoc
 // @github          https://github.com/osmanonurkoc
 // @include         explorer.exe
 // @architecture    x86-64
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Custom Shutdown Dialog (Safe Launch)
+# Custom Shutdown Dialog (Safe Launch) forked from @aubymori
 
 This mod redirects the classic Windows shutdown, logoff, and disconnect dialogs to a custom executable. It is essential for users of **Rectify11 Modern Shutdown**.
 
