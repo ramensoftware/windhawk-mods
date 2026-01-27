@@ -250,6 +250,37 @@
                 "version": "1.1.1"
             }
         },
+        "app-theme-crash-fixer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769537912000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769537912000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "osmanonurkoc",
+                "compilerOptions": "-lntdll -lshlwapi -luxtheme",
+                "description": "Prevents applications from crashing when using 3rd party themes by forcing default Windows themes or disabling visual styles per-app.",
+                "github": "https://github.com/osmanonurkoc",
+                "include": [
+                    "*"
+                ],
+                "name": "App Theme Crash Fixer",
+                "version": "1.0.0"
+            }
+        },
         "auto-theme-switcher": {
             "details": {
                 "defaultSorting": 3591,

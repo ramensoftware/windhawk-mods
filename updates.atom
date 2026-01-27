@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-27T18:00:11.000Z</updated>
+    <updated>2026-01-27T18:18:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[App Theme Crash Fixer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/app-theme-crash-fixer#3936c86c044b45c7e77aeace46280ff875d05d73</id>
+        <link href="https://windhawk.net/mods/app-theme-crash-fixer"/>
+        <updated>2026-01-27T18:18:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="appthemecrashfixer">App Theme Crash Fixer</h1>
+<p>This mod helps fix stability issues in specific applications when using third-party Windows themes (e.g., via SecureUXTheme or UltraUXThemePatcher).</p>
+<p>Some legacy or poorly written applications may crash if they try to load a custom <code>.msstyles</code> file that is missing specific resources or metrics. This mod provides two methods to fix these crashes without uninstalling your theme.</p>
+<h2 id="features">Features</h2>
+<ol>
+<li><p><strong>Force Light Mode (Soft Fix):</strong>
+Spoofs the Registry to tell the application that Windows is running in the default "Light" mode.
+Useful for apps that only crash when "Dark Mode" is active.</p></li>
+<li><p><strong>Disable Visual Styles (Hard Fix):</strong>
+Completely disables the theming engine for the target application.
+The application will look like Windows 98/2000 (Classic Theme), but it will stop crashing.
+Also spoofs <code>GetCurrentThemeName</code> to return the default Aero path, preventing the app from attempting to read corrupt theme files.</p></li>
+</ol>
+<h2 id="usage">Usage</h2>
+<p>Go to the <strong>Settings</strong> tab and add a new entry for each problematic application:
+<strong>Executable Name:</strong> The process name (e.g., <code>program.exe</code>).
+<strong>Disable Visual Styles:</strong> Check this if the app crashes on startup.
+<strong>Force Light Mode:</strong> Check this if the app looks broken in Dark Mode.</p>]]></content>
+        <author>
+            <name>osmanonurkoc</name>
+            <uri>https://github.com/osmanonurkoc</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable IME in Run Dialog 1.0]]></title>
         <id>https://windhawk.net/mods/run-box-no-ime#461e93cfd207c00b58449fd132aeca8968d215de</id>
@@ -312,17 +340,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Helper 2.1.1]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-helper#980412439698cdb23bf0ce440781638a2e4a7cca</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
-        <updated>2026-01-23T10:53:58.000Z</updated>
-        <content type="html"><![CDATA[<p>There is no need to call InitializeVirtualDesktopAPI at module startup. it is initialized on demand anyway. fix https://github.com/ramensoftware/windhawk-mods/issues/3052</p>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>
