@@ -525,10 +525,18 @@ class ModMetadataValidator:
         if not prop:
             return
 
-        if not re.fullmatch(
-            r'((-[lD]\S+|-Wl,--export-all-symbols)\s+)+', prop.value + ' '
-        ):
-            prop.warn('@@ require manual verification')
+        def is_allowed_option(option: str) -> bool:
+            return bool(
+                option.startswith('-l')
+                or option.startswith('-D')
+                or option == '-Wl,--export-all-symbols'
+                or option == '-fms-extensions'
+            )
+
+        options = prop.value.split()
+        disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
+        if disallowed_options:
+            prop.warn(f'@@ require manual verification: {" ".join(disallowed_options)}')
 
     def validate_license(self):
         """Validate license identifier."""
