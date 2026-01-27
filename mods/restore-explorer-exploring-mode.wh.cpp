@@ -6,7 +6,7 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -lole32 -lshlwapi -lpropsys
+// @compilerOptions -lole32 -lshlwapi -lpropsys -fms-extensions
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -76,6 +76,13 @@ Windows Registry Editor Version 5.00
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <propsys.h>
+
+// Workaround for missing _ReturnAddress symbol
+extern "C" void* _ReturnAddress2() { return __builtin_return_address(0); }
+#define _ReturnAddress _ReturnAddress2
+#include <wil/result_macros.h>
+#undef _ReturnAddress
+
 #include <wil/resource.h>
 #include <wil/com.h>
 
