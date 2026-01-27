@@ -5844,6 +5844,34 @@
                 "version": "1.0.1"
             }
         },
+        "run-box-no-ime": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769536811000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769536811000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Joe Ye",
+                "compilerOptions": "-limm32",
+                "description": "Disable IME automatically when typing in the Run dialog, to prevent accidental input of non-English characters.",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Disable IME in Run Dialog",
+                "version": "1.0"
+            }
+        },
         "safediscshim": {
             "details": {
                 "defaultSorting": 830,

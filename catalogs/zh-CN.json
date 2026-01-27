@@ -5844,6 +5844,34 @@
                 "version": "1.0.1"
             }
         },
+        "run-box-no-ime": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769536811000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769536811000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Joe Ye",
+                "compilerOptions": "-limm32",
+                "description": "在资源管理器 Win+R 运行对话框输入时自动禁用输入法, 防止意外输入中文等非英文字符.",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "运行对话框自动关闭输入法",
+                "version": "1.0"
+            }
+        },
         "safediscshim": {
             "details": {
                 "defaultSorting": 830,

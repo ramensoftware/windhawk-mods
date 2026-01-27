@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-27T12:32:39.000Z</updated>
+    <updated>2026-01-27T18:00:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable IME in Run Dialog 1.0]]></title>
+        <id>https://windhawk.net/mods/run-box-no-ime#461e93cfd207c00b58449fd132aeca8968d215de</id>
+        <link href="https://windhawk.net/mods/run-box-no-ime"/>
+        <updated>2026-01-27T18:00:11.000Z</updated>
+        <content type="html"><![CDATA[<p>When typing in the Run dialog, disable IME (Input Method Editor) automatically to prevent accidental input of non-English characters.<br />
+So you can type commands and hit <code>Enter</code> <em>confidently</em>, never have to worry about IME messing things up again.</p>
+<p><em>Bringing you an elegant, neat and streamlined Win+R experience.</em></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.4]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#53d96781b3215f0a082908a2539cafe178e8895a</id>
@@ -310,20 +323,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>u2x1</name>
             <uri>https://github.com/u2x1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Customize Windows notifications placement 1.2.1]]></title>
-        <id>https://windhawk.net/mods/notifications-placement#7017c454dba9939cf7482cbc6c8a3ddda6a13ee1</id>
-        <link href="https://windhawk.net/mods/notifications-placement"/>
-        <updated>2026-01-22T23:46:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added detailed instructions for selecting a monitor to the mod description.</li>
-<li>Fixed the mod not working with some Windows interface languages.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
