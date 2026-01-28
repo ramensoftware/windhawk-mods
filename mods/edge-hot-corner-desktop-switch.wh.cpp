@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              edge-hot-corner-desktop-switch
 // @name            Edge Hot-Corners Desktop Switch
-// @description     Switches virtual desktops when the mouse hovers at the left or right screen edge for a moment.
-// @version         0.3.1
+// @description     Switch virtual desktops by hovering at screen edges (left/right). Includes center height limit to avoid accidental triggers.
+// @version         1.3
 // @author          Sanskar Prasad
 // @github          https://github.com/sanskarprasad
 // @include         explorer.exe
@@ -12,103 +12,73 @@
 /*
 - thresholdMs: 700
   $name: Time threshold at edge (ms)
-  $description: >
-    Milliseconds the cursor must stay in the hot zone before
-    switching desktops.
-
 - edgeWidth: 5
   $name: Detection edge width (px)
-  $description: >
-    Width in pixels of the left/right screen hot zone.
+- centerHeight: 400
+  $name: Active center height (px)
+  $description: Height of the vertical active band for hot corners.
 */
 // ==/WindhawkModSettings==
 
 #include <Windows.h>
-#include <Shobjidl.h> // for SHQueryUserNotificationState
+#include <Shobjidl.h>
 
-// #include <windhawk-sdk.h>
-
+// -----------------------------------------------------------------------------
+// Settings
+// -----------------------------------------------------------------------------
 struct {
     int thresholdMs;
     int edgeWidth;
+    int centerHeight;
 } settings;
 
 volatile bool g_Running = false;
 HANDLE g_hThread = nullptr;
 
-//--------------------------------------------------------------------------------
-// CALLBACK for EnumWindows to find the taskbar window in this process
-//--------------------------------------------------------------------------------
-static BOOL CALLBACK EnumTaskbarWndProc(HWND hWnd, LPARAM lParam)
-{
-    DWORD pid = 0;
-    WCHAR className[32] = { 0 };
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid == GetCurrentProcessId() &&
-        GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className, L"Shell_TrayWnd") == 0)
-    {
-        *reinterpret_cast<HWND*>(lParam) = hWnd;
-        return FALSE; // stop enumeration
-    }
-    return TRUE; // continue
-}
-
-static HWND FindCurrentProcessTaskbarWnd()
-{
-    HWND hTaskbarWnd = nullptr;
-    EnumWindows(EnumTaskbarWndProc, reinterpret_cast<LPARAM>(&hTaskbarWnd));
-    return hTaskbarWnd;
-}
-
+// -----------------------------------------------------------------------------
+// Settings Loader
+// -----------------------------------------------------------------------------
 void LoadSettings() {
     settings.thresholdMs = Wh_GetIntSetting(L"thresholdMs");
     settings.edgeWidth   = Wh_GetIntSetting(L"edgeWidth");
+    settings.centerHeight = Wh_GetIntSetting(L"centerHeight");
 }
 
+// -----------------------------------------------------------------------------
+// Utility
+// -----------------------------------------------------------------------------
 bool IsInFullScreenMode() {
-    QUERY_USER_NOTIFICATION_STATE pquns;
-    if (FAILED(SHQueryUserNotificationState(&pquns))) {
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (FAILED(SHQueryUserNotificationState(&state)))
         return false;
-    }
 
-    switch (pquns) {
-        case QUNS_NOT_PRESENT:
-        case QUNS_BUSY:
-        case QUNS_RUNNING_D3D_FULL_SCREEN:
-            return true;
-    }
-
-    return false;
+    return (state == QUNS_RUNNING_D3D_FULL_SCREEN);
 }
 
+// -----------------------------------------------------------------------------
+// Simulate desktop switch (Ctrl + Win + Arrow)
+// -----------------------------------------------------------------------------
 void SimulateDesktopSwitch(int direction) {
-    if (IsInFullScreenMode()) {
-        Wh_Log(L"EdgeHotCorner: Skipped desktop switch due to fullscreen window");
-        return;
-    }
+    if (IsInFullScreenMode()) return;
 
-    HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (hTaskbarWnd) {
-        SetForegroundWindow(hTaskbarWnd);
-    }
+    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (hTaskbar) SetForegroundWindow(hTaskbar);
 
-    WORD vkDir = (direction < 0 ? VK_LEFT : VK_RIGHT);
     INPUT inputs[6] = {};
+    WORD vkArrow = (direction < 0 ? VK_LEFT : VK_RIGHT);
 
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = VK_LWIN;
-    inputs[0].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
 
     inputs[1].type = INPUT_KEYBOARD;
     inputs[1].ki.wVk = VK_CONTROL;
 
     inputs[2].type = INPUT_KEYBOARD;
-    inputs[2].ki.wVk = vkDir;
+    inputs[2].ki.wVk = vkArrow;
     inputs[2].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
 
     inputs[3].type = INPUT_KEYBOARD;
-    inputs[3].ki.wVk = vkDir;
+    inputs[3].ki.wVk = vkArrow;
     inputs[3].ki.dwFlags = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
 
     inputs[4].type = INPUT_KEYBOARD;
@@ -117,59 +87,42 @@ void SimulateDesktopSwitch(int direction) {
 
     inputs[5].type = INPUT_KEYBOARD;
     inputs[5].ki.wVk = VK_LWIN;
-    inputs[5].ki.dwFlags = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
+    inputs[5].ki.dwFlags = KEYEVENTF_KEYUP;
 
-    UINT sent = SendInput(_countof(inputs), inputs, sizeof(INPUT));
-    Wh_Log(
-        L"EdgeHotCorner: SimulateDesktopSwitch(%s): SendInput injected %u events",
-        (direction < 0 ? L"Left" : L"Right"), sent);
+    SendInput(_countof(inputs), inputs, sizeof(INPUT));
 }
 
+// -----------------------------------------------------------------------------
+// Monitor Thread
+// -----------------------------------------------------------------------------
 DWORD WINAPI MonitorThread(LPVOID) {
-    POINT pt = { 0 }, lastPt = { -1, -1 };
-    int zone = 0;          // 0 = none, 1 = left, 2 = right
+    const int vsLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int vsWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int vsRight = vsLeft + vsWidth;
+    const int vsHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    const int vsTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+
+    POINT pt;
+    int zone = 0;
     DWORD enterTime = 0;
 
     while (g_Running) {
-        Sleep(zone == 0 ? 100 : 20);
+        Sleep(25);
+        if (!GetCursorPos(&pt)) continue;
 
-        if (!GetCursorPos(&pt))
-            continue;
+        int centerTop = vsTop + (vsHeight - settings.centerHeight) / 2;
+        int centerBottom = centerTop + settings.centerHeight;
 
-        if (zone == 0 && pt.x == lastPt.x && pt.y == lastPt.y)
-            continue;
-        lastPt = pt;
-
-        int vsX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        int vsW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-
-        if (pt.x <= vsX + 100 || pt.x >= vsX + vsW - 100) {
-            Wh_Log(
-                L"EdgeHotCorner: Cursor x = %d, virtualScreenStartX = %d, width = %d",
-                pt.x, vsX, vsW);
-        }
-
-        HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONULL);
-        if (!hMon) {
-            zone = 0;
-            continue;
-        }
-
-        MONITORINFO mi{ sizeof(mi) };
-        GetMonitorInfoW(hMon, &mi);
-        bool atLeft  = (pt.x <= mi.rcMonitor.left + settings.edgeWidth);
-        bool atRight = (pt.x >= mi.rcMonitor.right - settings.edgeWidth);
-        int newZone  = atLeft ? 1 : (atRight ? 2 : 0);
+        bool inVerticalCenter = (pt.y >= centerTop && pt.y <= centerBottom);
+        bool atLeft = (pt.x <= vsLeft + settings.edgeWidth);
+        bool atRight = (pt.x >= vsRight - settings.edgeWidth);
+        int newZone = (inVerticalCenter && atLeft) ? 1 : (inVerticalCenter && atRight ? 2 : 0);
 
         if (newZone != 0) {
             if (zone != newZone) {
                 zone = newZone;
                 enterTime = GetTickCount();
-            }
-            else if (GetTickCount() - enterTime >= (DWORD)settings.thresholdMs) {
-                Wh_Log(
-                    L"EdgeHotCorner: Switching desktop: %s",
-                    (zone == 1 ? L"Previous" : L"Next"));
+            } else if (GetTickCount() - enterTime >= (DWORD)settings.thresholdMs) {
                 SimulateDesktopSwitch(zone == 1 ? -1 : +1);
                 zone = 0;
             }
@@ -177,42 +130,28 @@ DWORD WINAPI MonitorThread(LPVOID) {
             zone = 0;
         }
     }
-
     return 0;
 }
 
+// -----------------------------------------------------------------------------
+// Init / Uninit
+// -----------------------------------------------------------------------------
 BOOL Wh_ModInit() {
-    if (!FindCurrentProcessTaskbarWnd()) {
-        HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (hTaskbarWnd) {
-            // The taskbar exists, but it's not owned by the current process.
-            return FALSE;
-        }
-    }
-
-    Wh_Log(L"EdgeHotCorner: Initializing mod");
     LoadSettings();
 
     g_Running = true;
     g_hThread = CreateThread(nullptr, 0, MonitorThread, nullptr, 0, nullptr);
-    if (!g_hThread) {
-        Wh_Log(L"EdgeHotCorner: Failed to create monitor thread");
-    }
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"EdgeHotCorner: Uninitializing mod");
     g_Running = false;
     if (g_hThread) {
         WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
-        g_hThread = nullptr;
     }
-    Wh_Log(L"EdgeHotCorner: Mod shut down");
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"EdgeHotCorner: Settings changed; reloading");
     LoadSettings();
 }
