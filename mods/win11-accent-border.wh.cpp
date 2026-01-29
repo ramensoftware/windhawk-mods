@@ -2,7 +2,7 @@
 // @id              win11-accent-border
 // @name            Windows 11 Accent Window Border
 // @description     Show the accent color on the border but not on the titlebar
-// @version         1.0.3
+// @version         1.0.4
 // @author          Guerra24
 // @github          https://github.com/Guerra24
 // @include         *
@@ -32,12 +32,22 @@ You can use `AccentColorInactive` in `HKEY_CURRENT_USER\Software\Microsoft\Windo
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- SpecialWindows: false
+  $name: Target special windows
+  $description: Allows the mod to work properly with some applications that customize their windows (e.g. Flow Launcher)
+*/
+// ==/WindhawkModSettings==
+
 #include <dwmapi.h>
 #include <windhawk_api.h>
 
 COLORREF BorderActive;
 COLORREF BorderInactive = 0x000000;
 const COLORREF ColorDefault = DWMWA_COLOR_DEFAULT;
+
+bool SpecialWindows = false;
 
 void LoadColors() {
     DWORD color;
@@ -54,7 +64,7 @@ void LoadColors() {
 BOOL IsValidWindow(HWND hWnd) {
     DWORD dwStyle = GetWindowLongPtr(hWnd, GWL_STYLE);
     //Better exclude context menus
-    return (dwStyle & WS_THICKFRAME) == WS_THICKFRAME || (dwStyle & WS_CAPTION) == WS_CAPTION;
+    return (dwStyle & WS_THICKFRAME) == WS_THICKFRAME || (dwStyle & WS_CAPTION) == WS_CAPTION || (SpecialWindows && (dwStyle & WS_OVERLAPPED) == WS_OVERLAPPED && (dwStyle & WS_POPUP) != WS_POPUP);
 }
 
 using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
@@ -183,6 +193,8 @@ BOOL CALLBACK DisableEnumWindowsCallback(HWND hWnd, LPARAM lParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
+    SpecialWindows = Wh_GetIntSetting(L"SpecialWindows");
+
     LoadColors();
 
     Wh_SetFunctionHook(
@@ -224,4 +236,11 @@ void Wh_ModAfterInit() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L"BeforeUninit");
     EnumWindows(DisableEnumWindowsCallback, GetCurrentProcessId());
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"SettingsChanged");
+    EnumWindows(DisableEnumWindowsCallback, GetCurrentProcessId());
+    SpecialWindows = Wh_GetIntSetting(L"SpecialWindows");
+    EnumWindows(EnableEnumWindowsCallback, GetCurrentProcessId());
 }

@@ -9,7 +9,6 @@ import json
 import os
 import re
 import sys
-import time
 import urllib.error
 import urllib.request
 from functools import cache
@@ -164,24 +163,10 @@ def get_mod_file_metadata(
     return properties, warnings
 
 
-def urlopen_with_retry(url: str, max_retries: int = 5):
-    """Open URL with retry logic for 403 errors."""
-    attempt = 0
-    while True:
-        try:
-            return urllib.request.urlopen(url)
-        except urllib.error.HTTPError as e:
-            if e.code == 403 and attempt < max_retries - 1:
-                time.sleep(1)
-                attempt += 1
-                continue
-            raise
-
-
 @cache
 def get_mod_author_data():
-    url = 'https://mods.windhawk.net/mod_author_data.json'
-    response = urlopen_with_retry(url).read()
+    url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
+    response = urllib.request.urlopen(url).read()
     return json.loads(response)
 
 
@@ -199,10 +184,10 @@ def is_valid_license_identifier(license_id: str):
 
 @cache
 def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
-    """Fetch existing mod metadata, or None if mod doesn't exist."""
+    """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
     try:
-        url = f'https://mods.windhawk.net/mods/{mod_id}.wh.cpp'
-        response = urlopen_with_retry(url)
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{mod_id}.wh.cpp'
+        response = urllib.request.urlopen(url)
         content = response.read().decode('utf-8')
 
         # Use existing robust metadata parser (no warnings needed for existing mods)
@@ -226,8 +211,8 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
 def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
     """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
     try:
-        url = f'https://mods.windhawk.net/mods/{mod_id}/versions.json'
-        response = urlopen_with_retry(url)
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{mod_id}/versions.json'
+        response = urllib.request.urlopen(url)
         data = json.loads(response.read())
         return [item['version'] for item in data]
     except urllib.error.HTTPError as e:
@@ -540,10 +525,18 @@ class ModMetadataValidator:
         if not prop:
             return
 
-        if not re.fullmatch(
-            r'((-[lD]\S+|-Wl,--export-all-symbols)\s+)+', prop.value + ' '
-        ):
-            prop.warn('@@ require manual verification')
+        def is_allowed_option(option: str) -> bool:
+            return bool(
+                option.startswith('-l')
+                or option.startswith('-D')
+                or option == '-Wl,--export-all-symbols'
+                or option == '-fms-extensions'
+            )
+
+        options = prop.value.split()
+        disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
+        if disallowed_options:
+            prop.warn(f'@@ require manual verification: {" ".join(disallowed_options)}')
 
     def validate_license(self):
         """Validate license identifier."""
