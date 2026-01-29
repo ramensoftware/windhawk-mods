@@ -2,7 +2,7 @@
 // @id              vlc-discord-rpc
 // @name            VLC Discord Rich Presence
 // @description     Shows your playing status, quality tags (4K/HDR), and interactive buttons on Discord.
-// @version         1.0.1
+// @version         1.0.3
 // @author          ciizerr
 // @github          https://github.com/ciizerr
 // @include         vlc.exe
