@@ -165,7 +165,7 @@ def get_mod_file_metadata(
 
 @cache
 def get_mod_author_data():
-    url = 'https://mods.windhawk.net/mod_author_data.json'
+    url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
     response = urllib.request.urlopen(url).read()
     return json.loads(response)
 
@@ -186,7 +186,7 @@ def is_valid_license_identifier(license_id: str):
 def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
     """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
     try:
-        url = f'https://mods.windhawk.net/mods/{mod_id}.wh.cpp'
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{mod_id}.wh.cpp'
         response = urllib.request.urlopen(url)
         content = response.read().decode('utf-8')
 
@@ -211,7 +211,7 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
 def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
     """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
     try:
-        url = f'https://mods.windhawk.net/mods/{mod_id}/versions.json'
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{mod_id}/versions.json'
         response = urllib.request.urlopen(url)
         data = json.loads(response.read())
         return [item['version'] for item in data]
@@ -525,10 +525,18 @@ class ModMetadataValidator:
         if not prop:
             return
 
-        if not re.fullmatch(
-            r'((-[lD]\S+|-Wl,--export-all-symbols)\s+)+', prop.value + ' '
-        ):
-            prop.warn('@@ require manual verification')
+        def is_allowed_option(option: str) -> bool:
+            return bool(
+                option.startswith('-l')
+                or option.startswith('-D')
+                or option == '-Wl,--export-all-symbols'
+                or option == '-fms-extensions'
+            )
+
+        options = prop.value.split()
+        disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
+        if disallowed_options:
+            prop.warn(f'@@ require manual verification: {" ".join(disallowed_options)}')
 
     def validate_license(self):
         """Validate license identifier."""
@@ -681,6 +689,41 @@ def validate_symbol_hooks(path: Path):
     return warnings
 
 
+def validate_specific_keywords(path: Path):
+    """Check for specific keywords in mod source code."""
+    warnings = 0
+
+    mod_source = path.read_text(encoding='utf-8')
+    mod_source_lines = mod_source.splitlines()
+
+    # Words to check (pattern, description)
+    keyword_patterns = [
+        (r'InternalWh', 'InternalWh'),
+        (r'WH_EDITING', 'WH_EDITING'),
+        (r'\bWH_MOD\b', 'WH_MOD'),
+        (r'GWL_WNDPROC', 'GWL_WNDPROC'),
+        (r'GWLP_WNDPROC', 'GWLP_WNDPROC'),
+        (r'Wh_FindFirstSymbol', 'Wh_FindFirstSymbol'),
+        (r'Wh_FindNextSymbol', 'Wh_FindNextSymbol'),
+        (r'Wh_FindCloseSymbol', 'Wh_FindCloseSymbol'),
+    ]
+
+    for line_num, line in enumerate(mod_source_lines, start=1):
+        for pattern, word in keyword_patterns:
+            if re.search(pattern, line):
+                # Skip GWL(P)_WNDPROC when used with GetWindowLong(Ptr)
+                if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
+                    r'GetWindowLong(Ptr)?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
+                ):
+                    continue
+
+                warnings += add_warning(
+                    path, line_num, f'Line requires manual inspection for "{word}"'
+                )
+
+    return warnings
+
+
 def test_run():
     if len(sys.argv) != 3:
         print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
@@ -692,6 +735,7 @@ def test_run():
     warnings = 0
     warnings += validate_metadata(path, pr_author)
     warnings += validate_symbol_hooks(path)
+    warnings += validate_specific_keywords(path)
     if warnings > 0:
         print(f'Got {warnings} warnings')
 
@@ -730,6 +774,7 @@ def main():
 
         path_warnings = validate_metadata(path, pr_author)
         path_warnings += validate_symbol_hooks(path)
+        path_warnings += validate_specific_keywords(path)
         warnings += path_warnings
 
         if path_warnings == 0:
