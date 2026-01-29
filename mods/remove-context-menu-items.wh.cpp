@@ -1202,6 +1202,10 @@ BOOL WINAPI TrackPopupMenuEx_Hook(
     HWND hWnd,
     LPTPMPARAMS lptpm
 ) {
+    // Initialize COM on this thread (hook runs on different thread than Wh_ModInit)
+    HRESULT hrCom = CoInitialize(NULL);
+    bool comInitialized = SUCCEEDED(hrCom);
+    
     // Clear any stale file paths from previous calls
     g_threadFilePaths.clear();
     
@@ -1223,6 +1227,11 @@ BOOL WINAPI TrackPopupMenuEx_Hook(
     // Clear file paths after processing
     g_threadFilePaths.clear();
     
+    // Uninitialize COM on this thread
+    if (comInitialized) {
+        CoUninitialize();
+    }
+    
     return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
 }
 
@@ -1236,6 +1245,10 @@ BOOL WINAPI TrackPopupMenu_Hook(
     HWND hWnd,
     const RECT* prcRect
 ) {
+    // Initialize COM on this thread (hook runs on different thread than Wh_ModInit)
+    HRESULT hrCom = CoInitialize(NULL);
+    bool comInitialized = SUCCEEDED(hrCom);
+    
     // Clear any stale file paths from previous calls
     g_threadFilePaths.clear();
     
@@ -1256,6 +1269,11 @@ BOOL WINAPI TrackPopupMenu_Hook(
     
     // Clear file paths after processing
     g_threadFilePaths.clear();
+    
+    // Uninitialize COM on this thread
+    if (comInitialized) {
+        CoUninitialize();
+    }
     
     return TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
 }
@@ -1363,9 +1381,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Initializing context menu cleaner mod");
     Wh_Log(L"NOTE: Predefined options are in English. For other languages, use Custom Items in settings.");
     
-    // Initialize COM
-    CoInitialize(NULL);
-    
     LoadSettings();
     
     if (!Wh_SetFunctionHook(
@@ -1399,5 +1414,4 @@ void Wh_ModSettingsChanged() {
 // Windhawk mod cleanup
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing context menu cleaner mod");
-    CoUninitialize();
 }
