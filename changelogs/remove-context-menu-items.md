@@ -1,3 +1,23 @@
+## 1.5.0 ([Jan 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1a13854897981ceae24592b654e0f9558040006e/mods/remove-context-menu-items.wh.cpp))
+
+* Expanded predefined toggle compatibility beyond English to include support for several additional native languages:
+    * Čeština (Czech)
+    * English (United Kingdom & Australia)
+    * Portuguese (Brazil & Portugal)
+* Implemented a smart filtering system for "Edit in Notepad" and "Edit in Notepad++." 
+    * Users can now restrict these menu items to appear only for specific file extensions (e.g., .txt, .cfg, .log, .json).
+    * This prevents menu clutter when right-clicking non-text files while maintaining functionality for relevant documents.
+    * Known Limitation: In Explorer windows with multiple tabs, the mod currently only retrieves file context from the first (primary active) tab.
+* Added support for hiding more menu items including Cut, Copy, Paste, Rename, Delete, Create Shortcut, View, Sort by, Group by, Display settings, and Personalization.
+* Added support for hiding app-specific items such as "Open in Terminal," "Edit in Notepad++," and OneDrive-specific actions like "Always keep on this device" and "Free up space."
+* Restructured the settings interface into four distinct categories for improved usability:
+    1.  Bloatware Items
+    2.  Basic Items
+    3.  App-specific Items
+    4. Custom Items
+    5.  Extension Filtering
+* Refined the algorithm responsible for removing duplicate separators to ensure the context menu maintains a clean visual structure after item removal.
+
 ## 1.4 ([Jan 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/11c097e75c59eeb5340544a328410e6d2e4c1eff/mods/remove-context-menu-items.wh.cpp))
 
 * Added several new context menu items to the settings for easier removal:

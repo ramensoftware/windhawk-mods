@@ -5650,7 +5650,7 @@
                     21
                 ],
                 "ratingUsers": 25,
-                "updated": 1769115088000,
+                "updated": 1769728862000,
                 "users": 513
             },
             "metadata": {
@@ -5658,15 +5658,15 @@
                     "x86-64"
                 ],
                 "author": "Armaninyow",
-                "compilerOptions": "-lole32 -loleaut32",
-                "description": "Removes unwanted items from file context menus with configurable options",
+                "compilerOptions": "-lole32 -loleaut32 -lshlwapi -luuid",
+                "description": "Removes unwanted items from file context menus with configurable options and context-aware filtering",
                 "github": "https://github.com/armaninyow",
                 "include": [
                     "explorer.exe"
                 ],
                 "license": "MIT",
                 "name": "Remove Unwanted Context Menu Items (Classic Menu Only)",
-                "version": "1.4"
+                "version": "1.5.0"
             }
         },
         "remove-fullscreen-popup-chrome": {

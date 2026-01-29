@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-29T16:15:27.000Z</updated>
+    <updated>2026-01-29T23:21:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Unwanted Context Menu Items (Classic Menu Only) 1.5.0]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#1a13854897981ceae24592b654e0f9558040006e</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-01-29T23:21:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Expanded predefined toggle compatibility beyond English to include support for several additional native languages:<ul>
+<li>Čeština (Czech)</li>
+<li>English (United Kingdom &amp; Australia)</li>
+<li>Portuguese (Brazil &amp; Portugal)</li></ul></li>
+<li>Implemented a smart filtering system for "Edit in Notepad" and "Edit in Notepad++." <ul>
+<li>Users can now restrict these menu items to appear only for specific file extensions (e.g., .txt, .cfg, .log, .json).</li>
+<li>This prevents menu clutter when right-clicking non-text files while maintaining functionality for relevant documents.</li>
+<li>Known Limitation: In Explorer windows with multiple tabs, the mod currently only retrieves file context from the first (primary active) tab.</li></ul></li>
+<li>Added support for hiding more menu items including Cut, Copy, Paste, Rename, Delete, Create Shortcut, View, Sort by, Group by, Display settings, and Personalization.</li>
+<li>Added support for hiding app-specific items such as "Open in Terminal," "Edit in Notepad++," and OneDrive-specific actions like "Always keep on this device" and "Free up space."</li>
+<li>Restructured the settings interface into four distinct categories for improved usability:<ol>
+<li>Bloatware Items</li>
+<li>Basic Items</li>
+<li>App-specific Items</li>
+<li>Custom Items</li>
+<li>Extension Filtering</li></ol></li>
+<li>Refined the algorithm responsible for removing duplicate separators to ensure the context menu maintains a clean visual structure after item removal.</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VLC Discord Rich Presence 1.0.3]]></title>
         <id>https://windhawk.net/mods/vlc-discord-rpc#fad163cf3c8246732c75ac49aa098666cbebd786</id>
@@ -347,38 +376,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Magnifier Headless Mode 0.9.5.2]]></title>
-        <id>https://windhawk.net/mods/magnifier-headless#1f5a98f4619528de6c38e30571fcd85a6c0e8bbe</id>
-        <link href="https://windhawk.net/mods/magnifier-headless"/>
-        <updated>2026-01-23T19:53:41.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>New Features:</strong></p>
-<ul>
-<li>Add thread-safe implementation and race condition fixes.</li>
-<li>Add comprehensive API hooks for complete window visibility control.</li>
-<li>Add window procedure interception for comprehensive message handling.</li>
-<li>Add comprehensive performance optimizations.</li>
-<li>Add comprehensive error handling and robustness improvements.</li>
-<li>fix compilation errors by replacing SEH with portable error handling.</li>
-<li>Eliminate mouse freeze and add ultra-fast cleanup.</li>
-<li>Block touch controls and document mouse freeze fix.</li>
-<li>Block Magnifier Touch window by title.</li>
-<li>Make Magnifier Touch overlay transparent instead of hiding.</li>
-<li>Hide touch overlay using off-screen position + 0x0 size.</li>
-<li>The appropriate version number has been assigned.</li>
-</ul>
-<p><strong>Bug Fixes:</strong></p>
-<ul>
-<li>Hide GDI+ helper windows.</li>
-<li>Hide CSPNotify and MSCTFIME helper windows.</li>
-<li>Correct CSpNotify case sensitivity.</li>
-<li>Revert broad window class patterns that broke zoom.</li>
-</ul>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>
