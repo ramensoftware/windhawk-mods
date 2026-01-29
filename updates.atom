@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-27T22:28:30.000Z</updated>
+    <updated>2026-01-29T16:15:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[VLC Discord Rich Presence 1.0.3]]></title>
+        <id>https://windhawk.net/mods/vlc-discord-rpc#fad163cf3c8246732c75ac49aa098666cbebd786</id>
+        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
+        <updated>2026-01-29T16:15:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="vlcdiscordrichpresence">VLC Discord Rich Presence</h1>
+<p>Seamlessly integrates VLC Media Player with Discord to display playback status, media metadata, and resolution tags.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Smart Recognition:</strong> Automatically identifies Movies, TV Shows (with Season/Episode), and Anime.</li>
+<li><strong>Quality Tags:</strong> Displays resolution and format tags (4K, HDR, 1080p) based on the media file.</li>
+<li><strong>Interactive Buttons:</strong> Adds a "Search This" button to your status, redirecting to Google, IMDb, or YouTube.</li>
+<li><strong>Visual Themes:</strong> Includes options for Default and Dark Mode icon sets.</li>
+<li><strong>Playback Status:</strong> Accurately displays elapsed time, remaining time, and pause/idle states.</li>
+</ul>
+<h2 id="iconthemes">Icon Themes</h2>
+<p>Users can customize the appearance of the Rich Presence icons via the Mod Settings.</p>
+<ul>
+<li><p><strong>Default:</strong> The standard orange VLC cone.
+<img src="https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/default.png" alt="default theme" /></p></li>
+<li><p><strong>Dark:</strong> A dark-mode variant for low-light aesthetics.
+<img src="https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/dark_.png" alt="dark theme" /></p></li>
+</ul>
+<p><strong>Submissions:</strong> We are accepting community designs for new icon themes. If you have created a set (vlc, play, pause, stop), please contact <code>ciizerr</code> on Discord.</p>
+<h2 id="setupinstructionsfirstrunonly">Setup Instructions (First Run Only)</h2>
+<p>For this mod to retrieve data from VLC, the Web Interface must be enabled.</p>
+<ol>
+<li><p>Open VLC Media Player.</p></li>
+<li><p>Go to <strong>Tools</strong> &gt; <strong>Preferences</strong> (or press <code>Ctrl+P</code>).</p></li>
+<li><p>In the bottom-left corner, under <em>Show settings</em>, select <strong>All</strong>.</p></li>
+<li><p>Navigate to <strong>Interface</strong> &gt; <strong>Main interfaces</strong>.</p></li>
+<li><p>On the right panel, check the box for <strong>Web</strong>.</p>
+<p><img src="https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/setup/web-interface.png" alt="Enable Web Interface" /></p></li>
+<li><p>In the left sidebar, expand <em>Main interfaces</em> and click on <strong>Lua</strong>.</p></li>
+<li><p>Under <em>Lua HTTP</em>, set the <strong>Password</strong> to <code>1234</code> and <strong>Port</strong> to <code>8080</code>.</p>
+<p><img src="https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/setup/password.png" alt="Lua Password Setup" /></p></li>
+<li><p>Click <strong>Save</strong> and restart VLC.</p></li>
+</ol>
+<h2 id="configuration">Configuration</h2>
+<p><strong>Search Provider:</strong> You can change the destination of the search button (Google, Bing, IMDb) in the mod settings.</p>
+<p><strong>Custom Client ID:</strong> Power users who wish to upload their own assets can provide a custom Application ID in the settings.</p>
+<h2 id="feedbacksupport">Feedback &amp; Support</h2>
+<p>For bug reports, feature suggestions, or general feedback, please reach out via:</p>
+<ul>
+<li><strong>Discord:</strong> <code>ciizerr</code></li>
+<li><strong>GitHub:</strong> <a href="https://github.com/ciizerr/vlc-discord-rpc-archive">vlc-discord-rpc-archive</a> (contains cross-platform resources of vlc-discord-rpc)</li>
+</ul>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.1.0]]></title>
         <id>https://windhawk.net/mods/restore-explorer-exploring-mode#d2dfdeae3d10a9c1e78857810635f08061fa3afc</id>
@@ -327,17 +379,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>BCRTVKCS</name>
             <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Helper 2.1.2]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-helper#917fb6cede7d9079054a1e20be7c49eaff4cb569</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
-        <updated>2026-01-23T14:49:51.000Z</updated>
-        <content type="html"><![CDATA[<p>This fix makes the mod work properly after explorer.exe restarts. fix <a href="https://github.com/ramensoftware/windhawk-mods/issues/2855">#2855</a></p>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>
