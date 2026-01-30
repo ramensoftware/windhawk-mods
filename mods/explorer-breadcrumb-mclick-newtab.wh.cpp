@@ -3,7 +3,7 @@
 // @name            Explorer Breadcrumb Middle-Click New Tab
 // @description     Opens folders in a new tab by middle-clicking breadcrumb items (Linux style).
 // @version         1.0.0
-// @author          Osman Onur Koç
+// @author          osmanonurkoc
 // @github          https://github.com/osmanonurkoc
 // @include         explorer.exe
 // @compilerOptions -luiautomationcore -lole32 -loleaut32
