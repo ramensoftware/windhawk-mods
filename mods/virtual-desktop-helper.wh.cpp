@@ -2,7 +2,7 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, pin windows, and tile windows with customizable hotkeys
-// @version         2.1.2
+// @version         2.2.0
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -44,6 +44,48 @@ Based on VD.ahk by FuPeiJiang.
 
 Note: The modifier for utility hotkeys (Previous Desktop, Next Desktop, Pin, Tile, Layout) can be changed in settings.
 
+## Customization
+
+Settings are organized by feature. Each feature has an **Enable** toggle and its associated key configuration:
+
+### Hotkey Groups
+
+- **[Switch Desktop]** - Alt+1-9 to switch desktops
+- **[Move Window]** - Alt+Shift+1-9 to move windows between desktops
+- **[Prev/Next Desktop]** - Cycle between desktops (Alt+Q, Alt+X by default)
+- **[Pin Window]** - Pin/unpin windows to all desktops (Alt+P by default)
+- **[Tiling]** - Tile windows and related settings
+  - Main hotkey (Alt+D by default) to tile windows
+  - Layout cycle hotkey (Alt+L by default) - only works when tiling is enabled
+  - Default layout, margin, gap, and master size settings
+
+### Key Binding Format
+
+Hotkey fields accept any single character:
+
+**Letters & Numbers:** A-Z, 0-9  
+**Special Characters:**
+- `` ` `` (backtick), `~` (tilde)
+- `-` (minus), `=` (equals)
+- `[`, `]`, `\` (backslash)
+- `;` (semicolon), `'` (quote)
+- `,` (comma), `.` (period), `/` (slash)
+- Shifted versions: `!@#$%^&*()_+{}|:"<>?`
+
+**Special Keys:** Type the name: `Tab`, `Space`, `Enter`
+
+**Examples:**
+- Enter `F` → binds to Alt+F
+- Enter `~` → binds to Alt+` (backtick)
+- Enter `!` → binds to Alt+1 (shifted)
+- Enter `Tab` → binds to Alt+Tab
+
+**Example:** If you only want Alt+1-9 for switching desktops:
+1. Disable all options except "[Switch Desktop] Enable"
+2. All other hotkeys will be unregistered
+
+**Note:** The "[Tiling] Enable Layout Cycle" setting only has an effect when "[Tiling] Enable" is also enabled.
+
 ## Tiling Layouts
 
 1. **Master + Stack (Vertical)**: One large master window on the left, others stacked on the right
@@ -77,8 +119,12 @@ Select your Windows version in settings for correct functionality:
     - win11_22621: Windows 11 (Build 22621/22631/23H2)
     - win11_26100: Windows 11 (Build 26100+ / 24H2)
 
+- EnableSwitchDesktop: true
+  $name: '[Switch Desktop] Enable'
+  $description: Enable Alt+1-9 (or chosen modifier) to switch desktops
+
 - SwitchDesktopModifier: alt
-  $name: Switch Desktop Modifier
+  $name: '[Switch Desktop] Modifier'
   $description: Modifier keys for switching to desktop (combined with number keys 1-9)
   $options:
     - alt: Alt
@@ -87,8 +133,12 @@ Select your Windows version in settings for correct functionality:
     - ctrl+alt: Ctrl + Alt
     - ctrl+shift: Ctrl + Shift
 
+- EnableMoveWindow: true
+  $name: '[Move Window] Enable'
+  $description: Enable Alt+Shift+1-9 (or chosen modifier) to move windows between desktops
+
 - MoveWindowModifier: alt+shift
-  $name: Move Window Modifier
+  $name: '[Move Window] Modifier'
   $description: Modifier keys for moving active window to desktop (combined with number keys 1-9)
   $options:
     - alt+shift: Alt + Shift
@@ -103,33 +153,47 @@ Select your Windows version in settings for correct functionality:
   $name: Maximum Desktops
   $description: Number of desktops to register hotkeys for (1-9). Set lower if you use fewer desktops to avoid hotkey conflicts.
 
-- PrevDesktopKey: Q
-  $name: Previous Desktop Key
-  $description: Key to toggle back to the previous desktop (used with Utility Modifier)
-  $options:
-    - Q: Q
-    - Grave: "` (Backtick)"
-    - Tab: Tab
+- EnablePrevNextDesktop: true
+  $name: '[Prev/Next Desktop] Enable'
+  $description: Enable hotkeys to cycle between desktops
 
-- NextDesktopKey: X
-  $name: Next Desktop Key
-  $description: Key to switch to the next desktop (wraps around) (used with Utility Modifier)
+- UtilityModifier: alt
+  $name: '[Prev/Next Desktop] Modifier'
+  $description: Modifier keys for previous/next desktop hotkeys
   $options:
-    - X: X
-    - E: E
-    - N: N
-    - Z: Z
+    - alt: Alt
+    - ctrl: Ctrl
+    - alt+shift: Alt + Shift
+    - ctrl+alt: Ctrl + Alt
+    - ctrl+shift: Ctrl + Shift
 
-- PinKey: P
-  $name: Pin Window Key
-  $description: Key to pin/unpin the active window to all desktops (used with Utility Modifier)
-  $options:
-    - P: P
-    - W: W
+- PrevDesktopKey: "Q"
+  $name: '[Prev/Next Desktop] Previous Key'
+  $description: 'Key to toggle back to the previous desktop. Examples: Q, F, ~, !, [, Tab, Space'
+
+- NextDesktopKey: "X"
+  $name: '[Prev/Next Desktop] Next Key'
+  $description: 'Key to switch to the next desktop (wraps around). Examples: X, E, N, Z, @, ], Enter'
+
+- EnablePinWindow: true
+  $name: '[Pin Window] Enable'
+  $description: Enable hotkey to pin/unpin windows to all desktops
+
+- PinKey: "P"
+  $name: '[Pin Window] Key'
+  $description: 'Key to pin/unpin the active window to all desktops. Examples: P, W, #, ;, \\'
+
+- EnableTiling: true
+  $name: '[Tiling] Enable'
+  $description: Enable hotkey to tile windows on current monitor
+
+- TileKey: "D"
+  $name: '[Tiling] Key'
+  $description: 'Key to tile all windows on the current monitor. Examples: D, T, Space, `, -'
 
 - DefaultLayout: master_stack
-  $name: Default Tiling Layout
-  $description: The initial tiling layout when the mod starts
+  $name: '[Tiling] Default Layout'
+  $description: The initial tiling layout when the mod starts (only applies when tiling is enabled)
   $options:
     - master_stack: Master + Stack (Vertical)
     - master_stack_h: Master + Stack (Horizontal)
@@ -138,42 +202,25 @@ Select your Windows version in settings for correct functionality:
     - bsp: BSP (Binary Space Partition)
     - monocle: Monocle (Fullscreen)
 
-- TileKey: D
-  $name: Tile Key
-  $description: Key to tile all windows on the current monitor (used with Utility Modifier)
-  $options:
-    - D: D
-    - T: T
-    - Space: Space
-
-- LayoutKey: L
-  $name: Layout Cycle Key
-  $description: Key to cycle through tiling layouts (used with Utility Modifier)
-  $options:
-    - L: L
-    - Tab: Tab
-
-- UtilityModifier: alt
-  $name: Utility Hotkey Modifier
-  $description: Modifier keys for utility hotkeys (Previous Desktop, Pin, Tile, Layout)
-  $options:
-    - alt: Alt
-    - ctrl: Ctrl
-    - alt+shift: Alt + Shift
-    - ctrl+alt: Ctrl + Alt
-    - ctrl+shift: Ctrl + Shift
-
 - TileMargin: 4
-  $name: Tile Margin (pixels)
-  $description: Gap between tiled windows and screen edges (0-100)
+  $name: '[Tiling] Margin (pixels)'
+  $description: Gap between tiled windows and screen edges (0-100, only applies when tiling is enabled)
 
 - TileGap: 4
-  $name: Tile Gap (pixels)
-  $description: Gap between adjacent tiled windows (0-100)
+  $name: '[Tiling] Gap (pixels)'
+  $description: Gap between adjacent tiled windows (0-100, only applies when tiling is enabled)
 
 - MasterPercent: 50
-  $name: Master Window Size (%)
-  $description: Size percentage of the master window in Master+Stack layouts (1-99)
+  $name: '[Tiling] Master Size (%)'
+  $description: Size percentage of the master window in Master+Stack layouts (1-99, only applies when tiling is enabled)
+
+- EnableLayoutCycle: true
+  $name: '[Tiling] Enable Layout Cycle'
+  $description: Enable hotkey to cycle through tiling layouts (only works when tiling hotkey is enabled)
+
+- LayoutKey: "L"
+  $name: '[Tiling] Layout Cycle Key'
+  $description: 'Key to cycle through tiling layouts. Examples: L, Tab, =, ], /'
 */
 // ==/WindhawkModSettings==
 
@@ -363,6 +410,13 @@ static UINT g_tileKey = 'D';
 static UINT g_layoutKey = 'L';
 static UINT g_pinKey = 'P';
 
+static bool g_enableSwitchDesktop = true;
+static bool g_enableMoveWindow = true;
+static bool g_enablePrevNextDesktop = true;
+static bool g_enablePinWindow = true;
+static bool g_enableTiling = true;
+static bool g_enableLayoutCycle = true;
+
 // Per-desktop state: tracks last focused window and layout for each virtual desktop
 // Hash function for GUID to use in unordered_map
 // Combines 4 uint32_t values using a standard hash combining technique (golden ratio based)
@@ -413,12 +467,7 @@ T LookupTable(PCWSTR str, const std::pair<PCWSTR, T>* table, size_t count, T def
   return defaultVal;
 }
 
-UINT ParseKeyCode(PCWSTR str) {
-  static const std::pair<PCWSTR, UINT> kKeyMap[] = {
-      {L"Q", 'Q'}, {L"X", 'X'}, {L"E", 'E'}, {L"N", 'N'},          {L"Z", 'Z'},      {L"D", 'D'},         {L"T", 'T'},
-      {L"L", 'L'}, {L"P", 'P'}, {L"W", 'W'}, {L"Grave", VK_OEM_3}, {L"Tab", VK_TAB}, {L"Space", VK_SPACE}};
-  return LookupTable(str, kKeyMap, _countof(kKeyMap), (UINT)0);
-}
+
 
 TileLayout ParseLayoutSetting(PCWSTR str) {
   static const std::pair<PCWSTR, TileLayout> kLayoutMap[] = {{L"master_stack", TileLayout::MasterStack},
@@ -451,6 +500,50 @@ UINT ReadModifierSetting(PCWSTR name, UINT defaultVal) {
   return result ? result : defaultVal;
 }
 
+// Parse single character to virtual key code
+// Supports A-Z, 0-9, and special characters
+UINT ParseSingleCharKey(PCWSTR str) {
+  if (!str || !str[0]) return 0;
+  wchar_t c = str[0];
+
+  // Letters A-Z (and a-z)
+  if (c >= L'A' && c <= L'Z') return c;
+  if (c >= L'a' && c <= L'z') return c - L'a' + L'A';
+
+  // Numbers 0-9
+  if (c >= L'0' && c <= L'9') return c;
+
+  // Number row symbols
+  if (c == L'!') return '1';
+  if (c == L'@') return '2';
+  if (c == L'#') return '3';
+  if (c == L'$') return '4';
+  if (c == L'%') return '5';
+  if (c == L'^') return '6';
+  if (c == L'&') return '7';
+  if (c == L'*') return '8';
+  if (c == L'(') return '9';
+  if (c == L')') return '0';
+
+  // Other common special characters
+  if (c == L'`' || c == L'~') return VK_OEM_3;      // Grave/tilde key
+  if (c == L'-' || c == L'_') return VK_OEM_MINUS;  // Minus/underscore
+  if (c == L'=' || c == L'+') return VK_OEM_PLUS;   // Equals/plus (VK_OEM_PLUS is same as VK_ADD on some keyboards, use VK_OEM_NEC_EQUAL for some layouts)
+  if (c == L'[' || c == L'{') return VK_OEM_4;      // Left bracket
+  if (c == L']' || c == L'}') return VK_OEM_6;      // Right bracket
+  if (c == L'\\' || c == L'|') return VK_OEM_5;     // Backslash/pipe
+  if (c == L';' || c == L':') return VK_OEM_1;      // Semicolon/colon
+  if (c == L'\'' || c == L'"') return VK_OEM_7;     // Quote
+  if (c == L',' || c == L'<') return VK_OEM_COMMA;  // Comma
+  if (c == L'.' || c == L'>') return VK_OEM_PERIOD; // Period
+  if (c == L'/' || c == L'?') return VK_OEM_2;      // Slash
+
+  // Space
+  if (c == L' ') return VK_SPACE;
+
+  return 0;
+}
+
 void LoadSettings() {
   // Windows version
   PCWSTR version = Wh_GetStringSetting(L"WindowsVersion");
@@ -479,11 +572,20 @@ void LoadSettings() {
   g_currentLayout = ParseLayoutSetting(layout);
   Wh_FreeStringSetting(layout);
 
-  g_prevDesktopKey = ReadStringSetting(L"PrevDesktopKey", ParseKeyCode, (UINT)'Q');
-  g_nextDesktopKey = ReadStringSetting(L"NextDesktopKey", ParseKeyCode, (UINT)'X');
-  g_tileKey = ReadStringSetting(L"TileKey", ParseKeyCode, (UINT)'D');
-  g_layoutKey = ReadStringSetting(L"LayoutKey", ParseKeyCode, (UINT)'L');
-  g_pinKey = ReadStringSetting(L"PinKey", ParseKeyCode, (UINT)'P');
+  // Enable/disable toggles
+  g_enableSwitchDesktop = Wh_GetIntSetting(L"EnableSwitchDesktop") != 0;
+  g_enableMoveWindow = Wh_GetIntSetting(L"EnableMoveWindow") != 0;
+  g_enablePrevNextDesktop = Wh_GetIntSetting(L"EnablePrevNextDesktop") != 0;
+  g_enablePinWindow = Wh_GetIntSetting(L"EnablePinWindow") != 0;
+  g_enableTiling = Wh_GetIntSetting(L"EnableTiling") != 0;
+  g_enableLayoutCycle = Wh_GetIntSetting(L"EnableLayoutCycle") != 0;
+
+  // Load hotkey settings (single character input supporting A-Z, 0-9, and special chars)
+  g_prevDesktopKey = ReadStringSetting(L"PrevDesktopKey", ParseSingleCharKey, (UINT)'Q');
+  g_nextDesktopKey = ReadStringSetting(L"NextDesktopKey", ParseSingleCharKey, (UINT)'X');
+  g_tileKey = ReadStringSetting(L"TileKey", ParseSingleCharKey, (UINT)'D');
+  g_layoutKey = ReadStringSetting(L"LayoutKey", ParseSingleCharKey, (UINT)'L');
+  g_pinKey = ReadStringSetting(L"PinKey", ParseSingleCharKey, (UINT)'P');
 }
 
 //=============================================================================
@@ -556,6 +658,19 @@ bool ReinitializeVirtualDesktopAPI() {
 }
 
 void CleanupVirtualDesktopAPI() {
+  // Check if Explorer is still running - if not, skip Release calls to avoid hangs
+  HWND hShell = GetShellWindow();
+  if (!hShell || !IsWindow(hShell)) {
+    Wh_Log(L"Explorer not available, skipping COM cleanup to avoid hang");
+    g_pPinnedApps = nullptr;
+    g_pDesktopManager = nullptr;
+    g_pViewCollection = nullptr;
+    g_pDesktopManagerInternal = nullptr;
+    g_pServiceProvider = nullptr;
+    g_bInitialized = false;
+    return;
+  }
+
   SAFE_RELEASE(g_pPinnedApps);
   SAFE_RELEASE(g_pDesktopManager);
   SAFE_RELEASE(g_pViewCollection);
@@ -1195,15 +1310,29 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
     Wh_Log(L"Virtual Desktop API failed to initialize on startup");
   }
 
-  for (int i = 1; i <= g_maxDesktops; ++i) {
-    RegisterHotKey(nullptr, HK_MOVE_BASE + i - 1, g_moveModifiers, '0' + i);
-    RegisterHotKey(nullptr, HK_SWITCH_BASE + i - 1, g_switchModifiers, '0' + i);
+  if (g_enableMoveWindow) {
+    for (int i = 1; i <= g_maxDesktops; ++i) {
+      RegisterHotKey(nullptr, HK_MOVE_BASE + i - 1, g_moveModifiers, '0' + i);
+    }
   }
-  RegisterHotKey(nullptr, HK_PREV, g_utilityModifiers, g_prevDesktopKey);
-  RegisterHotKey(nullptr, HK_NEXT, g_utilityModifiers, g_nextDesktopKey);
-  RegisterHotKey(nullptr, HK_PIN, g_utilityModifiers, g_pinKey);
-  RegisterHotKey(nullptr, HK_TILE, g_utilityModifiers, g_tileKey);
-  RegisterHotKey(nullptr, HK_LAYOUT, g_utilityModifiers, g_layoutKey);
+  if (g_enableSwitchDesktop) {
+    for (int i = 1; i <= g_maxDesktops; ++i) {
+      RegisterHotKey(nullptr, HK_SWITCH_BASE + i - 1, g_switchModifiers, '0' + i);
+    }
+  }
+  if (g_enablePrevNextDesktop) {
+    RegisterHotKey(nullptr, HK_PREV, g_utilityModifiers, g_prevDesktopKey);
+    RegisterHotKey(nullptr, HK_NEXT, g_utilityModifiers, g_nextDesktopKey);
+  }
+  if (g_enablePinWindow) {
+    RegisterHotKey(nullptr, HK_PIN, g_utilityModifiers, g_pinKey);
+  }
+  if (g_enableTiling) {
+    RegisterHotKey(nullptr, HK_TILE, g_utilityModifiers, g_tileKey);
+    if (g_enableLayoutCycle) {
+      RegisterHotKey(nullptr, HK_LAYOUT, g_utilityModifiers, g_layoutKey);
+    }
+  }
   Wh_Log(L"Hotkeys registered");
 
   // Message loop - use MsgWaitForMultipleObjects to allow periodic check for stop signal
@@ -1263,11 +1392,29 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
   }
 
 cleanup:
-  for (int i = 0; i < 9; ++i) {
-    UnregisterHotKey(nullptr, HK_MOVE_BASE + i);
-    UnregisterHotKey(nullptr, HK_SWITCH_BASE + i);
+  if (g_enableMoveWindow) {
+    for (int i = 0; i < 9; ++i) {
+      UnregisterHotKey(nullptr, HK_MOVE_BASE + i);
+    }
   }
-  for (int hk : {HK_PREV, HK_NEXT, HK_PIN, HK_TILE, HK_LAYOUT}) UnregisterHotKey(nullptr, hk);
+  if (g_enableSwitchDesktop) {
+    for (int i = 0; i < 9; ++i) {
+      UnregisterHotKey(nullptr, HK_SWITCH_BASE + i);
+    }
+  }
+  if (g_enablePrevNextDesktop) {
+    UnregisterHotKey(nullptr, HK_PREV);
+    UnregisterHotKey(nullptr, HK_NEXT);
+  }
+  if (g_enablePinWindow) {
+    UnregisterHotKey(nullptr, HK_PIN);
+  }
+  if (g_enableTiling) {
+    UnregisterHotKey(nullptr, HK_TILE);
+    if (g_enableLayoutCycle) {
+      UnregisterHotKey(nullptr, HK_LAYOUT);
+    }
+  }
 
   CleanupVirtualDesktopAPI();
   CoUninitialize();
@@ -1298,14 +1445,25 @@ void StopHotkeyThread() {
   // Signal thread to stop
   g_stopHotkeyThread = true;
 
+  // Disable operations to prevent new COM calls during cleanup
+  g_bInitialized = false;
+
   if (g_threadId) {
     PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
   }
+
   if (g_hThread) {
-    WaitForSingleObject(g_hThread, INFINITE);
+    // Wait with timeout to avoid infinite hang on CoUninitialize
+    DWORD waitResult = WaitForSingleObject(g_hThread, 5000);
+    if (waitResult == WAIT_TIMEOUT) {
+      Wh_Log(L"WARNING: Hotkey thread cleanup timeout, thread may be stuck in CoUninitialize");
+      // Do NOT call TerminateThread - let Windows handle cleanup on process exit
+      // to avoid corrupting COM state and potentially crashing Explorer
+    }
     CloseHandle(g_hThread);
     g_hThread = nullptr;
   }
+
   g_threadId = 0;
   g_stopHotkeyThread = false;
 }
