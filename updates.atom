@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-30T20:07:50.000Z</updated>
+    <updated>2026-01-30T21:38:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Breadcrumb Middle-Click New Tab 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab#161fe6155b4e2de349f68456abe63b55027bc78c</id>
+        <link href="https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab"/>
+        <updated>2026-01-30T21:38:59.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="motivationthelinuxfeel">🐧 Motivation: The Linux Feel</h2>
+<p>For users coming from Linux environments (KDE Dolphin, GNOME Files, Thunar), 
+middle-clicking a parent folder in the address bar to open it in a new tab 
+is pure muscle memory. Windows 11 introduced Tabs, but missed this shortcut.</p>
+<p>This mod bridges that gap. It allows you to middle-click any folder name 
+in the breadcrumb bar to instantly open that location in a new background tab.</p>
+<h2 id="howitworkstechnicaldeepdive">⚙️ How it Works (Technical Deep Dive)</h2>
+<p>Windows 11 Explorer (specifically versions using XAML Islands) presents unique 
+challenges for automation, as standard API calls often return data for inactive/background tabs.
+This mod uses a <strong>Pure Input-Driven Approach</strong> to ensure 100% accuracy.</p>
+<ol>
+<li><strong>Threaded Hook:</strong> Installs a Low-Level Mouse Hook (WH<em>MOUSE</em>LL) on a 
+dedicated native thread to detect middle-clicks without freezing the UI.</li>
+<li><strong>Active Focus Probe (The Clipboard Proxy):</strong> * Instead of guessing the active tab via complex memory queries (COM), the mod asks Windows directly.<ul>
+<li>It momentarily forces the Address Bar into Edit Mode (<code>Alt+D</code>), simulates a Copy command (<code>Ctrl+C</code>), 
+and reads the <strong>Clipboard</strong>. </li>
+<li>This guarantees retrieval of the path for the <strong>currently visible tab</strong>, bypassing all internal ambiguity.</li></ul></li>
+<li><strong>Sibling Counting (The Duplicate Fix):</strong> * Instead of unreliable string matching (which fails with duplicate names like <code>...\Source\Source</code>), 
+  the mod uses <strong>Visual Geometry</strong>.<ul>
+<li>It identifies the clicked item and counts how many folders are visually to its right.</li>
+<li><em>Example:</em> If you middle-click the 3rd folder from the end, the mod intelligently strips 
+the last 2 folders from the full path retrieved in Step 2.</li></ul></li>
+<li><strong>Smart Navigation Sequence:</strong><ul>
+<li><strong>Silent Clipboard:</strong> It backs up your current clipboard, performs the navigation using a temporary clipboard entry 
+(flagged to be ignored by Clipboard History), and then <strong>restores your original clipboard data</strong>.</li>
+<li><strong>Focus Guard:</strong> Simulates <code>Ctrl+T</code> -&gt; <code>Alt+D</code> -&gt; <code>Paste</code> -&gt; <code>Enter</code>. The <code>Alt+D</code> step is 
+crucial to ensure focus isn't lost to the file view during animation.</li></ul></li>
+</ol>
+<h2 id="keyfeaturesfixes">✨ Key Features &amp; Fixes</h2>
+<ul>
+<li><strong>Duplicate Folder Support:</strong> Perfectly handles paths with repeating names.</li>
+<li><strong>Zombie Tab Prevention:</strong> Uses strict "Breadcrumb Whitelisting" to ensure middle-clicking 
+Tab Titles or the Window Title Bar allows Windows to close the tab natively.</li>
+<li><strong>Drive Letter Support:</strong> Detects <code>(C:)</code> style items and opens the drive root instantly.</li>
+<li><strong>Hidden Address Bar Support:</strong> Works even if "Display full path in title bar" is disabled.</li>
+</ul>
+<h2 id="compatibility">✅ Compatibility</h2>
+<ul>
+<li>Works on Windows 11 (22H2, 23H2, 24H2, 25H2 and Insider builds).</li>
+<li>Compatible with all Explorer view modes (Compact, Touch, etc.).</li>
+</ul>
+<h2 id="limitations">⚠️ Limitations</h2>
+<ul>
+<li><strong>Virtual Folders:</strong> May not work on special locations like "Control Panel" 
+or "This PC" root if no valid filesystem path exists.</li>
+<li><strong>Input Interference:</strong> Uses <code>SendInput</code>. Avoid touching the mouse/keyboard 
+during the split-second navigation sequence (approx. 400ms).</li>
+</ul>]]></content>
+        <author>
+            <name>osmanonurkoc</name>
+            <uri>https://github.com/osmanonurkoc</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Invisible Window Borders 1.0.0]]></title>
         <id>https://windhawk.net/mods/invisible-borders#31c0d47efd436261bab56b4037bd1e9285f81a9d</id>
@@ -368,17 +426,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tab Utility Window Hider 1.0.3]]></title>
-        <id>https://windhawk.net/mods/explorer-tab-utility-window-hider#f016abc733a47b45faa02a0d8501a95304d96587</id>
-        <link href="https://windhawk.net/mods/explorer-tab-utility-window-hider"/>
-        <updated>2026-01-23T21:31:39.000Z</updated>
-        <content type="html"><![CDATA[<p>Screenshot added.</p>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>

@@ -2695,6 +2695,34 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-breadcrumb-mclick-newtab": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769809139000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769809139000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "osmanonurkoc",
+                "compilerOptions": "-luiautomationcore -lole32 -loleaut32 -luser32 -lshlwapi",
+                "description": "Opens folders in a new tab by middle-clicking breadcrumb items (Linux style).",
+                "github": "https://github.com/osmanonurkoc",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer Breadcrumb Middle-Click New Tab",
+                "version": "1.0.0"
+            }
+        },
         "explorer-context-menu-classic": {
             "details": {
                 "defaultSorting": 272930,
