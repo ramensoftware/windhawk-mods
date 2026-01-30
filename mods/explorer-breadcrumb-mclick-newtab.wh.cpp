@@ -6,7 +6,7 @@
 // @author          osmanonurkoc
 // @github          https://github.com/osmanonurkoc
 // @include         explorer.exe
-// @compilerOptions -luiautomationcore -lole32 -loleaut32
+// @compilerOptions -luiautomationcore -lole32 -loleaut32 -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -45,7 +45,7 @@ This mod uses a sophisticated "Universal UI Scraping" approach:
 - **Virtual Folders:** May not work on special locations like "Control Panel" 
   or "This PC" root if no valid filesystem path is displayed in the UI.
 - **Input Interference:** Uses `SendInput`. Avoid touching the mouse/keyboard 
-  during the split-second navigation sequence (approx. 500ms).
+  during the split-second navigation sequence (approx. 300ms).
 */
 // ==/WindhawkModReadme==
 
@@ -54,18 +54,35 @@ This mod uses a sophisticated "Universal UI Scraping" approach:
 #include <UIAutomation.h>
 #include <comdef.h>
 #include <string>
-#include <vector>
 #include <cwctype> 
+#include <shlobj.h>
+#include <exdisp.h>
+#include <shlwapi.h>
+#include <shldisp.h>
 
-// Global variables
+const IID IID_Folder2_Manual = {0xF0D2D8EF, 0x3890, 0x11D2, {0xBF, 0x8B, 0x00, 0xC0, 0x4F, 0xB9, 0x36, 0x61}};
+
+#ifndef MAX_URL_LENGTH
+#define MAX_URL_LENGTH 2084
+#endif
+
 HHOOK g_hMouseHook = NULL;
 DWORD g_dwCurrentPID = 0;
 HANDLE g_hThread = NULL;
 DWORD g_dwThreadId = 0;
 
 // ============================================================================
-// HELPER FUNCTIONS
+// UTILS
 // ============================================================================
+
+std::wstring UrlToPath(std::wstring url) {
+    DWORD len = MAX_URL_LENGTH;
+    WCHAR buffer[MAX_URL_LENGTH];
+    if (PathCreateFromUrlW(url.c_str(), buffer, &len, 0) == S_OK) {
+        return std::wstring(buffer);
+    }
+    return url;
+}
 
 std::wstring GetTextFromElement(IUIAutomationElement* pElement) {
     if (!pElement) return L"";
@@ -106,25 +123,50 @@ std::wstring ParseDriveLetter(const std::wstring& text) {
     return L"";
 }
 
-bool IsChildOfTab(IUIAutomation* pAutomation, IUIAutomationElement* pElement) {
+// ----------------------------------------------------------------------------
+// THE TAB CLOSE FIX: BREADCRUMB WHITELIST
+// Instead of trying to detect Tabs (which look like generic windows),
+// we strictly verify if the clicked element is part of the Breadcrumb Bar.
+// ----------------------------------------------------------------------------
+bool IsBreadcrumb(IUIAutomation* pAutomation, IUIAutomationElement* pElement) {
     IUIAutomationTreeWalker* pWalker = NULL;
     pAutomation->get_ControlViewWalker(&pWalker);
     if (!pWalker) return false;
 
     IUIAutomationElement* pParent = pElement;
-    for (int i = 0; i < 4; i++) {
+    // Walk up 5 levels (Breadcrumb control is usually at Level 1 or 2)
+    for (int i = 0; i < 5; i++) {
         IUIAutomationElement* pTemp = NULL;
         pWalker->GetParentElement(pParent, &pTemp);
         
         if (pTemp) {
-            CONTROLTYPEID typeId = 0;
-            pTemp->get_CurrentControlType(&typeId);
-            if (typeId == 50019) { // TabItem
+            BSTR className = NULL;
+            BSTR autoId = NULL;
+            pTemp->get_CurrentClassName(&className);
+            pTemp->get_CurrentAutomationId(&autoId);
+            
+            bool isMatch = false;
+
+            // CHECK 1: Class Name contains "BreadcrumbBarItemControl"
+            if (className && wcsstr(className, L"BreadcrumbBarItemControl") != NULL) {
+                isMatch = true;
+            }
+            
+            // CHECK 2: Automation ID is "PART_BreadcrumbBar"
+            if (autoId && wcscmp(autoId, L"PART_BreadcrumbBar") == 0) {
+                isMatch = true;
+            }
+
+            if (className) SysFreeString(className);
+            if (autoId) SysFreeString(autoId);
+
+            if (isMatch) { 
                 pTemp->Release();
                 pWalker->Release();
                 if (pParent != pElement) pParent->Release();
-                return true; 
+                return true; // IT IS A BREADCRUMB! PROCEED.
             }
+            
             if (pParent != pElement) pParent->Release();
             pParent = pTemp;
         } else {
@@ -133,10 +175,83 @@ bool IsChildOfTab(IUIAutomation* pAutomation, IUIAutomationElement* pElement) {
     }
     if (pParent && pParent != pElement) pParent->Release();
     pWalker->Release();
-    return false;
+    return false; // Not a breadcrumb (likely a Tab or Title Bar)
 }
 
-std::wstring FindPathInWindow(IUIAutomation* pAutomation, IUIAutomationElement* pRootElement) {
+// ============================================================================
+// CORE: GET PATH FROM COM
+// ============================================================================
+std::wstring GetPathFromCOM() {
+    std::wstring currentPath = L"";
+    IShellWindows* pShellWindows = NULL;
+    
+    HWND hForeground = GetForegroundWindow();
+    DWORD dwForegroundThread = GetWindowThreadProcessId(hForeground, NULL);
+
+    if (SUCCEEDED(CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_ALL, IID_IShellWindows, (void**)&pShellWindows))) {
+        long count = 0;
+        pShellWindows->get_Count(&count);
+        
+        for (long i = 0; i < count; i++) {
+            IDispatch* pDisp = NULL;
+            if (SUCCEEDED(pShellWindows->Item(variant_t(i), &pDisp))) {
+                IWebBrowserApp* pApp = NULL;
+                if (SUCCEEDED(pDisp->QueryInterface(IID_IWebBrowserApp, (void**)&pApp))) {
+                    HWND hWndApp = NULL;
+                    pApp->get_HWND((LONG_PTR*)&hWndApp);
+                    DWORD dwAppThread = GetWindowThreadProcessId(hWndApp, NULL);
+
+                    if (dwAppThread == dwForegroundThread) {
+                        bool found = false;
+                        IDispatch* pDoc = NULL;
+                        if (SUCCEEDED(pApp->get_Document(&pDoc)) && pDoc) {
+                            IShellFolderViewDual* pView = NULL;
+                            if (SUCCEEDED(pDoc->QueryInterface(IID_IShellFolderViewDual, (void**)&pView))) {
+                                Folder* pFolder = NULL;
+                                if (SUCCEEDED(pView->get_Folder(&pFolder))) {
+                                    Folder2* pFolder2 = NULL;
+                                    if (SUCCEEDED(pFolder->QueryInterface(IID_Folder2_Manual, (void**)&pFolder2))) {
+                                        FolderItem* pSelf = NULL;
+                                        if (SUCCEEDED(pFolder2->get_Self(&pSelf))) {
+                                            BSTR pathBstr = NULL;
+                                            pSelf->get_Path(&pathBstr);
+                                            if (pathBstr) {
+                                                currentPath = std::wstring(pathBstr);
+                                                SysFreeString(pathBstr);
+                                                found = true;
+                                            }
+                                            pSelf->Release();
+                                        }
+                                        pFolder2->Release();
+                                    }
+                                    pFolder->Release();
+                                }
+                                pView->Release();
+                            }
+                            pDoc->Release();
+                        }
+
+                        if (!found) {
+                            BSTR urlBstr = NULL;
+                            pApp->get_LocationURL(&urlBstr);
+                            if (urlBstr) {
+                                currentPath = UrlToPath(std::wstring(urlBstr));
+                                SysFreeString(urlBstr);
+                            }
+                        }
+                    }
+                    pApp->Release();
+                }
+                pDisp->Release();
+            }
+            if (!currentPath.empty()) break;
+        }
+        pShellWindows->Release();
+    }
+    return currentPath;
+}
+
+std::wstring GetPathFromUI(IUIAutomation* pAutomation, IUIAutomationElement* pRootElement) {
     if (!pAutomation || !pRootElement) return L"";
     IUIAutomationCondition* pCondition = NULL;
     pAutomation->CreateTrueCondition(&pCondition);
@@ -165,20 +280,18 @@ std::wstring FindPathInWindow(IUIAutomation* pAutomation, IUIAutomationElement* 
 }
 
 // ============================================================================
-// NAVIGATION (Silent Clipboard)
+// NAVIGATION
 // ============================================================================
 
 void NavigateNewTab(const std::wstring& targetPath) {
     if (targetPath.length() < 2) return;
 
-    // Register the format that tells Windows 10/11: "Don't show this in Win+V History"
     static UINT cfExclude = RegisterClipboardFormat(L"ExcludeClipboardContentFromMonitorProcessing");
     static UINT cfCanInclude = RegisterClipboardFormat(L"CanIncludeInClipboardHistory");
 
     if (OpenClipboard(NULL)) {
         EmptyClipboard();
         
-        // 1. Set the actual Text Path
         size_t size = (targetPath.length() + 1) * sizeof(WCHAR);
         HGLOBAL hGlobalPath = GlobalAlloc(GMEM_MOVEABLE, size);
         if (hGlobalPath) {
@@ -188,20 +301,18 @@ void NavigateNewTab(const std::wstring& targetPath) {
             SetClipboardData(CF_UNICODETEXT, hGlobalPath);
         }
 
-        // 2. Set the "Exclude" flag (Prevents Clipboard History Bloat)
         HGLOBAL hGlobalExclude = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
         if (hGlobalExclude) {
             void* pData = GlobalLock(hGlobalExclude);
-            *(DWORD*)pData = 0; // Value doesn't matter, existence matters
+            *(DWORD*)pData = 0; 
             GlobalUnlock(hGlobalExclude);
             SetClipboardData(cfExclude, hGlobalExclude);
         }
         
-        // 3. Explicitly say "Do not include" (Double safety)
         HGLOBAL hGlobalCanInclude = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
         if (hGlobalCanInclude) {
             void* pData = GlobalLock(hGlobalCanInclude);
-            *(DWORD*)pData = 0; // 0 = False
+            *(DWORD*)pData = 0; 
             GlobalUnlock(hGlobalCanInclude);
             SetClipboardData(cfCanInclude, hGlobalCanInclude);
         }
@@ -212,7 +323,6 @@ void NavigateNewTab(const std::wstring& targetPath) {
     INPUT inputs[4] = {};
     int idx = 0;
 
-    // Ctrl + T
     idx = 0; memset(inputs, 0, sizeof(inputs));
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'T'; idx++;
@@ -220,9 +330,8 @@ void NavigateNewTab(const std::wstring& targetPath) {
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
     SendInput(idx, inputs, sizeof(INPUT));
     
-    Sleep(500); 
+    Sleep(300); 
 
-    // Alt + D
     idx = 0; memset(inputs, 0, sizeof(inputs));
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; idx++; 
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; idx++;
@@ -232,7 +341,6 @@ void NavigateNewTab(const std::wstring& targetPath) {
 
     Sleep(100);
 
-    // Ctrl + V
     idx = 0; memset(inputs, 0, sizeof(inputs));
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'V'; idx++;
@@ -242,7 +350,6 @@ void NavigateNewTab(const std::wstring& targetPath) {
     
     Sleep(50);
 
-    // Enter
     idx = 0; memset(inputs, 0, sizeof(inputs));
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_RETURN; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_RETURN; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
@@ -250,7 +357,7 @@ void NavigateNewTab(const std::wstring& targetPath) {
 }
 
 // ============================================================================
-// ANALYSIS & LOGIC
+// CORE LOGIC
 // ============================================================================
 
 void AnalyzeElement(POINT pt) {
@@ -263,8 +370,11 @@ void AnalyzeElement(POINT pt) {
         hr = pAutomation->ElementFromPoint(pt, &pElement);
         if (SUCCEEDED(hr) && pElement) {
             
-            // Check Exclusion (Tab Closing)
-            if (IsChildOfTab(pAutomation, pElement)) {
+            // ----------------------------------------------------------------
+            // WHITELIST CHECK: Only proceed if it is a BREADCRUMB
+            // ----------------------------------------------------------------
+            if (!IsBreadcrumb(pAutomation, pElement)) {
+                // Not a breadcrumb (likely a Tab or Title Bar). Abort.
                 pElement->Release();
                 pAutomation->Release();
                 return;
@@ -276,30 +386,33 @@ void AnalyzeElement(POINT pt) {
             pElement->get_CurrentControlType(&typeId);
 
             if (nameBstr && wcslen(nameBstr) > 0) {
+                // Button or Text
                 if (typeId == 50000 || typeId == 50020) { 
                     std::wstring clickedName(nameBstr);
                     
-                    // CHECK 1: Drive Letter? "Media (D:)"
                     std::wstring drivePath = ParseDriveLetter(clickedName);
                     if (!drivePath.empty()) {
                         NavigateNewTab(drivePath);
                     } 
                     else {
-                        // CHECK 2: Standard Folder
-                        IUIAutomationElement* pRoot = NULL;
-                        HWND hForeground = GetForegroundWindow();
-                        pAutomation->ElementFromHandle(hForeground, &pRoot);
+                        std::wstring fullPath = GetPathFromCOM();
 
-                        if (pRoot) {
-                            std::wstring fullPath = FindPathInWindow(pAutomation, pRoot);
-                            if (!fullPath.empty()) {
-                                size_t found = fullPath.rfind(clickedName);
-                                if (found != std::wstring::npos) {
-                                    std::wstring targetPath = fullPath.substr(0, found + clickedName.length());
-                                    NavigateNewTab(targetPath);
-                                }
+                        if (fullPath.empty()) {
+                            IUIAutomationElement* pRoot = NULL;
+                            HWND hForeground = GetForegroundWindow();
+                            pAutomation->ElementFromHandle(hForeground, &pRoot);
+                            if (pRoot) {
+                                fullPath = GetPathFromUI(pAutomation, pRoot);
+                                pRoot->Release();
                             }
-                            pRoot->Release();
+                        }
+
+                        if (!fullPath.empty()) {
+                            size_t found = fullPath.rfind(clickedName);
+                            if (found != std::wstring::npos) {
+                                std::wstring targetPath = fullPath.substr(0, found + clickedName.length());
+                                NavigateNewTab(targetPath);
+                            }
                         }
                     }
                 }
