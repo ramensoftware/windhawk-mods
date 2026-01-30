@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-30T09:28:02.000Z</updated>
+    <updated>2026-01-30T20:07:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Invisible Window Borders 1.0.0]]></title>
+        <id>https://windhawk.net/mods/invisible-borders#31c0d47efd436261bab56b4037bd1e9285f81a9d</id>
+        <link href="https://windhawk.net/mods/invisible-borders"/>
+        <updated>2026-01-30T20:07:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="invisiblewindowborders">Invisible Window Borders</h1>
+<p>Makes window borders invisible while preserving rounded corners.</p>
+<p><img src="https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/invisible-borders/onoff.png" alt="Comparison" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Invisible Borders</strong>: Removes border color while keeping frame structure</li>
+<li><strong>Preserves Rounded Corners</strong>: Keeps window frame intact for corner rendering</li>
+<li><strong>Universal</strong>: Works with all applications</li>
+<li><strong>Lightweight</strong>: Minimal performance impact</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 10 (version 1809 and later)</li>
+<li>Windows 11 (all versions)</li>
+<li>Requires DWM (Desktop Window Manager) to be enabled</li>
+</ul>
+<h2 id="support">Support</h2>
+<p>Report issues at: https://github.com/Bo0ii/windhawk-mods/issues</p>
+<h2 id="license">License</h2>
+<p>MIT License - Feel free to modify and distribute</p>]]></content>
+        <author>
+            <name>Bo0ii</name>
+            <uri>https://github.com/Bo0ii</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Helper 2.2.0]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-helper#c6f6f935554a24307402fbe91fd45489fb059a1b</id>
@@ -346,27 +376,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <link href="https://windhawk.net/mods/explorer-tab-utility-window-hider"/>
         <updated>2026-01-23T21:31:39.000Z</updated>
         <content type="html"><![CDATA[<p>Screenshot added.</p>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tab Utility Window Hider 1.0.2]]></title>
-        <id>https://windhawk.net/mods/explorer-tab-utility-window-hider#306f1348cc3db05898442dd282beda876d87fd89</id>
-        <link href="https://windhawk.net/mods/explorer-tab-utility-window-hider"/>
-        <updated>2026-01-23T20:28:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertabutilitywindowhider">Explorer Tab Utility Window Hider</h1>
-<p>This mod prevents w4po's <a href="https://github.com/w4po/ExplorerTabUtility">Explorer Tab Utility</a> from showing its window at startup and all times. The program will continue to run in the background with all its functionality, but the configuration window will never appear.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks the following Windows API functions:</p>
-<ul>
-<li><code>ShowWindow</code> / <code>ShowWindowAsync</code> - Blocks any attempt to show the window</li>
-<li><code>CreateWindowExW</code> - Hides the main window immediately after creation</li>
-<li><code>SetWindowPos</code> - Prevents the window from being made visible through positioning</li>
-</ul>
-<h2 id="targetprocess">Target Process</h2>
-<p>This mod only targets <code>ExplorerTabUtility.exe</code> and has no effect on other programs.</p>]]></content>
         <author>
             <name>BCRTVKCS</name>
             <uri>https://github.com/bcrtvkcs</uri>

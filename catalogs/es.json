@@ -4068,6 +4068,38 @@
                 "version": "0.7"
             }
         },
+        "invisible-borders": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769803670000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769803670000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Bo0ii",
+                "compilerOptions": "-ldwmapi -luser32",
+                "description": "Makes window borders invisible while keeping rounded corners",
+                "exclude": [
+                    "devenv.exe"
+                ],
+                "github": "https://github.com/Bo0ii",
+                "homepage": "https://github.com/Bo0ii/windhawk-mods",
+                "include": [
+                    "*"
+                ],
+                "name": "Invisible Window Borders",
+                "version": "1.0.0"
+            }
+        },
         "isretailready-false": {
             "details": {
                 "defaultSorting": 333,
