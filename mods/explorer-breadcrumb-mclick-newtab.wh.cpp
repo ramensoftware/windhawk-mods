@@ -220,7 +220,7 @@ void NavigateNewTab(const std::wstring& targetPath) {
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
     SendInput(idx, inputs, sizeof(INPUT));
     
-    Sleep(200); 
+    Sleep(500); 
 
     // Alt + D
     idx = 0; memset(inputs, 0, sizeof(inputs));
