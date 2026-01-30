@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-29T23:21:02.000Z</updated>
+    <updated>2026-01-30T09:28:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 2.2.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#c6f6f935554a24307402fbe91fd45489fb059a1b</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2026-01-30T09:28:02.000Z</updated>
+        <content type="html"><![CDATA[<p>Add hotkey toggles and fix COM cleanup timeout (<a href="https://github.com/ramensoftware/windhawk-mods/issues/3149">#3149</a>)</p>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Unwanted Context Menu Items (Classic Menu Only) 1.5.0]]></title>
         <id>https://windhawk.net/mods/remove-context-menu-items#1a13854897981ceae24592b654e0f9558040006e</id>
@@ -359,23 +370,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>BCRTVKCS</name>
             <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.7.3]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#a1eff912a93ab74e1e517d6842f725013c1f5062</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2026-01-23T20:00:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Readjust window eligibility filtering</li>
-<li>Remove text glow due to blending with Desktop shadowed texts</li>
-<li>Add flyouts effect options setting</li>
-<li>Fix custom theme and accent color reset when changing theme</li>
-<li>Better solution to the issue with colored borders in full screen windows.</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>

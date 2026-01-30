@@ -1,3 +1,7 @@
+## 2.2.0 ([Jan 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c6f6f935554a24307402fbe91fd45489fb059a1b/mods/virtual-desktop-helper.wh.cpp))
+
+Add hotkey toggles and fix COM cleanup timeout ([#3149](https://github.com/ramensoftware/windhawk-mods/issues/3149))
+
 ## 2.1.2 ([Jan 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/917fb6cede7d9079054a1e20be7c49eaff4cb569/mods/virtual-desktop-helper.wh.cpp))
 
 This fix makes the mod work properly after explorer.exe restarts. fix [#2855](https://github.com/ramensoftware/windhawk-mods/issues/2855)

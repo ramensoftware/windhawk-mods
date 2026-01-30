@@ -8348,7 +8348,7 @@
                     14
                 ],
                 "ratingUsers": 17,
-                "updated": 1769179791000,
+                "updated": 1769765282000,
                 "users": 138
             },
             "metadata": {
@@ -8360,7 +8360,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Virtual Desktop Helper",
-                "version": "2.1.2"
+                "version": "2.2.0"
             }
         },
         "virtual-desktop-hotkey-cycle": {
