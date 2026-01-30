@@ -18,6 +18,10 @@ which is invoked with `ALT`+`F4` with your own program.
 This also lets you override the action of the "Log Off" button
 in Windows XP's Explorer, which on Windows 10 normally instantly logs
 the user out.
+
+## Safe Launch Feature (Rectify11 Support)
+If you are using **Rectify11** or a similar modern dialog, you might notice the window closes immediately upon opening. 
+Enable the **Safe Launch** setting in the mod options. This makes the mod wait until you release `ALT`+`F4` before launching the executable, preventing the self-close bug.
 */
 // ==/WindhawkModReadme==
 
@@ -28,66 +32,85 @@ the user out.
   $description: Path to executable to open instead of shutdown dialog.
 - args: ""
   $name: Shutdown arguments
-  $description: Arguments to pass to the shutdown executable, if any.
 - logoffexe: C:\Classic\ClassicShutdown\ClassicShutdown.exe
   $name: Logoff executable
-  $description: Path to executable to open instead of logoff dialog.
 - logoffargs: /logoff
   $name: Logoff arguments
-  $description: Arguments to pass to the logoff executable, if any.
 - disconnectexe: C:\Classic\ClassicShutdown\ClassicShutdown.exe
   $name: Disconnect executable
-  $description: Path to executable to open instead of disconnect dialog.
 - disconnectargs: /disconnect
   $name: Disconnect arguments
-  $description: Arguments to pass to the disconnect executable, if any.
+- safeLaunch: false
+  $name: Safe Launch (Wait for Alt+F4 release)
+  $description: Prevents the custom dialog from closing immediately by waiting for keys to be released. Useful for Rectify11.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+#include <string>
 
 WindhawkUtils::StringSetting g_spszShutdownExe,   g_spszShutdownArgs;
 WindhawkUtils::StringSetting g_spszLogoffExe,     g_spszLogoffArgs;
 WindhawkUtils::StringSetting g_spszDisconnectExe, g_spszDisconnectArgs;
+bool g_bSafeLaunch;
+
+void LaunchExecutable(PCWSTR exePath, PCWSTR args)
+{
+    if (!exePath || !*exePath) return;
+
+    if (g_bSafeLaunch)
+    {
+        // Wait as long as Alt (VK_MENU) or F4 is pressed
+        while ((GetAsyncKeyState(VK_MENU) & 0x8000) || (GetAsyncKeyState(VK_F4) & 0x8000))
+        {
+            Sleep(50);
+        }
+        Sleep(100); // Small buffer wait
+    }
+
+    // Set working directory (to prevent missing icons and resources)
+    std::wstring sExe = exePath;
+    std::wstring sDir = L"";
+    size_t found = sExe.find_last_of(L"\\");
+    if (found != std::wstring::npos) {
+        sDir = sExe.substr(0, found);
+    }
+
+    ShellExecuteW(
+        NULL,
+        L"open",
+        exePath,
+        args,
+        sDir.empty() ? NULL : sDir.c_str(),
+        SW_NORMAL
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Hooks
+// -----------------------------------------------------------------------------
 
 void (*ExitWindowsDialog_orig)(HWND);
 void ExitWindowsDialog_hook(HWND hwndParent)
 {
-    ShellExecuteW(
-        hwndParent,
-        L"open",
-        g_spszShutdownExe,
-        g_spszShutdownArgs,
-        NULL,
-        SW_NORMAL
-    );
+    LaunchExecutable(g_spszShutdownExe, g_spszShutdownArgs);
 }
 
 void (*LogoffWindowsDialog_orig)(HWND);
 void LogoffWindowsDialog_hook(HWND hwndParent)
 {
-    ShellExecuteW(
-        hwndParent,
-        L"open",
-        g_spszLogoffExe,
-        g_spszLogoffArgs,
-        NULL,
-        SW_NORMAL
-    );
+    LaunchExecutable(g_spszLogoffExe, g_spszLogoffArgs);
 }
 
 void (*DisconnectWindowsDialog_orig)(HWND);
 void DisconnectWindowsDialog_hook(HWND hwndParent)
 {
-    ShellExecuteW(
-        hwndParent,
-        L"open",
-        g_spszDisconnectExe,
-        g_spszDisconnectArgs,
-        NULL,
-        SW_NORMAL
-    );
+    LaunchExecutable(g_spszDisconnectExe, g_spszDisconnectArgs);
 }
+
+// -----------------------------------------------------------------------------
+// Initialization
+// -----------------------------------------------------------------------------
 
 void LoadSettings(void)
 {
@@ -97,6 +120,7 @@ void LoadSettings(void)
     g_spszLogoffArgs     = WindhawkUtils::StringSetting::make(L"logoffargs");
     g_spszDisconnectExe  = WindhawkUtils::StringSetting::make(L"disconnectexe");
     g_spszDisconnectArgs = WindhawkUtils::StringSetting::make(L"disconnectargs");
+    g_bSafeLaunch        = (bool)Wh_GetIntSetting(L"safeLaunch");
 }
 
 #define HOOK(NAME, ORDINAL)                                   \
