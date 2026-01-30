@@ -2,7 +2,7 @@
 // @id              custom-shutdown-dialog
 // @name            Custom Shutdown Dialog
 // @description     Override the classic shutdown dialog in Explorer with your own
-// @version         1.2.0
+// @version         1.2.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
