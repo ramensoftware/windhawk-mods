@@ -2,7 +2,7 @@
 // @id              chrome-wheel-scroll-tabs
 // @name            Chrome/Edge scroll tabs with mouse wheel
 // @description     Use the mouse wheel while hovering over the tab bar to switch between tabs
-// @version         1.3
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -270,7 +270,23 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
         HWND hForegroundWnd = GetForegroundWindow();
         bool needsActivation = !hForegroundWnd || hForegroundWnd != hWnd;
 
+        // Check if foreground window is from the same thread.
+        HWND hSameThreadForeground = nullptr;
+        if (needsActivation && hForegroundWnd) {
+            DWORD dwForegroundThread =
+                GetWindowThreadProcessId(hForegroundWnd, nullptr);
+            DWORD dwTargetThread = GetWindowThreadProcessId(hWnd, nullptr);
+            if (dwForegroundThread == dwTargetThread) {
+                hSameThreadForeground = hForegroundWnd;
+            }
+        }
+
         if (needsActivation) {
+            // If foreground window is from same thread, deactivate it first.
+            if (hSameThreadForeground) {
+                SendMessage(hSameThreadForeground, WM_ACTIVATE, WA_INACTIVE, 0);
+            }
+
             // Fake window activation so key messages are processed even if not
             // focused.
             SendMessage(hWnd, WM_ACTIVATE, WA_ACTIVE, 0);
@@ -285,6 +301,11 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
         if (needsActivation) {
             // Restore deactivated state.
             SendMessage(hWnd, WM_ACTIVATE, WA_INACTIVE, 0);
+
+            // If there was a same-thread foreground window, reactivate it.
+            if (hSameThreadForeground) {
+                SendMessage(hSameThreadForeground, WM_ACTIVATE, WA_ACTIVE, 0);
+            }
         }
 
         // Clear flag.
