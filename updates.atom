@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-30T21:38:59.000Z</updated>
+    <updated>2026-01-31T11:57:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Window Open/Close Animations 1.0]]></title>
+        <id>https://windhawk.net/mods/disable-open-close-anims#f1aefb11d46c509279b1c578bc714a167e0097dd</id>
+        <link href="https://windhawk.net/mods/disable-open-close-anims"/>
+        <updated>2026-01-31T11:57:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablewindowopencloseanimations">Disable Window Open/Close Animations</h1>
+<p>This mod disables non-UWP app's window opening and closing animations without affecting other window animations, such as minimizing, restoring, maximizing, and snapping.</p>
+<p><img src="https://i.imgur.com/d9HvrJA.gif" alt="" /></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Block Win+V 1.0.1]]></title>
+        <id>https://windhawk.net/mods/block-win-v#bbc330d9ffc549ba93b495f0d5d807475967edb9</id>
+        <link href="https://windhawk.net/mods/block-win-v"/>
+        <updated>2026-01-31T11:57:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="blockwinv">Block Win+V</h1>
+<p>This mod blocks the Win+V keyboard shortcut (Clipboard History) in Windows.</p>
+<hr />
+<h1 id="winv">阻止 Win+V</h1>
+<p>此模块阻止 Windows 中的 Win+V 键盘快捷键（剪贴板历史记录）。</p>]]></content>
+        <author>
+            <name>Fenig</name>
+            <uri>https://github.com/JiangFengning</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Breadcrumb Middle-Click New Tab 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab#161fe6155b4e2de349f68456abe63b55027bc78c</id>
@@ -398,34 +426,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Live Overlay 1.0.2]]></title>
-        <id>https://windhawk.net/mods/desktop-live-overlay#2b84edda50e9ac534b043e9ce138bc0842ccd1e1</id>
-        <link href="https://windhawk.net/mods/desktop-live-overlay"/>
-        <updated>2026-01-24T15:05:59.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the refresh interval option to affect only system metrics, not clock seconds.</li>
-<li>Fixed the clock skipping seconds/minutes in some cases.</li>
-<li>Improved handling of settings changes. Previously, the mod was always reloaded. The update makes it faster and more stable.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dark mode context menus 1.4.2]]></title>
-        <id>https://windhawk.net/mods/dark-menus#ec19321d400b1a5e3d1531a16a34da8d0207065f</id>
-        <link href="https://windhawk.net/mods/dark-menus"/>
-        <updated>2026-01-24T12:01:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed https://github.com/MGGSK/DarkMenus/issues/26</li>
-</ul>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>

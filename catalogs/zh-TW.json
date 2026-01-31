@@ -406,6 +406,33 @@
                 "version": "1.1.1"
             }
         },
+        "block-win-v": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769860649000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769860649000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Fenig",
+                "description": "阻止 Windows 的 Win+V 键盘快捷键（剪贴板历史记录）",
+                "github": "https://github.com/JiangFengning",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "阻止 Win+V",
+                "version": "1.0.1"
+            }
+        },
         "ce-disable-process-button-flashing": {
             "details": {
                 "defaultSorting": 160,
@@ -2278,6 +2305,34 @@
                 ],
                 "name": "Disable Office Hotkeys",
                 "version": "1.0.0"
+            }
+        },
+        "disable-open-close-anims": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769860671000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769860671000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lockframe",
+                "compilerOptions": "-ldwmapi -luser32",
+                "description": "Disables Open/Close animations without affecting other window animations.",
+                "github": "https://github.com/Lockframe",
+                "include": [
+                    "*"
+                ],
+                "name": "Disable Window Open/Close Animations",
+                "version": "1.0"
             }
         },
         "disable-rounded-corners": {
