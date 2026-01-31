@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-31T11:57:51.000Z</updated>
+    <updated>2026-01-31T16:44:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.3]]></title>
+        <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#13069e19aca922f9311b4d69c07e7c83149e3451</id>
+        <link href="https://windhawk.net/mods/chrome-wheel-scroll-tabs"/>
+        <updated>2026-01-31T16:44:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved keyboard simulation method and added support for scrolling tabs in inactive windows.</li>
+<li>Added an option for throttle time to help prevent a single scroll wheel 'flick' from switching multiple tabs.</li>
+<li>Added support for the Thorium browser.</li>
+<li>Fixed compatibility with Opera.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Window Open/Close Animations 1.0]]></title>
         <id>https://windhawk.net/mods/disable-open-close-anims#f1aefb11d46c509279b1c578bc714a167e0097dd</id>
@@ -409,19 +425,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with ExplorerPatcher.</li>
 <li>Fixed the mod slowing down explorer.exe processes on launch.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Customize Windows notifications placement 1.2.2]]></title>
-        <id>https://windhawk.net/mods/notifications-placement#85f51d53e9ea2f705298115536b21d80e8923028</id>
-        <link href="https://windhawk.net/mods/notifications-placement"/>
-        <updated>2026-01-24T15:13:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed notification content being rotated in some cases.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

@@ -1,3 +1,10 @@
+## 1.3 ([Jan 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/13069e19aca922f9311b4d69c07e7c83149e3451/mods/chrome-wheel-scroll-tabs.wh.cpp))
+
+* Improved keyboard simulation method and added support for scrolling tabs in inactive windows.
+* Added an option for throttle time to help prevent a single scroll wheel 'flick' from switching multiple tabs.
+* Added support for the Thorium browser.
+* Fixed compatibility with Opera.
+
 ## 1.2.1 ([Jun 3, 2025](https://github.com/ramensoftware/windhawk-mods/blob/451a0a24c7e026a0c86c10adfb44b8681ab24bb6/mods/chrome-wheel-scroll-tabs.wh.cpp))
 
 * Fixed the recently-added options to limit the scroll area, which worked only for maximized windows.
