@@ -6,9 +6,6 @@
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         *
-// @exclude         lsass.exe
-// @exclude         csrss.exe
-// @exclude         smss.exe
 // @compilerOptions -ldwmapi -luser32
 // ==/WindhawkMod==
 
@@ -222,3 +219,4 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)AnimateWindow, (void*)AnimateWindow_Hook, (void**)&AnimateWindow_Original);
     return TRUE;
 }
+
