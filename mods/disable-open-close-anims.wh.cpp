@@ -9,10 +9,6 @@
 // @exclude         lsass.exe
 // @exclude         csrss.exe
 // @exclude         smss.exe
-// @exclude         wininit.exe
-// @exclude         services.exe
-// @exclude         spoolsv.exe
-// @exclude         dwm.exe
 // @compilerOptions -ldwmapi -luser32
 // ==/WindhawkMod==
 
@@ -34,7 +30,10 @@ This mod disables non-UWP app's window opening and closing animations without af
 // CONFIGURATION
 // ---------------------------------------------------------------------------
 #define RESTORE_ANIM_DELAY_MS 50
-#define TIMER_ID_RESTORE 0xDEAD 
+
+// Using a unique timestamp-based ID to minimize collision risk with app timers.
+// Original: 0xDEAD (potentially common). New: Epoch timestamp ~ Jan 2026.
+#define TIMER_ID_RESTORE 1769817678 
 
 #ifndef DWMWA_TRANSITIONS_FORCEDISABLED
 #define DWMWA_TRANSITIONS_FORCEDISABLED 3
