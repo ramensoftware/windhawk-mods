@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-31T18:32:01.000Z</updated>
+    <updated>2026-01-31T21:29:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Taskbar Window Suffixes 1.1]]></title>
+        <id>https://windhawk.net/mods/file-explorer-remove-suffixes#98854d86d13a0cd0122cf10cb1d1092801a765d9</id>
+        <link href="https://windhawk.net/mods/file-explorer-remove-suffixes"/>
+        <updated>2026-01-31T21:29:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a universal mode that removes suffixes for any program (e.g., "Document - Notepad" becomes "Document").</li>
+<li>Added custom regex rules: Define your own text replacement patterns for specific programs.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.2.3]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#c647bf6a1706bf7fd3e03751a2976b0ad64a6f41</id>
@@ -402,19 +416,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.4]]></title>
-        <id>https://windhawk.net/mods/win11-accent-border#e90d96a05be131b3f3454d75a52cb6dacde99660</id>
-        <link href="https://windhawk.net/mods/win11-accent-border"/>
-        <updated>2026-01-26T10:11:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <em>Target special windows</em> setting that allows the mod to work properly with some applications that customize their windows (e.g. Flow Launcher).</li>
-</ul>]]></content>
-        <author>
-            <name>Guerra24</name>
-            <uri>https://github.com/Guerra24</uri>
         </author>
     </entry>
 </feed>
