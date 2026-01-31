@@ -1,3 +1,9 @@
+## 1.5 ([Jan 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cecaca7b6506e55b663a4a7ee391cb5763a7285c/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* When showing folder sizes, the sizes are now shown in Tiles and Content folder view, not only in Details view. In addition, folder sizes are shown in the status bar, and in the details pane (enabled via OldNewExplorer). Note: An explorer restart might be required to apply these changes.
+* Fixed the "Use IEC terms" option for locales, such as Korean, which don't have a space, e.g. "50MB" and not "50 MB".
+* Fixed explorer freezing in some rare cases, possibly related to some network drives.
+
 ## 1.4.11 ([Jun 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5698ca7310087986276b6cb408fb83ed73d155d6/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Undid the Everything v1.4 fix from the previous version which was incorrect.

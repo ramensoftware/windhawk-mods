@@ -2881,7 +2881,7 @@
                     1057
                 ],
                 "ratingUsers": 1147,
-                "updated": 1751180243000,
+                "updated": 1769882688000,
                 "users": 115770
             },
             "featured": true,
@@ -2905,7 +2905,7 @@
                 ],
                 "name": "Better file sizes in Explorer details",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.4.11"
+                "version": "1.5"
             }
         },
         "explorer-double-click-up": {
