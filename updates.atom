@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-31T18:04:48.000Z</updated>
+    <updated>2026-01-31T18:32:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.2.3]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#c647bf6a1706bf7fd3e03751a2976b0ad64a6f41</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2026-01-31T18:32:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed some redirection cases of icons extracted with the <code>PrivateExtractIconsW</code> function.</li>
+<li>Fixed redirection of icon/cursor groups in some cases with the "Redirect all loaded resources" option.</li>
+<li>Fixed icon themes ending up in a corrupted state after removing and re-installing the mod.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.5]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#cecaca7b6506e55b663a4a7ee391cb5763a7285c</id>
@@ -400,17 +415,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>Guerra24</name>
             <uri>https://github.com/Guerra24</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Magnifier Headless Mode 0.9.5.4]]></title>
-        <id>https://windhawk.net/mods/magnifier-headless#a0e7724e823c3e7f5c2643133115e7d966753652</id>
-        <link href="https://windhawk.net/mods/magnifier-headless"/>
-        <updated>2026-01-25T20:58:07.000Z</updated>
-        <content type="html"><![CDATA[<p>This change ensures that the Magnifier touch overlay window is properly hidden from Alt+Tab switcher and Task Manager by enforcing the <code>WS_EX_TOOLWINDOW</code> extended window style. Also, a screenshot of the mod has been added to Windhawk Mod Readme.</p>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>

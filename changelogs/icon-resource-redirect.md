@@ -1,3 +1,9 @@
+## 1.2.3 ([Jan 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c647bf6a1706bf7fd3e03751a2976b0ad64a6f41/mods/icon-resource-redirect.wh.cpp))
+
+* Fixed some redirection cases of icons extracted with the `PrivateExtractIconsW` function.
+* Fixed redirection of icon/cursor groups in some cases with the "Redirect all loaded resources" option.
+* Fixed icon themes ending up in a corrupted state after removing and re-installing the mod.
+
 ## 1.2.2 ([Jul 11, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4f480eff9a5cecad737798bfafa461e1fb23c250/mods/icon-resource-redirect.wh.cpp))
 
 * Added the Kripton Flatery, Pane7 icon themes.
