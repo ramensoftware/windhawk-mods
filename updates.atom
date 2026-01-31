@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-31T16:44:18.000Z</updated>
+    <updated>2026-01-31T17:31:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.3.1]]></title>
+        <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#02dda800490b6c72a60961c45c0086dd8ce703c5</id>
+        <link href="https://windhawk.net/mods/chrome-wheel-scroll-tabs"/>
+        <updated>2026-01-31T17:31:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed scrolling tabs of an inactive browser window while another browser window is the foreground window.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.3]]></title>
         <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#13069e19aca922f9311b4d69c07e7c83149e3451</id>
@@ -415,20 +428,6 @@ removes that menu and moves the "Show desktop icons" option to the "Sort by"
         <author>
             <name>Math Shamenson</name>
             <uri>https://github.com/insane66613</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Live Overlay 1.0.3]]></title>
-        <id>https://windhawk.net/mods/desktop-live-overlay#051f9f44200b3b3db02b4b5b95f0c8b17680be06</id>
-        <link href="https://windhawk.net/mods/desktop-live-overlay"/>
-        <updated>2026-01-24T21:54:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with ExplorerPatcher.</li>
-<li>Fixed the mod slowing down explorer.exe processes on launch.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

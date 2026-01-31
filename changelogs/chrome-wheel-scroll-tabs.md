@@ -1,3 +1,7 @@
+## 1.3.1 ([Jan 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/02dda800490b6c72a60961c45c0086dd8ce703c5/mods/chrome-wheel-scroll-tabs.wh.cpp))
+
+* Fixed scrolling tabs of an inactive browser window while another browser window is the foreground window.
+
 ## 1.3 ([Jan 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/13069e19aca922f9311b4d69c07e7c83149e3451/mods/chrome-wheel-scroll-tabs.wh.cpp))
 
 * Improved keyboard simulation method and added support for scrolling tabs in inactive windows.
