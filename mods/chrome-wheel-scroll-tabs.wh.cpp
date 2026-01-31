@@ -2,7 +2,7 @@
 // @id              chrome-wheel-scroll-tabs
 // @name            Chrome/Edge scroll tabs with mouse wheel
 // @description     Use the mouse wheel while hovering over the tab bar to switch between tabs
-// @version         1.2.1
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -12,6 +12,7 @@
 // @include         opera.exe
 // @include         brave.exe
 // @include         *\YandexBrowser\Application\browser.exe
+// @include         thorium.exe
 // @compilerOptions -lcomctl32 -lgdi32
 // ==/WindhawkMod==
 
@@ -30,7 +31,7 @@
 Use the mouse wheel while hovering over the tab bar to switch between tabs.
 
 Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave,
-Yandex Browser.
+Yandex Browser, Thorium.
 
 ![demonstration](https://i.imgur.com/GWCsO70.gif)
 */
@@ -45,6 +46,12 @@ Yandex Browser.
   $description: >-
     Switch between tabs when the mouse's horizontal scroll wheel is tilted or
     rotated
+- throttleMs: 0
+  $name: Throttle time (milliseconds)
+  $description: >-
+    Prevents new actions from being triggered for this amount of time after the
+    last one. Set to 0 to disable throttling. Useful for preventing a single
+    scroll wheel 'flick' from switching multiple tabs.
 - scrollAreaLimit:
   - pixelsFromTop: 0
     $name: Pixels from top
@@ -65,6 +72,7 @@ Yandex Browser.
 struct {
     bool reverseScrollingDirection;
     bool horizontalScrolling;
+    int throttleMs;
     int scrollAreaLimitPixelsFromTop;
     int scrollAreaLimitPixelsFromLeft;
 } g_settings;
@@ -74,6 +82,8 @@ DWORD g_uiThreadId;
 DWORD g_lastScrollTime;
 HWND g_lastScrollWnd;
 short g_lastScrollDeltaRemainder;
+DWORD g_lastActionTime;
+thread_local bool g_simulateCtrlKeyDown;
 
 // wParam - TRUE to subclass, FALSE to unsubclass
 // lParam - subclass data
@@ -204,12 +214,6 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
             return false;
     }
 
-    HWND hForegroundWnd = GetForegroundWindow();
-    if (!hForegroundWnd || GetAncestor(hForegroundWnd, GA_ROOTOWNER) != hWnd) {
-        g_lastScrollWnd = nullptr;
-        return false;
-    }
-
     if (GetKeyState(VK_MENU) < 0 || GetKeyState(VK_LWIN) < 0 ||
         GetKeyState(VK_RWIN) < 0 || GetKeyState(VK_PRIOR) < 0 ||
         GetKeyState(VK_NEXT) < 0) {
@@ -234,36 +238,60 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
     int clicks = delta / WHEEL_DELTA;
     Wh_Log(L"%d clicks (delta=%d)", clicks, delta);
 
+    if (clicks != 0 && g_settings.throttleMs > 0) {
+        if (GetTickCount() - g_lastActionTime < (DWORD)g_settings.throttleMs) {
+            // It's too soon, ignore this scroll event.
+            clicks = 0;
+
+            // Reset remainder too.
+            delta = 0;
+        } else if (clicks < -1 || clicks > 1) {
+            // Throttle to a single action at a time.
+            clicks = clicks > 0 ? 1 : -1;
+
+            // Reset remainder if going too fast.
+            delta = 0;
+        }
+    }
+
     WORD key = VK_NEXT;
     if (clicks < 0) {
         clicks = -clicks;
         key = VK_PRIOR;
     }
 
-    INPUT* input = new INPUT[clicks * 2 + 2];
-    for (int i = 0; i < clicks * 2 + 2; i++) {
-        input[i].type = INPUT_KEYBOARD;
-        input[i].ki.wScan = 0;
-        input[i].ki.time = 0;
-        input[i].ki.dwExtraInfo = 0;
+    if (clicks > 0) {
+        Wh_Log(L"Simulating input for window %08X", (DWORD)(ULONG_PTR)hWnd);
+
+        // Set flag to fake Ctrl key state in GetKeyState hook.
+        g_simulateCtrlKeyDown = true;
+
+        // Check if window is already active.
+        HWND hForegroundWnd = GetForegroundWindow();
+        bool needsActivation = !hForegroundWnd || hForegroundWnd != hWnd;
+
+        if (needsActivation) {
+            // Fake window activation so key messages are processed even if not
+            // focused.
+            SendMessage(hWnd, WM_ACTIVATE, WA_ACTIVE, 0);
+        }
+
+        // Send only Page Up/Down keys (Ctrl state will be faked via hooks).
+        for (int i = 0; i < clicks; i++) {
+            SendMessage(hWnd, WM_KEYDOWN, key, 0);
+            SendMessage(hWnd, WM_KEYUP, key, 0);
+        }
+
+        if (needsActivation) {
+            // Restore deactivated state.
+            SendMessage(hWnd, WM_ACTIVATE, WA_INACTIVE, 0);
+        }
+
+        // Clear flag.
+        g_simulateCtrlKeyDown = false;
+
+        g_lastActionTime = GetTickCount();
     }
-
-    input[0].ki.wVk = VK_CONTROL;
-    input[0].ki.dwFlags = 0;
-
-    for (int i = 0; i < clicks; i++) {
-        input[1 + i * 2].ki.wVk = key;
-        input[1 + i * 2].ki.dwFlags = 0;
-        input[1 + i * 2 + 1].ki.wVk = key;
-        input[1 + i * 2 + 1].ki.dwFlags = KEYEVENTF_KEYUP;
-    }
-
-    input[1 + clicks * 2].ki.wVk = VK_CONTROL;
-    input[1 + clicks * 2].ki.dwFlags = KEYEVENTF_KEYUP;
-
-    SendInput(clicks * 2 + 2, input, sizeof(input[0]));
-
-    delete[] input;
 
     g_lastScrollTime = GetTickCount();
     g_lastScrollWnd = hWnd;
@@ -415,10 +443,23 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle,
     return hWnd;
 }
 
+using GetKeyState_t = decltype(&GetKeyState);
+GetKeyState_t pOriginalGetKeyState;
+SHORT WINAPI GetKeyStateHook(int nVirtKey) {
+    if (g_simulateCtrlKeyDown) {
+        Wh_Log(L"Simulating for GetKeyState(%04X)", nVirtKey);
+        // High bit set = key is down.
+        return (nVirtKey == VK_CONTROL) ? 0x8000 : 0;
+    }
+
+    return pOriginalGetKeyState(nVirtKey);
+}
+
 void LoadSettings() {
     g_settings.reverseScrollingDirection =
         Wh_GetIntSetting(L"reverseScrollingDirection");
     g_settings.horizontalScrolling = Wh_GetIntSetting(L"horizontalScrolling");
+    g_settings.throttleMs = Wh_GetIntSetting(L"throttleMs");
     g_settings.scrollAreaLimitPixelsFromTop =
         Wh_GetIntSetting(L"scrollAreaLimit.pixelsFromTop");
     g_settings.scrollAreaLimitPixelsFromLeft =
@@ -434,6 +475,9 @@ BOOL Wh_ModInit() {
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook,
                        (void**)&pOriginalCreateWindowExW);
+
+    Wh_SetFunctionHook((void*)GetKeyState, (void*)GetKeyStateHook,
+                       (void**)&pOriginalGetKeyState);
 
     EnumWindows(InitialEnumBrowserWindowsFunc, 0);
 
