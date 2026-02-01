@@ -1,3 +1,7 @@
+## 1.2.0 ([Feb 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5bbc958c7b7eecab54f74848a2e771922773376a/mods/restore-explorer-exploring-mode.wh.cpp))
+
+- Introduce accurate tree view open state behavior
+
 ## 1.1.0 ([Jan 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d2dfdeae3d10a9c1e78857810635f08061fa3afc/mods/restore-explorer-exploring-mode.wh.cpp))
 
 - Implement accurate new window behavior for "Open" and "Explore" verbs on folders

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-01T11:04:09.000Z</updated>
+    <updated>2026-02-01T20:45:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.2.0]]></title>
+        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#5bbc958c7b7eecab54f74848a2e771922773376a</id>
+        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
+        <updated>2026-02-01T20:45:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Introduce accurate tree view open state behavior</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme 1.2.1]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#06bdb896036376323a3edb138ff87804e6db2eee</id>
@@ -414,19 +427,6 @@ Also spoofs <code>GetCurrentThemeName</code> to return the default Aero path, pr
         <author>
             <name>osmanonurkoc</name>
             <uri>https://github.com/osmanonurkoc</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable IME in Run Dialog 1.0]]></title>
-        <id>https://windhawk.net/mods/run-box-no-ime#461e93cfd207c00b58449fd132aeca8968d215de</id>
-        <link href="https://windhawk.net/mods/run-box-no-ime"/>
-        <updated>2026-01-27T18:00:11.000Z</updated>
-        <content type="html"><![CDATA[<p>When typing in the Run dialog, disable IME (Input Method Editor) automatically to prevent accidental input of non-English characters.<br />
-So you can type commands and hit <code>Enter</code> <em>confidently</em>, never have to worry about IME messing things up again.</p>
-<p><em>Bringing you an elegant, neat and streamlined Win+R experience.</em></p>]]></content>
-        <author>
-            <name>Joe Ye</name>
-            <uri>https://github.com/JoeYe-233</uri>
         </author>
     </entry>
 </feed>
