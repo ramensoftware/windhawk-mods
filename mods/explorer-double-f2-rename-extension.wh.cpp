@@ -2,7 +2,7 @@
 // @id              explorer-double-f2-rename-extension
 // @name            Select filename extension on double F2
 // @description     When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension. Triple F2 selects the full name, quadruple F2 selects the base name again, etc.
-// @version         2.1
+// @version         3
 // @author          Marnes <leaumar@sent.com>
 // @github          https://github.com/leaumar
 // @include         explorer.exe
@@ -23,6 +23,11 @@ behavior), then the extension, then the full name, etc.
 Since version 2.1, you can choose to invert this cycle: select the full name
 with 2 presses, the extension with 3 presses.
 
+Since version 3, you can enable continuous looping: every F2 press steps to the
+next selection in the cycle, regardless of timing. If the selection at the
+moment of such a keypress is not one of the steps (e.g. you manually changed
+it to something random), the loop starts over.
+
 This mod works great together with
 [extension-change-no-warning](https://windhawk.net/mods/extension-change-no-warning).
 */
@@ -32,11 +37,17 @@ This mod works great together with
 /*
 - DoubleF2MilliSeconds: 1000
   $name: Double F2 timing
-  $description: Time window for double press (milliseconds, 100-10000)
+  $description: >
+    Time window for double press (milliseconds, 100-10000)
+- ContinuousLoop: false
+  $name: Continuous loop
+  $description: >
+    Disable double F2 timing and just loop on every single F2 press. Selections
+    that don't match one of the steps reset the cycle.
 - ReverseCycle: false
   $name: Swap double/triple F2
-  $description: 'Select the whole name on double F2 and the extension on triple
-F2?'
+  $description: >
+    Select the whole name on double F2 and the extension on triple F2?
 */
 // ==/WindhawkModSettings==
 
@@ -89,22 +100,63 @@ static bool GetReverseCycle() {
 
 static bool ReverseCycle;
 
+static bool GetContinuousLoop() {
+    auto continuous = Wh_GetIntSetting(L"ContinuousLoop");
+    return continuous != 0;
+}
+
+static bool ContinuousLoop;
+
 static void Cache() {
     DoublePressMillis = GetDoublePressMillis();
     ReverseCycle = GetReverseCycle();
+    ContinuousLoop = GetContinuousLoop();
 }
 }  // namespace ModSettings
 
-class Selection {
+namespace Selection {
+enum class Span { BASE, EXT, WHOLE };
+
+static Span ChooseSpan(short f2Count) {
+    auto timesF2 = f2Count % 3;
+    if (ModSettings::ReverseCycle) {
+        timesF2 = 2 - timesF2;
+    }
+    return timesF2 == 0 ? Span::WHOLE : (timesF2 == 1 ? Span::BASE : Span::EXT);
+}
+
+static Span GetNextSpan(Span current) {
+    auto reverse = ModSettings::GetReverseCycle();
+    switch (current) {
+        case Span::BASE:
+            return reverse ? Span::WHOLE : Span::EXT;
+        case Span::EXT:
+            return reverse ? Span::BASE : Span::WHOLE;
+        case Span::WHOLE:
+            return reverse ? Span::EXT : Span::BASE;
+    }
+}
+
+constexpr const wchar_t* toName(Span span) {
+    switch (span) {
+        case Span::BASE:
+            return L"base name";
+        case Span::EXT:
+            return L"extension";
+        case Span::WHOLE:
+            return L"whole name";
+    }
+}
+
+class Selector {
    private:
     HWND editControl;
     std::wstring text;
     size_t dotIndex;
 
-    Selection(HWND ctrl, std::wstring buffer, size_t dot)
+    Selector(HWND ctrl, std::wstring buffer, size_t dot)
         : editControl(ctrl), text(buffer), dotIndex(dot) {}
 
-   public:
     // default f2 behavior
     // if it's a dotfile or dotless, explorer selects the whole name
     void SelectBaseName() {
@@ -134,7 +186,44 @@ class Selection {
         Wh_Log(L"Selected whole name \"%s\".", text.c_str());
     }
 
-    static std::optional<Selection> InsideControl(HWND editControl) {
+   public:
+    void Select(Span span) {
+        switch (span) {
+            case Span::BASE:
+                SelectBaseName();
+                break;
+            case Span::EXT:
+                SelectExtension();
+                break;
+            case Span::WHOLE:
+                SelectWholeName();
+                break;
+        }
+    }
+
+    std::optional<Span> FindSpan() {
+        DWORD start = 0;
+        DWORD end = 0;
+        SendMessageW(editControl, EM_GETSEL, reinterpret_cast<WPARAM>(&start),
+                     reinterpret_cast<LPARAM>(&end));
+
+        Wh_Log(L"Found selection from %u to %u in \"%s\".", start, end,
+               text.c_str());
+
+        if (start == 0 && end == text.length()) {
+            return Span::WHOLE;
+        }
+        if (start == 0 && end == dotIndex) {
+            return Span::BASE;
+        }
+        if (dotIndex != std::wstring::npos && start == dotIndex + 1 &&
+            end == text.length()) {
+            return Span::EXT;
+        }
+        return std::nullopt;
+    }
+
+    static std::optional<Selector> InsideControl(HWND editControl) {
         // typical max filename length
         std::wstring text(260, L'\0');
         int copied = GetWindowTextW(editControl, text.data(), (int)text.size());
@@ -142,12 +231,13 @@ class Selection {
             // trim to actual length
             text.resize(copied);
             size_t dotIndex = text.find_last_of(L'.');
-            return Selection(editControl, text, dotIndex);
+            return Selector(editControl, text, dotIndex);
         } else {
             return std::nullopt;
         }
     }
 };
+}  // namespace Selection
 
 class KeyStreak {
    private:
@@ -319,35 +409,43 @@ static bool ApplyMultiF2Selection(WPARAM pressedKey) {
     if (f2Count > 0) {
         Wh_Log(L"F2 streak: %dx.", f2Count);
     }
-    if (f2Count > 1) {
-        HWND focus = GetFocus();
-        if (focus != nullptr && ExplorerUtils::IsEditControl(focus)) {
-            Wh_Log(L"Applying %s selection for %d times F2 in an Edit field.",
-                   ModSettings::ReverseCycle
-                       ? L"reverse"
-                       : L"original",  // because I'm worth it :-)
-                   f2Count);
-            auto selection = Selection::InsideControl(focus);
-            if (selection.has_value()) {
-                auto timesF2 = f2Count % 3;
-                if (ModSettings::ReverseCycle) {
-                    timesF2 = 2 - timesF2;
+    if (ModSettings::ContinuousLoop) {
+        if (f2Count > 0) {
+            HWND focus = GetFocus();
+            if (focus != nullptr && ExplorerUtils::IsEditControl(focus)) {
+                auto selection = Selection::Selector::InsideControl(focus);
+                if (selection.has_value()) {
+                    auto currentSpan = selection.value().FindSpan();
+                    auto nextSpan =
+                        currentSpan.has_value()
+                            ? Selection::GetNextSpan(currentSpan.value())
+                            : Selection::Span::BASE;
+                    Wh_Log(L"Current selection is %ls, changing to %ls.",
+                           currentSpan.has_value()
+                               ? Selection::toName(currentSpan.value())
+                               : L"arbitrary",
+                           Selection::toName(nextSpan));
+                    selection.value().Select(nextSpan);
+                    return true;
                 }
-                switch (timesF2) {
-                    // standard explorer f2
-                    case 1:
-                        selection.value().SelectBaseName();
-                        break;
-                    // original feature: double f2 = extension
-                    case 2:
-                        selection.value().SelectExtension();
-                        break;
-                    // new: triple f2 = whole name
-                    case 0:
-                        selection.value().SelectWholeName();
-                        break;
+            }
+        }
+    } else {
+        if (f2Count > 1) {
+            HWND focus = GetFocus();
+            if (focus != nullptr && ExplorerUtils::IsEditControl(focus)) {
+                Wh_Log(
+                    L"Applying %s selection for %d times F2 in an Edit field.",
+                    ModSettings::ReverseCycle
+                        ? L"reverse"
+                        : L"original",  // because I'm worth it :-)
+                    f2Count);
+                auto selection = Selection::Selector::InsideControl(focus);
+                if (selection.has_value()) {
+                    auto span = Selection::ChooseSpan(f2Count);
+                    selection.value().Select(span);
+                    return true;
                 }
-                return true;
             }
         }
     }
