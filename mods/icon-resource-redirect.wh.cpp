@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.2.3
+// @version         1.2.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -781,7 +781,7 @@ bool RedirectModule(DWORD c,
 typedef struct {
     int targetIndex;
     int currentIndex;
-    WORD foundId;
+    LPWSTR foundName;
 } ENUMICONCTX;
 
 BOOL CALLBACK EnumIconsProc(HMODULE hModule,
@@ -791,20 +791,57 @@ BOOL CALLBACK EnumIconsProc(HMODULE hModule,
     ENUMICONCTX* ctx = (ENUMICONCTX*)lParam;
 
     if (ctx->currentIndex == ctx->targetIndex) {
-        // Return 0 for non-numerical name.
-        if (IS_INTRESOURCE(lpszName)) {
-            ctx->foundId = (WORD)(LONG_PTR)lpszName;
-        }
+        ctx->foundName = lpszName;
         return FALSE;  // Stop enumeration.
     }
+
     ctx->currentIndex++;
     return TRUE;  // Continue.
 }
 
-WORD GetIconGroupIdByIndex(HMODULE hModule, int index) {
-    ENUMICONCTX ctx = {index, 0, 0};
-    EnumResourceNamesW(hModule, RT_GROUP_ICON, EnumIconsProc, (LONG_PTR)&ctx);
-    return ctx.foundId;  // 0 if not found or if string resource name.
+LPWSTR GetIconGroupNameByIndex(HMODULE hModule, int index) {
+    ENUMICONCTX ctx = {
+        .targetIndex = index,
+        .currentIndex = 0,
+        .foundName = nullptr,
+    };
+    EnumResourceNames(hModule, RT_GROUP_ICON, EnumIconsProc, (LONG_PTR)&ctx);
+    return ctx.foundName;
+}
+
+typedef struct {
+    LPCWSTR targetName;
+    int currentIndex;
+    int foundIndex;
+} ENUMICONBYNAMECTX;
+
+BOOL CALLBACK EnumIconsByNameProc(HMODULE hModule,
+                                  LPCWSTR lpszType,
+                                  LPWSTR lpszName,
+                                  LONG_PTR lParam) {
+    ENUMICONBYNAMECTX* ctx = (ENUMICONBYNAMECTX*)lParam;
+
+    // Only compare string names, skip integer resource IDs.
+    if (!IS_INTRESOURCE(lpszName)) {
+        if (wcscmp(lpszName, ctx->targetName) == 0) {
+            ctx->foundIndex = ctx->currentIndex;
+            return FALSE;  // Stop enumeration.
+        }
+    }
+
+    ctx->currentIndex++;
+    return TRUE;  // Continue.
+}
+
+int GetIconIndexByGroupName(HMODULE hModule, LPCWSTR name) {
+    ENUMICONBYNAMECTX ctx = {
+        .targetName = name,
+        .currentIndex = 0,
+        .foundIndex = -1,
+    };
+    EnumResourceNames(hModule, RT_GROUP_ICON, EnumIconsByNameProc,
+                      (LONG_PTR)&ctx);
+    return ctx.foundIndex;
 }
 
 using PrivateExtractIconsW_t = decltype(&PrivateExtractIconsW);
@@ -847,20 +884,54 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                 HMODULE module = LoadLibraryEx(szFileName, nullptr,
                                                LOAD_LIBRARY_AS_DATAFILE);
                 if (module) {
-                    iconId = -GetIconGroupIdByIndex(module, iconId);
-                    FreeLibrary(module);
+                    LPWSTR iconGroupName =
+                        GetIconGroupNameByIndex(module, iconId);
 
-                    if (iconId == 0) {
-                        Wh_Log(L"[%u] Failed to get icon group id", c);
-                        return false;
+                    // Best effort: use the icon id if available, otherwise
+                    // continue using the index.
+                    if (!iconGroupName) {
+                        Wh_Log(L"[%u] Failed to get icon group name", c);
+                    } else if (!IS_INTRESOURCE(iconGroupName)) {
+                        Wh_Log(L"[%u] Icon group name is not an id: %s", c,
+                               iconGroupName);
+
+                        // Load redirect file and find the string name's index.
+                        HMODULE redirectModule =
+                            LoadLibraryEx(fileNameRedirect, nullptr,
+                                          LOAD_LIBRARY_AS_DATAFILE);
+                        if (redirectModule) {
+                            int redirectIndex = GetIconIndexByGroupName(
+                                redirectModule, iconGroupName);
+                            FreeLibrary(redirectModule);
+
+                            if (redirectIndex >= 0) {
+                                iconId = redirectIndex;
+                                Wh_Log(
+                                    L"[%u] Found icon group name in redirect "
+                                    L"file at index %d",
+                                    c, redirectIndex);
+                            } else {
+                                Wh_Log(
+                                    L"[%u] Icon group name not found in "
+                                    L"redirect file, using original index",
+                                    c);
+                            }
+                        } else {
+                            Wh_Log(
+                                L"[%u] Failed to load redirect file for icon "
+                                L"name lookup",
+                                c);
+                        }
+                    } else {
+                        iconId = -(WORD)(ULONG_PTR)iconGroupName;
+                        Wh_Log(L"[%u] Using icon group id %d", c, -iconId);
                     }
-                } else {
-                    Wh_Log(L"[%u] Failed to get module handle", c);
-                    return false;
-                }
 
-                Wh_Log(L"[%u] Using id %d for icon index %d", c, -iconId,
-                       nIconIndex);
+                    FreeLibrary(module);
+                } else {
+                    // May happen e.g. for .ico files.
+                    Wh_Log(L"[%u] Failed to get module handle", c);
+                }
             }
 
             if (phicon) {
