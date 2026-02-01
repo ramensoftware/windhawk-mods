@@ -1450,7 +1450,7 @@
                     7
                 ],
                 "ratingUsers": 7,
-                "updated": 1769938633000,
+                "updated": 1769943849000,
                 "users": 188
             },
             "metadata": {
@@ -1462,7 +1462,7 @@
                     "winlogon.exe"
                 ],
                 "name": "Classic Theme",
-                "version": "1.2.0"
+                "version": "1.2.1"
             }
         },
         "classic-theme-enable-with-extended-compatibility": {
