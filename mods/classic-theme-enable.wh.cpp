@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.2.0
+// @version         1.2.1
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -266,7 +266,7 @@ BOOL TrySetThemeSectionSecurity() {
 
 DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
     const int MAX_ATTEMPTS = 10;
-    const DWORD RETRY_DELAY = 500;
+    const DWORD RETRY_DELAY = 100;
 
     for (int attempt = 1; attempt <= MAX_ATTEMPTS && !g_bStopThread; attempt++) {
         Wh_Log(L"Attempt %d/%d", attempt, MAX_ATTEMPTS);
