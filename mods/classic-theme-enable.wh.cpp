@@ -218,7 +218,10 @@ extern "C" NTSTATUS NTAPI NtOpenSection(
     IN POBJECT_ATTRIBUTES ObjectAttributes
 );
 
-BOOL TrySetThemeSectionSecurity(int attemptNumber) {
+HANDLE g_hThread = NULL;
+volatile BOOL g_bStopThread = FALSE;
+
+BOOL TrySetThemeSectionSecurity() {
     DWORD sessionId;
     ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
 
@@ -234,9 +237,8 @@ BOOL TrySetThemeSectionSecurity(int attemptNumber) {
     HANDLE hSection;
     NTSTATUS status = NtOpenSection(&hSection, WRITE_DAC, &objectAttributes);
 
-    Wh_Log("Attempt %d - status: %u\n", attemptNumber, status);
-    
     if (!NT_SUCCESS(status)) {
+        Wh_Log(L"NtOpenSection failed: 0x%X", status);
         return FALSE;
     }
 
@@ -254,7 +256,7 @@ BOOL TrySetThemeSectionSecurity(int attemptNumber) {
         psd
     );
 
-    Wh_Log("Attempt %d - result: %u\n", attemptNumber, result);
+    Wh_Log(L"SetKernelObjectSecurity result: %u", result);
 
     LocalFree(psd);
     CloseHandle(hSection);
@@ -262,24 +264,55 @@ BOOL TrySetThemeSectionSecurity(int attemptNumber) {
     return result;
 }
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Init");
+DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
+    const int MAX_ATTEMPTS = 10;
+    const DWORD RETRY_DELAY = 500;
 
-    const int MAX_ATTEMPTS = 10;   
-    const DWORD RETRY_DELAY = 100; 
-
-    for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        if (TrySetThemeSectionSecurity(attempt)) {
-            Wh_Log(L"Success on attempt %d\n", attempt);
-            return TRUE;
+    for (int attempt = 1; attempt <= MAX_ATTEMPTS && !g_bStopThread; attempt++) {
+        Wh_Log(L"Attempt %d/%d", attempt, MAX_ATTEMPTS);
+        
+        if (TrySetThemeSectionSecurity()) {
+            Wh_Log(L"Success on attempt %d", attempt);
+            return 0;
         }
         
-        if (attempt < MAX_ATTEMPTS) {
-            Wh_Log(L"Attempt %d failed, waiting %d ms before retry...\n", attempt, RETRY_DELAY);
+        if (attempt < MAX_ATTEMPTS && !g_bStopThread) {
             Sleep(RETRY_DELAY);
         }
     }
 
-    Wh_Log(L"All attempts failed\n");
-    return FALSE;
+    Wh_Log(L"All attempts failed");
+    return 1;
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L"Init");
+
+    // Сначала пробуем сразу — может, секция уже доступна
+    if (TrySetThemeSectionSecurity()) {
+        Wh_Log(L"Success on first try");
+        return TRUE;
+    }
+
+    // Если не получилось, запускаем фоновый поток для повторных попыток
+    g_bStopThread = FALSE;
+    g_hThread = CreateThread(NULL, 0, RetryThreadProc, NULL, 0, NULL);
+    
+    if (g_hThread == NULL) {
+        Wh_Log(L"Failed to create retry thread");
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L"Uninit");
+    
+    if (g_hThread) {
+        g_bStopThread = TRUE;
+        WaitForSingleObject(g_hThread, 2000);
+        CloseHandle(g_hThread);
+        g_hThread = NULL;
+    }
 }
