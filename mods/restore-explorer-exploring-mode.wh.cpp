@@ -358,10 +358,12 @@ HRESULT CDUISizerElement__WriteVisibleToPropBag_hook(
         //     <ProperTreeHost id="atom(ProperTreeHost)">
         //         <ProperTreeModuleInner id="atom(ProperTreeModuleInner)"/>
         //     </ProperTreeHost>
+        //     <Sizer id="atom(PageSpaceControlSizer)"/>
         // </Element>
         //
-        // We want ProperTreeModuleInner, as it has a pointer to the shell browser
-        // property bag, containing the ExpandInitialNav value.
+        // We are PageSpaceControlSizer and we want ProperTreeModuleInner, as
+        // it has a pointer to the shell browser property bag, containing the
+        // ExpandInitialNav value.
         //
         IPropertyBag *ppbBrowser = nullptr;
         DirectUI_Element *pe = DirectUI_Element_GetParent((DirectUI_Element *)pThis);
