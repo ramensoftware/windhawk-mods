@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-31T21:29:31.000Z</updated>
+    <updated>2026-01-31T23:56:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[2D Rectangular Selection for Desktop 1.0]]></title>
+        <id>https://windhawk.net/mods/desktop-rect-select#31f975f20b68341fe20ece937a85afaf494c42d4</id>
+        <link href="https://windhawk.net/mods/desktop-rect-select"/>
+        <updated>2026-01-31T23:56:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="2drectangularselectionfordesktopicons">2D Rectangular Selection for Desktop Icons</h1>
+<p>The Windows Desktop uses a different ListView implementation compared to standard Explorer folder views to enable free placement of icons. However, this distinct architecture means some standard features may not behave as expected. Most notably, the <code>Shift</code> + <code>Click</code> selection behavior defaults to a "1D" linear selection (item-by-item) rather than a 2D rectangular selection.</p>
+<p>This mod changes the <code>Shift</code> + <code>Click</code> behavior on Desktop to use a <strong>2D rectangular selection</strong>. When you hold Shift and click to select a range, the mod selects all icons within the <em>rectangular area</em> defined by your start and end points (similar to selecting a range of cells with <code>Shift</code> + <code>Click</code> in Excel), rather than selecting every icon sequentially between them.</p>
+<p><strong>Key Improvements:</strong></p>
+<ul>
+<li><strong>Intuitive Selection:</strong> Matches the visual layout of your icons rather than their underlying index order. It's just how you'd expect it to work!</li>
+<li><strong>Multi-Monitor Safety:</strong> Prevents accidental selection of icons on secondary displays, which often happens with the default linear behavior and can lead to unintended layout disruptions.</li>
+<li><strong>Complex Selections:</strong> Supports adding or removing rectangular regions from your current selection by holding <code>Ctrl</code> + <code>Shift</code> + <code>Click</code>.</li>
+</ul>
+<p><strong>Tested and verified on the following 64-bit platforms:</strong></p>
+<ul>
+<li>Windows 10 (22H2, 19045.4412)</li>
+<li>Windows 11 (22H2, 22621.1702)</li>
+<li>Windows Server 2022 (21H2, 20348.2700)</li>
+<li>Windows 7 SP1 (6.1.7601)</li>
+<li>Windows 8 CP (6.2.8250)</li>
+</ul>
+<p>If it doesn't work on your system, please open an issue and provide your version of <code>comctl32.dll</code> (which should be above 1MB in size, in case there are multiple versions on your system) at my <a href="https://github.com/JoeYe-233/windhawk-mods">GitHub repository</a>. Generally, the right version is located at <code>C:\Windows\WinSxS\[amd64, x86]_microsoft.windows.common-controls_[version string]\comctl32.dll</code>, where <code>[amd64, x86]</code> and <code>[version string]</code> varies based on your system and architecture.</p>
+<p><em>Note: This mod applies only to the Desktop, other Explorer windows are not affected.</em></p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="beforedefaultlinearselection">Before (Default Linear Selection)</h3>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/desktop-rect-select-before.gif" alt="Before" /> </p>
+<h3 id="after2drectangularselection">After (2D Rectangular Selection)</h3>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/desktop-rect-select-after.gif" alt="After" /></p>
+<h3 id="complexselections">Complex Selections</h3>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/desktop-rect-select-after2.gif" alt="Complex Selections" /></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Taskbar Window Suffixes 1.1]]></title>
         <id>https://windhawk.net/mods/file-explorer-remove-suffixes#98854d86d13a0cd0122cf10cb1d1092801a765d9</id>
@@ -397,25 +433,6 @@ So you can type commands and hit <code>Enter</code> <em>confidently</em>, never 
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop No View Menu 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-no-view-menu#726d7c1c85391cd220a8baa5083f0942681c2a5b</id>
-        <link href="https://windhawk.net/mods/desktop-no-view-menu"/>
-        <updated>2026-01-26T12:28:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopnoviewmenu">Desktop No View Menu</h1>
-<p>Windows XP and before did not allow you to change the view of the desktop and
-as such did not have a "View" menu in the desktop's context menu. This mod
-removes that menu and moves the "Show desktop icons" option to the "Sort by"
-(formerly "Arrange Icons By") menu, like Windows XP and before.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/desktop-no-view-menu/before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/desktop-no-view-menu/after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

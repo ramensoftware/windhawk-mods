@@ -2142,6 +2142,36 @@
                 "version": "1.0.0"
             }
         },
+        "desktop-rect-select": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1769903788000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1769903788000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Joe Ye",
+                "description": "在桌面图标上使用类似 Excel 的二维矩形选择方式。",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "桌面图标矩形选择",
+                "version": "1.0"
+            }
+        },
         "desktop-watermark-tweaks": {
             "details": {
                 "defaultSorting": 3231,
