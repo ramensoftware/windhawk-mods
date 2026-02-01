@@ -1,3 +1,8 @@
+## 1.2.4 ([Feb 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9e4a8e92b9c5f80d2abde061c88ee272d3c1ed9d/mods/icon-resource-redirect.wh.cpp))
+
+* Fixed `PrivateExtractIconsW` redirection for textual (non-numerical) resource IDs.
+* Fixed `PrivateExtractIconsW` redirection for non-executable files (e.g. .ico files).
+
 ## 1.2.3 ([Jan 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c647bf6a1706bf7fd3e03751a2976b0ad64a6f41/mods/icon-resource-redirect.wh.cpp))
 
 * Fixed some redirection cases of icons extracted with the `PrivateExtractIconsW` function.
