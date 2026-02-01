@@ -1,3 +1,8 @@
+## 3 ([Feb 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/551e1a0a6ae59ab71315af2fd7d085c9ff6c346e/mods/explorer-double-f2-rename-extension.wh.cpp))
+
+- minor refactor
+- option to loop selection based on current selection instead of hotkey timing
+
 ## 2.1 ([Oct 14, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9f806706ffd5af8ef7970ba315b4999c42682c35/mods/explorer-double-f2-rename-extension.wh.cpp))
 
 - allow swapping double/triple F2 behavior (extension and full name)
