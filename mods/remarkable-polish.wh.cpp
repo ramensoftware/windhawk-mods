@@ -14,7 +14,9 @@
 /*
 # reMarkable App Polish
 
-![Screenshot of Chrome's "Share Your Screen" dialog, where the reMarkable app's "Share Screen" window is selectable.](https://raw.githubusercontent.com/SteffanDonal/windhawk-mods/refs/heads/SteffanDonal-assets/remarkable-polish/google-meet-screenshot.png)
+![Screenshot of Chrome's "Share Your Screen" dialog, where
+the reMarkable app's "Share Screen" window is selectable.
+](https://raw.githubusercontent.com/SteffanDonal/windhawk-mods/refs/heads/SteffanDonal-assets/remarkable-polish/google-meet-screenshot.png)
 
 Adds two major improvements to the "Screen Share" feature:
 
@@ -96,8 +98,10 @@ I fixed it myself. Hopefully we can delete this some day.
 // ==/WindhawkModSettings==
 
 #include <commctrl.h>
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 static bool g_aspectLockEnabled = true;
 static int g_aspectLong = 0;
@@ -145,6 +149,20 @@ static bool IsMarkedTarget(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd))
         return false;
     return GetPropW(hWnd, kTargetProp) != nullptr;
+}
+
+static std::mutex g_trackedMutex;
+static std::unordered_set<HWND> g_trackedSubclassed;
+static const UINT_PTR kSubclassId = 1;
+static const UINT kMsgUnsubclass = WM_APP + 0x5A21;  // Magic. /Shrug
+
+static void TrackSubclassed(HWND hWnd) {
+    std::lock_guard<std::mutex> _{g_trackedMutex};
+    g_trackedSubclassed.insert(hWnd);
+}
+static void UntrackSubclassed(HWND hWnd) {
+    std::lock_guard<std::mutex> _{g_trackedMutex};
+    g_trackedSubclassed.erase(hWnd);
 }
 
 static void ApplyAspectOnSizing(WPARAM edge, RECT* r) {
@@ -232,6 +250,7 @@ static LRESULT CALLBACK TargetSubclassProc(HWND hWnd,
                                            DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_NCDESTROY:
+            UntrackSubclassed(hWnd);
             RemovePropW(hWnd, kTargetProp);
             RemoveWindowSubclass(hWnd, TargetSubclassProc, uIdSubclass);
             break;
@@ -241,6 +260,15 @@ static LRESULT CALLBACK TargetSubclassProc(HWND hWnd,
                 break;
             ApplyAspectOnSizing(wParam, (RECT*)lParam);
             return TRUE;
+        }
+
+        case kMsgUnsubclass: {
+            Wh_Log(L"[Subclass] kMsgUnsubclass hwnd=%p", hWnd);
+
+            UntrackSubclassed(hWnd);
+            RemovePropW(hWnd, kTargetProp);
+            RemoveWindowSubclass(hWnd, TargetSubclassProc, kSubclassId);
+            return 0;
         }
     }
 
@@ -254,6 +282,7 @@ static void AttachSubclass(HWND hWnd) {
     }
 
     if (SetWindowSubclass(hWnd, TargetSubclassProc, 1, 0)) {
+        TrackSubclassed(hWnd);
         Wh_Log(L"[AttachSubclass] attached hwnd=%p", hWnd);
     } else {
         Wh_Log(L"[AttachSubclass] FAILED hwnd=%p gle=%lu", hWnd,
@@ -335,6 +364,36 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"[Init] Complete");
     return TRUE;
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L"[Uninit]");
+
+    std::unordered_set<HWND> snapshot;
+    {
+        std::lock_guard<std::mutex> _{g_trackedMutex};
+        snapshot = g_trackedSubclassed;
+    }
+
+    for (HWND hWnd : snapshot) {
+        if (!hWnd || !IsWindow(hWnd))
+            continue;
+
+        DWORD_PTR result = 0;
+        BOOL ok =
+            SendMessageTimeoutW(hWnd, kMsgUnsubclass, 0, 0,
+                                SMTO_BLOCK | SMTO_ABORTIFHUNG, 200, &result);
+
+        Wh_Log(L"[Uninit] SendMessageTimeout unsubclass hwnd=%p ok=%d gle=%lu",
+               hWnd, ok ? 1 : 0, GetLastError());
+    }
+
+    {
+        std::lock_guard<std::mutex> _{g_trackedMutex};
+        g_trackedSubclassed.clear();
+    }
+
+    Wh_Log(L"[Uninit] Complete");
 }
 
 void Wh_ModSettingsChanged() {
