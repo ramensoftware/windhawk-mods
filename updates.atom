@@ -2,12 +2,83 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-01T20:57:00.000Z</updated>
+    <updated>2026-02-02T09:32:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Pinned Only on Start Menu 1.0.1]]></title>
+        <id>https://windhawk.net/mods/pinned-only-on-start-menu#3b945e5540b154cdc2c653f3c973a912ea83f70f</id>
+        <link href="https://windhawk.net/mods/pinned-only-on-start-menu"/>
+        <updated>2026-02-02T09:32:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="pinnedonlyonstartmenu">Pinned Only on Start Menu</h1>
+<p>This mod simplifies the Start Menu by removing secondary sections using native system policies.</p>
+<h3 id="features">Features:</h3>
+<ul>
+<li><strong>Hides "All apps":</strong> Removes the button and the programs list.</li>
+<li><strong>Hides "Recommended":</strong> Removes the section with recent files.</li>
+</ul>
+<h3 id="instructions">Instructions:</h3>
+<ul>
+<li>Enable the mod in Windhawk.</li>
+<li><strong>Restart explorer.exe</strong> or your computer to apply changes.</li>
+</ul>
+<hr />
+<p><strong>Author:</strong> Amat3rassu</p>]]></content>
+        <author>
+            <name>Amat3rassu</name>
+            <uri>https://github.com/Amat3rassu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[reMarkable App Polish 1.0]]></title>
+        <id>https://windhawk.net/mods/remarkable-polish#6070311ef5ae8f7892d3aab5ce819b89434df198</id>
+        <link href="https://windhawk.net/mods/remarkable-polish"/>
+        <updated>2026-02-02T09:32:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="remarkableapppolish">reMarkable App Polish</h1>
+<p><img src="https://raw.githubusercontent.com/SteffanDonal/windhawk-mods/refs/heads/SteffanDonal-assets/remarkable-polish/google-meet-screenshot.png" alt="Screenshot of Chrome's &quot;Share Your Screen&quot; dialog, where
+the reMarkable app's &quot;Share Screen&quot; window is selectable.
+" /></p>
+<p>Adds two major improvements to the "Screen Share" feature:</p>
+<ol>
+<li>Makes Screen Share a regular top-level window, so all of your apps can
+actually see it, so, you know, you may <em>share your screen…</em></li>
+<li>Adds a toggle to lock the Screen Share window to your device's aspect ratio
+when resized.</li>
+</ol>
+<h2 id="context">Context</h2>
+<p><em>over a year ago, at reMarkable HQ…</em></p>
+<blockquote>
+  <p>Hey, so the reMarkable Paper Pro comes out soon - our first full-color tablet!
+  We should probably spruce up that desktop app we've not touched in a long
+  time…</p>
+  <p>Oooh, yeah, you're right! We could tighten everything up - use a subtle
+  off-white color for backgrounds… A new font! Hover effects, the works! Oh, I
+  can't wait to tweak every little option available to us!</p>
+</blockquote>
+<h4 id="withtheirimpeccablestyleandtastesurelynothingcouldgowrong">With their impeccable style and taste, surely nothing could go wrong…</h4>
+<h3 id="theybrokescreensharinganditsbeenbrokenforoverayear">They broke screen sharing. And it's been broken for over a year.</h3>
+<p>You can share your screen to your Windows PC, but <strong>you cannot</strong> select it as a
+window in basically any of the major video conferencing apps!</p>
+<h3 id="whyhow">Why?! …  HOW?!?</h3>
+<p>During the redesign, they made the screen share window a separate "child" of the
+main app window.</p>
+<p>In doing so, they removed the screen share window's taskbar button, which also
+happens to be closely related to the method most video conferencing apps use to
+identify capture targets! Hooray!</p>
+<h3 id="rightsosubmitabugreport">Right… so… submit a bug report?</h3>
+<p>I did. Like, three times. I made a post on Reddit.
+I <em>tried</em>. Radio silence.</p>
+<p>It'd be <em>so</em> easy for them to fix, but it's still broken today.</p>
+<p>Thankfully, Windhawk is a thing - so here we are.
+I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
+        <author>
+            <name>Steffan Donal</name>
+            <uri>https://github.com/SteffanDonal</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Select filename extension on double F2 3]]></title>
         <id>https://windhawk.net/mods/explorer-double-f2-rename-extension#551e1a0a6ae59ab71315af2fd7d085c9ff6c346e</id>
@@ -347,72 +418,6 @@ during the split-second navigation sequence (approx. 400ms).</li>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VLC Discord Rich Presence 1.0.3]]></title>
-        <id>https://windhawk.net/mods/vlc-discord-rpc#fad163cf3c8246732c75ac49aa098666cbebd786</id>
-        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
-        <updated>2026-01-29T16:15:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="vlcdiscordrichpresence">VLC Discord Rich Presence</h1>
-<p>Seamlessly integrates VLC Media Player with Discord to display playback status, media metadata, and resolution tags.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Smart Recognition:</strong> Automatically identifies Movies, TV Shows (with Season/Episode), and Anime.</li>
-<li><strong>Quality Tags:</strong> Displays resolution and format tags (4K, HDR, 1080p) based on the media file.</li>
-<li><strong>Interactive Buttons:</strong> Adds a "Search This" button to your status, redirecting to Google, IMDb, or YouTube.</li>
-<li><strong>Visual Themes:</strong> Includes options for Default and Dark Mode icon sets.</li>
-<li><strong>Playback Status:</strong> Accurately displays elapsed time, remaining time, and pause/idle states.</li>
-</ul>
-<h2 id="iconthemes">Icon Themes</h2>
-<p>Users can customize the appearance of the Rich Presence icons via the Mod Settings.</p>
-<ul>
-<li><p><strong>Default:</strong> The standard orange VLC cone.
-<img src="https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/default.png" alt="default theme" /></p></li>
-<li><p><strong>Dark:</strong> A dark-mode variant for low-light aesthetics.
-<img src="https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/dark_.png" alt="dark theme" /></p></li>
-</ul>
-<p><strong>Submissions:</strong> We are accepting community designs for new icon themes. If you have created a set (vlc, play, pause, stop), please contact <code>ciizerr</code> on Discord.</p>
-<h2 id="setupinstructionsfirstrunonly">Setup Instructions (First Run Only)</h2>
-<p>For this mod to retrieve data from VLC, the Web Interface must be enabled.</p>
-<ol>
-<li><p>Open VLC Media Player.</p></li>
-<li><p>Go to <strong>Tools</strong> &gt; <strong>Preferences</strong> (or press <code>Ctrl+P</code>).</p></li>
-<li><p>In the bottom-left corner, under <em>Show settings</em>, select <strong>All</strong>.</p></li>
-<li><p>Navigate to <strong>Interface</strong> &gt; <strong>Main interfaces</strong>.</p></li>
-<li><p>On the right panel, check the box for <strong>Web</strong>.</p>
-<p><img src="https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/setup/web-interface.png" alt="Enable Web Interface" /></p></li>
-<li><p>In the left sidebar, expand <em>Main interfaces</em> and click on <strong>Lua</strong>.</p></li>
-<li><p>Under <em>Lua HTTP</em>, set the <strong>Password</strong> to <code>1234</code> and <strong>Port</strong> to <code>8080</code>.</p>
-<p><img src="https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/setup/password.png" alt="Lua Password Setup" /></p></li>
-<li><p>Click <strong>Save</strong> and restart VLC.</p></li>
-</ol>
-<h2 id="configuration">Configuration</h2>
-<p><strong>Search Provider:</strong> You can change the destination of the search button (Google, Bing, IMDb) in the mod settings.</p>
-<p><strong>Custom Client ID:</strong> Power users who wish to upload their own assets can provide a custom Application ID in the settings.</p>
-<h2 id="feedbacksupport">Feedback &amp; Support</h2>
-<p>For bug reports, feature suggestions, or general feedback, please reach out via:</p>
-<ul>
-<li><strong>Discord:</strong> <code>ciizerr</code></li>
-<li><strong>GitHub:</strong> <a href="https://github.com/ciizerr/vlc-discord-rpc-archive">vlc-discord-rpc-archive</a> (contains cross-platform resources of vlc-discord-rpc)</li>
-</ul>]]></content>
-        <author>
-            <name>ciizerr</name>
-            <uri>https://github.com/ciizerr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.1.0]]></title>
-        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#d2dfdeae3d10a9c1e78857810635f08061fa3afc</id>
-        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
-        <updated>2026-01-27T22:28:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Implement accurate new window behavior for "Open" and "Explore" verbs on folders</li>
-<li>Clean up some of the settings' descriptions</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
