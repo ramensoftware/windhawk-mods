@@ -1,3 +1,12 @@
+## 1.3 ([Feb 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4cdb11502fa5f68111eaf7cc6a54cf3ff68f2246/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Added new options for translucent background effects. You can choose between Acrylic, Mica, or Mica Alt (File Explorer default), and optionally apply the effect for the whole window (only supported in dark mode).
+* Added new themes: AddressSearchOnly, TintedGlass.
+* Updated the WindowGlass theme.
+* Added a way to define theme-aware resources. For example, different colors for an element can be defined for light mode and dark mode.
+* Added detection for conflicting programs which use the XAML Diagnostics API, and an option to block such programs. Refer to the mod description for more details.
+* Fixed the mod preventing the classic control panel from opening.
+
 ## 1.2.2 ([Oct 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d4f524e3e969acf4f18a77650a5afdb093961008/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Added themes: Matter, WindowGlass.
