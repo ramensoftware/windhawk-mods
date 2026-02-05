@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id           legacy-balloon-notifications
-// @name         Legacy X-style balloon notifications
+// @name         Legacy XP-style balloon notifications
 // @description  Enables legacy XP-style ballon notifications for Win10 taskbar
-// @version      1.0.0
+// @version      1.0.1
 // @author       Anixx
 // @github       https://github.com/Anixx
 // @include      explorer.exe
