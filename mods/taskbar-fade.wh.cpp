@@ -4,7 +4,7 @@
 // @description     Reduces visual clutter by automatically dimming or hiding the taskbar when idle. Ideal for focused workflows and preventing OLED burn-in.
 // @version         1.0
 // @author          Lukvbp
-// @github          ""
+// @github          https://github.com/lukvbp
 // @include         explorer.exe
 // @compilerOptions -luser32
 // ==/WindhawkMod==
