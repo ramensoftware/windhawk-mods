@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-05T08:35:09.000Z</updated>
+    <updated>2026-02-05T11:24:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Legacy XP-style balloon notifications 1.0.1]]></title>
+        <id>https://windhawk.net/mods/legacy-balloon-notifications#b1105c231e74ce852eff5e7b12ae5e648add3a3f</id>
+        <link href="https://windhawk.net/mods/legacy-balloon-notifications"/>
+        <updated>2026-02-05T11:24:26.000Z</updated>
+        <content type="html"><![CDATA[<p>fix typo</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Legacy X-style balloon notifications 1.0.0]]></title>
         <id>https://windhawk.net/mods/legacy-balloon-notifications#9ef70a55a57577033456db30088445a2e965ced7</id>
@@ -379,36 +390,6 @@ during the split-second navigation sequence (approx. 400ms).</li>
         <author>
             <name>osmanonurkoc</name>
             <uri>https://github.com/osmanonurkoc</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Invisible Window Borders 1.0.0]]></title>
-        <id>https://windhawk.net/mods/invisible-borders#31c0d47efd436261bab56b4037bd1e9285f81a9d</id>
-        <link href="https://windhawk.net/mods/invisible-borders"/>
-        <updated>2026-01-30T20:07:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="invisiblewindowborders">Invisible Window Borders</h1>
-<p>Makes window borders invisible while preserving rounded corners.</p>
-<p><img src="https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/invisible-borders/onoff.png" alt="Comparison" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Invisible Borders</strong>: Removes border color while keeping frame structure</li>
-<li><strong>Preserves Rounded Corners</strong>: Keeps window frame intact for corner rendering</li>
-<li><strong>Universal</strong>: Works with all applications</li>
-<li><strong>Lightweight</strong>: Minimal performance impact</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 10 (version 1809 and later)</li>
-<li>Windows 11 (all versions)</li>
-<li>Requires DWM (Desktop Window Manager) to be enabled</li>
-</ul>
-<h2 id="support">Support</h2>
-<p>Report issues at: https://github.com/Bo0ii/windhawk-mods/issues</p>
-<h2 id="license">License</h2>
-<p>MIT License - Feel free to modify and distribute</p>]]></content>
-        <author>
-            <name>Bo0ii</name>
-            <uri>https://github.com/Bo0ii</uri>
         </author>
     </entry>
 </feed>

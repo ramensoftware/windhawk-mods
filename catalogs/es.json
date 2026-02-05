@@ -4312,7 +4312,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1770280509000,
+                "updated": 1770290666000,
                 "users": 0
             },
             "metadata": {
@@ -4322,8 +4322,8 @@
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Legacy X-style balloon notifications",
-                "version": "1.0.0"
+                "name": "Legacy XP-style balloon notifications",
+                "version": "1.0.1"
             }
         },
         "legacy-clock-flyout": {
