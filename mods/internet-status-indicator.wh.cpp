@@ -2,7 +2,7 @@
 // @id              internet-status-indicator
 // @name            Internet Status Indicator
 // @description     Real-time network connectivity monitoring with visual indicators as a Tray Icon
-// @version         0.8
+// @version         0.7
 // @author          ALMAS CP
 // @github          https://github.com/almas-cp
 // @homepage        https://github.com/almas-cp
@@ -154,7 +154,6 @@ This mod runs as part of the windhawk.exe process for better stability and resou
 #include <algorithm>
 #include <condition_variable>
 #include <mutex>
-#include <functional>
 
 
 #define WM_TRAYICON (WM_USER + 1)
@@ -412,26 +411,6 @@ public:
     
     bool IsVisible() const { return iconVisible; }
     
-    // Recreate the tray icon (called when taskbar restarts)
-    bool RecreateTrayIcon() {
-        if (!isInitialized || !hwnd) return false;
-        
-        Wh_Log(L"🔄 Taskbar restarted, recreating tray icon...");
-        
-        // The icon was automatically removed when explorer/taskbar restarted
-        // So we just need to add it again
-        iconVisible = false;
-        
-        bool result = Shell_NotifyIcon(NIM_ADD, &nid) != FALSE;
-        if (result) {
-            iconVisible = true;
-            Wh_Log(L"✅ Tray icon recreated successfully");
-        } else {
-            Wh_Log(L"❌ Failed to recreate tray icon");
-        }
-        return result;
-    }
-    
     void Cleanup() {
         Hide();
         isInitialized = false;
@@ -445,23 +424,10 @@ class TrayWindow {
 private:
     HWND hwnd;
     static const wchar_t* CLASS_NAME;
-    static UINT s_uTaskbarRestart;  // Message ID for TaskbarCreated
-    static std::function<void()> s_onTaskbarCreated;  // Callback when taskbar restarts
     
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-        switch (uMsg) {
-            case WM_TRAYICON:
-                return 0;
-            default:
-                // Handle TaskbarCreated message
-                if (s_uTaskbarRestart != 0 && uMsg == s_uTaskbarRestart) {
-                    Wh_Log(L"📢 TaskbarCreated message received");
-                    if (s_onTaskbarCreated) {
-                        s_onTaskbarCreated();
-                    }
-                    return 0;
-                }
-                break;
+        if (uMsg == WM_TRAYICON) {
+            return 0;
         }
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
@@ -497,32 +463,14 @@ public:
             NULL
         );
         
-        if (hwnd) {
-            // Register the TaskbarCreated message
-            // This message is broadcast when the taskbar is created/recreated
-            s_uTaskbarRestart = RegisterWindowMessage(L"TaskbarCreated");
-            if (s_uTaskbarRestart == 0) {
-                Wh_Log(L"⚠️ Failed to register TaskbarCreated message");
-            } else {
-                Wh_Log(L"✅ Registered TaskbarCreated message (ID: %u)", s_uTaskbarRestart);
-            }
-        }
-        
         return hwnd != NULL;
     }
     
     HWND GetHandle() const { return hwnd; }
-    
-    // Set the callback for when taskbar is created/recreated
-    static void SetTaskbarCreatedCallback(std::function<void()> callback) {
-        s_onTaskbarCreated = callback;
-    }
 };
 
 
 const wchar_t* TrayWindow::CLASS_NAME = L"InternetStatusTrayWindow";
-UINT TrayWindow::s_uTaskbarRestart = 0;
-std::function<void()> TrayWindow::s_onTaskbarCreated = nullptr;
 
 
 class InternetStatusMonitor {
@@ -571,12 +519,6 @@ public:
             Wh_Log(L"❌ Failed to create tray window.");
             return false;
         }
-        
-        // Set up the TaskbarCreated callback to recreate the icon when explorer restarts
-        TrayWindow::SetTaskbarCreatedCallback([this]() {
-            OnTaskbarCreated();
-        });
-        
         if (!trayIcon->Initialize(trayWindow->GetHandle(), settings)) {
             Wh_Log(L"❌ Failed to initialize tray icon manager.");
             return false;
@@ -588,17 +530,6 @@ public:
         
         trayIconInitialized = true;
         return true;
-    }
-    
-    // Called when TaskbarCreated message is received (explorer restarted)
-    void OnTaskbarCreated() {
-        if (!trayIconInitialized || !trayIcon) return;
-        
-        // Recreate the tray icon
-        if (trayIcon->RecreateTrayIcon()) {
-            // Update with current connection status
-            trayIcon->UpdateStatus(isConnected.load(), true);
-        }
     }
     
     bool InitializeIcmp() {
