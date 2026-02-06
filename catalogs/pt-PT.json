@@ -7092,6 +7092,34 @@
                 "version": "2.5"
             }
         },
+        "taskbar-fade": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1770390914000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1770390914000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lukvbp",
+                "compilerOptions": "-luser32",
+                "description": "Reduces visual clutter by automatically dimming or hiding the taskbar when idle. Ideal for focused workflows and preventing OLED burn-in.",
+                "github": "https://github.com/lukvbp",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Taskbar Fade",
+                "version": "1.5"
+            }
+        },
         "taskbar-grouping": {
             "details": {
                 "defaultSorting": 201200,
