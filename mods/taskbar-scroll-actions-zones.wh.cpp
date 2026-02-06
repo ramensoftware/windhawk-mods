@@ -8,7 +8,7 @@
 // @homepage        https://github.com/almas-cp
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lversion
+// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lversion -ldxva2
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -23,75 +23,77 @@
 /*
 # Taskbar Scroll Actions (Zones)
 
-Assign different actions for scrolling over different zones of the taskbar, including virtual desktop
-switching, monitor brightness control, and volume control.
+Assign different actions for scrolling over different zones of the taskbar.
 
-The taskbar can be divided into 1 or 2 zones, and each zone can be assigned a different action:
+The taskbar can be divided into 1, 2, or 3 zones. Each zone can be assigned one of these actions:
 
-* Switch virtual desktop
-* Change monitor brightness
-* Change system volume
-* Change microphone volume
+* **Change system volume** - Scroll to adjust the master volume
+* **Change monitor brightness** - Scroll to adjust screen brightness (supports external monitors)
+* **Switch virtual desktop** - Scroll to switch between Windows virtual desktops
 
-You can configure how many zones to create and what action each zone should perform.
-You can also control whether system popups appear for volume changes.
+## Zone Layout
+
+- **Zone 1**: Leftmost portion of the taskbar
+- **Zone 2**: Middle portion (when using 3 zones) or right portion (when using 2 zones)
+- **Zone 3**: Rightmost portion (the "Show Desktop" button area) - great for desktop switching!
+
+**Tip:** Zone 3 corresponds to the "Show Desktop" hover area on the far right of the taskbar,
+making it intuitive for virtual desktop switching.
 
 **Note:** Some laptop touchpads might not support scrolling over the taskbar. A
-workaround is to use the "pinch to zoom" gesture. For details, check out [a
-relevant
-issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt-trigger-mouse-wheel-options).
+workaround is to use the "pinch to zoom" gesture.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- numberOfZones: 2
+- numberOfZones: two
   $name: Number of zones
   $description: How many zones to divide the taskbar into
   $options:
-  - 1: Single zone
-  - 2: Two zones
+  - one: Single zone (entire taskbar)
+  - two: Two zones (left and right)
+  - three: Three zones (left, middle, right/show-desktop)
 - zone1Action: brightnessChange
-  $name: Zone 1 action (leftmost/topmost)
+  $name: Zone 1 action (leftmost)
   $options:
   - virtualDesktopSwitch: Switch virtual desktop
   - brightnessChange: Change monitor brightness
   - systemVolumeChange: Change system volume
-  - micVolumeChange: Change microphone volume
 - zone2Action: systemVolumeChange
-  $name: Zone 2 action (rightmost/bottommost)
+  $name: Zone 2 action (middle or right)
   $options:
   - virtualDesktopSwitch: Switch virtual desktop
   - brightnessChange: Change monitor brightness
   - systemVolumeChange: Change system volume
-  - micVolumeChange: Change microphone volume
-- scrollArea: taskbar
-  $name: Scroll area
+- zone3Action: virtualDesktopSwitch
+  $name: Zone 3 action (rightmost / show-desktop area)
   $options:
-  - taskbar: The taskbar
-  - notificationArea: The tray area
-  - taskbarWithoutNotificationArea: The taskbar without the tray area
+  - virtualDesktopSwitch: Switch virtual desktop
+  - brightnessChange: Change monitor brightness
+  - systemVolumeChange: Change system volume
 - zone1ScrollStep: 5
   $name: Zone 1 scroll step
-  $description: >-
-    Allows to configure the change that will occur with each notch of mouse
-    wheel movement in zone 1.
+  $description: Change amount per scroll notch for Zone 1
 - zone2ScrollStep: 5
   $name: Zone 2 scroll step
+  $description: Change amount per scroll notch for Zone 2
+- zone3ScrollStep: 1
+  $name: Zone 3 scroll step
+  $description: Change amount per scroll notch for Zone 3
+- useDdcCi: true
+  $name: Support external monitors
   $description: >-
-    Allows to configure the change that will occur with each notch of mouse
-    wheel movement in zone 2.
+    Enable brightness control for external monitors using the DDC/CI protocol.
+    Falls back to WMI for laptop displays.
 - showVolumePopup: true
   $name: Show system volume popup
-  $description: >-
-    Show the Windows system volume popup when changing system volume.
-    Microphone volume changes are always silent.
+  $description: Show the Windows volume popup when changing volume
 - throttleMs: 0
   $name: Throttle time (milliseconds)
   $description: >-
-    Prevents new actions from being triggered for this amount of time after the
-    last one. Set to 0 to disable throttling. Useful for preventing a single
-    scroll wheel 'flick' from switching multiple desktops.
+    Minimum time between actions. Set to 0 to disable.
+    Useful for preventing rapid desktop switches.
 - reverseScrollingDirection: false
   $name: Reverse scrolling direction
 - oldTaskbarOnWin11: false
@@ -114,29 +116,27 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 #include <psapi.h>
 #include <wbemcli.h>
 #include <windowsx.h>
+#include <physicalmonitorenumerationapi.h>
+#include <highlevelmonitorconfigurationapi.h>
 
 #include <unordered_set>
+#include <vector>
 
 enum class ScrollAction {
     virtualDesktopSwitch,
     brightnessChange,
     systemVolumeChange,
-    micVolumeChange,
-};
-
-enum class ScrollArea {
-    taskbar,
-    notificationArea,
-    taskbarWithoutNotificationArea,
 };
 
 struct {
     int numberOfZones;
     ScrollAction zone1Action;
     ScrollAction zone2Action;
-    ScrollArea scrollArea;
+    ScrollAction zone3Action;
     int zone1ScrollStep;
     int zone2ScrollStep;
+    int zone3ScrollStep;
+    bool useDdcCi;
     bool showVolumePopup;
     int throttleMs;
     bool reverseScrollingDirection;
@@ -238,127 +238,43 @@ HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 
-bool GetNotificationAreaRect(HWND hMMTaskbarWnd, RECT* rcResult) {
-    if (hMMTaskbarWnd == g_hTaskbarWnd) {
-        HWND hTrayNotifyWnd =
-            FindWindowEx(hMMTaskbarWnd, NULL, L"TrayNotifyWnd", NULL);
-        if (hTrayNotifyWnd && GetWindowRect(hTrayNotifyWnd, rcResult) &&
-            !IsRectEmpty(rcResult)) {
-            return true;
-        }
-
-        // When attaching an external monitor, it was observed that the rect can
-        // be empty. Use fallback in this case.
-    } else if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
-        RECT rcTaskbar;
-        if (GetWindowRect(hMMTaskbarWnd, &rcTaskbar)) {
-            HWND hBridgeWnd = FindWindowEx(
-                hMMTaskbarWnd, NULL,
-                L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
-            while (hBridgeWnd) {
-                RECT rcBridge;
-                if (!GetWindowRect(hBridgeWnd, &rcBridge)) {
-                    break;
-                }
-
-                if (!EqualRect(&rcBridge, &rcTaskbar)) {
-                    if (IsRectEmpty(&rcBridge)) {
-                        break;
-                    }
-
-                    CopyRect(rcResult, &rcBridge);
-                    return true;
-                }
-
-                hBridgeWnd = FindWindowEx(
-                    hMMTaskbarWnd, hBridgeWnd,
-                    L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
-            }
-        }
-
-        // On newer Win11 versions, the clock on secondary taskbars is difficult
-        // to detect without either UI Automation or UWP UI APIs. Use fallback.
-    } else if (g_nExplorerVersion >= WIN_VERSION_10_R1) {
-        HWND hClockButtonWnd =
-            FindWindowEx(hMMTaskbarWnd, NULL, L"ClockButton", NULL);
-        if (hClockButtonWnd && GetWindowRect(hClockButtonWnd, rcResult) &&
-            !IsRectEmpty(rcResult)) {
-            return true;
-        }
-    } else {
-        // In older Windows versions, there's no clock on the secondary taskbar.
-        SetRectEmpty(rcResult);
-        return true;
-    }
-
-    RECT rcTaskbar;
-    if (!GetWindowRect(hMMTaskbarWnd, &rcTaskbar)) {
-        return false;
-    }
-
-    // Just consider the last pixels as a fallback, not accurate, but better
-    // than nothing.
-    int lastPixels = MulDiv(50, GetDpiForWindowWithFallback(hMMTaskbarWnd), 96);
-    CopyRect(rcResult, &rcTaskbar);
-    if (rcResult->right - rcResult->left > lastPixels) {
-        if (GetWindowLong(hMMTaskbarWnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) {
-            rcResult->right = rcResult->left + lastPixels;
-        } else {
-            rcResult->left = rcResult->right - lastPixels;
-        }
-    }
-
-    return true;
-}
-
 int GetZoneFromPoint(HWND hMMTaskbarWnd, POINT pt) {
     RECT rc;
     
-    switch (g_settings.scrollArea) {
-        case ScrollArea::taskbar: {
-            if (!GetWindowRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
-                return -1; // Not in taskbar
-            }
-            break;
-        }
-
-        case ScrollArea::notificationArea: {
-            if (!GetNotificationAreaRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
-                return -1; // Not in notification area
-            }
-            break;
-        }
-
-        case ScrollArea::taskbarWithoutNotificationArea: {
-            RECT rcNotify;
-            if (!GetWindowRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
-                return -1; // Not in taskbar
-            }
-            if (GetNotificationAreaRect(hMMTaskbarWnd, &rcNotify) && PtInRect(&rcNotify, pt)) {
-                return -1; // In notification area, but we want taskbar without it
-            }
-            break;
-        }
+    if (!GetWindowRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
+        return -1; // Not in taskbar
     }
 
     if (g_settings.numberOfZones == 1) {
         return 0; // Single zone
     }
 
-    // Determine which zone the point is in (for 2 zones)
+    // Determine taskbar orientation (horizontal or vertical)
     bool isHorizontal = (rc.right - rc.left) > (rc.bottom - rc.top);
     int totalSize = isHorizontal ? (rc.right - rc.left) : (rc.bottom - rc.top);
     int pointPos = isHorizontal ? (pt.x - rc.left) : (pt.y - rc.top);
     
-    int zoneSize = totalSize / 2;
-    int zone = pointPos / zoneSize;
-    
-    // Ensure zone is within bounds
-    if (zone >= 2) {
-        zone = 1;
+    if (g_settings.numberOfZones == 2) {
+        // Two zones: left half and right half (50/50)
+        int zoneSize = totalSize / 2;
+        return (pointPos < zoneSize) ? 0 : 1;
     }
     
-    return zone;
+    // Three zones: 49% / 49% / 2% distribution
+    // Zone 3 is a tiny edge on the rightmost side (like the "show desktop" button)
+    int zone3Size = totalSize * 2 / 100;  // 2% of taskbar
+    if (zone3Size < 10) zone3Size = 10;   // Minimum 10 pixels for usability
+    
+    int zone3Start = totalSize - zone3Size;
+    int zone1Size = zone3Start / 2;  // Split the remaining 98% equally
+    
+    if (pointPos >= zone3Start) {
+        return 2; // Zone 3 (rightmost 2% / show desktop area)
+    } else if (pointPos >= zone1Size) {
+        return 1; // Zone 2 (middle 49%)
+    } else {
+        return 0; // Zone 1 (leftmost 49%)
+    }
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -817,6 +733,126 @@ cleanup:
     return bRet;
 }
 
+// DDC/CI brightness control for external monitors
+bool GetBrightnessDdcCi(HWND hWnd, DWORD* currentBrightness, DWORD* minBrightness, DWORD* maxBrightness) {
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor) {
+        return false;
+    }
+
+    DWORD numPhysicalMonitors = 0;
+    if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, &numPhysicalMonitors) || numPhysicalMonitors == 0) {
+        return false;
+    }
+
+    std::vector<PHYSICAL_MONITOR> physicalMonitors(numPhysicalMonitors);
+    if (!GetPhysicalMonitorsFromHMONITOR(hMonitor, numPhysicalMonitors, physicalMonitors.data())) {
+        return false;
+    }
+
+    bool success = false;
+    for (DWORD i = 0; i < numPhysicalMonitors; i++) {
+        if (GetMonitorBrightness(physicalMonitors[i].hPhysicalMonitor, minBrightness, currentBrightness, maxBrightness)) {
+            success = true;
+            break;
+        }
+    }
+
+    DestroyPhysicalMonitors(numPhysicalMonitors, physicalMonitors.data());
+    return success;
+}
+
+bool SetBrightnessDdcCi(HWND hWnd, DWORD brightness) {
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor) {
+        return false;
+    }
+
+    DWORD numPhysicalMonitors = 0;
+    if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, &numPhysicalMonitors) || numPhysicalMonitors == 0) {
+        return false;
+    }
+
+    std::vector<PHYSICAL_MONITOR> physicalMonitors(numPhysicalMonitors);
+    if (!GetPhysicalMonitorsFromHMONITOR(hMonitor, numPhysicalMonitors, physicalMonitors.data())) {
+        return false;
+    }
+
+    bool success = false;
+    for (DWORD i = 0; i < numPhysicalMonitors; i++) {
+        if (SetMonitorBrightness(physicalMonitors[i].hPhysicalMonitor, brightness)) {
+            success = true;
+            break;
+        }
+    }
+
+    DestroyPhysicalMonitors(numPhysicalMonitors, physicalMonitors.data());
+    return success;
+}
+
+// Check if a monitor is the primary monitor (typically the laptop's internal display)
+bool IsPrimaryMonitor(HWND hWnd) {
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor) {
+        return false;
+    }
+    
+    MONITORINFO mi;
+    mi.cbSize = sizeof(MONITORINFO);
+    if (GetMonitorInfo(hMonitor, &mi)) {
+        return (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+    }
+    
+    return false;
+}
+
+// Unified brightness change function - monitor-aware
+// - For primary monitor (typically laptop): Try DDC/CI first, fall back to WMI
+// - For secondary monitors (typically external): Use DDC/CI only (don't affect laptop screen)
+bool ChangeBrightness(HWND hWnd, int delta) {
+    bool isPrimary = IsPrimaryMonitor(hWnd);
+    bool ddcCiSuccess = false;
+    
+    // Try DDC/CI first if enabled
+    if (g_settings.useDdcCi) {
+        DWORD currentBrightness, minBrightness, maxBrightness;
+        if (GetBrightnessDdcCi(hWnd, &currentBrightness, &minBrightness, &maxBrightness)) {
+            int newBrightness = (int)currentBrightness + delta;
+            if (newBrightness < (int)minBrightness) newBrightness = (int)minBrightness;
+            if (newBrightness > (int)maxBrightness) newBrightness = (int)maxBrightness;
+            
+            if (SetBrightnessDdcCi(hWnd, (DWORD)newBrightness)) {
+                Wh_Log(L"DDC/CI: Changed brightness from %d to %d (primary=%d)", 
+                       currentBrightness, newBrightness, isPrimary);
+                return true;
+            }
+        }
+    }
+    
+    // Only fall back to WMI if this is the primary monitor
+    // WMI controls the internal laptop display, so we shouldn't use it
+    // when scrolling on an external monitor's taskbar
+    if (isPrimary) {
+        int oldBrightness = GetBrightness();
+        if (oldBrightness != -1) {
+            int newBrightness = oldBrightness + delta;
+            if (newBrightness < 0) newBrightness = 0;
+            if (newBrightness > 100) newBrightness = 100;
+            
+            if (SetBrightness(newBrightness)) {
+                Wh_Log(L"WMI: Changed brightness from %d to %d (laptop internal display)", 
+                       oldBrightness, newBrightness);
+                return true;
+            }
+        }
+    } else {
+        Wh_Log(L"Skipping WMI brightness (not on primary monitor)");
+    }
+    
+    Wh_Log(L"Failed to change brightness for this monitor");
+    return false;
+}
+
 #pragma endregion  // brightness
 
 // Use a keyboard simulation and not IVirtualDesktopManagerInternal, since the
@@ -892,9 +928,7 @@ const static GUID XIID_IAudioEndpointVolume = {
     {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
 bool g_bSystemVolInitialized;
-bool g_bMicVolInitialized;
 IMMDeviceEnumerator* g_pSystemDeviceEnumerator;
-IMMDeviceEnumerator* g_pMicDeviceEnumerator;
 
 void SystemVolInit() {
     HRESULT hr = CoCreateInstance(
@@ -904,25 +938,10 @@ void SystemVolInit() {
         g_pSystemDeviceEnumerator = NULL;
 }
 
-void MicVolInit() {
-    HRESULT hr = CoCreateInstance(
-        XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
-        XIID_IMMDeviceEnumerator, (LPVOID*)&g_pMicDeviceEnumerator);
-    if (FAILED(hr))
-        g_pMicDeviceEnumerator = NULL;
-}
-
 void SystemVolUninit() {
     if (g_pSystemDeviceEnumerator) {
         g_pSystemDeviceEnumerator->Release();
         g_pSystemDeviceEnumerator = NULL;
-    }
-}
-
-void MicVolUninit() {
-    if (g_pMicDeviceEnumerator) {
-        g_pMicDeviceEnumerator->Release();
-        g_pMicDeviceEnumerator = NULL;
     }
 }
 
@@ -977,52 +996,6 @@ BOOL AddSystemMasterVolumeLevelScalar(float fMasterVolumeAdd, bool showPopup) {
     return bSuccess;
 }
 
-BOOL AddMicMasterVolumeLevelScalar(float fMasterVolumeAdd) {
-    IMMDevice* defaultDevice = NULL;
-    IAudioEndpointVolume* endpointVolume = NULL;
-    HRESULT hr;
-    float fMasterVolume;
-    BOOL bSuccess = FALSE;
-
-    if (!g_bMicVolInitialized) {
-        MicVolInit();
-        g_bMicVolInitialized = true;
-    }
-
-    if (g_pMicDeviceEnumerator) {
-        hr = g_pMicDeviceEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole,
-                                                          &defaultDevice);
-        if (SUCCEEDED(hr)) {
-            hr = defaultDevice->Activate(XIID_IAudioEndpointVolume,
-                                         CLSCTX_INPROC_SERVER, NULL,
-                                         (LPVOID*)&endpointVolume);
-            if (SUCCEEDED(hr)) {
-                if (SUCCEEDED(endpointVolume->GetMasterVolumeLevelScalar(
-                        &fMasterVolume))) {
-                    fMasterVolume += fMasterVolumeAdd;
-
-                    if (fMasterVolume < 0.0)
-                        fMasterVolume = 0.0;
-                    else if (fMasterVolume > 1.0)
-                        fMasterVolume = 1.0;
-
-                    if (SUCCEEDED(endpointVolume->SetMasterVolumeLevelScalar(
-                            fMasterVolume, NULL))) {
-                        bSuccess = TRUE;
-                        // Microphone volume changes are always silent (no popup)
-                    }
-                }
-
-                endpointVolume->Release();
-            }
-
-            defaultDevice->Release();
-        }
-    }
-
-    return bSuccess;
-}
-
 #pragma endregion  // volume
 
 DWORD g_lastScrollTime;
@@ -1032,16 +1005,20 @@ DWORD g_lastActionTime;
 ScrollAction GetActionForZone(int zone) {
     if (zone == 0) return g_settings.zone1Action;
     if (zone == 1) return g_settings.zone2Action;
+    if (zone == 2) return g_settings.zone3Action;
     return g_settings.zone1Action; // fallback
 }
 
 int GetScrollStepForZone(int zone) {
     if (zone == 0) return g_settings.zone1ScrollStep;
     if (zone == 1) return g_settings.zone2ScrollStep;
+    if (zone == 2) return g_settings.zone3ScrollStep;
     return g_settings.zone1ScrollStep; // fallback
 }
 
-void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam, int zone) {
+HWND g_currentTaskbarWnd = NULL; // Track current taskbar window for brightness
+
+void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam, int zone, HWND hTaskbarWnd) {
     ScrollAction action = GetActionForZone(zone);
     int scrollStep = GetScrollStepForZone(zone);
     
@@ -1079,31 +1056,15 @@ void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam, int zone) {
                 SwitchDesktopViaKeyboardShortcut(clicks);
                 break;
 
-            case ScrollAction::brightnessChange: {
-                int oldBrightness = GetBrightness();
-                if (oldBrightness != -1) {
-                    int newBrightness = oldBrightness + clicks;
-                    Wh_Log(L"Changing brightness from %d to %d", oldBrightness, newBrightness);
-                    SetBrightness(newBrightness);
-                } else {
-                    Wh_Log(L"Error getting current brightness");
-                }
+            case ScrollAction::brightnessChange:
+                ChangeBrightness(hTaskbarWnd, clicks);
                 break;
-            }
 
             case ScrollAction::systemVolumeChange:
                 if (AddSystemMasterVolumeLevelScalar(clicks * 0.01f, g_settings.showVolumePopup)) {
                     Wh_Log(L"Changed system volume by %d%%", clicks);
                 } else {
                     Wh_Log(L"Error changing system volume");
-                }
-                break;
-
-            case ScrollAction::micVolumeChange:
-                if (AddMicMasterVolumeLevelScalar(clicks * 0.01f)) {
-                    Wh_Log(L"Changed microphone volume by %d%%", clicks);
-                } else {
-                    Wh_Log(L"Error changing microphone volume");
                 }
                 break;
         }
@@ -1194,7 +1155,7 @@ bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     ZeroMemory(&input, sizeof(INPUT));
     SendInput(1, &input, sizeof(INPUT));
 
-    InvokeScrollAction(wParam, lParam, zone);
+    InvokeScrollAction(wParam, lParam, zone, hWnd);
 
     return true;
 }
@@ -1463,50 +1424,50 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
 }
 
 void LoadSettings() {
-    g_settings.numberOfZones = Wh_GetIntSetting(L"numberOfZones");
-    if (g_settings.numberOfZones < 1 || g_settings.numberOfZones > 2) {
-        g_settings.numberOfZones = 2; // Default to 2 zones
+    // Parse number of zones (string-based dropdown)
+    PCWSTR numberOfZones = Wh_GetStringSetting(L"numberOfZones");
+    g_settings.numberOfZones = 2; // Default to 2 zones
+    if (wcscmp(numberOfZones, L"one") == 0) {
+        g_settings.numberOfZones = 1;
+    } else if (wcscmp(numberOfZones, L"three") == 0) {
+        g_settings.numberOfZones = 3;
     }
+    Wh_FreeStringSetting(numberOfZones);
+
+    // Helper lambda to parse action
+    auto parseAction = [](PCWSTR actionStr, ScrollAction defaultAction) -> ScrollAction {
+        if (wcscmp(actionStr, L"virtualDesktopSwitch") == 0) {
+            return ScrollAction::virtualDesktopSwitch;
+        } else if (wcscmp(actionStr, L"brightnessChange") == 0) {
+            return ScrollAction::brightnessChange;
+        } else if (wcscmp(actionStr, L"systemVolumeChange") == 0) {
+            return ScrollAction::systemVolumeChange;
+        }
+        return defaultAction;
+    };
 
     // Parse Zone 1 Action
     PCWSTR zone1Action = Wh_GetStringSetting(L"zone1Action");
-    g_settings.zone1Action = ScrollAction::brightnessChange; // Default to brightness change
-    if (wcscmp(zone1Action, L"virtualDesktopSwitch") == 0) {
-        g_settings.zone1Action = ScrollAction::virtualDesktopSwitch;
-    } else if (wcscmp(zone1Action, L"systemVolumeChange") == 0) {
-        g_settings.zone1Action = ScrollAction::systemVolumeChange;
-    } else if (wcscmp(zone1Action, L"micVolumeChange") == 0) {
-        g_settings.zone1Action = ScrollAction::micVolumeChange;
-    }
+    g_settings.zone1Action = parseAction(zone1Action, ScrollAction::brightnessChange);
     Wh_FreeStringSetting(zone1Action);
 
     // Parse Zone 2 Action
     PCWSTR zone2Action = Wh_GetStringSetting(L"zone2Action");
-    g_settings.zone2Action = ScrollAction::systemVolumeChange; // Default to system volume
-    if (wcscmp(zone2Action, L"virtualDesktopSwitch") == 0) {
-        g_settings.zone2Action = ScrollAction::virtualDesktopSwitch;
-    } else if (wcscmp(zone2Action, L"brightnessChange") == 0) {
-        g_settings.zone2Action = ScrollAction::brightnessChange;
-    } else if (wcscmp(zone2Action, L"micVolumeChange") == 0) {
-        g_settings.zone2Action = ScrollAction::micVolumeChange;
-    }
+    g_settings.zone2Action = parseAction(zone2Action, ScrollAction::systemVolumeChange);
     Wh_FreeStringSetting(zone2Action);
 
-    PCWSTR scrollArea = Wh_GetStringSetting(L"scrollArea");
-    g_settings.scrollArea = ScrollArea::taskbar;
-    if (wcscmp(scrollArea, L"notificationArea") == 0) {
-        g_settings.scrollArea = ScrollArea::notificationArea;
-    } else if (wcscmp(scrollArea, L"taskbarWithoutNotificationArea") == 0) {
-        g_settings.scrollArea = ScrollArea::taskbarWithoutNotificationArea;
-    }
-    Wh_FreeStringSetting(scrollArea);
+    // Parse Zone 3 Action
+    PCWSTR zone3Action = Wh_GetStringSetting(L"zone3Action");
+    g_settings.zone3Action = parseAction(zone3Action, ScrollAction::virtualDesktopSwitch);
+    Wh_FreeStringSetting(zone3Action);
 
     g_settings.zone1ScrollStep = Wh_GetIntSetting(L"zone1ScrollStep");
     g_settings.zone2ScrollStep = Wh_GetIntSetting(L"zone2ScrollStep");
+    g_settings.zone3ScrollStep = Wh_GetIntSetting(L"zone3ScrollStep");
+    g_settings.useDdcCi = Wh_GetIntSetting(L"useDdcCi");
     g_settings.showVolumePopup = Wh_GetIntSetting(L"showVolumePopup");
     g_settings.throttleMs = Wh_GetIntSetting(L"throttleMs");
-    g_settings.reverseScrollingDirection =
-        Wh_GetIntSetting(L"reverseScrollingDirection");
+    g_settings.reverseScrollingDirection = Wh_GetIntSetting(L"reverseScrollingDirection");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
@@ -1648,7 +1609,6 @@ void Wh_ModUninit() {
     }
 
     SystemVolUninit();
-    MicVolUninit();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
