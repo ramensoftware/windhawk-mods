@@ -2,7 +2,7 @@
 // @id              no-properties-icon
 // @name            No Properties Icon
 // @description     Removes the window icon from property sheets like previous Windows versions
-// @version         1.0.1
+// @version         1.0.2
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -120,12 +120,6 @@ int STDCALL _SetPropertySheetIcon_hook(IDataObject *, ITEMIDLIST_ABSOLUTE *, PRO
     return 0;
 }
 
-int (__fastcall *_SetIconToCPLStubWindow_orig)(HWND, void *, void *, LPWSTR);
-int __fastcall _SetIconToCPLStubWindow_hook(HWND, void *, void *, LPWSTR)
-{
-    return 0;
-}
-
 INT_PTR (WINAPI *PropertySheetW_orig)(PROPSHEETHEADERW *);
 INT_PTR WINAPI PropertySheetW_hook(PROPSHEETHEADERW *ppshw)
 {
@@ -160,6 +154,14 @@ INT_PTR CALLBACK PropSheetDlgProc_hook(
     return PropSheetDlgProc_orig(hwnd, uMsg, wParam, lParam);
 }
 
+WNDPROC WndProc_orig;
+LRESULT CALLBACK WndProc_hook(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_ACTIVATEAPP)
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    return WndProc_orig(hwnd, uMsg, wParam, lParam);
+}
+
 void LoadSettings(void)
 {
     settings.showTaskbarIcon = Wh_GetIntSetting(L"showtaskbaricon");
@@ -169,7 +171,12 @@ void LoadSettings(void)
 BOOL Wh_ModInit(void)
 {
     Wh_Log(L"Init");
+
     LoadSettings();
+
+    WCHAR szModuleName[MAX_PATH];
+    HMODULE hModule = GetModuleHandleW(nullptr);
+    GetModuleFileNameW(hModule, szModuleName, MAX_PATH);
 
     HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32)
@@ -195,14 +202,6 @@ BOOL Wh_ModInit(void)
             _SetPropertySheetIcon_hook,
             false
         },
-        {
-            {
-                L"int " SSTDCALL " _SetIconToCPLStubWindow(struct HWND__ *,struct CPLMODULE *,struct CPLITEM *,unsigned short const *)"
-            },
-            &_SetIconToCPLStubWindow_orig,
-            _SetIconToCPLStubWindow_hook,
-            false
-        },
     };
 
     WindhawkUtils::SYMBOL_HOOK comCtl32Dllhook = {
@@ -218,6 +217,33 @@ BOOL Wh_ModInit(void)
         false
     };
 
+    WindhawkUtils::SYMBOL_HOOK sysdmCplHook = {
+        {
+            #ifdef _WIN64
+            L"__int64 __cdecl StubWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+            #else
+            L"long __stdcall StubWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
+            #endif
+        },
+        &WndProc_orig,
+        WndProc_hook,
+        false
+    };
+
+    WindhawkUtils::SYMBOL_HOOK rundll32ExeHook = 
+    {
+        {
+            #ifdef _WIN64
+            L"__int64 __cdecl WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+            #else
+            L"long __stdcall WndProc(struct HWND__ *,unsigned int,unsigned int,long)"
+            #endif
+        },
+        &WndProc_orig,
+        WndProc_hook,
+        false
+    };
+
     if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, 
                                     ARRAYSIZE(shell32DllHooks)))
     {
@@ -229,6 +255,22 @@ BOOL Wh_ModInit(void)
     {
         Wh_Log(L"Failed to hook comctl32.dll");
         return FALSE;
+    }
+
+    if (HINSTANCE hSysdm = GetModuleHandleW(L"sysdm.cpl"); hSysdm)
+    {
+        if (!WindhawkUtils::HookSymbols(hSysdm, &sysdmCplHook, 1)) 
+        {
+            Wh_Log(L"Failed to hook sysdm.cpl");
+        }
+    }
+
+    if (StrStrI(szModuleName, L"\\rundll32.exe") != nullptr)
+    {
+        if (!WindhawkUtils::HookSymbols(hModule, &rundll32ExeHook, 1)) 
+        {
+            Wh_Log(L"Failed to hook rundll32.exe");
+        }
     }
 
     Wh_SetFunctionHook((void*)GetProcAddress(hComCtl32, "PropertySheetW"), 

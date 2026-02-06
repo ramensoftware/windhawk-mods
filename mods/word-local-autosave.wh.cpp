@@ -1,0 +1,533 @@
+// ==WindhawkMod==
+// @id              word-local-autosave
+// @name            Word Local AutoSave
+// @description     Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S
+// @version         1.7
+// @author          communism420
+// @github          https://github.com/communism420
+// @include         WINWORD.EXE
+// @architecture    x86-64
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Word Local AutoSave
+
+This mod enables automatic saving for locally stored Word documents, similar to
+how AutoSave works with OneDrive files.
+
+## How it works
+
+The mod monitors keyboard input in Microsoft Word. When you type, delete, paste,
+or make any changes to your document, it automatically triggers a save after a
+short delay.
+
+## Features
+
+- Detects typing, backspace, delete, enter, punctuation, numpad, and clipboard operations (Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+Y)
+- Configurable delay before saving
+- Optional minimum interval between saves to prevent excessive disk writes
+- Works with any locally saved Word document
+- Only saves when Word is the active window
+- Requires a quiet period (400ms no key presses) before saving to prevent shortcut conflicts
+
+## Settings
+
+- **Save Delay (ms)**: How long to wait after the last keystroke before saving.
+  Default is 1000ms (1 second).
+- **Minimum Time Between Saves (ms)**: Minimum interval between consecutive saves.
+  Set to 0 to disable this limit and allow saving as frequently as possible.
+
+## Notes
+
+- The mod only works with documents that have already been saved at least once.
+  New unsaved documents will trigger the "Save As" dialog.
+- The mod simulates pressing Ctrl+S, so it behaves exactly like manual saving.
+- Manual Ctrl+S presses are detected and reset the auto-save timer.
+- Auto-save only triggers when Microsoft Word is the foreground window.
+- Auto-save requires 400ms of keyboard inactivity to prevent triggering wrong shortcuts.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- saveDelay: 1000
+  $name: Save Delay (ms)
+  $description: Delay in milliseconds before auto-saving after a change is detected (minimum 100ms)
+- minTimeBetweenSaves: 0
+  $name: Minimum Time Between Saves (ms)
+  $description: Minimum time between consecutive saves. Set to 0 to disable this limit.
+*/
+// ==/WindhawkModSettings==
+
+#include <windows.h>
+
+// Settings
+struct {
+    int saveDelay;
+    int minTimeBetweenSaves;
+} g_settings;
+
+// Minimum quiet time before saving (no key presses for this duration)
+// Must be longer than typical time between keystrokes when typing fast (~50-100ms)
+const DWORD QUIET_PERIOD_MS = 400;
+
+// Global state
+UINT_PTR g_saveTimerId = 0;
+UINT_PTR g_retryTimerId = 0;
+DWORD g_lastSaveTime = 0;
+DWORD g_lastInputTime = 0;
+DWORD g_lastKeyPressTime = 0;  // Track actual key press time for quiet period
+bool g_isSendingCtrlS = false;
+DWORD g_wordProcessId = 0;
+int g_retryCount = 0;
+
+// Original function pointer
+typedef BOOL (WINAPI *TranslateMessage_t)(const MSG*);
+TranslateMessage_t g_originalTranslateMessage = nullptr;
+
+// Forward declarations
+void ScheduleSave();
+void SendCtrlS();
+void TrySave();
+void CALLBACK RetryTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
+
+// Check if Word is the foreground window
+bool IsWordForeground() {
+    HWND foregroundWindow = GetForegroundWindow();
+    if (!foregroundWindow) {
+        return false;
+    }
+
+    DWORD foregroundProcessId = 0;
+    GetWindowThreadProcessId(foregroundWindow, &foregroundProcessId);
+
+    return (foregroundProcessId == g_wordProcessId);
+}
+
+// Check if enough quiet time has passed since last key press
+bool HasQuietPeriodPassed() {
+    DWORD currentTime = GetTickCount();
+    DWORD timeSinceLastKey = currentTime - g_lastKeyPressTime;
+    
+    if (timeSinceLastKey < QUIET_PERIOD_MS) {
+        Wh_Log(L"Only %lu ms since last keypress, need %lu ms quiet period", 
+               timeSinceLastKey, QUIET_PERIOD_MS);
+        return false;
+    }
+    return true;
+}
+
+// Check if any keys are physically pressed right now using GetAsyncKeyState
+bool AreAnyKeysPressed() {
+    // Check all letter keys A-Z
+    for (int i = 0x41; i <= 0x5A; i++) {
+        if (GetAsyncKeyState(i) & 0x8000) {
+            Wh_Log(L"Key %c is physically pressed", (char)i);
+            return true;
+        }
+    }
+    
+    // Check numbers 0-9
+    for (int i = 0x30; i <= 0x39; i++) {
+        if (GetAsyncKeyState(i) & 0x8000) return true;
+    }
+    
+    // Check ALL modifiers including Ctrl and Windows key
+    if (GetAsyncKeyState(VK_SHIFT) & 0x8000) {
+        Wh_Log(L"Shift is physically pressed");
+        return true;
+    }
+    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
+        Wh_Log(L"Ctrl is physically pressed");
+        return true;
+    }
+    if (GetAsyncKeyState(VK_MENU) & 0x8000) {
+        Wh_Log(L"Alt is physically pressed");
+        return true;
+    }
+    if (GetAsyncKeyState(VK_LWIN) & 0x8000) {
+        Wh_Log(L"Left Win is physically pressed");
+        return true;
+    }
+    if (GetAsyncKeyState(VK_RWIN) & 0x8000) {
+        Wh_Log(L"Right Win is physically pressed");
+        return true;
+    }
+    
+    // Check common editing keys
+    if (GetAsyncKeyState(VK_SPACE) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_RETURN) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_TAB) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_BACK) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_DELETE) & 0x8000) return true;
+    
+    // Check numpad
+    for (int i = VK_NUMPAD0; i <= VK_DIVIDE; i++) {
+        if (GetAsyncKeyState(i) & 0x8000) return true;
+    }
+    
+    // Check OEM keys (use regular for loop for compatibility)
+    if (GetAsyncKeyState(VK_OEM_1) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_2) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_3) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_4) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_5) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_6) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_7) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_8) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_PLUS) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_COMMA) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_MINUS) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_PERIOD) & 0x8000) return true;
+    if (GetAsyncKeyState(VK_OEM_102) & 0x8000) return true;
+    
+    return false;
+}
+
+// Send Ctrl+S keystroke
+void SendCtrlS() {
+    // Double safety check - verify twice with small delay
+    // This catches keys pressed between check and send
+    if (AreAnyKeysPressed()) {
+        Wh_Log(L"Key pressed (first check), aborting send");
+        g_retryCount++;
+        if (g_retryCount < 50) {
+            if (g_retryTimerId != 0) {
+                KillTimer(nullptr, g_retryTimerId);
+            }
+            g_retryTimerId = SetTimer(nullptr, 0, 100, RetryTimerProc);
+        }
+        return;
+    }
+    
+    // Small delay then check again
+    Sleep(20);
+    
+    if (AreAnyKeysPressed()) {
+        Wh_Log(L"Key pressed (second check), aborting send");
+        g_retryCount++;
+        if (g_retryCount < 50) {
+            if (g_retryTimerId != 0) {
+                KillTimer(nullptr, g_retryTimerId);
+            }
+            g_retryTimerId = SetTimer(nullptr, 0, 100, RetryTimerProc);
+        }
+        return;
+    }
+    
+    // Final quiet period check
+    if (!HasQuietPeriodPassed()) {
+        Wh_Log(L"Quiet period not passed, aborting send");
+        g_retryCount++;
+        if (g_retryCount < 50) {
+            if (g_retryTimerId != 0) {
+                KillTimer(nullptr, g_retryTimerId);
+            }
+            g_retryTimerId = SetTimer(nullptr, 0, 100, RetryTimerProc);
+        }
+        return;
+    }
+    
+    g_isSendingCtrlS = true;
+
+    INPUT inputs[4] = {};
+
+    // Press Ctrl
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[0].ki.dwFlags = 0;
+
+    // Press S
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = 'S';
+    inputs[1].ki.dwFlags = 0;
+
+    // Release S
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = 'S';
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    // Release Ctrl
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_CONTROL;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    UINT sent = SendInput(4, inputs, sizeof(INPUT));
+
+    g_isSendingCtrlS = false;
+
+    Wh_Log(L"Sent Ctrl+S for auto-save (sent %u inputs)", sent);
+}
+
+// Retry timer callback - checks if all keys are released
+void CALLBACK RetryTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    KillTimer(nullptr, g_retryTimerId);
+    g_retryTimerId = 0;
+    
+    TrySave();
+}
+
+// Try to perform save, retry if any keys are pressed or quiet period hasn't passed
+void TrySave() {
+    // Verify Word is still the foreground window
+    if (!IsWordForeground()) {
+        Wh_Log(L"Word is not the foreground window, skipping auto-save");
+        g_retryCount = 0;
+        return;
+    }
+
+    // Check if ANY keys are currently pressed OR if quiet period hasn't passed
+    if (AreAnyKeysPressed() || !HasQuietPeriodPassed()) {
+        g_retryCount++;
+        
+        // Retry up to 50 times (5 seconds total with 100ms intervals)
+        if (g_retryCount < 50) {
+            // Try again in 100ms
+            g_retryTimerId = SetTimer(nullptr, 0, 100, RetryTimerProc);
+            return;
+        } else {
+            Wh_Log(L"Too many retries, giving up on this save");
+            g_retryCount = 0;
+            return;
+        }
+    }
+
+    g_retryCount = 0;
+    
+    Wh_Log(L"Quiet period passed and no keys pressed - sending Ctrl+S");
+    
+    // All keys released and quiet period passed - safe to send Ctrl+S
+    SendCtrlS();
+    
+    g_lastSaveTime = GetTickCount();
+    g_lastInputTime = 0;
+}
+
+// Timer callback for delayed save
+void CALLBACK SaveTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    KillTimer(nullptr, g_saveTimerId);
+    g_saveTimerId = 0;
+
+    DWORD currentTime = GetTickCount();
+
+    // Check minimum time between saves (only if enabled, i.e. > 0)
+    if (g_settings.minTimeBetweenSaves > 0 && g_lastSaveTime > 0) {
+        if ((currentTime - g_lastSaveTime) < static_cast<DWORD>(g_settings.minTimeBetweenSaves)) {
+            Wh_Log(L"Skipping save - too soon since last save");
+            return;
+        }
+    }
+
+    // Check if there was recent input
+    if (g_lastInputTime == 0) {
+        return;
+    }
+
+    Wh_Log(L"Performing auto-save...");
+
+    // Try to save (will retry if any keys are pressed)
+    TrySave();
+}
+
+// Schedule a save operation
+void ScheduleSave() {
+    g_lastInputTime = GetTickCount();
+
+    // Kill existing timers
+    if (g_saveTimerId != 0) {
+        KillTimer(nullptr, g_saveTimerId);
+        g_saveTimerId = 0;
+    }
+    if (g_retryTimerId != 0) {
+        KillTimer(nullptr, g_retryTimerId);
+        g_retryTimerId = 0;
+    }
+    g_retryCount = 0;
+
+    // Set new timer
+    g_saveTimerId = SetTimer(nullptr, 0, g_settings.saveDelay, SaveTimerProc);
+
+    if (g_saveTimerId == 0) {
+        Wh_Log(L"Failed to set timer: %lu", GetLastError());
+    }
+}
+
+// Check if a key is an editing key that modifies the document
+bool IsEditingKey(WPARAM wParam) {
+    // Ignore if we're sending Ctrl+S ourselves
+    if (g_isSendingCtrlS) {
+        return false;
+    }
+
+    bool ctrlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+
+    // Ignore Ctrl+S (manual save) - update last save time
+    if (ctrlPressed && wParam == 'S') {
+        g_lastSaveTime = GetTickCount();
+        g_lastInputTime = 0;
+        if (g_saveTimerId != 0) {
+            KillTimer(nullptr, g_saveTimerId);
+            g_saveTimerId = 0;
+        }
+        if (g_retryTimerId != 0) {
+            KillTimer(nullptr, g_retryTimerId);
+            g_retryTimerId = 0;
+        }
+        Wh_Log(L"Manual save detected, resetting timer");
+        return false;
+    }
+
+    // Ctrl combinations that modify document
+    if (ctrlPressed) {
+        if (wParam == 'V' || wParam == 'X' || wParam == 'Z' || wParam == 'Y') {
+            return true;
+        }
+        return false;
+    }
+
+    // Ignore Alt combinations
+    if (altPressed) {
+        return false;
+    }
+
+    // Printable ASCII characters (space to tilde)
+    if (wParam >= 0x20 && wParam <= 0x7E) {
+        return true;
+    }
+
+    // Special editing keys
+    switch (wParam) {
+        case VK_BACK:
+        case VK_DELETE:
+        case VK_RETURN:
+        case VK_TAB:
+            return true;
+    }
+    
+    // Numpad numbers (0-9) and operators
+    if (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9) {
+        return true;
+    }
+    if (wParam == VK_MULTIPLY || wParam == VK_ADD || 
+        wParam == VK_SUBTRACT || wParam == VK_DECIMAL || wParam == VK_DIVIDE) {
+        return true;
+    }
+    
+    // OEM keys (punctuation: period, comma, brackets, etc.)
+    switch (wParam) {
+        case VK_OEM_1:      // ;: key
+        case VK_OEM_2:      // /? key
+        case VK_OEM_3:      // `~ key
+        case VK_OEM_4:      // [{ key
+        case VK_OEM_5:      // \| key
+        case VK_OEM_6:      // ]} key
+        case VK_OEM_7:      // '" key
+        case VK_OEM_8:      // misc
+        case VK_OEM_PLUS:   // =+ key
+        case VK_OEM_COMMA:  // ,< key
+        case VK_OEM_MINUS:  // -_ key
+        case VK_OEM_PERIOD: // .> key
+        case VK_OEM_102:    // additional key on non-US keyboards
+            return true;
+    }
+
+    return false;
+}
+
+// Hooked TranslateMessage
+BOOL WINAPI TranslateMessage_Hook(const MSG* lpMsg) {
+    if (lpMsg) {
+        // Track ALL key presses for quiet period detection
+        if (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_SYSKEYDOWN) {
+            g_lastKeyPressTime = GetTickCount();
+        }
+        
+        // Schedule save only for editing keys
+        if (lpMsg->message == WM_KEYDOWN) {
+            if (IsEditingKey(lpMsg->wParam)) {
+                ScheduleSave();
+            }
+        }
+    }
+
+    return g_originalTranslateMessage(lpMsg);
+}
+
+// Load settings
+void LoadSettings() {
+    g_settings.saveDelay = Wh_GetIntSetting(L"saveDelay");
+    g_settings.minTimeBetweenSaves = Wh_GetIntSetting(L"minTimeBetweenSaves");
+
+    // Minimal validation - just prevent negative values and too small delay
+    if (g_settings.saveDelay < 100) {
+        g_settings.saveDelay = 100;
+    }
+    if (g_settings.minTimeBetweenSaves < 0) {
+        g_settings.minTimeBetweenSaves = 0;
+    }
+
+    Wh_Log(L"Settings loaded: saveDelay=%d, minTimeBetweenSaves=%d (0=disabled)",
+           g_settings.saveDelay, g_settings.minTimeBetweenSaves);
+}
+
+// Mod initialization
+BOOL Wh_ModInit() {
+    Wh_Log(L"Word Local AutoSave mod v1.7 initializing...");
+
+    // Store current process ID for foreground window check
+    g_wordProcessId = GetCurrentProcessId();
+
+    LoadSettings();
+
+    // Hook TranslateMessage
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) {
+        Wh_Log(L"Failed to get user32.dll handle");
+        return FALSE;
+    }
+
+    void* translateMessageAddr = reinterpret_cast<void*>(
+        GetProcAddress(user32, "TranslateMessage"));
+    if (!translateMessageAddr) {
+        Wh_Log(L"Failed to get TranslateMessage address");
+        return FALSE;
+    }
+
+    Wh_Log(L"TranslateMessage found at %p", translateMessageAddr);
+
+    if (!Wh_SetFunctionHook(translateMessageAddr,
+                            reinterpret_cast<void*>(TranslateMessage_Hook),
+                            reinterpret_cast<void**>(&g_originalTranslateMessage))) {
+        Wh_Log(L"Failed to hook TranslateMessage");
+        return FALSE;
+    }
+
+    Wh_Log(L"Word Local AutoSave mod initialized successfully!");
+
+    return TRUE;
+}
+
+// Mod uninitialization
+void Wh_ModUninit() {
+    Wh_Log(L"Word Local AutoSave mod uninitializing...");
+
+    // Kill timers
+    if (g_saveTimerId != 0) {
+        KillTimer(nullptr, g_saveTimerId);
+        g_saveTimerId = 0;
+    }
+    if (g_retryTimerId != 0) {
+        KillTimer(nullptr, g_retryTimerId);
+        g_retryTimerId = 0;
+    }
+
+    Wh_Log(L"Word Local AutoSave mod uninitialized");
+}
+
+// Settings changed callback
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"Settings changed, reloading...");
+    LoadSettings();
+}

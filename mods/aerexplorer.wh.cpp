@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.7.1
+// @version         1.8.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -145,6 +145,12 @@ Feel free to try it on other versions, but it may not work.
 - beta8navbarbg: false
   $name: Windows 8 beta navigation bar background
   $description: Changes the background of the navigation bar to match Windows 8 betas.
+- leftviews: false
+  $name: Views dropdown on left
+  $description: Moves the views dropdown to the left after the "Organize" button, like Windows Vista.
+- cmdbaricons: false
+  $name: Command bar icons
+  $description: Shows icons on all command bar items, like Windows Vista.
 */
 // ==/WindhawkModSettings==
 
@@ -215,6 +221,8 @@ struct
     bool             nopcfolders;
     bool             vistasearchplaceholder;
     bool             beta8navbarbg;
+    bool             leftviews;
+    bool             cmdbaricons;
 } settings = { 0 };
 
 typedef HRESULT (WINAPI *VariantToBuffer_t)(LPVARIANT, void *, UINT);
@@ -444,20 +452,20 @@ L"\n";
 #pragma endregion // "Details pane UIFILE replacements"
 #endif
 
-typedef struct tagDRIVEGROUPI18N
+typedef struct _DRVGRPSTRINGS
 {
-    LANGID lid;
-    WCHAR szHardDisks[256];
-    WCHAR szRemovable[256];
-    WCHAR szOther[256];
-    WCHAR szScanners[256];
-    WCHAR szPortableMedia[256];
-    WCHAR szPortable[256];
-} DRIVEGROUPI18N;
+    LANGID  langid;
+    LPCWSTR pszHardDisks;
+    LPCWSTR pszRemovable;
+    LPCWSTR pszOther;
+    LPCWSTR pszScanners;
+    LPCWSTR pszPortableMedia;
+    LPCWSTR pszPortable;
+} DRVGRPSTRINGS;
 
-typedef const DRIVEGROUPI18N *LPCDRIVEGROUPI18N;
+typedef const DRVGRPSTRINGS *LPCDRVGRPSTRINGS;
 
-typedef enum _DRIVEGROUP
+typedef enum _DRVGRP
 {
     DG_HARDDISKS = 0,
     DG_REMOVABLE,
@@ -465,10 +473,10 @@ typedef enum _DRIVEGROUP
     DG_SCANNERS,
     DG_PORTABLEMEDIA,
     DG_PORTABLE
-} DRIVEGROUP;
+} DRVGRP;
 
 #pragma region "Drive grouping localization"
-const DRIVEGROUPI18N g_driveGroupI18n[] = {
+constexpr DRVGRPSTRINGS c_rgDriveGroupStrings[] = {
     {
         MAKELANGID(LANG_ARABIC, SUBLANG_ARABIC_SAUDI_ARABIA),
         L"محركات الأقراص الثابتة",
@@ -787,27 +795,77 @@ const DRIVEGROUPI18N g_driveGroupI18n[] = {
 };
 #pragma endregion
 
-LPCDRIVEGROUPI18N GetCurrentDriveLocale(void)
+BYTE ParseHexChar(WCHAR c)
 {
-    LANGID lid = GetUserDefaultLangID();
+    if (c >= L'0' && c <= L'9')
+        return c - L'0';
 
-    /* So we can fallback to English without iterating again. */
-    LPCDRIVEGROUPI18N en = NULL;
+    if (c >= 'A' && c <= 'F')
+        return c - ('A' - 0xA);
 
-    for (UINT i = 0; i < ARRAYSIZE(g_driveGroupI18n); i++)
+    if (c >= 'a' && c <= 'f')
+        return c - ('a' - 0xA);
+
+    return 0;
+}
+
+LPCDRVGRPSTRINGS GetCurrentDriveLocale(void)
+{
+    ULONG ulNumLanguages;
+    WCHAR szLanguages[MAX_PATH];
+    DWORD cchLanguages = ARRAYSIZE(szLanguages);
+    szLanguages[0] = L'\0';
+    GetThreadPreferredUILanguages(MUI_LANGUAGE_ID, &ulNumLanguages, szLanguages, &cchLanguages);
+
+    // Primary lang ID match
+    LPCDRVGRPSTRINGS pdgsPrimaryMatch = nullptr;
+    // Full lang ID match
+    LPCDRVGRPSTRINGS pdgsFullMatch    = nullptr;
+
+    constexpr UINT EN_US_INDEX = 7;
+    static_assert(
+        c_rgDriveGroupStrings[EN_US_INDEX].langid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+        "Incorrect index for en-US drive group strings"
+    );
+
+    LANGID langid = 0;
+    for (ULONG i = 0; i < ulNumLanguages; i++)
     {
-        if (g_driveGroupI18n[i].lid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US))
+        LPWSTR pszLang = szLanguages + (i * 5);
+        langid = ParseHexChar(pszLang[0]) << 12
+            | ParseHexChar(pszLang[1]) << 8
+            | ParseHexChar(pszLang[2]) << 4
+            | ParseHexChar(pszLang[3]);
+
+        if (langid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US))
+            return &c_rgDriveGroupStrings[EN_US_INDEX];
+        
+        for (UINT i = 0; i < ARRAYSIZE(c_rgDriveGroupStrings); i++)
         {
-            en = g_driveGroupI18n + i;
+            LPCDRVGRPSTRINGS pdgsCurrent = &c_rgDriveGroupStrings[i];
+
+            if (PRIMARYLANGID(pdgsCurrent->langid) == PRIMARYLANGID(langid))
+            {
+                pdgsPrimaryMatch = pdgsCurrent;
+            }
+
+            if (pdgsCurrent->langid == langid)
+            {
+                pdgsFullMatch = pdgsCurrent;
+                break;
+            }
         }
 
-        if (g_driveGroupI18n[i].lid == lid)
-        {
-            return g_driveGroupI18n + i;
-        }
+        if (pdgsPrimaryMatch)
+            break;
     }
 
-    return en;
+    if (pdgsFullMatch)
+        return pdgsFullMatch;
+    if (pdgsPrimaryMatch)
+        return pdgsPrimaryMatch;
+
+    return &c_rgDriveGroupStrings[EN_US_INDEX];
 }
 
 /* Only available in Windows 10, version 1607 and later. */
@@ -869,65 +927,71 @@ HRESULT STDCALL CSearchBox_SetCueAndTooltipText_hook(
 
 #define CAddressBand__hwnd(pThis) *((HWND *)pThis + 9)
 
+#ifdef _WIN64
+#   define CAddressBand__hwndTools(pThis) *((HWND *)pThis + 29)
+#else
+#   define CAddressBand__hwndTools(pThis) *((HWND *)pThis + 31)
+#endif
+
 /* Fix address bar position and toolbar size */
 void (THISCALL *CAddressBand__PositionChildWindows_orig)(void *) = nullptr;
 void THISCALL CAddressBand__PositionChildWindows_hook(
     void *pThis
 )
 {
-    HWND hWnd = CAddressBand__hwnd(pThis);
-    if (settings.tbst != TBST_DEFAULT && hWnd && IsWindow(hWnd))
+    if (settings.tbst != TBST_DEFAULT)
     {
-        HWND hProg = FindWindowExW(hWnd, NULL, L"msctls_progress32", NULL);
-        if (hProg)
+        HWND hwndTools = CAddressBand__hwndTools(pThis);
+        if (hwndTools)
         {
-            HWND hToolbar = FindWindowExW(hProg, NULL, L"ToolbarWindow32", NULL);
-            if (hToolbar)
+            TBBUTTONINFOW tbi;
+            tbi.cbSize = sizeof(TBBUTTONINFOW);
+            tbi.dwMask = TBIF_SIZE;
+
+            /* Spacer band that only gets added on classic. For some reason,
+               it's huge by default. */
+            tbi.cx = 2;
+            SendMessageW(hwndTools, TB_SETBUTTONINFOW, 203, (LPARAM)&tbi);
+
+            /* Dropdown width */
+            switch (settings.tbst)
             {
-                TBBUTTONINFOW tbi;
-                tbi.cbSize = sizeof(TBBUTTONINFOW);
-                tbi.dwMask = TBIF_SIZE;
+                case TBST_SEVEN:
+                    tbi.cx = ScaleForDPI(19);
+                    break;
+                case TBST_TEN:
+                    tbi.cx = ScaleForDPI(20);
+                    break;
+                case TBST_TENNEW:
+                    tbi.cx = ScaleForDPI(17);
+                    break;
+                case TBST_CUSTOM:
+                    tbi.cx = ScaleForDPI(settings.dropdownwidth);
+                    break;
+            }
+            SendMessageW(hwndTools, TB_SETBUTTONINFOW, 202, (LPARAM)&tbi);
 
-                /* Dropdown width */
-                switch (settings.tbst)
-                {
-                    case TBST_SEVEN:
-                        tbi.cx = ScaleForDPI(19);
-                        break;
-                    case TBST_TEN:
-                        tbi.cx = ScaleForDPI(20);
-                        break;
-                    case TBST_TENNEW:
-                        tbi.cx = ScaleForDPI(17);
-                        break;
-                    case TBST_CUSTOM:
-                        tbi.cx = ScaleForDPI(settings.dropdownwidth);
-                        break;
-                }
-                SendMessageW(hToolbar, TB_SETBUTTONINFOW, 202, (LPARAM)&tbi);
+            /* Refresh width */
+            switch (settings.tbst)
+            {
+                case TBST_SEVEN:
+                    tbi.cx = ScaleForDPI(25);
+                    break;
+                case TBST_TEN:
+                    tbi.cx = ScaleForDPI(20);
+                    break;
+                case TBST_TENNEW:
+                    tbi.cx = ScaleForDPI(17);
+                    break;
+                case TBST_CUSTOM:
+                    tbi.cx = ScaleForDPI(settings.refreshwidth);
+                    break;
+            }
 
-                /* Refresh width */
-                switch (settings.tbst)
-                {
-                    case TBST_SEVEN:
-                        tbi.cx = ScaleForDPI(25);
-                        break;
-                    case TBST_TEN:
-                        tbi.cx = ScaleForDPI(20);
-                        break;
-                    case TBST_TENNEW:
-                        tbi.cx = ScaleForDPI(17);
-                        break;
-                    case TBST_CUSTOM:
-                        tbi.cx = ScaleForDPI(settings.refreshwidth);
-                        break;
-                }
-
-                /* Toolbar buttons 100-102 are go, stop, and refresh respectively */
-                for (int i = 100; i <= 102; i++)
-                {
-                    SendMessageW(hToolbar, TB_SETBUTTONINFOW, i, (LPARAM)&tbi);
-                }                   
+            /* Toolbar buttons 100-102 are go, stop, and refresh respectively */
+            for (int i = 100; i <= 102; i++)
+            {
+                SendMessageW(hwndTools, TB_SETBUTTONINFOW, i, (LPARAM)&tbi);
             }
         }
     }
@@ -1738,12 +1802,15 @@ LRESULT CALLBACK TravelBandToolbarSubclassProc(
     DWORD_PTR dwRefData
 )
 {
+    if (uMsg == TB_SETBUTTONSIZE)
+    {
+        return DefSubclassProc(hWnd, TB_SETBUTTONSIZE, 0, 0);
+    }
+
     if (settings.aerotravel)
     {
         switch (uMsg)
         {
-            case TB_SETBUTTONSIZE:
-                return DefSubclassProc(hWnd, TB_SETBUTTONSIZE, 0, 0);
             case TB_SETPADDING:
                 return DefSubclassProc(hWnd, TB_SETPADDING, 0, MAKELPARAM(1, 0));
         }
@@ -2237,36 +2304,36 @@ HRESULT STDCALL CStorageSystemTypeCategorizer_GetCategoryInfo_hook(
     );
     if (SUCCEEDED(hr) && settings.classicgrouping)
     {
-        LPCDRIVEGROUPI18N dgi = GetCurrentDriveLocale();
-        LPCWSTR lpszOut = NULL;
+        LPCDRVGRPSTRINGS pdgs = GetCurrentDriveLocale();
+        LPCWSTR pszString = NULL;
 
-        if (dgi)
+        if (pdgs)
         {
-            switch ((DRIVEGROUP)dwCategoryId)
+            switch ((DRVGRP)dwCategoryId)
             {
                 case DG_HARDDISKS:
-                    lpszOut = dgi->szHardDisks;
+                    pszString = pdgs->pszHardDisks;
                     break;
                 case DG_REMOVABLE:
-                    lpszOut = dgi->szRemovable;
+                    pszString = pdgs->pszRemovable;
                     break;
                 case DG_OTHER:
-                    lpszOut = dgi->szOther;
+                    pszString = pdgs->pszOther;
                     break;
                 case DG_SCANNERS:
-                    lpszOut = dgi->szScanners;
+                    pszString = pdgs->pszScanners;
                     break;
                 case DG_PORTABLEMEDIA:
-                    lpszOut = dgi->szPortableMedia;
+                    pszString = pdgs->pszPortableMedia;
                     break;
                 case DG_PORTABLE:
-                    lpszOut = dgi->szPortable;
+                    pszString = pdgs->pszPortable;
                     break;
             }
 
-            if (lpszOut)
+            if (pszString)
             {
-                wcscpy(pci->wszName, lpszOut);
+                wcscpy(pci->wszName, pszString);
             }
         }
     }
@@ -2287,6 +2354,68 @@ FOLDERFLAGS THISCALL IViewSettings_GetFolderFlags_hook(
         ff &= ~FWF_NOHEADERINALLVIEWS;
     }
     return ff;
+}
+
+/* Views dropdown on left */
+
+BOOL (__fastcall *IsRightSideCommand_orig)(REFGUID);
+BOOL __fastcall IsRightSideCommand_hook(REFGUID rguidCmd)
+{
+    return settings.leftviews ? FALSE : IsRightSideCommand_orig(rguidCmd);
+}
+
+HRESULT (THISCALL *CCommandFolder__AppendRightSideCommands_orig)(void *, IUnknown *);
+HRESULT THISCALL CCommandFolder__AppendRightSideCommands_hook(void *pThis, IUnknown *punk)
+{
+    return settings.leftviews ? S_OK : CCommandFolder__AppendRightSideCommands_orig(pThis, punk);
+}
+
+HRESULT (THISCALL *CCommandFolder__AppendOrganizeCommand_orig)(void *, IUnknown *);
+HRESULT THISCALL CCommandFolder__AppendOrganizeCommand_hook(void *pThis, IUnknown *punk)
+{
+    HRESULT hr = CCommandFolder__AppendOrganizeCommand_orig(pThis, punk);
+    if (settings.leftviews && SUCCEEDED(hr))
+    {
+        hr = CCommandFolder__AppendRightSideCommands_orig(pThis, punk);
+    }
+    return hr;
+}
+
+/* Command bar icons */
+
+#ifdef _WIN64
+#   define ExplorerCommandItem_iconIndex(pThis)  *((DWORD *)pThis + 10)
+#else
+#   define ExplorerCommandItem_iconIndex(pThis)  *((DWORD *)pThis + 8)
+#endif
+
+void (THISCALL *CSplitButton_UpdateIcon_orig)(void *, int);
+void THISCALL CSplitButton_UpdateIcon_hook(
+    void *pThis,
+    int nIndex
+)
+{
+    if (!settings.cmdbaricons)
+        CSplitButton_UpdateIcon_orig(pThis, nIndex);
+}
+
+void (THISCALL *CSplitButton__UpdateDisplay_orig)(void *pThis, const struct ExplorerCommandItem *);
+void THISCALL CSplitButton__UpdateDisplay_hook(
+    void *pThis,
+    const struct ExplorerCommandItem *pItem
+)
+{
+    if (settings.cmdbaricons)
+    {
+        int nIndex = ExplorerCommandItem_iconIndex(pItem);
+        // The "Open" command on EXE files has no icon, unlike Vista.
+        // If that's the case, just grab the default document icon (the
+        // blank page)
+        if (nIndex == -1)
+            nIndex = Shell_GetCachedImageIndexW(L"shell32.dll", -1, 0);
+        CSplitButton_UpdateIcon_orig(pThis, nIndex);
+    }
+    CSplitButton__UpdateDisplay_orig(pThis, pItem);
 }
 
 #pragma endregion // "shell32.dll hooks"
@@ -2484,6 +2613,8 @@ void LoadSettings(void)
     LOAD_INT_SETTING(nopcfolders);
     LOAD_INT_SETTING(vistasearchplaceholder);
     LOAD_INT_SETTING(beta8navbarbg);
+    LOAD_INT_SETTING(leftviews);
+    LOAD_INT_SETTING(cmdbaricons);
 
     LPCWSTR szNpst = Wh_GetStringSetting(L"npst");
     if (0 == wcscmp(szNpst, L"vista"))
@@ -2565,7 +2696,7 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
   */
 HMODULE LoadComCtlModule(void)
 {
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     ACTCTXW actCtx = { sizeof(actCtx) };
     actCtx.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID | ACTCTX_FLAG_HMODULE_VALID;
     actCtx.lpResourceName = MAKEINTRESOURCEW(124);
@@ -2573,7 +2704,7 @@ HMODULE LoadComCtlModule(void)
     HANDLE hActCtx = CreateActCtxW(&actCtx);
     ULONG_PTR ulCookie;
     ActivateActCtx(hActCtx, &ulCookie);
-    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+    HMODULE hComCtl = LoadLibraryExW(L"comctl32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     /**
       * Certain processes will ignore the activation context and load
       * comctl32.dll 5.82 anyway. If that occurs, just reject it.
@@ -2947,6 +3078,56 @@ const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         &IViewSettings_GetFolderFlags_orig,
         IViewSettings_GetFolderFlags_hook,
         false
+    },
+    {
+        {
+            L"int "
+            SSTDCALL
+            " IsRightSideCommand(struct _GUID const &)"
+        },
+        &IsRightSideCommand_orig,
+        IsRightSideCommand_hook,
+        false
+    },
+    {
+        {
+            L"private: long "
+            STHISCALL
+            " CCommandFolder::_AppendRightSideCommands(struct IUnknown *)"
+        },
+        &CCommandFolder__AppendRightSideCommands_orig,
+        CCommandFolder__AppendRightSideCommands_hook,
+        false
+    },
+    {
+        {
+            L"private: long "
+            STHISCALL
+            " CCommandFolder::_AppendOrganizeCommand(struct IUnknown *)"
+        },
+        &CCommandFolder__AppendOrganizeCommand_orig,
+        CCommandFolder__AppendOrganizeCommand_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CSplitButton::UpdateIcon(int)"
+        },
+        &CSplitButton_UpdateIcon_orig,
+        CSplitButton_UpdateIcon_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CSplitButton::_UpdateDisplay(struct ExplorerCommandItem const *)"
+        },
+        &CSplitButton__UpdateDisplay_orig,
+        CSplitButton__UpdateDisplay_hook,
+        false
     }
 };
 
@@ -2964,12 +3145,12 @@ const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
     }
 };
 
-#define LOAD_MODULE_(module, varName)                    \
-    HMODULE varName = LoadLibraryW(L ## #module ".dll"); \
-    if (!varName)                                        \
-    {                                                    \
-        Wh_Log(L"Failed to load " #module ".dll");       \
-        return FALSE;                                    \
+#define LOAD_MODULE_(module, varName)                                                          \
+    HMODULE varName = LoadLibraryExW(L ## #module ".dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32); \
+    if (!varName)                                                                              \
+    {                                                                                          \
+        Wh_Log(L"Failed to load " #module ".dll");                                             \
+        return FALSE;                                                                          \
     }
 
 #define LOAD_MODULE(name) LOAD_MODULE_(name, name)
@@ -3019,6 +3200,12 @@ BOOL Wh_ModInit(void)
     LOAD_FUNCTION(propsys, VariantToBuffer)
 
     LOAD_MODULE(ExplorerFrame)
+    VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(ExplorerFrame, nullptr);
+    if (!pVerInfo || HIWORD(pVerInfo->dwFileVersionLS) > 21332)
+    {
+        Wh_Log(L"Rejecting invalid or Windows 11 ExplorerFrame.dll");
+        return FALSE;
+    }
     HOOK_SYMBOLS(ExplorerFrame, explorerframeDllHooks)
 
     LOAD_MODULE(shell32)

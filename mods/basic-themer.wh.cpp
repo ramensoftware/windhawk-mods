@@ -2,7 +2,7 @@
 // @id              basic-themer
 // @name            Basic Themer
 // @description     Applies the Windows Basic theme to desktop windows
-// @version         1.1.0
+// @version         1.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         dwm.exe
@@ -73,6 +73,7 @@ basic frames. To circumvent this, use the "DWM Unextend Frames" mod.
 #include <windhawk_utils.h>
 #include <dwmapi.h>
 #include <wtsapi32.h>
+#include <vector>
 
 struct
 {
@@ -286,10 +287,11 @@ void LoadSettings(void)
     }
 }
 
-const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK uDWMDllHooks[] = {
     {
         {
-            L"public: long __cdecl CWindowList::GetSyncedWindowDataByHwnd(struct HWND__ *,class CWindowData * *)"
+            L"public: long __cdecl CWindowList::GetSyncedWindowDataByHwnd(struct HWND__ *,class CWindowData * *)",
+            L"public: void __cdecl CWindowList::GetSyncedWindowDataByHwnd(struct HWND__ *,class CWindowData * *)"
         },
         &CWindowList_GetSyncedWindowDataByHwnd_orig,
         CWindowList_GetSyncedWindowDataByHwnd_hook,
@@ -297,7 +299,8 @@ const WindhawkUtils::SYMBOL_HOOK hooks[] = {
     },
     {
         {
-            L"public: long __cdecl CWindowList::SyncWindowData(struct IDwmWindow *,class CWindowData *)"
+            L"public: long __cdecl CWindowList::SyncWindowData(struct IDwmWindow *,class CWindowData *)",
+            L"public: void __cdecl CWindowList::SyncWindowData(struct IDwmWindow *,class CWindowData *)"
         },
         &CWindowList_SyncWindowData_orig,
         CWindowList_SyncWindowData_hook,
@@ -318,8 +321,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         uDWM,
-        hooks,
-        ARRAYSIZE(hooks)
+        uDWMDllHooks,
+        ARRAYSIZE(uDWMDllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in uDWM.dll");

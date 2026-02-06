@@ -2,14 +2,14 @@
 // @id              windows-11-file-explorer-styler
 // @name            Windows 11 File Explorer Styler
 // @description     Customize the File Explorer with themes contributed by others or create your own
-// @version         1.2
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lcomctl32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -37,6 +37,20 @@ Styler** and **Windows 11 Notification Center Styler** mods.
 Themes are collections of styles. The following themes are integrated into the
 mod and can be selected in the settings:
 
+[![Translucent
+Explorer11](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/Translucent%20Explorer11/screenshot-small.png)
+\
+Translucent
+Explorer11](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/Translucent%20Explorer11/README.md)
+
+[![MicaBar](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/MicaBar/screenshot-small.png)
+\
+MicaBar](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/MicaBar/README.md)
+
+[![NoCommandBar](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/NoCommandBar/screenshot-small.png)
+\
+NoCommandBar](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/NoCommandBar/README.md)
+
 [![Minimal
 Explorer11](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/Minimal%20Explorer11/screenshot-small.png)
 \
@@ -47,13 +61,21 @@ Explorer11](https://github.com/ramensoftware/windows-11-file-explorer-styling-gu
 \
 Tabless](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/Tabless/README.md)
 
-[![NoCommandBar](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/NoCommandBar/screenshot-small.png)
+[![Matter](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/Matter/screenshot-small.png)
 \
-NoCommandBar](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/NoCommandBar/README.md)
+Matter](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/Matter/README.md)
 
-[![MicaBar](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/MicaBar/screenshot-small.png)
+[![WindowGlass](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/WindowGlass/screenshot-small.png)
 \
-MicaBar](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/MicaBar/README.md)
+WindowGlass](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/WindowGlass/README.md)
+
+[![AddressSearchOnly](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/AddressSearchOnly/screenshot-small.png)
+\
+AddressSearchOnly](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/AddressSearchOnly/README.md)
+
+[![TintedGlass](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/TintedGlass/screenshot-small.png)
+\
+TintedGlass](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/TintedGlass/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11 file
 explorer styling
@@ -109,16 +131,63 @@ specified visual state.
 
 For the XAML syntax, in addition to the built-in taskbar objects, the mod
 provides a built-in blur brush via the `WindhawkBlur` object, which supports the
-`BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur
-BlurAmount="10" TintColor="#80FF00FF"/>`.
+`BlurAmount`, `TintColor`, and `TintOpacity` properties. For example:
+`Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`. Theme resources
+are also supported, for example: `Fill:=<WindhawkBlur BlurAmount="18"
+TintColor="{ThemeResource SystemAccentColorDark1}" TintOpacity="0.5"/>`.
 
 Targets and styles starting with two slashes (`//`) are ignored. This can be
 useful for temporarily disabling a target or style.
 
 ### Resource variables
 
-Some variables, such as size and padding for various controls, are defined as
-resource variables.
+Some variables, such as size and padding for various controls, colors, and
+brushes, are defined as resource variables. You can override existing resources
+or define new theme-aware resources.
+
+#### Overriding existing resources
+
+Use `key=value` to override an existing resource.
+
+#### Defining theme-aware resources
+
+Use `Key@Dark=value` and `Key@Light=value` to define new resources with
+different values for dark and light themes. These can then be referenced in
+styles using `{ThemeResource key}`.
+
+For example, to define a custom accent color that automatically adjusts based on
+the system theme:
+
+```
+AutoAccent@Dark={ThemeResource SystemAccentColorDark1}
+AutoAccent@Light={ThemeResource SystemAccentColorLight2}
+```
+
+Then use it in a style:
+
+```
+Background:=<SolidColorBrush Color="{ThemeResource AutoAccent}" />
+```
+
+The value will automatically update when the system accent color changes.
+
+## XAML diagnostics consumer handling
+
+This mod uses XAML diagnostics to inspect and customize the File Explorer.
+However, there can only be one XAML diagnostics consumer at a time. If another
+program (such as ExplorerBlurMica) tries to use XAML diagnostics while this mod
+is running, there will be a conflict.
+
+The **XAML diagnostics consumer handling** setting controls how this mod handles
+such conflicts:
+
+* **Alert**: When another program tries to use XAML diagnostics, a message box
+  will appear asking whether to block it. This allows you to decide on a
+  case-by-case basis.
+* **Block**: Automatically block other programs from using XAML diagnostics.
+  This ensures this mod works correctly, but might break the other program.
+* **Allow**: Allow other programs to use XAML diagnostics. This might break this
+  mod's styling, but allows the other program to work.
 
 ## Implementation notes
 
@@ -142,10 +211,35 @@ from the **TranslucentTB** project.
     in the mod details.
   $options:
   - "": None
+  - Translucent Explorer11: Translucent Explorer11
+  - MicaBar: MicaBar
+  - NoCommandBar: NoCommandBar
   - Minimal Explorer11: Minimal Explorer11
   - Tabless: Tabless
-  - NoCommandBar: NoCommandBar
-  - MicaBar: MicaBar
+  - Matter: Matter
+  - WindowGlass: WindowGlass
+  - AddressSearchOnly: AddressSearchOnly
+  - TintedGlass: TintedGlass
+- backgroundTranslucentEffect: ""
+  $name: Translucent background effect
+  $description: >-
+    The translucent effect to use for the File Explorer background. For
+    additional translucent effects, check out the Translucent Windows mod.
+  $options:
+  - "": Default for the selected theme
+  - default: Windows default
+  - acrylic: Acrylic
+  - mica: Mica
+  - micaAlt: Mica Alt
+  - none: None
+- backgroundTranslucentEffectRegion: ""
+  $name: Translucent background effect region
+  $description: >-
+    The region where the translucent background effect is applied. Note that
+    applying the effect to the entire window is only supported in dark mode.
+  $options:
+  - "": File Explorer frame only
+  - entireWindow: Entire window
 - controlStyles:
   - - target: ""
       $name: Target
@@ -167,23 +261,36 @@ from the **TranslucentTB** project.
     Fill=$mainColor
 
     Background:=<AcrylicBrush TintColor="$mainColor" TintOpacity="0.3" />
-- resourceVariables:
-  - - variableKey: ""
-      $name: Variable key
-    - value: ""
-      $name: Value
+- themeResourceVariables: [""]
   $name: Resource variables
+  $description: >-
+    Use "Key=Value" to override an existing resource with a new value.
+
+    Use "Key@Dark=Value" or "Key@Light=Value" to define theme-aware resources
+    that can be referenced with {ThemeResource Key} in styles.
 - explorerFrameContainerHeight: 0
   $name: Explorer frame container height
   $description: >-
     The height of the explorer frame container which includes the tabs, the
-    address bar, and the command bar, set to zero to use the default height
+    address bar, and the command bar, set to zero to use the default height.
+- xamlDiagnosticsHandling: alert
+  $name: XAML diagnostics consumer handling
+  $description: >-
+    How to handle other programs (e.g. ExplorerBlurMica) that try to use XAML
+    diagnostics. There can only be one consumer at a time. Block will prevent
+    other programs from using it, which might break them. Allow will let them
+    use it, which might break this mod.
+  $options:
+  - alert: Alert (prompt before blocking)
+  - block: Block other consumers
+  - allow: Allow other consumers
 */
 // ==/WindhawkModSettings==
 
 #include <xamlom.h>
 
 #include <atomic>
+#include <optional>
 #include <vector>
 
 #undef GetCurrentTime
@@ -195,13 +302,64 @@ struct ThemeTargetStyles {
     std::vector<PCWSTR> styles;
 };
 
+enum class BackgroundTranslucentEffect {
+    kDefault,
+    kAcrylic,
+    kMica,
+    kMicaAlt,
+    kNone,
+};
+
 struct Theme {
     std::vector<ThemeTargetStyles> targetStyles;
     std::vector<PCWSTR> styleConstants;
     int explorerFrameContainerHeight = 0;
+    BackgroundTranslucentEffect backgroundTranslucentEffect =
+        BackgroundTranslucentEffect::kDefault;
 };
 
 // clang-format off
+
+const Theme g_themeTranslucent_Explorer11 = {{
+    ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
+        L"Background=Transparent",
+        L"BorderThickness=0,0,0,1",
+        L"BorderBrush=#40A0A0A0"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas > Microsoft.UI.Xaml.Shapes.Path#SelectedBackgroundPath", {
+        L"Fill=#40404040"}},
+    ThemeTargetStyles{L"Grid#HomeViewRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#GalleryRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"ToolTip", {
+        L"Background:=<AcrylicBrush TintColor=\"#121212\" Opacity=\"0.3\"/>"}},
+    ThemeTargetStyles{L"Grid#DetailsViewControlRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"StackPanel#DetailsViewThumbnail > Grid", {
+        L"Background=Transparent"}},
+}, {}, /*explorerFrameContainerHeight=*/0, BackgroundTranslucentEffect::kAcrylic};
+
+const Theme g_themeMicaBar = {{
+    ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource LayerOnMicaBaseAltFillColorDefault}\"/>",
+        L"BorderThickness=0,0,0,1"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
+        L"Background=Transparent"}},
+}, {}, /*explorerFrameContainerHeight=*/0};
+
+const Theme g_themeNoCommandBar = {{
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl", {
+        L"Grid.RowSpan=2",
+        L"Margin=0,0,0,1"}},
+}, {}, /*explorerFrameContainerHeight=*/87};
 
 const Theme g_themeMinimal_Explorer11 = {{
     ThemeTargetStyles{L"AppBarButton#backButton > Grid#Root@CommonStates > Border#AppBarButtonInnerBorder", {
@@ -324,32 +482,301 @@ const Theme g_themeTabless = {{
     L"CommandBarGrid=1",
 }, /*explorerFrameContainerHeight=*/0};
 
-const Theme g_themeNoCommandBar = {{
-    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+const Theme g_themeMatter = {{
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar ", {
+        L"Background=Transparent",
+        L"HorizontalAlignment  = 1"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerSecondaryCommandBar", {
+        L"Background=Transparent",
+        L"Visibility = 1"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
         L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl", {
-        L"Grid.RowSpan=2",
-        L"Margin=0,0,0,1"}},
-}, {}, /*explorerFrameContainerHeight=*/87};
-
-const Theme g_themeMicaBar = {{
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem", {
+        L"Margin=0,0,4,0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot", {
+        L"CornerRadius=5",
+        L"Margin=2,4,0,4",
+        L"Height=29"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Grid#TabContainer", {
+        L"Background = Transparent ",
+        L"BorderThickness = 0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot@CommonStates", {
+        L"Background@Selected:= $accentColor2",
+        L"Background@PointerOverSelected:= $accentColor",
+        L"Background@PointerOver:= $accentColor2",
+        L"Background@Normal=$accentColor",
+        L"Background@PressedSelected:=$accentColor2",
+        L"Background@Pressed := $accentColor2"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border > Button#AddButton", {
+        L"Visibility  = 0",
+        L"Margin = 0,0,0,3"}},
     ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
-        L"Background:=<SolidColorBrush Color=\"{ThemeResource LayerOnMicaBaseAltFillColorDefault}\"/>",
-        L"BorderThickness=0,0,0,1"}},
+        L"Background=Transparent ",
+        L"BorderThickness = 0"}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background=Transparent "}},
+    ThemeTargetStyles{L"Grid#PART_LayoutRoot", {
+        L"Background :=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" Opacity=\"0.4\" />",
+        L"CornerRadius = 6",
+        L"BorderThickness = 0"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Margin = 0,-5,0,0"}},
+    ThemeTargetStyles{L"AutoSuggestBox#FileExplorerSearchBox > Grid#LayoutRoot > TextBox > Grid@CommonStates > Border#BorderElement", {
+        L"Background :=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" Opacity=\"0.4\" />",
+        L"CornerRadius = 6",
+        L"BorderThickness = 0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton[ToolTipService.ToolTip = Cut]", {
+        L"Visibility  = 1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton[ToolTipService.ToolTip = Copy]", {
+        L"Visibility  = 1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton[ToolTipService.ToolTip = Paste]", {
+        L"Visibility  = 1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton[ToolTipService.ToolTip = Rename]", {
+        L"Visibility  = 1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton[ToolTipService.ToolTip = Share]", {
+        L"Visibility  = 1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarSeparator", {
+        L"Visibility  = 1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Border#ScrollDecreaseButtonContainer", {
+        L"Margin = 0,0,0,3"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Border#ScrollIncreaseButtonContainer", {
+        L"Margin = 0,0,0,3"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#refreshButton", {
+        L"Visibility  =1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#upButton", {
+        L"Visibility  =1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#forwardButton", {
+        L"Visibility  =1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#backButton", {
+        L"Visibility  =1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton[ToolTipService.ToolTip = Create a new item in the current location.]", {
+        L"Visibility  = 1"}},
+}, {
+    L"accentColor=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" />",
+    L"accentColor2=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" Opacity=\"0.5\" />",
+}, /*explorerFrameContainerHeight=*/0};
+
+const Theme g_themeWindowGlass = {{
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#PART_LayoutRoot", {
+        L"Background=Transparent",
+        L"RenderTransform:=<TranslateTransform X=\"0\"/>"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.FirstCrumbStackPanelControl#FirstCrumbStackPanel", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#RootCommandSearchGrid > Windows.UI.Xaml.Controls.Border#BorderElement", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot", {
+        L"BorderThickness=$BorderThickness",
+        L"Background:=$ButtonBackground",
+        L"BorderBrush:=$ButtonBorder"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#CommandBarControlRootGrid", {
+        L"Background=Transparent",
+        L"BorderBrush=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar#FileExplorerCommandBar", {
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"0\" />",
+        L"HorizontalAlignment=Center",
+        L"Margin=-4",
+        L"Padding=10"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar#FileExplorerSecondaryCommandBar", {
+        L"RenderTransform:=<TranslateTransform X=\"Auto\" />",
+        L"HorizontalAlignment=Center",
+        L"Margin=-4",
+        L"Padding=10",
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar#FileExplorerCommandBar > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.Grid#ContentRoot", {
+        L"CornerRadius=$CornerRadius",
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush=Transparent",
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar#FileExplorerSecondaryCommandBar > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.Grid#ContentRoot", {
+        L"CornerRadius=$CornerRadius",
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush:=$BorderBrush",
+        L"Background=#10808080",
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#NavigationBarControlGrid", {
+        L"Background=Transparent",
+        L"BorderBrush=Transparent",
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"*\"/><ColumnDefinition Width=\"430\"/></ColumnDefinitionCollection>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#HomeViewRootGrid", {
+        L"BorderBrush:=$MainContentBG",
+        L"CornerRadius=8",
+        L"BorderThickness=0",
+        L"Margin=0,0,8,8",
+        L"Background:=$MainContentBG"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid  ", {
+        L"BorderBrush:=$MainContentBG",
+        L"CornerRadius=8",
+        L"BorderThickness=0",
+        L"Margin=0,0,8,8",
+        L"Background:=$MainContentBG"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid > Grid#GalleryRootGrid", {
+        L"Background:=$MainContentBG"}},
+    ThemeTargetStyles{L"ToolTip", {
+        L"Background:=$Background"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot", {
+        L"CornerRadius=8",
+        L"Margin=5",
+        L"Height=35"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Grid#TabContainer", {
+        L"Background=Transparent",
+        L"BorderBrush=Transparent"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot@CommonStates", {
+        L"Background@Selected:=<SolidColorBrush Color=\"#808080\" Opacity=\"0.10\"/>",
+        L"Background@PointerOverSelected:=<SolidColorBrush Color=\"#808080\" Opacity=\"0.10\"/>",
+        L"Background@PointerOver:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.13\"/>",
+        L"Background@Normal:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.05\"/>",
+        L"Background@PressedSelected:=<SolidColorBrush Color=\"#808080\" Opacity=\"0.10\"/>"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Border#BottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Shapes.Path#LeftRadiusRenderArc", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Shapes.Path#RightRadiusRenderArc", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainer", {
+        L"Visibility=Visible"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Viewbox#IconBox", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Primitives.CommandBarFlyoutCommandBar > Grid#LayoutRoot > Grid#OuterContentRoot > Grid#ContentRoot > Grid#PrimaryItemsRoot", {
+        L"Background:=$Background",
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush:=$BorderBrush",
+        L"Margin=0,0,0,-5",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Grid#OuterOverflowContentRootV2 > Grid#OverflowContentRoot > CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
+        L"Background:=$Background",
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush:=$BorderBrush",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter > Border", {
+        L"Background:=$Background",
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush:=$BorderBrush",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
+        L"Background:=$Background",
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush:=$BorderBrush",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AutoSuggestBox#FileExplorerSearchBox > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.TextBox#TextBox", {
+        L"CornerRadius=$CornerRadius",
+        L"Margin=0,0,180,0",
+        L"Background=Transparent",
+        L"BorderBrush=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#FileExplorerAddressBarGrid", {
+        L"MaxWidth=750",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AutoSuggestBox#PART_AutoSuggestBox > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.TextBox#TextBox", {
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar#NavigationCommands", {
+        L"Margin=180,0,0,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#RootContainer", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Border > Microsoft.UI.Xaml.Controls.Button#AddButton", {
+        L"RenderTransform:=<TranslateTransform Y=\"-6\" />"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.TextBlock#TextLabel", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#SubItemChevronPanel > Microsoft.UI.Xaml.Controls.FontIcon#SubItemChevron", {
+        L"RenderTransform:=<TranslateTransform X=\"-5\" Y=\"12\" />"}},
+}, {
+    L"Background=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#15323232\"/>",
+    L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SystemChromeLowColor}\" Offset=\"0.15\" /><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"0.95\" /></LinearGradientBrush>",
+    L"BorderThickness=0.3,1,0.3,0.3",
+    L"ButtonBackground=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\"1\" />",
+    L"ButtonBorder=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight3}\" Opacity=\"1\" />",
+    L"CornerRadius=8",
+    L"Background2=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"0\" />",
+    L"MainContentBG=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"1\" />",
+}, /*explorerFrameContainerHeight=*/0, BackgroundTranslucentEffect::kAcrylic};
+
+const Theme g_themeAddressSearchOnly = {{
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl", {
+        L"Grid.Row=0",
+        L"Background=Transparent",
+        L"MinHeight=48",
+        L"Margin=0,26,0,1"}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.FileExplorerTabControl", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"AppBarButton#refreshButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"AppBarButton#upButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"AppBarButton#backButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"AppBarButton#forwardButton", {
+        L"Visibility=Collapsed"}},
+}, {}, /*explorerFrameContainerHeight=*/80};
+
+const Theme g_themeTintedGlass = {{
+    ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
+        L"Background:=$CommonBgBrush",
+        L"BorderThickness=0,0,0,0",
+        L"BorderBrush=$CommonBgBrush"}},
     ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
         L"Background=Transparent"}},
-}, {}, /*explorerFrameContainerHeight=*/0};
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background:=$CommonBgBrush"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas > Microsoft.UI.Xaml.Shapes.Path#SelectedBackgroundPath", {
+        L"Fill:=$CommonBgBrush"}},
+    ThemeTargetStyles{L"Grid#HomeViewRootGrid", {
+        L"Background:=$CommonBgBrush"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid", {
+        L"Background:=$CommonBgBrush"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#GalleryRootGrid", {
+        L"Background:=$CommonBgBrush"}},
+    ThemeTargetStyles{L"ToolTip", {
+        L"Background:=$CommonBgBrush"}},
+    ThemeTargetStyles{L"Grid#DetailsViewControlRootGrid", {
+        L"Background:=$CommonBgBrush"}},
+    ThemeTargetStyles{L"StackPanel#DetailsViewThumbnail > Grid", {
+        L"Background:=$CommonBgBrush"}},
+    ThemeTargetStyles{L"TextBlock", {
+        L"Fill=#FFFFFF"}},
+}, {
+    L"CommonBgBrush=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#80000000\"/>",
+}, /*explorerFrameContainerHeight=*/0, BackgroundTranslucentEffect::kAcrylic};
 
 // clang-format on
 
+enum class BackgroundTranslucentEffectRegion {
+    kExplorerFrame,
+    kEntireWindow,
+};
+
+enum class XamlDiagnosticsHandling {
+    kAlert,
+    kBlock,
+    kAllow,
+};
+
 struct {
+    std::optional<BackgroundTranslucentEffect> backgroundTranslucentEffect;
+    BackgroundTranslucentEffectRegion backgroundTranslucentEffectRegion;
     int explorerFrameContainerHeight;
+    XamlDiagnosticsHandling xamlDiagnosticsHandling;
 } g_settings;
 
+BackgroundTranslucentEffect g_themeBackgroundTranslucentEffect;
 int g_themeExplorerFrameContainerHeight;
 
 std::atomic<bool> g_initialized;
 thread_local bool g_initializedForThread;
+thread_local bool g_resourceVariablesInitializedForThread;
 
 void ApplyCustomizations(InstanceHandle handle,
                          winrt::Microsoft::UI::Xaml::FrameworkElement element,
@@ -463,12 +890,19 @@ VisualTreeWatcher::~VisualTreeWatcher()
 void VisualTreeWatcher::UnadviseVisualTreeChange()
 {
     Wh_Log(L"UnadviseVisualTreeChange VisualTreeWatcher");
-    winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this));
+    HRESULT hr = m_XamlDiagnostics.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this);
+    if (FAILED(hr)) {
+        Wh_Log(L"UnadviseVisualTreeChange failed with error %08X", hr);
+    }
 }
 
 HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
 {
     Wh_Log(L"========================================");
+
+    if (!g_initializedForThread) {
+        Wh_Log(L"NOTE: Not initialized for thread %u", GetCurrentThreadId());
+    }
 
     switch (mutationType)
     {
@@ -664,6 +1098,8 @@ _Use_decl_annotations_ STDAPI DllCanUnloadNow(void)
 
 #pragma region api_cpp
 
+bool g_inInjectWindhawkTAP = false;
+
 using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX = decltype(&InitializeXamlDiagnosticsEx);
 
 HRESULT InjectWindhawkTAP() noexcept
@@ -697,6 +1133,8 @@ HRESULT InjectWindhawkTAP() noexcept
     // I didn't find a better way than trying many connections until one works.
     // Reference:
     // https://github.com/microsoft/microsoft-ui-xaml/blob/d74a0332cf0d5e58f12eddce1070fa7a79b4c2db/src/dxaml/xcp/dxaml/lib/DXamlCore.cpp#L2782
+    g_inInjectWindhawkTAP = true;
+
     HRESULT hr;
     for (int i = 0; i < 10000; i++)
     {
@@ -710,6 +1148,8 @@ HRESULT InjectWindhawkTAP() noexcept
         }
     }
 
+    g_inInjectWindhawkTAP = false;
+
     return hr;
 }
 
@@ -721,6 +1161,7 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <windhawk_utils.h>
 
 #include <list>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -733,16 +1174,21 @@ HRESULT InjectWindhawkTAP() noexcept
 using namespace std::string_view_literals;
 
 #include <commctrl.h>
+#include <dwmapi.h>
 #include <roapi.h>
 #include <winstring.h>
 
+#include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Text.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
+#include <winrt/Microsoft.UI.Xaml.Media.Imaging.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Networking.Connectivity.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 
 using namespace winrt::Microsoft::UI::Xaml;
 
@@ -785,7 +1231,9 @@ using PropertyOverridesUnresolved = std::vector<StyleRule>;
 
 struct XamlBlurBrushParams {
     float blurAmount;
-    wf::Numerics::float4 tint;
+    winrt::Windows::UI::Color tint;
+    std::optional<uint8_t> tintOpacity;
+    std::wstring tintThemeResourceKey;  // Empty if not from ThemeResource
 };
 
 using PropertyOverrideValue =
@@ -835,25 +1283,107 @@ thread_local std::unordered_map<InstanceHandle, ElementCustomizationState>
 
 thread_local bool g_elementPropertyModifying;
 
+// Global list to track ImageBrushes with failed loads for retry on network
+// reconnection.
+struct ImageBrushFailedLoadInfo {
+    winrt::weak_ref<Media::ImageBrush> brush;
+    winrt::hstring imageSource;
+    Media::ImageBrush::ImageFailed_revoker imageFailedRevoker;
+    Media::ImageBrush::ImageOpened_revoker imageOpenedRevoker;
+};
+
+struct FailedImageBrushesForThread {
+    std::list<ImageBrushFailedLoadInfo> failedImageBrushes;
+    winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher{nullptr};
+};
+
+thread_local FailedImageBrushesForThread g_failedImageBrushesForThread;
+
+// Global registry of all threads that have failed image brushes.
+std::mutex g_failedImageBrushesRegistryMutex;
+std::vector<winrt::weak_ref<winrt::Microsoft::UI::Dispatching::DispatcherQueue>>
+    g_failedImageBrushesRegistry;
+winrt::event_token g_networkStatusChangedToken;
+
+enum class ResourceVariableTheme {
+    None,
+    Dark,
+    Light,
+};
+
+struct ResourceVariableEntry {
+    std::wstring key;
+    std::wstring value;
+    ResourceVariableTheme theme;
+};
+
+// Track original resource values for restoration (per-thread since
+// Application::Current().Resources() is per-thread).
+thread_local std::unordered_map<std::wstring,
+                                winrt::Windows::Foundation::IInspectable>
+    g_originalResourceValues;
+
+// Track our merged theme dictionary for cleanup (per-thread).
+thread_local ResourceDictionary g_resourceVariablesThemeDict{nullptr};
+
+// Track theme resource entries that reference {ThemeResource ...} for refresh
+// (per-thread).
+thread_local std::vector<ResourceVariableEntry> g_themeResourceEntries;
+
+// For listening to theme color changes (per-thread).
+thread_local winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{
+    nullptr};
+thread_local winrt::event_token g_colorValuesChangedToken;
+
 winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     DependencyObject elementDo,
     DependencyProperty property) {
-    const auto value = elementDo.ReadLocalValue(property);
-    // TODO: Is this still needed?
+    auto value = elementDo.ReadLocalValue(property);
+
+    if (value) {
+        // A workaround for ColumnDefinitionCollection of
+        // NavigationBarControlGrid which can't be read by ReadLocalValue for
+        // some reason, even though it seems to be a local property.
+        if (value == DependencyProperty::UnsetValue()) {
+            auto grid = elementDo.try_as<Controls::Grid>();
+            if (grid && grid.Name() == L"NavigationBarControlGrid") {
+                auto value2 = elementDo.GetValue(property);
+                if (value2 && winrt::get_class_name(value2) ==
+                                  L"Microsoft.UI.Xaml.Controls."
+                                  L"ColumnDefinitionCollection") {
+                    Wh_Log(
+                        L"Using GetValue workaround for "
+                        L"ColumnDefinitionCollection");
+                    value = std::move(value2);
+                }
+            }
+        }
+
+        // TODO: Is this still needed?
 #if 0
-    if (value && winrt::get_class_name(value) ==
-                     L"Windows.UI.Xaml.Data.BindingExpressionBase") {
-        // BindingExpressionBase was observed to be returned for XAML properties
-        // that were declared as following:
-        //
-        // <Border ... CornerRadius="{TemplateBinding CornerRadius}" />
-        //
-        // Calling SetValue with it fails with an error, so we won't be able to
-        // use it to restore the value. As a workaround, we use
-        // GetAnimationBaseValue to get the value.
-        return elementDo.GetAnimationBaseValue(property);
-    }
+        auto className = winrt::get_class_name(value);
+        if (className == L"Windows.UI.Xaml.Data.BindingExpressionBase" ||
+            className == L"Windows.UI.Xaml.Data.BindingExpression") {
+            // BindingExpressionBase was observed to be returned for XAML
+            // properties that were declared as following:
+            //
+            // <Border ... CornerRadius="{TemplateBinding CornerRadius}" />
+            //
+            // Calling SetValue with it fails with an error, so we won't be able
+            // to use it to restore the value. As a workaround, we use
+            // GetAnimationBaseValue to get the value.
+            Wh_Log(L"ReadLocalValue returned %s, using GetAnimationBaseValue",
+                   className.c_str());
+            value = elementDo.GetAnimationBaseValue(property);
+        }
 #endif
+    }
+
+    Wh_Log(L"Read property value %s",
+           value ? (value == DependencyProperty::UnsetValue()
+                        ? L"(unset)"
+                        : winrt::get_class_name(value).c_str())
+                 : L"(null)");
 
     return value;
 }
@@ -866,7 +1396,6 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
 
 #include <winrt/Microsoft.UI.Xaml.Hosting.h>
 
-namespace wfn = wf::Numerics;
 namespace wge = winrt::Windows::Graphics::Effects;
 namespace muc = winrt::Microsoft::UI::Composition;
 namespace muxh = mux::Hosting;
@@ -893,19 +1422,30 @@ typedef enum MY_D2D1_GAUSSIANBLUR_OPTIMIZATION
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Microsoft.UI.Composition.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 
 class XamlBlurBrush : public mux::Media::XamlCompositionBrushBaseT<XamlBlurBrush>
 {
 public:
-	XamlBlurBrush(muc::Compositor compositor, float blurAmount, wfn::float4 tint);
+	XamlBlurBrush(muc::Compositor compositor,
+	              float blurAmount,
+	              winrt::Windows::UI::Color tint,
+	              std::optional<uint8_t> tintOpacity,
+	              winrt::hstring tintThemeResourceKey);
 
 	void OnConnected();
 	void OnDisconnected();
 
 private:
+	void RefreshThemeTint();
+	void OnThemeRefreshed();
+
 	muc::Compositor m_compositor;
 	float m_blurAmount;
-	wfn::float4 m_tint;
+	winrt::Windows::UI::Color m_tint;
+	std::optional<uint8_t> m_tintOpacity;
+	winrt::hstring m_tintThemeResourceKey;
+	winrt::Windows::UI::ViewManagement::UISettings m_uiSettings;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1154,7 +1694,7 @@ public:
 	winrt::hstring Name();
 	void Name(winrt::hstring name);
 
-	wfn::float4 Color = { 0.0f, 0.0f, 0.0f, 1.0f };
+	winrt::Windows::UI::Color Color{};
 private:
 	winrt::hstring m_name = L"FloodEffect";
 };
@@ -1212,7 +1752,12 @@ HRESULT FloodEffect::GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::
 	switch (index)
 	{
 		case D2D1_FLOOD_PROP_COLOR:
-			*value = wf::PropertyValue::CreateSingleArray({ Color.x, Color.y, Color.z, Color.w }).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			*value = wf::PropertyValue::CreateSingleArray({
+				Color.R / 255.0f,
+				Color.G / 255.0f,
+				Color.B / 255.0f,
+				Color.A / 255.0f,
+			}).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
 			break;
 
 		default:
@@ -1421,11 +1966,37 @@ void GaussianBlurEffect::Name(winrt::hstring name)
 
 ////////////////////////////////////////////////////////////////////////////////
 // XamlBlurBrush.cpp
-XamlBlurBrush::XamlBlurBrush(muc::Compositor compositor, float blurAmount, wfn::float4 tint) :
+#include <winrt/Microsoft.UI.Dispatching.h>
+
+XamlBlurBrush::XamlBlurBrush(muc::Compositor compositor,
+                             float blurAmount,
+                             winrt::Windows::UI::Color tint,
+                             std::optional<uint8_t> tintOpacity,
+                             winrt::hstring tintThemeResourceKey) :
 	m_compositor(std::move(compositor)),
 	m_blurAmount(blurAmount),
-	m_tint(tint)
-{ }
+	m_tint(tint),
+	m_tintOpacity(tintOpacity),
+	m_tintThemeResourceKey(std::move(tintThemeResourceKey))
+{
+	if (!m_tintThemeResourceKey.empty())
+	{
+		RefreshThemeTint();
+
+		auto dq = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+
+		m_uiSettings.ColorValuesChanged([weakThis = get_weak(), dq] (auto const&, auto const&)
+		{
+			dq.TryEnqueue([weakThis]
+			{
+				if (auto self = weakThis.get())
+				{
+					self->OnThemeRefreshed();
+				}
+			});
+		});
+	}
+}
 
 void XamlBlurBrush::OnConnected()
 {
@@ -1445,7 +2016,11 @@ void XamlBlurBrush::OnConnected()
 		compositeEffect->Sources.push_back(*floodEffect);
 		compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
 
-		auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
+		auto factory = m_compositor.CreateEffectFactory(
+			*compositeEffect,
+			// List of animatable properties.
+			{L"FloodEffect.Color"}
+		);
 		auto blurBrush = factory.CreateBrush();
 		blurBrush.SetSourceParameter(L"backdrop", backdropBrush);
 
@@ -1462,8 +2037,210 @@ void XamlBlurBrush::OnDisconnected()
 	}
 }
 
+void XamlBlurBrush::RefreshThemeTint()
+{
+	if (m_tintThemeResourceKey.empty())
+	{
+		return;
+	}
+
+	auto resources = Application::Current().Resources();
+	auto resource = resources.TryLookup(winrt::box_value(m_tintThemeResourceKey));
+	if (!resource)
+	{
+		Wh_Log(L"Failed to find resource");
+		return;
+	}
+
+	if (auto colorBrush = resource.try_as<mux::Media::SolidColorBrush>())
+	{
+		m_tint = colorBrush.Color();
+	}
+	else if (auto color = resource.try_as<winrt::Windows::UI::Color>())
+	{
+		m_tint = *color;
+	}
+	else
+	{
+		Wh_Log(L"Resource type is unsupported: %s",
+			winrt::get_class_name(resource).c_str());
+		return;
+	}
+
+	if (m_tintOpacity)
+	{
+		m_tint.A = *m_tintOpacity;
+	}
+}
+
+void XamlBlurBrush::OnThemeRefreshed()
+{
+	Wh_Log(L"Theme refreshed");
+
+	auto prevTint = m_tint;
+
+	RefreshThemeTint();
+
+	if (prevTint != m_tint)
+	{
+		if (auto effectBrush = CompositionBrush().try_as<muc::CompositionEffectBrush>())
+		{
+			effectBrush.Properties().InsertColor(L"FloodEffect.Color", m_tint);
+		}
+	}
+}
+
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
+
+// Helper functions for tracking and retrying failed ImageBrush loads.
+void RetryFailedImageLoadsOnCurrentThread() {
+    Wh_Log(L"Retrying failed image loads on current thread");
+
+    auto& failedImageBrushes = g_failedImageBrushesForThread.failedImageBrushes;
+
+    // Retry loading all failed images by re-setting the ImageSource property.
+    for (auto& info : failedImageBrushes) {
+        if (auto brush = info.brush.get()) {
+            try {
+                Wh_Log(L"Retrying image load for: %s",
+                       info.imageSource.c_str());
+                // Clear the ImageSource first to force a reload.
+                brush.ImageSource(nullptr);
+                // Then create a new BitmapImage and set it.
+                Media::Imaging::BitmapImage bitmapImage;
+                bitmapImage.UriSource(
+                    winrt::Windows::Foundation::Uri(info.imageSource));
+                brush.ImageSource(bitmapImage);
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Error retrying image load %08X: %s", ex.code(),
+                       ex.message().c_str());
+            }
+        }
+    }
+
+    // Clean up any weak refs that are no longer valid.
+    std::erase_if(failedImageBrushes,
+                  [](const auto& info) { return !info.brush.get(); });
+}
+
+void OnNetworkStatusChanged(
+    winrt::Windows::Foundation::IInspectable const& sender) {
+    Wh_Log(L"Network status changed, dispatching retry to all UI threads");
+
+    // Get snapshot of dispatchers under lock.
+    std::vector<winrt::Microsoft::UI::Dispatching::DispatcherQueue> dispatchers;
+    {
+        std::lock_guard<std::mutex> lock(g_failedImageBrushesRegistryMutex);
+
+        for (auto& weakDispatcher : g_failedImageBrushesRegistry) {
+            if (auto dispatcher = weakDispatcher.get()) {
+                dispatchers.push_back(dispatcher);
+            }
+        }
+
+        // Clean up dead weak refs.
+        std::erase_if(
+            g_failedImageBrushesRegistry,
+            [](const auto& weakDispatcher) { return !weakDispatcher.get(); });
+    }
+
+    // Dispatch retry to each UI thread.
+    for (auto& dispatcher : dispatchers) {
+        try {
+            dispatcher.TryEnqueue(
+                []() { RetryFailedImageLoadsOnCurrentThread(); });
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error dispatching retry to UI thread %08X: %s", ex.code(),
+                   ex.message().c_str());
+        }
+    }
+}
+
+void RemoveFromFailedImageBrushes(Media::ImageBrush const& brush) {
+    auto& failedImageBrushes = g_failedImageBrushesForThread.failedImageBrushes;
+
+    std::erase_if(failedImageBrushes, [&brush](const auto& info) {
+        if (auto existingBrush = info.brush.get()) {
+            return existingBrush == brush;
+        }
+        return false;
+    });
+}
+
+void SetupImageBrushTracking(Media::ImageBrush const& brush,
+                             winrt::hstring const& imageSourceUrl) {
+    // First remove any existing entry for this brush to avoid duplicates.
+    RemoveFromFailedImageBrushes(brush);
+
+    // Add new entry with event handlers.
+    ImageBrushFailedLoadInfo info;
+    info.brush = winrt::make_weak(brush);
+    info.imageSource = imageSourceUrl;
+
+    // Set up ImageFailed event handler - add to list only when load fails.
+    info.imageFailedRevoker = brush.ImageFailed(
+        winrt::auto_revoke,
+        [brushWeak = winrt::make_weak(brush), imageSourceUrl](
+            winrt::Windows::Foundation::IInspectable const& sender,
+            ExceptionRoutedEventArgs const& e) {
+            Wh_Log(L"ImageBrush load failed for: %s, error: %s",
+                   imageSourceUrl.c_str(), e.ErrorMessage().c_str());
+            // The brush should already be in the list, no action needed here as
+            // we add it preemptively in SetupImageBrushTracking.
+        });
+
+    // Set up ImageOpened event handler - remove from list when load succeeds.
+    info.imageOpenedRevoker = brush.ImageOpened(
+        winrt::auto_revoke,
+        [brushWeak = winrt::make_weak(brush)](
+            winrt::Windows::Foundation::IInspectable const& sender,
+            RoutedEventArgs const& e) {
+            Wh_Log(L"ImageBrush loaded successfully, removing from retry list");
+
+            if (auto brush = brushWeak.get()) {
+                RemoveFromFailedImageBrushes(brush);
+            }
+        });
+
+    // Add to the list preemptively - will be removed if load succeeds.
+    auto& failedImageBrushes = g_failedImageBrushesForThread.failedImageBrushes;
+    failedImageBrushes.push_back(std::move(info));
+
+    // Ensure we have a dispatcher for this thread.
+    if (!g_failedImageBrushesForThread.dispatcher) {
+        try {
+            g_failedImageBrushesForThread.dispatcher = winrt::Microsoft::UI::
+                Dispatching::DispatcherQueue::GetForCurrentThread();
+            if (g_failedImageBrushesForThread.dispatcher) {
+                // Register this thread's dispatcher globally.
+                std::lock_guard<std::mutex> lock(
+                    g_failedImageBrushesRegistryMutex);
+                g_failedImageBrushesRegistry.push_back(
+                    winrt::make_weak(g_failedImageBrushesForThread.dispatcher));
+                Wh_Log(L"Registered UI thread dispatcher for network retry");
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error getting dispatcher for current thread %08X: %s",
+                   ex.code(), ex.message().c_str());
+        }
+    }
+
+    // Register global network status changed handler if not already registered.
+    // This is a one-time global registration.
+    [[maybe_unused]] static bool networkHandlerRegistered = []() {
+        try {
+            g_networkStatusChangedToken =
+                winrt::Windows::Networking::Connectivity::NetworkInformation::
+                    NetworkStatusChanged(OnNetworkStatusChanged);
+            Wh_Log(L"Registered global network status change handler");
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error registering network status handler %08X: %s",
+                   ex.code(), ex.message().c_str());
+        }
+        return true;
+    }();
+}
 
 void SetOrClearValue(DependencyObject elementDo,
                      DependencyProperty property,
@@ -1473,16 +2250,17 @@ void SetOrClearValue(DependencyObject elementDo,
             std::get_if<winrt::Windows::Foundation::IInspectable>(
                 &overrideValue)) {
         value = *inspectable;
-    } else if (auto* blurBrashParams =
+    } else if (auto* blurBrushParams =
                    std::get_if<XamlBlurBrushParams>(&overrideValue)) {
         if (auto uiElement = elementDo.try_as<UIElement>()) {
             auto compositor =
                 muxh::ElementCompositionPreview::GetElementVisual(uiElement)
                     .Compositor();
 
-            value = winrt::make<XamlBlurBrush>(std::move(compositor),
-                                               blurBrashParams->blurAmount,
-                                               blurBrashParams->tint);
+            value = winrt::make<XamlBlurBrush>(
+                std::move(compositor), blurBrushParams->blurAmount,
+                blurBrushParams->tint, blurBrushParams->tintOpacity,
+                winrt::hstring(blurBrushParams->tintThemeResourceKey));
         } else {
             Wh_Log(L"Can't get UIElement for blur brush");
             return;
@@ -1493,8 +2271,52 @@ void SetOrClearValue(DependencyObject elementDo,
     }
 
     if (value == DependencyProperty::UnsetValue()) {
+        Wh_Log(L"Clearing property value");
         elementDo.ClearValue(property);
         return;
+    }
+
+    Wh_Log(L"Setting property value %s", winrt::get_class_name(value).c_str());
+
+    // Track ImageBrush with remote ImageSource for retry on network
+    // reconnection. This handles cases where an ImageBrush is set as a property
+    // value (e.g., Background).
+    if (auto imageBrush = value.try_as<Media::ImageBrush>()) {
+        auto imageSource = imageBrush.ImageSource();
+        if (auto bitmapImage =
+                imageSource.try_as<Media::Imaging::BitmapImage>()) {
+            auto uriSource = bitmapImage.UriSource();
+            if (uriSource) {
+                winrt::hstring uriString = uriSource.ToString();
+                if (uriString.starts_with(L"https://") ||
+                    uriString.starts_with(L"http://")) {
+                    Wh_Log(L"Tracking ImageBrush with remote source: %s",
+                           uriString.c_str());
+                    SetupImageBrushTracking(imageBrush, uriString);
+                }
+            }
+        }
+    }
+    // Also handle direct ImageSource property being set on an ImageBrush.
+    else if (auto imageBrush = elementDo.try_as<Media::ImageBrush>()) {
+        if (property == Media::ImageBrush::ImageSourceProperty()) {
+            // Check if the value is a BitmapImage with an http(s):// URI.
+            if (auto bitmapImage =
+                    value.try_as<Media::Imaging::BitmapImage>()) {
+                auto uriSource = bitmapImage.UriSource();
+                if (uriSource) {
+                    winrt::hstring uriString = uriSource.ToString();
+                    if (uriString.starts_with(L"https://") ||
+                        uriString.starts_with(L"http://")) {
+                        Wh_Log(
+                            L"Tracking ImageBrush ImageSource property with "
+                            L"remote source: %s",
+                            uriString.c_str());
+                        SetupImageBrushTracking(imageBrush, uriString);
+                    }
+                }
+            }
+        }
     }
 
     // This might fail. See `ReadLocalValueWithWorkaround` for an example (which
@@ -1596,13 +2418,18 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
     }
     substr = substr.substr(0, substr.size() - std::size(kWindhawkBlurSuffix));
 
-    auto value = XamlBlurBrushParams{
-        .blurAmount = 0,
-        .tint = {},
-    };
+    bool pendingTintColorThemeResource = false;
+    std::wstring tintThemeResourceKey;
+    winrt::Windows::UI::Color tint{};
+    float tintOpacity = std::numeric_limits<float>::quiet_NaN();
+    float blurAmount = 0;
 
-    constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
+    constexpr auto kTintColorThemeResourcePrefix =
+        L"TintColor=\"{ThemeResource"sv;
+    constexpr auto kTintColorThemeResourceSuffix = L"}\""sv;
     constexpr auto kTintColorPrefix = L"TintColor=\"#"sv;
+    constexpr auto kTintOpacityPrefix = L"TintOpacity=\""sv;
+    constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
     for (const auto prop : SplitStringView(substr, L" ")) {
         const auto propSubstr = TrimStringView(prop);
         if (propSubstr.empty()) {
@@ -1612,12 +2439,23 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
         Wh_Log(L"  %.*s", static_cast<int>(propSubstr.length()),
                propSubstr.data());
 
-        if (propSubstr.starts_with(kBlurAmountPrefix) &&
-            propSubstr.back() == L'\"') {
-            auto valStr = propSubstr.substr(
-                std::size(kBlurAmountPrefix),
-                propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
-            value.blurAmount = std::stoi(std::wstring(valStr));
+        if (pendingTintColorThemeResource) {
+            if (!propSubstr.ends_with(kTintColorThemeResourceSuffix)) {
+                throw std::runtime_error(
+                    "WindhawkBlur: Invalid TintColor theme resource syntax");
+            }
+
+            pendingTintColorThemeResource = false;
+
+            tintThemeResourceKey = propSubstr.substr(
+                0,
+                propSubstr.size() - std::size(kTintColorThemeResourceSuffix));
+
+            continue;
+        }
+
+        if (propSubstr == kTintColorThemeResourcePrefix) {
+            pendingTintColorThemeResource = true;
             continue;
         }
 
@@ -1645,14 +2483,53 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             uint8_t r = LOBYTE(HIWORD(valNum));
             uint8_t g = HIBYTE(LOWORD(valNum));
             uint8_t b = LOBYTE(LOWORD(valNum));
-            value.tint = {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            tint = {a, r, g, b};
+            continue;
+        }
+
+        if (propSubstr.starts_with(kTintOpacityPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kTintOpacityPrefix),
+                propSubstr.size() - std::size(kTintOpacityPrefix) - 1);
+            tintOpacity = std::stof(std::wstring(valStr));
+            continue;
+        }
+
+        if (propSubstr.starts_with(kBlurAmountPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kBlurAmountPrefix),
+                propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
+            blurAmount = std::stof(std::wstring(valStr));
             continue;
         }
 
         throw std::runtime_error("WindhawkBlur: Bad property");
     }
 
-    return value;
+    if (pendingTintColorThemeResource) {
+        throw std::runtime_error(
+            "WindhawkBlur: Unterminated TintColor theme resource");
+    }
+
+    if (!std::isnan(tintOpacity)) {
+        if (tintOpacity < 0.0f) {
+            tintOpacity = 0.0f;
+        } else if (tintOpacity > 1.0f) {
+            tintOpacity = 1.0f;
+        }
+
+        tint.A = static_cast<uint8_t>(tintOpacity * 255.0f);
+    }
+
+    return XamlBlurBrushParams{
+        .blurAmount = blurAmount,
+        .tint = tint,
+        .tintOpacity =
+            !std::isnan(tintOpacity) ? std::optional(tint.A) : std::nullopt,
+        .tintThemeResourceKey = std::move(tintThemeResourceKey),
+    };
 }
 
 Style GetStyleFromXamlSetters(const std::wstring_view type,
@@ -1727,7 +2604,9 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
             for (const auto& rule : styleRules) {
                 propertyOverrideValues.push_back(
-                    ParseNonXamlPropertyOverrideValue(rule.value));
+                    rule.isXamlValue
+                        ? ParseNonXamlPropertyOverrideValue(rule.value)
+                        : std::nullopt);
 
                 xaml += L"        <Setter Property=\"";
                 xaml += EscapeXmlAttribute(rule.name);
@@ -2228,59 +3107,6 @@ void CleanupCustomizations(InstanceHandle handle) {
 using StyleConstant = std::pair<std::wstring, std::wstring>;
 using StyleConstants = std::vector<StyleConstant>;
 
-std::optional<StyleConstant> ParseStyleConstant(std::wstring_view constant) {
-    // Skip if commented.
-    if (constant.starts_with(L"//")) {
-        return std::nullopt;
-    }
-
-    auto eqPos = constant.find(L'=');
-    if (eqPos == constant.npos) {
-        Wh_Log(L"Skipping entry with no '=': %.*s",
-               static_cast<int>(constant.length()), constant.data());
-        return std::nullopt;
-    }
-
-    auto key = TrimStringView(constant.substr(0, eqPos));
-    auto val = TrimStringView(constant.substr(eqPos + 1));
-
-    return StyleConstant{std::wstring(key), std::wstring(val)};
-}
-
-StyleConstants LoadStyleConstants(
-    const std::vector<PCWSTR>& themeStyleConstants) {
-    StyleConstants result;
-
-    for (const auto themeStyleConstant : themeStyleConstants) {
-        if (auto parsed = ParseStyleConstant(themeStyleConstant)) {
-            result.push_back(std::move(*parsed));
-        }
-    }
-
-    for (int i = 0;; i++) {
-        string_setting_unique_ptr constantSetting(
-            Wh_GetStringSetting(L"styleConstants[%d]", i));
-        if (!*constantSetting.get()) {
-            break;
-        }
-
-        if (auto parsed = ParseStyleConstant(constantSetting.get())) {
-            result.push_back(std::move(*parsed));
-        }
-    }
-
-    // Reverse the order to allow overriding definitions with the same name.
-    std::reverse(result.begin(), result.end());
-
-    // Sort by name length to replace long names first.
-    std::stable_sort(result.begin(), result.end(),
-                     [](const StyleConstant& a, const StyleConstant& b) {
-                         return a.first.size() > b.first.size();
-                     });
-
-    return result;
-}
-
 std::wstring ApplyStyleConstants(std::wstring_view style,
                                  const StyleConstants& styleConstants) {
     std::wstring result;
@@ -2310,6 +3136,65 @@ std::wstring ApplyStyleConstants(std::wstring_view style,
 
     // Care for the rest after last occurrence.
     result += style.substr(lastPos);
+
+    return result;
+}
+
+std::optional<StyleConstant> ParseStyleConstant(
+    std::wstring_view constant,
+    const StyleConstants& styleConstants) {
+    // Skip if commented.
+    if (constant.starts_with(L"//")) {
+        return std::nullopt;
+    }
+
+    auto eqPos = constant.find(L'=');
+    if (eqPos == constant.npos) {
+        Wh_Log(L"Skipping entry with no '=': %.*s",
+               static_cast<int>(constant.length()), constant.data());
+        return std::nullopt;
+    }
+
+    auto key = TrimStringView(constant.substr(0, eqPos));
+    auto valueRaw = TrimStringView(constant.substr(eqPos + 1));
+    auto value = ApplyStyleConstants(valueRaw, styleConstants);
+
+    return StyleConstant{std::wstring(key), std::move(value)};
+}
+
+StyleConstants LoadStyleConstants(
+    const std::vector<PCWSTR>& themeStyleConstants) {
+    StyleConstants result;
+
+    auto addToResult = [&result](StyleConstant sc) {
+        // Keep sorted by name length to replace long names first. Reverse the
+        // order to allow overriding definitions with the same name.
+        auto insertIndex = std::lower_bound(
+            result.begin(), result.end(), sc,
+            [](const StyleConstant& a, const StyleConstant& b) {
+                return a.first.size() > b.first.size();
+            });
+
+        result.insert(insertIndex, std::move(sc));
+    };
+
+    for (const auto themeStyleConstant : themeStyleConstants) {
+        if (auto parsed = ParseStyleConstant(themeStyleConstant, result)) {
+            addToResult(std::move(*parsed));
+        }
+    }
+
+    for (int i = 0;; i++) {
+        string_setting_unique_ptr constantSetting(
+            Wh_GetStringSetting(L"styleConstants[%d]", i));
+        if (!*constantSetting.get()) {
+            break;
+        }
+
+        if (auto parsed = ParseStyleConstant(constantSetting.get(), result)) {
+            addToResult(std::move(*parsed));
+        }
+    }
 
     return result;
 }
@@ -2541,19 +3426,34 @@ bool ProcessSingleTargetStylesFromSettings(
     return true;
 }
 
-void ProcessAllStylesFromSettings() {
+const Theme* GetSelectedTheme() {
     PCWSTR themeName = Wh_GetStringSetting(L"theme");
     const Theme* theme = nullptr;
-    if (wcscmp(themeName, L"Minimal Explorer11") == 0) {
+    if (wcscmp(themeName, L"Translucent Explorer11") == 0) {
+        theme = &g_themeTranslucent_Explorer11;
+    } else if (wcscmp(themeName, L"MicaBar") == 0) {
+        theme = &g_themeMicaBar;
+    } else if (wcscmp(themeName, L"NoCommandBar") == 0) {
+        theme = &g_themeNoCommandBar;
+    } else if (wcscmp(themeName, L"Minimal Explorer11") == 0) {
         theme = &g_themeMinimal_Explorer11;
     } else if (wcscmp(themeName, L"Tabless") == 0) {
         theme = &g_themeTabless;
-    } else if (wcscmp(themeName, L"NoCommandBar") == 0) {
-        theme = &g_themeNoCommandBar;
-    } else if (wcscmp(themeName, L"MicaBar") == 0) {
-        theme = &g_themeMicaBar;
+    } else if (wcscmp(themeName, L"Matter") == 0) {
+        theme = &g_themeMatter;
+    } else if (wcscmp(themeName, L"WindowGlass") == 0) {
+        theme = &g_themeWindowGlass;
+    } else if (wcscmp(themeName, L"AddressSearchOnly") == 0) {
+        theme = &g_themeAddressSearchOnly;
+    } else if (wcscmp(themeName, L"TintedGlass") == 0) {
+        theme = &g_themeTintedGlass;
     }
     Wh_FreeStringSetting(themeName);
+    return theme;
+}
+
+void ProcessAllStylesFromSettings() {
+    const Theme* theme = GetSelectedTheme();
 
     StyleConstants styleConstants = LoadStyleConstants(
         theme ? theme->styleConstants : std::vector<PCWSTR>{});
@@ -2575,11 +3475,6 @@ void ProcessAllStylesFromSettings() {
                 Wh_Log(L"Error: %S", ex.what());
             }
         }
-
-        g_themeExplorerFrameContainerHeight =
-            theme->explorerFrameContainerHeight;
-    } else {
-        g_themeExplorerFrameContainerHeight = 0;
     }
 
     for (int i = 0;; i++) {
@@ -2595,23 +3490,106 @@ void ProcessAllStylesFromSettings() {
     }
 }
 
-bool ProcessSingleResourceVariableFromSettings(int index) {
-    string_setting_unique_ptr variableKeyStringSetting(
-        Wh_GetStringSetting(L"resourceVariables[%d].variableKey", index));
-    if (!*variableKeyStringSetting.get()) {
+std::optional<ResourceVariableEntry> ParseResourceVariable(
+    std::wstring_view entry,
+    const StyleConstants& styleConstants) {
+    // Skip if commented.
+    if (entry.starts_with(L"//")) {
+        return std::nullopt;
+    }
+
+    // Find the first '=' to split key and value.
+    auto eqPos = entry.find(L'=');
+    if (eqPos == entry.npos) {
+        Wh_Log(L"Skipping entry with no '=': %.*s",
+               static_cast<int>(entry.length()), entry.data());
+        return std::nullopt;
+    }
+
+    auto keyPart = TrimStringView(entry.substr(0, eqPos));
+    auto valueRaw = TrimStringView(entry.substr(eqPos + 1));
+    auto value = ApplyStyleConstants(valueRaw, styleConstants);
+
+    ResourceVariableTheme theme = ResourceVariableTheme::None;
+    std::wstring key;
+
+    // Check for @theme suffix in key part.
+    auto atPos = keyPart.find(L'@');
+    if (atPos != keyPart.npos) {
+        key = TrimStringView(keyPart.substr(0, atPos));
+        auto themePart = TrimStringView(keyPart.substr(atPos + 1));
+        if (themePart == L"Dark") {
+            theme = ResourceVariableTheme::Dark;
+        } else if (themePart == L"Light") {
+            theme = ResourceVariableTheme::Light;
+        } else {
+            Wh_Log(L"Unknown theme '%.*s', expected 'Dark' or 'Light'",
+                   static_cast<int>(themePart.size()), themePart.data());
+            return std::nullopt;
+        }
+    } else {
+        key = std::wstring(keyPart);
+    }
+
+    return ResourceVariableEntry{std::move(key), std::move(value), theme};
+}
+
+constexpr std::wstring_view kThemeResourcePrefix = L"{ThemeResource ";
+
+bool IsThemeResourceReference(std::wstring_view value) {
+    return value.starts_with(kThemeResourcePrefix) && value.ends_with(L"}");
+}
+
+winrt::Windows::Foundation::IInspectable ResolveResourceVariableValue(
+    ResourceDictionary resources,
+    std::wstring_view value) {
+    // Check for {ThemeResource X} syntax - look up the resource directly
+    // to preserve dynamic theme-aware behavior.
+    if (IsThemeResourceReference(value)) {
+        auto resourceKey =
+            value.substr(kThemeResourcePrefix.size(),
+                         value.size() - kThemeResourcePrefix.size() - 1);
+        return resources.Lookup(
+            winrt::box_value(winrt::hstring(TrimStringView(resourceKey))));
+    }
+
+    // For other values, use boxed string (works for colors, etc.).
+    return winrt::box_value(winrt::hstring(value));
+}
+
+// Returns true if a theme resource was added.
+bool ProcessResourceVariableFromSetting(ResourceDictionary resources,
+                                        ResourceDictionary darkDict,
+                                        ResourceDictionary lightDict,
+                                        const ResourceVariableEntry& entry) {
+    auto boxedKey = winrt::box_value(entry.key);
+
+    if (entry.theme != ResourceVariableTheme::None) {
+        // Key@Dark= or Key@Light= - add to theme dict.
+        auto value = ResolveResourceVariableValue(resources, entry.value);
+        if (entry.theme == ResourceVariableTheme::Dark) {
+            darkDict.Insert(boxedKey, value);
+        } else {
+            lightDict.Insert(boxedKey, value);
+        }
+        return true;
+    }
+
+    // key= - convert using existing resource type.
+    auto existingResource = resources.TryLookup(boxedKey);
+    if (!existingResource) {
+        Wh_Log(L"Resource variable key '%s' not found, skipping",
+               entry.key.c_str());
         return false;
     }
 
-    Wh_Log(L"Processing resource variable %s", variableKeyStringSetting.get());
+    if (!g_originalResourceValues.contains(entry.key)) {
+        g_originalResourceValues[entry.key] = existingResource;
+    }
 
-    std::wstring_view variableKey = variableKeyStringSetting.get();
+    auto resourceClassName = winrt::get_class_name(existingResource);
 
-    auto resources = Application::Current().Resources();
-
-    auto resource = resources.Lookup(winrt::box_value(variableKey));
-
-    // Example: Windows.Foundation.IReference`1<Windows.UI.Xaml.Thickness>
-    auto resourceClassName = winrt::get_class_name(resource);
+    // Unwrap IReference<T> to get inner type name.
     if (resourceClassName.starts_with(L"Windows.Foundation.IReference`1<") &&
         resourceClassName.ends_with(L'>')) {
         size_t prefixSize = sizeof("Windows.Foundation.IReference`1<") - 1;
@@ -2620,26 +3598,84 @@ bool ProcessSingleResourceVariableFromSettings(int index) {
                            resourceClassName.size() - prefixSize - 1);
     }
 
-    auto resourceTypeName =
-        winrt::Windows::UI::Xaml::Interop::TypeName{resourceClassName};
+    resources.Insert(
+        boxedKey,
+        Markup::XamlBindingHelper::ConvertValue(
+            winrt::Windows::UI::Xaml::Interop::TypeName{resourceClassName},
+            winrt::box_value(entry.value)));
+    return false;
+}
 
-    string_setting_unique_ptr valueStringSetting(
-        Wh_GetStringSetting(L"resourceVariables[%d].value", index));
+void RefreshThemeResourceEntries() {
+    if (g_themeResourceEntries.empty()) {
+        return;
+    }
 
-    std::wstring_view value = valueStringSetting.get();
+    Wh_Log(L"Refreshing %zu theme resource entries",
+           g_themeResourceEntries.size());
 
-    resources.Insert(winrt::box_value(variableKey),
-                     Markup::XamlBindingHelper::ConvertValue(
-                         resourceTypeName, winrt::box_value(value)));
+    auto resources = Application::Current().Resources();
 
-    return true;
+    auto darkDict = g_resourceVariablesThemeDict.ThemeDictionaries()
+                        .TryLookup(winrt::box_value(L"Dark"))
+                        .try_as<ResourceDictionary>();
+    auto lightDict = g_resourceVariablesThemeDict.ThemeDictionaries()
+                         .TryLookup(winrt::box_value(L"Light"))
+                         .try_as<ResourceDictionary>();
+
+    for (const auto& entry : g_themeResourceEntries) {
+        try {
+            auto boxedKey = winrt::box_value(entry.key);
+            auto value = ResolveResourceVariableValue(resources, entry.value);
+
+            if (entry.theme == ResourceVariableTheme::Dark && darkDict) {
+                darkDict.Insert(boxedKey, value);
+            } else if (entry.theme == ResourceVariableTheme::Light &&
+                       lightDict) {
+                lightDict.Insert(boxedKey, value);
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error refreshing '%s': %08X", entry.key.c_str(),
+                   ex.code());
+        }
+    }
 }
 
 void ProcessResourceVariablesFromSettings() {
+    StyleConstants styleConstants = LoadStyleConstants(std::vector<PCWSTR>{});
+
+    auto resources = Application::Current().Resources();
+
+    // Create theme dictionaries for @Dark/@Light resources.
+    g_resourceVariablesThemeDict = ResourceDictionary();
+    ResourceDictionary darkDict;
+    ResourceDictionary lightDict;
+    bool hasThemeResources = false;
+
     for (int i = 0;; i++) {
+        string_setting_unique_ptr setting(
+            Wh_GetStringSetting(L"themeResourceVariables[%d]", i));
+        if (!*setting.get()) {
+            break;
+        }
+
+        Wh_Log(L"Processing theme resource variable %s", setting.get());
+
+        auto parsed = ParseResourceVariable(setting.get(), styleConstants);
+        if (!parsed) {
+            continue;
+        }
+
         try {
-            if (!ProcessSingleResourceVariableFromSettings(i)) {
-                break;
+            if (ProcessResourceVariableFromSetting(resources, darkDict,
+                                                   lightDict, *parsed)) {
+                hasThemeResources = true;
+
+                // Track entries with {ThemeResource ...} for refresh on color
+                // change.
+                if (IsThemeResourceReference(parsed->value)) {
+                    g_themeResourceEntries.push_back(*parsed);
+                }
             }
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
@@ -2647,9 +3683,66 @@ void ProcessResourceVariablesFromSettings() {
             Wh_Log(L"Error: %S", ex.what());
         }
     }
+
+    if (hasThemeResources) {
+        g_resourceVariablesThemeDict.ThemeDictionaries().Insert(
+            winrt::box_value(L"Dark"), darkDict);
+        g_resourceVariablesThemeDict.ThemeDictionaries().Insert(
+            winrt::box_value(L"Light"), lightDict);
+        resources.MergedDictionaries().Append(g_resourceVariablesThemeDict);
+    }
+
+    // Register for color changes to refresh theme resource references.
+    if (!g_themeResourceEntries.empty()) {
+        g_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
+        auto dispatcherQueue = winrt::Microsoft::UI::Dispatching::
+            DispatcherQueue::GetForCurrentThread();
+        g_colorValuesChangedToken =
+            g_uiSettings.ColorValuesChanged([dispatcherQueue](auto&&, auto&&) {
+                dispatcherQueue.TryEnqueue(
+                    []() { RefreshThemeResourceEntries(); });
+            });
+    }
+}
+
+void UninitializeResourceVariables() {
+    // Unregister color change handler.
+    if (g_colorValuesChangedToken) {
+        g_uiSettings.ColorValuesChanged(g_colorValuesChangedToken);
+        g_colorValuesChangedToken = {};
+    }
+    g_uiSettings = nullptr;
+    g_themeResourceEntries.clear();
+
+    // Restore original resource values.
+    auto resources = Application::Current().Resources();
+    for (const auto& [key, originalValue] : g_originalResourceValues) {
+        try {
+            resources.Insert(winrt::box_value(key), originalValue);
+        } catch (...) {
+            HRESULT hr = winrt::to_hresult();
+            Wh_Log(L"Error %08X", hr);
+        }
+    }
+    g_originalResourceValues.clear();
+
+    // Remove our merged theme dictionary.
+    if (g_resourceVariablesThemeDict) {
+        auto merged = resources.MergedDictionaries();
+        uint32_t index;
+        if (merged.IndexOf(g_resourceVariablesThemeDict, index)) {
+            merged.RemoveAt(index);
+        }
+        g_resourceVariablesThemeDict = nullptr;
+    }
 }
 
 void UninitializeForCurrentThread() {
+    // Clear failed image brushes list for this thread (revokers will
+    // automatically unregister).
+    g_failedImageBrushesForThread.failedImageBrushes.clear();
+    g_failedImageBrushesForThread.dispatcher = nullptr;
+
     for (const auto& [handle, elementCustomizationState] :
          g_elementsCustomizationState) {
         auto element = elementCustomizationState.element.get();
@@ -2664,6 +3757,11 @@ void UninitializeForCurrentThread() {
     g_elementsCustomizationState.clear();
 
     g_elementsCustomizationRules.clear();
+
+    if (g_resourceVariablesInitializedForThread) {
+        UninitializeResourceVariables();
+        g_resourceVariablesInitializedForThread = false;
+    }
 
     g_initializedForThread = false;
 }
@@ -2683,7 +3781,13 @@ void InitializeForCurrentThread() {
     }
 
     ProcessAllStylesFromSettings();
-    ProcessResourceVariablesFromSettings();
+
+    if (Application::Current()) {
+        ProcessResourceVariablesFromSettings();
+        g_resourceVariablesInitializedForThread = true;
+    } else {
+        Wh_Log(L"Application::Current() is null, skipping resource variables");
+    }
 
     g_initializedForThread = true;
 }
@@ -2699,20 +3803,167 @@ void InitializeSettingsAndTap() {
     }
 }
 
-bool IsTargetWindow(HWND hWnd) {
+enum class TargetWindowType {
+    None,
+    FileExplorer,
+    XamlExplorerHost,
+};
+
+TargetWindowType GetTargetWindowType(HWND hWnd) {
     WCHAR className[64];
     if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
-        return false;
+        return TargetWindowType::None;
     }
 
-    return _wcsicmp(className, L"CabinetWClass") == 0 ||
-           _wcsicmp(className, L"XamlExplorerHostIslandWindow_WASDK") == 0;
+    if (_wcsicmp(className, L"CabinetWClass") == 0) {
+        return TargetWindowType::FileExplorer;
+    }
+
+    // Used by the desktop context menu.
+    if (_wcsicmp(className, L"XamlExplorerHostIslandWindow_WASDK") == 0) {
+        return TargetWindowType::XamlExplorerHost;
+    }
+
+    return TargetWindowType::None;
+}
+
+using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
+DwmSetWindowAttribute_t DwmSetWindowAttribute_Original;
+HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hWnd,
+                                          DWORD dwAttribute,
+                                          LPCVOID pvAttribute,
+                                          DWORD cbAttribute) {
+    auto original = [=]() {
+        return DwmSetWindowAttribute_Original(hWnd, dwAttribute, pvAttribute,
+                                              cbAttribute);
+    };
+
+    if (dwAttribute != DWMWA_SYSTEMBACKDROP_TYPE &&
+        dwAttribute != DWMWA_USE_HOSTBACKDROPBRUSH) {
+        return original();
+    }
+
+    if (GetTargetWindowType(hWnd) != TargetWindowType::FileExplorer) {
+        return original();
+    }
+
+    auto backgroundTranslucentEffect =
+        g_settings.backgroundTranslucentEffect.value_or(
+            g_themeBackgroundTranslucentEffect);
+
+    int backdropType;
+    switch (backgroundTranslucentEffect) {
+        case BackgroundTranslucentEffect::kDefault:
+            return original();
+        case BackgroundTranslucentEffect::kAcrylic:
+            backdropType = DWMSBT_TRANSIENTWINDOW;
+            break;
+        case BackgroundTranslucentEffect::kMica:
+            backdropType = DWMSBT_MAINWINDOW;
+            break;
+        case BackgroundTranslucentEffect::kMicaAlt:
+            backdropType = DWMSBT_TABBEDWINDOW;
+            break;
+        case BackgroundTranslucentEffect::kNone:
+            backdropType = DWMSBT_NONE;
+            break;
+    }
+
+    Wh_Log(L">");
+
+    return DwmSetWindowAttribute_Original(hWnd, DWMWA_SYSTEMBACKDROP_TYPE,
+                                          &backdropType, sizeof(backdropType));
+}
+
+using DwmExtendFrameIntoClientArea_t = decltype(&DwmExtendFrameIntoClientArea);
+DwmExtendFrameIntoClientArea_t DwmExtendFrameIntoClientArea_Original;
+HRESULT WINAPI DwmExtendFrameIntoClientArea_Hook(HWND hWnd,
+                                                 const MARGINS* pMarInset) {
+    auto original = [=]() {
+        return DwmExtendFrameIntoClientArea_Original(hWnd, pMarInset);
+    };
+
+    if (GetTargetWindowType(hWnd) != TargetWindowType::FileExplorer) {
+        return original();
+    }
+
+    auto backgroundTranslucentEffect =
+        g_settings.backgroundTranslucentEffect.value_or(
+            g_themeBackgroundTranslucentEffect);
+
+    if (backgroundTranslucentEffect == BackgroundTranslucentEffect::kNone ||
+        g_settings.backgroundTranslucentEffectRegion !=
+            BackgroundTranslucentEffectRegion::kEntireWindow) {
+        return original();
+    }
+
+    Wh_Log(L">");
+
+    MARGINS margins = {-1, -1, -1, -1};
+    return DwmExtendFrameIntoClientArea_Original(hWnd, &margins);
+}
+
+void ApplyBackgroundTranslucentEffect(
+    HWND hWnd,
+    std::optional<BackgroundTranslucentEffect> effectToApply = std::nullopt) {
+    constexpr WCHAR kBackgroundTranslucentEffectAppliedKey[] =
+        L"windhawk_background_effect-" WH_MOD_ID;
+
+    auto effect =
+        effectToApply.value_or(g_settings.backgroundTranslucentEffect.value_or(
+            g_themeBackgroundTranslucentEffect));
+
+    if (effect == BackgroundTranslucentEffect::kNone) {
+        if (!RemoveProp(hWnd, kBackgroundTranslucentEffectAppliedKey)) {
+            return;
+        }
+    } else {
+        SetProp(hWnd, kBackgroundTranslucentEffectAppliedKey, (HANDLE)1);
+    }
+
+    Wh_Log(L"Applying background translucent effect %d for %08X",
+           static_cast<int>(effect), (DWORD)(ULONG_PTR)hWnd);
+
+    if (effect != BackgroundTranslucentEffect::kNone &&
+        g_settings.backgroundTranslucentEffectRegion ==
+            BackgroundTranslucentEffectRegion::kEntireWindow) {
+        MARGINS margins = {-1, -1, -1, -1};
+        DwmExtendFrameIntoClientArea_Original(hWnd, &margins);
+    }
+
+    int backdropType;
+    switch (effect) {
+        case BackgroundTranslucentEffect::kDefault:
+            backdropType = DWMSBT_TABBEDWINDOW;
+            break;
+        case BackgroundTranslucentEffect::kAcrylic:
+            backdropType = DWMSBT_TRANSIENTWINDOW;
+            break;
+        case BackgroundTranslucentEffect::kMica:
+            backdropType = DWMSBT_MAINWINDOW;
+            break;
+        case BackgroundTranslucentEffect::kMicaAlt:
+            backdropType = DWMSBT_TABBEDWINDOW;
+            break;
+        case BackgroundTranslucentEffect::kNone:
+            backdropType = DWMSBT_NONE;
+            break;
+    }
+
+    DwmSetWindowAttribute_Original(hWnd, DWMWA_SYSTEMBACKDROP_TYPE,
+                                   &backdropType, sizeof(backdropType));
 }
 
 void OnWindowCreated(HWND hWnd, PCSTR funcName) {
-    if (IsTargetWindow(hWnd)) {
+    TargetWindowType windowType = GetTargetWindowType(hWnd);
+    if (windowType != TargetWindowType::None) {
         Wh_Log(L"Initializing - Created window %08X via %S",
                (DWORD)(ULONG_PTR)hWnd, funcName);
+
+        if (windowType == TargetWindowType::FileExplorer) {
+            ApplyBackgroundTranslucentEffect(hWnd);
+        }
+
         InitializeForCurrentThread();
         InitializeSettingsAndTap();
     }
@@ -2824,6 +4075,125 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
+PFN_INITIALIZE_XAML_DIAGNOSTICS_EX InitializeXamlDiagnosticsEx_Original;
+HRESULT WINAPI
+InitializeXamlDiagnosticsEx_Hook(_In_ PCWSTR endPointName,
+                                 _In_ DWORD pid,
+                                 _In_ PCWSTR wszDllXamlDiagnostics,
+                                 _In_ PCWSTR wszTAPDllName,
+                                 _In_ CLSID tapClsid,
+                                 _In_opt_ PCWSTR wszInitializationData) {
+    if (g_inInjectWindhawkTAP) {
+        return InitializeXamlDiagnosticsEx_Original(
+            endPointName, pid, wszDllXamlDiagnostics, wszTAPDllName, tapClsid,
+            wszInitializationData);
+    }
+
+    bool blockCall = false;
+
+    switch (g_settings.xamlDiagnosticsHandling) {
+        case XamlDiagnosticsHandling::kAlert: {
+            void* retAddress = __builtin_return_address(0);
+
+            WCHAR modulePath[MAX_PATH];
+            PCWSTR modulePathStr = L"<unknown>";
+            HMODULE module;
+            if (GetModuleHandleEx(
+                    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                    reinterpret_cast<LPCWSTR>(retAddress), &module)) {
+                switch (GetModuleFileName(module, modulePath,
+                                          ARRAYSIZE(modulePath))) {
+                    case 0:
+                    case ARRAYSIZE(modulePath):
+                        break;
+
+                    default:
+                        modulePathStr = modulePath;
+                        break;
+                }
+            }
+
+            WCHAR message[1024];
+            _snwprintf_s(
+                message, _TRUNCATE,
+                L"The following module is trying to use XAML diagnostics:\n\n"
+                L"%s\n\n"
+                L"There can only be one consumer at a time. Blocking it might "
+                L"break that module, but allowing it might break this mod.\n\n"
+                L"Do you want to block it?\n\n"
+                L"Note: You can change this behavior in the mod settings.",
+                modulePathStr);
+            int result = MessageBox(
+                nullptr, message, L"Windows 11 File Explorer Styler - Windhawk",
+                MB_YESNO | MB_ICONQUESTION | MB_TOPMOST);
+            blockCall = (result == IDYES);
+            break;
+        }
+
+        case XamlDiagnosticsHandling::kBlock:
+            blockCall = true;
+            break;
+
+        case XamlDiagnosticsHandling::kAllow:
+            blockCall = false;
+            break;
+    }
+
+    if (blockCall) {
+        Wh_Log(L"Blocking InitializeXamlDiagnosticsEx call");
+        // Return success to avoid exception in the caller.
+        return S_OK;
+    }
+
+    Wh_Log(L"Allowing InitializeXamlDiagnosticsEx call");
+    return InitializeXamlDiagnosticsEx_Original(
+        endPointName, pid, wszDllXamlDiagnostics, wszTAPDllName, tapClsid,
+        wszInitializationData);
+}
+
+void HookInitializeXamlDiagnosticsExIfNeeded() {
+    if (InitializeXamlDiagnosticsEx_Original) {
+        return;  // Already hooked
+    }
+
+    const HMODULE wux = GetModuleHandle(L"Microsoft.Internal.FrameworkUdk.dll");
+    if (!wux) {
+        return;  // DLL not loaded yet
+    }
+
+    const auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
+        GetProcAddress(wux, "InitializeXamlDiagnosticsEx"));
+    if (!ixde) {
+        return;
+    }
+
+    Wh_Log(L"Hooking InitializeXamlDiagnosticsEx to handle other consumers");
+    WindhawkUtils::SetFunctionHook(ixde, InitializeXamlDiagnosticsEx_Hook,
+                                   &InitializeXamlDiagnosticsEx_Original);
+    Wh_ApplyHookOperations();
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+
+    if (module && !InitializeXamlDiagnosticsEx_Original && lpLibFileName) {
+        PCWSTR fileName = wcsrchr(lpLibFileName, L'\\');
+        fileName = fileName ? fileName + 1 : lpLibFileName;
+        // CoreMessagingXP.dll loads Microsoft.Internal.FrameworkUdk.dll via the
+        // import table.
+        if (_wcsicmp(fileName, L"CoreMessagingXP.dll") == 0) {
+            HookInitializeXamlDiagnosticsExIfNeeded();
+        }
+    }
+
+    return module;
+}
+
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
 bool RunFromWindowThread(HWND hWnd,
@@ -2893,7 +4263,7 @@ std::vector<HWND> GetTargetWnds() {
                 return TRUE;
             }
 
-            if (IsTargetWindow(hWnd)) {
+            if (GetTargetWindowType(hWnd) != TargetWindowType::None) {
                 param.hWnds->push_back(hWnd);
             }
 
@@ -2932,7 +4302,8 @@ XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Hook(void* pThis,
 }
 
 bool HookWindowsUIFileExplorerSymbols() {
-    HMODULE module = LoadLibrary(L"Windows.UI.FileExplorer.dll");
+    HMODULE module = LoadLibraryEx(L"Windows.UI.FileExplorer.dll", nullptr,
+                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Couldn't load Windows.UI.FileExplorer.dll");
         return false;
@@ -2955,39 +4326,237 @@ bool HookWindowsUIFileExplorerSymbols() {
     return true;
 }
 
+PTP_TIMER g_statsTimer;
+
+bool StartStatsTimer() {
+    static constexpr WCHAR kStatsBaseUrl[] =
+        L"https://github.com/ramensoftware/"
+        L"windows-11-file-explorer-styling-guide/"
+        L"releases/download/stats-v3/";
+
+    ULONGLONG lastStatsTime = 0;
+    Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
+                      sizeof(lastStatsTime));
+
+    // -1 can be set for disabling the stats timer.
+    if (lastStatsTime == 0xFFFFFFFF'FFFFFFFF) {
+        return false;
+    }
+
+    FILETIME currentTimeFt;
+    GetSystemTimeAsFileTime(&currentTimeFt);
+
+    ULONGLONG currentTime = ((ULONGLONG)currentTimeFt.dwHighDateTime << 32) |
+                            currentTimeFt.dwLowDateTime;
+
+    constexpr ULONGLONG k10Minutes = 10 * 60 * 10000000LL;
+    constexpr ULONGLONG k24Hours = 24 * 60 * 60 * 10000000LL;
+
+    ULONGLONG minDueTime = currentTime + k10Minutes;
+    ULONGLONG maxDueTime = currentTime + k24Hours;
+
+    ULONGLONG dueTime = k24Hours - (currentTime - lastStatsTime);
+    if (dueTime < minDueTime) {
+        dueTime = minDueTime;
+    } else if (dueTime > maxDueTime) {
+        dueTime = maxDueTime;
+    }
+
+    g_statsTimer = CreateThreadpoolTimer(
+        [](PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) {
+            Wh_Log(L">");
+
+            string_setting_unique_ptr themeName(Wh_GetStringSetting(L"theme"));
+            if (!*themeName.get()) {
+                return;
+            }
+
+            HANDLE mutex =
+                CreateMutex(nullptr, FALSE, L"WindhawkStats_" WH_MOD_ID);
+            if (mutex) {
+                WaitForSingleObject(mutex, INFINITE);
+            }
+
+            ULONGLONG lastStatsTime = 0;
+            Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
+                              sizeof(lastStatsTime));
+
+            FILETIME currentTimeFt;
+            GetSystemTimeAsFileTime(&currentTimeFt);
+            ULONGLONG currentTime =
+                ((ULONGLONG)currentTimeFt.dwHighDateTime << 32) |
+                currentTimeFt.dwLowDateTime;
+
+            const WH_URL_CONTENT* content = nullptr;
+            if (currentTime - lastStatsTime >= k10Minutes) {
+                Wh_SetBinaryValue(L"statsTimerLastTime", &currentTime,
+                                  sizeof(currentTime));
+
+                std::wstring themeNameEscaped = themeName.get();
+                std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
+                             L' ', L'_');
+                std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
+                             L'&', L'_');
+
+                std::wstring statsUrl = kStatsBaseUrl;
+                statsUrl += themeNameEscaped;
+                statsUrl += L".txt";
+
+                Wh_Log(L"Submitting stats to %s", statsUrl.c_str());
+
+                content = Wh_GetUrlContent(statsUrl.c_str(), nullptr);
+            } else {
+                Wh_Log(L"Skipping, last submission %llu seconds ago",
+                       (currentTime - lastStatsTime) / 10000000LL);
+            }
+
+            if (mutex) {
+                ReleaseMutex(mutex);
+                CloseHandle(mutex);
+            }
+
+            if (!content) {
+                Wh_Log(L"Failed to get stats content");
+                return;
+            }
+
+            if (content->statusCode != 200) {
+                Wh_Log(L"Stats content status code: %d", content->statusCode);
+            }
+
+            Wh_FreeUrlContent(content);
+            Wh_Log(L"Stats content submitted");
+        },
+        nullptr, nullptr);
+    if (!g_statsTimer) {
+        Wh_Log(L"Failed to create stats timer");
+        return false;
+    }
+
+    constexpr DWORD k24HoursInMs = 24 * 60 * 60 * 1000;
+    constexpr ULONGLONG k10MinutesInMs = 10 * 60 * 1000;
+
+    FILETIME dueTimeFt;
+    dueTimeFt.dwLowDateTime = (DWORD)(dueTime & 0xFFFFFFFF);
+    dueTimeFt.dwHighDateTime = (DWORD)(dueTime >> 32);
+    SetThreadpoolTimer(g_statsTimer, &dueTimeFt, k24HoursInMs, k10MinutesInMs);
+    return true;
+}
+
+void StopStatsTimer() {
+    if (g_statsTimer) {
+        SetThreadpoolTimer(g_statsTimer, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(g_statsTimer, TRUE);
+        CloseThreadpoolTimer(g_statsTimer);
+        g_statsTimer = nullptr;
+    }
+}
+
 void LoadSettings() {
+    PCWSTR backgroundTranslucentEffectRegion =
+        Wh_GetStringSetting(L"backgroundTranslucentEffectRegion");
+    g_settings.backgroundTranslucentEffectRegion =
+        BackgroundTranslucentEffectRegion::kExplorerFrame;
+    if (wcscmp(backgroundTranslucentEffectRegion, L"entireWindow") == 0) {
+        g_settings.backgroundTranslucentEffectRegion =
+            BackgroundTranslucentEffectRegion::kEntireWindow;
+    }
+    Wh_FreeStringSetting(backgroundTranslucentEffectRegion);
+
+    PCWSTR backgroundTranslucentEffect =
+        Wh_GetStringSetting(L"backgroundTranslucentEffect");
+    g_settings.backgroundTranslucentEffect.reset();
+    if (wcscmp(backgroundTranslucentEffect, L"default") == 0) {
+        g_settings.backgroundTranslucentEffect =
+            BackgroundTranslucentEffect::kDefault;
+    } else if (wcscmp(backgroundTranslucentEffect, L"acrylic") == 0) {
+        g_settings.backgroundTranslucentEffect =
+            BackgroundTranslucentEffect::kAcrylic;
+    } else if (wcscmp(backgroundTranslucentEffect, L"mica") == 0) {
+        g_settings.backgroundTranslucentEffect =
+            BackgroundTranslucentEffect::kMica;
+    } else if (wcscmp(backgroundTranslucentEffect, L"micaAlt") == 0) {
+        g_settings.backgroundTranslucentEffect =
+            BackgroundTranslucentEffect::kMicaAlt;
+    } else if (wcscmp(backgroundTranslucentEffect, L"none") == 0) {
+        g_settings.backgroundTranslucentEffect =
+            BackgroundTranslucentEffect::kNone;
+    }
+    Wh_FreeStringSetting(backgroundTranslucentEffect);
+
     g_settings.explorerFrameContainerHeight =
         Wh_GetIntSetting(L"explorerFrameContainerHeight");
+
+    PCWSTR xamlDiagnosticsHandling =
+        Wh_GetStringSetting(L"xamlDiagnosticsHandling");
+    g_settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kAlert;
+    if (wcscmp(xamlDiagnosticsHandling, L"block") == 0) {
+        g_settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kBlock;
+    } else if (wcscmp(xamlDiagnosticsHandling, L"allow") == 0) {
+        g_settings.xamlDiagnosticsHandling = XamlDiagnosticsHandling::kAllow;
+    }
+    Wh_FreeStringSetting(xamlDiagnosticsHandling);
+}
+
+void LoadThemeSettings() {
+    const Theme* theme = GetSelectedTheme();
+    g_themeBackgroundTranslucentEffect =
+        theme ? theme->backgroundTranslucentEffect
+              : BackgroundTranslucentEffect::kDefault;
+    g_themeExplorerFrameContainerHeight =
+        theme ? theme->explorerFrameContainerHeight : 0;
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
+    LoadThemeSettings();
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                   &CreateWindowExW_Original);
 
-    HMODULE user32Module = LoadLibrary(L"user32.dll");
+    WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute,
+                                   DwmSetWindowAttribute_Hook,
+                                   &DwmSetWindowAttribute_Original);
+
+    WindhawkUtils::SetFunctionHook(DwmExtendFrameIntoClientArea,
+                                   DwmExtendFrameIntoClientArea_Hook,
+                                   &DwmExtendFrameIntoClientArea_Original);
+
+    HMODULE user32Module =
+        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (user32Module) {
-        void* pCreateWindowInBand =
-            (void*)GetProcAddress(user32Module, "CreateWindowInBand");
+        auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
+            user32Module, "CreateWindowInBand");
         if (pCreateWindowInBand) {
-            Wh_SetFunctionHook(pCreateWindowInBand,
-                               (void*)CreateWindowInBand_Hook,
-                               (void**)&CreateWindowInBand_Original);
+            WindhawkUtils::SetFunctionHook(pCreateWindowInBand,
+                                           CreateWindowInBand_Hook,
+                                           &CreateWindowInBand_Original);
         }
 
-        void* pCreateWindowInBandEx =
-            (void*)GetProcAddress(user32Module, "CreateWindowInBandEx");
+        auto pCreateWindowInBandEx = (CreateWindowInBandEx_t)GetProcAddress(
+            user32Module, "CreateWindowInBandEx");
         if (pCreateWindowInBandEx) {
-            Wh_SetFunctionHook(pCreateWindowInBandEx,
-                               (void*)CreateWindowInBandEx_Hook,
-                               (void**)&CreateWindowInBandEx_Original);
+            WindhawkUtils::SetFunctionHook(pCreateWindowInBandEx,
+                                           CreateWindowInBandEx_Hook,
+                                           &CreateWindowInBandEx_Original);
         }
     }
 
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
+
+    // Hook immediately if DLL is already loaded.
+    HookInitializeXamlDiagnosticsExIfNeeded();
+
     HookWindowsUIFileExplorerSymbols();
+
+    StartStatsTimer();
 
     return TRUE;
 }
@@ -2999,7 +4568,18 @@ void Wh_ModAfterInit() {
     for (auto hTargetWnd : hTargetWnds) {
         Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hTargetWnd);
         RunFromWindowThread(
-            hTargetWnd, [](PVOID) { InitializeForCurrentThread(); }, nullptr);
+            hTargetWnd,
+            [](PVOID param) {
+                HWND hTargetWnd = (HWND)param;
+
+                InitializeForCurrentThread();
+
+                if (GetTargetWindowType(hTargetWnd) ==
+                    TargetWindowType::FileExplorer) {
+                    ApplyBackgroundTranslucentEffect(hTargetWnd);
+                }
+            },
+            (PVOID)hTargetWnd);
     }
 
     if (hTargetWnds.size() > 0) {
@@ -3011,13 +4591,46 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
+    StopStatsTimer();
+
     UninitializeSettingsAndTap();
 
     auto hTargetWnds = GetTargetWnds();
     for (auto hTargetWnd : hTargetWnds) {
         Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hTargetWnd);
         RunFromWindowThread(
-            hTargetWnd, [](PVOID) { UninitializeForCurrentThread(); }, nullptr);
+            hTargetWnd,
+            [](PVOID param) {
+                HWND hTargetWnd = (HWND)param;
+
+                UninitializeForCurrentThread();
+
+                if (GetTargetWindowType(hTargetWnd) ==
+                    TargetWindowType::FileExplorer) {
+                    ApplyBackgroundTranslucentEffect(
+                        hTargetWnd, BackgroundTranslucentEffect::kDefault);
+                }
+            },
+            (PVOID)hTargetWnd);
+    }
+
+    // Unregister global network status change handler.
+    if (g_networkStatusChangedToken) {
+        try {
+            winrt::Windows::Networking::Connectivity::NetworkInformation::
+                NetworkStatusChanged(g_networkStatusChangedToken);
+            Wh_Log(L"Unregistered global network status change handler");
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error unregistering network status handler %08X: %s",
+                   ex.code(), ex.message().c_str());
+        }
+        g_networkStatusChangedToken = {};
+    }
+
+    // Clear the dispatcher registry.
+    {
+        std::lock_guard<std::mutex> lock(g_failedImageBrushesRegistryMutex);
+        g_failedImageBrushesRegistry.clear();
     }
 }
 
@@ -3026,22 +4639,30 @@ void Wh_ModSettingsChanged() {
 
     UninitializeSettingsAndTap();
 
+    LoadSettings();
+    LoadThemeSettings();
+
     auto hTargetWnds = GetTargetWnds();
     for (auto hTargetWnd : hTargetWnds) {
         Wh_Log(L"Reinitializing for %08X", (DWORD)(ULONG_PTR)hTargetWnd);
         RunFromWindowThread(
             hTargetWnd,
-            [](PVOID) {
+            [](PVOID param) {
+                HWND hTargetWnd = (HWND)param;
+
                 UninitializeForCurrentThread();
                 InitializeForCurrentThread();
+
+                if (GetTargetWindowType(hTargetWnd) ==
+                    TargetWindowType::FileExplorer) {
+                    ApplyBackgroundTranslucentEffect(hTargetWnd);
+                }
             },
-            nullptr);
+            (PVOID)hTargetWnd);
     }
 
     if (hTargetWnds.size() > 0) {
         Wh_Log(L"Reinitializing - Found target windows");
         InitializeSettingsAndTap();
     }
-
-    LoadSettings();
 }

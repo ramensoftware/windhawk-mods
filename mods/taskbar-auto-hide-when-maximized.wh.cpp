@@ -2,14 +2,14 @@
 // @id              taskbar-auto-hide-when-maximized
 // @name            Taskbar auto-hide when maximized
 // @description     Makes the taskbar auto-hide only when a window is maximized or intersects the taskbar
-// @version         1.2.3
+// @version         1.2.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lole32 -loleaut32 -lversion
+// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -109,6 +109,7 @@ enum class WinVersion {
 
 WinVersion g_winVersion;
 
+std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
@@ -117,7 +118,9 @@ bool g_wasAutoHideDisabled;
 std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread;
 std::unordered_map<void*, HWND> g_taskbarsKeptShown;
+std::unordered_map<HWND, void*> g_taskbarToViewCoordinator;
 UINT_PTR g_pendingEventsTimer;
+std::atomic<bool> g_multitaskingViewActive;
 
 // TrayUI::_HandleTrayPrivateSettingMessage
 constexpr UINT kHandleTrayPrivateSettingMessage = WM_USER + 0x1CA;
@@ -159,12 +162,52 @@ WINOLEAPI CoDecrementMTAUsage(CO_MTA_USAGE_COOKIE Cookie);
 using IsWindowArranged_t = BOOL(WINAPI*)(HWND hwnd);
 IsWindowArranged_t pIsWindowArranged;
 
+// Private API for window band (z-order band).
+// https://blog.adeltax.com/window-z-order-in-windows-10/
+using GetWindowBand_t = BOOL(WINAPI*)(HWND hWnd, PDWORD pdwBand);
+GetWindowBand_t pGetWindowBand;
+
 // https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507
 bool IsWindowCloaked(HWND hwnd) {
     BOOL isCloaked = FALSE;
     return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked,
                                            sizeof(isCloaked))) &&
            isCloaked;
+}
+
+// Detects Win+Tab / Task View window.
+// Uses ZBID_IMMERSIVE_APPCHROME band, MultitaskingView thread description, and
+// taskbar process.
+bool IsMultitaskingViewWindow(HWND hWnd) {
+    // Must be in the current process (explorer.exe).
+    DWORD dwProcessId = 0;
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, &dwProcessId);
+    if (!dwThreadId || dwProcessId != GetCurrentProcessId()) {
+        return false;
+    }
+
+    // Check window band - must be ZBID_IMMERSIVE_APPCHROME (5).
+    DWORD band = 0;
+    if (!pGetWindowBand || !pGetWindowBand(hWnd, &band) || band != 5) {
+        return false;
+    }
+
+    // Check thread description for "MultitaskingView".
+    HANDLE hThread =
+        OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, dwThreadId);
+    if (!hThread) {
+        return false;
+    }
+
+    bool isMultitaskingView = false;
+    PWSTR description = nullptr;
+    if (SUCCEEDED(GetThreadDescription(hThread, &description)) && description) {
+        isMultitaskingView = wcscmp(description, L"MultitaskingView") == 0;
+        LocalFree(description);
+    }
+
+    CloseHandle(hThread);
+    return isMultitaskingView;
 }
 
 HWND FindCurrentProcessTaskbarWnd() {
@@ -311,6 +354,63 @@ std::wstring GetWindowAppId(HWND hWnd) {
     return result;
 }
 
+std::wstring GetProcessFileName(DWORD dwProcessId) {
+    HANDLE hProcess =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
+    if (!hProcess) {
+        return std::wstring{};
+    }
+
+    WCHAR processPath[MAX_PATH];
+
+    DWORD dwSize = ARRAYSIZE(processPath);
+    if (!QueryFullProcessImageName(hProcess, 0, processPath, &dwSize)) {
+        CloseHandle(hProcess);
+        return std::wstring{};
+    }
+
+    CloseHandle(hProcess);
+
+    PCWSTR processFileName = wcsrchr(processPath, L'\\');
+    if (!processFileName) {
+        return std::wstring{};
+    }
+
+    processFileName++;
+    return processFileName;
+}
+
+std::wstring GetWindowLogInfo(HWND hWnd) {
+    DWORD dwProcessId = 0;
+    GetWindowThreadProcessId(hWnd, &dwProcessId);
+    std::wstring processName = GetProcessFileName(dwProcessId);
+
+    WCHAR className[256];
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
+        wcscpy_s(className, L"<unknown>");
+    }
+
+    WCHAR windowName[256];
+    if (!GetWindowText(hWnd, windowName, ARRAYSIZE(windowName))) {
+        windowName[0] = L'\0';
+    }
+
+    LONG style = GetWindowLong(hWnd, GWL_STYLE);
+    LONG exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+
+    RECT rect{};
+    GetWindowRect(hWnd, &rect);
+
+    WCHAR buffer[1024];
+    swprintf_s(buffer,
+               L"window %08X: PID=%u, process=%s, class=%s, name=%s, "
+               L"style=0x%08X, exStyle=0x%08X, rect={%d,%d,%d,%d}",
+               (DWORD)(DWORD_PTR)hWnd, dwProcessId, processName.c_str(),
+               className, windowName, style, exStyle, rect.left, rect.top,
+               rect.right, rect.bottom);
+    return buffer;
+}
+
 bool IsWindowExcluded(HWND hWnd) {
     if (g_settings.excludedPrograms.empty()) {
         return false;
@@ -431,13 +531,18 @@ bool CanHideTaskbarForWindow(HWND hWnd,
     return false;
 }
 
-bool ShouldKeepTaskbarShown(HMONITOR monitor) {
+bool ShouldKeepTaskbarShown(HWND hTaskbarWnd, HMONITOR monitor) {
     if (g_settings.primaryMonitorOnly &&
         monitor != MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY)) {
         return false;
     }
 
     if (g_settings.mode == Mode::never) {
+        return true;
+    }
+
+    // Always show taskbar when MultitaskingView (Win+Tab) is active.
+    if (g_multitaskingViewActive) {
         return true;
     }
 
@@ -471,7 +576,8 @@ bool ShouldKeepTaskbarShown(HMONITOR monitor) {
             return TRUE;
         }
 
-        Wh_Log(L"Can hide taskbar for window %p", hWnd);
+        Wh_Log(L"Can hide taskbar %08X for %s", (DWORD)(DWORD_PTR)hTaskbarWnd,
+               GetWindowLogInfo(hWnd).c_str());
         return FALSE;
     };
 
@@ -575,6 +681,60 @@ bool AdjustAllTaskbarsIfNotPending() {
     return true;
 }
 
+using ViewCoordinator_ShouldStayExpandedChanged_t =
+    void(WINAPI*)(void* pThis, HWND hMMTaskbarWnd, bool shouldStayExpanded);
+ViewCoordinator_ShouldStayExpandedChanged_t
+    ViewCoordinator_ShouldStayExpandedChanged_Original;
+void WINAPI
+ViewCoordinator_ShouldStayExpandedChanged_Hook(void* pThis,
+                                               HWND hMMTaskbarWnd,
+                                               bool shouldStayExpanded) {
+    Wh_Log(L"> shouldStayExpanded=%d", shouldStayExpanded);
+
+    g_taskbarToViewCoordinator[hMMTaskbarWnd] = pThis;
+
+    ViewCoordinator_ShouldStayExpandedChanged_Original(pThis, hMMTaskbarWnd,
+                                                       shouldStayExpanded);
+}
+
+using ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_t =
+    void(WINAPI*)(void* pThis,
+                  HWND hMMTaskbarWnd,
+                  bool isPointerOver,
+                  int inputDeviceKind);
+ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_t
+    ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original;
+void WINAPI ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Hook(
+    void* pThis,
+    HWND hMMTaskbarWnd,
+    bool isPointerOver,
+    int inputDeviceKind) {
+    Wh_Log(L"> isPointerOver=%d", isPointerOver);
+
+    g_taskbarToViewCoordinator[hMMTaskbarWnd] = pThis;
+
+    if (!isPointerOver) {
+        for (const auto& pair : g_taskbarsKeptShown) {
+            if (pair.second == hMMTaskbarWnd) {
+                return;
+            }
+        }
+    }
+
+    ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original(
+        pThis, hMMTaskbarWnd, isPointerOver, inputDeviceKind);
+}
+
+void NotifyViewCoordinatorPointerOverChanged(HWND hWnd, bool isPointerOver) {
+    if (ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original) {
+        auto it = g_taskbarToViewCoordinator.find(hWnd);
+        if (it != g_taskbarToViewCoordinator.end()) {
+            ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original(
+                it->second, hWnd, isPointerOver, 2);
+        }
+    }
+}
+
 void* TrayUI_vftable_IInspectable;
 void* TrayUI_vftable_ITrayComponentHost;
 void* CSecondaryTray_vftable_ISecondaryTray;
@@ -650,6 +810,9 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     if (Msg == WM_NCCREATE) {
         Wh_Log(L"WM_NCCREATE: %08X", (DWORD)(ULONG_PTR)hWnd);
         AdjustTaskbar(hWnd);
+    } else if (Msg == WM_NCDESTROY) {
+        Wh_Log(L"WM_NCDESTROY: %08X", (DWORD)(ULONG_PTR)hWnd);
+        g_taskbarToViewCoordinator.erase(hWnd);
     } else if (Msg == kHandleTrayPrivateSettingMessage) {
         // Prevent auto-hide from being disabled while the mod is loaded.
         if ((DWORD)wParam == 4) {
@@ -683,7 +846,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
         }
 
         HMONITOR monitor = TrayUI_GetStuckMonitor_Original(pThis);
-        bool keepShown = ShouldKeepTaskbarShown(monitor);
+        bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
 
         void* pTrayUI_IInspectable =
             QueryViaVtableBackwards(pThis, TrayUI_vftable_IInspectable);
@@ -699,10 +862,14 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                 void* pTrayUI_ITrayComponentHost =
                     QueryViaVtable(pThis, TrayUI_vftable_ITrayComponentHost);
                 TrayUI_Unhide_Original(pTrayUI_ITrayComponentHost, 0, 0);
+
+                NotifyViewCoordinatorPointerOverChanged(hWnd, true);
             } else {
                 g_taskbarsKeptShown.erase(pTrayUI_IInspectable);
 
                 SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
+
+                NotifyViewCoordinatorPointerOverChanged(hWnd, false);
             }
         }
 
@@ -728,6 +895,9 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
     if (Msg == WM_NCCREATE) {
         Wh_Log(L"WM_NCCREATE: %08X", (DWORD)(ULONG_PTR)hWnd);
         AdjustTaskbar(hWnd);
+    } else if (Msg == WM_NCDESTROY) {
+        Wh_Log(L"WM_NCDESTROY: %08X", (DWORD)(ULONG_PTR)hWnd);
+        g_taskbarToViewCoordinator.erase(hWnd);
     } else if (Msg == g_updateTaskbarStateRegisteredMsg) {
         void* pCSecondaryTray_ISecondaryTray =
             QueryViaVtable(pThis, CSecondaryTray_vftable_ISecondaryTray);
@@ -735,7 +905,7 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
         HMONITOR monitor =
             CSecondaryTray_GetMonitor_Original(pCSecondaryTray_ISecondaryTray);
 
-        bool keepShown = ShouldKeepTaskbarShown(monitor);
+        bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
 
         bool keptShown = g_taskbarsKeptShown.contains(pThis);
 
@@ -746,10 +916,14 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
                 g_taskbarsKeptShown[pThis] = hWnd;
 
                 CSecondaryTray__Unhide_Original(pThis, 0, 0);
+
+                NotifyViewCoordinatorPointerOverChanged(hWnd, true);
             } else {
                 g_taskbarsKeptShown.erase(pThis);
 
                 SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
+
+                NotifyViewCoordinatorPointerOverChanged(hWnd, false);
             }
         }
 
@@ -781,7 +955,51 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
         return;
     }
 
-    Wh_Log(L"> %08X", (DWORD)(ULONG_PTR)hWnd);
+    // Check for Multitasking View (Win+Tab) window state changes.
+    if (IsMultitaskingViewWindow(hWnd)) {
+        bool entering = event == EVENT_OBJECT_SHOW ||
+                        event == EVENT_OBJECT_UNCLOAKED ||
+                        event == EVENT_OBJECT_CREATE;
+        bool leaving = event == EVENT_OBJECT_HIDE ||
+                       event == EVENT_OBJECT_CLOAKED ||
+                       event == EVENT_OBJECT_DESTROY;
+
+        if (entering && !g_multitaskingViewActive.exchange(true)) {
+            Wh_Log(L"MultitaskingView entering");
+        } else if (leaving && g_multitaskingViewActive.exchange(false)) {
+            Wh_Log(L"MultitaskingView leaving");
+        } else {
+            return;
+        }
+
+        // Fall through to trigger timer for all taskbars.
+    }
+
+    Wh_Log(
+        L"Event %s for %s",
+        [](DWORD event) -> PCWSTR {
+            switch (event) {
+                case EVENT_OBJECT_CREATE:
+                    return L"OBJECT_CREATE";
+                case EVENT_OBJECT_DESTROY:
+                    return L"OBJECT_DESTROY";
+                case EVENT_OBJECT_SHOW:
+                    return L"OBJECT_SHOW";
+                case EVENT_OBJECT_HIDE:
+                    return L"OBJECT_HIDE";
+                case EVENT_OBJECT_LOCATIONCHANGE:
+                    return L"OBJECT_LOCATIONCHANGE";
+                case EVENT_OBJECT_CLOAKED:
+                    return L"OBJECT_CLOAKED";
+                case EVENT_OBJECT_UNCLOAKED:
+                    return L"OBJECT_UNCLOAKED";
+                case EVENT_SYSTEM_FOREGROUND:
+                    return L"SYSTEM_FOREGROUND";
+                default:
+                    return L"UNKNOWN";
+            }
+        }(event),
+        GetWindowLogInfo(hWnd).c_str());
 
     if (g_pendingEventsTimer) {
         return;
@@ -871,7 +1089,55 @@ DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
         UnhookWinEvent(winSystemEventHook1);
     }
 
+    g_multitaskingViewActive = false;
+
     return 0;
+}
+
+bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldStayExpandedChanged(unsigned __int64,bool))"},
+            &ViewCoordinator_ShouldStayExpandedChanged_Original,
+            ViewCoordinator_ShouldStayExpandedChanged_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::HandleIsPointerOverTaskbarFrameChanged(unsigned __int64,bool,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
+            &ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original,
+            ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Hook,
+            true,
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -1053,16 +1319,23 @@ bool HandleLoadedExplorerPatcher() {
     return true;
 }
 
+void HandleLoadedModuleIfExplorerPatcher(HMODULE module) {
+    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
+        if (IsExplorerPatcherModule(module)) {
+            HookExplorerPatcherSymbols(module);
+        }
+    }
+}
+
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
-        if (IsExplorerPatcherModule(module)) {
-            HookExplorerPatcherSymbols(module);
-        }
+    if (module) {
+        HandleLoadedModuleIfExplorerPatcher(module);
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
     }
 
     return module;
@@ -1073,7 +1346,8 @@ bool HookTaskbarSymbols() {
     if (g_winVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
     } else {
-        module = LoadLibrary(L"taskbar.dll");
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
@@ -1197,10 +1471,13 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    HMODULE hUser32Module = LoadLibrary(L"user32.dll");
+    HMODULE hUser32Module =
+        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hUser32Module) {
         pIsWindowArranged = (IsWindowArranged_t)GetProcAddress(
             hUser32Module, "IsWindowArranged");
+        pGetWindowBand =
+            (GetWindowBand_t)GetProcAddress(hUser32Module, "GetWindowBand");
     }
 
     g_winVersion = GetExplorerVersion();
@@ -1219,8 +1496,23 @@ BOOL Wh_ModInit() {
         if (hasWin10Taskbar && !HookTaskbarSymbols()) {
             return FALSE;
         }
-    } else if (!HookTaskbarSymbols()) {
-        return FALSE;
+    } else if (g_winVersion >= WinVersion::Win11) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            g_taskbarViewDllLoaded = true;
+            if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                return FALSE;
+            }
+        } else {
+            Wh_Log(L"Taskbar view module not loaded yet");
+        }
+
+        if (!HookTaskbarSymbols()) {
+            return FALSE;
+        }
+    } else {
+        if (!HookTaskbarSymbols()) {
+            return FALSE;
+        }
     }
 
     if (!HandleLoadedExplorerPatcher()) {
@@ -1242,6 +1534,18 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
+
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
 
     // Try again in case there's a race between the previous attempt and the
     // LoadLibraryExW hook.
