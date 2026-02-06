@@ -1,3 +1,8 @@
+## 1.0.3 ([Feb 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/889b0d410941cdbc21e477ae25def0a47a897fda/mods/taskbar-auto-hide-per-monitor.wh.cpp))
+
+* Fixed incorrect auto-hide status when queried. Notably, Electron apps draw a border at the bottom of the window when auto-hide is enabled, and they were doing it even when the mod disabled auto-hide for a monitor.
+* Made compatible with older Windows 11 builds.
+
 ## 1.0.2 ([Jan 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/242ebc0abbd768ac6dab8cf705673af01676fb7d/mods/taskbar-auto-hide-per-monitor.wh.cpp))
 
 * Added support for the new taskbar auto-hide animation in Windows 11 preview builds (ViVeTool ID: 41356296).

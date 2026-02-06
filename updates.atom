@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-06T15:19:19.000Z</updated>
+    <updated>2026-02-06T20:29:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide per monitor 1.0.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-per-monitor#889b0d410941cdbc21e477ae25def0a47a897fda</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-per-monitor"/>
+        <updated>2026-02-06T20:29:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed incorrect auto-hide status when queried. Notably, Electron apps draw a border at the bottom of the window when auto-hide is enabled, and they were doing it even when the mod disabled auto-hide for a monitor.</li>
+<li>Made compatible with older Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Internet Status Indicator 0.8]]></title>
         <id>https://windhawk.net/mods/internet-status-indicator#f57c38965687b838aefcacd40734a05394798b76</id>
@@ -326,19 +340,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Window Open/Close Animations 1.0]]></title>
-        <id>https://windhawk.net/mods/disable-open-close-anims#f1aefb11d46c509279b1c578bc714a167e0097dd</id>
-        <link href="https://windhawk.net/mods/disable-open-close-anims"/>
-        <updated>2026-01-31T11:57:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablewindowopencloseanimations">Disable Window Open/Close Animations</h1>
-<p>This mod disables non-UWP app's window opening and closing animations without affecting other window animations, such as minimizing, restoring, maximizing, and snapping.</p>
-<p><img src="https://i.imgur.com/d9HvrJA.gif" alt="" /></p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>
