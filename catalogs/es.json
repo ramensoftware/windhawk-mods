@@ -4167,7 +4167,7 @@
                     12
                 ],
                 "ratingUsers": 19,
-                "updated": 1753184093000,
+                "updated": 1770391159000,
                 "users": 1595
             },
             "metadata": {
@@ -4180,7 +4180,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Internet Status Indicator",
-                "version": "0.7"
+                "version": "0.8"
             }
         },
         "invisible-borders": {

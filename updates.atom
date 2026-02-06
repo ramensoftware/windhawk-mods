@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-06T15:15:14.000Z</updated>
+    <updated>2026-02-06T15:19:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Internet Status Indicator 0.8]]></title>
+        <id>https://windhawk.net/mods/internet-status-indicator#f57c38965687b838aefcacd40734a05394798b76</id>
+        <link href="https://windhawk.net/mods/internet-status-indicator"/>
+        <updated>2026-02-06T15:19:19.000Z</updated>
+        <content type="html"><![CDATA[<p>Added handling for the <em>TaskbarCreated</em> message to recreate the tray icon when explorer restarts</p>]]></content>
+        <author>
+            <name>ALMAS CP</name>
+            <uri>https://github.com/almas-cp</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Fade 1.5]]></title>
         <id>https://windhawk.net/mods/taskbar-fade#a758bce656de5cff159573823319da3fe0e45c38</id>
@@ -328,21 +339,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Block Win+V 1.0.1]]></title>
-        <id>https://windhawk.net/mods/block-win-v#bbc330d9ffc549ba93b495f0d5d807475967edb9</id>
-        <link href="https://windhawk.net/mods/block-win-v"/>
-        <updated>2026-01-31T11:57:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="blockwinv">Block Win+V</h1>
-<p>This mod blocks the Win+V keyboard shortcut (Clipboard History) in Windows.</p>
-<hr />
-<h1 id="winv">阻止 Win+V</h1>
-<p>此模块阻止 Windows 中的 Win+V 键盘快捷键（剪贴板历史记录）。</p>]]></content>
-        <author>
-            <name>Fenig</name>
-            <uri>https://github.com/JiangFengning</uri>
         </author>
     </entry>
 </feed>
