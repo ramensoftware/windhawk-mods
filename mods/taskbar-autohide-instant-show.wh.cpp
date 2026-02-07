@@ -448,6 +448,7 @@ bool HookTaskbarSymbols() {
         }
     }
 
+    // explorer.exe, taskbar.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: virtual void __cdecl TrayUI::SlideWindow(struct HWND__ *,struct tagRECT const *,struct HMONITOR__ *,bool,bool))"},
