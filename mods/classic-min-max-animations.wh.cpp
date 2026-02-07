@@ -1076,7 +1076,7 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
     } 
   
     return (VS_FIXEDFILEINFO *)pFixedFileInfo; 
-} 
+}
 
 BOOL Wh_ModInit(void)
 {
@@ -1193,7 +1193,7 @@ BOOL Wh_ModInit(void)
 void Wh_ModUninit(void)
 {
     /* Re-enable animations for the user if they want them. */
-    if (IsMinAnimate())
+    if (Wh_GetIntValue(L"MinAnimate", -1) == 1)
     {
         ANIMATIONINFO ai;
         ai.cbSize = sizeof(ai);
