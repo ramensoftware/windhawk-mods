@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-07T10:24:28.000Z</updated>
+    <updated>2026-02-07T13:00:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Auto-Hide Instant Show 2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-autohide-instant-show#0278b8e63627c0577c2709c2ae9a0dd54a768811</id>
+        <link href="https://windhawk.net/mods/taskbar-autohide-instant-show"/>
+        <updated>2026-02-07T13:00:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarautohideinstantshow">Taskbar Auto-Hide Instant Show</h1>
+<p>Removes the built-in delay before the auto-hidden taskbar starts appearing.
+The animation triggers instantly when your mouse touches the screen edge.</p>
+<h2 id="animationtypes">Animation Types</h2>
+<h3 id="elasticspringovershoot">Elastic (spring overshoot)</h3>
+<p>The taskbar overshoots its target and oscillates like a spring.</p>
+<p><img src="https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/elastic.gif" alt="Elastic" /></p>
+<h3 id="fadeopacity">Fade (opacity)</h3>
+<p>The taskbar fades in/out in place.</p>
+<p><img src="https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/Fade.gif" alt="Fade" /></p>
+<h3 id="slidefadesilkysmooth">Slide + Fade (silky smooth)</h3>
+<p>Combines sliding with a fade effect for the smoothest feel.</p>
+<p><img src="https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/fade-slide.gif" alt="Slide + Fade" /></p>
+<h3 id="slidedefault">Slide (default)</h3>
+<p>Default Windows slide, but sped up. Control speed with the speedup settings.</p>
+<h3 id="bounce">Bounce</h3>
+<p>The taskbar bounces at its final position.</p>
+<h2 id="settings">Settings</h2>
+<p>For <strong>Slide</strong> mode, use <em>Show/Hide speedup (%)</em> to control speed.
+For all other modes, use <em>Show/Hide duration (ms)</em> to control timing.
+<em>Frame rate</em> applies to all animation types.</p>]]></content>
+        <author>
+            <name>Bo0ii</name>
+            <uri>https://github.com/Bo0ii</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.1.0]]></title>
         <id>https://windhawk.net/mods/classic-min-max-animations#02e228b15957006012d2e47f825fb567b6e68361</id>
@@ -320,21 +351,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Added a universal mode that removes suffixes for any program (e.g., "Document - Notepad" becomes "Document").</li>
 <li>Added custom regex rules: Define your own text replacement patterns for specific programs.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.2.3]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#c647bf6a1706bf7fd3e03751a2976b0ad64a6f41</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2026-01-31T18:32:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed some redirection cases of icons extracted with the <code>PrivateExtractIconsW</code> function.</li>
-<li>Fixed redirection of icon/cursor groups in some cases with the "Redirect all loaded resources" option.</li>
-<li>Fixed icon themes ending up in a corrupted state after removing and re-installing the mod.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
