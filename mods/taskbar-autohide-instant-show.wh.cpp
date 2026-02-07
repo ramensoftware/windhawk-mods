@@ -33,7 +33,7 @@ The taskbar fades in/out in place.
 ### Slide + Fade (silky smooth)
 Combines sliding with a fade effect for the smoothest feel.
 
-![Slide + Fade](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/fade%20%2B%20slide.gif)
+![Slide + Fade](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/fade-slide.gif)
 
 ### Slide (default)
 Default Windows slide, but sped up. Control speed with the speedup settings.
