@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-07T01:56:46.000Z</updated>
+    <updated>2026-02-07T10:24:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.1.0]]></title>
+        <id>https://windhawk.net/mods/classic-min-max-animations#02e228b15957006012d2e47f825fb567b6e68361</id>
+        <link href="https://windhawk.net/mods/classic-min-max-animations"/>
+        <updated>2026-02-07T10:24:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hook SystemParametersInfo to handle SPI_(GET|SET)ANIMATION</li>
+<li>Enabling/disabling "Animate windows when minimizing and maximizing" with
+the mod enabled will now control the mod's animation, not the system's</li>
+<li>Call SystemParametersInfo to automatically disable the DWM window animations
+at init and to enable them at uninit if MinAnimate is still enabled</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Size 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-size#4317a5cfd70115a622235a951bb056f517988819</id>
@@ -318,21 +335,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
 <li>Fixed some redirection cases of icons extracted with the <code>PrivateExtractIconsW</code> function.</li>
 <li>Fixed redirection of icon/cursor groups in some cases with the "Redirect all loaded resources" option.</li>
 <li>Fixed icon themes ending up in a corrupted state after removing and re-installing the mod.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.5]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#cecaca7b6506e55b663a4a7ee391cb5763a7285c</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2026-01-31T18:04:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>When showing folder sizes, the sizes are now shown in Tiles and Content folder view, not only in Details view. In addition, folder sizes are shown in the status bar, and in the details pane (enabled via OldNewExplorer). Note: An explorer restart might be required to apply these changes.</li>
-<li>Fixed the "Use IEC terms" option for locales, such as Korean, which don't have a space, e.g. "50MB" and not "50 MB".</li>
-<li>Fixed explorer freezing in some rare cases, possibly related to some network drives.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
