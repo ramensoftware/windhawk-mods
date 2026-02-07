@@ -85,6 +85,16 @@ For all other modes, use *Show/Hide duration (ms)* to control timing.
   $description: >-
     Target frame rate for all animations. Higher = smoother.
     60 is good for most displays, 120 for high refresh rate monitors.
+- unhideDelay: 1
+  $name: Unhide delay in ms
+  $description: >-
+    Delay before the taskbar starts appearing when you move the mouse to
+    the screen edge. Default Windows value is 50. Set to 1 for instant.
+- hideDelay: 1
+  $name: Hide delay in ms
+  $description: >-
+    Delay before the taskbar starts hiding after the mouse leaves.
+    Default Windows value is 500. Set to 1 for instant.
 - oldTaskbarOnWin11: false
   $name: Use old taskbar on Windows 11
   $description: >-
@@ -112,6 +122,8 @@ struct {
     int showDuration;
     int hideDuration;
     int frameRate;
+    int unhideDelay;
+    int hideDelay;
     bool oldTaskbarOnWin11;
 } g_settings;
 
@@ -126,10 +138,6 @@ WinVersion g_winVersion;
 
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
-
-// ============================================================
-// High-precision timer for animation control
-// ============================================================
 
 double g_recipCyclesPerSecond;
 
@@ -154,10 +162,6 @@ double TimerGetCycles() {
 double TimerGetSeconds() {
     return TimerGetCycles() * g_recipCyclesPerSecond;
 }
-
-// ============================================================
-// Easing functions
-// ============================================================
 
 double EaseOutElastic(double t) {
     if (t <= 0.0) return 0.0;
@@ -191,12 +195,6 @@ double EaseInCubic(double t) {
     return t * t * t;
 }
 
-// ============================================================
-// Hook: GetTickCount
-// Speeds up the default slide animation by faking time.
-// Only active during Slide animation type.
-// ============================================================
-
 using GetTickCount_t = decltype(&GetTickCount);
 GetTickCount_t GetTickCount_Original;
 DWORD WINAPI GetTickCount_Hook() {
@@ -213,12 +211,6 @@ DWORD WINAPI GetTickCount_Hook() {
 
     return ms;
 }
-
-// ============================================================
-// Hook: Sleep
-// Controls frame rate during the default slide animation.
-// Only active during Slide animation type.
-// ============================================================
 
 using Sleep_t = decltype(&Sleep);
 Sleep_t Sleep_Original;
@@ -244,11 +236,6 @@ void WINAPI Sleep_Hook(DWORD dwMilliseconds) {
     g_slideWindowLastFrameStartTime = TimerGetSeconds();
 }
 
-// ============================================================
-// Custom animation engine
-// Handles Elastic, Bounce, Fade, Slide+Fade types.
-// ============================================================
-
 static int Lerp(int a, int b, double t) {
     return a + (int)((b - a) * t);
 }
@@ -272,11 +259,9 @@ void DoCustomAnimation(HWND hWnd,
     int totalFrames = (int)(duration / frameDuration);
     if (totalFrames < 1) totalFrames = 1;
 
-    // Determine which properties to animate
     bool usePosition = (animType == 1 || animType == 2 || animType == 4);
     bool useFade = (animType == 3 || animType == 4);
 
-    // Setup layered window for fade
     LONG_PTR originalExStyle = 0;
     if (useFade) {
         originalExStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
@@ -284,12 +269,10 @@ void DoCustomAnimation(HWND hWnd,
             SetWindowLongPtr(hWnd, GWL_EXSTYLE,
                              originalExStyle | WS_EX_LAYERED);
         }
-        // Set initial alpha and sync with compositor before animating
         SetLayeredWindowAttributes(hWnd, 0, show ? 0 : 255, LWA_ALPHA);
         DwmFlush();
     }
 
-    // For pure fade show, jump to final position first (while invisible)
     if (useFade && !usePosition && show) {
         SetWindowPos(hWnd, NULL, endRect->left, endRect->top,
                      endRect->right - endRect->left,
@@ -297,13 +280,11 @@ void DoCustomAnimation(HWND hWnd,
                      SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
-    // Animation loop
     double startTime = TimerGetSeconds();
 
     for (int i = 1; i <= totalFrames; i++) {
         double t = (double)i / totalFrames;
 
-        // Apply easing based on animation type and direction
         double posT = t;
         double alphaT = t;
 
@@ -324,7 +305,6 @@ void DoCustomAnimation(HWND hWnd,
                     break;
             }
         } else {
-            // For hide, use ease-in (accelerating away)
             switch (animType) {
                 case 1:
                     posT = EaseInCubic(t);
@@ -342,7 +322,6 @@ void DoCustomAnimation(HWND hWnd,
             }
         }
 
-        // Interpolate position
         if (usePosition) {
             int x = Lerp(startRect->left, endRect->left, posT);
             int y = Lerp(startRect->top, endRect->top, posT);
@@ -354,7 +333,6 @@ void DoCustomAnimation(HWND hWnd,
                          SWP_NOZORDER | SWP_NOACTIVATE);
         }
 
-        // Interpolate alpha
         if (useFade) {
             BYTE alpha;
             if (show) {
@@ -364,11 +342,9 @@ void DoCustomAnimation(HWND hWnd,
             }
             if (alpha < 1) alpha = 1;
             SetLayeredWindowAttributes(hWnd, 0, alpha, LWA_ALPHA);
-            // Sync each frame with compositor to prevent flicker
             DwmFlush();
         }
 
-        // Frame timing (only needed for non-fade, DwmFlush handles fade timing)
         if (!useFade) {
             double targetTime =
                 startTime + (double)i * frameDuration / 1000.0;
@@ -380,7 +356,6 @@ void DoCustomAnimation(HWND hWnd,
         }
     }
 
-    // Ensure final position
     if (usePosition) {
         SetWindowPos(hWnd, NULL, endRect->left, endRect->top,
                      endRect->right - endRect->left,
@@ -388,11 +363,8 @@ void DoCustomAnimation(HWND hWnd,
                      SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
-    // Cleanup fade
     if (useFade) {
         if (!show) {
-            // HIDE: set fully invisible, then move to hidden position
-            // BEFORE removing WS_EX_LAYERED to prevent the flash
             SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
             DwmFlush();
             SetWindowPos(hWnd, NULL, endRect->left, endRect->top,
@@ -402,7 +374,6 @@ void DoCustomAnimation(HWND hWnd,
             DwmFlush();
         }
 
-        // Restore full opacity and original style
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         if (!(originalExStyle & WS_EX_LAYERED)) {
             DwmFlush();
@@ -410,11 +381,6 @@ void DoCustomAnimation(HWND hWnd,
         }
     }
 }
-
-// ============================================================
-// Hook: TrayUI::SlideWindow
-// Routes to either the sped-up default slide or custom animation.
-// ============================================================
 
 using TrayUI_SlideWindow_t = void(WINAPI*)(void* pThis,
                                            HWND hWnd,
@@ -432,7 +398,6 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
     Wh_Log(L"> show=%d animType=%d", show, g_settings.animationType);
 
     if (g_settings.animationType == 0) {
-        // Default slide with speedup (original behavior)
         g_slideWindowSpeedup =
             show ? g_settings.showSpeedup : g_settings.hideSpeedup;
         g_slideWindowStartTime = TimerGetSeconds();
@@ -443,22 +408,14 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
 
         g_slideWindowThreadId = 0;
     } else {
-        // Custom animation: get current position, animate, then finalize
         RECT startRect;
         GetWindowRect(hWnd, &startRect);
 
         DoCustomAnimation(hWnd, &startRect, rect, show);
 
-        // Call original with no animation to finalize internal state
         TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show, false);
     }
 }
-
-// ============================================================
-// Hook: SetTimer
-// Removes the ~300-500ms delay Windows adds before triggering
-// the taskbar show animation.
-// ============================================================
 
 using SetTimer_t = decltype(&SetTimer);
 SetTimer_t SetTimer_Original;
@@ -471,16 +428,13 @@ UINT_PTR WINAPI SetTimer_Hook(HWND hWnd,
         if (GetClassName(hWnd, className, ARRAYSIZE(className)) > 0) {
             if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
                 wcscmp(className, L"Shell_SecondaryTrayWnd") == 0) {
-                uElapse = 1;
+                uElapse = (nIDEvent == 3) ? g_settings.unhideDelay
+                                          : g_settings.hideDelay;
             }
         }
     }
     return SetTimer_Original(hWnd, nIDEvent, uElapse, lpTimerFunc);
 }
-
-// ============================================================
-// Taskbar symbol hooking
-// ============================================================
 
 bool HookTaskbarSymbols() {
     HMODULE module;
@@ -509,10 +463,6 @@ bool HookTaskbarSymbols() {
 
     return true;
 }
-
-// ============================================================
-// Version detection
-// ============================================================
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     void* pFixedFileInfo = nullptr;
@@ -568,10 +518,6 @@ WinVersion GetExplorerVersion() {
 
     return WinVersion::Unsupported;
 }
-
-// ============================================================
-// ExplorerPatcher compatibility
-// ============================================================
 
 struct EXPLORER_PATCHER_HOOK {
     PCSTR symbol;
@@ -689,12 +635,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return module;
 }
 
-// ============================================================
-// Settings & mod lifecycle
-// ============================================================
-
 void LoadSettings() {
-    // Read animation type as string from dropdown, convert to int
     LPCWSTR animType = Wh_GetStringSetting(L"animationType");
     if (wcscmp(animType, L"elastic") == 0) {
         g_settings.animationType = 1;
@@ -705,7 +646,7 @@ void LoadSettings() {
     } else if (wcscmp(animType, L"slideFade") == 0) {
         g_settings.animationType = 4;
     } else {
-        g_settings.animationType = 0;  // default: slide
+        g_settings.animationType = 0;
     }
     Wh_FreeStringSetting(animType);
 
@@ -714,6 +655,8 @@ void LoadSettings() {
     g_settings.showDuration = Wh_GetIntSetting(L"showDuration");
     g_settings.hideDuration = Wh_GetIntSetting(L"hideDuration");
     g_settings.frameRate = Wh_GetIntSetting(L"frameRate");
+    g_settings.unhideDelay = Wh_GetIntSetting(L"unhideDelay");
+    g_settings.hideDelay = Wh_GetIntSetting(L"hideDelay");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
@@ -749,26 +692,22 @@ BOOL Wh_ModInit() {
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
 
-    // Hook LoadLibraryExW for ExplorerPatcher compatibility
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
     WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
                                        LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
 
-    // Hook GetTickCount to speed up the default slide animation
     auto pKernelBaseGetTickCount = (decltype(&GetTickCount))GetProcAddress(
         kernelBaseModule, "GetTickCount");
     WindhawkUtils::Wh_SetFunctionHookT(
         pKernelBaseGetTickCount, GetTickCount_Hook, &GetTickCount_Original);
 
-    // Hook Sleep to control animation frame rate
     auto pKernelBaseSleep =
         (decltype(&Sleep))GetProcAddress(kernelBaseModule, "Sleep");
     WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseSleep, Sleep_Hook,
                                        &Sleep_Original);
 
-    // Hook SetTimer to eliminate the auto-hide show delay
     HMODULE user32Module = GetModuleHandle(L"user32.dll");
     auto pSetTimer =
         (decltype(&SetTimer))GetProcAddress(user32Module, "SetTimer");
@@ -785,8 +724,6 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    // Try again in case there's a race between the previous attempt and the
-    // LoadLibraryExW hook.
     if (!g_explorerPatcherInitialized) {
         HandleLoadedExplorerPatcher();
     }
