@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-06T23:16:08.000Z</updated>
+    <updated>2026-02-07T01:56:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Size 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-size#4317a5cfd70115a622235a951bb056f517988819</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-size"/>
+        <updated>2026-02-07T01:56:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>When "preserve aspect ratio" is selected, the respected bounds are now the width and height maximums. Minimum bounds are attempted to be respected, but not guaranteed. Fixes <a href="https://github.com/ramensoftware/windhawk-mods/issues/2957">issue #2957</a>. Contributed by <a href="https://github.com/alchemyyy">iZack</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide speed 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-speed#6ae852af8f5d6ccaf2ac39cc4a435d4637150c59</id>
@@ -320,19 +333,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
 <li>When showing folder sizes, the sizes are now shown in Tiles and Content folder view, not only in Details view. In addition, folder sizes are shown in the status bar, and in the details pane (enabled via OldNewExplorer). Note: An explorer restart might be required to apply these changes.</li>
 <li>Fixed the "Use IEC terms" option for locales, such as Korean, which don't have a space, e.g. "50MB" and not "50 MB".</li>
 <li>Fixed explorer freezing in some rare cases, possibly related to some network drives.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.3.1]]></title>
-        <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#02dda800490b6c72a60961c45c0086dd8ce703c5</id>
-        <link href="https://windhawk.net/mods/chrome-wheel-scroll-tabs"/>
-        <updated>2026-01-31T17:31:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed scrolling tabs of an inactive browser window while another browser window is the foreground window.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

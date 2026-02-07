@@ -7844,7 +7844,7 @@
                     81
                 ],
                 "ratingUsers": 88,
-                "updated": 1767476368000,
+                "updated": 1770429406000,
                 "users": 4268
             },
             "metadata": {
@@ -7861,7 +7861,7 @@
                 ],
                 "name": "Taskbar Thumbnail Size",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.2.1"
             }
         },
         "taskbar-thumbnails": {
