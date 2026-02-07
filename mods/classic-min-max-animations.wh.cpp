@@ -1080,9 +1080,19 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
 
 BOOL Wh_ModInit(void)
 {
-    /* Disable window animations */
     ANIMATIONINFO ai;
     ai.cbSize = sizeof(ai);
+
+    if (Wh_GetIntValue(L"MinAnimate", -1) == -1)
+    {
+        SystemParametersInfoW(SPI_GETANIMATION, sizeof(ai), &ai, FALSE);
+        if (ai.iMinAnimate)
+        {
+            Wh_SetIntValue(L"MinAnimate", 1);
+        }
+    }
+    
+    /* Disable window animations */
     ai.iMinAnimate = FALSE;
     SystemParametersInfoW(SPI_SETANIMATION, sizeof(ai), &ai, TRUE);
 
