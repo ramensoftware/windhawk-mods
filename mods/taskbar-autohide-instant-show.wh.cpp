@@ -466,13 +466,11 @@ UINT_PTR WINAPI SetTimer_Hook(HWND hWnd,
                               UINT_PTR nIDEvent,
                               UINT uElapse,
                               TIMERPROC lpTimerFunc) {
-    if (hWnd && uElapse >= 50 && uElapse <= 600) {
+    if (hWnd && (nIDEvent == 2 || nIDEvent == 3)) {
         wchar_t className[64];
         if (GetClassName(hWnd, className, ARRAYSIZE(className)) > 0) {
             if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
                 wcscmp(className, L"Shell_SecondaryTrayWnd") == 0) {
-                Wh_Log(L"Reducing taskbar timer: ID=%llu Elapse=%u -> 1",
-                       (unsigned long long)nIDEvent, uElapse);
                 uElapse = 1;
             }
         }
@@ -496,7 +494,6 @@ bool HookTaskbarSymbols() {
         }
     }
 
-    // explorer.exe, taskbar.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: virtual void __cdecl TrayUI::SlideWindow(struct HWND__ *,struct tagRECT const *,struct HMONITOR__ *,bool,bool))"},
