@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-07T13:00:05.000Z</updated>
+    <updated>2026-02-07T16:07:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.4]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#33fa04031ed4e201a3f971addf10d06909ba20ca</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2026-02-07T16:07:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added new themes: TintedGlass, Fluid.</li>
+<li>Updated themes: TranslucentShell, Matter, WindowGlass.</li>
+<li>TranslucentShell, Matter, and the new TintedGlass theme now allow to customize the media thumbnail size, which may be too large for small screens. Refer to the the theme's readme for details.</li>
+<li>WindowGlass now allows to select alternative background styles. Refer to the the theme's readme for details.</li>
+<li>Added a way to define theme-aware resources. For example, different colors for an element can be defined for light mode and dark mode.</li>
+<li>Fixed some styles failing to restore properly.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Auto-Hide Instant Show 2.0]]></title>
         <id>https://windhawk.net/mods/taskbar-autohide-instant-show#0278b8e63627c0577c2709c2ae9a0dd54a768811</id>
@@ -341,20 +359,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Taskbar Window Suffixes 1.1]]></title>
-        <id>https://windhawk.net/mods/file-explorer-remove-suffixes#98854d86d13a0cd0122cf10cb1d1092801a765d9</id>
-        <link href="https://windhawk.net/mods/file-explorer-remove-suffixes"/>
-        <updated>2026-01-31T21:29:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a universal mode that removes suffixes for any program (e.g., "Document - Notepad" becomes "Document").</li>
-<li>Added custom regex rules: Define your own text replacement patterns for specific programs.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

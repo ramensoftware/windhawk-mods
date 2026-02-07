@@ -1,3 +1,12 @@
+## 1.4 ([Feb 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/33fa04031ed4e201a3f971addf10d06909ba20ca/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added new themes: TintedGlass, Fluid.
+* Updated themes: TranslucentShell, Matter, WindowGlass.
+  * TranslucentShell, Matter, and the new TintedGlass theme now allow to customize the media thumbnail size, which may be too large for small screens. Refer to the the theme's readme for details.
+  * WindowGlass now allows to select alternative background styles. Refer to the the theme's readme for details.
+* Added a way to define theme-aware resources. For example, different colors for an element can be defined for light mode and dark mode.
+* Fixed some styles failing to restore properly.
+
 ## 1.3.3 ([Oct 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/eb68fe5aaceca7a2835888d536a43ebed0b86085/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Updated themes: Unified, 10JumpLists.
