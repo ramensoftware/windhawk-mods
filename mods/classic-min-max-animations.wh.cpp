@@ -2,7 +2,7 @@
 // @id              classic-min-max-animations
 // @name            Classic Minimize/Maximize Animations
 // @description     Restores the classic minimize/maximize animations used without DWM
-// @version         1.0.2
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -15,15 +15,6 @@
 From Windows 95 to XP, and in Vista and above without DWM running, windows had
 a minimize/maximize animation that involved the titlebar moving across the screen.
 This mod makes that animation play with DWM enabled by reimplementing it.
-
-## Usage note
-You must turn off the regular window animations in order for this mod to look correct.
-To do this:
-1. Run `sysdm.cpl` either from Start search or the Run dialog (WinKey + R).
-2. Go to the "Advanced" tab.
-3. Click "Settings..." under "Performance"
-4. Uncheck "Animate windows when minimizing and maximizing"
-5. Click Apply.
 
 ## Previews
 **Top-level window**:
@@ -101,6 +92,11 @@ bool IsWindowPerMonitorDpiAware(HWND hwnd)
     DPI_AWARENESS_CONTEXT context = GetWindowDpiAwarenessContext(hwnd);
     return (AreDpiAwarenessContextsEqual(context, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE) ||
             AreDpiAwarenessContextsEqual(context, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+}
+
+inline bool IsMinAnimate()
+{
+    return Wh_GetIntValue(L"MinAnimate", 1) != 0;
 }
 
 #pragma region "DWP hooks"
@@ -200,7 +196,7 @@ void MinMaxWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 case SC_MAXIMIZE:
                 case SC_RESTORE:
                 {
-                    if (!WaitForAnimWndThread() || g_fAnimating)
+                    if (!IsMinAnimate() || !WaitForAnimWndThread() || g_fAnimating)
                         return;
 
                     LPMINMAXPARAMS lpmmp = CreateMinMaxParams(hwnd, cmd);
@@ -251,7 +247,7 @@ using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_orig;
 BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow)
 {
-    if (g_fDisabled || g_fAnimating || !IsWindowVisible(hWnd))
+    if (!IsMinAnimate() || g_fDisabled || g_fAnimating || !IsWindowVisible(hWnd))
         return ShowWindow_orig(hWnd, nCmdShow);
 
     DWORD dwStyle = GetWindowLongW(hWnd, GWL_STYLE);
@@ -290,7 +286,7 @@ using ShowWindowAsync_t = decltype(&ShowWindowAsync);
 ShowWindowAsync_t ShowWindowAsync_orig;
 BOOL WINAPI ShowWindowAsync_hook(HWND hWnd, int nCmdShow)
 {
-    if (g_fDisabled || g_fAnimating || !IsWindowVisible(hWnd))
+    if (!IsMinAnimate() || g_fDisabled || g_fAnimating || !IsWindowVisible(hWnd))
         return ShowWindowAsync_orig(hWnd, nCmdShow);
 
     DWORD dwStyle = GetWindowLongW(hWnd, GWL_STYLE);
@@ -341,6 +337,82 @@ BOOL WINAPI SetWindowPos_hook(
 {
     Sleep(1);
     return SetWindowPos_orig(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+}
+
+bool MinMaxSystemParametersInfo(
+    UINT    uiAction,
+    UINT    uiParam,
+    LPVOID  pvParam,
+    UINT    fWinIni,
+    BOOL   *pfResult
+)
+{
+    switch (uiAction)
+    {
+        case SPI_GETANIMATION:
+        {
+            LPANIMATIONINFO lpai = (LPANIMATIONINFO)pvParam;
+            if (!lpai || uiParam != sizeof(*lpai) || lpai->cbSize != sizeof(*lpai))
+            {
+                *pfResult = FALSE;
+                return true;
+            }
+
+            lpai->cbSize = sizeof(*lpai);
+            lpai->iMinAnimate = IsMinAnimate();
+            Wh_Log(L"Requesting MINANIMATE, value: %d", lpai->iMinAnimate);
+
+            *pfResult = TRUE;
+            return true;
+        }
+        case SPI_SETANIMATION:
+        {
+            LPANIMATIONINFO lpai = (LPANIMATIONINFO)pvParam;
+            if (!lpai || lpai->cbSize != sizeof(*lpai))
+            {
+                *pfResult = FALSE;
+                return true;
+            }
+
+            Wh_SetIntValue(L"MinAnimate", lpai->iMinAnimate != 0);
+            Wh_Log(L"Setting MINANIMATE, value: %d", lpai->iMinAnimate);
+
+            *pfResult = TRUE;
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+using SystemParametersInfoA_t = decltype(&SystemParametersInfoA);
+SystemParametersInfoA_t SystemParametersInfoA_orig;
+BOOL WINAPI SystemParametersInfoA_hook(
+    UINT    uiAction,
+    UINT    uiParam,
+    LPVOID  pvParam,
+    UINT    fWinIni
+)
+{
+    BOOL fResult;
+    if (MinMaxSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni, &fResult))
+        return fResult;
+    return SystemParametersInfoA_orig(uiAction, uiParam, pvParam, fWinIni);
+}
+
+using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
+SystemParametersInfoW_t SystemParametersInfoW_orig;
+BOOL WINAPI SystemParametersInfoW_hook(
+    UINT    uiAction,
+    UINT    uiParam,
+    LPVOID  pvParam,
+    UINT    fWinIni
+)
+{
+    BOOL fResult;
+    if (MinMaxSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni, &fResult))
+        return fResult;
+    return SystemParametersInfoW_orig(uiAction, uiParam, pvParam, fWinIni);
 }
 
 #pragma endregion // "DWP hooks"
@@ -1008,6 +1080,12 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
 
 BOOL Wh_ModInit(void)
 {
+    /* Disable window animations */
+    ANIMATIONINFO ai;
+    ai.cbSize = sizeof(ai);
+    ai.iMinAnimate = FALSE;
+    SystemParametersInfoW(SPI_SETANIMATION, sizeof(ai), &ai, TRUE);
+
     HMODULE hmUser = GetModuleHandleW(L"user32.dll");
     if (!hmUser)
     {
@@ -1054,6 +1132,7 @@ BOOL Wh_ModInit(void)
     HOOK_A_W(DefDlgProc)
     HOOK(ShowWindow)
     HOOK(ShowWindowAsync)
+    HOOK_A_W(SystemParametersInfo)
     
     /**
       * There is a nasty bug where certain windows will gain the WS_EX_TOPMOST exstyle after
@@ -1113,6 +1192,15 @@ BOOL Wh_ModInit(void)
 
 void Wh_ModUninit(void)
 {
+    /* Re-enable animations for the user if they want them. */
+    if (IsMinAnimate())
+    {
+        ANIMATIONINFO ai;
+        ai.cbSize = sizeof(ai);
+        ai.iMinAnimate = TRUE;
+        SystemParametersInfoW(SPI_SETANIMATION, sizeof(ai), &ai, TRUE);
+    }
+
     if (g_hwndAnim && IsWindow(g_hwndAnim))
     {
         SendMessageW(g_hwndAnim, WM_CLOSE, 0, 0);
