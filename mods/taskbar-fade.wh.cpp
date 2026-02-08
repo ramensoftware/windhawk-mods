@@ -9,6 +9,27 @@
 // @compilerOptions -luser32
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# Taskbar Fade
+Automatically dims or hides the taskbar when the computer is idle.
+
+This mod is designed to prevent OLED burn-in and reduce visual distractions by lowering the taskbar's opacity when it is not in use.
+
+### Features
+* **Idle Dimming:** The taskbar fades to a lower transparency level (configurable) when the mouse is away.
+* **Idle Hiding:** Optionally hides the taskbar completely after a set timeout.
+* **Instant Wake:** Moving the mouse to the taskbar or the bottom of the screen restores full opacity immediately.
+* **Customization:** Settings available for fade speed, transparency levels, and timeout duration.
+
+### Configuration
+* **Default Transparency:** The opacity level when the taskbar is dimmed (0-100%).
+* **Enable Idle Hiding:** Check this to make the taskbar vanish completely after a timeout.
+* **Idle Timeout:** Seconds of inactivity before the taskbar hides.
+* **Fade Speed:** Duration of the fade animation in milliseconds.
+*/
+// ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - DimTransparency: 50
