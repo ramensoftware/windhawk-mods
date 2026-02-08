@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-when-maximized
 // @name            Taskbar auto-hide when maximized
 // @description     Makes the taskbar auto-hide only when a window is maximized or intersects the taskbar
-// @version         1.2.4
+// @version         1.2.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -542,8 +542,15 @@ bool ShouldKeepTaskbarShown(HWND hTaskbarWnd, HMONITOR monitor) {
     }
 
     // Always show taskbar when MultitaskingView (Win+Tab) is active.
+    // [FIX #3] Foreground window validation - prevent stale flag
     if (g_multitaskingViewActive) {
-        return true;
+        HWND fg = GetForegroundWindow();
+        if (!fg || !IsMultitaskingViewWindow(fg)) {
+            Wh_Log(L"MultitaskingView flag was stale, resetting");
+            g_multitaskingViewActive = false;
+        } else {
+            return true;
+        }
     }
 
     MONITORINFO monitorInfo{
@@ -641,6 +648,16 @@ bool AdjustAllTaskbarsIfNotPending() {
     std::unordered_set<HWND> secondaryTaskbarWindows;
     HWND hWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
 
+    // [FIX #2] Clean up dead HWNDs - critical hygiene
+    for (auto it = g_taskbarsKeptShown.begin(); it != g_taskbarsKeptShown.end();) {
+        if (!IsWindow(it->second)) {
+            Wh_Log(L"Cleaning up dead HWND from g_taskbarsKeptShown");
+            it = g_taskbarsKeptShown.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     DWORD currentTickCount = GetTickCount();
     DWORD pendingTickCount = 0;
 
@@ -713,11 +730,17 @@ void WINAPI ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Hook(
 
     g_taskbarToViewCoordinator[hMMTaskbarWnd] = pThis;
 
+    // [FIX #4] Pointer-over hook - block only when valid
     if (!isPointerOver) {
+        bool shouldBlock = false;
         for (const auto& pair : g_taskbarsKeptShown) {
-            if (pair.second == hMMTaskbarWnd) {
-                return;
+            if (pair.second == hMMTaskbarWnd && IsWindow(pair.second)) {
+                shouldBlock = true;
+                break;
             }
+        }
+        if (shouldBlock) {
+            return;
         }
     }
 
@@ -1007,18 +1030,41 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
 
     g_pendingEventsTimer = SetTimer(
         nullptr, 0, 200,
-        [](HWND hwnd,         // handle of window for timer messages
-           UINT uMsg,         // WM_TIMER message
-           UINT_PTR idEvent,  // timer identifier
-           DWORD dwTime       // current system time
-        ) {
+        [](HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
             Wh_Log(L">");
 
+            // [FIX #1] Retry counter - hard reset if stuck
+            static int pendingRetryCount = 0;
+
             if (!AdjustAllTaskbarsIfNotPending()) {
-                Wh_Log(L"Adjustment already pending, will retry later...");
+                pendingRetryCount++;
+                Wh_Log(L"Adjustment pending, retry %d/15", pendingRetryCount);
+                
+                // Hard reset after ~3 seconds
+                if (pendingRetryCount >= 15) {
+                    Wh_Log(L"HARD RESET - clearing all states");
+                    
+                    g_taskbarsKeptShown.clear();
+                    g_multitaskingViewActive = false;
+                    
+                    std::unordered_set<HWND> secondaryTaskbarWindows;
+                    HWND hTaskbarWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
+                    if (hTaskbarWnd) {
+                        RemoveProp(hTaskbarWnd, kUpdateTaskbarStatePendingTickCount);
+                    }
+                    for (HWND hSecondaryWnd : secondaryTaskbarWindows) {
+                        RemoveProp(hSecondaryWnd, kUpdateTaskbarStatePendingTickCount);
+                    }
+                    
+                    pendingRetryCount = 0;
+                    KillTimer(nullptr, g_pendingEventsTimer);
+                    g_pendingEventsTimer = 0;
+                    AdjustAllTaskbars();
+                }
                 return;
             }
 
+            pendingRetryCount = 0;
             KillTimer(nullptr, g_pendingEventsTimer);
             g_pendingEventsTimer = 0;
         });
