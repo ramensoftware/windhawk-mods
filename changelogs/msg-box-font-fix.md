@@ -1,3 +1,9 @@
+## 2.3.0 ([Feb 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/46493480da3a38c1f6d828d7781eafa6a37f3214/mods/msg-box-font-fix.wh.cpp))
+
+- Rename "Windows 95/NT 4.0" style to "Windows NT 4.0"
+- Split "Windows 98-XP" style into "Windows 95/98/Me" and "Windows 2000/XP" styles
+  - The former will have the close button disabled when a message box only has "OK"
+
 ## 2.2.0 ([Nov 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/97fcfb04c1e490b16df1bef76c33bc440d777fe3/mods/msg-box-font-fix.wh.cpp))
 
 - Clean up README and mod description

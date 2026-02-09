@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-09T20:56:40.000Z</updated>
+    <updated>2026-02-09T21:02:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Message Box Fix 2.3.0]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#46493480da3a38c1f6d828d7781eafa6a37f3214</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2026-02-09T21:02:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Rename "Windows 95/NT 4.0" style to "Windows NT 4.0"</li>
+<li>Split "Windows 98-XP" style into "Windows 95/98/Me" and "Windows 2000/XP" styles</li>
+<li>The former will have the close button disabled when a message box only has "OK"</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 2.6]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#eef7822727b2191233f4019a9c6f69128d083c4e</id>
@@ -340,20 +355,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.2.4]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#9e4a8e92b9c5f80d2abde061c88ee272d3c1ed9d</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2026-02-01T00:18:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed <code>PrivateExtractIconsW</code> redirection for textual (non-numerical) resource IDs.</li>
-<li>Fixed <code>PrivateExtractIconsW</code> redirection for non-executable files (e.g. .ico files).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
