@@ -495,7 +495,7 @@ BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    HMODULE hWpdshext = LoadLibraryW(L"wpdshext.dll");
+    HMODULE hWpdshext = LoadLibraryExW(L"wpdshext.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hWpdshext)
     {
         Wh_Log(L"Failed to load wpdshext.dll");
@@ -512,7 +512,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32)
     {
         Wh_Log(L"Failed to load shell32.dll");
