@@ -2528,7 +2528,7 @@
                     24
                 ],
                 "ratingUsers": 27,
-                "updated": 1739611048000,
+                "updated": 1770675526000,
                 "users": 2093
             },
             "metadata": {
@@ -2540,7 +2540,7 @@
                     "*"
                 ],
                 "name": "Disk Pie Chart",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "dot-hide": {
