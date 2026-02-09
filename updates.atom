@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-09T21:02:37.000Z</updated>
+    <updated>2026-02-09T21:12:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Fade 2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-fade#b5a803add78c879b47659306b82418629083ae53</id>
+        <link href="https://windhawk.net/mods/taskbar-fade"/>
+        <updated>2026-02-09T21:12:54.000Z</updated>
+        <content type="html"><![CDATA[<p>Performance / Idle Logic: I refactored the main loop to address the CPU usage concern. The mod now separates its logic: heavy window geometry updates are throttled to 1Hz (1 check/s), while lightweight mouse detection remains at 15Hz to ensure the taskbar wakes up instantly without lag.</p>
+<p>Documentation: Added a full WindhawkModReadme block with a description, features, and configuration guide.</p>
+<p>Improvements: Switched to a Cubic Ease-Out curve for a smoother feel. The animation is now time-based (deterministic), ensuring consistent speed regardless of system frame rate. Also Implemented a new pipeline to handle state transitions, added monitor hotplug detection to handle multi-monitor setups correctly and made some other adjustments.</p>]]></content>
+        <author>
+            <name>Lukvbp</name>
+            <uri>https://github.com/lukvbp</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Message Box Fix 2.3.0]]></title>
         <id>https://windhawk.net/mods/msg-box-font-fix#46493480da3a38c1f6d828d7781eafa6a37f3214</id>
@@ -341,17 +354,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <link href="https://windhawk.net/mods/classic-theme-enable"/>
         <updated>2026-02-01T11:04:09.000Z</updated>
         <content type="html"><![CDATA[<p>Reduced retry delay from 500ms to 100ms.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme 1.2.0]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#76f5120f16f038378993d244a9db848bed3afeca</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2026-02-01T09:37:13.000Z</updated>
-        <content type="html"><![CDATA[<p>Make several attempts if unsuccessful.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
