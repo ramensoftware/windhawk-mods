@@ -1,3 +1,7 @@
+## 2.6 ([Feb 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/eef7822727b2191233f4019a9c6f69128d083c4e/mods/taskbar-empty-space-clicks.wh.cpp))
+
+- implemented env variable resolution in "Open application, ..." action
+
 ## 2.5 ([Jan 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4878131bb6c969504ba404f7b38437d7d0eb5209/mods/taskbar-empty-space-clicks.wh.cpp))
 
 - added "Example presets" chapter to mod's description

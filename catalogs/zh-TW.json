@@ -7109,7 +7109,7 @@
                     221
                 ],
                 "ratingUsers": 241,
-                "updated": 1768670552000,
+                "updated": 1770670600000,
                 "users": 7996
             },
             "metadata": {
@@ -7121,7 +7121,7 @@
                     "explorer.exe"
                 ],
                 "name": "Click on empty taskbar space",
-                "version": "2.5"
+                "version": "2.6"
             }
         },
         "taskbar-fade": {
@@ -8759,7 +8759,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1769703327000,
+                "updated": 1770670540000,
                 "users": 29
             },
             "metadata": {
@@ -8775,7 +8775,7 @@
                     "vlc.exe"
                 ],
                 "name": "VLC Discord Rich Presence",
-                "version": "1.0.3"
+                "version": "1.1.0"
             }
         },
         "vmware-disable-upgrade-dialog": {

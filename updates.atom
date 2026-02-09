@@ -2,12 +2,56 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-07T16:07:18.000Z</updated>
+    <updated>2026-02-09T20:56:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 2.6]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#eef7822727b2191233f4019a9c6f69128d083c4e</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2026-02-09T20:56:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>implemented env variable resolution in "Open application, …" action</li>
+</ul>]]></content>
+        <author>
+            <name>m1lhaus</name>
+            <uri>https://github.com/m1lhaus</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.0]]></title>
+        <id>https://windhawk.net/mods/vlc-discord-rpc#4661e78857e35dcac8fa19ae55234b73cd322d6d</id>
+        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
+        <updated>2026-02-09T20:55:40.000Z</updated>
+        <content type="html"><![CDATA[<p><em>Visual Enhancements</em></p>
+<ul>
+<li>Cover Art Integration <strong>(new)</strong> : Discord now displays actual album art and movie posters when available (for files with embedded artwork).</li>
+<li>Privacy Options: Added a new setting to disable cover art display and revert to the classic VLC icon.</li>
+<li>Progress Bar: Replaced plain timestamps with a functional progress bar.</li>
+</ul>
+<p><em>Smarter Status Updates</em></p>
+<ul>
+<li><p>Contextual Status: Activity status now adapts automatically <strong>(new)</strong> :</p></li>
+<li><p>Listening to [Song Title] for music.</p></li>
+<li><p>Watching [Movie Title] for videos.</p></li>
+<li><p>Audio Language: Active audio track language (e.g., English, Japanese) is now shown for video files.</p></li>
+</ul>
+<p><em>Improvements & Fixes</em></p>
+<ul>
+<li><p>Improved Layout:</p></li>
+<li><p>Music: Displays Song, Artist, and Album (album shown on hover).</p></li>
+<li><p>TV Shows: Automatically detects and shows Season/Episode format (e.g., S01E05).</p></li>
+<li><p>Technical Fixes:</p></li>
+<li><p>Quality Indicators: Fixed display of tags for 4K, HDR, 10-bit, and 1080p content.</p></li>
+</ul>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.4]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#33fa04031ed4e201a3f971addf10d06909ba20ca</id>
@@ -310,55 +354,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.1.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-scroll#ddaa47d5ea629338f30ed0ed41d49774f9487a90</id>
-        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
-        <updated>2026-02-01T00:00:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved window minimize/restore robustness on Windows 11.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[2D Rectangular Selection for Desktop 1.0]]></title>
-        <id>https://windhawk.net/mods/desktop-rect-select#31f975f20b68341fe20ece937a85afaf494c42d4</id>
-        <link href="https://windhawk.net/mods/desktop-rect-select"/>
-        <updated>2026-01-31T23:56:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="2drectangularselectionfordesktopicons">2D Rectangular Selection for Desktop Icons</h1>
-<p>The Windows Desktop uses a different ListView implementation compared to standard Explorer folder views to enable free placement of icons. However, this distinct architecture means some standard features may not behave as expected. Most notably, the <code>Shift</code> + <code>Click</code> selection behavior defaults to a "1D" linear selection (item-by-item) rather than a 2D rectangular selection.</p>
-<p>This mod changes the <code>Shift</code> + <code>Click</code> behavior on Desktop to use a <strong>2D rectangular selection</strong>. When you hold Shift and click to select a range, the mod selects all icons within the <em>rectangular area</em> defined by your start and end points (similar to selecting a range of cells with <code>Shift</code> + <code>Click</code> in Excel), rather than selecting every icon sequentially between them.</p>
-<p><strong>Key Improvements:</strong></p>
-<ul>
-<li><strong>Intuitive Selection:</strong> Matches the visual layout of your icons rather than their underlying index order. It's just how you'd expect it to work!</li>
-<li><strong>Multi-Monitor Safety:</strong> Prevents accidental selection of icons on secondary displays, which often happens with the default linear behavior and can lead to unintended layout disruptions.</li>
-<li><strong>Complex Selections:</strong> Supports adding or removing rectangular regions from your current selection by holding <code>Ctrl</code> + <code>Shift</code> + <code>Click</code>.</li>
-</ul>
-<p><strong>Tested and verified on the following 64-bit platforms:</strong></p>
-<ul>
-<li>Windows 10 (22H2, 19045.4412)</li>
-<li>Windows 11 (22H2, 22621.1702)</li>
-<li>Windows Server 2022 (21H2, 20348.2700)</li>
-<li>Windows 7 SP1 (6.1.7601)</li>
-<li>Windows 8 CP (6.2.8250)</li>
-</ul>
-<p>If it doesn't work on your system, please open an issue and provide your version of <code>comctl32.dll</code> (which should be above 1MB in size, in case there are multiple versions on your system) at my <a href="https://github.com/JoeYe-233/windhawk-mods">GitHub repository</a>. Generally, the right version is located at <code>C:\Windows\WinSxS\[amd64, x86]_microsoft.windows.common-controls_[version string]\comctl32.dll</code>, where <code>[amd64, x86]</code> and <code>[version string]</code> varies based on your system and architecture.</p>
-<p><em>Note: This mod applies only to the Desktop, other Explorer windows are not affected.</em></p>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="beforedefaultlinearselection">Before (Default Linear Selection)</h3>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/desktop-rect-select-before.gif" alt="Before" /> </p>
-<h3 id="after2drectangularselection">After (2D Rectangular Selection)</h3>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/desktop-rect-select-after.gif" alt="After" /></p>
-<h3 id="complexselections">Complex Selections</h3>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/desktop-rect-select-after2.gif" alt="Complex Selections" /></p>]]></content>
-        <author>
-            <name>Joe Ye</name>
-            <uri>https://github.com/JoeYe-233</uri>
         </author>
     </entry>
 </feed>
