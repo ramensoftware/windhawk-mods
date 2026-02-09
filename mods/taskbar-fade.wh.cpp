@@ -80,7 +80,7 @@ struct {
     DWORD idleTimeoutMS;
     int fadeDuration;
     int idleFadeDuration;
-    int frameTimeMs; 
+    int frameTimeMs;
     double targetDimAlpha;
 } g_cache;
 
@@ -107,7 +107,7 @@ void LoadSettings() {
     if (rawTimeout < 1) rawTimeout = 1;
     if (rawTransp < 0) rawTransp = 0;
     if (rawTransp > 100) rawTransp = 100;
-    
+
     // FPS Clamp: 15 to 120
     if (rawFPS < 15) rawFPS = 15;
     if (rawFPS > 120) rawFPS = 120;
@@ -119,11 +119,11 @@ void LoadSettings() {
     if (rawIdleFade < calculatedFrameTime) rawIdleFade = calculatedFrameTime;
 
     g_cache.enableIdleFade = enableIdle;
-    
+
     // Safety: (DWORD) cast prevents signed integer overflow during multiplication
-    // if user enters a large duration (e.g. > 24 days).
+    // if user enters a large duration (e.g. > 24 days)
     g_cache.idleTimeoutMS = (DWORD)rawTimeout * 1000;
-    
+
     g_cache.fadeDuration = rawFade;
     g_cache.idleFadeDuration = rawIdleFade;
     g_cache.frameTimeMs = calculatedFrameTime;
@@ -170,7 +170,7 @@ void UpdateBarOpacity(TaskbarState& bar, int alpha) {
         SetWindowLongPtr(bar.hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
         bar.isLayered = true;
         // Force update on next step
-        bar.lastAlpha = -1; 
+        bar.lastAlpha = -1;
     }
 
     // 3. APPLY: Set Alpha
@@ -178,7 +178,7 @@ void UpdateBarOpacity(TaskbarState& bar, int alpha) {
         if (SetLayeredWindowAttributes(bar.hwnd, 0, (BYTE)alpha, LWA_ALPHA)) {
             bar.lastAlpha = alpha;
         }
-    } 
+    }
 
     // 4. POST-POLISH: Enable Transparent
     if (!bar.isTransparent && needTransparent) {
@@ -192,7 +192,7 @@ void UpdateBarOpacity(TaskbarState& bar, int alpha) {
         LONG_PTR exStyle = GetWindowLongPtr(bar.hwnd, GWL_EXSTYLE);
         SetWindowLongPtr(bar.hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
         bar.isLayered = false;
-        SetWindowPos(bar.hwnd, NULL, 0, 0, 0, 0, 
+        SetWindowPos(bar.hwnd, NULL, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 }
@@ -201,23 +201,23 @@ void UpdateBarOpacity(TaskbarState& bar, int alpha) {
 void WorkerLoop() {
     std::vector<TaskbarState> taskbars;
     LASTINPUTINFO lii = { sizeof(LASTINPUTINFO) };
-    
+
     // Animation State
-    double currentAlpha = 255.0; 
-    double lastTarget = -1.0;          
-    double animStartAlpha = 255.0;     
+    double currentAlpha = 255.0;
+    double lastTarget = -1.0;
+    double animStartAlpha = 255.0;
     FadeState lastState = FadeState::Dimmed;
 
     // Timing State
-    ULONGLONG animStartTime = 0;           
+    ULONGLONG animStartTime = 0;
     ULONGLONG lastGeometryUpdate = 0;
-    
+
     // Local snapshot variables
     bool enableIdleFade;
     DWORD idleTimeoutMS;
     int fadeDuration;
     int idleFadeDuration;
-    int frameTimeMs; 
+    int frameTimeMs;
     double targetDimAlpha;
 
     while (!g_stopThread) {
@@ -242,11 +242,11 @@ void WorkerLoop() {
 
         if (needsRefresh) {
             taskbars.clear();
-            
+
             auto AddTaskbar = [&](HWND h) {
                 if (h) {
                     RECT r = {0}; GetWindowRect(h, &r);
-                    
+
                     // Ignore empty rectangles (e.g. native auto-hide active)
                     if (!IsRectEmpty(&r)) {
                         LONG_PTR style = GetWindowLongPtr(h, GWL_EXSTYLE);
@@ -263,14 +263,14 @@ void WorkerLoop() {
                 AddTaskbar(hSec);
             }
 
-            if (taskbars.empty()) { 
+            if (taskbars.empty()) {
                 // Prevent CPU spin if no taskbars found (e.g. Explorer restarting)
-                Sleep(250); 
-                continue; 
+                Sleep(250);
+                continue;
             }
-            
+
             // Reset Animation State
-            currentAlpha = 255.0; 
+            currentAlpha = 255.0;
             lastTarget = 255.0;
             animStartAlpha = 255.0;
             animStartTime = now;
@@ -297,7 +297,7 @@ void WorkerLoop() {
         GetLastInputInfo(&lii);
         // 32-bit subtraction to handle rollover
         DWORD idleTime = (DWORD)now - lii.dwTime;
-        
+
         POINT pt = {0};
         GetCursorPos(&pt);
 
@@ -307,7 +307,7 @@ void WorkerLoop() {
         }
 
         FadeState targetState = FadeState::Dimmed;
-        
+
         if (enableIdleFade && idleTime > idleTimeoutMS) {
             targetState = FadeState::Idle;
         } else if (isHovering) {
@@ -325,7 +325,7 @@ void WorkerLoop() {
                     }
                 }
             }
-            lastGeometryUpdate = now; 
+            lastGeometryUpdate = now;
             lastState = targetState;
         }
 
@@ -341,12 +341,12 @@ void WorkerLoop() {
 
         // 6. Animation (Stateful Cubic Ease-Out)
         bool isAnimating = false;
-        
+
         // Exact float comparison (target only takes predefined values)
         if (target != lastTarget) {
             lastTarget = target;
-            animStartAlpha = currentAlpha; 
-            animStartTime = now;           
+            animStartAlpha = currentAlpha;
+            animStartTime = now;
         }
 
         double dist = std::abs(currentAlpha - target);
@@ -356,7 +356,7 @@ void WorkerLoop() {
             isAnimating = true;
 
             ULONGLONG elapsed = now - animStartTime;
-            
+
             if (elapsed >= (ULONGLONG)duration) {
                 currentAlpha = target;
             } else {
@@ -366,12 +366,12 @@ void WorkerLoop() {
 
                 double invT = 1.0 - t;
                 double ease = 1.0 - (invT * invT * invT);
-                
+
                 currentAlpha = animStartAlpha + ((target - animStartAlpha) * ease);
             }
-            
+
             int applyAlpha = (int)currentAlpha;
-            if (applyAlpha < 0) applyAlpha = 0; 
+            if (applyAlpha < 0) applyAlpha = 0;
             if (applyAlpha > 255) applyAlpha = 255;
 
             for (auto& bar : taskbars) UpdateBarOpacity(bar, applyAlpha);
@@ -404,7 +404,7 @@ BOOL WhTool_ModInit() {
 void WhTool_ModUninit() {
     g_stopThread = true;
     if (g_workerThread.joinable()) g_workerThread.join();
-    
+
     RestoreTaskbarStyle(FindWindow(L"Shell_TrayWnd", NULL));
     HWND hSec = NULL;
     while ((hSec = FindWindowEx(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)) != NULL) {
@@ -412,41 +412,161 @@ void WhTool_ModUninit() {
     }
 }
 
-// --- BOILERPLATE ---
+// --- WINDHAWK TOOL BOILERPLATE (DO NOT EDIT) ---
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
-void WINAPI EntryPoint_Hook() { Wh_Log(L">"); ExitThread(0); }
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
 BOOL Wh_ModInit() {
     bool isService = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) return FALSE;
-    for (int i = 1; i < argc; i++) if (wcscmp(argv[i], L"-service") == 0) { isService = true; break; }
-    for (int i = 1; i < argc - 1; i++) if (wcscmp(argv[i], L"-tool-mod") == 0) { isToolModProcess = true; if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true; break; }
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
     LocalFree(argv);
-    if (isService) return FALSE;
+
+    if (isService) {
+        return FALSE;
+    }
+
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
-        if (!WhTool_ModInit()) ExitProcess(1);
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-        Wh_SetFunctionHook((BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint, (void*)EntryPoint_Hook, nullptr);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
-    if (isToolModProcess) return FALSE;
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
+
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) return;
-    WCHAR path[MAX_PATH]; GetModuleFileName(nullptr, path, ARRAYSIZE(path));
-    WCHAR cmd[MAX_PATH + 64]; swprintf_s(cmd, L"\"%s\" -tool-mod \"%s\"", path, WH_MOD_ID);
-    STARTUPINFO si{ .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK };
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
-    if (CreateProcess(nullptr, cmd, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) { CloseHandle(pi.hProcess); CloseHandle(pi.hThread); }
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
-void Wh_ModSettingsChanged() { if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged(); }
-void Wh_ModUninit() { if (!g_isToolModProcessLauncher) { WhTool_ModUninit(); ExitProcess(0); } }
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
