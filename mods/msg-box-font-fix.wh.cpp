@@ -2,7 +2,7 @@
 // @id              msg-box-font-fix
 // @name            Message Box Fix
 // @description     Reverts message boxes to their behavior from before Windows 10 1709
-// @version         2.2.0
+// @version         2.3.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -21,9 +21,11 @@ versions before Windows 10 1709.
 - **Windows 7-10 1703**: Fixes the font size
 - **Windows Vista**: Same as Windows 7-10 1703, but message boxes with no icon will play
   the "Default Beep" sound
-- **Windows 98-XP**: Same as Windows Vista, but with different sizes and positions, as well as
+- **Windows 2000/XP**: Same as Windows Vista, but with different sizes and positions, as well as
   a solid background.
-- **Windows 95/NT 4.0**: Same as Windows 98-XP, but button widths are dynamic (typically smaller).
+- **Windows 95/98/Me**: Same as Windows 2000-XP, but the close button is disabled on message boxes
+  with only OK.
+- **Windows NT 4.0**: Same as Windows 98-XP, but button widths are dynamic (typically smaller).
 
 ## Before
 
@@ -34,7 +36,7 @@ versions before Windows 10 1709.
 
 ![After](https://raw.githubusercontent.com/aubymori/images/main/message-box-font-fix-after.png)
 ![After (classic)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-classic.png)
-![After (Windows 95/NT 4.0)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-nt4.png)
+![After (Windows NT 4.0)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-nt4.png)
 */
 // ==/WindhawkModReadme==
 
@@ -43,8 +45,9 @@ versions before Windows 10 1709.
 - style: seven
   $name: Message box style
   $options:
-  - nt4: Windows 95/NT 4.0
-  - xp: Windows 98-XP
+  - nt4: Windows NT 4.0
+  - 9x: Windows 95/98/Me
+  - xp: Windows 2000/XP
   - vista: Windows Vista
   - seven: Windows 7-10 1703
 */
@@ -56,6 +59,7 @@ HMODULE g_hUser32 = NULL;
 enum MESSAGEBOXSTYLE
 {
     MBS_NT4,
+    MBS_9X,
     MBS_XP,
     MBS_VISTA,
     MBS_SEVEN,
@@ -714,7 +718,7 @@ INT_PTR CALLBACK MB_DlgProc(
 
         hwndT = hwndDlg;
 
-        if (lpmb->CancelId == 0) {
+        if (lpmb->CancelId == 0 || (g_mbStyle == MBS_9X && lpmb->CancelId == IDOK)) {
             HMENU hMenu;
 
             if (hMenu = GetSystemMenu(hwndDlg, FALSE)) {
@@ -1263,6 +1267,10 @@ void LoadSettings(void)
     if (0 == wcscmp(pszStyle, L"nt4"))
     {
         g_mbStyle = MBS_NT4;
+    }
+    else if (0 == wcscmp(pszStyle, L"9x"))
+    {
+        g_mbStyle = MBS_9X;
     }
     else if (0 == wcscmp(pszStyle, L"xp"))
     {
