@@ -304,9 +304,23 @@ typedef struct _MNANIMATEINFO
     bool      fDeferSelectItem;
     WPARAM    wParamSelectItem;
     LPARAM    lParamSelectItem;
+    bool      fLayoutRTL;
 } MNANIMATEINFO;
 
 thread_local MNANIMATEINFO g_mnAnimInfo = { 0 };
+
+inline void SetRTL(HWND hwnd, bool fRTL)
+{
+    if (!g_mnAnimInfo.fLayoutRTL)
+        return;
+
+    DWORD dwExStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+    if (fRTL)
+        dwExStyle |= WS_EX_LAYOUTRTL;
+    else
+        dwExStyle &= ~WS_EX_LAYOUTRTL;
+    SetWindowLongW(hwnd, GWL_EXSTYLE, dwExStyle);
+}
 
 void MNAnimate(bool fIterate);
 LRESULT WINAPI MouseProc(int nCode, WPARAM wParam, LPARAM lParam)
@@ -430,9 +444,14 @@ void MNAnimateExit()
                 g_mnAnimInfo.wParamSelectItem, g_mnAnimInfo.lParamSelectItem);
         }
 
+        // Set the window back to RTL if it was before:
+        SetRTL(g_mnAnimInfo.hwndAni, true);
         SendMessageW(g_mnAnimInfo.hwndAni, WM_PRINT, (WPARAM)g_mnAnimInfo.hdcFinalFrame, PRF_CLIENT | PRF_NONCLIENT | PRF_ERASEBKGND);
+        
+        DWORD dwOldLayout = SetLayout(g_mnAnimInfo.hdcWndAni, 0);
         BitBlt(g_mnAnimInfo.hdcWndAni, 0, 0, g_mnAnimInfo.cxAni, g_mnAnimInfo.cyAni,
             g_mnAnimInfo.hdcFinalFrame, 0, 0, SRCCOPY | NOMIRRORBITMAP);
+        SetLayout(g_mnAnimInfo.hdcWndAni, dwOldLayout);
         InvalidateRect(g_mnAnimInfo.hwndAni, nullptr, TRUE);
     }
 
@@ -504,17 +523,23 @@ void MNAnimate(bool fIterate)
         y = 0;
     }
 
-    HRGN hrgn = CreateRectRgn(
-        x,
-        y,
-        x + g_mnAnimInfo.ixAni,
-        y + g_mnAnimInfo.iyAni
-    );
+    RECT rcRegion;
+    rcRegion.left   = x;
+    rcRegion.top    = y;
+    rcRegion.right  = x + g_mnAnimInfo.ixAni;
+    rcRegion.bottom = y + g_mnAnimInfo.iyAni;
+
+    HRGN hrgn = CreateRectRgnIndirect(&rcRegion);
     SetWindowRgn(g_mnAnimInfo.hwndAni, hrgn, FALSE);
     DeleteObject(hrgn);
 
+    // Force LTR, because RTL coords suck.
+    DWORD dwOldLayout = SetLayout(g_mnAnimInfo.hdcWndAni, 0);
+
     BitBlt(g_mnAnimInfo.hdcWndAni, x, y, g_mnAnimInfo.ixAni, g_mnAnimInfo.iyAni,
            g_mnAnimInfo.hdcAni, xOff, yOff, SRCCOPY | NOMIRRORBITMAP);
+
+    SetLayout(g_mnAnimInfo.hdcWndAni, dwOldLayout);
 
     if ((g_mnAnimInfo.cxAni == g_mnAnimInfo.ixAni)
      && (g_mnAnimInfo.cyAni == g_mnAnimInfo.iyAni))
@@ -595,7 +620,9 @@ LRESULT CALLBACK MenuSubclassProc(
                     {
                         s_fSelectingFirstItem = true;
                         SendMessageW(g_mnAnimInfo.hwndAni, MN_SELECTITEM, 0, 0);
+                        SetRTL(g_mnAnimInfo.hwndAni, true);
                         SendMessageW(g_mnAnimInfo.hwndAni, WM_PRINT, (WPARAM)g_mnAnimInfo.hdcAni, PRF_CLIENT | PRF_NONCLIENT | PRF_ERASEBKGND);
+                        SetRTL(g_mnAnimInfo.hwndAni, false);
                         s_fSelectingFirstItem = false;
                         s_fHasSelectedFirstItem = true;
                     }
@@ -794,6 +821,8 @@ LRESULT CALLBACK MenuSubclassProc(
                 g_mnAnimInfo.hbmAni = CreateCompatibleBitmap(g_mnAnimInfo.hdcWndAni, pwp->cx, pwp->cy);
                 g_mnAnimInfo.hdcFinalFrame = CreateCompatibleDC(NULL);
                 g_mnAnimInfo.hbmFinalFrame = CreateCompatibleBitmap(g_mnAnimInfo.hdcWndAni, pwp->cx, pwp->cy);
+                if (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL)
+                    g_mnAnimInfo.fLayoutRTL = true;
                 GetCursorPos(&g_mnAnimInfo.ptInitialMousePos);
                 
                 /* Get font metrics */
@@ -834,6 +863,10 @@ LRESULT CALLBACK MenuSubclassProc(
 
                 SelectObject(g_mnAnimInfo.hdcFinalFrame, g_mnAnimInfo.hbmFinalFrame);
                 SendMessageW(hwnd, WM_PRINT, (WPARAM)g_mnAnimInfo.hdcFinalFrame, PRF_CLIENT | PRF_NONCLIENT | PRF_ERASEBKGND);
+
+                /* Force RTL off for the duration of the animation. I do not
+                   want to deal with the insane mirrored coordinates. */
+                SetRTL(hwnd, false);
 
                 /* Start animation */
                 g_mnAnimInfo.ulAnimStartTime = GetTickCount64();
