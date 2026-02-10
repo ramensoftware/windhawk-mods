@@ -1269,7 +1269,7 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
   */
 HMODULE LoadComCtlModule(void)
 {
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     ACTCTXW actCtx = { sizeof(actCtx) };
     actCtx.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID | ACTCTX_FLAG_HMODULE_VALID;
     actCtx.lpResourceName = MAKEINTRESOURCEW(124);
@@ -1277,7 +1277,7 @@ HMODULE LoadComCtlModule(void)
     HANDLE hActCtx = CreateActCtxW(&actCtx);
     ULONG_PTR ulCookie;
     ActivateActCtx(hActCtx, &ulCookie);
-    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+    HMODULE hComCtl = LoadLibraryExW(L"comctl32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     /**
       * Certain processes will ignore the activation context and load
       * comctl32.dll 5.82 anyway. If that occurs, just reject it.
