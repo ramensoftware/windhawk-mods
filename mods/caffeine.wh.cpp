@@ -2,7 +2,7 @@
 // @id              caffeine
 // @name            Caffeine
 // @description     Prevent your PC from sleeping or turning off the display with a simple tray icon toggle
-// @version         1.0
+// @version         0.7
 // @author          ALMAS CP
 // @github          https://github.com/almas-cp
 // @homepage        https://github.com/almas-cp
@@ -16,11 +16,13 @@
 # Caffeine
 A lightweight system tray utility that prevents your computer from sleeping
 or turning off the display. Toggle it on and off with a single click on the
-tray icon.
+tray icon, or right-click to choose a timed duration.
 
 
 ## Features
 - **One-click toggle**: Left-click the tray icon to activate/deactivate
+- **Timed activation**: Right-click for duration options (15 min to 4 hours, or indefinite)
+- **Countdown display**: Tooltip shows remaining time when using timed mode
 - **Prevent sleep**: Keeps your system from entering sleep mode
 - **Prevent display off**: Stops the monitor from turning off due to inactivity
 - **Visual indicators**: Distinct colors for active (caffeinated) and inactive states
@@ -36,14 +38,21 @@ that the system and display should stay on. When deactivated, it clears
 these flags.
 
 
+## Controls
+- **Left-click**: Quick toggle — activates indefinitely if off, deactivates if on
+- **Right-click**: Context menu with duration options:
+  - Indefinite (keeps awake forever)
+  - 15 Minutes
+  - 30 Minutes
+  - 1 Hour
+  - 2 Hours
+  - 4 Hours
+  - Activate / Deactivate (shown based on current state)
+
+
 ## Visual Indicators
 - **Active (Caffeinated)**: Bright icon (default: amber/orange ☕)
 - **Inactive**: Dim icon (default: gray)
-
-
-## Usage
-- **Left-click** the tray icon to toggle caffeine on/off
-- Configure colors, shape, size, and auto-start behavior in mod settings
 */
 // ==/WindhawkModReadme==
 
@@ -115,11 +124,28 @@ these flags.
 
 #define WM_TRAYICON (WM_USER + 1)
 #define ID_TRAYICON 1002
-
+#define ID_TIMER_COUNTDOWN 2001
 
 // Icon shape constants
 #define SHAPE_CIRCLE 0
 #define SHAPE_SQUARE 1
+
+// Context menu item IDs
+#define IDM_INDEFINITE  4001
+#define IDM_15MIN       4002
+#define IDM_30MIN       4003
+#define IDM_1HOUR       4004
+#define IDM_2HOUR       4005
+#define IDM_4HOUR       4006
+#define IDM_DEACTIVATE  4007
+
+
+// Activation mode
+enum CaffeineMode {
+    MODE_OFF = 0,
+    MODE_INDEFINITE,
+    MODE_TIMED
+};
 
 
 struct CaffeineSettings {
@@ -148,7 +174,7 @@ private:
     HICON hIconInactive;
     bool iconVisible;
     bool isInitialized;
-    bool currentActiveState;  // Track state so UpdateSettings can refresh nid.hIcon
+    bool currentActiveState;
 
     int ClampColor(int value) {
         return std::max(0, std::min(255, value));
@@ -170,7 +196,6 @@ private:
 
         if (!hbm) return NULL;
 
-        // Convert RGB to BGR for bitmap and add alpha
         DWORD bitmapColor = ((color & 0xFF) << 16) | (color & 0xFF00) | ((color & 0xFF0000) >> 16) | 0xFF000000;
         DWORD transparent = 0x00000000;
 
@@ -196,7 +221,6 @@ private:
             }
         }
 
-        // Create mask bitmap
         HBITMAP hbmMask = CreateBitmap(size, size, 1, 1, NULL);
         if (!hbmMask) {
             DeleteObject(hbm);
@@ -343,13 +367,20 @@ public:
         return result;
     }
 
-    void UpdateStatus(bool active) {
+    // Update icon and tooltip — pass empty tooltipExtra for default, or remaining time string
+    void UpdateStatus(bool active, const wchar_t* tooltipExtra = nullptr) {
         if (!iconVisible || !isInitialized) return;
 
         currentActiveState = active;
         nid.hIcon = active ? hIconActive : hIconInactive;
-        const wchar_t* status = active ? L"Active (Keeping awake)" : L"Inactive";
-        swprintf_s(nid.szTip, L"Caffeine: %s", status);
+
+        if (!active) {
+            wcscpy_s(nid.szTip, L"Caffeine: Inactive");
+        } else if (tooltipExtra && tooltipExtra[0] != L'\0') {
+            swprintf_s(nid.szTip, L"Caffeine: Active (%s)", tooltipExtra);
+        } else {
+            wcscpy_s(nid.szTip, L"Caffeine: Active (Indefinite)");
+        }
 
         Shell_NotifyIcon(NIM_MODIFY, &nid);
     }
@@ -364,6 +395,24 @@ public:
     }
 
     bool IsVisible() const { return iconVisible; }
+
+    // Show a balloon/toast notification
+    void ShowBalloonNotification(const wchar_t* title, const wchar_t* message) {
+        if (!iconVisible || !isInitialized) return;
+
+        nid.uFlags |= NIF_INFO;
+        wcscpy_s(nid.szInfoTitle, title);
+        wcscpy_s(nid.szInfo, message);
+        nid.dwInfoFlags = NIIF_INFO;
+        nid.uTimeout = 5000;  // 5 seconds
+
+        Shell_NotifyIcon(NIM_MODIFY, &nid);
+
+        // Clear NIF_INFO flag so subsequent updates don't re-show the balloon
+        nid.uFlags &= ~NIF_INFO;
+        nid.szInfoTitle[0] = L'\0';
+        nid.szInfo[0] = L'\0';
+    }
 
     bool RecreateTrayIcon() {
         if (!isInitialized || !hwnd) return false;
@@ -397,6 +446,9 @@ private:
     static UINT s_uTaskbarRestart;
     static std::function<void()> s_onTaskbarCreated;
     static std::function<void()> s_onTrayClick;
+    static std::function<void()> s_onTrayRightClick;
+    static std::function<void()> s_onTimerTick;
+    static std::function<void(UINT)> s_onMenuCommand;
 
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         switch (uMsg) {
@@ -407,8 +459,26 @@ private:
                             s_onTrayClick();
                         }
                         return 0;
+                    case WM_RBUTTONUP:
+                        if (s_onTrayRightClick) {
+                            s_onTrayRightClick();
+                        }
+                        return 0;
                 }
                 return 0;
+
+            case WM_COMMAND:
+                if (s_onMenuCommand) {
+                    s_onMenuCommand(LOWORD(wParam));
+                }
+                return 0;
+
+            case WM_TIMER:
+                if (wParam == ID_TIMER_COUNTDOWN && s_onTimerTick) {
+                    s_onTimerTick();
+                }
+                return 0;
+
             default:
                 if (s_uTaskbarRestart != 0 && uMsg == s_uTaskbarRestart) {
                     Wh_Log(L"📢 TaskbarCreated message received");
@@ -427,6 +497,7 @@ public:
 
     ~CaffeineTrayWindow() {
         if (hwnd) {
+            KillTimer(hwnd, ID_TIMER_COUNTDOWN);
             DestroyWindow(hwnd);
         }
     }
@@ -467,6 +538,18 @@ public:
 
     HWND GetHandle() const { return hwnd; }
 
+    void StartCountdownTimer() {
+        if (hwnd) {
+            SetTimer(hwnd, ID_TIMER_COUNTDOWN, 1000, NULL);  // Tick every second
+        }
+    }
+
+    void StopCountdownTimer() {
+        if (hwnd) {
+            KillTimer(hwnd, ID_TIMER_COUNTDOWN);
+        }
+    }
+
     static void SetTaskbarCreatedCallback(std::function<void()> callback) {
         s_onTaskbarCreated = callback;
     }
@@ -474,12 +557,27 @@ public:
     static void SetTrayClickCallback(std::function<void()> callback) {
         s_onTrayClick = callback;
     }
+
+    static void SetTrayRightClickCallback(std::function<void()> callback) {
+        s_onTrayRightClick = callback;
+    }
+
+    static void SetTimerTickCallback(std::function<void()> callback) {
+        s_onTimerTick = callback;
+    }
+
+    static void SetMenuCommandCallback(std::function<void(UINT)> callback) {
+        s_onMenuCommand = callback;
+    }
 };
 
 const wchar_t* CaffeineTrayWindow::CLASS_NAME = L"CaffeineTrayWindow";
 UINT CaffeineTrayWindow::s_uTaskbarRestart = 0;
 std::function<void()> CaffeineTrayWindow::s_onTaskbarCreated = nullptr;
 std::function<void()> CaffeineTrayWindow::s_onTrayClick = nullptr;
+std::function<void()> CaffeineTrayWindow::s_onTrayRightClick = nullptr;
+std::function<void()> CaffeineTrayWindow::s_onTimerTick = nullptr;
+std::function<void(UINT)> CaffeineTrayWindow::s_onMenuCommand = nullptr;
 
 
 // ─── Core Caffeine Controller ────────────────────────────────────────────────
@@ -489,13 +587,18 @@ private:
     CaffeineSettings settings;
     std::unique_ptr<CaffeineTrayWindow> trayWindow;
     std::unique_ptr<CaffeineTrayIcon> trayIcon;
-    std::atomic<bool> isActive{false};
     bool trayIconInitialized;
+
+    // Activation state
+    CaffeineMode currentMode;
+    ULONGLONG activationTickMs;   // GetTickCount64() when activated
+    ULONGLONG durationMs;         // 0 for indefinite
+    int timedMinutes;             // Original duration in minutes (for menu checkmark)
 
     void ApplyExecutionState() {
         EXECUTION_STATE flags = ES_CONTINUOUS;
 
-        if (isActive.load()) {
+        if (currentMode != MODE_OFF) {
             if (settings.preventSleep) {
                 flags |= ES_SYSTEM_REQUIRED;
             }
@@ -503,12 +606,11 @@ private:
                 flags |= ES_DISPLAY_REQUIRED;
             }
         }
-        // If inactive, ES_CONTINUOUS alone clears previous flags
 
         SetThreadExecutionState(flags);
 
         if (settings.logVerbose) {
-            if (isActive.load()) {
+            if (currentMode != MODE_OFF) {
                 Wh_Log(L"☕ Caffeine active — Sleep:%s Display:%s",
                        settings.preventSleep ? L"blocked" : L"allowed",
                        settings.preventDisplayOff ? L"blocked" : L"allowed");
@@ -518,16 +620,55 @@ private:
         }
     }
 
+    // Format remaining time into a readable string
+    void FormatRemainingTime(wchar_t* buffer, size_t bufferSize, ULONGLONG remainingMs) {
+        ULONGLONG totalSeconds = remainingMs / 1000;
+        ULONGLONG hours = totalSeconds / 3600;
+        ULONGLONG minutes = (totalSeconds % 3600) / 60;
+        ULONGLONG seconds = totalSeconds % 60;
+
+        if (hours > 0) {
+            swprintf_s(buffer, bufferSize, L"%lluh %llum left", hours, minutes);
+        } else if (minutes > 0) {
+            swprintf_s(buffer, bufferSize, L"%llum %llus left", minutes, seconds);
+        } else {
+            swprintf_s(buffer, bufferSize, L"%llus left", seconds);
+        }
+    }
+
+    void UpdateTooltip() {
+        if (!trayIcon || !trayIcon->IsVisible()) return;
+
+        if (currentMode == MODE_OFF) {
+            trayIcon->UpdateStatus(false);
+        } else if (currentMode == MODE_INDEFINITE) {
+            trayIcon->UpdateStatus(true, L"Indefinite");
+        } else {
+            // Timed — show remaining
+            ULONGLONG now = GetTickCount64();
+            ULONGLONG elapsed = now - activationTickMs;
+            if (elapsed >= durationMs) {
+                // Time's up — will be handled by timer tick
+                trayIcon->UpdateStatus(true, L"Expiring...");
+            } else {
+                wchar_t timeStr[64];
+                FormatRemainingTime(timeStr, 64, durationMs - elapsed);
+                trayIcon->UpdateStatus(true, timeStr);
+            }
+        }
+    }
+
 public:
-    CaffeineController() : trayIconInitialized(false) {
+    CaffeineController() : trayIconInitialized(false),
+                           currentMode(MODE_OFF),
+                           activationTickMs(0),
+                           durationMs(0),
+                           timedMinutes(0) {
         trayWindow = std::make_unique<CaffeineTrayWindow>();
         trayIcon = std::make_unique<CaffeineTrayIcon>();
     }
 
     ~CaffeineController() {
-        // Note: Deactivate() is called explicitly in WhTool_ModUninit before
-        // g_controller.reset() to ensure power policy is restored cleanly.
-        // We only clean up tray resources here.
         if (trayIcon) {
             trayIcon->Cleanup();
         }
@@ -541,14 +682,25 @@ public:
             return false;
         }
 
-        // Set up TaskbarCreated callback
+        // Callbacks
         CaffeineTrayWindow::SetTaskbarCreatedCallback([this]() {
             OnTaskbarCreated();
         });
 
-        // Set up tray click callback for toggling
         CaffeineTrayWindow::SetTrayClickCallback([this]() {
             Toggle();
+        });
+
+        CaffeineTrayWindow::SetTrayRightClickCallback([this]() {
+            ShowContextMenu();
+        });
+
+        CaffeineTrayWindow::SetTimerTickCallback([this]() {
+            OnTimerTick();
+        });
+
+        CaffeineTrayWindow::SetMenuCommandCallback([this](UINT id) {
+            OnMenuCommand(id);
         });
 
         if (!trayIcon->Initialize(trayWindow->GetHandle(), settings)) {
@@ -569,61 +721,219 @@ public:
         if (!trayIconInitialized || !trayIcon) return;
 
         if (trayIcon->RecreateTrayIcon()) {
-            trayIcon->UpdateStatus(isActive.load());
+            UpdateTooltip();
         }
     }
 
-    void Activate() {
-        if (isActive.load()) return;
+    // ── Activation controls ──────────────────────────────────────────────
 
-        isActive.store(true);
+    void ActivateIndefinite() {
+        // Stop any running timer
+        trayWindow->StopCountdownTimer();
+
+        currentMode = MODE_INDEFINITE;
+        activationTickMs = 0;
+        durationMs = 0;
+        timedMinutes = 0;
+
         ApplyExecutionState();
+        UpdateTooltip();
+        SaveState();
 
-        if (trayIcon && trayIcon->IsVisible()) {
-            trayIcon->UpdateStatus(true);
-        }
-
-        Wh_Log(L"☕ Caffeine activated");
+        Wh_Log(L"☕ Caffeine activated (Indefinite)");
     }
 
-    void Deactivate() {
-        if (!isActive.load()) return;
+    void ActivateTimed(int minutes) {
+        currentMode = MODE_TIMED;
+        activationTickMs = GetTickCount64();
+        durationMs = (ULONGLONG)minutes * 60ULL * 1000ULL;
+        timedMinutes = minutes;
 
-        isActive.store(false);
         ApplyExecutionState();
+        UpdateTooltip();
+        SaveState();
 
-        if (trayIcon && trayIcon->IsVisible()) {
-            trayIcon->UpdateStatus(false);
+        // Start the 1-second countdown timer
+        trayWindow->StartCountdownTimer();
+
+        Wh_Log(L"☕ Caffeine activated (%d minutes)", minutes);
+    }
+
+    void Deactivate(bool showNotification = false) {
+        if (currentMode == MODE_OFF) return;
+
+        trayWindow->StopCountdownTimer();
+
+        // Show balloon notification if this was a timer expiry
+        if (showNotification && trayIcon && trayIcon->IsVisible()) {
+            wchar_t msg[128];
+            if (timedMinutes > 0) {
+                if (timedMinutes >= 60) {
+                    swprintf_s(msg, L"Your %d hour caffeine timer has ended.",
+                               timedMinutes / 60);
+                } else {
+                    swprintf_s(msg, L"Your %d minute caffeine timer has ended.",
+                               timedMinutes);
+                }
+            } else {
+                wcscpy_s(msg, L"Caffeine has been deactivated.");
+            }
+            trayIcon->ShowBalloonNotification(L"☕ Caffeine Expired", msg);
         }
+
+        currentMode = MODE_OFF;
+        activationTickMs = 0;
+        durationMs = 0;
+        timedMinutes = 0;
+
+        ApplyExecutionState();
+        UpdateTooltip();
+        ClearState();
 
         Wh_Log(L"💤 Caffeine deactivated");
     }
 
     void Toggle() {
-        if (isActive.load()) {
+        if (currentMode != MODE_OFF) {
             Deactivate();
         } else {
-            Activate();
+            ActivateIndefinite();
         }
     }
 
+    // ── Timer tick (called every second while timed mode is active) ──────
+
+    void OnTimerTick() {
+        if (currentMode != MODE_TIMED) {
+            trayWindow->StopCountdownTimer();
+            return;
+        }
+
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG elapsed = now - activationTickMs;
+
+        if (elapsed >= durationMs) {
+            // Time's up!
+            Wh_Log(L"⏰ Caffeine timer expired");
+            Deactivate(true);  // true = show expiry notification
+        } else {
+            // Update tooltip with remaining time
+            UpdateTooltip();
+        }
+    }
+
+    // ── Context menu ─────────────────────────────────────────────────────
+
+    void ShowContextMenu() {
+        HMENU hMenu = CreatePopupMenu();
+        if (!hMenu) return;
+
+        // Build menu items with checkmarks for current mode
+        UINT indefiniteFlags = MF_STRING;
+        if (currentMode == MODE_INDEFINITE) indefiniteFlags |= MF_CHECKED;
+        AppendMenu(hMenu, indefiniteFlags, IDM_INDEFINITE, L"Indefinite");
+
+        AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+
+        // Timed options
+        struct { UINT id; int minutes; const wchar_t* label; } timeOptions[] = {
+            { IDM_15MIN,  15,  L"15 Minutes" },
+            { IDM_30MIN,  30,  L"30 Minutes" },
+            { IDM_1HOUR,  60,  L"1 Hour"     },
+            { IDM_2HOUR,  120, L"2 Hours"    },
+            { IDM_4HOUR,  240, L"4 Hours"    },
+        };
+
+        for (auto& opt : timeOptions) {
+            UINT flags = MF_STRING;
+            bool isActiveOption = (currentMode == MODE_TIMED && timedMinutes == opt.minutes);
+            if (isActiveOption) {
+                flags |= MF_CHECKED;
+
+                // Append remaining time to the label
+                ULONGLONG elapsed = GetTickCount64() - activationTickMs;
+                if (elapsed < durationMs) {
+                    wchar_t timeStr[64];
+                    FormatRemainingTime(timeStr, 64, durationMs - elapsed);
+                    wchar_t labelWithTime[128];
+                    swprintf_s(labelWithTime, L"%s  (%s)", opt.label, timeStr);
+                    AppendMenu(hMenu, flags, opt.id, labelWithTime);
+                } else {
+                    AppendMenu(hMenu, flags, opt.id, opt.label);
+                }
+            } else {
+                AppendMenu(hMenu, flags, opt.id, opt.label);
+            }
+        }
+
+        AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+
+        if (currentMode == MODE_OFF) {
+            AppendMenu(hMenu, MF_STRING, IDM_INDEFINITE, L"Activate");
+        } else {
+            AppendMenu(hMenu, MF_STRING, IDM_DEACTIVATE, L"Deactivate");
+        }
+
+        // Show the menu at cursor position
+        POINT pt;
+        GetCursorPos(&pt);
+
+        // Required so the menu dismisses when clicking elsewhere
+        SetForegroundWindow(trayWindow->GetHandle());
+
+        TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
+                       pt.x, pt.y, 0, trayWindow->GetHandle(), NULL);
+
+        // Required after TrackPopupMenu per MSDN
+        PostMessage(trayWindow->GetHandle(), WM_NULL, 0, 0);
+
+        DestroyMenu(hMenu);
+    }
+
+    void OnMenuCommand(UINT id) {
+        switch (id) {
+            case IDM_INDEFINITE:
+                ActivateIndefinite();
+                break;
+            case IDM_15MIN:
+                ActivateTimed(15);
+                break;
+            case IDM_30MIN:
+                ActivateTimed(30);
+                break;
+            case IDM_1HOUR:
+                ActivateTimed(60);
+                break;
+            case IDM_2HOUR:
+                ActivateTimed(120);
+                break;
+            case IDM_4HOUR:
+                ActivateTimed(240);
+                break;
+            case IDM_DEACTIVATE:
+                Deactivate();
+                break;
+        }
+    }
+
+    // ── Settings ─────────────────────────────────────────────────────────
+
     void UpdateSettings(const CaffeineSettings& newSettings) {
-        bool wasActive = isActive.load();
         settings = newSettings;
 
         if (settings.iconShape < 0 || settings.iconShape > 1) {
             settings.iconShape = 0;
         }
 
-        // Update the execution state if currently active (settings may have changed)
-        if (wasActive) {
+        // Re-apply execution state if currently active (settings may have changed)
+        if (currentMode != MODE_OFF) {
             ApplyExecutionState();
         }
 
         // Update tray icon appearance
         if (trayIconInitialized && trayIcon) {
             trayIcon->UpdateSettings(settings);
-            trayIcon->UpdateStatus(wasActive);
+            UpdateTooltip();
         }
 
         Wh_Log(L"⚙️ Caffeine settings updated — AutoActivate:%s Sleep:%s Display:%s",
@@ -632,9 +942,97 @@ public:
                settings.preventDisplayOff ? L"blocked" : L"allowed");
     }
 
-    bool IsActive() const { return isActive.load(); }
-
+    bool IsActive() const { return currentMode != MODE_OFF; }
+    CaffeineMode GetMode() const { return currentMode; }
     const CaffeineSettings& GetSettings() const { return settings; }
+
+    // ── State persistence ────────────────────────────────────────────────
+
+    void SaveState() {
+        // Save: mode (1=indefinite, 2=timed), timedMinutes, and wall-clock
+        // activation time (seconds since epoch) for timed mode
+        Wh_SetIntValue(L"savedMode", (int)currentMode);
+        Wh_SetIntValue(L"savedTimedMinutes", timedMinutes);
+
+        if (currentMode == MODE_TIMED) {
+            // Save the wall-clock time when the timer should expire
+            // (current time + remaining ms, stored as seconds since epoch)
+            ULONGLONG remaining = 0;
+            ULONGLONG elapsed = GetTickCount64() - activationTickMs;
+            if (elapsed < durationMs) {
+                remaining = durationMs - elapsed;
+            }
+            // Store expiry as a FILETIME-based timestamp (100ns intervals)
+            FILETIME ft;
+            GetSystemTimeAsFileTime(&ft);
+            ULARGE_INTEGER now;
+            now.LowPart = ft.dwLowDateTime;
+            now.HighPart = ft.dwHighDateTime;
+            // Convert remaining ms to 100ns intervals and add to now
+            ULONGLONG expiryTime = now.QuadPart + (remaining * 10000ULL);
+            // Store as two 32-bit ints (high and low parts)
+            Wh_SetIntValue(L"savedExpiryHigh", (int)(expiryTime >> 32));
+            Wh_SetIntValue(L"savedExpiryLow", (int)(expiryTime & 0xFFFFFFFF));
+        }
+
+        Wh_Log(L"💾 State saved (mode=%d, minutes=%d)", (int)currentMode, timedMinutes);
+    }
+
+    void ClearState() {
+        Wh_SetIntValue(L"savedMode", 0);
+        Wh_SetIntValue(L"savedTimedMinutes", 0);
+        Wh_SetIntValue(L"savedExpiryHigh", 0);
+        Wh_SetIntValue(L"savedExpiryLow", 0);
+        Wh_Log(L"💾 Saved state cleared");
+    }
+
+    void RestoreState() {
+        int savedMode = Wh_GetIntValue(L"savedMode", 0);
+        if (savedMode == 0) return;  // No saved state
+
+        int savedMinutes = Wh_GetIntValue(L"savedTimedMinutes", 0);
+
+        if (savedMode == (int)MODE_INDEFINITE) {
+            Wh_Log(L"🔄 Restoring indefinite caffeine state");
+            ActivateIndefinite();
+        } else if (savedMode == (int)MODE_TIMED && savedMinutes > 0) {
+            // Calculate remaining time from saved expiry timestamp
+            ULONGLONG expiryHigh = (ULONGLONG)(unsigned int)Wh_GetIntValue(L"savedExpiryHigh", 0);
+            ULONGLONG expiryLow = (ULONGLONG)(unsigned int)Wh_GetIntValue(L"savedExpiryLow", 0);
+            ULONGLONG expiryTime = (expiryHigh << 32) | expiryLow;
+
+            FILETIME ft;
+            GetSystemTimeAsFileTime(&ft);
+            ULARGE_INTEGER now;
+            now.LowPart = ft.dwLowDateTime;
+            now.HighPart = ft.dwHighDateTime;
+
+            if (expiryTime > now.QuadPart) {
+                // Still time remaining — calculate how many minutes are left
+                ULONGLONG remainingMs = (expiryTime - now.QuadPart) / 10000ULL;
+                int remainingMinutes = (int)(remainingMs / 60000ULL);
+                if (remainingMinutes < 1) remainingMinutes = 1;  // At least 1 minute
+
+                Wh_Log(L"🔄 Restoring timed caffeine (%d min remaining of %d min)",
+                       remainingMinutes, savedMinutes);
+
+                // Activate with the remaining time, but keep the original
+                // timedMinutes for the menu checkmark
+                currentMode = MODE_TIMED;
+                durationMs = remainingMs;
+                activationTickMs = GetTickCount64();
+                timedMinutes = savedMinutes;
+
+                ApplyExecutionState();
+                UpdateTooltip();
+                trayWindow->StartCountdownTimer();
+            } else {
+                // Timer already expired while mod was unloaded
+                Wh_Log(L"⏰ Saved timer had already expired, staying inactive");
+                ClearState();
+            }
+        }
+    }
 };
 
 
@@ -676,9 +1074,12 @@ BOOL WhTool_ModInit() {
             Wh_Log(L"⚠️ Tray icon initialization failed, continuing without it");
         }
 
-        // Auto-activate if configured
-        if (g_controller->GetSettings().autoActivate) {
-            g_controller->Activate();
+        // Try to restore previous state first
+        g_controller->RestoreState();
+
+        // If no state was restored and auto-activate is on, activate
+        if (!g_controller->IsActive() && g_controller->GetSettings().autoActivate) {
+            g_controller->ActivateIndefinite();
         }
 
         Wh_Log(L"✅ Caffeine mod initialized successfully");
