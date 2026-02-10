@@ -4808,6 +4808,34 @@
                 "version": "1.0"
             }
         },
+        "menu-tooltip-slide-animation": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1770730550000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1770730550000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32 -lcomctl32 -lversion -luxtheme",
+                "description": "Makes menus and tooltips slide into view",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Menu/Tooltip Slide Animation",
+                "version": "1.0.0"
+            }
+        },
         "modern-notepad-to-classic-editor": {
             "details": {
                 "defaultSorting": 1890,

@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-10T09:05:29.000Z</updated>
+    <updated>2026-02-10T13:35:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Menu/Tooltip Slide Animation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/menu-tooltip-slide-animation#f3ca1c0c198f597b44116db8bced26e1abe60aaf</id>
+        <link href="https://windhawk.net/mods/menu-tooltip-slide-animation"/>
+        <updated>2026-02-10T13:35:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="menutooltipslideanimation">Menu/Tooltip Slide Animation</h1>
+<p>From Windows 98 through Windows XP, you could make menus and tooltips use a
+slide/scroll animation. This mod restores those animations to modern versions
+of Windows.</p>
+<h2 id="captionbuttontooltips">Caption button tooltips</h2>
+<p>The tooltips you see when hovering a window's caption buttons (Close, Maximize, Minimize)
+are implemented by the kernel-mode component of NTUSER. <strong>It is impossible to make them
+have a slide animation without issues.</strong></p>
+<p><strong>Tooltips</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/menu-tooltip-slide-animation/tooltip.gif" alt="Tooltips" /></p>
+<p><strong>Menus (Windows 98/Me)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/menu-tooltip-slide-animation/menu-9x.gif" alt="Menus (Windows 98/Me)" /></p>
+<p><strong>Menus (Windows 2000/XP)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/menu-tooltip-slide-animation/menu-nt.gif" alt="Menus (Windows 2000/XP)" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA["Sign in with a passkey" popup blocker 3.0.0]]></title>
         <id>https://windhawk.net/mods/passkey-popup-blocker#b1f2493c90d1f67de2767b2d669694d3b7ead97d</id>
@@ -350,20 +374,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <author>
             <name>Steffan Donal</name>
             <uri>https://github.com/SteffanDonal</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Select filename extension on double F2 3]]></title>
-        <id>https://windhawk.net/mods/explorer-double-f2-rename-extension#551e1a0a6ae59ab71315af2fd7d085c9ff6c346e</id>
-        <link href="https://windhawk.net/mods/explorer-double-f2-rename-extension"/>
-        <updated>2026-02-01T20:57:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>minor refactor</li>
-<li>option to loop selection based on current selection instead of hotkey timing</li>
-</ul>]]></content>
-        <author>
-            <name>Marnes &lt;leaumar@sent.com&gt;</name>
-            <uri>https://github.com/leaumar</uri>
         </author>
     </entry>
 </feed>
