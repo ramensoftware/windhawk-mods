@@ -2,12 +2,11 @@
 // @id              restore-explorer-exploring-mode
 // @name            Restore Explorer "Exploring" Mode
 // @description     Reintroduces File Explorer's "Exploring" mode from Windows XP and before
-// @version         1.0.3
+// @version         1.2.0
 // @author          aubymori
 // @github          https://github.com/aubymori
-// @include         explorer.exe
-// @compilerOptions -lshlwapi -lpropsys
-// @architecture    x86-64
+// @include         *
+// @compilerOptions -lole32 -lshlwapi -lpropsys -fms-extensions
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -23,6 +22,19 @@ Before Windows 7, File Explorer acted different in many ways:
   verb (Windows + E shortcut, directly invoking `explorer.exe`)
 
 This mod addresses all of these.
+
+## Usage notes
+Part of this mod's behavior relies on the "Explore" action being visible in folder context menus,
+which it is not by default. In order to enable it, save the following into a `.reg` file:
+
+```
+Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\Folder\shell\explore]
+"ProgrammaticAccessOnly"=-
+```
+
+...and then import it into the registry by double clicking it.
 
 **Preview**:
 
@@ -41,20 +53,54 @@ This mod addresses all of these.
   - sys_drive_root: Windows drive root (C:\) (Windows 95, 98, NT 4.0)
 - explorer_icon: true
   $name: Explorer icon
-  $description: Changes Explorer windows to have a generic Windows Explorer icon when the folder tree is open.
+  $description:
+    Changes Explorer windows to have a generic Windows Explorer icon when the folder tree is open. 
+    (Windows XP and before)
 - exploring_text: Exploring
   $name: "\"Exploring\" text"
   $description:
-    Text to use for the explore mode title (e.g. "Exploring - My Computer"). Leave blank 
-    for the title to not be affected (Windows 2000/Me+).
+    Text to use for the explore mode title (e.g. "Exploring - My Computer") (Windows 98 and before). Leave blank 
+    for the title to not be affected (Windows 2000/Me and after).
+- open_in_new_window: true
+  $name: "\"Open\" folder opens new window in open/save dialog"
+  $description:
+    When enabled, taking the "Open" action on a folder in an open/save dialog will open
+    the folder in a new Explorer window (Windows XP and before).
+- dont_store_tree_state: true
+  $name: Don't store tree view state
+  $description:
+    When enabled, the tree view's initial open state will be based on whether the window was opened in
+    explore mode and will not be carried between windows (Windows XP and before).
 */
 // ==/WindhawkModSettings==
 
+// Hack for Windhawk <1.7
+#undef WINAPI
+#define WINAPI __attribute__((stdcall))
 #include <windhawk_utils.h>
+#undef WINAPI
+#define WINAPI __stdcall
+
 #include <initguid.h>
+#include <shlguid.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <propsys.h>
+
+// Workaround for missing _ReturnAddress symbol
+extern "C" void* _ReturnAddress2() { return __builtin_return_address(0); }
+#define _ReturnAddress _ReturnAddress2
+#include <wil/result_macros.h>
+#undef _ReturnAddress
+
+#include <wil/resource.h>
+#include <wil/com.h>
+
+#ifdef _WIN64
+#define THISCALL_STR  L"__cdecl"
+#else
+#define THISCALL_STR  L"__thiscall"
+#endif
 
 //
 // Types
@@ -66,10 +112,10 @@ enum EXE_INVOKE_LOCATION
     EIL_DOCUMENTS,
     EIL_SYSDRIVEROOT,
 } g_exeInvokeLocation = EIL_UNCHANGED;
-
 bool g_fExplorerIcon = false;
-
 WindhawkUtils::StringSetting g_spszExploringText;
+bool g_fOpenInNewWindow = false;
+bool g_fDontStoreTreeState = false;
 
 interface IBrowserEvents : IUnknown
 {
@@ -88,7 +134,11 @@ DEFINE_GUID(SID_ShellBrowserPropStore, 0xA3B24A0A, 0x7B68, 0x448D, 0x99,0x79, 0x
 // Util functions
 //
 
+#ifdef _WIN64
 BOOL (WINAPI *ShellExecuteExW_orig)(SHELLEXECUTEINFOW *);
+#else
+#define ShellExecuteExW_orig ShellExecuteExW
+#endif
 
 HRESULT OpenFolderCSIDL(int csidl)
 {
@@ -107,6 +157,8 @@ HRESULT OpenFolderCSIDL(int csidl)
     }
     return E_FAIL;
 }
+
+#ifdef _WIN64
 
 //
 // Make Windows + E shortcut open in exploring mode
@@ -276,10 +328,213 @@ HRESULT CMemPropStore_Write_hook(
     return hr;
 }
 
+class DirectUI_Element;
+
+typedef DirectUI_Element *(*DirectUI_Element_GetParent_t)(DirectUI_Element *pThis);
+DirectUI_Element_GetParent_t DirectUI_Element_GetParent;
+
+typedef DirectUI_Element *(*DirectUI_Element_FindDescendent_t)(DirectUI_Element *pThis, ATOM atomID);
+DirectUI_Element_FindDescendent_t DirectUI_Element_FindDescendent;
+
+// This is exported from dui70, but the implementation is so simple that it's
+// not worth importing.
+#define StrToID(psz) FindAtomW(psz)
+
+thread_local bool g_fShouldSaveStream = false;
+
+HRESULT (*CDUISizerElement__WriteVisibleToPropBag_orig)(void *, BOOL);
+HRESULT CDUISizerElement__WriteVisibleToPropBag_hook(
+    void *pThis,
+    BOOL  fValue
+)
+{
+    LPCWSTR pszPropName = (LPCWSTR)pThis + 688;
+    if (!wcscmp(pszPropName, L"PageSpaceControlSizer_Visible"))
+    {
+        //
+        // Rough layout:
+        //
+        // <Element resid="ProperTreeInner">
+        //     <ProperTreeHost id="atom(ProperTreeHost)">
+        //         <ProperTreeModuleInner id="atom(ProperTreeModuleInner)"/>
+        //     </ProperTreeHost>
+        //     <Sizer id="atom(PageSpaceControlSizer)"/>
+        // </Element>
+        //
+        // We are PageSpaceControlSizer and we want ProperTreeModuleInner, as
+        // it has a pointer to the shell browser property bag, containing the
+        // ExpandInitialNav value.
+        //
+        IPropertyBag *ppbBrowser = nullptr;
+        DirectUI_Element *pe = DirectUI_Element_GetParent((DirectUI_Element *)pThis);
+        if (pe)
+        {
+            DirectUI_Element *peInner = DirectUI_Element_FindDescendent(pe, StrToID(L"ProperTreeModuleInner"));
+            if (peInner)
+            {
+                ppbBrowser = *((IPropertyBag **)peInner + 31);
+            }
+        }
+
+        if (ppbBrowser)
+        {
+            // If we have set the initial state, don't let navigation write it again.
+            BOOL fProp;
+            if (SUCCEEDED(PSPropertyBag_ReadBOOL(ppbBrowser, L"WH_HasSetInitialTreeState", &fProp))
+                && fProp)
+            {
+                return S_OK;
+            }
+
+            // If we don't want to store the tree state, open tree based on whether or not we are in
+            // explore mode. (XP and before)
+            if (g_fDontStoreTreeState)
+            {
+                if (SUCCEEDED(PSPropertyBag_ReadBOOL(ppbBrowser, L"ExpandInitialNav", &fProp)))
+                    fValue = fProp;
+                else
+                    fValue = FALSE;
+            }
+
+            PSPropertyBag_WriteBOOL(ppbBrowser, L"WH_HasSetInitialTreeState", TRUE);
+        }
+    }
+    return CDUISizerElement__WriteVisibleToPropBag_orig(pThis, fValue);
+}
+
+#endif
+
+enum ASSOCQUERY
+{
+    AQ_NOTHING = 0x0,
+    AQS_FRIENDLYTYPENAME = 0x170000,
+    AQS_DEFAULTICON = 0x70001,
+    AQS_CONTENTTYPE = 0x80070002,
+    AQS_CLSID = 0x470003,
+    AQS_PROGID = 0x70004,
+    AQS_APPID = 0x70005,
+    AQN_NAMED_VALUE = 0x10F0000,
+    AQNS_NAMED_MUI_STRING = 0x1170001,
+    AQNS_SHELLEX_HANDLER = 0x81470002,
+    AQVS_COMMAND = 0x2070000,
+    AQVS_DDECOMMAND = 0x2070001,
+    AQVS_DDEIFEXEC = 0x2070002,
+    AQVS_DDEAPPLICATION = 0x2070003,
+    AQVS_DDETOPIC = 0x2070004,
+    AQV_NOACTIVATEHANDLER = 0x2060005,
+    AQVD_MSIDESCRIPTOR = 0x2060006,
+    AQVS_APPLICATION_PATH = 0x2010007,
+    AQVS_APPLICATION_FRIENDLYNAME = 0x2170008,
+    AQVS_DDEWINDOWCLASS = 0x2070009,
+    AQVS_DDEWINDOWNAME = 0x207000A,
+    AQVS_CANONICALVERB = 0x207000B,
+    AQVG_DROPTARGETCLSID = 0x247000C,
+    AQVG_DELEGATEEXECUTE = 0x247000D,
+    AQVO_SHELLVERB_ELEMENT = 0x220000E,
+    AQVO_APPLICATION_ELEMENT = 0x220000F,
+    AQVO_SHELLVERB_EXECUTE = 0x2200010,
+    AQV_ELEVATE = 0x2020011,
+    AQVS_ISOLATEDCOMMANDTEMPLATE = 0x2070012,
+    AQVS_VERBICON = 0x2070013,
+    AQ_USERCUSTOMIZED = 0x20014,
+    AQVS_NAMED_COMMAND_VALUE = 0x8F0015,
+    AQVPS_DEFAULT_APPID = 0x4070016,
+    AQVG_EXPLORER_COMMAND_HANDLER = 0x2470017,
+    AQVG_COMMAND_STATE_HANDLER = 0x2470018,
+    AQVS_APPLICATION_PUBLISHER = 0x2170019,
+    AQVS_HANDLER_MODULE = 0x207001A,
+    AQVS_APPLICATION_ICON_REFERENCE = 0x207001B,
+    AQVS_SUPPORTED_URI_PROTOCOLS = 0x201001C,
+    AQVO_VERB_PARENT_ELEMENT = 0x220001D,
+    AQF_STRING = 0x10000,
+    AQF_EXISTS = 0x20000,
+    AQF_DIRECT = 0x40000,
+    AQF_DWORD = 0x80000,
+    AQF_MUISTRING = 0x100000,
+    AQF_OBJECT = 0x200000,
+    AQF_GUID = 0x400000,
+    AQF_CUEIS_VALUE_NAME = 0x800000,
+    AQF_CUEIS_NAME = 0x1000000,
+    AQF_CUEIS_SHELLVERB = 0x2000000,
+    AQF_SHELLVERB_PARENT = 0x4000000,
+    AQF_QUERY_INITCLASS = 0x80000000,
+};
+
+MIDL_INTERFACE("D8F6AD5B-B44F-4BCC-88FD-EB3473DB7502")
+IAssociationElement : IUnknown
+{
+public:
+	STDMETHOD(QueryString)(ASSOCQUERY flags, PCWSTR lpValueName, PWSTR *ppszOut) PURE;
+	STDMETHOD(QueryDword)(ASSOCQUERY flags, PCWSTR lpValueName, DWORD *pdwOut) PURE;
+	STDMETHOD(QueryGuid)(ASSOCQUERY flags, PCWSTR lpValueName, GUID *pGuidOut) PURE;
+	STDMETHOD(QueryExists)(ASSOCQUERY flags, PCWSTR lpValueName) PURE;
+	STDMETHOD(QueryDirect)(ASSOCQUERY flags, PCWSTR lpValueName, FLAGGED_BYTE_BLOB **) PURE;
+	STDMETHOD(QueryObject)(ASSOCQUERY flags, PCWSTR lpValueName, REFIID riid, void **ppvObject) PURE;
+};
+
+#ifdef _WIN64
+#define CExecuteCommandBase__paeAssoc(pThis) *((IAssociationElement **)pThis + 11)
+#else
+#define CExecuteCommandBase__paeAssoc(pThis) *((IAssociationElement **)pThis + 15)
+#endif
+
+#define CObjectWithSite__punkSite(pThis) *((IUnknown **)pThis + 1)
+
+//
+// Make Explore verb act like Vista and before (all processes)
+//
+HRESULT (__thiscall *CExecuteFolder_ShowFolder_orig)(void *, LPCITEMIDLIST, bool);
+HRESULT __thiscall CExecuteFolder_ShowFolder_hook(
+    void          *pThis,
+    LPCITEMIDLIST  pidlFolder,
+    bool           fForceNewWindow
+)
+{
+    IAssociationElement *paeAssoc = CExecuteCommandBase__paeAssoc(pThis);
+    if (paeAssoc)
+    {
+        wil::unique_cotaskmem_string spszVerb;
+        if (SUCCEEDED(paeAssoc->QueryString(AQVS_CANONICALVERB, nullptr, &spszVerb)))
+        {
+            bool fExploreVerb = !wcsicmp(spszVerb.get(), L"explore");
+            if (fExploreVerb || !wcsicmp(spszVerb.get(), L"open"))
+            {
+                IUnknown *punkSite = CObjectWithSite__punkSite(pThis);
+                wil::com_ptr<IShellBrowser> spBrowser;
+                if (punkSite
+                && SUCCEEDED(IUnknown_QueryService(
+                    punkSite,
+                    SID_STopLevelBrowser,
+                    IID_PPV_ARGS(&spBrowser))))
+                {
+                    wil::com_ptr<ICommDlgBrowser> spCommDlgBrowser;
+                    if (SUCCEEDED(spBrowser->QueryInterface(&spCommDlgBrowser)))
+                    {
+                        fForceNewWindow = fExploreVerb || g_fOpenInNewWindow;
+                    }
+                    else
+                    {
+                        HWND hwndTree;
+                        bool fTreeOpen = false;
+                        if (SUCCEEDED(spBrowser->GetControlWindow(FCW_TREE, &hwndTree)))
+                        {
+                            fTreeOpen = (hwndTree != NULL);
+                        }
+                        fForceNewWindow = ((!fExploreVerb && fTreeOpen) || (fExploreVerb && !fTreeOpen));
+                    }
+                }
+            }
+        }
+    }
+
+    return CExecuteFolder_ShowFolder_orig(pThis, pidlFolder, fForceNewWindow);
+}
+
 //
 // Init stuff
 //
 
+#ifdef _WIN64
 const WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
     {
         {
@@ -290,8 +545,10 @@ const WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         false
     },
 };
+#endif
 
 const WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
+#ifdef _WIN64
     {
         {
             L"private: int __cdecl CShellBrowser::_IsExplorerBandVisible(void)"
@@ -332,6 +589,27 @@ const WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
         CShellBrowser__OnCreate_hook,
         false
     },
+#endif
+    {
+        {
+            L"protected: long " THISCALL_STR L" CExecuteFolder::ShowFolder(struct _ITEMIDLIST_ABSOLUTE const *,bool)"
+        },
+        &CExecuteFolder_ShowFolder_orig,
+        CExecuteFolder_ShowFolder_hook,
+        false
+    },
+};
+
+#ifdef _WIN64
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+    {
+        {
+            L"private: long __cdecl CDUISizerElement::_WriteVisibleToPropBag(int)"
+        },
+        &CDUISizerElement__WriteVisibleToPropBag_orig,
+        CDUISizerElement__WriteVisibleToPropBag_hook,
+        false
+    },
 };
 
 const WindhawkUtils::SYMBOL_HOOK propsysDllHooks[] = {
@@ -344,83 +622,113 @@ const WindhawkUtils::SYMBOL_HOOK propsysDllHooks[] = {
         false
     },
 };
+#endif
+
+#define LOAD_MODULE_(module, varName)                                                          \
+    HMODULE varName = LoadLibraryExW(L ## #module ".dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32); \
+    if (!varName)                                                                              \
+    {                                                                                          \
+        Wh_Log(L"Failed to load " #module ".dll");                                             \
+        return FALSE;                                                                          \
+    }
+
+#define LOAD_MODULE(name) LOAD_MODULE_(name, name)
+
+#define HOOK_SYMBOLS_(module, moduleVar, hooks)                                    \
+    if (!WindhawkUtils::HookSymbols(                                               \
+        moduleVar,                                                                 \
+        hooks,                                                                     \
+        ARRAYSIZE(hooks)                                                           \
+    ))                                                                             \
+    {                                                                              \
+        Wh_Log(L"Failed to hook one or more symbol functions in " module); \
+        return FALSE;                                                              \
+    }
+
+#define HOOK_SYMBOLS(module, hooks) HOOK_SYMBOLS_(#module ".dll", module, hooks)
+
+#define HOOK_FUNCTION(function)               \
+    if (!Wh_SetFunctionHook(                  \
+        (void *)function,                     \
+        (void *)function ## _hook,            \
+        (void **)&function ## _orig           \
+    ))                                        \
+    {                                         \
+        Wh_Log(L"Failed to hook " #function); \
+        return FALSE;                         \
+    }
 
 void Wh_ModSettingsChanged(void)
 {
+#ifdef _WIN64
     g_spszExploringText = WindhawkUtils::StringSetting::make(L"exploring_text");
     g_fExplorerIcon = Wh_GetIntSetting(L"explorer_icon");
+    g_fDontStoreTreeState = Wh_GetIntSetting(L"dont_store_tree_state");
+#endif
+    g_fOpenInNewWindow = Wh_GetIntSetting(L"open_in_new_window");
 }
 
 BOOL Wh_ModInit(void)
 {
     Wh_ModSettingsChanged();
 
-    // We can safely only retrieve this in init, since it only matters for
-    // when explorer.exe's WinMain runs.
-    LPCWSTR pszInvokeLocation = Wh_GetStringSetting(L"exe_invoke_location");
-    if (!wcscmp(pszInvokeLocation, L"documents"))
+#ifdef _WIN64
+    bool fIsExplorer = false;
+    WCHAR szExplorerPath[MAX_PATH], szModulePath[MAX_PATH];
+    ExpandEnvironmentStringsW(L"%SystemRoot%\\explorer.exe", szExplorerPath, ARRAYSIZE(szExplorerPath));
+    GetModuleFileNameW(NULL, szModulePath, ARRAYSIZE(szModulePath));
+    if (!wcsicmp(szExplorerPath, szModulePath))
     {
-        g_exeInvokeLocation = EIL_DOCUMENTS;
-    }
-    else if (!wcscmp(pszInvokeLocation, L"sys_drive_root"))
-    {
-        g_exeInvokeLocation = EIL_SYSDRIVEROOT;
-    }
-    Wh_FreeStringSetting(pszInvokeLocation);
-
-    if (!WindhawkUtils::HookSymbols(
-        GetModuleHandleW(NULL),
-        explorerExeHooks,
-        ARRAYSIZE(explorerExeHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook one or more symbol functions in explorer.exe");
-        return FALSE;
+        fIsExplorer = true;
     }
 
-    HMODULE hExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hExplorerFrame)
+    if (fIsExplorer)
     {
-        Wh_Log(L"Failed to load ExplorerFrame.dll");
-        return FALSE;
-    }
+        // We can safely only retrieve this in init, since it only matters for
+        // when explorer.exe's WinMain runs.
+        LPCWSTR pszInvokeLocation = Wh_GetStringSetting(L"exe_invoke_location");
+        if (!wcscmp(pszInvokeLocation, L"documents"))
+        {
+            g_exeInvokeLocation = EIL_DOCUMENTS;
+        }
+        else if (!wcscmp(pszInvokeLocation, L"sys_drive_root"))
+        {
+            g_exeInvokeLocation = EIL_SYSDRIVEROOT;
+        }
+        Wh_FreeStringSetting(pszInvokeLocation);
 
-    if (!WindhawkUtils::HookSymbols(
-        hExplorerFrame,
-        explorerFrameDllHooks,
-        ARRAYSIZE(explorerFrameDllHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook one or more symbol functions in ExplorerFrame.dll");
-        return FALSE;
-    }
+        HOOK_SYMBOLS_("explorer.exe", GetModuleHandleW(NULL), explorerExeHooks)
 
-    HMODULE hPropsys = LoadLibraryExW(L"propsys.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hPropsys)
-    {
-        Wh_Log(L"Failed to load propsys.dll");
-        return FALSE;
-    }
+        LOAD_MODULE(propsys)
+        HOOK_SYMBOLS(propsys, propsysDllHooks)
 
-    if (!WindhawkUtils::HookSymbols(
-        hPropsys,
-        propsysDllHooks,
-        ARRAYSIZE(propsysDllHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook one or more symbol functions in propsys.dll");
-        return FALSE;
-    }
+        LOAD_MODULE(shell32)
+        HOOK_SYMBOLS(shell32, shell32DllHooks)
 
-    if (!Wh_SetFunctionHook(
-        (void *)ShellExecuteExW,
-        (void *)ShellExecuteExW_hook,
-        (void **)&ShellExecuteExW_orig
-    ))
-    {
-        Wh_Log(L"Failed to hook ShellExecuteExW");
-        return FALSE;
+        HOOK_FUNCTION(ShellExecuteExW)
+
+        LOAD_MODULE_(dui70, hmodDui70)
+
+        DirectUI_Element_GetParent
+            = (DirectUI_Element_GetParent_t)GetProcAddress(hmodDui70, "?GetParent@Element@DirectUI@@QEAAPEAV12@XZ");
+        if (!DirectUI_Element_GetParent)
+        {
+            Wh_Log(L"Failed to get address of DirectUI::Element::GetParent");
+            return FALSE;
+        }
+
+        DirectUI_Element_FindDescendent
+            = (DirectUI_Element_FindDescendent_t)GetProcAddress(hmodDui70, "?FindDescendent@Element@DirectUI@@QEAAPEAV12@G@Z");
+        if (!DirectUI_Element_FindDescendent)
+        {
+            Wh_Log(L"Failed to get address of DirectUI::Element::FindDescendent");
+            return FALSE;
+        }
     }
+#endif
+
+    LOAD_MODULE(ExplorerFrame)
+    HOOK_SYMBOLS(ExplorerFrame, explorerFrameDllHooks)
 
     return TRUE;
 }

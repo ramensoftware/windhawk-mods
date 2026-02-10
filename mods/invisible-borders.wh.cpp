@@ -1,10 +1,11 @@
 // ==WindhawkMod==
-// @id              win11-accent-border
-// @name            Windows 11 Accent Window Border
-// @description     Show the accent color on the border but not on the titlebar
-// @version         1.0.4
-// @author          Guerra24
-// @github          https://github.com/Guerra24
+// @id              invisible-borders
+// @name            Invisible Window Borders
+// @description     Makes window borders invisible while keeping rounded corners
+// @version         1.0.0
+// @author          Bo0ii
+// @github          https://github.com/Bo0ii
+// @homepage        https://github.com/Bo0ii/windhawk-mods
 // @include         *
 // @exclude         devenv.exe
 // @compilerOptions -ldwmapi -luser32
@@ -12,86 +13,83 @@
 
 // ==WindhawkModReadme==
 /*
-Mimics the behavior the *Show accent color on title bars and window borders* setting had in Windows 11 Build 22000.
+# Invisible Window Borders
 
-When it was enabled in build 22000 the accent color appeared behind the Mica effect but in 22621 and newer it appears on top and it doesn't look that great. This mod restores the former behavior.
+Makes window borders invisible while preserving rounded corners.
 
-**Make sure *Show accent color on title bars and window borders* is disabled as it conflicts with this mod!**
+![Comparison](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/invisible-borders/onoff.png)
 
-Before:
-![image](https://i.imgur.com/LnPyxkb.png)
+## Features
 
-After:
-![image](https://i.imgur.com/TpGSX6X.png)
+- **Invisible Borders**: Removes border color while keeping frame structure
+- **Preserves Rounded Corners**: Keeps window frame intact for corner rendering
+- **Universal**: Works with all applications
+- **Lightweight**: Minimal performance impact
 
-# Colors
+## Compatibility
 
-The focused color is always the accent color.
+- Windows 10 (version 1809 and later)
+- Windows 11 (all versions)
+- Requires DWM (Desktop Window Manager) to be enabled
 
-You can use `AccentColorInactive` in `HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM` to change the inactive color. This is a HEX value in BGR format.
+## Support
+
+Report issues at: https://github.com/Bo0ii/windhawk-mods/issues
+
+## License
+
+MIT License - Feel free to modify and distribute
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - SpecialWindows: false
-  $name: Target special windows
-  $description: Allows the mod to work properly with some applications that customize their windows (e.g. Flow Launcher)
+  $name: Apply to Special Windows
+  $description: Also apply to special windows like dialogs
 */
 // ==/WindhawkModSettings==
 
 #include <dwmapi.h>
 #include <windhawk_api.h>
 
-COLORREF BorderActive;
-COLORREF BorderInactive = 0x000000;
+// Special DWM color values
+#ifndef DWMWA_COLOR_NONE
+#define DWMWA_COLOR_NONE 0xFFFFFFFE
+#endif
+
+const COLORREF BorderInvisible = DWMWA_COLOR_NONE;  // No border color
 const COLORREF ColorDefault = DWMWA_COLOR_DEFAULT;
 
 bool SpecialWindows = false;
 
-void LoadColors() {
-    DWORD color;
-    DWORD colorSize = sizeof(color);
-    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent", L"AccentColorMenu", RRF_RT_REG_DWORD, NULL, &color, &colorSize);
-
-    BorderActive = (color & 0xFF0000) | (color & 0xFF00) | (color & 0xFF);
-
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColorInactive", RRF_RT_REG_DWORD, NULL, &color, &colorSize) == ERROR_SUCCESS) {
-        BorderInactive = (color & 0xFF0000) | (color & 0xFF00) | (color & 0xFF);
-    }
-}
-
 BOOL IsValidWindow(HWND hWnd) {
     DWORD dwStyle = GetWindowLongPtr(hWnd, GWL_STYLE);
-    //Better exclude context menus
-    return (dwStyle & WS_THICKFRAME) == WS_THICKFRAME || (dwStyle & WS_CAPTION) == WS_CAPTION || (SpecialWindows && (dwStyle & WS_OVERLAPPED) == WS_OVERLAPPED && (dwStyle & WS_POPUP) != WS_POPUP);
+    // Better exclude context menus
+    return (dwStyle & WS_THICKFRAME) == WS_THICKFRAME ||
+           (dwStyle & WS_CAPTION) == WS_CAPTION ||
+           (SpecialWindows && (dwStyle & WS_OVERLAPPED) == WS_OVERLAPPED && (dwStyle & WS_POPUP) != WS_POPUP);
 }
 
 using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
 DwmSetWindowAttribute_t DwmSetWindowAttribute_orig;
 HRESULT WINAPI DwmSetWindowAttribute_hook(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute) {
     if (dwAttribute == DWMWA_BORDER_COLOR && IsValidWindow(hwnd)) {
-        Wh_Log(L"DWMWA_BORDER_COLOR %08x", pvAttribute);
-        return S_OK;
+        Wh_Log(L"Intercepted DWMWA_BORDER_COLOR - setting to invisible");
+        // Override with invisible border
+        return DwmSetWindowAttribute_orig(hwnd, dwAttribute, &BorderInvisible, sizeof(BorderInvisible));
     }
 
     return DwmSetWindowAttribute_orig(hwnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
-void SetBorderColor(HWND hWnd, BOOL activate)
+void SetBorderInvisible(HWND hWnd)
 {
     if (!IsValidWindow(hWnd))
         return;
 
-    Wh_Log(L"Activate: %d", activate);
-    if (activate)
-    {
-        DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &BorderActive, sizeof(BorderActive));
-    }
-    else
-    {
-        DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &BorderInactive, sizeof(BorderInactive));
-    }
+    Wh_Log(L"Setting invisible border");
+    DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &BorderInvisible, sizeof(BorderInvisible));
 }
 
 using DefWindowProcA_t = decltype(&DefWindowProcA);
@@ -103,12 +101,9 @@ LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     switch (uMsg) {
         case WM_ACTIVATE:
         case WM_NCACTIVATE:
-            SetBorderColor(hWnd, wParam);
-        break;
         case WM_DWMCOLORIZATIONCOLORCHANGED:
-            LoadColors();
-            SetBorderColor(hWnd, GetForegroundWindow() == hWnd);
-        break;
+            SetBorderInvisible(hWnd);
+            break;
     }
 
     return result;
@@ -123,12 +118,9 @@ LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     switch (uMsg) {
         case WM_ACTIVATE:
         case WM_NCACTIVATE:
-            SetBorderColor(hWnd, wParam);
-        break;
         case WM_DWMCOLORIZATIONCOLORCHANGED:
-            LoadColors();
-            SetBorderColor(hWnd, GetForegroundWindow() == hWnd);
-        break;
+            SetBorderInvisible(hWnd);
+            break;
     }
 
     return result;
@@ -142,8 +134,8 @@ LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
     switch (uMsg) {
         case WM_NCACTIVATE:
-            SetBorderColor(hWnd, wParam);
-        break;
+            SetBorderInvisible(hWnd);
+            break;
     }
 
     return result;
@@ -157,8 +149,8 @@ LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
     switch (uMsg) {
         case WM_NCACTIVATE:
-            SetBorderColor(hWnd, wParam);
-        break;
+            SetBorderInvisible(hWnd);
+            break;
     }
 
     return result;
@@ -171,7 +163,7 @@ BOOL CALLBACK EnableEnumWindowsCallback(HWND hWnd, LPARAM lParam) {
     GetWindowThreadProcessId(hWnd, &wPid);
 
     if (pid == wPid) {
-        SetBorderColor(hWnd, GetForegroundWindow() == hWnd);
+        SetBorderInvisible(hWnd);
     }
 
     return TRUE;
@@ -188,14 +180,10 @@ BOOL CALLBACK DisableEnumWindowsCallback(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
-// The mod is being initialized, load settings, hook functions, and do other
-// initialization stuff if required.
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init");
+    Wh_Log(L"Init - Invisible Borders");
 
     SpecialWindows = Wh_GetIntSetting(L"SpecialWindows");
-
-    LoadColors();
 
     Wh_SetFunctionHook(
         (void *)DwmSetWindowAttribute,
@@ -225,16 +213,17 @@ BOOL Wh_ModInit() {
         (void *)DefDlgProcA_hook,
         (void **)&DefDlgProcA_orig
     );
+
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(L"AfterInit");
+    Wh_Log(L"AfterInit - Applying invisible borders");
     EnumWindows(EnableEnumWindowsCallback, GetCurrentProcessId());
 }
 
 void Wh_ModBeforeUninit() {
-    Wh_Log(L"BeforeUninit");
+    Wh_Log(L"BeforeUninit - Restoring default borders");
     EnumWindows(DisableEnumWindowsCallback, GetCurrentProcessId());
 }
 
