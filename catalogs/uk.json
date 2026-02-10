@@ -5496,13 +5496,13 @@
                     7
                 ],
                 "ratingUsers": 7,
-                "updated": 1768470508000,
+                "updated": 1770714329000,
                 "users": 203
             },
             "metadata": {
                 "author": "mode0192",
-                "compilerOptions": "-luser32",
-                "description": "Blocks automatic Windows Security \"Sign in with a passkey\" popup in browser unless you explicitly click \"Sign in\".",
+                "compilerOptions": "-luser32 -ladvapi32",
+                "description": "Blocks automatic Windows Security \"Sign in with a passkey\" popup in browser. Only allows them after a recent click/tap or Enter/Space.",
                 "github": "https://github.com/mode0192",
                 "include": [
                     "msedge.exe",
@@ -5519,7 +5519,7 @@
                 ],
                 "license": "CC-BY-NC-SA-4.0",
                 "name": "\"Sign in with a passkey\" popup blocker",
-                "version": "2.1.0"
+                "version": "3.0.0"
             }
         },
         "per-app-language-preferences": {

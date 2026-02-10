@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-09T22:18:46.000Z</updated>
+    <updated>2026-02-10T09:05:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA["Sign in with a passkey" popup blocker 3.0.0]]></title>
+        <id>https://windhawk.net/mods/passkey-popup-blocker#b1f2493c90d1f67de2767b2d669694d3b7ead97d</id>
+        <link href="https://windhawk.net/mods/passkey-popup-blocker"/>
+        <updated>2026-02-10T09:05:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Major</strong>: Added <strong>multi-process browser support</strong> using <strong>shared memory</strong> to sync user intent across Chrome/Edge tabs and sandboxed processes (fixes cases where clicks were not seen by the WebAuthn call).</li>
+<li><strong>Added</strong>: New <strong>Block Behavior</strong> setting: return <strong>NTE<em>USER</em>CANCELLED</strong> (default/recommended) or <strong>NTE<em>NOT</em>FOUND</strong> (compatibility).</li>
+<li><strong>Improved</strong>: Expanded intent detection to include mouse/touch <strong>down/up</strong> events and key <strong>down/up</strong> for <strong>Enter/Space</strong> (including system key variants).</li>
+<li><strong>Improved</strong>: Added <strong>Null DACL</strong> security attributes so sandboxed Chromium processes can access the shared memory mapping.</li>
+<li><strong>Improved</strong>: More robust initialization — the mod fails cleanly if the WebAuthn hook can’t be established.</li>
+<li><strong>Fixed</strong>: Proper resource cleanup on unload (<code>Wh_ModUninit</code>) and safer timing logic (wraparound-safe tick arithmetic).</li>
+</ul>]]></content>
+        <author>
+            <name>mode0192</name>
+            <uri>https://github.com/mode0192</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Pie Chart 1.0.1]]></title>
         <id>https://windhawk.net/mods/disk-pie-chart#7d6044d7d74bf7313da6db48270b26e10c682286</id>
@@ -346,19 +364,6 @@ I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
         <author>
             <name>Marnes &lt;leaumar@sent.com&gt;</name>
             <uri>https://github.com/leaumar</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.2.0]]></title>
-        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#5bbc958c7b7eecab54f74848a2e771922773376a</id>
-        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
-        <updated>2026-02-01T20:45:54.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Introduce accurate tree view open state behavior</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
