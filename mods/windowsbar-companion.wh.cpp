@@ -5,7 +5,7 @@
 // @version         1.0
 // @author          Meti0X7CB
 // @github          https://github.com/Meti0X7CB
-// @twitter         https://x.com/Meti0X7CB
+// @twitter         https://twitter.com/Meti0X7CB
 // @include         explorer.exe
 // @include         StartMenuExperienceHost.exe
 // @architecture    x86-64
