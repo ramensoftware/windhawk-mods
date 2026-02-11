@@ -2,7 +2,7 @@
 // @id              custom-desktop-watermark
 // @name            Custom Desktop Watermark
 // @description     Lets you set your own desktop watermark text
-// @version         1.1.0
+// @version         1.2.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -86,15 +86,14 @@ bool CDesktopWatermark_s_WantWatermark_hook(void)
     return true;
 }
 
-int CalculateTextSize(HDC hDC, LPCWSTR pszText, int *lpWidth)
+int CalculateTextWidth(HDC hdc, LPCWSTR pszText)
 {
     RECT rcText = { 0 };
-    int height = DrawTextW(
-        hDC, pszText, -1,
+    DrawTextW(
+        hdc, pszText, -1,
         &rcText, DT_CALCRECT | DT_SINGLELINE
     );
-    *lpWidth = RECTWIDTH(rcText);
-    return height;
+    return RECTWIDTH(rcText);
 }
 
 int PaintLine(
@@ -132,31 +131,48 @@ int PaintLine(
 
 void (*CDesktopWatermark_s_DesktopBuildPaint_orig)(HDC, LPCRECT, HFONT);
 void CDesktopWatermark_s_DesktopBuildPaint_hook(
-    HDC     hDC,
+    HDC     hdc,
     LPCRECT lprc,
     HFONT   hFont
 )
 {
-    COLORREF cr = SetTextColor(hDC, RGB(255, 255, 255));
-    int bk = SetBkMode(hDC, TRANSPARENT);
+    COLORREF cr = SetTextColor(hdc, RGB(255, 255, 255));
+    int bk = SetBkMode(hdc, TRANSPARENT);
     int offset = 0;
 
     NONCLIENTMETRICSW ncm = { sizeof(ncm) };
-    int dpi = GetDeviceCaps(hDC, LOGPIXELSX);
-    SystemParametersInfoForDpi(
-        SPI_GETNONCLIENTMETRICS,
-        sizeof(ncm),
-        &ncm,
-        0,
-        dpi
-    );
-    HFONT hTitleFont = CreateFontIndirectW(&ncm.lfCaptionFont);
-    HFONT hMessageFont = CreateFontIndirectW(&ncm.lfMessageFont);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+    
+    using SystemParametersInfoForDpi_t = decltype(&SystemParametersInfoForDpi);
+    static SystemParametersInfoForDpi_t pfnSystemParametersInfoForDpi
+        = (SystemParametersInfoForDpi_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SystemParametersInfoForDpi");
+    if (pfnSystemParametersInfoForDpi)
+    {
+        pfnSystemParametersInfoForDpi(
+            SPI_GETNONCLIENTMETRICS,
+            sizeof(ncm),
+            &ncm,
+            0,
+            dpi
+        );
+    }
+    else
+    {
+        SystemParametersInfoW(
+            SPI_GETNONCLIENTMETRICS,
+            sizeof(ncm),
+            &ncm,
+            0
+        );
+    }
+    
+    HFONT hfontTitle = CreateFontIndirectW(&ncm.lfCaptionFont);
+    HFONT hfontMessage = CreateFontIndirectW(&ncm.lfMessageFont);
     ncm.lfCaptionFont.lfWeight = FW_BOLD;
     ncm.lfMessageFont.lfWeight = FW_BOLD;
-    HFONT hTitleFontBold = CreateFontIndirectW(&ncm.lfCaptionFont);
-    HFONT hMessageFontBold = CreateFontIndirectW(&ncm.lfMessageFont);
-    if (!hTitleFont || !hMessageFont || !hTitleFontBold || !hMessageFontBold)
+    HFONT hfontTitleBold = CreateFontIndirectW(&ncm.lfCaptionFont);
+    HFONT hfontMessageBold = CreateFontIndirectW(&ncm.lfMessageFont);
+    if (!hfontTitle || !hfontMessage || !hfontTitleBold || !hfontMessageBold)
         return;
     int padding = MulDiv(3, dpi, 96);
     offset += MulDiv(g_fClassic ? 4 : 1, dpi, 96);
@@ -165,14 +181,13 @@ void CDesktopWatermark_s_DesktopBuildPaint_hook(
     for (const WatermarkLine &line : g_lines)
     {
         bool fMessageFont = g_fClassic && !line.title;
-        HFONT hFont = fMessageFont
-        ? (line.bold ? hMessageFontBold : hMessageFont)
-        : (line.bold ? hTitleFontBold : hTitleFont);
+        HFONT hfont = fMessageFont
+            ? (line.bold ? hfontMessageBold : hfontMessage)
+            : (line.bold ? hfontTitleBold : hfontTitle);
 
-        HFONT hfOld = (HFONT)SelectObject(hDC, hFont);
-        int width;
-        CalculateTextSize(hDC, line.text.c_str(), &width);
-        SelectObject(hDC, hfOld);
+        HFONT hfOld = (HFONT)SelectObject(hdc, hfont);
+        int width = CalculateTextWidth(hdc, line.text.c_str());
+        SelectObject(hdc, hfOld);
 
         if (width > maxWidth)
             maxWidth = width;
@@ -180,33 +195,34 @@ void CDesktopWatermark_s_DesktopBuildPaint_hook(
 
     for (size_t i = g_lines.size(); i--;)
     {
-        WatermarkLine &line = g_lines.at(i);
+        const WatermarkLine &line = g_lines.at(i);
         bool fMessageFont = g_fClassic && !line.title;
-        HFONT hFont = fMessageFont
-        ? (line.bold ? hMessageFontBold : hMessageFont)
-        : (line.bold ? hTitleFontBold : hTitleFont);
+        HFONT hfont = fMessageFont
+            ? (line.bold ? hfontMessageBold : hfontMessage)
+            : (line.bold ? hfontTitleBold : hfontTitle);
 
         offset += PaintLine(
-            hDC, lprc, line.text.c_str(),
-            hFont,
+            hdc, lprc, line.text.c_str(),
+            hfont,
             line.align,
             maxWidth,
             offset
         ) + padding;
     }
 
-    DeleteObject(hTitleFont);
-    DeleteObject(hMessageFont);
-    DeleteObject(hTitleFontBold);
-    DeleteObject(hMessageFontBold);
-    SetBkMode(hDC, bk);
-    SetTextColor(hDC, cr);
+    DeleteObject(hfontTitle);
+    DeleteObject(hfontMessage);
+    DeleteObject(hfontTitleBold);
+    DeleteObject(hfontMessageBold);
+    SetBkMode(hdc, bk);
+    SetTextColor(hdc, cr);
 }
 
 const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         {
-            L"public: static bool __cdecl CDesktopWatermark::s_WantWatermark(void)"
+            L"public: static bool __cdecl CDesktopWatermark::s_WantWatermark(void)",
+            L"private: static bool __cdecl CDesktopWatermark::s_IsDrawVersionAlwaysSet(void)"
         },
         &CDesktopWatermark_s_WantWatermark_orig,
         CDesktopWatermark_s_WantWatermark_hook,
@@ -214,7 +230,8 @@ const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     },
     {
         {
-            L"private: static void __cdecl CDesktopWatermark::s_DesktopBuildPaint(struct HDC__ *,struct tagRECT const *,struct HFONT__ *)"
+            L"private: static void __cdecl CDesktopWatermark::s_DesktopBuildPaint(struct HDC__ *,struct tagRECT const *,struct HFONT__ *)",
+            L"private: static void __cdecl CDesktopWatermark::s_DesktopBuildPaint(struct HDC__ *,struct tagRECT const *,struct HFONT__ *,bool)"
         },
         &CDesktopWatermark_s_DesktopBuildPaint_orig,
         CDesktopWatermark_s_DesktopBuildPaint_hook,
@@ -258,15 +275,15 @@ BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
-    if (!hShell32)
+    HMODULE hmodShell = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!hmodShell)
     {
         Wh_Log(L"Failed to load shell32.dll");
         return FALSE;
     }
 
     if (!WindhawkUtils::HookSymbols(
-        hShell32,
+        hmodShell,
         shell32DllHooks,
         ARRAYSIZE(shell32DllHooks)
     ))
@@ -278,7 +295,29 @@ BOOL Wh_ModInit(void)
     return TRUE;
 }
 
+#define FCIDM_REFRESH  0xA220
+
+void RefreshDesktop(void)
+{
+    HWND hwndProgman = FindWindowW(L"Progman", nullptr);
+    if (hwndProgman)
+    {
+        SendMessageW(hwndProgman, WM_COMMAND, FCIDM_REFRESH, 0);
+    }
+}
+
 void Wh_ModSettingsChanged(void)
 {
     LoadSettings();
+    RefreshDesktop();
+}
+
+void Wh_ModAfterInit(void)
+{
+    RefreshDesktop();
+}
+
+void Wh_ModUninit(void)
+{
+    RefreshDesktop();
 }
