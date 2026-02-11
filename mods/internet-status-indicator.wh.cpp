@@ -2,7 +2,7 @@
 // @id              internet-status-indicator
 // @name            Internet Status Indicator
 // @description     Real-time network connectivity monitoring with visual indicators as a Tray Icon
-// @version         0.8
+// @version         0.8.2
 // @author          ALMAS CP
 // @github          https://github.com/almas-cp
 // @homepage        https://github.com/almas-cp
