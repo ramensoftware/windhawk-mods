@@ -1,3 +1,8 @@
+## 1.2.0 ([Feb 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4a61d4185a09f270883f3cb72a8da7d22acec204/mods/custom-desktop-watermark.wh.cpp))
+
+- Refresh desktop whenever necessary to make changes show immediately
+- Support for Windows 8.1 and Windows 11 24H2
+
 ## 1.1.0 ([Jun 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d5b48dbb461bd68125950069d6c124ee5b15bff0/mods/custom-desktop-watermark.wh.cpp))
 
 - Add notice to README about empty lines

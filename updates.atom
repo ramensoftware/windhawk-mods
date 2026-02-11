@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-10T13:35:50.000Z</updated>
+    <updated>2026-02-11T00:34:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Desktop Watermark 1.2.0]]></title>
+        <id>https://windhawk.net/mods/custom-desktop-watermark#4a61d4185a09f270883f3cb72a8da7d22acec204</id>
+        <link href="https://windhawk.net/mods/custom-desktop-watermark"/>
+        <updated>2026-02-11T00:34:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Refresh desktop whenever necessary to make changes show immediately</li>
+<li>Support for Windows 8.1 and Windows 11 24H2</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Menu/Tooltip Slide Animation 1.0.0]]></title>
         <id>https://windhawk.net/mods/menu-tooltip-slide-animation#f3ca1c0c198f597b44116db8bced26e1abe60aaf</id>
@@ -327,53 +341,6 @@ This mod need a restart of File Explorer.</p>]]></content>
         <author>
             <name>Amat3rassu</name>
             <uri>https://github.com/Amat3rassu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[reMarkable App Polish 1.0]]></title>
-        <id>https://windhawk.net/mods/remarkable-polish#6070311ef5ae8f7892d3aab5ce819b89434df198</id>
-        <link href="https://windhawk.net/mods/remarkable-polish"/>
-        <updated>2026-02-02T09:32:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="remarkableapppolish">reMarkable App Polish</h1>
-<p><img src="https://raw.githubusercontent.com/SteffanDonal/windhawk-mods/refs/heads/SteffanDonal-assets/remarkable-polish/google-meet-screenshot.png" alt="Screenshot of Chrome's &quot;Share Your Screen&quot; dialog, where
-the reMarkable app's &quot;Share Screen&quot; window is selectable.
-" /></p>
-<p>Adds two major improvements to the "Screen Share" feature:</p>
-<ol>
-<li>Makes Screen Share a regular top-level window, so all of your apps can
-actually see it, so, you know, you may <em>share your screen…</em></li>
-<li>Adds a toggle to lock the Screen Share window to your device's aspect ratio
-when resized.</li>
-</ol>
-<h2 id="context">Context</h2>
-<p><em>over a year ago, at reMarkable HQ…</em></p>
-<blockquote>
-  <p>Hey, so the reMarkable Paper Pro comes out soon - our first full-color tablet!
-  We should probably spruce up that desktop app we've not touched in a long
-  time…</p>
-  <p>Oooh, yeah, you're right! We could tighten everything up - use a subtle
-  off-white color for backgrounds… A new font! Hover effects, the works! Oh, I
-  can't wait to tweak every little option available to us!</p>
-</blockquote>
-<h4 id="withtheirimpeccablestyleandtastesurelynothingcouldgowrong">With their impeccable style and taste, surely nothing could go wrong…</h4>
-<h3 id="theybrokescreensharinganditsbeenbrokenforoverayear">They broke screen sharing. And it's been broken for over a year.</h3>
-<p>You can share your screen to your Windows PC, but <strong>you cannot</strong> select it as a
-window in basically any of the major video conferencing apps!</p>
-<h3 id="whyhow">Why?! …  HOW?!?</h3>
-<p>During the redesign, they made the screen share window a separate "child" of the
-main app window.</p>
-<p>In doing so, they removed the screen share window's taskbar button, which also
-happens to be closely related to the method most video conferencing apps use to
-identify capture targets! Hooray!</p>
-<h3 id="rightsosubmitabugreport">Right… so… submit a bug report?</h3>
-<p>I did. Like, three times. I made a post on Reddit.
-I <em>tried</em>. Radio silence.</p>
-<p>It'd be <em>so</em> easy for them to fix, but it's still broken today.</p>
-<p>Thankfully, Windhawk is a thing - so here we are.
-I fixed it myself. Hopefully we can delete this some day.</p>]]></content>
-        <author>
-            <name>Steffan Donal</name>
-            <uri>https://github.com/SteffanDonal</uri>
         </author>
     </entry>
 </feed>
