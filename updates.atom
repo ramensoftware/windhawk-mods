@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-11T00:34:53.000Z</updated>
+    <updated>2026-02-11T20:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Menu/Tooltip Slide Animation 1.0.1]]></title>
+        <id>https://windhawk.net/mods/menu-tooltip-slide-animation#f00b63e81fa59fd1553ccecb247430b3c7a661dd</id>
+        <link href="https://windhawk.net/mods/menu-tooltip-slide-animation"/>
+        <updated>2026-02-11T20:00:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Don't use slide animation when UI effects are disabled</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Desktop Watermark 1.2.0]]></title>
         <id>https://windhawk.net/mods/custom-desktop-watermark#4a61d4185a09f270883f3cb72a8da7d22acec204</id>
@@ -317,30 +330,6 @@ This mod need a restart of File Explorer.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Pinned Only on Start Menu 1.0.1]]></title>
-        <id>https://windhawk.net/mods/pinned-only-on-start-menu#3b945e5540b154cdc2c653f3c973a912ea83f70f</id>
-        <link href="https://windhawk.net/mods/pinned-only-on-start-menu"/>
-        <updated>2026-02-02T09:32:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="pinnedonlyonstartmenu">Pinned Only on Start Menu</h1>
-<p>This mod simplifies the Start Menu by removing secondary sections using native system policies.</p>
-<h3 id="features">Features:</h3>
-<ul>
-<li><strong>Hides "All apps":</strong> Removes the button and the programs list.</li>
-<li><strong>Hides "Recommended":</strong> Removes the section with recent files.</li>
-</ul>
-<h3 id="instructions">Instructions:</h3>
-<ul>
-<li>Enable the mod in Windhawk.</li>
-<li><strong>Restart explorer.exe</strong> or your computer to apply changes.</li>
-</ul>
-<hr />
-<p><strong>Author:</strong> Amat3rassu</p>]]></content>
-        <author>
-            <name>Amat3rassu</name>
-            <uri>https://github.com/Amat3rassu</uri>
         </author>
     </entry>
 </feed>

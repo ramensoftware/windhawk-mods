@@ -4821,7 +4821,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1770730550000,
+                "updated": 1770840000000,
                 "users": 8
             },
             "metadata": {
@@ -4833,7 +4833,7 @@
                     "*"
                 ],
                 "name": "Menu/Tooltip Slide Animation",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "modern-notepad-to-classic-editor": {
