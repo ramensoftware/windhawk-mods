@@ -3513,7 +3513,7 @@
                     134
                 ],
                 "ratingUsers": 139,
-                "updated": 1769894971000,
+                "updated": 1770843445000,
                 "users": 8623
             },
             "metadata": {
@@ -3527,7 +3527,7 @@
                 ],
                 "name": "Remove Taskbar Window Suffixes",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "firefox-border-fix": {

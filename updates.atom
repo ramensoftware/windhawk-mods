@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-11T20:00:00.000Z</updated>
+    <updated>2026-02-11T20:57:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Taskbar Window Suffixes 1.1.1]]></title>
+        <id>https://windhawk.net/mods/file-explorer-remove-suffixes#df279b7963c3e46e98eea4734d1506c6b3568dd7</id>
+        <link href="https://windhawk.net/mods/file-explorer-remove-suffixes"/>
+        <updated>2026-02-11T20:57:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed suffixes being removed twice for explorer windows in universal mode.</li>
+<li>Titles on the taskbar are now updated right away when the mod is enabled and when settings are changed (universal mode and custom rules only).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Menu/Tooltip Slide Animation 1.0.1]]></title>
         <id>https://windhawk.net/mods/menu-tooltip-slide-animation#f00b63e81fa59fd1553ccecb247430b3c7a661dd</id>
@@ -312,24 +326,6 @@ This mod need a restart of File Explorer.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.3]]></title>
-        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#4cdb11502fa5f68111eaf7cc6a54cf3ff68f2246</id>
-        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
-        <updated>2026-02-03T21:05:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added new options for translucent background effects. You can choose between Acrylic, Mica, or Mica Alt (File Explorer default), and optionally apply the effect for the whole window (only supported in dark mode).</li>
-<li>Added new themes: AddressSearchOnly, TintedGlass.</li>
-<li>Updated the WindowGlass theme.</li>
-<li>Added a way to define theme-aware resources. For example, different colors for an element can be defined for light mode and dark mode.</li>
-<li>Added detection for conflicting programs which use the XAML Diagnostics API, and an option to block such programs. Refer to the mod description for more details.</li>
-<li>Fixed the mod preventing the classic control panel from opening.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
