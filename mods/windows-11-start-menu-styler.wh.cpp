@@ -173,10 +173,10 @@ specified visual state.
 
 For the XAML syntax, in addition to the built-in taskbar objects, the mod
 provides a built-in blur brush via the `WindhawkBlur` object, which supports the
-`BlurAmount`, `TintColor`, and `TintOpacity` properties. For example:
-`Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`. Theme resources
+`BlurAmount`, `TintColor`, `TintOpacity`, `TintLuminosityOpacity` and `TintSaturation` properties. For example:
+`Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF" TintSaturation="1.5"/>`. Theme resources
 are also supported, for example: `Fill:=<WindhawkBlur BlurAmount="18"
-TintColor="{ThemeResource SystemAccentColorDark1}" TintOpacity="0.5"/>`.
+TintColor="{ThemeResource SystemAccentColorDark1}" TintOpacity="0.5" TintLuminosityOpacity="0.8"/>`.
 
 Targets and styles starting with two slashes (`//`) are ignored. This can be
 useful for temporarily disabling a target or style.
