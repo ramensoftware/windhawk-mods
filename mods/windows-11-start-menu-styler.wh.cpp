@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     Customize the start menu with themes contributed by others or create your own
-// @version         1.3.3
+// @version         1.3.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -309,6 +309,8 @@ from the **TranslucentTB** project.
 #undef GetCurrentTime
 
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 
 struct ThemeTargetStyles {
     PCWSTR target;
@@ -5306,6 +5308,9 @@ struct XamlBlurBrushParams {
     winrt::Windows::UI::Color tint;
     std::optional<uint8_t> tintOpacity;
     std::wstring tintThemeResourceKey;  // Empty if not from ThemeResource
+    std::optional<float> tintLuminosityOpacity;
+    std::optional<float> tintSaturation;
+    std::optional<float> noiseOpacity;
 };
 
 using PropertyOverrideValue =
@@ -5449,6 +5454,76 @@ typedef enum MY_D2D1_GAUSSIANBLUR_OPTIMIZATION
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 
+winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(int width, int height, float intensity) {
+    // We ignore 'intensity' here and generate FULL opacity noise.
+    // Opacity will be handled by the Composition Effect Graph instead.
+    
+    // Use 256x256 to minimize visible tiling seams
+    int realWidth = 256;
+    int realHeight = 256;
+
+    #pragma pack(push, 1)
+    struct BmpHeader {
+        uint16_t signature{0x4D42}; 
+        uint32_t fileSize;
+        uint32_t reserved{0};
+        uint32_t dataOffset{54};
+        uint32_t headerSize{40};
+        int32_t  width;
+        int32_t  height;
+        uint16_t planes{1};
+        uint16_t bpp{32}; 
+        uint32_t compression{0};
+        uint32_t imageSize{0};
+        int32_t  xRes{0};
+        int32_t  yRes{0};
+        uint32_t colorsUsed{0};
+        uint32_t colorsImportant{0};
+    };
+    #pragma pack(pop)
+
+    uint32_t rowSize = realWidth * 4;
+    uint32_t dataSize = rowSize * realHeight;
+    uint32_t totalSize = sizeof(BmpHeader) + dataSize;
+
+    BmpHeader header;
+    header.fileSize = totalSize;
+    header.width = realWidth;
+    header.height = realHeight; 
+    header.imageSize = dataSize;
+
+    std::vector<uint8_t> pixels(dataSize);
+    
+    uint32_t seed = 12345; 
+    auto randByte = [&seed]() {
+        seed = seed * 1664525 + 1013904223;
+        return static_cast<uint8_t>(seed >> 24);
+    };
+
+    for (size_t i = 0; i < pixels.size(); i += 4) {
+        uint8_t gray = randByte(); 
+        
+        // Force fully opaque pixels (A=255)
+        // This prevents the BMP loader from treating it as transparent or invalid.
+        pixels[i]     = gray;
+        pixels[i + 1] = gray;
+        pixels[i + 2] = gray;
+        pixels[i + 3] = 255; 
+    }
+
+    winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
+    winrt::Windows::Storage::Streams::DataWriter writer(stream);
+    
+    writer.WriteBytes(winrt::array_view<const uint8_t>(reinterpret_cast<const uint8_t*>(&header), sizeof(header)));
+    writer.WriteBytes(pixels);
+    
+    writer.StoreAsync().get();
+    writer.DetachStream();
+    stream.Seek(0);
+    
+    return stream;
+}
+
 class XamlBlurBrush : public wux::Media::XamlCompositionBrushBaseT<XamlBlurBrush>
 {
 public:
@@ -5456,7 +5531,10 @@ public:
 	              float blurAmount,
 	              winrt::Windows::UI::Color tint,
 	              std::optional<uint8_t> tintOpacity,
-	              winrt::hstring tintThemeResourceKey);
+	              winrt::hstring tintThemeResourceKey,
+                  std::optional<float> tintLuminosityOpacity,
+                  std::optional<float> tintSaturation,
+                  std::optional<float> noiseOpacity);
 
 	void OnConnected();
 	void OnDisconnected();
@@ -5470,6 +5548,9 @@ private:
 	winrt::Windows::UI::Color m_tint;
 	std::optional<uint8_t> m_tintOpacity;
 	winrt::hstring m_tintThemeResourceKey;
+    std::optional<float> m_tintLuminosityOpacity;
+    std::optional<float> m_tintSaturation;
+    std::optional<float> m_noiseOpacity;
 	winrt::Windows::UI::ViewManagement::UISettings m_uiSettings;
 };
 
@@ -5828,6 +5909,52 @@ void FloodEffect::Name(winrt::hstring name)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// BorderEffect.h
+// {2A2D49C0-4ACF-43C7-8C6A-7C4A27874D27}
+static constexpr GUID CLSID_D2D1Border_Custom = { 0x2A2D49C0, 0x4ACF, 0x43C7, { 0x8C, 0x6A, 0x7C, 0x4A, 0x27, 0x87, 0x4D, 0x27 } };
+
+struct BorderEffect : winrt::implements<BorderEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop>
+{
+public:
+    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override { *id = CLSID_D2D1Border_Custom; return S_OK; }
+    
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
+        if (!index || !mapping) return E_INVALIDARG;
+        std::wstring_view n(name);
+        if (n == L"ExtendX") { *index = D2D1_BORDER_PROP_EDGE_MODE_X; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+        if (n == L"ExtendY") { *index = D2D1_BORDER_PROP_EDGE_MODE_Y; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+        return E_INVALIDARG;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override { *count = 2; return S_OK; }
+    
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept override {
+        if (!value) return E_INVALIDARG;
+        if (index == D2D1_BORDER_PROP_EDGE_MODE_X) *value = wf::PropertyValue::CreateUInt32((UINT32)ExtendX).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+        else if (index == D2D1_BORDER_PROP_EDGE_MODE_Y) *value = wf::PropertyValue::CreateUInt32((UINT32)ExtendY).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+        else return E_BOUNDS;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override {
+        if (!source) return E_INVALIDARG;
+        if (index == 0 && Source) { winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source)); return S_OK; }
+        return E_BOUNDS;
+    }
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 1; return S_OK; }
+
+    winrt::hstring Name() { return m_name; }
+    void Name(winrt::hstring name) { m_name = name; }
+
+    wge::IGraphicsEffectSource Source{nullptr};
+    D2D1_BORDER_EDGE_MODE ExtendX = D2D1_BORDER_EDGE_MODE_WRAP;
+    D2D1_BORDER_EDGE_MODE ExtendY = D2D1_BORDER_EDGE_MODE_WRAP;
+
+private:
+    winrt::hstring m_name = L"BorderEffect";
+};
+
+////////////////////////////////////////////////////////////////////////////////
 // GaussianBlurEffect.h
 #include <d2d1effects.h>
 #include <winrt/Windows.Foundation.h>
@@ -5990,6 +6117,132 @@ void GaussianBlurEffect::Name(winrt::hstring name)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ColorMatrixEffect.h
+
+// {921F03D6-641C-47DF-852D-B4BB6153AE11}
+static constexpr GUID CLSID_D2D1ColorMatrix_Custom = { 0x921F03D6, 0x641C, 0x47DF, { 0x85, 0x2D, 0xB4, 0xBB, 0x61, 0x53, 0xAE, 0x11 } };
+
+struct ColorMatrixEffect : winrt::implements<ColorMatrixEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop>
+{
+public:
+    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override;
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override;
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override;
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept override;
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override;
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override;
+
+    winrt::hstring Name();
+    void Name(winrt::hstring name);
+
+    wge::IGraphicsEffectSource Source{ nullptr };
+    
+    // 5x4 Matrix (20 floats)
+    float Matrix[20] = {
+        1,0,0,0,
+        0,1,0,0,
+        0,0,1,0,
+        0,0,0,1,
+        0,0,0,0
+    };
+
+    // D2D1_ALPHA_MODE_PREMULTIPLIED (1)
+    // We use Premultiplied so the 'Translation' (Offset) in the matrix 
+    // is correctly handled for transparent pixels (multiplied by 0 alpha -> 0).
+    uint32_t AlphaMode = 1; 
+
+    // ClampOutput = false.
+    // Necessary to prevent clipping color data when luminance math temporarily exceeds [0,1].
+    boolean ClampOutput = false; 
+
+private:
+    winrt::hstring m_name = L"ColorMatrixEffect";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// ColorMatrixEffect.cpp
+
+HRESULT ColorMatrixEffect::GetEffectId(GUID* id) noexcept
+{
+    if (!id) return E_INVALIDARG;
+    *id = CLSID_D2D1ColorMatrix_Custom;
+    return S_OK;
+}
+
+HRESULT ColorMatrixEffect::GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept
+{
+    if (!index || !mapping) return E_INVALIDARG;
+    
+    std::wstring_view nameView(name);
+    if (nameView == L"ColorMatrix") {
+        *index = 0; // D2D1_COLORMATRIX_PROP_COLOR_MATRIX
+        *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+        return S_OK;
+    }
+    else if (nameView == L"AlphaMode") {
+        *index = 1; // D2D1_COLORMATRIX_PROP_ALPHA_MODE
+        *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+        return S_OK;
+    }
+    else if (nameView == L"ClampOutput") {
+        *index = 2; // D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT
+        *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+        return S_OK;
+    }
+    return E_INVALIDARG;
+}
+
+HRESULT ColorMatrixEffect::GetPropertyCount(UINT* count) noexcept
+{
+    if (!count) return E_INVALIDARG;
+    *count = 3;
+    return S_OK;
+}
+
+HRESULT ColorMatrixEffect::GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept try
+{
+    if (!value) return E_INVALIDARG;
+    
+    switch (index) {
+        case 0:
+            *value = wf::PropertyValue::CreateSingleArray(
+                winrt::array_view<const float>(Matrix, Matrix + 20)
+            ).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+            break;
+        case 1:
+             *value = wf::PropertyValue::CreateUInt32(AlphaMode).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+             break;
+        case 2:
+             *value = wf::PropertyValue::CreateBoolean(ClampOutput).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+             break;
+        default:
+            return E_BOUNDS;
+    }
+    return S_OK;
+}
+catch (...) { return winrt::to_hresult(); }
+
+HRESULT ColorMatrixEffect::GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept
+{
+    if (!source) return E_INVALIDARG;
+    if (index == 0 && Source) {
+        winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source));
+        return S_OK;
+    }
+    return E_BOUNDS;
+}
+
+HRESULT ColorMatrixEffect::GetSourceCount(UINT* count) noexcept
+{
+    if (!count) return E_INVALIDARG;
+    *count = 1;
+    return S_OK;
+}
+
+winrt::hstring ColorMatrixEffect::Name() { return m_name; }
+void ColorMatrixEffect::Name(winrt::hstring name) { m_name = name; }
+
+////////////////////////////////////////////////////////////////////////////////
 // XamlBlurBrush.cpp
 #include <winrt/Windows.System.h>
 
@@ -5997,60 +6250,174 @@ XamlBlurBrush::XamlBlurBrush(wuc::Compositor compositor,
                              float blurAmount,
                              winrt::Windows::UI::Color tint,
                              std::optional<uint8_t> tintOpacity,
-                             winrt::hstring tintThemeResourceKey) :
-	m_compositor(std::move(compositor)),
-	m_blurAmount(blurAmount),
-	m_tint(tint),
-	m_tintOpacity(tintOpacity),
-	m_tintThemeResourceKey(std::move(tintThemeResourceKey))
+                             winrt::hstring tintThemeResourceKey,
+                             std::optional<float> tintLuminosityOpacity,
+                             std::optional<float> tintSaturation,
+                             std::optional<float> noiseOpacity) :
+    m_compositor(std::move(compositor)),
+    m_blurAmount(blurAmount),
+    m_tint(tint),
+    m_tintOpacity(tintOpacity),
+    m_tintThemeResourceKey(std::move(tintThemeResourceKey)),
+    m_tintLuminosityOpacity(tintLuminosityOpacity),
+    m_tintSaturation(tintSaturation),
+    m_noiseOpacity(noiseOpacity)
 {
-	if (!m_tintThemeResourceKey.empty())
-	{
-		RefreshThemeTint();
-
-		auto dq = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
-
-		m_uiSettings.ColorValuesChanged([weakThis = get_weak(), dq] (auto const&, auto const&)
-		{
-			dq.TryEnqueue([weakThis]
-			{
-				if (auto self = weakThis.get())
-				{
-					self->OnThemeRefreshed();
-				}
-			});
-		});
-	}
+    if (!m_tintThemeResourceKey.empty())
+    {
+        RefreshThemeTint();
+        
+        auto dq = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+        m_uiSettings.ColorValuesChanged([weakThis = get_weak(), dq] (auto const&, auto const&)
+        {
+            dq.TryEnqueue([weakThis]
+            {
+                if (auto self = weakThis.get())
+                {
+                    self->OnThemeRefreshed();
+                }
+            });
+        });
+    }
 }
 
 void XamlBlurBrush::OnConnected()
 {
-	if (!CompositionBrush())
-	{
-		auto backdropBrush = m_compositor.CreateBackdropBrush();
+    if (!CompositionBrush())
+    {
+        auto backdropBrush = m_compositor.CreateBackdropBrush();
 
-		auto blurEffect = winrt::make_self<GaussianBlurEffect>();
-		blurEffect->Source = wuc::CompositionEffectSourceParameter(L"backdrop");
-		blurEffect->BlurAmount = m_blurAmount;
+        // 1. Blur Layer (Bottom)
+        auto blurEffect = winrt::make_self<GaussianBlurEffect>();
+        blurEffect->Source = wuc::CompositionEffectSourceParameter(L"backdrop");
+        blurEffect->BlurAmount = m_blurAmount;
+        blurEffect->Name(L"BlurEffect");
 
-		auto floodEffect = winrt::make_self<FloodEffect>();
-		floodEffect->Color = m_tint;
+        wge::IGraphicsEffectSource topOfStack = blurEffect.as<wge::IGraphicsEffectSource>();
 
-		auto compositeEffect = winrt::make_self<CompositeEffect>();
-		compositeEffect->Sources.push_back(*blurEffect);
-		compositeEffect->Sources.push_back(*floodEffect);
-		compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+        // 2. Saturation Layer
+        if (m_tintSaturation && *m_tintSaturation != 1.0f)
+        {
+            float s = *m_tintSaturation;
+            if (s < 0.0f) s = 0.0f; 
 
-		auto factory = m_compositor.CreateEffectFactory(
-			*compositeEffect,
-			// List of animatable properties.
-			{L"FloodEffect.Color"}
-		);
-		auto blurBrush = factory.CreateBrush();
-		blurBrush.SetSourceParameter(L"backdrop", backdropBrush);
+            auto satMatrix = winrt::make_self<ColorMatrixEffect>();
+            satMatrix->Source = topOfStack; 
+            satMatrix->AlphaMode = 1; 
+            satMatrix->ClampOutput = false; 
 
-		CompositionBrush(blurBrush);
-	}
+            const float lr = 0.2125f;
+            const float lg = 0.7154f;
+            const float lb = 0.0721f;
+            float invS = 1.0f - s;
+            
+            satMatrix->Matrix[0] = invS * lr + s; satMatrix->Matrix[1] = invS * lr; satMatrix->Matrix[2] = invS * lr; satMatrix->Matrix[3] = 0.0f;
+            satMatrix->Matrix[4] = invS * lg; satMatrix->Matrix[5] = invS * lg + s; satMatrix->Matrix[6] = invS * lg; satMatrix->Matrix[7] = 0.0f;
+            satMatrix->Matrix[8] = invS * lb; satMatrix->Matrix[9] = invS * lb; satMatrix->Matrix[10]= invS * lb + s; satMatrix->Matrix[11]= 0.0f;
+            satMatrix->Matrix[15] = 1.0f;
+            satMatrix->Name(L"SaturationEffect");
+            topOfStack = satMatrix.as<wge::IGraphicsEffectSource>();
+        }
+
+        // 3. Luminosity Layer
+        if (m_tintLuminosityOpacity && *m_tintLuminosityOpacity > 0.0f)
+        {
+            float op = *m_tintLuminosityOpacity;
+            if (op < 0.0f) op = 0.0f;
+            if (op > 1.0f) op = 1.0f;
+
+            float r = m_tint.R / 255.0f;
+            float g = m_tint.G / 255.0f;
+            float b = m_tint.B / 255.0f;
+
+            const float lr = 0.2126f;
+            const float lg = 0.7152f;
+            const float lb = 0.0722f;
+            float tintLum = (r * lr) + (g * lg) + (b * lb);
+
+            auto lumMatrix = winrt::make_self<ColorMatrixEffect>();
+            lumMatrix->Source = topOfStack; 
+            lumMatrix->AlphaMode = 1; 
+            lumMatrix->ClampOutput = false; 
+
+            lumMatrix->Matrix[0] = 1.0f - (lr * op); lumMatrix->Matrix[4] = - (lg * op); lumMatrix->Matrix[8] = - (lb * op); lumMatrix->Matrix[12]= 0.0f;
+            lumMatrix->Matrix[1] = - (lr * op); lumMatrix->Matrix[5] = 1.0f - (lg * op); lumMatrix->Matrix[9] = - (lb * op); lumMatrix->Matrix[13]= 0.0f;
+            lumMatrix->Matrix[2] = - (lr * op); lumMatrix->Matrix[6] = - (lg * op); lumMatrix->Matrix[10]= 1.0f - (lb * op); lumMatrix->Matrix[14]= 0.0f;
+            lumMatrix->Matrix[15]= 1.0f;
+            lumMatrix->Matrix[16]= tintLum * op; lumMatrix->Matrix[17]= tintLum * op; lumMatrix->Matrix[18]= tintLum * op; lumMatrix->Matrix[19]= 0.0f;
+
+            lumMatrix->Name(L"LuminosityBlend");
+            topOfStack = lumMatrix.as<wge::IGraphicsEffectSource>();
+        }
+
+        // 4. Noise Layer (Procedural Bitmap + Tiling + Opacity Matrix)
+        wuc::CompositionSurfaceBrush noiseBrush{nullptr};
+        if (m_noiseOpacity && *m_noiseOpacity > 0.0f)
+        {
+            // A. Create Opaque Noise Surface
+            auto stream = CreateNoiseStream(0, 0, 1.0f); 
+            auto surface = wux::Media::LoadedImageSurface::StartLoadFromStream(stream);
+            noiseBrush = m_compositor.CreateSurfaceBrush(surface);
+            noiseBrush.Stretch(wuc::CompositionStretch::None);
+            
+            // B. Tile it (Repeat)
+            auto borderEffect = winrt::make_self<BorderEffect>();
+            borderEffect->ExtendX = D2D1_BORDER_EDGE_MODE_WRAP;
+            borderEffect->ExtendY = D2D1_BORDER_EDGE_MODE_WRAP;
+            borderEffect->Source = wuc::CompositionEffectSourceParameter(L"NoiseSource");
+            borderEffect->Name(L"NoiseTiling");
+
+            // C. Apply Opacity via ColorMatrix (Scale Alpha and RGB)
+            auto opacityEffect = winrt::make_self<ColorMatrixEffect>();
+            opacityEffect->Source = borderEffect.as<wge::IGraphicsEffectSource>();
+            opacityEffect->AlphaMode = 1; 
+            opacityEffect->ClampOutput = false;
+            
+            float nOp = *m_noiseOpacity;
+            // Matrix: Scale all channels by Opacity (for Premultiplied blending)
+            opacityEffect->Matrix[0] = nOp;  // R scale
+            opacityEffect->Matrix[5] = nOp;  // G scale
+            opacityEffect->Matrix[10] = nOp; // B scale
+            opacityEffect->Matrix[15] = nOp; // A scale
+            
+            opacityEffect->Name(L"NoiseOpacityEffect");
+
+            // D. Blend Noise OVER the current blur stack
+            auto noiseComposite = winrt::make_self<CompositeEffect>();
+            noiseComposite->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+            noiseComposite->Sources.push_back(topOfStack); // Dest (Bottom)
+            noiseComposite->Sources.push_back(opacityEffect.as<wge::IGraphicsEffectSource>()); // Source (Top)
+            
+            noiseComposite->Name(L"NoiseComposite"); 
+            topOfStack = noiseComposite.as<wge::IGraphicsEffectSource>();
+        }
+
+        // 5. Tint Layer (Flood)
+        auto tintEffect = winrt::make_self<FloodEffect>();
+        tintEffect->Color = m_tint;
+        tintEffect->Name(L"FloodEffect");
+
+        // 6. Final Composite (Tint + Stack)
+        auto compositeEffect = winrt::make_self<CompositeEffect>();
+        compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+        compositeEffect->Sources.push_back(topOfStack); // Dest
+        compositeEffect->Sources.push_back(tintEffect.as<wge::IGraphicsEffectSource>()); // Source (Top Tint)
+
+        compositeEffect->Name(L"FinalComposite");
+
+        std::vector<winrt::hstring> animatableProperties = {L"FloodEffect.Color"};
+        auto factory = m_compositor.CreateEffectFactory(*compositeEffect, animatableProperties);
+        auto brush = factory.CreateBrush();
+
+        brush.SetSourceParameter(L"backdrop", backdropBrush);
+        
+        // Bind the noise brush if we created one
+        if (noiseBrush) {
+            brush.SetSourceParameter(L"NoiseSource", noiseBrush);
+        }
+
+        CompositionBrush(brush);
+    }
 }
 
 void XamlBlurBrush::OnDisconnected()
@@ -6284,9 +6651,14 @@ void SetOrClearValue(DependencyObject elementDo,
                     .Compositor();
 
             value = winrt::make<XamlBlurBrush>(
-                std::move(compositor), blurBrushParams->blurAmount,
-                blurBrushParams->tint, blurBrushParams->tintOpacity,
-                winrt::hstring(blurBrushParams->tintThemeResourceKey));
+                std::move(compositor), 
+                blurBrushParams->blurAmount,
+                blurBrushParams->tint, 
+                blurBrushParams->tintOpacity,
+                winrt::hstring(blurBrushParams->tintThemeResourceKey),
+                blurBrushParams->tintLuminosityOpacity,
+                blurBrushParams->tintSaturation,
+                blurBrushParams->noiseOpacity);
         } else {
             Wh_Log(L"Can't get UIElement for blur brush");
             return;
@@ -6475,17 +6847,23 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
     }
     substr = substr.substr(0, substr.size() - std::size(kWindhawkBlurSuffix));
 
+    float tintLuminosityOpacity = std::numeric_limits<float>::quiet_NaN();
+    float tintSaturation = std::numeric_limits<float>::quiet_NaN();
+    float noiseOpacity = std::numeric_limits<float>::quiet_NaN();
+
     bool pendingTintColorThemeResource = false;
     std::wstring tintThemeResourceKey;
     winrt::Windows::UI::Color tint{};
     float tintOpacity = std::numeric_limits<float>::quiet_NaN();
     float blurAmount = 0;
 
-    constexpr auto kTintColorThemeResourcePrefix =
-        L"TintColor=\"{ThemeResource"sv;
+    constexpr auto kTintColorThemeResourcePrefix = L"TintColor=\"{ThemeResource"sv;
     constexpr auto kTintColorThemeResourceSuffix = L"}\""sv;
     constexpr auto kTintColorPrefix = L"TintColor=\"#"sv;
     constexpr auto kTintOpacityPrefix = L"TintOpacity=\""sv;
+    constexpr auto kTintLuminosityOpacityPrefix = L"TintLuminosityOpacity=\""sv;
+    constexpr auto kTintSaturationPrefix = L"TintSaturation=\""sv;
+    constexpr auto kNoiseOpacityPrefix = L"NoiseOpacity=\""sv;
     constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
     for (const auto prop : SplitStringView(substr, L" ")) {
         const auto propSubstr = TrimStringView(prop);
@@ -6513,6 +6891,30 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
 
         if (propSubstr == kTintColorThemeResourcePrefix) {
             pendingTintColorThemeResource = true;
+            continue;
+        }
+
+        if (propSubstr.starts_with(kTintLuminosityOpacityPrefix) && propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kTintLuminosityOpacityPrefix),
+                propSubstr.size() - std::size(kTintLuminosityOpacityPrefix) - 1);
+            tintLuminosityOpacity = std::stof(std::wstring(valStr));
+            continue;
+        }
+
+        if (propSubstr.starts_with(kTintSaturationPrefix) && propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kTintSaturationPrefix),
+                propSubstr.size() - std::size(kTintSaturationPrefix) - 1);
+            tintSaturation = std::stof(std::wstring(valStr));
+            continue;
+        }
+
+        if (propSubstr.starts_with(kNoiseOpacityPrefix) && propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kNoiseOpacityPrefix),
+                propSubstr.size() - std::size(kNoiseOpacityPrefix) - 1);
+            noiseOpacity = std::stof(std::wstring(valStr));
             continue;
         }
 
@@ -6583,9 +6985,11 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
     return XamlBlurBrushParams{
         .blurAmount = blurAmount,
         .tint = tint,
-        .tintOpacity =
-            !std::isnan(tintOpacity) ? std::optional(tint.A) : std::nullopt,
+        .tintOpacity = !std::isnan(tintOpacity) ? std::optional(tint.A) : std::nullopt,
         .tintThemeResourceKey = std::move(tintThemeResourceKey),
+        .tintLuminosityOpacity = !std::isnan(tintLuminosityOpacity) ? std::optional(tintLuminosityOpacity) : std::nullopt,  // NEW
+        .tintSaturation = !std::isnan(tintSaturation) ? std::optional(tintSaturation) : std::nullopt,                        // NEW
+        .noiseOpacity = !std::isnan(noiseOpacity) ? std::optional(noiseOpacity) : std::nullopt,                              // NEW
     };
 }
 
