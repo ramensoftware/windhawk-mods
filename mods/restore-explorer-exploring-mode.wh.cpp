@@ -2,7 +2,7 @@
 // @id              restore-explorer-exploring-mode
 // @name            Restore Explorer "Exploring" Mode
 // @description     Reintroduces File Explorer's "Exploring" mode from Windows XP and before
-// @version         1.1.0
+// @version         1.2.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -66,7 +66,11 @@ Windows Registry Editor Version 5.00
   $description:
     When enabled, taking the "Open" action on a folder in an open/save dialog will open
     the folder in a new Explorer window (Windows XP and before).
-
+- dont_store_tree_state: true
+  $name: Don't store tree view state
+  $description:
+    When enabled, the tree view's initial open state will be based on whether the window was opened in
+    explore mode and will not be carried between windows (Windows XP and before).
 */
 // ==/WindhawkModSettings==
 
@@ -108,12 +112,10 @@ enum EXE_INVOKE_LOCATION
     EIL_DOCUMENTS,
     EIL_SYSDRIVEROOT,
 } g_exeInvokeLocation = EIL_UNCHANGED;
-
 bool g_fExplorerIcon = false;
-
 WindhawkUtils::StringSetting g_spszExploringText;
-
 bool g_fOpenInNewWindow = false;
+bool g_fDontStoreTreeState = false;
 
 interface IBrowserEvents : IUnknown
 {
@@ -326,6 +328,80 @@ HRESULT CMemPropStore_Write_hook(
     return hr;
 }
 
+class DirectUI_Element;
+
+typedef DirectUI_Element *(*DirectUI_Element_GetParent_t)(DirectUI_Element *pThis);
+DirectUI_Element_GetParent_t DirectUI_Element_GetParent;
+
+typedef DirectUI_Element *(*DirectUI_Element_FindDescendent_t)(DirectUI_Element *pThis, ATOM atomID);
+DirectUI_Element_FindDescendent_t DirectUI_Element_FindDescendent;
+
+// This is exported from dui70, but the implementation is so simple that it's
+// not worth importing.
+#define StrToID(psz) FindAtomW(psz)
+
+thread_local bool g_fShouldSaveStream = false;
+
+HRESULT (*CDUISizerElement__WriteVisibleToPropBag_orig)(void *, BOOL);
+HRESULT CDUISizerElement__WriteVisibleToPropBag_hook(
+    void *pThis,
+    BOOL  fValue
+)
+{
+    LPCWSTR pszPropName = (LPCWSTR)pThis + 688;
+    if (!wcscmp(pszPropName, L"PageSpaceControlSizer_Visible"))
+    {
+        //
+        // Rough layout:
+        //
+        // <Element resid="ProperTreeInner">
+        //     <ProperTreeHost id="atom(ProperTreeHost)">
+        //         <ProperTreeModuleInner id="atom(ProperTreeModuleInner)"/>
+        //     </ProperTreeHost>
+        //     <Sizer id="atom(PageSpaceControlSizer)"/>
+        // </Element>
+        //
+        // We are PageSpaceControlSizer and we want ProperTreeModuleInner, as
+        // it has a pointer to the shell browser property bag, containing the
+        // ExpandInitialNav value.
+        //
+        IPropertyBag *ppbBrowser = nullptr;
+        DirectUI_Element *pe = DirectUI_Element_GetParent((DirectUI_Element *)pThis);
+        if (pe)
+        {
+            DirectUI_Element *peInner = DirectUI_Element_FindDescendent(pe, StrToID(L"ProperTreeModuleInner"));
+            if (peInner)
+            {
+                ppbBrowser = *((IPropertyBag **)peInner + 31);
+            }
+        }
+
+        if (ppbBrowser)
+        {
+            // If we have set the initial state, don't let navigation write it again.
+            BOOL fProp;
+            if (SUCCEEDED(PSPropertyBag_ReadBOOL(ppbBrowser, L"WH_HasSetInitialTreeState", &fProp))
+                && fProp)
+            {
+                return S_OK;
+            }
+
+            // If we don't want to store the tree state, open tree based on whether or not we are in
+            // explore mode. (XP and before)
+            if (g_fDontStoreTreeState)
+            {
+                if (SUCCEEDED(PSPropertyBag_ReadBOOL(ppbBrowser, L"ExpandInitialNav", &fProp)))
+                    fValue = fProp;
+                else
+                    fValue = FALSE;
+            }
+
+            PSPropertyBag_WriteBOOL(ppbBrowser, L"WH_HasSetInitialTreeState", TRUE);
+        }
+    }
+    return CDUISizerElement__WriteVisibleToPropBag_orig(pThis, fValue);
+}
+
 #endif
 
 enum ASSOCQUERY
@@ -525,6 +601,17 @@ const WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
 };
 
 #ifdef _WIN64
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+    {
+        {
+            L"private: long __cdecl CDUISizerElement::_WriteVisibleToPropBag(int)"
+        },
+        &CDUISizerElement__WriteVisibleToPropBag_orig,
+        CDUISizerElement__WriteVisibleToPropBag_hook,
+        false
+    },
+};
+
 const WindhawkUtils::SYMBOL_HOOK propsysDllHooks[] = {
     {
         {
@@ -537,11 +624,46 @@ const WindhawkUtils::SYMBOL_HOOK propsysDllHooks[] = {
 };
 #endif
 
+#define LOAD_MODULE_(module, varName)                                                          \
+    HMODULE varName = LoadLibraryExW(L ## #module ".dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32); \
+    if (!varName)                                                                              \
+    {                                                                                          \
+        Wh_Log(L"Failed to load " #module ".dll");                                             \
+        return FALSE;                                                                          \
+    }
+
+#define LOAD_MODULE(name) LOAD_MODULE_(name, name)
+
+#define HOOK_SYMBOLS_(module, moduleVar, hooks)                                    \
+    if (!WindhawkUtils::HookSymbols(                                               \
+        moduleVar,                                                                 \
+        hooks,                                                                     \
+        ARRAYSIZE(hooks)                                                           \
+    ))                                                                             \
+    {                                                                              \
+        Wh_Log(L"Failed to hook one or more symbol functions in " module); \
+        return FALSE;                                                              \
+    }
+
+#define HOOK_SYMBOLS(module, hooks) HOOK_SYMBOLS_(#module ".dll", module, hooks)
+
+#define HOOK_FUNCTION(function)               \
+    if (!Wh_SetFunctionHook(                  \
+        (void *)function,                     \
+        (void *)function ## _hook,            \
+        (void **)&function ## _orig           \
+    ))                                        \
+    {                                         \
+        Wh_Log(L"Failed to hook " #function); \
+        return FALSE;                         \
+    }
+
 void Wh_ModSettingsChanged(void)
 {
 #ifdef _WIN64
     g_spszExploringText = WindhawkUtils::StringSetting::make(L"exploring_text");
     g_fExplorerIcon = Wh_GetIntSetting(L"explorer_icon");
+    g_fDontStoreTreeState = Wh_GetIntSetting(L"dont_store_tree_state");
 #endif
     g_fOpenInNewWindow = Wh_GetIntSetting(L"open_in_new_window");
 }
@@ -575,66 +697,38 @@ BOOL Wh_ModInit(void)
         }
         Wh_FreeStringSetting(pszInvokeLocation);
 
-        if (!WindhawkUtils::HookSymbols(
-            GetModuleHandleW(NULL),
-            explorerExeHooks,
-            ARRAYSIZE(explorerExeHooks)
-        ))
+        HOOK_SYMBOLS_("explorer.exe", GetModuleHandleW(NULL), explorerExeHooks)
+
+        LOAD_MODULE(propsys)
+        HOOK_SYMBOLS(propsys, propsysDllHooks)
+
+        LOAD_MODULE(shell32)
+        HOOK_SYMBOLS(shell32, shell32DllHooks)
+
+        HOOK_FUNCTION(ShellExecuteExW)
+
+        LOAD_MODULE_(dui70, hmodDui70)
+
+        DirectUI_Element_GetParent
+            = (DirectUI_Element_GetParent_t)GetProcAddress(hmodDui70, "?GetParent@Element@DirectUI@@QEAAPEAV12@XZ");
+        if (!DirectUI_Element_GetParent)
         {
-            Wh_Log(L"Failed to hook one or more symbol functions in explorer.exe");
+            Wh_Log(L"Failed to get address of DirectUI::Element::GetParent");
+            return FALSE;
+        }
+
+        DirectUI_Element_FindDescendent
+            = (DirectUI_Element_FindDescendent_t)GetProcAddress(hmodDui70, "?FindDescendent@Element@DirectUI@@QEAAPEAV12@G@Z");
+        if (!DirectUI_Element_FindDescendent)
+        {
+            Wh_Log(L"Failed to get address of DirectUI::Element::FindDescendent");
             return FALSE;
         }
     }
 #endif
 
-    HMODULE hExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hExplorerFrame)
-    {
-        Wh_Log(L"Failed to load ExplorerFrame.dll");
-        return FALSE;
-    }
-
-    if (!WindhawkUtils::HookSymbols(
-        hExplorerFrame,
-        explorerFrameDllHooks,
-        ARRAYSIZE(explorerFrameDllHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook one or more symbol functions in ExplorerFrame.dll");
-        return FALSE;
-    }
-
-#ifdef _WIN64
-    if (fIsExplorer)
-    {
-        HMODULE hPropsys = LoadLibraryExW(L"propsys.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!hPropsys)
-        {
-            Wh_Log(L"Failed to load propsys.dll");
-            return FALSE;
-        }
-
-        if (!WindhawkUtils::HookSymbols(
-            hPropsys,
-            propsysDllHooks,
-            ARRAYSIZE(propsysDllHooks)
-        ))
-        {
-            Wh_Log(L"Failed to hook one or more symbol functions in propsys.dll");
-            return FALSE;
-        }
-
-        if (!Wh_SetFunctionHook(
-            (void *)ShellExecuteExW,
-            (void *)ShellExecuteExW_hook,
-            (void **)&ShellExecuteExW_orig
-        ))
-        {
-            Wh_Log(L"Failed to hook ShellExecuteExW");
-            return FALSE;
-        }
-    }
-#endif
+    LOAD_MODULE(ExplorerFrame)
+    HOOK_SYMBOLS(ExplorerFrame, explorerFrameDllHooks)
 
     return TRUE;
 }
