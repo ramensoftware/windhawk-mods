@@ -2,7 +2,7 @@
 // @id              menu-tooltip-slide-animation
 // @name            Menu/Tooltip Slide Animation
 // @description     Makes menus and tooltips slide into view
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -51,6 +51,13 @@ have a slide animation without issues.**
 #include <vector>
 
 #pragma region "SPI stuff"
+
+inline bool UIEffectsEnabled(void)
+{
+    BOOL fUIEffects = FALSE;
+    SystemParametersInfoW(SPI_GETUIEFFECTS, 0, &fUIEffects, 0);
+    return fUIEffects;
+}
 
 inline bool MenuAnimationEnabled(void)
 {
@@ -136,6 +143,13 @@ bool SlideAnimSystemParametersInfo(
     if (!pvParam)                     \
     {                                 \
         *pfResult = FALSE;            \
+        return true;                  \
+    }                                 \
+                                      \
+    if (!UIEffectsEnabled())          \
+    {                                 \
+        *(BOOL *)pvParam = FALSE;     \
+        *pfResult = TRUE;             \
         return true;                  \
     }                                 \
                                       \
@@ -903,7 +917,7 @@ void SlideAnimWndProc(
     {
         case WM_UAHINITMENU:
         {
-            if (!MenuAnimationEnabled() || MenuFadeEnabled())
+            if (!UIEffectsEnabled() || !MenuAnimationEnabled() || MenuFadeEnabled())
                 return;
 
             PUAHMENU puim = (PUAHMENU)lParam;
@@ -1114,7 +1128,7 @@ LRESULT __fastcall CToolTipsMgr_ToolTipsWndProc_hook(
         case WM_WINDOWPOSCHANGING:
         {
             LPWINDOWPOS pwp = (LPWINDOWPOS)lParam;
-            if (TooltipAnimationEnabled() && !TooltipFadeEnabled()
+            if (UIEffectsEnabled() && TooltipAnimationEnabled() && !TooltipFadeEnabled()
             && !g_fAnimatingTooltip && (pwp->flags & SWP_SHOWWINDOW))
             {
                 g_fTooltipWasShown = true;
@@ -1152,7 +1166,7 @@ void __thiscall CToolTipsMgr_DoShowBubble_hook(
     CToolTipsMgr_DoShowBubble_orig(pThis);
     // If the tooltip isn't left visible from the original function,
     // bail out.
-    if (g_fTooltipWasShown && TooltipAnimationEnabled() && !TooltipFadeEnabled())
+    if (g_fTooltipWasShown && UIEffectsEnabled() && TooltipAnimationEnabled() && !TooltipFadeEnabled())
     {
         g_fTooltipWasShown = false;
         
