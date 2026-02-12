@@ -8,7 +8,7 @@
 // @description:es  Desactiva el tamaño de corte utilizado para mostrar miniaturas en el Explorador de Archivos.
 // @name:ja         サムネイルの最小サイズを無効化
 // @description:ja  エクスプローラーでサムネイルを表示する際に使用される最小サイズの制限を無効にします。
-// @version         1.2
+// @version         1.3
 // @author          Leymonaide
 // @github          https://github.com/Leymonaide
 // @twitter         https://twitter.com/Leym0naide
@@ -224,8 +224,10 @@ BOOL Wh_ModInit() {
 
     if (!WindhawkUtils::HookSymbols(shell32, shell32Hooks, ARRAYSIZE(shell32Hooks)))
     {
+        // This failure is non-fatal as the functionality is mostly contained in
+        // windows.storage.dll, and the functions are removed from shell32 in
+        // Windows 11.
         Wh_Log(L"Failed to hook symbols in shell32.dll.");
-        return FALSE;
     }
 
     if (!WindhawkUtils::HookSymbols(windowsStorageDll, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks)))
