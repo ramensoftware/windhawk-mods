@@ -13,20 +13,17 @@
 # Explorer Copy-as-path: Remove quotes
 
 Windows Explorer's "Copy as path" (Ctrl+Shift+C) produces quoted paths (e.g. "C:\\A B\\file.txt").
-This mod hooks shell32's CCopyAsPathMenu::_Invoke and calls Windows.Storage!GetShellItemsAsTextHGLOBAL
-with flags=2 (instead of the default 0), then writes the returned CF_UNICODETEXT to clipboard.
 
-If it can't resolve symbols or fails at runtime, it falls back to the original behavior.
+This mod runs inside explorer.exe and hooks Windows.Storage.dll!GetShellItemsAsTextHGLOBAL.
+When Explorer calls this function with flags=0 (the default, which produces quoted paths),
+the mod rewrites flags to 2, which has been verified to return unquoted paths.
 
-This implementation avoids hard-coded shell32 addresses by hooking
-Windows.Storage.dll!GetShellItemsAsTextHGLOBAL and changing flags==0 to 2.
+Other flags and callers are left unchanged.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <windhawk_api.h>
-
-#include <stdint.h>
 
 // Treat IDataObject as an opaque COM pointer to avoid heavy headers.
 struct IDataObject;
@@ -38,10 +35,9 @@ static HRESULT WINAPI GetShellItemsAsTextHGLOBAL_Hook(IDataObject* dataObject, U
     // In shell32, CCopyAsPathMenu uses flags==0 for Ctrl+Shift+C (quoted paths).
     // flags==2 was verified to return unquoted paths.
     if (flags == 0) {
-        static bool loggedOnce = false;
-        if (!loggedOnce) {
+        static volatile LONG loggedOnce = 0;
+        if (InterlockedCompareExchange(&loggedOnce, 1, 0) == 0) {
             Wh_Log(L"GetShellItemsAsTextHGLOBAL: rewriting flags 0 -> 2");
-            loggedOnce = true;
         }
         flags = 2;
     }
@@ -53,7 +49,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
     HMODULE windowsStorage = GetModuleHandleW(L"Windows.Storage.dll");
     if (!windowsStorage) {
-        windowsStorage = LoadLibraryW(L"Windows.Storage.dll");
+        windowsStorage = LoadLibraryExW(L"Windows.Storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!windowsStorage) {
             Wh_Log(L"Failed to load Windows.Storage.dll");
             return FALSE;
