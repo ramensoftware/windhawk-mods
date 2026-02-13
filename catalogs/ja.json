@@ -6522,6 +6522,39 @@
                 "version": "1.0"
             }
         },
+        "start-menu-size": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1770998165000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1770998165000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Set a custom size for the Start menu on Windows 11",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "StartMenuExperienceHost.exe"
+                ],
+                "name": "Start Menu Size",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "suppress-run-box-error-message": {
             "details": {
                 "defaultSorting": 656,

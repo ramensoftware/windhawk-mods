@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-13T14:20:30.000Z</updated>
+    <updated>2026-02-13T15:56:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Size 1.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-size#90a82d22fb69981ef683bcc34b726f2933dc98f1</id>
+        <link href="https://windhawk.net/mods/start-menu-size"/>
+        <updated>2026-02-13T15:56:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startmenusize">Start Menu Size</h1>
+<p>Set a custom size for the Start menu on Windows 11.</p>
+<p>Allows you to override the default width and height of the Start menu.</p>
+<p><img src="https://i.imgur.com/FoFSFOV.png" alt="Screenshot" /><br />
+<em>Example for making the Start menu smaller</em></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Shell Flyout Positions 1.2]]></title>
         <id>https://windhawk.net/mods/shell-flyout-positions#c46e11f8c2f0d701fd60bad7b3eef653bafd0b32</id>
@@ -311,20 +326,6 @@ at init and to enable them at uninit if MinAnimate is still enabled</li>
         <updated>2026-02-06T23:16:08.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added support for the new taskbar auto-hide animation in Windows 11 preview builds (ViVeTool ID: 41356296).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide per monitor 1.0.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-per-monitor#889b0d410941cdbc21e477ae25def0a47a897fda</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-per-monitor"/>
-        <updated>2026-02-06T20:29:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed incorrect auto-hide status when queried. Notably, Electron apps draw a border at the bottom of the window when auto-hide is enabled, and they were doing it even when the mod disabled auto-hide for a monitor.</li>
-<li>Made compatible with older Windows 11 builds.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
