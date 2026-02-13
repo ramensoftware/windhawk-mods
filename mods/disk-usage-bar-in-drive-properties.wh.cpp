@@ -619,7 +619,7 @@ int __fastcall Shell32_DrawPie_Hook(
     return 0; // Suppress the original chart
 }
 
-const WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         { SHELL32_DRAWPIE },
         &Shell32_DrawPie_Original,
@@ -642,7 +642,7 @@ void __fastcall WpdShExt_DrawPie_Hook(
     DrawDiskUsageBar(hdc, prcChart, dwUsagePer1000);
 }
 
-const WindhawkUtils::SYMBOL_HOOK wpdshextHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK wpdshextDllHooks[] = {
     {
         { WPDSHEXT_DRAWPIE },
         &WpdShExt_DrawPie_Original,
@@ -670,8 +670,8 @@ BOOL Wh_ModInit()
     {
         if (!WindhawkUtils::HookSymbols(
             hShell32,
-            shell32Hooks,
-            ARRAYSIZE(shell32Hooks)
+            shell32DllHooks,
+            ARRAYSIZE(shell32DllHooks)
         ))
         {
             Wh_Log(L"Failed to hook DrawPie in shell32.dll");
@@ -684,8 +684,8 @@ BOOL Wh_ModInit()
     {
         if (!WindhawkUtils::HookSymbols(
             hWpdShExt,
-            wpdshextHooks,
-            ARRAYSIZE(wpdshextHooks)
+            wpdshextDllHooks,
+            ARRAYSIZE(wpdshextDllHooks)
         ))
         {
             Wh_Log(L"Failed to hook _DrawPie in wpdshext.dll");
