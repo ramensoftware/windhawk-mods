@@ -2543,6 +2543,34 @@
                 "version": "1.0.1"
             }
         },
+        "disk-usage-bar-in-drive-properties": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771003357000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771003357000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Kitsune",
+                "compilerOptions": "-luxtheme -lgdi32",
+                "description": "Replaces the pie/donut chart in drive properties with a usage bar",
+                "github": "https://github.com/AromaKitsune",
+                "include": [
+                    "*"
+                ],
+                "name": "Disk Usage Bar in Drive Properties",
+                "version": "1.0"
+            }
+        },
         "dot-hide": {
             "details": {
                 "defaultSorting": 7800,

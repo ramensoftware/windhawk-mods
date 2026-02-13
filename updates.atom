@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-13T15:56:05.000Z</updated>
+    <updated>2026-02-13T17:22:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar in Drive Properties 1.0]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-in-drive-properties#c2e624b0ebeb3c649073ec5656655b1bebc65089</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-in-drive-properties"/>
+        <updated>2026-02-13T17:22:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="diskusagebarindriveproperties">Disk Usage Bar in Drive Properties</h1>
+<p>This mod replaces the disk usage pie/donut chart in the drive properties dialog
+with a usage bar.</p>
+<p><img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/disk-usage-bar-in-drive-properties.png" alt="" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Replaces the pie/donut chart with a blue usage bar, like in "This PC".</li>
+<li>Switches the bar color to red when the disk is almost full.</li>
+<li>Displays the usage percentage text below the bar.</li>
+</ul>
+<h2 id="supportedwindowsversions">Supported Windows versions</h2>
+<ul>
+<li>Windows 11</li>
+<li>Windows 10</li>
+<li>Windows 8.1</li>
+</ul>
+<h2 id="configuration">Configuration</h2>
+<p>You can enable the option to switch the usage bar color to red when disk usage
+exceeds 90%.</p>
+<hr />
+<p>Based on the "<a href="https://windhawk.net/mods/disk-pie-chart">Disk Pie Chart</a>" mod by
+<strong>aubymori</strong>.</p>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Size 1.0]]></title>
         <id>https://windhawk.net/mods/start-menu-size#90a82d22fb69981ef683bcc34b726f2933dc98f1</id>
@@ -313,19 +345,6 @@ at init and to enable them at uninit if MinAnimate is still enabled</li>
         <updated>2026-02-07T01:56:46.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>When "preserve aspect ratio" is selected, the respected bounds are now the width and height maximums. Minimum bounds are attempted to be respected, but not guaranteed. Fixes <a href="https://github.com/ramensoftware/windhawk-mods/issues/2957">issue #2957</a>. Contributed by <a href="https://github.com/alchemyyy">iZack</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide speed 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-speed#6ae852af8f5d6ccaf2ac39cc4a435d4637150c59</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-speed"/>
-        <updated>2026-02-06T23:16:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the new taskbar auto-hide animation in Windows 11 preview builds (ViVeTool ID: 41356296).</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
