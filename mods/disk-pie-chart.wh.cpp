@@ -2,7 +2,7 @@
 // @id              disk-pie-chart
 // @name            Disk Pie Chart
 // @description     Makes the graph in disk properties a pie chart again
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -361,9 +361,7 @@ void __fastcall _DrvPrshtDrawItem_hook(
         case IDC_DRV_FREECOLOR:
         case IDC_DRV_CACHECOLOR:
         {
-            COLORREF crPieClr;
-            int      nPieClr;
-
+            int nPieClr;
             switch (lpdi->CtlID)
             {
                 case IDC_DRV_USEDCOLOR:
@@ -376,67 +374,24 @@ void __fastcall _DrvPrshtDrawItem_hook(
                     nPieClr = DP_CACHECOLOR;
                     break;
             }
-            crPieClr = c_crPieColors[nPieClr];
 
-            if (crPieClr)
+            COLORREF crPie = c_crPieColors[nPieClr];
+            HBRUSH hbr = CreateSolidBrush(crPie);
+            FillRect(lpdi->hDC, &lpdi->rcItem, hbr);
+            DeleteObject(hbr);
+
+            if (settings.classic)
             {
-                RECT rc;
-                CopyRect(&rc, &lpdi->rcItem);
+                DWORD dwStyle = GetWindowLongW(lpdi->hwndItem, GWL_STYLE);
+                if (dwStyle & WS_BORDER)
+                    break;
 
-                HBRUSH hbrPieClr = CreateSolidBrush(crPieClr);
-                FillRect(
-                    lpdi->hDC,
-                    &rc,
-                    hbrPieClr
-                );
-                DeleteObject(hbrPieClr);
-
-                if (settings.classic)
-                {
-                    HBRUSH hbrShadow, hbrDkShadow, hbrLight, hbrHilight;
-                    hbrShadow = GetSysColorBrush(COLOR_3DSHADOW);
-                    hbrDkShadow = GetSysColorBrush(COLOR_3DDKSHADOW);
-                    hbrLight = GetSysColorBrush(COLOR_3DLIGHT);
-                    hbrHilight = GetSysColorBrush(COLOR_3DHILIGHT);
-
-                    rc.right = rc.left + 2;
-                    FillRect(lpdi->hDC, &rc, hbrDkShadow);
-
-                    rc.right = lpdi->rcItem.right;
-                    rc.bottom = rc.top + 2;
-                    FillRect(lpdi->hDC, &rc, hbrDkShadow);
-
-                    rc.bottom = lpdi->rcItem.bottom;
-                    rc.left = rc.right - 2;
-                    FillRect(lpdi->hDC, &rc, hbrLight);
-
-                    rc.left = lpdi->rcItem.left;
-                    rc.top = rc.bottom - 2;
-                    FillRect(lpdi->hDC, &rc, hbrLight);
-
-                    rc.top = lpdi->rcItem.top;
-                    rc.right = rc.left + 1;
-                    FillRect(lpdi->hDC, &rc, hbrShadow);
-
-                    rc.right = lpdi->rcItem.right;
-                    rc.bottom = rc.top + 1;
-                    FillRect(lpdi->hDC, &rc, hbrShadow);
-
-                    rc.bottom = lpdi->rcItem.bottom;
-                    rc.left = rc.right - 1;
-                    FillRect(lpdi->hDC, &rc, hbrHilight);
-
-                    rc.left = lpdi->rcItem.left;
-                    rc.top = rc.bottom - 1;
-                    FillRect(lpdi->hDC, &rc, hbrHilight);
-                }
+                DrawEdge(lpdi->hDC, &lpdi->rcItem, BDR_SUNKEN, BF_RECT);
             }
             break;
         }
         default:
-            _DrvPrshtDrawItem_orig(
-                lpps, lpdi
-            );
+            _DrvPrshtDrawItem_orig(lpps, lpdi);
     }
 }
 
@@ -540,7 +495,7 @@ BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    HMODULE hWpdshext = LoadLibraryW(L"wpdshext.dll");
+    HMODULE hWpdshext = LoadLibraryExW(L"wpdshext.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hWpdshext)
     {
         Wh_Log(L"Failed to load wpdshext.dll");
@@ -557,7 +512,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32)
     {
         Wh_Log(L"Failed to load shell32.dll");
