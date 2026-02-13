@@ -53,18 +53,12 @@ Based on the "[Disk Pie Chart](https://windhawk.net/mods/disk-pie-chart)" mod by
 #include <shellapi.h>
 
 #ifdef _WIN64
-#   define SSTDCALL L"__cdecl"
 #   define SHELL32_DRAWPIE L"DrawPie"
+#   define WPDSHEXT_DRAWPIE L"void __cdecl _DrawPie(struct HDC__ *,struct tagRECT const *,unsigned int,unsigned int,unsigned long const *)"
 #else
-#   define SSTDCALL L"__stdcall"
 #   define SHELL32_DRAWPIE L"_DrawPie@20"
+#   define WPDSHEXT_DRAWPIE L"void __stdcall _DrawPie(struct HDC__ *,struct tagRECT const *,unsigned int,unsigned int,unsigned long const *)"
 #endif
-
-#define WPDSHEXT_DRAWPIE \
-    L"void " \
-    SSTDCALL \
-    L" _DrawPie(struct HDC__ *,struct tagRECT const *,unsigned int," \
-    L"unsigned int,unsigned long const *)"
 
 struct {
     bool showRedUsageBar;
