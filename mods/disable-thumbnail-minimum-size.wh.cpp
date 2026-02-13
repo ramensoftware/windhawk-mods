@@ -14,7 +14,7 @@
 // @twitter         https://twitter.com/Leym0naide
 // @homepage        https://leymonaide.github.io/
 // @include         *
-// @compilerOptions -lshlwapi -lpropsys -lole32
+// @compilerOptions -lshlwapi -lpropsys -lole32 -lntdll
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -61,6 +61,8 @@ items nearly unrecognizable. However, it's good to have the option to display th
 #include <propvarutil.h>
 
 using Microsoft::WRL::ComPtr;
+
+EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlGetVersion(PRTL_OSVERSIONINFOW lpVersionInformation);
 
 bool g_fKeepFolderCutoff = true;
 
@@ -213,6 +215,9 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    RTL_OSVERSIONINFOW osvi;
+    RtlGetVersion(&osvi);
+
     HMODULE shell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     HMODULE windowsStorageDll = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
@@ -222,12 +227,17 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!WindhawkUtils::HookSymbols(shell32, shell32Hooks, ARRAYSIZE(shell32Hooks)))
+    // The duplicate functions were removed from shell32 in Windows 11, so we
+    // will only attempt to hook them on Windows 10.
+    if (osvi.dwBuildNumber < 22000)
     {
-        // This failure is non-fatal as the functionality is mostly contained in
-        // windows.storage.dll, and the functions are removed from shell32 in
-        // Windows 11.
-        Wh_Log(L"Failed to hook symbols in shell32.dll.");
+        if (!WindhawkUtils::HookSymbols(shell32, shell32Hooks, ARRAYSIZE(shell32Hooks)))
+        {
+            // This failure is non-fatal as the functionality is mostly
+            // contained in windows.storage.dll. shell32 is hooked for complete
+            // coverage, but it's not too worrying if the hooks failed.
+            Wh_Log(L"Nonfatal: Failed to hook symbols in shell32.dll.");
+        }
     }
 
     if (!WindhawkUtils::HookSymbols(windowsStorageDll, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks)))
