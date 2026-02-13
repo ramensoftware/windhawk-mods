@@ -6700,6 +6700,39 @@
                 "version": "1.1"
             }
         },
+        "taskbar-auto-hide-custom-activation-area": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771010774000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771010774000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "Customize the taskbar auto-hide activation area, allowing to limit mouse unhiding to specific regions",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar auto-hide custom activation area",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-auto-hide-keyboard-only": {
             "details": {
                 "defaultSorting": 9060,

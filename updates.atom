@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-13T17:22:37.000Z</updated>
+    <updated>2026-02-13T19:26:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide custom activation area 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-custom-activation-area#dc75ec6a3d28698d3b605f12582e0286c0f1588d</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-custom-activation-area"/>
+        <updated>2026-02-13T19:26:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarautohidecustomactivationarea">Taskbar auto-hide custom activation area</h1>
+<p>Customize the taskbar auto-hide activation area, allowing to limit mouse
+unhiding to specific regions.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Usage Bar in Drive Properties 1.0]]></title>
         <id>https://windhawk.net/mods/disk-usage-bar-in-drive-properties#c2e624b0ebeb3c649073ec5656655b1bebc65089</id>
@@ -336,19 +349,6 @@ at init and to enable them at uninit if MinAnimate is still enabled</li>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Size 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-size#4317a5cfd70115a622235a951bb056f517988819</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-size"/>
-        <updated>2026-02-07T01:56:46.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>When "preserve aspect ratio" is selected, the respected bounds are now the width and height maximums. Minimum bounds are attempted to be respected, but not guaranteed. Fixes <a href="https://github.com/ramensoftware/windhawk-mods/issues/2957">issue #2957</a>. Contributed by <a href="https://github.com/alchemyyy">iZack</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
