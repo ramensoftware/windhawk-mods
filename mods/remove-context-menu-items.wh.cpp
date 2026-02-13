@@ -2,7 +2,7 @@
 // @id              remove-context-menu-items
 // @name            Remove Unwanted Context Menu Items (Classic Menu Only)
 // @description     Removes unwanted items from file context menus with configurable options and context-aware filtering
-// @version         1.5.0
+// @version         1.6.0
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -15,9 +15,7 @@
 /*
 # Remove Unwanted Context Menu Items (Classic Menu Only)
 
-⚠️ **Language Notice:** The predefined toggle options currently include cs-CZ, en-AU, en-GB, pt-BR, and pt-PT. If you find a mistake and for additional details, please click [here](https://github.com/armaninyow/Remove-Unwanted-Context-Menu-Items).
-
-⚠️ **Windows 11 Users:** This mod currently works only with the classic context menu. Please install the [**Classic context menu on Windows 11**](https://windhawk.net/mods/explorer-context-menu-classic) mod to use this mod. Support for the modern Windows 11 context menu will be implemented soon.
+⚠️ **Windows 11 Users:** This mod currently works only with the classic context menu. Please install the [Classic context menu on Windows 11](https://windhawk.net/mods/explorer-context-menu-classic) mod to use this mod.
 
 ---
 
@@ -37,45 +35,54 @@ This mod removes unwanted items from file context menus with configurable option
 
 Clean up your Windows context menus by removing bloatware and unwanted items:
 
-### Bloatware Items (Default: ON)
-- Move to OneDrive
-- Ask Copilot
-- Scan with Microsoft Defender
-- Create with Designer
-- Edit with Clipchamp
+### Bloatware Items
+- `Move to OneDrive`
+- `Ask Copilot`
+- `Scan with Microsoft Defender`
+- `Create with Designer`
+- `Edit with Clipchamp`
 
-### Basic Items (Default: OFF)
-- Open
-- Cast to Device
-- Include in library
-- Restore previous versions
+### Basic Items
+- `Open`
+- `Cast to Device`
+- `Include in library`
+- `Restore previous versions`
 - ...and many more!
 
-### App-specific Items (Default: OFF)
-- Add to VLC media player's Playlist
-- Edit in Notepad
-- Edit with Paint
-- NVIDIA Control Panel
+### App-specific Items
+- `Add to VLC media player's Playlist`
+- `Edit in Notepad`
+- `Edit with Paint`
+- `NVIDIA Control Panel`
 - ...and many more!
 
 ### Context-Aware Filtering
-Some items like "Edit in Notepad" can be filtered based on file extensions. For example, you can configure the mod to only show "Edit in Notepad" for text files (.txt, .log, .json) but hide it for images and other files.
+Some items like `Edit in Notepad` can be filtered based on file extensions. For example, you can configure the mod to only show `Edit in Notepad` for text files (.txt, .log, .json) but hide it for images and other files.
 
 ### Custom Items
 You can also add your own custom menu items to remove by entering their text in the settings.
 
 **Basic Usage (Exact Match):**
-- "Copy" - Removes the "Copy" option (exact match)
-- "Pin to Quick access" - Removes the "Pin to Quick access" option (exact match)
-- "Open" - Removes only "Open" (exact match, won't remove "Open in new tab")
+- "Copy" - Removes the `Copy` option (exact match)
+- "Pin to Quick access" - Removes the `Pin to Quick access` option (exact match)
+- "Open" - Removes only `Open` (exact match, won't remove `Open in new tab`)
 
 **Wildcard Usage (Prefix Match):**
 Add an asterisk (*) at the end to match items that start with the given text:
-- "Open*" - Removes "Open", "Open with...", "Open in Terminal", "Open in new tab", etc.
-- "Pin to*" - Removes "Pin to Quick access", "Pin to Start", etc.
-- "C*" - Removes all menu items that start with C ("Cut", "Copy", "Create shortcut"). Be careful!
+- "Open*" - Removes `Open`, `Open with...`, `Open in Terminal`, `Open in new tab`, etc.
+- "Pin to*" - Removes `Pin to Quick access`, `Pin to Start`, etc.
+- "C*" - Removes all menu items that start with C (`Cut`, `Copy`, `Create shortcut`). Be careful!
 
 **Tip:** Right-click a file/folder, note the exact text of the menu item you want to remove, then add it to Custom Items. Use the asterisk (*) only if you want to remove multiple items with the same prefix.
+
+## Supported Languages
+
+- `cs-CZ`
+- `de-DE` (added by [Schleifenkratzer](https://github.com/Schleifenkratzer))
+- `en-AU`, `en-GB`
+- `pt-BR`, `pt-PT`
+
+If you find a mistake and for additional details, please click [here](https://github.com/armaninyow/Remove-Unwanted-Context-Menu-Items).
 */
 // ==/WindhawkModReadme==
 
@@ -136,6 +143,8 @@ Add an asterisk (*) at the end to match items that start with the given text:
     $name: Customize this folder...
   - removeFavorites: false
     $name: Add to Favorites
+  - removePinToQuickAccess: false
+    $name: Pin to Quick access
   - removePinToStart: false
     $name: Pin to Start
   - removeCast: false
@@ -168,6 +177,8 @@ Add an asterisk (*) at the end to match items that start with the given text:
   - removePaste: false
     $name: Paste
     $description: Only when greyed-out
+  - removeExtractAll: false
+    $name: Extract All...
   $name: Basic Items
   $description: Disabled by default
 
@@ -202,6 +213,8 @@ Add an asterisk (*) at the end to match items that start with the given text:
   - removeFreeUpSpace: false
     $name: Free up space
     $description: OneDrive submenu item
+  - removeWinRAR: false
+    $name: WinRAR
   $name: App-specific Items
   $description: Disabled by default
 
@@ -574,6 +587,7 @@ struct BasicSettings {
     bool removeCopyAsPath;
     bool removeCustomizeFolder;
     bool removeFavorites;
+    bool removePinToQuickAccess;
     bool removePinToStart;
     bool removeCast;
     bool removeGiveAccess;
@@ -589,6 +603,7 @@ struct BasicSettings {
     bool removeNew;
     bool removeProperties;
     bool removePaste;
+    bool removeExtractAll;
 };
 
 struct AppSpecificSettings {
@@ -605,6 +620,7 @@ struct AppSpecificSettings {
     bool removeOpenInTerminal;
     bool removeAlwaysKeepOnThisDevice;
     bool removeFreeUpSpace;
+    bool removeWinRAR;
 };
 
 struct ExtensionFilteringSettings {
@@ -686,291 +702,361 @@ void InitializeMenuItems() {
         {L"Move to OneDrive", &g_settings.bloatwareItems.removeOneDrive, false, nullptr},
         {L"Mover para o OneDrive", &g_settings.bloatwareItems.removeOneDrive, false, nullptr}, // pt-BR, pt-PT
         {L"Přesunout na OneDrive", &g_settings.bloatwareItems.removeOneDrive, false, nullptr}, // cs-CZ
+        {L"Auf OneDrive verschieben", &g_settings.bloatwareItems.removeOneDrive, false, nullptr}, // de-DE
         
         // Always keep on this device (en-US, en-GB, en-AU same)
         {L"Always keep on this device", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr},
         {L"Sempre manter neste dispositivo", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr}, // pt-BR
         {L"Manter sempre neste dispositivo", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr}, // pt-PT
         {L"Vždy ponechat na tomto zařízení", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr}, // cs-CZ
+        {L"Immer auf diesem Gerät behalten", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr}, // de-DE
         
         // Free up space (en-US, en-GB, en-AU same)
         {L"Free up space", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr},
         {L"Liberar espaço", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr}, // pt-BR
         {L"Libertar espaço", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr}, // pt-PT
         {L"Uvolnit místo", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr}, // cs-CZ
+        {L"Bereinigen", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr}, // de-DE
         
         // Ask Copilot (en-US, en-GB, en-AU same)
         {L"Ask Copilot", &g_settings.bloatwareItems.removeCopilot, false, nullptr},
         {L"Perguntar ao Copilot", &g_settings.bloatwareItems.removeCopilot, false, nullptr}, // pt-BR, pt-PT
         {L"Zeptat se Copilota", &g_settings.bloatwareItems.removeCopilot, false, nullptr}, // cs-CZ
+        {L"Copilot fragen", &g_settings.bloatwareItems.removeCopilot, false, nullptr}, // de-DE
         
         // Scan with Microsoft Defender (en-US, en-GB, en-AU same)
         {L"Scan with Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr},
         {L"Verificar com o Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr}, // pt-BR
         {L"Analisar com o Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr}, // pt-PT
         {L"Prohledat pomocí programu Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr}, // cs-CZ
+        {L"Mit Microsoft Defender überprüfen...", &g_settings.bloatwareItems.removeDefender, false, nullptr}, // de-DE
         
         // Create with Designer (en-US, en-GB, en-AU same)
         {L"Create with Designer", &g_settings.bloatwareItems.removeDesigner, false, nullptr},
         {L"Criar com o Designer", &g_settings.bloatwareItems.removeDesigner, false, nullptr}, // pt-BR, pt-PT
         {L"Vytvořit pomocí Designeru", &g_settings.bloatwareItems.removeDesigner, false, nullptr}, // cs-CZ
+        {L"Mit Designer erstellen", &g_settings.bloatwareItems.removeDesigner, false, nullptr}, // de-DE
         
         // Edit with Clipchamp (en-US, en-GB, en-AU same)
         {L"Edit with Clipchamp", &g_settings.bloatwareItems.removeClipchamp, false, nullptr},
         {L"Editar com o Clipchamp", &g_settings.bloatwareItems.removeClipchamp, false, nullptr}, // pt-BR, pt-PT
         {L"Upravit pomocí Clipchampu", &g_settings.bloatwareItems.removeClipchamp, false, nullptr}, // cs-CZ
+        {L"Mit Clipchamp bearbeiten", &g_settings.bloatwareItems.removeClipchamp, false, nullptr}, // de-DE
         
         // Basic Items - Open (en-US, en-GB, en-AU same)
         {L"Open", &g_settings.basicItems.removeOpen, false, nullptr},
         {L"Abrir", &g_settings.basicItems.removeOpen, false, nullptr}, // pt-BR, pt-PT
         {L"Otevřít", &g_settings.basicItems.removeOpen, false, nullptr}, // cs-CZ
+        {L"Öffnen", &g_settings.basicItems.removeOpen, false, nullptr}, // de-DE
         
         // Open with (en-US, en-GB, en-AU same)
         {L"Open with", &g_settings.basicItems.removeOpenWith, false, nullptr},
         {L"Abrir com", &g_settings.basicItems.removeOpenWith, false, nullptr}, // pt-BR, pt-PT
         {L"Otevřít v aplikaci", &g_settings.basicItems.removeOpenWith, false, nullptr}, // cs-CZ
+        {L"Öffnen mit", &g_settings.basicItems.removeOpenWith, false, nullptr}, // de-DE
         
         // Cut (en-US, en-GB, en-AU same)
         {L"Cut", &g_settings.basicItems.removeCut, false, nullptr},
         {L"Recortar", &g_settings.basicItems.removeCut, false, nullptr}, // pt-BR
         {L"Cortar", &g_settings.basicItems.removeCut, false, nullptr}, // pt-PT
         {L"Vyjmout", &g_settings.basicItems.removeCut, false, nullptr}, // cs-CZ
+        {L"Ausschneiden", &g_settings.basicItems.removeCut, false, nullptr}, // de-DE
         
         // Copy (en-US, en-GB, en-AU same)
         {L"Copy", &g_settings.basicItems.removeCopy, false, nullptr},
         {L"Copiar", &g_settings.basicItems.removeCopy, false, nullptr}, // pt-BR, pt-PT
         {L"Kopírovat", &g_settings.basicItems.removeCopy, false, nullptr}, // cs-CZ
+        {L"Kopieren", &g_settings.basicItems.removeCopy, false, nullptr}, // de-DE
         
         // Create shortcut (en-US, en-GB, en-AU same)
         {L"Create shortcut", &g_settings.basicItems.removeCreateShortcut, false, nullptr},
         {L"Criar atalho", &g_settings.basicItems.removeCreateShortcut, false, nullptr}, // pt-BR, pt-PT
         {L"Vytvořit zástupce", &g_settings.basicItems.removeCreateShortcut, false, nullptr}, // cs-CZ
+        {L"Verknüpfung erstellen", &g_settings.basicItems.removeCreateShortcut, false, nullptr}, // de-DE
         
         // Delete (en-US, en-GB, en-AU same)
         {L"Delete", &g_settings.basicItems.removeDelete, false, nullptr},
         {L"Excluir", &g_settings.basicItems.removeDelete, false, nullptr}, // pt-BR
         {L"Eliminar", &g_settings.basicItems.removeDelete, false, nullptr}, // pt-PT
         {L"Odstranit", &g_settings.basicItems.removeDelete, false, nullptr}, // cs-CZ
+        {L"Löschen", &g_settings.basicItems.removeDelete, false, nullptr}, // de-DE
         
         // Rename (en-US, en-GB, en-AU same)
         {L"Rename", &g_settings.basicItems.removeRename, false, nullptr},
         {L"Renomear", &g_settings.basicItems.removeRename, false, nullptr}, // pt-BR
         {L"Mudar o nome", &g_settings.basicItems.removeRename, false, nullptr}, // pt-PT
         {L"Přejmenovat", &g_settings.basicItems.removeRename, false, nullptr}, // cs-CZ
+        {L"Umbenennen", &g_settings.basicItems.removeRename, false, nullptr}, // de-DE
         
         // Send to (en-US, en-GB, en-AU same)
         {L"Send to", &g_settings.basicItems.removeSendTo, false, nullptr},
         {L"Enviar para", &g_settings.basicItems.removeSendTo, false, nullptr}, // pt-BR, pt-PT
         {L"Odeslat do", &g_settings.basicItems.removeSendTo, false, nullptr}, // cs-CZ
+        {L"Senden an", &g_settings.basicItems.removeSendTo, false, nullptr}, // de-DE
         
         // Open in new tab (en-US, en-GB, en-AU same)
         {L"Open in new tab", &g_settings.basicItems.removeOpenInNewTab, false, nullptr},
         {L"Abrir em uma nova guia", &g_settings.basicItems.removeOpenInNewTab, false, nullptr}, // pt-BR
         {L"Abrir num novo separador", &g_settings.basicItems.removeOpenInNewTab, false, nullptr}, // pt-PT
         {L"Otevřít na nové kartě", &g_settings.basicItems.removeOpenInNewTab, false, nullptr}, // cs-CZ
+        {L"In neuer Registerkarte öffnen", &g_settings.basicItems.removeOpenInNewTab, false, nullptr}, // de-DE
         
         // Open in new window (en-US, en-GB, en-AU same)
         {L"Open in new window", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr},
         {L"Abrir em uma nova janela", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr}, // pt-BR
         {L"Abrir numa nova janela", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr}, // pt-PT
         {L"Otevřít v novém okně", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr}, // cs-CZ
+        {L"In neuem Fenster öffnen", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr}, // de-DE
         
         // Edit (en-US, en-GB, en-AU same)
         {L"Edit", &g_settings.basicItems.removeEdit, false, nullptr},
         {L"Editar", &g_settings.basicItems.removeEdit, false, nullptr}, // pt-BR, pt-PT
         {L"Upravit", &g_settings.basicItems.removeEdit, false, nullptr}, // cs-CZ
+        {L"Bearbeiten", &g_settings.basicItems.removeEdit, false, nullptr}, // de-DE
         
         // Play (en-US, en-GB, en-AU same)
         {L"Play", &g_settings.basicItems.removePlay, false, nullptr},
         {L"Reproduzir", &g_settings.basicItems.removePlay, false, nullptr}, // pt-BR, pt-PT
         {L"Přehrát", &g_settings.basicItems.removePlay, false, nullptr}, // cs-CZ
+        {L"Wiedergabe", &g_settings.basicItems.removePlay, false, nullptr}, // de-DE
         
         // Preview (en-US, en-GB, en-AU same)
         {L"Preview", &g_settings.basicItems.removePreview, false, nullptr},
         {L"Visualizar", &g_settings.basicItems.removePreview, false, nullptr}, // pt-BR
         {L"Pré-visualizar", &g_settings.basicItems.removePreview, false, nullptr}, // pt-PT
         {L"Náhled", &g_settings.basicItems.removePreview, false, nullptr}, // cs-CZ
+        {L"Vorschau", &g_settings.basicItems.removePreview, false, nullptr}, // de-DE
         
         // Print (en-US, en-GB, en-AU same)
         {L"Print", &g_settings.basicItems.removePrint, false, nullptr},
         {L"Imprimir", &g_settings.basicItems.removePrint, false, nullptr}, // pt-BR, pt-PT
         {L"Tisk", &g_settings.basicItems.removePrint, false, nullptr}, // cs-CZ
+        {L"Drucken", &g_settings.basicItems.removePrint, false, nullptr}, // de-DE
         
         // Share (en-US, en-GB, en-AU same)
         {L"Share", &g_settings.basicItems.removeShare, false, nullptr},
         {L"Compartilhar", &g_settings.basicItems.removeShare, false, nullptr}, // pt-BR
         {L"Partilhar", &g_settings.basicItems.removeShare, false, nullptr}, // pt-PT
         {L"Sdílet", &g_settings.basicItems.removeShare, false, nullptr}, // cs-CZ
+        {L"Freigabe", &g_settings.basicItems.removeShare, false, nullptr}, // de-DE
         
         // Send with Quick Share (en-US, en-GB, en-AU same)
         {L"Send with Quick Share", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr},
         {L"Enviar com o Compartilhamento Rápido", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr}, // pt-BR
         {L"Enviar com Partilha Rápida", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr}, // pt-PT
         {L"Odeslat pomocí Rychlého sdílení", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr}, // cs-CZ
+        {L"Mit Quick Share senden", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr}, // de-DE
         
         // Refresh (en-US, en-GB, en-AU same)
         {L"Refresh", &g_settings.basicItems.removeRefresh, false, nullptr},
         {L"Atualizar", &g_settings.basicItems.removeRefresh, false, nullptr}, // pt-BR, pt-PT
         {L"Aktualizovat", &g_settings.basicItems.removeRefresh, false, nullptr}, // cs-CZ
+        {L"Aktualisieren", &g_settings.basicItems.removeRefresh, false, nullptr}, // de-DE
         
         // Copy as path (en-US, en-GB, en-AU same)
         {L"Copy as path", &g_settings.basicItems.removeCopyAsPath, false, nullptr},
         {L"Copiar como caminho", &g_settings.basicItems.removeCopyAsPath, false, nullptr}, // pt-BR, pt-PT
         {L"Kopírovat jako cestu", &g_settings.basicItems.removeCopyAsPath, false, nullptr}, // cs-CZ
+        {L"Als Pfad kopieren", &g_settings.basicItems.removeCopyAsPath, false, nullptr}, // de-DE
         
         // Customize this folder
         {L"Customize this folder...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr}, // en-US
         {L"Customise this folder...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr}, // en-GB, en-AU
         {L"Personalizar esta pasta...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr}, // pt-BR, pt-PT
         {L"Přizpůsobit tuto složku...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr}, // cs-CZ
+        {L"Ordner anpassen...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr}, // de-DE
         
         // Add to Favorites
         {L"Add to Favorites", &g_settings.basicItems.removeFavorites, false, nullptr}, // en-US
         {L"Add to Favourites", &g_settings.basicItems.removeFavorites, false, nullptr}, // en-GB, en-AU
         {L"Adicionar aos Favoritos", &g_settings.basicItems.removeFavorites, false, nullptr}, // pt-BR, pt-PT
         {L"Přidat k oblíbeným položkám", &g_settings.basicItems.removeFavorites, false, nullptr}, // cs-CZ
+        {L"Zu Favoriten hinzufügen", &g_settings.basicItems.removeFavorites, false, nullptr}, // de-DE
+        
+        // Pin to Quick access (en-US, en-GB, en-AU same)
+        {L"Pin to Quick access", &g_settings.basicItems.removePinToQuickAccess, false, nullptr},
+        {L"Fixar no Acesso Rápido", &g_settings.basicItems.removePinToQuickAccess, false, nullptr}, // pt-BR
+        {L"Afixar no Acesso rápido", &g_settings.basicItems.removePinToQuickAccess, false, nullptr}, // pt-PT
+        {L"Připnout na Rychlý přístup", &g_settings.basicItems.removePinToQuickAccess, false, nullptr}, // cs-CZ
+        {L"An Schnellzugriff anheften", &g_settings.basicItems.removePinToQuickAccess, false, nullptr}, // de-DE
         
         // Pin to Start (en-US, en-GB, en-AU same)
         {L"Pin to Start", &g_settings.basicItems.removePinToStart, false, nullptr},
         {L"Fixar em Iniciar", &g_settings.basicItems.removePinToStart, false, nullptr}, // pt-BR
         {L"Afixar no Iniciar", &g_settings.basicItems.removePinToStart, false, nullptr}, // pt-PT
         {L"Připnout na Start", &g_settings.basicItems.removePinToStart, false, nullptr}, // cs-CZ
+        {L"An \"Start\" anheften", &g_settings.basicItems.removePinToStart, false, nullptr}, // de-DE
         
         // Cast to Device (en-US, en-GB, en-AU same)
         {L"Cast to Device", &g_settings.basicItems.removeCast, false, nullptr},
         {L"Transmitir para Dispositivo", &g_settings.basicItems.removeCast, false, nullptr}, // pt-BR
         {L"Transmitir para o Dispositivo", &g_settings.basicItems.removeCast, false, nullptr}, // pt-PT
         {L"Přetypovat do zařízení", &g_settings.basicItems.removeCast, false, nullptr}, // cs-CZ
+        {L"Wiedergabe auf Gerät", &g_settings.basicItems.removeCast, false, nullptr}, // de-DE
         
         // Give access to (en-US, en-GB, en-AU same)
         {L"Give access to", &g_settings.basicItems.removeGiveAccess, false, nullptr},
         {L"Conceder acesso a", &g_settings.basicItems.removeGiveAccess, false, nullptr}, // pt-BR, pt-PT
         {L"Poskytnout přístup k", &g_settings.basicItems.removeGiveAccess, false, nullptr}, // cs-CZ
+        {L"Freigeben für", &g_settings.basicItems.removeGiveAccess, false, nullptr}, // de-DE
         
         // Restore previous versions (en-US, en-GB, en-AU same)
         {L"Restore previous versions", &g_settings.basicItems.removeRestoreVersions, false, nullptr},
         {L"Restaurar versões anteriores", &g_settings.basicItems.removeRestoreVersions, false, nullptr}, // pt-BR, pt-PT
         {L"Obnovit předchozí verze", &g_settings.basicItems.removeRestoreVersions, false, nullptr}, // cs-CZ
+        {L"Vorgängerversionen wiederhestellen", &g_settings.basicItems.removeRestoreVersions, false, nullptr}, // de-DE
         
         // Include in library (en-US, en-GB, en-AU same)
         {L"Include in library", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr},
         {L"Incluir na biblioteca", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr}, // pt-BR, pt-PT
         {L"Zahrnout do knihovny", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr}, // cs-CZ
+        {L"In Bibliothek aufnehmen", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr}, // de-DE
         
         // Rotate right (en-US, en-GB, en-AU same)
         {L"Rotate right", &g_settings.basicItems.removeRotate, false, nullptr},
         {L"Girar para a direita", &g_settings.basicItems.removeRotate, false, nullptr}, // pt-BR
         {L"Rodar para a direita", &g_settings.basicItems.removeRotate, false, nullptr}, // pt-PT
         {L"Otočit doprava", &g_settings.basicItems.removeRotate, false, nullptr}, // cs-CZ
+        {L"Nach rechts drehen", &g_settings.basicItems.removeRotate, false, nullptr}, // de-DE
         
         // Rotate left (en-US, en-GB, en-AU same)
         {L"Rotate left", &g_settings.basicItems.removeRotate, false, nullptr},
         {L"Girar para a esquerda", &g_settings.basicItems.removeRotate, false, nullptr}, // pt-BR
         {L"Rodar para a esquerda", &g_settings.basicItems.removeRotate, false, nullptr}, // pt-PT
         {L"Otočit doleva", &g_settings.basicItems.removeRotate, false, nullptr}, // cs-CZ
+        {L"Nach links drehen", &g_settings.basicItems.removeRotate, false, nullptr}, // de-DE
         
         // Display settings (en-US, en-GB, en-AU same)
         {L"Display settings", &g_settings.basicItems.removeDisplaySettings, false, nullptr},
         {L"Configurações de vídeo", &g_settings.basicItems.removeDisplaySettings, false, nullptr}, // pt-BR
         {L"Definições do ecrã", &g_settings.basicItems.removeDisplaySettings, false, nullptr}, // pt-PT
         {L"Nastavení zobrazení", &g_settings.basicItems.removeDisplaySettings, false, nullptr}, // cs-CZ
+        {L"Anzeigeeinstellungen", &g_settings.basicItems.removeDisplaySettings, false, nullptr}, // de-DE
         
         // Personalize
         {L"Personalize", &g_settings.basicItems.removePersonalize, false, nullptr}, // en-US
         {L"Personalise", &g_settings.basicItems.removePersonalize, false, nullptr}, // en-GB, en-AU
         {L"Personalizar", &g_settings.basicItems.removePersonalize, false, nullptr}, // pt-BR, pt-PT
         {L"Přizpůsobit", &g_settings.basicItems.removePersonalize, false, nullptr}, // cs-CZ
+        {L"Anpassen", &g_settings.basicItems.removePersonalize, false, nullptr}, // de-DE
         
         // Set as desktop background (en-US, en-GB, en-AU same)
         {L"Set as desktop background", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr},
         {L"Definir como plano de fundo da área de trabalho", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr}, // pt-BR
         {L"Definir como fundo do ambiente de trabalho", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr}, // pt-PT
         {L"Nastavit jako pozadí plochy", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr}, // cs-CZ
+        {L"Als Desktophintergrund festlegen", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr}, // de-DE
         
         // View (en-US, en-GB, en-AU same)
         {L"View", &g_settings.basicItems.removeView, false, nullptr},
         {L"Exibir", &g_settings.basicItems.removeView, false, nullptr}, // pt-BR
         {L"Ver", &g_settings.basicItems.removeView, false, nullptr}, // pt-PT
         {L"Zobrazení", &g_settings.basicItems.removeView, false, nullptr}, // cs-CZ
+        {L"Ansicht", &g_settings.basicItems.removeView, false, nullptr}, // de-DE
         
         // Sort by (en-US, en-GB, en-AU same)
         {L"Sort by", &g_settings.basicItems.removeSortBy, false, nullptr},
         {L"Classificar por", &g_settings.basicItems.removeSortBy, false, nullptr}, // pt-BR
         {L"Ordenar por", &g_settings.basicItems.removeSortBy, false, nullptr}, // pt-PT
         {L"Seřadit podle", &g_settings.basicItems.removeSortBy, false, nullptr}, // cs-CZ
+        {L"Sortieren nach", &g_settings.basicItems.removeSortBy, false, nullptr}, // de-DE
         
         // Group by (en-US, en-GB, en-AU same)
         {L"Group by", &g_settings.basicItems.removeGroupBy, false, nullptr},
         {L"Agrupar por", &g_settings.basicItems.removeGroupBy, false, nullptr}, // pt-BR, pt-PT
         {L"Seskupit podle", &g_settings.basicItems.removeGroupBy, false, nullptr}, // cs-CZ
+        {L"Gruppieren nach", &g_settings.basicItems.removeGroupBy, false, nullptr}, // de-DE
         
         // New (en-US, en-GB, en-AU same)
         {L"New", &g_settings.basicItems.removeNew, false, nullptr},
         {L"Novo", &g_settings.basicItems.removeNew, false, nullptr}, // pt-BR, pt-PT
         {L"Nový", &g_settings.basicItems.removeNew, false, nullptr}, // cs-CZ
+        {L"Neu", &g_settings.basicItems.removeNew, false, nullptr}, // de-DE
         
         // Properties (en-US, en-GB, en-AU same)
         {L"Properties", &g_settings.basicItems.removeProperties, false, nullptr},
         {L"Propriedades", &g_settings.basicItems.removeProperties, false, nullptr}, // pt-BR, pt-PT
         {L"Vlastnosti", &g_settings.basicItems.removeProperties, false, nullptr}, // cs-CZ
+        {L"Eigenschaften", &g_settings.basicItems.removeProperties, false, nullptr}, // de-DE
         
         // Paste (en-US, en-GB, en-AU same)
         {L"Paste", &g_settings.basicItems.removePaste, false, nullptr},
         {L"Colar", &g_settings.basicItems.removePaste, false, nullptr}, // pt-BR, pt-PT
         {L"Vložit", &g_settings.basicItems.removePaste, false, nullptr}, // cs-CZ
+        {L"Einfügen", &g_settings.basicItems.removePaste, false, nullptr}, // de-DE
+        
+        // Extract All (en-US, en-GB, en-AU same)
+        {L"Extract All...", &g_settings.basicItems.removeExtractAll, false, nullptr},
+        {L"Extrair Tudo...", &g_settings.basicItems.removeExtractAll, false, nullptr}, // pt-BR
+        {L"Extrair Todos...", &g_settings.basicItems.removeExtractAll, false, nullptr}, // pt-PT
+        {L"Extrahovat vše...", &g_settings.basicItems.removeExtractAll, false, nullptr}, // cs-CZ
+        {L"Alle extrahieren...", &g_settings.basicItems.removeExtractAll, false, nullptr}, // de-DE
         
         // App-specific Items
         // Add to VLC media player's Playlist (en-US, en-GB, en-AU same)
         {L"Add to VLC media player's Playlist", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr},
         {L"Adicionar à lista de reprodução do VLC media player", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr}, // pt-BR, pt-PT
         {L"Přidat do seznamu stop přehrávače médií VLC", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr}, // cs-CZ
+        {L"Zur VLC media player Wiedergabeliste hinzufügen", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr}, // de-DE
         
         // Play with VLC media player (en-US, en-GB, en-AU same)
         {L"Play with VLC media player", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr},
         {L"Reproduzir com o VLC media player", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr}, // pt-BR, pt-PT
         {L"Přehrát přehrávačem médií VLC", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr}, // cs-CZ
+        {L"Mit VLC media player wiedergeben", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr}, // de-DE
         
         // Add to Media Player play queue (en-US, en-GB, en-AU same)
         {L"Add to Media Player play queue", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr},
         {L"Adicionar à fila de reprodução do Media Player", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr}, // pt-BR, pt-PT
         {L"Přidat do fronty přehrávání přehrávače médií", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr}, // cs-CZ
+        {L"Zur Windows Media Player-Wiedergabeliste hinzufügen", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr}, // de-DE
         
         // Play with Media Player (en-US, en-GB, en-AU same)
         {L"Play with Media Player", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr},
         {L"Reproduzir com o Media Player", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr}, // pt-BR, pt-PT
         {L"Přehrát přehrávačem médií", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr}, // cs-CZ
+        {L"Mit Windows Media Player wiedergeben", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr}, // de-DE
         
         // Edit in Notepad (en-US, en-GB, en-AU same)
         {L"Edit in Notepad", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions},
         {L"Editar no Bloco de Notas", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions}, // pt-BR, pt-PT
         {L"Upravit v Poznámkovém bloku", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions}, // cs-CZ
+        {L"Im Editor bearbeiten", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions}, // de-DE
         
         // Edit in Notepad++ (en-US, en-GB, en-AU same)
         {L"Edit in Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions},
         {L"Editar no Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions}, // pt-BR, pt-PT
         {L"Upravit v aplikaci Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions}, // cs-CZ
+        {L"Mit Notepad++ bearbeiten", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions}, // de-DE
         
         // Edit with Photos (en-US, en-GB, en-AU same)
         {L"Edit with Photos", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr},
         {L"Editar com Fotos", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr}, // pt-BR
         {L"Editar com Fotografias", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr}, // pt-PT
         {L"Upravit pomocí Fotky", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr}, // cs-CZ
+        {L"Mit Fotos bearbeiten", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr}, // de-DE
         
         // Edit with Paint (en-US, en-GB, en-AU same)
         {L"Edit with Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr},
         {L"Editar com o Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr}, // pt-BR, pt-PT
         {L"Upravit pomocí Malování", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr}, // cs-CZ
+        {L"Mit Paint bearbeiten", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr}, // de-DE
         
         // NVIDIA Control Panel (en-US, en-GB, en-AU same)
         {L"NVIDIA Control Panel", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr},
         {L"Painel de Controle NVIDIA", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr}, // pt-BR
         {L"Painel de Controlo da NVIDIA", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr}, // pt-PT
         {L"Ovládací panely NVIDIA", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr}, // cs-CZ
+        {L"NVIDIA Systemsteuerung", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr}, // de-DE
         
         // Open in Terminal (en-US, en-GB, en-AU same)
         {L"Open in Terminal", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr},
         {L"Abrir no Terminal", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr}, // pt-BR, pt-PT
-        {L"Otevřít v terminálu", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr} // cs-CZ
+        {L"Otevřít v terminálu", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr}, // cs-CZ
+        {L"In Terminal öffnen", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr}, // de-DE
+        
+        // WinRAR (same in all languages)
+        {L"WinRAR", &g_settings.appSpecificItems.removeWinRAR, false, nullptr}
     };
 }
 
@@ -1307,6 +1393,7 @@ void LoadSettings() {
     g_settings.basicItems.removeCopyAsPath = Wh_GetIntSetting(L"basicItems.removeCopyAsPath");
     g_settings.basicItems.removeCustomizeFolder = Wh_GetIntSetting(L"basicItems.removeCustomizeFolder");
     g_settings.basicItems.removeFavorites = Wh_GetIntSetting(L"basicItems.removeFavorites");
+    g_settings.basicItems.removePinToQuickAccess = Wh_GetIntSetting(L"basicItems.removePinToQuickAccess");
     g_settings.basicItems.removePinToStart = Wh_GetIntSetting(L"basicItems.removePinToStart");
     g_settings.basicItems.removeCast = Wh_GetIntSetting(L"basicItems.removeCast");
     g_settings.basicItems.removeGiveAccess = Wh_GetIntSetting(L"basicItems.removeGiveAccess");
@@ -1322,6 +1409,7 @@ void LoadSettings() {
     g_settings.basicItems.removeNew = Wh_GetIntSetting(L"basicItems.removeNew");
     g_settings.basicItems.removeProperties = Wh_GetIntSetting(L"basicItems.removeProperties");
     g_settings.basicItems.removePaste = Wh_GetIntSetting(L"basicItems.removePaste");
+    g_settings.basicItems.removeExtractAll = Wh_GetIntSetting(L"basicItems.removeExtractAll");
     
     // App-specific items
     g_settings.appSpecificItems.removeSendWithQuickShare = Wh_GetIntSetting(L"appSpecificItems.removeSendWithQuickShare");
@@ -1337,6 +1425,7 @@ void LoadSettings() {
     g_settings.appSpecificItems.removeOpenInTerminal = Wh_GetIntSetting(L"appSpecificItems.removeOpenInTerminal");
     g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice = Wh_GetIntSetting(L"appSpecificItems.removeAlwaysKeepOnThisDevice");
     g_settings.appSpecificItems.removeFreeUpSpace = Wh_GetIntSetting(L"appSpecificItems.removeFreeUpSpace");
+    g_settings.appSpecificItems.removeWinRAR = Wh_GetIntSetting(L"appSpecificItems.removeWinRAR");
     
     // Extension filtering settings
     g_settings.extensionFiltering.enableExtensionFiltering = Wh_GetIntSetting(L"extensionFiltering.enableExtensionFiltering");
