@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-13T19:26:14.000Z</updated>
+    <updated>2026-02-13T20:20:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Auto-Hide Instant Show 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-autohide-instant-show#9fddc7f33e424cabfaca200627b002cff2cd24b4</id>
+        <link href="https://windhawk.net/mods/taskbar-autohide-instant-show"/>
+        <updated>2026-02-13T20:20:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix fade cleanup flash on hide (alpha set before removing WS<em>EX</em>LAYERED)</li>
+<li>Add animation cancellation to prevent state corruption on rapid show/hide</li>
+<li>Suppress pre-animation flash by updating TrayUI state while window is hidden</li>
+<li>Add mouse edge detection thread for monitors with no visible windows</li>
+</ul>]]></content>
+        <author>
+            <name>Bo0ii</name>
+            <uri>https://github.com/Bo0ii</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide custom activation area 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-custom-activation-area#dc75ec6a3d28698d3b605f12582e0286c0f1588d</id>
@@ -332,23 +348,6 @@ For all other modes, use <em>Show/Hide duration (ms)</em> to control timing.
         <author>
             <name>Bo0ii</name>
             <uri>https://github.com/Bo0ii</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.1.0]]></title>
-        <id>https://windhawk.net/mods/classic-min-max-animations#02e228b15957006012d2e47f825fb567b6e68361</id>
-        <link href="https://windhawk.net/mods/classic-min-max-animations"/>
-        <updated>2026-02-07T10:24:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hook SystemParametersInfo to handle SPI_(GET|SET)ANIMATION</li>
-<li>Enabling/disabling "Animate windows when minimizing and maximizing" with
-the mod enabled will now control the mod's animation, not the system's</li>
-<li>Call SystemParametersInfo to automatically disable the DWM window animations
-at init and to enable them at uninit if MinAnimate is still enabled</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
