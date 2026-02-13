@@ -2411,12 +2411,12 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1768123077000,
+                "updated": 1770987035000,
                 "users": 93
             },
             "metadata": {
                 "author": "Leymonaide",
-                "compilerOptions": "-lshlwapi -lpropsys -lole32",
+                "compilerOptions": "-lshlwapi -lpropsys -lole32 -lntdll",
                 "description": "Desactiva el tamaño de corte utilizado para mostrar miniaturas en el Explorador de Archivos.",
                 "github": "https://github.com/Leymonaide",
                 "homepage": "https://leymonaide.github.io/",
@@ -2426,7 +2426,7 @@
                 "license": "MIT",
                 "name": "Desactivar el tamaño mínimo de miniaturas",
                 "twitter": "https://twitter.com/Leym0naide",
-                "version": "1.2"
+                "version": "1.3"
             }
         },
         "disable-tray-icons": {
