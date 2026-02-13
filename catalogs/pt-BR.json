@@ -6291,7 +6291,7 @@
                     14
                 ],
                 "ratingUsers": 17,
-                "updated": 1768568820000,
+                "updated": 1770992430000,
                 "users": 560
             },
             "metadata": {
@@ -6299,18 +6299,19 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lshcore",
-                "description": "Customize the horizontal position of the Notification Center and Action Center on Windows 11",
+                "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore",
+                "description": "Customize the position of the Notification Center, Action Center, and Start menu on Windows 11",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
                     "explorer.exe",
                     "ShellExperienceHost.exe",
-                    "ShellHost.exe"
+                    "ShellHost.exe",
+                    "StartMenuExperienceHost.exe"
                 ],
                 "name": "Shell Flyout Positions",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "shrink-address-bar-height": {

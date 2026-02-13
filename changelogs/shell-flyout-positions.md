@@ -1,3 +1,7 @@
+## 1.2 ([Feb 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c46e11f8c2f0d701fd60bad7b3eef653bafd0b32/mods/shell-flyout-positions.wh.cpp))
+
+* Added options for customizing the position of the Start menu.
+
 ## 1.1 ([Jan 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/32c7d48986dceaa8e938441e08509de1a00038c5/mods/shell-flyout-positions.wh.cpp))
 
 * Added "Aligned to tray area" option to position flyouts aligned with the system tray area.

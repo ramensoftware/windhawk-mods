@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-13T12:50:35.000Z</updated>
+    <updated>2026-02-13T14:20:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Shell Flyout Positions 1.2]]></title>
+        <id>https://windhawk.net/mods/shell-flyout-positions#c46e11f8c2f0d701fd60bad7b3eef653bafd0b32</id>
+        <link href="https://windhawk.net/mods/shell-flyout-positions"/>
+        <updated>2026-02-13T14:20:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added options for customizing the position of the Start menu.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Thumbnail Minimum Size 1.3]]></title>
         <id>https://windhawk.net/mods/disable-thumbnail-minimum-size#2bf8a1c7d42abb42256127bf697e4f2425b1e77e</id>
@@ -316,17 +329,6 @@ at init and to enable them at uninit if MinAnimate is still enabled</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Internet Status Indicator 0.8]]></title>
-        <id>https://windhawk.net/mods/internet-status-indicator#f57c38965687b838aefcacd40734a05394798b76</id>
-        <link href="https://windhawk.net/mods/internet-status-indicator"/>
-        <updated>2026-02-06T15:19:19.000Z</updated>
-        <content type="html"><![CDATA[<p>Added handling for the <em>TaskbarCreated</em> message to recreate the tray icon when explorer restarts</p>]]></content>
-        <author>
-            <name>ALMAS CP</name>
-            <uri>https://github.com/almas-cp</uri>
         </author>
     </entry>
 </feed>
