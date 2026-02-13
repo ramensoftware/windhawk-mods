@@ -229,7 +229,7 @@ BOOL Wh_ModInit() {
 
     // The duplicate functions were removed from shell32 in Windows 11, so we
     // will only attempt to hook them on Windows 10.
-    if (osvi.dwBuildNumber < 22000)
+    if (osvi.dwBuildNumber < 26100)
     {
         if (!WindhawkUtils::HookSymbols(shell32, shell32Hooks, ARRAYSIZE(shell32Hooks)))
         {
