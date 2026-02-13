@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-11T21:40:04.000Z</updated>
+    <updated>2026-02-13T10:35:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Unwanted Context Menu Items (Classic Menu Only) 1.6.0]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#41174bcacc1725f58fc074b2fed9863e5d0a27c6</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-02-13T10:35:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added German language support (thanks to <a href="https://github.com/Schleifenkratzer">Schleifenkratzer</a>)</li>
+<li>Added 3 new menu items (<code>Pin to Quick access</code>, <code>Extract All...</code>, <code>WinRAR</code>)</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Internet Status Indicator 0.8.2]]></title>
         <id>https://windhawk.net/mods/internet-status-indicator#6e80e7cab1bfd36a5bcf7fd8a6fa0d225d40e483</id>
@@ -313,17 +327,6 @@ at init and to enable them at uninit if MinAnimate is still enabled</li>
         <author>
             <name>Lukvbp</name>
             <uri>https://github.com/lukvbp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Legacy XP-style balloon notifications 1.0.1]]></title>
-        <id>https://windhawk.net/mods/legacy-balloon-notifications#b1105c231e74ce852eff5e7b12ae5e648add3a3f</id>
-        <link href="https://windhawk.net/mods/legacy-balloon-notifications"/>
-        <updated>2026-02-05T11:24:26.000Z</updated>
-        <content type="html"><![CDATA[<p>fix typo</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

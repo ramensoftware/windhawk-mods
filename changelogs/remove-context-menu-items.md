@@ -1,3 +1,8 @@
+## 1.6.0 ([Feb 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/41174bcacc1725f58fc074b2fed9863e5d0a27c6/mods/remove-context-menu-items.wh.cpp))
+
+- Added German language support (thanks to [Schleifenkratzer](https://github.com/Schleifenkratzer))
+- Added 3 new menu items (`Pin to Quick access`, `Extract All...`, `WinRAR`)
+
 ## 1.5.0 ([Jan 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1a13854897981ceae24592b654e0f9558040006e/mods/remove-context-menu-items.wh.cpp))
 
 * Expanded predefined toggle compatibility beyond English to include support for several additional native languages:
