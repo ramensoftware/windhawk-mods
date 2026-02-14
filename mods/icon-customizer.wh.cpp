@@ -2,9 +2,9 @@
 // @id              icon-customizer
 // @name            Icon Customizer
 // @description     Allows you to override almost 100 built-in Windows icons.
-// @version         1.0
+// @version         0.1
 // @author          FireBlade
-// @github          https://github.com/FireBlade211
+// @github          https://github.com/fireblade211
 // @include         *
 // @compilerOptions -lshell32 -lshlwapi
 // ==/WindhawkMod==
@@ -879,6 +879,99 @@ BOOL Wh_ModInit() {
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+    Wh_FreeStringSetting(settings.DOCNOASSOC);
+    Wh_FreeStringSetting(settings.DOCASSOC);
+    Wh_FreeStringSetting(settings.APPLICATION);
+    Wh_FreeStringSetting(settings.FOLDER);
+    Wh_FreeStringSetting(settings.FOLDEROPEN);
+    Wh_FreeStringSetting(settings.DRIVE525);
+    Wh_FreeStringSetting(settings.DRIVE35);
+    Wh_FreeStringSetting(settings.DRIVEREMOVE);
+    Wh_FreeStringSetting(settings.DRIVEFIXED);
+    Wh_FreeStringSetting(settings.DRIVENET);
+    Wh_FreeStringSetting(settings.DRIVENETDISABLED);
+    Wh_FreeStringSetting(settings.DRIVECD);
+    Wh_FreeStringSetting(settings.DRIVERAM);
+    Wh_FreeStringSetting(settings.WORLD);
+    Wh_FreeStringSetting(settings.SERVER);
+    Wh_FreeStringSetting(settings.PRINTER);
+    Wh_FreeStringSetting(settings.MYNETWORK);
+    Wh_FreeStringSetting(settings.FIND);
+    Wh_FreeStringSetting(settings.HELP);
+    Wh_FreeStringSetting(settings.SHARE);
+    Wh_FreeStringSetting(settings.LINK);
+    Wh_FreeStringSetting(settings.SLOWFILE);
+    Wh_FreeStringSetting(settings.RECYCLER);
+    Wh_FreeStringSetting(settings.RECYCLERFULL);
+    Wh_FreeStringSetting(settings.MEDIACDAUDIO);
+    Wh_FreeStringSetting(settings.LOCK);
+    Wh_FreeStringSetting(settings.AUTOLIST);
+    Wh_FreeStringSetting(settings.PRINTERNET);
+    Wh_FreeStringSetting(settings.SERVERSHARE);
+    Wh_FreeStringSetting(settings.PRINTERFAX);
+    Wh_FreeStringSetting(settings.PRINTERFAXNET);
+    Wh_FreeStringSetting(settings.PRINTERFILE);
+    Wh_FreeStringSetting(settings.STACK);
+    Wh_FreeStringSetting(settings.MEDIASVCD);
+    Wh_FreeStringSetting(settings.STUFFEDFOLDER);
+    Wh_FreeStringSetting(settings.DRIVEUNKNOWN);
+    Wh_FreeStringSetting(settings.DRIVEDVD);
+    Wh_FreeStringSetting(settings.MEDIADVD);
+    Wh_FreeStringSetting(settings.MEDIADVDRAM);
+    Wh_FreeStringSetting(settings.MEDIADVDRW);
+    Wh_FreeStringSetting(settings.MEDIADVDR);
+    Wh_FreeStringSetting(settings.MEDIADVDROM);
+    Wh_FreeStringSetting(settings.MEDIACDAUDIOPLUS);
+    Wh_FreeStringSetting(settings.MEDIACDRW);
+    Wh_FreeStringSetting(settings.MEDIACDR);
+    Wh_FreeStringSetting(settings.MEDIACDBURN);
+    Wh_FreeStringSetting(settings.MEDIABLANKCD);
+    Wh_FreeStringSetting(settings.MEDIACDROM);
+    Wh_FreeStringSetting(settings.AUDIOFILES);
+    Wh_FreeStringSetting(settings.IMAGEFILES);
+    Wh_FreeStringSetting(settings.VIDEOFILES);
+    Wh_FreeStringSetting(settings.MIXEDFILES);
+    Wh_FreeStringSetting(settings.FOLDERBACK);
+    Wh_FreeStringSetting(settings.FOLDERFRONT);
+    Wh_FreeStringSetting(settings.SHIELD);
+    Wh_FreeStringSetting(settings.WARNING);
+    Wh_FreeStringSetting(settings.INFO);
+    Wh_FreeStringSetting(settings.iERROR);
+    Wh_FreeStringSetting(settings.KEY);
+    Wh_FreeStringSetting(settings.SOFTWARE);
+    Wh_FreeStringSetting(settings.RENAME);
+    Wh_FreeStringSetting(settings.iDELETE);
+    Wh_FreeStringSetting(settings.MEDIAAUDIODVD);
+    Wh_FreeStringSetting(settings.MEDIAMOVIEDVD);
+    Wh_FreeStringSetting(settings.MEDIAENHANCEDCD);
+    Wh_FreeStringSetting(settings.MEDIAENHANCEDDVD);
+    Wh_FreeStringSetting(settings.MEDIAHDDVD);
+    Wh_FreeStringSetting(settings.MEDIABLURAY);
+    Wh_FreeStringSetting(settings.MEDIAVCD);
+    Wh_FreeStringSetting(settings.MEDIADVDPLUSR);
+    Wh_FreeStringSetting(settings.MEDIADVDPLUSRW);
+    Wh_FreeStringSetting(settings.DESKTOPPC);
+    Wh_FreeStringSetting(settings.MOBILEPC);
+    Wh_FreeStringSetting(settings.USERS);
+    Wh_FreeStringSetting(settings.MEDIASMARTMEDIA);
+    Wh_FreeStringSetting(settings.MEDIACOMPACTFLASH);
+    Wh_FreeStringSetting(settings.DEVICECELLPHONE);
+    Wh_FreeStringSetting(settings.DEVICECAMERA);
+    Wh_FreeStringSetting(settings.DEVICEVIDEOCAMERA);
+    Wh_FreeStringSetting(settings.DEVICEAUDIOPLAYER);
+    Wh_FreeStringSetting(settings.NETWORKCONNECT);
+    Wh_FreeStringSetting(settings.INTERNET);
+    Wh_FreeStringSetting(settings.ZIPFILE);
+    Wh_FreeStringSetting(settings.SETTINGS);
+    Wh_FreeStringSetting(settings.DRIVEHDDVD);
+    Wh_FreeStringSetting(settings.DRIVEBD);
+    Wh_FreeStringSetting(settings.MEDIAHDDVDROM);
+    Wh_FreeStringSetting(settings.MEDIAHDDVDR);
+    Wh_FreeStringSetting(settings.MEDIAHDDVDRAM);
+    Wh_FreeStringSetting(settings.MEDIABDROM);
+    Wh_FreeStringSetting(settings.MEDIABDR);
+    Wh_FreeStringSetting(settings.MEDIABDRE);
+    Wh_FreeStringSetting(settings.CLUSTEREDDRIVE);
 }
 
 // The mod settings were changed, reload them.
