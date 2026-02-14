@@ -3,7 +3,7 @@
 // @name            HotCorner Hotkeys
 // @version         1.9
 // @author          webberlv
-// @github          https://github.com/webberlv
+// @github          https://github.com/webberLV
 // @license         GPL-3.0-only
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -loleaut32 -lole32 -lversion
