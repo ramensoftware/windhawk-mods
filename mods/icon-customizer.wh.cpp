@@ -2,9 +2,9 @@
 // @id              icon-customizer
 // @name            Icon Customizer
 // @description     Allows you to override almost 100 built-in Windows icons.
-// @version         0.1
+// @version         1.0
 // @author          FireBlade
-// @github          https://github.com/fireblade211
+// @github          https://github.com/FireBlade211
 // @include         *
 // @compilerOptions -lshell32 -lshlwapi
 // ==/WindhawkMod==
