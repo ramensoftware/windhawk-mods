@@ -4,7 +4,7 @@
 // @description     Removes quotes added by Ctrl+Shift+C by changing GetShellItemsAsTextHGLOBAL flags from 0 to 2.
 // @version         1.0.0
 // @author          ilyfairy
-// @github          https://github.com/osmanonurkoc
+// @github          https://github.com/ilyfairy
 // @include         explorer.exe
 // ==/WindhawkMod==
 
