@@ -6075,6 +6075,34 @@
                 "version": "1.0"
             }
         },
+        "restore-autorun-icon-in-drive-properties": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771093172000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771093172000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Kitsune",
+                "compilerOptions": "-lgdi32",
+                "description": "Restores the missing AutoRun icon in drive properties",
+                "github": "https://github.com/AromaKitsune",
+                "include": [
+                    "*"
+                ],
+                "name": "Restore AutoRun Icon in Drive Properties",
+                "version": "1.0"
+            }
+        },
         "restore-button-pulse-anim": {
             "details": {
                 "defaultSorting": 15900,

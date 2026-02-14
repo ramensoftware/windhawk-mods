@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-14T01:22:16.000Z</updated>
+    <updated>2026-02-14T18:19:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore AutoRun Icon in Drive Properties 1.0]]></title>
+        <id>https://windhawk.net/mods/restore-autorun-icon-in-drive-properties#e5f406613139e1f02cee75a96e0d20c4c30f9410</id>
+        <link href="https://windhawk.net/mods/restore-autorun-icon-in-drive-properties"/>
+        <updated>2026-02-14T18:19:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="restoreautoruniconindriveproperties">Restore AutoRun Icon in Drive Properties</h1>
+<p>Since Windows 2000, the drive properties dialog never displays the AutoRun icon
+on the General tab, leaving a blank space.</p>
+<p>This mod restores the AutoRun icon back where it belongs.</p>
+<p>| Before | After |
+| :----: | :---: |
+| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/restore-autorun-icon-in-drive-properties_before.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/restore-autorun-icon-in-drive-properties_after.png" alt="" /> |</p>
+<h2 id="compatibilitywithothermods">Compatibility with other mods</h2>
+<p>Any other mods that hook the <code>DrawPie</code> function will conflict with this mod and
+prevent it from functioning.</p>
+<h3 id="conflictingmods">Conflicting mods</h3>
+<ul>
+<li><a href="https://windhawk.net/mods/disk-usage-bar-in-drive-properties">Disk Usage Bar in Drive Properties</a>
+by me</li>
+<li><a href="https://windhawk.net/mods/disk-pie-chart">Disk Pie Chart</a>
+by <strong>aubymori</strong></li>
+</ul>
+<p><strong>Note:</strong> The "Disk Usage Bar in Drive Properties" mod already has the AutoRun
+icon restoration code integrated, so you don't need to use both mods together.</p>
+<h2 id="supportedwindowsversions">Supported Windows versions</h2>
+<ul>
+<li>Windows 11</li>
+<li>Windows 10</li>
+<li>Windows 8.1</li>
+</ul>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Size 1.0.1]]></title>
         <id>https://windhawk.net/mods/start-menu-size#4636d9d145e6aa1858d4955fc422f816aac37b39</id>
@@ -295,37 +330,6 @@ have a slide animation without issues.</strong></p>
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.0]]></title>
-        <id>https://windhawk.net/mods/vlc-discord-rpc#4661e78857e35dcac8fa19ae55234b73cd322d6d</id>
-        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
-        <updated>2026-02-09T20:55:40.000Z</updated>
-        <content type="html"><![CDATA[<p><em>Visual Enhancements</em></p>
-<ul>
-<li>Cover Art Integration <strong>(new)</strong> : Discord now displays actual album art and movie posters when available (for files with embedded artwork).</li>
-<li>Privacy Options: Added a new setting to disable cover art display and revert to the classic VLC icon.</li>
-<li>Progress Bar: Replaced plain timestamps with a functional progress bar.</li>
-</ul>
-<p><em>Smarter Status Updates</em></p>
-<ul>
-<li><p>Contextual Status: Activity status now adapts automatically <strong>(new)</strong> :</p></li>
-<li><p>Listening to [Song Title] for music.</p></li>
-<li><p>Watching [Movie Title] for videos.</p></li>
-<li><p>Audio Language: Active audio track language (e.g., English, Japanese) is now shown for video files.</p></li>
-</ul>
-<p><em>Improvements & Fixes</em></p>
-<ul>
-<li><p>Improved Layout:</p></li>
-<li><p>Music: Displays Song, Artist, and Album (album shown on hover).</p></li>
-<li><p>TV Shows: Automatically detects and shows Season/Episode format (e.g., S01E05).</p></li>
-<li><p>Technical Fixes:</p></li>
-<li><p>Quality Indicators: Fixed display of tags for 4K, HDR, 10-bit, and 1080p content.</p></li>
-</ul>]]></content>
-        <author>
-            <name>ciizerr</name>
-            <uri>https://github.com/ciizerr</uri>
         </author>
     </entry>
 </feed>
