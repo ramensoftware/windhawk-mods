@@ -6563,7 +6563,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1770998165000,
+                "updated": 1771032136000,
                 "users": 17
             },
             "metadata": {
@@ -6580,7 +6580,7 @@
                 ],
                 "name": "Start Menu Size",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "suppress-run-box-error-message": {
