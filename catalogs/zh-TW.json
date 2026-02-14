@@ -7763,7 +7763,7 @@
                     94
                 ],
                 "ratingUsers": 104,
-                "updated": 1735667463000,
+                "updated": 1771103590000,
                 "users": 4556
             },
             "metadata": {
@@ -7771,7 +7771,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lversion",
+                "compilerOptions": "-loleaut32 -lruntimeobject -lversion -lwtsapi32",
                 "description": "Move the primary taskbar, including the tray icons, notifications, action center, etc. to another monitor",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -7781,7 +7781,7 @@
                 ],
                 "name": "Primary taskbar on secondary monitor",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "taskbar-reorder-right-drag": {
