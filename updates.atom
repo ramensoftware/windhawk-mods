@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-14T18:19:32.000Z</updated>
+    <updated>2026-02-14T20:31:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icon Customizer 0.1]]></title>
+        <id>https://windhawk.net/mods/icon-customizer#50a31f627be5eb196a8a2ba6f57cdde4d1abba35</id>
+        <link href="https://windhawk.net/mods/icon-customizer"/>
+        <updated>2026-02-14T20:31:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="iconcustomizer">Icon Customizer</h1>
+<p>Allows you to override almost 100 Windows icons to anything you like.</p>
+<h2 id="overrideanicon">Override an icon</h2>
+<p>To change an icon, open the mod settings and change the icons you like by entering the path to an ICO, EXE, or DLL file.
+Optionally you can also specify an index, for example:</p>
+<pre><code>C:\Windows\System32\shell32.dll,32
+</code></pre>
+<h2 id="howitworks">How it works</h2>
+<p>This mod adds a hook for <code>SHGetStockIconInfo</code>, which Windows apps call whenever they need to retrieve a stock icon. It then
+ checks if the icon for the specified ID is overriden and gives Windows the new icon.</p>
+<h2 id="note">Note</h2>
+<p>This mod will only work on apps that load icons themselves, and will not work on built-in Windows dialogs such as message boxes.
+This is because those dialogs do not utilize the <code>SHGetStockIconInfo</code> function.</p>]]></content>
+        <author>
+            <name>FireBlade</name>
+            <uri>https://github.com/FireBlade211</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore AutoRun Icon in Drive Properties 1.0]]></title>
         <id>https://windhawk.net/mods/restore-autorun-icon-in-drive-properties#e5f406613139e1f02cee75a96e0d20c4c30f9410</id>
@@ -317,19 +340,6 @@ have a slide animation without issues.</strong></p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 2.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#eef7822727b2191233f4019a9c6f69128d083c4e</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2026-02-09T20:56:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>implemented env variable resolution in "Open application, …" action</li>
-</ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>

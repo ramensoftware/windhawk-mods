@@ -4070,6 +4070,34 @@
                 "version": "1.3.2"
             }
         },
+        "icon-customizer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771101100000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771101100000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "FireBlade",
+                "compilerOptions": "-lshell32 -lshlwapi",
+                "description": "Allows you to override almost 100 built-in Windows icons.",
+                "github": "https://github.com/FireBlade211",
+                "include": [
+                    "*"
+                ],
+                "name": "Icon Customizer",
+                "version": "0.1"
+            }
+        },
         "icon-resource-redirect": {
             "details": {
                 "defaultSorting": 272550,
