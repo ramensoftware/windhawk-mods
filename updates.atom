@@ -2,12 +2,167 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-14T22:49:45.000Z</updated>
+    <updated>2026-02-14T23:08:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[HotCorner Hotkeys 1.9]]></title>
+        <id>https://windhawk.net/mods/hotcorner-hotkeys#db7dfb73775465f201b6535f9d4e6dbd39e825dd</id>
+        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
+        <updated>2026-02-14T23:08:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hotcornerhotkeys">HotCorner Hotkeys</h1>
+<p>This mod assigns global keyboard shortcuts to Windows actions.
+Each shortcut is registered once per unique key combination. When triggered,
+the current cursor position is sampled and used to dispatch the action mapped
+to the active screen zone (corner, edge). </p>
+<p>A single hotkey may execute different actions depending on cursor location. If no zone is selected hotkey is consumed nothing happens. If you were hoping for the hotkey to function globally without a zone selection check out 
+<a href="https://windhawk.net/mods/keyboard-shortcut-actions">keyboard-shortcut-actions</a> instead.</p>
+<h2 id="architecture">Architecture</h2>
+<h3 id="registrationvsdispatch">Registration vs. dispatch</h3>
+<ul>
+<li><strong>Registration</strong>: Each unique key combination is registered exactly once
+as a global hotkey.</li>
+<li><strong>Dispatch</strong>: On <code>WM_HOTKEY</code>, the cursor zone is computed and the
+<code>(hotkey, zone)</code> mapping is resolved and executed.</li>
+</ul>
+<h3 id="rules">Rules</h3>
+<ul>
+<li>Action identity is <code>(hotkey, zone)</code></li>
+<li>Zones are used only during dispatch</li>
+<li>A hotkey may map to multiple actions across different zones</li>
+<li>Duplicate <code>(hotkey, zone)</code> mappings are invalid and rejected at load time</li>
+<li>Each key combination is registered once globally</li>
+<li>If no action exists for the active cursor zone:</li>
+<li>No action is executed</li>
+<li>The hotkey is still consumed </li>
+</ul>
+<h2 id="zones">Zones</h2>
+<p>Zones are computed from the active monitor bounds using <code>GatePx</code>
+(pixel thickness).</p>
+<p>Corner zones take precedence over edge zones when regions overlap.</p>
+<p>Supported values:</p>
+<p><code>NONE, LEFT, TOP_LEFT, TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT</code></p>
+<p><code>NONE</code> matches only when the cursor is outside all edge and corner gate regions.</p>
+<h2 id="supportedactions">Supported actions</h2>
+<ol>
+<li><p><strong>Show desktop</strong><br />
+Toggle desktop visibility</p></li>
+<li><p><strong>Ctrl+Alt+Tab</strong><br />
+Open the Ctrl+Alt+Tab dialog</p></li>
+<li><p><strong>Task Manager</strong><br />
+Open Windows Task Manager</p></li>
+<li><p><strong>Mute system volume</strong><br />
+Toggle system-wide mute</p></li>
+<li><p><strong>Taskbar auto-hide</strong><br />
+Toggle taskbar auto-hide</p></li>
+<li><p><strong>Win+Tab</strong><br />
+Open Task View</p></li>
+<li><p><strong>Hide desktop icons</strong><br />
+Toggle visibility of all desktop icons</p></li>
+<li><p><strong>Combine taskbar buttons</strong><br />
+Toggle taskbar button grouping between two states</p></li>
+<li><p><strong>Toggle taskbar alignment</strong><br />
+Toggle taskbar icon alignment (left/center, Windows 11 only)</p></li>
+<li><p><strong>Open Start menu</strong><br />
+Send the Win key</p></li>
+<li><p><strong>Virtual key press</strong><br />
+Send a virtual key sequence</p></li>
+<li><p><strong>Open application, path, or URL</strong><br />
+Launch an executable, open a path, or open a URL</p></li>
+<li><p><strong>Media Play/Pause</strong></p></li>
+<li><p><strong>Media Next Track</strong></p></li>
+<li><p><strong>Media Previous Track</strong></p></li>
+</ol>
+<h2 id="hotkeyformat">Hotkey format</h2>
+<p>Hotkeys use the form:</p>
+<p><code>Modifier+Modifier+Key</code></p>
+<h3 id="modifiers">Modifiers</h3>
+<p><code>Alt</code>, <code>Ctrl</code>, <code>Shift</code>, <code>Win</code></p>
+<h3 id="keys">Keys</h3>
+<ul>
+<li>Letters: <code>A–Z</code></li>
+<li>Numbers: <code>0–9</code></li>
+<li>Function keys: <code>F1–F24</code></li>
+<li>Navigation: <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Insert</code>, <code>Delete</code>,
+<code>Left</code>, <code>Right</code>, <code>Up</code>, <code>Down</code></li>
+<li>Common: <code>Enter</code>, <code>Tab</code>, <code>Space</code>, <code>Backspace</code>, <code>Escape</code> (<code>Esc</code>),
+<code>CapsLock</code>, <code>PrintScreen</code>, <code>Pause</code></li>
+<li>Numpad: <code>Numpad0–Numpad9</code> (<code>Num0–Num9</code>), <code>NumLock</code>,
+<code>Add</code>, <code>Subtract</code>, <code>Multiply</code>, <code>Divide</code>, <code>Decimal</code></li>
+<li>Media: <code>VolumeMute</code>, <code>VolumeUp</code>, <code>VolumeDown</code>,
+<code>MediaPlayPause</code>, <code>MediaNext</code>, <code>MediaPrev</code>, <code>MediaStop</code></li>
+<li>Modifier keys (Virtual Key Press only):
+<code>LWin</code>, <code>RWin</code>, <code>LShift</code>, <code>RShift</code>,
+<code>LCtrl</code>, <code>RCtrl</code>, <code>LAlt</code>, <code>RAlt</code></li>
+<li>Selected <code>VK_*</code> virtual-key codes (numeric forms accepted where supported)</li>
+</ul>
+<h3 id="examples">Examples</h3>
+<ul>
+<li><code>Ctrl+Alt+D</code></li>
+<li><code>Ctrl+Shift+F1</code></li>
+<li><code>Alt+Home</code></li>
+<li><code>Win+Numpad1</code></li>
+</ul>
+<h2 id="additionalarguments">Additional arguments</h2>
+<p>Only actions <strong>8</strong>, <strong>11</strong>, and <strong>12</strong> accept <code>AdditionalArgs</code>.
+Arguments are separated by semicolons.</p>
+<h3 id="8combinetaskbarbuttons">8. Combine taskbar buttons</h3>
+<p><code>priState1;priState2;secState1;secState2</code></p>
+<p>States:</p>
+<ul>
+<li><code>COMBINE_ALWAYS</code></li>
+<li><code>COMBINE_WHEN_FULL</code></li>
+<li><code>COMBINE_NEVER</code></li>
+</ul>
+<p>Example:
+<code>COMBINE_ALWAYS;COMBINE_NEVER;COMBINE_ALWAYS;COMBINE_NEVER</code></p>
+<h3 id="11virtualkeypress">11. Virtual key press</h3>
+<p><code>key1;key2;...;keyN</code><br />
+or<br />
+<code>Modifier+Key</code></p>
+<p>Notes:</p>
+<ul>
+<li>Each key may be a key name (<code>A</code>, <code>Enter</code>, <code>VK_OEM_3</code>)
+or a chord (<code>Ctrl+Shift+Escape</code>)</li>
+<li>Multi-key sequences press keys in order, then release</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li><code>Win+E</code></li>
+<li><code>Ctrl+Shift+Escape</code></li>
+<li><code>LCtrl;C</code></li>
+</ul>
+<h3 id="12openapplicationpathorurl">12. Open application, path, or URL</h3>
+<p><code>command</code></p>
+<p>Notes:</p>
+<ul>
+<li>Starts an executable (with optional arguments),
+opens a filesystem path, or opens a URL</li>
+<li>Prefix with <code>uac;</code> to request elevation</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li><code>notepad.exe</code></li>
+<li><code>"C:\Program Files\App\app.exe" --arg</code></li>
+<li><code>https://example.com</code></li>
+<li><code>uac;C:\Windows\System32\cmd.exe</code></li>
+</ul>
+<h2 id="credits">Credits</h2>
+<h2 id="credits-1">Credits</h2>
+<p>The actions in this mod are based on
+<a href="https://windhawk.net/mods/taskbar-empty-space-clicks">Click on empty taskbar space</a>
+by <a href="https://github.com/m1lhaus">m1lhaus</a>.</p>
+<p>The global hotkey triggering mechanism is based on 
+<a href="https://windhawk.net/mods/keyboard-shortcut-actions">keyboard-shortcut-actions</a>
+by <a href="https://github.com/m417z">m417z</a>.</p>]]></content>
+        <author>
+            <name>webberlv</name>
+            <uri>https://github.com/webberLV</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Volume control open location 1.0]]></title>
         <id>https://windhawk.net/mods/volume-control-open-location#37553a08c7b7c274c04b883d8149c9ceab51b752</id>
@@ -363,19 +518,6 @@ have a slide animation without issues.</strong></p>
         <author>
             <name>mode0192</name>
             <uri>https://github.com/mode0192</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disk Pie Chart 1.0.1]]></title>
-        <id>https://windhawk.net/mods/disk-pie-chart#7d6044d7d74bf7313da6db48270b26e10c682286</id>
-        <link href="https://windhawk.net/mods/disk-pie-chart"/>
-        <updated>2026-02-09T22:18:46.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Revise method of rendering color indicator borders</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

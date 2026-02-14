@@ -4037,6 +4037,34 @@
                 "version": "1.0"
             }
         },
+        "hotcorner-hotkeys": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771110511000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771110511000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "webberlv",
+                "compilerOptions": "-lcomctl32 -loleaut32 -lole32 -lversion",
+                "github": "https://github.com/webberLV",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "GPL-3.0-only",
+                "name": "HotCorner Hotkeys",
+                "version": "1.9"
+            }
+        },
         "hover-text-magnifier": {
             "details": {
                 "defaultSorting": 1040,
