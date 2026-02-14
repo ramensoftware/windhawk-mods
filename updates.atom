@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-13T20:20:52.000Z</updated>
+    <updated>2026-02-14T00:20:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray auto-hide (show on hover) 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-show-on-hover#cf80b958c9c974090ce99d1da49af302b5e614ba</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-show-on-hover"/>
+        <updated>2026-02-14T00:20:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbartrayautohideshowonhover">Taskbar tray auto-hide (show on hover)</h1>
+<p>Hide the taskbar tray area when not in use, and show it when hovering the mouse
+over it.</p>
+<p><img src="https://i.imgur.com/uGReVFB.gif" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Auto-Hide Instant Show 2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-autohide-instant-show#9fddc7f33e424cabfaca200627b002cff2cd24b4</id>
@@ -317,37 +331,6 @@ have a slide animation without issues.</strong></p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Auto-Hide Instant Show 2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-autohide-instant-show#0278b8e63627c0577c2709c2ae9a0dd54a768811</id>
-        <link href="https://windhawk.net/mods/taskbar-autohide-instant-show"/>
-        <updated>2026-02-07T13:00:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarautohideinstantshow">Taskbar Auto-Hide Instant Show</h1>
-<p>Removes the built-in delay before the auto-hidden taskbar starts appearing.
-The animation triggers instantly when your mouse touches the screen edge.</p>
-<h2 id="animationtypes">Animation Types</h2>
-<h3 id="elasticspringovershoot">Elastic (spring overshoot)</h3>
-<p>The taskbar overshoots its target and oscillates like a spring.</p>
-<p><img src="https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/elastic.gif" alt="Elastic" /></p>
-<h3 id="fadeopacity">Fade (opacity)</h3>
-<p>The taskbar fades in/out in place.</p>
-<p><img src="https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/Fade.gif" alt="Fade" /></p>
-<h3 id="slidefadesilkysmooth">Slide + Fade (silky smooth)</h3>
-<p>Combines sliding with a fade effect for the smoothest feel.</p>
-<p><img src="https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/fade-slide.gif" alt="Slide + Fade" /></p>
-<h3 id="slidedefault">Slide (default)</h3>
-<p>Default Windows slide, but sped up. Control speed with the speedup settings.</p>
-<h3 id="bounce">Bounce</h3>
-<p>The taskbar bounces at its final position.</p>
-<h2 id="settings">Settings</h2>
-<p>For <strong>Slide</strong> mode, use <em>Show/Hide speedup (%)</em> to control speed.
-For all other modes, use <em>Show/Hide duration (ms)</em> to control timing.
-<em>Frame rate</em> applies to all animation types.</p>]]></content>
-        <author>
-            <name>Bo0ii</name>
-            <uri>https://github.com/Bo0ii</uri>
         </author>
     </entry>
 </feed>
