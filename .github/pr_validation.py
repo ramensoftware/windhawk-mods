@@ -334,6 +334,7 @@ class ModMetadataValidator:
         self.validate_compiler_options()
         self.validate_license()
         self.validate_name()
+        self.validate_description()
         self.validate_architecture()
 
         return self.ctx.warning_count()
@@ -552,7 +553,21 @@ class ModMetadataValidator:
 
     def validate_name(self):
         """Validate name exists."""
-        self.property('name', warn_if_missing=True)
+        prop = self.property('name', warn_if_missing=True)
+        if not prop:
+            return
+
+        if len(prop.value) < 8 or len(prop.value) > 80:
+            prop.warn('@@ must be between 8 and 80 characters')
+
+    def validate_description(self):
+        """Validate description exists."""
+        prop = self.property('description', warn_if_missing=True)
+        if not prop:
+            return
+
+        if len(prop.value) < 30 or len(prop.value) > 250:
+            prop.warn('@@ must be between 30 and 250 characters')
 
     def validate_architecture(self):
         """Validate architecture values."""
