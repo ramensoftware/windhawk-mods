@@ -15,10 +15,12 @@
 // ==WindhawkModReadme==
 /*
 # Old Login Fade
-* This mod brings back the old login screen fade effect in Windows 7 and earlier.
-* The fade effect is implemented by changing the screen brightness using the `SetDeviceGammaRamp` function, which is the same method used by the original fade effect.
-* You need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
+* This mod restores the old login screen fade effect found in Windows 7 and earlier.
+* The fade effect is implemented by adjusting the screen brightness using the SetDeviceGammaRamp function, the same method used by the original fade effect.
+* You need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
 * Will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment.
+## Known issues
+* The fade animation may look broken on early boot when using the auto-login feature.
 */
 // ==/WindhawkModReadme==
 
