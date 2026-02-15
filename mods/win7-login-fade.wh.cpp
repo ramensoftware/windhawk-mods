@@ -18,6 +18,7 @@
 * This mod brings back the old login screen fade effect in Windows 7 and earlier.
 * The fade effect is implemented by changing the screen brightness using the `SetDeviceGammaRamp` function, which is the same method used by the original fade effect.
 * You need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
+* Will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment.
 */
 // ==/WindhawkModReadme==
 
@@ -46,10 +47,19 @@ void SetBrightness(WORD brightness) { // 0: black, 256: normal, 256+: brighter
         gammaArray[2][i] = (WORD)val;
         
     }
-    HDC hDC = GetDC(NULL);
-    // Win32k also uses this function for the old fade
-    SetDeviceGammaRamp(hDC, gammaArray);
-    ReleaseDC(NULL, hDC);
+    // Call SetDeviceGammaRamp for each monitor, otherwise it'll not work properly in multi-monitor setup
+    DISPLAY_DEVICEW dd;
+    dd.cb = sizeof(dd);
+    for (DWORD i = 0; EnumDisplayDevicesW(NULL, i, &dd, 0); i++) {
+        if (dd.StateFlags & DISPLAY_DEVICE_ACTIVE) {
+            HDC hDC = CreateDCW(dd.DeviceName, NULL, NULL, NULL);
+            if (hDC) {
+                // Win32k also uses this function for the old fade
+                SetDeviceGammaRamp(hDC, gammaArray);
+                DeleteDC(hDC);
+            }
+        }
+    }
 }
 
 void FadeDesktop(int fps, int duration, BOOL fadeOut) {
