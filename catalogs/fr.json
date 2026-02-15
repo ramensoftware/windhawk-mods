@@ -9527,6 +9527,39 @@
                 "version": "1.0"
             }
         },
+        "win7-login-fade": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771190675000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771190675000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Ingan121",
+                "compilerOptions": "-lgdi32",
+                "description": "Bring back the old login screen fade effect",
+                "github": "https://github.com/Ingan121",
+                "homepage": "https://www.ingan121.com/",
+                "include": [
+                    "winlogon.exe"
+                ],
+                "name": "Old Login Fade",
+                "twitter": "https://twitter.com/Ingan121",
+                "version": "1.0"
+            }
+        },
         "win7-style-uac-dim": {
             "details": {
                 "defaultSorting": 16368,

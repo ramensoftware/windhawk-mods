@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-14T23:08:31.000Z</updated>
+    <updated>2026-02-15T21:24:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Old Login Fade 1.0]]></title>
+        <id>https://windhawk.net/mods/win7-login-fade#bf283bac8816ef3cd5ce8dd68e8d12c3058a8340</id>
+        <link href="https://windhawk.net/mods/win7-login-fade"/>
+        <updated>2026-02-15T21:24:35.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="oldloginfade">Old Login Fade</h1>
+<ul>
+<li>This mod restores the old login screen fade effect found in Windows 7 and earlier.</li>
+<li>The fade effect is implemented by adjusting the screen brightness using the SetDeviceGammaRamp function, the same method used by the original fade effect.</li>
+<li>You need to set the <code>HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange</code> registry value to <code>0x100</code> (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.</li>
+<li>Will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment.</li>
+</ul>
+<h2 id="knownissues">Known issues</h2>
+<ul>
+<li>The fade animation may look broken on early boot when using the auto-login feature.</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[HotCorner Hotkeys 1.9]]></title>
         <id>https://windhawk.net/mods/hotcorner-hotkeys#db7dfb73775465f201b6535f9d4e6dbd39e825dd</id>
@@ -500,24 +521,6 @@ have a slide animation without issues.</strong></p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA["Sign in with a passkey" popup blocker 3.0.0]]></title>
-        <id>https://windhawk.net/mods/passkey-popup-blocker#b1f2493c90d1f67de2767b2d669694d3b7ead97d</id>
-        <link href="https://windhawk.net/mods/passkey-popup-blocker"/>
-        <updated>2026-02-10T09:05:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Major</strong>: Added <strong>multi-process browser support</strong> using <strong>shared memory</strong> to sync user intent across Chrome/Edge tabs and sandboxed processes (fixes cases where clicks were not seen by the WebAuthn call).</li>
-<li><strong>Added</strong>: New <strong>Block Behavior</strong> setting: return <strong>NTE<em>USER</em>CANCELLED</strong> (default/recommended) or <strong>NTE<em>NOT</em>FOUND</strong> (compatibility).</li>
-<li><strong>Improved</strong>: Expanded intent detection to include mouse/touch <strong>down/up</strong> events and key <strong>down/up</strong> for <strong>Enter/Space</strong> (including system key variants).</li>
-<li><strong>Improved</strong>: Added <strong>Null DACL</strong> security attributes so sandboxed Chromium processes can access the shared memory mapping.</li>
-<li><strong>Improved</strong>: More robust initialization — the mod fails cleanly if the WebAuthn hook can’t be established.</li>
-<li><strong>Fixed</strong>: Proper resource cleanup on unload (<code>Wh_ModUninit</code>) and safer timing logic (wraparound-safe tick arithmetic).</li>
-</ul>]]></content>
-        <author>
-            <name>mode0192</name>
-            <uri>https://github.com/mode0192</uri>
         </author>
     </entry>
 </feed>
