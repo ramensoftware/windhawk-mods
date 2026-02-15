@@ -1,0 +1,143 @@
+// ==WindhawkMod==
+// @id              win7-login-fade
+// @name            Old Login Fade
+// @description     Bring back the old login screen fade effect
+// @version         1.0
+// @author          Ingan121
+// @github          https://github.com/Ingan121
+// @twitter         https://twitter.com/Ingan121
+// @homepage        https://www.ingan121.com/
+// @include         winlogon.exe
+// @architecture    x86-64
+// @compilerOptions -lgdi32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Old Login Fade
+* This mod brings back the old login screen fade effect in Windows 7 and earlier.
+* The fade effect is implemented by changing the screen brightness using the `SetDeviceGammaRamp` function, which is the same method used by the original fade effect.
+* You need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- duration: 500
+  $name: Fade duration (ms)
+*/
+// ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
+
+int g_duration = 500;
+
+// https://www.nirsoft.net/vc/change_screen_brightness.html
+void SetBrightness(WORD brightness) { // 0: black, 256: normal, 256+: brighter
+    WORD gammaArray[3][256];
+    for (int i = 0; i < 256; i++)
+    {
+        int val = i * brightness;
+        if (val > 65535) {
+            val = 65535;
+        }
+        gammaArray[0][i] = (WORD)val;
+        gammaArray[1][i] = (WORD)val;
+        gammaArray[2][i] = (WORD)val;
+        
+    }
+    HDC hDC = GetDC(NULL);
+    // Win32k also uses this function for the old fade
+    SetDeviceGammaRamp(hDC, gammaArray);
+    ReleaseDC(NULL, hDC);
+}
+
+void FadeDesktop(int fps, int duration, BOOL fadeOut) {
+    LARGE_INTEGER startTime;
+    QueryPerformanceCounter(&startTime);
+    LARGE_INTEGER frequency;
+    QueryPerformanceFrequency(&frequency);
+    int frameStep = 1000 / fps;
+    while (true) {
+        LARGE_INTEGER currentTime;
+        QueryPerformanceCounter(&currentTime);
+        double elapsedSeconds = (double)(currentTime.QuadPart - startTime.QuadPart) / frequency.QuadPart;
+        if (elapsedSeconds >= duration / 1000.0) {
+            break;
+        }
+        double progress = elapsedSeconds / (duration / 1000.0);
+        if (fadeOut) {
+            progress = 1.0 - progress;
+        }
+        WORD brightness = (WORD)(progress * 256);
+        SetBrightness(brightness);
+        Sleep(frameStep);
+    }
+}
+
+int GetDeviceRefreshRate() {
+    HDC hdc = GetDC(NULL);
+    int refreshRate = GetDeviceCaps(hdc, VREFRESH);
+    ReleaseDC(NULL, hdc);
+    if (refreshRate <= 0) {
+        refreshRate = 60;
+    }
+    return refreshRate;
+}
+
+// Note: calling SwitchDesktopWithFade_original crashes winlogon, I did not find the proper function prototype for this yet
+// But I'm not using the original function anyway
+typedef __int64 (*SwitchDesktopWithFade_t)(HDESK hDesktop, DWORD duration);
+SwitchDesktopWithFade_t SwitchDesktopWithFade_original;
+__int64 SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration) {
+    Wh_Log(L"SwitchDesktopWithFade, duration=%d", duration);
+    duration = g_duration;
+    if (duration <= 0) {
+        return SwitchDesktop(hDesktop);
+    }
+    if (duration > 10000) {
+        duration = 500;
+    }
+    int refreshRate = GetDeviceRefreshRate();
+    FadeDesktop(refreshRate, duration, TRUE);
+    BOOL result = SwitchDesktop(hDesktop);
+    FadeDesktop(refreshRate, duration, FALSE);
+    return result;
+}
+
+// The mod is being initialized, load settings, hook functions, and do other
+// initialization stuff if required.
+BOOL Wh_ModInit() {
+    Wh_Log(L"Init");
+
+    g_duration = Wh_GetIntSetting(L"duration");
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) {
+        Wh_Log(L"GetModuleHandleW user32.dll failed");
+        return FALSE;
+    }
+
+    SwitchDesktopWithFade_t SwitchDesktopWithFade = (SwitchDesktopWithFade_t)GetProcAddress(user32, "SwitchDesktopWithFade");
+    if (!SwitchDesktopWithFade) {
+        Wh_Log(L"GetProcAddress SwitchDesktopWithFade failed");
+        return FALSE;
+    }
+
+    if (!Wh_SetFunctionHook((void*)SwitchDesktopWithFade, (void*)SwitchDesktopWithFade_hook, (void**)SwitchDesktopWithFade_original)) {
+        Wh_Log(L"Wh_SetFunctionHook SwitchDesktopWithFade failed");
+        return FALSE;
+    }
+    Wh_Log(L"Init OK");
+
+    return TRUE;
+}
+
+// The mod is being unloaded, free all allocated resources.
+void Wh_ModUninit() {
+    Wh_Log(L"Uninit");
+}
+
+void Wh_ModSettingsChanged() {
+    g_duration = Wh_GetIntSetting(L"duration");
+}
