@@ -1,6 +1,7 @@
 // ==WindhawkMod==
 // @id              hotcorner-hotkeys
 // @name            HotCorner Hotkeys
+// @description     Global hotkeys routed by cursor zone (corner/edge) to run different actions; no-match consumes the hotkey.
 // @version         1.9
 // @author          webberlv
 // @github          https://github.com/webberLV
