@@ -26,12 +26,20 @@
 /*
 - duration: 500
   $name: Fade duration (ms)
+- fadeOnLock: true
+  $name: Fade when locking
+  $description: Whether to fade when locking the computer. Please disable the lock screen for the smoothest animations.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+#include <thread>
 
 int g_duration = 500;
+BOOL g_fadeOnLock = TRUE;
+BOOL g_isLocking = FALSE;
+BOOL g_isLockFadeInProgress = FALSE;
+BOOL g_switchDesktopCalledDuringLockFade = FALSE;
 
 // https://www.nirsoft.net/vc/change_screen_brightness.html
 void SetBrightness(WORD brightness) { // 0: black, 256: normal, 256+: brighter
@@ -95,8 +103,35 @@ int GetDeviceRefreshRate() {
     return refreshRate;
 }
 
-// Note: calling SwitchDesktopWithFade_original crashes winlogon, I did not find the proper function prototype for this yet
-// But I'm not using the original function anyway
+using SwitchDesktop_t = decltype(&SwitchDesktop);
+SwitchDesktop_t SwitchDesktop_original;
+BOOL WINAPI SwitchDesktop_hook(HDESK hDesktop) {
+    if (g_isLocking) {
+        g_isLocking = FALSE;
+        std::thread([hDesktop] {
+            // LogonUI starts after this function returns, so do the fade asynchronously to let it start earlier
+            g_isLockFadeInProgress = TRUE;
+            int refreshRate = GetDeviceRefreshRate();
+            FadeDesktop(refreshRate, g_duration, TRUE);
+            if (g_switchDesktopCalledDuringLockFade) {
+                // On Win10+, SwitchDesktop is called twice during lock, once for the secure desktop and once for the normal desktop, which hosts LockApp.exe
+                // So, for the second call, just skip the first call, as the second call is switching to the normal desktop, which we are currently in when fading
+                // This does not look that good, as LockApp startup is visible during the fade, but doing it synchronously causes a quiet a long time of black screen before the lock screen appears
+                // SwitchDesktop is only called once when the lock screen is disabled with GPO/registry, so make sure it still works in that case
+                g_switchDesktopCalledDuringLockFade = FALSE;
+            } else {
+                SwitchDesktop_original(hDesktop);
+            }
+            FadeDesktop(refreshRate, g_duration, FALSE);
+            g_isLockFadeInProgress = FALSE;
+        }).detach();
+        return TRUE;
+    } else if (g_isLockFadeInProgress) {
+        g_switchDesktopCalledDuringLockFade = TRUE;
+    }
+    return SwitchDesktop_original(hDesktop);
+};
+
 typedef __int64 (*SwitchDesktopWithFade_t)(HDESK hDesktop, DWORD duration);
 SwitchDesktopWithFade_t SwitchDesktopWithFade_original;
 __int64 SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration) {
@@ -110,10 +145,21 @@ __int64 SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration) {
     }
     int refreshRate = GetDeviceRefreshRate();
     FadeDesktop(refreshRate, duration, TRUE);
-    BOOL result = SwitchDesktop(hDesktop);
+    BOOL result = SwitchDesktop_original(hDesktop);
     FadeDesktop(refreshRate, duration, FALSE);
     return result;
 }
+
+// __int64 __fastcall WLGeneric_InitiateLock_Execute(struct _StateMachineCallContext *a1)
+typedef __int64 __fastcall (*WLGeneric_InitiateLock_Execute_t)(void* a1);
+WLGeneric_InitiateLock_Execute_t WLGeneric_InitiateLock_Execute_original;
+__int64 __fastcall WLGeneric_InitiateLock_Execute_hook(void* a1) {
+    if (g_fadeOnLock) {
+        g_isLocking = TRUE;
+        g_switchDesktopCalledDuringLockFade = FALSE;
+    }
+    return WLGeneric_InitiateLock_Execute_original(a1);
+};
 
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
@@ -121,6 +167,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
     g_duration = Wh_GetIntSetting(L"duration");
+    g_fadeOnLock = Wh_GetIntSetting(L"fadeOnLock");
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
@@ -134,9 +181,32 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!Wh_SetFunctionHook((void*)SwitchDesktopWithFade, (void*)SwitchDesktopWithFade_hook, (void**)SwitchDesktopWithFade_original)) {
+    if (!Wh_SetFunctionHook((void*)SwitchDesktopWithFade, (void*)SwitchDesktopWithFade_hook, (void**)&SwitchDesktopWithFade_original)) {
         Wh_Log(L"Wh_SetFunctionHook SwitchDesktopWithFade failed");
         return FALSE;
+    }
+
+    if (!Wh_SetFunctionHook((void*)SwitchDesktop, (void*)SwitchDesktop_hook, (void**)&SwitchDesktop_original)) {
+        Wh_Log(L"Wh_SetFunctionHook SwitchDesktop failed");
+        return FALSE;
+    }
+    
+    HMODULE winlogon = GetModuleHandleW(NULL);
+    if (winlogon) {
+        WindhawkUtils::SYMBOL_HOOK winlogonExeHooks[] = {
+            {
+                {
+                    L"unsigned long __cdecl WLGeneric_InitiateLock_Execute(struct _StateMachineCallContext *)",
+                },
+                &WLGeneric_InitiateLock_Execute_original,
+                WLGeneric_InitiateLock_Execute_hook,
+                FALSE
+            }
+        };
+        if (!WindhawkUtils::HookSymbols(winlogon, winlogonExeHooks, ARRAYSIZE(winlogonExeHooks))) {
+            Wh_Log(L"HookSymbols WLGeneric_InitiateLock_Execute failed");
+            // This is not critical, just missing the fade on Win+L
+        }
     }
     Wh_Log(L"Init OK");
 
@@ -150,4 +220,5 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     g_duration = Wh_GetIntSetting(L"duration");
+    g_fadeOnLock = Wh_GetIntSetting(L"fadeOnLock");
 }
