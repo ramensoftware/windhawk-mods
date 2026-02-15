@@ -24,7 +24,7 @@
 
 // ==WindhawkModSettings==
 /*
-- duration: 500
+- duration: 1000
   $name: Fade duration (ms)
 - fadeOnLock: true
   $name: Fade when locking
@@ -35,7 +35,7 @@
 #include <windhawk_utils.h>
 #include <thread>
 
-int g_duration = 500;
+int g_duration = 1000;
 BOOL g_fadeOnLock = TRUE;
 BOOL g_isLocking = FALSE;
 BOOL g_isLockFadeInProgress = FALSE;
@@ -106,6 +106,9 @@ int GetDeviceRefreshRate() {
 using SwitchDesktop_t = decltype(&SwitchDesktop);
 SwitchDesktop_t SwitchDesktop_original;
 BOOL WINAPI SwitchDesktop_hook(HDESK hDesktop) {
+    if (g_duration == 0) {
+        return SwitchDesktop_original(hDesktop);
+    }
     WCHAR desktopName[256];
     if (GetUserObjectInformationW(hDesktop, UOI_NAME, desktopName, sizeof(desktopName), NULL)) {
         Wh_Log(L"SwitchDesktop called, desktop=%s", desktopName);
@@ -115,7 +118,7 @@ BOOL WINAPI SwitchDesktop_hook(HDESK hDesktop) {
                 // LogonUI starts after this function returns, so do the fade asynchronously to let it start earlier
                 g_isLockFadeInProgress = TRUE;
                 int refreshRate = GetDeviceRefreshRate();
-                FadeDesktop(refreshRate, g_duration, TRUE);
+                FadeDesktop(refreshRate, g_duration / 2, TRUE);
                 if (g_switchDesktopCalledDuringLockFade) {
                     // On Win10+, SwitchDesktop is called twice during lock, once for the secure desktop and once for the normal desktop, which hosts LockApp.exe
                     // So, for the second call, just skip the first call, as the second call is switching to the normal desktop, which we are currently in when fading
@@ -125,7 +128,7 @@ BOOL WINAPI SwitchDesktop_hook(HDESK hDesktop) {
                 } else {
                     SwitchDesktop_original(hDesktop);
                 }
-                FadeDesktop(refreshRate, g_duration, FALSE);
+                FadeDesktop(refreshRate, g_duration / 2, FALSE);
                 g_isLockFadeInProgress = FALSE;
             }).detach();
             return TRUE;
@@ -145,17 +148,13 @@ typedef __int64 (*SwitchDesktopWithFade_t)(HDESK hDesktop, DWORD duration);
 SwitchDesktopWithFade_t SwitchDesktopWithFade_original;
 __int64 SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration) {
     Wh_Log(L"SwitchDesktopWithFade, duration=%d", duration);
-    duration = g_duration;
-    if (duration <= 0) {
-        return SwitchDesktop(hDesktop);
-    }
-    if (duration > 10000) {
-        duration = 500;
+    if (g_duration == 0) {
+        return SwitchDesktop_original(hDesktop);
     }
     int refreshRate = GetDeviceRefreshRate();
-    FadeDesktop(refreshRate, duration, TRUE);
+    FadeDesktop(refreshRate, g_duration / 2, TRUE);
     BOOL result = SwitchDesktop_original(hDesktop);
-    FadeDesktop(refreshRate, duration, FALSE);
+    FadeDesktop(refreshRate, g_duration / 2, FALSE);
     return result;
 }
 
@@ -163,20 +162,31 @@ __int64 SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration) {
 typedef __int64 __fastcall (*WLGeneric_InitiateLock_Execute_t)(void* a1);
 WLGeneric_InitiateLock_Execute_t WLGeneric_InitiateLock_Execute_original;
 __int64 __fastcall WLGeneric_InitiateLock_Execute_hook(void* a1) {
-    if (g_fadeOnLock) {
+    if (g_fadeOnLock && g_duration != 0) {
         g_isLocking = TRUE;
         g_switchDesktopCalledDuringLockFade = FALSE;
     }
     return WLGeneric_InitiateLock_Execute_original(a1);
 };
 
+void LoadSettings() {
+    g_duration = Wh_GetIntSetting(L"duration");
+    g_fadeOnLock = Wh_GetIntSetting(L"fadeOnLock");
+
+    if (g_duration <= 0) {
+        g_duration = 0;
+    }
+    if (g_duration > 10000) {
+        g_duration = 1000;
+    }
+}
+
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    g_duration = Wh_GetIntSetting(L"duration");
-    g_fadeOnLock = Wh_GetIntSetting(L"fadeOnLock");
+    LoadSettings();
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
@@ -228,6 +238,5 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
-    g_duration = Wh_GetIntSetting(L"duration");
-    g_fadeOnLock = Wh_GetIntSetting(L"fadeOnLock");
+    LoadSettings();
 }
