@@ -106,28 +106,37 @@ int GetDeviceRefreshRate() {
 using SwitchDesktop_t = decltype(&SwitchDesktop);
 SwitchDesktop_t SwitchDesktop_original;
 BOOL WINAPI SwitchDesktop_hook(HDESK hDesktop) {
-    if (g_isLocking) {
-        g_isLocking = FALSE;
-        std::thread([hDesktop] {
-            // LogonUI starts after this function returns, so do the fade asynchronously to let it start earlier
-            g_isLockFadeInProgress = TRUE;
-            int refreshRate = GetDeviceRefreshRate();
-            FadeDesktop(refreshRate, g_duration, TRUE);
-            if (g_switchDesktopCalledDuringLockFade) {
-                // On Win10+, SwitchDesktop is called twice during lock, once for the secure desktop and once for the normal desktop, which hosts LockApp.exe
-                // So, for the second call, just skip the first call, as the second call is switching to the normal desktop, which we are currently in when fading
-                // This does not look that good, as LockApp startup is visible during the fade, but doing it synchronously causes a quiet a long time of black screen before the lock screen appears
-                // SwitchDesktop is only called once when the lock screen is disabled with GPO/registry, so make sure it still works in that case
-                g_switchDesktopCalledDuringLockFade = FALSE;
-            } else {
-                SwitchDesktop_original(hDesktop);
-            }
-            FadeDesktop(refreshRate, g_duration, FALSE);
-            g_isLockFadeInProgress = FALSE;
-        }).detach();
-        return TRUE;
-    } else if (g_isLockFadeInProgress) {
-        g_switchDesktopCalledDuringLockFade = TRUE;
+    WCHAR desktopName[256];
+    if (GetUserObjectInformationW(hDesktop, UOI_NAME, desktopName, sizeof(desktopName), NULL)) {
+        Wh_Log(L"SwitchDesktop called, desktop=%s", desktopName);
+        if (g_isLocking && _wcsicmp(desktopName, L"Winlogon") == 0) {
+            g_isLocking = FALSE;
+            std::thread([hDesktop] {
+                // LogonUI starts after this function returns, so do the fade asynchronously to let it start earlier
+                g_isLockFadeInProgress = TRUE;
+                int refreshRate = GetDeviceRefreshRate();
+                FadeDesktop(refreshRate, g_duration, TRUE);
+                if (g_switchDesktopCalledDuringLockFade) {
+                    // On Win10+, SwitchDesktop is called twice during lock, once for the secure desktop and once for the normal desktop, which hosts LockApp.exe
+                    // So, for the second call, just skip the first call, as the second call is switching to the normal desktop, which we are currently in when fading
+                    // This does not look that good, as LockApp startup is visible during the fade, but doing it synchronously causes a quiet a long time of black screen before the lock screen appears
+                    // SwitchDesktop is only called once when the lock screen is disabled with GPO/registry, so make sure it still works in that case
+                    g_switchDesktopCalledDuringLockFade = FALSE;
+                } else {
+                    SwitchDesktop_original(hDesktop);
+                }
+                FadeDesktop(refreshRate, g_duration, FALSE);
+                g_isLockFadeInProgress = FALSE;
+            }).detach();
+            return TRUE;
+        } else if (g_isLockFadeInProgress && _wcsicmp(desktopName, L"Default") == 0) {
+            g_switchDesktopCalledDuringLockFade = TRUE;
+        } else {
+            // Includes locking from Ctrl+Alt+Del, which may disrupt the expected SwitchDesktop call order mentioned above
+            g_isLocking = FALSE;
+        }
+    } else {
+        Wh_Log(L"SwitchDesktop called, GetUserObjectInformationW failed");
     }
     return SwitchDesktop_original(hDesktop);
 };
