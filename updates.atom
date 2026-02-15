@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-15T21:24:35.000Z</updated>
+    <updated>2026-02-15T21:32:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Firefox Picture-in-Picture Always on Top 1.0]]></title>
+        <id>https://windhawk.net/mods/firefox-pip-disable-always-on-top#f05440843ea6ba8697a21144c1ee93b428f4db1a</id>
+        <link href="https://windhawk.net/mods/firefox-pip-disable-always-on-top"/>
+        <updated>2026-02-15T21:32:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="firefoxpipdisablealwaysontop">Firefox PiP - Disable Always on Top</h1>
+<p>Prevents ONLY Firefox Picture-in-Picture windows from staying always on top.
+Uses hook + async verification for precision without blocking.</p>]]></content>
+        <author>
+            <name>ViNSaNiTY24</name>
+            <uri>https://github.com/ViNSaNiTY24</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Old Login Fade 1.0]]></title>
         <id>https://windhawk.net/mods/win7-login-fade#bf283bac8816ef3cd5ce8dd68e8d12c3058a8340</id>
@@ -494,30 +507,6 @@ exceeds 90%.</p>
 <li>Refresh desktop whenever necessary to make changes show immediately</li>
 <li>Support for Windows 8.1 and Windows 11 24H2</li>
 </ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Menu/Tooltip Slide Animation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/menu-tooltip-slide-animation#f3ca1c0c198f597b44116db8bced26e1abe60aaf</id>
-        <link href="https://windhawk.net/mods/menu-tooltip-slide-animation"/>
-        <updated>2026-02-10T13:35:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="menutooltipslideanimation">Menu/Tooltip Slide Animation</h1>
-<p>From Windows 98 through Windows XP, you could make menus and tooltips use a
-slide/scroll animation. This mod restores those animations to modern versions
-of Windows.</p>
-<h2 id="captionbuttontooltips">Caption button tooltips</h2>
-<p>The tooltips you see when hovering a window's caption buttons (Close, Maximize, Minimize)
-are implemented by the kernel-mode component of NTUSER. <strong>It is impossible to make them
-have a slide animation without issues.</strong></p>
-<p><strong>Tooltips</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/menu-tooltip-slide-animation/tooltip.gif" alt="Tooltips" /></p>
-<p><strong>Menus (Windows 98/Me)</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/menu-tooltip-slide-animation/menu-9x.gif" alt="Menus (Windows 98/Me)" /></p>
-<p><strong>Menus (Windows 2000/XP)</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/menu-tooltip-slide-animation/menu-nt.gif" alt="Menus (Windows 2000/XP)" /></p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>

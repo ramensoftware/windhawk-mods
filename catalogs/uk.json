@@ -3585,6 +3585,33 @@
                 "version": "1.5"
             }
         },
+        "firefox-pip-disable-always-on-top": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771191148000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771191148000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ViNSaNiTY24",
+                "description": "Removes the always-on-top behavior from Firefox PiP windows",
+                "github": "https://github.com/ViNSaNiTY24",
+                "include": [
+                    "firefox.exe"
+                ],
+                "name": "Disable Firefox Picture-in-Picture Always on Top",
+                "version": "1.0"
+            }
+        },
         "fix-basic-caption-text": {
             "details": {
                 "defaultSorting": 8505,
