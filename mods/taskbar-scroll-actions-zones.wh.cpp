@@ -81,11 +81,14 @@ workaround is to use the "pinch to zoom" gesture.
 - zone3ScrollStep: 1
   $name: Zone 3 scroll step
   $description: Change amount per scroll notch for Zone 3
-- useDdcCi: true
-  $name: Support external monitors
+- useDdcCi: false
+  $name: Support external monitors (DDC/CI)
   $description: >-
     Enable brightness control for external monitors using the DDC/CI protocol.
     Falls back to WMI for laptop displays.
+    WARNING: Many monitors don't fully implement the MCCS standard over I2C,
+    which may result in undefined monitor behavior. Only enable this if you
+    have verified it works correctly with your monitor.
 - showVolumePopup: true
   $name: Show system volume popup
   $description: Show the Windows volume popup when changing volume
