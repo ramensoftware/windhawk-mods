@@ -1,3 +1,9 @@
+## 2.3.0 ([Feb 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8df200d486cea8f11c582b906f87689e371a7bc8/mods/virtual-desktop-helper.wh.cpp))
+
+- Removed tiling functionality and all related settings/hotkeys; the mod now focuses only on virtual desktop switching, moving, and pinning.
+
+- Added “Previous Desktop (Index)” behavior and hotkey handling, plus documentation updates for previous/next/last terminology.
+
 ## 2.2.0 ([Jan 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c6f6f935554a24307402fbe91fd45489fb059a1b/mods/virtual-desktop-helper.wh.cpp))
 
 Add hotkey toggles and fix COM cleanup timeout ([#3149](https://github.com/ramensoftware/windhawk-mods/issues/3149))
