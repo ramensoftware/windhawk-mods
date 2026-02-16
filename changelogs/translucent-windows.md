@@ -1,3 +1,8 @@
+## 1.7.4 ([Feb 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3dc62307b1a820cc2e7646d056d30ef495651ffa/mods/translucent-windows.wh.cpp))
+
+* Fix black background system colors in some programs (e.g. Office) using mods process ruled settings
+* Minor custom theme additions
+
 ## 1.7.3 ([Jan 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a1eff912a93ab74e1e517d6842f725013c1f5062/mods/translucent-windows.wh.cpp))
 
 * Readjust window eligibility filtering

@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-16T08:39:30.000Z</updated>
+    <updated>2026-02-16T18:09:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.7.4]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#3dc62307b1a820cc2e7646d056d30ef495651ffa</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2026-02-16T18:09:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix black background system colors in some programs (e.g. Office) using mods process ruled settings</li>
+<li>Minor custom theme additions</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Caffeine 0.7]]></title>
         <id>https://windhawk.net/mods/caffeine#4ff0d3c579524082f13600af1a613b893ffe9193</id>
@@ -528,20 +542,6 @@ exceeds 90%.</p>
         <author>
             <name>ALMAS CP</name>
             <uri>https://github.com/almas-cp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Taskbar Window Suffixes 1.1.1]]></title>
-        <id>https://windhawk.net/mods/file-explorer-remove-suffixes#df279b7963c3e46e98eea4734d1506c6b3568dd7</id>
-        <link href="https://windhawk.net/mods/file-explorer-remove-suffixes"/>
-        <updated>2026-02-11T20:57:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed suffixes being removed twice for explorer windows in universal mode.</li>
-<li>Titles on the taskbar are now updated right away when the mod is enabled and when settings are changed (universal mode and custom rules only).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
