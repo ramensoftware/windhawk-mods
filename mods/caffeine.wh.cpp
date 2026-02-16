@@ -123,6 +123,7 @@ these flags.
 
 
 #define WM_TRAYICON (WM_USER + 1)
+#define WM_SETTINGS_CHANGED (WM_USER + 2)
 #define ID_TRAYICON 1002
 #define ID_TIMER_COUNTDOWN 2001
 
@@ -449,6 +450,7 @@ private:
     static std::function<void()> s_onTrayRightClick;
     static std::function<void()> s_onTimerTick;
     static std::function<void(UINT)> s_onMenuCommand;
+    static std::function<void()> s_onSettingsChanged;
 
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         switch (uMsg) {
@@ -476,6 +478,12 @@ private:
             case WM_TIMER:
                 if (wParam == ID_TIMER_COUNTDOWN && s_onTimerTick) {
                     s_onTimerTick();
+                }
+                return 0;
+
+            case WM_SETTINGS_CHANGED:
+                if (s_onSettingsChanged) {
+                    s_onSettingsChanged();
                 }
                 return 0;
 
@@ -569,6 +577,10 @@ public:
     static void SetMenuCommandCallback(std::function<void(UINT)> callback) {
         s_onMenuCommand = callback;
     }
+
+    static void SetSettingsChangedCallback(std::function<void()> callback) {
+        s_onSettingsChanged = callback;
+    }
 };
 
 const wchar_t* CaffeineTrayWindow::CLASS_NAME = L"CaffeineTrayWindow";
@@ -578,6 +590,7 @@ std::function<void()> CaffeineTrayWindow::s_onTrayClick = nullptr;
 std::function<void()> CaffeineTrayWindow::s_onTrayRightClick = nullptr;
 std::function<void()> CaffeineTrayWindow::s_onTimerTick = nullptr;
 std::function<void(UINT)> CaffeineTrayWindow::s_onMenuCommand = nullptr;
+std::function<void()> CaffeineTrayWindow::s_onSettingsChanged = nullptr;
 
 
 // ─── Core Caffeine Controller ────────────────────────────────────────────────
@@ -945,6 +958,7 @@ public:
     bool IsActive() const { return currentMode != MODE_OFF; }
     CaffeineMode GetMode() const { return currentMode; }
     const CaffeineSettings& GetSettings() const { return settings; }
+    HWND GetTrayWindowHandle() const { return trayWindow ? trayWindow->GetHandle() : NULL; }
 
     // ── State persistence ────────────────────────────────────────────────
 
@@ -1039,6 +1053,7 @@ public:
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
 static std::unique_ptr<CaffeineController> g_controller;
+static HWND g_trayWindowHwnd;
 
 
 void LoadSettings() {
@@ -1063,16 +1078,27 @@ void LoadSettings() {
 }
 
 
-BOOL WhTool_ModInit() {
-    Wh_Log(L"☕ Initializing Caffeine mod (windhawk.exe)");
+// Worker thread procedure — owns the message loop, tray window, and all
+// thread-affine API calls (SetThreadExecutionState, etc.).
+DWORD WINAPI CaffeineWorkerThread(LPVOID /*param*/) {
+    Wh_Log(L"☕ Caffeine worker thread started");
 
     try {
         g_controller = std::make_unique<CaffeineController>();
         LoadSettings();
 
+        // Set up the settings-changed callback so it reloads on this thread
+        CaffeineTrayWindow::SetSettingsChangedCallback([]() {
+            Wh_Log(L"⚙️ Caffeine settings changed (on worker thread)");
+            LoadSettings();
+        });
+
         if (!g_controller->InitializeTrayIcon()) {
             Wh_Log(L"⚠️ Tray icon initialization failed, continuing without it");
         }
+
+        // Store the tray window HWND for cross-thread message posting
+        g_trayWindowHwnd = g_controller->GetTrayWindowHandle();
 
         // Try to restore previous state first
         g_controller->RestoreState();
@@ -1082,39 +1108,65 @@ BOOL WhTool_ModInit() {
             g_controller->ActivateIndefinite();
         }
 
-        Wh_Log(L"✅ Caffeine mod initialized successfully");
-        return TRUE;
+        Wh_Log(L"✅ Caffeine mod initialized, entering message loop");
+
+        // Message loop — keeps the tray icon alive and processes timer/tray events
+        MSG msg;
+        while (GetMessage(&msg, nullptr, 0, 0)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
+        Wh_Log(L"🔄 Caffeine worker thread message loop exited");
+
+        if (g_controller) {
+            g_controller->Deactivate();
+            g_controller.reset();
+        }
     } catch (...) {
-        Wh_Log(L"❌ Failed to initialize Caffeine mod");
+        Wh_Log(L"❌ Exception in Caffeine worker thread");
+    }
+
+    return 0;
+}
+
+
+BOOL WhTool_ModInit() {
+    Wh_Log(L"☕ Initializing Caffeine mod (windhawk.exe)");
+
+    // Spawn a dedicated thread that owns the message loop and all
+    // thread-affine state (SetThreadExecutionState, tray window, etc.).
+    HANDLE hThread = CreateThread(nullptr, 0, CaffeineWorkerThread,
+                                  nullptr, 0, nullptr);
+    if (!hThread) {
+        Wh_Log(L"❌ Failed to create worker thread");
         return FALSE;
     }
+
+    CloseHandle(hThread);
+    return TRUE;
 }
 
 
 void WhTool_ModUninit() {
-    Wh_Log(L"🔄 Uninitializing Caffeine mod");
-
-    if (g_controller) {
-        g_controller->Deactivate();  // Always restore power policy on exit
-        g_controller.reset();
-    }
-
-    PostQuitMessage(0);
-
-    Wh_Log(L"✅ Caffeine mod uninitialized");
+    // The process will exit shortly after this call, so there's no much
+    // need to clean up here.
 }
 
 
 void WhTool_ModSettingsChanged() {
-    Wh_Log(L"⚙️ Caffeine settings changed");
-    LoadSettings();
+    // Post a message to the tray window so the settings reload happens
+    // on the worker thread (same thread that calls SetThreadExecutionState).
+    if (g_trayWindowHwnd) {
+        PostMessage(g_trayWindowHwnd, WM_SETTINGS_CHANGED, 0, 0);
+    }
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
-// [https://github.com/ramensoftware/windhawk-mods/pull/1916](https://github.com/ramensoftware/windhawk-mods/pull/1916)
+// [https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process)
 //
 // The mod will load and run in a dedicated windhawk.exe process.
 //
@@ -1131,15 +1183,8 @@ HANDLE g_toolModProcessMutex;
 
 
 void WINAPI EntryPoint_Hook() {
-    Wh_Log(L"Tool mod process entry point hooked. Starting message loop.");
-
-    MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-
-    Wh_Log(L"Tool mod message loop exited. Process will terminate.");
+    Wh_Log(L">");
+    ExitThread(0);
 }
 
 
@@ -1266,7 +1311,7 @@ void Wh_ModAfterInit() {
     };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
