@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-15T21:32:28.000Z</updated>
+    <updated>2026-02-16T08:39:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Caffeine 0.7]]></title>
+        <id>https://windhawk.net/mods/caffeine#4ff0d3c579524082f13600af1a613b893ffe9193</id>
+        <link href="https://windhawk.net/mods/caffeine"/>
+        <updated>2026-02-16T08:39:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="caffeine">Caffeine</h1>
+<p>A lightweight system tray utility that prevents your computer from sleeping
+or turning off the display. Toggle it on and off with a single click on the
+tray icon, or right-click to choose a timed duration.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>One-click toggle</strong>: Left-click the tray icon to activate/deactivate</li>
+<li><strong>Timed activation</strong>: Right-click for duration options (15 min to 4 hours, or indefinite)</li>
+<li><strong>Countdown display</strong>: Tooltip shows remaining time when using timed mode</li>
+<li><strong>Prevent sleep</strong>: Keeps your system from entering sleep mode</li>
+<li><strong>Prevent display off</strong>: Stops the monitor from turning off due to inactivity</li>
+<li><strong>Visual indicators</strong>: Distinct colors for active (caffeinated) and inactive states</li>
+<li><strong>Customizable appearance</strong>: Choose colors, shapes, and icon size</li>
+<li><strong>Auto-start option</strong>: Optionally start in active state when the mod loads</li>
+<li><strong>Lightweight</strong>: Uses the proper Windows API (<code>SetThreadExecutionState</code>) — no fake keypresses</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>When activated, the mod calls <code>SetThreadExecutionState</code> with
+<code>ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED</code> to tell Windows
+that the system and display should stay on. When deactivated, it clears
+these flags.</p>
+<h2 id="controls">Controls</h2>
+<ul>
+<li><strong>Left-click</strong>: Quick toggle — activates indefinitely if off, deactivates if on</li>
+<li><strong>Right-click</strong>: Context menu with duration options:</li>
+<li>Indefinite (keeps awake forever)</li>
+<li>15 Minutes</li>
+<li>30 Minutes</li>
+<li>1 Hour</li>
+<li>2 Hours</li>
+<li>4 Hours</li>
+<li>Activate / Deactivate (shown based on current state)</li>
+</ul>
+<h2 id="visualindicators">Visual Indicators</h2>
+<ul>
+<li><strong>Active (Caffeinated)</strong>: Bright icon (default: amber/orange ☕)</li>
+<li><strong>Inactive</strong>: Dim icon (default: gray)</li>
+</ul>]]></content>
+        <author>
+            <name>ALMAS CP</name>
+            <uri>https://github.com/almas-cp</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[HotCorner Hotkeys 2.0]]></title>
+        <id>https://windhawk.net/mods/hotcorner-hotkeys#8c9ca28522ced27a2e22342a20ed6041f6ec0a47</id>
+        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
+        <updated>2026-02-16T08:37:08.000Z</updated>
+        <content type="html"><![CDATA[<p>Add @description metadata to HotCorner Hotkeys mod</p>]]></content>
+        <author>
+            <name>webberlv</name>
+            <uri>https://github.com/webberLV</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Firefox Picture-in-Picture Always on Top 1.0]]></title>
         <id>https://windhawk.net/mods/firefox-pip-disable-always-on-top#f05440843ea6ba8697a21144c1ee93b428f4db1a</id>
@@ -483,33 +542,6 @@ exceeds 90%.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Menu/Tooltip Slide Animation 1.0.1]]></title>
-        <id>https://windhawk.net/mods/menu-tooltip-slide-animation#f00b63e81fa59fd1553ccecb247430b3c7a661dd</id>
-        <link href="https://windhawk.net/mods/menu-tooltip-slide-animation"/>
-        <updated>2026-02-11T20:00:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Don't use slide animation when UI effects are disabled</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Desktop Watermark 1.2.0]]></title>
-        <id>https://windhawk.net/mods/custom-desktop-watermark#4a61d4185a09f270883f3cb72a8da7d22acec204</id>
-        <link href="https://windhawk.net/mods/custom-desktop-watermark"/>
-        <updated>2026-02-11T00:34:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Refresh desktop whenever necessary to make changes show immediately</li>
-<li>Support for Windows 8.1 and Windows 11 24H2</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

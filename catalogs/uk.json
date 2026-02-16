@@ -433,6 +433,35 @@
                 "version": "1.0.1"
             }
         },
+        "caffeine": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771231170000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771231170000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ALMAS CP",
+                "compilerOptions": "-lgdi32 -luser32",
+                "description": "Prevent your PC from sleeping or turning off the display with a simple tray icon toggle",
+                "github": "https://github.com/almas-cp",
+                "homepage": "https://github.com/almas-cp",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Caffeine",
+                "version": "0.7"
+            }
+        },
         "ce-disable-process-button-flashing": {
             "details": {
                 "defaultSorting": 150,
@@ -4077,19 +4106,20 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1771110511000,
+                "updated": 1771231028000,
                 "users": 2
             },
             "metadata": {
                 "author": "webberlv",
                 "compilerOptions": "-lcomctl32 -loleaut32 -lole32 -lversion",
+                "description": "Global hotkeys routed by cursor zone (corner/edge) to run different actions; no-match consumes the hotkey.",
                 "github": "https://github.com/webberLV",
                 "include": [
                     "explorer.exe"
                 ],
                 "license": "GPL-3.0-only",
                 "name": "HotCorner Hotkeys",
-                "version": "1.9"
+                "version": "2.0"
             }
         },
         "hover-text-magnifier": {
