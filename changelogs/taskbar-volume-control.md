@@ -1,3 +1,11 @@
+## 1.3 ([Feb 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7514df4a76170d6b3cd9075791227880f2068fb4/mods/taskbar-volume-control.wh.cpp))
+
+* Added an option to scroll anywhere on the screen while holding a configurable combination of modifier keys to change the system volume.
+* Added an option to scroll at the taskbar position even when a full screen window covers the taskbar.
+* Added an option for custom regions along the taskbar where scrolling will control the system volume. For example, "100-200" (pixels) or "20%-50%" (percentage of taskbar length).
+* Improved the volume change step option, which is now compatible with all volume indicators.
+* Improved the "No automatic mute toggle" option, which is now compatible with all volume indicators.
+
 ## 1.2.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/066479c7768f6916417c24e9eea34a022182df0f/mods/taskbar-volume-control.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.

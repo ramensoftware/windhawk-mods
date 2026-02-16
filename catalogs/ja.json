@@ -8309,22 +8309,24 @@
                     863
                 ],
                 "ratingUsers": 948,
-                "updated": 1742566197000,
+                "updated": 1771272851000,
                 "users": 92396
             },
             "featured": true,
             "metadata": {
                 "author": "m417z",
                 "compilerOptions": "-DWINVER=0x0A00 -lcomctl32 -ldwmapi -lgdi32 -lole32 -lversion",
-                "description": "Control the system volume by scrolling over the taskbar",
+                "description": "Control the system volume by scrolling over the taskbar or anywhere with modifier keys",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
-                    "explorer.exe"
+                    "explorer.exe",
+                    "ShellExperienceHost.exe",
+                    "SndVol.exe"
                 ],
                 "name": "Taskbar Volume Control",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.2"
+                "version": "1.3"
             }
         },
         "taskbar-volume-control-per-app": {
