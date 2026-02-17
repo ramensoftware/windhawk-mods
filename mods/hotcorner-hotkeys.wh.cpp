@@ -1,12 +1,12 @@
 // ==WindhawkMod==
-// @id              hotcorner-hotkeys
-// @name            HotCorner Hotkeys
-// @description     Global hotkeys routed by cursor zone (corner/edge) to run different actions; no-match consumes the hotkey.
-// @version         2.0
-// @author          webberlv
-// @github          https://github.com/webberLV
-// @license         GPL-3.0-only
-// @include         explorer.exe
+// @id                   hotcorner-hotkeys
+// @name                 HotCorner Hotkeys
+// @description          Assign configurable keyboard hotkeys to up to 8 actions, gated by cursor zones (four corners + four edges) of the active monitor.
+// @version              2.4
+// @author               webberlv
+// @github               https://github.com/webberLV
+// @license              GPL-3.0-only
+// @include             explorer.exe
 // @compilerOptions -lcomctl32 -loleaut32 -lole32 -lversion
 // ==/WindhawkMod==
 
@@ -19,13 +19,9 @@
 /*
 # HotCorner Hotkeys
 
-This mod assigns global keyboard shortcuts to Windows actions.
-Each shortcut is registered once per unique key combination. When triggered,
-the current cursor position is sampled and used to dispatch the action mapped
-to the active screen zone (corner, edge). 
+This mod binds configurable keyboard hotkeys to screen zones defined by the four corners and four edges of the active monitor. Each hotkey is registered once per unique key combination and evaluated at trigger time using the current cursor position.
 
-A single hotkey may execute different actions depending on cursor location. If no zone is selected hotkey is consumed nothing happens. If you were hoping for the hotkey to function globally without a zone selection check out 
-[keyboard-shortcut-actions](https://windhawk.net/mods/keyboard-shortcut-actions) instead.
+When a hotkey is pressed, the cursor location determines which zone is active and dispatches the corresponding action. A single hotkey can therefore invoke up to eight distinct actions. If the cursor is not within a defined zone, the hotkey is intercepted and no action is executed. This mod is zone-gated by design and does not provide unconditional global hotkeys. If you were hoping for the hotkey to function globally without a zone selection restriction check out [keyboard-shortcut-actions](https://windhawk.net/mods/keyboard-shortcut-actions) instead. 
 
 ## Architecture
 
@@ -35,10 +31,7 @@ A single hotkey may execute different actions depending on cursor location. If n
   as a global hotkey.
 - **Dispatch**: On `WM_HOTKEY`, the cursor zone is computed and the
   `(hotkey, zone)` mapping is resolved and executed.
-
-
 ### Rules
-
 - Action identity is `(hotkey, zone)`
 - Zones are used only during dispatch
 - A hotkey may map to multiple actions across different zones
@@ -47,75 +40,60 @@ A single hotkey may execute different actions depending on cursor location. If n
 - If no action exists for the active cursor zone:
   - No action is executed
   - The hotkey is still consumed 
-
 ## Zones
-
 Zones are computed from the active monitor bounds using `GatePx`
 (pixel thickness).
-
 Corner zones take precedence over edge zones when regions overlap.
-
 Supported values:
-
 `NONE, LEFT, TOP_LEFT, TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT`
-
 `NONE` matches only when the cursor is outside all edge and corner gate regions.
-
 ## Supported actions
-
 1. **Show desktop**  
    Toggle desktop visibility
-
 2. **Ctrl+Alt+Tab**  
    Open the Ctrl+Alt+Tab dialog
-
 3. **Task Manager**  
    Open Windows Task Manager
-
 4. **Mute system volume**  
    Toggle system-wide mute
-
 5. **Taskbar auto-hide**  
    Toggle taskbar auto-hide
-
 6. **Win+Tab**  
    Open Task View
-
 7. **Hide desktop icons**  
    Toggle visibility of all desktop icons
-
 8. **Combine taskbar buttons**  
    Toggle taskbar button grouping between two states
-
 9. **Toggle taskbar alignment**  
    Toggle taskbar icon alignment (left/center, Windows 11 only)
-
 10. **Open Start menu**  
     Send the Win key
-
 11. **Virtual key press**  
     Send a virtual key sequence
-
 12. **Open application, path, or URL**  
     Launch an executable, open a path, or open a URL
-
 13. **Media Play/Pause**
-
 14. **Media Next Track**
-
 15. **Media Previous Track**
 
-## Hotkey format
+16. **Toggle Always On Top (active window)**  
+    Toggles `WS_EX_TOPMOST` on the current foreground window
+
+17. **Opacity Up (active window)**  
+    Increases window opacity
+
+18. **Opacity Down (active window)**  
+    Decreases window opacity
+
+# Hotkey format
 
 Hotkeys use the form:
 
 `Modifier+Modifier+Key`
 
-### Modifiers
-
+## Modifiers
 `Alt`, `Ctrl`, `Shift`, `Win`
-
-### Keys
+#### Keys
 
 - Letters: `A–Z`
 - Numbers: `0–9`
@@ -139,10 +117,10 @@ Hotkeys use the form:
 - `Ctrl+Shift+F1`
 - `Alt+Home`
 - `Win+Numpad1`
-
 ## Additional arguments
 
-Only actions **8**, **11**, and **12** accept `AdditionalArgs`.
+Actions 8, 11, 12, 17, and 18 accept AdditionalArgs.
+
 Arguments are separated by semicolons.
 
 ### 8. Combine taskbar buttons
@@ -187,6 +165,25 @@ Examples:
 - `"C:\Program Files\App\app.exe" --arg`
 - `https://example.com`
 - `uac;C:\Windows\System32\cmd.exe`
+
+### 17/18. Opacity Up / Down (active window)
+
+Tokens (semicolon separated). All tokens are optional.  
+Unspecified values use default behavior.
+
+- `step<number>`: Opacity step per press (default `0.05`)
+- `min<number>`: Minimum opacity clamp (default `0.10`)
+- `max<number>`: Maximum opacity clamp (default `1.00`)
+- `allApp`: Apply to all top-level windows in the same process as the foreground window
+- `dontLayer`: Do not automatically add `WS_EX_LAYERED`
+
+Examples:
+
+- `step0.03`
+- `step0.02;min0.30;max0.95`
+- `allApp;step0.02`
+- `allApp;dontLayer;min0.25;max0.90`
+
 
 ## Credits
 
@@ -254,6 +251,10 @@ by [m417z](https://github.com/m417z).
       - ACTION_MEDIA_PLAY_PAUSE: Media Play/Pause
       - ACTION_MEDIA_NEXT: Media Next Track
       - ACTION_MEDIA_PREV: Media Previous Track
+      - ACTION_TOGGLE_ALWAYSONTOP_ACTIVE: Toggle Always On Top (active window)
+      - ACTION_OPACITY_UP_ACTIVE: Opacity Up (active window)
+      - ACTION_OPACITY_DOWN_ACTIVE: Opacity Down (active window)
+
     - AdditionalArgs: ""
       $name: Additional Args
       $description: Additional arguments for the action (see Details tab).
@@ -334,6 +335,10 @@ enum class HotkeyActionType {
     MediaPlayPause,
     MediaNext,
     MediaPrev,
+    ToggleAlwaysOnTopActive,
+    OpacityUpActive,
+    OpacityDownActive,
+
 };
 
 enum class Zone : uint8_t {
@@ -1395,6 +1400,197 @@ void StartProcess(std::wstring command) {
         }
     }
 }
+// ===================== Window targeting + always-on-top + opacity =====================
+
+static HWND GetActiveTopLevelWindow() {
+    HWND h = GetForegroundWindow();
+    if (!h) return nullptr;
+
+    h = GetAncestor(h, GA_ROOT);
+    if (!h) return nullptr;
+
+    if (g_hTaskbarWnd && h == g_hTaskbarWnd) return nullptr;
+    if (!IsWindowVisible(h)) return nullptr;
+    return h;
+}
+
+static bool IsTopmost(HWND hWnd) {
+    LONG ex = GetWindowLong(hWnd, GWL_EXSTYLE);
+    return (ex & WS_EX_TOPMOST) != 0;
+}
+
+static void ToggleAlwaysOnTopActive() {
+    HWND h = GetActiveTopLevelWindow();
+    if (!h) return;
+
+    const bool cur = IsTopmost(h);
+    SetWindowPos(h, cur ? HWND_NOTOPMOST : HWND_TOPMOST,
+                 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+}
+
+struct OpacityConfig {
+    double step = 0.05;      // default (old hardcoded)
+    double min  = 0.10;      // default (old hardcoded)
+    double max  = 1.00;      // default (old hardcoded)
+    bool forceLayered = true; // default (old behavior)
+    bool applyToApp   = false; // default off
+};
+
+static bool EnsureLayered(HWND hWnd) {
+    LONG ex = GetWindowLong(hWnd, GWL_EXSTYLE);
+    if ((ex & WS_EX_LAYERED) == 0) {
+        SetWindowLong(hWnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+    }
+    return true;
+}
+
+static double GetOpacity(HWND hWnd) {
+    LONG ex = GetWindowLong(hWnd, GWL_EXSTYLE);
+    if ((ex & WS_EX_LAYERED) == 0) return 1.0;
+
+    COLORREF cr = 0;
+    BYTE alpha = 255;
+    DWORD flags = 0;
+    if (!GetLayeredWindowAttributes(hWnd, &cr, &alpha, &flags)) return 1.0;
+    if ((flags & LWA_ALPHA) == 0) return 1.0;
+
+    return (double)alpha / 255.0;
+}
+
+static void SetOpacity(HWND hWnd, double opacity01, bool forceLayered) {
+    if (!hWnd) return;
+
+    if (opacity01 < 0.0) opacity01 = 0.0;
+    if (opacity01 > 1.0) opacity01 = 1.0;
+
+    LONG ex = GetWindowLong(hWnd, GWL_EXSTYLE);
+    if ((ex & WS_EX_LAYERED) == 0) {
+        if (!forceLayered) {
+            // Don't touch styles: cannot apply alpha if not already layered.
+            return;
+        }
+        EnsureLayered(hWnd);
+    }
+
+    int a = (int)lround(opacity01 * 255.0);
+    if (a < 0) a = 0;
+    if (a > 255) a = 255;
+
+    SetLayeredWindowAttributes(hWnd, 0, (BYTE)a, LWA_ALPHA);
+}
+
+static bool TryParseDoubleSuffix(const std::wstring& tokenLower,
+                                 const std::wstring& prefixLower,
+                                 double& out) {
+    if (tokenLower.rfind(prefixLower, 0) != 0) return false; // not prefix
+    std::wstring num = stringtools::trim(tokenLower.substr(prefixLower.size()));
+    if (num.empty()) return false;
+
+    try {
+        size_t pos = 0;
+        out = std::stod(num, &pos);
+        return pos == num.size();
+    } catch (...) {
+        return false;
+    }
+}
+
+static OpacityConfig ParseOpacityArgs_NoEquals(const std::wstring& args) {
+    OpacityConfig cfg; // defaults
+
+    auto parts = SplitArgs(args, L';');
+    for (auto p0 : parts) {
+        std::wstring p = stringtools::toLower(stringtools::trim(p0));
+        if (p.empty()) continue;
+
+        // flags
+        if (p == L"allapp" || p == L"app" || p == L"all") {
+            cfg.applyToApp = true;
+            continue;
+        }
+        if (p == L"dontlayer" || p == L"nostyle" || p == L"noexlayered") {
+            cfg.forceLayered = false;
+            continue;
+        }
+        if (p == L"layered" || p == L"forcelayered" || p == L"force-layered") {
+            cfg.forceLayered = true;
+            continue;
+        }
+
+        // prefix+number
+        double v = 0.0;
+        if (TryParseDoubleSuffix(p, L"step", v)) { cfg.step = v; continue; }
+        if (TryParseDoubleSuffix(p, L"min",  v)) { cfg.min  = v; continue; }
+        if (TryParseDoubleSuffix(p, L"max",  v)) { cfg.max  = v; continue; }
+    }
+
+    // sanitize
+    cfg.step = std::max(0.001, std::min(cfg.step, 1.0));
+    cfg.min  = std::max(0.0,   std::min(cfg.min,  1.0));
+    cfg.max  = std::max(0.0,   std::min(cfg.max,  1.0));
+    if (cfg.min > cfg.max) std::swap(cfg.min, cfg.max);
+
+    return cfg;
+}
+
+static bool IsEligibleOpacityTarget(HWND hWnd) {
+    if (!hWnd) return false;
+    if (!IsWindowVisible(hWnd)) return false;
+    if (g_hTaskbarWnd && hWnd == g_hTaskbarWnd) return false;
+    return true;
+}
+
+struct ApplyOpacityCtx {
+    DWORD pid = 0;
+    double opacity01 = 1.0;
+    const OpacityConfig* cfg = nullptr;
+};
+
+static BOOL CALLBACK EnumWindowsApplyOpacityProc(HWND hWnd, LPARAM lp) {
+    auto* ctx = reinterpret_cast<ApplyOpacityCtx*>(lp);
+    if (!ctx || !ctx->cfg) return TRUE;
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != ctx->pid) return TRUE;
+
+    if (!IsEligibleOpacityTarget(hWnd)) return TRUE;
+
+    SetOpacity(hWnd, ctx->opacity01, ctx->cfg->forceLayered);
+    return TRUE;
+}
+
+static void ChangeOpacityActive(double delta, const OpacityConfig& cfg) {
+    HWND h = GetActiveTopLevelWindow();
+    if (!h) return;
+
+    double cur = GetOpacity(h);
+    double next = cur + delta;
+
+    if (next < cfg.min) next = cfg.min;
+    if (next > cfg.max) next = cfg.max;
+
+    if (!cfg.applyToApp) {
+        SetOpacity(h, next, cfg.forceLayered);
+        return;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (!pid) return;
+
+    ApplyOpacityCtx ctx;
+    ctx.pid = pid;
+    ctx.opacity01 = next;
+    ctx.cfg = &cfg;
+
+    EnumWindows(EnumWindowsApplyOpacityProc, reinterpret_cast<LPARAM>(&ctx));
+}
+
+static void OpacityUpActive(const OpacityConfig& cfg)   { ChangeOpacityActive(+cfg.step, cfg); }
+static void OpacityDownActive(const OpacityConfig& cfg) { ChangeOpacityActive(-cfg.step, cfg); }
+
+// ===================== Virtual key press parsing stays same =====================
 
 std::vector<int> ParseVirtualKeypressSetting(const std::wstring& args) {
     std::vector<int> keys;
@@ -1438,6 +1634,9 @@ std::optional<HotkeyActionType> TryParseActionType(const std::wstring& actionNam
         {L"ACTION_MEDIA_PLAY_PAUSE", HotkeyActionType::MediaPlayPause},
         {L"ACTION_MEDIA_NEXT", HotkeyActionType::MediaNext},
         {L"ACTION_MEDIA_PREV", HotkeyActionType::MediaPrev},
+        {L"ACTION_TOGGLE_ALWAYSONTOP_ACTIVE", HotkeyActionType::ToggleAlwaysOnTopActive},
+        {L"ACTION_OPACITY_UP_ACTIVE", HotkeyActionType::OpacityUpActive},
+        {L"ACTION_OPACITY_DOWN_ACTIVE", HotkeyActionType::OpacityDownActive},
     };
 
     auto it = actionMap.find(key);
@@ -1465,6 +1664,9 @@ const wchar_t* ActionTypeToString(HotkeyActionType actionType) {
         case HotkeyActionType::MediaPlayPause: return L"MediaPlayPause";
         case HotkeyActionType::MediaNext: return L"MediaNext";
         case HotkeyActionType::MediaPrev: return L"MediaPrev";
+        case HotkeyActionType::ToggleAlwaysOnTopActive: return L"ToggleAlwaysOnTopActive";
+        case HotkeyActionType::OpacityUpActive: return L"OpacityUpActive";
+        case HotkeyActionType::OpacityDownActive: return L"OpacityDownActive";
     }
     return L"Unknown";
 }
@@ -1562,6 +1764,22 @@ bool TryBuildActionExecutor(HotkeyActionType actionType,
         case HotkeyActionType::MediaPrev:
             executorOut = []() { MediaPrev(); };
             return true;
+
+        case HotkeyActionType::ToggleAlwaysOnTopActive:
+            executorOut = []() { ToggleAlwaysOnTopActive(); };
+            return true;
+
+        case HotkeyActionType::OpacityUpActive: {
+            const OpacityConfig cfg = ParseOpacityArgs_NoEquals(args);
+            executorOut = [cfg]() { OpacityUpActive(cfg); };
+            return true;
+        }
+
+        case HotkeyActionType::OpacityDownActive: {
+            const OpacityConfig cfg = ParseOpacityArgs_NoEquals(args);
+            executorOut = [cfg]() { OpacityDownActive(cfg); };
+            return true;
+        }
     }
 
     errorOut = L"Unknown action type";
@@ -1593,7 +1811,6 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
 
         bool anyIdMatch = false;
         bool executed = false;
-
         for (const auto& action : g_settings.hotkeyActions) {
             if (!action.registered) {
                 continue;
@@ -1601,7 +1818,6 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
             if (action.hotkeyId != hotkeyId) {
                 continue;
             }
-
             anyIdMatch = true;
 
             if (action.zone != zone) {
@@ -2035,5 +2251,4 @@ void Wh_ModSettingsChanged() {
         SendMessage(g_hTaskbarWnd, g_hotkeyRegisteredMsg, HOTKEY_REGISTER, 0);
     }
 }
-
-#pragma endregion  // windhawk_exports
+#pragma endregion // windhawk_exports
