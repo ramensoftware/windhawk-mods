@@ -9627,7 +9627,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1771190675000,
+                "updated": 1771368527000,
                 "users": 47
             },
             "metadata": {
@@ -9642,9 +9642,9 @@
                 "include": [
                     "winlogon.exe"
                 ],
-                "name": "Old Login Fade",
+                "name": "Old Logon Fade",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "win7-style-uac-dim": {
