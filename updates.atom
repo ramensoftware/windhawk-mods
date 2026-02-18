@@ -2,12 +2,52 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-17T22:48:47.000Z</updated>
+    <updated>2026-02-18T00:53:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Magnifier Headless Mode 1.0]]></title>
+        <id>https://windhawk.net/mods/magnifier-headless#90157decb7b9647ae233e9e2994a95c8ad417bb3</id>
+        <link href="https://windhawk.net/mods/magnifier-headless"/>
+        <updated>2026-02-18T00:53:38.000Z</updated>
+        <content type="html"><![CDATA[<p>refactor: Remove over-engineering and fix Windhawk compliance issues</p>
+<ul>
+<li>Remove 7 unnecessary API hooks (<code>AnimateWindow</code>, <code>BringWindowToTop</code>,
+<code>SetForegroundWindow</code>, <code>UpdateLayeredWindow</code>, <code>SetLayeredWindowAttributes</code>,
+<code>SetWindowRgn</code>, <code>DwmSetWindowAttribute</code>) — the 4 core hooks
+(<code>CreateWindowExW</code>, <code>ShowWindow</code>, <code>SetWindowPos</code>, <code>SetWindowLongPtrW</code>) fully
+cover all window visibility paths for Magnify.exe</li>
+<li>Remove <code>CallWndProc</code> hook + window subclassing infrastructure (150+ lines)
+that duplicated what the API hooks already handle</li>
+<li>Remove LRU cache (16-entry tick-based eviction for a process with ~5
+windows)</li>
+<li>Remove Safe wrapper functions with retry mechanisms (<code>SafeSetParent Sleep+retry</code>, <code>SafeSetWindowLongPtrW</code>, <code>SafeGetClassName</code>, <code>SafeIsWindow</code>)</li>
+<li>Remove <code>AutoCriticalSection</code> class and CRITICAL_SECTION — no longer needed without subclassing or cache</li>
+<li>Remove <code>CSpNotify</code> and <code>MSCTFIME</code> from <code>IsMagnifierWindow</code> detection — these are system-wide accessibility/IME windows, hiding them breaks accessibility features in an accessibility tool</li>
+<li>Remove GDI+ helper window detection — not Magnifier-specific</li>
+<li>Remove MSVC-only #pragma comment(lib) — Windhawk uses Clang/mingw-w64</li>
+<li>Remove redundant #include directives (<code>windhawk_api.h</code> is auto-included)</li>
+<li>Remove <code>@compilerOptions -lcomctl32</code> (only needed for removed subclassing)</li>
+<li>Fix <code>EnumWindows</code> to scope to current process only via <code>GetCurrentProcessId</code></li>
+<li>Rewrite <code>WindhawkModReadme</code> section to be user-focused instead of implementation docs</li>
+<li>Bump version to 1.0</li>
+</ul>
+<p>fix: Hide Magnifier Touch window from Alt+Tab
+The touch overlay was still appearing in Alt+Tab because <code>ShowWindow_Hook</code> was letting show commands pass through for touch overlay windows.</p>
+<ul>
+<li><code>ShowWindow_Hook</code> blocks show commands for touch overlays (same as magnifier)</li>
+<li><code>SetWindowPos_Hook</code> adds <code>SWP_HIDEWINDOW</code> flag for touch overlays</li>
+<li><code>CreateWindowExW_Hook</code> calls <code>ShowWindow</code> (<code>SW_HIDE</code>) after creating touch overlay</li>
+<li><code>CreateWindowExW_Hook</code> strips <code>WS_VISIBLE</code> from touch overlay before creation</li>
+</ul>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Old Logon Fade 1.1]]></title>
         <id>https://windhawk.net/mods/win7-login-fade#407aa7889e7c75d5eca0310b16dfc82055846d1a</id>
@@ -536,19 +576,6 @@ over it.</p>
         <author>
             <name>Bo0ii</name>
             <uri>https://github.com/Bo0ii</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide custom activation area 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-custom-activation-area#dc75ec6a3d28698d3b605f12582e0286c0f1588d</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-custom-activation-area"/>
-        <updated>2026-02-13T19:26:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarautohidecustomactivationarea">Taskbar auto-hide custom activation area</h1>
-<p>Customize the taskbar auto-hide activation area, allowing to limit mouse
-unhiding to specific regions.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
