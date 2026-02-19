@@ -73,7 +73,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           deploy_dir="${{ runner.temp }}/last_deploy"
-          robocopy . "$deploy_dir" /MIR /XD .git /R:3 /W:5
+          git --git-dir="$deploy_dir/.git" --work-tree=. add -A
           touch "$deploy_dir/.nojekyll"
           git -C "$deploy_dir" add -A
           git -C "$deploy_dir" diff --cached --quiet || git -C "$deploy_dir" commit -m "deploy: $(git rev-parse HEAD)"
