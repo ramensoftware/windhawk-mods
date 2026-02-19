@@ -70,9 +70,9 @@ jobs:
           python scripts/archive_mod_images.py
       - name: Deploy
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
           deploy_dir="${{ runner.temp }}/last_deploy"
+          git -C "$deploy_dir" config user.name 'github-actions[bot]'
+          git -C "$deploy_dir" config user.email 'github-actions[bot]@users.noreply.github.com'
           touch .nojekyll
           git --git-dir="$deploy_dir/.git" --work-tree=. add -A
           git -C "$deploy_dir" diff --cached --quiet || git -C "$deploy_dir" commit -m "deploy: $(git rev-parse HEAD)"
