@@ -7341,7 +7341,7 @@
                     517
                 ],
                 "ratingUsers": 629,
-                "updated": 1767122451000,
+                "updated": 1771542639000,
                 "users": 48674
             },
             "metadata": {
@@ -7356,7 +7356,7 @@
                     "explorer.exe"
                 ],
                 "name": "Taskbar Dock Animation",
-                "version": "1.7"
+                "version": "1.9.2"
             }
         },
         "taskbar-empty-space-clicks": {

@@ -7341,7 +7341,7 @@
                     517
                 ],
                 "ratingUsers": 629,
-                "updated": 1767122451000,
+                "updated": 1771542639000,
                 "users": 48674
             },
             "metadata": {
@@ -7350,13 +7350,13 @@
                 ],
                 "author": "Ph0en1x-dev",
                 "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luser32",
-                "description": "Animates taskbar icons on mouse hover like in macOS",
+                "description": "macOS のように、マウスホバーでタスクバーアイコンをアニメーション表示します",
                 "github": "https://github.com/Ph0en1x-dev",
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Taskbar Dock Animation",
-                "version": "1.7"
+                "name": "タスクバー Dock アニメーション",
+                "version": "1.9.2"
             }
         },
         "taskbar-empty-space-clicks": {

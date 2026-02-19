@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-19T05:44:47.000Z</updated>
+    <updated>2026-02-19T23:10:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Dock Animation 1.9.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-dock-animation#d23ad55f18703e56934a130555304dbdb78b4dee</id>
+        <link href="https://windhawk.net/mods/taskbar-dock-animation"/>
+        <updated>2026-02-19T23:10:39.000Z</updated>
+        <content type="html"><![CDATA[<p>Added an option to disable animation for system taskbar buttons (Start, Widgets, Task View, Search).</p>
+<p>Added multilingual support.</p>
+<p>Added a smoothing (lerp) setting for the animation (not to be confused with the animation curve types).</p>
+<p>Added dirty-checking to prevent expensive repeated scans of the Windows UI element tree.</p>]]></content>
+        <author>
+            <name>Ph0en1x-dev</name>
+            <uri>https://github.com/Ph0en1x-dev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 1.8]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#95b4e5915b916a947210f4b89c88e15674d81f25</id>
@@ -586,20 +600,6 @@ icon restoration code integrated, so you don't need to use both mods together.</
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with the classic Start menu in some cases.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray auto-hide (show on hover) 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-show-on-hover#cf80b958c9c974090ce99d1da49af302b5e614ba</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-show-on-hover"/>
-        <updated>2026-02-14T00:20:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbartrayautohideshowonhover">Taskbar tray auto-hide (show on hover)</h1>
-<p>Hide the taskbar tray area when not in use, and show it when hovering the mouse
-over it.</p>
-<p><img src="https://i.imgur.com/uGReVFB.gif" alt="Demonstration" /></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

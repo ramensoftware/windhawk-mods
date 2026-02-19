@@ -1,3 +1,13 @@
+## 1.9.2 ([Feb 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d23ad55f18703e56934a130555304dbdb78b4dee/mods/taskbar-dock-animation.wh.cpp))
+
+Added an option to disable animation for system taskbar buttons (Start, Widgets, Task View, Search).
+
+Added multilingual support.
+
+Added a smoothing (lerp) setting for the animation (not to be confused with the animation curve types).
+
+Added dirty-checking to prevent expensive repeated scans of the Windows UI element tree.
+
 ## 1.7 ([Dec 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e02578f8da0413422830baa6b5c0934d6446b1f4/mods/taskbar-dock-animation.wh.cpp))
 
 * Expanded Taskbar Support: Added support for vertical and top-aligned taskbars.

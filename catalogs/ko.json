@@ -7341,7 +7341,7 @@
                     517
                 ],
                 "ratingUsers": 629,
-                "updated": 1767122451000,
+                "updated": 1771542639000,
                 "users": 48674
             },
             "metadata": {
@@ -7350,13 +7350,13 @@
                 ],
                 "author": "Ph0en1x-dev",
                 "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luser32",
-                "description": "Animates taskbar icons on mouse hover like in macOS",
+                "description": "macOS처럼 마우스를 올리면 작업 표시줄 아이콘이 애니메이션됩니다",
                 "github": "https://github.com/Ph0en1x-dev",
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Taskbar Dock Animation",
-                "version": "1.7"
+                "name": "작업 표시줄 Dock 애니메이션",
+                "version": "1.9.2"
             }
         },
         "taskbar-empty-space-clicks": {
