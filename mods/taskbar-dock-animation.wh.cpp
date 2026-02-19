@@ -1465,14 +1465,23 @@ void Wh_ModBeforeUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L"DockAnimation: Settings changed.");
     LoadSettings();
-    try {
-        for (auto& pair : g_contexts) {
-            auto& ctx = pair.second;
-            ResetAllIconScales(ctx.icons);
-            ctx.isInitialized = false;
-            ctx.icons.clear();
-        }
-        g_isBouncing = false;
-    } catch (...) {
+
+    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+    if (hTaskbar) {
+        RunFromWindowThread(
+            hTaskbar,
+            [](PVOID) {
+                try {
+                    for (auto& pair : g_contexts) {
+                        auto& ctx = pair.second;
+                        ResetAllIconScales(ctx.icons);
+                        ctx.isInitialized = false;
+                        ctx.icons.clear();
+                    }
+                    g_isBouncing = false;
+                } catch (...) {}
+            },
+            nullptr);
     }
 }
+
