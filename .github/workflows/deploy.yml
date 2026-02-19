@@ -70,10 +70,19 @@ jobs:
           python scripts/archive_mod_images.py
       - name: Deploy
         run: |
+          src_dir=.
           deploy_dir="${{ runner.temp }}/last_deploy"
-          git -C "$deploy_dir" config user.name 'github-actions[bot]'
-          git -C "$deploy_dir" config user.email 'github-actions[bot]@users.noreply.github.com'
-          touch .nojekyll
-          git --git-dir="$deploy_dir/.git" --work-tree=. add -A
-          git -C "$deploy_dir" diff --cached --quiet || git -C "$deploy_dir" commit -m "deploy: $(git rev-parse HEAD)"
-          git -C "$deploy_dir" push origin pages
+          deploy_branch=pages
+
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          # echo Cloning the repository
+          # git clone --branch $deploy_branch --single-branch --depth 1 --no-checkout https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "$deploy_dir"
+          echo Adding generated files to the repository
+          git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" add -A
+          touch "$deploy_dir/.nojekyll"
+          git -C "$deploy_dir" add .nojekyll
+          echo Committing changes
+          git -C "$deploy_dir" diff --cached --quiet || git -C "$deploy_dir" commit -m "deploy: $(git -C "$src_dir" rev-parse HEAD)"
+          echo Pushing to GitHub
+          git -C "$deploy_dir" push origin $deploy_branch
