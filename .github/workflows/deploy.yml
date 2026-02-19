@@ -74,7 +74,7 @@ jobs:
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           deploy_dir="${{ runner.temp }}/last_deploy"
           git -C "$deploy_dir" rm -rf .
-          cp -r . "$deploy_dir"
+          rsync -a . "$deploy_dir" --exclude .git
           touch "$deploy_dir/.nojekyll"
           git -C "$deploy_dir" add -A
           git -C "$deploy_dir" diff --cached --quiet || git -C "$deploy_dir" commit -m "deploy: $(git rev-parse HEAD)"
