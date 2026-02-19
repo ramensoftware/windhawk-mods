@@ -4,6 +4,7 @@
 // @description     Resolves file picker crashes in Notepad & RegEdit when ExplorerPatcher is installed
 // @version         1.0
 // @author          Kitsune
+// @github          https://github.com/AromaKitsune
 // @include         notepad.exe
 // @include         regedit.exe
 // @compilerOptions -lntdll
