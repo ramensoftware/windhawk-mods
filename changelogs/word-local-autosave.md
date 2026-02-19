@@ -1,3 +1,37 @@
+## 1.8 ([Feb 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/95b4e5915b916a947210f4b89c88e15674d81f25/mods/word-local-autosave.wh.cpp))
+
+- Version bumped to 1.8
+- **Fixed dead code**: Ctrl+Shift+Z check was unreachable - now Ctrl+Z handles both undo and redo (with/without Shift)
+- **Fixed data loss**: `minTimeBetweenSaves` skip no longer loses changes - now calculates remaining time and schedules deferred save
+- **Fixed crash risk**: Hook now returns TRUE instead of FALSE when `g_originalTranslateMessage` is null
+- **Fixed race condition**: `Wh_ModSettingsChanged()` now calls `ResetAllTimers()` before loading new settings
+- **Removed unused variable**: `g_initialized` was declared but never used
+- **Added navigation keys check**: Home, End, Page Up (VK_PRIOR), Page Down (VK_NEXT)
+- **Removed redundant checks**: Eliminated double `AreAnyKeysPressed()` calls in TrySave → SendCtrlS flow
+- **Added upper limit for `minTimeBetweenSaves`**: MAX_MIN_TIME_BETWEEN_SAVES = 300000 (5 minutes)
+- **Changed `ScheduleRetry()` return type**: Now returns void instead of ignored bool
+- **Fixed `Wh_ModUninit()`**: Now properly resets `g_retryCount` via `ResetAllTimers()`
+- **Added `IS_KEY_PRESSED()` macro**: Replaced 40+ occurrences of `0x8000` magic number
+- **Added `ResetAllTimers()` helper**: Unified function for killing all timers and resetting state
+- **Increased quiet period**: 400ms → 500ms for better safety margin
+- **Implemented atomic Ctrl+S sending**: Safety checks between each keystroke to prevent race conditions
+- **Added critical key check after Ctrl press**:
+  - All letters A-Z (prevents Ctrl+B/I/U/E/L/R/J/A/N/O/P/W, etc.)
+  - All numbers 0-9 (prevents Ctrl+1/2/5 line spacing)
+  - Shift key (prevents Ctrl+Shift+S Apply Styles)
+  - Alt key (prevents Ctrl+Alt combinations)
+  - Bracket keys [ ] (prevents Ctrl+[/] font size change)
+  - Function keys F1-F12
+- **Added `SendSingleKey()` helper**: Granular keystroke control
+- **Added `ReleaseCtrl()` cleanup**: Properly releases Ctrl on abort
+- **Expanded `AreAnyKeysPressed()` with 85+ keys**:
+  - Left/Right Shift, Ctrl, Alt variants
+  - Caps Lock, Scroll Lock, Num Lock
+  - Print Screen, Pause/Break, Context Menu
+  - F13-F24 extended function keys
+  - All media keys (Volume, Play/Pause, etc.)
+  - All browser keys (Back, Forward, Refresh, etc.)
+
 ## 1.7 ([Jan 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2e20ba2ff622362ea8165a3ec4852aeffdfaf51f/mods/word-local-autosave.wh.cpp))
 
 - Fixed accidental text alignment changes (Ctrl+L/E/R/J) caused by race condition

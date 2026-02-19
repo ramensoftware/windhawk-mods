@@ -1,0 +1,79 @@
+name: Deploy static content
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '2 0 * * *'
+
+concurrency:
+  group: deploy-static-content
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: '1'
+
+jobs:
+  run:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+          cache-dependency-path: '.github/requirements.txt'
+      - name: Install Python dependencies
+        run: python -m pip install -r .github/requirements.txt
+      - name: Clone last deployed content
+        run: |
+          git clone --depth 1 --single-branch --branch pages https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
+      - name: Cache Windhawk
+        id: cache-windhawk
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/windhawk
+          key: v1-${{ runner.os }}-1.7.3
+      - name: Extract Windhawk
+        if: steps.cache-windhawk.outputs.cache-hit != 'true'
+        run: |
+          installer_url="https://github.com/ramensoftware/windhawk/releases/download/v1.7.3/windhawk_setup.exe"
+          installer_path="${{ runner.temp }}/windhawk_setup.exe"
+          echo "Downloading $installer_url to $installer_path"
+          curl -L "$installer_url" -o "$installer_path"
+
+          extract_path="${{ runner.temp }}\windhawk"
+          echo "Extracting $installer_path to $extract_path"
+          MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
+      - name: Install dependencies
+        run: npm install
+      - name: Prepare static content
+        run: npx tsx deploy.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WINDHAWK_MODS_LAST_DEPLOY_PATH: ${{ runner.temp }}\last_deploy
+          WINDHAWK_PATH: ${{ runner.temp }}\windhawk
+      - name: Archive mod images
+        run: |
+          # Copy last deployed images.
+          cp -R "${{ runner.temp }}/last_deploy/images" images
+          # Archive new images.
+          python scripts/archive_mod_images.py
+      - name: Deploy
+        run: |
+          deploy_dir="${{ runner.temp }}/last_deploy"
+          git -C "$deploy_dir" config user.name 'github-actions[bot]'
+          git -C "$deploy_dir" config user.email 'github-actions[bot]@users.noreply.github.com'
+          touch .nojekyll
+          git --git-dir="$deploy_dir/.git" --work-tree=. add -A
+          git -C "$deploy_dir" diff --cached --quiet || git -C "$deploy_dir" commit -m "deploy: $(git rev-parse HEAD)"
+          git -C "$deploy_dir" push origin pages

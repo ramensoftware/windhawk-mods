@@ -1,0 +1,80 @@
+name: Mod compatibility check
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+env:
+  PYTHONUTF8: '1'
+
+jobs:
+  run:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [
+          # '1.4.1',
+          # '1.5',  # Same compiler as 1.5.1.
+          '1.5.1',
+          # '1.6', # Same compiler as 1.6.1.
+          '1.6.1',
+          '1.7.3',
+        ]
+        # exclude:
+        #   # Exclude 1.4.1, which is quite old, for everyone but m417z.
+        #   - version: ${{ (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'm417z') && '1.4.1' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Cache Windhawk
+        id: cache-windhawk
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/windhawk
+          key: v1-${{ runner.os }}-${{ matrix.version }}
+      - name: Extract Windhawk
+        if: steps.cache-windhawk.outputs.cache-hit != 'true'
+        run: |
+          installer_url="https://github.com/ramensoftware/windhawk/releases/download/v${{ matrix.version }}/windhawk_setup.exe"
+          installer_path="${{ runner.temp }}/windhawk_setup.exe"
+          echo "Downloading $installer_url to $installer_path"
+          curl -L "$installer_url" -o "$installer_path"
+
+          extract_path="${{ runner.temp }}\windhawk"
+          echo "Extracting $installer_path to $extract_path"
+          MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
+      - name: Get changed files
+        if: github.event_name == 'pull_request'
+        id: changed-files
+        uses: tj-actions/changed-files@v47
+      - name: Compile mod
+        if: github.event_name == 'pull_request'
+        env:
+          ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
+          MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
+          ALL_CHANGED_AND_MODIFIED_FILES: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
+          ALL_CHANGED_AND_MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.all_changed_and_modified_files_count }}
+        run: |
+          a=ADDED_FILES_COUNT
+          b=MODIFIED_FILES_COUNT
+          c=ALL_CHANGED_AND_MODIFIED_FILES_COUNT
+          if [[ ( ($a -eq 0 && $b -eq 1) || ($a -eq 1 && $b -eq 0) ) && $c -eq 1 ]]; then
+            echo "Compiling $ALL_CHANGED_AND_MODIFIED_FILES"
+            windhawk_path="${{ runner.temp }}\windhawk"
+            python -u scripts/compile_mod.py -w "$windhawk_path" \
+              -f "$ALL_CHANGED_AND_MODIFIED_FILES" \
+              -o32 "${{ runner.temp }}\mod_32.dll" \
+              -o64 "${{ runner.temp }}\mod_64.dll" \
+              -oarm64 "${{ runner.temp }}\mod_arm64.dll"
+          fi

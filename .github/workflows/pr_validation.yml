@@ -1,0 +1,43 @@
+name: PR mod validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  PYTHONUTF8: '1'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    name: Test changed files
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v47
+        with:
+          json: true
+
+          # Per example from the readme: set to false because we are using an
+          # environment variable to store the output and avoid command
+          # injection.
+          escape_json: false
+
+      - name: Validate the changes
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
+          MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
+          ALL_CHANGED_AND_MODIFIED_FILES: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
+          ALL_CHANGED_AND_MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.all_changed_and_modified_files_count }}
+        run: |
+          python .github/pr_validation.py
