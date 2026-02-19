@@ -73,8 +73,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           deploy_dir="${{ runner.temp }}/last_deploy"
+          touch .nojekyll
           git --git-dir="$deploy_dir/.git" --work-tree=. add -A
-          touch "$deploy_dir/.nojekyll"
-          git -C "$deploy_dir" add -A
           git -C "$deploy_dir" diff --cached --quiet || git -C "$deploy_dir" commit -m "deploy: $(git rev-parse HEAD)"
           git -C "$deploy_dir" push origin pages
