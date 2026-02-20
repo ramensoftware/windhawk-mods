@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              window-opacity
 // @name            Window Opacity
-// @description     Set any window's transparency with global hotkeys: Modifier+1 (10%) through Modifier+9 (90%), Modifier+0 resets to 100%
-// @version         0.0.1
+// @description     Set any window's transparency with global hotkeys: Modifier+1-9 for 10-90%, Modifier+0 resets, Modifier+Plus/Minus to cycle
+// @version         0.1.0
 // @author          Jogai
 // @github          https://github.com/Jogai
 // @homepage        https://www.scott-software.nl/
@@ -22,8 +22,25 @@ Control any window's transparency with global keyboard shortcuts.
 - **Modifier+1** through **Modifier+9**: Sets the foreground window to
   10%–90% opacity
 - **Modifier+0**: Resets the foreground window to 100% (fully opaque)
+- **Modifier+Minus (-)**: Decreases opacity by 10% (more transparent)
+- **Modifier+Equals (=)**: Increases opacity by 10% (more visible)
 
 The default modifier is **Ctrl+Alt**. You can change it in the mod settings.
+
+The Minus/Equals cycling hotkeys are disabled by default. Enable them in the
+settings by choosing a key pair (Minus/Equals or Page Up/Page Down).
+
+## Keyboard layout
+
+The hotkeys follow the number row so the layout is intuitive:
+
+| `1` | `2` | `3` | `4` | `5` | `6` | `7` | `8` | `9` | `0` | `-` | `=` |
+|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
+| 10% | 20% | 30% | 40% | 50% | 60% | 70% | 80% | 90% | Reset | Step - | Step + |
+
+The `0`, `-` and `=` keys sit right next to each other at the end of the
+number row, giving you quick access to reset and fine-tune without having to
+remember a specific number.
 
 ## How it works
 
@@ -60,6 +77,15 @@ disabled or unloaded.
   - win_alt: Win+Alt
   - win_ctrl: Win+Ctrl
   - win_shift: Win+Shift
+- CycleKeys: none
+  $name: Cycle opacity keys
+  $description: >-
+    Key pair used with the modifier to cycle opacity up/down by 10%.
+    Set to Disabled to not register any cycling hotkeys.
+  $options:
+  - none: Disabled
+  - minus_equals: Minus (-) / Equals (=)
+  - pageupdown: Page Up / Page Down
 */
 // ==/WindhawkModSettings==
 
@@ -83,9 +109,11 @@ disabled or unloaded.
 
 static HWND g_hTaskbarWnd = nullptr;
 
-// Unique base ID for our 10 hotkeys (keys 0-9).
-static const int kHotkeyIdBase = 0x574F4800;  // "WOH\0"
-static const int kHotkeyCount = 10;
+// Unique base ID for our hotkeys.
+static const int kHotkeyIdBase = 0x574F4800;       // "WOH\0"
+static const int kHotkeyCount = 10;                 // keys 0-9
+static const int kHotkeyIdPlus = 0x574F480A;        // kHotkeyIdBase + 10
+static const int kHotkeyIdMinus = 0x574F480B;       // kHotkeyIdBase + 11
 
 // Custom window messages for cross-thread hotkey management.
 static UINT g_registerMsg =
@@ -102,6 +130,10 @@ static std::unordered_map<HWND, bool> g_modifiedWindows;
 // Current modifier flags parsed from settings.
 static UINT g_currentModifiers = MOD_CONTROL | MOD_ALT;
 
+// VK codes for cycle-up and cycle-down keys (0 = disabled).
+static UINT g_cycleUpVk = 0;
+static UINT g_cycleDownVk = 0;
+
 // =====================================================================
 // Settings
 // =====================================================================
@@ -116,11 +148,30 @@ static UINT ParseModifier(const wchar_t* value) {
     return MOD_CONTROL | MOD_ALT;
 }
 
+static void ParseCycleKeys(const wchar_t* value, UINT* upVk, UINT* downVk) {
+    if (wcscmp(value, L"minus_equals") == 0) {
+        *upVk = VK_OEM_PLUS;    // =/+ key (increase opacity)
+        *downVk = VK_OEM_MINUS; // -/_ key (decrease opacity)
+    } else if (wcscmp(value, L"pageupdown") == 0) {
+        *upVk = VK_PRIOR;      // Page Up
+        *downVk = VK_NEXT;     // Page Down
+    } else {
+        *upVk = 0;
+        *downVk = 0;
+    }
+}
+
 static void LoadSettings() {
     WindhawkUtils::StringSetting modifier =
         WindhawkUtils::StringSetting::make(L"Modifier");
     g_currentModifiers = ParseModifier(modifier.get());
-    Wh_Log(L"Loaded modifier: 0x%X", g_currentModifiers);
+
+    WindhawkUtils::StringSetting cycleKeys =
+        WindhawkUtils::StringSetting::make(L"CycleKeys");
+    ParseCycleKeys(cycleKeys.get(), &g_cycleUpVk, &g_cycleDownVk);
+
+    Wh_Log(L"Loaded modifier: 0x%X, cycle up VK: 0x%X, cycle down VK: 0x%X",
+           g_currentModifiers, g_cycleUpVk, g_cycleDownVk);
 }
 
 // =====================================================================
@@ -139,12 +190,33 @@ static void RegisterHotkeys(HWND hWnd) {
                    i, GetLastError());
         }
     }
+
+    if (g_cycleUpVk) {
+        if (RegisterHotKey(hWnd, kHotkeyIdPlus,
+                           g_currentModifiers | MOD_NOREPEAT, g_cycleUpVk)) {
+            Wh_Log(L"Registered cycle-up hotkey (VK=0x%X)", g_cycleUpVk);
+        } else {
+            Wh_Log(L"Failed to register cycle-up hotkey (error=%lu)",
+                   GetLastError());
+        }
+    }
+    if (g_cycleDownVk) {
+        if (RegisterHotKey(hWnd, kHotkeyIdMinus,
+                           g_currentModifiers | MOD_NOREPEAT, g_cycleDownVk)) {
+            Wh_Log(L"Registered cycle-down hotkey (VK=0x%X)", g_cycleDownVk);
+        } else {
+            Wh_Log(L"Failed to register cycle-down hotkey (error=%lu)",
+                   GetLastError());
+        }
+    }
 }
 
 static void UnregisterHotkeys(HWND hWnd) {
     for (int i = 0; i < kHotkeyCount; i++) {
         UnregisterHotKey(hWnd, kHotkeyIdBase + i);
     }
+    UnregisterHotKey(hWnd, kHotkeyIdPlus);
+    UnregisterHotKey(hWnd, kHotkeyIdMinus);
 }
 
 // =====================================================================
@@ -232,6 +304,51 @@ static void ApplyOpacity(int digitKey) {
     }
 }
 
+static void CycleOpacity(bool increase) {
+    HWND hwnd = GetForegroundWindow();
+
+    if (ShouldExcludeWindow(hwnd)) {
+        Wh_Log(L"Excluded window %p", hwnd);
+        return;
+    }
+
+    if (UsesColorKey(hwnd)) {
+        Wh_Log(L"Window %p uses LWA_COLORKEY, skipping", hwnd);
+        return;
+    }
+
+    LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    bool isLayered = (exStyle & WS_EX_LAYERED) != 0;
+
+    // Determine current opacity step (1-10, where 10 = fully opaque).
+    int currentStep = 10;
+    if (isLayered) {
+        BYTE bAlpha = 255;
+        DWORD dwFlags = 0;
+        if (GetLayeredWindowAttributes(hwnd, nullptr, &bAlpha, &dwFlags) &&
+            (dwFlags & LWA_ALPHA)) {
+            // Round to nearest 10% step.
+            currentStep = (bAlpha * 10 + 127) / 255;
+            if (currentStep < 1) currentStep = 1;
+            if (currentStep > 10) currentStep = 10;
+        }
+    }
+
+    int newStep = increase ? currentStep + 1 : currentStep - 1;
+    if (newStep > 10) newStep = 10;
+    if (newStep < 1) newStep = 1;
+
+    if (newStep == currentStep) return;
+
+    if (newStep == 10) {
+        // Restore to fully opaque -- reuse digit-0 logic.
+        ApplyOpacity(0);
+    } else {
+        // Reuse digit logic: step N maps to digit N.
+        ApplyOpacity(newStep);
+    }
+}
+
 static void RestoreAllWindows() {
     for (auto& [hwnd, originallyLayered] : g_modifiedWindows) {
         if (!IsWindow(hwnd))
@@ -263,6 +380,14 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
             int digitKey = hotkeyId - kHotkeyIdBase;
             if (digitKey >= 0 && digitKey <= 9) {
                 ApplyOpacity(digitKey);
+                return 0;
+            }
+            if (hotkeyId == kHotkeyIdPlus) {
+                CycleOpacity(true);
+                return 0;
+            }
+            if (hotkeyId == kHotkeyIdMinus) {
+                CycleOpacity(false);
                 return 0;
             }
             break;
