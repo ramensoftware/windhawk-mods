@@ -15,7 +15,7 @@
 /*
 # Windows 7 Style UAC Window Positioning
 * Make UAC windows positioned on top of the parent window, just like in Windows 7 and Vista, even in the secure desktop, instead of being centered on the screen as in Windows 8 and later.
-* Currently, this mod is only compatible with the classic UAC! If you are using Windows 10 or later, restore the old one with [this NTMU pack](https://get-ntmu.github.io/#!/pack/classicuac) first. The new modern XAML-based UAC is much more difficult to mod and may require a completely different approach, so I have no plans to support it for now.
+* **Currently, this mod is only compatible with the classic UAC!** If you are using Windows 10 or later, restore the old one with [this NTMU pack](https://get-ntmu.github.io/#!/pack/classicuac) first. The new modern XAML-based UAC is much more difficult to mod and may require a completely different approach, so I have no plans to support it for now.
 * It is highly recommended to use this mod together with [Windows 7 Style UAC Dim](https://windhawk.net/mods/win7-style-uac-dim) for the best experience.
 */
 // ==/WindhawkModReadme==
