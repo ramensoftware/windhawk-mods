@@ -9677,6 +9677,38 @@
                 "version": "1.0.1"
             }
         },
+        "win7-style-uac-pos": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771700383000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771700383000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Ingan121",
+                "description": "Make UAC windows show on top of parent window",
+                "github": "https://github.com/Ingan121",
+                "homepage": "https://www.ingan121.com/",
+                "include": [
+                    "consent.exe"
+                ],
+                "name": "Windows 7 Style UAC Window Positioning",
+                "twitter": "https://twitter.com/Ingan121",
+                "version": "0.1"
+            }
+        },
         "win95-nt4-menubars": {
             "details": {
                 "defaultSorting": 504,

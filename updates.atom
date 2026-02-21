@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-21T18:08:26.000Z</updated>
+    <updated>2026-02-21T18:59:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Style UAC Window Positioning 0.1]]></title>
+        <id>https://windhawk.net/mods/win7-style-uac-pos#e83a16e7ef7ab1ee1828dbae13b23accf3b6d4bc</id>
+        <link href="https://windhawk.net/mods/win7-style-uac-pos"/>
+        <updated>2026-02-21T18:59:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7styleuacwindowpositioning">Windows 7 Style UAC Window Positioning</h1>
+<ul>
+<li>Make UAC windows positioned on top of the parent window, just like in Windows 7 and Vista, even in the secure desktop, instead of being centered on the screen as in Windows 8 and later.</li>
+<li><strong>Currently, this mod is only compatible with the classic UAC!</strong> If you are using Windows 10 or later, restore the old one with <a href="https://get-ntmu.github.io/#!/pack/classicuac">this NTMU pack</a> first. The new modern XAML-based UAC is much more difficult to mod and may require a completely different approach, so I have no plans to support it for now.</li>
+<li>It is highly recommended to use this mod together with <a href="https://windhawk.net/mods/win7-style-uac-dim">Windows 7 Style UAC Dim</a> for the best experience.</li>
+</ul>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>In order to use this mod, you must allow Windhawk to inject into the <strong>consent.exe</strong>
+system process. To do so, add it to the process inclusion list in the advanced
+settings. If you do not do this, it will silently fail to inject.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Up → New Window/Tab (Ctrl-click or Middle-click) 1.4]]></title>
         <id>https://windhawk.net/mods/explorer-up-new-window#9a735b7426ce7b619456e4528a9b2fdbe87f20a7</id>
@@ -591,29 +612,6 @@ number when both are configured.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Icon Customizer 0.1]]></title>
-        <id>https://windhawk.net/mods/icon-customizer#50a31f627be5eb196a8a2ba6f57cdde4d1abba35</id>
-        <link href="https://windhawk.net/mods/icon-customizer"/>
-        <updated>2026-02-14T20:31:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="iconcustomizer">Icon Customizer</h1>
-<p>Allows you to override almost 100 Windows icons to anything you like.</p>
-<h2 id="overrideanicon">Override an icon</h2>
-<p>To change an icon, open the mod settings and change the icons you like by entering the path to an ICO, EXE, or DLL file.
-Optionally you can also specify an index, for example:</p>
-<pre><code>C:\Windows\System32\shell32.dll,32
-</code></pre>
-<h2 id="howitworks">How it works</h2>
-<p>This mod adds a hook for <code>SHGetStockIconInfo</code>, which Windows apps call whenever they need to retrieve a stock icon. It then
- checks if the icon for the specified ID is overriden and gives Windows the new icon.</p>
-<h2 id="note">Note</h2>
-<p>This mod will only work on apps that load icons themselves, and will not work on built-in Windows dialogs such as message boxes.
-This is because those dialogs do not utilize the <code>SHGetStockIconInfo</code> function.</p>]]></content>
-        <author>
-            <name>FireBlade</name>
-            <uri>https://github.com/FireBlade211</uri>
         </author>
     </entry>
 </feed>
