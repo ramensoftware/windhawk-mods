@@ -43,6 +43,7 @@ Useful when you want to keep your current folder open while exploring the parent
 #include <UIAutomation.h>
 #include <OleAuto.h>
 #include <string>
+#include <vector>
 #include <atomic>
 
 #ifndef ARRAYSIZE
@@ -296,48 +297,69 @@ static void CtrlN() {
 }
 
 // ---------- Clipboard helpers for New Tab mode ----------
-struct ClipboardBackup {
-    bool hasData;
-    HANDLE hData;
+struct ClipboardFormatData {
     UINT format;
+    HANDLE hData;
+};
+
+struct ClipboardBackup {
+    std::vector<ClipboardFormatData> formats;
 };
 
 static ClipboardBackup BackupClipboard() {
-    ClipboardBackup backup = { false, nullptr, 0 };
-    if (OpenClipboard(nullptr)) {
-        if (IsClipboardFormatAvailable(CF_UNICODETEXT)) {
-            HANDLE hRaw = GetClipboardData(CF_UNICODETEXT);
-            if (hRaw) {
-                size_t size = GlobalSize(hRaw);
-                HANDLE hCopy = GlobalAlloc(GMEM_MOVEABLE, size);
-                if (hCopy) {
-                    void* pSrc = GlobalLock(hRaw);
-                    void* pDst = GlobalLock(hCopy);
-                    if (pSrc && pDst) {
-                        memcpy(pDst, pSrc, size);
-                    }
-                    GlobalUnlock(hCopy);
-                    GlobalUnlock(hRaw);
-                    backup.hasData = true;
-                    backup.hData = hCopy;
-                    backup.format = CF_UNICODETEXT;
-                }
-            }
-        }
-        CloseClipboard();
+    ClipboardBackup backup;
+    if (!OpenClipboard(nullptr)) {
+        return backup;
     }
+
+    UINT format = 0;
+    while ((format = EnumClipboardFormats(format)) != 0) {
+        HANDLE hRaw = GetClipboardData(format);
+        if (!hRaw) continue;
+
+        SIZE_T size = GlobalSize(hRaw);
+        if (size == 0) continue;
+
+        HANDLE hCopy = GlobalAlloc(GMEM_MOVEABLE, size);
+        if (!hCopy) continue;
+
+        void* pSrc = GlobalLock(hRaw);
+        void* pDst = GlobalLock(hCopy);
+        if (pSrc && pDst) {
+            memcpy(pDst, pSrc, size);
+            GlobalUnlock(hCopy);
+            GlobalUnlock(hRaw);
+            backup.formats.push_back({ format, hCopy });
+        } else {
+            GlobalUnlock(hCopy);
+            GlobalUnlock(hRaw);
+            GlobalFree(hCopy);
+        }
+    }
+
+    CloseClipboard();
     return backup;
 }
 
-static void RestoreClipboard(ClipboardBackup backup) {
-    if (!backup.hasData || !backup.hData) return;
+static void RestoreClipboard(ClipboardBackup& backup) {
+    if (backup.formats.empty()) return;
+
     if (OpenClipboard(nullptr)) {
         EmptyClipboard();
-        SetClipboardData(backup.format, backup.hData);
+        for (auto& item : backup.formats) {
+            SetClipboardData(item.format, item.hData);
+            item.hData = nullptr;
+        }
         CloseClipboard();
     } else {
-        GlobalFree(backup.hData);
+        for (auto& item : backup.formats) {
+            if (item.hData) {
+                GlobalFree(item.hData);
+                item.hData = nullptr;
+            }
+        }
     }
+    backup.formats.clear();
 }
 
 static std::wstring ProbeAddressBarWithClipboard(HWND top) {
@@ -484,7 +506,7 @@ static void OpenParentInNewTab(HWND top) {
     // Backup clipboard before we start using it
     ClipboardBackup backup = BackupClipboard();
 
-    // Get current path via clipboard probe
+    // Get current path via clipboard probe (sends Alt+D, Ctrl+C, then reads clipboard)
     std::wstring currentPath = ProbeAddressBarWithClipboard(top);
     if (currentPath.empty()) {
         Wh_Log(L"[err] Failed to get current path");
