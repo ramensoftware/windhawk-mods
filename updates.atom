@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-21T17:52:45.000Z</updated>
+    <updated>2026-02-21T18:08:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Up → New Window/Tab (Ctrl-click or Middle-click) 1.4]]></title>
+        <id>https://windhawk.net/mods/explorer-up-new-window#9a735b7426ce7b619456e4528a9b2fdbe87f20a7</id>
+        <link href="https://windhawk.net/mods/explorer-up-new-window"/>
+        <updated>2026-02-21T18:08:26.000Z</updated>
+        <content type="html"><![CDATA[<p>New feature: Added a setting to open parent in new tab instead of new window</p>]]></content>
+        <author>
+            <name>Tobias Lind</name>
+            <uri>https://github.com/TobbeLino</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Window Opacity 0.1.0]]></title>
         <id>https://windhawk.net/mods/window-opacity#e3e64385b10b0bcaaf1c2c255b35a4848ce23dbb</id>
@@ -603,41 +614,6 @@ This is because those dialogs do not utilize the <code>SHGetStockIconInfo</code>
         <author>
             <name>FireBlade</name>
             <uri>https://github.com/FireBlade211</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore AutoRun Icon in Drive Properties 1.0]]></title>
-        <id>https://windhawk.net/mods/restore-autorun-icon-in-drive-properties#e5f406613139e1f02cee75a96e0d20c4c30f9410</id>
-        <link href="https://windhawk.net/mods/restore-autorun-icon-in-drive-properties"/>
-        <updated>2026-02-14T18:19:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="restoreautoruniconindriveproperties">Restore AutoRun Icon in Drive Properties</h1>
-<p>Since Windows 2000, the drive properties dialog never displays the AutoRun icon
-on the General tab, leaving a blank space.</p>
-<p>This mod restores the AutoRun icon back where it belongs.</p>
-<p>| Before | After |
-| :----: | :---: |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/restore-autorun-icon-in-drive-properties_before.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/restore-autorun-icon-in-drive-properties_after.png" alt="" /> |</p>
-<h2 id="compatibilitywithothermods">Compatibility with other mods</h2>
-<p>Any other mods that hook the <code>DrawPie</code> function will conflict with this mod and
-prevent it from functioning.</p>
-<h3 id="conflictingmods">Conflicting mods</h3>
-<ul>
-<li><a href="https://windhawk.net/mods/disk-usage-bar-in-drive-properties">Disk Usage Bar in Drive Properties</a>
-by me</li>
-<li><a href="https://windhawk.net/mods/disk-pie-chart">Disk Pie Chart</a>
-by <strong>aubymori</strong></li>
-</ul>
-<p><strong>Note:</strong> The "Disk Usage Bar in Drive Properties" mod already has the AutoRun
-icon restoration code integrated, so you don't need to use both mods together.</p>
-<h2 id="supportedwindowsversions">Supported Windows versions</h2>
-<ul>
-<li>Windows 11</li>
-<li>Windows 10</li>
-<li>Windows 8.1</li>
-</ul>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
