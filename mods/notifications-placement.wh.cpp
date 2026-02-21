@@ -2,7 +2,7 @@
 // @id              notifications-placement
 // @name            Customize Windows notifications placement
 // @description     Move notifications to another monitor or another corner of the screen
-// @version         1.2
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -30,6 +30,48 @@ Move notifications to another monitor or another corner of the screen.
 Only Windows 10 64-bit and Windows 11 are supported.
 
 ![Screenshot](https://i.imgur.com/4PxMvLg.png)
+
+## Selecting a monitor
+
+You can select a monitor by its number or by its interface name in the mod
+settings.
+
+### By monitor number
+
+Set the **Monitor** setting to the desired monitor number (1, 2, 3, etc.). Note
+that this number may differ from the monitor number shown in Windows Display
+Settings.
+
+Set the **Monitor** setting to 0 to use the monitor where the mouse cursor is
+currently located.
+
+### By interface name
+
+If monitor numbers change frequently (e.g., after locking your PC or
+restarting), you can use the monitor's interface name instead. To find the
+interface name:
+
+1. Go to the mod's **Advanced** tab.
+2. Set **Debug logging** to **Mod logs**.
+3. Click on **Show log output**.
+4. In the mod settings, enter any text (e.g., `TEST`) in the **Monitor interface
+   name** field.
+5. Trigger a notification to appear.
+6. In the log output, look for lines containing `Found display device`. You will
+   see one line per monitor, for example:
+   ```
+   Found display device \\.\DISPLAY1, interface name: \\?\DISPLAY#DELA1D2#5&abc123#0#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+   Found display device \\.\DISPLAY2, interface name: \\?\DISPLAY#GSM5B09#4&def456#0#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+   ```
+   Use the interface name that follows the "interface name:" text. You may need
+   to experiment to determine which interface name corresponds to which physical
+   monitor.
+7. Copy the relevant interface name (or a unique substring of it) into the
+   **Monitor interface name** setting.
+8. Set **Debug logging** back to **None** when done.
+
+The **Monitor interface name** setting takes priority over the **Monitor**
+number when both are configured.
 */
 // ==/WindhawkModReadme==
 
@@ -235,13 +277,13 @@ std::wstring GetProcessFileName(DWORD dwProcessId) {
 
     CloseHandle(hProcess);
 
-    PCWSTR processFileNameUpper = wcsrchr(processPath, L'\\');
-    if (!processFileNameUpper) {
+    PCWSTR processFileName = wcsrchr(processPath, L'\\');
+    if (!processFileName) {
         return std::wstring{};
     }
 
-    processFileNameUpper++;
-    return processFileNameUpper;
+    processFileName++;
+    return processFileName;
 }
 
 FrameworkElement EnumChildElements(
@@ -301,51 +343,104 @@ bool IsTargetCoreWindow(HWND hWnd) {
     // String resource: \ActionCenter\AC_ToastCenter_Title
     // The strings were collected from here:
     // https://github.com/m417z/windows-language-files
-    static const std::unordered_set<std::wstring> newNotificationStrings = {
-        L"Jakinarazpen berria",
-        L"Jauns paziņojums",
-        L"Naujas pranešimas",
-        L"Neue Benachrichtigung",
-        L"New notification",
-        L"Nieuwe melding",
-        L"Notificació nova",
-        L"Notificación nueva",
-        L"Notificare nouă",
-        L"Nouvelle notification",
-        L"Nova notificação",
-        L"Nova notificación",
-        L"Nova obavijesti",
-        L"Nové oznámení",
-        L"Nové oznámenie",
-        L"Novo obaveštenje",
-        L"Novo obvestilo",
-        L"Nowe powiadomienie",
-        L"Nueva notificación",
-        L"Nuova notifica",
-        L"Ny meddelelse",
-        L"Ny varsling",
-        L"Nytt meddelande",
-        L"Pemberitahuan baru",
-        L"Thông báo mới",
-        L"Új értesítés",
-        L"Uus teatis",
-        L"Uusi ilmoitus",
-        L"Yeni bildirim",
-        L"Νέα ειδοποίηση",
-        L"Нове сповіщення",
-        L"Ново известие",
-        L"Новое уведомление",
-        L"הודעה חדשה",
-        L"\u200f\u200fإعلام جديد",
-        L"การแจ้งให้ทราบใหม่",
-        L"새 알림",
-        L"新しい通知",
-        L"新通知",
-    };
 
-    WCHAR szWindowText[256];
+    // clang-format off
+    static const std::unordered_set<std::wstring> newNotificationStrings = {
+        L"Nuwe kennisgewing", // AF-ZA
+        L"አዲስ ማሳወቂያ", // AM-ET
+        L"নতুন জাননী", // AS-IN
+        L"Yeni bildiriş", // AZ-LATN-AZ
+        L"Новае апавяшчэнне", // BE-BY
+        L"নতুন বিজ্ঞপ্তি", // BN-IN
+        L"Novo obavještenje", // BS-LATN-BA
+        L"Notificació nova", // CA-ES-VALENCIA
+        L"ᎢᏤᎢ ᎧᏃᎮᏓ", // CHR-CHER-US
+        L"Hysbysiad newydd", // CY-GB
+        L"اعلان جدید", // FA-IR
+        L"Bagong notification", // FIL-PH
+        L"Fógra nua", // GA-IE
+        L"Brath ùr", // GD-GB
+        L"નવી સૂચના", // GU-IN
+        L"नई अधिसूचना", // HI-IN
+        L"Նոր ծանուցում", // HY-AM
+        L"Ný tilkynning", // IS-IS
+        L"ახალი შეტყობინება", // KA-GE
+        L"Жаңа хабарландыру", // KK-KZ
+        L"ការ​ជូន​ដំណឹង​ថ្មី", // KM-KH
+        L"ಹೊಸ ಪ್ರಕಟಣೆ", // KN-IN
+        L"नवी अधिसुचोवणी", // KOK-IN
+        L"Nei Notifikatioun", // LB-LU
+        L"ການແຈ້ງເຕືອນໃໝ່", // LO-LA
+        L"Whakamōhiotanga hōu", // MI-NZ
+        L"Ново известување", // MK-MK
+        L"പുതിയ അറിയിപ്പ്", // ML-IN
+        L"नवीन सूचना", // MR-IN
+        L"Pemberitahuan baharu", // MS-MY
+        L"Notifika ġdida", // MT-MT
+        L"नयाँ सूचना", // NE-NP
+        L"Nytt varsel", // NN-NO
+        L"ନୂତନ ବିଜ୍ଞପ୍ତି", // OR-IN
+        L"ਨਵੀਂ ਸੂਚਨਾ", // PA-IN
+        L"Musuq willana", // QUZ-PE
+        L"Njoftim i ri", // SQ-AL
+        L"Ново обавјештење", // SR-CYRL-BA
+        L"Ново обавештење", // SR-CYRL-RS
+        L"புதிய அறிவிப்பு", // TA-IN
+        L"కొత్త నోటిఫికేషన్", // TE-IN
+        L"Яңа белдерү", // TT-RU
+        L"يېڭى ئۇقتۇرۇش", // UG-CN
+        L"نئی اطلاع", // UR-PK
+        L"Yangi xabarnoma", // UZ-LATN-UZ
+        L"\u200f\u200fإعلام جديد", // AR-SA
+        L"Ново известие", // BG-BG
+        L"Notificació nova", // CA-ES
+        L"Nové oznámení", // CS-CZ
+        L"Ny meddelelse", // DA-DK
+        L"Neue Benachrichtigung", // DE-DE
+        L"Νέα ειδοποίηση", // EL-GR
+        L"New notification", // EN-GB
+        L"New notification", // EN-US
+        L"Notificación nueva", // ES-ES
+        L"Nueva notificación", // ES-MX
+        L"Uus teatis", // ET-EE
+        L"Jakinarazpen berria", // EU-ES
+        L"Uusi ilmoitus", // FI-FI
+        L"Nouvelle notification", // FR-CA
+        L"Nouvelle notification", // FR-FR
+        L"Nova notificación", // GL-ES
+        L"הודעה חדשה", // HE-IL
+        L"Nova obavijesti", // HR-HR
+        L"Új értesítés", // HU-HU
+        L"Pemberitahuan baru", // ID-ID
+        L"Nuova notifica", // IT-IT
+        L"新しい通知", // JA-JP
+        L"새 알림", // KO-KR
+        L"Naujas pranešimas", // LT-LT
+        L"Jauns paziņojums", // LV-LV
+        L"Ny varsling", // NB-NO
+        L"Nieuwe melding", // NL-NL
+        L"Nowe powiadomienie", // PL-PL
+        L"Nova notificação", // PT-BR
+        L"Nova notificação", // PT-PT
+        L"Notificare nouă", // RO-RO
+        L"Новое уведомление", // RU-RU
+        L"Nové oznámenie", // SK-SK
+        L"Novo obvestilo", // SL-SI
+        L"Novo obaveštenje", // SR-LATN-RS
+        L"Nytt meddelande", // SV-SE
+        L"การแจ้งให้ทราบใหม่", // TH-TH
+        L"Yeni bildirim", // TR-TR
+        L"Нове сповіщення", // UK-UA
+        L"Thông báo mới", // VI-VN
+        L"新通知", // ZH-CN
+        L"新通知", // ZH-TW
+    };
+    // clang-format on
+
+    WCHAR szWindowText[256]{};
     if (GetWindowText(hWnd, szWindowText, ARRAYSIZE(szWindowText)) == 0 ||
         !newNotificationStrings.contains(szWindowText)) {
+        Wh_Log(L"Not targeting CoreWindow, window text: %s", szWindowText);
         return false;
     }
 
@@ -377,8 +472,13 @@ std::vector<HWND> GetCoreWindows() {
 void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
     Wh_Log(L"Before: %dx%d %dx%d", *x, *y, *cx, *cy);
 
-    HMONITOR srcMonitor = MonitorFromPoint({*x + *cx / 2, *y + *cy * 2},
-                                           MONITOR_DEFAULTTONEAREST);
+    RECT rc{
+        .left = *x,
+        .top = *y,
+        .right = *x + *cx,
+        .bottom = *y + *cy,
+    };
+    HMONITOR srcMonitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
 
     UINT srcMonitorDpiX = 96;
     UINT srcMonitorDpiY = 96;
@@ -617,15 +717,43 @@ void UpdateAnimationDirectionStyle() {
         return;
     }
 
-    FrameworkElement rootGridContent = nullptr;
-    child = launcherFrame;
-    if ((child = FindChildByName(child, L"FlexibleNormalToastView")) &&
-        (child = FindChildByName(child, L"MainGrid")) &&
-        (child = FindChildByName(child, L"RevealGrid2"))) {
-        rootGridContent = child;
-    }
+    auto origin = winrt::Windows::Foundation::Point{0.5, 0.5};
 
-    if (!rootGridContent) {
+    bool foundAnyRootGridContent = false;
+    EnumChildElements(launcherFrame, [&](FrameworkElement toastView) {
+        auto name = toastView.Name();
+        if (name.empty()) {
+            return false;  // continue enumeration
+        }
+
+        if (!name.starts_with(L"FlexibleNormalToastView") &&
+            !name.starts_with(L"FlexiblePriorityToastView")) {
+            return false;  // continue enumeration
+        }
+
+        FrameworkElement mainGrid = FindChildByName(toastView, L"MainGrid");
+        if (!mainGrid) {
+            return false;  // continue enumeration
+        }
+
+        FrameworkElement revealGrid2 =
+            FindChildByName(mainGrid, L"RevealGrid2");
+        if (!revealGrid2) {
+            return false;  // continue enumeration
+        }
+
+        Wh_Log(L"Applying transform to toast view %s", name.c_str());
+
+        Media::RotateTransform transform;
+        transform.Angle(-angle);
+        revealGrid2.RenderTransform(transform);
+        revealGrid2.RenderTransformOrigin(origin);
+
+        foundAnyRootGridContent = true;
+        return false;  // continue enumeration to find all matching children
+    });
+
+    if (!foundAnyRootGridContent) {
         Wh_Log(L"Failed to find root grid content");
         return;
     }
@@ -633,13 +761,7 @@ void UpdateAnimationDirectionStyle() {
     Media::RotateTransform transform;
     transform.Angle(angle);
     launcherFrame.RenderTransform(transform);
-    Media::RotateTransform transform2;
-    transform2.Angle(-angle);
-    rootGridContent.RenderTransform(transform2);
-
-    auto origin = winrt::Windows::Foundation::Point{0.5, 0.5};
     launcherFrame.RenderTransformOrigin(origin);
-    rootGridContent.RenderTransformOrigin(origin);
 
     g_customAnimationDirectionApplied = (angle != 0);
 }
