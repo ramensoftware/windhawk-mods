@@ -1,31 +1,45 @@
 // ==WindhawkMod==
 // @id              explorer-up-new-window
-// @name            Explorer Up → New Window (Ctrl-click or Middle-click)
-// @description     Ctrl or middle-click on explorer up-button opens parent in a new window.
-// @version         1.3
+// @name            Explorer Up → New Window/Tab (Ctrl-click or Middle-click)
+// @description     Ctrl or middle-click on explorer up-button opens parent in a new window or tab.
+// @version         1.4
 // @author          Tobias Lind
 // @github          https://github.com/TobbeLino
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -luiautomationcore -lshell32 -luser32 -luuid
+// @compilerOptions -lole32 -loleaut32 -luiautomationcore -lshell32 -luser32 -luuid -lshlwapi
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Explorer Up → New Window
+# Explorer Up → New Window/Tab
 
-Opens the parent folder in a **new** Explorer window when you:
+Opens the parent folder in a **new** Explorer window or tab when you:
 - **Middle-click** on the Up button
 - **Ctrl + Left-click** on the Up button
 - Press **Ctrl + Alt + Up** keyboard shortcut
 
 Useful when you want to keep your current folder open while exploring the parent.
+
+
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- openIn: window
+  $name: Open parent folder in
+  $description: Choose whether to open in a new window or a new tab
+  $options:
+  - window: New Window
+  - tab: New Tab
+*/
+// ==/WindhawkModSettings==
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <UIAutomation.h>
 #include <OleAuto.h>
 #include <string>
@@ -34,6 +48,25 @@ Useful when you want to keep your current folder open while exploring the parent
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #endif
+
+// ---------- Settings ----------
+enum class OpenMode { Window, Tab };
+
+struct {
+    OpenMode openIn = OpenMode::Window;
+} g_settings;
+
+void LoadSettings() {
+    PCWSTR val = Wh_GetStringSetting(L"openIn");
+    Wh_Log(L"LoadSettings: raw value='%s'", val ? val : L"(null)");
+    if (val && _wcsicmp(val, L"tab") == 0) {
+        g_settings.openIn = OpenMode::Tab;
+    } else {
+        g_settings.openIn = OpenMode::Window;
+    }
+    Wh_FreeStringSetting(val);
+    Wh_Log(L"LoadSettings: openIn=%s", g_settings.openIn == OpenMode::Tab ? L"tab" : L"window");
+}
 
 // ---------- Globals ----------
 static std::atomic_bool g_inProgress{false};
@@ -264,6 +297,217 @@ static void CtrlN() {
     SendKeysSequence(inps, idx);
 }
 
+// ---------- Clipboard helpers for New Tab mode ----------
+struct ClipboardBackup {
+    bool hasData;
+    HANDLE hData;
+    UINT format;
+};
+
+static ClipboardBackup BackupClipboard() {
+    ClipboardBackup backup = { false, nullptr, 0 };
+    if (OpenClipboard(nullptr)) {
+        if (IsClipboardFormatAvailable(CF_UNICODETEXT)) {
+            HANDLE hRaw = GetClipboardData(CF_UNICODETEXT);
+            if (hRaw) {
+                size_t size = GlobalSize(hRaw);
+                HANDLE hCopy = GlobalAlloc(GMEM_MOVEABLE, size);
+                if (hCopy) {
+                    void* pSrc = GlobalLock(hRaw);
+                    void* pDst = GlobalLock(hCopy);
+                    if (pSrc && pDst) {
+                        memcpy(pDst, pSrc, size);
+                    }
+                    GlobalUnlock(hCopy);
+                    GlobalUnlock(hRaw);
+                    backup.hasData = true;
+                    backup.hData = hCopy;
+                    backup.format = CF_UNICODETEXT;
+                }
+            }
+        }
+        CloseClipboard();
+    }
+    return backup;
+}
+
+static void RestoreClipboard(ClipboardBackup backup) {
+    if (!backup.hasData || !backup.hData) return;
+    if (OpenClipboard(nullptr)) {
+        EmptyClipboard();
+        SetClipboardData(backup.format, backup.hData);
+        CloseClipboard();
+    } else {
+        GlobalFree(backup.hData);
+    }
+}
+
+static std::wstring ProbeAddressBarWithClipboard(HWND top) {
+    std::wstring foundPath = L"";
+
+    SetForegroundWindow(top);
+    Sleep(50);
+
+    ClipboardBackup backup = BackupClipboard();
+
+    INPUT inputs[8] = {};
+    int idx = 0;
+
+    // Alt+D (Focus & Select address bar)
+    memset(inputs, 0, sizeof(inputs)); idx = 0;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    SendInput(idx, inputs, sizeof(INPUT));
+    Sleep(80);
+
+    // Ctrl+C (Copy)
+    memset(inputs, 0, sizeof(inputs)); idx = 0;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'C'; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'C'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    SendInput(idx, inputs, sizeof(INPUT));
+    Sleep(80);
+
+    // Esc (Restore view)
+    memset(inputs, 0, sizeof(inputs)); idx = 0;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_ESCAPE; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_ESCAPE; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    SendInput(idx, inputs, sizeof(INPUT));
+    Sleep(50);
+
+    // Read from clipboard
+    if (OpenClipboard(nullptr)) {
+        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+        if (hData) {
+            WCHAR* pszText = (WCHAR*)GlobalLock(hData);
+            if (pszText) {
+                foundPath = std::wstring(pszText);
+                GlobalUnlock(hData);
+            }
+        }
+        CloseClipboard();
+    }
+
+    RestoreClipboard(backup);
+    return foundPath;
+}
+
+static std::wstring GetParentPath(const std::wstring& path) {
+    if (path.empty()) return L"";
+    WCHAR buffer[MAX_PATH];
+    wcsncpy(buffer, path.c_str(), MAX_PATH);
+    buffer[MAX_PATH - 1] = 0;
+    PathRemoveFileSpecW(buffer);
+    return std::wstring(buffer);
+}
+
+static void NavigateNewTab(HWND top, const std::wstring& targetPath) {
+    if (targetPath.length() < 2) return;
+
+    Wh_Log(L"NavigateNewTab: %s", targetPath.c_str());
+
+    SetForegroundWindow(top);
+    Sleep(50);
+
+    // Put path in clipboard (with exclusion markers for clipboard history)
+    static UINT cfExclude = RegisterClipboardFormat(L"ExcludeClipboardContentFromMonitorProcessing");
+    static UINT cfCanInclude = RegisterClipboardFormat(L"CanIncludeInClipboardHistory");
+
+    if (OpenClipboard(nullptr)) {
+        EmptyClipboard();
+        size_t size = (targetPath.length() + 1) * sizeof(WCHAR);
+        HGLOBAL hGlobalPath = GlobalAlloc(GMEM_MOVEABLE, size);
+        if (hGlobalPath) {
+            void* pData = GlobalLock(hGlobalPath);
+            memcpy(pData, targetPath.c_str(), size);
+            GlobalUnlock(hGlobalPath);
+            SetClipboardData(CF_UNICODETEXT, hGlobalPath);
+        }
+        // Mark as excluded from clipboard history
+        HGLOBAL hGlobalExclude = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+        if (hGlobalExclude) {
+            void* pData = GlobalLock(hGlobalExclude);
+            *(DWORD*)pData = 0;
+            GlobalUnlock(hGlobalExclude);
+            SetClipboardData(cfExclude, hGlobalExclude);
+        }
+        HGLOBAL hGlobalCanInclude = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+        if (hGlobalCanInclude) {
+            void* pData = GlobalLock(hGlobalCanInclude);
+            *(DWORD*)pData = 0;
+            GlobalUnlock(hGlobalCanInclude);
+            SetClipboardData(cfCanInclude, hGlobalCanInclude);
+        }
+        CloseClipboard();
+    }
+
+    INPUT inputs[4] = {};
+    int idx = 0;
+
+    // Ctrl+T (New tab)
+    idx = 0; memset(inputs, 0, sizeof(inputs));
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'T'; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'T'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    SendInput(idx, inputs, sizeof(INPUT));
+    Sleep(450);
+
+    // Alt+D (Focus address bar)
+    idx = 0; memset(inputs, 0, sizeof(inputs));
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    SendInput(idx, inputs, sizeof(INPUT));
+    Sleep(100);
+
+    // Ctrl+V (Paste path)
+    idx = 0; memset(inputs, 0, sizeof(inputs));
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'V'; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'V'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    SendInput(idx, inputs, sizeof(INPUT));
+    Sleep(50);
+
+    // Enter (Navigate)
+    idx = 0; memset(inputs, 0, sizeof(inputs));
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_RETURN; idx++;
+    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_RETURN; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    SendInput(idx, inputs, sizeof(INPUT));
+}
+
+static void OpenParentInNewTab(HWND top) {
+    if (!IsWindow(top)) return;
+
+    Wh_Log(L"OpenParentInNewTab");
+
+    // Get current path via clipboard probe
+    std::wstring currentPath = ProbeAddressBarWithClipboard(top);
+    if (currentPath.empty()) {
+        Wh_Log(L"[err] Failed to get current path");
+        return;
+    }
+
+    Wh_Log(L"Current path: %s", currentPath.c_str());
+
+    // Compute parent path
+    std::wstring parentPath = GetParentPath(currentPath);
+    if (parentPath.empty() || parentPath == currentPath) {
+        Wh_Log(L"[err] Already at root or failed to get parent");
+        return;
+    }
+
+    Wh_Log(L"Parent path: %s", parentPath.c_str());
+
+    // Navigate to parent in new tab
+    NavigateNewTab(top, parentPath);
+}
+
 static bool InvokeUpInWindow(HWND top) {
     Wh_Log(L"InvokeUpInWindow");
     if (!IsWindow(top)) return false;
@@ -325,29 +569,35 @@ static void DuplicateAndInvokeUp(HWND top) {
 }
 
 // ---------- Worker ----------
-struct NewWindowTask { HWND top; };
+struct OpenParentTask { HWND top; OpenMode mode; };
 
 static DWORD WINAPI OpenParentWorker(LPVOID param) {
-    NewWindowTask* t = (NewWindowTask*)param;
+    OpenParentTask* t = (OpenParentTask*)param;
     if (t) {
         HWND top = t->top;
+        OpenMode mode = t->mode;
         delete t;
 
-        Wh_Log(L"[Act] Ctrl+N → focus new → UIA Up");
-        DuplicateAndInvokeUp(top);
+        if (mode == OpenMode::Tab) {
+            Wh_Log(L"[Act] Opening parent in new tab");
+            OpenParentInNewTab(top);
+        } else {
+            Wh_Log(L"[Act] Ctrl+N → focus new → Alt+Up");
+            DuplicateAndInvokeUp(top);
+        }
     }
 
     ResetInProgress();
     return 0;
 }
 
-static void OpenParentInNewWindow(HWND top) {
-    NewWindowTask* t = new NewWindowTask{ top };
+static void OpenParent(HWND top) {
+    Wh_Log(L"OpenParent: mode=%s", g_settings.openIn == OpenMode::Tab ? L"tab" : L"window");
+    OpenParentTask* t = new OpenParentTask{ top, g_settings.openIn };
     HANDLE h = CreateThread(nullptr, 0, OpenParentWorker, t, 0, nullptr);
     if (h) {
         CloseHandle(h);
     } else {
-        // Thread creation failed, clean up and reset
         Wh_Log(L"[err] CreateThread failed: %lu", GetLastError());
         delete t;
         ResetInProgress();
@@ -457,15 +707,14 @@ static LRESULT CALLBACK MouseLLProc(int code, WPARAM wp, LPARAM lp) {
                         }
 
                         if (shouldHandle) {
-                            Wh_Log(L"[Up+] %s on Up (Ctrl=%d) → NEW window",
-                                (which == SuppressBtn::Middle) ? L"Middle-down" : L"Ctrl+Left-down",
-                                ctrlDown ? 1 : 0);
+                            Wh_Log(L"[Up+] %s on Up → open parent",
+                                (which == SuppressBtn::Middle) ? L"Middle-down" : L"Ctrl+Left-down");
                             g_suppress = which;
                             if (!SetInProgressIfIdle()) {
                                 el->Release();
                                 return CallNextHookEx(g_mouseHook, code, wp, lp);
                             }
-                            OpenParentInNewWindow(top);
+                            OpenParent(top);
                             return 1; // swallow DOWN; matching UP swallowed above
                         }
                     }
@@ -552,12 +801,12 @@ static LRESULT CALLBACK KbdLLProc(int code, WPARAM wp, LPARAM lp) {
             if (isKeyDown(VK_MENU) && isKeyDown(VK_CONTROL)) {
                 HWND fg = GetForegroundWindow();
                 if (IsExplorerTop(fg)) {
-                    Wh_Log(L"[Up+] Ctrl+Alt+Up → NEW window (Ctrl + N, Alt + Up)");
+                    Wh_Log(L"[Up+] Ctrl+Alt+Up → open parent");
                     g_suppress = SuppressBtn::Key;
                     if (!SetInProgressIfIdle()) {
                         return CallNextHookEx(g_kbdHook, code, wp, lp);
                     }
-                    OpenParentInNewWindow(fg);
+                    OpenParent(fg);
                     return 1;
                 }
             }
@@ -568,8 +817,9 @@ static LRESULT CALLBACK KbdLLProc(int code, WPARAM wp, LPARAM lp) {
 
 // ---------- Tool mod entry points ----------
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Init (Up → New Window, LL hooks in dedicated thread)");
+    Wh_Log(L"Init (Up → New Window/Tab, LL hooks in dedicated thread)");
 
+    LoadSettings();
     ResetInProgress();
 
     // Create event to signal when hook thread is ready
@@ -608,7 +858,7 @@ void WhTool_ModUninit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    // No settings.
+    LoadSettings();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
