@@ -58,14 +58,12 @@ struct {
 
 void LoadSettings() {
     PCWSTR val = Wh_GetStringSetting(L"openIn");
-    Wh_Log(L"LoadSettings: raw value='%s'", val ? val : L"(null)");
     if (val && _wcsicmp(val, L"tab") == 0) {
         g_settings.openIn = OpenMode::Tab;
     } else {
         g_settings.openIn = OpenMode::Window;
     }
     Wh_FreeStringSetting(val);
-    Wh_Log(L"LoadSettings: openIn=%s", g_settings.openIn == OpenMode::Tab ? L"tab" : L"window");
 }
 
 // ---------- Globals ----------
@@ -348,8 +346,6 @@ static std::wstring ProbeAddressBarWithClipboard(HWND top) {
     SetForegroundWindow(top);
     Sleep(50);
 
-    ClipboardBackup backup = BackupClipboard();
-
     INPUT inputs[8] = {};
     int idx = 0;
 
@@ -391,7 +387,6 @@ static std::wstring ProbeAddressBarWithClipboard(HWND top) {
         CloseClipboard();
     }
 
-    RestoreClipboard(backup);
     return foundPath;
 }
 
@@ -486,10 +481,14 @@ static void OpenParentInNewTab(HWND top) {
 
     Wh_Log(L"OpenParentInNewTab");
 
+    // Backup clipboard before we start using it
+    ClipboardBackup backup = BackupClipboard();
+
     // Get current path via clipboard probe
     std::wstring currentPath = ProbeAddressBarWithClipboard(top);
     if (currentPath.empty()) {
         Wh_Log(L"[err] Failed to get current path");
+        RestoreClipboard(backup);
         return;
     }
 
@@ -499,6 +498,7 @@ static void OpenParentInNewTab(HWND top) {
     std::wstring parentPath = GetParentPath(currentPath);
     if (parentPath.empty() || parentPath == currentPath) {
         Wh_Log(L"[err] Already at root or failed to get parent");
+        RestoreClipboard(backup);
         return;
     }
 
@@ -506,6 +506,10 @@ static void OpenParentInNewTab(HWND top) {
 
     // Navigate to parent in new tab
     NavigateNewTab(top, parentPath);
+
+    // Give time for paste to complete, then restore clipboard
+    Sleep(200);
+    RestoreClipboard(backup);
 }
 
 static bool InvokeUpInWindow(HWND top) {
