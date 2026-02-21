@@ -9733,6 +9733,36 @@
                 "version": "0.2"
             }
         },
+        "window-opacity": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771696365000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771696365000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Jogai",
+                "compilerOptions": "-lcomctl32",
+                "description": "Set any window's transparency with global hotkeys: Modifier+1-9 for 10-90%, Modifier+0 resets, Modifier+Plus/Minus to cycle",
+                "github": "https://github.com/Jogai",
+                "homepage": "https://www.scott-software.nl/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "MIT",
+                "name": "Window Opacity",
+                "version": "0.1.0"
+            }
+        },
         "windows-11-file-explorer-styler": {
             "details": {
                 "defaultSorting": 832959,

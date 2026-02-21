@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-19T23:10:39.000Z</updated>
+    <updated>2026-02-21T17:52:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Window Opacity 0.1.0]]></title>
+        <id>https://windhawk.net/mods/window-opacity#e3e64385b10b0bcaaf1c2c255b35a4848ce23dbb</id>
+        <link href="https://windhawk.net/mods/window-opacity"/>
+        <updated>2026-02-21T17:52:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowopacityhotkeys">Window Opacity Hotkeys</h1>
+<p>Control any window's transparency with global keyboard shortcuts.</p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li><strong>Modifier+1</strong> through <strong>Modifier+9</strong>: Sets the foreground window to
+10%–90% opacity</li>
+<li><strong>Modifier+0</strong>: Resets the foreground window to 100% (fully opaque)</li>
+<li><strong>Modifier+Minus (-)</strong>: Decreases opacity by 10% (more transparent)</li>
+<li><strong>Modifier+Equals (=)</strong>: Increases opacity by 10% (more visible)</li>
+</ul>
+<p>The default modifier is <strong>Ctrl+Alt</strong>. You can change it in the mod settings.</p>
+<p>The Minus/Equals cycling hotkeys are disabled by default. Enable them in the
+settings by choosing a key pair (Minus/Equals or Page Up/Page Down).</p>
+<h2 id="keyboardlayout">Keyboard layout</h2>
+<p>The hotkeys follow the number row so the layout is intuitive:</p>
+<p>| <code>1</code> | <code>2</code> | <code>3</code> | <code>4</code> | <code>5</code> | <code>6</code> | <code>7</code> | <code>8</code> | <code>9</code> | <code>0</code> | <code>-</code> | <code>=</code> |
+|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
+| 10% | 20% | 30% | 40% | 50% | 60% | 70% | 80% | 90% | Reset | Step - | Step + |</p>
+<p>The <code>0</code>, <code>-</code> and <code>=</code> keys sit right next to each other at the end of the
+number row, giving you quick access to reset and fine-tune without having to
+remember a specific number.</p>
+<h2 id="howitworks">How it works</h2>
+<p>When a hotkey is pressed, the mod applies the <code>WS_EX_LAYERED</code> window style and
+calls <code>SetLayeredWindowAttributes</code> on the current foreground window. When
+resetting to 100%, the <code>WS_EX_LAYERED</code> style is removed to avoid rendering
+artifacts.</p>
+<p>All modified windows are automatically restored to full opacity when the mod is
+disabled or unloaded.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windows that already use <code>WS_EX_LAYERED</code> with <code>LWA_COLORKEY</code> (color-key
+transparency) are skipped to avoid overriding their existing transparency
+mechanism.</li>
+<li>The taskbar and desktop windows are excluded from opacity changes.</li>
+<li>Some UWP/WinUI windows may not respond to layered window attributes due to
+<code>WS_EX_NOREDIRECTIONBITMAP</code>. In that case the hotkey will have no visible
+effect.</li>
+</ul>]]></content>
+        <author>
+            <name>Jogai</name>
+            <uri>https://github.com/Jogai</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Dock Animation 1.9.2]]></title>
         <id>https://windhawk.net/mods/taskbar-dock-animation#d23ad55f18703e56934a130555304dbdb78b4dee</id>
@@ -590,19 +638,6 @@ icon restoration code integrated, so you don't need to use both mods together.</
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Size 1.0.1]]></title>
-        <id>https://windhawk.net/mods/start-menu-size#4636d9d145e6aa1858d4955fc422f816aac37b39</id>
-        <link href="https://windhawk.net/mods/start-menu-size"/>
-        <updated>2026-02-14T01:22:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with the classic Start menu in some cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
