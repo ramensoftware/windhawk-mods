@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-22T08:58:08.000Z</updated>
+    <updated>2026-02-22T09:01:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-per-app-volume-control#207ca90dc7800e6be4e0ad67b6a689b80bb0ba39</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-per-app-volume-control"/>
+        <updated>2026-02-22T09:01:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarvolumecontrol">Taskbar Volume Control</h1>
+<p>Scroll the mouse wheel over an application's taskbar button to adjust its
+volume. A tooltip follows your cursor showing the current volume level.</p>
+<ul>
+<li><strong>Scroll Up</strong>: Increase volume</li>
+<li><strong>Scroll Down</strong>: Decrease volume</li>
+<li>Works with the Windows 10 taskbar running either under Windows 10 or Windows 11</li>
+<li>Only affects apps that have an active audio session</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 95/98/NT 4.0 Open/Save Dialog 1.0.0]]></title>
         <id>https://windhawk.net/mods/win9x-nt4-open-save-dialog#3310e658993f5cbf956406fc9650bc70008069e1</id>
@@ -569,55 +588,6 @@ by <a href="https://github.com/m417z">m417z</a>.</p>]]></content>
         <author>
             <name>webberlv</name>
             <uri>https://github.com/webberLV</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Volume control open location 1.0]]></title>
-        <id>https://windhawk.net/mods/volume-control-open-location#37553a08c7b7c274c04b883d8149c9ceab51b752</id>
-        <link href="https://windhawk.net/mods/volume-control-open-location"/>
-        <updated>2026-02-14T22:49:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="volumecontrolopenlocation">Volume control open location</h1>
-<p>Shows the volume control on the monitor where the mouse cursor is located, or
-on a custom monitor of choice.</p>
-<h2 id="selectingamonitor">Selecting a monitor</h2>
-<p>You can select a monitor by its number or by its interface name in the mod
-settings.</p>
-<h3 id="bymonitornumber">By monitor number</h3>
-<p>Set the <strong>Monitor</strong> setting to the desired monitor number (1, 2, 3, etc.). Note
-that this number may differ from the monitor number shown in Windows Display
-Settings.</p>
-<p>Set the <strong>Monitor</strong> setting to 0 to use the monitor where the mouse cursor is
-currently located.</p>
-<h3 id="byinterfacename">By interface name</h3>
-<p>If monitor numbers change frequently (e.g., after locking your PC or
-restarting), you can use the monitor's interface name instead. To find the
-interface name:</p>
-<ol>
-<li>Go to the mod's <strong>Advanced</strong> tab.</li>
-<li>Set <strong>Debug logging</strong> to <strong>Mod logs</strong>.</li>
-<li>Click on <strong>Show log output</strong>.</li>
-<li>In the mod settings, enter any text (e.g., <code>TEST</code>) in the <strong>Monitor interface
-name</strong> field.</li>
-<li>Change the volume to trigger the mod's logic.</li>
-<li>In the log output, look for lines containing <code>Found display device</code>. You will
-see one line per monitor, for example:</li>
-</ol>
-<pre><code>   Found display device \\.\DISPLAY1, interface name: \\?\DISPLAY#DELA1D2#5&amp;abc123#0#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
-   Found display device \\.\DISPLAY2, interface name: \\?\DISPLAY#GSM5B09#4&amp;def456#0#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
-</code></pre>
-<p>Use the interface name that follows the "interface name:" text. You may need
-   to experiment to determine which interface name corresponds to which physical
-   monitor.</p>
-<ol start="7">
-<li>Copy the relevant interface name (or a unique substring of it) into the
-<strong>Monitor interface name</strong> setting.</li>
-<li>Set <strong>Debug logging</strong> back to <strong>None</strong> when done.</li>
-</ol>
-<p>The <strong>Monitor interface name</strong> setting takes priority over the <strong>Monitor</strong>
-number when both are configured.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
