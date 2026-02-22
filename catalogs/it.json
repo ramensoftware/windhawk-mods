@@ -9737,6 +9737,35 @@
                 "version": "1.0.0"
             }
         },
+        "win9x-nt4-open-save-dialog": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771750688000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771750688000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lcomdlg32 -lcomctl32 -lpsapi",
+                "description": "Modifies the classic open/save dialog to be more like Windows 98 and earlier",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "license": "GPL-3.0",
+                "name": "Windows 95/98/NT 4.0 Open/Save Dialog",
+                "version": "1.0.0"
+            }
+        },
         "windbg-no-ole-flush-clipboard": {
             "details": {
                 "defaultSorting": 288,
