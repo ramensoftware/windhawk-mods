@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              win10-taskbar-per-app-volume-control
-// @name            Win10 Taskbar Volume Control
+// @name            Win10 Taskbar Per-App Volume Control
 // @description     Adjust per-app volume by scrolling the mouse wheel over Win10 taskbar buttons
 // @version         1.0.1
 // @author          Anixx
