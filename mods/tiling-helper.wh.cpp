@@ -275,6 +275,7 @@ static std::unordered_map<DesktopMonitorKey, TilingState, DesktopMonitorKeyHash,
 static SRWLOCK g_tilingStateLock = SRWLOCK_INIT;
 static volatile LONG g_retileInProgress = 0;
 static HWINEVENTHOOK g_hMoveSizeHook = nullptr;
+static HWINEVENTHOOK g_hMinimizeHook = nullptr;
 
 //=============================================================================
 //Cache Rects
@@ -282,6 +283,46 @@ static HWINEVENTHOOK g_hMoveSizeHook = nullptr;
 
 static std::unordered_map<HWND, RECT> g_moveSizeStartRects;
 static std::unordered_map<HWND, RECT> g_moveSizeEndRects;
+
+
+//=============================================================================
+//Move detection
+//=============================================================================
+
+
+
+enum class RectChange {
+    None,
+    MoveOnly,
+    ResizeOnly,
+    MoveAndResize
+};
+
+static inline LONG RectW(const RECT& r) { return r.right - r.left; }
+static inline LONG RectH(const RECT& r) { return r.bottom - r.top; }
+
+static inline bool Differs(LONG a, LONG b, LONG tol = 1) {
+    return (a > b) ? (a - b > tol) : (b - a > tol);
+}
+
+RectChange ClassifyRectChange(const RECT& before, const RECT& after, LONG tol = 1) {
+    bool xChanged = Differs(before.left,  after.left,  tol);
+    bool yChanged = Differs(before.top,   after.top,   tol);
+    bool wChanged = Differs(RectW(before), RectW(after), tol);
+    bool hChanged = Differs(RectH(before), RectH(after), tol);
+
+    bool posChanged  = xChanged || yChanged;
+    bool sizeChanged = wChanged || hChanged;
+
+    if (!posChanged && !sizeChanged) {Wh_Log(L"None change"); return RectChange::None;}
+    if ( posChanged && !sizeChanged) {Wh_Log(L"Move-only change"); return RectChange::MoveOnly;}
+    if (!posChanged &&  sizeChanged) {Wh_Log(L"Resize-only change"); return RectChange::ResizeOnly;}
+    Wh_Log(L"Both changed"); return RectChange::MoveAndResize;
+}
+
+
+
+
 
 
 //=============================================================================
@@ -1058,6 +1099,7 @@ void RetileFromResize(HWND hwnd) {
     if (windows.empty()) {
       return;
     }
+
     if (!ContainsWindow(windows, resizedHwnd)) {
       HWND resolved = ResolveToTiledWindow(resizedHwnd, windows);
       if (resolved) {
@@ -1087,23 +1129,20 @@ if (itStart != g_moveSizeStartRects.end()) {
     if (itEnd != g_moveSizeEndRects.end()) {
         const RECT& after = itEnd->second;
 
-        bool xChanged = (before.left != after.left);
-        bool yChanged = (before.top  != after.top);
+        RectChange change = ClassifyRectChange(before, after, 1);
 
         // Clean up cache entries first (safe and simple)
         g_moveSizeStartRects.erase(hwnd);
         g_moveSizeEndRects.erase(hwnd);
 
-        if (xChanged && yChanged) {
+
+        if (change == RectChange::MoveOnly) {
             Wh_Log(L"Skipped successfully");
             state.windows.erase(
             std::remove(state.windows.begin(), state.windows.end(), resizedHwnd),
             state.windows.end()
             );
 
-            // weights may now be stale
-            state.stackWeights.clear();
-            state.gridWeights.clear();
 
             if (state.windows.empty()) {
                 AcquireSRWLockExclusive(&g_tilingStateLock);
@@ -1111,12 +1150,35 @@ if (itStart != g_moveSizeStartRects.end()) {
                 ReleaseSRWLockExclusive(&g_tilingStateLock);
                 return;
             }
+            
+            else if (state.windows.size() == 1){
+                 // Clear stale layout memory
+                //state.stackWeights.clear();
+                //state.gridWeights.clear();
+                state.masterRatio = ClampDouble(g_masterPercent / 100.0, 0.1, 0.9);
+
+                // If you already have workArea here, force the last window to fill it
+                PlaceWindow(state.windows[0], workArea);
+                // Persist updated state
+                AcquireSRWLockExclusive(&g_tilingStateLock);
+                
+                // Reset everything in state before writing back
+                state.layout = g_currentLayout;
+                state.windows.clear();
+                state.stackWeights.clear();
+                state.gridWeights.clear();
+                g_tilingStateMap[key] = state;
+                ReleaseSRWLockExclusive(&g_tilingStateLock);
+                return;
+            };
+
             AcquireSRWLockExclusive(&g_tilingStateLock);
             g_tilingStateMap[key] = state;
             ReleaseSRWLockExclusive(&g_tilingStateLock);
-            return;
+            
+            //return;
         }
-        else Wh_Log(L"Test B failed");
+
     } else {
         // No end rect cached, clean up start just in case
         Wh_Log(L"Test A failed");
@@ -1340,10 +1402,8 @@ void OnWindowResizeEnd(HWND hwnd) {
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
-  
-  Wh_Log(L"Seg 1");
-  if (event != EVENT_SYSTEM_MOVESIZEEND && event != EVENT_SYSTEM_MOVESIZESTART) return;
-  Wh_Log(L"Seg 2",event);
+    if (((event != EVENT_SYSTEM_MOVESIZESTART)&&(event != EVENT_SYSTEM_MOVESIZEEND))&&(event != EVENT_SYSTEM_MINIMIZESTART)) return;
+  Wh_Log(L"Hooked");
 
     if (event == EVENT_SYSTEM_MOVESIZESTART) {
         Wh_Log(L"Seg 3");
@@ -1352,8 +1412,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         if (GetWindowFrameRect(hwnd, &r)) {
         g_moveSizeStartRects[hwnd] = r;
         }
-    };
-    if (event == EVENT_SYSTEM_MOVESIZEEND) {
+    }
+    else if (event == EVENT_SYSTEM_MOVESIZEEND) {
             Wh_Log(L"Seg 4");
 
         RECT r{};
@@ -1361,28 +1421,47 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         g_moveSizeEndRects[hwnd] = r;
         }
     }
-    else 
-    return;
 
   if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
   if (!hwnd) return;
-
-  OnWindowResizeEnd(hwnd);
+  
+  if (event == EVENT_SYSTEM_MOVESIZEEND || event == EVENT_SYSTEM_MINIMIZESTART) 
+    //if (event == EVENT_SYSTEM_MINIMIZESTART) {RetileFromResize(hwnd);return;};
+    OnWindowResizeEnd(hwnd);
+  return;
 }
 
 void InstallMoveSizeHook() {
-  if (g_hMoveSizeHook) return;
-  g_hMoveSizeHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, nullptr, WinEventProc, 0, 0,
-                                   WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-  if (!g_hMoveSizeHook) {
-    Wh_Log(L"Failed to install move/size hook");
+    if (!g_hMoveSizeHook) {
+            g_hMoveSizeHook = SetWinEventHook(
+                EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND,
+                nullptr, WinEventProc, 0, 0,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        }
+
+        if (!g_hMinimizeHook) {
+            g_hMinimizeHook = SetWinEventHook(
+                EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND,
+                nullptr, WinEventProc, 0, 0,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        }  if (!g_hMoveSizeHook) {
+    if (!g_hMoveSizeHook){
+        Wh_Log(L"Failed to install move/size hook");}
+    if (!g_hMinimizeHook){
+        Wh_Log(L"Failed to install minimization hook");}
+
   }
 }
 
 void RemoveMoveSizeHook() {
-  if (!g_hMoveSizeHook) return;
-  UnhookWinEvent(g_hMoveSizeHook);
-  g_hMoveSizeHook = nullptr;
+    if (g_hMoveSizeHook) {
+        UnhookWinEvent(g_hMoveSizeHook);
+        g_hMoveSizeHook = nullptr;
+    }
+    if (g_hMinimizeHook) {
+        UnhookWinEvent(g_hMinimizeHook);
+        g_hMinimizeHook = nullptr;
+    }
 }
 
 void ResetTilingStateMemory() {
