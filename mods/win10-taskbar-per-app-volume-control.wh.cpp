@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              win10-taskbar-per-app-volume-control
-// @name            Taskbar Volume Control
+// @name            Win10 Taskbar Volume Control
 // @description     Adjust per-app volume by scrolling the mouse wheel over Win10 taskbar buttons
-// @version         1.0.0
+// @version         1.0.1
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         explorer.exe
@@ -13,12 +13,14 @@
 /*
 # Taskbar Volume Control
 
+**!Important!** This mod works with the Windows 10 taskbar running either under Windows 10 or Windows 11.
+For Windows 11 taskbar, use this mod: [Taskbar Volume Control Per-App](https://windhawk.net/mods/taskbar-volume-control-per-app).
+
 Scroll the mouse wheel over an application's taskbar button to adjust its
 volume. A tooltip follows your cursor showing the current volume level.
 
 - **Scroll Up**: Increase volume
 - **Scroll Down**: Decrease volume
-- Works with the Windows 10 taskbar running either under Windows 10 or Windows 11
 - Only affects apps that have an active audio session
 */
 // ==/WindhawkModReadme==
