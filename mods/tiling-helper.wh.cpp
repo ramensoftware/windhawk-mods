@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              tiling-helper
-// @name            Tiling Helper
+// @id              tiling-helper-mod
+// @name            Tiling Helper Mod
 // @description     Tile windows on the current monitor with customizable layouts and hotkeys
 // @version         1.0.0
 // @author          u2x1
@@ -275,6 +275,14 @@ static std::unordered_map<DesktopMonitorKey, TilingState, DesktopMonitorKeyHash,
 static SRWLOCK g_tilingStateLock = SRWLOCK_INIT;
 static volatile LONG g_retileInProgress = 0;
 static HWINEVENTHOOK g_hMoveSizeHook = nullptr;
+
+//=============================================================================
+//Cache Rects
+//=============================================================================
+
+static std::unordered_map<HWND, RECT> g_moveSizeStartRects;
+static std::unordered_map<HWND, RECT> g_moveSizeEndRects;
+
 
 //=============================================================================
 // Helper Functions
@@ -1002,6 +1010,7 @@ void RetileFromResize(HWND hwnd) {
     return;
   }
 
+
   HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
   RECT monitorWork = {};
   if (!monitor || !GetMonitorWorkArea(monitor, &monitorWork)) {
@@ -1067,6 +1076,58 @@ void RetileFromResize(HWND hwnd) {
   if (state.windows.empty()) {
     return;
   }
+
+
+  Wh_Log(L"Start skipping");
+auto itStart = g_moveSizeStartRects.find(hwnd);
+if (itStart != g_moveSizeStartRects.end()) {
+    const RECT& before = itStart->second;
+
+    auto itEnd = g_moveSizeEndRects.find(hwnd);
+    if (itEnd != g_moveSizeEndRects.end()) {
+        const RECT& after = itEnd->second;
+
+        bool xChanged = (before.left != after.left);
+        bool yChanged = (before.top  != after.top);
+
+        // Clean up cache entries first (safe and simple)
+        g_moveSizeStartRects.erase(hwnd);
+        g_moveSizeEndRects.erase(hwnd);
+
+        if (xChanged && yChanged) {
+            Wh_Log(L"Skipped successfully");
+            state.windows.erase(
+            std::remove(state.windows.begin(), state.windows.end(), resizedHwnd),
+            state.windows.end()
+            );
+
+            // weights may now be stale
+            state.stackWeights.clear();
+            state.gridWeights.clear();
+
+            if (state.windows.empty()) {
+                AcquireSRWLockExclusive(&g_tilingStateLock);
+                g_tilingStateMap.erase(key);
+                ReleaseSRWLockExclusive(&g_tilingStateLock);
+                return;
+            }
+            AcquireSRWLockExclusive(&g_tilingStateLock);
+            g_tilingStateMap[key] = state;
+            ReleaseSRWLockExclusive(&g_tilingStateLock);
+            return;
+        }
+        else Wh_Log(L"Test B failed");
+    } else {
+        // No end rect cached, clean up start just in case
+        Wh_Log(L"Test A failed");
+        g_moveSizeStartRects.erase(hwnd);
+    }
+}
+Wh_Log(L"Nothing logged");
+
+    
+
+
 
   for (HWND w : state.windows) {
     RECT rect = {};
@@ -1279,15 +1340,39 @@ void OnWindowResizeEnd(HWND hwnd) {
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
-  if (event != EVENT_SYSTEM_MOVESIZEEND) return;
+  
+  Wh_Log(L"Seg 1");
+  if (event != EVENT_SYSTEM_MOVESIZEEND && event != EVENT_SYSTEM_MOVESIZESTART) return;
+  Wh_Log(L"Seg 2",event);
+
+    if (event == EVENT_SYSTEM_MOVESIZESTART) {
+        Wh_Log(L"Seg 3");
+
+        RECT r{};
+        if (GetWindowFrameRect(hwnd, &r)) {
+        g_moveSizeStartRects[hwnd] = r;
+        }
+    };
+    if (event == EVENT_SYSTEM_MOVESIZEEND) {
+            Wh_Log(L"Seg 4");
+
+        RECT r{};
+        if (GetWindowFrameRect(hwnd, &r)) {
+        g_moveSizeEndRects[hwnd] = r;
+        }
+    }
+    else 
+    return;
+
   if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
   if (!hwnd) return;
+
   OnWindowResizeEnd(hwnd);
 }
 
 void InstallMoveSizeHook() {
   if (g_hMoveSizeHook) return;
-  g_hMoveSizeHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, nullptr, WinEventProc, 0, 0,
+  g_hMoveSizeHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, nullptr, WinEventProc, 0, 0,
                                    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
   if (!g_hMoveSizeHook) {
     Wh_Log(L"Failed to install move/size hook");
