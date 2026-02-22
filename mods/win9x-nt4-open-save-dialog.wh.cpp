@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              win9x-nt4-open-save-toolbar
-// @name            Windows 95/98/NT 4.0 Open/Save Toolbar
+// @id              win9x-nt4-open-save-dialog
+// @name            Windows 95/98/NT 4.0 Open/Save Dialog
 // @description     Modifies the classic open/save dialog to be more like Windows 98 and earlier
 // @version         1.0.0
 // @author          aubymori
@@ -13,13 +13,11 @@
 // ==WindhawkModReadme==
 /*
 # Windows 95/98/NT 4.0 Open/Save Dialog
-This mod replaces the classic open/save dialog's toolbar items with those from Windows
-95, 98, or NT 4.0.
+This mod makes the classic open/save dialog more like the one from Windows 95,
+98, or NT 4.0 by removing the Places Bar and replacing the toolbar items.
 
 If you want Windows 98's Deskop item, you will need a copy of Windows 98's comdlg32.dll.
 Once you have that, provide a path to it in the mod options.
-
-You can disable the Places Bar through [other means](https://www.tenforums.com/tutorials/126103-enable-disable-places-bar-common-dialog-box-windows.html).
 
 **NOTE**: This mod only applies to the *classic* open/save dialogs. To see these changes everywhere,
 you will need [this mod](https://windhawk.net/mods/classic-file-picker-dialog).
@@ -71,8 +69,6 @@ DWORD (WINAPI *CDGetAppCompatFlags)();
 
 #define IDB_JUMPDESKTOP      800
 
-// This is 12 in the original implementation, but has
-// since been removed and shifted by other bitmaps.
 #define VIEW_JUMPDESKTOP     12
 
 TBBUTTON atbButtons95[] =
@@ -124,7 +120,6 @@ HWND WINAPI CreateToolbarEx_hook(
         
         if (g_hmodCommDlg98)
         {
-            Wh_Log(L"Setting 98 buttons...");
             lpButtons = atbButtons98;
             iNumButtons = ARRAYSIZE(atbButtons98);
 
@@ -167,7 +162,6 @@ HWND WINAPI CreateToolbarEx_hook(
         }
         else
         {
-            Wh_Log(L"Setting 95 buttons...");
             lpButtons = atbButtons95;
             iNumButtons = ARRAYSIZE(atbButtons95);
         }
@@ -193,8 +187,7 @@ LRESULT CALLBACK DefViewSubclassProc(
     UINT      uMsg,
     WPARAM    wParam,
     LPARAM    lParam,
-    DWORD_PTR dwRefData
-)
+    DWORD_PTR dwRefData)
 {
     switch (uMsg)
     {
@@ -203,7 +196,6 @@ LRESULT CALLBACK DefViewSubclassProc(
             UINT idCmd = LOWORD(wParam);
             if (idCmd >= 28747 && idCmd <= 28754)
             {
-                Wh_Log(L"View command hit: %u", idCmd);
                 HWND hwndToolbar = (HWND)dwRefData;
                 SendMessageW(hwndToolbar, TB_CHECKBUTTON, IDC_VIEWLIST,    idCmd == 28753);
                 SendMessageW(hwndToolbar, TB_CHECKBUTTON, IDC_VIEWDETAILS, idCmd == 28747);
@@ -230,7 +222,6 @@ void OnViewChange()
             HWND hwndListView = FindWindowExW(hwndDefView, NULL, WC_LISTVIEWW, nullptr);
             if (hwndListView)
             {
-                Wh_Log(L"Setting initial view");
                 int iView = ListView_GetView(hwndListView);
                 SendMessageW(hwndToolbar, TB_CHECKBUTTON, IDC_VIEWLIST,    iView == LV_VIEW_LIST);
                 SendMessageW(hwndToolbar, TB_CHECKBUTTON, IDC_VIEWDETAILS, iView == LV_VIEW_DETAILS);
@@ -291,14 +282,37 @@ int __fastcall CDLoadStringEx_hook(
     HINSTANCE hInstance,
     UINT      uID,
     LPWSTR    lpBuffer,
-    int       nBufferMax
-)
+    int       nBufferMax)
 {
     if (uID == 710)
     {
         hInstance = g_hmodCommDlg98;
     }
     return CDLoadStringEx_orig(cp, hInstance, uID, lpBuffer, nBufferMax);
+}
+
+#ifdef _WIN64
+    #define CFileOpenSave__wResIDTemplate(pThis) *((WORD *)pThis + 212)
+#else
+    #define CFileOpenSave__wResIDTemplate(pThis) *((WORD *)pThis + 118)
+#endif
+
+/* Force the dialog to use the variant without the Places Bar. Windows has a policy
+   to disable the Places Bar, but half the apps in existence ignore it completely. :) */
+HRESULT (__thiscall *CFileOpenSave__GetDialogTemplate_orig)(class CFileOpenSave *, HWND, LPDLGTEMPLATE *, BOOL *, WORD *);
+HRESULT __thiscall CFileOpenSave__GetDialogTemplate_hook(
+    class CFileOpenSave *pThis,
+    HWND                 hwndOwner,
+    LPDLGTEMPLATE       *ppdt,
+    BOOL                *pfSetThreadUI,
+    WORD                *pLangID)
+{
+    WORD wResIDTemplate = CFileOpenSave__wResIDTemplate(pThis);
+    if (wResIDTemplate == 1552)
+        CFileOpenSave__wResIDTemplate(pThis) = 1547;
+    else if (wResIDTemplate == 1563)
+        CFileOpenSave__wResIDTemplate(pThis) = 1562;
+    return CFileOpenSave__GetDialogTemplate_orig(pThis, hwndOwner, ppdt, pfSetThreadUI, pLangID);
 }
 
 #ifdef _WIN64
@@ -368,6 +382,14 @@ const WindhawkUtils::SYMBOL_HOOK comdlg32DllHooks[] = {
         },
         &CDLoadStringEx_orig,
         CDLoadStringEx_hook,
+        false
+    },
+    {
+        {
+            L"protected: long " THISCALL_STR L" CFileOpenSave::_GetDialogTemplate(struct HWND__ *,struct DLGTEMPLATE * *,int *,unsigned short *)"
+        },
+        &CFileOpenSave__GetDialogTemplate_orig,
+        CFileOpenSave__GetDialogTemplate_hook,
         false
     },
 };
