@@ -612,6 +612,7 @@ TilingState BuildStateFromWindows(TileLayout layout, const RECT& workArea, const
 }
 
 std::vector<LONG> ComputeWeightedSizes(LONG totalSize, LONG gap, const std::vector<double>& weights) {
+  //Wh_Log(L"Weighed Sizes");
   size_t count = weights.size();
   std::vector<LONG> sizes(count, 0);
   if (count == 0) return sizes;
@@ -631,9 +632,11 @@ std::vector<LONG> ComputeWeightedSizes(LONG totalSize, LONG gap, const std::vect
     LONG size = 0;
     if (i == count - 1) {
       size = available - used;
+
     } else {
       double ratio = w / remainingSum;
-      size = static_cast<LONG>(std::llround(static_cast<double>(available) * ratio));
+      //Fix loop logic
+      size = static_cast<LONG>(std::llround(static_cast<double>(available - used) * ratio));
       if (size < 1) size = 1;
       LONG maxSize = available - used - remainingSlots;
       if (size > maxSize) size = maxSize;
