@@ -1269,6 +1269,8 @@ void RetileFromResize(HWND hwnd) {
   }
 
   std::vector<RECT> windowRects(state.windows.size());
+
+  constexpr LONG kMinRetileSpan = 80; 
   if (state.layout == TileLayout::MasterStack || state.layout == TileLayout::MasterStackH) {
     bool horizontal = (state.layout == TileLayout::MasterStackH);
     LONG totalSize = horizontal ? (workArea.bottom - workArea.top) : (workArea.right - workArea.left);
@@ -1290,7 +1292,7 @@ void RetileFromResize(HWND hwnd) {
     }
 
     LONG resizedSize = horizontal ? (resizedRect.bottom - resizedRect.top) : (resizedRect.right - resizedRect.left);
-    if (resizedSize < 1) resizedSize = 1;
+    if (resizedSize < kMinRetileSpan) resizedSize = kMinRetileSpan;
 
     LONG masterSize = resizedSize;
     if (resizedIndex != 0) {
@@ -1305,7 +1307,7 @@ void RetileFromResize(HWND hwnd) {
           return;
         }
         masterSize = horizontal ? (masterRect.bottom - masterRect.top) : (masterRect.right - masterRect.left);
-        if (masterSize < 1) masterSize = 1;
+        if (masterSize < kMinRetileSpan) masterSize = kMinRetileSpan;
       }
     }
 
@@ -1350,7 +1352,7 @@ void RetileFromResize(HWND hwnd) {
       size_t fixedIndex = (resizedIndex == 0) ? (size_t)-1 : (resizedIndex - 1);
       if (fixedIndex != (size_t)-1) {
         LONG fixedSize = horizontal ? (resizedRect.right - resizedRect.left) : (resizedRect.bottom - resizedRect.top);
-        if (fixedSize < 1) fixedSize = 1;
+        if (fixedSize < kMinRetileSpan) fixedSize = kMinRetileSpan;
         LONG stackTotal = horizontal ? (stackArea.right - stackArea.left) : (stackArea.bottom - stackArea.top);
         stackSizes = ComputeWeightedSizesWithFixed(stackTotal, g_tileGap, state.stackWeights, fixedIndex, fixedSize);
       } else {
@@ -1417,7 +1419,7 @@ void RetileFromResize(HWND hwnd) {
     LONG totalSize = horizontal ? (workArea.bottom - workArea.top) : (workArea.right - workArea.left);
     LONG fixedSize = horizontal ? (ordered[resizedIndex].rect.bottom - ordered[resizedIndex].rect.top)
                                 : (ordered[resizedIndex].rect.right - ordered[resizedIndex].rect.left);
-    if (fixedSize < 1) fixedSize = 1;
+    if (fixedSize < kMinRetileSpan) fixedSize = kMinRetileSpan;
 
     std::vector<LONG> sizes =
         ComputeWeightedSizesWithFixed(totalSize, g_tileGap, state.gridWeights, resizedIndex, fixedSize);
