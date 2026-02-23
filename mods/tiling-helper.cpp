@@ -1085,6 +1085,9 @@ void RetileFromResize(HWND hwnd) {
 
   HWND resizedHwnd = hwnd;
 
+
+  
+
   if (hasState) {
     if (!ContainsWindow(state.windows, resizedHwnd)) {
       HWND resolved = ResolveToTiledWindow(resizedHwnd, state.windows);
@@ -1120,41 +1123,104 @@ void RetileFromResize(HWND hwnd) {
   }
 
 
-  Wh_Log(L"Start skipping");
-auto itStart = g_moveSizeStartRects.find(hwnd);
-if (itStart != g_moveSizeStartRects.end()) {
-    const RECT& before = itStart->second;
+    Wh_Log(L"Start skipping");
 
-    auto itEnd = g_moveSizeEndRects.find(hwnd);
-    if (itEnd != g_moveSizeEndRects.end()) {
-        const RECT& after = itEnd->second;
+    //Look up resized window for cached states to see whether it was moved or not. 
+    //Yes: Remove it from curret "state" (special 1 rem win case); No: Erase cache for win
+    auto itStart = g_moveSizeStartRects.find(hwnd);
+    if (itStart != g_moveSizeStartRects.end()) {
+        const RECT& before = itStart->second;
 
-        RectChange change = ClassifyRectChange(before, after, 1);
+        auto itEnd = g_moveSizeEndRects.find(hwnd);
+        if (itEnd != g_moveSizeEndRects.end()) {
+            const RECT& after = itEnd->second;
 
-        // Clean up cache entries first (safe and simple)
-        g_moveSizeStartRects.erase(hwnd);
-        g_moveSizeEndRects.erase(hwnd);
+            RectChange change = ClassifyRectChange(before, after, 1);
+
+            // Clean up cache entries first (safe and simple)
+            g_moveSizeStartRects.erase(hwnd);
+            g_moveSizeEndRects.erase(hwnd);
 
 
-        if (change == RectChange::MoveOnly) {
-            Wh_Log(L"Skipped successfully");
+            if (change == RectChange::MoveOnly) {
+                Wh_Log(L"Skipped successfully");
+                state.windows.erase(
+                std::remove(state.windows.begin(), state.windows.end(), resizedHwnd),
+                state.windows.end()
+                );
+
+
+                if (state.windows.empty()) {
+                    AcquireSRWLockExclusive(&g_tilingStateLock);
+                    g_tilingStateMap.erase(key);
+                    ReleaseSRWLockExclusive(&g_tilingStateLock);
+                    return;
+                }
+                
+                else if (state.windows.size() == 1){
+                    state.masterRatio = ClampDouble(g_masterPercent / 100.0, 0.1, 0.9);
+
+                    // If you already have workArea here, force the last window to fill it
+                    PlaceWindow(state.windows[0], workArea);
+                    // Persist updated state
+                    AcquireSRWLockExclusive(&g_tilingStateLock);
+                    
+                    // Reset everything in state before writing back
+                    state.layout = g_currentLayout;
+                    state.windows.clear();
+                    state.stackWeights.clear();
+                    state.gridWeights.clear();
+                    g_tilingStateMap[key] = state;
+                    ReleaseSRWLockExclusive(&g_tilingStateLock);
+                    return;
+                };
+
+                AcquireSRWLockExclusive(&g_tilingStateLock);
+                g_tilingStateMap[key] = state;
+                ReleaseSRWLockExclusive(&g_tilingStateLock);
+                
+                //return;
+            }
+
+        } else {
+            // No end rect cached, clean up start just in case
+            Wh_Log(L"Test A failed");
+            g_moveSizeStartRects.erase(hwnd);
+        }
+    }
+    Wh_Log(L"Nothing logged");
+
+    
+
+
+
+  for (HWND w : state.windows) {
+    RECT rect = {};
+    if (!GetWindowFrameRect(w, &rect)) {
+      TileWindows();
+      return;
+    }
+
+    //Resized window isn't on current monitor anymore somehow
+    if (MonitorFromRect(&rect, MONITOR_DEFAULTTONULL) != monitor) {  
+
+        //If window minimized
+        if (IsIconic(resizedHwnd)) {
+            Wh_Log(L"Works");
+
             state.windows.erase(
-            std::remove(state.windows.begin(), state.windows.end(), resizedHwnd),
-            state.windows.end()
-            );
-
+                std::remove(state.windows.begin(), state.windows.end(), resizedHwnd),
+                state.windows.end());
 
             if (state.windows.empty()) {
+                Wh_Log(L"tiling state map erased");
                 AcquireSRWLockExclusive(&g_tilingStateLock);
                 g_tilingStateMap.erase(key);
                 ReleaseSRWLockExclusive(&g_tilingStateLock);
                 return;
             }
-            
             else if (state.windows.size() == 1){
-                 // Clear stale layout memory
-                //state.stackWeights.clear();
-                //state.gridWeights.clear();
+                Wh_Log(L"Placed last remaining window");
                 state.masterRatio = ClampDouble(g_masterPercent / 100.0, 0.1, 0.9);
 
                 // If you already have workArea here, force the last window to fill it
@@ -1172,34 +1238,20 @@ if (itStart != g_moveSizeStartRects.end()) {
                 return;
             };
 
-            AcquireSRWLockExclusive(&g_tilingStateLock);
-            g_tilingStateMap[key] = state;
-            ReleaseSRWLockExclusive(&g_tilingStateLock);
-            
-            //return;
+            Wh_Log(L"tiling state map not erased");
+
+            resizedHwnd = state.windows.front(); // retarget for downstream code
+            state.stackWeights.clear();
+            state.gridWeights.clear();
+
+        //Window not minimized. Something broke. Fallback
+        } else {
+
+            Wh_Log(L"Didn't work");
+            TileWindows();
+            return;
         }
-
-    } else {
-        // No end rect cached, clean up start just in case
-        Wh_Log(L"Test A failed");
-        g_moveSizeStartRects.erase(hwnd);
-    }
-}
-Wh_Log(L"Nothing logged");
-
     
-
-
-
-  for (HWND w : state.windows) {
-    RECT rect = {};
-    if (!GetWindowFrameRect(w, &rect)) {
-      TileWindows();
-      return;
-    }
-    if (MonitorFromRect(&rect, MONITOR_DEFAULTTONULL) != monitor) {
-      TileWindows();
-      return;
     }
   }
 
