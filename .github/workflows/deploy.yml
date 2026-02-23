@@ -36,7 +36,7 @@ jobs:
         run: python -m pip install -r .github/requirements.txt
       - name: Clone last deployed content
         run: |
-          git clone --depth 1 --single-branch --branch pages https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
+          git clone --branch pages --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
       - name: Cache Windhawk
         id: cache-windhawk
         uses: actions/cache@v5
@@ -77,12 +77,12 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           # echo Cloning the repository
-          # git clone --branch $deploy_branch --single-branch --depth 1 --no-checkout https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "$deploy_dir"
+          # git clone --branch $deploy_branch --depth 1 --filter=blob:none --no-checkout https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "$deploy_dir"
           echo Adding generated files to the repository
           git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" add -A
           touch "$deploy_dir/.nojekyll"
           git -C "$deploy_dir" add .nojekyll
           echo Committing changes
-          git -C "$deploy_dir" diff --cached --quiet || git -C "$deploy_dir" commit -m "deploy: $(git -C "$src_dir" rev-parse HEAD)"
+          git -C "$deploy_dir" diff-index --cached --quiet HEAD || git -C "$deploy_dir" commit -m "deploy: $(git -C "$src_dir" rev-parse HEAD)"
           echo Pushing to GitHub
           git -C "$deploy_dir" push origin $deploy_branch
