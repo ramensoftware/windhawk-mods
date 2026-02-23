@@ -1092,7 +1092,8 @@ void RetileFromResize(HWND hwnd) {
     if (!ContainsWindow(state.windows, resizedHwnd)) {
       HWND resolved = ResolveToTiledWindow(resizedHwnd, state.windows);
       if (resolved) {
-        resizedHwnd = resolved;
+        // Patch: Makes it so that a window from another desktop (not found in "state" doesn't trigger retile)
+        resizedHwnd = resolved; return;
       } else {
         return;
       }
