@@ -1093,35 +1093,41 @@ void RetileFromResize(HWND hwnd) {
       HWND resolved = ResolveToTiledWindow(resizedHwnd, state.windows);
       if (resolved) {
         // Patch: Makes it so that a window from another desktop (not found in "state" doesn't trigger retile)
+        
         resizedHwnd = resolved; return;
       } else {
+        Wh_Log(L"Issues here 1");
         return;
       }
     }
   } else {
-    // Auto-retile really shouldn't do anything if theres no state for this desktop. This fallback is extremely unnecessary
-    return; 
+    Wh_Log(L"Issues here 2");
 
-/*
+
     std::vector<HWND> windows = CollectTileWindows(monitor);
     if (windows.empty()) {
       return;
     }
 
     if (!ContainsWindow(windows, resizedHwnd)) {
+
+
       HWND resolved = ResolveToTiledWindow(resizedHwnd, windows);
       if (resolved) {
         resizedHwnd = resolved;
       } else {
         return;
       }
+      
+    // Auto-retile really shouldn't do anything if theres no state for this desktop. This fallback is extremely unnecessary
+    return; 
     }
 
     TileLayout layout = g_currentLayout;
     state = BuildStateFromWindows(layout, workArea, windows, monitor);
     state.layout = layout;
     hasState = true;
-*/
+
     
   }
 
