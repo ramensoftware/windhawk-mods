@@ -2,7 +2,7 @@
 // @id              keyboard-shortcut-actions
 // @name            Keyboard Shortcut Actions
 // @description     Trigger custom actions with global keyboard shortcuts (hotkeys): show desktop, mute volume, open Task Manager, media controls, and more
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -872,8 +872,8 @@ void SendKeypress(const std::vector<int>& keys) {
         // Defer keypress - store and start thread timer
         g_pendingKeypressKeys = keys;
         g_pendingKeypressRetryCount = 0;
-        g_keypressTimerId =
-            SetTimer(nullptr, 0, kKeypressRetryIntervalMs, KeypressRetryTimerProc);
+        g_keypressTimerId = SetTimer(nullptr, 0, kKeypressRetryIntervalMs,
+                                     KeypressRetryTimerProc);
         Wh_Log(L"Modifier keys pressed, deferring keypress");
         return;
     }
@@ -1432,36 +1432,41 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
                                            _In_ WPARAM wParam,
                                            _In_ LPARAM lParam,
                                            _In_ DWORD_PTR dwRefData) {
-    if (uMsg == g_uninitCOMMsg) {
-        g_audioCOM.Uninit();
-        return 0;
-    }
+    switch (uMsg) {
+        case WM_HOTKEY: {
+            int hotkeyId = static_cast<int>(wParam);
+            for (const auto& action : g_settings.hotkeyActions) {
+                if (action.registered && action.hotkeyId == hotkeyId) {
+                    Wh_Log(L"Hotkey %s triggered, executing %s",
+                           action.hotkeyString.c_str(),
+                           ActionTypeToString(action.actionType));
+                    if (action.actionExecutor) {
+                        action.actionExecutor();
+                    }
+                    return 0;
+                }
+            }
+            break;
+        }
 
-    if (uMsg == WM_HOTKEY) {
-        int hotkeyId = static_cast<int>(wParam);
-        for (const auto& action : g_settings.hotkeyActions) {
-            if (action.registered && action.hotkeyId == hotkeyId) {
-                Wh_Log(L"Hotkey %s triggered, executing %s",
-                       action.hotkeyString.c_str(),
-                       ActionTypeToString(action.actionType));
-                if (action.actionExecutor) {
-                    action.actionExecutor();
+        default:
+            if (uMsg == g_hotkeyRegisteredMsg) {
+                switch (wParam) {
+                    case HOTKEY_REGISTER:
+                        RegisterHotkeys(hWnd);
+                        break;
+                    case HOTKEY_UNREGISTER:
+                        UnregisterHotkeys(hWnd);
+                        break;
                 }
                 return 0;
             }
-        }
-    }
 
-    if (uMsg == g_hotkeyRegisteredMsg) {
-        switch (wParam) {
-            case HOTKEY_REGISTER:
-                RegisterHotkeys(hWnd);
-                break;
-            case HOTKEY_UNREGISTER:
-                UnregisterHotkeys(hWnd);
-                break;
-        }
-        return 0;
+            if (uMsg == g_uninitCOMMsg) {
+                g_audioCOM.Uninit();
+                return 0;
+            }
+            break;
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -1510,6 +1515,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
     if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
         Wh_Log(L"Shell_TrayWnd created: %p", hWnd);
         HandleIdentifiedTaskbarWindow(hWnd);
+        RegisterHotkeys(hWnd);
     }
 
     return hWnd;

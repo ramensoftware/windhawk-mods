@@ -2,12 +2,33 @@
 // @id              taskbar-fade
 // @name            Taskbar Fade
 // @description     Reduces visual clutter by automatically dimming or hiding the taskbar when idle. Ideal for focused workflows and preventing OLED burn-in.
-// @version         1.5
+// @version         2.0
 // @author          Lukvbp
 // @github          https://github.com/lukvbp
 // @include         windhawk.exe
 // @compilerOptions -luser32
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Taskbar Fade
+Automatically dims or hides the taskbar when the computer is idle.
+
+This mod is designed to prevent OLED burn-in and reduce visual distractions by lowering the taskbar's opacity when it is not in use.
+
+### Features
+* **Idle Dimming:** The taskbar fades to a lower transparency level (configurable) when the mouse is away.
+* **Idle Hiding:** Optionally hides the taskbar completely after a set timeout.
+* **Instant Wake:** Moving the mouse to the taskbar or the bottom of the screen restores full opacity immediately.
+* **Customization:** Settings available for fade speed, transparency levels, and timeout duration.
+
+### Configuration
+* **Default Transparency:** The opacity level when the taskbar is dimmed (0-100%).
+* **Enable Idle Hiding:** Check this to make the taskbar vanish completely after a timeout.
+* **Idle Timeout:** Seconds of inactivity before the taskbar hides.
+* **Fade Speed:** Duration of the fade animation in milliseconds.
+*/
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
@@ -20,13 +41,13 @@
 - IdleTimeout: 15
   $name: Idle Timeout (Seconds)
   $description: Time before the taskbar disappears (if Idle Hiding is enabled).
-- FadeDuration: 200
+- FadeDuration: 250
   $name: Wake/Dim Speed (ms)
   $description: How fast it animates when you are using the PC.
 - IdleFadeDuration: 2000
   $name: Idle Fade Speed (ms)
   $description: How fast it fades out when you walk away.
-- TargetFPS: 30
+- TargetFPS: 60
   $name: Animation Smoothness (FPS)
   $description: Higher is smoother but uses more CPU. (Range 15 to 120).
 */
@@ -37,7 +58,6 @@
 #include <thread>
 #include <vector>
 #include <cmath>
-#include <cstdio>
 #include <mutex>
 
 // --- MOD LOGIC ---
@@ -47,54 +67,67 @@ std::atomic<bool> g_stopThread(false);
 std::thread g_workerThread;
 std::mutex g_settingsMutex;
 
+// State Machine
+enum class FadeState {
+    Active, // Mouse is hovering
+    Dimmed, // Mouse away, but not yet idle (or idle hiding disabled)
+    Idle    // Idle timeout reached (Overrides hover)
+};
+
 // Runtime Settings Cache
 struct {
     bool enableIdleFade;
     DWORD idleTimeoutMS;
     int fadeDuration;
     int idleFadeDuration;
-    int frameTimeMs; 
+    int frameTimeMs;
     double targetDimAlpha;
 } g_cache;
 
 // Window Tracking
 struct TaskbarState {
     HWND hwnd;
-    bool isLayered;
+    bool isLayered;     // CACHE
+    bool isTransparent; // CACHE
     int lastAlpha;
+    RECT rect; // Cached geometry
 };
 
-// --- SETTINGS MANAGEMENT ---
+// --- SETTINGS ---
 void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
 
-    bool enableIdle = Wh_GetIntSetting(L"EnableIdleFade");
+    bool enableIdle = Wh_GetIntSetting(L"EnableIdleFade") != 0;
     int rawTimeout = Wh_GetIntSetting(L"IdleTimeout");
     int rawTransp = Wh_GetIntSetting(L"DimTransparency");
     int rawFade = Wh_GetIntSetting(L"FadeDuration");
     int rawIdleFade = Wh_GetIntSetting(L"IdleFadeDuration");
     int rawFPS = Wh_GetIntSetting(L"TargetFPS");
 
-    // Validation
     if (rawTimeout < 1) rawTimeout = 1;
     if (rawTransp < 0) rawTransp = 0;
     if (rawTransp > 100) rawTransp = 100;
+
+    // FPS Clamp: 15 to 120
     if (rawFPS < 15) rawFPS = 15;
     if (rawFPS > 120) rawFPS = 120;
 
     int calculatedFrameTime = 1000 / rawFPS;
 
-    // Ensure animations are at least one frame long
+    // Validate Durations
     if (rawFade < calculatedFrameTime) rawFade = calculatedFrameTime;
     if (rawIdleFade < calculatedFrameTime) rawIdleFade = calculatedFrameTime;
 
     g_cache.enableIdleFade = enableIdle;
-    g_cache.idleTimeoutMS = (DWORD)(rawTimeout * 1000);
+
+    // Safety: (DWORD) cast prevents signed integer overflow during multiplication
+    // if user enters a large duration (e.g. > 24 days)
+    g_cache.idleTimeoutMS = (DWORD)rawTimeout * 1000;
+
     g_cache.fadeDuration = rawFade;
     g_cache.idleFadeDuration = rawIdleFade;
     g_cache.frameTimeMs = calculatedFrameTime;
 
-    // Pre-calculate target alpha for the "Dimmed" state
     double opacityPercent = (100.0 - (double)rawTransp);
     g_cache.targetDimAlpha = (opacityPercent * 255.0) / 100.0;
 }
@@ -105,54 +138,62 @@ void WhTool_ModSettingsChanged() {
 
 // --- WINDOW HELPERS ---
 
-bool IsMouseOverWindow(HWND hwnd, POINT cursorPt) {
-    if (!hwnd || !IsWindowVisible(hwnd)) return false;
-    RECT rect;
-    if (!GetWindowRect(hwnd, &rect)) return false;
-    return PtInRect(&rect, cursorPt);
-}
-
-bool EnsureLayeredStyle(HWND hwnd, bool enable) {
-    if (!hwnd || !IsWindow(hwnd)) return false;
-
+void RestoreTaskbarStyle(HWND hwnd) {
+    if (!IsWindow(hwnd)) return;
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-    bool isCurrentlyLayered = (exStyle & WS_EX_LAYERED) != 0;
-
-    if (enable && !isCurrentlyLayered) {
-        SetLastError(0);
-        LONG_PTR result = SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-        if (result == 0 && GetLastError() != 0) {
-            return false;
-        }
-    } else if (!enable && isCurrentlyLayered) {
-        SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
-        // Force a redraw when removing transparency
-        SetWindowPos(hwnd, NULL, 0, 0, 0, 0, 
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    if ((exStyle & WS_EX_LAYERED) || (exStyle & WS_EX_TRANSPARENT)) {
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~(WS_EX_LAYERED | WS_EX_TRANSPARENT));
+        SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
-    return true;
 }
 
+// 5-Stage Pipeline: Safe Ordering for Style Changes
 void UpdateBarOpacity(TaskbarState& bar, int alpha) {
-    if (!bar.hwnd || !IsWindow(bar.hwnd)) return;
+    if (!IsWindow(bar.hwnd)) return;
+
+    // Early-Out if state is already correct
+    if (bar.lastAlpha == alpha) return;
 
     bool needLayered = (alpha < 255);
+    bool needTransparent = (alpha == 0);
 
-    // 1. Manage Window Style (WS_EX_LAYERED)
-    if (bar.isLayered != needLayered) {
-        if (EnsureLayeredStyle(bar.hwnd, needLayered)) {
-            bar.isLayered = needLayered;
-            bar.lastAlpha = -1; // Style changed, force alpha update
+    // 1. PRE-CLEANUP: Remove Transparent
+    if (bar.isTransparent && !needTransparent) {
+        LONG_PTR exStyle = GetWindowLongPtr(bar.hwnd, GWL_EXSTYLE);
+        SetWindowLongPtr(bar.hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT);
+        bar.isTransparent = false;
+    }
+
+    // 2. SETUP: Enable Layered
+    if (!bar.isLayered && needLayered) {
+        LONG_PTR exStyle = GetWindowLongPtr(bar.hwnd, GWL_EXSTYLE);
+        SetWindowLongPtr(bar.hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+        bar.isLayered = true;
+        // Force update on next step
+        bar.lastAlpha = -1;
+    }
+
+    // 3. APPLY: Set Alpha
+    if (needLayered) {
+        if (SetLayeredWindowAttributes(bar.hwnd, 0, (BYTE)alpha, LWA_ALPHA)) {
+            bar.lastAlpha = alpha;
         }
     }
 
-    // 2. Apply Alpha (Only if needed AND value actually changed)
-    if (needLayered) {
-        if (bar.lastAlpha != alpha) {
-            if (SetLayeredWindowAttributes(bar.hwnd, 0, (BYTE)alpha, LWA_ALPHA)) {
-                bar.lastAlpha = alpha;
-            }
-        }
+    // 4. POST-POLISH: Enable Transparent
+    if (!bar.isTransparent && needTransparent) {
+        LONG_PTR exStyle = GetWindowLongPtr(bar.hwnd, GWL_EXSTYLE);
+        SetWindowLongPtr(bar.hwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT);
+        bar.isTransparent = true;
+    }
+
+    // 5. CLEANUP: Remove Layered
+    if (bar.isLayered && !needLayered) {
+        LONG_PTR exStyle = GetWindowLongPtr(bar.hwnd, GWL_EXSTYLE);
+        SetWindowLongPtr(bar.hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+        bar.isLayered = false;
+        SetWindowPos(bar.hwnd, NULL, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 }
 
@@ -160,127 +201,192 @@ void UpdateBarOpacity(TaskbarState& bar, int alpha) {
 void WorkerLoop() {
     std::vector<TaskbarState> taskbars;
     LASTINPUTINFO lii = { sizeof(LASTINPUTINFO) };
-    
-    double currentAlpha = 255.0; 
 
-    // Local settings snapshot for thread safety
-    struct {
-        bool enableIdleFade;
-        DWORD idleTimeoutMS;
-        int fadeDuration;
-        int idleFadeDuration;
-        int frameTimeMs; 
-        double targetDimAlpha;
-    } settings;
+    // Animation State
+    double currentAlpha = 255.0;
+    double lastTarget = -1.0;
+    double animStartAlpha = 255.0;
+    FadeState lastState = FadeState::Dimmed;
+
+    // Timing State
+    ULONGLONG animStartTime = 0;
+    ULONGLONG lastGeometryUpdate = 0;
+
+    // Local snapshot variables
+    bool enableIdleFade;
+    DWORD idleTimeoutMS;
+    int fadeDuration;
+    int idleFadeDuration;
+    int frameTimeMs;
+    double targetDimAlpha;
 
     while (!g_stopThread) {
-        // --- 0. SNAPSHOT SETTINGS ---
+        // 0. Settings Snapshot
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
-            settings.enableIdleFade = g_cache.enableIdleFade;
-            settings.idleTimeoutMS = g_cache.idleTimeoutMS;
-            settings.fadeDuration = g_cache.fadeDuration;
-            settings.idleFadeDuration = g_cache.idleFadeDuration;
-            settings.frameTimeMs = g_cache.frameTimeMs;
-            settings.targetDimAlpha = g_cache.targetDimAlpha;
+            enableIdleFade = g_cache.enableIdleFade;
+            idleTimeoutMS = g_cache.idleTimeoutMS;
+            fadeDuration = g_cache.fadeDuration;
+            idleFadeDuration = g_cache.idleFadeDuration;
+            frameTimeMs = g_cache.frameTimeMs;
+            targetDimAlpha = g_cache.targetDimAlpha;
         }
 
-        // --- 1. DISCOVERY / RECOVERY ---
-        // Verify taskbar handles are still valid (handles Explorer crashes/restarts)
+        ULONGLONG now = GetTickCount64();
+
+        // 1. Discovery & Recovery
         bool needsRefresh = taskbars.empty();
         if (!needsRefresh) {
-            for (const auto& bar : taskbars) {
-                if (!IsWindow(bar.hwnd)) {
-                    needsRefresh = true;
-                    break;
-                }
-            }
+            for (const auto& bar : taskbars) if (!IsWindow(bar.hwnd)) { needsRefresh = true; break; }
         }
 
         if (needsRefresh) {
             taskbars.clear();
-            HWND hMain = FindWindow(L"Shell_TrayWnd", NULL);
-            if (hMain) {
-                // Initialize lastAlpha to -1 to ensure first paint occurs
-                taskbars.push_back({ hMain, false, -1 });
-            }
 
+            auto AddTaskbar = [&](HWND h) {
+                if (h) {
+                    RECT r = {0}; GetWindowRect(h, &r);
+
+                    // Ignore empty rectangles (e.g. native auto-hide active)
+                    if (!IsRectEmpty(&r)) {
+                        LONG_PTR style = GetWindowLongPtr(h, GWL_EXSTYLE);
+                        bool isLayered = (style & WS_EX_LAYERED) != 0;
+                        bool isTrans = (style & WS_EX_TRANSPARENT) != 0;
+                        taskbars.push_back({ h, isLayered, isTrans, -1, r });
+                    }
+                }
+            };
+
+            AddTaskbar(FindWindow(L"Shell_TrayWnd", NULL));
             HWND hSec = NULL;
             while ((hSec = FindWindowEx(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)) != NULL) {
-                taskbars.push_back({ hSec, false, -1 });
+                AddTaskbar(hSec);
             }
-            
+
             if (taskbars.empty()) {
-                Sleep(1000); // Explorer likely not running, wait and retry
+                // Prevent CPU spin if no taskbars found (e.g. Explorer restarting)
+                Sleep(250);
                 continue;
             }
-            currentAlpha = 255.0; 
+
+            // Reset Animation State
+            currentAlpha = 255.0;
+            lastTarget = 255.0;
+            animStartAlpha = 255.0;
+            animStartTime = now;
+            lastGeometryUpdate = now;
+            lastState = FadeState::Dimmed;
         }
 
-        // --- 2. INPUT DETECTION ---
-        GetLastInputInfo(&lii);
-        ULONGLONG tick = GetTickCount64();
-        ULONGLONG lastInput = (ULONGLONG)lii.dwTime; 
-        ULONGLONG idleTime = tick - lastInput;
+        // 2. Geometry Refresh (1Hz Timer)
+        if (now - lastGeometryUpdate > 1000) {
+            for (auto& bar : taskbars) {
+                if (IsWindow(bar.hwnd)) {
+                    RECT r = {0};
+                    GetWindowRect(bar.hwnd, &r);
+                    // Only update if geometry is valid
+                    if (!IsRectEmpty(&r)) {
+                        bar.rect = r;
+                    }
+                }
+            }
+            lastGeometryUpdate = now;
+        }
 
-        POINT pt;
+        // 3. Logic: Determine State
+        GetLastInputInfo(&lii);
+        // 32-bit subtraction to handle rollover
+        DWORD idleTime = (DWORD)now - lii.dwTime;
+
+        POINT pt = {0};
         GetCursorPos(&pt);
-        
+
         bool isHovering = false;
         for (const auto& bar : taskbars) {
-            if (IsMouseOverWindow(bar.hwnd, pt)) {
-                isHovering = true;
-                break; 
-            }
+            if (PtInRect(&bar.rect, pt)) { isHovering = true; break; }
         }
 
-        // --- 3. TARGET CALCULATION ---
-        double target = 255.0;
-        int activeDuration = settings.fadeDuration; 
+        FadeState targetState = FadeState::Dimmed;
 
-        if (settings.enableIdleFade && (idleTime > settings.idleTimeoutMS)) {
-            target = 0.0; // Idle State
-            activeDuration = settings.idleFadeDuration; 
+        if (enableIdleFade && idleTime > idleTimeoutMS) {
+            targetState = FadeState::Idle;
         } else if (isHovering) {
-            target = 255.0; // Active State
-            activeDuration = settings.fadeDuration;
-        } else {
-            target = settings.targetDimAlpha; // Dimmed State
-            activeDuration = settings.fadeDuration; 
+            targetState = FadeState::Active;
         }
 
-        // --- 4. ANIMATION LOGIC ---
-        bool isAnimating = false;
-        
-        if (std::abs(currentAlpha - target) > 0.5) {
-            isAnimating = true;
-            
-            double stepSize = (255.0 * (double)settings.frameTimeMs) / (double)activeDuration;
+        // 4. Reactive Geometry Update
+        if (targetState != lastState) {
+            for (auto& bar : taskbars) {
+                if (IsWindow(bar.hwnd)) {
+                    RECT r = {0};
+                    GetWindowRect(bar.hwnd, &r);
+                    if (!IsRectEmpty(&r)) {
+                        bar.rect = r;
+                    }
+                }
+            }
+            lastGeometryUpdate = now;
+            lastState = targetState;
+        }
 
-            if (currentAlpha < target) {
-                currentAlpha += stepSize;
-                if (currentAlpha > target) currentAlpha = target;
+        // 5. Target Alpha Calculation
+        double target = 255.0;
+        int duration = fadeDuration;
+
+        switch (targetState) {
+            case FadeState::Active: target = 255.0; duration = fadeDuration; break;
+            case FadeState::Idle:   target = 0.0;   duration = idleFadeDuration; break;
+            case FadeState::Dimmed: target = targetDimAlpha; duration = fadeDuration; break;
+        }
+
+        // 6. Animation (Stateful Cubic Ease-Out)
+        bool isAnimating = false;
+
+        // Exact float comparison (target only takes predefined values)
+        if (target != lastTarget) {
+            lastTarget = target;
+            animStartAlpha = currentAlpha;
+            animStartTime = now;
+        }
+
+        double dist = std::abs(currentAlpha - target);
+
+        // SNAP THRESHOLD: 1.0 (Prevents sub-pixel CPU churn)
+        if (dist >= 1.0) {
+            isAnimating = true;
+
+            ULONGLONG elapsed = now - animStartTime;
+
+            if (elapsed >= (ULONGLONG)duration) {
+                currentAlpha = target;
             } else {
-                currentAlpha -= stepSize;
-                if (currentAlpha < target) currentAlpha = target;
+                double t = (double)elapsed / (double)duration;
+                if (t < 0.0) t = 0.0;
+                if (t > 1.0) t = 1.0;
+
+                double invT = 1.0 - t;
+                double ease = 1.0 - (invT * invT * invT);
+
+                currentAlpha = animStartAlpha + ((target - animStartAlpha) * ease);
             }
 
-            // Clamp to byte range
             int applyAlpha = (int)currentAlpha;
             if (applyAlpha < 0) applyAlpha = 0;
             if (applyAlpha > 255) applyAlpha = 255;
 
-            for (auto& bar : taskbars) {
-                UpdateBarOpacity(bar, applyAlpha);
+            for (auto& bar : taskbars) UpdateBarOpacity(bar, applyAlpha);
+        } else {
+            // Snap to exact target
+            if (currentAlpha != target) {
+                currentAlpha = target;
+                for (auto& bar : taskbars) UpdateBarOpacity(bar, (int)currentAlpha);
             }
         }
 
-        // --- 5. DYNAMIC SLEEP ---
+        // 7. Dynamic Sleep
         if (isAnimating) {
-            // High refresh rate only when visual updates are needed
-            std::this_thread::sleep_for(std::chrono::milliseconds(settings.frameTimeMs));
+            std::this_thread::sleep_for(std::chrono::milliseconds(frameTimeMs));
         } else {
-            // Low power polling (~15 checks/sec) to save CPU when static
             std::this_thread::sleep_for(std::chrono::milliseconds(66));
         }
     }
@@ -298,19 +404,15 @@ BOOL WhTool_ModInit() {
 void WhTool_ModUninit() {
     g_stopThread = true;
     if (g_workerThread.joinable()) g_workerThread.join();
-    
-    // Cleanup: Restore original opacity
-    HWND hMain = FindWindow(L"Shell_TrayWnd", NULL);
-    if (hMain) EnsureLayeredStyle(hMain, false);
 
+    RestoreTaskbarStyle(FindWindow(L"Shell_TrayWnd", NULL));
     HWND hSec = NULL;
     while ((hSec = FindWindowEx(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)) != NULL) {
-        EnsureLayeredStyle(hSec, false);
+        RestoreTaskbarStyle(hSec);
     }
 }
 
 // --- WINDHAWK TOOL BOILERPLATE (DO NOT EDIT) ---
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;

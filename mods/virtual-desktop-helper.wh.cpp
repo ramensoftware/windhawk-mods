@@ -1,19 +1,19 @@
 // ==WindhawkMod==
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
-// @description     Switch virtual desktops, move windows between desktops, pin windows, and tile windows with customizable hotkeys
-// @version         2.2.0
+// @description     Switch virtual desktops, move windows between desktops, and pin windows with customizable hotkeys
+// @version         2.3.0
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -ldwmapi
+// @compilerOptions -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Virtual Desktop Helper
 
-A comprehensive virtual desktop management tool with window tiling support for Windows 10/11.
+A comprehensive virtual desktop management tool for Windows 10/11.
 
 Based on VD.ahk by FuPeiJiang.
 
@@ -22,13 +22,10 @@ Based on VD.ahk by FuPeiJiang.
 ### Virtual Desktop Management
 - **Quick Switch**: Jump directly to any desktop (1-9) with a single hotkey
 - **Move Windows**: Send the active window to any desktop instantly
-- **Previous Desktop**: Toggle back to the last visited desktop
+- **Previous Desktop (Index)**: Switch to the previous desktop (idx-1, wraps around)
+- **Next Desktop (Index)**: Switch to the next desktop (idx+1, wraps around)
+- **Last Desktop**: Toggle back to the last visited desktop
 - **Pin Windows**: Pin/unpin windows to appear on all desktops
-
-### Window Tiling
-- **Manual Tiling**: Tile all windows on the current monitor with one hotkey
-- **Multiple Layouts**: 6 different tiling layouts to choose from
-- **Customizable Gaps**: Adjust margins and gaps between windows
 
 ## Default Hotkeys
 
@@ -36,13 +33,12 @@ Based on VD.ahk by FuPeiJiang.
 |--------|----------------|
 | Switch to desktop 1-9 | `Alt + 1-9` |
 | Move window to desktop 1-9 | `Alt + Shift + 1-9` |
-| Toggle previous desktop | `Alt + Q` (configurable modifier) |
-| Switch to next desktop | `Alt + X` (configurable modifier) |
+| Switch to previous desktop (idx-1) | `Alt + Z` (configurable modifier) |
+| Switch to next desktop (idx+1) | `Alt + X` (configurable modifier) |
+| Toggle last desktop | `Alt + Q` (configurable modifier) |
 | Pin/unpin window | `Alt + P` (configurable modifier) |
-| Tile windows | `Alt + D` (configurable modifier) |
-| Cycle layout | `Alt + L` (configurable modifier) |
 
-Note: The modifier for utility hotkeys (Previous Desktop, Next Desktop, Pin, Tile, Layout) can be changed in settings.
+Note: The modifier for utility hotkeys (Previous/Next Desktop (Index), Last Desktop, Pin) can be changed in settings. Previous/next cycling is limited by the "Maximum Desktops" setting.
 
 ## Customization
 
@@ -52,13 +48,8 @@ Settings are organized by feature. Each feature has an **Enable** toggle and its
 
 - **[Switch Desktop]** - Alt+1-9 to switch desktops
 - **[Move Window]** - Alt+Shift+1-9 to move windows between desktops
-- **[Prev/Next Desktop]** - Cycle between desktops (Alt+Q, Alt+X by default)
+- **[Prev/Next Desktop]** - Previous/next by index and last-desktop toggle (Alt+Z, Alt+X, Alt+Q by default)
 - **[Pin Window]** - Pin/unpin windows to all desktops (Alt+P by default)
-- **[Tiling]** - Tile windows and related settings
-  - Main hotkey (Alt+D by default) to tile windows
-  - Layout cycle hotkey (Alt+L by default) - only works when tiling is enabled
-  - Default layout, margin, gap, and master size settings
-
 ### Key Binding Format
 
 Hotkey fields accept any single character:
@@ -83,17 +74,6 @@ Hotkey fields accept any single character:
 **Example:** If you only want Alt+1-9 for switching desktops:
 1. Disable all options except "[Switch Desktop] Enable"
 2. All other hotkeys will be unregistered
-
-**Note:** The "[Tiling] Enable Layout Cycle" setting only has an effect when "[Tiling] Enable" is also enabled.
-
-## Tiling Layouts
-
-1. **Master + Stack (Vertical)**: One large master window on the left, others stacked on the right
-2. **Master + Stack (Horizontal)**: One large master window on top, others in a row below
-3. **Columns**: All windows in equal vertical columns
-4. **Rows**: All windows in equal horizontal rows
-5. **BSP (Binary Space Partition)**: Recursive binary split layout
-6. **Monocle**: All windows fullscreen (stacked)
 
 ## Windows Version Support
 
@@ -168,8 +148,12 @@ Select your Windows version in settings for correct functionality:
     - ctrl+shift: Ctrl + Shift
 
 - PrevDesktopKey: "Q"
-  $name: '[Prev/Next Desktop] Previous Key'
-  $description: 'Key to toggle back to the previous desktop. Examples: Q, F, ~, !, [, Tab, Space'
+  $name: '[Prev/Next Desktop] Last Desktop Key'
+  $description: 'Key to toggle back to the last visited desktop. Examples: Q, F, ~, !, [, Tab, Space'
+
+- PrevIndexKey: "Z"
+  $name: '[Prev/Next Desktop] Previous Desktop (Index) Key'
+  $description: 'Key to switch to the previous desktop by index (idx-1, wraps around). Examples: Z, A, <, ,, Tab'
 
 - NextDesktopKey: "X"
   $name: '[Prev/Next Desktop] Next Key'
@@ -183,56 +167,17 @@ Select your Windows version in settings for correct functionality:
   $name: '[Pin Window] Key'
   $description: 'Key to pin/unpin the active window to all desktops. Examples: P, W, #, ;, \\'
 
-- EnableTiling: true
-  $name: '[Tiling] Enable'
-  $description: Enable hotkey to tile windows on current monitor
-
-- TileKey: "D"
-  $name: '[Tiling] Key'
-  $description: 'Key to tile all windows on the current monitor. Examples: D, T, Space, `, -'
-
-- DefaultLayout: master_stack
-  $name: '[Tiling] Default Layout'
-  $description: The initial tiling layout when the mod starts (only applies when tiling is enabled)
-  $options:
-    - master_stack: Master + Stack (Vertical)
-    - master_stack_h: Master + Stack (Horizontal)
-    - columns: Columns
-    - rows: Rows
-    - bsp: BSP (Binary Space Partition)
-    - monocle: Monocle (Fullscreen)
-
-- TileMargin: 4
-  $name: '[Tiling] Margin (pixels)'
-  $description: Gap between tiled windows and screen edges (0-100, only applies when tiling is enabled)
-
-- TileGap: 4
-  $name: '[Tiling] Gap (pixels)'
-  $description: Gap between adjacent tiled windows (0-100, only applies when tiling is enabled)
-
-- MasterPercent: 50
-  $name: '[Tiling] Master Size (%)'
-  $description: Size percentage of the master window in Master+Stack layouts (1-99, only applies when tiling is enabled)
-
-- EnableLayoutCycle: true
-  $name: '[Tiling] Enable Layout Cycle'
-  $description: Enable hotkey to cycle through tiling layouts (only works when tiling hotkey is enabled)
-
-- LayoutKey: "L"
-  $name: '[Tiling] Layout Cycle Key'
-  $description: 'Key to cycle through tiling layouts. Examples: L, Tab, =, ], /'
 */
 // ==/WindhawkModSettings==
 
-#include <dwmapi.h>
 #include <initguid.h>
 #include <objbase.h>
 #include <objectarray.h>
+#include <oleacc.h>
 #include <shobjidl.h>
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <unordered_map>
-#include <vector>
 
 #define SAFE_RELEASE(p) \
   do {                  \
@@ -383,41 +328,29 @@ static bool g_hasPreviousDesktop = false;
 // HK_MOVE_BASE (1-9): Move window to desktop 1-9
 // HK_SWITCH_BASE (10-18): Switch to desktop 1-9
 // HK_PREV (19): Toggle to previous desktop
-// HK_TILE (20): Tile windows on current monitor
-// HK_LAYOUT (21): Cycle through tiling layouts
-// HK_PIN (22): Pin/unpin current window
-// HK_NEXT (23): Switch to next desktop (wrap around)
+// HK_PIN (20): Pin/unpin current window
+// HK_NEXT (21): Switch to next desktop (wrap around)
+// HK_PREV_INDEX (22): Switch to previous desktop by index (wrap around)
 enum HotkeyIds {
   HK_MOVE_BASE = 1,
   HK_SWITCH_BASE = 10,
   HK_PREV = 19,
-  HK_TILE = 20,
-  HK_LAYOUT = 21,
-  HK_PIN = 22,
-  HK_NEXT = 23
+  HK_PIN = 20,
+  HK_NEXT = 21,
+  HK_PREV_INDEX = 22
 };
 
-static LONG g_tileMargin = 4;
-static LONG g_tileGap = 4;
-static LONG g_masterPercent = 50;
-
-enum class TileLayout { MasterStack, Columns, Rows, MasterStackH, BSP, Monocle, COUNT };
-static TileLayout g_currentLayout = TileLayout::MasterStack;
-
 static UINT g_prevDesktopKey = 'Q';
+static UINT g_prevIndexKey = 'Z';
 static UINT g_nextDesktopKey = 'X';
-static UINT g_tileKey = 'D';
-static UINT g_layoutKey = 'L';
 static UINT g_pinKey = 'P';
 
 static bool g_enableSwitchDesktop = true;
 static bool g_enableMoveWindow = true;
 static bool g_enablePrevNextDesktop = true;
 static bool g_enablePinWindow = true;
-static bool g_enableTiling = true;
-static bool g_enableLayoutCycle = true;
 
-// Per-desktop state: tracks last focused window and layout for each virtual desktop
+// Per-desktop state: tracks last focused window for each virtual desktop
 // Hash function for GUID to use in unordered_map
 // Combines 4 uint32_t values using a standard hash combining technique (golden ratio based)
 struct GuidHash {
@@ -437,7 +370,6 @@ struct GuidEqual {
 };
 
 static std::unordered_map<GUID, HWND, GuidHash, GuidEqual> g_desktopFocusMap;
-static std::unordered_map<GUID, TileLayout, GuidHash, GuidEqual> g_desktopLayoutMap;
 
 //=============================================================================
 // Helper Functions
@@ -448,6 +380,8 @@ template <typename T>
 T GetVTableFunction(void* pInterface, int index) {
   return reinterpret_cast<T>((*reinterpret_cast<void***>(pInterface))[index]);
 }
+
+bool InitializeVirtualDesktopAPI();
 
 bool UsesHMonitorParameter() { return g_versionIIDs[g_windowsVersionIndex].usesHMonitor; }
 
@@ -467,17 +401,6 @@ T LookupTable(PCWSTR str, const std::pair<PCWSTR, T>* table, size_t count, T def
   return defaultVal;
 }
 
-
-
-TileLayout ParseLayoutSetting(PCWSTR str) {
-  static const std::pair<PCWSTR, TileLayout> kLayoutMap[] = {{L"master_stack", TileLayout::MasterStack},
-                                                             {L"master_stack_h", TileLayout::MasterStackH},
-                                                             {L"columns", TileLayout::Columns},
-                                                             {L"rows", TileLayout::Rows},
-                                                             {L"bsp", TileLayout::BSP},
-                                                             {L"monocle", TileLayout::Monocle}};
-  return LookupTable(str, kLayoutMap, _countof(kLayoutMap), TileLayout::MasterStack);
-}
 
 int ParseWindowsVersion(PCWSTR str) {
   static const std::pair<PCWSTR, int> kVersionMap[] = {
@@ -559,32 +482,16 @@ void LoadSettings() {
   g_maxDesktops = Wh_GetIntSetting(L"MaxDesktops");
   if (g_maxDesktops < 1 || g_maxDesktops > 9) g_maxDesktops = 9;
 
-  // Tiling settings
-  g_tileMargin = Wh_GetIntSetting(L"TileMargin");
-  if (g_tileMargin < 0 || g_tileMargin > 100) g_tileMargin = 4;
-  g_tileGap = Wh_GetIntSetting(L"TileGap");
-  if (g_tileGap < 0 || g_tileGap > 100) g_tileGap = 4;
-  g_masterPercent = Wh_GetIntSetting(L"MasterPercent");
-  if (g_masterPercent < 1 || g_masterPercent > 99) g_masterPercent = 50;
-
-  // Layout and hotkey settings
-  PCWSTR layout = Wh_GetStringSetting(L"DefaultLayout");
-  g_currentLayout = ParseLayoutSetting(layout);
-  Wh_FreeStringSetting(layout);
-
   // Enable/disable toggles
   g_enableSwitchDesktop = Wh_GetIntSetting(L"EnableSwitchDesktop") != 0;
   g_enableMoveWindow = Wh_GetIntSetting(L"EnableMoveWindow") != 0;
   g_enablePrevNextDesktop = Wh_GetIntSetting(L"EnablePrevNextDesktop") != 0;
   g_enablePinWindow = Wh_GetIntSetting(L"EnablePinWindow") != 0;
-  g_enableTiling = Wh_GetIntSetting(L"EnableTiling") != 0;
-  g_enableLayoutCycle = Wh_GetIntSetting(L"EnableLayoutCycle") != 0;
 
   // Load hotkey settings (single character input supporting A-Z, 0-9, and special chars)
   g_prevDesktopKey = ReadStringSetting(L"PrevDesktopKey", ParseSingleCharKey, (UINT)'Q');
+  g_prevIndexKey = ReadStringSetting(L"PrevIndexKey", ParseSingleCharKey, (UINT)'Z');
   g_nextDesktopKey = ReadStringSetting(L"NextDesktopKey", ParseSingleCharKey, (UINT)'X');
-  g_tileKey = ReadStringSetting(L"TileKey", ParseSingleCharKey, (UINT)'D');
-  g_layoutKey = ReadStringSetting(L"LayoutKey", ParseSingleCharKey, (UINT)'L');
   g_pinKey = ReadStringSetting(L"PinKey", ParseSingleCharKey, (UINT)'P');
 }
 
@@ -954,6 +861,47 @@ bool SwitchToPreviousDesktop() {
   return GoToDesktopNum(index + 1);
 }
 
+bool SwitchToPreviousIndexDesktop() {
+  Wh_Log(L"SwitchToPreviousIndexDesktop called");
+  if (!InitializeVirtualDesktopAPI()) {
+    Wh_Log(L"SwitchToPreviousIndexDesktop: API not initialized");
+    return false;
+  }
+
+  GUID currentDesktopId = {};
+  if (!GetCurrentDesktopId(&currentDesktopId)) {
+    Wh_Log(L"SwitchToPreviousIndexDesktop: Failed to get current desktop ID");
+    return false;
+  }
+
+  int currentIndex = GetDesktopIndexById(currentDesktopId);
+  if (currentIndex < 0) {
+    Wh_Log(L"SwitchToPreviousIndexDesktop: Invalid current index");
+    return false;
+  }
+
+  IObjectArray* desktops = GetDesktops();
+  if (!desktops) {
+    Wh_Log(L"SwitchToPreviousIndexDesktop: Failed to get desktops");
+    return false;
+  }
+
+  UINT desktopCount = 0;
+  desktops->GetCount(&desktopCount);
+  desktops->Release();
+
+  Wh_Log(L"SwitchToPreviousIndexDesktop: currentIndex=%d, desktopCount=%u, maxDesktops=%d", currentIndex,
+         desktopCount, g_maxDesktops);
+
+  int cycleCount = (int)desktopCount;
+  if (cycleCount > g_maxDesktops) cycleCount = g_maxDesktops;
+  if (cycleCount <= 0) return false;
+
+  int prevIndex = (currentIndex - 1 + cycleCount) % cycleCount;
+  Wh_Log(L"SwitchToPreviousIndexDesktop: Switching to desktop %d", prevIndex + 1);
+  return GoToDesktopNum(prevIndex + 1);
+}
+
 bool SwitchToNextDesktop() {
   Wh_Log(L"SwitchToNextDesktop called");
   if (!InitializeVirtualDesktopAPI()) {
@@ -1056,239 +1004,6 @@ bool TogglePinWindow() {
   return SUCCEEDED(hr);
 }
 
-//=============================================================================
-// Window Tiling
-//=============================================================================
-
-static const wchar_t* kIgnoredWindowClasses[] = {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd",
-                                                 L"Windows.UI.Core.CoreWindow"};
-
-bool IsWindowCloaked(HWND hwnd) {
-  BOOL cloaked = FALSE;
-  DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-  return cloaked;
-}
-
-// Check if a window should be included in tiling
-bool IsTileEligible(HWND hwnd, HMONITOR targetMonitor) {
-  if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || !IsWindowEnabled(hwnd)) return false;
-  if (GetAncestor(hwnd, GA_ROOT) != hwnd || GetWindow(hwnd, GW_OWNER)) return false;
-
-  LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-  if ((style & WS_CHILD) || !(style & WS_SIZEBOX)) return false;
-
-  LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-  if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return false;
-
-  if (IsWindowCloaked(hwnd)) return false;
-
-  wchar_t className[64];
-  if (GetClassNameW(hwnd, className, 64)) {
-    for (const auto* ignoredClass : kIgnoredWindowClasses) {
-      if (_wcsicmp(className, ignoredClass) == 0) return false;
-    }
-  }
-
-  RECT frameRect;
-  if (!SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frameRect, sizeof(frameRect)))) {
-    if (!GetWindowRect(hwnd, &frameRect)) return false;
-  }
-
-  return frameRect.right > frameRect.left && frameRect.bottom > frameRect.top &&
-         MonitorFromRect(&frameRect, MONITOR_DEFAULTTONULL) == targetMonitor;
-}
-
-// Position a window, compensating for invisible DWM frame borders
-void PlaceWindow(HWND hwnd, const RECT& targetRect) {
-  if (IsZoomed(hwnd)) ShowWindow(hwnd, SW_RESTORE);
-
-  // Compensate for invisible window borders (DWM frame)
-  RECT windowRect, extendedFrame;
-  LONG offsetLeft = 0, offsetTop = 0, offsetRight = 0, offsetBottom = 0;
-
-  if (GetWindowRect(hwnd, &windowRect) &&
-      SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &extendedFrame, sizeof(extendedFrame)))) {
-    offsetLeft = extendedFrame.left - windowRect.left;
-    offsetTop = extendedFrame.top - windowRect.top;
-    offsetRight = windowRect.right - extendedFrame.right;
-    offsetBottom = windowRect.bottom - extendedFrame.bottom;
-  }
-
-  SetWindowPos(hwnd, nullptr, targetRect.left - offsetLeft, targetRect.top - offsetTop,
-               targetRect.right - targetRect.left + offsetLeft + offsetRight,
-               targetRect.bottom - targetRect.top + offsetTop + offsetBottom,
-               SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS);
-}
-
-//=============================================================================
-// Tiling Layout Algorithms
-//=============================================================================
-
-// Master window on one side, remaining windows stacked on the other
-void LayoutMasterStack(const RECT& area, size_t windowCount, std::vector<RECT>& outRects, bool horizontal) {
-  outRects.resize(windowCount);
-  if (windowCount == 0) return;
-  if (windowCount == 1) {
-    outRects[0] = area;
-    return;
-  }
-
-  LONG totalSize = horizontal ? (area.bottom - area.top) : (area.right - area.left);
-  LONG masterSize = (totalSize - g_tileGap) * g_masterPercent / 100;
-
-  if (horizontal) {
-    // Master on top, stack below in a row
-    outRects[0] = {area.left, area.top, area.right, area.top + masterSize};
-    LONG stackTop = area.top + masterSize + g_tileGap;
-    LONG stackWidth = (area.right - area.left - (LONG)(windowCount - 2) * g_tileGap) / (LONG)(windowCount - 1);
-    LONG x = area.left;
-    for (size_t i = 1; i < windowCount; ++i) {
-      LONG right = (i == windowCount - 1) ? area.right : x + stackWidth;
-      outRects[i] = {x, stackTop, right, area.bottom};
-      x = right + g_tileGap;
-    }
-  } else {
-    // Master on left, stack on right
-    outRects[0] = {area.left, area.top, area.left + masterSize, area.bottom};
-    LONG stackLeft = area.left + masterSize + g_tileGap;
-    LONG stackHeight = (area.bottom - area.top - (LONG)(windowCount - 2) * g_tileGap) / (LONG)(windowCount - 1);
-    LONG y = area.top;
-    for (size_t i = 1; i < windowCount; ++i) {
-      LONG bottom = (i == windowCount - 1) ? area.bottom : y + stackHeight;
-      outRects[i] = {stackLeft, y, area.right, bottom};
-      y = bottom + g_tileGap;
-    }
-  }
-}
-
-// Equal-sized columns or rows
-void LayoutGrid(const RECT& area, size_t windowCount, std::vector<RECT>& outRects, bool horizontal) {
-  outRects.resize(windowCount);
-  if (windowCount == 0) return;
-
-  LONG totalSize = horizontal ? (area.bottom - area.top) : (area.right - area.left);
-  LONG cellSize = (totalSize - (LONG)(windowCount - 1) * g_tileGap) / (LONG)windowCount;
-  LONG position = horizontal ? area.top : area.left;
-
-  for (size_t i = 0; i < windowCount; ++i) {
-    LONG end = (i == windowCount - 1) ? (horizontal ? area.bottom : area.right) : position + cellSize;
-    outRects[i] = horizontal ? RECT{area.left, position, area.right, end} : RECT{position, area.top, end, area.bottom};
-    position = end + g_tileGap;
-  }
-}
-
-// Binary Space Partition: recursively split space alternating vertical/horizontal
-void LayoutBSP(const RECT& area, size_t startIndex, size_t count, int depth, std::vector<RECT>& outRects) {
-  if (count == 0) return;
-  if (count == 1) {
-    outRects[startIndex] = area;
-    return;
-  }
-
-  bool splitVertical = (depth % 2 == 0);
-  LONG mid = splitVertical ? area.left + (area.right - area.left - g_tileGap) / 2
-                           : area.top + (area.bottom - area.top - g_tileGap) / 2;
-
-  outRects[startIndex] =
-      splitVertical ? RECT{area.left, area.top, mid, area.bottom} : RECT{area.left, area.top, area.right, mid};
-
-  RECT remaining = splitVertical ? RECT{mid + g_tileGap, area.top, area.right, area.bottom}
-                                 : RECT{area.left, mid + g_tileGap, area.right, area.bottom};
-
-  LayoutBSP(remaining, startIndex + 1, count - 1, depth + 1, outRects);
-}
-
-TileLayout GetCurrentDesktopLayout() {
-  GUID currentDesktopId;
-  if (GetCurrentDesktopId(&currentDesktopId)) {
-    auto it = g_desktopLayoutMap.find(currentDesktopId);
-    if (it != g_desktopLayoutMap.end()) {
-      return it->second;
-    }
-  }
-  return g_currentLayout;
-}
-
-void SetCurrentDesktopLayout(TileLayout layout) {
-  GUID currentDesktopId;
-  if (GetCurrentDesktopId(&currentDesktopId)) {
-    g_desktopLayoutMap[currentDesktopId] = layout;
-  }
-}
-
-void TileWindows() {
-  HWND foregroundWindow = GetForegroundWindow();
-  HMONITOR monitor = foregroundWindow ? MonitorFromWindow(foregroundWindow, MONITOR_DEFAULTTONULL) : nullptr;
-
-  if (!monitor) {
-    POINT cursorPos;
-    if (GetCursorPos(&cursorPos)) {
-      monitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
-    }
-  }
-  if (!monitor) return;
-
-  MONITORINFO monitorInfo = {sizeof(monitorInfo)};
-  if (!GetMonitorInfoW(monitor, &monitorInfo)) return;
-
-  // Calculate work area with margins
-  RECT workArea = {monitorInfo.rcWork.left + g_tileMargin, monitorInfo.rcWork.top + g_tileMargin,
-                   monitorInfo.rcWork.right - g_tileMargin, monitorInfo.rcWork.bottom - g_tileMargin};
-
-  if (workArea.right <= workArea.left || workArea.bottom <= workArea.top) return;
-
-  // Collect eligible windows
-  std::vector<HWND> windows;
-  struct EnumContext {
-    HMONITOR targetMonitor;
-    std::vector<HWND>* windowList;
-  } context = {monitor, &windows};
-
-  EnumWindows(
-      [](HWND hwnd, LPARAM lParam) WINAPI -> BOOL {
-        auto* ctx = reinterpret_cast<EnumContext*>(lParam);
-        if (IsTileEligible(hwnd, ctx->targetMonitor)) {
-          ctx->windowList->push_back(hwnd);
-        }
-        return TRUE;
-      },
-      reinterpret_cast<LPARAM>(&context));
-
-  if (windows.empty()) return;
-
-  // Get layout for current desktop
-  TileLayout layout = GetCurrentDesktopLayout();
-
-  // Calculate and apply layout
-  std::vector<RECT> windowRects(windows.size());
-  switch (layout) {
-    case TileLayout::MasterStack:
-      LayoutMasterStack(workArea, windows.size(), windowRects, false);
-      break;
-    case TileLayout::MasterStackH:
-      LayoutMasterStack(workArea, windows.size(), windowRects, true);
-      break;
-    case TileLayout::Columns:
-      LayoutGrid(workArea, windows.size(), windowRects, false);
-      break;
-    case TileLayout::Rows:
-      LayoutGrid(workArea, windows.size(), windowRects, true);
-      break;
-    case TileLayout::BSP:
-      LayoutBSP(workArea, 0, windows.size(), 0, windowRects);
-      break;
-    case TileLayout::Monocle:
-      windowRects.assign(windows.size(), workArea);
-      break;
-    default:
-      break;
-  }
-
-  for (size_t i = 0; i < windows.size(); ++i) {
-    PlaceWindow(windows[i], windowRects[i]);
-  }
-  Wh_Log(L"Tiled %zu windows with layout %d", windows.size(), static_cast<int>(layout));
-}
 
 //=============================================================================
 // Hotkey Thread
@@ -1322,16 +1037,11 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
   }
   if (g_enablePrevNextDesktop) {
     RegisterHotKey(nullptr, HK_PREV, g_utilityModifiers, g_prevDesktopKey);
+    RegisterHotKey(nullptr, HK_PREV_INDEX, g_utilityModifiers, g_prevIndexKey);
     RegisterHotKey(nullptr, HK_NEXT, g_utilityModifiers, g_nextDesktopKey);
   }
   if (g_enablePinWindow) {
     RegisterHotKey(nullptr, HK_PIN, g_utilityModifiers, g_pinKey);
-  }
-  if (g_enableTiling) {
-    RegisterHotKey(nullptr, HK_TILE, g_utilityModifiers, g_tileKey);
-    if (g_enableLayoutCycle) {
-      RegisterHotKey(nullptr, HK_LAYOUT, g_utilityModifiers, g_layoutKey);
-    }
   }
   Wh_Log(L"Hotkeys registered");
 
@@ -1348,20 +1058,6 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
         }
         if (msg.message == WM_HOTKEY) {
           UINT hotkeyId = static_cast<UINT>(msg.wParam);
-
-          // TileWindows and Layout cycling don't require Virtual Desktop API
-          if (hotkeyId == HK_TILE) {
-            TileWindows();
-            continue;
-          }
-          if (hotkeyId == HK_LAYOUT) {
-            TileLayout currentLayout = GetCurrentDesktopLayout();
-            TileLayout newLayout =
-                static_cast<TileLayout>((static_cast<int>(currentLayout) + 1) % static_cast<int>(TileLayout::COUNT));
-            SetCurrentDesktopLayout(newLayout);
-            TileWindows();
-            continue;
-          }
 
           // All other hotkeys require Virtual Desktop API
           if (!g_bInitialized && !InitializeVirtualDesktopAPI()) {
@@ -1380,6 +1076,8 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
             GoToDesktopNum(hotkeyId - HK_SWITCH_BASE + 1);
           } else if (hotkeyId == HK_PREV) {
             SwitchToPreviousDesktop();
+          } else if (hotkeyId == HK_PREV_INDEX) {
+            SwitchToPreviousIndexDesktop();
           } else if (hotkeyId == HK_NEXT) {
             SwitchToNextDesktop();
           } else if (hotkeyId == HK_PIN) {
@@ -1404,16 +1102,11 @@ cleanup:
   }
   if (g_enablePrevNextDesktop) {
     UnregisterHotKey(nullptr, HK_PREV);
+    UnregisterHotKey(nullptr, HK_PREV_INDEX);
     UnregisterHotKey(nullptr, HK_NEXT);
   }
   if (g_enablePinWindow) {
     UnregisterHotKey(nullptr, HK_PIN);
-  }
-  if (g_enableTiling) {
-    UnregisterHotKey(nullptr, HK_TILE);
-    if (g_enableLayoutCycle) {
-      UnregisterHotKey(nullptr, HK_LAYOUT);
-    }
   }
 
   CleanupVirtualDesktopAPI();
@@ -1493,7 +1186,6 @@ void WhTool_ModSettingsChanged() {
   Wh_Log(L"Settings changed, reloading...");
   StopHotkeyThread();
   g_desktopFocusMap.clear();
-  g_desktopLayoutMap.clear();
   LoadSettings();
   if (!StartHotkeyThread()) {
     Wh_Log(L"Failed to restart hotkey thread after settings change");
