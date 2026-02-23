@@ -9085,7 +9085,7 @@
                     3
                 ],
                 "ratingUsers": 4,
-                "updated": 1770670540000,
+                "updated": 1771886789000,
                 "users": 69
             },
             "metadata": {
@@ -9097,11 +9097,12 @@
                 "compilerOptions": "-lwinhttp",
                 "description": "Shows your playing status, quality tags (4K/HDR), and interactive buttons on Discord.",
                 "github": "https://github.com/ciizerr",
+                "homepage": "https://vlc-rpc.vercel.app/",
                 "include": [
                     "vlc.exe"
                 ],
                 "name": "VLC Discord Rich Presence",
-                "version": "1.1.0"
+                "version": "1.1.1"
             }
         },
         "vmware-disable-upgrade-dialog": {

@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-22T13:31:02.000Z</updated>
+    <updated>2026-02-23T22:46:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.1]]></title>
+        <id>https://windhawk.net/mods/vlc-discord-rpc#77a37e151ece2d18a73ac9e1b3cfab3abac18a6e</id>
+        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
+        <updated>2026-02-23T22:46:29.000Z</updated>
+        <content type="html"><![CDATA[<p>Metadata &amp; Visuals</p>
+<ul>
+<li><p>External Artwork Fetching (new): If a media file lacks embedded artwork, the mod now seamlessly attempts to find and display relevant cover art or movie posters online.</p></li>
+<li><p>Advanced Metadata Cleaning: Introduced aggressive filtering to remove junk text (like website names, resolutions, or release group tags) from titles and artist names, resulting in a much cleaner Rich Presence.</p></li>
+<li><p>Release Year Parsing: Added support for extracting the release year from filenames to improve metadata accuracy and artwork matching.</p></li>
+</ul>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win10 Taskbar Per-App Volume Control 1.0.1]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-per-app-volume-control#7810027bbc5e62fd3455a897e2658e17d1815f29</id>
@@ -423,27 +439,6 @@ Uses hook + async verification for precision without blocking.</p>]]></content>
         <author>
             <name>ViNSaNiTY24</name>
             <uri>https://github.com/ViNSaNiTY24</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Old Login Fade 1.0]]></title>
-        <id>https://windhawk.net/mods/win7-login-fade#bf283bac8816ef3cd5ce8dd68e8d12c3058a8340</id>
-        <link href="https://windhawk.net/mods/win7-login-fade"/>
-        <updated>2026-02-15T21:24:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="oldloginfade">Old Login Fade</h1>
-<ul>
-<li>This mod restores the old login screen fade effect found in Windows 7 and earlier.</li>
-<li>The fade effect is implemented by adjusting the screen brightness using the SetDeviceGammaRamp function, the same method used by the original fade effect.</li>
-<li>You need to set the <code>HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange</code> registry value to <code>0x100</code> (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.</li>
-<li>Will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment.</li>
-</ul>
-<h2 id="knownissues">Known issues</h2>
-<ul>
-<li>The fade animation may look broken on early boot when using the auto-login feature.</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>

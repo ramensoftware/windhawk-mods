@@ -115,7 +115,9 @@
     "https://github.com/ciizerr": {
         "author": "ciizerr",
         "github": "https://github.com/ciizerr",
-        "homepages": []
+        "homepages": [
+            "https://vlc-rpc.vercel.app/"
+        ]
     },
     "https://github.com/cirn09": {
         "author": "Cirn09",
