@@ -4270,6 +4270,36 @@
                 "version": "1.0"
             }
         },
+        "idm-clear-completed-downloads": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1771887115000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1771887115000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "BCRTVKCS",
+                "compilerOptions": "-luser32",
+                "description": "This mode cleans up as soon as the IDM window appears on the screen.",
+                "github": "https://github.com/bcrtvkcs",
+                "homepage": "https://grdigital.pro",
+                "include": [
+                    "idman.exe"
+                ],
+                "name": "IDM Clear Completed Downloads",
+                "twitter": "https://x.com/bcrtvkcs",
+                "version": "0.5.3"
+            }
+        },
         "ignore-focus-loss": {
             "details": {
                 "defaultSorting": 10395,
