@@ -1087,7 +1087,7 @@ void RetileFromResize(HWND hwnd) {
 
 
   
-
+    //Does the current desktop have saved "state" or not? 
   if (hasState) {
     if (!ContainsWindow(state.windows, resizedHwnd)) {
       HWND resolved = ResolveToTiledWindow(resizedHwnd, state.windows);
@@ -1099,6 +1099,10 @@ void RetileFromResize(HWND hwnd) {
       }
     }
   } else {
+    // Auto-retile really shouldn't do anything if theres no state for this desktop. This fallback is extremely unnecessary
+    return; 
+
+/*
     std::vector<HWND> windows = CollectTileWindows(monitor);
     if (windows.empty()) {
       return;
@@ -1117,6 +1121,8 @@ void RetileFromResize(HWND hwnd) {
     state = BuildStateFromWindows(layout, workArea, windows, monitor);
     state.layout = layout;
     hasState = true;
+*/
+    
   }
 
   if (state.windows.empty()) {
