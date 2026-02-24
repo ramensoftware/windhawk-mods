@@ -1,10 +1,10 @@
 // ==WindhawkMod==
-// @id              notepad-multi-select-full
-// @name            Notepad Multi-Select (Final Engine)
+// @id              notepad-multi-select
+// @name            Notepad Multi-Select
 // @description     Adds Alt+Shift multi-caret, true blue highlighting, fixed visibility, and safe jumping.
 // @version         4.4
-// @author          Mohamed Magdy
-// @github          hamomagdy7
+// @author          "https://github.com/hamomagdy724"
+// @github          hamomagdy724
 // @include         notepad.exe
 // @compilerOptions -luser32 -lcomctl32 -lgdi32
 // ==/WindhawkMod==
