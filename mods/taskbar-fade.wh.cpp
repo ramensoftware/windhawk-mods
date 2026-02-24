@@ -2,7 +2,7 @@
 // @id              taskbar-fade
 // @name            Taskbar Fade
 // @description     Reduces visual clutter by automatically dimming or hiding the taskbar when idle. Ideal for focused workflows and preventing OLED burn-in.
-// @version         2.0
+// @version         2.1
 // @author          Lukvbp
 // @github          https://github.com/lukvbp
 // @include         windhawk.exe
@@ -20,11 +20,15 @@ This mod is designed to prevent OLED burn-in and reduce visual distractions by l
 * **Idle Dimming:** The taskbar fades to a lower transparency level (configurable) when the mouse is away.
 * **Idle Hiding:** Optionally hides the taskbar completely after a set timeout.
 * **Instant Wake:** Moving the mouse to the taskbar or the bottom of the screen restores full opacity immediately.
+* **Smart Idle:** (Optional) Only hide the taskbar if the desktop is focused. If windows are open, keep the taskbar dimmed instead.
+* **Clean Desktop:** (Optional) Hide desktop icons when the taskbar hides for a completely black screen.
 * **Customization:** Settings available for fade speed, transparency levels, and timeout duration.
 
 ### Configuration
 * **Default Transparency:** The opacity level when the taskbar is dimmed (0-100%).
 * **Enable Idle Hiding:** Check this to make the taskbar vanish completely after a timeout.
+* **Smart Idle:** If checked, idle hiding is disabled when any window is open/focused.
+* **Hide Desktop Icons:** If checked, desktop icons will also vanish when idle.
 * **Idle Timeout:** Seconds of inactivity before the taskbar hides.
 * **Fade Speed:** Duration of the fade animation in milliseconds.
 */
@@ -38,6 +42,12 @@ This mod is designed to prevent OLED burn-in and reduce visual distractions by l
 - EnableIdleFade: true
   $name: Enable Idle Hiding
   $description: If checked, the taskbar will vanish completely when you are away.
+- SmartIdle: false
+  $name: Smart Idle (Only hide on empty desktop)
+  $description: Prevents the taskbar from fully hiding if you have a window (like a browser) open and focused.
+- HideDesktopIcons: false
+  $name: Hide Desktop Icons on Idle
+  $description: When the taskbar fully hides, also hide desktop icons for a perfectly clean screen.
 - IdleTimeout: 15
   $name: Idle Timeout (Seconds)
   $description: Time before the taskbar disappears (if Idle Hiding is enabled).
@@ -77,7 +87,9 @@ enum class FadeState {
 // Runtime Settings Cache
 struct {
     bool enableIdleFade;
-    DWORD idleTimeoutMS;
+    bool smartIdle;
+    bool hideDesktopIcons;
+    DWORD idleTimeoutMs;
     int fadeDuration;
     int idleFadeDuration;
     int frameTimeMs;
@@ -90,7 +102,7 @@ struct TaskbarState {
     bool isLayered;     // CACHE
     bool isTransparent; // CACHE
     int lastAlpha;
-    RECT rect; // Cached geometry
+    RECT rect;          // Cached geometry
 };
 
 // --- SETTINGS ---
@@ -98,31 +110,50 @@ void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
 
     bool enableIdle = Wh_GetIntSetting(L"EnableIdleFade") != 0;
+    bool smartIdle = Wh_GetIntSetting(L"SmartIdle") != 0;
+    bool hideIcons = Wh_GetIntSetting(L"HideDesktopIcons") != 0;
+
     int rawTimeout = Wh_GetIntSetting(L"IdleTimeout");
     int rawTransp = Wh_GetIntSetting(L"DimTransparency");
     int rawFade = Wh_GetIntSetting(L"FadeDuration");
     int rawIdleFade = Wh_GetIntSetting(L"IdleFadeDuration");
     int rawFPS = Wh_GetIntSetting(L"TargetFPS");
 
-    if (rawTimeout < 1) rawTimeout = 1;
-    if (rawTransp < 0) rawTransp = 0;
-    if (rawTransp > 100) rawTransp = 100;
+    if (rawTimeout < 1) {
+        rawTimeout = 1;
+    }
+    if (rawTransp < 0) {
+        rawTransp = 0;
+    }
+    if (rawTransp > 100) {
+        rawTransp = 100;
+    }
 
     // FPS Clamp: 15 to 120
-    if (rawFPS < 15) rawFPS = 15;
-    if (rawFPS > 120) rawFPS = 120;
+    if (rawFPS < 15) {
+        rawFPS = 15;
+    }
+    if (rawFPS > 120) {
+        rawFPS = 120;
+    }
 
     int calculatedFrameTime = 1000 / rawFPS;
 
     // Validate Durations
-    if (rawFade < calculatedFrameTime) rawFade = calculatedFrameTime;
-    if (rawIdleFade < calculatedFrameTime) rawIdleFade = calculatedFrameTime;
+    if (rawFade < calculatedFrameTime) {
+        rawFade = calculatedFrameTime;
+    }
+    if (rawIdleFade < calculatedFrameTime) {
+        rawIdleFade = calculatedFrameTime;
+    }
 
     g_cache.enableIdleFade = enableIdle;
+    g_cache.smartIdle = smartIdle;
+    g_cache.hideDesktopIcons = hideIcons;
 
     // Safety: (DWORD) cast prevents signed integer overflow during multiplication
     // if user enters a large duration (e.g. > 24 days)
-    g_cache.idleTimeoutMS = (DWORD)rawTimeout * 1000;
+    g_cache.idleTimeoutMs = (DWORD)rawTimeout * 1000;
 
     g_cache.fadeDuration = rawFade;
     g_cache.idleFadeDuration = rawIdleFade;
@@ -139,7 +170,10 @@ void WhTool_ModSettingsChanged() {
 // --- WINDOW HELPERS ---
 
 void RestoreTaskbarStyle(HWND hwnd) {
-    if (!IsWindow(hwnd)) return;
+    if (!IsWindow(hwnd)) {
+        return;
+    }
+    
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     if ((exStyle & WS_EX_LAYERED) || (exStyle & WS_EX_TRANSPARENT)) {
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~(WS_EX_LAYERED | WS_EX_TRANSPARENT));
@@ -147,12 +181,39 @@ void RestoreTaskbarStyle(HWND hwnd) {
     }
 }
 
+// Helper to find the Desktop Icons window (SysListView32)
+// Handles both standard Progman and WorkerW (wallpaper engine / task view) cases
+HWND GetDesktopListView() {
+    HWND hProgman = FindWindowW(L"Progman", L"Program Manager");
+    HWND hDefView = FindWindowExW(hProgman, NULL, L"SHELLDLL_DefView", NULL);
+
+    if (!hDefView) {
+        // Fallback: iterate WorkerW windows
+        HWND hWorkerW = NULL;
+        while ((hWorkerW = FindWindowExW(NULL, hWorkerW, L"WorkerW", NULL)) != NULL) {
+            hDefView = FindWindowExW(hWorkerW, NULL, L"SHELLDLL_DefView", NULL);
+            if (hDefView) {
+                break;
+            }
+        }
+    }
+
+    if (hDefView) {
+        return FindWindowExW(hDefView, NULL, L"SysListView32", L"FolderView");
+    }
+    return NULL;
+}
+
 // 5-Stage Pipeline: Safe Ordering for Style Changes
 void UpdateBarOpacity(TaskbarState& bar, int alpha) {
-    if (!IsWindow(bar.hwnd)) return;
+    if (!IsWindow(bar.hwnd)) {
+        return;
+    }
 
     // Early-Out if state is already correct
-    if (bar.lastAlpha == alpha) return;
+    if (bar.lastAlpha == alpha) {
+        return;
+    }
 
     bool needLayered = (alpha < 255);
     bool needTransparent = (alpha == 0);
@@ -192,8 +253,7 @@ void UpdateBarOpacity(TaskbarState& bar, int alpha) {
         LONG_PTR exStyle = GetWindowLongPtr(bar.hwnd, GWL_EXSTYLE);
         SetWindowLongPtr(bar.hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
         bar.isLayered = false;
-        SetWindowPos(bar.hwnd, NULL, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        SetWindowPos(bar.hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 }
 
@@ -214,7 +274,10 @@ void WorkerLoop() {
 
     // Local snapshot variables
     bool enableIdleFade;
-    DWORD idleTimeoutMS;
+    bool smartIdle;
+    bool hideDesktopIcons;
+    bool isDesktopFocused = true; // Assumed true if smart idle is off
+    DWORD idleTimeoutMs;
     int fadeDuration;
     int idleFadeDuration;
     int frameTimeMs;
@@ -225,7 +288,9 @@ void WorkerLoop() {
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             enableIdleFade = g_cache.enableIdleFade;
-            idleTimeoutMS = g_cache.idleTimeoutMS;
+            smartIdle = g_cache.smartIdle;
+            hideDesktopIcons = g_cache.hideDesktopIcons;
+            idleTimeoutMs = g_cache.idleTimeoutMs;
             fadeDuration = g_cache.fadeDuration;
             idleFadeDuration = g_cache.idleFadeDuration;
             frameTimeMs = g_cache.frameTimeMs;
@@ -237,7 +302,12 @@ void WorkerLoop() {
         // 1. Discovery & Recovery
         bool needsRefresh = taskbars.empty();
         if (!needsRefresh) {
-            for (const auto& bar : taskbars) if (!IsWindow(bar.hwnd)) { needsRefresh = true; break; }
+            for (const auto& bar : taskbars) {
+                if (!IsWindow(bar.hwnd)) {
+                    needsRefresh = true;
+                    break;
+                }
+            }
         }
 
         if (needsRefresh) {
@@ -245,7 +315,8 @@ void WorkerLoop() {
 
             auto AddTaskbar = [&](HWND h) {
                 if (h) {
-                    RECT r = {0}; GetWindowRect(h, &r);
+                    RECT r = {0}; 
+                    GetWindowRect(h, &r);
 
                     // Ignore empty rectangles (e.g. native auto-hide active)
                     if (!IsRectEmpty(&r)) {
@@ -278,7 +349,7 @@ void WorkerLoop() {
             lastState = FadeState::Dimmed;
         }
 
-        // 2. Geometry Refresh (1Hz Timer)
+        // 2. Geometry & Smart Idle Refresh (1Hz Timer)
         if (now - lastGeometryUpdate > 1000) {
             for (auto& bar : taskbars) {
                 if (IsWindow(bar.hwnd)) {
@@ -290,6 +361,27 @@ void WorkerLoop() {
                     }
                 }
             }
+
+            // Only check foreground window if Smart Idle is enabled
+            if (smartIdle) {
+                HWND hForeground = GetForegroundWindow();
+                if (hForeground) {
+                    WCHAR szClass[64];
+                    if (GetClassNameW(hForeground, szClass, 64)) {
+                        // Check if focused window is the Desktop or Taskbar itself
+                        isDesktopFocused = (wcscmp(szClass, L"Progman") == 0 || 
+                                            wcscmp(szClass, L"WorkerW") == 0 || 
+                                            wcscmp(szClass, L"Shell_TrayWnd") == 0);
+                    } else {
+                        isDesktopFocused = true;
+                    }
+                } else {
+                    isDesktopFocused = true;
+                }
+            } else {
+                isDesktopFocused = true; // Always allow idle if smart check disabled
+            }
+
             lastGeometryUpdate = now;
         }
 
@@ -303,19 +395,36 @@ void WorkerLoop() {
 
         bool isHovering = false;
         for (const auto& bar : taskbars) {
-            if (PtInRect(&bar.rect, pt)) { isHovering = true; break; }
+            if (PtInRect(&bar.rect, pt)) { 
+                isHovering = true; 
+                break; 
+            }
         }
 
         FadeState targetState = FadeState::Dimmed;
 
-        if (enableIdleFade && idleTime > idleTimeoutMS) {
+        // Condition: Enabled AND Timeout reached AND (Smart Idle check passed)
+        if (enableIdleFade && idleTime > idleTimeoutMs && isDesktopFocused) {
             targetState = FadeState::Idle;
         } else if (isHovering) {
             targetState = FadeState::Active;
         }
 
-        // 4. Reactive Geometry Update
+        // 4. Reactive Geometry & State Updates
         if (targetState != lastState) {
+            // Hide Desktop Icons
+            if (hideDesktopIcons) {
+                HWND hIcons = GetDesktopListView();
+                if (hIcons) {
+                    if (targetState == FadeState::Idle) {
+                        ShowWindow(hIcons, SW_HIDE);
+                    } else if (lastState == FadeState::Idle) {
+                        ShowWindow(hIcons, SW_SHOW);
+                    }
+                }
+            }
+
+            // Force geometry refresh on state change to ensure hover rects are accurate
             for (auto& bar : taskbars) {
                 if (IsWindow(bar.hwnd)) {
                     RECT r = {0};
@@ -334,9 +443,18 @@ void WorkerLoop() {
         int duration = fadeDuration;
 
         switch (targetState) {
-            case FadeState::Active: target = 255.0; duration = fadeDuration; break;
-            case FadeState::Idle:   target = 0.0;   duration = idleFadeDuration; break;
-            case FadeState::Dimmed: target = targetDimAlpha; duration = fadeDuration; break;
+            case FadeState::Active: 
+                target = 255.0; 
+                duration = fadeDuration; 
+                break;
+            case FadeState::Idle:   
+                target = 0.0;   
+                duration = idleFadeDuration; 
+                break;
+            case FadeState::Dimmed: 
+                target = targetDimAlpha; 
+                duration = fadeDuration; 
+                break;
         }
 
         // 6. Animation (Stateful Cubic Ease-Out)
@@ -361,8 +479,12 @@ void WorkerLoop() {
                 currentAlpha = target;
             } else {
                 double t = (double)elapsed / (double)duration;
-                if (t < 0.0) t = 0.0;
-                if (t > 1.0) t = 1.0;
+                if (t < 0.0) {
+                    t = 0.0;
+                }
+                if (t > 1.0) {
+                    t = 1.0;
+                }
 
                 double invT = 1.0 - t;
                 double ease = 1.0 - (invT * invT * invT);
@@ -371,15 +493,23 @@ void WorkerLoop() {
             }
 
             int applyAlpha = (int)currentAlpha;
-            if (applyAlpha < 0) applyAlpha = 0;
-            if (applyAlpha > 255) applyAlpha = 255;
+            if (applyAlpha < 0) {
+                applyAlpha = 0;
+            }
+            if (applyAlpha > 255) {
+                applyAlpha = 255;
+            }
 
-            for (auto& bar : taskbars) UpdateBarOpacity(bar, applyAlpha);
+            for (auto& bar : taskbars) {
+                UpdateBarOpacity(bar, applyAlpha);
+            }
         } else {
             // Snap to exact target
             if (currentAlpha != target) {
                 currentAlpha = target;
-                for (auto& bar : taskbars) UpdateBarOpacity(bar, (int)currentAlpha);
+                for (auto& bar : taskbars) {
+                    UpdateBarOpacity(bar, (int)currentAlpha);
+                }
             }
         }
 
@@ -403,12 +533,20 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
     g_stopThread = true;
-    if (g_workerThread.joinable()) g_workerThread.join();
+    if (g_workerThread.joinable()) {
+        g_workerThread.join();
+    }
 
     RestoreTaskbarStyle(FindWindow(L"Shell_TrayWnd", NULL));
     HWND hSec = NULL;
     while ((hSec = FindWindowEx(NULL, hSec, L"Shell_SecondaryTrayWnd", NULL)) != NULL) {
         RestoreTaskbarStyle(hSec);
+    }
+
+    // Safety: Ensure desktop icons are visible when mod unloads
+    HWND hIcons = GetDesktopListView();
+    if (hIcons && !IsWindowVisible(hIcons)) {
+        ShowWindow(hIcons, SW_SHOW);
     }
 }
 
