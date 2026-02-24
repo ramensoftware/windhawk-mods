@@ -1,3 +1,9 @@
+## 2.1 ([Feb 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/24fd1c92dd79a8061eed9e2432e8d540ea1cc301/mods/taskbar-fade.wh.cpp))
+
+Cleaned the code a bit
+Added the ability to hide desktop icons when idling
+Added the ability to disable the fade while something is focused
+
 ## 2.0 ([Feb 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b5a803add78c879b47659306b82418629083ae53/mods/taskbar-fade.wh.cpp))
 
 Performance / Idle Logic: I refactored the main loop to address the CPU usage concern. The mod now separates its logic: heavy window geometry updates are throttled to 1Hz (1 check/s), while lightweight mouse detection remains at 15Hz to ensure the taskbar wakes up instantly without lag.

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-23T22:51:55.000Z</updated>
+    <updated>2026-02-24T23:54:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Fade 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-fade#24fd1c92dd79a8061eed9e2432e8d540ea1cc301</id>
+        <link href="https://windhawk.net/mods/taskbar-fade"/>
+        <updated>2026-02-24T23:54:38.000Z</updated>
+        <content type="html"><![CDATA[<p>Cleaned the code a bit
+Added the ability to hide desktop icons when idling
+Added the ability to disable the fade while something is focused</p>]]></content>
+        <author>
+            <name>Lukvbp</name>
+            <uri>https://github.com/lukvbp</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[IDM Clear Completed Downloads 0.5.3]]></title>
         <id>https://windhawk.net/mods/idm-clear-completed-downloads#24542c7a28cb73aa9d8d92f781186deab23f0587</id>
@@ -446,17 +459,6 @@ these flags.</p>
         <author>
             <name>ALMAS CP</name>
             <uri>https://github.com/almas-cp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[HotCorner Hotkeys 2.0]]></title>
-        <id>https://windhawk.net/mods/hotcorner-hotkeys#8c9ca28522ced27a2e22342a20ed6041f6ec0a47</id>
-        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
-        <updated>2026-02-16T08:37:08.000Z</updated>
-        <content type="html"><![CDATA[<p>Add @description metadata to HotCorner Hotkeys mod</p>]]></content>
-        <author>
-            <name>webberlv</name>
-            <uri>https://github.com/webberLV</uri>
         </author>
     </entry>
 </feed>
