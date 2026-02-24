@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id              notepad-multi-select-full
 // @name            Notepad Multi-Select (Final Engine)
-// @description     Adds Alt+Shift multi-caret typing, backspacing, and rendering.
-// @version         3.1
+// @description     Adds Alt+Shift multi-caret, true blue highlighting, fixed visibility, and safe jumping.
+// @version         4.4
 // @author          Mohamed Magdy
-// @github          hamomagdy724
+// @github          hamomagdy7
 // @include         notepad.exe
 // @compilerOptions -luser32 -lcomctl32 -lgdi32
 // ==/WindhawkMod==
@@ -13,31 +13,148 @@
 #include <windowsx.h>
 #include <commctrl.h>
 #include <stdbool.h>
+#include <stdlib.h> 
+#include <wctype.h> 
 
 #define MAX_CARETS 50
+#define BLINK_TIMER_ID 1001
+
+inline int GetMin(int a, int b) { return (a < b) ? a : b; }
+inline int GetMax(int a, int b) { return (a > b) ? a : b; }
 
 // --- 1. STATE MEMORY ---
 typedef struct {
-    int caretPositions[MAX_CARETS];
+    int positions[MAX_CARETS];
+    int anchors[MAX_CARETS];
     int caretCount;
 } MultiCursorState;
 
-MultiCursorState g_state = {{0}, 0};
+MultiCursorState g_state = {{0}, {0}, 0};
 
-// Helper function to sort carets from Top to Bottom
+bool g_caretsVisible = true;
+UINT_PTR g_blinkTimer = 0;
+bool g_isNativeCaretHidden = false; 
+
 void SortCaretsAscending() {
     for (int i = 0; i < g_state.caretCount - 1; i++) {
         for (int j = 0; j < g_state.caretCount - i - 1; j++) {
-            if (g_state.caretPositions[j] > g_state.caretPositions[j+1]) {
-                int temp = g_state.caretPositions[j];
-                g_state.caretPositions[j] = g_state.caretPositions[j+1];
-                g_state.caretPositions[j+1] = temp;
+            int p1 = GetMin(g_state.positions[j], g_state.anchors[j]);
+            int p2 = GetMin(g_state.positions[j+1], g_state.anchors[j+1]);
+            if (p1 > p2) {
+                int tp = g_state.positions[j];
+                g_state.positions[j] = g_state.positions[j+1];
+                g_state.positions[j+1] = tp;
+                
+                int ta = g_state.anchors[j];
+                g_state.anchors[j] = g_state.anchors[j+1];
+                g_state.anchors[j+1] = ta;
             }
         }
     }
 }
 
-// --- THREAD-SAFE SUBCLASSING (m417z Framework) ---
+void CancelMultiSelect(HWND hWnd) {
+    if (g_state.caretCount > 0) {
+        g_state.caretCount = 0;
+        if (g_blinkTimer) {
+            KillTimer(hWnd, BLINK_TIMER_ID);
+            g_blinkTimer = 0;
+        }
+        if (g_isNativeCaretHidden) {
+            ShowCaret(hWnd); 
+            g_isNativeCaretHidden = false;
+        }
+        InvalidateRect(hWnd, NULL, TRUE);
+    }
+}
+
+void ResetBlinkTimer(HWND hWnd) {
+    if (g_blinkTimer) KillTimer(hWnd, BLINK_TIMER_ID);
+    g_caretsVisible = true;
+    g_blinkTimer = SetTimer(hWnd, BLINK_TIMER_ID, GetCaretBlinkTime(), NULL);
+}
+
+// Custom Coordinate Fetcher
+bool GetCaretX(HWND hWnd, int pos, int* pX, int* pY, TEXTMETRIC* tm) {
+    LRESULT coords = SendMessage(hWnd, EM_POSFROMCHAR, pos, 0);
+    if (coords != -1) {
+        *pX = GET_X_LPARAM(coords);
+        *pY = GET_Y_LPARAM(coords);
+        return true;
+    }
+    int textLen = SendMessage(hWnd, WM_GETTEXTLENGTH, 0, 0);
+    if (pos > 0 && pos >= textLen) {
+        coords = SendMessage(hWnd, EM_POSFROMCHAR, pos - 1, 0);
+        if (coords != -1) {
+            *pX = GET_X_LPARAM(coords) + tm->tmAveCharWidth;
+            *pY = GET_Y_LPARAM(coords);
+            return true;
+        }
+    }
+    return false;
+}
+
+// --- 2. CUSTOM WORD BOUNDARY PARSERS ---
+int FindWordBreakLeft(HWND hWnd, int pos) {
+    if (pos <= 0) return 0;
+    int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, pos, 0);
+    int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
+    if (pos == lineStart) return pos - 1; 
+    
+    int lineLen = SendMessage(hWnd, EM_LINELENGTH, pos, 0);
+    if (lineLen <= 0) return pos - 1;
+    
+    WCHAR* buf = (WCHAR*)malloc((lineLen + 1) * sizeof(WCHAR));
+    if (!buf) return pos - 1;
+    
+    *(WORD*)buf = (WORD)lineLen;
+    int copied = SendMessage(hWnd, EM_GETLINE, lineIdx, (LPARAM)buf);
+    int localPos = pos - lineStart;
+    if (localPos > copied) localPos = copied;
+    
+    int i = localPos - 1;
+    while (i > 0 && iswspace(buf[i])) i--; 
+    if (i >= 0) {
+        if (iswalnum(buf[i])) {
+            while (i > 0 && iswalnum(buf[i - 1])) i--;
+        } else if (iswpunct(buf[i])) {
+            while (i > 0 && iswpunct(buf[i - 1])) i--;
+        }
+    }
+    free(buf);
+    return lineStart + i;
+}
+
+int FindWordBreakRight(HWND hWnd, int pos) {
+    int textLen = SendMessage(hWnd, WM_GETTEXTLENGTH, 0, 0);
+    if (pos >= textLen) return textLen;
+    int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, pos, 0);
+    int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
+    int lineLen = SendMessage(hWnd, EM_LINELENGTH, pos, 0);
+    
+    int localPos = pos - lineStart;
+    if (localPos >= lineLen) return pos + 1; 
+    
+    WCHAR* buf = (WCHAR*)malloc((lineLen + 1) * sizeof(WCHAR));
+    if (!buf) return pos + 1;
+    
+    *(WORD*)buf = (WORD)lineLen;
+    int copied = SendMessage(hWnd, EM_GETLINE, lineIdx, (LPARAM)buf);
+    
+    int i = localPos;
+    if (i < copied) {
+        if (iswalnum(buf[i])) {
+            while (i < copied && iswalnum(buf[i])) i++;
+        } else if (iswpunct(buf[i])) {
+            while (i < copied && iswpunct(buf[i])) i++;
+        }
+    }
+    while (i < copied && iswspace(buf[i])) i++; 
+    free(buf);
+    return lineStart + i;
+}
+
+// --- 3. THREAD-SAFE SUBCLASSING ---
 UINT g_subclassRegisteredMsg;
 
 struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
@@ -77,30 +194,138 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
     return param.result;
 }
 
-// --- 2. THE MULTI-SELECT ENGINE ---
+// --- 4. THE MULTI-SELECT ENGINE ---
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     
-    // -- 1. CANCEL MULTI-SELECT ON CLICK OR ESCAPE --
     if (uMsg == WM_LBUTTONDOWN || (uMsg == WM_KEYDOWN && wParam == VK_ESCAPE)) {
-        if (g_state.caretCount > 0) {
-            g_state.caretCount = 0;
-            InvalidateRect(hWnd, NULL, TRUE);
-        }
+        CancelMultiSelect(hWnd);
     }
 
-    // -- 2. INTERCEPT TYPING (LETTERS, NUMBERS, ENTER) --
+    if (uMsg == WM_KEYDOWN && (wParam == VK_UP || wParam == VK_DOWN) && g_state.caretCount > 1) {
+        bool isAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+        bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        if (!isAlt || !isShift) CancelMultiSelect(hWnd);
+    }
+
+    if (uMsg == WM_TIMER && wParam == BLINK_TIMER_ID) {
+        if (g_state.caretCount > 1) {
+            g_caretsVisible = !g_caretsVisible;
+            InvalidateRect(hWnd, NULL, FALSE);
+        }
+        return 0; 
+    }
+
+    // -- INTERCEPT SHIFT+ARROW HIGHLIGHTING & CTRL WORD JUMPING --
+    if (uMsg == WM_KEYDOWN && (wParam == VK_LEFT || wParam == VK_RIGHT) && g_state.caretCount > 1) {
+        bool isLeft = (wParam == VK_LEFT);
+        bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+
+        for (int i = 0; i < g_state.caretCount; i++) {
+            int p = g_state.positions[i];
+            int a = g_state.anchors[i];
+
+            if (!isShift && p != a) {
+                p = isLeft ? GetMin(a, p) : GetMax(a, p);
+                g_state.positions[i] = p;
+                g_state.anchors[i] = p;
+                continue;
+            }
+
+            if (isCtrl) {
+                p = isLeft ? FindWordBreakLeft(hWnd, p) : FindWordBreakRight(hWnd, p);
+            } else {
+                int textLen = SendMessage(hWnd, WM_GETTEXTLENGTH, 0, 0);
+                if (isLeft && p > 0) p--;
+                else if (!isLeft && p < textLen) p++;
+            }
+
+            g_state.positions[i] = p;
+            if (!isShift) g_state.anchors[i] = p;
+        }
+        
+        int primaryPos = g_state.positions[g_state.caretCount - 1];
+        int primaryAnchor = g_state.anchors[g_state.caretCount - 1];
+        SendMessage(hWnd, EM_SETSEL, primaryAnchor, primaryPos);
+        ResetBlinkTimer(hWnd);
+        InvalidateRect(hWnd, NULL, FALSE);
+        return 0; 
+    }
+
+    // -- TAB AND SHIFT+TAB --
+    if (uMsg == WM_KEYDOWN && wParam == VK_TAB) {
+        bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool isSingleCaret = (g_state.caretCount <= 1);
+
+        if (isSingleCaret) {
+            DWORD start, end;
+            SendMessage(hWnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
+            g_state.anchors[0] = start;
+            g_state.positions[0] = end;
+            g_state.caretCount = 1; 
+        } else {
+            SortCaretsAscending();
+        }
+
+        int offset = 0;
+        for (int i = 0; i < g_state.caretCount; i++) {
+            int p = g_state.positions[i] + offset;
+            int a = g_state.anchors[i] + offset;
+            int s = GetMin(a, p);
+            int e = GetMax(a, p);
+
+            if (s != e) { 
+                SendMessage(hWnd, EM_SETSEL, s, e);
+                SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
+                p = s;
+                offset -= (e - s);
+            }
+
+            if (isShift) {
+                int currentLine = SendMessage(hWnd, EM_LINEFROMCHAR, p, 0);
+                int lineStart = SendMessage(hWnd, EM_LINEINDEX, currentLine, 0);
+                int diff = p - lineStart;
+                int toMove = (diff >= 4) ? 4 : diff; 
+
+                if (toMove > 0) {
+                    g_state.positions[i] = p - toMove;
+                    g_state.anchors[i] = p - toMove;
+                } else {
+                    g_state.positions[i] = p;
+                    g_state.anchors[i] = p;
+                }
+            } else {
+                SendMessage(hWnd, EM_SETSEL, p, p);
+                SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"    ");
+                g_state.positions[i] = p + 4;
+                g_state.anchors[i] = p + 4;
+                offset += 4;
+            }
+        }
+
+        int primaryPos = g_state.positions[g_state.caretCount - 1];
+        SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos); 
+
+        if (isSingleCaret) {
+            g_state.caretCount = 0; 
+        } else {
+            ResetBlinkTimer(hWnd);
+            InvalidateRect(hWnd, NULL, FALSE);
+        }
+        return 0; 
+    }
+    
+    if (uMsg == WM_CHAR && wParam == VK_TAB) return 0;
+
+    // -- TYPING OVER HIGHLIGHTED SELECTIONS --
     if (uMsg == WM_CHAR && g_state.caretCount > 1) {
-        // Ignore backspace here (ASCII 8), we handle it in WM_KEYDOWN
-        if (wParam == 8) return 0; 
-        // Ignore other unprintable control characters except Enter (ASCII 13)
+        if (wParam == 8 || wParam == 127) return 0; 
         if (wParam < 32 && wParam != VK_RETURN) return 0;
 
         SortCaretsAscending();
-        
         WCHAR str[3] = {0};
         int charsAdded = 1;
         
-        // Notepad requires \r\n for a new line, not just \r
         if (wParam == VK_RETURN) {
             str[0] = L'\r'; str[1] = L'\n'; str[2] = L'\0';
             charsAdded = 2;
@@ -108,61 +333,128 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
             str[0] = (WCHAR)wParam; str[1] = L'\0';
         }
 
-        int offset = 0; // Tracks the shifting text
-        
+        int offset = 0; 
         for (int i = 0; i < g_state.caretCount; i++) {
-            int pos = g_state.caretPositions[i] + offset;
+            int p = g_state.positions[i] + offset;
+            int a = g_state.anchors[i] + offset;
+            int s = GetMin(a, p);
+            int e = GetMax(a, p);
             
-            // Move real cursor to this position and inject the text
-            SendMessage(hWnd, EM_SETSEL, pos, pos);
+            SendMessage(hWnd, EM_SETSEL, s, e);
             SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)str);
             
-            // Update the memory array for the next keystroke
-            g_state.caretPositions[i] = pos + charsAdded;
-            offset += charsAdded; // Push subsequent cursors forward
+            g_state.positions[i] = s + charsAdded;
+            g_state.anchors[i] = g_state.positions[i]; 
+            offset += charsAdded - (e - s); 
         }
         
+        int primaryPos = g_state.positions[g_state.caretCount - 1];
+        SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos);
+        ResetBlinkTimer(hWnd);
         InvalidateRect(hWnd, NULL, FALSE);
-        return 0; // Kill default typing behavior
+        return 0; 
     }
 
-    // -- 3. INTERCEPT BACKSPACE --
+    // -- BACKSPACE --
     if (uMsg == WM_KEYDOWN && wParam == VK_BACK && g_state.caretCount > 1) {
+        bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         SortCaretsAscending();
         int offset = 0;
 
         for (int i = 0; i < g_state.caretCount; i++) {
-            int pos = g_state.caretPositions[i] + offset;
-            
-            if (pos > 0) { 
-                // Highlight the 1 character to the left of the cursor, and replace it with nothing
-                SendMessage(hWnd, EM_SETSEL, pos - 1, pos);
+            int p = g_state.positions[i] + offset;
+            int a = g_state.anchors[i] + offset;
+            int s = GetMin(a, p);
+            int e = GetMax(a, p);
+
+            if (s != e) { 
+                SendMessage(hWnd, EM_SETSEL, s, e);
                 SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
-                
-                g_state.caretPositions[i] = pos - 1;
-                offset -= 1; // Pull subsequent cursors backward
+                g_state.positions[i] = s;
+                g_state.anchors[i] = s;
+                offset -= (e - s);
+            } else if (p > 0) { 
+                int deleteCount = 1;
+                if (isCtrl) {
+                    int prevWordPos = FindWordBreakLeft(hWnd, p);
+                    deleteCount = p - prevWordPos;
+                    if (deleteCount < 0) deleteCount = 0;
+                }
+                if (deleteCount > 0) {
+                    SendMessage(hWnd, EM_SETSEL, p - deleteCount, p);
+                    SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
+                    g_state.positions[i] = p - deleteCount;
+                    g_state.anchors[i] = g_state.positions[i];
+                    offset -= deleteCount; 
+                }
             }
         }
+        int primaryPos = g_state.positions[g_state.caretCount - 1];
+        SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos);
+        ResetBlinkTimer(hWnd);
         InvalidateRect(hWnd, NULL, FALSE);
-        return 0; // Kill default backspace behavior
+        return 0; 
     }
 
-    // -- 4. INTERCEPT ALT+SHIFT+UP/DOWN TO ADD CURSORS --
+    // -- DELETE --
+    if (uMsg == WM_KEYDOWN && wParam == VK_DELETE && g_state.caretCount > 1) {
+        bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        SortCaretsAscending();
+        int offset = 0;
+
+        for (int i = 0; i < g_state.caretCount; i++) {
+            int p = g_state.positions[i] + offset;
+            int a = g_state.anchors[i] + offset;
+            int s = GetMin(a, p);
+            int e = GetMax(a, p);
+
+            if (s != e) { 
+                SendMessage(hWnd, EM_SETSEL, s, e);
+                SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
+                g_state.positions[i] = s;
+                g_state.anchors[i] = s;
+                offset -= (e - s);
+            } else {
+                int textLen = SendMessage(hWnd, WM_GETTEXTLENGTH, 0, 0);
+                if (p < textLen) { 
+                    int deleteCount = 1;
+                    if (isCtrl) {
+                        int nextWordPos = FindWordBreakRight(hWnd, p);
+                        deleteCount = nextWordPos - p;
+                        if (deleteCount < 0) deleteCount = 0;
+                    }
+                    if (deleteCount > 0) {
+                        SendMessage(hWnd, EM_SETSEL, p, p + deleteCount);
+                        SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
+                        g_state.positions[i] = p; 
+                        g_state.anchors[i] = p;
+                        offset -= deleteCount; 
+                    }
+                }
+            }
+        }
+        int primaryPos = g_state.positions[g_state.caretCount - 1];
+        SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos);
+        ResetBlinkTimer(hWnd);
+        InvalidateRect(hWnd, NULL, FALSE);
+        return 0; 
+    }
+
+    // -- MULTI-SELECT SPAWNING --
     if (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) {
         bool isAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
         bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
-        // Make sure we only trigger when it's exactly Alt+Shift+Up/Down
         if (isAlt && isShift && (wParam == VK_UP || wParam == VK_DOWN)) {
-            
             if (g_state.caretCount == 0) {
                 DWORD startPos, endPos;
                 SendMessage(hWnd, EM_GETSEL, (WPARAM)&startPos, (LPARAM)&endPos);
-                g_state.caretPositions[0] = startPos;
+                g_state.anchors[0] = startPos;
+                g_state.positions[0] = endPos;
                 g_state.caretCount = 1;
             }
 
-            int lastCaretPos = g_state.caretPositions[g_state.caretCount - 1];
+            int lastCaretPos = g_state.positions[g_state.caretCount - 1];
             int currentLine = SendMessage(hWnd, EM_LINEFROMCHAR, lastCaretPos, 0);
             int lineStartChar = SendMessage(hWnd, EM_LINEINDEX, currentLine, 0);
             int column = lastCaretPos - lineStartChar; 
@@ -173,42 +465,115 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
             if (targetLine >= 0 && targetLine < totalLines && g_state.caretCount < MAX_CARETS) {
                 int targetLineStart = SendMessage(hWnd, EM_LINEINDEX, targetLine, 0);
                 int targetLineLen = SendMessage(hWnd, EM_LINELENGTH, targetLineStart, 0);
-                
                 int newCaretPos = targetLineStart + (column < targetLineLen ? column : targetLineLen);
                 
-                g_state.caretPositions[g_state.caretCount] = newCaretPos;
+                g_state.positions[g_state.caretCount] = newCaretPos;
+                g_state.anchors[g_state.caretCount] = newCaretPos;
                 g_state.caretCount++;
                 
+                SendMessage(hWnd, EM_SETSEL, newCaretPos, newCaretPos);
+                ResetBlinkTimer(hWnd);
                 InvalidateRect(hWnd, NULL, FALSE); 
             }
-            return 0; // Kill default movement
+            return 0; 
         }
     }
 
-    // -- 5. DRAW THE PHANTOM CURSORS ON SCREEN --
+    // -- TRUE SELECTION AND CARET RENDERING --
     if (uMsg == WM_PAINT) {
         LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-        if (g_state.caretCount > 1) { // Only draw if multi-select is active
+        if (g_state.caretCount > 1) { 
+            if (!g_isNativeCaretHidden) {
+                HideCaret(hWnd); 
+                g_isNativeCaretHidden = true;
+            }
+
             HDC hdc = GetDC(hWnd);
+            HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
+            if (!hFont) hFont = (HFONT)GetStockObject(SYSTEM_FONT);
+            
+            HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+            
             TEXTMETRIC tm;
             GetTextMetrics(hdc, &tm);
-            int fontHeight = tm.tmHeight;
 
-            HBRUSH caretBrush = CreateSolidBrush(RGB(0, 120, 215)); // Standard Windows Blue
+            UINT caretWidth = 1;
+            SystemParametersInfo(SPI_GETCARETWIDTH, 0, &caretWidth, 0);
+            if (caretWidth < 1) caretWidth = 1;
 
-            for (int i = 0; i < g_state.caretCount; i++) {
-                int pos = g_state.caretPositions[i];
-                LRESULT coords = SendMessage(hWnd, EM_POSFROMCHAR, pos, 0);
-                if (coords != -1) {
-                    int x = GET_X_LPARAM(coords);
-                    int y = GET_Y_LPARAM(coords);
-                    RECT rect = { x, y, x + 2, y + fontHeight };
-                    FillRect(hdc, &rect, caretBrush);
+            SetBkMode(hdc, OPAQUE);
+            COLORREF oldBk = SetBkColor(hdc, GetSysColor(COLOR_HIGHLIGHT));
+            COLORREF oldFg = SetTextColor(hdc, GetSysColor(COLOR_HIGHLIGHTTEXT));
+
+            // Draw Custom Blue Highlights
+            for (int i = 0; i < g_state.caretCount - 1; i++) {
+                int p = g_state.positions[i];
+                int a = g_state.anchors[i];
+
+                if (p != a) {
+                    int s = GetMin(a, p);
+                    int e = GetMax(a, p);
+                    int lineS = SendMessage(hWnd, EM_LINEFROMCHAR, s, 0);
+                    int lineE = SendMessage(hWnd, EM_LINEFROMCHAR, e, 0);
+
+                    for (int currLine = lineS; currLine <= lineE; currLine++) {
+                        int lineStart = SendMessage(hWnd, EM_LINEINDEX, currLine, 0);
+                        int lineLen = SendMessage(hWnd, EM_LINELENGTH, lineStart, 0);
+                        int drawS = (currLine == lineS) ? s : lineStart;
+                        int drawE = (currLine == lineE) ? e : lineStart + lineLen;
+                        
+                        if (currLine < lineE && drawE == lineStart + lineLen) drawE++; 
+                        
+                        int selLen = drawE - drawS;
+                        if (selLen > 0) {
+                            WCHAR* lineBuf = (WCHAR*)malloc((lineLen + 2) * sizeof(WCHAR));
+                            *(WORD*)lineBuf = (WORD)lineLen;
+                            int copied = SendMessage(hWnd, EM_GETLINE, currLine, (LPARAM)lineBuf);
+                            
+                            int localS = drawS - lineStart;
+                            int x1, y1, x2, y2;
+                            
+                            if (GetCaretX(hWnd, drawS, &x1, &y1, &tm)) {
+                                if (!GetCaretX(hWnd, drawE, &x2, &y2, &tm) || y1 != y2) {
+                                    x2 = x1 + selLen * tm.tmAveCharWidth;
+                                }
+                                
+                                RECT rect = { x1, y1, x2, y1 + tm.tmHeight };
+                                int charsToDraw = 0;
+                                if (localS >= 0 && localS < copied) charsToDraw = GetMin(selLen, copied - localS);
+                                
+                                if (charsToDraw > 0) {
+                                    ExtTextOutW(hdc, x1, y1, ETO_OPAQUE, &rect, lineBuf + localS, charsToDraw, NULL);
+                                } else {
+                                    ExtTextOutW(hdc, x1, y1, ETO_OPAQUE, &rect, L" ", 1, NULL);
+                                }
+                            }
+                            free(lineBuf);
+                        }
+                    }
                 }
             }
-            DeleteObject(caretBrush);
+
+            SetBkColor(hdc, oldBk);
+            SetTextColor(hdc, oldFg);
+
+            // Draw Carets
+            if (g_caretsVisible) {
+                for (int i = 0; i < g_state.caretCount; i++) {
+                    int p = g_state.positions[i];
+                    int x, y;
+                    if (GetCaretX(hWnd, p, &x, &y, &tm)) {
+                        RECT rect = { x, y, x + (int)caretWidth, y + tm.tmHeight };
+                        InvertRect(hdc, &rect);
+                    }
+                }
+            }
+            
+            SelectObject(hdc, hOldFont);
             ReleaseDC(hWnd, hdc);
+            
+            // THE ROGUE HIDEDCARET HAS BEEN BANISHED FROM HERE
         }
         return result;
     }
@@ -233,7 +598,6 @@ BOOL CALLBACK FindCurrentProcessNotepadWindowEnumFunc(HWND hWnd, LPARAM lParam) 
     return FALSE;
 }
 
-// THIS IS THE FUNCTION I FORGOT TO PASTE LAST TIME!
 HWND FindCurrentProcessNotepadWindow() {
     HWND hNotepadWnd = NULL;
     EnumWindows(FindCurrentProcessNotepadWindowEnumFunc, (LPARAM)&hNotepadWnd);
@@ -275,5 +639,8 @@ BOOL Wh_ModInit(void) {
 }
 
 void Wh_ModUninit(void) {
-    if (g_hEditWnd) SendMessage(g_hEditWnd, g_subclassRegisteredMsg, FALSE, 0);
+    if (g_hEditWnd) {
+        CancelMultiSelect(g_hEditWnd); 
+        SendMessage(g_hEditWnd, g_subclassRegisteredMsg, FALSE, 0);
+    }
 }
