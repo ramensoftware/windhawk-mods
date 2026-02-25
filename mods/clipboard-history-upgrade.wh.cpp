@@ -1,0 +1,499 @@
+// ==WindhawkMod==
+// @id              clipboard-history-upgrade
+// @name            Clipboard History Upgrade
+// @description     Enhances Windows Win+V with Regex formatting, tracking parameter removal, and Markdown to Rich Text conversion.
+// @version         1.1.0
+// @author          SwiftExplorer567
+// @github          https://github.com/SwiftExplorer567
+// @include         *
+// @compilerOptions -luser32 -lole32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Clipboard History Upgrade
+
+Enhance the Windows Clipboard History (Win+V) by automatically cleaning and formatting text when you copy it.
+
+## Features:
+*   **Regex-based formatting:** Automatically replace text (e.g., replace specific words, fix common typos) based on your custom rules.
+*   **Remove tracking variables:** Automatically strip `utm_`, `fbclid`, and other common tracking parameters from copied URLs.
+*   **Auto-Trim Whitespace:** Strip leading/trailing spaces and newlines.
+*   **Text Unwrapper:** Merge broken text (e.g., from PDFs) back into fluid paragraphs.
+*   **Smart Casing:** Convert text to lowercase, UPPERCASE, or Title Case automatically.
+*   **Code Path Auto-Escaper:** Automatically formats Windows file paths (`C:\`) to escaped paths (`C:\\` or `C:/`).
+*   **Data Extractor:** If copying a large text block, extract *only* URLs or Email Addresses.
+*   **Markdown & Rich Text:** Auto-convert simple Markdown (`**bold**`) to rich text.
+*   **Force Plain Text:** Strip all rich formatting from the source application.
+
+*Note: Changes happen at the moment of copying. The cleaned text is what gets placed into standard clipboard history.*
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- RegexReplacements:
+  - - Search: apple
+      $name: Search Regex/String
+    - Replace: orange
+      $name: Replace String
+  $name: Regex text replacements (applied globally)
+- RemoveTrackingParams: true
+  $name: Auto-remove common tracking parameters from URLs (utm_*, fbclid, etc.)
+- AutoTrimWhitespace: false
+  $name: Auto-Trim Whitespace (strip leading/trailing space)
+- UnwrapText: false
+  $name: Text Unwrapper (Remove hard line breaks like from PDF copies)
+- CasingMode: 0
+  $name: Smart Casing Mode
+  $options:
+  - 0: None
+  - 1: lowercase
+  - 2: UPPERCASE
+  - 3: Title Case
+- PathEscaperMode: 0
+  $name: Code Path Auto-Escaper
+  $options:
+  - 0: None
+  - 1: Double Backslash (\\)
+  - 2: Forward Slash (/)
+- DataExtractorMode: 0
+  $name: Data Extractor
+  $options:
+  - 0: None
+  - 1: URLs Only
+  - 2: Email Addresses Only
+- ConvertMarkdownToRichText: true
+  $name: Auto-convert simple Markdown to Rich Text (HTML Format)
+- ForcePlainText: false
+  $name: Force Plain Text (Strip all rich formatting from source app)
+*/
+// ==/WindhawkModSettings==
+
+#include <windows.h>
+#include <string>
+#include <vector>
+#include <regex>
+#include <cwctype>
+
+struct RegexReplacementItem {
+    std::wregex searchRegex;
+    std::wstring replaceW;
+};
+
+std::vector<RegexReplacementItem> g_regexReplacements;
+bool g_removeTrackingParams = true;
+bool g_autoTrimWhitespace = false;
+bool g_unwrapText = false;
+int g_casingMode = 0;
+int g_pathEscaperMode = 0;
+int g_dataExtractorMode = 0;
+bool g_convertMarkdownToRichText = true;
+bool g_forcePlainText = false;
+
+// -------------------------------------------------------------------------
+// Settings Loader
+// -------------------------------------------------------------------------
+
+void LoadSettings()
+{
+    g_regexReplacements.clear();
+
+    g_removeTrackingParams = Wh_GetIntSetting(L"RemoveTrackingParams");
+    g_autoTrimWhitespace = Wh_GetIntSetting(L"AutoTrimWhitespace");
+    g_unwrapText = Wh_GetIntSetting(L"UnwrapText");
+    g_casingMode = Wh_GetIntSetting(L"CasingMode");
+    g_pathEscaperMode = Wh_GetIntSetting(L"PathEscaperMode");
+    g_dataExtractorMode = Wh_GetIntSetting(L"DataExtractorMode");
+    g_convertMarkdownToRichText = Wh_GetIntSetting(L"ConvertMarkdownToRichText");
+    g_forcePlainText = Wh_GetIntSetting(L"ForcePlainText");
+
+    for (int i = 0;; i++) {
+        PCWSTR search = Wh_GetStringSetting(L"RegexReplacements[%d].Search", i);
+        bool hasSearch = *search;
+
+        if (hasSearch) {
+            PCWSTR replace = Wh_GetStringSetting(L"RegexReplacements[%d].Replace", i);
+
+            try {
+                g_regexReplacements.push_back({
+                    std::wregex(search),
+                    std::wstring(replace)
+                });
+            } catch (const std::regex_error&) {
+                Wh_Log(L"Invalid regex provided in settings: %s", search);
+            }
+            Wh_FreeStringSetting(replace);
+        }
+
+        Wh_FreeStringSetting(search);
+
+        if (!hasSearch) {
+            break;
+        }
+    }
+}
+
+// -------------------------------------------------------------------------
+// Text Transformations
+// -------------------------------------------------------------------------
+
+std::wstring ApplyRegexReplacements(std::wstring text)
+{
+    for (const auto& item : g_regexReplacements) {
+        text = std::regex_replace(text, item.searchRegex, item.replaceW);
+    }
+    return text;
+}
+
+std::wstring RemoveUrlTrackingParams(std::wstring text)
+{
+    if (!g_removeTrackingParams) return text;
+    
+    // Quick heuristic: does it look like a URL with query parameters?
+    if (text.find(L"http") == std::wstring::npos || text.find(L"?") == std::wstring::npos) {
+        return text;
+    }
+
+    // A relatively robust regex to strip tracking params
+    // Covers utm_*, fbclid, gclid, etc.
+    // Easiest is to replace them with empty string and clean up stray ? or &
+    std::wregex trackingRegex(L"([?&])(utm_[^&=]+|fbclid|gclid|igshid|mc_cid|mc_eid|msclkid)=[^&#]*(&?)", std::regex_constants::icase);
+    
+    // We might need to run this multiple times to catch adjacent parameters because of overlapping matches
+    std::wstring prevText;
+    do {
+        prevText = text;
+        text = std::regex_replace(text, trackingRegex, L"$1$3");
+    } while (text != prevText);
+
+    // Clean up trailing '?' or '&', or '&&'
+    text = std::regex_replace(text, std::wregex(L"&&+"), L"&");
+    text = std::regex_replace(text, std::wregex(L"\\?&"), L"?");
+    text = std::regex_replace(text, std::wregex(L"[?&]$"), L"");
+
+    return text;
+}
+
+std::wstring ExtractData(const std::wstring& text)
+{
+    if (g_dataExtractorMode == 0) return text;
+
+    std::wregex pattern;
+    if (g_dataExtractorMode == 1) {
+        // Simple URL regex
+        pattern = std::wregex(L"https?://[^\\s]+", std::regex_constants::icase);
+    } else if (g_dataExtractorMode == 2) {
+        // Simple Email regex
+        pattern = std::wregex(L"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", std::regex_constants::icase);
+    }
+
+    std::wstring result = L"";
+    auto words_begin = std::wsregex_iterator(text.begin(), text.end(), pattern);
+    auto words_end = std::wsregex_iterator();
+
+    for (std::wsregex_iterator i = words_begin; i != words_end; ++i) {
+        std::wsmatch match = *i;
+        result += match.str() + L"\r\n";
+    }
+
+    // Remove trailing newline if there's any result
+    if (!result.empty()) {
+        result.pop_back();
+        result.pop_back();
+    }
+
+    // If nothing found, we probably shouldn't nuke the clipboard, just return original.
+    return result.empty() ? text : result;
+}
+
+std::wstring TrimWhitespace(std::wstring text)
+{
+    if (!g_autoTrimWhitespace) return text;
+    
+    auto start = text.find_first_not_of(L" \t\r\n");
+    if (start == std::wstring::npos) return L""; // All whitespace
+    
+    auto end = text.find_last_not_of(L" \t\r\n");
+    return text.substr(start, end - start + 1);
+}
+
+std::wstring UnwrapText(std::wstring text)
+{
+    if (!g_unwrapText) return text;
+
+    // Convert \r\n to \n for easier processing
+    text = std::regex_replace(text, std::wregex(L"\\r\\n"), L"\n");
+
+    // Replace single newlines with space, but keep double newlines (paragraphs)
+    // We achieve this using a negative lookahead/lookbehind or just regexreplace
+    // regex: \n(?!\n) -> space (if not preceded by \n)
+    text = std::regex_replace(text, std::wregex(L"(?<!\\n)\\n(?!\\n)"), L" ");
+
+    // Restore Windows newlines for any remaining \n
+    text = std::regex_replace(text, std::wregex(L"\\n"), L"\r\n");
+
+    return text;
+}
+
+std::wstring ApplyCasing(std::wstring text)
+{
+    if (g_casingMode == 0) return text;
+
+    if (g_casingMode == 1) { // Lowercase
+        for (auto& c : text) c = std::towlower(c);
+    } else if (g_casingMode == 2) { // UPPERCASE
+        for (auto& c : text) c = std::towupper(c);
+    } else if (g_casingMode == 3) { // Title Case
+        bool newWord = true;
+        for (auto& c : text) {
+            if (std::iswspace(c)) {
+                newWord = true;
+            } else if (newWord) {
+                c = std::towupper(c);
+                newWord = false;
+            } else {
+                c = std::towlower(c);
+            }
+        }
+    }
+    return text;
+}
+
+std::wstring ApplyPathEscaper(std::wstring text)
+{
+    if (g_pathEscaperMode == 0) return text;
+
+    // Is it a path? Just check if it has a volume letter and slash like C:\ or \server\share
+    if (text.find(L":\\") != std::wstring::npos || text.find(L"\\\\") == 0) {
+        if (g_pathEscaperMode == 1) {
+            // Double Backslash. First replace \ with \\, but not if it's already \\.
+            // Easiest way in simple string:
+            // Since paths might have \ or \\, let's normalize to \ first then double.
+            text = std::regex_replace(text, std::wregex(L"\\\\+"), L"\\");
+            text = std::regex_replace(text, std::wregex(L"\\\\"), L"\\\\");
+        } else if (g_pathEscaperMode == 2) {
+            // Forward Slash
+            text = std::regex_replace(text, std::wregex(L"\\\\+"), L"/");
+        }
+    }
+    return text;
+}
+
+std::wstring CleanCopiedText(const std::wstring& originalText)
+{
+    std::wstring text = originalText;
+    
+    // Order of operations matters:
+    // Extract data first, so we don't accidentally ruin URLs by title-casing them
+    text = ExtractData(text);
+    text = RemoveUrlTrackingParams(text);
+    text = ApplyRegexReplacements(text);
+    text = UnwrapText(text);
+    text = ApplyCasing(text);
+    text = ApplyPathEscaper(text);
+    text = TrimWhitespace(text);
+    
+    return text;
+}
+
+// -------------------------------------------------------------------------
+// Markdown to HTML Format Generation
+// -------------------------------------------------------------------------
+
+std::string ConvertMarkdownToHtml(const std::wstring& text)
+{
+    // A very simple markdown to HTML generator.
+    std::wstring htmlW = text;
+
+    // Convert newlines to <br> first 
+    htmlW = std::regex_replace(htmlW, std::wregex(L"\\r\\n|\\r|\\n"), L"<br>\n");
+
+    // **bold**
+    htmlW = std::regex_replace(htmlW, std::wregex(L"\\*\\*(.*?)\\*\\*"), L"<strong>$1</strong>");
+
+    // __bold__ 
+    htmlW = std::regex_replace(htmlW, std::wregex(L"__(.*?)__"), L"<strong>$1</strong>");
+
+    // *italic*
+    htmlW = std::regex_replace(htmlW, std::wregex(L"\\*([^\\*]+)\\*"), L"<em>$1</em>");
+
+    // _italic_
+    htmlW = std::regex_replace(htmlW, std::wregex(L"_([^_]+)_"), L"<em>$1</em>");
+
+    // [Link text](URL)
+    htmlW = std::regex_replace(htmlW, std::wregex(L"\\[(.*?)\\]\\((.*?)\\)"), L"<a href=\"$2\">$1</a>");
+
+    // Convert UTF-16 to UTF-8
+    int u8Len = WideCharToMultiByte(CP_UTF8, 0, htmlW.c_str(), -1, NULL, 0, NULL, NULL);
+    std::string htmlU8(u8Len, 0);
+    WideCharToMultiByte(CP_UTF8, 0, htmlW.c_str(), -1, &htmlU8[0], u8Len, NULL, NULL);
+    
+    // Remove the null terminator that std::string will give us
+    if (!htmlU8.empty() && htmlU8.back() == '\0') {
+        htmlU8.pop_back();
+    }
+
+    return htmlU8;
+}
+
+std::string GenerateClipboardHtmlPayload(const std::string& htmlBodyFragment)
+{
+    const char* headerFormat =
+        "Version:0.9\r\n"
+        "StartHTML:%010u\r\n"
+        "EndHTML:%010u\r\n"
+        "StartFragment:%010u\r\n"
+        "EndFragment:%010u\r\n";
+
+    const char* htmlPrefix =
+        "<html>\r\n"
+        "<body>\r\n"
+        "<!--StartFragment-->";
+
+    const char* htmlSuffix =
+        "<!--EndFragment-->\r\n"
+        "</body>\r\n"
+        "</html>";
+
+    std::string htmlPrefixStr = htmlPrefix;
+    std::string htmlSuffixStr = htmlSuffix;
+
+    // We don't know the header length precisely until we format it, 
+    // but the format string has fixed length placeholders.
+    // Length of the formatted header will be: 97 bytes
+    size_t headerLength = 97;
+
+    size_t startHtml = headerLength;
+    size_t startFragment = startHtml + htmlPrefixStr.length();
+    size_t endFragment = startFragment + htmlBodyFragment.length();
+    size_t endHtml = endFragment + htmlSuffixStr.length();
+
+    char headerBuffer[128];
+    snprintf(headerBuffer, sizeof(headerBuffer), headerFormat, 
+        (unsigned int)startHtml, 
+        (unsigned int)endHtml, 
+        (unsigned int)startFragment, 
+        (unsigned int)endFragment);
+
+    return std::string(headerBuffer) + htmlPrefixStr + htmlBodyFragment + htmlSuffixStr;
+}
+
+// -------------------------------------------------------------------------
+// Hooks
+// -------------------------------------------------------------------------
+
+using SetClipboardData_t = decltype(&SetClipboardData);
+SetClipboardData_t pOriginalSetClipboardData;
+HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
+{
+    // If Force Plain Text is enabled, and we're intercepting an HTML or RTF format, just drop it.
+    // However, since we intercept per-format and don't control the whole clipboard transaction here easily,
+    // the cleanest way to "Force Plain Text" is to let CF_UNICODETEXT pass through (which we modify),
+    // and return NULL for known rich text formats when they are pushed.
+    
+    if (g_forcePlainText) {
+        static UINT cfHtml = 0;
+        static UINT cfRtf = 0;
+        if (cfHtml == 0) cfHtml = RegisterClipboardFormatW(L"HTML Format");
+        if (cfRtf == 0) cfRtf = RegisterClipboardFormatW(L"Rich Text Format");
+
+        if (uFormat == cfHtml || uFormat == cfRtf || uFormat == CF_DIB || uFormat == CF_BITMAP) {
+            // Drop it to force plain text. 
+            // Note: Returning NULL might cause some apps to fail, but it's the simplest way to block a format in a hook.
+            if (hMem) GlobalFree(hMem);
+            return NULL;
+        }
+    }
+
+    if (uFormat == CF_UNICODETEXT && hMem != NULL) {
+        // Read text from hMem
+        LPCWSTR pData = (LPCWSTR)GlobalLock(hMem);
+        if (pData) {
+            std::wstring originalText(pData);
+            GlobalUnlock(hMem);
+
+            std::wstring cleanedText = CleanCopiedText(originalText);
+
+            // Check if we need to convert markdown to HTML
+            // (Note: If ForcePlainText is ON, we shouldn't inject Markdown HTML either, as the user wants plain text)
+            if (g_convertMarkdownToRichText && !g_forcePlainText && cleanedText != originalText && 
+               (originalText.find(L"**") != std::wstring::npos || 
+                originalText.find(L"__") != std::wstring::npos ||
+                originalText.find(L"*") != std::wstring::npos || 
+                originalText.find(L"_") != std::wstring::npos ||
+                (originalText.find(L"[") != std::wstring::npos && originalText.find(L"](") != std::wstring::npos))) {
+                
+                // Text seems to contain markdown. Generate the HTML format string
+                std::string htmlUtf8 = ConvertMarkdownToHtml(cleanedText);
+                std::string htmlPayload = GenerateClipboardHtmlPayload(htmlUtf8);
+
+                UINT cfHtml = RegisterClipboardFormatW(L"HTML Format");
+                if (cfHtml) {
+                    HGLOBAL hMemHtml = GlobalAlloc(GMEM_MOVEABLE, htmlPayload.length() + 1);
+                    if (hMemHtml) {
+                        LPVOID pMemHtml = GlobalLock(hMemHtml);
+                        if (pMemHtml) {
+                            memcpy(pMemHtml, htmlPayload.c_str(), htmlPayload.length() + 1);
+                            GlobalUnlock(hMemHtml);
+                            
+                            // Send the HTML format *before* sending standard text format
+                            pOriginalSetClipboardData(cfHtml, hMemHtml);
+                        } else {
+                            GlobalFree(hMemHtml);
+                        }
+                    }
+                }
+            }
+
+            // If the text actually changed, we generate a new HGLOBAL
+            if (cleanedText != originalText) {
+                SIZE_T size = (cleanedText.length() + 1) * sizeof(WCHAR);
+                HANDLE hNewMem = GlobalAlloc(GMEM_MOVEABLE, size);
+                if (hNewMem) {
+                    LPWSTR pNewData = (LPWSTR)GlobalLock(hNewMem);
+                    if (pNewData) {
+                        memcpy(pNewData, cleanedText.c_str(), size);
+                        GlobalUnlock(hNewMem);
+                        
+                        // We must free the old memory here.
+                        GlobalFree(hMem);
+
+                        // Call original with our newly allocated handle
+                        return pOriginalSetClipboardData(uFormat, hNewMem);
+                    } else {
+                        GlobalFree(hNewMem); // Allocation failed lock, fallback
+                    }
+                }
+            }
+        }
+    }
+
+    return pOriginalSetClipboardData(uFormat, hMem);
+}
+
+
+// -------------------------------------------------------------------------
+// Init
+// -------------------------------------------------------------------------
+
+BOOL Wh_ModInit(void)
+{
+    Wh_Log(L"Init");
+    LoadSettings();
+
+    Wh_SetFunctionHook((void*)SetClipboardData, (void*)SetClipboardDataHook, (void**)&pOriginalSetClipboardData);
+
+    return TRUE;
+}
+
+void Wh_ModUninit(void)
+{
+    Wh_Log(L"Uninit");
+}
+
+void Wh_ModSettingsChanged(void)
+{
+    Wh_Log(L"SettingsChanged");
+    LoadSettings();
+}
