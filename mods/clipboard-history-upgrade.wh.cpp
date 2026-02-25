@@ -2,7 +2,7 @@
 // @id              clipboard-history-upgrade
 // @name            Clipboard History Upgrade
 // @description     Enhances Windows Win+V with Regex formatting, tracking parameter removal, and Markdown to Rich Text conversion.
-// @version         1.1.0
+// @version         1.2.0
 // @author          SwiftExplorer567
 // @github          https://github.com/SwiftExplorer567
 // @include         *
