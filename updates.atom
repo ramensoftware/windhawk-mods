@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-25T10:19:40.000Z</updated>
+    <updated>2026-02-25T17:19:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.5]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#ff3aafc922d9a5c9d2fc28155d842ba87f85b242</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
+        <updated>2026-02-25T17:19:15.000Z</updated>
+        <content type="html"><![CDATA[<p>Updated version number and modified the README to reflect changes in taskbar context menu recommendations and known issues.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.0]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#6425cdbad3a7427a2f53ad4be99dc615d8e53f0d</id>
@@ -411,20 +422,6 @@ virtual desktop and monitor.</li>
         <author>
             <name>u2x1</name>
             <uri>https://github.com/u2x1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.7.4]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#3dc62307b1a820cc2e7646d056d30ef495651ffa</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2026-02-16T18:09:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix black background system colors in some programs (e.g. Office) using mods process ruled settings</li>
-<li>Minor custom theme additions</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>

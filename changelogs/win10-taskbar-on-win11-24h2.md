@@ -1,3 +1,7 @@
+## 0.1.5 ([Feb 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ff3aafc922d9a5c9d2fc28155d842ba87f85b242/mods/win10-taskbar-on-win11-24h2.wh.cpp))
+
+Updated version number and modified the README to reflect changes in taskbar context menu recommendations and known issues.
+
 ## 0.1.4 ([Jan 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/53d96781b3215f0a082908a2539cafe178e8895a/mods/win10-taskbar-on-win11-24h2.wh.cpp))
 
 Update mod name, description, and version

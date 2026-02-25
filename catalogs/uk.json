@@ -9416,7 +9416,7 @@
                     5
                 ],
                 "ratingUsers": 11,
-                "updated": 1769517159000,
+                "updated": 1772039955000,
                 "users": 287
             },
             "metadata": {
@@ -9431,7 +9431,7 @@
                     "userinit.exe"
                 ],
                 "name": "Win10 taskbar on Win11 24H2 or 25H2",
-                "version": "0.1.4"
+                "version": "0.1.5"
             }
         },
         "win10-taskbar-per-app-volume-control": {
