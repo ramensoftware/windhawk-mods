@@ -113,6 +113,9 @@
 #include <sddl.h>
 #include <versionhelpers.h>
 
+#define WM_MONOFFTASK (WM_USER + 1)
+#define OVERLAY_WIN_CLASS L"LogonSleepFadeOverlay"
+
 enum FadeType {
     None,
     Gamma,
@@ -141,10 +144,10 @@ typedef struct _MONITOR_INFO {
     WORD origGamma[3][256];
 } MONITOR_INFO;
 
-struct WinlogonSleepFadeData {
+struct GlobalFadeData {
     int monitorCount;
     MONITOR_INFO* monitors;
-} g_winlogonSleepFadeData;
+} g_fadeData;
 
 bool IsFadeInProgressInThisProcess() {
     return g_isFadeInProgress.load();
@@ -448,29 +451,118 @@ NTSTATUS NTAPI NtInitiatePowerAction_hook(POWER_ACTION SystemAction, SYSTEM_POWE
 typedef NTSTATUS (NTAPI* NtPowerInformation_t)(POWER_INFORMATION_LEVEL, PVOID, ULONG, PVOID, ULONG);
 NtPowerInformation_t NtPowerInformation_original;
 
+void RestoreGammaAndMonitorOff() {
+    if (g_fadeData.monitors) {
+        for (int i = 0; i < g_fadeData.monitorCount; i++) {
+            if (g_fadeData.monitors[i].hDC) {
+                SetDeviceGammaRamp(g_fadeData.monitors[i].hDC, g_fadeData.monitors[i].origGamma);
+                DeleteDC(g_fadeData.monitors[i].hDC);
+            }
+        }
+        free(g_fadeData.monitors);
+        g_fadeData.monitors = NULL;
+        g_fadeData.monitorCount = 0;
+    }
+    NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+}
+
+LRESULT OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_CREATE:
+            Wh_Log(L"OverlayWndProc WM_CREATE");
+            return 0;
+        case WM_MONOFFTASK:
+            Wh_Log(L"OverlayWndProc WM_MONOFFTASK");
+            Sleep(100); // Needed to prevent flashing when monitor fade is started multiple times in the same process
+            RestoreGammaAndMonitorOff();
+            return 0;
+        case WM_LBUTTONDOWN:
+            DestroyWindow(hWnd);
+            return 0;
+        case WM_SETCURSOR:
+            SetCursor(NULL);
+            return 1;
+        case WM_TIMER:
+            KillTimer(hWnd, 1);
+            DestroyWindow(hWnd);
+            return 0;
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
+        default:
+            break;
+    }
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+
+HWND CreateOverlayWindow() {
+    WNDCLASSW wc = { 0 };
+    wc.lpfnWndProc = OverlayWndProc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = OVERLAY_WIN_CLASS;
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    if (!RegisterClassW(&wc)) {
+        int gle = GetLastError();
+        if (gle != ERROR_CLASS_ALREADY_EXISTS) {
+            Wh_Log(L"RegisterClassW failed, GLE=%d", gle);
+            return NULL;
+        }
+    }
+    return CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, OVERLAY_WIN_CLASS, L"", WS_POPUP, 0, 0, 0, 0, NULL, NULL, wc.hInstance, NULL);
+}
+
 DWORD MonitorOffThreadProc(LPVOID lpParameter) {
     if (BeginFade()) {
         Wh_Log(L"Initiating monitor off fade...");
         int refreshRate = GetDeviceRefreshRate();
-        int monitorCount = 0;
-        MONITOR_INFO* monitors = NULL;
-        if (!GetMonitorsInfo(&monitors, &monitorCount)) {
+        if (!GetMonitorsInfo(&g_fadeData.monitors, &g_fadeData.monitorCount)) {
             EndFade();
             NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
             return 1;
         }
 
-        FadeDesktop(refreshRate, g_settings.sleepDuration, true, monitors, monitorCount);
-        NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
-        Sleep(1500); // Arbitrary delay to ensure the display is fully off before restoring gamma, as this undocumented API is asynchronous and otherwise it'll cause a screen flash
+        HWND overlayWnd = CreateOverlayWindow();
 
-        for (int i = 0; i < monitorCount; i++) {
-            if (monitors[i].hDC) {
-                SetDeviceGammaRamp(monitors[i].hDC, monitors[i].origGamma);
-                DeleteDC(monitors[i].hDC);
+        // Unfortunately, monitor off APIs are all asynchronous and there is no reliable way to determine when the monitor is actually off
+        // If we immediately restore the gamma right after calling the API, the screen will briefly flash back to normal brightness before turning off
+        // On the other side, waiting enough seconds and setting the gamma ramps after screens are turned off, has random failures that causes the screen to be stuck at black
+        // So just show an black overlay window between the fade and the monitor off to cover up the potential flash, and hide the overlay after a fixed amount of time
+        //
+        // I should probably rework this later to delegate the fade to a different process, also avoiding the ExitProcess block below
+        if (overlayWnd) {
+            FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_fadeData.monitors, g_fadeData.monitorCount);
+
+            // Show the overlay after the fade, and schedule it to hide after 1.5 seconds
+            SetWindowPos(overlayWnd, HWND_TOPMOST, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), SWP_SHOWWINDOW);
+            if (!SetTimer(overlayWnd, 1, 1500, NULL)) {
+                Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
+                RestoreGammaAndMonitorOff();
+                DestroyWindow(overlayWnd);
+                EndFade();
+                return 1;
             }
+            PostMessageW(overlayWnd, WM_MONOFFTASK, 0, 0);
+
+            // I don't want extra hassle of managing another thread for the overlay window lol; just make sure the following order of operations is correct:
+            // Fade out -> Show overlay -> Restore gamma -> Monitor off -> Wait for monitor off with arbitrary delay -> Hide overlay
+            MSG msg;
+            while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            if (UnregisterClassW(OVERLAY_WIN_CLASS, GetModuleHandleW(NULL)) == 0) {
+                Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
+            }
+
+            if (g_fadeData.monitors) {
+                // Somehow window message stuff failed
+                Wh_Log(L"Overlay window message loop ended unexpectedly, restoring gamma ramps...");
+                RestoreGammaAndMonitorOff();
+            }
+        } else {
+            Wh_Log(L"Failed to create overlay window, GLE=%d", GetLastError());
+            NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
         }
-        free(monitors);
         EndFade();
         return 0;
     } else {
@@ -486,10 +578,15 @@ NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel,
         // Both NtPowerInformation and DefWindowProc WM_SYSCOMMAND is asynchronous so do it in a separate thread
         HANDLE monitorOffThread = g_monitorOffThread.exchange(NULL);
         if (monitorOffThread) {
-            // cleanup handle (it shouldn't be running at least as IsFadeInProgress is checked above)
+            // Clean up remaining handle (it shouldn't be running at least as IsFadeInProgress is checked above)
             DWORD result = WaitForSingleObject(monitorOffThread, 0);
             if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED) {
-                Wh_Log(L"Monitor off thread is still running, wait failed with GLE=%d", GetLastError());
+                if (result != WAIT_TIMEOUT) {
+                    Wh_Log(L"WaitForSingleObject failed, GLE=%d", GetLastError());
+                } else {
+                    Wh_Log(L"Monitor off thread is still running");
+                }
+                g_monitorOffThread.store(monitorOffThread);
                 return NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
             }
             CloseHandle(monitorOffThread);
@@ -595,22 +692,22 @@ int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) 
         if (a1 == 263) { // Pre-sleep/hibernate message
             if (BeginFade()) {
                 int refreshRate = GetDeviceRefreshRate();
-                if (GetMonitorsInfo(&g_winlogonSleepFadeData.monitors, &g_winlogonSleepFadeData.monitorCount)) {
-                    FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_winlogonSleepFadeData.monitors, g_winlogonSleepFadeData.monitorCount);
+                if (GetMonitorsInfo(&g_fadeData.monitors, &g_fadeData.monitorCount)) {
+                    FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_fadeData.monitors, g_fadeData.monitorCount);
                 }
                 EndFade();
             }
         } else if (a1 == 260) { // Post-monitor-on/wake-up message
-            if (g_winlogonSleepFadeData.monitors) {
-                for (int i = 0; i < g_winlogonSleepFadeData.monitorCount; i++) {
-                    if (g_winlogonSleepFadeData.monitors[i].hDC) {
-                        SetDeviceGammaRamp(g_winlogonSleepFadeData.monitors[i].hDC, g_winlogonSleepFadeData.monitors[i].origGamma); // Restore gamma
-                        DeleteDC(g_winlogonSleepFadeData.monitors[i].hDC);
+            if (g_fadeData.monitors) {
+                for (int i = 0; i < g_fadeData.monitorCount; i++) {
+                    if (g_fadeData.monitors[i].hDC) {
+                        SetDeviceGammaRamp(g_fadeData.monitors[i].hDC, g_fadeData.monitors[i].origGamma); // Restore gamma
+                        DeleteDC(g_fadeData.monitors[i].hDC);
                     }
                 }
-                free(g_winlogonSleepFadeData.monitors);
-                g_winlogonSleepFadeData.monitors = NULL;
-                g_winlogonSleepFadeData.monitorCount = 0;
+                free(g_fadeData.monitors);
+                g_fadeData.monitors = NULL;
+                g_fadeData.monitorCount = 0;
             }
         }
     }
@@ -831,6 +928,11 @@ BOOL Wh_ModInit() {
         CLEANUP
     }
 
+    if (g_isWinlogon) {
+        // It has neither interactive window nor NtPowerInformation(ScreenOff) usage
+        return TRUE;
+    }
+
     NtPowerInformation_t NtPowerInformation = (NtPowerInformation_t)GetProcAddress(ntdll, "NtPowerInformation");
     if (!NtPowerInformation) {
         Wh_Log(L"GetProcAddress NtPowerInformation failed");
@@ -860,7 +962,7 @@ BOOL Wh_ModInit() {
 
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
+    Wh_Log(L"Uninit"); // Prevent new fades
     g_isExiting.store(true);
     if (IsFadeInProgressInThisProcess()) {
         Wh_Log(L"Fade is in progress during uninit, waiting for it to complete...");
@@ -877,17 +979,13 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged(BOOL* bReload) {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     BOOL prevSleepFadeEnabled = g_settings.sleepFadeEnabled;
     LoadSettings();
     if (!g_isWinlogon && prevSleepFadeEnabled != g_settings.sleepFadeEnabled) {
-        // The global injection is enabled or disabled, need to reload the mod to unload it
+        // The global injection is enabled or disabled, need to unload the mod
         // (Reloading unloaded mod on mod setting change is automatically handled by Windhawk)
-        *bReload = TRUE;
-        g_isExiting.store(true); // Prevent new fades
-        if (IsFadeInProgressInThisProcess()) {
-            Wh_Log(L"Fade is in progress during settings change, waiting for it to complete...");
-            WaitForFade();
-        }
+        return FALSE;
     }
+    return TRUE;
 }
