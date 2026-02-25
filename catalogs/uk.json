@@ -3784,6 +3784,34 @@
                 "version": "1.0"
             }
         },
+        "fix-windows-tools-view": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772053332000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772053332000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lole32 -luuid -lcomctl32",
+                "description": "Saves/restores view mode for Windows Tools folder",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Fix Windows Tools Folder View",
+                "version": "1.0"
+            }
+        },
         "flight-simulator-focus-helper": {
             "details": {
                 "defaultSorting": 124,
