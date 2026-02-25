@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win7-login-fade
 // @name            Logon & Sleep Fade Restorer
-// @description     Bring back the old logon and sleep screen fade effect
+// @description     Bring back the old logon screen and sleep fade effect
 // @version         1.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
