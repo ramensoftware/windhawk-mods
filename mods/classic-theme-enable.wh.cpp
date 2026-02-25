@@ -48,7 +48,7 @@ on Windows 11 24H2, 25H2 or later install the Windows 10 taskbar using the
 the later mod, also the mod [*Fake Explorer path*](https://windhawk.net/mods/fake-explorer-path) is needed.
 On Windows 11 24H2 and later the taskbar classic context menu have been removed, to restore it
 install this mod: 
-[*Windows 10 Taskbar Context Menu Fix for Win11 24H2+*](https://github.com/ramensoftware/windhawk-mods/compare/main...Anixx:windhawk-mods:patch-84)
+[*Windows 10 Taskbar Context Menu Fix for Win11 24H2+*](https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2)
 
 5. The Windows 10 taskbar still needs a compatibility fix, so install the mod
 [*Classic Theme Explorer Lite*](https://windhawk.net/mods/classic-theme-explorer-lite).
