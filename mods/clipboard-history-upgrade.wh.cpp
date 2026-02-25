@@ -2,7 +2,7 @@
 // @id              clipboard-history-upgrade
 // @name            Clipboard History Upgrade
 // @description     Enhances Windows Win+V with Regex formatting, tracking parameter removal, and Markdown to Rich Text conversion.
-// @version         1.0.0
+// @version         1.1.0
 // @author          SwiftExplorer567
 // @github          https://github.com/SwiftExplorer567
 // @include         *
@@ -150,7 +150,6 @@ std::wstring RemoveUrlTrackingParams(std::wstring text)
 {
     if (!g_removeTrackingParams) return text;
     
-    // Quick heuristic: does it look like a URL with query parameters?
     if (text.find(L"http") == std::wstring::npos || text.find(L"?") == std::wstring::npos) {
         return text;
     }
@@ -213,9 +212,12 @@ std::wstring UnwrapText(std::wstring text)
 {
     if (!g_unwrapText) return text;
 
-    text = std::regex_replace(text, std::wregex(L"\\r\\n"), L"\n");
-    text = std::regex_replace(text, std::wregex(L"(?<!\\n)\\n(?!\\n)"), L" ");
-    text = std::regex_replace(text, std::wregex(L"\\n"), L"\r\n");
+    text = std::regex_replace(text, std::wregex(L"\r\n"), L"\n");
+
+    // Preserve paragraph breaks (double newlines) using a placeholder
+    text = std::regex_replace(text, std::wregex(L"\n\n"), L"\x01\x01");
+    text = std::regex_replace(text, std::wregex(L"\n"), L" ");
+    text = std::regex_replace(text, std::wregex(L"\x01\x01"), L"\r\n\r\n");
 
     return text;
 }
@@ -322,7 +324,7 @@ std::string GenerateClipboardHtmlPayload(const std::string& htmlBodyFragment)
     std::string htmlPrefixStr = htmlPrefix;
     std::string htmlSuffixStr = htmlSuffix;
 
-    size_t headerLength = 97;
+    size_t headerLength = 105;
 
     size_t startHtml = headerLength;
     size_t startFragment = startHtml + htmlPrefixStr.length();
@@ -367,12 +369,12 @@ HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
 
             std::wstring cleanedText = CleanCopiedText(originalText);
 
-            if (g_convertMarkdownToRichText && !g_forcePlainText && cleanedText != originalText && 
-               (originalText.find(L"**") != std::wstring::npos || 
-                originalText.find(L"__") != std::wstring::npos ||
-                originalText.find(L"*") != std::wstring::npos || 
-                originalText.find(L"_") != std::wstring::npos ||
-                (originalText.find(L"[") != std::wstring::npos && originalText.find(L"](") != std::wstring::npos))) {
+            if (g_convertMarkdownToRichText && !g_forcePlainText &&
+               (cleanedText.find(L"**") != std::wstring::npos || 
+                cleanedText.find(L"__") != std::wstring::npos ||
+                cleanedText.find(L"*") != std::wstring::npos || 
+                cleanedText.find(L"_") != std::wstring::npos ||
+                (cleanedText.find(L"[") != std::wstring::npos && cleanedText.find(L"](") != std::wstring::npos))) {
                 
                 std::string htmlUtf8 = ConvertMarkdownToHtml(cleanedText);
                 std::string htmlPayload = GenerateClipboardHtmlPayload(htmlUtf8);
