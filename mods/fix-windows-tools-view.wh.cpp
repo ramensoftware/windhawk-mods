@@ -4,19 +4,9 @@
 // @description     Saves/restores view mode for Windows Tools folder
 // @version         1.0
 // @author          Anixx
-// @github       https://github.com/Anixx
 // @include         explorer.exe
 // @compilerOptions -lole32 -luuid -lcomctl32
 // ==/WindhawkMod==
-
-// ==WindhawkModReadme==
-/*
-This mod makes the `Windows Tools` (formerly `Administrative Tools`) folder to save and restore its view properties, like any other folder
-instead of using the hardcoded tile view.
-Particularly, this works around the issue that in the default, tile mode the elements of this folders have other content
-instead of names displayed when using SysListView32.
-*/
-// ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <commctrl.h>
@@ -38,6 +28,8 @@ struct FolderInfo {
 std::unordered_map<HWND, FolderInfo> g_windows;
 std::set<HWND> g_subclassedDefViews;
 HWND g_lastCreatedCabinet = NULL;
+
+static UINT WM_REMOVE_SUBCLASS = 0;
 
 typedef HWND (WINAPI *CREATEWINDOWEXW)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
 typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
@@ -163,7 +155,19 @@ BOOL ApplyViewMode(IFolderView2* pfv, int bagNum) {
 LRESULT CALLBACK DefViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                       LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     HWND hwndCabinet = GetAncestor(hWnd, GA_ROOT);
-    
+
+    if (uMsg == WM_REMOVE_SUBCLASS && WM_REMOVE_SUBCLASS != 0) {
+        auto it = g_windows.find(hwndCabinet);
+        if (it != g_windows.end() && it->second.pFolderView && it->second.bagNumber > 0) {
+            SaveViewMode(it->second.pFolderView, it->second.bagNumber);
+            it->second.pFolderView->Release();
+            it->second.pFolderView = nullptr;
+        }
+        g_subclassedDefViews.erase(hWnd);
+        RemoveWindowSubclass(hWnd, DefViewSubclassProc, uIdSubclass);
+        return 0;
+    }
+
     if (uMsg == WM_SHOWWINDOW && wParam == TRUE) {
         IFolderView2* pfv = GetFolderViewFromCabinet(hwndCabinet);
         if (pfv) {
@@ -237,6 +241,9 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
 }
 
 BOOL Wh_ModInit(void) {
+    WM_REMOVE_SUBCLASS = RegisterWindowMessageW(L"WH_FixWindowsToolsView_RemoveSubclass");
+    if (!WM_REMOVE_SUBCLASS) return FALSE;
+
     Wh_SetFunctionHook((void*)GetProcAddress(LoadLibraryW(L"kernelbase.dll"), "RegQueryValueExW"),
                        (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
     Wh_SetFunctionHook((void*)CreateWindowExW,
@@ -245,9 +252,9 @@ BOOL Wh_ModInit(void) {
 }
 
 void Wh_ModUninit(void) {
-    for (HWND hwnd : g_subclassedDefViews) {
+    for (HWND hwnd : std::set<HWND>(g_subclassedDefViews)) {
         if (IsWindow(hwnd))
-            RemoveWindowSubclass(hwnd, DefViewSubclassProc, 0);
+            SendMessage(hwnd, WM_REMOVE_SUBCLASS, 0, 0);
     }
     g_subclassedDefViews.clear();
     
