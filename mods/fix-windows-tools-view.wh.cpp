@@ -72,25 +72,25 @@ int ExtractBagNumber(HKEY hKey) {
 IFolderView2* GetFolderViewFromCabinet(HWND hwndCabinet) {
     IFolderView2* result = nullptr;
     IShellWindows* psw = nullptr;
-    
+
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER,
                                  IID_IShellWindows, (void**)&psw)) || !psw) return nullptr;
-    
+
     long count = 0;
     psw->get_Count(&count);
-    
+
     for (long i = 0; i < count && !result; i++) {
         VARIANT vi = {VT_I4};
         vi.lVal = i;
-        
+
         IDispatch* pdisp = nullptr;
         if (FAILED(psw->Item(vi, &pdisp)) || !pdisp) continue;
-        
+
         IWebBrowser2* pwb = nullptr;
         if (SUCCEEDED(pdisp->QueryInterface(IID_IWebBrowser2, (void**)&pwb)) && pwb) {
             HWND hwnd = NULL;
             pwb->get_HWND((SHANDLE_PTR*)&hwnd);
-            
+
             if (hwnd == hwndCabinet) {
                 IServiceProvider* psp = nullptr;
                 if (SUCCEEDED(pwb->QueryInterface(IID_IServiceProvider, (void**)&psp)) && psp) {
@@ -162,17 +162,24 @@ BOOL ApplyViewMode(IFolderView2* pfv, int bagNum) {
     return result;
 }
 
+void CleanupCabinetEntry(HWND hwndCabinet) {
+    auto it = g_windows.find(hwndCabinet);
+    if (it == g_windows.end()) return;
+
+    if (it->second.pFolderView) {
+        if (it->second.bagNumber > 0)
+            SaveViewMode(it->second.pFolderView, it->second.bagNumber);
+        it->second.pFolderView->Release();
+    }
+    g_windows.erase(it);
+}
+
 LRESULT CALLBACK DefViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                       LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     HWND hwndCabinet = GetAncestor(hWnd, GA_ROOT);
 
     if (uMsg == WM_REMOVE_SUBCLASS && WM_REMOVE_SUBCLASS != 0) {
-        auto it = g_windows.find(hwndCabinet);
-        if (it != g_windows.end() && it->second.pFolderView && it->second.bagNumber > 0) {
-            SaveViewMode(it->second.pFolderView, it->second.bagNumber);
-            it->second.pFolderView->Release();
-            it->second.pFolderView = nullptr;
-        }
+        CleanupCabinetEntry(hwndCabinet);
         g_subclassedDefViews.erase(hWnd);
         RemoveWindowSubclass(hWnd, DefViewSubclassProc, uIdSubclass);
         return 0;
@@ -186,7 +193,7 @@ LRESULT CALLBACK DefViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                 if (it != g_windows.end()) {
                     it->second.pFolderView = pfv;
                     pfv->AddRef();
-                    
+
                     if (it->second.bagNumber > 0 && !ApplyViewMode(pfv, it->second.bagNumber)) {
                         UINT viewMode = 0;
                         if (SUCCEEDED(pfv->GetCurrentViewMode(&viewMode)) && viewMode == FVM_TILE)
@@ -203,12 +210,7 @@ LRESULT CALLBACK DefViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         }
     }
     else if (uMsg == WM_DESTROY) {
-        auto it = g_windows.find(hwndCabinet);
-        if (it != g_windows.end() && it->second.pFolderView && it->second.bagNumber > 0) {
-            SaveViewMode(it->second.pFolderView, it->second.bagNumber);
-            it->second.pFolderView->Release();
-            it->second.pFolderView = nullptr;
-        }
+        CleanupCabinetEntry(hwndCabinet);
         g_subclassedDefViews.erase(hWnd);
         RemoveWindowSubclass(hWnd, DefViewSubclassProc, uIdSubclass);
     }
@@ -262,12 +264,13 @@ BOOL Wh_ModInit(void) {
 }
 
 void Wh_ModUninit(void) {
+
     for (HWND hwnd : std::set<HWND>(g_subclassedDefViews)) {
         if (IsWindow(hwnd))
             SendMessage(hwnd, WM_REMOVE_SUBCLASS, 0, 0);
     }
     g_subclassedDefViews.clear();
-    
+
     for (auto& pair : g_windows) {
         if (pair.second.pFolderView)
             pair.second.pFolderView->Release();
