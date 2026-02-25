@@ -2,7 +2,7 @@
 // @id              clipboard-history-upgrade
 // @name            Clipboard History Upgrade
 // @description     Enhances Windows Win+V with Regex formatting, tracking parameter removal, and Markdown to Rich Text conversion.
-// @version         1.1.0
+// @version         1.0.0
 // @author          SwiftExplorer567
 // @github          https://github.com/SwiftExplorer567
 // @include         *
@@ -155,19 +155,14 @@ std::wstring RemoveUrlTrackingParams(std::wstring text)
         return text;
     }
 
-    // A relatively robust regex to strip tracking params
-    // Covers utm_*, fbclid, gclid, etc.
-    // Easiest is to replace them with empty string and clean up stray ? or &
     std::wregex trackingRegex(L"([?&])(utm_[^&=]+|fbclid|gclid|igshid|mc_cid|mc_eid|msclkid)=[^&#]*(&?)", std::regex_constants::icase);
     
-    // We might need to run this multiple times to catch adjacent parameters because of overlapping matches
     std::wstring prevText;
     do {
         prevText = text;
         text = std::regex_replace(text, trackingRegex, L"$1$3");
     } while (text != prevText);
 
-    // Clean up trailing '?' or '&', or '&&'
     text = std::regex_replace(text, std::wregex(L"&&+"), L"&");
     text = std::regex_replace(text, std::wregex(L"\\?&"), L"?");
     text = std::regex_replace(text, std::wregex(L"[?&]$"), L"");
@@ -181,10 +176,8 @@ std::wstring ExtractData(const std::wstring& text)
 
     std::wregex pattern;
     if (g_dataExtractorMode == 1) {
-        // Simple URL regex
         pattern = std::wregex(L"https?://[^\\s]+", std::regex_constants::icase);
     } else if (g_dataExtractorMode == 2) {
-        // Simple Email regex
         pattern = std::wregex(L"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", std::regex_constants::icase);
     }
 
@@ -197,13 +190,11 @@ std::wstring ExtractData(const std::wstring& text)
         result += match.str() + L"\r\n";
     }
 
-    // Remove trailing newline if there's any result
     if (!result.empty()) {
         result.pop_back();
         result.pop_back();
     }
 
-    // If nothing found, we probably shouldn't nuke the clipboard, just return original.
     return result.empty() ? text : result;
 }
 
@@ -212,7 +203,7 @@ std::wstring TrimWhitespace(std::wstring text)
     if (!g_autoTrimWhitespace) return text;
     
     auto start = text.find_first_not_of(L" \t\r\n");
-    if (start == std::wstring::npos) return L""; // All whitespace
+    if (start == std::wstring::npos) return L"";
     
     auto end = text.find_last_not_of(L" \t\r\n");
     return text.substr(start, end - start + 1);
@@ -222,15 +213,8 @@ std::wstring UnwrapText(std::wstring text)
 {
     if (!g_unwrapText) return text;
 
-    // Convert \r\n to \n for easier processing
     text = std::regex_replace(text, std::wregex(L"\\r\\n"), L"\n");
-
-    // Replace single newlines with space, but keep double newlines (paragraphs)
-    // We achieve this using a negative lookahead/lookbehind or just regexreplace
-    // regex: \n(?!\n) -> space (if not preceded by \n)
     text = std::regex_replace(text, std::wregex(L"(?<!\\n)\\n(?!\\n)"), L" ");
-
-    // Restore Windows newlines for any remaining \n
     text = std::regex_replace(text, std::wregex(L"\\n"), L"\r\n");
 
     return text;
@@ -264,16 +248,11 @@ std::wstring ApplyPathEscaper(std::wstring text)
 {
     if (g_pathEscaperMode == 0) return text;
 
-    // Is it a path? Just check if it has a volume letter and slash like C:\ or \server\share
     if (text.find(L":\\") != std::wstring::npos || text.find(L"\\\\") == 0) {
         if (g_pathEscaperMode == 1) {
-            // Double Backslash. First replace \ with \\, but not if it's already \\.
-            // Easiest way in simple string:
-            // Since paths might have \ or \\, let's normalize to \ first then double.
             text = std::regex_replace(text, std::wregex(L"\\\\+"), L"\\");
             text = std::regex_replace(text, std::wregex(L"\\\\"), L"\\\\");
         } else if (g_pathEscaperMode == 2) {
-            // Forward Slash
             text = std::regex_replace(text, std::wregex(L"\\\\+"), L"/");
         }
     }
@@ -284,8 +263,6 @@ std::wstring CleanCopiedText(const std::wstring& originalText)
 {
     std::wstring text = originalText;
     
-    // Order of operations matters:
-    // Extract data first, so we don't accidentally ruin URLs by title-casing them
     text = ExtractData(text);
     text = RemoveUrlTrackingParams(text);
     text = ApplyRegexReplacements(text);
@@ -303,33 +280,19 @@ std::wstring CleanCopiedText(const std::wstring& originalText)
 
 std::string ConvertMarkdownToHtml(const std::wstring& text)
 {
-    // A very simple markdown to HTML generator.
     std::wstring htmlW = text;
 
-    // Convert newlines to <br> first 
     htmlW = std::regex_replace(htmlW, std::wregex(L"\\r\\n|\\r|\\n"), L"<br>\n");
-
-    // **bold**
     htmlW = std::regex_replace(htmlW, std::wregex(L"\\*\\*(.*?)\\*\\*"), L"<strong>$1</strong>");
-
-    // __bold__ 
     htmlW = std::regex_replace(htmlW, std::wregex(L"__(.*?)__"), L"<strong>$1</strong>");
-
-    // *italic*
     htmlW = std::regex_replace(htmlW, std::wregex(L"\\*([^\\*]+)\\*"), L"<em>$1</em>");
-
-    // _italic_
     htmlW = std::regex_replace(htmlW, std::wregex(L"_([^_]+)_"), L"<em>$1</em>");
-
-    // [Link text](URL)
     htmlW = std::regex_replace(htmlW, std::wregex(L"\\[(.*?)\\]\\((.*?)\\)"), L"<a href=\"$2\">$1</a>");
 
-    // Convert UTF-16 to UTF-8
     int u8Len = WideCharToMultiByte(CP_UTF8, 0, htmlW.c_str(), -1, NULL, 0, NULL, NULL);
     std::string htmlU8(u8Len, 0);
     WideCharToMultiByte(CP_UTF8, 0, htmlW.c_str(), -1, &htmlU8[0], u8Len, NULL, NULL);
     
-    // Remove the null terminator that std::string will give us
     if (!htmlU8.empty() && htmlU8.back() == '\0') {
         htmlU8.pop_back();
     }
@@ -359,9 +322,6 @@ std::string GenerateClipboardHtmlPayload(const std::string& htmlBodyFragment)
     std::string htmlPrefixStr = htmlPrefix;
     std::string htmlSuffixStr = htmlSuffix;
 
-    // We don't know the header length precisely until we format it, 
-    // but the format string has fixed length placeholders.
-    // Length of the formatted header will be: 97 bytes
     size_t headerLength = 97;
 
     size_t startHtml = headerLength;
@@ -387,11 +347,6 @@ using SetClipboardData_t = decltype(&SetClipboardData);
 SetClipboardData_t pOriginalSetClipboardData;
 HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
 {
-    // If Force Plain Text is enabled, and we're intercepting an HTML or RTF format, just drop it.
-    // However, since we intercept per-format and don't control the whole clipboard transaction here easily,
-    // the cleanest way to "Force Plain Text" is to let CF_UNICODETEXT pass through (which we modify),
-    // and return NULL for known rich text formats when they are pushed.
-    
     if (g_forcePlainText) {
         static UINT cfHtml = 0;
         static UINT cfRtf = 0;
@@ -399,15 +354,12 @@ HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
         if (cfRtf == 0) cfRtf = RegisterClipboardFormatW(L"Rich Text Format");
 
         if (uFormat == cfHtml || uFormat == cfRtf || uFormat == CF_DIB || uFormat == CF_BITMAP) {
-            // Drop it to force plain text. 
-            // Note: Returning NULL might cause some apps to fail, but it's the simplest way to block a format in a hook.
             if (hMem) GlobalFree(hMem);
             return NULL;
         }
     }
 
     if (uFormat == CF_UNICODETEXT && hMem != NULL) {
-        // Read text from hMem
         LPCWSTR pData = (LPCWSTR)GlobalLock(hMem);
         if (pData) {
             std::wstring originalText(pData);
@@ -415,8 +367,6 @@ HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
 
             std::wstring cleanedText = CleanCopiedText(originalText);
 
-            // Check if we need to convert markdown to HTML
-            // (Note: If ForcePlainText is ON, we shouldn't inject Markdown HTML either, as the user wants plain text)
             if (g_convertMarkdownToRichText && !g_forcePlainText && cleanedText != originalText && 
                (originalText.find(L"**") != std::wstring::npos || 
                 originalText.find(L"__") != std::wstring::npos ||
@@ -424,7 +374,6 @@ HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
                 originalText.find(L"_") != std::wstring::npos ||
                 (originalText.find(L"[") != std::wstring::npos && originalText.find(L"](") != std::wstring::npos))) {
                 
-                // Text seems to contain markdown. Generate the HTML format string
                 std::string htmlUtf8 = ConvertMarkdownToHtml(cleanedText);
                 std::string htmlPayload = GenerateClipboardHtmlPayload(htmlUtf8);
 
@@ -437,7 +386,6 @@ HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
                             memcpy(pMemHtml, htmlPayload.c_str(), htmlPayload.length() + 1);
                             GlobalUnlock(hMemHtml);
                             
-                            // Send the HTML format *before* sending standard text format
                             pOriginalSetClipboardData(cfHtml, hMemHtml);
                         } else {
                             GlobalFree(hMemHtml);
@@ -446,7 +394,6 @@ HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
                 }
             }
 
-            // If the text actually changed, we generate a new HGLOBAL
             if (cleanedText != originalText) {
                 SIZE_T size = (cleanedText.length() + 1) * sizeof(WCHAR);
                 HANDLE hNewMem = GlobalAlloc(GMEM_MOVEABLE, size);
@@ -456,13 +403,11 @@ HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem)
                         memcpy(pNewData, cleanedText.c_str(), size);
                         GlobalUnlock(hNewMem);
                         
-                        // We must free the old memory here.
                         GlobalFree(hMem);
 
-                        // Call original with our newly allocated handle
                         return pOriginalSetClipboardData(uFormat, hNewMem);
                     } else {
-                        GlobalFree(hNewMem); // Allocation failed lock, fallback
+                        GlobalFree(hNewMem);
                     }
                 }
             }
