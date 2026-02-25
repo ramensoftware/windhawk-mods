@@ -8,6 +8,15 @@
 // @compilerOptions -lole32 -luuid -lcomctl32
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+This mod makes the `Windows Tools` (formerly `Administrative Tools`) folder to save and restore its view properties, like any other folder
+instead of using the hardcoded tile view.
+Particularly, this works around the issue that in the default, tile mode the elements of this folders have other content
+instead of names displayed when using SysListView32.
+*/
+// ==/WindhawkModReadme==
+
 #include <windows.h>
 #include <commctrl.h>
 #include <shlobj.h>
