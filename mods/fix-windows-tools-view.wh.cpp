@@ -4,6 +4,7 @@
 // @description     Saves/restores view mode for Windows Tools folder
 // @version         1.0
 // @author          Anixx
+// @github          https://github.com/Anixx
 // @include         explorer.exe
 // @compilerOptions -lole32 -luuid -lcomctl32
 // ==/WindhawkMod==
