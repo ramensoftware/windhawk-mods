@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-24T23:54:38.000Z</updated>
+    <updated>2026-02-25T10:19:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.0]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#6425cdbad3a7427a2f53ad4be99dc615d8e53f0d</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2"/>
+        <updated>2026-02-25T10:19:40.000Z</updated>
+        <content type="html"><![CDATA[<p>The taskbar context menu (when clicking on the taskbar empty area) does not appear when
+running the Windows 10 taskbar ob Windows 11 24H2 or Windows 11 25H2.
+This mod restores the menu. If anyone knows where is stored the localization for
+the string "Lock the taskbar", feel free to contact.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Fade 2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-fade#24fd1c92dd79a8061eed9e2432e8d540ea1cc301</id>
@@ -411,54 +425,6 @@ virtual desktop and monitor.</li>
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Caffeine 0.7]]></title>
-        <id>https://windhawk.net/mods/caffeine#4ff0d3c579524082f13600af1a613b893ffe9193</id>
-        <link href="https://windhawk.net/mods/caffeine"/>
-        <updated>2026-02-16T08:39:30.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="caffeine">Caffeine</h1>
-<p>A lightweight system tray utility that prevents your computer from sleeping
-or turning off the display. Toggle it on and off with a single click on the
-tray icon, or right-click to choose a timed duration.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>One-click toggle</strong>: Left-click the tray icon to activate/deactivate</li>
-<li><strong>Timed activation</strong>: Right-click for duration options (15 min to 4 hours, or indefinite)</li>
-<li><strong>Countdown display</strong>: Tooltip shows remaining time when using timed mode</li>
-<li><strong>Prevent sleep</strong>: Keeps your system from entering sleep mode</li>
-<li><strong>Prevent display off</strong>: Stops the monitor from turning off due to inactivity</li>
-<li><strong>Visual indicators</strong>: Distinct colors for active (caffeinated) and inactive states</li>
-<li><strong>Customizable appearance</strong>: Choose colors, shapes, and icon size</li>
-<li><strong>Auto-start option</strong>: Optionally start in active state when the mod loads</li>
-<li><strong>Lightweight</strong>: Uses the proper Windows API (<code>SetThreadExecutionState</code>) — no fake keypresses</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>When activated, the mod calls <code>SetThreadExecutionState</code> with
-<code>ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED</code> to tell Windows
-that the system and display should stay on. When deactivated, it clears
-these flags.</p>
-<h2 id="controls">Controls</h2>
-<ul>
-<li><strong>Left-click</strong>: Quick toggle — activates indefinitely if off, deactivates if on</li>
-<li><strong>Right-click</strong>: Context menu with duration options:</li>
-<li>Indefinite (keeps awake forever)</li>
-<li>15 Minutes</li>
-<li>30 Minutes</li>
-<li>1 Hour</li>
-<li>2 Hours</li>
-<li>4 Hours</li>
-<li>Activate / Deactivate (shown based on current state)</li>
-</ul>
-<h2 id="visualindicators">Visual Indicators</h2>
-<ul>
-<li><strong>Active (Caffeinated)</strong>: Bright icon (default: amber/orange ☕)</li>
-<li><strong>Inactive</strong>: Dim icon (default: gray)</li>
-</ul>]]></content>
-        <author>
-            <name>ALMAS CP</name>
-            <uri>https://github.com/almas-cp</uri>
         </author>
     </entry>
 </feed>
