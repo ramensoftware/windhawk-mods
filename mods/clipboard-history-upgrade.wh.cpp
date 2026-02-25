@@ -37,36 +37,66 @@ Enhance the Windows Clipboard History (Win+V) by automatically cleaning and form
       $name: Search Regex/String
     - Replace: orange
       $name: Replace String
-  $name: Regex text replacements (applied globally)
+  $name: Regex text replacements
+  $description: >-
+    Define custom find-and-replace rules using regular expressions.
+    These are applied to all copied text.
 - RemoveTrackingParams: true
-  $name: Auto-remove common tracking parameters from URLs (utm_*, fbclid, etc.)
+  $name: Remove tracking parameters
+  $description: >-
+    Automatically strip utm_source, fbclid, gclid, and other
+    common tracking parameters from copied URLs.
 - AutoTrimWhitespace: false
-  $name: Auto-Trim Whitespace (strip leading/trailing space)
+  $name: Auto-trim whitespace
+  $description: >-
+    Remove leading and trailing spaces, tabs, and newlines
+    that are often accidentally included when selecting text.
 - UnwrapText: false
-  $name: Text Unwrapper (Remove hard line breaks like from PDF copies)
-- CasingMode: 0
-  $name: Smart Casing Mode
+  $name: Unwrap text (PDF fixer)
+  $description: >-
+    Merge broken lines back into flowing paragraphs.
+    Useful when copying text from PDFs or narrow columns
+    that insert hard line breaks mid-sentence.
+    Paragraph breaks (double newlines) are preserved.
+- CasingMode: none
+  $name: Smart casing
+  $description: >-
+    Automatically convert copied text to the selected casing style.
   $options:
-  - 0: None
-  - 1: lowercase
-  - 2: UPPERCASE
-  - 3: Title Case
-- PathEscaperMode: 0
-  $name: Code Path Auto-Escaper
+  - none: None (no change)
+  - lowercase: lowercase
+  - uppercase: UPPERCASE
+  - titlecase: Title Case
+- PathEscaperMode: none
+  $name: Path auto-escaper
+  $description: >-
+    When a Windows file path is detected (e.g. C:\Users\file.txt),
+    automatically escape the backslashes for use in code.
   $options:
-  - 0: None
-  - 1: Double Backslash (\\)
-  - 2: Forward Slash (/)
-- DataExtractorMode: 0
-  $name: Data Extractor
+  - none: None (no change)
+  - doubleBackslash: Double backslash (C:\\Users\\file.txt)
+  - forwardSlash: Forward slash (C:/Users/file.txt)
+- DataExtractorMode: none
+  $name: Data extractor
+  $description: >-
+    Instead of copying the full text, extract only the URLs
+    or email addresses found within it.
   $options:
-  - 0: None
-  - 1: URLs Only
-  - 2: Email Addresses Only
+  - none: None (copy full text)
+  - urls: Extract URLs only
+  - emails: Extract email addresses only
 - ConvertMarkdownToRichText: true
-  $name: Auto-convert simple Markdown to Rich Text (HTML Format)
+  $name: Markdown to rich text
+  $description: >-
+    Detect simple Markdown syntax (**bold**, *italic*, [links](url))
+    and inject an HTML Format clipboard payload so that rich text
+    editors render the formatting when you paste.
 - ForcePlainText: false
-  $name: Force Plain Text (Strip all rich formatting from source app)
+  $name: Force plain text
+  $description: >-
+    Strip all rich formatting (HTML, RTF, images) from the source
+    application so that text always pastes as plain, unformatted text.
+    Note: This overrides "Markdown to rich text" if both are enabled.
 */
 // ==/WindhawkModSettings==
 
@@ -102,11 +132,27 @@ void LoadSettings()
     g_removeTrackingParams = Wh_GetIntSetting(L"RemoveTrackingParams");
     g_autoTrimWhitespace = Wh_GetIntSetting(L"AutoTrimWhitespace");
     g_unwrapText = Wh_GetIntSetting(L"UnwrapText");
-    g_casingMode = Wh_GetIntSetting(L"CasingMode");
-    g_pathEscaperMode = Wh_GetIntSetting(L"PathEscaperMode");
-    g_dataExtractorMode = Wh_GetIntSetting(L"DataExtractorMode");
     g_convertMarkdownToRichText = Wh_GetIntSetting(L"ConvertMarkdownToRichText");
     g_forcePlainText = Wh_GetIntSetting(L"ForcePlainText");
+
+    PCWSTR casingMode = Wh_GetStringSetting(L"CasingMode");
+    g_casingMode = 0;
+    if (wcscmp(casingMode, L"lowercase") == 0) g_casingMode = 1;
+    else if (wcscmp(casingMode, L"uppercase") == 0) g_casingMode = 2;
+    else if (wcscmp(casingMode, L"titlecase") == 0) g_casingMode = 3;
+    Wh_FreeStringSetting(casingMode);
+
+    PCWSTR pathMode = Wh_GetStringSetting(L"PathEscaperMode");
+    g_pathEscaperMode = 0;
+    if (wcscmp(pathMode, L"doubleBackslash") == 0) g_pathEscaperMode = 1;
+    else if (wcscmp(pathMode, L"forwardSlash") == 0) g_pathEscaperMode = 2;
+    Wh_FreeStringSetting(pathMode);
+
+    PCWSTR extractorMode = Wh_GetStringSetting(L"DataExtractorMode");
+    g_dataExtractorMode = 0;
+    if (wcscmp(extractorMode, L"urls") == 0) g_dataExtractorMode = 1;
+    else if (wcscmp(extractorMode, L"emails") == 0) g_dataExtractorMode = 2;
+    Wh_FreeStringSetting(extractorMode);
 
     for (int i = 0;; i++) {
         PCWSTR search = Wh_GetStringSetting(L"RegexReplacements[%d].Search", i);
