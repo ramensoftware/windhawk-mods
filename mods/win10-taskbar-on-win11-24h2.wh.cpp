@@ -35,6 +35,8 @@ You also can use 7+ Taskbar Tweaker.
 
 Explorer Patcher will not have any effect.
 
+To customize the clock and tray area, launch legacy tray setup dialog:
+
 `explorer shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}`
 
 Known issues:
