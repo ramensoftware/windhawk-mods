@@ -1,10 +1,10 @@
 // ==WindhawkMod==
-// @id              notepad-multi-select-full
+// @id              notepad-multi-select
 // @name            Notepad Multi-Select (Final Engine)
 // @description     Adds Alt+Shift multi-caret, true blue highlighting, smart indent, and perfect \r\n handling.
 // @version         4.9
 // @author          Mohamed Magdy
-// @github          hamomagdy7
+// @github          https://github.com/hamomagdy724
 // @include         notepad.exe
 // @compilerOptions -luser32 -lcomctl32 -lgdi32
 // ==/WindhawkMod==
