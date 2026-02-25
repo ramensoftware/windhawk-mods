@@ -1724,6 +1724,34 @@
                 "version": "1.4.0"
             }
         },
+        "clipboard-history-upgrade": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772059113000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772059113000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "SwiftExplorer567",
+                "compilerOptions": "-luser32 -lole32",
+                "description": "Enhances Windows Win+V with Regex formatting, tracking parameter removal, and Markdown to Rich Text conversion.",
+                "github": "https://github.com/SwiftExplorer567",
+                "include": [
+                    "*"
+                ],
+                "name": "Clipboard History Upgrade",
+                "version": "1.2.0"
+            }
+        },
         "close-explorer-on-esc": {
             "details": {
                 "defaultSorting": 4120,
