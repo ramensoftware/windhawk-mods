@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win7-login-fade
 // @name            Logon & Sleep Fade Restorer
-// @description     Bring back the old logon screen and sleep fade effect
+// @description     Bring back the old logon and sleep screen fade effect
 // @version         1.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
@@ -25,9 +25,9 @@
   * Gamma (Kernel): Use the existing kernel-mode gamma fade logic, instead of a user-mode reimplementation. **This is broken on Windows 10 1903 and later**, and only an extra delay during an invisible fade will be present. **Do not use this mode on recent versions of Windows.**
   * DWM (Original): Keep the original DWM fade effect to make the fade work as if this mod is disabled. Duration is not adjustable in this mode. Not available for logoff/shutdown.
 * The gamma-based fade types will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment. It's also not compatible with NVIDIA driver's reference color mode.
-* To use the `Gamma (Reimplemented)` mode (which is the default) on Windows 10 1903 and later, you'll need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
+* To use the `Gamma (Reimplemented)` mode (which is the default), you'll need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
 * To add fade effects to sleep and hibernation initiated by the idle timer or power button, enable the "Enable enhanced sleep/hibernate interception" option. This option has limited compatibility compared to the rest of the mod, and is only tested on Windows 10 LTSC 2021 (22H2). It might work on 21H2 and later versions; however, this mode is not likely to work on Windows 10 1903 and earlier, unfortunately.
-## Presets for replicating specific Windows versions' fade effects
+## Presets
 * Windows Vista/7 (mod defaults)
   * Logon fade type: Gamma (Reimplemented)
   * Logon fade duration: 1000 ms
@@ -44,8 +44,9 @@
   * Sleep fade duration: 167 ms
 ## Known issues and limitations
 * The logon fade animation may look broken on early boot when using the auto-login feature.
-* Turning off the monitor with the power button action will not trigger the sleep fade effect, as it is handled internally by the kernel without informing a user-mode component.
+* Turning off the monitor with the power button action (or sleeping on Modern Standby devices) will not trigger the sleep fade effect, as it is handled internally by the kernel without informing a user-mode component.
   * Monitor off initiated by the idle timer can have fade added as usual.
+* Only `Gamma (Kernel)` and `DWM (Original)` logon/logoff fade types are supported on Windows 8 for now, to avoid critical issues that I have observed. Early Windows 10 versions are not tested, so avoid `None` and `Gamma (Reimplemented)` modes on those versions as well to be safe, until I can confirm their stability.
 */
 // ==/WindhawkModReadme==
 
@@ -109,6 +110,8 @@
 
 #include <windhawk_utils.h>
 #include <atomic>
+#include <sddl.h>
+#include <versionhelpers.h>
 
 enum FadeType {
     None,
@@ -131,7 +134,7 @@ bool g_isWinlogon = false;
 HANDLE g_fadeMutex = NULL;
 std::atomic<bool> g_isFadeInProgress = false;
 std::atomic<bool> g_isExiting = false;
-HANDLE g_monitorOffThread = NULL;
+std::atomic<HANDLE> g_monitorOffThread = NULL;
 
 typedef struct _MONITOR_INFO {
     HDC hDC = NULL;
@@ -159,16 +162,25 @@ bool IsFadeInProgress() {
         ReleaseMutex(g_fadeMutex);
         return false;
     } else {
+        if (result != WAIT_TIMEOUT) {
+            Wh_Log(L"WaitForSingleObject failed, GLE=%d", GetLastError());
+        }
         return true;
     }
 }
 
 bool BeginFade() {
-    if (g_isExiting.load()) {
+    if (g_isExiting.load() || IsFadeInProgressInThisProcess()) {
         return false;
     }
     if (!g_fadeMutex) {
-        return false;
+        if (g_isWinlogon) {
+            g_isFadeInProgress.store(true);
+            return true;
+        } else {
+            // Should not be reachable I think
+            return false;
+        }
     }
     DWORD result = WaitForSingleObject(g_fadeMutex, 0);
     if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED) {
@@ -188,16 +200,18 @@ void EndFade() {
 
 void WaitForFade() {
     if (IsFadeInProgressInThisProcess()) {
-        if (g_monitorOffThread) {
-            WaitForSingleObject(g_monitorOffThread, INFINITE);
-            CloseHandle(g_monitorOffThread);
-            g_monitorOffThread = NULL;
+        HANDLE monitorOffThread = g_monitorOffThread.exchange(NULL);
+        if (monitorOffThread) {
+            WaitForSingleObject(monitorOffThread, INFINITE);
+            CloseHandle(monitorOffThread);
         } else {
             Sleep(std::max({g_settings.logonDuration, g_settings.logoffDuration, g_settings.sleepDuration}) + 1000);
         }
     } else if (g_fadeMutex) {
-        WaitForSingleObject(g_fadeMutex, INFINITE);
-        ReleaseMutex(g_fadeMutex);
+        DWORD result = WaitForSingleObject(g_fadeMutex, INFINITE);
+        if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED) {
+            ReleaseMutex(g_fadeMutex);
+        }
     }
 }
 
@@ -298,13 +312,17 @@ int GetDeviceRefreshRate() {
     if (refreshRate <= 0) {
         refreshRate = 60;
     }
+    // idk if this high refresh rate is possible but it would cause Sleep(0) above
+    if (refreshRate >= 1000) {
+        refreshRate = 500;
+    }
     return refreshRate;
 }
 
 // flags: this third argument was introduced in Windows 8, and it apparently controls whether to use the DWM fade or not,
 // but I did not find any code responsible for parsing the flags; only seen it being used by winlogon.exe. Known values:
 // 53: 8.0, 8.1 login
-// 64: 8.0, 8.1 unlock
+// 64: 8.0, 8.1 lock/unlock
 // 55: 10 1507, 1607, 1809, 1903, 21H2, 22H2, 11 22H2, 24H2, 25H2 login
 // 65: 10 1507, 1607, 1809, 1903, 21H2, 22H2, 11 22H2, 24H2, 25H2 unlock
 // 65: 10 1507, 1607 lock
@@ -388,51 +406,6 @@ __int64 __fastcall SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration, DW
     return result;
 }
 
-typedef NTSTATUS (NTAPI* NtPowerInformation_t)(POWER_INFORMATION_LEVEL, PVOID, ULONG, PVOID, ULONG);
-NtPowerInformation_t NtPowerInformation_original;
-
-DWORD MonitorOffThreadProc(LPVOID lpParameter) {
-    Wh_Log(L"Initiating monitor off fade...");
-    int refreshRate = GetDeviceRefreshRate();
-    int monitorCount = 0;
-    MONITOR_INFO* monitors = NULL;
-    if (!GetMonitorsInfo(&monitors, &monitorCount)) {
-        EndFade();
-        NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
-        return 1;
-    }
-
-    FadeDesktop(refreshRate, g_settings.sleepDuration, true, monitors, monitorCount);
-    NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
-    Sleep(2000); // Arbitrary delay to ensure the display is fully off before restoring gamma, as this internal API is asynchronous and otherwise it'll cause a screen flash
-
-    for (int i = 0; i < monitorCount; i++) {
-        if (monitors[i].hDC) {
-            SetDeviceGammaRamp(monitors[i].hDC, monitors[i].origGamma);
-            DeleteDC(monitors[i].hDC);
-        }
-    }
-    free(monitors);
-    EndFade();
-    return 0;
-}
-
-NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength) {
-    // Internal API introduced in Windows 8, known usermode use cases include Open-Shell Menu
-    // DefWindowProc WM_SYSCOMMAND SC_MONITORPOWER has it's own kernel mode routine and does not use this API, so these two must be hooked separately
-    if (InformationLevel == ScreenOff && g_settings.sleepFadeEnabled && BeginFade()) {
-        // Both NtPowerInformation and DefWindowProc WM_SYSCOMMAND is asynchronous so do it in a separate thread
-        g_monitorOffThread = CreateThread(NULL, 0, MonitorOffThreadProc, NULL, 0, NULL);
-        if (!g_monitorOffThread) {
-            Wh_Log(L"Failed to create monitor off thread, GLE=%d", GetLastError());
-            EndFade();
-            return NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
-        }
-        return 0; // STATUS_SUCCESS
-    }
-    return NtPowerInformation_original(InformationLevel, InputBuffer, InputBufferLength, OutputBuffer, OutputBufferLength);
-};
-
 // SetSuspendState and SetSystemPowerState both internally call NtInitiatePowerAction synchronously
 // Fading in asynchronous mode is not yet supported as it makes determining the correct timing to restore gamma ramps difficult without causing extra delay or screen flash,
 // and we would also need to delegate the fading to a separate process or thread to avoid blocking the caller (and process exit), which adds more complexity and potential issues
@@ -472,15 +445,64 @@ NTSTATUS NTAPI NtInitiatePowerAction_hook(POWER_ACTION SystemAction, SYSTEM_POWE
     return NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, Asynchronous);
 };
 
-// For some command line utilities that initiates sleep/hibernate/monitor off asynchronously then exit immediately
-using ExitProcess_t = void (WINAPI*)(UINT uExitCode);
-ExitProcess_t ExitProcess_original;
-void WINAPI ExitProcess_hook(UINT uExitCode) {
-    if (IsFadeInProgressInThisProcess()) {
-        Wh_Log(L"Deferring process exit until fade is finished...");
-        WaitForFade();
+typedef NTSTATUS (NTAPI* NtPowerInformation_t)(POWER_INFORMATION_LEVEL, PVOID, ULONG, PVOID, ULONG);
+NtPowerInformation_t NtPowerInformation_original;
+
+DWORD MonitorOffThreadProc(LPVOID lpParameter) {
+    if (BeginFade()) {
+        Wh_Log(L"Initiating monitor off fade...");
+        int refreshRate = GetDeviceRefreshRate();
+        int monitorCount = 0;
+        MONITOR_INFO* monitors = NULL;
+        if (!GetMonitorsInfo(&monitors, &monitorCount)) {
+            EndFade();
+            NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            return 1;
+        }
+
+        FadeDesktop(refreshRate, g_settings.sleepDuration, true, monitors, monitorCount);
+        NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+        Sleep(1500); // Arbitrary delay to ensure the display is fully off before restoring gamma, as this undocumented API is asynchronous and otherwise it'll cause a screen flash
+
+        for (int i = 0; i < monitorCount; i++) {
+            if (monitors[i].hDC) {
+                SetDeviceGammaRamp(monitors[i].hDC, monitors[i].origGamma);
+                DeleteDC(monitors[i].hDC);
+            }
+        }
+        free(monitors);
+        EndFade();
+        return 0;
+    } else {
+        NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
     }
-    ExitProcess_original(uExitCode);
+    return 1;
+}
+
+NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength) {
+    // Undocumented API introduced in Windows 8, known usermode use cases include Open-Shell Menu
+    // DefWindowProc WM_SYSCOMMAND SC_MONITORPOWER has it's own kernel mode routine and does not use this API, so these two must be hooked separately
+    if (InformationLevel == ScreenOff && g_settings.sleepFadeEnabled && !IsFadeInProgress()) {
+        // Both NtPowerInformation and DefWindowProc WM_SYSCOMMAND is asynchronous so do it in a separate thread
+        HANDLE monitorOffThread = g_monitorOffThread.exchange(NULL);
+        if (monitorOffThread) {
+            // cleanup handle (it shouldn't be running at least as IsFadeInProgress is checked above)
+            DWORD result = WaitForSingleObject(monitorOffThread, 0);
+            if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED) {
+                Wh_Log(L"Monitor off thread is still running, wait failed with GLE=%d", GetLastError());
+                return NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            }
+            CloseHandle(monitorOffThread);
+        }
+        monitorOffThread = CreateThread(NULL, 0, MonitorOffThreadProc, NULL, 0, NULL);
+        if (!monitorOffThread) {
+            Wh_Log(L"Failed to create monitor off thread, GLE=%d", GetLastError());
+            return NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+        }
+        g_monitorOffThread.store(monitorOffThread);
+        return 0; // STATUS_SUCCESS
+    }
+    return NtPowerInformation_original(InformationLevel, InputBuffer, InputBufferLength, OutputBuffer, OutputBufferLength);
 };
 
 // From aubymori's MinMax mod
@@ -544,6 +566,17 @@ DWP_HOOK(
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
 
+// For some command line utilities that initiates sleep/hibernate/monitor off asynchronously then exit immediately
+using ExitProcess_t = void (WINAPI*)(UINT uExitCode);
+ExitProcess_t ExitProcess_original;
+void WINAPI ExitProcess_hook(UINT uExitCode) {
+    if (IsFadeInProgressInThisProcess()) {
+        Wh_Log(L"Deferring process exit until fade is finished...");
+        WaitForFade();
+    }
+    ExitProcess_original(uExitCode);
+};
+
 // Internal Winlogon function for handling power messages sent by win32k (xxxSendWinlogonPowerMessage)
 // a1 known values:
 // 263: Sent before sleeping/hibernating (can block)
@@ -585,6 +618,52 @@ int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) 
     return WMsgPSPHandler_original(a1, a2, a3, a4);
 };
 
+HANDLE CreateFadeMutex() {
+    static const wchar_t* kMutexName = L"Local\\LsfFadeMutex";
+    static const wchar_t* kMutexSddl = L"D:(A;;GA;;;IU)(A;;GA;;;SY)(A;;GA;;;BA)";
+
+    SECURITY_ATTRIBUTES sa = {};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = FALSE;
+
+    PSECURITY_DESCRIPTOR securityDescriptor = NULL;
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            kMutexSddl,
+            SDDL_REVISION_1,
+            &securityDescriptor,
+            NULL)) {
+        sa.lpSecurityDescriptor = securityDescriptor;
+    } else {
+        Wh_Log(L"ConvertStringSecurityDescriptorToSecurityDescriptorW failed, GLE=%d", GetLastError());
+    }
+
+    HANDLE mutex = CreateMutexExW(
+        sa.lpSecurityDescriptor ? &sa : NULL,
+        kMutexName,
+        0,
+        SYNCHRONIZE | MUTEX_MODIFY_STATE
+    );
+
+    if (!mutex) {
+        DWORD createError = GetLastError();
+        Wh_Log(L"CreateMutexExW with custom/default security failed, GLE=%d", createError);
+
+        if (sa.lpSecurityDescriptor) {
+            // Retry without explicit security descriptor
+            mutex = CreateMutexExW(NULL, kMutexName, 0, SYNCHRONIZE | MUTEX_MODIFY_STATE);
+            if (!mutex) {
+                Wh_Log(L"CreateMutexExW fallback failed, GLE=%d", GetLastError());
+            }
+        }
+    }
+
+    if (securityDescriptor) {
+        LocalFree(securityDescriptor);
+    }
+
+    return mutex;
+}
+
 FadeType FadeTypeStringToEnum(LPCWSTR str) {
     if (wcscmp(str, L"none") == 0) {
         return None;
@@ -600,11 +679,18 @@ FadeType FadeTypeStringToEnum(LPCWSTR str) {
 }
 
 void LoadSettings() {
+    bool isWin10 = IsWindows10OrGreater();
+
     LPCWSTR logonTypeStr = Wh_GetStringSetting(L"type");
     FadeType logonType = FadeTypeStringToEnum(logonTypeStr);
     Wh_FreeStringSetting(logonTypeStr);
     if (logonType < None || logonType > DWM) {
         logonType = Gamma;
+    }
+    if (!isWin10 && logonType < Kernel) {
+        // On my Win8 machine, somehow calling SwitchDesktop causes weird behavior like repeated SwitchDesktopWithFade calls or winlogon crashes
+        // So only allow modes that call SwitchDesktopWithFade_original for now
+        logonType = Kernel;
     }
     int logonDuration = Wh_GetIntSetting(L"duration");
     if (logonDuration < 0) {
@@ -620,6 +706,9 @@ void LoadSettings() {
     Wh_FreeStringSetting(logoffTypeStr);
     if (logoffType < None || logoffType > DWM) {
         logoffType = Gamma;
+    }
+    if (!isWin10 && logoffType < Kernel) {
+        logoffType = Kernel;
     }
     int logoffDuration = Wh_GetIntSetting(L"logoffDuration");
     if (logoffDuration < 0) {
@@ -659,13 +748,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
     LoadSettings();
-
-    g_fadeMutex = CreateMutexW(NULL, FALSE, L"Local\\LsfFadeMutex");
-    if (!g_fadeMutex) {
-        // Likely services, but I think they would barely initiate the sleep fade anyway
-        Wh_Log(L"CreateMutexW failed");
-        return FALSE;
-    }
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
@@ -717,37 +799,54 @@ BOOL Wh_ModInit() {
         }
     }
 
+    g_fadeMutex = CreateFadeMutex();
+    if (!g_fadeMutex) {
+        // Likely services, but I think they would barely initiate the sleep fade anyway
+        Wh_Log(L"Failed to create/open fade mutex");
+        if (!g_isWinlogon) {
+            // Allow winlogon to proceed without mutex to allow the single process mode (no sleep fade) to work at least, but not for others
+            return FALSE;
+        }
+    }
+
+#define CLEANUP                   \
+    if (g_fadeMutex) {            \
+        CloseHandle(g_fadeMutex); \
+        g_fadeMutex = NULL;       \
+    }                             \
+    return FALSE;
+
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     if (!ntdll) {
         Wh_Log(L"GetModuleHandleW ntdll.dll failed");
-        return FALSE;
+        CLEANUP
     }
 
     NtInitiatePowerAction_t NtInitiatePowerAction = (NtInitiatePowerAction_t)GetProcAddress(ntdll, "NtInitiatePowerAction");
     if (!NtInitiatePowerAction) {
         Wh_Log(L"GetProcAddress NtInitiatePowerAction failed");
-        return FALSE;
+        CLEANUP
     }
     if (!Wh_SetFunctionHook((void*)NtInitiatePowerAction, (void*)NtInitiatePowerAction_hook, (void**)&NtInitiatePowerAction_original)) {
         Wh_Log(L"Wh_SetFunctionHook NtInitiatePowerAction failed");
-        return FALSE;
+        CLEANUP
     }
 
     NtPowerInformation_t NtPowerInformation = (NtPowerInformation_t)GetProcAddress(ntdll, "NtPowerInformation");
     if (!NtPowerInformation) {
         Wh_Log(L"GetProcAddress NtPowerInformation failed");
-        return FALSE;
+        CLEANUP
     }
     if (!Wh_SetFunctionHook((void*)NtPowerInformation, (void*)NtPowerInformation_hook, (void**)&NtPowerInformation_original)) {
         Wh_Log(L"Wh_SetFunctionHook NtPowerInformation failed");
-        return FALSE;
+        CLEANUP
     }
 
 #define HOOK(func)                                                                         \
     if (!Wh_SetFunctionHook((void *)func, (void *)func ## _hook, (void **)&func ## _orig)) \
     {                                                                                      \
         Wh_Log(L"Failed to hook %s", L ## #func);                                          \
-        return FALSE;                                                                      \
+        CLEANUP                                                                            \
     }
 
 #define HOOK_A_W(func) HOOK(func ## A) HOOK(func ## W)
@@ -772,10 +871,10 @@ void Wh_ModUninit() {
         CloseHandle(g_fadeMutex);
         g_fadeMutex = NULL;
     }
-    if (g_monitorOffThread) {
-        WaitForSingleObject(g_monitorOffThread, INFINITE);
-        CloseHandle(g_monitorOffThread);
-        g_monitorOffThread = NULL;
+    HANDLE monitorOffThread = g_monitorOffThread.exchange(NULL);
+    if (monitorOffThread) {
+        WaitForSingleObject(monitorOffThread, INFINITE);
+        CloseHandle(monitorOffThread);
     }
 }
 
