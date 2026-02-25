@@ -1,3 +1,7 @@
+## 1.2.2 ([Feb 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b90a0eb5c2a2fd3fb149e703536422fe61ae966d/mods/classic-theme-enable.wh.cpp))
+
+Update readme
+
 ## 1.2.1 ([Feb 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/06bdb896036376323a3edb138ff87804e6db2eee/mods/classic-theme-enable.wh.cpp))
 
 Reduced retry delay from 500ms to 100ms.

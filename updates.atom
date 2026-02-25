@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-25T17:19:15.000Z</updated>
+    <updated>2026-02-25T19:59:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme 1.2.2]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#b90a0eb5c2a2fd3fb149e703536422fe61ae966d</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2026-02-25T19:59:10.000Z</updated>
+        <content type="html"><![CDATA[<p>Update readme</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.5]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#ff3aafc922d9a5c9d2fc28155d842ba87f85b242</id>
@@ -384,40 +395,6 @@ The touch overlay was still appearing in Alt+Tab because <code>ShowWindow_Hook</
         <content type="html"><![CDATA[<ul>
 <li><p>Removed tiling functionality and all related settings/hotkeys; the mod now focuses only on virtual desktop switching, moving, and pinning.</p></li>
 <li><p>Added “Previous Desktop (Index)” behavior and hotkey handling, plus documentation updates for previous/next/last terminology.</p></li>
-</ul>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tiling Helper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/tiling-helper#85e4a6e8b5ce29cc1c26d9da6f343b03e20927ae</id>
-        <link href="https://windhawk.net/mods/tiling-helper"/>
-        <updated>2026-02-16T18:29:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="tilinghelper">Tiling Helper</h1>
-<p>A focused window tiling tool for Windows 10/11. Tile windows on the current monitor, cycle layouts, and keep
-resize-adjusted ratios per virtual desktop.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Manual tiling hotkey</li>
-<li>Layout cycle hotkey</li>
-<li>6 layouts: Master+Stack (Vertical/Horizontal), Columns, Rows, BSP, Monocle</li>
-<li>Adjustable margin, gap, and master size</li>
-<li>Remembers resize adjustments per virtual desktop + monitor (auto-retile can be disabled)</li>
-<li>Optional capture of current window sizes when tiling (useful if auto-retile is off)</li>
-</ul>
-<h2 id="defaulthotkeys">Default Hotkeys</h2>
-<ul>
-<li>Tile windows: Alt + D</li>
-<li>Cycle layout: Alt + L</li>
-<li>Toggle retile-on-resize + reset memory: Alt + R</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The layout selection is global (one current layout), while the tiling state (ratios/weights) is stored per
-virtual desktop and monitor.</li>
-<li>If Virtual Desktop APIs are unavailable, tiling still works but per-desktop memory is disabled.</li>
 </ul>]]></content>
         <author>
             <name>u2x1</name>
