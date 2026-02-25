@@ -25,8 +25,8 @@
   * Gamma (Kernel): Use the existing kernel-mode gamma fade logic, instead of a user-mode reimplementation. **This is broken on Windows 10 1903 and later**, and only an extra delay during an invisible fade will be present. **Do not use this mode on recent versions of Windows.**
   * DWM (Original): Keep the original DWM fade effect to make the fade work as if this mod is disabled. Duration is not adjustable in this mode. Not available for logoff/shutdown.
 * The gamma-based fade types will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment. It's also not compatible with NVIDIA driver's reference color mode.
-* To use the `Gamma (Reimplemented)` mode (which is the default), you'll need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100` (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
-* To add fade effects to sleep and hibernation initiated by the idle timer or power button, enable the "Enable enhanced sleep/hibernate interception" option. This option has limited compatibility compared to the rest of the mod, and is only tested on Windows 10 LTSC 2021 (22H2). It might work on 21H2 and later versions; however, this mode is not likely to work on Windows 10 1903 and earlier, unfortunately.
+* To use the `Gamma (Reimplemented)` mode (which is the default), **you'll need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100`** (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
+* To add fade effects to sleep and hibernation initiated by the idle timer or power button, enable the "Enable enhanced sleep/hibernate interception" option. This option has limited compatibility compared to the rest of the mod, and is only tested on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may work on 21H2 and later versions; however, this mode is unlikely to work on Windows 10 1903 and earlier versions, unfortunately.
 ## Presets
 * Windows Vista/7 (mod defaults)
   * Logon fade type: Gamma (Reimplemented)
@@ -44,9 +44,9 @@
   * Sleep fade duration: 167 ms
 ## Known issues and limitations
 * The logon fade animation may look broken on early boot when using the auto-login feature.
-* Turning off the monitor with the power button action (or sleeping on Modern Standby devices) will not trigger the sleep fade effect, as it is handled internally by the kernel without informing a user-mode component.
+* Turning off the monitor with the power button action (or sleeping on Modern Standby devices) will not trigger the sleep fade effect, as it is handled internally by the kernel without notifying a user-mode component before initiating the action.
   * Monitor off initiated by the idle timer can have fade added as usual.
-* Only `Gamma (Kernel)` and `DWM (Original)` logon/logoff fade types are supported on Windows 8 for now, to avoid critical issues that I have observed. Early Windows 10 versions are not tested, so avoid `None` and `Gamma (Reimplemented)` modes on those versions as well to be safe, until I can confirm their stability.
+* Only `Gamma (Kernel)` and `DWM (Original)` logon/logoff fade types are supported on Windows 8 for now, to avoid critical issues that I have observed. Early Windows 10 versions have not been thoroughly tested, so it is recommended to avoid `None` and `Gamma (Reimplemented)` modes on those versions as a precaution, until I can confirm their stability.
 */
 // ==/WindhawkModReadme==
 
@@ -103,8 +103,8 @@
 - enhancedSleepIntercept: false
   $name: Enable enhanced sleep/hibernate interception
   $name:ko-KR: 향상된 절전/최대 절전 모드 가로채기 활성화
-  $description: "Adds fade effects to sleep and hibernation by intercepting the messages between Winlogon and the kernel, which allows the fade effect to be applied to every sleep/hibernate action, including the kernel-initiated idle timer and power button actions. Only tested on Windows 10 LTSC 2021 (22H2), but it might work on 21H2 and later versions. Unfortunately, this mode is not likely to work on Windows 10 1903 and earlier."
-  $description:ko-KR: "Winlogon과 커널 간의 메시지를 가로채 절전/최대 절전 모드 진입 시 페이드 효과를 추가합니다. 이를 통해 커널에서 시작된 유휴 타이머 및 전원 버튼 동작을 포함하여 모든 절전/최대 절전 모드 작업에 페이드 효과를 적용할 수 있습니다. Windows 10 LTSC 2021(22H2)에서만 테스트되었지만 21H2 및 이후 버전에서 작동할 수도 있습니다. 본 모드는 Windows 10 1903 및 이전 버전에서는 작동하지 않을 가능성이 높습니다."
+  $description: "Adds fade effects to sleep and hibernation by intercepting the messages between Winlogon and the kernel, which allows the fade effect to be applied to every sleep/hibernate action, including the kernel-initiated idle timer and power button actions. This option has limited compatibility; see mod details page for more information."
+  $description:ko-KR: "Winlogon과 커널 간의 메시지를 가로채 절전/최대 절전 모드 진입 시 페이드 효과를 추가합니다. 이를 통해 커널에서 시작된 유휴 타이머 및 전원 버튼 동작을 포함하여 모든 절전/최대 절전 모드 작업에 페이드 효과를 적용할 수 있습니다. 이 옵션은 호환성이 높지 않으므로 모드 세부 정보 페이지를 확인하시기 바랍니다."
 */
 // ==/WindhawkModSettings==
 
@@ -566,7 +566,7 @@ DWP_HOOK(
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
 
-// For some command line utilities that initiates sleep/hibernate/monitor off asynchronously then exit immediately
+// For some command line utilities that initiate sleep/hibernate/monitor off asynchronously then exit immediately
 using ExitProcess_t = void (WINAPI*)(UINT uExitCode);
 ExitProcess_t ExitProcess_original;
 void WINAPI ExitProcess_hook(UINT uExitCode) {
@@ -584,8 +584,9 @@ void WINAPI ExitProcess_hook(UINT uExitCode) {
 // 259: Sent when resuming from hibernation
 // 261: Sent after turning off the monitor (cannot block, sent on monitor off/sleep/hibernate)
 // 260: Sent after turning on the monitor (cannot block, sent on monitor on/wake up from sleep/hibernate)
-// Tested only on Win10 LTSC 2021 22H2, and from my static analysis it might work from 10 21H2 to 11 25H2. Doubt it'll work on 1903 and below. 1909-20H2 were not inspected
-// The symbol itself seems to be present in all Windows versions between 8.0 and 11 25H2
+// Tested only on Win10 LTSC 2021 22H2 and 11 25H2, and from my static analysis it might work from 10 21H2 to 11 25H2
+// Doubt it'll work on 1903 and below. 1909-20H2 were not inspected
+// The symbol string itself seems to be present in all x64 Windows versions between 7 and 11 25H2
 typedef int (__cdecl *WMsgPSPHandler_t)(unsigned long a1, void* a2, void* a3, long* a4);
 WMsgPSPHandler_t WMsgPSPHandler_original;
 int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) {
@@ -600,9 +601,7 @@ int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) 
                 EndFade();
             }
         } else if (a1 == 260) { // Post-monitor-on/wake-up message
-            int refreshRate = GetDeviceRefreshRate();
             if (g_winlogonSleepFadeData.monitors) {
-                FadeDesktop(refreshRate, g_settings.sleepDuration, false, g_winlogonSleepFadeData.monitors, g_winlogonSleepFadeData.monitorCount);
                 for (int i = 0; i < g_winlogonSleepFadeData.monitorCount; i++) {
                     if (g_winlogonSleepFadeData.monitors[i].hDC) {
                         SetDeviceGammaRamp(g_winlogonSleepFadeData.monitors[i].hDC, g_winlogonSleepFadeData.monitors[i].origGamma); // Restore gamma
