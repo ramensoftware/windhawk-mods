@@ -41,72 +41,92 @@ Instead of manually cleaning up tracking URLs, manually escaping backslashes, or
 
 // ==WindhawkModSettings==
 /*
-- TriggerModifierKey: none
-  $name: Trigger modifier key
-  $description: >-
-    Only apply formatting if this key is held while copying. If none is selected, formatting always applies.
-  $options:
-  - none: None (always process)
-  - shift: Shift
-  - alt: Alt
-- RegexReplacements:
-  - - Search: apple
-      $name: Search Regex/String
-    - Replace: orange
-      $name: Replace String
-  $name: Regex text replacements
-  $description: >-
-    Define custom find-and-replace rules using regular expressions.
-    These are applied to all copied text.
-- RemoveTrackingParams: false
-  $name: Remove tracking parameters
-  $description: >-
-    Automatically strip utm_source, fbclid, gclid, and other
-    common tracking parameters from copied URLs.
-- AutoTrimWhitespace: false
-  $name: Auto-trim whitespace
-  $description: >-
-    Remove leading and trailing spaces, tabs, and newlines
-    that are often accidentally included when selecting text.
-- UnwrapText: false
-  $name: Unwrap text (PDF fixer)
-  $description: >-
-    Merge broken lines back into flowing paragraphs.
-    Useful when copying text from PDFs or narrow columns
-    that insert hard line breaks mid-sentence.
-    Paragraph breaks (double newlines) are preserved.
-- CasingMode: none
-  $name: Smart casing
-  $description: >-
-    Automatically convert copied text to the selected casing style.
-  $options:
-  - none: None (no change)
-  - lowercase: lowercase
-  - uppercase: UPPERCASE
-  - titlecase: Title Case
-- PathEscaperMode: none
-  $name: Path auto-escaper
-  $description: >-
-    When a Windows file path is detected (e.g. C:\Users\file.txt),
-    automatically escape the backslashes for use in code.
-  $options:
-  - none: None (no change)
-  - doubleBackslash: Double backslash (C:\\Users\\file.txt)
-  - forwardSlash: Forward slash (C:/Users/file.txt)
-- DataExtractorMode: none
-  $name: Data extractor
-  $description: >-
-    Instead of copying the full text, extract only the URLs
-    or email addresses found within it.
-  $options:
-  - none: None (copy full text)
-  - urls: Extract URLs only
-  - emails: Extract email addresses only
-- ForcePlainText: false
-  $name: Force plain text
-  $description: >-
-    Strip all rich formatting (HTML, RTF, images) from the source
-    application so that text always pastes as plain, unformatted text.
+- Core:
+  - TriggerModifierKey: none
+    $name: ⌨️ Trigger modifier key
+    $description: >-
+      Only apply formatting if this key is held while copying. If none is selected, formatting always applies.
+    $options:
+    - none: None (always process)
+    - shift: Shift
+    - alt: Alt
+  $name: ⚙️ Core & Triggers
+
+- CleanupAndFormatting:
+  - RemoveTrackingParams: false
+    $name: 🛡️ Remove tracking parameters
+    $description: >-
+      Automatically strip utm_source, fbclid, gclid, and other
+      common tracking parameters from copied URLs.
+  - ForcePlainText: false
+    $name: 🚫 Force plain text
+    $description: >-
+      Strip all rich formatting (HTML, RTF, images) from the source
+      application so that text always pastes as plain, unformatted text.
+  - AutoTrimWhitespace: false
+    $name: ✂️ Auto-trim whitespace
+    $description: >-
+      Remove leading and trailing spaces, tabs, and newlines
+      that are often accidentally included when selecting text.
+  - UnwrapText: false
+    $name: 📄 Unwrap text (PDF fixer)
+    $description: >-
+      Merge broken lines back into flowing paragraphs.
+      Useful when copying text from PDFs or narrow columns
+      that insert hard line breaks mid-sentence.
+      Paragraph breaks (double newlines) are preserved.
+  - CasingMode: none
+    $name: 🔠 Smart casing
+    $description: >-
+      Automatically convert copied text to the selected casing style.
+    $options:
+    - none: None (no change)
+    - lowercase: lowercase
+    - uppercase: UPPERCASE
+    - titlecase: Title Case
+  - SmartCasingExcludeUrls: true
+    $name: 🔗 Exclude URLs from smart casing
+    $description: >-
+      Do not change the casing of URLs (http://... or https://...) when smart casing is enabled.
+  - PathEscaperMode: none
+    $name: 💻 Path auto-escaper
+    $description: >-
+      When a Windows file path is detected (e.g. C:\Users\file.txt),
+      automatically escape the backslashes for use in code.
+    $options:
+    - none: None (no change)
+    - doubleBackslash: Double backslash (C:\\Users\\file.txt)
+    - forwardSlash: Forward slash (C:/Users/file.txt)
+  - MarkdownToHtml: false
+    $name: 📝 Markdown to rich text
+    $description: >-
+      Automatically convert simple Markdown (like **bold** or [links](url))
+      into actual Rich Text on the clipboard.
+  $name: 🧹 Text Cleanup & Formatting
+
+- DataExtraction:
+  - DataExtractorMode: none
+    $name: 📥 Data extractor
+    $description: >-
+      Instead of copying the full text, extract only the URLs
+      or email addresses found within it.
+    $options:
+    - none: None (copy full text)
+    - urls: Extract URLs only
+    - emails: Extract email addresses only
+  $name: 🛡️ Data Extraction
+
+- AdvancedConversions:
+  - RegexReplacements:
+    - - Search: ""
+        $name: Search Regex/String
+      - Replace: ""
+        $name: Replace String
+    $name: ⚡ Regex text replacements
+    $description: >-
+      Define custom find-and-replace rules using regular expressions.
+      These are applied to all copied text.
+  $name: ⚡ Advanced Conversions
 */
 // ==/WindhawkModSettings==
 
@@ -127,8 +147,10 @@ bool g_removeTrackingParams = false;
 bool g_autoTrimWhitespace = false;
 bool g_unwrapText = false;
 int g_casingMode = 0;
+bool g_smartCasingExcludeUrls = true;
 int g_pathEscaperMode = 0;
 int g_dataExtractorMode = 0;
+bool g_markdownToHtml = true;
 bool g_forcePlainText = false;
 int g_triggerModifierKey = 0;
 
@@ -139,12 +161,13 @@ int g_triggerModifierKey = 0;
 void LoadSettings() {
   g_regexReplacements.clear();
 
-  g_removeTrackingParams = Wh_GetIntSetting(L"RemoveTrackingParams");
-  g_autoTrimWhitespace = Wh_GetIntSetting(L"AutoTrimWhitespace");
-  g_unwrapText = Wh_GetIntSetting(L"UnwrapText");
-  g_forcePlainText = Wh_GetIntSetting(L"ForcePlainText");
+  g_removeTrackingParams = Wh_GetIntSetting(L"DataExtraction.RemoveTrackingParams");
+  g_autoTrimWhitespace = Wh_GetIntSetting(L"CleanupAndFormatting.AutoTrimWhitespace");
+  g_unwrapText = Wh_GetIntSetting(L"CleanupAndFormatting.UnwrapText");
+  g_markdownToHtml = Wh_GetIntSetting(L"CleanupAndFormatting.MarkdownToHtml");
+  g_forcePlainText = Wh_GetIntSetting(L"CleanupAndFormatting.ForcePlainText");
 
-  PCWSTR triggerKey = Wh_GetStringSetting(L"TriggerModifierKey");
+  PCWSTR triggerKey = Wh_GetStringSetting(L"Core.TriggerModifierKey");
   g_triggerModifierKey = 0;
   if (triggerKey) {
     if (wcscmp(triggerKey, L"shift") == 0)
@@ -154,7 +177,7 @@ void LoadSettings() {
     Wh_FreeStringSetting(triggerKey);
   }
 
-  PCWSTR casingMode = Wh_GetStringSetting(L"CasingMode");
+  PCWSTR casingMode = Wh_GetStringSetting(L"CleanupAndFormatting.CasingMode");
   g_casingMode = 0;
   if (wcscmp(casingMode, L"lowercase") == 0)
     g_casingMode = 1;
@@ -164,7 +187,9 @@ void LoadSettings() {
     g_casingMode = 3;
   Wh_FreeStringSetting(casingMode);
 
-  PCWSTR pathMode = Wh_GetStringSetting(L"PathEscaperMode");
+  g_smartCasingExcludeUrls = Wh_GetIntSetting(L"CleanupAndFormatting.SmartCasingExcludeUrls");
+
+  PCWSTR pathMode = Wh_GetStringSetting(L"CleanupAndFormatting.PathEscaperMode");
   g_pathEscaperMode = 0;
   if (wcscmp(pathMode, L"doubleBackslash") == 0)
     g_pathEscaperMode = 1;
@@ -172,7 +197,7 @@ void LoadSettings() {
     g_pathEscaperMode = 2;
   Wh_FreeStringSetting(pathMode);
 
-  PCWSTR extractorMode = Wh_GetStringSetting(L"DataExtractorMode");
+  PCWSTR extractorMode = Wh_GetStringSetting(L"DataExtraction.DataExtractorMode");
   g_dataExtractorMode = 0;
   if (wcscmp(extractorMode, L"urls") == 0)
     g_dataExtractorMode = 1;
@@ -181,11 +206,11 @@ void LoadSettings() {
   Wh_FreeStringSetting(extractorMode);
 
   for (int i = 0;; i++) {
-    PCWSTR search = Wh_GetStringSetting(L"RegexReplacements[%d].Search", i);
+    PCWSTR search = Wh_GetStringSetting(L"AdvancedConversions.RegexReplacements[%d].Search", i);
     bool hasSearch = *search;
 
     if (hasSearch) {
-      PCWSTR replace = Wh_GetStringSetting(L"RegexReplacements[%d].Replace", i);
+      PCWSTR replace = Wh_GetStringSetting(L"AdvancedConversions.RegexReplacements[%d].Replace", i);
 
       try {
         g_regexReplacements.push_back(
@@ -312,15 +337,44 @@ std::wstring ApplyCasing(std::wstring text) {
   if (g_casingMode == 0)
     return text;
 
+  std::vector<std::pair<size_t, size_t>> urlRanges;
+  if (g_smartCasingExcludeUrls) {
+    static const std::wregex urlPattern(L"https?://[^\\s]+", std::regex_constants::icase);
+    auto words_begin = std::wsregex_iterator(text.begin(), text.end(), urlPattern);
+    auto words_end = std::wsregex_iterator();
+    for (std::wsregex_iterator i = words_begin; i != words_end; ++i) {
+      std::wsmatch match = *i;
+      urlRanges.push_back({match.position(), match.length()});
+    }
+  }
+
+  size_t urlIdx = 0;
+  auto is_in_url = [&](size_t pos) {
+    if (!g_smartCasingExcludeUrls) return false;
+    while (urlIdx < urlRanges.size() && pos >= urlRanges[urlIdx].first + urlRanges[urlIdx].second) {
+      urlIdx++;
+    }
+    return (urlIdx < urlRanges.size() && pos >= urlRanges[urlIdx].first);
+  };
+
   if (g_casingMode == 1) { // Lowercase
-    for (auto &c : text)
-      c = std::towlower(c);
+    for (size_t i = 0; i < text.length(); ++i) {
+      if (!is_in_url(i))
+        text[i] = std::towlower(text[i]);
+    }
   } else if (g_casingMode == 2) { // UPPERCASE
-    for (auto &c : text)
-      c = std::towupper(c);
+    for (size_t i = 0; i < text.length(); ++i) {
+      if (!is_in_url(i))
+        text[i] = std::towupper(text[i]);
+    }
   } else if (g_casingMode == 3) { // Title Case
     bool newWord = true;
-    for (auto &c : text) {
+    for (size_t i = 0; i < text.length(); ++i) {
+      if (is_in_url(i)) {
+        newWord = false;
+        continue;
+      }
+      wchar_t &c = text[i];
       if (std::iswspace(c)) {
         newWord = true;
       } else if (newWord) {
@@ -517,7 +571,7 @@ HANDLE WINAPI SetClipboardDataHook(UINT uFormat, HANDLE hMem) {
               if (hRet) {
                 GlobalFree(hMem);
                 
-                if (!g_forcePlainText && cfHtml) {
+                if (!g_forcePlainText && g_markdownToHtml && cfHtml) {
                     t_isCopyingOurFormats = true;
 
                     std::string htmlPayload = GenerateClipboardHtmlPayload(ConvertMarkdownToHtml(cleanedText));
