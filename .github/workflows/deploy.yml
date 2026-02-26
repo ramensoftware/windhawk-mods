@@ -56,6 +56,8 @@ jobs:
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
       - name: Install dependencies
         run: npm install
+      - name: Write commit graph
+        run: git commit-graph write --reachable
       - name: Prepare static content
         run: npx tsx deploy.ts
         env:
@@ -83,6 +85,6 @@ jobs:
           touch "$deploy_dir/.nojekyll"
           git -C "$deploy_dir" add .nojekyll
           echo Committing changes
-          git -C "$deploy_dir" diff-index --cached --quiet HEAD || git -C "$deploy_dir" commit -m "deploy: $(git -C "$src_dir" rev-parse HEAD)"
+          git -C "$deploy_dir" diff-index --cached --quiet HEAD || git -C "$deploy_dir" commit -m "deploy: ${{ github.sha }}"
           echo Pushing to GitHub
           git -C "$deploy_dir" push origin $deploy_branch
