@@ -465,11 +465,8 @@ HWND CreateOverlayWindow() {
     wc.lpszClassName = OVERLAY_WIN_CLASS;
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     if (!RegisterClassW(&wc)) {
-        int gle = GetLastError();
-        if (gle != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"RegisterClassW failed, GLE=%d", gle);
-            return NULL;
-        }
+        Wh_Log(L"RegisterClassW failed, GLE=%d", GetLastError());
+        return NULL;
     }
     return CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, OVERLAY_WIN_CLASS, L"", WS_POPUP, 0, 0, 0, 0, NULL, NULL, wc.hInstance, NULL);
 }
@@ -489,6 +486,8 @@ DWORD MonitorOffThreadProc(LPVOID lpParameter) {
         // Unfortunately, monitor off APIs are all asynchronous and there is no reliable way to determine when the monitor is actually off
         // If we immediately restore the gamma right after calling the API, the screen will briefly flash back to normal brightness before turning off
         // On the other side, waiting enough seconds and setting the gamma ramps after screens are turned off, has random failures that causes the screen to be stuck at black
+        // Moreover, listening for monitor wake events with RegisterPowerSettingNotification still does not work,
+        // as the exact timing for WM_POWERBROADCAST messages is pretty random and thus the gamma restore logic may run while the monitor is still off
         // So just show an black overlay window between the fade and the monitor off to cover up the potential flash, and hide the overlay after a fixed amount of time
         //
         // I should probably rework this later to delegate the fade to a different process, also avoiding the ExitProcess block below
@@ -987,9 +986,8 @@ void Wh_ModUninit() {
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    BOOL prevSleepFadeEnabled = g_settings.sleepFadeEnabled;
     LoadSettings();
-    if (!g_isWinlogon && prevSleepFadeEnabled != g_settings.sleepFadeEnabled) {
+    if (!g_isWinlogon && !g_settings.sleepFadeEnabled) {
         // The global injection is enabled or disabled, need to unload the mod
         // (Reloading unloaded mod on mod setting change is automatically handled by Windhawk)
         return FALSE;
