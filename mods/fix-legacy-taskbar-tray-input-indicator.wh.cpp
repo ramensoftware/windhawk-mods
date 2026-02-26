@@ -34,6 +34,7 @@ Windows 11 taskbar.
 static wchar_t g_lastText[8] = {};
 static DWORD g_captureTime = 0;
 static bool g_drawn = false;
+static LOGFONTW g_lastFont = {};
 
 static bool LooksLikeLayoutText(LPCWSTR lpchText, int len) {
     if (!lpchText || len < 2 || len > 4) return false;
@@ -46,9 +47,8 @@ static bool LooksLikeLayoutText(LPCWSTR lpchText, int len) {
 static bool IsRotatedFont(HDC hdc) {
     HFONT hFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
     if (!hFont) return false;
-    LOGFONTW lf = {};
-    if (GetObjectW(hFont, sizeof(lf), &lf) == 0) return false;
-    return (lf.lfEscapement != 0 || lf.lfOrientation != 0);
+    if (GetObjectW(hFont, sizeof(g_lastFont), &g_lastFont) == 0) return false;
+    return (g_lastFont.lfEscapement != 0 || g_lastFont.lfOrientation != 0);
 }
 
 using ExtTextOutW_t = BOOL(WINAPI*)(HDC, int, int, UINT, const RECT*, LPCWSTR, UINT, const INT*);
@@ -80,9 +80,7 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int width, int height
     
     DWORD elapsed = GetTickCount() - g_captureTime;
     
-    // Проверяем: есть текст, прошло < 100мс, ещё не рисовали
     if (g_lastText[0] != 0 && elapsed < 100 && !g_drawn) {
-        // Проверяем только размер копируемой области: ~36x20
         if (width >= 30 && width <= 50 && height >= 15 && height <= 30) {
             
             RECT rc = { xDest, yDest, xDest + width, yDest + height };
@@ -90,11 +88,9 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int width, int height
             HBRUSH hBrush = GetSysColorBrush(COLOR_3DFACE);
             FillRect(hdcDest, &rc, hBrush);
             
-            LOGFONTW lf = {};
-            lf.lfHeight = -11;
-            lf.lfWeight = FW_NORMAL;
-            lf.lfCharSet = DEFAULT_CHARSET;
-            wcscpy_s(lf.lfFaceName, L"Tahoma");
+            LOGFONTW lf = g_lastFont;
+            lf.lfEscapement = 0;
+            lf.lfOrientation = 0;
             
             HFONT hFont = CreateFontIndirectW(&lf);
             if (hFont) {
@@ -122,5 +118,3 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
-}
