@@ -28,18 +28,19 @@ Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate bu
 
 // ==WindhawkModSettings==
 /*
-- placement: end
+- alignment: right
   $name: Alignment
   $name:zh-CN: 对齐方式
   $description: Aligns the buttons within the NavigationPane.
   $description:zh-CN: 设置按钮组在导航窗格中的对齐方式。
   $options:
-    - start: Start (Usually Left / Top)
-    - end: End (Usually Right / Bottom)
+    - left: Left
+    - center: Center
+    - right: Right
   $options:zh-CN:
-    - start: Start (通常为左/上)
-    - end: End (通常为右/下)
-
+    - left: 左对齐
+    - center: 居中
+    - right: 右对齐
 
 - buttons: [sleep, signout, restart, shutdown]
   $name:zh-CN: 按钮与排序
@@ -103,10 +104,8 @@ static std::mutex g_settingsMutex;
 // Settings Management
 // ============================================================================
 
-enum class Placement { Start, End };
-
 struct Settings {
-    Placement placement = Placement::End;
+    wux::HorizontalAlignment alignment = wux::HorizontalAlignment::Right;
     std::vector<std::wstring> buttonKeywords;
 };
 
@@ -125,11 +124,16 @@ static std::wstring JoinStrings(const std::vector<std::wstring>& v) {
 static void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
 
-    PCWSTR placementStr = Wh_GetStringSetting(L"placement");
-    g_settings.placement = (placementStr && _wcsicmp(placementStr, L"start") == 0)
-        ? Placement::Start
-        : Placement::End;
-    Wh_FreeStringSetting(placementStr);
+    g_settings.alignment = wux::HorizontalAlignment::Right;
+    PCWSTR alignmentStr = Wh_GetStringSetting(L"alignment");
+
+    if (_wcsicmp(alignmentStr, L"left") == 0) {
+        g_settings.alignment = wux::HorizontalAlignment::Left;
+    } else if (_wcsicmp(alignmentStr, L"center") == 0) {
+        g_settings.alignment = wux::HorizontalAlignment::Center;
+    }
+
+    Wh_FreeStringSetting(alignmentStr);
 
     g_settings.buttonKeywords.clear();
     // 'buttons' is defined as an array of strings in settings.
@@ -148,8 +152,8 @@ static void LoadSettings() {
             g_settings.buttonKeywords.push_back(std::move(item));
     }
 
-    Wh_Log(L"Settings loaded: placement=%s, buttons=%s",
-           g_settings.placement == Placement::Start ? L"start" : L"end",
+    Wh_Log(L"Settings loaded: alignment=%d, buttons=%s",
+           static_cast<int>(g_settings.alignment),
            JoinStrings(g_settings.buttonKeywords).c_str());
 }
 
@@ -416,12 +420,8 @@ static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement origina
             if (container.Visibility() != wux::Visibility::Visible)
                 container.Visibility(wux::Visibility::Visible);
 
-            auto align = (currentSettings.placement == Placement::End)
-                ? wux::HorizontalAlignment::Right
-                : wux::HorizontalAlignment::Left;
-
-            if (container.HorizontalAlignment() != align)
-                container.HorizontalAlignment(align);
+            if (container.HorizontalAlignment() != currentSettings.alignment)
+                container.HorizontalAlignment(currentSettings.alignment);
 
             container.Margin({ 0, 0, 0, 0 });
             return;
@@ -431,11 +431,8 @@ static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement origina
         if (container.Visibility() != wux::Visibility::Visible)
             container.Visibility(wux::Visibility::Visible);
 
-        container.HorizontalAlignment(
-            currentSettings.placement == Placement::End
-                ? wux::HorizontalAlignment::Right
-                : wux::HorizontalAlignment::Left
-        );
+        container.HorizontalAlignment(currentSettings.alignment);
+
         container.Margin({ 0, 0, 0, 0 });
 
         container.Children().Clear();
