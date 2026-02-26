@@ -20,7 +20,7 @@ Seamlessly integrates VLC Media Player with Discord to display playback status, 
 
 ## Features
 * **Smart Cover Art Engine:** Automatically uploads local album art to `0x0.st`. If local art is missing, it intelligently scrapes high-res posters and album covers directly from the web(accuracy depends on how well filename matches the title).
-* **Metadata Scrubber:** Intelligently strips piracy site URLs, promotional phrases, bracketed tags, and scene release technical info to guarantee perfect Discord display titles.
+* **Metadata Cleaner:** Intelligently strips piracy site URLs, promotional phrases, bracketed tags, and scene release technical info to guarantee perfect Discord display titles.
 * **Custom Junk Filter:** Define your own list of annoying tags or site names to automatically remove from media titles.
 * **Smart Activity Status:** Dynamically switches between "Listening to **Song**", "Watching **Movie**", or "Playing **Video**" based on the file type.
 * **Clean Metadata:** * **Music:** Displays Song Title, Artist, and Album.
@@ -61,7 +61,9 @@ For this mod to retrieve data from VLC, the Web Interface must be enabled.
 ## Configuration
 **Show Cover Art:** Toggle to enable/disable the fetching and uploading of cover art. If disabled, the mod will use the standard VLC icon.
 
-**Custom Junk Words:** Add specific words or phrases to be automatically scrubbed from your media titles before displaying on Discord.
+**Custom Junk Filter:** Define your own list of annoying tags or site names to automatically remove from media titles.
+
+**Strict Local Filters (Transparency):** To keep the metadata cleaner accurate against new piracy tags, the mod fetches a tiny text file [`filters.txt`](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/assets/filters.txt) from the GitHub repository if the file is older than 6 hours. If you prefer **zero** external network requests, enable `Strict Local Filters Only`. This will restrict the metadata cleaner to only use the built-in hardcoded dictionary + your custom words.
 
 **Search Provider:** You can change the destination of the search button (Google, Bing, IMDb) in the mod settings.
 
@@ -88,6 +90,9 @@ For bug reports, feature suggestions, or general feedback, please reach out via:
 - EnableMetadataCleaner: true
   $name: Clean Media Titles
   $description: "Automatically removes common scene tags (e.g., WEB-DL, 1080p) and URLs from filenames so they look clean on Discord."
+- StrictLocalMode: true
+  $name: Strict Local Filters Only
+  $description: "If enabled, stops downloading community filter updates from GitHub and only relies on the built-in hardcoded filters and your custom words. See README."
 - CustomJunkWords: ""
   $name: Additional Words to Remove (Optional)
   $description: "Add your own custom words to remove, separated by commas (e.g., toonworld4all.com, custom-tag). Note: 'Clean Media Titles' must be enabled above for this to work."
@@ -782,10 +787,13 @@ void LoadFiltersFromFile(const std::string& path) {
     }
 }
 
-void FetchRemoteFilters() {
+void FetchRemoteFilters(bool strictLocalMode) {
     std::string cachePath = GetCacheFilePath();
     
-    // 1. Check if we have a valid cache that is < 24 hours old
+    // 0. If Strict Local Mode is enabled, skip network and cache completely
+    if (strictLocalMode) return;
+
+    // 1. Check if we have a valid cache that is < 6 hours old
     if (!cachePath.empty() && IsCacheValid(cachePath)) {
         LoadFiltersFromFile(cachePath);
         if (g_filtersLoaded) return; // Success!
@@ -856,9 +864,11 @@ void FetchRemoteFilters() {
 // =============================================================
 
 void Worker() {
+    bool bStrictLocalMode = Wh_GetIntSetting(L"StrictLocalMode");
+    
     // -------------------------------------------------------------
     // 🔥 PULL REMOTE FILTERS & SYNC CACHE
-    FetchRemoteFilters();
+    FetchRemoteFilters(bStrictLocalMode);
     // -------------------------------------------------------------
     std::string defaultId = "1465711556418474148"; 
     PCWSTR sId = Wh_GetStringSetting(L"ClientId");
