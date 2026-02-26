@@ -1737,19 +1737,19 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1772059113000,
+                "updated": 1772104426000,
                 "users": 0
             },
             "metadata": {
                 "author": "SwiftExplorer567",
                 "compilerOptions": "-luser32 -lole32",
-                "description": "Enhances Windows Win+V with Regex formatting, tracking parameter removal, and Markdown to Rich Text conversion.",
+                "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
                 "github": "https://github.com/SwiftExplorer567",
                 "include": [
                     "*"
                 ],
-                "name": "Clipboard History Upgrade",
-                "version": "1.2.0"
+                "name": "Smart Copy & Paste",
+                "version": "1.3.0"
             }
         },
         "close-explorer-on-esc": {
