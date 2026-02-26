@@ -3753,6 +3753,37 @@
                 "version": "1.2"
             }
         },
+        "fix-legacy-taskbar-tray-input-indicator": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772104604000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772104604000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Anixx",
+                "compilerOptions": "-lgdi32 -luser32",
+                "description": "Fixes text orientation in the keyboard layout indicator in Win10 taskbar running under Win11 24H2+",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Fix language indicator in Win10 taskbar under Win11 24H2+",
+                "version": "1.0.0"
+            }
+        },
         "fix-qt-scrollbar-grippers": {
             "details": {
                 "defaultSorting": 800,
