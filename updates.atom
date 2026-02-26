@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-25T22:38:33.000Z</updated>
+    <updated>2026-02-26T10:15:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Logon & Sleep Fade Restorer 1.2]]></title>
+        <id>https://windhawk.net/mods/win7-login-fade#cfb61a49f07450f896d6598a1a2a18e2af344a5e</id>
+        <link href="https://windhawk.net/mods/win7-login-fade"/>
+        <updated>2026-02-26T10:15:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for fading on sleep, hibernation, and monitor off</li>
+<li>Add support for setting different duration values on logon/unlock and logoff/shutdown, and optionally keeping the default DWM fade on logon/unlock</li>
+<li>Add support for using the kernel-mode fade implementation instead of the custom logic in this mod (on supported versions)</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Clipboard History Upgrade 1.2.0]]></title>
         <id>https://windhawk.net/mods/clipboard-history-upgrade#a029fc8cc49ba4ee97412587d7539880ba98edf8</id>
@@ -394,23 +409,6 @@ The touch overlay was still appearing in Alt+Tab because <code>ShowWindow_Hook</
         <author>
             <name>webberlv</name>
             <uri>https://github.com/webberLV</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control 1.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control#7514df4a76170d6b3cd9075791227880f2068fb4</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control"/>
-        <updated>2026-02-16T20:14:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to scroll anywhere on the screen while holding a configurable combination of modifier keys to change the system volume.</li>
-<li>Added an option to scroll at the taskbar position even when a full screen window covers the taskbar.</li>
-<li>Added an option for custom regions along the taskbar where scrolling will control the system volume. For example, "100-200" (pixels) or "20%-50%" (percentage of taskbar length).</li>
-<li>Improved the volume change step option, which is now compatible with all volume indicators.</li>
-<li>Improved the "No automatic mute toggle" option, which is now compatible with all volume indicators.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
