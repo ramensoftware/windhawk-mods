@@ -1737,7 +1737,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1772104426000,
+                "updated": 1772128907000,
                 "users": 0
             },
             "metadata": {
@@ -1749,7 +1749,7 @@
                     "*"
                 ],
                 "name": "Smart Copy & Paste",
-                "version": "1.3.0"
+                "version": "1.3.1"
             }
         },
         "close-explorer-on-esc": {
