@@ -2,7 +2,7 @@
 // @id              clipboard-history-upgrade
 // @name            Smart Copy & Paste
 // @description     Automatically format, clean, and enrich text instantly as you copy it to the clipboard.
-// @version         1.3.0
+// @version         1.3.1
 // @author          SwiftExplorer567
 // @github          https://github.com/SwiftExplorer567
 // @include         *
