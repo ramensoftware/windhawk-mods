@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              clipboard-history-upgrade
+// @id              smart-copy-paste
 // @name            Smart Copy & Paste
 // @description     Automatically format, clean, and enrich text instantly as you copy it to the clipboard.
 // @version         1.3.0
