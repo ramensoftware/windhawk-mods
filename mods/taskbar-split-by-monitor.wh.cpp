@@ -6,7 +6,7 @@
 // @description:ja  各モニターのタスクバーにそのモニター上のウィンドウのみを表示します
 // @version         1.1.0
 // @author          ajisaiflow
-// @github          lighfu
+// @github          https://github.com/lighfu
 // @include         explorer.exe
 // @include         ShellHost.exe
 // @architecture    x86-64
