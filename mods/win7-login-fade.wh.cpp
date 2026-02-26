@@ -413,6 +413,7 @@ __int64 __fastcall SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration, DW
 typedef NTSTATUS (NTAPI* NtPowerInformation_t)(POWER_INFORMATION_LEVEL, PVOID, ULONG, PVOID, ULONG);
 NtPowerInformation_t NtPowerInformation_original;
 
+// Restore the pre-fade gamma ramps and turn off the monitor, and also clean up the monitor info data.
 void RestoreGammaAndMonitorOff() {
     if (g_fadeData.monitors) {
         for (int i = 0; i < g_fadeData.monitorCount; i++) {
@@ -523,7 +524,9 @@ DWORD MonitorOffThreadProc(LPVOID lpParameter) {
             }
         } else {
             Wh_Log(L"Failed to create overlay window, GLE=%d", GetLastError());
-            NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            // Just do the fade without the overlay, which will make the screen flash
+            FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_fadeData.monitors, g_fadeData.monitorCount);
+            RestoreGammaAndMonitorOff();
         }
         EndFade();
         return 0;
