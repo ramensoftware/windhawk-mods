@@ -409,45 +409,7 @@ __int64 __fastcall SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration, DW
     return result;
 }
 
-// SetSuspendState and SetSystemPowerState both internally call NtInitiatePowerAction synchronously
-// Fading in asynchronous mode is not yet supported as it makes determining the correct timing to restore gamma ramps difficult without causing extra delay or screen flash,
-// and we would also need to delegate the fading to a separate process or thread to avoid blocking the caller (and process exit), which adds more complexity and potential issues
-// Asynchronous NtInitiatePowerAction usage in user mode seems to be pretty rare anyway
-// Currently this hook is only used if the Winlogon kernel power message handler hook below has failed or is disabled
-typedef NTSTATUS (NTAPI* NtInitiatePowerAction_t)(POWER_ACTION, SYSTEM_POWER_STATE, ULONG, BOOLEAN);
-NtInitiatePowerAction_t NtInitiatePowerAction_original;
-NTSTATUS NTAPI NtInitiatePowerAction_hook(POWER_ACTION SystemAction, SYSTEM_POWER_STATE LightestSystemState, ULONG Flags, BOOLEAN Asynchronous) {
-    Wh_Log(L"NtInitiatePowerAction, SystemAction=%d, LightestSystemState=%d, Flags=0x%X, Asynchronous=%d", SystemAction, LightestSystemState, Flags, Asynchronous);
-    if (g_settings.sleepFadeEnabled && (!g_settings.enhancedSleepIntercept || Wh_GetIntValue(L"WinlogonHookFailed", 0)) &&
-        !Asynchronous && (SystemAction == PowerActionSleep || SystemAction == PowerActionHibernate)
-    ) {
-        if (BeginFade()) {
-            Wh_Log(L"Initiating sleep/hibernate fade from individual process...");
-            int refreshRate = GetDeviceRefreshRate();
-            int monitorCount = 0;
-            MONITOR_INFO* monitors = NULL;
-            if (!GetMonitorsInfo(&monitors, &monitorCount)) {
-                EndFade();
-                return NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, FALSE);
-            }
-
-            FadeDesktop(refreshRate, g_settings.sleepDuration, true, monitors, monitorCount);
-            NTSTATUS result = NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, FALSE);
-
-            for (int i = 0; i < monitorCount; i++) {
-                if (monitors[i].hDC) {
-                    SetDeviceGammaRamp(monitors[i].hDC, monitors[i].origGamma); // Restore gamma
-                    DeleteDC(monitors[i].hDC);
-                }
-            }
-            free(monitors);
-            EndFade();
-            return result;
-        }
-    }
-    return NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, Asynchronous);
-};
-
+#pragma region Hooks and functions for monitor off fading
 typedef NTSTATUS (NTAPI* NtPowerInformation_t)(POWER_INFORMATION_LEVEL, PVOID, ULONG, PVOID, ULONG);
 NtPowerInformation_t NtPowerInformation_original;
 
@@ -662,6 +624,7 @@ DWP_HOOK(
     DefDlgProc,
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
+#pragma endregion
 
 // For some command line utilities that initiate sleep/hibernate/monitor off asynchronously then exit immediately
 using ExitProcess_t = void (WINAPI*)(UINT uExitCode);
@@ -672,6 +635,46 @@ void WINAPI ExitProcess_hook(UINT uExitCode) {
         WaitForFade();
     }
     ExitProcess_original(uExitCode);
+};
+
+#pragma region Hooks for sleep and hibernation fading
+// SetSuspendState and SetSystemPowerState both internally call NtInitiatePowerAction synchronously
+// Fading in asynchronous mode is not yet supported as it makes determining the correct timing to restore gamma ramps difficult without causing extra delay or screen flash,
+// and we would also need to delegate the fading to a separate process or thread to avoid blocking the caller (and process exit), which adds more complexity and potential issues
+// Asynchronous NtInitiatePowerAction usage in user mode seems to be pretty rare anyway
+// Currently this hook is only used if the Winlogon kernel power message handler hook below has failed or is disabled
+typedef NTSTATUS (NTAPI* NtInitiatePowerAction_t)(POWER_ACTION, SYSTEM_POWER_STATE, ULONG, BOOLEAN);
+NtInitiatePowerAction_t NtInitiatePowerAction_original;
+NTSTATUS NTAPI NtInitiatePowerAction_hook(POWER_ACTION SystemAction, SYSTEM_POWER_STATE LightestSystemState, ULONG Flags, BOOLEAN Asynchronous) {
+    Wh_Log(L"NtInitiatePowerAction, SystemAction=%d, LightestSystemState=%d, Flags=0x%X, Asynchronous=%d", SystemAction, LightestSystemState, Flags, Asynchronous);
+    if (g_settings.sleepFadeEnabled && (!g_settings.enhancedSleepIntercept || Wh_GetIntValue(L"WinlogonHookFailed", 0)) &&
+        !Asynchronous && (SystemAction == PowerActionSleep || SystemAction == PowerActionHibernate)
+    ) {
+        if (BeginFade()) {
+            Wh_Log(L"Initiating sleep/hibernate fade from individual process...");
+            int refreshRate = GetDeviceRefreshRate();
+            int monitorCount = 0;
+            MONITOR_INFO* monitors = NULL;
+            if (!GetMonitorsInfo(&monitors, &monitorCount)) {
+                EndFade();
+                return NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, FALSE);
+            }
+
+            FadeDesktop(refreshRate, g_settings.sleepDuration, true, monitors, monitorCount);
+            NTSTATUS result = NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, FALSE);
+
+            for (int i = 0; i < monitorCount; i++) {
+                if (monitors[i].hDC) {
+                    SetDeviceGammaRamp(monitors[i].hDC, monitors[i].origGamma); // Restore gamma
+                    DeleteDC(monitors[i].hDC);
+                }
+            }
+            free(monitors);
+            EndFade();
+            return result;
+        }
+    }
+    return NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, Asynchronous);
 };
 
 // Internal Winlogon function for handling power messages sent by win32k (xxxSendWinlogonPowerMessage)
@@ -713,6 +716,7 @@ int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) 
     }
     return WMsgPSPHandler_original(a1, a2, a3, a4);
 };
+#pragma endregion
 
 HANDLE CreateFadeMutex() {
     static const wchar_t* kMutexName = L"Local\\LsfFadeMutex";
