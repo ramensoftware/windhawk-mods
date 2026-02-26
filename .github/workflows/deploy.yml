@@ -57,7 +57,7 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Write commit graph
-        run: git commit-graph write --reachable
+        run: git commit-graph write --reachable --changed-paths
       - name: Prepare static content
         run: npx tsx deploy.ts
         env:
