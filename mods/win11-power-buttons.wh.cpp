@@ -220,6 +220,7 @@ static const wchar_t* PROXY_MESSAGE_NAME = L"PowerActionProxy_Execute";
 
 static UINT g_proxyMessage = 0;
 static HWND g_proxyWindow = NULL;
+static HANDLE g_proxyThread = NULL;
 
 static void InitProxyMessage() {
     if (g_proxyMessage == 0) {
@@ -277,7 +278,8 @@ static DWORD WINAPI ProxyWindowThread(LPVOID) {
     wcex.lpszClassName = PROXY_WINDOW_CLASS;
 
     if (!RegisterClassExW(&wcex)) {
-        if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return 1;
+        Wh_Log(L"Proxy: RegisterClassEx failed, error %lu", GetLastError());
+        return 1;
     }
 
     g_proxyWindow = CreateWindowExW(
@@ -288,6 +290,7 @@ static DWORD WINAPI ProxyWindowThread(LPVOID) {
 
     if (!g_proxyWindow) {
         Wh_Log(L"Proxy: Failed to create window, error %lu", GetLastError());
+        UnregisterClassW(PROXY_WINDOW_CLASS, GetModuleHandle(NULL));
         return 1;
     }
 
@@ -300,16 +303,18 @@ static DWORD WINAPI ProxyWindowThread(LPVOID) {
         DispatchMessage(&msg);
     }
 
+    DestroyWindow(g_proxyWindow);
+    g_proxyWindow = NULL;
+    UnregisterClassW(PROXY_WINDOW_CLASS, GetModuleHandle(NULL));
+
     return 0;
 }
 
 static void StartProxyThread() {
-    HANDLE hThread = CreateThread(NULL, 0, ProxyWindowThread, NULL, 0, NULL);
-    if (!hThread) {
+    g_proxyThread = CreateThread(NULL, 0, ProxyWindowThread, NULL, 0, NULL);
+    if (!g_proxyThread) {
         Wh_Log(L"Proxy: Failed to create thread, error %lu", GetLastError());
-        return;
     }
-    CloseHandle(hThread);
 }
 
 // Sends a message to the explorer proxy window to execute the command
@@ -659,7 +664,7 @@ static void InitWithRetry(HWND hwnd) {
     }
 
     if (!StartVisibilityMonitoring()) {
-        SetTimer(hwnd, 101, 100, RetryTimerProc);
+        SetTimer(hwnd, 1772058423, 100, RetryTimerProc);
     }
 }
 
@@ -816,8 +821,14 @@ void Wh_ModUninit() {
 
     if (g_proxyWindow) {
         PostMessage(g_proxyWindow, WM_QUIT, 0, 0);
-        g_proxyWindow = NULL;
     }
+
+    if (g_proxyThread) {
+        WaitForSingleObject(g_proxyThread, 5000); 
+        CloseHandle(g_proxyThread);
+        g_proxyThread = NULL;
+    }
+    g_proxyWindow = NULL;
 
     if (!IsExplorerProcess()) {
         HWND hCoreWnd = FindCoreWindow();
