@@ -720,19 +720,17 @@ int DetectActivityType(const std::string& filename, const std::string& quality) 
 // 4. REMOTE FILTER UPDATER & CACHING
 // =============================================================
 
-std::string GetCacheFilePath() {
-    char path[MAX_PATH];
-    if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {
-        std::string dir = std::string(path) + "\\VLC_RPC";
-        CreateDirectoryA(dir.c_str(), NULL);
-        return dir + "\\junklist.txt";
+std::wstring GetCacheFilePathW() {
+    WCHAR storagePath[MAX_PATH];
+    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+        return std::wstring(storagePath) + L"\\junklist.txt";
     }
-    return "";
+    return L"";
 }
 
-bool IsCacheValid(const std::string& path) {
-    struct stat result;
-    if (stat(path.c_str(), &result) == 0) {
+bool IsCacheValid(const std::wstring& path) {
+    struct _stat result;
+    if (_wstat(path.c_str(), &result) == 0) {
         time_t now = time(nullptr);
         // 21600 seconds = 6 hours
         if (difftime(now, result.st_mtime) < 21600) {
@@ -742,24 +740,28 @@ bool IsCacheValid(const std::string& path) {
     return false;
 }
 
-void LoadFiltersFromFile(const std::string& path) {
-    std::ifstream file(path);
-    if (!file.is_open()) return;
+struct FilterData {
+    std::vector<std::string> sites;
+    std::vector<std::string> tlds;
+    std::vector<std::string> tags;
+    std::vector<std::string> words;
+    bool isValid = false;
+};
 
+FilterData ParseFilters(const std::string& text) {
+    FilterData data;
+    if (text.empty()) return data;
+
+    std::stringstream ss(text);
     std::string line;
-    int currentSection = 0; 
+    int currentSection = 0;
 
-    std::vector<std::string> newSites;
-    std::vector<std::string> newTlds;
-    std::vector<std::string> newTags;
-    std::vector<std::string> newWords;
-
-    while (std::getline(file, line)) {
+    while (std::getline(ss, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
-        
+        if (line.empty()) continue;
+
         size_t first = line.find_first_not_of(" \t");
-        if (first == std::string::npos) continue; 
-        
+        if (first == std::string::npos) continue;
         size_t last = line.find_last_not_of(" \t");
         line = line.substr(first, last - first + 1);
 
@@ -771,91 +773,86 @@ void LoadFiltersFromFile(const std::string& path) {
         std::string lowerLine = line;
         std::transform(lowerLine.begin(), lowerLine.end(), lowerLine.begin(), ::tolower);
 
-        if (currentSection == 1) newSites.push_back(lowerLine);
-        else if (currentSection == 2) newTlds.push_back(lowerLine);
-        else if (currentSection == 3) newTags.push_back(lowerLine);
-        else if (currentSection == 4) newWords.push_back(lowerLine);
+        if (currentSection == 1) data.sites.push_back(lowerLine);
+        else if (currentSection == 2) data.tlds.push_back(lowerLine);
+        else if (currentSection == 3) data.tags.push_back(lowerLine);
+        else if (currentSection == 4) data.words.push_back(lowerLine);
     }
 
-    if (!newSites.empty() && !newTlds.empty() && !newTags.empty() && !newWords.empty()) {
-        std::lock_guard<std::mutex> lock(g_filterMutex);
-        g_junkSites = newSites;
-        g_tlds = newTlds;
-        g_truncateTags = newTags;
-        g_junkWords = newWords;
-        g_filtersLoaded = true;
+    if (!data.sites.empty() && !data.tlds.empty() && !data.tags.empty() && !data.words.empty()) {
+        data.isValid = true;
     }
+    return data;
+}
+
+FilterData LoadFiltersFromFile(const std::wstring& path) {
+    std::ifstream file(path.c_str());
+    if (!file.is_open()) return FilterData();
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    return ParseFilters(content);
 }
 
 void FetchRemoteFilters(bool strictLocalMode) {
-    std::string cachePath = GetCacheFilePath();
+    std::wstring cachePath = GetCacheFilePathW();
     
     // 0. If Strict Local Mode is enabled, skip network and cache completely
     if (strictLocalMode) return;
 
-    // 1. Check if we have a valid cache that is < 6 hours old
+    // 1. Check if we have a valid cache that is < 24 hours old
     if (!cachePath.empty() && IsCacheValid(cachePath)) {
-        LoadFiltersFromFile(cachePath);
-        if (g_filtersLoaded) return; // Success!
+        FilterData localData = LoadFiltersFromFile(cachePath);
+        if (localData.isValid) {
+            std::lock_guard<std::mutex> lock(g_filterMutex);
+            g_junkSites = localData.sites;
+            g_tlds = localData.tlds;
+            g_truncateTags = localData.tags;
+            g_junkWords = localData.words;
+            g_filtersLoaded = true;
+            return; // Success!
+        }
     }
 
     // 2. Fetch from GitHub if no cache or cache expired
-    std::wstring host = L"raw.githubusercontent.com";
-    std::wstring path = L"/ciizerr/vlc-discord-rpc-archive/main/assets/filters.txt";
-    
-    std::string result = FetchHttps(host, path);
-    
-    if (!result.empty() && result.find("[SITES]") != std::string::npos) {
-        // Save new cache securely
-        if (!cachePath.empty()) {
-            std::ofstream out(cachePath, std::ios::trunc);
-            if (out.is_open()) {
-                out << result;
-                out.close();
+    PCWSTR url = L"https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/assets/filters.txt";
+    const WH_URL_CONTENT* content = Wh_GetUrlContent(url, nullptr);
+    if (content) {
+        std::string result(content->data, content->length);
+        Wh_FreeUrlContent(content);
+
+        FilterData remoteData = ParseFilters(result);
+        if (remoteData.isValid) {
+            // Save new cache securely
+            if (!cachePath.empty()) {
+                std::ofstream out(cachePath.c_str(), std::ios::trunc);
+                if (out.is_open()) {
+                    out << result;
+                    out.close();
+                }
             }
-        }
-        
-        // Parse from memory since we just fetched it
-        std::stringstream ss(result);
-        std::string line;
-        int currentSection = 0; 
-        std::vector<std::string> newSites, newTlds, newTags, newWords;
-
-        while (std::getline(ss, line)) {
-            if (!line.empty() && line.back() == '\r') line.pop_back();
-            if (line.empty()) continue;
             
-            size_t first = line.find_first_not_of(" \t");
-            if (first == std::string::npos) continue; 
-            size_t last = line.find_last_not_of(" \t");
-            line = line.substr(first, last - first + 1);
-
-            if (line == "[SITES]") { currentSection = 1; continue; }
-            if (line == "[TLDS]") { currentSection = 2; continue; }
-            if (line == "[SCENE]") { currentSection = 3; continue; }
-            if (line == "[WORDS]") { currentSection = 4; continue; }
-
-            std::string lowerLine = line;
-            std::transform(lowerLine.begin(), lowerLine.end(), lowerLine.begin(), ::tolower);
-
-            if (currentSection == 1) newSites.push_back(lowerLine);
-            else if (currentSection == 2) newTlds.push_back(lowerLine);
-            else if (currentSection == 3) newTags.push_back(lowerLine);
-            else if (currentSection == 4) newWords.push_back(lowerLine);
-        }
-
-        if (!newSites.empty() && !newTlds.empty() && !newTags.empty() && !newWords.empty()) {
+            // Apply to global state
             std::lock_guard<std::mutex> lock(g_filterMutex);
-            g_junkSites = newSites;
-            g_tlds = newTlds;
-            g_truncateTags = newTags;
-            g_junkWords = newWords;
+            g_junkSites = remoteData.sites;
+            g_tlds = remoteData.tlds;
+            g_truncateTags = remoteData.tags;
+            g_junkWords = remoteData.words;
+            g_filtersLoaded = true;
+            return;
+        }
+    }
+
+    // 3. Absolute Fallback: If Github fails, and cache is expired, STILL try to load the expired cache 
+    // to prevent complete regression to hardcoded lists.
+    if (!cachePath.empty()) {
+        FilterData staleData = LoadFiltersFromFile(cachePath);
+        if (staleData.isValid) {
+            std::lock_guard<std::mutex> lock(g_filterMutex);
+            g_junkSites = staleData.sites;
+            g_tlds = staleData.tlds;
+            g_truncateTags = staleData.tags;
+            g_junkWords = staleData.words;
             g_filtersLoaded = true;
         }
-    } else {
-        // 3. Absolute Fallback: If Github fails, and cache is expired, STILL try to load the expired cache 
-        // to prevent complete regression to hardcoded lists.
-        if (!cachePath.empty()) LoadFiltersFromFile(cachePath);
     }
 }
 
