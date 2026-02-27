@@ -46,7 +46,7 @@ Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate bu
 
 - confirm_before_action: false
   $name: Confirm before power actions
-  $name:zh-CN: 执行电源操作前确认
+  $name:zh-CN: 执行前确认
   $description: Show a confirmation dialog before executing power actions.
   $description:zh-CN: 在执行电源操作前显示确认对话框。
 
