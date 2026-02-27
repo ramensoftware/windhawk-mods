@@ -1737,19 +1737,20 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1772128907000,
+                "updated": 1772196226000,
                 "users": 20
             },
             "metadata": {
                 "author": "SwiftExplorer567",
                 "compilerOptions": "-luser32 -lole32",
-                "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
+                "description": "Tekst automatisch opmaken, opschonen en verrijken bij het kopiëren naar het klembord.",
                 "github": "https://github.com/SwiftExplorer567",
+                "homepage": "https://v0.hasanjws.com/user/hasanjws",
                 "include": [
                     "*"
                 ],
-                "name": "Smart Copy & Paste",
-                "version": "1.3.1"
+                "name": "Slim Kopiëren & Plakken",
+                "version": "1.3.2"
             }
         },
         "close-explorer-on-esc": {
@@ -10234,7 +10235,7 @@
                     2
                 ],
                 "ratingUsers": 2,
-                "updated": 1771479887000,
+                "updated": 1772196283000,
                 "users": 82
             },
             "metadata": {
@@ -10248,7 +10249,7 @@
                     "WINWORD.EXE"
                 ],
                 "name": "Word Local AutoSave",
-                "version": "1.8"
+                "version": "1.9"
             }
         },
         "xs-discord-control-registered-games": {

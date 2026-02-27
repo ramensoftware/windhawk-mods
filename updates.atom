@@ -2,12 +2,74 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-26T18:01:47.000Z</updated>
+    <updated>2026-02-27T12:44:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 1.9]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#11b7ab2210ab196be114e08000e38136265d2d01</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-02-27T12:44:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Version bumped to 1.9</li>
+<li>Fixed SetTimer result not being checked in SaveTimerProc - could silently fail</li>
+<li>Fixed SetTimer result not being checked in ScheduleRetry - added error logging and retry count reset</li>
+<li>Fixed potential underflow in remainingTime calculation - now computed safely after validation</li>
+<li>Fixed incomplete IsAnyCriticalKeyPressed() - was missing VK<em>TAB, VK</em>INSERT, VK_RETURN, Numpad keys</li>
+<li>Added mouse button checks (VK<em>LBUTTON, VK</em>RBUTTON, VK<em>MBUTTON, VK</em>XBUTTON1, VK_XBUTTON2)</li>
+<li>Added Ctrl+Space check (clear formatting shortcut)</li>
+<li>Added Ctrl+Backspace check (delete word shortcut)</li>
+<li>Added Ctrl+Delete check (delete word forward shortcut)</li>
+<li>Added Ctrl+Home/End check (document navigation shortcuts)</li>
+<li>Added Ctrl+Arrows check (word navigation shortcuts)</li>
+<li>Replaced magic number 50 with constant DEFERRED<em>SAVE</em>BUFFER_MS</li>
+<li>Added volatile keyword to g_isSendingCtrlS for thread safety</li>
+<li>Created AbortSendCtrlS() helper function - eliminated duplicate cleanup code</li>
+<li>Changed INPUT initialization to use ZeroMemory() for better compiler compatibility</li>
+<li>Changed IS<em>KEY</em>PRESSED macro to use &lt; 0 instead of &amp; 0x8000 for correct SHORT comparison</li>
+<li>Added Win key (VK<em>LWIN, VK</em>RWIN) check in critical key detection</li>
+<li>Added XButton1/XButton2 mouse button checks</li>
+<li>Fixed key "sticking" issue - created ReleaseKeyWithRetry() with MAX<em>KEY</em>RELEASE_RETRIES=3 attempts</li>
+<li>Fixed deferred save not accounting for new input - added WM_CHAR handling for IME support</li>
+<li>Ctrl+Enter (page break) now triggers autosave</li>
+<li>Ctrl+Shift+Enter (column break) now triggers autosave</li>
+<li>Added VK_CLEAR (Numpad 5 without NumLock) to both key checks</li>
+<li>Added VK_SEPARATOR to both key checks and IsEditingKey</li>
+<li>Fixed ScheduleSave() calling ResetAllTimers() - now only calls KillSaveTimer() to preserve retry state</li>
+<li>Added MAX<em>KEY</em>RELEASE_RETRIES = 3 constant</li>
+<li>Added all OEM keys to IsAnyCriticalKeyPressed()</li>
+<li>Added comprehensive protection for 100+ Word shortcuts based on official Microsoft documentation</li>
+<li>Added protection for Ctrl+A through Ctrl+Z (Select All, Bold, Copy, Font Dialog, Center, Find, Go To, Replace, Italic, Justify, Hyperlink, Left, Indent, New, Open, Print, Remove Format, Right, Hanging Indent, Underline, Paste, Close, Cut, Redo, Undo)</li>
+<li>Added protection for Ctrl+0/1/2/5 (paragraph spacing and line spacing)</li>
+<li>Added protection for Ctrl+[ and Ctrl+] (decrease/increase font size)</li>
+<li>Added protection for Ctrl+= (subscript), Ctrl+- (non-breaking hyphen), Ctrl+; (date), Ctrl+' and Ctrl+` (accents)</li>
+<li>Added protection for Ctrl+F1 through Ctrl+F12 (Ribbon, Print Preview, Close window, Switch windows, Insert field, Maximize, Open)</li>
+<li>Added protection for Ctrl+Shift+S (Styles), Ctrl+Shift+E (Track Changes), Ctrl+Shift+Enter (Column break)</li>
+<li>Added VK<em>LAUNCH</em>MAIL, VK<em>LAUNCH</em>MEDIA<em>SELECT, VK</em>LAUNCH<em>APP1, VK</em>LAUNCH_APP2 to key checks</li>
+<li>Added VK_PAUSE (Ctrl+Break) to critical key check</li>
+<li>Added VK<em>SCROLL and VK</em>CAPITAL to critical key check</li>
+<li>Updated README with comprehensive "Shortcut Protection" section listing all protected shortcuts</li>
+<li>Added detailed comments documenting each key group and corresponding Word shortcuts</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Smart Copy & Paste 1.3.2]]></title>
+        <id>https://windhawk.net/mods/clipboard-history-upgrade#6b27babfc9ebb5acdb628fe0458222bc3555cd3a</id>
+        <link href="https://windhawk.net/mods/clipboard-history-upgrade"/>
+        <updated>2026-02-27T12:43:46.000Z</updated>
+        <content type="html"><![CDATA[<p>Add extensive localization for the mod (name, descriptions, UI labels, option names, option descriptions and option values) across 14 languages (tr, de, fr, es, pt-BR, it, ru, uk, ja, ko, zh-CN, zh-TW, pl, nl). Update README with a Localization section, bump version to 1.3.2, add a homepage field, and localize many settings (Core, CleanupAndFormatting, Text Cleanup &amp; Formatting, etc.). Changes are limited to metadata, strings, and README; no functional code logic was modified.</p>]]></content>
+        <author>
+            <name>SwiftExplorer567</name>
+            <uri>https://github.com/SwiftExplorer567</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Smart Copy & Paste 1.3.1]]></title>
         <id>https://windhawk.net/mods/clipboard-history-upgrade#f75c1e904f5c57cd06f2c371b06d4d44a98052c2</id>
@@ -328,63 +390,6 @@ effect.</li>
         <author>
             <name>Jogai</name>
             <uri>https://github.com/Jogai</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Dock Animation 1.9.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-dock-animation#d23ad55f18703e56934a130555304dbdb78b4dee</id>
-        <link href="https://windhawk.net/mods/taskbar-dock-animation"/>
-        <updated>2026-02-19T23:10:39.000Z</updated>
-        <content type="html"><![CDATA[<p>Added an option to disable animation for system taskbar buttons (Start, Widgets, Task View, Search).</p>
-<p>Added multilingual support.</p>
-<p>Added a smoothing (lerp) setting for the animation (not to be confused with the animation curve types).</p>
-<p>Added dirty-checking to prevent expensive repeated scans of the Windows UI element tree.</p>]]></content>
-        <author>
-            <name>Ph0en1x-dev</name>
-            <uri>https://github.com/Ph0en1x-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 1.8]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#95b4e5915b916a947210f4b89c88e15674d81f25</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-02-19T05:44:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Version bumped to 1.8</li>
-<li><strong>Fixed dead code</strong>: Ctrl+Shift+Z check was unreachable - now Ctrl+Z handles both undo and redo (with/without Shift)</li>
-<li><strong>Fixed data loss</strong>: <code>minTimeBetweenSaves</code> skip no longer loses changes - now calculates remaining time and schedules deferred save</li>
-<li><strong>Fixed crash risk</strong>: Hook now returns TRUE instead of FALSE when <code>g_originalTranslateMessage</code> is null</li>
-<li><strong>Fixed race condition</strong>: <code>Wh_ModSettingsChanged()</code> now calls <code>ResetAllTimers()</code> before loading new settings</li>
-<li><strong>Removed unused variable</strong>: <code>g_initialized</code> was declared but never used</li>
-<li><strong>Added navigation keys check</strong>: Home, End, Page Up (VK<em>PRIOR), Page Down (VK</em>NEXT)</li>
-<li><strong>Removed redundant checks</strong>: Eliminated double <code>AreAnyKeysPressed()</code> calls in TrySave → SendCtrlS flow</li>
-<li><strong>Added upper limit for <code>minTimeBetweenSaves</code></strong>: MAX<em>MIN</em>TIME<em>BETWEEN</em>SAVES = 300000 (5 minutes)</li>
-<li><strong>Changed <code>ScheduleRetry()</code> return type</strong>: Now returns void instead of ignored bool</li>
-<li><strong>Fixed <code>Wh_ModUninit()</code></strong>: Now properly resets <code>g_retryCount</code> via <code>ResetAllTimers()</code></li>
-<li><strong>Added <code>IS_KEY_PRESSED()</code> macro</strong>: Replaced 40+ occurrences of <code>0x8000</code> magic number</li>
-<li><strong>Added <code>ResetAllTimers()</code> helper</strong>: Unified function for killing all timers and resetting state</li>
-<li><strong>Increased quiet period</strong>: 400ms → 500ms for better safety margin</li>
-<li><strong>Implemented atomic Ctrl+S sending</strong>: Safety checks between each keystroke to prevent race conditions</li>
-<li><strong>Added critical key check after Ctrl press</strong>:</li>
-<li>All letters A-Z (prevents Ctrl+B/I/U/E/L/R/J/A/N/O/P/W, etc.)</li>
-<li>All numbers 0-9 (prevents Ctrl+1/2/5 line spacing)</li>
-<li>Shift key (prevents Ctrl+Shift+S Apply Styles)</li>
-<li>Alt key (prevents Ctrl+Alt combinations)</li>
-<li>Bracket keys [ ] (prevents Ctrl+[/] font size change)</li>
-<li>Function keys F1-F12</li>
-<li><strong>Added <code>SendSingleKey()</code> helper</strong>: Granular keystroke control</li>
-<li><strong>Added <code>ReleaseCtrl()</code> cleanup</strong>: Properly releases Ctrl on abort</li>
-<li><strong>Expanded <code>AreAnyKeysPressed()</code> with 85+ keys</strong>:</li>
-<li>Left/Right Shift, Ctrl, Alt variants</li>
-<li>Caps Lock, Scroll Lock, Num Lock</li>
-<li>Print Screen, Pause/Break, Context Menu</li>
-<li>F13-F24 extended function keys</li>
-<li>All media keys (Volume, Play/Pause, etc.)</li>
-<li>All browser keys (Back, Forward, Refresh, etc.)</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>
