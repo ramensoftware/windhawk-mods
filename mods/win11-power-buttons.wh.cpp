@@ -234,6 +234,21 @@ static void InitProxyMessage() {
     }
 }
 
+static bool ConfirmPowerAction() {
+    PCWSTR title = L"Confirm Power Action";
+    PCWSTR message = L"Are you sure?";
+
+    switch (PRIMARYLANGID(GetThreadUILanguage())) {
+        case LANG_CHINESE:
+            title = L"确认电源操作";
+            message = L"您确定要执行此操作吗？";
+            break;
+    }
+
+    int button = MessageBoxW(nullptr, message, title, MB_ICONQUESTION | MB_YESNO | MB_TOPMOST | MB_SETFOREGROUND);
+    return button == IDYES;
+}
+
 // Executes the requested power action, acquiring necessary privileges if required
 static void PerformPowerAction(PowerAction action) {
     HANDLE hToken = NULL;
@@ -268,8 +283,16 @@ static void PerformPowerAction(PowerAction action) {
 
 static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == g_proxyMessage && g_proxyMessage != 0) {
-        PerformPowerAction((PowerAction)wParam);
+        if (ConfirmPowerAction()) {
+            PerformPowerAction((PowerAction)wParam);
+        }
         return 0;
+    }
+    switch (message) {
+        case WM_DESTROY:
+            g_proxyWindow = NULL;
+            PostQuitMessage(0);
+            return 0;
     }
     return DefWindowProcW(hWnd, message, wParam, lParam);
 }
@@ -309,8 +332,6 @@ static DWORD WINAPI ProxyWindowThread(LPVOID) {
         DispatchMessage(&msg);
     }
 
-    DestroyWindow(g_proxyWindow);
-    g_proxyWindow = NULL;
     UnregisterClassW(PROXY_WINDOW_CLASS, GetModuleHandle(NULL));
 
     return 0;
@@ -332,6 +353,10 @@ static void SendPowerAction(PowerAction action) {
         Wh_Log(L"Proxy: Window not found. Is explorer.exe hooked?");
         return;
     }
+
+    DWORD proxyProcessId = 0;
+    GetWindowThreadProcessId(hProxy, &proxyProcessId);
+    AllowSetForegroundWindow(proxyProcessId);
 
     PostMessageW(hProxy, g_proxyMessage, (WPARAM)action, 0);
 }
@@ -819,7 +844,7 @@ void Wh_ModUninit() {
     g_unloading = true;
 
     if (g_proxyWindow) {
-        PostMessage(g_proxyWindow, WM_QUIT, 0, 0);
+        PostMessage(g_proxyWindow, WM_CLOSE, 0, 0);
     }
 
     if (g_proxyThread) {
