@@ -1,14 +1,3 @@
-Brightness Shortcut Key (Always On Top)
-native-brightness-v1
-1.0
-Prash
-explorer.exe
-Shortcut Key to Change the Brightness
-Details
-Settings
-Source Code
-Advanced
-Collapse Readme and Settings
 // ==WindhawkMod==
 // @id              native-brightness-v1
 // @name            Brightness Shortcut Key (Always On Top)
@@ -16,9 +5,9 @@ Collapse Readme and Settings
 // @version         1.0
 // @author          Prash
 // @include         explorer.exe
+// @github	    https://github.com/prasmit2410
 // @compilerOptions -lole32 -loleaut32 -lwbemuuid -lgdi32
 // @include         mspaint.exe
-// @compilerOptions -lcomctl32 -lgdi32 -luxtheme
 // @license         MIT
 // @include notepad.exe
 // @include program-1.*.exe
@@ -26,8 +15,6 @@ Collapse Readme and Settings
 // @include %SystemRoot%\explorer.exe
 // @architecture x86
 // @architecture x86-64
-// @architecture amd64
-// @architecture arm64
 // ==/WindhawkMod==
 
 #include <windows.h>
