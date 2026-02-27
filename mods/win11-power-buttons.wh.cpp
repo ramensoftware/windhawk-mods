@@ -44,6 +44,12 @@ Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate bu
     - center: 居中
     - right: 右对齐
 
+- confirm_before_action: false
+  $name: Confirm before power actions
+  $name:zh-CN: 执行电源操作前确认
+  $description: Show a confirmation dialog before executing power actions.
+  $description:zh-CN: 在执行电源操作前显示确认对话框。
+
 - buttons: [sleep, signout, restart, shutdown]
   $name:zh-CN: 按钮与排序
   $name: Buttons & Order
@@ -154,8 +160,9 @@ static void LoadSettings() {
             g_settings.buttonKeywords.push_back(std::move(item));
     }
 
-    Wh_Log(L"Settings loaded: alignment=%d, buttons=%s",
+    Wh_Log(L"Settings loaded: alignment=%d, confirm=%d, buttons=%s",
            static_cast<int>(g_settings.alignment),
+           Wh_GetIntSetting(L"confirm_before_action") != 0,
            JoinStrings(g_settings.buttonKeywords).c_str());
 }
 
@@ -283,7 +290,8 @@ static void PerformPowerAction(PowerAction action) {
 
 static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == g_proxyMessage && g_proxyMessage != 0) {
-        if (ConfirmPowerAction()) {
+        bool needConfirm = Wh_GetIntSetting(L"confirm_before_action") != 0;
+        if (!needConfirm || ConfirmPowerAction()) {
             PerformPowerAction((PowerAction)wParam);
         }
         return 0;
