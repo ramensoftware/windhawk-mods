@@ -1,3 +1,17 @@
+## 1.1.2 ([Feb 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e07ad9a662659b593b03547496fb6930809acbab/mods/vlc-discord-rpc.wh.cpp))
+
+_Fixes & Performance Improvements_
+
+* High CPU Usage Fix: Resolved a performance issue introduced in v1.1.1 where the metadata cleaner caused high CPU load. Implemented a state-change cache so the heavy metadata scrubber only runs when the source media actually changes.
+
+_Advanced Filtering & Processing_
+
+* Dynamic Filter Syncing: The metadata cleaner now remotely fetches and locally caches community-maintained junk word and tag filters. This ensures the cleaner stays highly accurate and up-to-date over time without requiring mod updates.
+
+_Enhanced Customization_
+
+* Modular Mod Settings: Added dedicated toggles in the Windhawk settings to individually enable or disable Quality Tags (`ShowQualityTags`) and the Metadata Cleaner (`clean media titles`) based on user preference.
+
 ## 1.1.1 ([Feb 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/77a37e151ece2d18a73ac9e1b3cfab3abac18a6e/mods/vlc-discord-rpc.wh.cpp))
 
 Metadata & Visuals

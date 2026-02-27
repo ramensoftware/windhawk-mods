@@ -9203,7 +9203,7 @@
                     3
                 ],
                 "ratingUsers": 4,
-                "updated": 1771886789000,
+                "updated": 1772197351000,
                 "users": 74
             },
             "metadata": {
@@ -9220,7 +9220,7 @@
                     "vlc.exe"
                 ],
                 "name": "VLC Discord Rich Presence",
-                "version": "1.1.1"
+                "version": "1.1.2"
             }
         },
         "vmware-disable-upgrade-dialog": {

@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-27T12:44:43.000Z</updated>
+    <updated>2026-02-27T13:02:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.2]]></title>
+        <id>https://windhawk.net/mods/vlc-discord-rpc#e07ad9a662659b593b03547496fb6930809acbab</id>
+        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
+        <updated>2026-02-27T13:02:31.000Z</updated>
+        <content type="html"><![CDATA[<p><em>Fixes & Performance Improvements</em></p>
+<ul>
+<li>High CPU Usage Fix: Resolved a performance issue introduced in v1.1.1 where the metadata cleaner caused high CPU load. Implemented a state-change cache so the heavy metadata scrubber only runs when the source media actually changes.</li>
+</ul>
+<p><em>Advanced Filtering & Processing</em></p>
+<ul>
+<li>Dynamic Filter Syncing: The metadata cleaner now remotely fetches and locally caches community-maintained junk word and tag filters. This ensures the cleaner stays highly accurate and up-to-date over time without requiring mod updates.</li>
+</ul>
+<p><em>Enhanced Customization</em></p>
+<ul>
+<li>Modular Mod Settings: Added dedicated toggles in the Windhawk settings to individually enable or disable Quality Tags (<code>ShowQualityTags</code>) and the Metadata Cleaner (<code>clean media titles</code>) based on user preference.</li>
+</ul>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 1.9]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#11b7ab2210ab196be114e08000e38136265d2d01</id>
@@ -342,54 +364,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>Tobias Lind</name>
             <uri>https://github.com/TobbeLino</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Opacity 0.1.0]]></title>
-        <id>https://windhawk.net/mods/window-opacity#e3e64385b10b0bcaaf1c2c255b35a4848ce23dbb</id>
-        <link href="https://windhawk.net/mods/window-opacity"/>
-        <updated>2026-02-21T17:52:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowopacityhotkeys">Window Opacity Hotkeys</h1>
-<p>Control any window's transparency with global keyboard shortcuts.</p>
-<h2 id="usage">Usage</h2>
-<ul>
-<li><strong>Modifier+1</strong> through <strong>Modifier+9</strong>: Sets the foreground window to
-10%–90% opacity</li>
-<li><strong>Modifier+0</strong>: Resets the foreground window to 100% (fully opaque)</li>
-<li><strong>Modifier+Minus (-)</strong>: Decreases opacity by 10% (more transparent)</li>
-<li><strong>Modifier+Equals (=)</strong>: Increases opacity by 10% (more visible)</li>
-</ul>
-<p>The default modifier is <strong>Ctrl+Alt</strong>. You can change it in the mod settings.</p>
-<p>The Minus/Equals cycling hotkeys are disabled by default. Enable them in the
-settings by choosing a key pair (Minus/Equals or Page Up/Page Down).</p>
-<h2 id="keyboardlayout">Keyboard layout</h2>
-<p>The hotkeys follow the number row so the layout is intuitive:</p>
-<p>| <code>1</code> | <code>2</code> | <code>3</code> | <code>4</code> | <code>5</code> | <code>6</code> | <code>7</code> | <code>8</code> | <code>9</code> | <code>0</code> | <code>-</code> | <code>=</code> |
-|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
-| 10% | 20% | 30% | 40% | 50% | 60% | 70% | 80% | 90% | Reset | Step - | Step + |</p>
-<p>The <code>0</code>, <code>-</code> and <code>=</code> keys sit right next to each other at the end of the
-number row, giving you quick access to reset and fine-tune without having to
-remember a specific number.</p>
-<h2 id="howitworks">How it works</h2>
-<p>When a hotkey is pressed, the mod applies the <code>WS_EX_LAYERED</code> window style and
-calls <code>SetLayeredWindowAttributes</code> on the current foreground window. When
-resetting to 100%, the <code>WS_EX_LAYERED</code> style is removed to avoid rendering
-artifacts.</p>
-<p>All modified windows are automatically restored to full opacity when the mod is
-disabled or unloaded.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Windows that already use <code>WS_EX_LAYERED</code> with <code>LWA_COLORKEY</code> (color-key
-transparency) are skipped to avoid overriding their existing transparency
-mechanism.</li>
-<li>The taskbar and desktop windows are excluded from opacity changes.</li>
-<li>Some UWP/WinUI windows may not respond to layered window attributes due to
-<code>WS_EX_NOREDIRECTIONBITMAP</code>. In that case the hotkey will have no visible
-effect.</li>
-</ul>]]></content>
-        <author>
-            <name>Jogai</name>
-            <uri>https://github.com/Jogai</uri>
         </author>
     </entry>
 </feed>
