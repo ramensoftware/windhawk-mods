@@ -9447,10 +9447,13 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1772014780000,
+                "updated": 1772231457000,
                 "users": 11
             },
             "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
                 "author": "Anixx",
                 "description": "Fixes context menu on Windows 10 taskbar running on Windows 11 24H2, 25H2 and later",
                 "github": "https://github.com/Anixx",
@@ -9458,7 +9461,7 @@
                     "explorer.exe"
                 ],
                 "name": "Windows 10 Taskbar Context Menu Fix for Win11 24H2+",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "win10-taskbar-on-win11": {

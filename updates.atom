@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-27T21:57:42.000Z</updated>
+    <updated>2026-02-27T22:30:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.1]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#d4752edf9c0ec0c4dfbb7589695b6f6d904ca97b</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2"/>
+        <updated>2026-02-27T22:30:57.000Z</updated>
+        <content type="html"><![CDATA[<p>Remove the items "tile", "cascade", not functional in Win11</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 1.1.0]]></title>
         <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#26745de2fff4b3d684ef2b2cae2c5ef43928697c</id>
@@ -330,25 +341,6 @@ Added the ability to disable the fade while something is focused</p>]]></content
         <link href="https://windhawk.net/mods/win10-taskbar-per-app-volume-control"/>
         <updated>2026-02-22T13:31:02.000Z</updated>
         <content type="html"><![CDATA[<p>Rename mod to 'Win10 Taskbar Per-App Volume Control'</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-per-app-volume-control#207ca90dc7800e6be4e0ad67b6a689b80bb0ba39</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-per-app-volume-control"/>
-        <updated>2026-02-22T09:01:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarvolumecontrol">Taskbar Volume Control</h1>
-<p>Scroll the mouse wheel over an application's taskbar button to adjust its
-volume. A tooltip follows your cursor showing the current volume level.</p>
-<ul>
-<li><strong>Scroll Up</strong>: Increase volume</li>
-<li><strong>Scroll Down</strong>: Decrease volume</li>
-<li>Works with the Windows 10 taskbar running either under Windows 10 or Windows 11</li>
-<li>Only affects apps that have an active audio session</li>
-</ul>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
