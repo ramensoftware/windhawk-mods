@@ -9642,6 +9642,38 @@
                 "version": "1.1.0"
             }
         },
+        "win11-power-buttons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772229102000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772229102000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "灵弦",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols -luser32 -lwtsapi32 -lpowrprof",
+                "description": "添加可配置的一键关机/重启/注销/睡眠/休眠按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。",
+                "github": "https://github.com/ahzvenol",
+                "include": [
+                    "StartMenuExperienceHost.exe",
+                    "explorer.exe"
+                ],
+                "name": "Windows 11 开始菜单一键电源按钮",
+                "version": "1.0.0"
+            }
+        },
         "win11-start-power-text-renamer": {
             "details": {
                 "defaultSorting": 865,
