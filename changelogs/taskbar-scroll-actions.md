@@ -1,3 +1,9 @@
+## 1.2 ([Feb 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a004a92ed65a9e3174df2df8e2131fa1fbb009ff/mods/taskbar-scroll-actions.wh.cpp))
+
+* Added an option for custom regions along the taskbar. For example, "100-200" (pixels) or "20%-50%" (percentage of taskbar length).
+* It's now possible to define multiple actions in different scroll regions. Note that due to this change, the mod settings have to be configured again.
+* Added the DDC/CI brightness control method to support external monitors.
+
 ## 1.1 ([Jul 14, 2025](https://github.com/ramensoftware/windhawk-mods/blob/27e1954f2906a693556907ad1dfbbb1bc4716a9d/mods/taskbar-scroll-actions.wh.cpp))
 
 * Added an option to change the microphone volume.

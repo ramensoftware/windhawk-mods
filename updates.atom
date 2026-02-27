@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-27T13:02:31.000Z</updated>
+    <updated>2026-02-27T13:38:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Scroll Actions 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-scroll-actions#a004a92ed65a9e3174df2df8e2131fa1fbb009ff</id>
+        <link href="https://windhawk.net/mods/taskbar-scroll-actions"/>
+        <updated>2026-02-27T13:38:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option for custom regions along the taskbar. For example, "100-200" (pixels) or "20%-50%" (percentage of taskbar length).</li>
+<li>It's now possible to define multiple actions in different scroll regions. Note that due to this change, the mod settings have to be configured again.</li>
+<li>Added the DDC/CI brightness control method to support external monitors.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.2]]></title>
         <id>https://windhawk.net/mods/vlc-discord-rpc#e07ad9a662659b593b03547496fb6930809acbab</id>
@@ -353,17 +368,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Up → New Window/Tab (Ctrl-click or Middle-click) 1.4]]></title>
-        <id>https://windhawk.net/mods/explorer-up-new-window#9a735b7426ce7b619456e4528a9b2fdbe87f20a7</id>
-        <link href="https://windhawk.net/mods/explorer-up-new-window"/>
-        <updated>2026-02-21T18:08:26.000Z</updated>
-        <content type="html"><![CDATA[<p>New feature: Added a setting to open parent in new tab instead of new window</p>]]></content>
-        <author>
-            <name>Tobias Lind</name>
-            <uri>https://github.com/TobbeLino</uri>
         </author>
     </entry>
 </feed>

@@ -8032,7 +8032,7 @@
                     29
                 ],
                 "ratingUsers": 38,
-                "updated": 1752489315000,
+                "updated": 1772199504000,
                 "users": 1184
             },
             "metadata": {
@@ -8040,8 +8040,8 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lcomctl32 -lgdi32 -lole32 -loleaut32 -lversion",
-                "description": "Assign actions for scrolling over the taskbar, including virtual desktop switching and monitor brightness control",
+                "compilerOptions": "-lcomctl32 -ldxva2 -lgdi32 -lole32 -loleaut32 -lversion",
+                "description": "Assign actions for scrolling over the taskbar, including virtual desktop switching, brightness control, and microphone volume control",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -8049,7 +8049,7 @@
                 ],
                 "name": "Taskbar Scroll Actions",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "taskbar-shadow-border": {
