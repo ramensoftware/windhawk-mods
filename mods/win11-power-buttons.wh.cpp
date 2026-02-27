@@ -219,6 +219,63 @@ static void BuildButtons() {
 }
 
 // ============================================================================
+// Localization
+// ============================================================================
+
+static std::wstring GetActionDisplayName(PowerAction action) {
+    LANGID lang = PRIMARYLANGID(GetThreadUILanguage());
+
+    switch (action) {
+        case PowerAction::Shutdown:
+            switch (lang) {
+                case LANG_CHINESE: return L"关机";
+                default: return L"Shut down";
+            }
+        case PowerAction::Restart:
+            switch (lang) {
+                case LANG_CHINESE: return L"重启";
+                default: return L"Restart";
+            }
+        case PowerAction::SignOut:
+            switch (lang) {
+                case LANG_CHINESE: return L"注销";
+                default: return L"Sign out";
+            }
+        case PowerAction::Sleep:
+            switch (lang) {
+                case LANG_CHINESE: return L"睡眠";
+                default: return L"Sleep";
+            }
+        case PowerAction::Hibernate:
+            switch (lang) {
+                case LANG_CHINESE: return L"休眠";
+                default: return L"Hibernate";
+            }
+    }
+    return L"";
+}
+
+static std::wstring GetConfirmTitle() {
+    switch (PRIMARYLANGID(GetThreadUILanguage())) {
+        case LANG_CHINESE:
+            return L"确认电源操作";
+        default:
+            return  L"Confirm Power Action";
+    }
+}
+
+static std::wstring GetConfirmMessage(PowerAction action) {
+    std::wstring actionName = GetActionDisplayName(action);
+    switch (PRIMARYLANGID(GetThreadUILanguage())) {
+        case LANG_CHINESE:
+            return L"您确定要执行" + actionName + L"吗？";
+        default:
+            for (auto& c : actionName) c = towlower(c);
+            return  L"Are you sure you want to " + actionName + L"?";
+    }
+}
+
+// ============================================================================
 // Cross-Process IPC (Explorer Proxy)
 //
 // StartMenuExperienceHost.exe runs within a restricted AppContainer sandbox
@@ -241,18 +298,11 @@ static void InitProxyMessage() {
     }
 }
 
-static bool ConfirmPowerAction() {
-    PCWSTR title = L"Confirm Power Action";
-    PCWSTR message = L"Are you sure?";
+static bool ConfirmPowerAction(PowerAction action) {
+    std::wstring title = GetConfirmTitle();
+    std::wstring message = GetConfirmMessage(action);
 
-    switch (PRIMARYLANGID(GetThreadUILanguage())) {
-        case LANG_CHINESE:
-            title = L"确认电源操作";
-            message = L"您确定要执行此操作吗？";
-            break;
-    }
-
-    int button = MessageBoxW(nullptr, message, title, MB_ICONQUESTION | MB_YESNO | MB_TOPMOST | MB_SETFOREGROUND);
+    int button = MessageBoxW(nullptr, message.c_str(), title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_TOPMOST | MB_SETFOREGROUND);
     return button == IDYES;
 }
 
@@ -290,9 +340,10 @@ static void PerformPowerAction(PowerAction action) {
 
 static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == g_proxyMessage && g_proxyMessage != 0) {
+        PowerAction action = (PowerAction)wParam;
         bool needConfirm = Wh_GetIntSetting(L"confirm_before_action") != 0;
-        if (!needConfirm || ConfirmPowerAction()) {
-            PerformPowerAction((PowerAction)wParam);
+        if (!needConfirm || ConfirmPowerAction(action)) {
+            PerformPowerAction(action);
         }
         return 0;
     }
@@ -353,6 +404,7 @@ static void StartProxyThread() {
 }
 
 // Sends a message to the explorer proxy window to execute the command
+[[maybe_unused]]
 static void SendPowerAction(PowerAction action) {
     InitProxyMessage();
 
@@ -496,6 +548,8 @@ static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement origina
             icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
             icon.FontSize(16);
             btn.Content(icon);
+
+            wuxc::ToolTipService::SetToolTip(btn, winrt::box_value(GetActionDisplayName(cfg.action)));
 
             PowerAction action = cfg.action;
             btn.Click([action](auto&&, auto&&) {
