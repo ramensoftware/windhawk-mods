@@ -1,10 +1,10 @@
 // ==WindhawkMod==
-// @id              notepad-multi-select-full
-// @name            Notepad Multi-Select (Final Engine)
-// @description     Adds Alt+Shift multi-caret, true blue highlighting, smart indent, and perfect \r\n handling.
-// @version         4.9
+// @id              notepad-multi-select
+// @name            Notepad++ feature
+// @description     Adds Alt+Shift multi-caret, highlighting, auto-indent, auto-pair, and Ctrl+D duplication.
+// @version         5.3
 // @author          Mohamed Magdy
-// @github          hamomagdy7
+// @github          https://github.com/hamomagdy724
 // @include         notepad.exe
 // @compilerOptions -luser32 -lcomctl32 -lgdi32
 // ==/WindhawkMod==
@@ -13,31 +13,32 @@
 /*
 # Notepad Multi-Select & Advanced Editing Engine
 
-A powerful Windhawk mod that transforms classic Windows Notepad into a modern, IDE-like text editor. It introduces true multi-caret editing, system-native highlighting, Python-style auto-indentation, and smart text navigation, all while strictly preserving Notepad's native performance and undo history.
+A professional-grade Windhawk modification that elevates the classic Windows Notepad into a modern, IDE-style text editor. This engine introduces true multi-caret editing, system-native text highlighting, context-aware auto-indentation, automated character pairing, and line duplication, all while strictly preserving the native performance and undo history of the host application.
 
-** Compatibility:** This mod is designed exclusively for **Classic Notepad** (`notepad.exe` without tabs). It does not apply to the new UWP/Windows 11 modern Notepad app.
+**️ Compatibility:** This modification is designed exclusively for the classic Win32 Notepad (`notepad.exe` without tabs). It does not hook into the modern Windows 11 UWP Notepad application.
 
-## Key Features
+## Core Features
 
-* **Multi-Caret Editing:** Spawn multiple cursors to edit consecutive lines simultaneously.
-* **True System Highlighting:** Highlights multi-line selections using native Windows theme colors (`COLOR_HIGHLIGHT`), perfectly matching standard text selection.
-* **Auto-Pair Insertion:** Automatically completes brackets and quotes (`()`, `[]`, `{}`, `''`, `""`) and places the caret inside. Features intelligent "step-over" when typing the closing character.
-* **Python-Style Auto-Indent:** Pressing `Enter` automatically traces the previous line's logical indentation (spaces or tabs) and applies it to the new line.
-* **Smart Word Navigation:** `Ctrl + Left/Right` and `Ctrl + Backspace/Delete` treat attached punctuation as part of the word, deleting chunks cleanly without stopping at every symbol.
-* **Intelligent Tab Management:** * `Tab` injects a rigid `\t` character.
-  * `Shift + Tab` acts as a non-destructive un-indent, gliding your cursor backward up to 4 spaces without deleting text.
-* **Zero Native Conflicts:** Built-in isolation firewalls ensure that when only one caret is active, the mod steps aside, allowing standard Windows Undo, Redo, and scrolling to function flawlessly.
+* **Multi-Caret Editing:** Spawn multiple concurrent cursors to edit, delete, or navigate across adjacent lines simultaneously.
+* **Line & Selection Duplication:** Press `Ctrl + D` in single-caret mode to instantly duplicate the current line or highlighted selection inline.
+* **System-Native Highlighting:** Renders multi-line text selections using standard Windows theme parameters (`COLOR_HIGHLIGHT`), ensuring visual consistency.
+* **Automated Character Pairing & Wrap:** Automatically completes structural pairs (`()`, `[]`, `{}`, `''`, `""`). If text is selected, it beautifully wraps the text. Features IDE-standard "step-over" logic.
+* **Context-Aware Auto-Indentation:** Intercepts line breaks (`Enter`) to dynamically trace and replicate the exact leading whitespace (spaces or tabs) of the preceding logical line.
+* **Smart Word Navigation:** Enhances `Ctrl + Left/Right` and `Ctrl + Backspace/Delete` logic to evaluate text chunks globally, ignoring arbitrary punctuation breaks for cleaner deletion of contiguous strings.
+* **Intelligent Tab Management:** Standardizes the `Tab` key to inject a rigid `\t` character. Introduces `Shift + Tab` as a non-destructive un-indent command.
+* **Native Conflict Insulation:** Engineered with strict execution firewalls. When operating in standard single-caret mode, the engine explicitly defers to the native Windows `DefSubclassProc`, ensuring zero interference with standard undo stacks.
 
-##️ Shortcuts & Keybindings
+## ️ Keybindings & Navigation
 
-| Shortcut | Action |
+| Command | Action |
 | :--- | :--- |
-| `Alt + Shift + Up/Down` | Spawn a new caret on the line above or below. |
-| `Shift + Left/Right` | Highlight text simultaneously across all active carets. |
-| `Escape` or `Mouse Click` | Exit multi-select mode and return to normal editing. |
-| `Enter` | Create a new line with auto-indentation mirroring the line above. |
-| `Shift + Tab` | Safely un-indent (move cursor left up to 4 spaces). |
-| `Ctrl + Backspace / Delete` | Delete entire attached word blocks cleanly. |
+| `Alt + Shift + Up/Down` | Spawn an additional caret on the adjacent line above or below. |
+| `Shift + Left/Right` | Highlight text simultaneously across all active cursors. |
+| `Escape` or `Mouse Click` | Terminate multi-select mode and revert to standard single-caret editing. |
+| `Ctrl + D` | Duplicate the currently selected text, or the entire current line. |
+| `Enter` | Execute a line break with dynamic replication of previous indentation. |
+| `Shift + Tab` | Execute a non-destructive reverse jump (un-indent) up to 4 spaces. |
+| `Ctrl + Backspace / Delete` | Execute contiguous word block deletion, overriding standard punctuation stops. |
 */
 // ==/WindhawkModReadme==
 
@@ -126,29 +127,25 @@ bool GetCaretX(HWND hWnd, int pos, int* pX, int* pY, TEXTMETRIC* tm) {
     return false;
 }
 
-// Memory-Safe Logical Paragraph Finder (Bypasses Word Wrap Issues!)
+// Memory-Safe Logical Paragraph Finder
 int GetLogicalLineStartIdx(HWND hWnd, int p) {
     int currIdx = SendMessage(hWnd, EM_LINEFROMCHAR, p, 0);
     while (currIdx > 0) {
         int prevStart = SendMessage(hWnd, EM_LINEINDEX, currIdx - 1, 0);
         int prevLen = SendMessage(hWnd, EM_LINELENGTH, prevStart, 0);
         int currStart = SendMessage(hWnd, EM_LINEINDEX, currIdx, 0);
-        
-        // If the gap between the end of previous visual line and start of current is >= 2,
-        // it means we hit a hard \r\n break. Otherwise, it's just soft word-wrap.
         if (currStart - (prevStart + prevLen) >= 2) break; 
-        
         currIdx--;
     }
     return currIdx;
 }
 
-// --- 2. CUSTOM WORD BOUNDARY PARSERS (SPACE-DELIMITED ONLY) ---
+// --- 2. CUSTOM WORD BOUNDARY PARSERS ---
 int FindWordBreakLeft(HWND hWnd, int pos) {
     if (pos <= 0) return 0;
     int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, pos, 0);
     int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
-    if (pos == lineStart) return pos - 1; 
+    if (pos == lineStart) return (pos >= 2) ? pos - 2 : 0; 
     
     int lineLen = SendMessage(hWnd, EM_LINELENGTH, pos, 0);
     if (lineLen <= 0) return pos - 1;
@@ -177,7 +174,7 @@ int FindWordBreakRight(HWND hWnd, int pos) {
     int lineLen = SendMessage(hWnd, EM_LINELENGTH, pos, 0);
     
     int localPos = pos - lineStart;
-    if (localPos >= lineLen) return pos + 1; 
+    if (localPos >= lineLen) return (pos + 2 <= textLen) ? pos + 2 : textLen; 
     
     WCHAR* buf = (WCHAR*)malloc((lineLen + 1) * sizeof(WCHAR));
     if (!buf) return pos + 1;
@@ -236,8 +233,8 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
 // --- 4. THE MULTI-SELECT ENGINE ---
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     
-    // -- GLOBALLY KILL THE CTRL+BACKSPACE BOX (ASCII 127) --
-    if (uMsg == WM_CHAR && wParam == 127) {
+    // -- GLOBALLY KILL CONTROL-CHAR RECTANGLES (ASCII 127 & ASCII 4 for Ctrl+D) --
+    if (uMsg == WM_CHAR && (wParam == 127 || wParam == 4)) {
         return 0; 
     }
 
@@ -259,8 +256,72 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         return 0; 
     }
 
-    // -- INTERCEPT SHIFT+ARROW HIGHLIGHTING & CTRL WORD JUMPING --
-    if (uMsg == WM_KEYDOWN && (wParam == VK_LEFT || wParam == VK_RIGHT) && g_state.caretCount > 1) {
+    // -- CTRL+D: DUPLICATE LINE OR SELECTION (SINGLE CARET) --
+    if (uMsg == WM_KEYDOWN && wParam == 0x44) { 
+        bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        if (isCtrl && g_state.caretCount <= 1) {
+            DWORD dwStart, dwEnd;
+            SendMessage(hWnd, EM_GETSEL, (WPARAM)&dwStart, (LPARAM)&dwEnd);
+            int start = (int)dwStart;
+            int end = (int)dwEnd;
+
+            int textLen = SendMessage(hWnd, WM_GETTEXTLENGTH, 0, 0);
+            WCHAR* fullText = (WCHAR*)malloc((textLen + 1) * sizeof(WCHAR));
+            if (textLen > 0) SendMessage(hWnd, WM_GETTEXT, textLen + 1, (LPARAM)fullText);
+
+            if (start != end) {
+                // Selection Duplication
+                int selMin = GetMin(start, end);
+                int selMax = GetMax(start, end);
+                int selLen = selMax - selMin;
+
+                if (selLen > 0 && textLen > 0) {
+                    WCHAR* dupText = (WCHAR*)malloc((selLen + 1) * sizeof(WCHAR));
+                    for (int i = 0; i < selLen; i++) dupText[i] = fullText[selMin + i];
+                    dupText[selLen] = L'\0';
+
+                    SendMessage(hWnd, EM_SETSEL, selMax, selMax);
+                    SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)dupText);
+                    SendMessage(hWnd, EM_SETSEL, selMax, selMax + selLen);
+
+                    free(dupText);
+                }
+            } else {
+                // Line Duplication
+                if (textLen >= 0) {
+                    int p = start;
+                    int lineStart = p - 1;
+                    while (lineStart >= 0 && fullText[lineStart] != L'\n') lineStart--;
+                    lineStart++; 
+
+                    int lineEnd = p;
+                    while (lineEnd < textLen && fullText[lineEnd] != L'\r' && fullText[lineEnd] != L'\n') lineEnd++;
+
+                    int lineLen = lineEnd - lineStart;
+                    WCHAR* dupText = (WCHAR*)malloc((lineLen + 3) * sizeof(WCHAR));
+                    dupText[0] = L'\r';
+                    dupText[1] = L'\n';
+                    for (int i = 0; i < lineLen; i++) dupText[2 + i] = fullText[lineStart + i];
+                    dupText[lineLen + 2] = L'\0';
+
+                    SendMessage(hWnd, EM_SETSEL, lineEnd, lineEnd);
+                    SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)dupText);
+
+                    int col = p - lineStart;
+                    int newCaretPos = lineEnd + 2 + col;
+                    SendMessage(hWnd, EM_SETSEL, newCaretPos, newCaretPos);
+
+                    free(dupText);
+                }
+            }
+            if (fullText) free(fullText);
+            return 0; 
+        }
+    }
+
+    if (uMsg == WM_KEYDOWN && (wParam == VK_LEFT || wParam == VK_RIGHT)) {
+        if (g_state.caretCount <= 1) return DefSubclassProc(hWnd, uMsg, wParam, lParam); 
+
         bool isLeft = (wParam == VK_LEFT);
         bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -296,16 +357,17 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         return 0; 
     }
 
-    // -- TAB AND SHIFT+TAB (GLOBAL: SINGLE AND MULTI) --
     if (uMsg == WM_KEYDOWN && wParam == VK_TAB) {
         bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         bool isSingleCaret = (g_state.caretCount <= 1);
 
+        if (isSingleCaret && !isShift) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
         if (isSingleCaret) {
-            DWORD start, end;
-            SendMessage(hWnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
-            g_state.anchors[0] = start;
-            g_state.positions[0] = end;
+            DWORD dwStart, dwEnd;
+            SendMessage(hWnd, EM_GETSEL, (WPARAM)&dwStart, (LPARAM)&dwEnd);
+            g_state.anchors[0] = (int)dwStart;
+            g_state.positions[0] = (int)dwEnd;
             g_state.caretCount = 1; 
         } else {
             SortCaretsAscending();
@@ -326,7 +388,6 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
             }
 
             if (isShift) {
-                // MOVE BACKWARD safely without deleting
                 int logIdx = GetLogicalLineStartIdx(hWnd, p);
                 int logLineStart = SendMessage(hWnd, EM_LINEINDEX, logIdx, 0);
                 
@@ -341,7 +402,6 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
                     g_state.anchors[i] = p;
                 }
             } else {
-                // Native rigid Tab injection! (Deleted the Space hack!)
                 SendMessage(hWnd, EM_SETSEL, p, p);
                 SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"\t");
                 g_state.positions[i] = p + 1;
@@ -353,26 +413,29 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         int primaryPos = g_state.positions[g_state.caretCount - 1];
         SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos); 
 
-        if (isSingleCaret) {
-            g_state.caretCount = 0; 
-        } else {
+        if (isSingleCaret) g_state.caretCount = 0; 
+        else {
             ResetBlinkTimer(hWnd);
             InvalidateRect(hWnd, NULL, FALSE);
         }
         return 0; 
     }
     
-    if (uMsg == WM_CHAR && wParam == VK_TAB) return 0;
+    if (uMsg == WM_CHAR && wParam == VK_TAB) {
+        if (g_state.caretCount <= 1 && !(GetKeyState(VK_SHIFT) & 0x8000)) {
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        }
+        return 0; 
+    }
 
-    // -- PYTHON-STYLE AUTO-INDENT (VK_RETURN) GLOBAL: SINGLE AND MULTI --
     if (uMsg == WM_CHAR && wParam == VK_RETURN) {
         bool isSingleCaret = (g_state.caretCount <= 1);
 
         if (isSingleCaret) {
-            DWORD start, end;
-            SendMessage(hWnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
-            g_state.anchors[0] = start;
-            g_state.positions[0] = end;
+            DWORD dwStart, dwEnd;
+            SendMessage(hWnd, EM_GETSEL, (WPARAM)&dwStart, (LPARAM)&dwEnd);
+            g_state.anchors[0] = (int)dwStart;
+            g_state.positions[0] = (int)dwEnd;
             g_state.caretCount = 1; 
         } else {
             SortCaretsAscending();
@@ -392,7 +455,6 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 offset -= (e - s);
             }
 
-            // O(1) Memory Safe Paragraph Indent Tracer!
             int logIdx = GetLogicalLineStartIdx(hWnd, p);
             int logStart = SendMessage(hWnd, EM_LINEINDEX, logIdx, 0);
             int logLen = SendMessage(hWnd, EM_LINELENGTH, logStart, 0);
@@ -439,40 +501,164 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         int primaryPos = g_state.positions[g_state.caretCount - 1];
         SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos);
         
-        if (isSingleCaret) {
-            g_state.caretCount = 0; 
-        } else {
+        if (isSingleCaret) g_state.caretCount = 0; 
+        else {
             ResetBlinkTimer(hWnd);
             InvalidateRect(hWnd, NULL, FALSE);
         }
         return 0; 
     }
 
-    // -- TYPING OVER HIGHLIGHTED SELECTIONS --
-    if (uMsg == WM_CHAR && g_state.caretCount > 1) {
-        if (wParam == 8 || wParam == VK_RETURN) return 0; 
-        if (wParam < 32 && wParam != VK_RETURN) return 0;
+    if (uMsg == WM_CHAR) {
+        if (wParam == 8 || wParam == VK_RETURN) {
+            if (g_state.caretCount <= 1) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            return 0;
+        }
+        if (wParam < 32 && wParam != VK_RETURN) {
+            if (g_state.caretCount <= 1) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            return 0;
+        }
+
+        WCHAR pairChar = 0;
+        if (wParam == L'(') pairChar = L')';
+        else if (wParam == L'[') pairChar = L']';
+        else if (wParam == L'{') pairChar = L'}';
+        else if (wParam == L'\'') pairChar = L'\'';
+        else if (wParam == L'"') pairChar = L'"';
+
+        bool isClosingChar = (wParam == L')' || wParam == L']' || wParam == L'}' || wParam == L'\'' || wParam == L'"');
+        bool isSingleCaret = (g_state.caretCount <= 1);
+
+        if (isSingleCaret) {
+            DWORD dwStart, dwEnd;
+            SendMessage(hWnd, EM_GETSEL, (WPARAM)&dwStart, (LPARAM)&dwEnd);
+            int start = (int)dwStart;
+            int end = (int)dwEnd;
+
+            bool steppedOver = false;
+            if (isClosingChar && start == end) {
+                int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, start, 0);
+                int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
+                int lineLen = SendMessage(hWnd, EM_LINELENGTH, start, 0);
+                int localPos = start - lineStart;
+                
+                if (localPos < lineLen) {
+                    WCHAR* buf = (WCHAR*)malloc((lineLen + 1) * sizeof(WCHAR));
+                    *(WORD*)buf = (WORD)lineLen;
+                    SendMessage(hWnd, EM_GETLINE, lineIdx, (LPARAM)buf);
+                    
+                    if (buf[localPos] == (WCHAR)wParam) {
+                        SendMessage(hWnd, EM_SETSEL, start + 1, start + 1);
+                        steppedOver = true;
+                    }
+                    free(buf);
+                }
+            }
+
+            if (steppedOver) return 0;
+
+            if (pairChar) {
+                if (start != end) {
+                    int selMin = GetMin(start, end);
+                    int selMax = GetMax(start, end);
+                    int selLen = selMax - selMin;
+                    
+                    int textLen = SendMessage(hWnd, WM_GETTEXTLENGTH, 0, 0);
+                    WCHAR* fullText = (WCHAR*)malloc((textLen + 1) * sizeof(WCHAR));
+                    SendMessage(hWnd, WM_GETTEXT, textLen + 1, (LPARAM)fullText);
+                    
+                    WCHAR* wrapped = (WCHAR*)malloc((selLen + 3) * sizeof(WCHAR));
+                    wrapped[0] = (WCHAR)wParam;
+                    for (int k = 0; k < selLen; k++) wrapped[1 + k] = fullText[selMin + k];
+                    wrapped[selLen + 1] = pairChar;
+                    wrapped[selLen + 2] = L'\0';
+                    
+                    SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)wrapped);
+                    SendMessage(hWnd, EM_SETSEL, selMin + 1, selMax + 1); 
+                    free(fullText);
+                    free(wrapped);
+                    return 0;
+                } else {
+                    WCHAR str[3] = { (WCHAR)wParam, pairChar, L'\0' };
+                    SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)str);
+                    
+                    DWORD newStart, newEnd;
+                    SendMessage(hWnd, EM_GETSEL, (WPARAM)&newStart, (LPARAM)&newEnd);
+                    SendMessage(hWnd, EM_SETSEL, (int)newStart - 1, (int)newStart - 1); 
+                    return 0; 
+                }
+            }
+
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        }
 
         SortCaretsAscending();
-        WCHAR str[3] = {0};
-        int charsAdded = 1;
-        
-        str[0] = (WCHAR)wParam; str[1] = L'\0';
-
         int offset = 0; 
+        int textLen = SendMessage(hWnd, WM_GETTEXTLENGTH, 0, 0);
+        WCHAR* fullText = (WCHAR*)malloc((textLen + 1) * sizeof(WCHAR));
+        if (textLen > 0) SendMessage(hWnd, WM_GETTEXT, textLen + 1, (LPARAM)fullText);
+
         for (int i = 0; i < g_state.caretCount; i++) {
             int p = g_state.positions[i] + offset;
             int a = g_state.anchors[i] + offset;
             int s = GetMin(a, p);
             int e = GetMax(a, p);
             
-            SendMessage(hWnd, EM_SETSEL, s, e);
-            SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)str);
-            
-            g_state.positions[i] = s + charsAdded;
-            g_state.anchors[i] = g_state.positions[i]; 
-            offset += charsAdded - (e - s); 
+            bool steppedOver = false;
+            if (isClosingChar && s == e) {
+                int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, p, 0);
+                int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
+                int lineLen = SendMessage(hWnd, EM_LINELENGTH, p, 0);
+                int localPos = p - lineStart;
+                
+                if (localPos < lineLen) {
+                    WCHAR* buf = (WCHAR*)malloc((lineLen + 1) * sizeof(WCHAR));
+                    *(WORD*)buf = (WORD)lineLen;
+                    SendMessage(hWnd, EM_GETLINE, lineIdx, (LPARAM)buf);
+                    if (buf[localPos] == (WCHAR)wParam) steppedOver = true;
+                    free(buf);
+                }
+            }
+
+            if (steppedOver) {
+                g_state.positions[i] = p + 1;
+                g_state.anchors[i] = p + 1;
+            } else if (pairChar) {
+                if (s != e) {
+                    int selLen = e - s;
+                    WCHAR* wrapped = (WCHAR*)malloc((selLen + 3) * sizeof(WCHAR));
+                    wrapped[0] = (WCHAR)wParam;
+                    for (int k = 0; k < selLen; k++) wrapped[1 + k] = fullText[s - offset + k];
+                    wrapped[selLen + 1] = pairChar;
+                    wrapped[selLen + 2] = L'\0';
+                    
+                    SendMessage(hWnd, EM_SETSEL, s, e);
+                    SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)wrapped);
+                    
+                    g_state.anchors[i] = s + 1;
+                    g_state.positions[i] = e + 1; 
+                    offset += 2; 
+                    free(wrapped);
+                } else {
+                    WCHAR str[3] = { (WCHAR)wParam, pairChar, L'\0' };
+                    SendMessage(hWnd, EM_SETSEL, s, e);
+                    SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)str);
+                    
+                    g_state.positions[i] = s + 1; 
+                    g_state.anchors[i] = g_state.positions[i]; 
+                    offset += 2 - (e - s); 
+                }
+            } else {
+                WCHAR str[2] = { (WCHAR)wParam, L'\0' };
+                SendMessage(hWnd, EM_SETSEL, s, e);
+                SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)str);
+                
+                g_state.positions[i] = s + 1;
+                g_state.anchors[i] = g_state.positions[i]; 
+                offset += 1 - (e - s); 
+            }
         }
+        free(fullText);
         
         int primaryPos = g_state.positions[g_state.caretCount - 1];
         SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos);
@@ -481,14 +667,32 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         return 0; 
     }
 
-    // -- RIGID BACKSPACE (GLOBAL: SINGLE AND MULTI) --
     if (uMsg == WM_KEYDOWN && wParam == VK_BACK) {
         bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         bool isSingleCaret = (g_state.caretCount <= 1);
 
         if (isSingleCaret) {
-            DWORD start, end;
-            SendMessage(hWnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
+            DWORD dwStart, dwEnd;
+            SendMessage(hWnd, EM_GETSEL, (WPARAM)&dwStart, (LPARAM)&dwEnd);
+            int start = (int)dwStart;
+            int end = (int)dwEnd;
+            
+            if (start == end && start > 0) {
+                int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, start, 0);
+                int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
+                if (start == lineStart && lineIdx > 0) {
+                    int prevStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx - 1, 0);
+                    int prevLen = SendMessage(hWnd, EM_LINELENGTH, prevStart, 0);
+                    if (start - (prevStart + prevLen) >= 2) {
+                        SendMessage(hWnd, EM_SETSEL, start - 2, start);
+                        SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
+                        return 0;
+                    }
+                }
+            }
+            
+            if (!isCtrl) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            
             g_state.anchors[0] = start;
             g_state.positions[0] = end;
             g_state.caretCount = 1; 
@@ -517,15 +721,12 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
                     deleteCount = p - prevWordPos;
                     if (deleteCount < 0) deleteCount = 0;
                 } else {
-                    // Safe Double-Backspace Fix (O(1) memory lookup!)
                     int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, p, 0);
                     int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
                     if (p == lineStart && lineIdx > 0) {
                         int prevStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx - 1, 0);
                         int prevLen = SendMessage(hWnd, EM_LINELENGTH, prevStart, 0);
-                        if (p - (prevStart + prevLen) >= 2) {
-                            deleteCount = 2; // Instantly kills \r\n
-                        }
+                        if (p - (prevStart + prevLen) >= 2) deleteCount = 2;
                     }
                 }
 
@@ -542,21 +743,52 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         int primaryPos = g_state.positions[g_state.caretCount - 1];
         SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos);
         
-        if (isSingleCaret) {
-            g_state.caretCount = 0; 
-        } else {
+        if (isSingleCaret) g_state.caretCount = 0; 
+        else {
             ResetBlinkTimer(hWnd);
             InvalidateRect(hWnd, NULL, FALSE);
         }
         return 0; 
     }
 
-    // -- DELETE --
-    if (uMsg == WM_KEYDOWN && wParam == VK_DELETE && g_state.caretCount > 1) {
+    if (uMsg == WM_KEYDOWN && wParam == VK_DELETE) {
         bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        SortCaretsAscending();
-        int offset = 0;
+        bool isSingleCaret = (g_state.caretCount <= 1);
 
+        if (isSingleCaret) {
+            DWORD dwStart, dwEnd;
+            SendMessage(hWnd, EM_GETSEL, (WPARAM)&dwStart, (LPARAM)&dwEnd);
+            int start = (int)dwStart;
+            int end = (int)dwEnd;
+            
+            if (start == end) {
+                int textLen = SendMessage(hWnd, WM_GETTEXTLENGTH, 0, 0);
+                if (start < textLen) {
+                    int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, start, 0);
+                    int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
+                    int lineLen = SendMessage(hWnd, EM_LINELENGTH, start, 0);
+                    
+                    if (start == lineStart + lineLen && lineIdx < SendMessage(hWnd, EM_GETLINECOUNT, 0, 0) - 1) {
+                        int nextStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx + 1, 0);
+                        if (nextStart - start >= 2) {
+                            SendMessage(hWnd, EM_SETSEL, start, start + 2);
+                            SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
+                            return 0;
+                        }
+                    }
+                }
+            }
+            
+            if (!isCtrl) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            
+            g_state.anchors[0] = start;
+            g_state.positions[0] = end;
+            g_state.caretCount = 1; 
+        } else {
+            SortCaretsAscending();
+        }
+
+        int offset = 0;
         for (int i = 0; i < g_state.caretCount; i++) {
             int p = g_state.positions[i] + offset;
             int a = g_state.anchors[i] + offset;
@@ -577,7 +809,16 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
                         int nextWordPos = FindWordBreakRight(hWnd, p);
                         deleteCount = nextWordPos - p;
                         if (deleteCount < 0) deleteCount = 0;
+                    } else {
+                        int lineIdx = SendMessage(hWnd, EM_LINEFROMCHAR, p, 0);
+                        int lineStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx, 0);
+                        int lineLen = SendMessage(hWnd, EM_LINELENGTH, p, 0);
+                        if (p == lineStart + lineLen && lineIdx < SendMessage(hWnd, EM_GETLINECOUNT, 0, 0) - 1) {
+                            int nextStart = SendMessage(hWnd, EM_LINEINDEX, lineIdx + 1, 0);
+                            if (nextStart - p >= 2) deleteCount = 2;
+                        }
                     }
+
                     if (deleteCount > 0) {
                         SendMessage(hWnd, EM_SETSEL, p, p + deleteCount);
                         SendMessage(hWnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
@@ -590,22 +831,25 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         }
         int primaryPos = g_state.positions[g_state.caretCount - 1];
         SendMessage(hWnd, EM_SETSEL, primaryPos, primaryPos);
-        ResetBlinkTimer(hWnd);
-        InvalidateRect(hWnd, NULL, FALSE);
+        
+        if (isSingleCaret) g_state.caretCount = 0; 
+        else {
+            ResetBlinkTimer(hWnd);
+            InvalidateRect(hWnd, NULL, FALSE);
+        }
         return 0; 
     }
 
-    // -- MULTI-SELECT SPAWNING --
     if (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) {
         bool isAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
         bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
         if (isAlt && isShift && (wParam == VK_UP || wParam == VK_DOWN)) {
             if (g_state.caretCount == 0) {
-                DWORD startPos, endPos;
-                SendMessage(hWnd, EM_GETSEL, (WPARAM)&startPos, (LPARAM)&endPos);
-                g_state.anchors[0] = startPos;
-                g_state.positions[0] = endPos;
+                DWORD dwStart, dwEnd;
+                SendMessage(hWnd, EM_GETSEL, (WPARAM)&dwStart, (LPARAM)&dwEnd);
+                g_state.anchors[0] = (int)dwStart;
+                g_state.positions[0] = (int)dwEnd;
                 g_state.caretCount = 1;
             }
 
@@ -634,7 +878,6 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         }
     }
 
-    // -- TRUE SELECTION AND CARET RENDERING --
     if (uMsg == WM_PAINT) {
         LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
@@ -661,7 +904,6 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
             COLORREF oldBk = SetBkColor(hdc, GetSysColor(COLOR_HIGHLIGHT));
             COLORREF oldFg = SetTextColor(hdc, GetSysColor(COLOR_HIGHLIGHTTEXT));
 
-            // Draw Custom Blue Highlights
             for (int i = 0; i < g_state.caretCount - 1; i++) {
                 int p = g_state.positions[i];
                 int a = g_state.anchors[i];
@@ -713,7 +955,6 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
             SetBkColor(hdc, oldBk);
             SetTextColor(hdc, oldFg);
 
-            // Draw Carets
             if (g_caretsVisible) {
                 for (int i = 0; i < g_state.caretCount; i++) {
                     int p = g_state.positions[i];
@@ -738,7 +979,6 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// --- WINDOW INJECTION ---
 HWND g_hNotepadWnd = NULL;
 HWND g_hEditWnd = NULL;
 
@@ -776,7 +1016,6 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lp
     return hWnd;
 }
 
-// --- INIT ---
 BOOL Wh_ModInit(void) {
     g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_MultiSelect");
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
