@@ -2,9 +2,10 @@
 // @id win10-taskbar-context-menu-fix-24h2
 // @name Windows 10 Taskbar Context Menu Fix for Win11 24H2+
 // @description Fixes context menu on Windows 10 taskbar running on Windows 11 24H2, 25H2 and later
-// @version 1.0
+// @version 1.1
 // @author Anixx
 // @github          https://github.com/Anixx
+// @architecture    x86-64
 // @include explorer.exe
 // ==/WindhawkMod==
 
@@ -24,17 +25,11 @@ static HMODULE g_explorerModule;
 static HMODULE g_shell32Module;
 static HMODULE g_bthpropsModule;
 
-#define IDM_CASCADE         0x193
-#define IDM_SIDEBYSIDE      0x194
-#define IDM_STACKED         0x195
 #define IDM_SHOWDESKTOP     0x197
 #define IDM_TASKMANAGER     0x1A4
 #define IDM_LOCKTASKBAR     0x1A8
 #define IDM_SETTINGS        0x19D
 
-#define IDS_CASCADE         535    // explorer.exe
-#define IDS_SIDEBYSIDE      536    // explorer.exe
-#define IDS_STACKED         538    // explorer.exe
 #define IDS_SHOWDESKTOP     10113  // shell32.dll
 #define IDS_TASKMANAGER     24743  // shell32.dll
 #define IDS_SETTINGS        2128   // bthprops.cpl
@@ -61,20 +56,7 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
 
     wchar_t buf[256];
 
-    AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
-
-    wchar_t* str = LoadStr(g_explorerModule, IDS_CASCADE, buf, 256);
-    AppendMenuW(hPopup, MF_STRING, IDM_CASCADE, str ? str : L"Cascade windows");
-
-    str = LoadStr(g_explorerModule, IDS_SIDEBYSIDE, buf, 256);
-    AppendMenuW(hPopup, MF_STRING, IDM_SIDEBYSIDE, str ? str : L"Show windows side by side");
-
-    str = LoadStr(g_explorerModule, IDS_STACKED, buf, 256);
-    AppendMenuW(hPopup, MF_STRING, IDM_STACKED, str ? str : L"Show windows stacked");
-
-    AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
-
-    str = LoadStr(g_shell32Module, IDS_SHOWDESKTOP, buf, 256);
+    wchar_t* str = LoadStr(g_shell32Module, IDS_SHOWDESKTOP, buf, 256);
     AppendMenuW(hPopup, MF_STRING, IDM_SHOWDESKTOP, str ? str : L"Show the desktop");
 
     AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
@@ -109,7 +91,9 @@ BOOL Wh_ModInit() {
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
     g_bthpropsModule = LoadLibraryW(L"bthprops.cpl");
 
-    return Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
+    Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
+
+    return TRUE;
 }
 
 void Wh_ModUninit() {
