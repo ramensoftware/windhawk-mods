@@ -2,10 +2,9 @@
 // @id              fix-legacy-taskbar-tray-input-indicator
 // @name            Fix language indicator in Win10 taskbar under Win11 24H2+
 // @description     Fixes text orientation in the keyboard layout indicator in Win10 taskbar running under Win11 24H2+
-// @version         1.0.0
+// @version         1.1.0
 // @author          Anixx
 // @github          https://github.com/Anixx
-// @architecture    x86-64
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -luser32
 // ==/WindhawkMod==
@@ -36,6 +35,8 @@ static wchar_t g_lastText[8] = {};
 static DWORD g_captureTime = 0;
 static bool g_drawn = false;
 static LOGFONTW g_lastFont = {};
+static int g_textBitmapW = 0;
+static int g_textBitmapH = 0;
 
 static bool LooksLikeLayoutText(LPCWSTR lpchText, int len) {
     if (!lpchText || len < 2 || len > 4) return false;
@@ -65,6 +66,15 @@ BOOL WINAPI ExtTextOutW_Hook(HDC hdc, int x, int y, UINT options,
         g_lastText[len] = 0;
         g_captureTime = GetTickCount();
         g_drawn = false;
+        
+        // Запоминаем размер bitmap в который рисуется текст
+        HBITMAP hbm = (HBITMAP)GetCurrentObject(hdc, OBJ_BITMAP);
+        BITMAP bm = {};
+        if (hbm && GetObject(hbm, sizeof(bm), &bm)) {
+            g_textBitmapW = bm.bmWidth;
+            g_textBitmapH = bm.bmHeight;
+        }
+        
         return TRUE;
     }
 
@@ -82,8 +92,25 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int width, int height
     DWORD elapsed = GetTickCount() - g_captureTime;
     
     if (g_lastText[0] != 0 && elapsed < 100 && !g_drawn) {
-        if (width >= 30 && width <= 50 && height >= 15 && height <= 30) {
-            
+        // Проверяем что это BitBlt для индикатора:
+        // - размер копирования больше чем bitmap с текстом (это финальный BitBlt)
+        // - или размер примерно соответствует области индикатора
+        bool isIndicatorBlit = false;
+        
+        // Финальный BitBlt: копируемая область больше чем маленький bitmap с текстом
+        if (g_textBitmapW > 0 && g_textBitmapH > 0) {
+            // Для вертикальной панели: width > textBitmapH или height > textBitmapW
+            // Для горизонтальной панели: width > textBitmapW или height > textBitmapH
+            if ((width > g_textBitmapW || height > g_textBitmapH) &&
+                (width > g_textBitmapH || height > g_textBitmapW)) {
+                // Размер должен быть разумным (не весь экран)
+                if (width <= 200 && height <= 200) {
+                    isIndicatorBlit = true;
+                }
+            }
+        }
+        
+        if (isIndicatorBlit) {
             RECT rc = { xDest, yDest, xDest + width, yDest + height };
             
             HBRUSH hBrush = GetSysColorBrush(COLOR_3DFACE);
@@ -118,4 +145,3 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)BitBlt, (void*)BitBlt_Hook, (void**)&BitBlt_Original);
     return TRUE;
 }
-
