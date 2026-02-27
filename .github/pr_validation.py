@@ -586,16 +586,20 @@ class ModMetadataValidator:
         if not prop:
             return
 
+        msg = ''
         for arch in prop.value.split('\n'):
             if arch.strip() == '':
                 pass
             elif arch not in {'x86', 'x86-64', 'amd64', 'arm64'}:
-                prop.warn(f'Unknown architecture "{arch}"')
+                msg += f'Unknown architecture "{arch}"\n'
             elif arch not in {'x86', 'x86-64'}:
-                prop.warn(
+                msg += (
                     f'Architecture "{arch}" isn\'t commonly used, manual verification'
-                    ' is required'
+                    ' is required\n'
                 )
+
+        if msg:
+            prop.warn(msg.rstrip('\n'))
 
 
 def validate_metadata(path: Path, expected_author: str) -> int:
