@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-27T21:51:42.000Z</updated>
+    <updated>2026-02-27T21:57:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 1.1.0]]></title>
+        <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#26745de2fff4b3d684ef2b2cae2c5ef43928697c</id>
+        <link href="https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator"/>
+        <updated>2026-02-27T21:57:42.000Z</updated>
+        <content type="html"><![CDATA[<p>Remove hardcoded sizes, support for vertical and multi-row taskbar</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Power Buttons 1.0.0]]></title>
         <id>https://windhawk.net/mods/win11-power-buttons#fbc2e4d7d37b92463231f76b217eb1a240f3e6f5</id>
@@ -341,27 +352,6 @@ volume. A tooltip follows your cursor showing the current volume level.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 95/98/NT 4.0 Open/Save Dialog 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win9x-nt4-open-save-dialog#3310e658993f5cbf956406fc9650bc70008069e1</id>
-        <link href="https://windhawk.net/mods/win9x-nt4-open-save-dialog"/>
-        <updated>2026-02-22T08:58:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows9598nt40opensavedialog">Windows 95/98/NT 4.0 Open/Save Dialog</h1>
-<p>This mod makes the classic open/save dialog more like the one from Windows 95,
-98, or NT 4.0 by removing the Places Bar and replacing the toolbar items.</p>
-<p>If you want Windows 98's Deskop item, you will need a copy of Windows 98's comdlg32.dll.
-Once you have that, provide a path to it in the mod options.</p>
-<p><strong>NOTE</strong>: This mod only applies to the <em>classic</em> open/save dialogs. To see these changes everywhere,
-you will need <a href="https://windhawk.net/mods/classic-file-picker-dialog">this mod</a>.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win9x-nt4-open-save-dialog/before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win9x-nt4-open-save-dialog/after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
