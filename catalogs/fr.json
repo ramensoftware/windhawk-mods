@@ -3361,7 +3361,7 @@
                     2
                 ],
                 "ratingUsers": 2,
-                "updated": 1771697306000,
+                "updated": 1772282559000,
                 "users": 113
             },
             "metadata": {
@@ -3374,7 +3374,7 @@
                 ],
                 "license": "MIT",
                 "name": "Explorer Up → New Window/Tab (Ctrl-click or Middle-click)",
-                "version": "1.4"
+                "version": "1.4.1"
             }
         },
         "explorerframe-fixes-for-win11-22h2plus": {

@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-28T11:30:51.000Z</updated>
+    <updated>2026-02-28T12:42:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Up → New Window/Tab (Ctrl-click or Middle-click) 1.4.1]]></title>
+        <id>https://windhawk.net/mods/explorer-up-new-window#2a2d29687df197f84b6def9da159231ada7cde43</id>
+        <link href="https://windhawk.net/mods/explorer-up-new-window"/>
+        <updated>2026-02-28T12:42:39.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix issue preventing Windhawk from exiting (applied updated "Mods-as-tools"-snippet)</p>]]></content>
+        <author>
+            <name>Tobias Lind</name>
+            <uri>https://github.com/TobbeLino</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Visio: Middle Mouse Pan & Smart Zoom 1.0]]></title>
         <id>https://windhawk.net/mods/visio-pan-zoom#d506e023b55369144196a4f782ebb91c51b2cce7</id>
@@ -354,17 +365,6 @@ Windows 11 taskbar.</p>]]></content>
 instead of using the hardcoded tile view.
 Particularly, this works around the issue that in the default, tile mode the elements of this folders have other content
 instead of names displayed when using SysListView32.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme 1.2.2]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#b90a0eb5c2a2fd3fb149e703536422fe61ae966d</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2026-02-25T19:59:10.000Z</updated>
-        <content type="html"><![CDATA[<p>Update readme</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
