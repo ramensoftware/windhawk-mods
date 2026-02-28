@@ -2,7 +2,7 @@
 // @id              taskbar-shadow-border
 // @name            Taskbar Shadow & Border
 // @description     Adds a customizable, floating shadow and border effect above the taskbar
-// @version         1.0.2
+// @version         1.0.3
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         windhawk.exe
@@ -137,7 +137,6 @@ BOOL IsFullScreenAppActive(HWND hTaskbar) {
     if (!hFore || hFore == GetShellWindow()) return FALSE;
     if (hFore == hTaskbar) return FALSE;
 
-    // PATCH: If the app is frozen, skip expensive checks to prevent stalling
     if (IsHungAppWindow(hFore)) return FALSE;
 
     WCHAR szClass[256];
@@ -158,7 +157,6 @@ BOOL IsFullScreenAppActive(HWND hTaskbar) {
     MONITORINFO mi = { sizeof(MONITORINFO) };
     if (!GetMonitorInfo(hMonFore, &mi)) return FALSE;
 
-    // Fuzzy Tolerance (20px)
     const long TOLERANCE = 20;
 
     return (rcFore.left <= (mi.rcMonitor.left + TOLERANCE) && 
@@ -182,7 +180,6 @@ void FreeGdiCache() {
 void DrawShadow(HWND hShadow, int width, int height, int opacity, int borderWidth, UINT32 borderColor) {
     if (!hShadow || width <= 0 || height <= 0) return;
 
-    // GDI Cache: Only re-alloc if size changes
     if (width != g_cache.width || height != g_cache.height || !g_cache.hdcMem) {
         FreeGdiCache();
 
@@ -289,6 +286,8 @@ void UpdateShadow(BOOL forceRedraw) {
         return;
     }
 
+    g_state.lastHiddenByFullScreen = false;
+
     // 3. Settings & Position
     bool isDark = g_isDarkMode.load();
     int activeHeight = isDark ? g_shadowHeightDark.load() : g_shadowHeight.load();
@@ -306,58 +305,49 @@ void UpdateShadow(BOOL forceRedraw) {
     int shadowTop = rcTaskbar.top - activeHeight - offset;
     int shadowLeft = rcTaskbar.left;
     
-    // 4. Dirty Check
-    // FIX: Get current actual style to ensure external changes (like Boot/Shell restarts)
-    // don't leave the internal state desynchronized.
-    LONG_PTR exStyle = GetWindowLongPtr(g_hShadow, GWL_EXSTYLE);
-    bool isActuallyTopMost = (exStyle & WS_EX_TOPMOST) != 0;
-
-    if (!forceRedraw &&
-        !g_state.lastHiddenByFullScreen && 
-        g_state.lastX == shadowLeft &&
-        g_state.lastY == shadowTop &&
-        g_state.lastW == tbWidth &&
-        g_state.lastH == activeHeight &&
-        g_state.lastTopMost == alwaysOnTop &&
-        (isActuallyTopMost == alwaysOnTop) && // <-- Added check: Reality must match Settings
-        g_state.lastBorderWidth == activeBorderWidth &&
-        g_state.lastBorderColor == activeBorderColor &&
-        g_state.lastOpacity == activeOpacity &&
-        g_state.lastThemeMode == (int)isDark)
-    {
-        return;
-    }
-
-    g_state.lastHiddenByFullScreen = false;
-
-    // 5. Update Window Position
-    HWND zOrderTarget = alwaysOnTop ? HWND_TOPMOST : HWND_BOTTOM; 
-
-    UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER;
-    
-    SetWindowPos(g_hShadow, zOrderTarget, shadowLeft, shadowTop, tbWidth, activeHeight, flags);
-
-    // Only Redraw if visuals changed
-    if (forceRedraw || 
+    // 4. Decoupled State Evaluation
+    bool needsRedraw = forceRedraw ||
         g_state.lastW != tbWidth || 
         g_state.lastH != activeHeight || 
         g_state.lastOpacity != activeOpacity ||
+        g_state.lastThemeMode != (int)isDark ||
         g_state.lastBorderWidth != activeBorderWidth ||
-        g_state.lastBorderColor != activeBorderColor ||
-        g_state.lastThemeMode != (int)isDark) 
-    {
+        g_state.lastBorderColor != activeBorderColor;
+
+    bool needsPosUpdate = needsRedraw ||
+        g_state.lastX != shadowLeft ||
+        g_state.lastY != shadowTop ||
+        g_state.lastTopMost != alwaysOnTop ||
+        alwaysOnTop; // <--- The core fix for Issue 1 and 3: Always re-assert Z-order if TopMost is requested.
+
+    if (!needsPosUpdate && !needsRedraw) {
+        LONG_PTR exStyle = GetWindowLongPtr(g_hShadow, GWL_EXSTYLE);
+        bool isActuallyTopMost = (exStyle & WS_EX_TOPMOST) != 0;
+        if (isActuallyTopMost == alwaysOnTop) {
+            return; 
+        }
+    }
+
+    // 5. Update Window Position & Enforce Z-Order
+    HWND zOrderTarget = alwaysOnTop ? HWND_TOPMOST : HWND_BOTTOM; 
+    UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER;
+    SetWindowPos(g_hShadow, zOrderTarget, shadowLeft, shadowTop, tbWidth, activeHeight, flags);
+
+    // 6. Execute GDI Draw ONLY if visuals changed
+    if (needsRedraw) {
         DrawShadow(g_hShadow, tbWidth, activeHeight, activeOpacity, activeBorderWidth, activeBorderColor);
+        
+        g_state.lastW = tbWidth;
+        g_state.lastH = activeHeight;
+        g_state.lastOpacity = activeOpacity;
+        g_state.lastThemeMode = (int)isDark;
+        g_state.lastBorderWidth = activeBorderWidth;
+        g_state.lastBorderColor = activeBorderColor;
     }
         
-    g_state.lastW = tbWidth;
-    g_state.lastH = activeHeight;
-    g_state.lastOpacity = activeOpacity;
-    g_state.lastThemeMode = (int)isDark;
     g_state.lastX = shadowLeft;
     g_state.lastY = shadowTop;
     g_state.lastTopMost = alwaysOnTop;
-    g_state.lastBorderWidth = activeBorderWidth;
-    g_state.lastBorderColor = activeBorderColor;
 }
 
 // ----------------------------------------------------------------------------
@@ -377,7 +367,12 @@ LRESULT CALLBACK ShadowWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             return 0;
 
         case WM_TIMER:
-            if (wParam == 1) UpdateShadow(FALSE);
+            if (wParam == 1) { // 500ms loop
+                UpdateShadow(FALSE);
+            } else if (wParam == 2) { // 50ms fast debounce loop
+                KillTimer(hwnd, 2);
+                UpdateShadow(FALSE);
+            }
             return 0;
 
         case WM_SETTINGCHANGE:
@@ -402,6 +397,7 @@ LRESULT CALLBACK ShadowWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         case WM_DESTROY: 
             FreeGdiCache();
             KillTimer(hwnd, 1);
+            KillTimer(hwnd, 2);
             g_hShadow = NULL; 
             PostQuitMessage(0); 
             return 0;
@@ -418,13 +414,14 @@ void CALLBACK ThreadWinEventProc(
 ) {
     if (!g_hTaskbar || !IsWindow(g_hTaskbar)) g_hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
 
+    // The core fix for Issue 2: Uses Timer 2 to safely debounce event spam from Explorer
     if (hwnd == g_hTaskbar && idObject == OBJID_WINDOW && idChild == CHILDID_SELF) {
-        UpdateShadow(FALSE);
+        if (g_hShadow) SetTimer(g_hShadow, 2, 50, NULL);
         return;
     }
 
     if (event == EVENT_SYSTEM_FOREGROUND) {
-        if (g_hShadow) PostMessage(g_hShadow, WM_TIMER, 1, 0); 
+        if (g_hShadow) SetTimer(g_hShadow, 2, 50, NULL); 
     }
 }
 
@@ -449,7 +446,7 @@ DWORD WINAPI ShadowThreadProc(LPVOID lpParam) {
     );
 
     if (g_hShadow) {
-        SetTimer(g_hShadow, 1, 500, NULL);
+        SetTimer(g_hShadow, 1, 500, NULL); // Primary validation loop
         UpdateShadow(TRUE);
     }
 
@@ -519,6 +516,8 @@ void WhTool_ModSettingsChanged() {
     if (g_hShadow && IsWindow(g_hShadow)) PostMessage(g_hShadow, WM_UPDATE_SETTINGS, 0, 0);
 }
 
+// Windhawk tool mod implementation
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -528,7 +527,7 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -539,8 +538,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -557,7 +558,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
