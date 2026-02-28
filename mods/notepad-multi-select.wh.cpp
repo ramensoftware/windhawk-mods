@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              notepad-multi-select
-// @name            Notepad++ feature
+// @name            Notepad Multi-Select
 // @description     Adds Alt+Shift multi-caret, highlighting, auto-indent, auto-pair, and Ctrl+D duplication.
 // @version         5.3
 // @author          Mohamed Magdy
