@@ -3767,7 +3767,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1772271733000,
+                "updated": 1772277409000,
                 "users": 1
             },
             "metadata": {
@@ -3779,7 +3779,7 @@
                     "explorer.exe"
                 ],
                 "name": "Fix language indicator in Win10 taskbar under Win11 24H2+",
-                "version": "1.2.0"
+                "version": "1.3.0"
             }
         },
         "fix-qt-scrollbar-grippers": {
