@@ -3767,7 +3767,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1772229462000,
+                "updated": 1772271733000,
                 "users": 1
             },
             "metadata": {
@@ -3779,7 +3779,7 @@
                     "explorer.exe"
                 ],
                 "name": "Fix language indicator in Win10 taskbar under Win11 24H2+",
-                "version": "1.1.0"
+                "version": "1.2.0"
             }
         },
         "fix-qt-scrollbar-grippers": {
@@ -9532,7 +9532,7 @@
                     6
                 ],
                 "ratingUsers": 11,
-                "updated": 1772039955000,
+                "updated": 1772271643000,
                 "users": 288
             },
             "metadata": {
@@ -9547,7 +9547,7 @@
                     "userinit.exe"
                 ],
                 "name": "Win10 taskbar on Win11 24H2 or 25H2",
-                "version": "0.1.5"
+                "version": "0.1.6"
             }
         },
         "win10-taskbar-per-app-volume-control": {

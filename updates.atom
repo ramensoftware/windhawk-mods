@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-28T01:23:36.000Z</updated>
+    <updated>2026-02-28T09:42:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 1.2.0]]></title>
+        <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#42750ed7fdbf87a8777a6ff118b119f20a12e302</id>
+        <link href="https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator"/>
+        <updated>2026-02-28T09:42:13.000Z</updated>
+        <content type="html"><![CDATA[<p>Improve reliability and remove the interim black rectangle</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.6]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#5d6a6214dfee43e3192a8587945094121257a189</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
+        <updated>2026-02-28T09:40:43.000Z</updated>
+        <content type="html"><![CDATA[<p>Update readme</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Notepad Multi-Select 5.3]]></title>
         <id>https://windhawk.net/mods/notepad-multi-select#1f17101c3d58a843cfcdae6bd399df5e5e81176e</id>
@@ -320,53 +342,6 @@ Added the ability to disable the fade while something is focused</p>]]></content
         <author>
             <name>Lukvbp</name>
             <uri>https://github.com/lukvbp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[IDM Clear Completed Downloads 0.5.3]]></title>
-        <id>https://windhawk.net/mods/idm-clear-completed-downloads#24542c7a28cb73aa9d8d92f781186deab23f0587</id>
-        <link href="https://windhawk.net/mods/idm-clear-completed-downloads"/>
-        <updated>2026-02-23T22:51:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="idmclearcompleteddownloads">IDM Clear Completed Downloads</h1>
-<p>This mod automatically cleans up completed downloads every time you open the <a href="https://www.internetdownloadmanager.com/">Internet Download Manager (IDM)</a> window.</p>
-<h2 id="whatdoesitdo">What Does It Do?</h2>
-<p>When IDM's main window opens, the mod kicks in and automatically performs the following:</p>
-<ol>
-<li><strong>Deletes completed downloads</strong> - Triggers IDM's "Delete completed downloads" command</li>
-<li><strong>Auto-dismisses the confirmation dialog</strong> - Hides the confirmation popup and clicks "Yes"</li>
-<li><strong>Targets only the main window</strong> - Ignores other IDM windows like Settings, download dialogs, etc.</li>
-</ol>
-<h2 id="howitworks">How It Works</h2>
-<p>The mod hooks the <code>ShowWindow</code> function in the Windows API. When IDM makes a window visible:</p>
-<ul>
-<li>Checks if the window's class name is <code>#32770</code> (standard dialog class)</li>
-<li>Verifies the window is <strong>ownerless</strong> (no owner) and <strong>has a menu bar</strong></li>
-<li>Only the IDM main window satisfies both conditions, so other windows are filtered out</li>
-<li>If conditions are met, the cleanup task is launched in a separate thread</li>
-</ul>
-<h2 id="targetprocess">Target Process</h2>
-<ul>
-<li>This mod is only for targets the <code>idman.exe</code> process and does not affect other programs.</li>
-</ul>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.1]]></title>
-        <id>https://windhawk.net/mods/vlc-discord-rpc#77a37e151ece2d18a73ac9e1b3cfab3abac18a6e</id>
-        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
-        <updated>2026-02-23T22:46:29.000Z</updated>
-        <content type="html"><![CDATA[<p>Metadata &amp; Visuals</p>
-<ul>
-<li><p>External Artwork Fetching (new): If a media file lacks embedded artwork, the mod now seamlessly attempts to find and display relevant cover art or movie posters online.</p></li>
-<li><p>Advanced Metadata Cleaning: Introduced aggressive filtering to remove junk text (like website names, resolutions, or release group tags) from titles and artist names, resulting in a much cleaner Rich Presence.</p></li>
-<li><p>Release Year Parsing: Added support for extracting the release year from filenames to improve metadata accuracy and artwork matching.</p></li>
-</ul>]]></content>
-        <author>
-            <name>ciizerr</name>
-            <uri>https://github.com/ciizerr</uri>
         </author>
     </entry>
 </feed>
