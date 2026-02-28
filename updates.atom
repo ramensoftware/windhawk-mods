@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-28T11:16:49.000Z</updated>
+    <updated>2026-02-28T11:30:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Visio: Middle Mouse Pan & Smart Zoom 1.0]]></title>
+        <id>https://windhawk.net/mods/visio-pan-zoom#d506e023b55369144196a4f782ebb91c51b2cce7</id>
+        <link href="https://windhawk.net/mods/visio-pan-zoom"/>
+        <updated>2026-02-28T11:30:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="visiomiddlepansmartzoom">Visio: Middle Pan &amp; Smart Zoom</h1>
+<p>This mod brings modern CAD/design software navigation experience to Microsoft Visio, allowing you to navigate the canvas with just <em>one hand</em>.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Middle-Click Panning:</strong> Press and hold the middle mouse button to freely pan the canvas (replaces the cumbersome <code>Ctrl + Shift + Right Click</code> default).</li>
+<li><strong>Smart Zoom:</strong> Use the mouse scroll wheel to zoom in and out directly (replaces <code>Ctrl + Scroll</code>).</li>
+<li><strong>Horizontal Scroll Kept:</strong> Holding <code>Shift</code> while scrolling will still pan the canvas horizontally.</li>
+<li><strong>Touchpad Perfection:</strong> Intelligently distinguishes between a physical mouse and a Windows Precision Touchpad. Your native two-finger scrolling and pinch-to-zoom gestures are preserved perfectly without interference.</li>
+</ul>
+<h3 id="settingsnote">Settings Note</h3>
+<p>If you are using a mouse with an "infinite / free-spinning / continuous" scroll wheel (like the Logitech MX Master series with MagSpeed), the Smart Zoom might not trigger correctly because the wheel sends micro-signals similar to a touchpad. You can fix this by disabling the <strong>"Preserve Native Touchpad Scroll"</strong> option in the mod's Settings page.</p>
+<hr />
+<h1 id="visio">Visio: 中键平移与智能缩放</h1>
+<p>为 Microsoft Visio 带来类似于 CAD 或设计软件的现代化导航体验，只需使用单手即可进行画布导航，彻底告别反人类的默认快捷键操作。</p>
+<h3 id="">核心功能</h3>
+<ul>
+<li><strong>中键平移画布：</strong> 按住鼠标中键即可自由拖拽平移画布（完美替代原生繁琐的 <code>Ctrl + Shift + 右键</code> 操作）。</li>
+<li><strong>滚轮智能缩放：</strong> 直接滚动鼠标滚轮即可进行画布缩放（替代 <code>Ctrl + 滚轮</code>）。</li>
+<li><strong>保留水平滚动：</strong> 按住 <code>Shift</code> 键滚动滚轮，依然可以水平移动画布。</li>
+<li><strong>完美兼容触摸板：</strong> 模块底层内置了智能启发式识别算法，能够精确区分物理鼠标刻度与 Windows 精密触摸板。触摸板原生的双指上下滑动与捏合缩放手势将被完美保留，互不干扰。</li>
+</ul>
+<h3 id="-1">设置项说明</h3>
+<p>如果您使用的是支持“无极滚轮/自由滚轮”的鼠标（例如罗技 MX Master 系列的 MagSpeed），由于其自由滚动模式下产生的微小信号特征与触摸板类似，可能会被算法识别为触摸板导致智能缩放失效。遇到此类情况，请在模块的设置页中关闭【保留原生触摸板滚动】选项。</p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 1.3.0]]></title>
         <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#b50ab73d1bf7a80b4cda5ac8ed366825ec03c138</id>
@@ -332,17 +365,6 @@ instead of names displayed when using SysListView32.</p>]]></content>
         <link href="https://windhawk.net/mods/classic-theme-enable"/>
         <updated>2026-02-25T19:59:10.000Z</updated>
         <content type="html"><![CDATA[<p>Update readme</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.5]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#ff3aafc922d9a5c9d2fc28155d842ba87f85b242</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
-        <updated>2026-02-25T17:19:15.000Z</updated>
-        <content type="html"><![CDATA[<p>Updated version number and modified the README to reflect changes in taskbar context menu recommendations and known issues.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>

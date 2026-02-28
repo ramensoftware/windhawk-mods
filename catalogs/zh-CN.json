@@ -9214,6 +9214,34 @@
                 "version": "1.0.4"
             }
         },
+        "visio-pan-zoom": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772278251000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772278251000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Joe Ye",
+                "compilerOptions": "-lcomctl32 -luser32",
+                "description": "为 Visio 带来现代化的导航体验：中键拖拽平移，滚轮直接缩放，完美兼容触摸板。",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "VISIO.EXE"
+                ],
+                "name": "Visio 中键平移与智能缩放",
+                "version": "1.0"
+            }
+        },
         "visual-studio-anti-rich-header": {
             "details": {
                 "defaultSorting": 288,

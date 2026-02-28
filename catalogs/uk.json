@@ -9214,6 +9214,34 @@
                 "version": "1.0.4"
             }
         },
+        "visio-pan-zoom": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772278251000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772278251000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Joe Ye",
+                "compilerOptions": "-lcomctl32 -luser32",
+                "description": "Brings modern CAD-like navigation to Visio: Middle-drag to pan, scroll wheel to zoom.",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "VISIO.EXE"
+                ],
+                "name": "Visio: Middle Mouse Pan & Smart Zoom",
+                "version": "1.0"
+            }
+        },
         "visual-studio-anti-rich-header": {
             "details": {
                 "defaultSorting": 288,
