@@ -1,3 +1,7 @@
+## 1.0.3 ([Feb 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/41b22ece71797fbdef290fbc18ece19c1aa8ef40/mods/taskbar-shadow-border.wh.cpp))
+
+Reworked top-most setting logic and updated Wh_ModTool implementation
+
 ## 1.0.2 ([Jan 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cf23e93ece31260bd5d5141fb4c464d40febbba3/mods/taskbar-shadow-border.wh.cpp))
 
 Fixed top-most setting not being properly applied at boot
