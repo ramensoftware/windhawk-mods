@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              visio-pan-zoom
 // @name            Visio: Middle Mouse Pan & Smart Zoom
-// @name:zh-CN      Visio ÖÐ¼üÆ½ÒÆÓëÖÇÄÜËõ·Å
+// @name:zh-CN      Visio ä¸­é”®å¹³ç§»ä¸Žæ™ºèƒ½ç¼©æ”¾
 // @description     Brings modern CAD-like navigation to Visio: Middle-drag to pan, scroll wheel to zoom.
-// @description:zh-CN Îª Visio ´øÀ´ÏÖ´ú»¯µÄµ¼º½ÌåÑé£ºÖÐ¼üÍÏ×§Æ½ÒÆ£¬¹öÂÖÖ±½ÓËõ·Å£¬ÍêÃÀ¼æÈÝ´¥Ãþ°å¡£
+// @description:zh-CN ä¸º Visio å¸¦æ¥çŽ°ä»£åŒ–çš„å¯¼èˆªä½“éªŒï¼šä¸­é”®æ‹–æ‹½å¹³ç§»ï¼Œæ»šè½®ç›´æŽ¥ç¼©æ”¾ï¼Œå®Œç¾Žå…¼å®¹è§¦æ‘¸æ¿ã€‚
 // @version         1.0
 // @author          Joe Ye
 // @github          https://github.com/JoeYe-233
@@ -28,18 +28,18 @@ If you are using a mouse with an "infinite / free-spinning / continuous" scroll 
 
 ---
 
-# Visio: ÖÐ¼üÆ½ÒÆÓëÖÇÄÜËõ·Å
+# Visio: ä¸­é”®å¹³ç§»ä¸Žæ™ºèƒ½ç¼©æ”¾
 
-Îª Microsoft Visio ´øÀ´ÀàËÆÓÚ CAD »òÉè¼ÆÈí¼þµÄÏÖ´ú»¯µ¼º½ÌåÑé£¬Ö»ÐèÊ¹ÓÃµ¥ÊÖ¼´¿É½øÐÐ»­²¼µ¼º½£¬³¹µ×¸æ±ð·´ÈËÀàµÄÄ¬ÈÏ¿ì½Ý¼ü²Ù×÷¡£
+ä¸º Microsoft Visio å¸¦æ¥ç±»ä¼¼äºŽ CAD æˆ–è®¾è®¡è½¯ä»¶çš„çŽ°ä»£åŒ–å¯¼èˆªä½“éªŒï¼Œåªéœ€ä½¿ç”¨å•æ‰‹å³å¯è¿›è¡Œç”»å¸ƒå¯¼èˆªï¼Œå½»åº•å‘Šåˆ«åäººç±»çš„é»˜è®¤å¿«æ·é”®æ“ä½œã€‚
 
-### ºËÐÄ¹¦ÄÜ
-* **ÖÐ¼üÆ½ÒÆ»­²¼£º** °´×¡Êó±êÖÐ¼ü¼´¿É×ÔÓÉÍÏ×§Æ½ÒÆ»­²¼£¨ÍêÃÀÌæ´úÔ­Éú·±ËöµÄ `Ctrl + Shift + ÓÒ¼ü` ²Ù×÷£©¡£
-* **¹öÂÖÖÇÄÜËõ·Å£º** Ö±½Ó¹ö¶¯Êó±ê¹öÂÖ¼´¿É½øÐÐ»­²¼Ëõ·Å£¨Ìæ´ú `Ctrl + ¹öÂÖ`£©¡£
-* **±£ÁôË®Æ½¹ö¶¯£º** °´×¡ `Shift` ¼ü¹ö¶¯¹öÂÖ£¬ÒÀÈ»¿ÉÒÔË®Æ½ÒÆ¶¯»­²¼¡£
-* **ÍêÃÀ¼æÈÝ´¥Ãþ°å£º** Ä£¿éµ×²ãÄÚÖÃÁËÖÇÄÜÆô·¢Ê½Ê¶±ðËã·¨£¬ÄÜ¹»¾«È·Çø·ÖÎïÀíÊó±ê¿Ì¶ÈÓë Windows ¾«ÃÜ´¥Ãþ°å¡£´¥Ãþ°åÔ­ÉúµÄË«Ö¸ÉÏÏÂ»¬¶¯ÓëÄóºÏËõ·ÅÊÖÊÆ½«±»ÍêÃÀ±£Áô£¬»¥²»¸ÉÈÅ¡£
+### æ ¸å¿ƒåŠŸèƒ½
+* **ä¸­é”®å¹³ç§»ç”»å¸ƒï¼š** æŒ‰ä½é¼ æ ‡ä¸­é”®å³å¯è‡ªç”±æ‹–æ‹½å¹³ç§»ç”»å¸ƒï¼ˆå®Œç¾Žæ›¿ä»£åŽŸç”Ÿç¹ççš„ `Ctrl + Shift + å³é”®` æ“ä½œï¼‰ã€‚
+* **æ»šè½®æ™ºèƒ½ç¼©æ”¾ï¼š** ç›´æŽ¥æ»šåŠ¨é¼ æ ‡æ»šè½®å³å¯è¿›è¡Œç”»å¸ƒç¼©æ”¾ï¼ˆæ›¿ä»£ `Ctrl + æ»šè½®`ï¼‰ã€‚
+* **ä¿ç•™æ°´å¹³æ»šåŠ¨ï¼š** æŒ‰ä½ `Shift` é”®æ»šåŠ¨æ»šè½®ï¼Œä¾ç„¶å¯ä»¥æ°´å¹³ç§»åŠ¨ç”»å¸ƒã€‚
+* **å®Œç¾Žå…¼å®¹è§¦æ‘¸æ¿ï¼š** æ¨¡å—åº•å±‚å†…ç½®äº†æ™ºèƒ½å¯å‘å¼è¯†åˆ«ç®—æ³•ï¼Œèƒ½å¤Ÿç²¾ç¡®åŒºåˆ†ç‰©ç†é¼ æ ‡åˆ»åº¦ä¸Ž Windows ç²¾å¯†è§¦æ‘¸æ¿ã€‚è§¦æ‘¸æ¿åŽŸç”Ÿçš„åŒæŒ‡ä¸Šä¸‹æ»‘åŠ¨ä¸Žæåˆç¼©æ”¾æ‰‹åŠ¿å°†è¢«å®Œç¾Žä¿ç•™ï¼Œäº’ä¸å¹²æ‰°ã€‚
 
-### ÉèÖÃÏîËµÃ÷
-Èç¹ûÄúÊ¹ÓÃµÄÊÇÖ§³Ö¡°ÎÞ¼«¹öÂÖ/×ÔÓÉ¹öÂÖ¡±µÄÊó±ê£¨ÀýÈçÂÞ¼¼ MX Master ÏµÁÐµÄ MagSpeed£©£¬ÓÉÓÚÆä×ÔÓÉ¹ö¶¯Ä£Ê½ÏÂ²úÉúµÄÎ¢Ð¡ÐÅºÅÌØÕ÷Óë´¥Ãþ°åÀàËÆ£¬¿ÉÄÜ»á±»Ëã·¨Ê¶±ðÎª´¥Ãþ°åµ¼ÖÂÖÇÄÜËõ·ÅÊ§Ð§¡£Óöµ½´ËÀàÇé¿ö£¬ÇëÔÚÄ£¿éµÄÉèÖÃÒ³ÖÐ¹Ø±Õ¡¾±£ÁôÔ­Éú´¥Ãþ°å¹ö¶¯¡¿Ñ¡Ïî¡£
+### è®¾ç½®é¡¹è¯´æ˜Ž
+å¦‚æžœæ‚¨ä½¿ç”¨çš„æ˜¯æ”¯æŒâ€œæ— æžæ»šè½®/è‡ªç”±æ»šè½®â€çš„é¼ æ ‡ï¼ˆä¾‹å¦‚ç½—æŠ€ MX Master ç³»åˆ—çš„ MagSpeedï¼‰ï¼Œç”±äºŽå…¶è‡ªç”±æ»šåŠ¨æ¨¡å¼ä¸‹äº§ç”Ÿçš„å¾®å°ä¿¡å·ç‰¹å¾ä¸Žè§¦æ‘¸æ¿ç±»ä¼¼ï¼Œå¯èƒ½ä¼šè¢«ç®—æ³•è¯†åˆ«ä¸ºè§¦æ‘¸æ¿å¯¼è‡´æ™ºèƒ½ç¼©æ”¾å¤±æ•ˆã€‚é‡åˆ°æ­¤ç±»æƒ…å†µï¼Œè¯·åœ¨æ¨¡å—çš„è®¾ç½®é¡µä¸­å…³é—­ã€ä¿ç•™åŽŸç”Ÿè§¦æ‘¸æ¿æ»šåŠ¨ã€‘é€‰é¡¹ã€‚
 */
 // ==/WindhawkModReadme==
 
@@ -47,15 +47,15 @@ If you are using a mouse with an "infinite / free-spinning / continuous" scroll 
 /*
 - isolateTouchpad: true
   $name: Preserve Native Touchpad Scroll
-  $name:zh-CN: ±£ÁôÔ­Éú´¥Ãþ°å¹ö¶¯
+  $name:zh-CN: ä¿ç•™åŽŸç”Ÿè§¦æ‘¸æ¿æ»šåŠ¨
   $description: |
     Why this is needed: Touchpads essentially send rapid, small mouse wheel signals to Windows. If this mod intercepts all wheel signals, your standard two-finger vertical scroll on a Windows Precision Touchpad will be forcefully converted into zooming, which is highly unintuitive.
      - Keep this ENABLED on laptops to intelligently differentiate touchpad micro-scrolls from physical mouse clicks, preserving your native touchpad scrolling and pinching.
      - EXCEPTION: Mice with "free-spinning" or "infinite" scroll wheels (e.g., Logitech MX Master series with MagSpeed) also generate micro-scroll signals and might be misidentified as touchpads by this algorithm. If your free-spinning mouse wheel fails to trigger Smart Zoom, UNCHECK this option.
   $description:zh-CN: |
-    ´¥Ãþ°åË«Ö¸»¬¶¯±¾ÖÊÉÏÒ²ÊÇÔÚÏòÏµÍ³·¢ËÍ¸ßÆµµÄÎ¢Ð¡Êó±ê¹öÂÖÐÅºÅ¡£Èç¹û±¾Ä£×éÃ¤Ä¿À¹½ØËùÓÐ¹öÂÖÐÅºÅ£¬ÄãÔÚ Windows ¾«ÃÜ´¥Ãþ°åÉÏµÄË«Ö¸ÉÏÏÂ»¬¶¯²Ù×÷½«±»Ç¿ÖÆ×ª»»ÎªËõ·Å£¬¼«Îª·´Ö±¾õÇÒÄÑÓÃ¡£
-     - ½¨ÒéÔÚ±Ê¼Ç±¾µçÄÔÉÏÊ¼ÖÕ±£³Ö±¾Ñ¡Ïî¡¾¿ªÆô¡¿£¬±¾Ä£×é½«ÖÇÄÜÇø·Ö´¥Ãþ°åµÄÎ¢Ð¡¹ö¶¯ÓëÎïÀíÊó±ê¹öÂÖµÄÃ÷È·¿Ì¶È£¬´Ó¶ø±£ÁôÔ­ÉúµÄ´¥Ãþ°åË«Ö¸¹ö¶¯ºÍÄóºÏËõ·ÅÌåÑé¡£
-     - ×¢Òâ£º´øÓÐ¡°ÎÞ¼«¹öÂÖ¡±¹¦ÄÜµÄÊó±ê£¨ÀýÈçÂÞ¼¼ MX Master ÏµÁÐµÄ MagSpeed£©ÔÚ×ÔÓÉ¹ö¶¯Ä£Ê½ÏÂ²úÉúµÄÐÅºÅºÍ´¥Ãþ°åÀàËÆ£¬¿ÉÄÜ»á±»ÎóÅÐÎª´¥Ãþ°å¡£Èç¹ûÄãµÄÎÞ¼«¹öÂÖÎÞ·¨Õý³£´¥·¢ÖÇÄÜËõ·Å£¬Çë¡¾¹Ø±Õ¡¿±¾Ñ¡Ïî¡£
+    è§¦æ‘¸æ¿åŒæŒ‡æ»‘åŠ¨æœ¬è´¨ä¸Šä¹Ÿæ˜¯åœ¨å‘ç³»ç»Ÿå‘é€é«˜é¢‘çš„å¾®å°é¼ æ ‡æ»šè½®ä¿¡å·ã€‚å¦‚æžœæœ¬æ¨¡ç»„ç›²ç›®æ‹¦æˆªæ‰€æœ‰æ»šè½®ä¿¡å·ï¼Œä½ åœ¨ Windows ç²¾å¯†è§¦æ‘¸æ¿ä¸Šçš„åŒæŒ‡ä¸Šä¸‹æ»‘åŠ¨æ“ä½œå°†è¢«å¼ºåˆ¶è½¬æ¢ä¸ºç¼©æ”¾ï¼Œæžä¸ºåç›´è§‰ä¸”éš¾ç”¨ã€‚
+     - å»ºè®®åœ¨ç¬”è®°æœ¬ç”µè„‘ä¸Šå§‹ç»ˆä¿æŒæœ¬é€‰é¡¹ã€å¼€å¯ã€‘ï¼Œæœ¬æ¨¡ç»„å°†æ™ºèƒ½åŒºåˆ†è§¦æ‘¸æ¿çš„å¾®å°æ»šåŠ¨ä¸Žç‰©ç†é¼ æ ‡æ»šè½®çš„æ˜Žç¡®åˆ»åº¦ï¼Œä»Žè€Œä¿ç•™åŽŸç”Ÿçš„è§¦æ‘¸æ¿åŒæŒ‡æ»šåŠ¨å’Œæåˆç¼©æ”¾ä½“éªŒã€‚
+     - æ³¨æ„ï¼šå¸¦æœ‰â€œæ— æžæ»šè½®â€åŠŸèƒ½çš„é¼ æ ‡ï¼ˆä¾‹å¦‚ç½—æŠ€ MX Master ç³»åˆ—çš„ MagSpeedï¼‰åœ¨è‡ªç”±æ»šåŠ¨æ¨¡å¼ä¸‹äº§ç”Ÿçš„ä¿¡å·å’Œè§¦æ‘¸æ¿ç±»ä¼¼ï¼Œå¯èƒ½ä¼šè¢«è¯¯åˆ¤ä¸ºè§¦æ‘¸æ¿ã€‚å¦‚æžœä½ çš„æ— æžæ»šè½®æ— æ³•æ­£å¸¸è§¦å‘æ™ºèƒ½ç¼©æ”¾ï¼Œè¯·ã€å…³é—­ã€‘æœ¬é€‰é¡¹ã€‚
 */
 // ==/WindhawkModSettings==
 
