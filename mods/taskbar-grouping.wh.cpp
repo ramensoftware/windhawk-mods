@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.10
+// @version         1.3.11
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -75,6 +75,12 @@ or a similar tool), enable the relevant option in the mod's settings.
     open folder window - with application icons, the icon on the taskbar is
     always the icon of Explorer, while with window icons, the icon changes
     depending on the open folder.
+- windowIconsPrograms: [example1.exe]
+  $name: Window icon programs
+  $description: >-
+    Each entry is a name, path, or application ID that affects window icon behavior.
+    When "Use window icons" is enabled, these programs will be excluded. When "Use window icons" is disabled, only these 
+    programs will use window icons.
 - customGroups:
   - - name: Group 1
       $name: Group name
@@ -160,6 +166,7 @@ struct {
     PinnedItemsMode pinnedItemsMode;
     PlaceUngroupedItemsTogetherMode placeUngroupedItemsTogether;
     bool useWindowIcons;
+    std::unordered_set<std::wstring> windowIconProgramItems;
     std::unordered_set<std::wstring> excludedProgramItems;
     std::vector<std::wstring> customGroupNames;
     std::unordered_map<std::wstring, int> customGroupProgramItems;
@@ -670,7 +677,79 @@ const ITEMIDLIST* WINAPI CTaskGroup_GetShortcutIDList_Hook(PVOID pThis) {
             return nullptr;
         }
 
-        if (g_settings.useWindowIcons) {
+        // Determine whether to use window icon for this task group.
+        bool shouldUseWindowIcon = g_settings.useWindowIcons;
+
+        // Check if the program is in the window icon programs list.
+        if (!g_settings.windowIconProgramItems.empty()) {
+            PCWSTR appId = CTaskGroup_GetAppID_Original(pThis);
+            if (appId && *appId) {
+                WCHAR appIdClean[MAX_PATH];
+                if (!RemoveAppIdSuffix(appIdClean, appId)) {
+                    wcscpy_s(appIdClean, appId);
+                }
+
+                WCHAR appIdUpper[MAX_PATH];
+                int len = wcslen(appIdClean);
+                LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                              appIdClean, len + 1,
+                              appIdUpper, len + 1, nullptr, nullptr, 0);
+
+                bool inList = false;
+
+                if (g_settings.windowIconProgramItems.contains(appIdUpper)) {
+                    inList = true;
+                }
+                // Check process path and file name by window handle.
+                else {
+                    PCWSTR suffix = FindAppIdSuffix(appId);
+                    if (suffix && suffix[4] == L'w') {
+                        DWORD hwndValue = 0;
+                        if (swscanf(suffix + 5, L"%08X", &hwndValue) == 1 && hwndValue != 0) {
+                            HWND hwnd = (HWND)(DWORD_PTR)hwndValue;
+                            DWORD dwProcessId = 0;
+                            if (GetWindowThreadProcessId(hwnd, &dwProcessId)) {
+                                HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                                              FALSE, dwProcessId);
+                                if (hProcess) {
+                                    WCHAR processPath[MAX_PATH];
+                                    DWORD dwSize = ARRAYSIZE(processPath);
+                                    if (QueryFullProcessImageName(hProcess, 0, processPath, &dwSize)) {
+                                        WCHAR processPathUpper[MAX_PATH];
+                                        LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                                                      processPath, dwSize + 1,
+                                                      processPathUpper, dwSize + 1,
+                                                      nullptr, nullptr, 0);
+
+                                        // Check full path.
+                                        if (g_settings.windowIconProgramItems.contains(processPathUpper)) {
+                                            inList = true;
+                                        }
+                                        // Check file name.
+                                        else {
+                                            PCWSTR fileName = wcsrchr(processPathUpper, L'\\');
+                                            if (fileName) {
+                                                fileName++;
+                                                if (*fileName && g_settings.windowIconProgramItems.contains(fileName)) {
+                                                    inList = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    CloseHandle(hProcess);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // When useWindowIcons is enabled, listed programs are excluded.
+                // When useWindowIcons is disabled, only listed programs use window icons.
+                shouldUseWindowIcon = (g_settings.useWindowIcons != inList);
+            }
+        }
+
+        if (shouldUseWindowIcon) {
             return nullptr;
         }
 
@@ -1841,6 +1920,29 @@ void LoadSettings() {
     Wh_FreeStringSetting(placeUngroupedItemsTogetherMode);
 
     g_settings.useWindowIcons = Wh_GetIntSetting(L"useWindowIcons");
+
+    g_settings.windowIconProgramItems.clear();
+
+    for (int i = 0;; i++) {
+        PCWSTR program = Wh_GetStringSetting(L"windowIconsPrograms[%d]", i);
+
+        bool hasProgram = *program;
+        if (hasProgram) {
+            std::wstring programUpper = program;
+            LCMapStringEx(
+                LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, &programUpper[0],
+                static_cast<int>(programUpper.length()), &programUpper[0],
+                static_cast<int>(programUpper.length()), nullptr, nullptr, 0);
+
+            g_settings.windowIconProgramItems.insert(std::move(programUpper));
+        }
+
+        Wh_FreeStringSetting(program);
+        
+        if (!hasProgram) {
+            break;
+        }
+    }
 
     g_settings.excludedProgramItems.clear();
 
