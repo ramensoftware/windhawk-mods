@@ -3,7 +3,8 @@
 // @name            OneNote Cursor Teleport Fix (Sync Engine)
 // @description     Cures the pen tablet rubber-band bug by permanently syncing the Win32 mouse with Windows Ink.
 // @version         2.0
-// @author          Hamo
+// @author          Mohamed Magdy
+// @github          https://github.com/hamomagdy724
 // @include         onenote.exe
 // @compilerOptions -luser32 -lcomctl32 -lgdi32
 // ==/WindhawkMod==
