@@ -2,7 +2,7 @@
 // @id              explorer-up-new-window
 // @name            Explorer Up → New Window/Tab (Ctrl-click or Middle-click)
 // @description     Ctrl or middle-click on explorer up-button opens parent in a new window or tab.
-// @version         1.4
+// @version         1.4.1
 // @author          Tobias Lind
 // @github          https://github.com/TobbeLino
 // @include         windhawk.exe
@@ -903,7 +903,7 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -914,8 +914,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -932,7 +934,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
