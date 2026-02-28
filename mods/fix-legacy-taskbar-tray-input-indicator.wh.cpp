@@ -2,7 +2,7 @@
 // @id              fix-legacy-taskbar-tray-input-indicator
 // @name            Fix language indicator in Win10 taskbar under Win11 24H2+
 // @description     Fixes text orientation in the keyboard layout indicator in Win10 taskbar running under Win11 24H2+
-// @version         1.2.0
+// @version         1.3.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -38,6 +38,7 @@ static int g_srcH = 0;
 static bool g_pending = false;
 static DWORD g_threadId = 0;
 static COLORREF g_lastGoodBg = CLR_INVALID;
+static bool g_firstBltDone = false;
 
 static bool LooksLikeLayoutText(LPCWSTR s, int len) {
     if (!s || len < 2 || len > 4) return false;
@@ -76,6 +77,7 @@ BOOL WINAPI ExtTextOutW_Hook(HDC hdc, int x, int y, UINT options,
                 g_srcW = bm.bmWidth;
                 g_srcH = bm.bmHeight;
                 g_pending = true;
+                g_firstBltDone = false;
                 g_threadId = GetCurrentThreadId();
             }
 
@@ -112,9 +114,23 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
         return result;
     }
 
-    bool isSecondBlit = (w > h && w >= g_srcH && h >= g_srcW);
+    // BitBlt #1: точное совпадение с исходным размером — пропускаем
+    bool isFirstBlit = (w == g_srcW && h == g_srcH);
+    if (isFirstBlit) {
+        g_firstBltDone = true;
+        return result;
+    }
     
-    if (!isSecondBlit) {
+    // BitBlt #2: второй BitBlt после первого, размер больше исходного
+    // но не слишком большой (макс 3x от исходного)
+    if (!g_firstBltDone) {
+        return result;
+    }
+    
+    bool sizeOk = (w >= g_srcW && h >= g_srcW) &&  // достаточно для текста
+                  (w <= g_srcH * 3 && h <= g_srcH * 3);  // не слишком большой
+    
+    if (!sizeOk) {
         return result;
     }
 
@@ -166,4 +182,7 @@ BOOL Wh_ModInit() {
                         (void**)&BitBlt_Original);
 
     return TRUE;
+}
+
+void Wh_ModUninit() {
 }
