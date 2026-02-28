@@ -292,3 +292,4 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     if (hookThreadId) PostThreadMessage(hookThreadId, WM_QUIT, 0, 0);
 }
+
