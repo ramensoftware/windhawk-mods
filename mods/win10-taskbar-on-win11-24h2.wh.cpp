@@ -2,7 +2,7 @@
 // @id              win10-taskbar-on-win11-24h2
 // @name            Win10 taskbar on Win11 24H2 or 25H2
 // @description     Installs Windows 10 taskbar on Windows 11 version 24H2, 25H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024
-// @version         0.1.4
+// @version         0.1.6
 // @architecture    x86-64
 // @author          Anixx
 // @github          https://github.com/Anixx
@@ -25,23 +25,41 @@ You also should remove the critical system processes from the exclusion list in 
 Since this mod downloads the Windows 10 taskbar from Microsoft's symbols server and stores it in the Windhawk data directory, 
 it won't work in the portable version of Windhawk.
 
+Since the taskbar context menu has been removed in Win11 24H2, it is highly recommended to install this mod to
+restore the menu: 
+
+[*Windows 10 Taskbar Context Menu Fix for Win11 24H2+*](https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2).
+
 If you are using Classic theme, you should also install mods "Classic Theme Explorer Lite" and "Non Immersive Taskbar Context Menu".
-The mod "Eradicate immersive menus" will not work.
+
+The taskbar by default will have no labels on the task buttons shown. You can change this behavior
+via the Settings app.
 
 You also can use 7+ Taskbar Tweaker. 
 
-Explorer Patcher by default will have no effect, ask at EP forums for support.
+Explorer Patcher will not have any effect.
+
 To customize the clock and tray area, launch legacy tray setup dialog:
 
 `explorer shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}`
+
+If you want to restart Explorer after its process has been terminated, you should
+run the file userinit.exe from the system directory.
+
+You can choose whether to use the Win10 Explorer or Win11 Explorer as the file manager.
+You can switch between them by checking "Open folders in separate process" check box
+in File Explorer's settings.
 
 Known issues:
 
 * Notification toasts may cause Explorer to crash, it is recommended to disable notifications.
 
-* The keyboard layout indicator displays the language name vertically rather than horizontally.
+* The language switch menu flyout may appear at Explorer's start.
 
-* Some users reported that the right-click menu of the taskbar does not appear, but this is inconsistens and other factors may affect this issue.
+* The keyboard layout indicator displays the language name vertically rather than horizontally.
+To mitigate this, install this mod:
+
+[*Fix language indicator in Win10 taskbar under Win11 24H2+*](https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator)
 
 */
 // ==/WindhawkModReadme==

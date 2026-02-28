@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.0.8
+// @version         1.2.2
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -43,9 +43,12 @@ to prevent the color scheme change after pressing Ctrl+Alt+Del or going to the l
 4. Windows Classic theme is not compatible with Windows 11 taskbar. 
 On Windows 11 version 21H2 to 23H2 it is recommended to enable the Windows 10 taskbar with the
 [*Windows 10 taskbar on Windows 11*](https://windhawk.net/mods/win10-taskbar-on-win11) mod while
-on Windows 11 24H2 install the Windows 10 taskbar using the
+on Windows 11 24H2, 25H2 or later install the Windows 10 taskbar using the
 [*Win10 taskbar on Win11 24H2*](https://windhawk.net/mods/win10-taskbar-on-win11-24h2) mod. For
 the later mod, also the mod [*Fake Explorer path*](https://windhawk.net/mods/fake-explorer-path) is needed.
+On Windows 11 24H2 and later the taskbar classic context menu have been removed, to restore it
+install this mod: 
+[*Windows 10 Taskbar Context Menu Fix for Win11 24H2+*](https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2)
 
 5. The Windows 10 taskbar still needs a compatibility fix, so install the mod
 [*Classic Theme Explorer Lite*](https://windhawk.net/mods/classic-theme-explorer-lite).
@@ -106,12 +109,11 @@ To fix this, install the [*Classic theme transparency fix*](https://windhawk.net
 and enable all options in its settings.
 
 11. To fix the empty context menus in Explorer, install the mods
-[*Disable Immersive Context Menus*](https://windhawk.net/mods/disable-immersive-context-menus)
-and
+[*Disable Immersive Context Menus*](https://windhawk.net/mods/disable-immersive-context-menus),
 [*Non Immersive Taskbar Context Menu*](https://windhawk.net/mods/classic-taskbar-context-menu),
-alternatively, if you are on Windows 11 23H2 or below, you can install the mod
-[*Eradicate Immersive Menus*](https://windhawk.net/mods/eradicate-immersive-menus)
-instead of the both. If confused, you can install all three, they do not conflict.
+and
+[*Eradicate Immersive Menus*](https://windhawk.net/mods/eradicate-immersive-menus). While their
+functionalty somewhat overlap, it is recommended to install all three.
 
 12. To restore the dragged items image during drag-and-drop, install this mod:
 [*Classic Explorer Drag-n-Drop Lite*](https://windhawk.net/mods/classic-explorer-dragdrop-lite).
@@ -194,6 +196,9 @@ because the later version 1.0.1 broke the compatibility with Classic theme and w
 36. To make File Explorer to remember positions of the folders' windows the way it was before Vista,
 install this mod: [*Remember the folder windows' positions*](https://windhawk.net/mods/remember-folder-positions).
 
+37. To make the Control Panel to look like a regular folder the way it was before Windows 7, install this mod:
+[*Control Panel Classic View Lite*](https://windhawk.net/mods/cpl-classic-view-lite).
+
 To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
 utility, but make sure to install and run it in Windows 2000 or XP compatibility mode (in Windows XP mode
 it will require the UAC authorization). Alternatively you can use the 
@@ -209,61 +214,107 @@ it will require the UAC authorization). Alternatively you can use the
 #include <aclapi.h>
 #include <securitybaseapi.h>
 
-// Define the prototype for the NtOpenSection function.
 extern "C" NTSTATUS NTAPI NtOpenSection(
     OUT PHANDLE SectionHandle,
     IN ACCESS_MASK DesiredAccess,
     IN POBJECT_ATTRIBUTES ObjectAttributes
 );
 
-BOOL Wh_ModInit() {
+HANDLE g_hThread = NULL;
+volatile BOOL g_bStopThread = FALSE;
 
-    Wh_Log(L"Init");
-
-    // Retrieve the current session ID for the process.
+BOOL TrySetThemeSectionSecurity() {
     DWORD sessionId;
     ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
-
 
     wchar_t sectionName[256];
     swprintf_s(sectionName, _countof(sectionName), L"\\Sessions\\%lu\\Windows\\ThemeSection", sessionId);
 
-    // Define the name of the section object.
     UNICODE_STRING sectionObjectName;
     RtlInitUnicodeString(&sectionObjectName, sectionName);
 
-    // Define the attributes for the section object.
     OBJECT_ATTRIBUTES objectAttributes;
     InitializeObjectAttributes(&objectAttributes, &sectionObjectName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
     HANDLE hSection;
     NTSTATUS status = NtOpenSection(&hSection, WRITE_DAC, &objectAttributes);
 
-    Wh_Log("status: %u\n", status);
-    Wh_Log("%s", sectionName);
+    if (!NT_SUCCESS(status)) {
+        Wh_Log(L"NtOpenSection failed: 0x%X", status);
+        return FALSE;
+    }
 
-    // Define your SDDL string.
     LPCWSTR sddl = L"O:BAG:SYD:(A;;RC;;;IU)(A;;DCSWRPSDRCWDWO;;;SY)";
     PSECURITY_DESCRIPTOR psd = NULL;
 
-    // Convert the SDDL string to a security descriptor.
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &psd, NULL)) {
         CloseHandle(hSection);
-        return false;
+        return FALSE;
     }
 
-    // Set the security descriptor for the object.
     BOOL result = SetKernelObjectSecurity(
         hSection,
         DACL_SECURITY_INFORMATION,
         psd
     );
 
-    Wh_Log("result: %u\n", result);
+    Wh_Log(L"SetKernelObjectSecurity result: %u", result);
 
-    // Cleanup: free allocated security descriptor memory and close the handle.
     LocalFree(psd);
     CloseHandle(hSection);
 
     return result;
+}
+
+DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
+    const int MAX_ATTEMPTS = 10;
+    const DWORD RETRY_DELAY = 100;
+
+    for (int attempt = 1; attempt <= MAX_ATTEMPTS && !g_bStopThread; attempt++) {
+        Wh_Log(L"Attempt %d/%d", attempt, MAX_ATTEMPTS);
+        
+        if (TrySetThemeSectionSecurity()) {
+            Wh_Log(L"Success on attempt %d", attempt);
+            return 0;
+        }
+        
+        if (attempt < MAX_ATTEMPTS && !g_bStopThread) {
+            Sleep(RETRY_DELAY);
+        }
+    }
+
+    Wh_Log(L"All attempts failed");
+    return 1;
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L"Init");
+
+    // Сначала пробуем сразу — может, секция уже доступна
+    if (TrySetThemeSectionSecurity()) {
+        Wh_Log(L"Success on first try");
+        return TRUE;
+    }
+
+    // Если не получилось, запускаем фоновый поток для повторных попыток
+    g_bStopThread = FALSE;
+    g_hThread = CreateThread(NULL, 0, RetryThreadProc, NULL, 0, NULL);
+    
+    if (g_hThread == NULL) {
+        Wh_Log(L"Failed to create retry thread");
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L"Uninit");
+    
+    if (g_hThread) {
+        g_bStopThread = TRUE;
+        WaitForSingleObject(g_hThread, 2000);
+        CloseHandle(g_hThread);
+        g_hThread = NULL;
+    }
 }
