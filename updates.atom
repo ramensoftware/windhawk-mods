@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-27T22:30:57.000Z</updated>
+    <updated>2026-02-28T01:23:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Notepad Multi-Select 5.3]]></title>
+        <id>https://windhawk.net/mods/notepad-multi-select#1f17101c3d58a843cfcdae6bd399df5e5e81176e</id>
+        <link href="https://windhawk.net/mods/notepad-multi-select"/>
+        <updated>2026-02-28T01:23:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="notepadmultiselectadvancededitingengine">Notepad Multi-Select &amp; Advanced Editing Engine</h1>
+<p>A professional-grade Windhawk modification that elevates the classic Windows Notepad into a modern, IDE-style text editor. This engine introduces true multi-caret editing, system-native text highlighting, context-aware auto-indentation, automated character pairing, and line duplication, all while strictly preserving the native performance and undo history of the host application.</p>
+<p><strong>️ Compatibility:</strong> This modification is designed exclusively for the classic Win32 Notepad (<code>notepad.exe</code> without tabs). It does not hook into the modern Windows 11 UWP Notepad application.</p>
+<h2 id="corefeatures">Core Features</h2>
+<ul>
+<li><strong>Multi-Caret Editing:</strong> Spawn multiple concurrent cursors to edit, delete, or navigate across adjacent lines simultaneously.</li>
+<li><strong>Line & Selection Duplication:</strong> Press <code>Ctrl + D</code> in single-caret mode to instantly duplicate the current line or highlighted selection inline.</li>
+<li><strong>System-Native Highlighting:</strong> Renders multi-line text selections using standard Windows theme parameters (<code>COLOR_HIGHLIGHT</code>), ensuring visual consistency.</li>
+<li><strong>Automated Character Pairing & Wrap:</strong> Automatically completes structural pairs (<code>()</code>, <code>[]</code>, <code>{}</code>, <code>''</code>, <code>""</code>). If text is selected, it beautifully wraps the text. Features IDE-standard "step-over" logic.</li>
+<li><strong>Context-Aware Auto-Indentation:</strong> Intercepts line breaks (<code>Enter</code>) to dynamically trace and replicate the exact leading whitespace (spaces or tabs) of the preceding logical line.</li>
+<li><strong>Smart Word Navigation:</strong> Enhances <code>Ctrl + Left/Right</code> and <code>Ctrl + Backspace/Delete</code> logic to evaluate text chunks globally, ignoring arbitrary punctuation breaks for cleaner deletion of contiguous strings.</li>
+<li><strong>Intelligent Tab Management:</strong> Standardizes the <code>Tab</code> key to inject a rigid <code>\t</code> character. Introduces <code>Shift + Tab</code> as a non-destructive un-indent command.</li>
+<li><strong>Native Conflict Insulation:</strong> Engineered with strict execution firewalls. When operating in standard single-caret mode, the engine explicitly defers to the native Windows <code>DefSubclassProc</code>, ensuring zero interference with standard undo stacks.</li>
+</ul>
+<h2 id="keybindingsnavigation">️ Keybindings &amp; Navigation</h2>
+<p>| Command | Action |
+| :--- | :--- |
+| <code>Alt + Shift + Up/Down</code> | Spawn an additional caret on the adjacent line above or below. |
+| <code>Shift + Left/Right</code> | Highlight text simultaneously across all active cursors. |
+| <code>Escape</code> or <code>Mouse Click</code> | Terminate multi-select mode and revert to standard single-caret editing. |
+| <code>Ctrl + D</code> | Duplicate the currently selected text, or the entire current line. |
+| <code>Enter</code> | Execute a line break with dynamic replication of previous indentation. |
+| <code>Shift + Tab</code> | Execute a non-destructive reverse jump (un-indent) up to 4 spaces. |
+| <code>Ctrl + Backspace / Delete</code> | Execute contiguous word block deletion, overriding standard punctuation stops. |</p>]]></content>
+        <author>
+            <name>Mohamed Magdy</name>
+            <uri>https://github.com/hamomagdy724</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.1]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#d4752edf9c0ec0c4dfbb7589695b6f6d904ca97b</id>
@@ -333,17 +367,6 @@ Added the ability to disable the fade while something is focused</p>]]></content
         <author>
             <name>ciizerr</name>
             <uri>https://github.com/ciizerr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win10 Taskbar Per-App Volume Control 1.0.1]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-per-app-volume-control#7810027bbc5e62fd3455a897e2658e17d1815f29</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-per-app-volume-control"/>
-        <updated>2026-02-22T13:31:02.000Z</updated>
-        <content type="html"><![CDATA[<p>Rename mod to 'Win10 Taskbar Per-App Volume Control'</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
