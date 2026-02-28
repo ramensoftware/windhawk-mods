@@ -5794,6 +5794,34 @@
                 "version": "1.0.1"
             }
         },
+        "onenote-cursor-teleport-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772272649000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772272649000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Mohamed Magdy",
+                "compilerOptions": "-luser32 -lcomctl32 -lgdi32",
+                "description": "Resolves the pen tablet cursor rubber-band bug by syncing the Win32 mouse with Windows Ink",
+                "github": "https://github.com/hamomagdy724",
+                "include": [
+                    "onenote.exe"
+                ],
+                "name": "OneNote Cursor Teleport Fix",
+                "version": "2.0"
+            }
+        },
         "passkey-popup-blocker": {
             "details": {
                 "defaultSorting": 2540,

@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-28T09:42:13.000Z</updated>
+    <updated>2026-02-28T09:57:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[OneNote Cursor Teleport Fix 2.0]]></title>
+        <id>https://windhawk.net/mods/onenote-cursor-teleport-fix#db533e7279c8362af59299a281dde90763b37968</id>
+        <link href="https://windhawk.net/mods/onenote-cursor-teleport-fix"/>
+        <updated>2026-02-28T09:57:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="onenotecursorteleportfixuiprotectionengine">OneNote Cursor Teleport Fix &amp; UI Protection Engine</h1>
+<p>A structural Windhawk modification that resolves hardware desynchronization between pen tablets in mouse mode and Microsoft OneNote's Windows Ink engine. This engine synchronizes the system cursor with the physical pen state</p>
+<p>Compatibility: Designed exclusively for the desktop version of Microsoft OneNote (onenote.exe).</p>
+<h2 id="corefeatures">Core Features</h2>
+<ul>
+<li><strong>Windows Ink Synchronization:</strong> Monitors <code>WM_POINTER</code> events and enforces Win32 system mouse tracking to prevent cursor desynchronization upon pen entry.</li>
+<li><strong>Teleport Interception:</strong> Evaluates the Euclidean distance of <code>WM_MOUSEMOVE</code> events and drops hardware jump packets that exceed the configured threshold.</li>
+<li><strong>Hierarchical UI Exception Engine:</strong> Parses window classes, styles, and ancestry to blacklist transient UI elements (e.g., <code>NetUIPopupWindow</code>, <code>SysShadow</code>). This prevents synthetic mouse events from auto-dismissing ribbon dropdowns or leaving artifacts.</li>
+<li><strong>Thread-Safe Subclassing:</strong> Implements a non-destructive subclassing architecture that safely attaches to OneNote's internal document canvas and active windows while avoiding protected UI layers.</li>
+</ul>]]></content>
+        <author>
+            <name>Mohamed Magdy</name>
+            <uri>https://github.com/hamomagdy724</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 1.2.0]]></title>
         <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#42750ed7fdbf87a8777a6ff118b119f20a12e302</id>
@@ -329,19 +349,6 @@ the string "Lock the taskbar", feel free to contact.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Fade 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-fade#24fd1c92dd79a8061eed9e2432e8d540ea1cc301</id>
-        <link href="https://windhawk.net/mods/taskbar-fade"/>
-        <updated>2026-02-24T23:54:38.000Z</updated>
-        <content type="html"><![CDATA[<p>Cleaned the code a bit
-Added the ability to hide desktop icons when idling
-Added the ability to disable the fade while something is focused</p>]]></content>
-        <author>
-            <name>Lukvbp</name>
-            <uri>https://github.com/lukvbp</uri>
         </author>
     </entry>
 </feed>
