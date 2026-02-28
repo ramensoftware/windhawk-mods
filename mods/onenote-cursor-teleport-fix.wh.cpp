@@ -1,8 +1,8 @@
 // ==WindhawkMod==
-// @id              onenote-cursor-teleport-fix-ultimate
-// @name            OneNote Teleport Fix (Ultimate Exception Engine)
-// @description     V1.0 Sync Logic wrapped in a massive 500+ line surgical exception engine to protect all menus.
-// @version         12.0
+// @id              onenote-cursor-teleport-fix
+// @name            OneNote Cursor Teleport Fix (Sync Engine)
+// @description     Cures the pen tablet rubber-band bug by permanently syncing the Win32 mouse with Windows Ink.
+// @version         2.0
 // @author          Hamo
 // @include         onenote.exe
 // @compilerOptions -luser32 -lcomctl32 -lgdi32
@@ -10,10 +10,10 @@
 
 // ==WindhawkModReadme==
 /*
-# OneNote Cursor Teleport Fix (Ultimate Exception Engine)
+# OneNote Cursor Teleport Fix
 This is the definitive solution to the Huion/OneNote pen teleport bug.
 
-### The Logic (Based on V1.0)
+### The Logic
 1. **The Sync Engine:** Actively monitors `WM_POINTER` events. If the hidden Windows mouse lags behind the pen by more than a few pixels, it uses `SetCursorPos` to drag the mouse to the pen, killing the desync.
 2. **The Jump Blocker:** If a massive `WM_MOUSEMOVE` fires, it calculates the distance and swallows the teleport.
 
