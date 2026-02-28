@@ -47,7 +47,7 @@ If you want to restart Explorer after its process has been terminated, you shoul
 run the file userinit.exe from the system directory.
 
 You can choose whether to use the Win10 Explorer or Win11 Explorer as the file manager.
-You can switch between them by checking "Open folders in separate processes" check box
+You can switch between them by checking "Open folders in separate process" check box
 in File Explorer's settings.
 
 Known issues:
