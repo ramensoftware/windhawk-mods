@@ -1,0 +1,136 @@
+// ==WindhawkModReadme== 
+/*
+# Custom Selection & HotTracking Colors
+
+Этот мод позволяет изменить стандартные системные цвета выделения и подсветки ссылок в Windows 11.
+
+## Возможности
+- Изменение цвета выделения (`COLOR_HIGHLIGHT`).
+- Изменение цвета подсветки ссылок (`COLOR_HOTLIGHT`).
+
+## Примечания
+- Стандартные цвета Windows:
+  - Выделение: `RGB(0, 120, 215)`
+  - Подсветка ссылок: `RGB(0, 102, 204)`
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkMod==
+// @id              custom-selection-color
+// @name            Custom Selection & HotTracking Colors
+// @description     Позволяет задать свои цвета выделения и подсветки ссылок в Windows 11
+// @version         0.6
+// @author          WereCool
+// @include         *
+// @compilerOptions -lgdi32
+// ==/WindhawkMod==
+
+// ==WindhawkModSettings==
+/*
+- highlightColor:
+  - red: 0
+  - green: 120
+  - blue: 215
+  $name: Цвет подсветки ссылок (Hotlight)
+  $description: Стандартный Windows RGB(0, 120, 215)
+
+- hotTrackingColor:
+  - red: 0
+  - green: 102
+  - blue: 204
+  $name: Цвет выделения (Highlight) 
+  $description: Стандартный Windows RGB(0, 102, 204)
+*/
+// ==/WindhawkModSettings==
+
+#include <windows.h>
+
+struct {
+    BYTE red, green, blue;
+    BYTE hotRed, hotGreen, hotBlue;
+} settings;
+
+COLORREF MakeColor(BYTE r, BYTE g, BYTE b) {
+    return RGB(r, g, b);
+}
+
+// --- Hook GetSysColor ---
+using GetSysColor_t = decltype(&GetSysColor);
+GetSysColor_t GetSysColor_Original;
+
+int WINAPI GetSysColor_Hook(int nIndex) {
+    if (nIndex == COLOR_HIGHLIGHT)
+        return (int)MakeColor(settings.red, settings.green, settings.blue);
+
+    if (nIndex == COLOR_HOTLIGHT)
+        return (int)MakeColor(settings.hotRed, settings.hotGreen, settings.hotBlue);
+
+    return GetSysColor_Original(nIndex);
+}
+
+// --- Hook GetSysColorBrush ---
+using GetSysColorBrush_t = decltype(&GetSysColorBrush);
+GetSysColorBrush_t GetSysColorBrush_Original;
+
+HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex) {
+    if (nIndex == COLOR_HIGHLIGHT) {
+        static HBRUSH hBrushHighlight = nullptr;
+        if (hBrushHighlight) DeleteObject(hBrushHighlight);
+        hBrushHighlight = CreateSolidBrush(MakeColor(settings.red, settings.green, settings.blue));
+        return hBrushHighlight;
+    }
+    if (nIndex == COLOR_HOTLIGHT) {
+        static HBRUSH hBrushHot = nullptr;
+        if (hBrushHot) DeleteObject(hBrushHot);
+        hBrushHot = CreateSolidBrush(MakeColor(settings.hotRed, settings.hotGreen, settings.hotBlue));
+        return hBrushHot;
+    }
+    return GetSysColorBrush_Original(nIndex);
+}
+
+// --- Запись в реестр ---
+void ApplyToRegistry() {
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\Colors", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        wchar_t value[32];
+
+        wsprintfW(value, L"%d %d %d", settings.red, settings.green, settings.blue);
+        RegSetValueExW(hKey, L"Hilight", 0, REG_SZ, (BYTE*)value, (DWORD)((wcslen(value) + 1) * sizeof(wchar_t)));
+
+        wsprintfW(value, L"%d %d %d", settings.hotRed, settings.hotGreen, settings.hotBlue);
+        RegSetValueExW(hKey, L"HotTrackingColor", 0, REG_SZ, (BYTE*)value, (DWORD)((wcslen(value) + 1) * sizeof(wchar_t)));
+
+        RegCloseKey(hKey);
+    }
+}
+
+void LoadSettings() {
+    settings.red = Wh_GetIntSetting(L"highlightColor.red");
+    settings.green = Wh_GetIntSetting(L"highlightColor.green");
+    settings.blue = Wh_GetIntSetting(L"highlightColor.blue");
+
+    settings.hotRed = Wh_GetIntSetting(L"hotTrackingColor.red");
+    settings.hotGreen = Wh_GetIntSetting(L"hotTrackingColor.green");
+    settings.hotBlue = Wh_GetIntSetting(L"hotTrackingColor.blue");
+
+    ApplyToRegistry();
+}
+
+BOOL Wh_ModInit() {
+    LoadSettings();
+
+    Wh_SetFunctionHook((void*)GetSysColor,
+                       (void*)GetSysColor_Hook,
+                       (void**)&GetSysColor_Original);
+
+    Wh_SetFunctionHook((void*)GetSysColorBrush,
+                       (void*)GetSysColorBrush_Hook,
+                       (void**)&GetSysColorBrush_Original);
+
+    return TRUE;
+}
+
+void Wh_ModUninit() {}
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+}
