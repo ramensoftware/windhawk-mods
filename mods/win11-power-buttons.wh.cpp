@@ -2,9 +2,9 @@
 // @id              win11-power-buttons
 // @name            Windows 11 Start Menu Power Buttons
 // @name:zh-CN      Windows 11 开始菜单一键电源按钮
-// @description     Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate buttons to the Windows 11 Start menu, replacing the default power flyout.
-// @description:zh-CN 添加可配置的一键关机/重启/注销/睡眠/休眠按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
-// @version         1.0.0
+// @description     Adds customizable one-click Shutdown, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
+// @description:zh-CN 添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
+// @version         1.0.1
 // @author          Hakuuyosei
 // @author:zh-CN    灵弦
 // @github          https://github.com/ahzvenol
@@ -61,12 +61,14 @@ Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate bu
     - signout: Sign out
     - sleep: Sleep
     - hibernate: Hibernate
+    - lock: Lock
   $options:zh-CN:
     - shutdown: 关机
     - restart: 重启
     - signout: 注销
     - sleep: 睡眠
     - hibernate: 休眠
+    - lock: 锁定
 */
 // ==/WindhawkModSettings==
 
@@ -176,6 +178,7 @@ enum class PowerAction {
     SignOut = 2,
     Sleep = 3,
     Hibernate = 4,
+    Lock = 5,
 };
 
 struct ButtonDefinition {
@@ -192,6 +195,7 @@ static const std::vector<ButtonDefinition> g_buttonDefinitions = {
     {L"signout",   PowerAction::SignOut,   L"\uF3B1"},
     {L"sleep",     PowerAction::Sleep,     L"\uE708"},
     {L"hibernate", PowerAction::Hibernate, L"\uE708"},
+    {L"lock",      PowerAction::Lock,      L"\uE72E"},
 };
 
 struct ButtonConfig {
@@ -250,6 +254,11 @@ static std::wstring GetActionDisplayName(PowerAction action) {
             switch (lang) {
                 case LANG_CHINESE: return L"休眠";
                 default: return L"Hibernate";
+            }
+        case PowerAction::Lock:
+            switch (lang) {
+                case LANG_CHINESE: return L"锁定";
+                default: return L"Lock";
             }
     }
     return L"";
@@ -334,6 +343,9 @@ static void PerformPowerAction(PowerAction action) {
             break;
         case PowerAction::Hibernate:
             SetSuspendState(TRUE, FALSE, FALSE);
+            break;
+        case PowerAction::Lock:
+            LockWorkStation();
             break;
     }
 }
