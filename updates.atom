@@ -2,12 +2,68 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-02-28T15:26:54.000Z</updated>
+    <updated>2026-03-02T03:17:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 2.0]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#50ecdda554f97aa7fac4b4f41879e206d11474b1</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-03-02T03:17:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Version bumped to 2.0</li>
+<li>Implemented 8-stage verification system in SendCtrlS() for guaranteed zero false triggers</li>
+<li>Stage 1: Triple pre-check with 10ms delays between checks to catch fast typing</li>
+<li>Stage 2: Final quiet period validation after pre-checks</li>
+<li>Stage 3: Press Ctrl with error handling</li>
+<li>Stage 4: Critical key check + quiet period re-validation after Ctrl press</li>
+<li>Stage 5: Press S with inter-key delay</li>
+<li>Stage 6: Post-S verification to detect any other key pressed during S send</li>
+<li>Stage 7: Release S with retry mechanism</li>
+<li>Stage 8: Release Ctrl with retry mechanism</li>
+<li>Implemented 5 safety checks in TrySave() before calling SendCtrlS()</li>
+<li>Safety check 1: Verify Word is foreground window</li>
+<li>Safety check 2: Verify no keys are currently pressed</li>
+<li>Safety check 3: Verify quiet period has passed</li>
+<li>Safety check 4: Double-check after small delay to catch very fast typing</li>
+<li>Safety check 5: Re-verify Word is still foreground (user might have switched windows)</li>
+<li>Added PRE<em>SEND</em>VERIFY<em>DELAY</em>MS = 10 constant for delay between pre-check verifications</li>
+<li>Added POST<em>CTRL</em>VERIFY<em>DELAY</em>MS = 5 constant for delay after Ctrl press before verification</li>
+<li>Added INTER<em>KEY</em>DELAY_MS = 2 constant for delay between key operations</li>
+<li>Added PRE<em>SEND</em>CHECK_COUNT = 3 constant for number of pre-send verifications</li>
+<li>Added Sleep() calls between all critical operations to allow system to process inputs</li>
+<li>Added post-S letter key scan (A-Z except S) to detect concurrent key presses</li>
+<li>Added quiet period re-validation after Ctrl press</li>
+<li>Added foreground re-validation in TrySave() after delay-based checks</li>
+<li>Updated README with new "Safety Features (v2.0)" section documenting 8-stage verification</li>
+<li>Guarantees zero false shortcut triggers even with minimum 100ms save delay</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA["Sign in with a passkey" popup blocker 3.1.0]]></title>
+        <id>https://windhawk.net/mods/passkey-popup-blocker#d555d48688bd3e832f9ffef9b012cc236dffbff2</id>
+        <link href="https://windhawk.net/mods/passkey-popup-blocker"/>
+        <updated>2026-03-02T03:16:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Changed</strong>: Increased default <strong>Interaction Timeout</strong> from <strong>500ms</strong> to <strong>800ms</strong>.</li>
+<li><strong>Improved</strong>: <strong>WebAuthn hook is now initialized first</strong> (before message loop hooks) — mod fails cleanly early if the critical hook can't be established, avoiding partial hook state.</li>
+<li><strong>Improved</strong>: <code>GetLastTick()</code> now uses <code>InterlockedOr(&amp;val, 0)</code> instead of <code>InterlockedCompareExchange</code> for a more correct and idiomatic atomic read on LONG-aligned memory.</li>
+<li><strong>Improved</strong>: <code>SetLastTick()</code> local fallback now also uses <code>InterlockedExchange</code> (was a plain assignment before), making it thread-safe in all cases.</li>
+<li><strong>Fixed</strong>: Removed <code>m-&gt;time</code> as a tick source in message hooks — it was unreliable (can be 0 or stale in some browser message loops). <code>GetTickCount()</code> is now used consistently.</li>
+<li><strong>Code</strong>: Replaced C-style casts with <code>static_cast</code> / <code>reinterpret_cast</code> throughout for cleaner, safer code.</li>
+</ul>]]></content>
+        <author>
+            <name>mode0192</name>
+            <uri>https://github.com/mode0192</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Shadow & Border 1.0.3]]></title>
         <id>https://windhawk.net/mods/taskbar-shadow-border#41b22ece71797fbdef290fbc18ece19c1aa8ef40</id>
@@ -322,46 +378,6 @@ Windows 11 taskbar.</p>]]></content>
         <link href="https://windhawk.net/mods/clipboard-history-upgrade"/>
         <updated>2026-02-26T11:13:46.000Z</updated>
         <content type="html"><![CDATA[<p>The new implementation renames the mod, restructures and expands features (regex replacements, tracking-parameter removal, trimming, unwrap, casing, path escaping, data extraction, Markdown-&gt;CF_HTML conversion, force-plain-text), and introduces a TriggerModifierKey setting to require a modifier for processing. It also adds safety checks (clipboard size limit), improved HTML escaping and payload generation, thread-local guards to avoid re-entrancy when injecting formats, and cleaner handling of dropped/non-text formats.</p>]]></content>
-        <author>
-            <name>SwiftExplorer567</name>
-            <uri>https://github.com/SwiftExplorer567</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Logon & Sleep Fade Restorer 1.2]]></title>
-        <id>https://windhawk.net/mods/win7-login-fade#cfb61a49f07450f896d6598a1a2a18e2af344a5e</id>
-        <link href="https://windhawk.net/mods/win7-login-fade"/>
-        <updated>2026-02-26T10:15:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for fading on sleep, hibernation, and monitor off</li>
-<li>Add support for setting different duration values on logon/unlock and logoff/shutdown, and optionally keeping the default DWM fade on logon/unlock</li>
-<li>Add support for using the kernel-mode fade implementation instead of the custom logic in this mod (on supported versions)</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Clipboard History Upgrade 1.2.0]]></title>
-        <id>https://windhawk.net/mods/clipboard-history-upgrade#a029fc8cc49ba4ee97412587d7539880ba98edf8</id>
-        <link href="https://windhawk.net/mods/clipboard-history-upgrade"/>
-        <updated>2026-02-25T22:38:33.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="clipboardhistoryupgrade">Clipboard History Upgrade</h1>
-<p>Enhance the Windows Clipboard History (Win+V) by automatically cleaning and formatting text when you copy it.</p>
-<h2 id="features">Features:</h2>
-<ul>
-<li><strong>Regex-based formatting:</strong> Automatically replace text (e.g., replace specific words, fix common typos) based on your custom rules.</li>
-<li><strong>Remove tracking variables:</strong> Automatically strip <code>utm_</code>, <code>fbclid</code>, and other common tracking parameters from copied URLs.</li>
-<li><strong>Auto-Trim Whitespace:</strong> Strip leading/trailing spaces and newlines.</li>
-<li><strong>Text Unwrapper:</strong> Merge broken text (e.g., from PDFs) back into fluid paragraphs.</li>
-<li><strong>Smart Casing:</strong> Convert text to lowercase, UPPERCASE, or Title Case automatically.</li>
-<li><strong>Code Path Auto-Escaper:</strong> Automatically formats Windows file paths (<code>C:\</code>) to escaped paths (<code>C:\\</code> or <code>C:/</code>).</li>
-<li><strong>Data Extractor:</strong> If copying a large text block, extract <em>only</em> URLs or Email Addresses.</li>
-<li><strong>Markdown & Rich Text:</strong> Auto-convert simple Markdown (<code>**bold**</code>) to rich text.</li>
-<li><strong>Force Plain Text:</strong> Strip all rich formatting from the source application.</li>
-</ul>
-<p><em>Note: Changes happen at the moment of copying. The cleaned text is what gets placed into standard clipboard history.</em></p>]]></content>
         <author>
             <name>SwiftExplorer567</name>
             <uri>https://github.com/SwiftExplorer567</uri>

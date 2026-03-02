@@ -1,3 +1,12 @@
+## 3.1.0 ([Mar 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d555d48688bd3e832f9ffef9b012cc236dffbff2/mods/passkey-popup-blocker.wh.cpp))
+
+* **Changed**: Increased default **Interaction Timeout** from **500ms** to **800ms**.
+* **Improved**: **WebAuthn hook is now initialized first** (before message loop hooks) — mod fails cleanly early if the critical hook can't be established, avoiding partial hook state.
+* **Improved**: `GetLastTick()` now uses `InterlockedOr(&val, 0)` instead of `InterlockedCompareExchange` for a more correct and idiomatic atomic read on LONG-aligned memory.
+* **Improved**: `SetLastTick()` local fallback now also uses `InterlockedExchange` (was a plain assignment before), making it thread-safe in all cases.
+* **Fixed**: Removed `m->time` as a tick source in message hooks — it was unreliable (can be 0 or stale in some browser message loops). `GetTickCount()` is now used consistently.
+* **Code**: Replaced C-style casts with `static_cast` / `reinterpret_cast` throughout for cleaner, safer code.
+
 ## 3.0.0 ([Feb 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b1f2493c90d1f67de2767b2d669694d3b7ead97d/mods/passkey-popup-blocker.wh.cpp))
 
 * **Major**: Added **multi-process browser support** using **shared memory** to sync user intent across Chrome/Edge tabs and sandboxed processes (fixes cases where clicks were not seen by the WebAuthn call).

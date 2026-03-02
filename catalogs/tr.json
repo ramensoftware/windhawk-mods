@@ -5835,7 +5835,7 @@
                     8
                 ],
                 "ratingUsers": 8,
-                "updated": 1770714329000,
+                "updated": 1772421371000,
                 "users": 258
             },
             "metadata": {
@@ -5858,7 +5858,7 @@
                 ],
                 "license": "CC-BY-NC-SA-4.0",
                 "name": "\"Sign in with a passkey\" popup blocker",
-                "version": "3.0.0"
+                "version": "3.1.0"
             }
         },
         "per-app-language-preferences": {
@@ -10351,7 +10351,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1772196283000,
+                "updated": 1772421434000,
                 "users": 90
             },
             "metadata": {
@@ -10365,7 +10365,7 @@
                     "WINWORD.EXE"
                 ],
                 "name": "Word Local AutoSave",
-                "version": "1.9"
+                "version": "2.0"
             }
         },
         "xs-discord-control-registered-games": {

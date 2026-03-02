@@ -1,3 +1,32 @@
+## 2.0 ([Mar 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/50ecdda554f97aa7fac4b4f41879e206d11474b1/mods/word-local-autosave.wh.cpp))
+
+- Version bumped to 2.0
+- Implemented 8-stage verification system in SendCtrlS() for guaranteed zero false triggers
+- Stage 1: Triple pre-check with 10ms delays between checks to catch fast typing
+- Stage 2: Final quiet period validation after pre-checks
+- Stage 3: Press Ctrl with error handling
+- Stage 4: Critical key check + quiet period re-validation after Ctrl press
+- Stage 5: Press S with inter-key delay
+- Stage 6: Post-S verification to detect any other key pressed during S send
+- Stage 7: Release S with retry mechanism
+- Stage 8: Release Ctrl with retry mechanism
+- Implemented 5 safety checks in TrySave() before calling SendCtrlS()
+- Safety check 1: Verify Word is foreground window
+- Safety check 2: Verify no keys are currently pressed
+- Safety check 3: Verify quiet period has passed
+- Safety check 4: Double-check after small delay to catch very fast typing
+- Safety check 5: Re-verify Word is still foreground (user might have switched windows)
+- Added PRE_SEND_VERIFY_DELAY_MS = 10 constant for delay between pre-check verifications
+- Added POST_CTRL_VERIFY_DELAY_MS = 5 constant for delay after Ctrl press before verification
+- Added INTER_KEY_DELAY_MS = 2 constant for delay between key operations
+- Added PRE_SEND_CHECK_COUNT = 3 constant for number of pre-send verifications
+- Added Sleep() calls between all critical operations to allow system to process inputs
+- Added post-S letter key scan (A-Z except S) to detect concurrent key presses
+- Added quiet period re-validation after Ctrl press
+- Added foreground re-validation in TrySave() after delay-based checks
+- Updated README with new "Safety Features (v2.0)" section documenting 8-stage verification
+- Guarantees zero false shortcut triggers even with minimum 100ms save delay
+
 ## 1.9 ([Feb 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/11b7ab2210ab196be114e08000e38136265d2d01/mods/word-local-autosave.wh.cpp))
 
 - Version bumped to 1.9
