@@ -1,3 +1,7 @@
+## 1.4.0 ([Mar 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/59966b5a2e2fe7dcdbc6b536b8ba1c20b9cda8e2/mods/fix-legacy-taskbar-tray-input-indicator.wh.cpp))
+
+Fix issues with taskbar thicker than 3 rows.
+
 ## 1.3.0 ([Feb 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b50ab73d1bf7a80b4cda5ac8ed366825ec03c138/mods/fix-legacy-taskbar-tray-input-indicator.wh.cpp))
 
 Updated version to 1.3.0 and added logic for first BitBlt operation.
