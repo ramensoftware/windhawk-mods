@@ -2,7 +2,7 @@
 // @id              fix-legacy-taskbar-tray-input-indicator
 // @name            Fix language indicator in Win10 taskbar under Win11 24H2+
 // @description     Fixes text orientation in the keyboard layout indicator in Win10 taskbar running under Win11 24H2+
-// @version         1.3.0
+// @version         1.4.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -121,16 +121,16 @@ BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
         return result;
     }
     
-    // BitBlt #2: второй BitBlt после первого, размер больше исходного
-    // но не слишком большой (макс 3x от исходного)
     if (!g_firstBltDone) {
         return result;
     }
     
-    bool sizeOk = (w >= g_srcW && h >= g_srcW) &&  // достаточно для текста
-                  (w <= g_srcH * 3 && h <= g_srcH * 3);  // не слишком большой
+    // BitBlt #2: первый после #1, размер БОЛЬШЕ исходного
+    // (индикатор всегда больше чем маленький bitmap с текстом)
+    // Ширина должна быть >= srcH (текст был повёрнут, теперь горизонтальный)
+    bool isIndicator = (w > g_srcW || h > g_srcH) && (w >= g_srcH);
     
-    if (!sizeOk) {
+    if (!isIndicator) {
         return result;
     }
 
@@ -180,9 +180,6 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)BitBlt,
                         (void*)BitBlt_Hook,
                         (void**)&BitBlt_Original);
-
     return TRUE;
 }
 
-void Wh_ModUninit() {
-}
