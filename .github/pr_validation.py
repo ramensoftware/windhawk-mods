@@ -801,6 +801,9 @@ def main():
     if len(paths) == 0:
         sys.exit('No files changed')
 
+    # Filter out files that should be ignored
+    paths = [p for p in paths if not any(part.startswith('.') for part in p.parts) and not p.name.endswith('.pyc')]
+
     added_count = int(os.environ['ADDED_FILES_COUNT'])
     modified_count = int(os.environ['MODIFIED_FILES_COUNT'])
     all_count = int(os.environ['ALL_CHANGED_AND_MODIFIED_FILES_COUNT'])
