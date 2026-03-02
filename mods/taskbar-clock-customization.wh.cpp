@@ -298,6 +298,16 @@ styles, such as the font color and size.
     - MaxLength: 28
       $name: Web content maximum length
       $description: Longer strings will be truncated with ellipsis.
+    - MaxItems: 1
+      $name: Maximum items to extract
+      $description: >-
+        Number of items to extract from the feed (e.g., RSS items). Set to 1 for
+        single item (default behavior). Set higher to enable rotation.
+    - RotationInterval: 5
+      $name: Rotation interval (seconds)
+      $description: >-
+        How many seconds to display each item before cycling to the next.
+        Only used when MaxItems > 1.
   $name: Web content items
   $description: >-
     Will be used to fetch data displayed in place of the %web<n>% and
@@ -557,6 +567,8 @@ struct WebContentsSettings {
     ContentMode contentMode;
     std::vector<std::pair<std::wregex, std::wstring>> searchReplace;
     int maxLength;
+    int maxItems;
+    int rotationInterval;
 };
 
 struct TextStyleSettings {
@@ -686,6 +698,8 @@ std::atomic<bool> g_webContentLoaded;
 
 std::vector<std::optional<std::wstring>> g_webContentStrings;
 std::vector<std::optional<std::wstring>> g_webContentStringsFull;
+std::vector<std::vector<std::wstring>> g_webContentStringsAll;      // All items for rotation
+std::vector<std::vector<std::wstring>> g_webContentStringsFullAll;  // All items full for rotation
 std::optional<std::wstring> g_webContentWeather;
 
 // Kept for compatibility with old settings:
@@ -913,6 +927,40 @@ std::wstring ExtractWebContent(std::wstring_view webContent,
     return std::wstring(webContent.substr(start, end - start));
 }
 
+std::vector<std::wstring> ExtractAllWebContent(std::wstring_view webContent,
+                                               PCWSTR webContentsBlockStart,
+                                               PCWSTR webContentsStart,
+                                               PCWSTR webContentsEnd,
+                                               int maxItems) {
+    std::vector<std::wstring> results;
+    size_t searchPos = 0;
+    
+    while (results.size() < static_cast<size_t>(maxItems)) {
+        auto block = webContent.find(webContentsBlockStart, searchPos);
+        if (block == webContent.npos) {
+            break;
+        }
+
+        auto start = webContent.find(webContentsStart, block);
+        if (start == webContent.npos) {
+            break;
+        }
+
+        start += wcslen(webContentsStart);
+
+        auto end = *webContentsEnd ? webContent.find(webContentsEnd, start)
+                                   : webContent.length();
+        if (end == webContent.npos) {
+            break;
+        }
+
+        results.emplace_back(webContent.substr(start, end - start));
+        searchPos = end + wcslen(webContentsEnd);
+    }
+
+    return results;
+}
+
 std::wstring ExtractTextFromHtml(std::wstring html) {
     winrt::com_ptr<IHTMLDocument2> doc;
     winrt::check_hresult(CoCreateInstance(CLSID_HTMLDocument, nullptr,
@@ -1122,65 +1170,88 @@ void UpdateWebContent() {
             continue;
         }
 
-        std::wstring extracted = ExtractWebContent(*urlContent, item.blockStart,
-                                                   item.start, item.end);
+        // Extract multiple items if maxItems > 1
+        int effectiveMaxItems = std::max(item.maxItems, 1);
+        std::vector<std::wstring> extractedItems = ExtractAllWebContent(
+            *urlContent, item.blockStart, item.start, item.end, effectiveMaxItems);
 
-        try {
-            switch (item.contentMode) {
-                case ContentMode::plainText:
-                    break;
-
-                case ContentMode::html:
-                    extracted = ExtractTextFromHtml(extracted);
-                    break;
-
-                case ContentMode::xml:
-                    extracted = ExtractTextFromXml(extracted);
-                    break;
-
-                case ContentMode::xmlHtml:
-                    extracted =
-                        ExtractTextFromHtml(ExtractTextFromXml(extracted));
-                    break;
-            }
-        } catch (const winrt::hresult_error& ex) {
-            WCHAR buffer[256];
-            _snwprintf_s(buffer, _TRUNCATE, L"Content error %08X: %s",
-                         ex.code().value, ex.message().c_str());
-            extracted = buffer;
-        } catch (const std::exception& ex) {
-            WCHAR buffer[256];
-            _snwprintf_s(buffer, _TRUNCATE, L"Content error: %S", ex.what());
-            extracted = buffer;
+        if (extractedItems.empty()) {
+            continue;
         }
 
-        for (const auto& [s, r] : item.searchReplace) {
+        // Process each extracted item
+        std::vector<std::wstring> processedItems;
+        std::vector<std::wstring> processedItemsFull;
+
+        for (auto& extracted : extractedItems) {
             try {
-                extracted = std::regex_replace(extracted, s, r);
-            } catch (const std::regex_error& ex) {
-                Wh_Log(L"Search/replace error %08X: %S",
-                       static_cast<DWORD>(ex.code()), ex.what());
+                switch (item.contentMode) {
+                    case ContentMode::plainText:
+                        break;
+
+                    case ContentMode::html:
+                        extracted = ExtractTextFromHtml(extracted);
+                        break;
+
+                    case ContentMode::xml:
+                        extracted = ExtractTextFromXml(extracted);
+                        break;
+
+                    case ContentMode::xmlHtml:
+                        extracted =
+                            ExtractTextFromHtml(ExtractTextFromXml(extracted));
+                        break;
+                }
+            } catch (const winrt::hresult_error& ex) {
+                WCHAR buffer[256];
+                _snwprintf_s(buffer, _TRUNCATE, L"Content error %08X: %s",
+                             ex.code().value, ex.message().c_str());
+                extracted = buffer;
+            } catch (const std::exception& ex) {
+                WCHAR buffer[256];
+                _snwprintf_s(buffer, _TRUNCATE, L"Content error: %S", ex.what());
+                extracted = buffer;
+            }
+
+            for (const auto& [s, r] : item.searchReplace) {
+                try {
+                    extracted = std::regex_replace(extracted, s, r);
+                } catch (const std::regex_error& ex) {
+                    Wh_Log(L"Search/replace error %08X: %S",
+                           static_cast<DWORD>(ex.code()), ex.what());
+                }
+            }
+
+            // Store full version
+            processedItemsFull.push_back(extracted);
+
+            // Store truncated version
+            if (item.maxLength <= 0 ||
+                extracted.length() <= (size_t)item.maxLength) {
+                processedItems.push_back(extracted);
+            } else {
+                std::wstring truncated(extracted.begin(),
+                                       extracted.begin() + item.maxLength);
+                if (truncated.length() >= 3) {
+                    truncated[truncated.length() - 1] = L'.';
+                    truncated[truncated.length() - 2] = L'.';
+                    truncated[truncated.length() - 3] = L'.';
+                }
+                processedItems.push_back(std::move(truncated));
             }
         }
 
         std::lock_guard<std::mutex> guard(g_webContentMutex);
 
-        if (item.maxLength <= 0 ||
-            extracted.length() <= (size_t)item.maxLength) {
-            g_webContentStrings[i] = extracted;
-        } else {
-            std::wstring truncated(extracted.begin(),
-                                   extracted.begin() + item.maxLength);
-            if (truncated.length() >= 3) {
-                truncated[truncated.length() - 1] = L'.';
-                truncated[truncated.length() - 2] = L'.';
-                truncated[truncated.length() - 3] = L'.';
-            }
+        // Store all items for rotation
+        g_webContentStringsAll[i] = std::move(processedItems);
+        g_webContentStringsFullAll[i] = std::move(processedItemsFull);
 
-            g_webContentStrings[i] = std::move(truncated);
+        // For backward compatibility, also set the first item in the original vectors
+        if (!g_webContentStringsAll[i].empty()) {
+            g_webContentStrings[i] = g_webContentStringsAll[i][0];
+            g_webContentStringsFull[i] = g_webContentStringsFullAll[i][0];
         }
-
-        g_webContentStringsFull[i] = std::move(extracted);
     }
 
     if (IsStrInDateTimePatternSettings(L"%weather%") &&
@@ -1230,6 +1301,8 @@ void WebContentUpdateThreadInit() {
 
     g_webContentStrings.resize(g_settings.webContentsItems.size());
     g_webContentStringsFull.resize(g_settings.webContentsItems.size());
+    g_webContentStringsAll.resize(g_settings.webContentsItems.size());
+    g_webContentStringsFullAll.resize(g_settings.webContentsItems.size());
 
     // A fuzzy check to see if any of the lines contain the web content pattern.
     // If not, no need to fire up the thread.
@@ -1265,6 +1338,8 @@ void WebContentUpdateThreadUninit() {
 
     g_webContentStrings.clear();
     g_webContentStringsFull.clear();
+    g_webContentStringsAll.clear();
+    g_webContentStringsFullAll.clear();
     g_webContentWeather.reset();
 }
 
@@ -3272,12 +3347,27 @@ size_t ResolveFormatToken(
         std::lock_guard<std::mutex> guard(g_webContentMutex);
 
         PCWSTR value;
-        if (index >= g_webContentStrings.size()) {
+        if (index >= g_webContentStringsAll.size()) {
             value = L"-";
-        } else if (!g_webContentStrings[index]) {
+        } else if (g_webContentStringsAll[index].empty()) {
             value = L"Loading...";
         } else {
-            value = g_webContentStrings[index]->c_str();
+            // Calculate which item to display based on rotation
+            const auto& items = g_webContentStringsAll[index];
+            if (items.size() == 1) {
+                value = items[0].c_str();
+            } else {
+                // Get rotation interval for this web content item
+                int rotationInterval = 5;  // default
+                if (index < g_settings.webContentsItems.size()) {
+                    rotationInterval = g_settings.webContentsItems[index].rotationInterval;
+                    if (rotationInterval <= 0) rotationInterval = 5;
+                }
+                // Calculate current item based on time
+                ULONGLONG currentSeconds = GetTickCount64() / 1000;
+                size_t itemIndex = (currentSeconds / rotationInterval) % items.size();
+                value = items[itemIndex].c_str();
+            }
         }
 
         resolvedCallback(value);
@@ -3291,12 +3381,27 @@ size_t ResolveFormatToken(
         std::lock_guard<std::mutex> guard(g_webContentMutex);
 
         PCWSTR value;
-        if (index >= g_webContentStringsFull.size()) {
+        if (index >= g_webContentStringsFullAll.size()) {
             value = L"-";
-        } else if (!g_webContentStringsFull[index]) {
+        } else if (g_webContentStringsFullAll[index].empty()) {
             value = L"Loading...";
         } else {
-            value = g_webContentStringsFull[index]->c_str();
+            // Calculate which item to display based on rotation
+            const auto& items = g_webContentStringsFullAll[index];
+            if (items.size() == 1) {
+                value = items[0].c_str();
+            } else {
+                // Get rotation interval for this web content item
+                int rotationInterval = 5;  // default
+                if (index < g_settings.webContentsItems.size()) {
+                    rotationInterval = g_settings.webContentsItems[index].rotationInterval;
+                    if (rotationInterval <= 0) rotationInterval = 5;
+                }
+                // Calculate current item based on time
+                ULONGLONG currentSeconds = GetTickCount64() / 1000;
+                size_t itemIndex = (currentSeconds / rotationInterval) % items.size();
+                value = items[itemIndex].c_str();
+            }
         }
 
         resolvedCallback(value);
@@ -4879,6 +4984,14 @@ void LoadSettings() {
         }
 
         item.maxLength = Wh_GetIntSetting(L"WebContentsItems[%d].MaxLength", i);
+        item.maxItems = Wh_GetIntSetting(L"WebContentsItems[%d].MaxItems", i);
+        if (item.maxItems <= 0) {
+            item.maxItems = 1;  // Default to single item
+        }
+        item.rotationInterval = Wh_GetIntSetting(L"WebContentsItems[%d].RotationInterval", i);
+        if (item.rotationInterval <= 0) {
+            item.rotationInterval = 5;  // Default to 5 seconds
+        }
 
         g_settings.webContentsItems.push_back(std::move(item));
     }
