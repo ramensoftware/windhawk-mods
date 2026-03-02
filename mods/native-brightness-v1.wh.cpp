@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              native-brightness-v1
+// @id              native-brightness
 // @name            Brightness Shortcut Key (Always On Top)
 // @description     Shortcut Key to Change the Brightness.Use CTRL + ALT + UP/DOWM to increase or decrease the brightness natively for the system.
 // @version         1.0
@@ -12,7 +12,7 @@
 // @include notepad.exe
 // @include program-1.*.exe
 // @include C:\programs\*.exe
-// @include %SystemRoot%\explorer.exe
+
 // @architecture x86
 // @architecture x86-64
 // ==/WindhawkMod==
@@ -292,5 +292,6 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     if (hookThreadId) PostThreadMessage(hookThreadId, WM_QUIT, 0, 0);
 }
+
 
 
