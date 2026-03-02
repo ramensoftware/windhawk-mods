@@ -627,7 +627,7 @@ DWP_HOOK(
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
 
-// Prevent unexpected behavior like monitor from turning off during an ongoing fade, when applications use [Send|Post]Message with HWND_BROADCAST to turn off the monitor
+// Prevent unexpected behavior like monitor turning off during an ongoing fade, when applications use [Send|Post]Message with HWND_BROADCAST to turn off the monitor
 // This is a common hack used by a lot of programs to turn the monitor off, but it makes the SC_MONITORPOWER handler to run in a lot of processes in a short amount of time
 // The message can also reach processes excluded by Windhawk and unhookable/protected processes, which we cannot intercept (to ignore the request) once the message reaches them
 // So just use this hacky workaround to initiate the fade directly from the call, without letting the message out of the caller process,
