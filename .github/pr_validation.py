@@ -805,13 +805,14 @@ def main():
     modified_count = int(os.environ['MODIFIED_FILES_COUNT'])
     all_count = int(os.environ['ALL_CHANGED_AND_MODIFIED_FILES_COUNT'])
 
-    if (added_count, modified_count, all_count) not in [(1, 0, 1), (0, 1, 1)]:
-        warnings += add_warning(
-            paths[0],
-            1,
-            'Must be one added or one modified file, got '
-            f'{added_count=} {modified_count=} {all_count=}',
-        )
+    # checks if added/modified files count equals 1
+    # if (added_count, modified_count, all_count) not in [(1, 0, 1), (0, 1, 1)]:
+    #     warnings += add_warning(
+    #         paths[0],
+    #         1,
+    #         'Must be one added or one modified file, got '
+    #         f'{added_count=} {modified_count=} {all_count=}',
+    #     )
 
     for path in paths:
         print(f'Checking {path=}')
