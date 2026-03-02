@@ -2,7 +2,7 @@
 // @id              internet-status-indicator
 // @name            Internet Status Indicator
 // @description     Real-time network connectivity monitoring with visual indicators as a Tray Icon
-// @version         0.8
+// @version         0.8.2
 // @author          ALMAS CP
 // @github          https://github.com/almas-cp
 // @homepage        https://github.com/almas-cp
@@ -159,6 +159,10 @@ This mod runs as part of the windhawk.exe process for better stability and resou
 
 #define WM_TRAYICON (WM_USER + 1)
 #define ID_TRAYICON 1001
+#define WM_UPDATE_STATUS (WM_USER + 2)
+#define TIMER_REFRESH_ICON 2001
+#define BOOT_REFRESH_DURATION_MS 60000
+#define BOOT_REFRESH_INTERVAL_MS 2000
 
 
 // Icon shape constants
@@ -492,10 +496,30 @@ private:
     static const wchar_t* CLASS_NAME;
     static UINT s_uTaskbarRestart;  // Message ID for TaskbarCreated
     static std::function<void()> s_onTaskbarCreated;  // Callback when taskbar restarts
+    static std::function<void(bool)> s_onStatusUpdate;  // Callback for status updates on UI thread
+    static std::function<bool()> s_getConnectionState;  // Getter for current connection state
+    static DWORD s_timerStartTick;  // When the boot refresh timer was started
     
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         switch (uMsg) {
             case WM_TRAYICON:
+                return 0;
+            case WM_UPDATE_STATUS:
+                if (s_onStatusUpdate) {
+                    s_onStatusUpdate(wParam != 0);
+                }
+                return 0;
+            case WM_TIMER:
+                if (wParam == TIMER_REFRESH_ICON) {
+                    if (s_onStatusUpdate && s_getConnectionState) {
+                        s_onStatusUpdate(s_getConnectionState());
+                    }
+                    // Kill timer after boot refresh period
+                    if (GetTickCount() - s_timerStartTick >= BOOT_REFRESH_DURATION_MS) {
+                        KillTimer(hwnd, TIMER_REFRESH_ICON);
+                        Wh_Log(L"✅ Boot refresh timer stopped");
+                    }
+                }
                 return 0;
             default:
                 // Handle TaskbarCreated message
@@ -562,12 +586,32 @@ public:
     static void SetTaskbarCreatedCallback(std::function<void()> callback) {
         s_onTaskbarCreated = callback;
     }
+    
+    static void SetStatusUpdateCallback(std::function<void(bool)> callback) {
+        s_onStatusUpdate = callback;
+    }
+    
+    static void SetConnectionStateGetter(std::function<bool()> getter) {
+        s_getConnectionState = getter;
+    }
+    
+    void StartBootRefreshTimer() {
+        if (hwnd) {
+            s_timerStartTick = GetTickCount();
+            SetTimer(hwnd, TIMER_REFRESH_ICON, BOOT_REFRESH_INTERVAL_MS, NULL);
+            Wh_Log(L"🔄 Boot refresh timer started (every %dms for %ds)",
+                   BOOT_REFRESH_INTERVAL_MS, BOOT_REFRESH_DURATION_MS / 1000);
+        }
+    }
 };
 
 
 const wchar_t* TrayWindow::CLASS_NAME = L"InternetStatusTrayWindow";
 UINT TrayWindow::s_uTaskbarRestart = 0;
 std::function<void()> TrayWindow::s_onTaskbarCreated = nullptr;
+std::function<void(bool)> TrayWindow::s_onStatusUpdate = nullptr;
+std::function<bool()> TrayWindow::s_getConnectionState = nullptr;
+DWORD TrayWindow::s_timerStartTick = 0;
 
 
 class InternetStatusMonitor {
@@ -630,6 +674,21 @@ public:
             Wh_Log(L"❌ Failed to show tray icon.");
             return false;
         }
+        
+        // Set up status update callback (runs on UI thread via window messages)
+        TrayWindow::SetStatusUpdateCallback([this](bool connected) {
+            if (trayIcon && trayIcon->IsVisible()) {
+                trayIcon->UpdateStatus(connected, false);
+            }
+        });
+        
+        // Set up connection state getter for timer-based refresh
+        TrayWindow::SetConnectionStateGetter([this]() {
+            return isConnected.load();
+        });
+        
+        // Start boot refresh timer for reliable icon updates during system startup
+        trayWindow->StartBootRefreshTimer();
         
         trayIconInitialized = true;
         return true;
@@ -726,9 +785,10 @@ public:
             }
         }
         
-        // Update tray icon
-        if (settings.showTrayIcon && trayIcon && trayIcon->IsVisible()) {
-            trayIcon->UpdateStatus(currentlyConnected, false);
+        // Post to UI thread for thread-safe tray icon update
+        if (settings.showTrayIcon && trayWindow && trayWindow->GetHandle()) {
+            PostMessage(trayWindow->GetHandle(), WM_UPDATE_STATUS, 
+                       currentlyConnected ? 1 : 0, 0);
         }
         
         // Verbose logging
