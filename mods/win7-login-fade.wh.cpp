@@ -2,7 +2,7 @@
 // @id              win7-login-fade
 // @name            Logon & Sleep Fade Restorer
 // @description     Bring back the old logon screen and sleep fade effect
-// @version         1.2
+// @version         1.3
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -536,7 +536,7 @@ DWORD MonitorOffThreadProc(LPVOID lpParameter) {
 }
 
 NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength) {
-    // Undocumented API introduced in Windows 8, known usermode use cases include Open-Shell Menu
+    // Undocumented API introduced in Windows 8, known usermode use cases include StartMenuExperienceHost and Open-Shell Menu (used for the sleep action on Modern Standby devices)
     // DefWindowProc WM_SYSCOMMAND SC_MONITORPOWER has it's own kernel mode routine and does not use this API, so these two must be hooked separately
     if (InformationLevel == ScreenOff && g_settings.sleepFadeEnabled && !IsFadeInProgress()) {
         // Both NtPowerInformation and DefWindowProc WM_SYSCOMMAND is asynchronous so do it in a separate thread
@@ -624,6 +624,21 @@ DWP_HOOK(
     (hWnd, uMsg, wParam, lParam))
 DWP_HOOK(
     DefDlgProc,
+    (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
+    (hWnd, uMsg, wParam, lParam))
+
+// Prevent unexpected behavior like monitor from turning off during an ongoing fade, when applications use [Send|Post]Message with HWND_BROADCAST to turn off the monitor
+// This is a common hack used by a lot of programs to turn the monitor off, but it makes the SC_MONITORPOWER handler to run in a lot of processes in a short amount of time
+// The message can also reach processes excluded by Windhawk and unhookable/protected processes, which we cannot intercept (to ignore the request) once the message reaches them
+// So just use this hacky workaround to initiate the fade directly from the call, without letting the message out of the caller process,
+// so that we can at least do proper fade on hacky monitor off requests from included/hooked processes
+// There are bunch of Win32 APIs to post messages to other processes, but only these two are commonly used by those hacky monitor off implementations
+DWP_HOOK(
+    SendMessage,
+    (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
+    (hWnd, uMsg, wParam, lParam))
+DWP_HOOK(
+    PostMessage,
     (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
     (hWnd, uMsg, wParam, lParam))
 #pragma endregion
@@ -962,6 +977,8 @@ BOOL Wh_ModInit() {
     HOOK_A_W(DefFrameProc)
     HOOK_A_W(DefMDIChildProc)
     HOOK_A_W(DefDlgProc)
+    HOOK_A_W(SendMessage)
+    HOOK_A_W(PostMessage)
 
     return TRUE;
 }
