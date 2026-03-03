@@ -16,6 +16,10 @@ This mod improves certain Windows dialogs. It also re-translates messages for th
 
 
 More dialogs coming soon! (or maybe not so soon, just in the future)
+
+## Dialogs changed
+- Message boxes changed to Task Dialogs
+- Legacy folder picker replaced with modern directory selector
 */
 // ==/WindhawkModReadme==
 
@@ -317,7 +321,7 @@ int WINAPI MessageBoxW_Hook(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT u
             }
         }
 
-        return 0;
+        return MessageBoxW_Original(hWnd, lpText, lpCaption, uType);
     }
     else return MessageBoxW_Original(hWnd, lpText, lpCaption, uType);
 }
@@ -570,7 +574,7 @@ int WINAPI MessageBoxIndirectW_Hook(const MSGBOXPARAMSW *lpmbp) {
             }
         }
 
-        return 0;
+        return MessageBoxIndirectW_Original(lpmbp);
     }
     else return MessageBoxIndirectW_Original(lpmbp);
 }
@@ -929,7 +933,7 @@ BOOL Wh_ModInit() {
     // wc.lpszClassName = WC_MODERNICONPICKERDLGW;
     // wc.hInstance = GetModuleHandleW(nullptr);
 
-    HMODULE hUser32 = LoadLibraryW(L"user32.dll");
+    HMODULE hUser32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     MessageBoxW_t pMessageBoxW =
         (MessageBoxW_t)GetProcAddress(hUser32,
                                                 "MessageBoxW");
@@ -945,7 +949,7 @@ BOOL Wh_ModInit() {
                         (void*)MessageBoxIndirectW_Hook,
                         (void**)&MessageBoxIndirectW_Original);
 
-    HMODULE hShell32 = LoadLibraryW(L"Shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"Shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     SHBrowseForFolderW_t pSHBrowseForFolderW = (SHBrowseForFolderW_t)GetProcAddress(hShell32, "SHBrowseForFolderW");
 
@@ -959,7 +963,7 @@ BOOL Wh_ModInit() {
     //  (void*)PickIconDlg_Hook,
     //  (void**)&PickIconDlg_Original);
 
-    // HMODULE hComDlg = LoadLibraryW(L"Comdlg32.dll");
+    // HMODULE hComDlg = LoadLibraryExW(L"Comdlg32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     // ChooseColorW_t pChooseColorW = (ChooseColorW_t)GetProcAddress(hComDlg, "ChooseColorW");
 
