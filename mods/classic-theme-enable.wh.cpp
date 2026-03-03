@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.2.1
+// @version         1.2.2
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -43,9 +43,12 @@ to prevent the color scheme change after pressing Ctrl+Alt+Del or going to the l
 4. Windows Classic theme is not compatible with Windows 11 taskbar. 
 On Windows 11 version 21H2 to 23H2 it is recommended to enable the Windows 10 taskbar with the
 [*Windows 10 taskbar on Windows 11*](https://windhawk.net/mods/win10-taskbar-on-win11) mod while
-on Windows 11 24H2 install the Windows 10 taskbar using the
+on Windows 11 24H2, 25H2 or later install the Windows 10 taskbar using the
 [*Win10 taskbar on Win11 24H2*](https://windhawk.net/mods/win10-taskbar-on-win11-24h2) mod. For
 the later mod, also the mod [*Fake Explorer path*](https://windhawk.net/mods/fake-explorer-path) is needed.
+On Windows 11 24H2 and later the taskbar classic context menu have been removed, to restore it
+install this mod: 
+[*Windows 10 Taskbar Context Menu Fix for Win11 24H2+*](https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2)
 
 5. The Windows 10 taskbar still needs a compatibility fix, so install the mod
 [*Classic Theme Explorer Lite*](https://windhawk.net/mods/classic-theme-explorer-lite).
@@ -106,12 +109,11 @@ To fix this, install the [*Classic theme transparency fix*](https://windhawk.net
 and enable all options in its settings.
 
 11. To fix the empty context menus in Explorer, install the mods
-[*Disable Immersive Context Menus*](https://windhawk.net/mods/disable-immersive-context-menus)
-and
+[*Disable Immersive Context Menus*](https://windhawk.net/mods/disable-immersive-context-menus),
 [*Non Immersive Taskbar Context Menu*](https://windhawk.net/mods/classic-taskbar-context-menu),
-alternatively, if you are on Windows 11 23H2 or below, you can install the mod
-[*Eradicate Immersive Menus*](https://windhawk.net/mods/eradicate-immersive-menus)
-instead of the both. If confused, you can install all three, they do not conflict.
+and
+[*Eradicate Immersive Menus*](https://windhawk.net/mods/eradicate-immersive-menus). While their
+functionalty somewhat overlap, it is recommended to install all three.
 
 12. To restore the dragged items image during drag-and-drop, install this mod:
 [*Classic Explorer Drag-n-Drop Lite*](https://windhawk.net/mods/classic-explorer-dragdrop-lite).

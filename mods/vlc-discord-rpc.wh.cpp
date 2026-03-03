@@ -2,9 +2,10 @@
 // @id              vlc-discord-rpc
 // @name            VLC Discord Rich Presence
 // @description     Shows your playing status, quality tags (4K/HDR), and interactive buttons on Discord.
-// @version         1.1.0
+// @version         1.1.2
 // @author          ciizerr
 // @github          https://github.com/ciizerr
+// @homepage        https://vlc-rpc.vercel.app/
 // @include         vlc.exe
 // @compilerOptions -lwinhttp
 // @architecture    x86
@@ -15,13 +16,14 @@
 /*
 # VLC Discord Rich Presence
 
-Seamlessly integrates VLC Media Player with Discord to display playback status, media metadata, resolution tags, and **Album Artwork(new)**.
+Seamlessly integrates VLC Media Player with Discord to display playback status, media metadata, resolution tags, and **Album Artwork**.
 
 ## Features
-* **Cover Art Upload:** Automatically uploads local album art and movie posters to `0x0.st` so they appear on Discord.
+* **Smart Cover Art Engine:** Automatically uploads local album art to `0x0.st`. If local art is missing, it intelligently scrapes high-res posters and album covers directly from the web(accuracy depends on how well filename matches the title).
+* **Metadata Cleaner:** Intelligently strips piracy site URLs, promotional phrases, bracketed tags, and scene release technical info to guarantee perfect Discord display titles.
+* **Custom Junk Filter:** Define your own list of annoying tags or site names to automatically remove from media titles.
 * **Smart Activity Status:** Dynamically switches between "Listening to **Song**", "Watching **Movie**", or "Playing **Video**" based on the file type.
-* **Clean Metadata:** 
-    * **Music:** Displays Song Title, Artist, and Album.
+* **Clean Metadata:** * **Music:** Displays Song Title, Artist, and Album.
     * **Video:** Displays Title, Season/Episode, Chapter, and Audio Language.
 * **Quality Tags:** Displays resolution and format tags (4K, HDR, 1080p, 10-bit) based on the media file.
 * **Interactive Buttons:** Adds a "Search This" button to your status, redirecting to Google, IMDb, or YouTube.
@@ -31,10 +33,10 @@ Seamlessly integrates VLC Media Player with Discord to display playback status, 
 Users can customize the appearance of the Rich Presence icons via the Mod Settings.
 
 * **Default:** The standard orange VLC cone.
-![default theme](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/default.png)
+![default theme](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/default.gif)
 
 * **Dark:** A dark-mode variant for low-light aesthetics.
-![dark theme](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/dark_.png)
+![dark theme](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/dark_.gif)
 
 **Submissions:** We are accepting community designs for new icon themes. If you have created a set (vlc, play, pause, stop), please contact `ciizerr` on Discord.
 
@@ -57,7 +59,11 @@ For this mod to retrieve data from VLC, the Web Interface must be enabled.
 8.  Click **Save** and restart VLC.
 
 ## Configuration
-**Show Cover Art:** Toggle to enable/disable the uploading of local cover art. If disabled, the mod will use the standard VLC icon.
+**Show Cover Art:** Toggle to enable/disable the fetching and uploading of cover art. If disabled, the mod will use the standard VLC icon.
+
+**Custom Junk Filter:** Define your own list of annoying tags or site names to automatically remove from media titles.
+
+**Strict Local Filters (Transparency):** To keep the metadata cleaner accurate against new piracy tags, the mod fetches a tiny text file [`filters.txt`](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/assets/filters.txt) from the GitHub repository if the file is older than 6 hours. If you prefer **zero** external network requests, enable `Strict Local Filters Only`. This will restrict the metadata cleaner to only use the built-in hardcoded dictionary + your custom words.
 
 **Search Provider:** You can change the destination of the search button (Google, Bing, IMDb) in the mod settings.
 
@@ -77,7 +83,19 @@ For bug reports, feature suggestions, or general feedback, please reach out via:
   $description: "The Application ID from the Discord Developer Portal. Leave default to use the official one."
 - ShowCoverArt: true
   $name: Show Cover Art
-  $description: "If enabled, local album art is uploaded to 0x0.st (temp host) to appear on Discord. Disable to use the standard VLC icon."
+  $description: "If enabled, attempts to upload local art or fetch online posters via smart web search. Disable to use the standard VLC icon."
+- ShowQualityTags: true
+  $name: Show Quality Tags
+  $description: "If enabled, displays resolution and format tags (4K, HDR, 1080p). Disable for a cleaner status layout."
+- EnableMetadataCleaner: true
+  $name: Clean Media Titles
+  $description: "Automatically removes common scene tags (e.g., WEB-DL, 1080p) and URLs from filenames so they look clean on Discord."
+- StrictLocalMode: true
+  $name: Strict Local Filters Only
+  $description: "If enabled, stops downloading community filter updates from GitHub and only relies on the built-in hardcoded filters and your custom words. See README."
+- CustomJunkWords: ""
+  $name: Additional Words to Remove (Optional)
+  $description: "Add your own custom words to remove, separated by commas (e.g., toonworld4all.com, custom-tag). Note: 'Clean Media Titles' must be enabled above for this to work."
 - Theme: ""
   $name: Icon Theme
   $description: "Prefix for your assets. Upload images like 'dark_play_icon' to use the Dark theme."
@@ -112,6 +130,12 @@ For bug reports, feature suggestions, or general feedback, please reach out via:
 #include <fstream>
 #include <mutex>
 #include <algorithm> 
+#include <cctype>
+#include <sstream>
+#include <shlobj.h>
+#include <sys/stat.h>
+
+#pragma comment(lib, "shell32.lib")
 
 // =============================================================
 // ⚙️ GLOBALS
@@ -125,7 +149,17 @@ std::map<std::string, std::string> g_imageCache;
 std::mutex g_cacheMutex;
 
 // =============================================================
-// 1. HELPERS
+// 🔥 DYNAMIC JUNK FILTER GLOBALS 🔥
+// =============================================================
+std::vector<std::string> g_junkSites;
+std::vector<std::string> g_tlds;
+std::vector<std::string> g_truncateTags;
+std::vector<std::string> g_junkWords;
+std::mutex g_filterMutex;
+bool g_filtersLoaded = false;
+
+// =============================================================
+// 1. STRING & METADATA HELPERS
 // =============================================================
 
 std::string WStrToStr(const std::wstring& wstr) {
@@ -243,9 +277,243 @@ std::string CleanString(std::string str) {
     return out;
 }
 
+// 🔥 V8 OMNI-SCRUBBER (With Custom Hitman) 🔥
+std::string CleanMetadata(std::string text, const std::vector<std::string>& customJunk) {
+    if (text.empty()) return "";
+
+    // 1. Strip everything inside [] only
+    std::string noBrackets = "";
+    bool inBracket = false;
+    for (char c : text) {
+        if (c == '[') inBracket = true;
+        else if (c == ']') { inBracket = false; continue; }
+        
+        if (!inBracket) noBrackets += c;
+    }
+
+    // 2. Erase media extensions
+    size_t dot = noBrackets.find_last_of(".");
+    if (dot != std::string::npos) {
+        std::string ext = noBrackets.substr(dot);
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext == ".mp3" || ext == ".mkv" || ext == ".mp4" || ext == ".avi" || ext == ".flac" || ext == ".m4a" || ext == ".wav") {
+            noBrackets = noBrackets.substr(0, dot);
+        }
+    }
+
+    std::string lowerText = noBrackets;
+    std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+
+    // 3. The Custom Hitman (User's Exact Matches)
+    for (const auto& word : customJunk) {
+        if (word.empty()) continue;
+        size_t pos;
+        while ((pos = lowerText.find(word)) != std::string::npos) {
+            noBrackets.replace(pos, word.length(), std::string(word.length(), ' '));
+            lowerText.replace(pos, word.length(), std::string(word.length(), ' '));
+        }
+    }
+
+    // 4. The URL Assassin (Wipe Site + TLD combos before dots become spaces)
+    std::vector<std::string> activeSites;
+    std::vector<std::string> activeTlds;
+    std::vector<std::string> activeTags;
+    std::vector<std::string> activeWords;
+    
+    {
+        std::lock_guard<std::mutex> lock(g_filterMutex);
+        if (g_filtersLoaded) {
+            activeSites = g_junkSites;
+            activeTlds = g_tlds;
+            activeTags = g_truncateTags;
+            activeWords = g_junkWords;
+        } else {
+            // Hardcoded Fallbacks
+            activeSites = { 
+                "olamovies", "vegamovies", "moviesmod", "katmoviehd", "mkvcinemas", 
+                "filmyzilla", "filmywap", "1tamilmv", "jiorockers", "ibomma", "yts", 
+                "yify", "psa", "qxr", "tigole", "rarbg", "pahe", "pagalworld", "mrjatt", 
+                "djpunjab", "wapking", "songspk", "djmaza", "pendujatt", "naasongs", 
+                "masstamilan", "jiosaavn", "moviesverse"
+            };
+            activeTlds = { 
+                ".top", ".com", ".net", ".org", ".in", ".nl", ".is", ".to", ".pw", 
+                ".cc", ".site", ".info", ".biz", ".co", ".nz", ".uk", ".mx", ".ws", ".pro" 
+            };
+            activeTags = {
+                "2160p", "1080p", "720p", "480p", "4k", "bluray", "web-dl", "webrip", "hdrip", "camrip", "brrip"
+            };
+            activeWords = {
+                "downloaded from", "download from", "shared by", "brought to you by", "visit website",
+                "downloaded", "download", "320kbps", "128kbps", "kbps", "official video", "lyric video", 
+                "ringtone", "full song", "pagalworld", "mrjatt", 
+                "djpunjab", "wapking", "songspk", "djmaza", "pendujatt", "naasongs", "masstamilan", 
+                "jiosaavn", "olamovies", "uhdmovies", "vegamovies", "moviesmod", "katmoviehd", "mkvcinemas", 
+                "filmyzilla", "filmywap", "1tamilmv", "jiorockers", "ibomma", "yts", "yify", "psa", "qxr", 
+                "tigole", "rarbg", "pahe", "x264", "x265", "hevc", "10bit"
+            };
+        }
+    }
+    
+    // Custom words also act as base URLs for the Assassin
+    activeSites.insert(activeSites.end(), customJunk.begin(), customJunk.end());
+    
+    for (const auto& site : activeSites) {
+        if (site.empty()) continue;
+        for (const auto& tld : activeTlds) {
+            std::string url = site + tld;
+            size_t pos;
+            while ((pos = lowerText.find(url)) != std::string::npos) {
+                noBrackets.replace(pos, url.length(), std::string(url.length(), ' '));
+                lowerText.replace(pos, url.length(), std::string(url.length(), ' '));
+            }
+        }
+    }
+
+    // 5. Replace Periods (.) and Underscores (_) with Spaces
+    for (char &c : noBrackets) {
+        if (c == '.' || c == '_' || c == '~') c = ' ';
+    }
+
+    lowerText = noBrackets;
+    std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+
+    // 6. The Scene Truncator (Chop off everything after these tags)
+    for (const auto& tag : activeTags) {
+        size_t pos = lowerText.find(tag);
+        if (pos != std::string::npos) {
+            noBrackets = noBrackets.substr(0, pos);
+            lowerText = lowerText.substr(0, pos); 
+        }
+    }
+
+    // 7. Phrase & Standard Junk Word Removal
+    // Custom words get a final sweep here as standard text
+    activeWords.insert(activeWords.end(), customJunk.begin(), customJunk.end());
+
+    std::string result = noBrackets;
+    for (const auto& word : activeWords) {
+        if (word.empty()) continue;
+        size_t pos;
+        while (true) {
+            lowerText = result;
+            std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+            pos = lowerText.find(word);
+            if (pos == std::string::npos) break;
+            result.replace(pos, word.length(), " "); 
+        }
+    }
+    
+    // 8. Replace remaining double spaces
+    std::string finalClean;
+    for (char c : result) {
+        if (c == ' ' && !finalClean.empty() && finalClean.back() == ' ') continue; 
+        finalClean += c;
+    }
+    
+    // 9. Trim edges
+    size_t start = finalClean.find_first_not_of(" -");
+    if (start == std::string::npos) return "";
+    size_t end = finalClean.find_last_not_of(" -");
+    return finalClean.substr(start, end - start + 1);
+}
+
+std::string ExtractYear(const std::string& filename) {
+    for (size_t i = 0; i + 3 < filename.length(); i++) {
+        if ((filename[i] == '1' && filename[i+1] == '9') || 
+            (filename[i] == '2' && filename[i+1] == '0')) {
+            if (isdigit(filename[i+2]) && isdigit(filename[i+3])) {
+                bool validStart = (i == 0 || !isdigit(filename[i-1]));
+                bool validEnd = (i + 4 == filename.length() || !isdigit(filename[i+4]));
+                if (validStart && validEnd) {
+                    return filename.substr(i, 4);
+                }
+            }
+        }
+    }
+    return "";
+}
+
 // =============================================================
-// 2. IMAGE UPLOAD LOGIC
+// 2. NETWORK & IMAGE API LOGIC
 // =============================================================
+
+std::string FetchHttps(const std::wstring& host, const std::wstring& path) {
+    std::string result = "";
+    HINTERNET hSession = WinHttpOpen(L"VLC-RPC-Mod/1.4", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) return "";
+
+    WinHttpSetTimeouts(hSession, 3000, 3000, 3000, 3000);
+
+    HINTERNET hConnect = WinHttpConnect(hSession, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (hConnect) {
+        HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+        if (hRequest) {
+            std::wstring headers = L"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n";
+            if (WinHttpSendRequest(hRequest, headers.c_str(), headers.length(), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+                WinHttpReceiveResponse(hRequest, NULL)) {
+                
+                DWORD dwSize = 0;
+                DWORD dwDownloaded = 0;
+                do {
+                    if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) break;
+                    if (dwSize == 0) break;
+                    std::vector<char> buffer(dwSize + 1);
+                    if (WinHttpReadData(hRequest, buffer.data(), dwSize, &dwDownloaded)) {
+                        result.append(buffer.data(), dwDownloaded);
+                    }
+                } while (dwSize > 0);
+            }
+            WinHttpCloseHandle(hRequest);
+        }
+        WinHttpCloseHandle(hConnect);
+    }
+    WinHttpCloseHandle(hSession);
+    return result;
+}
+
+std::string FindExternalArtwork(int type, const std::string& queryTitle, const std::string& querySub, bool isTvShow = false) {
+    if (queryTitle.empty()) return "";
+    
+    std::string cacheKey = "EXT_" + NumToStr(type) + "_" + queryTitle + querySub + (isTvShow ? "_TV" : "");
+    {
+        std::lock_guard<std::mutex> lock(g_cacheMutex);
+        if (g_imageCache.find(cacheKey) != g_imageCache.end()) {
+            return g_imageCache[cacheKey]; 
+        }
+    }
+
+    std::string finalUrl = "";
+    std::string suffix = (type == 2) ? " song cover art" : (isTvShow ? " show poster" : " movie poster");
+    std::string term = UrlEncode(queryTitle + " " + querySub + suffix);
+    
+    std::wstring host = L"www.bing.com";
+    std::wstring path = StrToWStr("/images/search?q=" + term);
+    
+    std::string html = FetchHttps(host, path);
+    
+    std::string searchToken = "id=OIP.";
+    size_t start = html.find(searchToken);
+    
+    if (start != std::string::npos) {
+        start += 3; 
+        size_t endQuote = html.find("\"", start);
+        size_t endAmp = html.find("&", start);
+        size_t end = std::min(endQuote, endAmp);
+        
+        if (end != std::string::npos) {
+            std::string imageId = html.substr(start, end - start);
+            finalUrl = "https://tse1.mm.bing.net/th?id=" + imageId;
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_cacheMutex);
+        g_imageCache[cacheKey] = finalUrl; 
+    }
+
+    return finalUrl;
+}
 
 bool ReadFileBytes(const std::wstring& path, std::vector<char>& data) {
     std::ifstream file(path.c_str(), std::ios::binary | std::ios::ate);
@@ -266,15 +534,13 @@ std::string UploadTo0x0st(const std::string& fileUrl) {
     
     {
         std::lock_guard<std::mutex> lock(g_cacheMutex);
-        if (g_imageCache.find(pathStr) != g_imageCache.end()) {
-            return g_imageCache[pathStr];
-        }
+        if (g_imageCache.find(pathStr) != g_imageCache.end()) return g_imageCache[pathStr];
     }
 
     std::vector<char> fileData;
     if (!ReadFileBytes(StrToWStr(pathStr), fileData)) return "";
 
-    HINTERNET hSession = WinHttpOpen(L"VLC-RPC-Mod/1.3", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET hSession = WinHttpOpen(L"VLC-RPC-Mod/1.4", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return "";
     HINTERNET hConnect = WinHttpConnect(hSession, L"0x0.st", INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) { WinHttpCloseHandle(hSession); return ""; }
@@ -293,7 +559,6 @@ std::string UploadTo0x0st(const std::string& fileUrl) {
     bodyTail += "\r\n--" + boundary + "--\r\n";
 
     DWORD totalSize = (DWORD)(bodyHead.size() + fileData.size() + bodyTail.size());
-
     bool success = false;
     std::string resultUrl = "";
 
@@ -306,8 +571,7 @@ std::string UploadTo0x0st(const std::string& fileUrl) {
         WinHttpWriteData(hRequest, bodyTail.c_str(), (DWORD)bodyTail.size(), &bytesWritten);
 
         if (WinHttpReceiveResponse(hRequest, NULL)) {
-            DWORD dwSize = 0;
-            DWORD dwDownloaded = 0;
+            DWORD dwSize = 0, dwDownloaded = 0;
             do {
                 if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) break;
                 if (dwSize == 0) break;
@@ -317,17 +581,12 @@ std::string UploadTo0x0st(const std::string& fileUrl) {
                 }
             } while (dwSize > 0);
             
-            while (!resultUrl.empty() && (resultUrl.back() == '\n' || resultUrl.back() == '\r')) {
-                resultUrl.pop_back();
-            }
+            while (!resultUrl.empty() && (resultUrl.back() == '\n' || resultUrl.back() == '\r')) resultUrl.pop_back();
             if (resultUrl.find("http") == 0) success = true;
         }
     }
 
-    WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(hConnect);
-    WinHttpCloseHandle(hSession);
-
+    WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
     if (success) {
         std::lock_guard<std::mutex> lock(g_cacheMutex);
         g_imageCache[pathStr] = resultUrl;
@@ -391,8 +650,6 @@ std::string GetQualityTags(const std::string& json) {
         std::string block = json.substr(start, end - start);
 
         if (block.find("\"Type\":\"Video\"") != std::string::npos) {
-            
-            // Resolution
             std::string res = ExtractString(block, "Video_resolution");
             if (!res.empty()) {
                 size_t xPos = res.find("x");
@@ -408,21 +665,19 @@ std::string GetQualityTags(const std::string& json) {
                 }
             }
 
-            // HDR Detection
             std::string color = ExtractString(block, "Color_primaries");
             std::string transfer = ExtractString(block, "Color_transfer_function");
             
             bool isHDR = false;
-            if (color.find("2020") != std::string::npos) isHDR = true; // BT.2020
-            if (transfer.find("PQ") != std::string::npos) isHDR = true; // SMPTE ST 2084
-            if (transfer.find("HLG") != std::string::npos) isHDR = true; // HLG
+            if (color.find("2020") != std::string::npos) isHDR = true; 
+            if (transfer.find("PQ") != std::string::npos) isHDR = true; 
+            if (transfer.find("HLG") != std::string::npos) isHDR = true; 
             if (transfer.find("2084") != std::string::npos) isHDR = true;
 
             if (isHDR) {
                 if (!tags.empty()) tags += SEP;
                 tags += "HDR";
             }
-            
             break; 
         }
     }
@@ -462,10 +717,156 @@ int DetectActivityType(const std::string& filename, const std::string& quality) 
 }
 
 // =============================================================
-// 4. MAIN WORKER
+// 4. REMOTE FILTER UPDATER & CACHING
+// =============================================================
+
+std::wstring GetCacheFilePathW() {
+    WCHAR storagePath[MAX_PATH];
+    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+        return std::wstring(storagePath) + L"\\junklist.txt";
+    }
+    return L"";
+}
+
+bool IsCacheValid(const std::wstring& path) {
+    struct _stat result;
+    if (_wstat(path.c_str(), &result) == 0) {
+        time_t now = time(nullptr);
+        // 21600 seconds = 6 hours
+        if (difftime(now, result.st_mtime) < 21600) {
+            return true;
+        }
+    }
+    return false;
+}
+
+struct FilterData {
+    std::vector<std::string> sites;
+    std::vector<std::string> tlds;
+    std::vector<std::string> tags;
+    std::vector<std::string> words;
+    bool isValid = false;
+};
+
+FilterData ParseFilters(const std::string& text) {
+    FilterData data;
+    if (text.empty()) return data;
+
+    std::stringstream ss(text);
+    std::string line;
+    int currentSection = 0;
+
+    while (std::getline(ss, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty()) continue;
+
+        size_t first = line.find_first_not_of(" \t");
+        if (first == std::string::npos) continue;
+        size_t last = line.find_last_not_of(" \t");
+        line = line.substr(first, last - first + 1);
+
+        if (line == "[SITES]") { currentSection = 1; continue; }
+        if (line == "[TLDS]") { currentSection = 2; continue; }
+        if (line == "[SCENE]") { currentSection = 3; continue; }
+        if (line == "[WORDS]") { currentSection = 4; continue; }
+
+        std::string lowerLine = line;
+        std::transform(lowerLine.begin(), lowerLine.end(), lowerLine.begin(), ::tolower);
+
+        if (currentSection == 1) data.sites.push_back(lowerLine);
+        else if (currentSection == 2) data.tlds.push_back(lowerLine);
+        else if (currentSection == 3) data.tags.push_back(lowerLine);
+        else if (currentSection == 4) data.words.push_back(lowerLine);
+    }
+
+    if (!data.sites.empty() && !data.tlds.empty() && !data.tags.empty() && !data.words.empty()) {
+        data.isValid = true;
+    }
+    return data;
+}
+
+FilterData LoadFiltersFromFile(const std::wstring& path) {
+    std::ifstream file(path.c_str());
+    if (!file.is_open()) return FilterData();
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    return ParseFilters(content);
+}
+
+void FetchRemoteFilters(bool strictLocalMode) {
+    std::wstring cachePath = GetCacheFilePathW();
+    
+    // 0. If Strict Local Mode is enabled, skip network and cache completely
+    if (strictLocalMode) return;
+
+    // 1. Check if we have a valid cache that is < 24 hours old
+    if (!cachePath.empty() && IsCacheValid(cachePath)) {
+        FilterData localData = LoadFiltersFromFile(cachePath);
+        if (localData.isValid) {
+            std::lock_guard<std::mutex> lock(g_filterMutex);
+            g_junkSites = localData.sites;
+            g_tlds = localData.tlds;
+            g_truncateTags = localData.tags;
+            g_junkWords = localData.words;
+            g_filtersLoaded = true;
+            return; // Success!
+        }
+    }
+
+    // 2. Fetch from GitHub if no cache or cache expired
+    PCWSTR url = L"https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/assets/filters.txt";
+    const WH_URL_CONTENT* content = Wh_GetUrlContent(url, nullptr);
+    if (content) {
+        std::string result(content->data, content->length);
+        Wh_FreeUrlContent(content);
+
+        FilterData remoteData = ParseFilters(result);
+        if (remoteData.isValid) {
+            // Save new cache securely
+            if (!cachePath.empty()) {
+                std::ofstream out(cachePath.c_str(), std::ios::trunc);
+                if (out.is_open()) {
+                    out << result;
+                    out.close();
+                }
+            }
+            
+            // Apply to global state
+            std::lock_guard<std::mutex> lock(g_filterMutex);
+            g_junkSites = remoteData.sites;
+            g_tlds = remoteData.tlds;
+            g_truncateTags = remoteData.tags;
+            g_junkWords = remoteData.words;
+            g_filtersLoaded = true;
+            return;
+        }
+    }
+
+    // 3. Absolute Fallback: If Github fails, and cache is expired, STILL try to load the expired cache 
+    // to prevent complete regression to hardcoded lists.
+    if (!cachePath.empty()) {
+        FilterData staleData = LoadFiltersFromFile(cachePath);
+        if (staleData.isValid) {
+            std::lock_guard<std::mutex> lock(g_filterMutex);
+            g_junkSites = staleData.sites;
+            g_tlds = staleData.tlds;
+            g_truncateTags = staleData.tags;
+            g_junkWords = staleData.words;
+            g_filtersLoaded = true;
+        }
+    }
+}
+
+// =============================================================
+// 5. MAIN WORKER
 // =============================================================
 
 void Worker() {
+    bool bStrictLocalMode = Wh_GetIntSetting(L"StrictLocalMode");
+    
+    // -------------------------------------------------------------
+    // 🔥 PULL REMOTE FILTERS & SYNC CACHE
+    FetchRemoteFilters(bStrictLocalMode);
+    // -------------------------------------------------------------
     std::string defaultId = "1465711556418474148"; 
     PCWSTR sId = Wh_GetStringSetting(L"ClientId");
     std::string myClientId = sId ? WStrToStr(sId) : defaultId;
@@ -473,6 +874,25 @@ void Worker() {
     Wh_FreeStringSetting(sId);
 
     bool bShowCoverArt = Wh_GetIntSetting(L"ShowCoverArt");
+    bool bShowQualityTags = Wh_GetIntSetting(L"ShowQualityTags");
+    bool bEnableMetadataCleaner = Wh_GetIntSetting(L"EnableMetadataCleaner");
+
+    // Process Custom Junk Words Setting
+    PCWSTR sJunk = Wh_GetStringSetting(L"CustomJunkWords");
+    std::string customJunkStr = sJunk ? WStrToStr(sJunk) : "";
+    Wh_FreeStringSetting(sJunk);
+    
+    std::vector<std::string> customJunkList;
+    std::stringstream ss(customJunkStr);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+        size_t start = token.find_first_not_of(" ");
+        if (start != std::string::npos) {
+            token = token.substr(start, token.find_last_not_of(" ") - start + 1);
+            std::transform(token.begin(), token.end(), token.begin(), ::tolower);
+            customJunkList.push_back(token);
+        }
+    }
 
     PCWSTR sTheme = Wh_GetStringSetting(L"Theme");
     std::string myTheme = sTheme ? WStrToStr(sTheme) : "";
@@ -496,7 +916,7 @@ void Worker() {
     std::string assetPause = myTheme + "pause_icon";
     std::string assetStop  = myTheme + "stop_icon";
 
-    HINTERNET hSession = WinHttpOpen(L"VLC-RPC/1.3", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET hSession = WinHttpOpen(L"VLC-RPC/1.4", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     HINTERNET hConnect = NULL;
     HINTERNET hRequest = NULL;
 
@@ -507,10 +927,17 @@ void Worker() {
     std::string lastState = ""; int heartbeat = 0; 
     long long anchorStart = 0; long long anchorEnd = 0;
     int lastActivityType = 0; 
-    
-    std::string lastArtworkLocal = ""; 
-    std::string currentRemoteArt = ""; 
     std::string lastDisplayImage = ""; 
+
+    // 🔥 STATE CHANGE CACHE VARIABLES 🔥
+    std::string lastRawFilename = "";
+    std::string lastRawTitle = "";
+    std::string lastRawArtist = "";
+    std::string lastShowName = "";
+    std::string cachedFilename = "";
+    std::string cachedTitle = "";
+    std::string cachedArtist = "";
+    std::string cachedShowName = "";
 
     while (!g_stopThread.load()) {
         if (hSession && !hConnect) hConnect = WinHttpConnect(hSession, L"127.0.0.1", 8080, 0);
@@ -561,14 +988,17 @@ void Worker() {
                         }
                     }
                     else if (stateStr == "playing" || stateStr == "paused") {
-                        std::string filename = CleanString(ExtractString(json, "filename"));
+                        std::string rawFilename = CleanString(ExtractString(json, "filename"));
+                        std::string rawTitle = ExtractString(json, "title");
                         std::string showName = ExtractString(json, "showName");
                         std::string season = ExtractString(json, "seasonNumber");
                         std::string episode = ExtractString(json, "episodeNumber");
-                        std::string title = ExtractString(json, "title");
-                        std::string artist = ExtractString(json, "artist"); 
+                        std::string rawArtist = ExtractString(json, "artist"); 
                         std::string album = ExtractString(json, "album");   
                         std::string artworkUrl = ExtractString(json, "artwork_url");
+                        
+                        std::string date = ExtractString(json, "date");
+                        if (date.empty()) date = ExtractYear(rawFilename); 
                         
                         long long chapter = ExtractNumber(json, "chapter");
                         long long time = ExtractNumber(json, "time");
@@ -578,13 +1008,41 @@ void Worker() {
                         std::string quality = GetQualityTags(json);
                         std::string audio = GetAudioLanguages(json);
                         
-                        int activityType = DetectActivityType(filename, quality);
+                        int activityType = DetectActivityType(rawFilename, quality);
+
+                        // 🔥 STATE-CHANGE CACHE TRIGGER 🔥
+                        // Only run the heavy scrubber if the actual file/metadata changed
+                        if (rawFilename != lastRawFilename || rawTitle != lastRawTitle || rawArtist != lastRawArtist || showName != lastShowName) {
+                            
+                            std::string filenameClean = bEnableMetadataCleaner ? CleanMetadata(rawFilename, customJunkList) : rawFilename;
+                            cachedFilename = filenameClean.empty() ? rawFilename : filenameClean;
+                            
+                            std::string titleClean = bEnableMetadataCleaner ? CleanMetadata(rawTitle, customJunkList) : rawTitle;
+                            cachedTitle = titleClean.empty() ? cachedFilename : titleClean;
+                            
+                            std::string artistClean = bEnableMetadataCleaner ? CleanMetadata(rawArtist, customJunkList) : rawArtist;
+                            cachedArtist = artistClean.empty() ? rawArtist : artistClean;
+                            
+                            std::string showClean = bEnableMetadataCleaner ? CleanMetadata(showName, customJunkList) : showName;
+                            cachedShowName = showClean.empty() ? showName : showClean;
+
+                            // Save states for next loop check
+                            lastRawFilename = rawFilename;
+                            lastRawTitle = rawTitle;
+                            lastRawArtist = rawArtist;
+                            lastShowName = showName;
+                        }
+
+                        // Use the hyper-fast cached strings
+                        std::string filename = cachedFilename;
+                        std::string title = cachedTitle;
+                        std::string artist = cachedArtist;
 
                         std::string top = ""; std::string bot = ""; std::string query = "";
                         std::string activityName = ""; 
                         std::string largeText = "VLC Media Player";
 
-                        if (activityType == 2) { // LISTENING
+                        if (activityType == 2) { 
                             activityName = title.empty() ? filename : title;
                             top = activityName; 
                             query = activityName + " " + artist;
@@ -600,30 +1058,30 @@ void Worker() {
                             if (!album.empty()) largeText = album;
                             else largeText = "Listening to Music";
 
-                        } else { // WATCHING / PLAYING
+                        } else { 
                             if (!showName.empty() && !episode.empty()) {
-                                activityName = showName;
-                                top = showName;
-                                if (!quality.empty()) top += SEP + quality;
+                                activityName = cachedShowName;
+                                top = activityName;
+                                if (bShowQualityTags && !quality.empty()) top += SEP + quality;
                                 bot = "S" + season + "E" + episode;
                                 if (chapter >= 0) bot += SEP + "Ch " + NumToStr(chapter + 1);
                                 if (!audio.empty()) bot += SEP + audio;
-                                query = showName + " S" + season + "E" + episode;
+                                query = activityName + " S" + season + "E" + episode;
                                 largeText = "Watching TV Show";
                             } 
                             else if (!title.empty()) {
-                                activityName = CleanString(title);
-                                top = CleanString(title);
-                                if (!quality.empty()) top += SEP + quality;
+                                activityName = title;
+                                top = title;
+                                if (bShowQualityTags && !quality.empty()) top += SEP + quality;
                                 if (chapter >= 0) bot = "Ch " + NumToStr(chapter + 1); else bot = "Video";
                                 if (!audio.empty()) bot += SEP + audio;
-                                query = CleanString(title);
+                                query = title;
                                 largeText = "Watching Movie";
                             }
                             else {
                                 activityName = filename;
                                 top = filename;
-                                if (!quality.empty()) top += SEP + quality;
+                                if (bShowQualityTags && !quality.empty()) top += SEP + quality;
                                 bot = "Video";
                                 query = filename;
                                 largeText = "Watching Video";
@@ -634,19 +1092,27 @@ void Worker() {
 
                         std::string displayImage = assetLarge; 
                         
-                        if (bShowCoverArt && !artworkUrl.empty() && artworkUrl.find("file://") == 0) {
-                            if (artworkUrl != lastArtworkLocal) {
-                                std::string uploaded = UploadTo0x0st(artworkUrl);
-                                if (!uploaded.empty()) {
-                                    currentRemoteArt = uploaded;
-                                } else {
-                                    currentRemoteArt = "";
+                        if (bShowCoverArt) {
+                            if (!artworkUrl.empty()) {
+                                if (artworkUrl.find("file://") == 0) {
+                                    std::string uploaded = UploadTo0x0st(artworkUrl);
+                                    if (!uploaded.empty() && uploaded.find("http") == 0) {
+                                        displayImage = uploaded;
+                                    }
+                                } else if (artworkUrl.find("http") == 0) {
+                                    displayImage = artworkUrl;
                                 }
-                                lastArtworkLocal = artworkUrl;
                             }
-                            if (!currentRemoteArt.empty()) displayImage = currentRemoteArt;
-                        } else {
-                             displayImage = assetLarge;
+                            
+                            if (displayImage == assetLarge && (activityType == 2 || activityType == 3)) {
+                                std::string queryTitle = (activityType == 2) ? (title.empty() ? filename : title) : activityName;
+                                std::string querySub = (activityType == 2) ? artist : date;
+                                
+                                std::string externalArt = FindExternalArtwork(activityType, queryTitle, querySub, (!showName.empty() && !episode.empty()));
+                                if (!externalArt.empty() && externalArt.find("http") == 0) {
+                                    displayImage = externalArt;
+                                }
+                            }
                         }
 
                         auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
