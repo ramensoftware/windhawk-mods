@@ -272,7 +272,7 @@ int WINAPI MessageBoxW_Hook(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT u
 
         PCWSTR caption = lpCaption != NULL ? lpCaption : L"Error";
 
-        HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+        HMODULE hComCtl = LoadLibraryExW(L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hComCtl) {
             // TaskDialog_t pTaskDialog = (TaskDialog_t)GetProcAddress(hComCtl, "TaskDialog");
 
@@ -519,7 +519,7 @@ int WINAPI MessageBoxIndirectW_Hook(const MSGBOXPARAMSW *lpmbp) {
 
         PCWSTR caption = lpmbp->lpszCaption != NULL ? lpmbp->lpszCaption : L"Error";
 
-        HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+        HMODULE hComCtl = LoadLibraryExW(L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hComCtl) {
             // TaskDialog_t pTaskDialog = (TaskDialog_t)GetProcAddress(hComCtl, "TaskDialog");
 
