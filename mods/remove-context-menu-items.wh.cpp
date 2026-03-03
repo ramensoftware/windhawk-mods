@@ -276,7 +276,7 @@ If you find a mistake and for additional details, please click [here](https://gi
   - enableWinRARFiltering: false
     $name: Enable WinRAR extension filtering
     $description: >-
-      When enabled, WinRAR menu items will ONLY appear for files whose extensions are in the WinRAR whitelist below. They are hidden for all other file types. (Note: Requires "WinRAR" menu item to be enabled.)
+      When enabled, the WinRAR menu item will ONLY appear for files whose extensions are in the WinRAR whitelist below. It is hidden for all other file types. (Note: Requires "WinRAR" menu item to be enabled.)
 
         Known Limitation: In Explorer window with multiple tabs, the mod currently retrieves file context from the first tab (active primary tab) rather than the other tabs currently being viewed or clicked.
   - winrarExtensions:
