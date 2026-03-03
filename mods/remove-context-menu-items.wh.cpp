@@ -2,7 +2,7 @@
 // @id              remove-context-menu-items
 // @name            Remove Unwanted Context Menu Items (Classic Menu Only)
 // @description     Removes unwanted items from file context menus with configurable options and context-aware filtering
-// @version         1.6.0
+// @version         1.7.0
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -57,7 +57,10 @@ Clean up your Windows context menus by removing bloatware and unwanted items:
 - ...and many more!
 
 ### Context-Aware Filtering
-Some items like `Edit in Notepad` can be filtered based on file extensions. For example, you can configure the mod to only show `Edit in Notepad` for text files (.txt, .log, .json) but hide it for images and other files.
+Some items like `Edit in Notepad` and `WinRAR` can be filtered based on file extensions. For example, you can configure the mod to only show `Edit in Notepad` for text files or `WinRAR` items for archives, hiding them for all other file types.
+
+### Modifier Key Override
+Hold `Ctrl` or `Alt` while right-clicking to temporarily bypass the mod and see all original context menu items. Useful when you need access to a hidden item without changing settings.
 
 ### Custom Items
 You can also add your own custom menu items to remove by entering their text in the settings.
@@ -157,7 +160,7 @@ If you find a mistake and for additional details, please click [here](https://gi
     $name: Include in library
   - removeRotate: false
     $name: Rotate options
-    $description: Removes the "Rotate right" and "Rotate left" items
+    $description: The "Rotate right" and "Rotate left" items
   - removeDisplaySettings: false
     $name: Display settings
   - removePersonalize: false
@@ -195,10 +198,10 @@ If you find a mistake and for additional details, please click [here](https://gi
     $name: Play with Media Player
   - removeEditInNotepad: false
     $name: Edit in Notepad
-    $description: See the notice below for more information
+    $description: Enable extension filtering below to show this only for relevant file types
   - removeEditInNotepadPlusPlus: false
     $name: Edit in Notepad++
-    $description: See the notice below for more information
+    $description: Enable extension filtering below to show this only for relevant file types
   - removeEditWithPhotos: false
     $name: Edit with Photos
   - removeEditWithPaint: false
@@ -215,6 +218,7 @@ If you find a mistake and for additional details, please click [here](https://gi
     $description: OneDrive submenu item
   - removeWinRAR: false
     $name: WinRAR
+    $description: Enable extension filtering below to show this only for relevant file types
   $name: App-specific Items
   $description: Disabled by default
 
@@ -226,30 +230,34 @@ If you find a mistake and for additional details, please click [here](https://gi
 
     Wildcard Usage (Prefix Match): Add * at the end for prefix matching (e.g., "Open*" removes all items starting with "Open")
 
+- modifierKeyOverride:
+  - enableModifierOverride: true
+    $name: Enable modifier key override
+    $description: >-
+      When enabled, holding Ctrl or Alt while right-clicking temporarily bypasses the mod and shows all original context menu items.
+  - overrideKey: ctrl
+    $name: Override key
+    $description: Which modifier key to hold while right-clicking to bypass filtering
+    $options:
+    - ctrl: Ctrl
+    - alt: Alt
+    - both: Both
+  $name: Modifier Key Override
+  $description: Hold a modifier key while right-clicking to see all original menu items
+
 - extensionFiltering:
   - enableExtensionFiltering: false
-    $name: Enable extension-based filtering
+    $name: Enable Notepad extension filtering
     $description: >-
-      When enabled, the Notepad menu items will ONLY appear for files with extensions in the whitelist.
+      When enabled, the "Edit in Notepad" and "Edit in Notepad++" menu items will ONLY appear for files whose extensions are in the Notepad whitelist below. They are hidden for all other file types. (Note: Requires "Edit in Notepad" or "Edit in Notepad++" items to be enabled.)
 
-      Note: Requires the "Edit in Notepad" or "Edit in Notepad++" items to be enabled
-
-
-      Known Limitation: In Explorer window with multiple tabs, the mod currently retrieves file context from the first tab (active primary tab) rather than the other tabs currently being viewed or clicked.
+        Known Limitation: In Explorer window with multiple tabs, the mod currently retrieves file context from the first tab (active primary tab) rather than the other tabs currently being viewed or clicked.
   - notepadExtensions:
     - ".txt"
     - ".log"
-    - ".ini"
-    - ".cfg"
-    - ".conf"
-    - ".inf"
-    - ".bat"
-    - ".cmd"
-    - ".reg"
     - ".json"
     - ".xml"
     - ".html"
-    - ".htm"
     - ".css"
     - ".js"
     - ".ts"
@@ -262,24 +270,30 @@ If you find a mistake and for additional details, please click [here](https://gi
     - ".java"
     - ".c"
     - ".cpp"
-    - ".h"
     - ".cs"
-    - ".php"
-    - ".rb"
-    - ".sh"
-    - ".ps1"
-    - ".vbs"
-    - ".lua"
-    - ".asm"
-    - ".makefile"
-    - ".htaccess"
-    - ".gitconfig"
-    - ".env"
-    - ".dockerfile"
     $name: Extensions for Notepad/Notepad++
-    $description: Notepad menu items will ONLY appear for these file extensions. Use lowercase with dot (e.g., .txt)
-  $name: Note for Notepad menu items
-  $description: In Windows 11, the "Edit in Notepad" and "Edit in Notepad++" items appear even when right-clicking files that are not text or code. The toggles above remove these items globally. To display them only for relevant text/code files, enable this filtering feature.
+    $description: Use lowercase with dot (e.g., .txt)
+  - enableWinRARFiltering: false
+    $name: Enable WinRAR extension filtering
+    $description: >-
+      When enabled, the WinRAR menu item will ONLY appear for files whose extensions are in the WinRAR whitelist below. It is hidden for all other file types. (Note: Requires "WinRAR" item to be enabled.)
+
+        Known Limitation: In Explorer window with multiple tabs, the mod currently retrieves file context from the first tab (active primary tab) rather than the other tabs currently being viewed or clicked.
+  - winrarExtensions:
+    - ".zip"
+    - ".rar"
+    - ".7z"
+    - ".iso"
+    - ".tar"
+    - ".gzip"
+    - ".xz"
+    - ".zst"
+    - ".cab"
+    $name: Extensions for WinRAR
+    $description: Use lowercase with dot (e.g., .zip)
+  $name: Extension Filtering
+  $description: >-
+    On Windows 11, Notepad and WinRAR items can appear even when right-clicking unrelated files. Use the Extension Filtering to show each only for relevant file types.
 */
 // ==/WindhawkModSettings==
 
@@ -626,6 +640,13 @@ struct AppSpecificSettings {
 struct ExtensionFilteringSettings {
     bool enableExtensionFiltering;
     std::vector<std::wstring> notepadExtensions;
+    bool enableWinRARFiltering;
+    std::vector<std::wstring> winrarExtensions;
+};
+
+struct ModifierKeySettings {
+    bool enableModifierOverride;
+    std::wstring overrideKey; // "ctrl", "alt", "both"
 };
 
 struct {
@@ -633,6 +654,7 @@ struct {
     BasicSettings basicItems;
     AppSpecificSettings appSpecificItems;
     ExtensionFilteringSettings extensionFiltering;
+    ModifierKeySettings modifierKeyOverride;
     std::vector<std::wstring> customItems;
 } g_settings;
 
@@ -1056,8 +1078,9 @@ void InitializeMenuItems() {
         {L"In Terminal öffnen", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr}, // de-DE
         
         // WinRAR (same in all languages)
-        {L"WinRAR", &g_settings.appSpecificItems.removeWinRAR, false, nullptr}
+        {L"WinRAR", &g_settings.appSpecificItems.removeWinRAR, true, &g_settings.extensionFiltering.winrarExtensions}
     };
+    
 }
 
 
@@ -1109,8 +1132,16 @@ bool MatchesCustomItem(const std::wstring& text, const std::wstring& pattern) {
 
 // Function to check if a menu item should be removed based on extension filtering
 bool ShouldRemoveByExtension(const MenuItem& item) {
-    // If extension filtering is disabled, don't apply extension logic
-    if (!g_settings.extensionFiltering.enableExtensionFiltering) {
+    // Determine which filter toggle applies to this item
+    bool filterEnabled = false;
+    if (item.allowedExtensions == &g_settings.extensionFiltering.winrarExtensions) {
+        filterEnabled = g_settings.extensionFiltering.enableWinRARFiltering;
+    } else {
+        filterEnabled = g_settings.extensionFiltering.enableExtensionFiltering;
+    }
+    
+    // If the relevant filter is disabled, don't apply extension logic
+    if (!filterEnabled) {
         return false;
     }
     
@@ -1145,21 +1176,29 @@ bool ShouldRemoveMenuItem(const std::wstring& text) {
         if (cleanText == cleanItemText) {
             bool isEnabled = *(item.enabled);
             
-            Wh_Log(L"ShouldRemoveMenuItem for '%s': isEnabled=%d, requiresExtCheck=%d, extFilterEnabled=%d",
-                   item.text.c_str(), isEnabled, item.requiresExtensionCheck, 
-                   g_settings.extensionFiltering.enableExtensionFiltering);
+            Wh_Log(L"ShouldRemoveMenuItem for '%s': isEnabled=%d, requiresExtCheck=%d",
+                   item.text.c_str(), isEnabled, item.requiresExtensionCheck);
             
-            // Special handling for extension-filtered items
-            if (item.requiresExtensionCheck && g_settings.extensionFiltering.enableExtensionFiltering) {
-                // When extension filtering is enabled for this item:
-                // - If the setting is ON (removeEditInNotepad = true), apply whitelist logic
-                // - Remove the item if extension is NOT in whitelist
+            // Special handling for extension-filtered items (Notepad and WinRAR)
+            if (item.requiresExtensionCheck) {
                 if (isEnabled) {
-                    bool shouldRemove = ShouldRemoveByExtension(item);
-                    Wh_Log(L"  -> Extension filtering active, final decision: remove=%d", shouldRemove);
-                    return shouldRemove;
+                    // Check if the relevant filter toggle is on for this item
+                    bool filterOn = (item.allowedExtensions == &g_settings.extensionFiltering.winrarExtensions)
+                        ? g_settings.extensionFiltering.enableWinRARFiltering
+                        : g_settings.extensionFiltering.enableExtensionFiltering;
+                    
+                    if (filterOn) {
+                        // Filter is on: only remove if extension is not in whitelist
+                        bool shouldRemove = ShouldRemoveByExtension(item);
+                        Wh_Log(L"  -> Extension filtering active, final decision: remove=%d", shouldRemove);
+                        return shouldRemove;
+                    } else {
+                        // Filter is off: removal toggle wins, hide globally
+                        Wh_Log(L"  -> Filter disabled, removing globally");
+                        return true;
+                    }
                 }
-                // If the setting is OFF, never remove this item
+                // If the removal setting is OFF, never remove this item
                 Wh_Log(L"  -> Setting is OFF, keeping item");
                 return false;
             }
@@ -1183,6 +1222,25 @@ bool ShouldRemoveMenuItem(const std::wstring& text) {
     }
     
     return false;
+}
+
+// Function to check if the modifier key bypass is active
+bool IsModifierKeyBypassActive() {
+    if (!g_settings.modifierKeyOverride.enableModifierOverride) {
+        return false;
+    }
+    
+    const std::wstring& key = g_settings.modifierKeyOverride.overrideKey;
+    bool ctrlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    
+    if (key == L"ctrl") {
+        return ctrlPressed;
+    } else if (key == L"alt") {
+        return altPressed;
+    } else { // "both" - either key works
+        return ctrlPressed || altPressed;
+    }
 }
 
 // Function to process a menu and remove unwanted items
@@ -1308,7 +1366,12 @@ BOOL WINAPI TrackPopupMenuEx_Hook(
         Wh_Log(L"TrackPopupMenuEx called with no file context");
     }
     
-    ProcessMenu(hMenu);
+    // Check modifier key bypass - if active, skip menu processing
+    if (IsModifierKeyBypassActive()) {
+        Wh_Log(L"TrackPopupMenuEx: Modifier key bypass active, skipping menu processing");
+    } else {
+        ProcessMenu(hMenu);
+    }
     
     // Clear file paths after processing
     g_threadFilePaths.clear();
@@ -1351,7 +1414,12 @@ BOOL WINAPI TrackPopupMenu_Hook(
         Wh_Log(L"TrackPopupMenu called with no file context");
     }
     
-    ProcessMenu(hMenu);
+    // Check modifier key bypass - if active, skip menu processing
+    if (IsModifierKeyBypassActive()) {
+        Wh_Log(L"TrackPopupMenu: Modifier key bypass active, skipping menu processing");
+    } else {
+        ProcessMenu(hMenu);
+    }
     
     // Clear file paths after processing
     g_threadFilePaths.clear();
@@ -1458,9 +1526,38 @@ void LoadSettings() {
         }
     }
     
+    // WinRAR filtering settings (nested under extensionFiltering)
+    g_settings.extensionFiltering.enableWinRARFiltering = Wh_GetIntSetting(L"extensionFiltering.enableWinRARFiltering");
+    
+    g_settings.extensionFiltering.winrarExtensions.clear();
+    for (int i = 0; i < maxItems; i++) {
+        PCWSTR ext = Wh_GetStringSetting(L"extensionFiltering.winrarExtensions[%d]", i);
+        if (!ext) break;
+        std::wstring extension(ext);
+        Wh_FreeStringSetting(ext);
+        if (!extension.empty()) {
+            g_settings.extensionFiltering.winrarExtensions.push_back(extension);
+        }
+    }
+    
+    // Modifier key override settings
+    g_settings.modifierKeyOverride.enableModifierOverride = Wh_GetIntSetting(L"modifierKeyOverride.enableModifierOverride");
+    {
+        PCWSTR key = Wh_GetStringSetting(L"modifierKeyOverride.overrideKey");
+        if (key) {
+            g_settings.modifierKeyOverride.overrideKey = key;
+            Wh_FreeStringSetting(key);
+        } else {
+            g_settings.modifierKeyOverride.overrideKey = L"ctrl";
+        }
+    }
+    
     Wh_Log(L"Total custom items loaded: %d", (int)g_settings.customItems.size());
-    Wh_Log(L"Extension filtering enabled: %d", g_settings.extensionFiltering.enableExtensionFiltering);
+    Wh_Log(L"Notepad extension filtering enabled: %d", g_settings.extensionFiltering.enableExtensionFiltering);
     Wh_Log(L"Notepad extensions count: %d", (int)g_settings.extensionFiltering.notepadExtensions.size());
+    Wh_Log(L"WinRAR extension filtering enabled: %d", g_settings.extensionFiltering.enableWinRARFiltering);
+    Wh_Log(L"WinRAR extensions count: %d", (int)g_settings.extensionFiltering.winrarExtensions.size());
+    Wh_Log(L"Modifier key override enabled: %d, key: %s", g_settings.modifierKeyOverride.enableModifierOverride, g_settings.modifierKeyOverride.overrideKey.c_str());
     
     InitializeMenuItems();
 }
