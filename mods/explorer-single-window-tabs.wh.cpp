@@ -311,9 +311,7 @@ static DWORD WINAPI RedirectThread(LPVOID param) {
         return 0;
     }
 
-    // Hide and close the duplicate window
-    ShowWindow(newWnd, SW_HIDE);
-    Sleep(30);
+    // Close the duplicate window (already hidden via WS_VISIBLE strip)
     PostMessageW(newWnd, WM_CLOSE, 0, 0);
 
     // Snapshot tab count before creating a new tab
@@ -371,6 +369,13 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
     bool isCabinet = lpClassName && !IS_INTRESOURCE(lpClassName) &&
                      wcscmp(lpClassName, WC_CABINET) == 0;
 
+    // Strip WS_VISIBLE so the window is never shown before we decide
+    bool wasVisible = false;
+    if (isCabinet && g_enabled) {
+        wasVisible = (dwStyle & WS_VISIBLE) != 0;
+        dwStyle &= ~WS_VISIBLE;
+    }
+
     HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
                                           dwStyle, X, Y, nWidth, nHeight,
                                           hWndParent, hMenu, hInstance,
@@ -378,14 +383,16 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
 
     if (hwnd && isCabinet && g_enabled) {
         HWND existing = FindExistingExplorer(hwnd);
-        if (existing) {
-            // Shift held = bypass, allow separate window
-            if (!(GetAsyncKeyState(VK_SHIFT) & 0x8000)) {
-                auto* ri = new RedirectInfo{hwnd, existing};
-                HANDLE hThread =
-                    CreateThread(nullptr, 0, RedirectThread, ri, 0, nullptr);
-                if (hThread) CloseHandle(hThread);
-            }
+        if (existing && !(GetAsyncKeyState(VK_SHIFT) & 0x8000)) {
+            // Redirect — window stays hidden, thread will close it
+            auto* ri = new RedirectInfo{hwnd, existing};
+            HANDLE hThread =
+                CreateThread(nullptr, 0, RedirectThread, ri, 0, nullptr);
+            if (hThread) CloseHandle(hThread);
+        } else {
+            // First window or Shift bypass — restore visibility
+            if (wasVisible)
+                ShowWindow(hwnd, SW_SHOW);
         }
     }
 
