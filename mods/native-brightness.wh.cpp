@@ -1,16 +1,13 @@
 // ==WindhawkMod==
 // @id              native-brightness
 // @name            Brightness Shortcut Key (Always On Top)
-// @description     Shortcut Key to Change the Brightness.Use CTRL + ALT + UP/DOWM to increase or decrease the brightness natively for the system.
+// @description     Shortcut Key to Change the Brightness. Use CTRL + ALT + UP/DOWN to increase or decrease the brightness natively for the system.
 // @version         1.0
 // @author          Prash
 // @include         windhawk.exe
-// @github	    https://github.com/prasmit2410
+// @github          https://github.com/prasmit2410
 // @compilerOptions -lole32 -loleaut32 -lwbemuuid -lgdi32
-// @include         mspaint.exe
 // @license         MIT
-// @architecture x86
-// @architecture x86-64
 // ==/WindhawkMod==
 
 #include <windows.h>
@@ -62,8 +59,8 @@ LRESULT CALLBACK OSDWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         // --- Draw Icon (Left) ---
         HFONT hIconFont = CreateFont(32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
-                                 OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 
-                                 DEFAULT_PITCH | FF_SWISS, L"Segoe MDL2 Assets");
+                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 
+                                   DEFAULT_PITCH | FF_SWISS, L"Segoe MDL2 Assets");
         SelectObject(hdc, hIconFont);
         
         RECT iconRect = rect;
@@ -73,8 +70,8 @@ LRESULT CALLBACK OSDWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         // --- Draw Percentage (Right) ---
         HFONT hTextFont = CreateFont(28, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
-                                 OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 
-                                 DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 
+                                   DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
         SelectObject(hdc, hTextFont);
 
         wchar_t text[16];
@@ -104,7 +101,6 @@ void InitOSD() {
     wc.lpszClassName = OSD_CLASS_NAME;
     RegisterClass(&wc);
 
-    // Create window with TOPMOST flag initially
     hOSD = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED, 
         OSD_CLASS_NAME, L"", 
@@ -122,7 +118,6 @@ void InitOSD() {
 
 void ShowOSD(int level) {
     displayBrightness = level;
-    
     if (hOSD) {
         int screenW = GetSystemMetrics(SM_CXSCREEN);
         int screenH = GetSystemMetrics(SM_CYSCREEN);
@@ -131,15 +126,9 @@ void ShowOSD(int level) {
         int x = (screenW - winW) / 2;
         int y = screenH - 160; 
 
-        // 1. Force visual update first
         InvalidateRect(hOSD, NULL, TRUE);
-
-        // 2. AGGRESSIVE SHOW: Show, NoActivate, and Force Topmost Z-Order
-        // We call SetWindowPos with HWND_TOPMOST every single time to ensure it jumps over other windows.
         SetWindowPos(hOSD, HWND_TOPMOST, x, y, winW, winH, 
             SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-
-        // 3. Reset the "Hide" timer
         SetTimer(hOSD, 1, 1500, NULL); 
     }
 }
@@ -195,9 +184,7 @@ void ChangeBrightness(int offset) {
     if (newBrightness > 100) newBrightness = 100;
     if (newBrightness < 0) newBrightness = 0;
     
-    // UPDATE VISUALS IMMEDIATELY
     ShowOSD(newBrightness);
-
     if (newBrightness == currentBrightness) return;
 
     BSTR methodQueryStr = SysAllocString(L"SELECT * FROM WmiMonitorBrightnessMethods");
@@ -239,7 +226,7 @@ void ChangeBrightness(int offset) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Hooks & Threads
+// 3. Hooks & Threads (Fixed Naming Here)
 // ---------------------------------------------------------------------------
 LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
@@ -280,16 +267,25 @@ DWORD WINAPI ThreadMain(LPVOID) {
     return 0;
 }
 
-BOOL WhTool_ModInitInit() {
+// Fixed function name
+BOOL WhTool_ModInit() {
     CreateThread(NULL, 0, ThreadMain, NULL, 0, NULL);
     return TRUE;
 }
 
-void WhTool_ModInitUninit() {
+// Fixed function name
+void WhTool_ModUninit() {
     if (hookThreadId) PostThreadMessage(hookThreadId, WM_QUIT, 0, 0);
 }
 
+// Added missing function
+void WhTool_ModSettingsChanged() {
+    // Logic for settings update can go here if needed.
+}
 
+// ---------------------------------------------------------------------------
+// 4. Windhawk Boilerplate
+// ---------------------------------------------------------------------------
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -304,10 +300,7 @@ BOOL Wh_ModInit() {
     bool isCurrentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
+    if (!argv) return FALSE;
 
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
@@ -330,101 +323,45 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isExcluded) {
-        return FALSE;
-    }
+    if (isExcluded) return FALSE;
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
             ExitProcess(1);
         }
 
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
+        if (!WhTool_ModInit()) ExitProcess(1);
 
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        void* entryPoint = (BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
 
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isToolModProcess) {
-        return FALSE;
-    }
+    if (isToolModProcess) return FALSE;
 
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
+    if (!g_isToolModProcessLauncher) return;
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
+    GetModuleFileName(nullptr, currentProcessPath, MAX_PATH);
 
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
+    WCHAR commandLine[MAX_PATH * 2];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
+    STARTUPINFO si = { sizeof(si) };
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
     PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
+    
+    // Using standard CreateProcess for simplicity in final version
+    if (!CreateProcess(currentProcessPath, commandLine, NULL, NULL, FALSE, NORMAL_PRIORITY_CLASS, NULL, NULL, &si, &pi)) {
         return;
     }
 
@@ -433,20 +370,12 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
+    if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
+    if (!g_isToolModProcessLauncher) {
+        WhTool_ModUninit();
+        ExitProcess(0);
     }
-
-    WhTool_ModUninit();
-    ExitProcess(0);
 }
-
-
