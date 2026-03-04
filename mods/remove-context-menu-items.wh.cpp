@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              remove-context-menu-items
-// @name            Remove Unwanted Context Menu Items (Classic Menu Only)
+// @name            Remove Context Menu Items
 // @description     Removes unwanted items from file context menus with configurable options and context-aware filtering
-// @version         1.7.0
+// @version         1.7.1
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -13,23 +13,23 @@
 
 // ==WindhawkModReadme==
 /*
-# Remove Unwanted Context Menu Items (Classic Menu Only)
+# Remove Context Menu Items
 
 ⚠️ **Windows 11 Users:** This mod currently works only with the classic context menu. Please install the [Classic context menu on Windows 11](https://windhawk.net/mods/explorer-context-menu-classic) mod to use this mod.
 
 ---
 
-This mod removes unwanted items from file context menus with configurable options. It hooks into the context menu creation process and removes unwanted menu items by checking their text labels before they are displayed. It also automatically cleans up duplicate separator lines. Custom items use exact matching by default for precision, with optional wildcard support for flexibility.
+This mod removes unwanted items from file context menus with configurable options. It hooks into the context menu creation process and removes unwanted menu items by checking their text labels before they are displayed. It also automatically cleans up duplicate separator lines.
 
 ## Screenshots
 
 **Before and after right-clicking on an empty space:**
 
-![Before and after on empty space](https://i.imgur.com/xEyRTk1.png)
+![Before and after on empty space](https://raw.githubusercontent.com/armaninyow/Remove-Unwanted-Context-Menu-Items/refs/heads/main/Blank%20Space.png)
 
 **Before and after right-clicking a video file:**
 
-![Before and after on video file](https://i.imgur.com/CPNiFtQ.png)
+![Before and after on video file](https://raw.githubusercontent.com/armaninyow/Remove-Unwanted-Context-Menu-Items/refs/heads/main/Video%20File.png)
 
 ## Features
 
@@ -66,15 +66,24 @@ Hold `Ctrl` or `Alt` while right-clicking to temporarily bypass the mod and see 
 You can also add your own custom menu items to remove by entering their text in the settings.
 
 **Basic Usage (Exact Match):**
-- "Copy" - Removes the `Copy` option (exact match)
-- "Pin to Quick access" - Removes the `Pin to Quick access` option (exact match)
-- "Open" - Removes only `Open` (exact match, won't remove `Open in new tab`)
+- `Copy` - Removes the "Copy" option (exact match)
+- `Pin to Quick access` - Removes the "Pin to Quick access" option (exact match)
+- `Open` - Removes only "Open" (exact match, won't remove "Open in new tab")
 
 **Wildcard Usage (Prefix Match):**
 Add an asterisk (*) at the end to match items that start with the given text:
-- "Open*" - Removes `Open`, `Open with...`, `Open in Terminal`, `Open in new tab`, etc.
-- "Pin to*" - Removes `Pin to Quick access`, `Pin to Start`, etc.
-- "C*" - Removes all menu items that start with C (`Cut`, `Copy`, `Create shortcut`). Be careful!
+- `Open*` - Removes all menu items that start with "Open":
+  - Open
+  - Open with...
+  - Open in new tab
+  - Open in Terminal (and more)
+- `Pin to*` - Removes all menu items that start with "Pin to":
+  - Pin to Start
+  - Pin to Quick access (and more)
+- `C*` - Removes all menu items that start with "C":
+  - Cut
+  - Copy
+  - Create shortcut (and more, so be careful!)
 
 **Tip:** Right-click a file/folder, note the exact text of the menu item you want to remove, then add it to Custom Items. Use the asterisk (*) only if you want to remove multiple items with the same prefix.
 
@@ -163,8 +172,10 @@ If you find a mistake and for additional details, please click [here](https://gi
     $description: The "Rotate right" and "Rotate left" items
   - removeDisplaySettings: false
     $name: Display settings
+    $description: Desktop menu item
   - removePersonalize: false
     $name: Personalize
+    $description: Desktop menu item
   - removeSetAsDesktopBackground: false
     $name: Set as desktop background
   - removeView: false
@@ -200,7 +211,7 @@ If you find a mistake and for additional details, please click [here](https://gi
     $name: Edit in Notepad
     $description: Enable extension filtering below to show this only for relevant file types
   - removeEditInNotepadPlusPlus: false
-    $name: Edit in Notepad++
+    $name: Edit with Notepad++
     $description: Enable extension filtering below to show this only for relevant file types
   - removeEditWithPhotos: false
     $name: Edit with Photos
@@ -208,14 +219,15 @@ If you find a mistake and for additional details, please click [here](https://gi
     $name: Edit with Paint
   - removeNvidiaControlPanel: false
     $name: NVIDIA Control Panel
+    $description: Desktop menu item
   - removeOpenInTerminal: false
     $name: Open in Terminal
   - removeAlwaysKeepOnThisDevice: false
     $name: Always keep on this device
-    $description: OneDrive submenu item
+    $description: OneDrive menu item
   - removeFreeUpSpace: false
     $name: Free up space
-    $description: OneDrive submenu item
+    $description: OneDrive menu item
   - removeWinRAR: false
     $name: WinRAR
     $description: Enable extension filtering below to show this only for relevant file types
@@ -249,7 +261,7 @@ If you find a mistake and for additional details, please click [here](https://gi
   - enableExtensionFiltering: false
     $name: Enable Notepad extension filtering
     $description: >-
-      When enabled, the "Edit in Notepad" and "Edit in Notepad++" menu items will ONLY appear for files whose extensions are in the Notepad whitelist below. They are hidden for all other file types. (Note: Requires "Edit in Notepad" or "Edit in Notepad++" items to be enabled.)
+      When enabled, "Edit in Notepad" and "Edit with Notepad++" will ONLY appear for files whose extensions are in the Notepad whitelist below. They are hidden for all other file types. (Note: Requires "Edit in Notepad" or "Edit with Notepad++" menu items to be enabled.)
 
         Known Limitation: In Explorer window with multiple tabs, the mod currently retrieves file context from the first tab (active primary tab) rather than the other tabs currently being viewed or clicked.
   - notepadExtensions:
@@ -276,7 +288,7 @@ If you find a mistake and for additional details, please click [here](https://gi
   - enableWinRARFiltering: false
     $name: Enable WinRAR extension filtering
     $description: >-
-      When enabled, the WinRAR menu item will ONLY appear for files whose extensions are in the WinRAR whitelist below. It is hidden for all other file types. (Note: Requires "WinRAR" item to be enabled.)
+      When enabled, the WinRAR menu item will ONLY appear for files whose extensions are in the WinRAR whitelist below. It is hidden for all other file types. (Note: Requires "WinRAR" menu item to be enabled.)
 
         Known Limitation: In Explorer window with multiple tabs, the mod currently retrieves file context from the first tab (active primary tab) rather than the other tabs currently being viewed or clicked.
   - winrarExtensions:
@@ -1045,8 +1057,8 @@ void InitializeMenuItems() {
         {L"Upravit v Poznámkovém bloku", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions}, // cs-CZ
         {L"Im Editor bearbeiten", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions}, // de-DE
         
-        // Edit in Notepad++ (en-US, en-GB, en-AU same)
-        {L"Edit in Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions},
+        // Edit with Notepad++ (en-US, en-GB, en-AU same)
+        {L"Edit with Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions},
         {L"Editar no Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions}, // pt-BR, pt-PT
         {L"Upravit v aplikaci Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions}, // cs-CZ
         {L"Mit Notepad++ bearbeiten", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions}, // de-DE
