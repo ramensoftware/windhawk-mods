@@ -1,8 +1,10 @@
 // ==WindhawkMod==
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars Lite
-// @description     Native titlebars in UWP apps
+// @description     Enables native titlebars in UWP apps
 // @version         1.0.0
+// @author          Anixx
+// @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
 // @include         explorer.exe
 // @architecture    x86-64
@@ -10,7 +12,15 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+
+Replaces the UWP titlebars with native Win32 titlebars.
+
+This mod is focused on the Classic theme, so may produce sub-optimal results in other cases.
+
+![Screenshot](https://i.imgur.com/Pf6RQTk.png)
+
+*/
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
@@ -115,7 +125,7 @@ BOOL Wh_ModInit()
 
     Wh_SetFunctionHook((void *)DwmExtendFrameIntoClientArea, (void *)DwmExtendFrameIntoClientArea_hook, (void **)&DwmExtendFrameIntoClientArea_orig);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK ApplicationFrame_hooks[] = {
         {
             {L"private: long __cdecl CTitleBar::_CreateTitleBarWindow(void)"},
             (void **)&CTitleBar__CreateTitleBarWindow_orig,
@@ -130,5 +140,5 @@ BOOL Wh_ModInit()
         },
     };
 
-    return WindhawkUtils::HookSymbols(LoadLibraryW(L"ApplicationFrame.dll"), hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(LoadLibraryW(L"ApplicationFrame.dll"), ApplicationFrame_hooks, ARRAYSIZE(ApplicationFrame_hooks));
 }
