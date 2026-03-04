@@ -6342,7 +6342,7 @@
                     31
                 ],
                 "ratingUsers": 38,
-                "updated": 1772514981000,
+                "updated": 1772649300000,
                 "users": 828
             },
             "metadata": {
@@ -6357,8 +6357,8 @@
                     "explorer.exe"
                 ],
                 "license": "MIT",
-                "name": "Remove Unwanted Context Menu Items (Classic Menu Only)",
-                "version": "1.7.0"
+                "name": "Remove Context Menu Items",
+                "version": "1.7.1"
             }
         },
         "remove-fullscreen-popup-chrome": {

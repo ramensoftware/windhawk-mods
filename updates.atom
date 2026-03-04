@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-04T17:58:39.000Z</updated>
+    <updated>2026-03-04T18:35:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Context Menu Items 1.7.1]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#5d5ac123fe3725cd883374758ac47def57af8891</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-03-04T18:35:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed mod from <code>Remove Unwanted Context Menu Items (Classic Menu Only)</code> back to <code>Remove Context Menu Items</code>.</li>
+<li>Renamed <code>Edit in Notepad++</code> to <code>Edit with Notepad++</code> throughout.</li>
+<li>Cleaned up minor description and formatting inconsistencies.</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Legacy (Win32) sound volume flyout 2.0.0]]></title>
         <id>https://windhawk.net/mods/legacy-sound-flyout#211f737a1a4504166562f3782db20c86eec52a84</id>
@@ -412,17 +427,6 @@ the second-level menus.</p>
         <author>
             <name>Mohamed Magdy</name>
             <uri>https://github.com/hamomagdy724</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.1]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#d4752edf9c0ec0c4dfbb7589695b6f6d904ca97b</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2"/>
-        <updated>2026-02-27T22:30:57.000Z</updated>
-        <content type="html"><![CDATA[<p>Remove the items "tile", "cascade", not functional in Win11</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

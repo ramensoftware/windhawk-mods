@@ -1,3 +1,9 @@
+## 1.7.1 ([Mar 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5d5ac123fe3725cd883374758ac47def57af8891/mods/remove-context-menu-items.wh.cpp))
+
+- Renamed mod from `Remove Unwanted Context Menu Items (Classic Menu Only)` back to `Remove Context Menu Items`.
+- Renamed `Edit in Notepad++` to `Edit with Notepad++` throughout.
+- Cleaned up minor description and formatting inconsistencies.
+
 ## 1.7.0 ([Mar 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/efc613f8a1e849205871cfa07708a2cf82b96fb1/mods/remove-context-menu-items.wh.cpp))
 
 - Added `WinRAR Extension Filtering` toggle under the newly improved `Extension Filtering` section. When enabled alongside the WinRAR removal toggle, the WinRAR context menu item will only appear for archive/compressed files (.zip, .rar, .7z, .iso, .tar, .gzip, .xz, .zst, .cab). It is hidden for all other file types.
