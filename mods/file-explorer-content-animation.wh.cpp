@@ -22,42 +22,6 @@
 
 ---
 
-## Português
-
-Uma animação suave de deslizamento inspirada no WinUI para a área de conteúdo do Explorador de Arquivos no Windows 11.
-
-Este mod aprimora a navegação entre pastas com um movimento sutil e moderno, mantendo estabilidade total do sistema e ótimo desempenho.
-
-### ✨ Recursos
-
-- Animação suave com easing refinado
-- Delay opcional na primeira abertura de cada janela
-- Delay durante navegação para esconder o "Trabalhando nisso..."
-- Sem flicker
-- Sem flash preto
-- Não interfere em miniaturas
-- Não quebra o DirectComposition
-- Leve e eficiente
-- Compatível com o mod Translucent Windows
-
-### 🧠 Como Funciona
-
-- O mod move temporariamente a área de conteúdo para fora da área visível
-- Aguarda estabilização do layout
-- Restaura a posição original
-- Executa uma animação suave com easing inspirado no WinUI
-
-Isso mantém o pipeline de renderização intacto e estável mesmo nas builds mais recentes do Windows 11 (incluindo 25H2).
-
-### ⚙️ Configurações
-
-- **Duração da Animação** – Define quanto tempo a animação leva.
-- **Distância do Slide** – Define o deslocamento inicial.
-- **Delay na Primeira Abertura** – Aplicado apenas ao abrir uma nova janela.
-- **Delay ao Trocar de Pasta** – Pequeno atraso para esconder o texto de carregamento.
-
----
-
 ## English
 
 A smooth, WinUI-inspired slide animation for the File Explorer content area on Windows 11.
@@ -91,6 +55,42 @@ This approach keeps the DirectComposition pipeline intact, ensuring stability ev
 - **Slide Distance** – Controls how far the content moves before settling.
 - **First Open Delay** – Applies only when a new Explorer window is opened.
 - **Navigation Delay** – Brief delay during folder switching to hide loading text.
+
+---
+
+## Português
+
+Uma animação suave de deslizamento inspirada no WinUI para a área de conteúdo do Explorador de Arquivos no Windows 11.
+
+Este mod aprimora a navegação entre pastas com um movimento sutil e moderno, mantendo estabilidade total do sistema e ótimo desempenho.
+
+### ✨ Recursos
+
+- Animação suave com easing refinado
+- Delay opcional na primeira abertura de cada janela
+- Delay durante navegação para esconder o "Trabalhando nisso..."
+- Sem flicker
+- Sem flash preto
+- Não interfere em miniaturas
+- Não quebra o DirectComposition
+- Leve e eficiente
+- Compatível com o mod Translucent Windows
+
+### 🧠 Como Funciona
+
+- O mod move temporariamente a área de conteúdo para fora da área visível
+- Aguarda estabilização do layout
+- Restaura a posição original
+- Executa uma animação suave com easing inspirado no WinUI
+
+Isso mantém o pipeline de renderização intacto e estável mesmo nas builds mais recentes do Windows 11 (incluindo 25H2).
+
+### ⚙️ Configurações
+
+- **Duração da Animação** – Define quanto tempo a animação leva.
+- **Distância do Slide** – Define o deslocamento inicial.
+- **Delay na Primeira Abertura** – Aplicado apenas ao abrir uma nova janela.
+- **Delay ao Trocar de Pasta** – Pequeno atraso para esconder o texto de carregamento.
 
 ---
 
