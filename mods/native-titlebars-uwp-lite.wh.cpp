@@ -125,7 +125,7 @@ BOOL Wh_ModInit()
 
     Wh_SetFunctionHook((void *)DwmExtendFrameIntoClientArea, (void *)DwmExtendFrameIntoClientArea_hook, (void **)&DwmExtendFrameIntoClientArea_orig);
 
-    WindhawkUtils::SYMBOL_HOOK ApplicationFrame_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK ApplicationFrame_dll_hooks[] = {
         {
             {L"private: long __cdecl CTitleBar::_CreateTitleBarWindow(void)"},
             (void **)&CTitleBar__CreateTitleBarWindow_orig,
@@ -140,5 +140,5 @@ BOOL Wh_ModInit()
         },
     };
 
-    return WindhawkUtils::HookSymbols(LoadLibraryW(L"ApplicationFrame.dll"), ApplicationFrame_hooks, ARRAYSIZE(ApplicationFrame_hooks));
+    return WindhawkUtils::HookSymbols(LoadLibraryW(L"ApplicationFrame.dll"), ApplicationFrame_dll_hooks, ARRAYSIZE(ApplicationFrame_dll_hooks));
 }
