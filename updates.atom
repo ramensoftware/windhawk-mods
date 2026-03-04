@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-04T01:12:08.000Z</updated>
+    <updated>2026-03-04T13:52:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Non-Immersive Taskbar Context Menu Lite 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-context-menu-lite#61e6b2c04ace5ab9ec784db42fd702d88b98cb29</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-context-menu-lite"/>
+        <updated>2026-03-04T13:52:43.000Z</updated>
+        <content type="html"><![CDATA[<p>Compared to the other mod <code>Non-Immersive Taskbar Context Menu</code> this one has simplier code and supports
+the second-level menus.</p>
+<p>Unlike <code>Eradicate immersive menus</code> it does not download symbols.</p>
+<p>Intended for Win10 taskbar running either under Win10 or Win11.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer WinUI-Like Content Animation 1.0]]></title>
         <id>https://windhawk.net/mods/file-explorer-content-animation#d474c7f1b77392ec9794d915f1b707a54e81164d</id>
@@ -411,21 +425,6 @@
         <author>
             <name>Hakuuyosei</name>
             <uri>https://github.com/ahzvenol</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Scroll Actions 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-scroll-actions#a004a92ed65a9e3174df2df8e2131fa1fbb009ff</id>
-        <link href="https://windhawk.net/mods/taskbar-scroll-actions"/>
-        <updated>2026-02-27T13:38:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option for custom regions along the taskbar. For example, "100-200" (pixels) or "20%-50%" (percentage of taskbar length).</li>
-<li>It's now possible to define multiple actions in different scroll regions. Note that due to this change, the mod settings have to be configured again.</li>
-<li>Added the DDC/CI brightness control method to support external monitors.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

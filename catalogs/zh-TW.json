@@ -1467,6 +1467,33 @@
                 "version": "1.0.3"
             }
         },
+        "classic-taskbar-context-menu-lite": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772632363000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772632363000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "description": "Restores the classic (non-immersive) taskbar context menus in Win10 taskbar",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Non-Immersive Taskbar Context Menu Lite",
+                "version": "1.0.0"
+            }
+        },
         "classic-taskdlg-fix": {
             "details": {
                 "defaultSorting": 2610,
