@@ -8,6 +8,7 @@
 // @description:es Animación suave de deslizamiento inspirada en WinUI para el área de contenido del Explorador de Archivos.
 // @version         1.0
 // @author          crazyboyybs
+// @github          https://github.com/crazyboyybs
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi
