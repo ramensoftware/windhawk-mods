@@ -95,32 +95,110 @@ static void AbortRedirect(HWND hwnd) {
 }
 
 // ---------------------------------------------------------------------------
-// Find an existing visible CabinetWClass window (cross-process)
+// Find an existing visible File Explorer window (not Control Panel).
+// Uses IShellWindows COM to check each window's actual path.
 // ---------------------------------------------------------------------------
-struct FindExplorerCtx {
-    HWND exclude;
-    HWND result;
-};
-
-static BOOL CALLBACK EnumFindExplorer(HWND hwnd, LPARAM lParam) {
-    auto* ctx = reinterpret_cast<FindExplorerCtx*>(lParam);
-    if (hwnd == ctx->exclude)
-        return TRUE;
-
-    WCHAR cls[64];
-    if (GetClassNameW(hwnd, cls, _countof(cls)) &&
-        wcscmp(cls, WC_CABINET) == 0 &&
-        IsWindowVisible(hwnd)) {
-        ctx->result = hwnd;
-        return FALSE;
-    }
-    return TRUE;
-}
-
 static HWND FindExistingExplorer(HWND exclude) {
-    FindExplorerCtx ctx{exclude, nullptr};
-    EnumWindows(EnumFindExplorer, reinterpret_cast<LPARAM>(&ctx));
-    return ctx.result;
+    IShellWindows* pSW = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(&pSW))))
+        return nullptr;
+
+    long count = 0;
+    pSW->get_Count(&count);
+
+    HWND result = nullptr;
+    for (long i = 0; i < count; i++) {
+        VARIANT idx;
+        VariantInit(&idx);
+        idx.vt   = VT_I4;
+        idx.lVal = i;
+
+        IDispatch* pDisp = nullptr;
+        if (FAILED(pSW->Item(idx, &pDisp)) || !pDisp)
+            continue;
+
+        IWebBrowser2* pBrowser = nullptr;
+        if (SUCCEEDED(pDisp->QueryInterface(IID_PPV_ARGS(&pBrowser)))) {
+            SHANDLE_PTR hwndPtr = 0;
+            pBrowser->get_HWND(&hwndPtr);
+            HWND hwnd =
+                reinterpret_cast<HWND>(static_cast<ULONG_PTR>(hwndPtr));
+
+            if (hwnd && hwnd != exclude && IsWindowVisible(hwnd)) {
+                // Get the window's path to verify it's real File Explorer
+                std::wstring path;
+
+                BSTR url = nullptr;
+                if (SUCCEEDED(pBrowser->get_LocationURL(&url)) && url &&
+                    wcslen(url) > 0) {
+                    WCHAR filePath[MAX_PATH * 2];
+                    DWORD len = MAX_PATH * 2;
+                    if (SUCCEEDED(PathCreateFromUrlW(url, filePath, &len, 0)))
+                        path = filePath;
+                    else
+                        path = url;
+                    SysFreeString(url);
+                } else {
+                    if (url) SysFreeString(url);
+
+                    // Fallback: PIDL path (for "This PC", etc.)
+                    IServiceProvider* pSP = nullptr;
+                    if (SUCCEEDED(
+                            pDisp->QueryInterface(IID_PPV_ARGS(&pSP)))) {
+                        IShellBrowser* pSB = nullptr;
+                        if (SUCCEEDED(pSP->QueryService(
+                                SID_STopLevelBrowser, IID_PPV_ARGS(&pSB)))) {
+                            IShellView* pSV = nullptr;
+                            if (SUCCEEDED(
+                                    pSB->QueryActiveShellView(&pSV))) {
+                                IFolderView* pFV = nullptr;
+                                if (SUCCEEDED(pSV->QueryInterface(
+                                        IID_PPV_ARGS(&pFV)))) {
+                                    IPersistFolder2* pPF = nullptr;
+                                    if (SUCCEEDED(pFV->GetFolder(
+                                            IID_PPV_ARGS(&pPF)))) {
+                                        PIDLIST_ABSOLUTE pidl = nullptr;
+                                        if (SUCCEEDED(
+                                                pPF->GetCurFolder(&pidl))) {
+                                            PWSTR name = nullptr;
+                                            if (SUCCEEDED(
+                                                    SHGetNameFromIDList(
+                                                        pidl,
+                                                        SIGDN_DESKTOPABSOLUTEPARSING,
+                                                        &name))) {
+                                                path = name;
+                                                CoTaskMemFree(name);
+                                            }
+                                            CoTaskMemFree(pidl);
+                                        }
+                                        pPF->Release();
+                                    }
+                                    pFV->Release();
+                                }
+                                pSV->Release();
+                            }
+                            pSB->Release();
+                        }
+                        pSP->Release();
+                    }
+                }
+
+                // Only use this window if its path is redirectable
+                // (i.e. not Control Panel or other special shell locations)
+                if (!path.empty() && IsRedirectablePath(path)) {
+                    result = hwnd;
+                    pBrowser->Release();
+                    pDisp->Release();
+                    break;
+                }
+            }
+            pBrowser->Release();
+        }
+        pDisp->Release();
+    }
+    pSW->Release();
+    return result;
 }
 
 // ---------------------------------------------------------------------------
