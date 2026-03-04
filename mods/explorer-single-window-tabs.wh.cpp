@@ -52,10 +52,14 @@ Hold **Shift** while opening a folder to force a separate window.
 #define WC_SHELLTAB  L"ShellTabWindowClass"
 #define CMD_NEW_TAB  0xA21B  // Internal Explorer "new tab" command
 
-static HWND g_lastCreatedWindow = nullptr;
+// Control Panel CLSID — windows navigating here should not be redirected
+static const WCHAR kControlPanelCLSID[] =
+    L"::{26EE0668-A00A-44D7-9371-BEB064C98683}";
+
+static HWND g_lastPrimaryWindow = nullptr;
 static thread_local bool g_creatingExplorerWindow = false;
 
-// Forward declarations for hooks used in RedirectThread
+// Forward declaration (needed by RedirectThread before ShowWindow hook)
 using ShowWindow_t = decltype(&ShowWindow);
 static ShowWindow_t ShowWindow_Original;
 
@@ -64,37 +68,30 @@ struct RedirectInfo {
     HWND primaryWindow;
 };
 
-// Control Panel CLSID — windows navigating here should not be redirected
-static const WCHAR kControlPanelCLSID[] =
-    L"::{26EE0668-A00A-44D7-9371-BEB064C98683}";
-
 // ---------------------------------------------------------------------------
 // Check whether a path is a normal folder that can be opened as a tab.
 // Returns false for Control Panel and other special shell locations.
 // ---------------------------------------------------------------------------
 static bool IsRedirectablePath(const std::wstring& path) {
-    // Control Panel
     if (path.find(kControlPanelCLSID) != std::wstring::npos)
         return false;
 
-    // Other shell:: special folders (e.g. Recycle Bin, God Mode, etc.)
-    // that may not work as tabs
-    if (path.compare(0, 9, L"shell:::{" ) == 0)
+    if (path.compare(0, 9, L"shell:::{") == 0)
         return false;
 
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// Check if a CabinetWClass window is a File Explorer window (not Control
-// Panel or other shell windows that reuse the same class).
+// Restore a window that was hidden for redirect but needs to be shown
+// (e.g. Control Panel, or abort cases).
 // ---------------------------------------------------------------------------
-static bool IsFileExplorerWindow(HWND hwnd) {
-    // Control Panel windows have "ControlPanelFolder" as their window text
-    // or a specific class structure. A reliable check: File Explorer windows
-    // have a ShellTabWindowClass child.
-    HWND shellTab = FindWindowExW(hwnd, nullptr, WC_SHELLTAB, nullptr);
-    return shellTab != nullptr;
+static void AbortRedirect(HWND hwnd) {
+    if (g_lastPrimaryWindow == hwnd)
+        g_lastPrimaryWindow = nullptr;
+
+    // Re-add WS_VISIBLE and show the window via the original ShowWindow
+    ShowWindow_Original(hwnd, SW_SHOW);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,8 +110,7 @@ static BOOL CALLBACK EnumFindExplorer(HWND hwnd, LPARAM lParam) {
     WCHAR cls[64];
     if (GetClassNameW(hwnd, cls, _countof(cls)) &&
         wcscmp(cls, WC_CABINET) == 0 &&
-        IsWindowVisible(hwnd) &&
-        IsFileExplorerWindow(hwnd)) {
+        IsWindowVisible(hwnd)) {
         ctx->result = hwnd;
         return FALSE;
     }
@@ -336,10 +332,7 @@ static DWORD WINAPI RedirectThread(LPVOID param) {
 
     if (path.empty() || !primary || !IsWindow(primary) ||
         newWnd == primary) {
-        // Abort — unblock and re-show the window
-        if (g_lastCreatedWindow == newWnd)
-            g_lastCreatedWindow = nullptr;
-        ShowWindow_Original(newWnd, SW_SHOW);
+        AbortRedirect(newWnd);
         CoUninitialize();
         return 0;
     }
@@ -347,18 +340,15 @@ static DWORD WINAPI RedirectThread(LPVOID param) {
     // Don't redirect Control Panel or other special shell windows
     if (!IsRedirectablePath(path)) {
         Wh_Log(L"Non-redirectable path, allowing window: %s", path.c_str());
-        if (g_lastCreatedWindow == newWnd)
-            g_lastCreatedWindow = nullptr;
-        ShowWindow_Original(newWnd, SW_SHOW);
+        AbortRedirect(newWnd);
         CoUninitialize();
         return 0;
     }
 
-    // Snapshot tab count before closing (subtract 1 for the window we're
-    // about to close, so the count reflects what it will be after close)
+    // Snapshot tab count before creating a new tab
     int prevCount = GetShellWindowCount() - 1;
 
-    // Close the duplicate window (hidden via WS_VISIBLE strip + ShowWindow hook)
+    // Close the duplicate window (already hidden via WS_VISIBLE strip)
     PostMessageW(newWnd, WM_CLOSE, 0, 0);
 
     // Create a new tab via internal WM_COMMAND
@@ -393,10 +383,6 @@ static DWORD WINAPI RedirectThread(LPVOID param) {
     AllowSetForegroundWindow(pid);
     SetForegroundWindow(primary);
 
-    // Clear the blocked window now that redirect is complete
-    if (g_lastCreatedWindow == newWnd)
-        g_lastCreatedWindow = nullptr;
-
     Wh_Log(L"%s → %s", navigated ? L"Redirected" : L"Failed", path.c_str());
 
     CoUninitialize();
@@ -416,26 +402,27 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
                                   HINSTANCE hInstance, LPVOID lpParam) {
     auto original = [=]() {
         return CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance,
-                                         lpParam);
+                                        dwStyle, X, Y, nWidth, nHeight,
+                                        hWndParent, hMenu, hInstance, lpParam);
     };
 
     bool isCabinet = lpClassName && !IS_INTRESOURCE(lpClassName) &&
                      wcscmp(lpClassName, WC_CABINET) == 0;
-
-    if (!isCabinet)
+    if (!isCabinet) {
         return original();
+    }
 
     // Bypass if Shift is held
-    if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
+    if (GetAsyncKeyState(VK_SHIFT) & 0x8000) {
         return original();
+    }
 
     HWND existing = FindExistingExplorer(nullptr);
 
-    // First window — let it open normally
-    if (!existing)
+    // First window
+    if (!existing) {
         return original();
+    }
 
     // Strip WS_VISIBLE so the window is never shown
     dwStyle &= ~WS_VISIBLE;
@@ -452,7 +439,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
     g_creatingExplorerWindow = false;
 
     if (hwnd) {
-        g_lastCreatedWindow = hwnd;
+        g_lastPrimaryWindow = hwnd;
 
         // Redirect — window stays hidden, thread will close it
         auto* ri = new RedirectInfo{hwnd, existing};
@@ -467,15 +454,14 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
 // ---------------------------------------------------------------------------
 // Hook: ShowWindow — prevent the redirected window from flashing
 // ---------------------------------------------------------------------------
-
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    if (g_creatingExplorerWindow || hWnd == g_lastCreatedWindow) {
+    if (g_creatingExplorerWindow || hWnd == g_lastPrimaryWindow) {
         WCHAR className[64];
         if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
             wcscmp(className, WC_CABINET) == 0) {
-            Wh_Log(L"Blocked ShowWindow for %p %s", hWnd,
-                   g_creatingExplorerWindow ? L"(creating)"
-                                            : L"(last created)");
+            Wh_Log(
+                L"Blocked ShowWindow for %p %s", hWnd,
+                g_creatingExplorerWindow ? L"(creating)" : L"(last created)");
             return TRUE;
         }
     }
