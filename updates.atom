@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-04T13:52:43.000Z</updated>
+    <updated>2026-03-04T17:58:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Legacy (Win32) sound volume flyout 2.0.0]]></title>
+        <id>https://windhawk.net/mods/legacy-sound-flyout#211f737a1a4504166562f3782db20c86eec52a84</id>
+        <link href="https://windhawk.net/mods/legacy-sound-flyout"/>
+        <updated>2026-03-04T17:58:39.000Z</updated>
+        <content type="html"><![CDATA[<p>New method, support for 24h2 and later</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.0.0]]></title>
+        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#f2218777d0edd317dcebe26e444176231202e103</id>
+        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
+        <updated>2026-03-04T17:54:41.000Z</updated>
+        <content type="html"><![CDATA[<p>Replaces the UWP titlebars with native Win32 titlebars.</p>
+<p>This mod is focused on the Classic theme, so may produce sub-optimal results in other cases.</p>
+<p><img src="https://i.imgur.com/Pf6RQTk.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Non-Immersive Taskbar Context Menu Lite 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-taskbar-context-menu-lite#61e6b2c04ace5ab9ec784db42fd702d88b98cb29</id>
@@ -399,32 +423,6 @@ the second-level menus.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 1.1.0]]></title>
-        <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#26745de2fff4b3d684ef2b2cae2c5ef43928697c</id>
-        <link href="https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator"/>
-        <updated>2026-02-27T21:57:42.000Z</updated>
-        <content type="html"><![CDATA[<p>Remove hardcoded sizes, support for vertical and multi-row taskbar</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Power Buttons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win11-power-buttons#fbc2e4d7d37b92463231f76b217eb1a240f3e6f5</id>
-        <link href="https://windhawk.net/mods/win11-power-buttons"/>
-        <updated>2026-02-27T21:51:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11startmenupowerbuttons">Windows 11 Start Menu Power Buttons</h1>
-<p>Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate buttons to the Windows 11 Start menu, replacing the default power flyout.</p>
-<p><img src="https://i.imgur.com/M7xcCgb.png" alt="" /></p>
-<hr />
-<p>添加可配置的一键关机/重启/注销/睡眠/休眠按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。</p>]]></content>
-        <author>
-            <name>Hakuuyosei</name>
-            <uri>https://github.com/ahzvenol</uri>
         </author>
     </entry>
 </feed>

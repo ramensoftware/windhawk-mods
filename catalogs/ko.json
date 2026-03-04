@@ -4823,18 +4823,19 @@
                     3
                 ],
                 "ratingUsers": 4,
-                "updated": 1754126331000,
+                "updated": 1772647119000,
                 "users": 320
             },
             "metadata": {
                 "author": "Anixx",
+                "compilerOptions": "-lcomctl32 -lpsapi",
                 "description": "Enables legacy sound volume flyout on Win10 taskbar",
                 "github": "https://github.com/Anixx",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Legacy (Win32) sound volume flyout",
-                "version": "1.0.0"
+                "version": "2.0.0"
             }
         },
         "lines-in-mmc": {
@@ -5325,6 +5326,38 @@
                 "name": "Dark Paint",
                 "twitter": "https://twitter.com/AhmedWalid605",
                 "version": "1.0.1"
+            }
+        },
+        "native-titlebars-uwp-lite": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772646881000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772646881000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Anixx",
+                "compilerOptions": "-luser32 -lcomctl32 -ldwmapi",
+                "description": "Enables native titlebars in UWP apps",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "ApplicationFrameHost.exe",
+                    "explorer.exe"
+                ],
+                "name": "Remove UWP titlebars Lite",
+                "version": "1.0.0"
             }
         },
         "nilesoft-text-shrinker": {
