@@ -2,12 +2,116 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-04T00:39:57.000Z</updated>
+    <updated>2026-03-04T01:12:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer WinUI-Like Content Animation 1.0]]></title>
+        <id>https://windhawk.net/mods/file-explorer-content-animation#d474c7f1b77392ec9794d915f1b707a54e81164d</id>
+        <link href="https://windhawk.net/mods/file-explorer-content-animation"/>
+        <updated>2026-03-04T01:12:08.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/file-explorer-content-animation.gif" alt="Preview" /></p>
+<hr />
+<h2 id="english">English</h2>
+<p>A smooth, WinUI-inspired slide animation for the File Explorer content area on Windows 11.</p>
+<p>This mod enhances folder navigation with a subtle motion design approach, similar to modern WinUI transitions, while preserving system stability and performance.</p>
+<h3 id="features">✨ Features</h3>
+<ul>
+<li>Smooth slide animation with refined easing</li>
+<li>Per-window first open delay (optional)</li>
+<li>Navigation delay to hide the "Working on it…" message</li>
+<li>Zero flicker</li>
+<li>No black flashes</li>
+<li>No interference with thumbnails</li>
+<li>No DirectComposition breakage</li>
+<li>Lightweight and CPU-friendly</li>
+<li>Compatible with the Translucent Windows mod</li>
+</ul>
+<h3 id="howitworks">🧠 How It Works</h3>
+<ul>
+<li>The mod temporarily offsets the content view outside the visible area</li>
+<li>Waits for layout stabilization</li>
+<li>Restores position</li>
+<li>Plays a smooth eased slide animation</li>
+</ul>
+<p>This approach keeps the DirectComposition pipeline intact, ensuring stability even on recent Windows 11 builds (including 25H2).</p>
+<h3 id="settings">⚙️ Settings</h3>
+<ul>
+<li><strong>Animation Duration</strong> – Controls how long the slide lasts.</li>
+<li><strong>Slide Distance</strong> – Controls how far the content moves before settling.</li>
+<li><strong>First Open Delay</strong> – Applies only when a new Explorer window is opened.</li>
+<li><strong>Navigation Delay</strong> – Brief delay during folder switching to hide loading text.</li>
+</ul>
+<hr />
+<h2 id="portugus">Português</h2>
+<p>Uma animação suave de deslizamento inspirada no WinUI para a área de conteúdo do Explorador de Arquivos no Windows 11.</p>
+<p>Este mod aprimora a navegação entre pastas com um movimento sutil e moderno, mantendo estabilidade total do sistema e ótimo desempenho.</p>
+<h3 id="recursos">✨ Recursos</h3>
+<ul>
+<li>Animação suave com easing refinado</li>
+<li>Delay opcional na primeira abertura de cada janela</li>
+<li>Delay durante navegação para esconder o "Trabalhando nisso…"</li>
+<li>Sem flicker</li>
+<li>Sem flash preto</li>
+<li>Não interfere em miniaturas</li>
+<li>Não quebra o DirectComposition</li>
+<li>Leve e eficiente</li>
+<li>Compatível com o mod Translucent Windows</li>
+</ul>
+<h3 id="comofunciona">🧠 Como Funciona</h3>
+<ul>
+<li>O mod move temporariamente a área de conteúdo para fora da área visível</li>
+<li>Aguarda estabilização do layout</li>
+<li>Restaura a posição original</li>
+<li>Executa uma animação suave com easing inspirado no WinUI</li>
+</ul>
+<p>Isso mantém o pipeline de renderização intacto e estável mesmo nas builds mais recentes do Windows 11 (incluindo 25H2).</p>
+<h3 id="configuraes">⚙️ Configurações</h3>
+<ul>
+<li><strong>Duração da Animação</strong> – Define quanto tempo a animação leva.</li>
+<li><strong>Distância do Slide</strong> – Define o deslocamento inicial.</li>
+<li><strong>Delay na Primeira Abertura</strong> – Aplicado apenas ao abrir uma nova janela.</li>
+<li><strong>Delay ao Trocar de Pasta</strong> – Pequeno atraso para esconder o texto de carregamento.</li>
+</ul>
+<hr />
+<h2 id="espaol">Español</h2>
+<p>Una animación suave de deslizamiento inspirada en WinUI para el área de contenido del Explorador de Archivos en Windows 11.</p>
+<p>Este mod mejora la navegación entre carpetas con un movimiento moderno y sutil, manteniendo total estabilidad del sistema y un excelente rendimiento.</p>
+<h3 id="caractersticas">✨ Características</h3>
+<ul>
+<li>Animación suave con easing refinado</li>
+<li>Retraso opcional en la primera apertura de cada ventana</li>
+<li>Retraso durante la navegación para ocultar "Trabajando en ello…"</li>
+<li>Sin parpadeos</li>
+<li>Sin flashes negros</li>
+<li>No interfiere con miniaturas</li>
+<li>No rompe DirectComposition</li>
+<li>Ligero y eficiente</li>
+<li>Compatible con el mod Translucent Windows</li>
+</ul>
+<h3 id="cmofunciona">🧠 Cómo Funciona</h3>
+<ul>
+<li>El mod mueve temporalmente el área de contenido fuera del área visible</li>
+<li>Espera a que el layout se estabilice</li>
+<li>Restaura la posición original</li>
+<li>Ejecuta una animación suave inspirada en WinUI</li>
+</ul>
+<p>Esto mantiene intacto el pipeline de renderizado incluso en builds recientes de Windows 11 (incluyendo 25H2).</p>
+<h3 id="configuracin">⚙️ Configuración</h3>
+<ul>
+<li><strong>Duración de la Animación</strong> – Controla cuánto dura el efecto.</li>
+<li><strong>Distancia del Deslizamiento</strong> – Define el desplazamiento inicial.</li>
+<li><strong>Retraso en la Primera Apertura</strong> – Solo al abrir una nueva ventana.</li>
+<li><strong>Retraso al Cambiar de Carpeta</strong> – Pequeño retraso para ocultar el texto de carga.</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Dialogs 1.0]]></title>
         <id>https://windhawk.net/mods/better-dialogs#46b704d449ad5b1960f330e8fcf6c8626c86512f</id>
@@ -322,28 +426,6 @@
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.2]]></title>
-        <id>https://windhawk.net/mods/vlc-discord-rpc#e07ad9a662659b593b03547496fb6930809acbab</id>
-        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
-        <updated>2026-02-27T13:02:31.000Z</updated>
-        <content type="html"><![CDATA[<p><em>Fixes & Performance Improvements</em></p>
-<ul>
-<li>High CPU Usage Fix: Resolved a performance issue introduced in v1.1.1 where the metadata cleaner caused high CPU load. Implemented a state-change cache so the heavy metadata scrubber only runs when the source media actually changes.</li>
-</ul>
-<p><em>Advanced Filtering & Processing</em></p>
-<ul>
-<li>Dynamic Filter Syncing: The metadata cleaner now remotely fetches and locally caches community-maintained junk word and tag filters. This ensures the cleaner stays highly accurate and up-to-date over time without requiring mod updates.</li>
-</ul>
-<p><em>Enhanced Customization</em></p>
-<ul>
-<li>Modular Mod Settings: Added dedicated toggles in the Windhawk settings to individually enable or disable Quality Tags (<code>ShowQualityTags</code>) and the Metadata Cleaner (<code>clean media titles</code>) based on user preference.</li>
-</ul>]]></content>
-        <author>
-            <name>ciizerr</name>
-            <uri>https://github.com/ciizerr</uri>
         </author>
     </entry>
 </feed>

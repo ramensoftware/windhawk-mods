@@ -3614,6 +3614,38 @@
                 "version": "1.0.3"
             }
         },
+        "file-explorer-content-animation": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772586728000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772586728000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "crazyboyybs",
+                "compilerOptions": "-ldwmapi",
+                "description": "Animação suave de deslizamento inspirada no WinUI para a área de conteúdo do Explorador de Arquivos.",
+                "github": "https://github.com/crazyboyybs",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "MIT",
+                "name": "Animação de Conteúdo do Explorador de Arquivos estilo WinUI",
+                "version": "1.0"
+            }
+        },
         "file-explorer-remove-suffixes": {
             "details": {
                 "defaultSorting": 89280,
