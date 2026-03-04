@@ -295,8 +295,3 @@ void Wh_ModUninit() {
     RemoveSubclass();
     Wh_Log(L"Uninitialized");
 }
-
-void Wh_ModUninit() {
-    RemoveSubclass();
-    Wh_Log(L"Uninitialized");
-}
