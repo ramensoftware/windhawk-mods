@@ -31,6 +31,8 @@ static bool g_isDragging = false;
 static POINT g_mouseDownPos = {0};
 static int g_mouseDownButton = -1;
 
+static UINT g_taskbarCreatedMsg = 0;
+
 // -------------------------------------------------------
 // sndvol
 // -------------------------------------------------------
@@ -74,6 +76,26 @@ static void LaunchClassicVolume() {
     } else {
         delete pt;
     }
+}
+
+// -------------------------------------------------------
+// Инициализация SndVolSSO
+// -------------------------------------------------------
+
+static bool InitSndVolSSOInfo() {
+    if (g_sndVolSSOBase) return true;
+    
+    HMODULE hSndVolSSO = GetModuleHandleW(L"SndVolSSO.dll");
+    if (!hSndVolSSO) return false;
+    
+    MODULEINFO mi{};
+    if (!GetModuleInformation(GetCurrentProcess(), hSndVolSSO, &mi, sizeof(mi))) {
+        return false;
+    }
+    
+    g_sndVolSSOBase = (BYTE*)mi.lpBaseOfDll;
+    g_sndVolSSOEnd = g_sndVolSSOBase + mi.SizeOfImage;
+    return true;
 }
 
 // -------------------------------------------------------
@@ -175,6 +197,10 @@ static HWND FindTrayToolbar() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!hTray) return nullptr;
     
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hTray, &pid);
+    if (pid != GetCurrentProcessId()) return nullptr;
+    
     HWND hNotify = FindWindowExW(hTray, nullptr, L"TrayNotifyWnd", nullptr);
     if (!hNotify) return nullptr;
     
@@ -188,28 +214,11 @@ static HWND FindTrayToolbar() {
 }
 
 // -------------------------------------------------------
-// Инициализация
+// Subclass setup/remove
 // -------------------------------------------------------
-
-static bool InitSndVolSSOInfo() {
-    if (g_sndVolSSOBase) return true;
-    
-    HMODULE hSndVolSSO = GetModuleHandleW(L"SndVolSSO.dll");
-    if (!hSndVolSSO) return false;
-    
-    MODULEINFO mi{};
-    if (!GetModuleInformation(GetCurrentProcess(), hSndVolSSO, &mi, sizeof(mi))) {
-        return false;
-    }
-    
-    g_sndVolSSOBase = (BYTE*)mi.lpBaseOfDll;
-    g_sndVolSSOEnd = g_sndVolSSOBase + mi.SizeOfImage;
-    return true;
-}
 
 static void SetupSubclass() {
     if (g_hTrayToolbar) return;
-    
     if (!InitSndVolSSOInfo()) return;
     
     HWND hToolbar = FindTrayToolbar();
@@ -229,7 +238,7 @@ static void RemoveSubclass() {
 }
 
 // -------------------------------------------------------
-// Хук CreateWindowExW для отслеживания создания таскбара
+// Хуки
 // -------------------------------------------------------
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -244,16 +253,8 @@ HWND WINAPI CreateWindowExW_Hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     
-    if (hwnd && lpClassName && !IS_INTRESOURCE(lpClassName)) {
-        // Когда создаётся Shell_TrayWnd — пробуем установить subclass
-        if (wcscmp(lpClassName, L"Shell_TrayWnd") == 0) {
-            Wh_Log(L"Shell_TrayWnd created");
-            // Toolbar создаётся позже, поставим отложенный вызов
-            PostMessage(hwnd, WM_NULL, 0, 0);
-        }
-        // Или ловим сам ToolbarWindow32 в нужном контексте
-        else if (wcscmp(lpClassName, L"ToolbarWindow32") == 0 && !g_hTrayToolbar) {
-            // Проверяем, это ли нужный toolbar
+    if (hwnd && !g_hTrayToolbar && lpClassName && !IS_INTRESOURCE(lpClassName)) {
+        if (wcscmp(lpClassName, L"ToolbarWindow32") == 0) {
             SetupSubclass();
         }
     }
@@ -261,20 +262,15 @@ HWND WINAPI CreateWindowExW_Hook(
     return hwnd;
 }
 
-// -------------------------------------------------------
-// Хук на сообщение TaskbarCreated
-// -------------------------------------------------------
-
-static UINT g_taskbarCreatedMsg = 0;
-
 using DefWindowProcW_t = decltype(&DefWindowProcW);
 DefWindowProcW_t DefWindowProcW_Original;
 
 LRESULT WINAPI DefWindowProcW_Hook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
-        Wh_Log(L"TaskbarCreated received");
+        Wh_Log(L"TaskbarCreated");
         RemoveSubclass();
-        SetupSubclass();
+        g_sndVolSSOBase = nullptr;
+        g_sndVolSSOEnd = nullptr;
     }
     return DefWindowProcW_Original(hwnd, msg, wParam, lParam);
 }
@@ -289,11 +285,15 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
     Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original);
     
-    // Пробуем сразу, если shell уже запущен
     SetupSubclass();
     
     Wh_Log(L"Initialized");
     return TRUE;
+}
+
+void Wh_ModUninit() {
+    RemoveSubclass();
+    Wh_Log(L"Uninitialized");
 }
 
 void Wh_ModUninit() {
