@@ -5,6 +5,7 @@
 // @version      2.0.0
 // @author       Anixx
 // @github       https://github.com/Anixx
+// @compilerOptions -lcomctl32 -lpsapi
 // @include      explorer.exe
 // ==/WindhawkMod==
 
