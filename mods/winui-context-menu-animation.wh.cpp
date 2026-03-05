@@ -1,0 +1,997 @@
+// ==WindhawkMod==
+// @id              winui-context-menu-animation
+// @name            WinUI Context Menu Animation
+// @name:pt         Menus de Contexto com Animação WinUI
+// @name:es         Menús contextuales con animación WinUI
+// @description     Adds smooth WinUI-style vertical slide animations to classic Win32 context menus in Windows 11
+// @description:pt  Adiciona animações suaves de deslizamento vertical no estilo WinUI aos menus de contexto Win32 clássicos no Windows 11
+// @description:es  Agrega animaciones de deslizamiento verticales suaves al estilo WinUI a los menús contextuales clásicos de Win32 en Windows 11
+// @version         1.0
+// @author          crazyboyybs, aubymori
+// @github          https://github.com/crazyboyybs
+// @include         *
+// @compilerOptions -lgdi32 -lcomctl32 -lmsimg32
+// @license         MIT
+// ==/WindhawkMod==
+
+// ==WindhawkModSettings==
+/*
+- animationDuration: 320
+  $name: Animation duration (ms)
+  $name:pt: Duração da animação (ms)
+  $name:es: Duración de la animación (ms)
+  $description: Total duration of the menu opening animation in milliseconds
+  $description:pt: Tempo total da animação de abertura do menu em milissegundos
+  $description:es: Tempo total de la animación de apertura del menú en milissegundos
+
+- fadeDuration: 80
+  $name: Fade-in duration (%)
+  $name:pt: Duração do fade-in (%)
+  $name:es: Duración del desvanecimiento (%)
+  $description: Percentage of the animation used for the fade-in effect (0 = no fade, 100 = fade for the entire animation)
+  $description:pt: Porcentagem da animação usada para o efeito de fade-in (0 = sem fade, 100 = fade durante toda a animação)
+  $description:es: Porcentaje de animación utilizada para el efecto de aparición gradual (0 = sin desvanecimiento, 100 = desvanecimiento durante toda la animación)
+
+- timerInterval: 6
+  $name: Frame interval (ms)
+  $name:pt: Intervalo de frame (ms)
+  $name:es: Intervalo de fotograma (ms)
+  $description: "Interval in milliseconds between animation frames. Recommended: 6 for 120 Hz or higher displays, 16 for 60 Hz displays. Note: if fade-in is enabled, each frame calls AlphaBlend on the CPU — lower values increase CPU usage during the animation. Set fade-in to 0 to eliminate this cost entirely."
+  $description:pt: "Intervalo em milissegundos entre os frames da animação. Recomendado: 6 para telas de 120 Hz ou superior, 16 para telas de 60 Hz. Nota: com o fade-in ativo, cada frame executa AlphaBlend via CPU — intervalos menores aumentam o uso de CPU durante a animação. Defina o fade-in como 0 para eliminar esse custo completamente."
+  $description:es: "Intervalo en milisegundos entre fotogramas de animación. Recomendado: 6 para pantallas de 120 Hz o superiores, 16 para pantallas de 60 Hz. Nota: con el desvanecimiento activo, cada fotograma ejecuta AlphaBlend por CPU — intervalos menores aumentan el uso de CPU durante la animación. Establezca el desvanecimiento en 0 para eliminar este costo por completo."
+*/
+// ==/WindhawkModSettings==
+
+// ==WindhawkModReadme==
+/*
+![Preview](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Menu%20de%20Contexto%20com%20Anima%C3%A7%C3%A3o%20WinUI.gif)
+![Preview](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Menu%20de%20Contexto%202%20com%20Anima%C3%A7%C3%A3o%20WinUI.gif)
+# WinUI Context Menu Animation
+
+## English
+
+This mod brings the smooth vertical slide animation used in modern **WinUI applications**
+to classic **Win32 context menus and popup menus** in Windows 11.
+
+Instead of appearing instantly, menus smoothly slide into view using a **WinUI-style
+cubic-bezier easing curve** combined with a subtle fade-in.
+
+Each menu and submenu independently determines whether it should animate **upward or
+downward** based on its actual position on the screen. This ensures consistent behavior
+with how Windows naturally flips menus near screen edges.
+
+### Features
+
+• Smooth WinUI-style vertical slide animation  
+• Configurable animation and fade times  
+• Accurate cubic-bezier easing matching modern Windows apps  
+• Independent direction detection for menus and submenus  
+• Compatible with context menus, menu bars, and nested submenus  
+• Lightweight implementation using native Win32 hooks
+
+### Credits
+
+This mod is based on the excellent work by **aubymori**:
+
+Menu/Tooltip Slide Animation  
+https://windhawk.net/mods/menu-tooltip-slide-animation
+
+The original mod restored the classic Windows 98/XP menu animation system.
+This fork adapts the animation engine to replicate the **modern WinUI motion style**
+used throughout Windows 11.
+
+Changes in this version include:
+
+• Replacing the classic animation with a WinUI-style vertical easing motion  
+• Removing tooltip animation logic  
+• Removing horizontal animation  
+• Improving submenu direction detection  
+• Implementing an accurate cubic-bezier solver for smooth motion
+
+---
+
+## Português (Brasil)
+
+Este mod traz a animação suave de **deslizamento vertical usada em aplicativos
+modernos com WinUI** para os **menus de contexto e menus popup clássicos do Win32**
+no Windows 11.
+
+Em vez de aparecerem instantaneamente, os menus passam a surgir com um movimento
+suave utilizando uma **curva de easing cubic-bezier semelhante à do WinUI**,
+acompanhada por um leve efeito de fade-in.
+
+Cada menu e submenu determina **de forma independente** se deve animar para cima
+ou para baixo com base em sua posição real na tela. Isso garante um comportamento
+natural quando o menu precisa inverter sua direção próximo às bordas da tela.
+
+### Recursos
+
+• Animação vertical suave inspirada no WinUI  
+• Tempo de animação e fade configuráveis  
+• Curva de easing cubic-bezier equivalente à usada no Windows moderno  
+• Detecção independente de direção para menus e submenus  
+• Compatível com menus de contexto, barras de menu e submenus aninhados  
+• Implementação leve baseada em hooks nativos do Win32
+
+### Créditos
+
+Este mod é baseado no trabalho de **aubymori**:
+
+Menu/Tooltip Slide Animation  
+https://windhawk.net/mods/menu-tooltip-slide-animation
+
+O mod original restaurava as animações clássicas de menus do Windows 98/XP.
+Esta versão adapta o mecanismo de animação para reproduzir o **estilo de
+movimento moderno do WinUI presente no Windows 11**.
+
+Principais mudanças nesta versão:
+
+• Substituição da animação clássica por movimento vertical estilo WinUI  
+• Remoção da animação de tooltips  
+• Remoção da animação horizontal  
+• Melhoria na detecção de direção de submenus  
+• Implementação de um solver cubic-bezier preciso para animação suave
+
+---
+
+## Español
+
+Este mod añade la animación vertical suave utilizada en las **aplicaciones modernas
+basadas en WinUI** a los **menús de contexto y menús emergentes clásicos de Win32**
+en Windows 11.
+
+En lugar de aparecer instantáneamente, los menús se deslizan suavemente utilizando
+una **curva de easing cubic-bezier similar a la del WinUI**, combinada con un
+ligero efecto de aparición gradual (fade-in).
+
+Cada menú y submenú determina **de forma independiente** si debe animarse hacia
+arriba o hacia abajo según su posición real en la pantalla, manteniendo un
+comportamiento natural cuando Windows invierte la dirección cerca de los bordes.
+
+### Características
+
+• Animación vertical suave inspirada en WinUI  
+• Tiempos de animación y desvanecimiento configurables  
+• Curva de easing cubic-bezier equivalente a la usada en Windows moderno  
+• Detección independiente de dirección para menús y submenús  
+• Compatible con menús de contexto, barras de menú y submenús anidados  
+• Implementación ligera basada en hooks nativos de Win32
+
+### Créditos
+
+Este mod está basado en el trabajo de **aubymori**:
+
+Menu/Tooltip Slide Animation  
+https://windhawk.net/mods/menu-tooltip-slide-animation
+
+El mod original restauraba las animaciones clásicas de menús de Windows 98/XP.
+Esta versión adapta el motor de animación para reproducir el **estilo de
+movimiento moderno de WinUI utilizado en Windows 11**.
+
+Cambios principales en esta versión:
+
+• Reemplazo de la animación clásica por movimiento vertical estilo WinUI  
+• Eliminación de la animación de tooltips  
+• Eliminación de la animación horizontal  
+• Mejora en la detección de dirección de submenús  
+• Implementación precisa de la curva cubic-bezier
+*/
+// ==/WindhawkModReadme==
+
+#include <wingdi.h>
+#include <windhawk_utils.h>
+#include <commctrl.h>
+#include <cmath>
+
+// ============================================================
+//  Parâmetros do sistema
+// ============================================================
+
+static inline bool UIEffectsEnabled()
+{
+    BOOL v = FALSE;
+    SystemParametersInfoW(SPI_GETUIEFFECTS, 0, &v, 0);
+    return v != FALSE;
+}
+
+static inline bool MenuAnimationEnabled()
+{
+    return Wh_GetIntValue(L"AnimateMenus", 1) != 0;
+}
+
+static inline bool MenuFadeEnabled()
+{
+    return Wh_GetIntValue(L"FadeMenus", 0) != 0;
+}
+
+using SystemParametersInfo_t = decltype(&SystemParametersInfoW);
+SystemParametersInfo_t SystemParametersInfoW_orig;
+SystemParametersInfo_t SystemParametersInfoA_orig;
+
+#define USPF_ININIT     0x1   // Chamado em Wh_ModInit   (usa SPI real, sem hook)
+#define USPF_INUNINIT   0x2   // Chamado em Wh_ModUninit (restaura estado salvo)
+
+static void UpdateSystemParameters(DWORD dwFlags)
+{
+    // Durante init/uninit ainda não instalamos o hook (ou já removemos),
+    // então chamamos a função real diretamente.
+    SystemParametersInfo_t pfnSPI = (dwFlags & (USPF_ININIT | USPF_INUNINIT))
+        ? SystemParametersInfoW
+        : SystemParametersInfoW_orig;
+
+    bool fAnimEnabled = (dwFlags & USPF_INUNINIT)
+        ? (Wh_GetIntValue(L"AnimateMenus", 0) != 0)
+        : (MenuAnimationEnabled() && MenuFadeEnabled());
+
+    pfnSPI(SPI_SETMENUANIMATION, 0, (LPVOID)(UINT_PTR)(BOOL)fAnimEnabled, SPIF_UPDATEINIFILE);
+
+    // O bit de fade deve estar sempre ativo enquanto o mod estiver rodando.
+    // Sem ele, componentes kernel-mode voltam para o slide legado, que está
+    // quebrado nos drivers de GPU modernos (aparece instantâneo com fundo sólido).
+    pfnSPI(SPI_SETMENUFADE, 0, (LPVOID)(UINT_PTR)(BOOL)TRUE, SPIF_UPDATEINIFILE);
+}
+
+static bool HandleSPICall(UINT uiAction, LPVOID pvParam, UINT fWinIni, BOOL *pfResult)
+{
+    switch (uiAction)
+    {
+        case SPI_GETMENUANIMATION:
+        case SPI_GETMENUFADE:
+        {
+            if (!pvParam) { *pfResult = FALSE; return true; }
+            BOOL value = UIEffectsEnabled()
+                ? (uiAction == SPI_GETMENUANIMATION ? MenuAnimationEnabled() : MenuFadeEnabled())
+                : FALSE;
+            *(BOOL *)pvParam = value;
+            *pfResult = TRUE;
+            return true;
+        }
+        case SPI_SETMENUANIMATION:
+        {
+            Wh_SetIntValue(L"AnimateMenus", pvParam != 0);
+            UpdateSystemParameters(0);
+            if (fWinIni & SPIF_SENDCHANGE)
+            {
+                ULONG_PTR r;
+                SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE,
+                    uiAction, (LPARAM)L"", SMTO_NORMAL, 100, &r);
+            }
+            *pfResult = TRUE;
+            return true;
+        }
+        case SPI_SETMENUFADE:
+        {
+            Wh_SetIntValue(L"FadeMenus", pvParam != 0);
+            UpdateSystemParameters(0);
+            if (fWinIni & SPIF_SENDCHANGE)
+            {
+                ULONG_PTR r;
+                SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE,
+                    uiAction, (LPARAM)L"", SMTO_NORMAL, 100, &r);
+            }
+            *pfResult = TRUE;
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+BOOL WINAPI SystemParametersInfoW_hook(UINT uiAction, UINT uiParam, LPVOID pvParam, UINT fWinIni)
+{
+    BOOL fResult = FALSE;
+    if (HandleSPICall(uiAction, pvParam, fWinIni, &fResult))
+        return fResult;
+    return SystemParametersInfoW_orig(uiAction, uiParam, pvParam, fWinIni);
+}
+
+BOOL WINAPI SystemParametersInfoA_hook(UINT uiAction, UINT uiParam, LPVOID pvParam, UINT fWinIni)
+{
+    BOOL fResult = FALSE;
+    if (HandleSPICall(uiAction, pvParam, fWinIni, &fResult))
+        return fResult;
+    return SystemParametersInfoA_orig(uiAction, uiParam, pvParam, fWinIni);
+}
+
+// ============================================================
+//  Easing WinUI — cubic-bezier(0.1, 0.9, 0.2, 1.0)
+// ============================================================
+//
+//  Avalia a função CSS cubic-bezier com precisão, usando o método de Newton
+//  para inverter a curva X paramétrica e depois ler o valor Y.
+//  P0=(0,0) e P3=(1,1) são implícitos; P1 e P2 são os pontos de controle.
+
+static double CubicBezierX(double u, double p1x, double p2x)
+{
+    double inv = 1.0 - u;
+    return 3.0*inv*inv*u*p1x + 3.0*inv*u*u*p2x + u*u*u;
+}
+
+static double CubicBezierXDeriv(double u, double p1x, double p2x)
+{
+    double inv = 1.0 - u;
+    return 3.0*(inv*inv*p1x + 2.0*inv*u*(p2x - p1x) + u*u*(1.0 - p2x));
+}
+
+static double CubicBezierY(double u, double p1y, double p2y)
+{
+    double inv = 1.0 - u;
+    return 3.0*inv*inv*u*p1y + 3.0*inv*u*u*p2y + u*u*u;
+}
+
+static double WinUIEase(double t)
+{
+    // Curva WinUI de expansão/exibição: cubic-bezier(0.1, 0.9, 0.2, 1.0)
+    constexpr double p1x = 0.1, p1y = 0.9, p2x = 0.2, p2y = 1.0;
+
+    if (t <= 0.0) return 0.0;
+    if (t >= 1.0) return 1.0;
+
+    // Resolve Bx(u) = t pelo método de Newton (6 iterações são suficientes)
+    double u = t;
+    for (int i = 0; i < 6; i++)
+    {
+        double dx = CubicBezierX(u, p1x, p2x) - t;
+        double d  = CubicBezierXDeriv(u, p1x, p2x);
+        if (fabs(d) < 1e-9) break;
+        u -= dx / d;
+        if (u < 0.0) u = 0.0;
+        if (u > 1.0) u = 1.0;
+    }
+    return CubicBezierY(u, p1y, p2y);
+}
+
+// Parâmetros de animação configuráveis (lidos em Wh_ModSettingsChanged)
+static double g_dAnimDuration  = 320.0; // duração total em ms
+static double g_dFadeWindow    = 0.80;  // fração do tempo usada para fade-in
+static UINT   g_uTimerInterval = 6;     // intervalo do timer em ms
+
+// Alta precisão para cálculo de tempo da animação
+static LARGE_INTEGER g_qpcFreq;
+
+// ============================================================
+//  Animação de menus
+// ============================================================
+
+#define MENUCLASS       MAKEINTATOM(0x8000)
+#define WM_UAHINITMENU  0x0093
+#define MFISPOPUP       0x00000001
+#define IDWH_MNANIMATE  0x00574DB1
+#define DCX_USESTYLE    0x00010000L
+
+// Flags de direção da animação (somente vertical)
+#define MNA_UP          0x4
+#define MNA_DOWN        0x8
+
+// Parâmetro do WM_UAHINITMENU
+typedef struct tagUAHMENU {
+    HMENU hmenu;
+    HDC   hdc;
+    DWORD dwFlags;
+} UAHMENU, *PUAHMENU;
+
+struct MNANIMATEINFO
+{
+    HWND      hwndAni;
+    LARGE_INTEGER qpcStart;
+    int       iDropDir;         // MNA_UP ou MNA_DOWN
+    HDC       hdcWndAni;        // DC da janela do menu
+    HBITMAP   hbmAni;
+    HGDIOBJ   hOldBmp;
+    HDC       hdcAni;           // Fonte off-screen de cada frame da animação
+    int       cxAni;            // Largura total do menu
+    int       cyAni;            // Altura total do menu
+    int       cyVisible;        // Altura visível atual (cresce de 0 até cyAni)
+    bool      fMouseMoved;
+    POINT     ptInitialMousePos;
+    bool      fLayoutRTL;
+};
+
+thread_local bool           g_fMenuAnimating = false;
+thread_local ULONG          g_uMenuDepth     = 0;
+
+thread_local bool           g_fIsTpm  = false;
+thread_local POINT          g_ptTpm   = {};
+
+thread_local HHOOK          g_hMouseHook    = NULL;
+thread_local HHOOK          g_hKeyboardHook = NULL;
+
+thread_local MNANIMATEINFO  g_mnAnimInfo    = {};
+
+// Declaração antecipada
+void MNAnimate(bool fIterate);
+
+// ---- Hooks de janelas do Windows (mouse / teclado) ----
+
+LRESULT WINAPI MouseProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    if (nCode >= 0 && g_fMenuAnimating && g_mnAnimInfo.hwndAni)
+    {
+        POINT pt = reinterpret_cast<MOUSEHOOKSTRUCT *>(lParam)->pt;
+
+        // Se o mouse não se moveu desde que o menu abriu, não cancela a animação.
+        // Isso cobre o caso em que o usuário abriu o menu pelo teclado.
+        if (!g_mnAnimInfo.fMouseMoved
+            && pt.x == g_mnAnimInfo.ptInitialMousePos.x
+            && pt.y == g_mnAnimInfo.ptInitialMousePos.y)
+        {
+            goto done;
+        }
+
+        g_mnAnimInfo.fMouseMoved = true;
+
+        // Obtém o rect atual da janela em animação para teste de interseção
+        RECT rcMenu;
+        GetWindowRect(g_mnAnimInfo.hwndAni, &rcMenu);
+
+        bool fInsideMenu = (pt.x > rcMenu.left && pt.x < rcMenu.right
+                         && pt.y > rcMenu.top  && pt.y < rcMenu.bottom);
+
+        // Cancela a animação apenas se o usuário clicar dentro do menu.
+        // Mover o cursor para dentro não interrompe — a animação continua
+        // até o fim naturalmente, como no WinUI original.
+        if (fInsideMenu && (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN))
+        {
+            MNAnimate(false);
+        }
+    }
+
+done:
+    return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+}
+
+LRESULT WINAPI KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    // Qualquer tecla pressionada durante a animação a cancela imediatamente
+    if (nCode >= 0 && g_fMenuAnimating)
+        MNAnimate(false);
+
+    return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
+}
+
+static void RegisterWindowsHooks()
+{
+    g_hMouseHook = SetWindowsHookExW(WH_MOUSE, MouseProc, NULL, GetCurrentThreadId());
+
+    // Hook de teclado apenas necessário para popups de primeiro nível;
+    // submenus são encerrados via WM_WINDOWPOSCHANGED do menu seguinte.
+    if (g_uMenuDepth == 1)
+        g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD, KeyboardProc, NULL, GetCurrentThreadId());
+}
+
+static void UnregisterWindowsHooks()
+{
+    if (g_hMouseHook)    { UnhookWindowsHookEx(g_hMouseHook);    g_hMouseHook    = NULL; }
+    if (g_hKeyboardHook) { UnhookWindowsHookEx(g_hKeyboardHook); g_hKeyboardHook = NULL; }
+}
+
+// ---- Gerenciamento de recursos GDI ----
+
+static void ResetMNAnimateInfo()
+{
+    // Restaura opacidade total e remove WS_EX_LAYERED antes de liberar recursos
+    if (g_mnAnimInfo.hwndAni)
+    {
+        DWORD dwEx = GetWindowLongW(g_mnAnimInfo.hwndAni, GWL_EXSTYLE);
+        if (dwEx & WS_EX_LAYERED)
+        {
+            SetLayeredWindowAttributes(g_mnAnimInfo.hwndAni, 0, 255, LWA_ALPHA);
+            SetWindowLongW(g_mnAnimInfo.hwndAni, GWL_EXSTYLE, dwEx & ~WS_EX_LAYERED);
+        }
+    }
+
+    if (g_mnAnimInfo.hOldBmp)
+        SelectObject(g_mnAnimInfo.hdcAni, g_mnAnimInfo.hOldBmp);
+
+    if (g_mnAnimInfo.hdcWndAni)
+        ReleaseDC(g_mnAnimInfo.hwndAni, g_mnAnimInfo.hdcWndAni);
+
+    if (g_mnAnimInfo.hbmAni)
+        DeleteObject(g_mnAnimInfo.hbmAni);
+
+    if (g_mnAnimInfo.hdcAni)
+        DeleteDC(g_mnAnimInfo.hdcAni);
+
+    ZeroMemory(&g_mnAnimInfo, sizeof(g_mnAnimInfo));
+    UnregisterWindowsHooks();
+    g_fMenuAnimating = false;
+}
+
+// fNaturalEnd=true: animação terminou no tempo — o último tick já pintou
+// o frame completo corretamente; não fazemos blit adicional.
+// fNaturalEnd=false: cancelamento explícito — blitamos hdcAni (menu
+// completo capturado no início) para exibir o menu instantaneamente.
+static void MNAnimateExit(bool fNaturalEnd)
+{
+    KillTimer(g_mnAnimInfo.hwndAni, IDWH_MNANIMATE);
+
+    if (!fNaturalEnd && g_mnAnimInfo.hdcAni)
+    {
+        DWORD dwOldLayout = SetLayout(g_mnAnimInfo.hdcWndAni, 0);
+        BitBlt(g_mnAnimInfo.hdcWndAni, 0, 0,
+               g_mnAnimInfo.cxAni, g_mnAnimInfo.cyAni,
+               g_mnAnimInfo.hdcAni, 0, 0,
+               SRCCOPY | NOMIRRORBITMAP);
+        SetLayout(g_mnAnimInfo.hdcWndAni, dwOldLayout);
+    }
+
+    ResetMNAnimateInfo();
+}
+
+// ---- Tick principal da animação ----
+
+void MNAnimate(bool fIterate)
+{
+    if (!g_fMenuAnimating)
+        return;
+
+    double kDuration   = g_dAnimDuration;
+    double kFadeWindow = g_dFadeWindow;
+
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    double elapsed = (double)(now.QuadPart - g_mnAnimInfo.qpcStart.QuadPart)
+                   / (double)g_qpcFreq.QuadPart * 1000.0;
+    double t = elapsed / kDuration;
+    if (t > 1.0) t = 1.0;
+
+    if (!fIterate)
+    {
+        MNAnimateExit(false); // cancelamento explícito
+        return;
+    }
+    if (t >= 1.0)
+    {
+        MNAnimateExit(true); // tempo esgotado — fim natural
+        return;
+    }
+
+    double smooth = WinUIEase(t);
+    double motion = smooth + smooth * smooth * 0.02;
+
+    // Usa floor em vez de round: a fração sobrante alimenta a linha
+    // de borda sub-pixel, evitando saltos de 2px nos ticks lentos.
+    double cyFloat = g_mnAnimInfo.cyAni * motion;
+    int    cyFull  = (int)cyFloat;
+    if (cyFull > g_mnAnimInfo.cyAni) cyFull = g_mnAnimInfo.cyAni;
+    double frac = (cyFull < g_mnAnimInfo.cyAni) ? (cyFloat - (double)cyFull) : 0.0;
+
+    int cyLast = g_mnAnimInfo.cyVisible;
+    g_mnAnimInfo.cyVisible = cyFull;
+
+    // Alpha: fade-in usando easing WinUI — atualizado a cada tick,
+    // independente da altura, para que o fade seja sempre contínuo.
+    BYTE alpha = 255;
+    if (kFadeWindow > 0.0 && t < kFadeWindow)
+    {
+        double fadeT = t / kFadeWindow;
+        if (fadeT > 1.0) fadeT = 1.0;
+        alpha = (BYTE)(255.0 * WinUIEase(fadeT));
+    }
+    SetLayeredWindowAttributes(g_mnAnimInfo.hwndAni, 0, alpha, LWA_ALPHA);
+
+    // Evita repintura redundante quando nem a altura nem a fração mudaram
+    if (g_mnAnimInfo.cyVisible == cyLast && frac < 0.004)
+        return;
+
+    // Coordenadas de destino e offset na fonte.
+    // O conteúdo faz scroll junto com a borda crescente.
+    int y, yOff;
+    if (g_mnAnimInfo.iDropDir & MNA_UP)
+    {
+        // Borda superior sobe; conteúdo entra pela borda de baixo.
+        y    = g_mnAnimInfo.cyAni - cyFull;
+        yOff = 0;
+    }
+    else
+    {
+        // Borda inferior desce; conteúdo entra pela borda de cima.
+        y    = 0;
+        yOff = g_mnAnimInfo.cyAni - cyFull;
+    }
+
+    DWORD dwOldLayout = SetLayout(g_mnAnimInfo.hdcWndAni, 0);
+
+    // Região inteira visível
+    if (cyFull > 0)
+    {
+        IntersectClipRect(g_mnAnimInfo.hdcWndAni,
+            0, y, g_mnAnimInfo.cxAni, y + cyFull);
+
+        if (alpha < 240)
+        {
+            BLENDFUNCTION bf = { AC_SRC_OVER, 0, alpha, 0 };
+            AlphaBlend(
+                g_mnAnimInfo.hdcWndAni, 0, y,   g_mnAnimInfo.cxAni, cyFull,
+                g_mnAnimInfo.hdcAni,   0, yOff, g_mnAnimInfo.cxAni, cyFull, bf);
+        }
+        else
+        {
+            BitBlt(
+                g_mnAnimInfo.hdcWndAni, 0, y,   g_mnAnimInfo.cxAni, cyFull,
+                g_mnAnimInfo.hdcAni,   0, yOff,
+                SRCCOPY | NOMIRRORBITMAP);
+        }
+        SelectClipRgn(g_mnAnimInfo.hdcWndAni, NULL);
+    }
+
+    // Linha de borda sub-pixel: desenha a próxima linha a ser revelada
+    // com alpha proporcional à fração de pixel sobrante. Isso elimina
+    // o salto visual entre frames — o olho percebe movimento contínuo.
+    if (frac > 0.004 && cyFull < g_mnAnimInfo.cyAni)
+    {
+        int yDest, ySrc;
+        if (g_mnAnimInfo.iDropDir & MNA_UP)
+        {
+            yDest = y - 1;   // linha acima da borda atual
+            ySrc  = cyFull;  // próxima linha-fonte a ser revelada
+        }
+        else
+        {
+            yDest = cyFull;              // linha abaixo da borda atual
+            ySrc  = g_mnAnimInfo.cyAni - cyFull - 1; // próxima linha-fonte
+        }
+        if (yDest >= 0 && yDest < g_mnAnimInfo.cyAni)
+        {
+            BYTE ba = (BYTE)(frac * (double)alpha + 0.5);
+            if (ba > 0)
+            {
+                BLENDFUNCTION bf = { AC_SRC_OVER, 0, ba, 0 };
+                AlphaBlend(
+                    g_mnAnimInfo.hdcWndAni, 0, yDest, g_mnAnimInfo.cxAni, 1,
+                    g_mnAnimInfo.hdcAni,   0, ySrc,  g_mnAnimInfo.cxAni, 1, bf);
+            }
+        }
+    }
+
+    SetLayout(g_mnAnimInfo.hdcWndAni, dwOldLayout);
+
+    if (g_mnAnimInfo.cyVisible == g_mnAnimInfo.cyAni)
+        MNAnimateExit(true); // último pixel pintado — fim natural
+}
+
+// ============================================================
+//  Subclasse da janela de menu
+// ============================================================
+
+LRESULT CALLBACK MenuSubclassProc(
+    HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+    UINT_PTR uIDSubclass, DWORD_PTR dwRefData)
+{
+    switch (uMsg)
+    {
+    // -----------------------------------------------------------------
+    case WM_DESTROY:
+    // -----------------------------------------------------------------
+        if (g_uMenuDepth > 0) g_uMenuDepth--;
+
+        // Ao navegar pela barra de menus via hover, o Windows destrói o popup
+        // anterior antes de criar o novo. Só resetamos se for a janela animando.
+        if (g_mnAnimInfo.hwndAni == hwnd)
+        {
+            // Restaura RTL antes de ResetMNAnimateInfo — após o reset o struct está zerado
+            if (g_mnAnimInfo.fLayoutRTL)
+            {
+                DWORD dwEx = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                SetWindowLongW(hwnd, GWL_EXSTYLE, dwEx | WS_EX_LAYOUTRTL);
+            }
+            ResetMNAnimateInfo();
+        }
+
+        goto DWP;
+
+    // -----------------------------------------------------------------
+    case WM_WINDOWPOSCHANGING:
+    // -----------------------------------------------------------------
+    {
+        LPWINDOWPOS pwpC = (LPWINDOWPOS)lParam;
+        if (!(pwpC->flags & SWP_SHOWWINDOW))
+            goto DWP;
+        if (!UIEffectsEnabled() || !MenuAnimationEnabled() || MenuFadeEnabled())
+            goto DWP;
+
+        // Desativa RTL já aqui — antes de o DWM compor a janela — para que
+        // o conteúdo nunca apareça espelhado para o lado oposto.
+        // Aproveitamos a mesma leitura para adicionar WS_EX_LAYERED e definir
+        // alpha=0, tornando a janela invisível ao compositor até o primeiro tick.
+        // WS_EX_LAYERED é mantido durante toda a animação e removido
+        // em ResetMNAnimateInfo ao fim (natural ou por cancelamento).
+        {
+            DWORD dwEx = GetWindowLongW(hwnd, GWL_EXSTYLE);
+            dwEx &= ~WS_EX_LAYOUTRTL;   // remove RTL antes da composição
+            dwEx |=  WS_EX_LAYERED;     // habilita transparência por alpha
+            SetWindowLongW(hwnd, GWL_EXSTYLE, dwEx);
+            SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+        }
+
+        goto DWP;
+    }
+
+    // -----------------------------------------------------------------
+    case WM_PAINT:
+    // -----------------------------------------------------------------
+        // Suprime o repaint normal durante a animação;
+        // toda pintura é feita por nós via DC off-screen.
+        if (g_fMenuAnimating && g_mnAnimInfo.hwndAni == hwnd)
+        {
+            PAINTSTRUCT ps;
+            BeginPaint(hwnd, &ps);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        goto DWP;
+
+    // -----------------------------------------------------------------
+    case WM_TIMER:
+    // -----------------------------------------------------------------
+        if (wParam == IDWH_MNANIMATE)
+        {
+            MNAnimate(true);
+            return 0;
+        }
+        goto DWP;
+
+    // -----------------------------------------------------------------
+    case WM_WINDOWPOSCHANGED:
+    // -----------------------------------------------------------------
+    {
+        LPWINDOWPOS pwp = (LPWINDOWPOS)lParam;
+        if (!(pwp->flags & SWP_SHOWWINDOW))
+            goto DWP;
+
+        // Se a animação não vai iniciar (UIEffects off, FadeEnabled, etc.),
+        // remove WS_EX_LAYERED para não deixar a janela presa invisível.
+        if (!UIEffectsEnabled() || !MenuAnimationEnabled() || MenuFadeEnabled())
+        {
+            DWORD dwExL = GetWindowLongW(hwnd, GWL_EXSTYLE);
+            if (dwExL & WS_EX_LAYERED)
+                SetWindowLongW(hwnd, GWL_EXSTYLE, dwExL & ~WS_EX_LAYERED);
+            goto DWP;
+        }
+
+        // Encerra animação anterior (ex: submenu abrindo durante animação do pai,
+        // ou hover na barra antes que a animação anterior termine).
+        MNAnimate(false);
+
+        g_uMenuDepth++;
+
+        // -----------------------------------------------------------------
+        //  Detecção de direção — cada menu é avaliado de forma independente.
+        //
+        //  Caso especial depth=1 via TrackPopupMenu/Ex: o ponto de invocação
+        //  exato (g_ptTpm) é conhecido. Se o menu abriu acima desse ponto,
+        //  o Windows o inverteu — animamos para cima (MNA_UP).
+        //
+        //  Demais casos (submenus, barra de menus): usamos a posição do
+        //  cursor como referência. Se o topo do menu ficou acima do meio
+        //  do cursor, o Windows inverteu o menu — animamos para cima.
+        // -----------------------------------------------------------------
+
+        int iDropDir;
+
+        if (g_fIsTpm && g_uMenuDepth == 1)
+        {
+            // Menu de contexto principal
+            iDropDir = (pwp->y >= g_ptTpm.y - 4) ? MNA_DOWN : MNA_UP;
+        }
+        else
+        {
+            POINT ptCursor;
+            GetCursorPos(&ptCursor);
+
+            // Distância entre cursor e topo do menu
+            int dy = ptCursor.y - pwp->y;
+
+            // Se o topo do menu ficou acima do cursor,
+            // o Windows inverteu o submenu
+            if (dy > (pwp->cy / 2))
+                iDropDir = MNA_UP;
+            else
+                iDropDir = MNA_DOWN;
+        }
+
+        // -----------------------------------------------------------------
+        //  Inicializa estado GDI da animação
+        // -----------------------------------------------------------------
+        g_fMenuAnimating               = true;
+        g_mnAnimInfo.hwndAni           = hwnd;
+        g_mnAnimInfo.iDropDir          = iDropDir;
+        g_mnAnimInfo.cxAni             = pwp->cx;
+        g_mnAnimInfo.cyAni             = pwp->cy;
+        g_mnAnimInfo.cyVisible         = 0;
+        g_mnAnimInfo.hdcWndAni         = GetDCEx(hwnd, NULL, DCX_WINDOW | DCX_USESTYLE);
+        g_mnAnimInfo.hdcAni            = CreateCompatibleDC(g_mnAnimInfo.hdcWndAni);
+        g_mnAnimInfo.hbmAni            = CreateCompatibleBitmap(g_mnAnimInfo.hdcWndAni, pwp->cx, pwp->cy);
+        g_mnAnimInfo.fLayoutRTL        = !!(GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL);
+        GetCursorPos(&g_mnAnimInfo.ptInitialMousePos);
+
+        // Verifica falha de alocação GDI (OOM extremo) antes de SelectObject.
+        // ResetMNAnimateInfo libera o que foi alocado e remove WS_EX_LAYERED.
+        if (!g_mnAnimInfo.hdcWndAni || !g_mnAnimInfo.hdcAni || !g_mnAnimInfo.hbmAni)
+        {
+            ResetMNAnimateInfo();
+            goto DWP;
+        }
+
+        // Captura o menu no estado totalmente renderizado (fonte da animação)
+        g_mnAnimInfo.hOldBmp = SelectObject(g_mnAnimInfo.hdcAni, g_mnAnimInfo.hbmAni);
+        SendMessageW(hwnd, WM_PRINT, (WPARAM)g_mnAnimInfo.hdcAni,
+            PRF_CLIENT | PRF_NONCLIENT | PRF_ERASEBKGND);
+
+        RegisterWindowsHooks();
+
+        QueryPerformanceCounter(&g_mnAnimInfo.qpcStart);
+        SetTimer(hwnd, IDWH_MNANIMATE, g_uTimerInterval, NULL);
+        MNAnimate(true);
+        goto DWP;
+    }
+
+    default:
+        goto DWP;
+    }
+
+DWP:
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+// ============================================================
+//  Hooks de DefWindowProc / DefDlgProc / etc.
+//  — interceptam WM_UAHINITMENU para instalar a subclasse do menu
+//
+//  WM_UAHINITMENU (0x0093) é uma mensagem UAH (User API Hook) interna
+//  enviada à janela proprietária imediatamente antes de cada popup ser
+//  exibido — inclusive durante navegação hover na barra de menus.
+//  Neste ponto a janela do menu já existe e FindWindowExW localiza o
+//  HWND de forma confiável.
+// ============================================================
+
+static void SlideAnimWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg != WM_UAHINITMENU)
+        return;
+
+    if (!UIEffectsEnabled() || !MenuAnimationEnabled() || MenuFadeEnabled())
+        return;
+
+    PUAHMENU puim = (PUAHMENU)lParam;
+    if (!(puim->dwFlags & MFISPOPUP))
+        return;
+
+    // Localiza o HWND da janela de menu que exibe este HMENU.
+    // SetWindowSubclass é idempotente para o mesmo (hwnd, uIDSubclass):
+    // chamá-lo novamente apenas atualiza os dados, sem duplicar o hook.
+    HWND hwndMenu = NULL;
+    while ((hwndMenu = FindWindowExW(NULL, hwndMenu, MENUCLASS, nullptr)) != NULL)
+    {
+        HMENU hm = (HMENU)SendMessageW(hwndMenu, MN_GETHMENU, 0, 0);
+        if (hm == puim->hmenu)
+            break;
+    }
+
+    if (hwndMenu)
+        SetWindowSubclass(hwndMenu, MenuSubclassProc, 0, (DWORD_PTR)puim->hmenu);
+}
+
+#define DWP_HOOK_(name, defArgs, callArgs)               \
+LRESULT (CALLBACK *name##_orig) defArgs;                 \
+LRESULT CALLBACK   name##_hook  defArgs                  \
+{                                                         \
+    SlideAnimWndProc(hWnd, uMsg, wParam, lParam);        \
+    return name##_orig callArgs;                         \
+}
+
+#define DWP_HOOK(name, defArgs, callArgs)  \
+    DWP_HOOK_(name##A, defArgs, callArgs)  \
+    DWP_HOOK_(name##W, defArgs, callArgs)
+
+DWP_HOOK(DefWindowProc,
+    (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
+    (hWnd, uMsg, wParam, lParam))
+DWP_HOOK(DefFrameProc,
+    (HWND hWnd, HWND hWndMDIClient, UINT uMsg, WPARAM wParam, LPARAM lParam),
+    (hWnd, hWndMDIClient, uMsg, wParam, lParam))
+DWP_HOOK(DefMDIChildProc,
+    (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
+    (hWnd, uMsg, wParam, lParam))
+DWP_HOOK(DefDlgProc,
+    (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam),
+    (hWnd, uMsg, wParam, lParam))
+
+// ============================================================
+//  Hooks de TrackPopupMenu / TrackPopupMenuEx
+//  — registram o ponto de invocação para detecção de direção
+// ============================================================
+
+using TrackPopupMenu_t   = decltype(&TrackPopupMenu);
+using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
+
+TrackPopupMenu_t   TrackPopupMenu_orig;
+TrackPopupMenuEx_t TrackPopupMenuEx_orig;
+
+BOOL WINAPI TrackPopupMenu_hook(
+    HMENU hMenu, UINT uFlags, int x, int y,
+    int nReserved, HWND hWnd, const RECT *prcRect)
+{
+    g_fIsTpm = true;
+    g_ptTpm  = { x, y };
+    BOOL fResult = TrackPopupMenu_orig(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
+    g_fIsTpm = false;
+    g_ptTpm  = {};
+    return fResult;
+}
+
+BOOL WINAPI TrackPopupMenuEx_hook(
+    HMENU hMenu, UINT uFlags, int x, int y, HWND hwnd, LPTPMPARAMS lptpm)
+{
+    g_fIsTpm = true;
+    g_ptTpm  = { x, y };
+    BOOL fResult = TrackPopupMenuEx_orig(hMenu, uFlags, x, y, hwnd, lptpm);
+    g_fIsTpm = false;
+    g_ptTpm  = {};
+    return fResult;
+}
+
+// ============================================================
+//  Ciclo de vida do mod
+// ============================================================
+
+// Macro auxiliar de dois níveis para converter o nome da função em wide string.
+// O operador # gera uma string estreita (char); L#func não é válido em C/C++.
+// A solução é passar por um macro intermediário que força a expansão antes
+// de concatenar o prefixo L.
+#define WH_WIDEN2(x) L ## x
+#define WH_WIDEN(x)  WH_WIDEN2(x)
+
+#define HOOK(func)                                                                               \
+    if (!Wh_SetFunctionHook((void *)func, (void *)func##_hook, (void **)&func##_orig)) {       \
+        Wh_Log(L"Falha ao hookar %s", WH_WIDEN(#func));                                        \
+        return FALSE;                                                                            \
+    }
+
+#define HOOK_A_W(func) HOOK(func##A) HOOK(func##W)
+
+void Wh_ModSettingsChanged()
+{
+    // Duração em ms — mínimo de 50ms para evitar flash invisível
+    int iDuration = Wh_GetIntSetting(L"animationDuration");
+    g_dAnimDuration = (iDuration >= 50) ? (double)iDuration : 50.0;
+
+    // Fade em % (0–100) convertido para fração (0.0–1.0)
+    int iFade = Wh_GetIntSetting(L"fadeDuration");
+    if (iFade < 0)   iFade = 0;
+    if (iFade > 100) iFade = 100;
+    g_dFadeWindow = iFade / 100.0;
+
+    // Intervalo do timer em ms — clampado entre 1 e 100
+    int iInterval = Wh_GetIntSetting(L"timerInterval");
+    if (iInterval < 1)   iInterval = 1;
+    if (iInterval > 100) iInterval = 100;
+    g_uTimerInterval = (UINT)iInterval;
+}
+
+BOOL Wh_ModInit()
+{
+    Wh_ModSettingsChanged();
+    QueryPerformanceFrequency(&g_qpcFreq);
+    // Salva o estado atual de animação para restaurá-lo fielmente no uninit
+    BOOL fEnabled = FALSE;
+    if (SystemParametersInfoW(SPI_GETMENUANIMATION, 0, &fEnabled, 0) && fEnabled)
+        Wh_SetIntValue(L"AnimateMenus", 1);
+
+    UpdateSystemParameters(USPF_ININIT);
+
+    HOOK_A_W(DefWindowProc)
+    HOOK_A_W(DefFrameProc)
+    HOOK_A_W(DefMDIChildProc)
+    HOOK_A_W(DefDlgProc)
+    HOOK(TrackPopupMenu)
+    HOOK(TrackPopupMenuEx)
+    HOOK_A_W(SystemParametersInfo)
+
+    return TRUE;
+}
+
+void Wh_ModUninit()
+{
+    UpdateSystemParameters(USPF_INUNINIT);
+}
