@@ -17,24 +17,17 @@
 Prevents File Explorer from opening multiple windows. Every new folder is
 redirected into a **new tab** inside the first (primary) Explorer window.
 
-## How It Works
-
-Uses internal Windows Shell COM interfaces and Explorer's undocumented
-`WM_COMMAND` messages to programmatically create tabs and navigate them.
-
-1. Hooks `CreateWindowExW` to detect new Explorer windows.
-2. Extracts the navigation path via `IShellWindows` / `IWebBrowser2`.
-3. Closes the new window and sends `WM_COMMAND 0xA21B` to
-   `ShellTabWindowClass` to create a tab.
-4. Navigates the new tab using `IWebBrowser2::Navigate2`.
+**Requires Windows 11 22H2 or later** (tabbed File Explorer).
 
 ## Bypass
 
 Hold **Shift** while opening a folder to force a separate window.
 
-## Requirements
+## Known Limitations
 
-- **Windows 11 22H2** or later (tabbed File Explorer).
+- Control Panel always opens in its own window (by design).
+- Dragging a tab out to detach it will be re-merged. Use **Shift** to
+  open a separate window instead.
 */
 // ==/WindhawkModReadme==
 
@@ -55,8 +48,6 @@ Hold **Shift** while opening a folder to force a separate window.
 // CLSIDs for special windows that should NOT be redirected into tabs
 static const WCHAR kControlPanelCLSID[] =
     L"::{26EE0668-A00A-44D7-9371-BEB064C98683}";
-static const WCHAR kRecycleBinCLSID[] =
-    L"::{645FF040-5081-101B-9F08-00AA002F954E}";
 
 static HWND g_lastPrimaryWindow = nullptr;
 static thread_local bool g_creatingExplorerWindow = false;
@@ -78,10 +69,7 @@ static bool IsRedirectablePath(const std::wstring& path) {
     if (path.find(kControlPanelCLSID) != std::wstring::npos)
         return false;
 
-    if (path.find(kRecycleBinCLSID) != std::wstring::npos)
-        return false;
-
-    if (path.compare(0, 9, L"shell:::{") == 0)
+    if (path.compare(0, 9, L"shell:::{" ) == 0)
         return false;
 
     return true;
@@ -372,15 +360,43 @@ static bool NavigateNewTab(HWND primaryHwnd, const std::wstring& path,
                 if (isEmptyOrNew) {
                     VARIANT target;
                     VariantInit(&target);
-                    target.vt      = VT_BSTR;
-                    target.bstrVal = SysAllocString(path.c_str());
-
                     VARIANT empty;
                     VariantInit(&empty);
+                    HRESULT hr = E_FAIL;
 
-                    HRESULT hr = pBrowser->Navigate2(&target, &empty,
-                                                      &empty, &empty, &empty);
-                    SysFreeString(target.bstrVal);
+                    // CLSID paths (e.g. `::{...}`) need PIDL-based navigation
+                    // because Navigate2 with a BSTR doesn't handle them.
+                    if (path.size() >= 3 && path[0] == L':' &&
+                        path[1] == L':' && path[2] == L'{') {
+                        PIDLIST_ABSOLUTE pidl = nullptr;
+                        if (SUCCEEDED(SHParseDisplayName(path.c_str(),
+                                nullptr, &pidl, 0, nullptr)) && pidl) {
+                            UINT pidlSize = ILGetSize(pidl);
+                            SAFEARRAY* sa = SafeArrayCreateVector(
+                                VT_UI1, 0, pidlSize);
+                            if (sa) {
+                                void* data = nullptr;
+                                SafeArrayAccessData(sa, &data);
+                                memcpy(data, pidl, pidlSize);
+                                SafeArrayUnaccessData(sa);
+
+                                target.vt     = VT_ARRAY | VT_UI1;
+                                target.parray = sa;
+                                hr = pBrowser->Navigate2(&target, &empty,
+                                                          &empty, &empty,
+                                                          &empty);
+                                SafeArrayDestroy(sa);
+                            }
+                            CoTaskMemFree(pidl);
+                        }
+                    } else {
+                        // Regular filesystem path — BSTR works fine
+                        target.vt      = VT_BSTR;
+                        target.bstrVal = SysAllocString(path.c_str());
+                        hr = pBrowser->Navigate2(&target, &empty,
+                                                  &empty, &empty, &empty);
+                        SysFreeString(target.bstrVal);
+                    }
 
                     Wh_Log(L"Navigate2 [%d] hr=0x%08X", static_cast<int>(i),
                            hr);
