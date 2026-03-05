@@ -7,7 +7,7 @@
 // @description:pt  Adiciona animações suaves de deslizamento vertical no estilo WinUI aos menus de contexto Win32 clássicos no Windows 11
 // @description:es  Agrega animaciones de deslizamiento verticales suaves al estilo WinUI a los menús contextuales clásicos de Win32 en Windows 11
 // @version         1.0
-// @author          crazyboyybs, aubymori
+// @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         *
 // @compilerOptions -lgdi32 -lcomctl32 -lmsimg32
