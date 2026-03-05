@@ -52,9 +52,11 @@ Hold **Shift** while opening a folder to force a separate window.
 #define WC_SHELLTAB  L"ShellTabWindowClass"
 #define CMD_NEW_TAB  0xA21B  // Internal Explorer "new tab" command
 
-// Control Panel CLSID — windows navigating here should not be redirected
+// CLSIDs for special windows that should NOT be redirected into tabs
 static const WCHAR kControlPanelCLSID[] =
     L"::{26EE0668-A00A-44D7-9371-BEB064C98683}";
+static const WCHAR kRecycleBinCLSID[] =
+    L"::{645FF040-5081-101B-9F08-00AA002F954E}";
 
 static HWND g_lastPrimaryWindow = nullptr;
 static thread_local bool g_creatingExplorerWindow = false;
@@ -76,6 +78,9 @@ static bool IsRedirectablePath(const std::wstring& path) {
     if (path.find(kControlPanelCLSID) != std::wstring::npos)
         return false;
 
+    if (path.find(kRecycleBinCLSID) != std::wstring::npos)
+        return false;
+
     if (path.compare(0, 9, L"shell:::{") == 0)
         return false;
 
@@ -90,7 +95,17 @@ static void AbortRedirect(HWND hwnd) {
     if (g_lastPrimaryWindow == hwnd)
         g_lastPrimaryWindow = nullptr;
 
-    // Re-add WS_VISIBLE and show the window via the original ShowWindow
+    if (!IsWindow(hwnd))
+        return;
+
+    // Remove transparency and restore the window
+    LONG exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_LAYERED) {
+        SetWindowLongW(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+    }
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                 SWP_NOACTIVATE | SWP_FRAMECHANGED);
     ShowWindow_Original(hwnd, SW_SHOW);
 }
 
@@ -396,10 +411,10 @@ static DWORD WINAPI RedirectThread(LPVOID param) {
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)))
         return 1;
 
-    // Wait for the new window to finish navigating (max ~6s)
+    // Wait for the new window to finish navigating (max ~2s)
     std::wstring path;
-    for (int attempt = 0; attempt < 60 && IsWindow(newWnd); attempt++) {
-        Sleep(100);
+    for (int attempt = 0; attempt < 40 && IsWindow(newWnd); attempt++) {
+        Sleep(50);
         path = GetExplorerWindowPath(newWnd);
         if (!path.empty()) break;
     }
@@ -502,9 +517,6 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
         return original();
     }
 
-    // Strip WS_VISIBLE so the window is never shown
-    dwStyle &= ~WS_VISIBLE;
-
     Wh_Log(L"Creating Explorer window");
     g_creatingExplorerWindow = true;
 
@@ -517,9 +529,17 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
     g_creatingExplorerWindow = false;
 
     if (hwnd) {
+        // Make window fully transparent instead of stripping WS_VISIBLE.
+        // This keeps WS_VISIBLE set so the window registers in IShellWindows
+        // (required for path extraction of special folders like Recycle Bin)
+        // but the user never sees it.
+        SetWindowLongW(hwnd, GWL_EXSTYLE,
+                       GetWindowLongW(hwnd, GWL_EXSTYLE) | WS_EX_LAYERED);
+        SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+
         g_lastPrimaryWindow = hwnd;
 
-        // Redirect — window stays hidden, thread will close it
+        // Redirect — window is transparent, thread will close it
         auto* ri = new RedirectInfo{hwnd, existing};
         HANDLE hThread =
             CreateThread(nullptr, 0, RedirectThread, ri, 0, nullptr);
