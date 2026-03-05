@@ -2,12 +2,115 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-04T18:35:00.000Z</updated>
+    <updated>2026-03-05T10:45:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinUI Context Menu Animation 1.0]]></title>
+        <id>https://windhawk.net/mods/winui-context-menu-animation#5de798ced9a02dfd9c48f2728fd11ddf9e4acdfa</id>
+        <link href="https://windhawk.net/mods/winui-context-menu-animation"/>
+        <updated>2026-03-05T10:45:51.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Menu%20de%20Contexto%20com%20Anima%C3%A7%C3%A3o%20WinUI.gif" alt="Preview" />
+<img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Menu%20de%20Contexto%202%20com%20Anima%C3%A7%C3%A3o%20WinUI.gif" alt="Preview" /></p>
+<h1 id="winuicontextmenuanimation">WinUI Context Menu Animation</h1>
+<h2 id="english">English</h2>
+<p>This mod brings the smooth vertical slide animation used in modern <strong>WinUI applications</strong>
+to classic <strong>Win32 context menus and popup menus</strong> in Windows 11.</p>
+<p>Instead of appearing instantly, menus smoothly slide into view using a <strong>WinUI-style
+cubic-bezier easing curve</strong> combined with a subtle fade-in.</p>
+<p>Each menu and submenu independently determines whether it should animate <strong>upward or
+downward</strong> based on its actual position on the screen. This ensures consistent behavior
+with how Windows naturally flips menus near screen edges.</p>
+<h3 id="features">Features</h3>
+<p>• Smooth WinUI-style vertical slide animation<br />
+• Configurable animation and fade times<br />
+• Accurate cubic-bezier easing matching modern Windows apps<br />
+• Independent direction detection for menus and submenus<br />
+• Compatible with context menus, menu bars, and nested submenus<br />
+• Lightweight implementation using native Win32 hooks</p>
+<h3 id="credits">Credits</h3>
+<p>This mod is based on the excellent work by <strong>aubymori</strong>:</p>
+<p>Menu/Tooltip Slide Animation<br />
+https://windhawk.net/mods/menu-tooltip-slide-animation</p>
+<p>The original mod restored the classic Windows 98/XP menu animation system.
+This fork adapts the animation engine to replicate the <strong>modern WinUI motion style</strong>
+used throughout Windows 11.</p>
+<p>Changes in this version include:</p>
+<p>• Replacing the classic animation with a WinUI-style vertical easing motion<br />
+• Removing tooltip animation logic<br />
+• Removing horizontal animation<br />
+• Improving submenu direction detection<br />
+• Implementing an accurate cubic-bezier solver for smooth motion</p>
+<hr />
+<h2 id="portugusbrasil">Português (Brasil)</h2>
+<p>Este mod traz a animação suave de <strong>deslizamento vertical usada em aplicativos
+modernos com WinUI</strong> para os <strong>menus de contexto e menus popup clássicos do Win32</strong>
+no Windows 11.</p>
+<p>Em vez de aparecerem instantaneamente, os menus passam a surgir com um movimento
+suave utilizando uma <strong>curva de easing cubic-bezier semelhante à do WinUI</strong>,
+acompanhada por um leve efeito de fade-in.</p>
+<p>Cada menu e submenu determina <strong>de forma independente</strong> se deve animar para cima
+ou para baixo com base em sua posição real na tela. Isso garante um comportamento
+natural quando o menu precisa inverter sua direção próximo às bordas da tela.</p>
+<h3 id="recursos">Recursos</h3>
+<p>• Animação vertical suave inspirada no WinUI<br />
+• Tempo de animação e fade configuráveis<br />
+• Curva de easing cubic-bezier equivalente à usada no Windows moderno<br />
+• Detecção independente de direção para menus e submenus<br />
+• Compatível com menus de contexto, barras de menu e submenus aninhados<br />
+• Implementação leve baseada em hooks nativos do Win32</p>
+<h3 id="crditos">Créditos</h3>
+<p>Este mod é baseado no trabalho de <strong>aubymori</strong>:</p>
+<p>Menu/Tooltip Slide Animation<br />
+https://windhawk.net/mods/menu-tooltip-slide-animation</p>
+<p>O mod original restaurava as animações clássicas de menus do Windows 98/XP.
+Esta versão adapta o mecanismo de animação para reproduzir o <strong>estilo de
+movimento moderno do WinUI presente no Windows 11</strong>.</p>
+<p>Principais mudanças nesta versão:</p>
+<p>• Substituição da animação clássica por movimento vertical estilo WinUI<br />
+• Remoção da animação de tooltips<br />
+• Remoção da animação horizontal<br />
+• Melhoria na detecção de direção de submenus<br />
+• Implementação de um solver cubic-bezier preciso para animação suave</p>
+<hr />
+<h2 id="espaol">Español</h2>
+<p>Este mod añade la animación vertical suave utilizada en las <strong>aplicaciones modernas
+basadas en WinUI</strong> a los <strong>menús de contexto y menús emergentes clásicos de Win32</strong>
+en Windows 11.</p>
+<p>En lugar de aparecer instantáneamente, los menús se deslizan suavemente utilizando
+una <strong>curva de easing cubic-bezier similar a la del WinUI</strong>, combinada con un
+ligero efecto de aparición gradual (fade-in).</p>
+<p>Cada menú y submenú determina <strong>de forma independiente</strong> si debe animarse hacia
+arriba o hacia abajo según su posición real en la pantalla, manteniendo un
+comportamiento natural cuando Windows invierte la dirección cerca de los bordes.</p>
+<h3 id="caractersticas">Características</h3>
+<p>• Animación vertical suave inspirada en WinUI<br />
+• Tiempos de animación y desvanecimiento configurables<br />
+• Curva de easing cubic-bezier equivalente a la usada en Windows moderno<br />
+• Detección independiente de dirección para menús y submenús<br />
+• Compatible con menús de contexto, barras de menú y submenús anidados<br />
+• Implementación ligera basada en hooks nativos de Win32</p>
+<h3 id="crditos-1">Créditos</h3>
+<p>Este mod está basado en el trabajo de <strong>aubymori</strong>:</p>
+<p>Menu/Tooltip Slide Animation<br />
+https://windhawk.net/mods/menu-tooltip-slide-animation</p>
+<p>El mod original restauraba las animaciones clásicas de menús de Windows 98/XP.
+Esta versión adapta el motor de animación para reproducir el <strong>estilo de
+movimiento moderno de WinUI utilizado en Windows 11</strong>.</p>
+<p>Cambios principales en esta versión:</p>
+<p>• Reemplazo de la animación clásica por movimiento vertical estilo WinUI<br />
+• Eliminación de la animación de tooltips<br />
+• Eliminación de la animación horizontal<br />
+• Mejora en la detección de dirección de submenús<br />
+• Implementación precisa de la curva cubic-bezier</p>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Context Menu Items 1.7.1]]></title>
         <id>https://windhawk.net/mods/remove-context-menu-items#5d5ac123fe3725cd883374758ac47def57af8891</id>
@@ -393,40 +496,6 @@ the second-level menus.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Notepad Multi-Select 5.3]]></title>
-        <id>https://windhawk.net/mods/notepad-multi-select#1f17101c3d58a843cfcdae6bd399df5e5e81176e</id>
-        <link href="https://windhawk.net/mods/notepad-multi-select"/>
-        <updated>2026-02-28T01:23:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="notepadmultiselectadvancededitingengine">Notepad Multi-Select &amp; Advanced Editing Engine</h1>
-<p>A professional-grade Windhawk modification that elevates the classic Windows Notepad into a modern, IDE-style text editor. This engine introduces true multi-caret editing, system-native text highlighting, context-aware auto-indentation, automated character pairing, and line duplication, all while strictly preserving the native performance and undo history of the host application.</p>
-<p><strong>️ Compatibility:</strong> This modification is designed exclusively for the classic Win32 Notepad (<code>notepad.exe</code> without tabs). It does not hook into the modern Windows 11 UWP Notepad application.</p>
-<h2 id="corefeatures">Core Features</h2>
-<ul>
-<li><strong>Multi-Caret Editing:</strong> Spawn multiple concurrent cursors to edit, delete, or navigate across adjacent lines simultaneously.</li>
-<li><strong>Line & Selection Duplication:</strong> Press <code>Ctrl + D</code> in single-caret mode to instantly duplicate the current line or highlighted selection inline.</li>
-<li><strong>System-Native Highlighting:</strong> Renders multi-line text selections using standard Windows theme parameters (<code>COLOR_HIGHLIGHT</code>), ensuring visual consistency.</li>
-<li><strong>Automated Character Pairing & Wrap:</strong> Automatically completes structural pairs (<code>()</code>, <code>[]</code>, <code>{}</code>, <code>''</code>, <code>""</code>). If text is selected, it beautifully wraps the text. Features IDE-standard "step-over" logic.</li>
-<li><strong>Context-Aware Auto-Indentation:</strong> Intercepts line breaks (<code>Enter</code>) to dynamically trace and replicate the exact leading whitespace (spaces or tabs) of the preceding logical line.</li>
-<li><strong>Smart Word Navigation:</strong> Enhances <code>Ctrl + Left/Right</code> and <code>Ctrl + Backspace/Delete</code> logic to evaluate text chunks globally, ignoring arbitrary punctuation breaks for cleaner deletion of contiguous strings.</li>
-<li><strong>Intelligent Tab Management:</strong> Standardizes the <code>Tab</code> key to inject a rigid <code>\t</code> character. Introduces <code>Shift + Tab</code> as a non-destructive un-indent command.</li>
-<li><strong>Native Conflict Insulation:</strong> Engineered with strict execution firewalls. When operating in standard single-caret mode, the engine explicitly defers to the native Windows <code>DefSubclassProc</code>, ensuring zero interference with standard undo stacks.</li>
-</ul>
-<h2 id="keybindingsnavigation">️ Keybindings &amp; Navigation</h2>
-<p>| Command | Action |
-| :--- | :--- |
-| <code>Alt + Shift + Up/Down</code> | Spawn an additional caret on the adjacent line above or below. |
-| <code>Shift + Left/Right</code> | Highlight text simultaneously across all active cursors. |
-| <code>Escape</code> or <code>Mouse Click</code> | Terminate multi-select mode and revert to standard single-caret editing. |
-| <code>Ctrl + D</code> | Duplicate the currently selected text, or the entire current line. |
-| <code>Enter</code> | Execute a line break with dynamic replication of previous indentation. |
-| <code>Shift + Tab</code> | Execute a non-destructive reverse jump (un-indent) up to 4 spaces. |
-| <code>Ctrl + Backspace / Delete</code> | Execute contiguous word block deletion, overriding standard punctuation stops. |</p>]]></content>
-        <author>
-            <name>Mohamed Magdy</name>
-            <uri>https://github.com/hamomagdy724</uri>
         </author>
     </entry>
 </feed>

@@ -10403,6 +10403,35 @@
                 "version": "1.0.0"
             }
         },
+        "winui-context-menu-animation": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1772707551000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1772707551000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "crazyboyybs",
+                "compilerOptions": "-lgdi32 -lcomctl32 -lmsimg32",
+                "description": "Agrega animaciones de deslizamiento verticales suaves al estilo WinUI a los menús contextuales clásicos de Win32 en Windows 11",
+                "github": "https://github.com/crazyboyybs",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "Menús contextuales con animación WinUI",
+                "version": "1.0"
+            }
+        },
         "winver-custom-text": {
             "details": {
                 "defaultSorting": 1552,
