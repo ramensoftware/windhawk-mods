@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-05T10:45:51.000Z</updated>
+    <updated>2026-03-05T12:47:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.2]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#49305bed9ea78e471a174bc599d3de9d08df0a9a</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2"/>
+        <updated>2026-03-05T12:47:19.000Z</updated>
+        <content type="html"><![CDATA[<p>Localize locking the taskbar item</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinUI Context Menu Animation 1.0]]></title>
         <id>https://windhawk.net/mods/winui-context-menu-animation#5de798ced9a02dfd9c48f2728fd11ddf9e4acdfa</id>
@@ -482,17 +493,6 @@ the second-level menus.</p>
         <link href="https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator"/>
         <updated>2026-02-28T09:42:13.000Z</updated>
         <content type="html"><![CDATA[<p>Improve reliability and remove the interim black rectangle</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.6]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#5d6a6214dfee43e3192a8587945094121257a189</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
-        <updated>2026-02-28T09:40:43.000Z</updated>
-        <content type="html"><![CDATA[<p>Update readme</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>

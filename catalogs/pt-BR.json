@@ -9651,7 +9651,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1772231457000,
+                "updated": 1772714839000,
                 "users": 47
             },
             "metadata": {
@@ -9665,7 +9665,7 @@
                     "explorer.exe"
                 ],
                 "name": "Windows 10 Taskbar Context Menu Fix for Win11 24H2+",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "win10-taskbar-on-win11": {
