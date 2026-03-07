@@ -4,6 +4,7 @@
 // @description     Use CTRL + ALT + UP/DOWN to change brightness. Runs in a dedicated process for maximum stability.
 // @version         1.0.0
 // @author          Prash
+// @github          https://github.com/prasmit2410
 // @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -lwbemuuid -lgdi32 -luser32 -lshell32
 // @license         MIT
@@ -143,7 +144,6 @@ LRESULT CALLBACK OSDWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rect; GetClientRect(hwnd, &rect);
 
-        // Background
         HBRUSH hBrush = CreateSolidBrush(RGB(240, 240, 240));
         FillRect(hdc, &rect, hBrush);
         DeleteObject(hBrush);
@@ -151,14 +151,12 @@ LRESULT CALLBACK OSDWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(30, 30, 30));
 
-        // Icon
         HFONT hIconFont = CreateFont(32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, DEFAULT_QUALITY, 0, L"Segoe MDL2 Assets");
         SelectObject(hdc, hIconFont);
         RECT iconRect = {0, 0, 65, 60};
         DrawText(hdc, L"\uE706", -1, &iconRect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
         DeleteObject(hIconFont);
 
-        // Text
         HFONT hTextFont = CreateFont(26, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, DEFAULT_QUALITY, 0, L"Segoe UI");
         SelectObject(hdc, hTextFont);
         wchar_t buf[16]; swprintf(buf, 16, L"%d%%", g_currentBrightnessValue);
@@ -177,7 +175,6 @@ LRESULT CALLBACK OSDWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         SetHardwareBrightness(g_currentBrightnessValue);
 
-        // Position at bottom center
         int screenW = GetSystemMetrics(SM_CXSCREEN);
         int screenH = GetSystemMetrics(SM_CYSCREEN);
         SetWindowPos(hwnd, HWND_TOPMOST, (screenW - 180) / 2, screenH - 140, 180, 60, SWP_SHOWWINDOW | SWP_NOACTIVATE);
@@ -252,12 +249,10 @@ void WhTool_ModUninit() {
     CoUninitialize();
 }
 
-void WhTool_ModSettingsChanged() {
-    // Logic for setting updates
-}
+void WhTool_ModSettingsChanged() {}
 
 // ---------------------------------------------------------------------------
-// 5. OFFICIAL WINDHAWK TOOL BOILERPLATE (COPY-PASTE)
+// 5. OFFICIAL WINDHAWK TOOL BOILERPLATE
 // ---------------------------------------------------------------------------
 
 bool g_isToolModProcessLauncher;
@@ -304,7 +299,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (isCurrentToolProcess: true, isCurrentToolModProcess) {
+    if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
@@ -403,18 +398,13 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
+    if (g_isToolModProcessLauncher) return;
     WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
+    if (g_isToolModProcessLauncher) return;
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
