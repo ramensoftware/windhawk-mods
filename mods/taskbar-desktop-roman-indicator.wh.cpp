@@ -2,7 +2,7 @@
 // @id              taskbar-desktop-roman-indicator
 // @name            Taskbar Desktop Roman Indicator
 // @description     Appends the current virtual desktop number in Roman numerals to the Windows 11 taskbar clock
-// @version         0.1
+// @version         1.0.0
 // @author          Simon Benedict
 // @github          https://github.com/simon-ami
 // @include         explorer.exe
