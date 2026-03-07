@@ -188,13 +188,12 @@ struct ButtonDefinition {
 };
 
 // Glyphs are from Segoe Fluent Icons.
-// Hibernate shares the Sleep icon as there isn't a dedicated standard glyph.
 static const std::vector<ButtonDefinition> g_buttonDefinitions = {
     {L"shutdown",  PowerAction::Shutdown,  L"\uE7E8"},
     {L"restart",   PowerAction::Restart,   L"\uE777"},
     {L"signout",   PowerAction::SignOut,   L"\uF3B1"},
     {L"sleep",     PowerAction::Sleep,     L"\uE708"},
-    {L"hibernate", PowerAction::Hibernate, L"\uE708"},
+    {L"hibernate", PowerAction::Hibernate, L"\uE823"},
     {L"lock",      PowerAction::Lock,      L"\uE72E"},
 };
 
