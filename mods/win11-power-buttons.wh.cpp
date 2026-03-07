@@ -18,13 +18,13 @@
 /*
 # Windows 11 Start Menu Power Buttons
 
-Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate buttons to the Windows 11 Start menu, replacing the default power flyout.
+Adds customizable one-click Shutdown, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 
 ![](https://i.imgur.com/M7xcCgb.png)
 
 ---
 
-添加可配置的一键关机/重启/注销/睡眠/休眠按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
+添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
 */
 // ==/WindhawkModReadme==
 
