@@ -8,6 +8,7 @@
 // @github          https://github.com/prasmit2410
 // @compilerOptions -lole32 -loleaut32 -lwbemuuid -lgdi32
 // @license         MIT
+// ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
@@ -27,6 +28,7 @@ A lightweight tool to control your monitor's brightness using keyboard shortcuts
 *Note: Requires a monitor that supports WMI/DDC (standard on most laptops and modern displays).*
 */
 // ==/WindhawkModReadme==
+
 
 #include <windows.h>
 #include <wbemidl.h>
@@ -276,3 +278,4 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() { if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged(); }
 void Wh_ModUninit() { if (!g_isToolModProcessLauncher) { WhTool_ModUninit(); ExitProcess(0); } }
+
