@@ -793,7 +793,7 @@ def test_run():
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = 0
+    warnings = validate_encoding(path)
     warnings += validate_metadata(path, pr_author)
     warnings += validate_symbol_hooks(path)
     warnings += validate_specific_keywords(path)
