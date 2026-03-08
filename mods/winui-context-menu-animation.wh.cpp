@@ -6,7 +6,7 @@
 // @description     Adds smooth WinUI-style vertical slide animations to classic Win32 context menus in Windows 11
 // @description:pt  Adiciona animações suaves de deslizamento vertical no estilo WinUI aos menus de contexto Win32 clássicos no Windows 11
 // @description:es  Agrega animaciones de deslizamiento verticales suaves al estilo WinUI a los menús contextuales clásicos de Win32 en Windows 11
-// @version         1.0
+// @version         1.0.1
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         *
@@ -36,9 +36,17 @@
   $name: Frame interval (ms)
   $name:pt: Intervalo de frame (ms)
   $name:es: Intervalo de fotograma (ms)
-  $description: "Interval in milliseconds between animation frames. Recommended: 6 for 120 Hz or higher displays, 16 for 60 Hz displays. Note: if fade-in is enabled, each frame calls AlphaBlend on the CPU — lower values increase CPU usage during the animation. Set fade-in to 0 to eliminate this cost entirely."
-  $description:pt: "Intervalo em milissegundos entre os frames da animação. Recomendado: 6 para telas de 120 Hz ou superior, 16 para telas de 60 Hz. Nota: com o fade-in ativo, cada frame executa AlphaBlend via CPU — intervalos menores aumentam o uso de CPU durante a animação. Defina o fade-in como 0 para eliminar esse custo completamente."
-  $description:es: "Intervalo en milisegundos entre fotogramas de animación. Recomendado: 6 para pantallas de 120 Hz o superiores, 16 para pantallas de 60 Hz. Nota: con el desvanecimiento activo, cada fotograma ejecuta AlphaBlend por CPU — intervalos menores aumentan el uso de CPU durante la animación. Establezca el desvanecimiento en 0 para eliminar este costo por completo."
+  $description: "Interval in milliseconds between animation frames. Recommended: 6 for 120 Hz or higher displays, 16 for 60 Hz displays. Lower values produce smoother motion but increase CPU usage, as each frame composites a bitmap per frame (via UpdateLayeredWindow in default mode, or via AlphaBlend in compatibility mode)."
+  $description:pt: "Intervalo em milissegundos entre os frames da animação. Recomendado: 6 para telas de 120 Hz ou superior, 16 para telas de 60 Hz. Valores menores produzem movimento mais suave, mas aumentam o uso de CPU, pois cada frame compõe um bitmap por frame (via UpdateLayeredWindow no modo padrão, ou via AlphaBlend no modo de compatibilidade)."
+  $description:es: "Intervalo en milisegundos entre fotogramas de animación. Recomendado: 6 para pantallas de 120 Hz o superiores, 16 para pantallas de 60 Hz. Valores menores producen un movimiento más suave, pero aumentan el uso de CPU, ya que cada fotograma compone un mapa de bits por fotograma (mediante UpdateLayeredWindow en el modo predeterminado, o mediante AlphaBlend en el modo de compatibilidad)."
+
+- translucentWindowsCompat: false
+  $name: Translucent Windows compatibility mode
+  $name:pt: Modo de compatibilidade com Translucent Windows
+  $name:es: Modo de compatibilidad con Translucent Windows
+  $description: Enable if you use the Translucent Windows mod. Reverts to the legacy compositing path (AlphaBlend), disabling per-pixel alpha rendering and background styling changes. This restores the behavior of version 1.0.
+  $description:pt: Ative se você usa o mod Translucent Windows. Reverte para o caminho de composição legado (AlphaBlend), desativando a renderização alfa por pixel e as alterações de estilo de fundo. Isso restaura o comportamento da versão 1.0.
+  $description:es: Actívalo si usas el mod Translucent Windows. Revierte al camino de composición heredado (AlphaBlend), desactivando la composición alfa por píxel y los cambios de estilo de fondo. Esto restaura el comportamiento de la versión 1.0.
 */
 // ==/WindhawkModSettings==
 
@@ -67,7 +75,16 @@ with how Windows naturally flips menus near screen edges.
 • Accurate cubic-bezier easing matching modern Windows apps  
 • Independent direction detection for menus and submenus  
 • Compatible with context menus, menu bars, and nested submenus  
-• Lightweight implementation using native Win32 hooks
+• Lightweight implementation using native Win32 hooks  
+• Optional compatibility mode for the Translucent Windows mod
+
+### Translucent Windows Compatibility
+
+If you use the **Translucent Windows** mod alongside this one, enable the
+**Translucent Windows compatibility mode** setting. This reverts the animation
+rendering to the legacy compositing path (AlphaBlend), disabling per-pixel alpha
+transparency and background styling changes. The slide and fade animations remain
+fully functional — only the compositing method changes.
 
 ### Credits
 
@@ -86,7 +103,8 @@ Changes in this version include:
 • Removing tooltip animation logic  
 • Removing horizontal animation  
 • Improving submenu direction detection  
-• Implementing an accurate cubic-bezier solver for smooth motion
+• Implementing an accurate cubic-bezier solver for smooth motion  
+• (1.0.1) Migrating to per-pixel alpha compositing via UpdateLayeredWindow and added Translucent Windows compatibility mode
 
 ---
 
@@ -111,7 +129,17 @@ natural quando o menu precisa inverter sua direção próximo às bordas da tela
 • Curva de easing cubic-bezier equivalente à usada no Windows moderno  
 • Detecção independente de direção para menus e submenus  
 • Compatível com menus de contexto, barras de menu e submenus aninhados  
-• Implementação leve baseada em hooks nativos do Win32
+• Implementação leve baseada em hooks nativos do Win32  
+• Modo de compatibilidade opcional para o mod Translucent Windows
+
+### Compatibilidade com Translucent Windows
+
+Se você usa o mod **Translucent Windows** junto com este, ative a configuração
+**Modo de compatibilidade com Translucent Windows**. Isso reverte a renderização
+da animação para o caminho de composição legado (AlphaBlend), desativando a
+transparência alfa por pixel e as alterações de estilo de fundo. As animações
+de slide e fade continuam funcionando normalmente — apenas o método de composição
+muda.
 
 ### Créditos
 
@@ -130,7 +158,8 @@ Principais mudanças nesta versão:
 • Remoção da animação de tooltips  
 • Remoção da animação horizontal  
 • Melhoria na detecção de direção de submenus  
-• Implementação de um solver cubic-bezier preciso para animação suave
+• Implementação de um solver cubic-bezier preciso para animação suave  
+• (1.0.1) Migração para composição alfa por pixel via UpdateLayeredWindow e adição do modo de compatibilidade com Translucent Windows
 
 ---
 
@@ -155,7 +184,17 @@ comportamiento natural cuando Windows invierte la dirección cerca de los bordes
 • Curva de easing cubic-bezier equivalente a la usada en Windows moderno  
 • Detección independiente de dirección para menús y submenús  
 • Compatible con menús de contexto, barras de menú y submenús anidados  
-• Implementación ligera basada en hooks nativos de Win32
+• Implementación ligera basada en hooks nativos de Win32  
+• Modo de compatibilidad opcional para el mod Translucent Windows
+
+### Compatibilidad con Translucent Windows
+
+Si usas el mod **Translucent Windows** junto con este, activa la opción
+**Modo de compatibilidad con Translucent Windows**. Esto revierte la composición
+de la animación al camino heredado (AlphaBlend), desactivando la transparencia
+alfa por píxel y los cambios de estilo de fondo. Las animaciones de deslizamiento
+y desvanecimiento siguen funcionando con normalidad — solo cambia el método de
+composición.
 
 ### Créditos
 
@@ -174,7 +213,8 @@ Cambios principales en esta versión:
 • Eliminación de la animación de tooltips  
 • Eliminación de la animación horizontal  
 • Mejora en la detección de dirección de submenús  
-• Implementación precisa de la curva cubic-bezier
+• Implementación precisa de la curva cubic-bezier  
+• (1.0.1) Migración a composición alfa por píxel mediante UpdateLayeredWindow y adición del modo de compatibilidad con Translucent Windows
 */
 // ==/WindhawkModReadme==
 
@@ -342,9 +382,10 @@ static double WinUIEase(double t)
 }
 
 // Parâmetros de animação configuráveis (lidos em Wh_ModSettingsChanged)
-static double g_dAnimDuration  = 320.0; // duração total em ms
-static double g_dFadeWindow    = 0.80;  // fração do tempo usada para fade-in
-static UINT   g_uTimerInterval = 6;     // intervalo do timer em ms
+static double g_dAnimDuration     = 320.0; // duração total em ms
+static double g_dFadeWindow       = 0.80;  // fração do tempo usada para fade-in
+static UINT   g_uTimerInterval    = 6;     // intervalo do timer em ms
+static bool   g_bTranslucentCompat = false; // modo de compatibilidade com Translucent Windows
 
 // Alta precisão para cálculo de tempo da animação
 static LARGE_INTEGER g_qpcFreq;
@@ -375,10 +416,16 @@ struct MNANIMATEINFO
     HWND      hwndAni;
     LARGE_INTEGER qpcStart;
     int       iDropDir;         // MNA_UP ou MNA_DOWN
-    HDC       hdcWndAni;        // DC da janela do menu
+    HDC       hdcWndAni;        // DC da janela do menu — usado para WM_PRINT e compat rendering
     HBITMAP   hbmAni;
     HGDIOBJ   hOldBmp;
-    HDC       hdcAni;           // Fonte off-screen de cada frame da animação
+    HDC       hdcAni;           // Fonte off-screen: bitmap opaco capturado via WM_PRINT
+    // Campos exclusivos do modo ULW (não usados em modo de compatibilidade)
+    HDC       hdcFrame;         // Destino 32-bit ARGB para UpdateLayeredWindow
+    HBITMAP   hbmFrame;         // DIB section 32-bit associado a hdcFrame
+    HGDIOBJ   hOldBmpFrame;     // Bitmap anterior em hdcFrame (para restauração)
+    void     *pFrameBits;       // Ponteiro direto aos pixels de hbmFrame (pré-multiplicado)
+    POINT     ptWindowPos;      // Posição da janela na tela (para UpdateLayeredWindow)
     int       cxAni;            // Largura total do menu
     int       cyAni;            // Altura total do menu
     int       cyVisible;        // Altura visível atual (cresce de 0 até cyAni)
@@ -469,19 +516,14 @@ static void UnregisterWindowsHooks()
 
 static void ResetMNAnimateInfo()
 {
-    // Restaura opacidade total e remove WS_EX_LAYERED antes de liberar recursos
-    if (g_mnAnimInfo.hwndAni)
-    {
-        DWORD dwEx = GetWindowLongW(g_mnAnimInfo.hwndAni, GWL_EXSTYLE);
-        if (dwEx & WS_EX_LAYERED)
-        {
-            SetLayeredWindowAttributes(g_mnAnimInfo.hwndAni, 0, 255, LWA_ALPHA);
-            SetWindowLongW(g_mnAnimInfo.hwndAni, GWL_EXSTYLE, dwEx & ~WS_EX_LAYERED);
-        }
-    }
+    // Salva hwnd antes de ZeroMemory — necessário para repintar após liberação.
+    HWND hwndReset = g_mnAnimInfo.hwndAni;
 
     if (g_mnAnimInfo.hOldBmp)
         SelectObject(g_mnAnimInfo.hdcAni, g_mnAnimInfo.hOldBmp);
+
+    if (g_mnAnimInfo.hOldBmpFrame)
+        SelectObject(g_mnAnimInfo.hdcFrame, g_mnAnimInfo.hOldBmpFrame);
 
     if (g_mnAnimInfo.hdcWndAni)
         ReleaseDC(g_mnAnimInfo.hwndAni, g_mnAnimInfo.hdcWndAni);
@@ -492,27 +534,97 @@ static void ResetMNAnimateInfo()
     if (g_mnAnimInfo.hdcAni)
         DeleteDC(g_mnAnimInfo.hdcAni);
 
+    if (g_mnAnimInfo.hbmFrame)
+        DeleteObject(g_mnAnimInfo.hbmFrame);   // pFrameBits inválido após este ponto
+
+    if (g_mnAnimInfo.hdcFrame)
+        DeleteDC(g_mnAnimInfo.hdcFrame);
+
     ZeroMemory(&g_mnAnimInfo, sizeof(g_mnAnimInfo));
     UnregisterWindowsHooks();
     g_fMenuAnimating = false;
+
+    if (hwndReset)
+    {
+        DWORD dwEx = GetWindowLongW(hwndReset, GWL_EXSTYLE);
+        if (dwEx & WS_EX_LAYERED)
+        {
+            if (g_bTranslucentCompat)
+            {
+                // Modo de compatibilidade (legado): restaura opacidade total via SLWA
+                // antes de remover WS_EX_LAYERED, assim o sistema volta a desenhar
+                // normalmente e não é necessário forçar RedrawWindow.
+                SetLayeredWindowAttributes(hwndReset, 0, 255, LWA_ALPHA);
+            }
+            SetWindowLongW(hwndReset, GWL_EXSTYLE, dwEx & ~WS_EX_LAYERED);
+        }
+
+        if (!g_bTranslucentCompat)
+        {
+            // Modo ULW: durante a animação suprimimos todos os WM_PAINT e pintamos
+            // exclusivamente via UpdateLayeredWindow. Ao sair do modo ULW (removendo
+            // WS_EX_LAYERED), o conteúdo da janela está inválido — o sistema nunca
+            // a pintou via GDI. Sem RedrawWindow, o Windows exibe o fundo padrão
+            // branco e os itens do menu só aparecem ao passar o mouse.
+            //
+            // RDW_ERASE | RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME instrui o sistema
+            // a apagar e repintar toda a janela — inclusive a moldura não-cliente —
+            // de forma síncrona antes de retornar.
+            RedrawWindow(hwndReset, NULL, NULL,
+                RDW_ERASE | RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);
+        }
+    }
 }
 
-// fNaturalEnd=true: animação terminou no tempo — o último tick já pintou
-// o frame completo corretamente; não fazemos blit adicional.
-// fNaturalEnd=false: cancelamento explícito — blitamos hdcAni (menu
-// completo capturado no início) para exibir o menu instantaneamente.
+// fNaturalEnd=true: animação terminou no tempo — o último tick já enviou
+// o frame completo; só liberamos recursos.
+// fNaturalEnd=false: cancelamento explícito — exibimos o menu completo
+// instantaneamente antes de liberar recursos.
 static void MNAnimateExit(bool fNaturalEnd)
 {
     KillTimer(g_mnAnimInfo.hwndAni, IDWH_MNANIMATE);
 
-    if (!fNaturalEnd && g_mnAnimInfo.hdcAni)
+    if (!fNaturalEnd)
     {
-        DWORD dwOldLayout = SetLayout(g_mnAnimInfo.hdcWndAni, 0);
-        BitBlt(g_mnAnimInfo.hdcWndAni, 0, 0,
-               g_mnAnimInfo.cxAni, g_mnAnimInfo.cyAni,
-               g_mnAnimInfo.hdcAni, 0, 0,
-               SRCCOPY | NOMIRRORBITMAP);
-        SetLayout(g_mnAnimInfo.hdcWndAni, dwOldLayout);
+        if (g_bTranslucentCompat)
+        {
+            // Modo de compatibilidade (legado): blita o menu completo direto
+            // no DC da janela para exibição instantânea.
+            if (g_mnAnimInfo.hdcAni)
+            {
+                DWORD dwOldLayout = SetLayout(g_mnAnimInfo.hdcWndAni, 0);
+                BitBlt(g_mnAnimInfo.hdcWndAni, 0, 0,
+                       g_mnAnimInfo.cxAni, g_mnAnimInfo.cyAni,
+                       g_mnAnimInfo.hdcAni, 0, 0,
+                       SRCCOPY | NOMIRRORBITMAP);
+                SetLayout(g_mnAnimInfo.hdcWndAni, dwOldLayout);
+            }
+        }
+        else
+        {
+            // Modo ULW: envia um frame 100% opaco via UpdateLayeredWindow antes
+            // de remover WS_EX_LAYERED — garante que o menu apareça completo
+            // ao sair do modo ULW, sem depender do RedrawWindow subsequente.
+            if (g_mnAnimInfo.hdcFrame && g_mnAnimInfo.pFrameBits)
+            {
+                BitBlt(g_mnAnimInfo.hdcFrame, 0, 0,
+                       g_mnAnimInfo.cxAni, g_mnAnimInfo.cyAni,
+                       g_mnAnimInfo.hdcAni, 0, 0,
+                       SRCCOPY | NOMIRRORBITMAP);
+
+                DWORD *px    = (DWORD *)g_mnAnimInfo.pFrameBits;
+                int    count = g_mnAnimInfo.cxAni * g_mnAnimInfo.cyAni;
+                for (int i = 0; i < count; i++)
+                    px[i] |= 0xFF000000u;
+
+                POINT         ptSrc = {};
+                SIZE          sz    = { g_mnAnimInfo.cxAni, g_mnAnimInfo.cyAni };
+                BLENDFUNCTION bf    = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+                UpdateLayeredWindow(g_mnAnimInfo.hwndAni, NULL,
+                    &g_mnAnimInfo.ptWindowPos, &sz,
+                    g_mnAnimInfo.hdcFrame, &ptSrc, 0, &bf, ULW_ALPHA);
+            }
+        }
     }
 
     ResetMNAnimateInfo();
@@ -559,8 +671,7 @@ void MNAnimate(bool fIterate)
     int cyLast = g_mnAnimInfo.cyVisible;
     g_mnAnimInfo.cyVisible = cyFull;
 
-    // Alpha: fade-in usando easing WinUI — atualizado a cada tick,
-    // independente da altura, para que o fade seja sempre contínuo.
+    // Alpha global do frame para o fade-in — calculado com easing WinUI.
     BYTE alpha = 255;
     if (kFadeWindow > 0.0 && t < kFadeWindow)
     {
@@ -568,14 +679,20 @@ void MNAnimate(bool fIterate)
         if (fadeT > 1.0) fadeT = 1.0;
         alpha = (BYTE)(255.0 * WinUIEase(fadeT));
     }
-    SetLayeredWindowAttributes(g_mnAnimInfo.hwndAni, 0, alpha, LWA_ALPHA);
+
+    if (g_bTranslucentCompat)
+    {
+        // Modo de compatibilidade (legado): atualiza o alpha da janela inteira
+        // via SetLayeredWindowAttributes antes do early-return, garantindo que
+        // o fade seja sempre contínuo mesmo quando a altura não mudou.
+        SetLayeredWindowAttributes(g_mnAnimInfo.hwndAni, 0, alpha, LWA_ALPHA);
+    }
 
     // Evita repintura redundante quando nem a altura nem a fração mudaram
     if (g_mnAnimInfo.cyVisible == cyLast && frac < 0.004)
         return;
 
-    // Coordenadas de destino e offset na fonte.
-    // O conteúdo faz scroll junto com a borda crescente.
+    // Coordenadas de destino no frame e offset na fonte.
     int y, yOff;
     if (g_mnAnimInfo.iDropDir & MNA_UP)
     {
@@ -590,61 +707,165 @@ void MNAnimate(bool fIterate)
         yOff = g_mnAnimInfo.cyAni - cyFull;
     }
 
-    DWORD dwOldLayout = SetLayout(g_mnAnimInfo.hdcWndAni, 0);
-
-    // Região inteira visível
-    if (cyFull > 0)
+    if (g_bTranslucentCompat)
     {
-        IntersectClipRect(g_mnAnimInfo.hdcWndAni,
-            0, y, g_mnAnimInfo.cxAni, y + cyFull);
+        // ----------------------------------------------------------------
+        //  Modo de compatibilidade (legado) — composição via AlphaBlend
+        //
+        //  Pinta diretamente no DC da janela (hdcWndAni) usando AlphaBlend
+        //  para a transparência e BitBlt quando o alpha está próximo de 255.
+        //  Compatível com mods que modificam o fundo da janela, como
+        //  Translucent Windows.
+        // ----------------------------------------------------------------
 
-        if (alpha < 240)
-        {
-            BLENDFUNCTION bf = { AC_SRC_OVER, 0, alpha, 0 };
-            AlphaBlend(
-                g_mnAnimInfo.hdcWndAni, 0, y,   g_mnAnimInfo.cxAni, cyFull,
-                g_mnAnimInfo.hdcAni,   0, yOff, g_mnAnimInfo.cxAni, cyFull, bf);
-        }
-        else
-        {
-            BitBlt(
-                g_mnAnimInfo.hdcWndAni, 0, y,   g_mnAnimInfo.cxAni, cyFull,
-                g_mnAnimInfo.hdcAni,   0, yOff,
-                SRCCOPY | NOMIRRORBITMAP);
-        }
-        SelectClipRgn(g_mnAnimInfo.hdcWndAni, NULL);
-    }
+        DWORD dwOldLayout = SetLayout(g_mnAnimInfo.hdcWndAni, 0);
 
-    // Linha de borda sub-pixel: desenha a próxima linha a ser revelada
-    // com alpha proporcional à fração de pixel sobrante. Isso elimina
-    // o salto visual entre frames — o olho percebe movimento contínuo.
-    if (frac > 0.004 && cyFull < g_mnAnimInfo.cyAni)
-    {
-        int yDest, ySrc;
-        if (g_mnAnimInfo.iDropDir & MNA_UP)
+        // Região inteira visível
+        if (cyFull > 0)
         {
-            yDest = y - 1;   // linha acima da borda atual
-            ySrc  = cyFull;  // próxima linha-fonte a ser revelada
-        }
-        else
-        {
-            yDest = cyFull;              // linha abaixo da borda atual
-            ySrc  = g_mnAnimInfo.cyAni - cyFull - 1; // próxima linha-fonte
-        }
-        if (yDest >= 0 && yDest < g_mnAnimInfo.cyAni)
-        {
-            BYTE ba = (BYTE)(frac * (double)alpha + 0.5);
-            if (ba > 0)
+            IntersectClipRect(g_mnAnimInfo.hdcWndAni,
+                0, y, g_mnAnimInfo.cxAni, y + cyFull);
+
+            if (alpha < 240)
             {
-                BLENDFUNCTION bf = { AC_SRC_OVER, 0, ba, 0 };
+                BLENDFUNCTION bf = { AC_SRC_OVER, 0, alpha, 0 };
                 AlphaBlend(
-                    g_mnAnimInfo.hdcWndAni, 0, yDest, g_mnAnimInfo.cxAni, 1,
-                    g_mnAnimInfo.hdcAni,   0, ySrc,  g_mnAnimInfo.cxAni, 1, bf);
+                    g_mnAnimInfo.hdcWndAni, 0, y,   g_mnAnimInfo.cxAni, cyFull,
+                    g_mnAnimInfo.hdcAni,   0, yOff, g_mnAnimInfo.cxAni, cyFull, bf);
+            }
+            else
+            {
+                BitBlt(
+                    g_mnAnimInfo.hdcWndAni, 0, y,   g_mnAnimInfo.cxAni, cyFull,
+                    g_mnAnimInfo.hdcAni,   0, yOff,
+                    SRCCOPY | NOMIRRORBITMAP);
+            }
+            SelectClipRgn(g_mnAnimInfo.hdcWndAni, NULL);
+        }
+
+        // Linha de borda sub-pixel via AlphaBlend direto no DC da janela
+        if (frac > 0.004 && cyFull < g_mnAnimInfo.cyAni)
+        {
+            int yDest, ySrc;
+            if (g_mnAnimInfo.iDropDir & MNA_UP)
+            {
+                yDest = y - 1;
+                ySrc  = cyFull;
+            }
+            else
+            {
+                yDest = cyFull;
+                ySrc  = g_mnAnimInfo.cyAni - cyFull - 1;
+            }
+            if (yDest >= 0 && yDest < g_mnAnimInfo.cyAni)
+            {
+                BYTE ba = (BYTE)(frac * (double)alpha + 0.5);
+                if (ba > 0)
+                {
+                    BLENDFUNCTION bf = { AC_SRC_OVER, 0, ba, 0 };
+                    AlphaBlend(
+                        g_mnAnimInfo.hdcWndAni, 0, yDest, g_mnAnimInfo.cxAni, 1,
+                        g_mnAnimInfo.hdcAni,   0, ySrc,  g_mnAnimInfo.cxAni, 1, bf);
+                }
             }
         }
-    }
 
-    SetLayout(g_mnAnimInfo.hdcWndAni, dwOldLayout);
+        SetLayout(g_mnAnimInfo.hdcWndAni, dwOldLayout);
+    }
+    else
+    {
+        // ----------------------------------------------------------------
+        //  Modo ULW — composição via UpdateLayeredWindow com ARGB 32-bit
+        //
+        //  UpdateLayeredWindow exige um bitmap 32-bit com alpha pré-multiplicado:
+        //  cada canal (R, G, B) deve ser multiplicado pelo alpha antes de armazenar.
+        //  Pixels transparentes (regiões ainda não reveladas) ficam em 0x00000000,
+        //  tornando-se genuinamente transparentes — sem fundo branco ou preto.
+        // ----------------------------------------------------------------
+
+        // Zera o frame inteiro → todas as regiões começam transparentes
+        memset(g_mnAnimInfo.pFrameBits, 0,
+               (size_t)g_mnAnimInfo.cxAni * (size_t)g_mnAnimInfo.cyAni * 4);
+
+        // Copia a região visível do bitmap opaco (hdcAni) para o frame.
+        // BitBlt para um DIB 32-bit escreve os bytes de cor corretamente e
+        // deixa o byte de alpha em 0 — fixaremos o alpha no loop abaixo.
+        if (cyFull > 0)
+        {
+            BitBlt(g_mnAnimInfo.hdcFrame, 0, y,   g_mnAnimInfo.cxAni, cyFull,
+                   g_mnAnimInfo.hdcAni,   0, yOff, SRCCOPY | NOMIRRORBITMAP);
+
+            // Aplica alpha pré-multiplicado aos pixels da região visível.
+            // Formato do DWORD no DIB (little-endian): 0xAARRGGBB
+            //   byte[0]=B, byte[1]=G, byte[2]=R, byte[3]=A
+            DWORD *px    = (DWORD *)g_mnAnimInfo.pFrameBits + (size_t)y * g_mnAnimInfo.cxAni;
+            int    count = cyFull * g_mnAnimInfo.cxAni;
+            for (int i = 0; i < count; i++)
+            {
+                DWORD c = px[i];
+                BYTE  b = (BYTE)(c        & 0xFF);
+                BYTE  g_= (BYTE)((c >> 8) & 0xFF);
+                BYTE  r = (BYTE)((c >>16) & 0xFF);
+                px[i] = ((DWORD)(b * alpha / 255))
+                      | ((DWORD)(g_* alpha / 255) << 8)
+                      | ((DWORD)(r * alpha / 255) << 16)
+                      | ((DWORD)alpha             << 24);
+            }
+        }
+
+        // Linha de borda sub-pixel: a próxima linha com alpha proporcional
+        // à fração de pixel sobrante — garante movimento visualmente contínuo.
+        if (frac > 0.004 && cyFull < g_mnAnimInfo.cyAni)
+        {
+            int yDest, ySrc;
+            if (g_mnAnimInfo.iDropDir & MNA_UP)
+            {
+                yDest = y - 1;
+                ySrc  = cyFull;
+            }
+            else
+            {
+                yDest = cyFull;
+                ySrc  = g_mnAnimInfo.cyAni - cyFull - 1;
+            }
+
+            if (yDest >= 0 && yDest < g_mnAnimInfo.cyAni)
+            {
+                BYTE ba = (BYTE)(frac * (double)alpha + 0.5);
+                if (ba > 0)
+                {
+                    BitBlt(g_mnAnimInfo.hdcFrame, 0, yDest, g_mnAnimInfo.cxAni, 1,
+                           g_mnAnimInfo.hdcAni,   0, ySrc,  SRCCOPY | NOMIRRORBITMAP);
+
+                    DWORD *pxSub = (DWORD *)g_mnAnimInfo.pFrameBits
+                                 + (size_t)yDest * g_mnAnimInfo.cxAni;
+                    for (int i = 0; i < g_mnAnimInfo.cxAni; i++)
+                    {
+                        DWORD c  = pxSub[i];
+                        BYTE  b  = (BYTE)(c        & 0xFF);
+                        BYTE  g_ = (BYTE)((c >> 8) & 0xFF);
+                        BYTE  r  = (BYTE)((c >>16) & 0xFF);
+                        pxSub[i] = ((DWORD)(b * ba / 255))
+                                  | ((DWORD)(g_* ba / 255) << 8)
+                                  | ((DWORD)(r * ba / 255) << 16)
+                                  | ((DWORD)ba             << 24);
+                    }
+                }
+            }
+        }
+
+        // Envia o frame ARGB composto ao DWM via UpdateLayeredWindow.
+        // O compositor usa o alpha de cada pixel individualmente — as regiões
+        // com alpha=0 são genuinamente transparentes (see-through para o desktop).
+        {
+            POINT         ptSrc = {};
+            SIZE          sz    = { g_mnAnimInfo.cxAni, g_mnAnimInfo.cyAni };
+            BLENDFUNCTION bf    = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+            UpdateLayeredWindow(g_mnAnimInfo.hwndAni, NULL,
+                &g_mnAnimInfo.ptWindowPos, &sz,
+                g_mnAnimInfo.hdcFrame, &ptSrc, 0, &bf, ULW_ALPHA);
+        }
+    }
 
     if (g_mnAnimInfo.cyVisible == g_mnAnimInfo.cyAni)
         MNAnimateExit(true); // último pixel pintado — fim natural
@@ -706,6 +927,23 @@ LRESULT CALLBACK MenuSubclassProc(
 
         goto DWP;
     }
+
+    // -----------------------------------------------------------------
+    case WM_NCPAINT:
+    // -----------------------------------------------------------------
+        // Suprime a pintura da borda não-cliente durante a animação ULW.
+        // A borda do menu Win32 é desenhada pelo sistema via WM_NCPAINT —
+        // não pelo DWM. Sem supressão, ela aparece com tamanho total desde
+        // o primeiro frame enquanto o conteúdo ainda está crescendo.
+        // RDW_FRAME no RedrawWindow de ResetMNAnimateInfo repinta o NC
+        // corretamente quando a animação termina.
+        //
+        // Não suprimimos no modo de compatibilidade: nesse caminho o DC
+        // da janela (hdcWndAni) é pincelado diretamente pelo AlphaBlend e
+        // a borda NC precisa estar presente normalmente.
+        if (!g_bTranslucentCompat && g_fMenuAnimating && g_mnAnimInfo.hwndAni == hwnd)
+            return 0;
+        goto DWP;
 
     // -----------------------------------------------------------------
     case WM_PAINT:
@@ -799,26 +1037,86 @@ LRESULT CALLBACK MenuSubclassProc(
         g_mnAnimInfo.cxAni             = pwp->cx;
         g_mnAnimInfo.cyAni             = pwp->cy;
         g_mnAnimInfo.cyVisible         = 0;
+        g_mnAnimInfo.ptWindowPos       = { pwp->x, pwp->y };
         g_mnAnimInfo.hdcWndAni         = GetDCEx(hwnd, NULL, DCX_WINDOW | DCX_USESTYLE);
         g_mnAnimInfo.hdcAni            = CreateCompatibleDC(g_mnAnimInfo.hdcWndAni);
         g_mnAnimInfo.hbmAni            = CreateCompatibleBitmap(g_mnAnimInfo.hdcWndAni, pwp->cx, pwp->cy);
         g_mnAnimInfo.fLayoutRTL        = !!(GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL);
         GetCursorPos(&g_mnAnimInfo.ptInitialMousePos);
 
-        // Verifica falha de alocação GDI (OOM extremo) antes de SelectObject.
-        // ResetMNAnimateInfo libera o que foi alocado e remove WS_EX_LAYERED.
-        if (!g_mnAnimInfo.hdcWndAni || !g_mnAnimInfo.hdcAni || !g_mnAnimInfo.hbmAni)
+        if (!g_bTranslucentCompat)
         {
-            ResetMNAnimateInfo();
-            goto DWP;
+            // Modo ULW: cria o DC e o DIB section 32-bit ARGB usado por UpdateLayeredWindow.
+            // biHeight negativo = DIB top-down, coordenada 0 no topo — igual ao
+            // nosso sistema de coordenadas de animação.
+            g_mnAnimInfo.hdcFrame = CreateCompatibleDC(g_mnAnimInfo.hdcWndAni);
+            if (g_mnAnimInfo.hdcFrame)
+            {
+                BITMAPINFOHEADER bmi  = {};
+                bmi.biSize            = sizeof(bmi);
+                bmi.biWidth           = pwp->cx;
+                bmi.biHeight          = -pwp->cy;  // top-down
+                bmi.biPlanes          = 1;
+                bmi.biBitCount        = 32;
+                bmi.biCompression     = BI_RGB;
+                g_mnAnimInfo.hbmFrame = CreateDIBSection(
+                    g_mnAnimInfo.hdcFrame, (BITMAPINFO *)&bmi, DIB_RGB_COLORS,
+                    &g_mnAnimInfo.pFrameBits, NULL, 0);
+                if (g_mnAnimInfo.hbmFrame)
+                    g_mnAnimInfo.hOldBmpFrame = SelectObject(
+                        g_mnAnimInfo.hdcFrame, g_mnAnimInfo.hbmFrame);
+            }
         }
 
-        // Captura o menu no estado totalmente renderizado (fonte da animação)
+        // Verifica falha de alocação GDI (OOM extremo) antes de SelectObject.
+        // ResetMNAnimateInfo libera o que foi alocado e remove WS_EX_LAYERED.
+        {
+            bool fOOM = (!g_mnAnimInfo.hdcWndAni || !g_mnAnimInfo.hdcAni || !g_mnAnimInfo.hbmAni);
+            if (!g_bTranslucentCompat)
+                fOOM = fOOM || (!g_mnAnimInfo.hdcFrame || !g_mnAnimInfo.hbmFrame || !g_mnAnimInfo.pFrameBits);
+            if (fOOM)
+            {
+                ResetMNAnimateInfo();
+                goto DWP;
+            }
+        }
+
+        // Captura o menu no estado totalmente renderizado (fonte da animação).
+        // hdcAni é um DDB opaco — os pixels são copiados e transformados a cada tick.
         g_mnAnimInfo.hOldBmp = SelectObject(g_mnAnimInfo.hdcAni, g_mnAnimInfo.hbmAni);
         SendMessageW(hwnd, WM_PRINT, (WPARAM)g_mnAnimInfo.hdcAni,
             PRF_CLIENT | PRF_NONCLIENT | PRF_ERASEBKGND);
 
         RegisterWindowsHooks();
+
+        if (!g_bTranslucentCompat)
+        {
+            // Modo ULW: alterna WS_EX_LAYERED para sair do modo SLWA e entrar em modo ULW.
+            //
+            // Em WM_WINDOWPOSCHANGING chamamos SetLayeredWindowAttributes(alpha=0)
+            // para ocultar a janela ao compositor antes da primeira pintura.
+            // Isso coloca a janela em "modo SLWA". Uma janela em modo SLWA rejeita
+            // chamadas a UpdateLayeredWindow (retorna FALSE sem efeito), causando o
+            // fundo branco a cada tick.
+            //
+            // A solução: remover e re-adicionar WS_EX_LAYERED limpa o modo SLWA.
+            // Isso ocorre enquanto a janela ainda está invisível (alpha=0), de modo
+            // que o ciclo é imperceptível ao usuário.
+            // Após o ciclo, a próxima chamada — MNAnimate(true) abaixo — será a
+            // primeira UpdateLayeredWindow, estabelecendo o modo ULW corretamente.
+            {
+                DWORD dwExMode = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                SetWindowLongW(hwnd, GWL_EXSTYLE, dwExMode & ~WS_EX_LAYERED);
+                SetWindowLongW(hwnd, GWL_EXSTYLE, dwExMode |  WS_EX_LAYERED);
+            }
+
+            // Desabilita a decoração NC do DWM (borda + sombra) durante a animação.
+            // O DWM compõe a borda como uma camada separada com o tamanho total da
+            // janela desde o início — independente da nossa superfície ULW — dando
+            // a impressão de que o conteúdo "se encaixa" na borda durante o slide.
+            // A borda NC é suprimida via WM_NCPAINT durante a animação e restaurada
+            // pelo RDW_FRAME do RedrawWindow em ResetMNAnimateInfo.
+        }
 
         QueryPerformanceCounter(&g_mnAnimInfo.qpcStart);
         SetTimer(hwnd, IDWH_MNANIMATE, g_uTimerInterval, NULL);
@@ -967,12 +1265,16 @@ void Wh_ModSettingsChanged()
     if (iInterval < 1)   iInterval = 1;
     if (iInterval > 100) iInterval = 100;
     g_uTimerInterval = (UINT)iInterval;
+
+    // Modo de compatibilidade com Translucent Windows
+    g_bTranslucentCompat = Wh_GetIntSetting(L"translucentWindowsCompat") != 0;
 }
 
 BOOL Wh_ModInit()
 {
     Wh_ModSettingsChanged();
     QueryPerformanceFrequency(&g_qpcFreq);
+
     // Salva o estado atual de animação para restaurá-lo fielmente no uninit
     BOOL fEnabled = FALSE;
     if (SystemParametersInfoW(SPI_GETMENUANIMATION, 0, &fEnabled, 0) && fEnabled)
