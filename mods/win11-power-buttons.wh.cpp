@@ -2,7 +2,7 @@
 // @id              win11-power-buttons
 // @name            Windows 11 Start Menu Power Buttons
 // @name:zh-CN      Windows 11 开始菜单一键电源按钮
-// @description     Adds customizable one-click Shutdown, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
+// @description     Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 // @description:zh-CN 添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
 // @version         1.0.1
 // @author          Hakuuyosei
@@ -18,7 +18,7 @@
 /*
 # Windows 11 Start Menu Power Buttons
 
-Adds customizable one-click Shutdown, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
+Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 
 ![](https://i.imgur.com/M7xcCgb.png)
 
@@ -56,7 +56,7 @@ Adds customizable one-click Shutdown, Restart, Sign out, Sleep, Hibernate, and L
   $description: Select which buttons to display and their order. Duplicates are ignored.
   $description:zh-CN: 选择要显示的按钮以及它们的顺序，重复项会被忽略。
   $options:
-    - shutdown: Shutdown
+    - shutdown: Shut down
     - restart: Restart
     - signout: Sign out
     - sleep: Sleep
