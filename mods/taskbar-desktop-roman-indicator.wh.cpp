@@ -21,6 +21,7 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
 
 * Roman or Arabic numbering
 * Number mode or workspace markers mode
+* Custom marker symbol for workspace markers mode
 * Configurable left and right padding
 * Configurable spacing between indicator characters
 * Optional bold indicator text
@@ -45,6 +46,9 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
   $options:
     - number: Current desktop number
     - markers: Workspace markers
+- markerSymbol: ●
+  $name: Marker symbol
+  $description: Symbol or short text used for each workspace marker when indicator mode is set to workspace markers.
 - numberingFormat: roman
   $name: Numbering format
   $description: Choose whether the desktop indicator uses Roman or Arabic numerals.
@@ -66,6 +70,9 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
   $options:
     - normal: Normal
     - bold: Bold
+- inactiveMarkerOpacity: 22
+  $name: Inactive marker opacity
+  $description: Opacity percentage for non-active workspace markers. 100 matches the active marker, lower values make inactive markers dimmer.
 - pollIntervalMs: 100
   $name: Poll interval (ms)
   $description: How often Explorer checks for desktop changes. Lower values react faster but do more registry reads; 50-100 ms is usually fine, and values much lower than that are rarely worthwhile.
@@ -141,10 +148,12 @@ enum class IndicatorWeight {
 
 struct ModSettings {
     IndicatorMode indicatorMode = IndicatorMode::Number;
+    std::wstring markerSymbol = L"\u25cf";
     NumberingFormat numberingFormat = NumberingFormat::Roman;
     int leftPadding = 3;
     int rightPadding = 0;
     int indicatorCharacterSpacing = 1;
+    int inactiveMarkerOpacity = 22;
     int pollIntervalMs = 100;
     IndicatorWeight indicatorWeight = IndicatorWeight::Normal;
 };
@@ -255,6 +264,11 @@ std::wstring BuildIndicatorGap() {
     return BuildPadding(std::max(g_settings.indicatorCharacterSpacing, 0));
 }
 
+std::wstring GetConfiguredMarkerSymbol() {
+    return g_settings.markerSymbol.empty() ? std::wstring(L"\u25cf")
+                                           : g_settings.markerSymbol;
+}
+
 std::wstring ApplyIndicatorCharacterSpacing(const std::wstring& text) {
     int spacing = std::max(g_settings.indicatorCharacterSpacing, 0);
     if (spacing == 0 || text.size() < 2) {
@@ -302,13 +316,14 @@ std::wstring BuildMarkerSequenceText(int desktopCount) {
     desktopCount = std::max(desktopCount, 1);
 
     std::wstring gap = BuildIndicatorGap();
+    std::wstring markerSymbol = GetConfiguredMarkerSymbol();
     std::wstring result;
 
     for (int i = 0; i < desktopCount; ++i) {
         if (i > 0) {
             result += gap;
         }
-        result += L"I";
+        result += markerSymbol;
     }
 
     return result;
@@ -478,6 +493,12 @@ void LoadSettings() {
         g_settings.indicatorMode = IndicatorMode::Number;
     }
 
+    StringSetting markerSymbol = StringSetting::make(L"markerSymbol");
+    g_settings.markerSymbol = markerSymbol.get();
+    if (g_settings.markerSymbol.empty()) {
+        g_settings.markerSymbol = L"\u25cf";
+    }
+
     StringSetting numberingFormat = StringSetting::make(L"numberingFormat");
     if (wcscmp(numberingFormat.get(), L"arabic") == 0) {
         g_settings.numberingFormat = NumberingFormat::Arabic;
@@ -496,6 +517,8 @@ void LoadSettings() {
     g_settings.rightPadding = std::max(0, Wh_GetIntSetting(L"rightPadding"));
     g_settings.indicatorCharacterSpacing =
         std::max(0, Wh_GetIntSetting(L"indicatorCharacterSpacing"));
+    g_settings.inactiveMarkerOpacity =
+        std::clamp(Wh_GetIntSetting(L"inactiveMarkerOpacity"), 0, 100);
     g_settings.pollIntervalMs = std::clamp(Wh_GetIntSetting(L"pollIntervalMs"), 25, 2000);
     g_pollIntervalMs.store(g_settings.pollIntervalMs);
 }
@@ -708,6 +731,7 @@ std::vector<IndicatorSegment> BuildMarkerSuffixSegments(bool hasBaseText,
     }
 
     std::wstring gap = BuildIndicatorGap();
+    std::wstring markerSymbol = GetConfiguredMarkerSymbol();
     desktopCount = std::max(desktopCount, 1);
     currentDesktopNumber = std::clamp(currentDesktopNumber, 1, desktopCount);
 
@@ -717,8 +741,9 @@ std::vector<IndicatorSegment> BuildMarkerSuffixSegments(bool hasBaseText,
         }
 
         segments.push_back(
-            {L"I", i == currentDesktopNumber ? IndicatorSegmentStyle::Normal
-                                             : IndicatorSegmentStyle::Dimmed});
+            {markerSymbol,
+             i == currentDesktopNumber ? IndicatorSegmentStyle::Normal
+                                       : IndicatorSegmentStyle::Dimmed});
     }
 
     if (g_settings.rightPadding > 0) {
@@ -852,12 +877,15 @@ Media::Brush CreateTransparentBrush() {
 }
 
 Media::Brush CreateDimmedIndicatorBrush(Controls::TextBlock targetTextBlock) {
-    winrt::Windows::UI::Color color{56, 255, 255, 255};
+    BYTE opacity = static_cast<BYTE>(
+        std::clamp(g_settings.inactiveMarkerOpacity, 0, 100) * 255 / 100);
+    winrt::Windows::UI::Color color{opacity, 255, 255, 255};
 
     auto solidBrush = targetTextBlock.Foreground().try_as<Media::SolidColorBrush>();
     if (solidBrush) {
         color = solidBrush.Color();
-        color.A = static_cast<BYTE>(std::max(28, (color.A * 22) / 100));
+        color.A = static_cast<BYTE>((color.A * std::clamp(
+            g_settings.inactiveMarkerOpacity, 0, 100)) / 100);
     }
 
     return Media::SolidColorBrush(color);
