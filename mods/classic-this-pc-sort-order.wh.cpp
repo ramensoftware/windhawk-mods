@@ -37,7 +37,7 @@ Restarting Explorer is recommended after installing the mod.
     - classic: All Items shortcut
 - hidecplfrompc: true
   $name: Hide Control Panel from This PC folder view
-  $description: Hides Control Panel shortcut on the folder view and keeps it in the navigation pane. Requires a process restart for the setting to take effect.
+  $description: Hides Control Panel shortcut on the folder view and keeps it in the navigation pane.
 */
 // ==/WindhawkModSettings==
 
@@ -58,8 +58,6 @@ Restarting Explorer is recommended after installing the mod.
 #define REGSTR_PATH_EXPLORER_COMPUTER_NAMESPACE L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\MyComputer\\NameSpace"
 #define CONTROLS_SORT_INDEX 30
 
-DEFINE_GUID(CLSID_ControlPanel, 0x26EE0668, 0xA00A, 0x44D7, 0x93, 0x71, 0xBE, 0xB0, 0x64, 0xC9, 0x86, 0x83);
-DEFINE_GUID(CLSID_ControlPanelClassic, 0x21EC2020, 0x3AEA, 0x1069, 0xA2, 0xDD, 0x08, 0x00, 0x2B, 0x30, 0x30, 0x9D);
 DEFINE_GUID(IID_IShellItem2, 0x7e9fb0d3, 0x919f, 0x4307, 0xab,0x2e, 0x9b,0x18,0x60,0x31,0x0c,0x93);
 DEFINE_PROPERTYKEY(PKEY_NamespaceCLSID, 0x28636aa6,0x953d,0x11d2,0xb5,0xd6,0x00,0xc0,0x4f,0xd9,0x18,0xd0,6);
 
@@ -111,9 +109,12 @@ typedef struct
     BYTE                bFlagsLegacy;
 } REGITEMSINFO;
 
+GUID *pguidCpl = nullptr;
+GUID *pguidCplCategory = nullptr;
+
 REQREGITEM g_asDrivesReqItems[] =
 {
-    { &CLSID_ControlPanel, 0x1041, L"shell32.dll", -137, CONTROLS_SORT_INDEX, SFGAO_FOLDER | SFGAO_HASSUBFOLDER, NULL},
+    { pguidCpl, 0, nullptr, 0, CONTROLS_SORT_INDEX, SFGAO_FOLDER | SFGAO_HASSUBFOLDER, NULL},
 };
 
 HRESULT (STDCALL *CRegFolder_Initialize_orig)(void *, REGITEMSINFO *);
@@ -124,7 +125,7 @@ HRESULT STDCALL CRegFolder_Initialize_hook(void *pThis, REGITEMSINFO *prif)
         prif->iCmp = -1;
         if (g_settings.fAddCPL != ADDCPL_NONE)
         {
-            g_asDrivesReqItems->pclsid = g_settings.fAddCPL == ADDCPL_CLASSIC ? &CLSID_ControlPanelClassic : &CLSID_ControlPanel;
+            g_asDrivesReqItems->pclsid = g_settings.fAddCPL == ADDCPL_CLASSIC ? pguidCpl : pguidCplCategory;
             prif->iReqItems = ARRAYSIZE(g_asDrivesReqItems);
             prif->pReqItems = g_asDrivesReqItems;
         }
@@ -211,18 +212,44 @@ BOOL Wh_ModInit()
         };
 
 
-    WindhawkUtils::SYMBOL_HOOK shell32DllHook
+    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[]
     {
         {
-            #ifdef _WIN64
-            L"public: virtual long __cdecl CDrivesViewCallback::ShouldShow(struct IShellFolder *,struct _ITEMIDLIST_ABSOLUTE const *,struct _ITEMID_CHILD const __unaligned *)"
-            #else
-            L"public: virtual long __stdcall CDrivesViewCallback::ShouldShow(struct IShellFolder *,struct _ITEMIDLIST_ABSOLUTE const *,struct _ITEMID_CHILD const *)"
-            #endif
+            {
+                #ifdef _WIN64
+                L"public: virtual long __cdecl CDrivesViewCallback::ShouldShow(struct IShellFolder *,struct _ITEMIDLIST_ABSOLUTE const *,struct _ITEMID_CHILD const __unaligned *)"
+                #else
+                L"public: virtual long __stdcall CDrivesViewCallback::ShouldShow(struct IShellFolder *,struct _ITEMIDLIST_ABSOLUTE const *,struct _ITEMID_CHILD const *)"
+                #endif
+            },
+            &CDrivesViewCallback_ShouldShow_orig,
+            CDrivesViewCallback_ShouldShow_hook,
+            false
         },
-        &CDrivesViewCallback_ShouldShow_orig,
-        CDrivesViewCallback_ShouldShow_hook,
-        false
+        {
+            {
+                #ifdef _WIN64
+                L"CLSID_ControlPanel"
+                #else
+                L"_CLSID_ControlPanel"
+                #endif
+            },
+            &pguidCpl,
+            nullptr,
+            false
+        },
+        {
+            {
+                #ifdef _WIN64
+                L"CLSID_ControlPanelCategory"
+                #else
+                L"_CLSID_ControlPanelCategory"
+                #endif
+            },
+            &pguidCplCategory,
+            nullptr,
+            false
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(hWindowsStorage, &windowsStorageHook, 1)) 
@@ -231,7 +258,8 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    if (!WindhawkUtils::HookSymbols(hShell32, &shell32DllHook, 1)) 
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks,
+                                    ARRAYSIZE(shell32DllHooks))) 
     {
         Wh_Log(L"Failed to hook shell32.dll");
         return FALSE;
