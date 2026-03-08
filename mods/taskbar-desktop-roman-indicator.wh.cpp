@@ -22,6 +22,7 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
 * Roman or Arabic numbering
 * Number mode or workspace markers mode
 * Custom marker symbol for workspace markers mode
+  Example symbols: `●`, `•`, `○`, `◉`
 * Configurable left and right padding
 * Configurable spacing between indicator characters
 * Optional bold indicator text
@@ -48,7 +49,7 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
     - markers: Workspace markers
 - markerSymbol: ●
   $name: Marker symbol
-  $description: Symbol or short text used for each workspace marker when indicator mode is set to workspace markers.
+  $description: Symbol or short text used for each workspace marker when indicator mode is set to workspace markers. E.g. ┃, ⬤, ●, •, ○, ◉, ⎕, ∎, ◆, ♦, ★
 - numberingFormat: roman
   $name: Numbering format
   $description: Choose whether the desktop indicator uses Roman or Arabic numerals.
@@ -260,6 +261,10 @@ std::wstring BuildPadding(int count) {
     return std::wstring(std::max(count, 0), L' ');
 }
 
+std::wstring BuildTrailingPadding(int count) {
+    return std::wstring(std::max(count, 0), L'\u00A0');
+}
+
 std::wstring BuildIndicatorGap() {
     return BuildPadding(std::max(g_settings.indicatorCharacterSpacing, 0));
 }
@@ -308,7 +313,7 @@ std::wstring BuildIndicatorSuffix(bool hasBaseText,
                                   const std::wstring& desktopNumber) {
     std::wstring leftPadding =
         hasBaseText ? BuildPadding(g_settings.leftPadding) : L"";
-    std::wstring rightPadding = BuildPadding(g_settings.rightPadding);
+    std::wstring rightPadding = BuildTrailingPadding(g_settings.rightPadding);
     return leftPadding + desktopNumber + rightPadding;
 }
 
@@ -748,7 +753,8 @@ std::vector<IndicatorSegment> BuildMarkerSuffixSegments(bool hasBaseText,
 
     if (g_settings.rightPadding > 0) {
         segments.push_back(
-            {BuildPadding(g_settings.rightPadding), IndicatorSegmentStyle::Normal});
+            {BuildTrailingPadding(g_settings.rightPadding),
+             IndicatorSegmentStyle::Normal});
     }
 
     return segments;
