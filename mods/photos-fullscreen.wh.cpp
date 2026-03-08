@@ -33,14 +33,6 @@ After installing this mod, the Photos app will automatically open in fullscreen 
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
-/*
-- AutoMaximize: true
-  $name: Auto-maximize on startup
-  $description: Automatically maximize the Photos app window when it opens
-*/
-// ==/WindhawkModSettings==
-
 #include <windows.h>
 
 // Original CreateWindowExW function
