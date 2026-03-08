@@ -2,7 +2,7 @@
 // @id              photos-fullscreen
 // @name            Photos Fullscreen Mode
 // @description     Forces Windows Photos app to open in fullscreen mode instead of windowed mode
-// @version         1.0.0
+// @version         1.0.2
 // @author          mak7im01
 // @github          https://github.com/mak7im01
 // @include         Microsoft.Photos.exe
@@ -33,6 +33,8 @@ After installing this mod, the Photos app will automatically open in fullscreen 
 */
 // ==/WindhawkModReadme==
 
+
+
 #include <windows.h>
 
 // Original CreateWindowExW function
@@ -43,15 +45,7 @@ CreateWindowExW_t CreateWindowExW_Original;
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Original;
 
-// Settings
-struct {
-    BOOL autoMaximize;
-} g_settings;
 
-// Load settings
-void LoadSettings() {
-    g_settings.autoMaximize = Wh_GetIntSetting(L"AutoMaximize");
-}
 
 // Hook for CreateWindowExW - intercept window creation
 HWND WINAPI CreateWindowExW_Hook(
@@ -68,8 +62,8 @@ HWND WINAPI CreateWindowExW_Hook(
     HINSTANCE hInstance,
     LPVOID lpParam
 ) {
-    // If auto-maximize is enabled and this is a top-level window (no parent)
-    if (g_settings.autoMaximize && hWndParent == NULL) {
+    // If this is a top-level window (no parent)
+    if (hWndParent == NULL) {
         // Check that this is not a system window
         if (lpClassName && lpWindowName) {
             // Add WS_MAXIMIZE style to maximize the window
@@ -98,17 +92,14 @@ HWND WINAPI CreateWindowExW_Hook(
 
 // Hook for ShowWindow - additional maximization when showing window
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    // If auto-maximize is enabled
-    if (g_settings.autoMaximize) {
-        // Check that this is a top-level application window
-        if (hWnd && GetParent(hWnd) == NULL) {
-            WCHAR className[256];
-            if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) > 0) {
-                // Maximize window on first show
-                if (nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL) {
-                    nCmdShow = SW_SHOWMAXIMIZED;
-                    Wh_Log(L"Maximizing window: %s", className);
-                }
+    // Check that this is a top-level application window
+    if (hWnd && GetParent(hWnd) == NULL) {
+        WCHAR className[256];
+        if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) > 0) {
+            // Maximize window on first show
+            if (nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL) {
+                nCmdShow = SW_SHOWMAXIMIZED;
+                Wh_Log(L"Maximizing window: %s", className);
             }
         }
     }
@@ -120,9 +111,6 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 // Mod initialization
 BOOL Wh_ModInit() {
     Wh_Log(L"Photos Fullscreen Mode - Initializing");
-    
-    // Load settings
-    LoadSettings();
     
     // Set hook for CreateWindowExW
     Wh_SetFunctionHook(
@@ -147,28 +135,20 @@ void Wh_ModAfterInit() {
     Wh_Log(L"Photos Fullscreen Mode - After init");
     
     // Maximize all existing application windows
-    if (g_settings.autoMaximize) {
-        HWND hWnd = GetTopWindow(NULL);
-        while (hWnd) {
-            DWORD processId;
-            GetWindowThreadProcessId(hWnd, &processId);
-            
-            if (processId == GetCurrentProcessId() && GetParent(hWnd) == NULL) {
-                if (IsWindowVisible(hWnd)) {
-                    ShowWindow(hWnd, SW_MAXIMIZE);
-                    Wh_Log(L"Maximized existing window");
-                }
+    HWND hWnd = GetTopWindow(NULL);
+    while (hWnd) {
+        DWORD processId;
+        GetWindowThreadProcessId(hWnd, &processId);
+        
+        if (processId == GetCurrentProcessId() && GetParent(hWnd) == NULL) {
+            if (IsWindowVisible(hWnd)) {
+                ShowWindow(hWnd, SW_MAXIMIZE);
+                Wh_Log(L"Maximized existing window");
             }
-            
-            hWnd = GetNextWindow(hWnd, GW_HWNDNEXT);
         }
+        
+        hWnd = GetNextWindow(hWnd, GW_HWNDNEXT);
     }
-}
-
-// Called when settings change
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"Photos Fullscreen Mode - Settings changed");
-    LoadSettings();
 }
 
 // Mod uninitialization
