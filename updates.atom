@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-05T12:47:19.000Z</updated>
+    <updated>2026-03-08T12:36:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.7]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#fd34fadeb640a2fcee887aa02773f8c66c35f6aa</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2026-03-08T12:36:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.81 to 1.2.85 (CEF 144)</li>
+<li>Add proper support for the ARM64 version of the Spotify client, including the transparent rendering feature</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.2]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#49305bed9ea78e471a174bc599d3de9d08df0a9a</id>
@@ -485,17 +499,6 @@ the second-level menus.</p>
         <author>
             <name>Mohamed Magdy</name>
             <uri>https://github.com/hamomagdy724</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 1.2.0]]></title>
-        <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#42750ed7fdbf87a8777a6ff118b119f20a12e302</id>
-        <link href="https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator"/>
-        <updated>2026-02-28T09:42:13.000Z</updated>
-        <content type="html"><![CDATA[<p>Improve reliability and remove the interim black rectangle</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
