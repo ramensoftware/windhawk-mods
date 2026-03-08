@@ -10416,7 +10416,7 @@
                     4
                 ],
                 "ratingUsers": 6,
-                "updated": 1772707551000,
+                "updated": 1773008171000,
                 "users": 192
             },
             "metadata": {
@@ -10429,7 +10429,7 @@
                 ],
                 "license": "MIT",
                 "name": "Menús contextuales con animación WinUI",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "winver-custom-text": {
