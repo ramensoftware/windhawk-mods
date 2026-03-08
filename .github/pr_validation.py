@@ -552,13 +552,24 @@ class ModMetadataValidator:
             )
 
     def validate_name(self):
-        """Validate name exists."""
+        """Validate name exists and is unique."""
         prop = self.property('name', warn_if_missing=True)
         if not prop:
             return
 
         if len(prop.value) < 8 or len(prop.value) > 80:
             prop.warn('@@ must be between 8 and 80 characters')
+
+        # Check for duplicate names across existing mods
+        filename_mod_id = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
+        all_names = get_all_mod_names()
+        for other_mod_id, other_name in all_names.items():
+            if (
+                other_mod_id != filename_mod_id
+                and other_name.lower() == prop.value.lower()
+            ):
+                prop.warn(f'@@ "{prop.value}" is already used by mod "{other_mod_id}"')
+                break
 
     def validate_description(self):
         """Validate description exists."""
@@ -575,20 +586,24 @@ class ModMetadataValidator:
         if not prop:
             return
 
+        msg = ''
         for arch in prop.value.split('\n'):
             if arch.strip() == '':
                 pass
             elif arch not in {'x86', 'x86-64', 'amd64', 'arm64'}:
-                prop.warn(f'Unknown architecture "{arch}"')
+                msg += f'Unknown architecture "{arch}"\n'
             elif arch not in {'x86', 'x86-64'}:
-                prop.warn(
+                msg += (
                     f'Architecture "{arch}" isn\'t commonly used, manual verification'
-                    ' is required'
+                    ' is required\n'
                 )
+
+        if msg:
+            prop.warn(msg.rstrip('\n'))
 
 
 def validate_metadata(path: Path, expected_author: str) -> int:
-    with path.open(encoding='utf-8') as file:
+    with path.open(encoding='utf-8', errors='ignore') as file:
         properties, initial_warnings = get_mod_file_metadata(
             file, warn_callback=lambda line, msg: add_warning(path, line, msg)
         )
@@ -605,6 +620,20 @@ def validate_metadata(path: Path, expected_author: str) -> int:
         file_warnings += add_warning(path, 1, 'File is not placed in the mods folder')
 
     return initial_warnings + metadata_warnings + file_warnings
+
+
+@cache
+def get_all_mod_names() -> dict[str, str]:
+    """Scan all mod files and return a mapping of mod_id (from filename) to @name."""
+    result = {}
+    for path in Path('mods').glob('*.wh.cpp'):
+        mod_id = path.name.removesuffix('.wh.cpp')
+        with path.open(encoding='utf-8') as f:
+            properties, _ = get_mod_file_metadata(f)
+        name_prop = properties.get(('name', None))
+        if name_prop:
+            result[mod_id] = name_prop[0]
+    return result
 
 
 @cache
@@ -648,7 +677,7 @@ def get_target_modules_from_previous_line(previous_line: str):
 def validate_symbol_hooks(path: Path):
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8')
+    mod_source = path.read_text(encoding='utf-8', errors='ignore')
     mod_source_lines = mod_source.splitlines()
 
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
@@ -704,11 +733,28 @@ def validate_symbol_hooks(path: Path):
     return warnings
 
 
+def validate_encoding(path: Path):
+    """Validate that the file is valid UTF-8 without BOM."""
+    raw = path.read_bytes()
+
+    try:
+        raw.decode('utf-8')
+    except UnicodeDecodeError as e:
+        return add_warning(path, 1, f'File is not valid UTF-8: {e}')
+
+    warnings = 0
+
+    if raw.startswith(b'\xef\xbb\xbf'):
+        warnings += add_warning(path, 1, 'File must not start with a UTF-8 BOM')
+
+    return warnings
+
+
 def validate_specific_keywords(path: Path):
     """Check for specific keywords in mod source code."""
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8')
+    mod_source = path.read_text(encoding='utf-8', errors='ignore')
     mod_source_lines = mod_source.splitlines()
 
     # Words to check (pattern, description)
@@ -747,7 +793,7 @@ def test_run():
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = 0
+    warnings = validate_encoding(path)
     warnings += validate_metadata(path, pr_author)
     warnings += validate_symbol_hooks(path)
     warnings += validate_specific_keywords(path)
@@ -787,7 +833,8 @@ def main():
     for path in paths:
         print(f'Checking {path=}')
 
-        path_warnings = validate_metadata(path, pr_author)
+        path_warnings = validate_encoding(path)
+        path_warnings += validate_metadata(path, pr_author)
         path_warnings += validate_symbol_hooks(path)
         path_warnings += validate_specific_keywords(path)
         warnings += path_warnings
