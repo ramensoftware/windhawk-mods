@@ -852,12 +852,12 @@ Media::Brush CreateTransparentBrush() {
 }
 
 Media::Brush CreateDimmedIndicatorBrush(Controls::TextBlock targetTextBlock) {
-    winrt::Windows::UI::Color color{96, 255, 255, 255};
+    winrt::Windows::UI::Color color{56, 255, 255, 255};
 
     auto solidBrush = targetTextBlock.Foreground().try_as<Media::SolidColorBrush>();
     if (solidBrush) {
         color = solidBrush.Color();
-        color.A = static_cast<BYTE>(std::max(48, (color.A * 40) / 100));
+        color.A = static_cast<BYTE>(std::max(28, (color.A * 22) / 100));
     }
 
     return Media::SolidColorBrush(color);
