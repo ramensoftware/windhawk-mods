@@ -13,7 +13,8 @@
 /*
 # Numbered taskbar
 Displays numbers 1 through 0 on the first 10 application icons in the taskbar.
-These numbers correspond to the `Win + Number` keyboard shortcuts which launch the respective applications.
+These numbers correspond to the `Win + Number` keyboard shortcuts which launch
+the respective applications.
 */
 // ==/WindhawkModReadme==
 
@@ -41,8 +42,10 @@ These numbers correspond to the `Win + Number` keyboard shortcuts which launch t
 */
 // ==/WindhawkModSettings==
 
+#include <algorithm>
 #include <atomic>
 #include <gdiplus.h>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <uiautomation.h>
@@ -62,20 +65,37 @@ struct ModSettings {
   int delayMs;
 } g_settings;
 
+std::mutex g_settingsMutex;
 std::atomic<bool> g_modStopping(false);
 std::thread *g_workerThread = nullptr;
 HWND g_overlayHwnd = NULL;
 
 void LoadSettings() {
-  g_settings.fontSize = Wh_GetIntSetting(L"fontSize");
-  g_settings.fontColor = Wh_GetIntSetting(L"fontColor");
-  g_settings.outlineColor = Wh_GetIntSetting(L"outlineColor");
-  g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
-  g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
-  g_settings.updateIntervalMs = Wh_GetIntSetting(L"updateIntervalMs");
-  g_settings.showOnlyOnWinKey = Wh_GetIntSetting(L"showOnlyOnWinKey") != 0;
-  g_settings.delayMs = Wh_GetIntSetting(L"delayMs");
-  if (g_settings.updateIntervalMs < 50) g_settings.updateIntervalMs = 50;
+  ModSettings newSettings;
+  newSettings.fontSize = Wh_GetIntSetting(L"fontSize");
+  newSettings.fontColor = Wh_GetIntSetting(L"fontColor");
+  newSettings.outlineColor = Wh_GetIntSetting(L"outlineColor");
+  newSettings.offsetX = Wh_GetIntSetting(L"offsetX");
+  newSettings.offsetY = Wh_GetIntSetting(L"offsetY");
+  newSettings.showOnlyOnWinKey = Wh_GetIntSetting(L"showOnlyOnWinKey") != 0;
+
+  newSettings.delayMs = Wh_GetIntSetting(L"delayMs");
+  if (newSettings.delayMs < 0) newSettings.delayMs = 0;
+
+  if (newSettings.fontSize < 1) newSettings.fontSize = 1;
+  if (newSettings.fontSize > 200) newSettings.fontSize = 200;
+
+  if (newSettings.offsetX < -1000) newSettings.offsetX = -1000;
+  if (newSettings.offsetX > 1000) newSettings.offsetX = 1000;
+  if (newSettings.offsetY < -1000) newSettings.offsetY = -1000;
+  if (newSettings.offsetY > 1000) newSettings.offsetY = 1000;
+
+  newSettings.updateIntervalMs = Wh_GetIntSetting(L"updateIntervalMs");
+  if (newSettings.updateIntervalMs < 50) newSettings.updateIntervalMs = 50;
+  if (newSettings.updateIntervalMs > 60000) newSettings.updateIntervalMs = 60000;
+
+  std::lock_guard<std::mutex> lock(g_settingsMutex);
+  g_settings = newSettings;
 }
 
 void Wh_ModSettingsChanged() { LoadSettings(); }
@@ -112,8 +132,8 @@ std::vector<RECT> GetTaskbarButtonRects(IUIAutomation *pUIAutomation) {
                 if (sid == L"StartButton" || sid == L"SearchButton" ||
                     sid == L"TaskViewButton" || sid == L"WidgetsButton" ||
                     sid == L"ChatButton" || sid == L"ShowDesktopButton" ||
-                    sid == L"SystemTray" ||
-                    sid == L"NotificationCenterButton") isAppButton = false;
+                    sid == L"SystemTray" || sid == L"NotificationCenterButton")
+                  isAppButton = false;
                 SysFreeString(autoId);
               }
 
@@ -121,7 +141,7 @@ std::vector<RECT> GetTaskbarButtonRects(IUIAutomation *pUIAutomation) {
               pElement->get_CurrentClassName(&className);
               if (className) {
                 std::wstring cls(className);
-                if (cls == L"Taskbar.SystemTrayIcon" || cls == L"Taskbar.StartButton") isAppButton = false;
+                if (cls == L"Taskbar.SystemTrayIcon" ||cls == L"Taskbar.StartButton") isAppButton = false;
                 SysFreeString(className);
               }
 
@@ -141,16 +161,15 @@ std::vector<RECT> GetTaskbarButtonRects(IUIAutomation *pUIAutomation) {
     }
   }
 
-  for (size_t i = 0; i < rects.size(); i++) {
-    for (size_t j = i + 1; j < rects.size(); j++) {
-      if (rects[j].left < rects[i].left) {
-        RECT temp = rects[i];
-        rects[i] = rects[j];
-        rects[j] = temp;
-      }
-    }
+  bool isVertical = false;
+  if (hwndTaskbar) {
+    RECT taskbarRect;
+    if (GetWindowRect(hwndTaskbar, &taskbarRect))
+      if ((taskbarRect.bottom - taskbarRect.top) > (taskbarRect.right - taskbarRect.left)) isVertical = true;
   }
 
+  if (isVertical) std::sort(rects.begin(), rects.end(), [](const RECT &a, const RECT &b) { return a.top < b.top; });
+  else std::sort(rects.begin(), rects.end(), [](const RECT &a, const RECT &b) { return a.left < b.left; });
   return rects;
 }
 
@@ -159,7 +178,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
   return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-void DrawNumbers(const std::vector<RECT> &rects, HWND hwndTaskbar) {
+void DrawNumbers(const std::vector<RECT> &rects, HWND hwndTaskbar, const ModSettings &settings, HDC hdcScreen, HDC hdcMem,
+                 HBITMAP &hBitmap, HBITMAP &hOldBitmap, void *&pvBits, int &cachedWidth, int &cachedHeight) {
   if (!g_overlayHwnd)return;
 
   RECT taskbarRect;
@@ -172,19 +192,41 @@ void DrawNumbers(const std::vector<RECT> &rects, HWND hwndTaskbar) {
 
   SetWindowPos(g_overlayHwnd, HWND_TOPMOST, taskbarRect.left, taskbarRect.top, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
 
-  HDC hdcScreen = GetDC(NULL);
-  HDC hdcMem = CreateCompatibleDC(hdcScreen);
-  HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, width, height);
-  HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
+  if (width != cachedWidth || height != cachedHeight) {
+    if (hBitmap) {
+      SelectObject(hdcMem, hOldBitmap);
+      DeleteObject(hBitmap);
+      hBitmap = NULL;
+    }
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    hBitmap = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pvBits, NULL, 0);
+    if (!hBitmap) {
+      cachedWidth = 0;
+      cachedHeight = 0;
+      return;
+    }
+    hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
+    cachedWidth = width;
+    cachedHeight = height;
+  }
+
+  if (pvBits && cachedWidth > 0 && cachedHeight > 0) memset(pvBits, 0, cachedWidth * cachedHeight * 4);
 
   Graphics graphics(hdcMem);
   graphics.SetSmoothingMode(SmoothingModeAntiAlias);
-  graphics.Clear(Color(0, 0, 0, 0));
 
   FontFamily fontFamily(L"Segoe UI");
-  Font font(&fontFamily, (REAL)g_settings.fontSize, FontStyleBold, UnitPixel);
+  Font font(&fontFamily, (REAL)settings.fontSize, FontStyleBold, UnitPixel);
 
-  SolidBrush textBrush(Color(g_settings.fontColor));
+  SolidBrush textBrush(Color(settings.fontColor));
 
   StringFormat format;
   format.SetAlignment(StringAlignmentNear);
@@ -196,13 +238,13 @@ void DrawNumbers(const std::vector<RECT> &rects, HWND hwndTaskbar) {
 
     std::wstring text = std::to_wstring(index == 10 ? 0 : index);
 
-    int x = r.left - taskbarRect.left + g_settings.offsetX;
-    int y = r.top - taskbarRect.top + g_settings.offsetY;
+    int x = r.left - taskbarRect.left + settings.offsetX;
+    int y = r.top - taskbarRect.top + settings.offsetY;
 
     GraphicsPath path;
-    path.AddString(text.c_str(), -1, &fontFamily, FontStyleBold, (REAL)g_settings.fontSize, Point(x, y), &format);
+    path.AddString(text.c_str(), -1, &fontFamily, FontStyleBold, (REAL)settings.fontSize, Point(x, y), &format);
 
-    Pen outlinePen(Color(g_settings.outlineColor), 2.0f);
+    Pen outlinePen(Color(settings.outlineColor), 2.0f);
     outlinePen.SetLineJoin(LineJoinRound);
 
     graphics.DrawPath(&outlinePen, &path);
@@ -221,11 +263,6 @@ void DrawNumbers(const std::vector<RECT> &rects, HWND hwndTaskbar) {
   POINT ptSrc = {0, 0};
 
   UpdateLayeredWindow(g_overlayHwnd, hdcScreen, &ptPos, &size, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
-
-  SelectObject(hdcMem, hOldBitmap);
-  DeleteObject(hBitmap);
-  DeleteDC(hdcMem);
-  ReleaseDC(NULL, hdcScreen);
 }
 
 void WorkerThreadWrapper() {
@@ -245,14 +282,28 @@ void WorkerThreadWrapper() {
 
   ULONGLONG winKeyPressTime = 0;
 
+  HDC hdcScreen = GetDC(NULL);
+  HDC hdcMem = CreateCompatibleDC(hdcScreen);
+  HBITMAP hBitmap = NULL;
+  HBITMAP hOldBitmap = NULL;
+  void *pvBits = nullptr;
+  int cachedWidth = 0;
+  int cachedHeight = 0;
+
   while (!g_modStopping) {
+    ModSettings currentSettings;
+    {
+      std::lock_guard<std::mutex> lock(g_settingsMutex);
+      currentSettings = g_settings;
+    }
+
     bool isWinKeyPressed = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
     bool shouldShow = true;
 
-    if (g_settings.showOnlyOnWinKey) {
+    if (currentSettings.showOnlyOnWinKey) {
       if (isWinKeyPressed) {
         if (winKeyPressTime == 0) winKeyPressTime = GetTickCount64();
-        if (GetTickCount64() - winKeyPressTime < (ULONGLONG)g_settings.delayMs) shouldShow = false;
+        if (GetTickCount64() - winKeyPressTime < (ULONGLONG)currentSettings.delayMs) shouldShow = false;
       } else {
         winKeyPressTime = 0;
         shouldShow = false;
@@ -264,13 +315,19 @@ void WorkerThreadWrapper() {
       if (!IsWindowVisible(g_overlayHwnd)) ShowWindow(g_overlayHwnd, SW_SHOWNA);
       SetWindowPos(g_overlayHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
       std::vector<RECT> rects = GetTaskbarButtonRects(pUIAutomation);
-      DrawNumbers(rects, hwndTaskbar);
-    } else {
-      if (IsWindowVisible(g_overlayHwnd)) ShowWindow(g_overlayHwnd, SW_HIDE);
-    }
+      DrawNumbers(rects, hwndTaskbar, currentSettings, hdcScreen, hdcMem, hBitmap, hOldBitmap, pvBits, cachedWidth, cachedHeight);
+    } 
+    else if (IsWindowVisible(g_overlayHwnd)) ShowWindow(g_overlayHwnd, SW_HIDE);
 
-    Sleep(g_settings.updateIntervalMs);
+    Sleep(currentSettings.updateIntervalMs);
   }
+
+  if (hBitmap) {
+    SelectObject(hdcMem, hOldBitmap);
+    DeleteObject(hBitmap);
+  }
+  DeleteDC(hdcMem);
+  ReleaseDC(NULL, hdcScreen);
 
   if (pUIAutomation) pUIAutomation->Release();
 
