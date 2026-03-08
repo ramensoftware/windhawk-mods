@@ -20,6 +20,7 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
 ## Features
 
 * Roman or Arabic numbering
+* Number mode or workspace markers mode
 * Configurable left and right padding
 * Configurable spacing between indicator characters
 * Optional bold indicator text
@@ -38,6 +39,12 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
 
 // ==WindhawkModSettings==
 /*
+- indicatorMode: number
+  $name: Indicator mode
+  $description: Show either the current desktop number or one marker per desktop with the active desktop highlighted.
+  $options:
+    - number: Current desktop number
+    - markers: Workspace markers
 - numberingFormat: roman
   $name: Numbering format
   $description: Choose whether the desktop indicator uses Roman or Arabic numerals.
@@ -92,10 +99,26 @@ using WindhawkUtils::StringSetting;
 using namespace winrt::Windows::UI::Text;
 namespace Documents = winrt::Windows::UI::Xaml::Documents;
 
+enum class IndicatorMode {
+    Number,
+    Markers,
+};
+
+enum class IndicatorSegmentStyle {
+    Normal,
+    Dimmed,
+    Transparent,
+};
+
+struct IndicatorSegment {
+    std::wstring text;
+    IndicatorSegmentStyle style = IndicatorSegmentStyle::Normal;
+};
+
 struct IndicatorLayout {
-    std::wstring visibleSuffix;
     std::wstring renderedSuffix;
     double widestSuffixWidth = 0;
+    std::vector<IndicatorSegment> suffixSegments;
 };
 
 enum class WinVersion {
@@ -117,6 +140,7 @@ enum class IndicatorWeight {
 };
 
 struct ModSettings {
+    IndicatorMode indicatorMode = IndicatorMode::Number;
     NumberingFormat numberingFormat = NumberingFormat::Roman;
     int leftPadding = 3;
     int rightPadding = 0;
@@ -227,6 +251,10 @@ std::wstring BuildPadding(int count) {
     return std::wstring(std::max(count, 0), L' ');
 }
 
+std::wstring BuildIndicatorGap() {
+    return BuildPadding(std::max(g_settings.indicatorCharacterSpacing, 0));
+}
+
 std::wstring ApplyIndicatorCharacterSpacing(const std::wstring& text) {
     int spacing = std::max(g_settings.indicatorCharacterSpacing, 0);
     if (spacing == 0 || text.size() < 2) {
@@ -270,6 +298,30 @@ std::wstring BuildIndicatorSuffix(bool hasBaseText,
     return leftPadding + desktopNumber + rightPadding;
 }
 
+std::wstring BuildMarkerSequenceText(int desktopCount) {
+    desktopCount = std::max(desktopCount, 1);
+
+    std::wstring gap = BuildIndicatorGap();
+    std::wstring result;
+
+    for (int i = 0; i < desktopCount; ++i) {
+        if (i > 0) {
+            result += gap;
+        }
+        result += L"I";
+    }
+
+    return result;
+}
+
+std::wstring BuildIndicatorCoreText(int currentDesktopNumber, int desktopCount) {
+    if (g_settings.indicatorMode == IndicatorMode::Markers) {
+        return BuildMarkerSequenceText(desktopCount);
+    }
+
+    return FormatDesktopNumber(currentDesktopNumber);
+}
+
 FontWeight GetConfiguredIndicatorFontWeight() {
     switch (g_settings.indicatorWeight) {
         case IndicatorWeight::Bold:
@@ -281,7 +333,8 @@ FontWeight GetConfiguredIndicatorFontWeight() {
 }
 
 bool UseTabularNumeralsForIndicator() {
-    return g_settings.numberingFormat == NumberingFormat::Arabic;
+    return g_settings.indicatorMode == IndicatorMode::Number &&
+           g_settings.numberingFormat == NumberingFormat::Arabic;
 }
 
 std::vector<BYTE> ReadRegistryValue(HKEY root,
@@ -418,6 +471,13 @@ int ReadDesktopCountFromRegistry() {
 }
 
 void LoadSettings() {
+    StringSetting indicatorMode = StringSetting::make(L"indicatorMode");
+    if (wcscmp(indicatorMode.get(), L"markers") == 0) {
+        g_settings.indicatorMode = IndicatorMode::Markers;
+    } else {
+        g_settings.indicatorMode = IndicatorMode::Number;
+    }
+
     StringSetting numberingFormat = StringSetting::make(L"numberingFormat");
     if (wcscmp(numberingFormat.get(), L"arabic") == 0) {
         g_settings.numberingFormat = NumberingFormat::Arabic;
@@ -637,17 +697,61 @@ double MeasureIndicatorTextWidth(const Controls::TextBlock& source,
     return measureBlock.DesiredSize().Width;
 }
 
+std::vector<IndicatorSegment> BuildMarkerSuffixSegments(bool hasBaseText,
+                                                        int currentDesktopNumber,
+                                                        int desktopCount) {
+    std::vector<IndicatorSegment> segments;
+
+    if (hasBaseText && g_settings.leftPadding > 0) {
+        segments.push_back({BuildPadding(g_settings.leftPadding),
+                            IndicatorSegmentStyle::Normal});
+    }
+
+    std::wstring gap = BuildIndicatorGap();
+    desktopCount = std::max(desktopCount, 1);
+    currentDesktopNumber = std::clamp(currentDesktopNumber, 1, desktopCount);
+
+    for (int i = 1; i <= desktopCount; ++i) {
+        if (i > 1 && !gap.empty()) {
+            segments.push_back({gap, IndicatorSegmentStyle::Normal});
+        }
+
+        segments.push_back(
+            {L"I", i == currentDesktopNumber ? IndicatorSegmentStyle::Normal
+                                             : IndicatorSegmentStyle::Dimmed});
+    }
+
+    if (g_settings.rightPadding > 0) {
+        segments.push_back(
+            {BuildPadding(g_settings.rightPadding), IndicatorSegmentStyle::Normal});
+    }
+
+    return segments;
+}
+
 IndicatorLayout BuildIndicatorLayout(const Controls::TextBlock& source,
                                      bool hasBaseText,
-                                     const std::wstring& desktopNumber) {
+                                     int currentDesktopNumber,
+                                     int desktopCount) {
     IndicatorLayout layout;
-    layout.visibleSuffix = BuildIndicatorSuffix(hasBaseText, desktopNumber);
+
+    if (g_settings.indicatorMode == IndicatorMode::Markers) {
+        layout.renderedSuffix = BuildIndicatorSuffix(
+            hasBaseText, BuildIndicatorCoreText(currentDesktopNumber, desktopCount));
+        layout.widestSuffixWidth = MeasureSingleRunTextWidth(
+            source, layout.renderedSuffix, GetConfiguredIndicatorFontWeight());
+        layout.suffixSegments = BuildMarkerSuffixSegments(
+            hasBaseText, currentDesktopNumber, desktopCount);
+        return layout;
+    }
+
+    std::wstring visibleSuffix = BuildIndicatorSuffix(
+        hasBaseText, BuildIndicatorCoreText(currentDesktopNumber, desktopCount));
 
     double currentWidth = MeasureSingleRunTextWidth(
-        source, layout.visibleSuffix, GetConfiguredIndicatorFontWeight());
+        source, visibleSuffix, GetConfiguredIndicatorFontWeight());
     layout.widestSuffixWidth = currentWidth;
 
-    int desktopCount = ReadDesktopCountFromRegistry();
     for (int i = 1; i <= desktopCount; ++i) {
         std::wstring candidateSuffix =
             BuildIndicatorSuffix(hasBaseText, FormatDesktopNumber(i));
@@ -710,7 +814,13 @@ IndicatorLayout BuildIndicatorLayout(const Controls::TextBlock& source,
     std::wstring rightFiller =
         buildInvisibleFillerText(std::max(0.0, fillerWidth - leftFillerWidth));
 
-    layout.renderedSuffix = leftFiller + layout.visibleSuffix + rightFiller;
+    layout.renderedSuffix = leftFiller + visibleSuffix + rightFiller;
+    layout.suffixSegments.push_back(
+        {leftFiller, IndicatorSegmentStyle::Transparent});
+    layout.suffixSegments.push_back(
+        {visibleSuffix, IndicatorSegmentStyle::Normal});
+    layout.suffixSegments.push_back(
+        {rightFiller, IndicatorSegmentStyle::Transparent});
     return layout;
 }
 
@@ -718,7 +828,8 @@ template <typename TInlines>
 void AppendRun(const TInlines& inlines,
                const std::wstring& text,
                FontWeight fontWeight,
-               bool transparent = false) {
+               Media::Brush foreground = nullptr,
+               bool useIndicatorTypography = true) {
     if (text.empty()) {
         return;
     }
@@ -726,15 +837,30 @@ void AppendRun(const TInlines& inlines,
     Documents::Run run;
     run.Text(winrt::hstring(text));
     run.FontWeight(fontWeight);
-    if (UseTabularNumeralsForIndicator()) {
+    if (useIndicatorTypography && UseTabularNumeralsForIndicator()) {
         Documents::Typography::SetNumeralAlignment(
             run, FontNumeralAlignment::Tabular);
     }
-    if (transparent) {
-        winrt::Windows::UI::Color transparentColor{};
-        run.Foreground(Media::SolidColorBrush(transparentColor));
+    if (foreground) {
+        run.Foreground(foreground);
     }
     inlines.Append(run);
+}
+
+Media::Brush CreateTransparentBrush() {
+    return Media::SolidColorBrush(winrt::Windows::UI::Color{0, 255, 255, 255});
+}
+
+Media::Brush CreateDimmedIndicatorBrush(Controls::TextBlock targetTextBlock) {
+    winrt::Windows::UI::Color color{96, 255, 255, 255};
+
+    auto solidBrush = targetTextBlock.Foreground().try_as<Media::SolidColorBrush>();
+    if (solidBrush) {
+        color = solidBrush.Color();
+        color.A = static_cast<BYTE>(std::max(48, (color.A * 40) / 100));
+    }
+
+    return Media::SolidColorBrush(color);
 }
 
 void SetIndicatorTextBlockContent(Controls::TextBlock targetTextBlock,
@@ -744,24 +870,23 @@ void SetIndicatorTextBlockContent(Controls::TextBlock targetTextBlock,
     inlines.Clear();
 
     if (!baseText.empty()) {
-        AppendRun(inlines, baseText, targetTextBlock.FontWeight());
+        AppendRun(inlines, baseText, targetTextBlock.FontWeight(), nullptr, false);
     }
 
-    std::wstring leftFiller;
-    std::wstring rightFiller;
+    Media::Brush transparentBrush = CreateTransparentBrush();
+    Media::Brush dimmedBrush = CreateDimmedIndicatorBrush(targetTextBlock);
 
-    if (layout.renderedSuffix.size() >= layout.visibleSuffix.size()) {
-        size_t visiblePos = layout.renderedSuffix.find(layout.visibleSuffix);
-        if (visiblePos != std::wstring::npos) {
-            leftFiller = layout.renderedSuffix.substr(0, visiblePos);
-            rightFiller =
-                layout.renderedSuffix.substr(visiblePos + layout.visibleSuffix.size());
+    for (const auto& segment : layout.suffixSegments) {
+        Media::Brush foreground = nullptr;
+        if (segment.style == IndicatorSegmentStyle::Transparent) {
+            foreground = transparentBrush;
+        } else if (segment.style == IndicatorSegmentStyle::Dimmed) {
+            foreground = dimmedBrush;
         }
-    }
 
-    AppendRun(inlines, leftFiller, GetConfiguredIndicatorFontWeight(), true);
-    AppendRun(inlines, layout.visibleSuffix, GetConfiguredIndicatorFontWeight());
-    AppendRun(inlines, rightFiller, GetConfiguredIndicatorFontWeight(), true);
+        AppendRun(inlines, segment.text, GetConfiguredIndicatorFontWeight(),
+                  foreground);
+    }
 }
 
 void EnsureReservedWidth(const ClockEntryPtr& entry,
@@ -772,16 +897,24 @@ void EnsureReservedWidth(const ClockEntryPtr& entry,
     }
 
     int desktopCount = ReadDesktopCountFromRegistry();
-    double widestWidth = MeasureIndicatorTextWidth(
-        targetTextBlock, baseText,
-        BuildIndicatorSuffix(!baseText.empty(), FormatDesktopNumber(1)));
+    double widestWidth = 0;
 
-    for (int i = 2; i <= desktopCount; ++i) {
-        double candidateWidth = MeasureIndicatorTextWidth(
+    if (g_settings.indicatorMode == IndicatorMode::Markers) {
+        widestWidth = MeasureIndicatorTextWidth(
             targetTextBlock, baseText,
-            BuildIndicatorSuffix(!baseText.empty(), FormatDesktopNumber(i)));
-        if (candidateWidth > widestWidth) {
-            widestWidth = candidateWidth;
+            BuildIndicatorSuffix(!baseText.empty(), BuildMarkerSequenceText(desktopCount)));
+    } else {
+        widestWidth = MeasureIndicatorTextWidth(
+            targetTextBlock, baseText,
+            BuildIndicatorSuffix(!baseText.empty(), FormatDesktopNumber(1)));
+
+        for (int i = 2; i <= desktopCount; ++i) {
+            double candidateWidth = MeasureIndicatorTextWidth(
+                targetTextBlock, baseText,
+                BuildIndicatorSuffix(!baseText.empty(), FormatDesktopNumber(i)));
+            if (candidateWidth > widestWidth) {
+                widestWidth = candidateWidth;
+            }
         }
     }
 
@@ -825,7 +958,7 @@ void EnsureStableTextAlignment(const ClockEntryPtr& entry,
     }
 }
 
-void ApplyRomanIndicator(const ClockEntryPtr& entry) {
+void ApplyIndicator(const ClockEntryPtr& entry) {
     if (!entry || g_unloading) {
         return;
     }
@@ -836,7 +969,8 @@ void ApplyRomanIndicator(const ClockEntryPtr& entry) {
         return;
     }
 
-    std::wstring desktopNumber = FormatDesktopNumber(g_currentDesktopNumber.load());
+    int currentDesktopNumber = g_currentDesktopNumber.load();
+    int desktopCount = ReadDesktopCountFromRegistry();
 
     std::lock_guard<std::mutex> lock(entry->mutex);
 
@@ -848,7 +982,7 @@ void ApplyRomanIndicator(const ClockEntryPtr& entry) {
     if (useDateLine) {
         IndicatorLayout layout =
             BuildIndicatorLayout(dateTextBlock, !entry->baseDateText.empty(),
-                                 desktopNumber);
+                                 currentDesktopNumber, desktopCount);
         EnsureReservedWidth(entry, dateTextBlock, entry->baseDateText);
         EnsureStableTextAlignment(entry, dateTextBlock);
         SetIndicatorTextBlockContent(dateTextBlock, entry->baseDateText, layout);
@@ -856,7 +990,7 @@ void ApplyRomanIndicator(const ClockEntryPtr& entry) {
     } else if (timeTextBlock) {
         IndicatorLayout layout =
             BuildIndicatorLayout(timeTextBlock, !entry->baseTimeText.empty(),
-                                 desktopNumber);
+                                 currentDesktopNumber, desktopCount);
         EnsureReservedWidth(entry, timeTextBlock, entry->baseTimeText);
         EnsureStableTextAlignment(entry, timeTextBlock);
         SetIndicatorTextBlockContent(timeTextBlock, entry->baseTimeText, layout);
@@ -954,7 +1088,7 @@ void DispatchToEntry(const ClockEntryPtr& entry, bool captureBaseText) {
                 CaptureClockBaseText(entry);
             }
 
-            ApplyRomanIndicator(entry);
+            ApplyIndicator(entry);
         });
 }
 
@@ -982,7 +1116,7 @@ void UpdateAllClockEntriesCurrentThread(bool captureBaseText) {
             CaptureClockBaseText(entry);
         }
 
-        ApplyRomanIndicator(entry);
+        ApplyIndicator(entry);
     }
 }
 
@@ -1007,7 +1141,7 @@ void ProcessDateTimeIconContentElement(FrameworkElement root) {
 
     auto entry = AddOrGetClockEntry(dateTextBlock, timeTextBlock);
     CaptureClockBaseText(entry);
-    ApplyRomanIndicator(entry);
+    ApplyIndicator(entry);
 }
 
 void ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
