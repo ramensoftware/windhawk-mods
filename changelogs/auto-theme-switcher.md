@@ -1,3 +1,12 @@
+## 1.2.0 ([Mar 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ecdc1c019b82241836f41cdf8a8ec62c5c91cccd/mods/auto-theme-switcher.wh.cpp))
+
+- Fixed issues with Hibernation
+- Fixed issues with applying Lock Screen Wallpaper
+- Fixed instability issues caused by Location Access not being available before being logged in
+- Allows Lock Screen Wallpaper change before logged in
+- Allows specifying seconds for "Custom Hours" scheduling mode
+- Improved Structure
+
 ## 1.1.1 ([Jul 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a24a92e08b8e8f7163fa47e734cf01e4ec6f14b1/mods/auto-theme-switcher.wh.cpp))
 
 - Fixed Sunset to sunrise (location service) interfering with ApplyTheme() causing it to fail

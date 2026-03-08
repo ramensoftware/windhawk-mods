@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-08T12:36:33.000Z</updated>
+    <updated>2026-03-08T20:18:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Theme Switcher 1.2.0]]></title>
+        <id>https://windhawk.net/mods/auto-theme-switcher#ecdc1c019b82241836f41cdf8a8ec62c5c91cccd</id>
+        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
+        <updated>2026-03-08T20:18:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed issues with Hibernation</li>
+<li>Fixed issues with applying Lock Screen Wallpaper</li>
+<li>Fixed instability issues caused by Location Access not being available before being logged in</li>
+<li>Allows Lock Screen Wallpaper change before logged in</li>
+<li>Allows specifying seconds for "Custom Hours" scheduling mode</li>
+<li>Improved Structure</li>
+</ul>]]></content>
+        <author>
+            <name>tinodin</name>
+            <uri>https://github.com/tinodin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CEF/Spotify Tweaks 1.7]]></title>
         <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#fd34fadeb640a2fcee887aa02773f8c66c35f6aa</id>
@@ -479,26 +497,6 @@ the second-level menus.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[OneNote Cursor Teleport Fix 2.0]]></title>
-        <id>https://windhawk.net/mods/onenote-cursor-teleport-fix#db533e7279c8362af59299a281dde90763b37968</id>
-        <link href="https://windhawk.net/mods/onenote-cursor-teleport-fix"/>
-        <updated>2026-02-28T09:57:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="onenotecursorteleportfixuiprotectionengine">OneNote Cursor Teleport Fix &amp; UI Protection Engine</h1>
-<p>A structural Windhawk modification that resolves hardware desynchronization between pen tablets in mouse mode and Microsoft OneNote's Windows Ink engine. This engine synchronizes the system cursor with the physical pen state</p>
-<p>Compatibility: Designed exclusively for the desktop version of Microsoft OneNote (onenote.exe).</p>
-<h2 id="corefeatures">Core Features</h2>
-<ul>
-<li><strong>Windows Ink Synchronization:</strong> Monitors <code>WM_POINTER</code> events and enforces Win32 system mouse tracking to prevent cursor desynchronization upon pen entry.</li>
-<li><strong>Teleport Interception:</strong> Evaluates the Euclidean distance of <code>WM_MOUSEMOVE</code> events and drops hardware jump packets that exceed the configured threshold.</li>
-<li><strong>Hierarchical UI Exception Engine:</strong> Parses window classes, styles, and ancestry to blacklist transient UI elements (e.g., <code>NetUIPopupWindow</code>, <code>SysShadow</code>). This prevents synthetic mouse events from auto-dismissing ribbon dropdowns or leaving artifacts.</li>
-<li><strong>Thread-Safe Subclassing:</strong> Implements a non-destructive subclassing architecture that safely attaches to OneNote's internal document canvas and active windows while avoiding protected UI layers.</li>
-</ul>]]></content>
-        <author>
-            <name>Mohamed Magdy</name>
-            <uri>https://github.com/hamomagdy724</uri>
         </author>
     </entry>
 </feed>
