@@ -13,8 +13,7 @@
 /*
 # Numbered taskbar
 Displays numbers 1 through 0 on the first 10 application icons in the taskbar.
-These numbers correspond to the `Win + Number` keyboard shortcuts which launch
-the respective applications.
+These numbers correspond to the `Win + Number` keyboard shortcuts which launch the respective applications.
 */
 // ==/WindhawkModReadme==
 
@@ -81,7 +80,6 @@ void LoadSettings() {
 
   newSettings.delayMs = Wh_GetIntSetting(L"delayMs");
   if (newSettings.delayMs < 0) newSettings.delayMs = 0;
-
   if (newSettings.fontSize < 1) newSettings.fontSize = 1;
   if (newSettings.fontSize > 200) newSettings.fontSize = 200;
 
@@ -116,8 +114,37 @@ std::vector<RECT> GetTaskbarButtonRects(IUIAutomation *pUIAutomation) {
       pUIAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varType, &pButtonCondition);
 
       if (pButtonCondition) {
+        IUIAutomationElement *pSearchRoot = pTaskbarElement;
+
+        IUIAutomationCondition *pClassCondition1 = NULL;
+        VARIANT varClass1;
+        VariantInit(&varClass1);
+        varClass1.vt = VT_BSTR;
+        varClass1.bstrVal = SysAllocString(L"Taskbar.TaskList");
+        pUIAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId, varClass1, &pClassCondition1);
+
+        IUIAutomationCondition *pClassCondition2 = NULL;
+        VARIANT varClass2;
+        VariantInit(&varClass2);
+        varClass2.vt = VT_BSTR;
+        varClass2.bstrVal = SysAllocString(L"MSTaskListWClass");
+        pUIAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId, varClass2, &pClassCondition2);
+
+        IUIAutomationCondition *pOrCondition = NULL;
+        pUIAutomation->CreateOrCondition(pClassCondition1, pClassCondition2, &pOrCondition);
+
+        IUIAutomationElement *pTaskListElement = NULL;
+        if (SUCCEEDED(pTaskbarElement->FindFirst(TreeScope_Subtree, pOrCondition, &pTaskListElement)) && pTaskListElement)
+          pSearchRoot = pTaskListElement;
+
+        SysFreeString(varClass1.bstrVal);
+        SysFreeString(varClass2.bstrVal);
+        if (pClassCondition1) pClassCondition1->Release();
+        if (pClassCondition2) pClassCondition2->Release();
+        if (pOrCondition) pOrCondition->Release();
+
         IUIAutomationElementArray *pElementArray = NULL;
-        if (SUCCEEDED(pTaskbarElement->FindAll(TreeScope_Subtree, pButtonCondition, &pElementArray)) && pElementArray) {
+        if (SUCCEEDED(pSearchRoot->FindAll(TreeScope_Subtree, pButtonCondition, &pElementArray)) && pElementArray) {
           int count = 0;
           pElementArray->get_Length(&count);
 
@@ -129,10 +156,11 @@ std::vector<RECT> GetTaskbarButtonRects(IUIAutomation *pUIAutomation) {
               bool isAppButton = true;
               if (autoId) {
                 std::wstring sid(autoId);
-                if (sid == L"StartButton" || sid == L"SearchButton" ||
-                    sid == L"TaskViewButton" || sid == L"WidgetsButton" ||
-                    sid == L"ChatButton" || sid == L"ShowDesktopButton" ||
-                    sid == L"SystemTray" || sid == L"NotificationCenterButton")
+                if (sid == L"StartButton" || sid == L"SearchButton" || sid == L"TaskViewButton" ||
+                    sid == L"WidgetsButton" || sid == L"ChatButton" || sid == L"ShowDesktopButton" ||
+                    sid == L"SystemTray" || sid == L"NotificationCenterButton" || sid == L"ControlCenterButton" ||
+                    sid == L"ChevronButton" || sid == L"FocusAssistButton" || sid == L"CopilotButton" ||
+                    sid == L"PenWorkspaceButton" || sid == L"TouchKeyboardModeButton" || sid == L"SystemTrayIcon")
                   isAppButton = false;
                 SysFreeString(autoId);
               }
@@ -141,7 +169,8 @@ std::vector<RECT> GetTaskbarButtonRects(IUIAutomation *pUIAutomation) {
               pElement->get_CurrentClassName(&className);
               if (className) {
                 std::wstring cls(className);
-                if (cls == L"Taskbar.SystemTrayIcon" ||cls == L"Taskbar.StartButton") isAppButton = false;
+                if (cls == L"Taskbar.SystemTrayIcon" || cls == L"Taskbar.StartButton" || cls == L"SystemTray.NormalButton" ||
+                    cls == L"SystemTray.AccentButton" || cls == L"SystemTray.OmniButtonCenter") isAppButton = false;
                 SysFreeString(className);
               }
 
@@ -155,6 +184,7 @@ std::vector<RECT> GetTaskbarButtonRects(IUIAutomation *pUIAutomation) {
           }
           pElementArray->Release();
         }
+        if (pTaskListElement) pTaskListElement->Release();
         pButtonCondition->Release();
       }
       pTaskbarElement->Release();
@@ -180,7 +210,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 void DrawNumbers(const std::vector<RECT> &rects, HWND hwndTaskbar, const ModSettings &settings, HDC hdcScreen, HDC hdcMem,
                  HBITMAP &hBitmap, HBITMAP &hOldBitmap, void *&pvBits, int &cachedWidth, int &cachedHeight) {
-  if (!g_overlayHwnd)return;
+  if (!g_overlayHwnd) return;
 
   RECT taskbarRect;
   GetWindowRect(hwndTaskbar, &taskbarRect);
@@ -312,12 +342,12 @@ void WorkerThreadWrapper() {
 
     HWND hwndTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
     if (shouldShow && hwndTaskbar && IsWindowVisible(hwndTaskbar)) {
-      if (!IsWindowVisible(g_overlayHwnd)) ShowWindow(g_overlayHwnd, SW_SHOWNA);
+      if (!IsWindowVisible(g_overlayHwnd))
+        ShowWindow(g_overlayHwnd, SW_SHOWNA);
       SetWindowPos(g_overlayHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
       std::vector<RECT> rects = GetTaskbarButtonRects(pUIAutomation);
       DrawNumbers(rects, hwndTaskbar, currentSettings, hdcScreen, hdcMem, hBitmap, hOldBitmap, pvBits, cachedWidth, cachedHeight);
-    } 
-    else if (IsWindowVisible(g_overlayHwnd)) ShowWindow(g_overlayHwnd, SW_HIDE);
+    } else if (IsWindowVisible(g_overlayHwnd)) ShowWindow(g_overlayHwnd, SW_HIDE);
 
     Sleep(currentSettings.updateIntervalMs);
   }
