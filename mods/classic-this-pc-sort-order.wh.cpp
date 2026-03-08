@@ -43,7 +43,7 @@ Restarting Explorer is recommended after installing the mod.
 
 #include <shlobj.h>
 #include <initguid.h>
-#include <propkey.h>
+#include <propkeydef.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
@@ -61,6 +61,7 @@ Restarting Explorer is recommended after installing the mod.
 DEFINE_GUID(CLSID_ControlPanel, 0x26EE0668, 0xA00A, 0x44D7, 0x93, 0x71, 0xBE, 0xB0, 0x64, 0xC9, 0x86, 0x83);
 DEFINE_GUID(CLSID_ControlPanelClassic, 0x21EC2020, 0x3AEA, 0x1069, 0xA2, 0xDD, 0x08, 0x00, 0x2B, 0x30, 0x30, 0x9D);
 DEFINE_GUID(IID_IShellItem2, 0x7e9fb0d3, 0x919f, 0x4307, 0xab,0x2e, 0x9b,0x18,0x60,0x31,0x0c,0x93);
+DEFINE_PROPERTYKEY(PKEY_NamespaceCLSID, 0x28636aa6,0x953d,0x11d2,0xb5,0xd6,0x00,0xc0,0x4f,0xd9,0x18,0xd0,6);
 
 typedef enum
 {
@@ -114,9 +115,6 @@ REQREGITEM g_asDrivesReqItems[] =
 {
     { &CLSID_ControlPanel, 0x1041, L"shell32.dll", -137, CONTROLS_SORT_INDEX, SFGAO_FOLDER | SFGAO_HASSUBFOLDER, NULL},
 };
-
-bool g_fAddControlPanelIcon = false;
-bool g_fHideControlPanelIconFromDriveView = false;
 
 HRESULT (STDCALL *CRegFolder_Initialize_orig)(void *, REGITEMSINFO *);
 HRESULT STDCALL CRegFolder_Initialize_hook(void *pThis, REGITEMSINFO *prif)
