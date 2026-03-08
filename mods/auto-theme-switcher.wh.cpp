@@ -162,33 +162,30 @@ SYSTEMTIME ParseScheduleTime(PCWSTR timeStr) {
     return st;
 }
 
-BasicGeoposition GetLocation()
+bool GetLocation(double& lat, double& lng)
 {
-    auto permission = Geolocator::RequestAccessAsync().get();
+    try {
+        auto accessOp = Geolocator::RequestAccessAsync();
+        if (accessOp.get() != GeolocationAccessStatus::Allowed) return false;
 
-    if (permission == GeolocationAccessStatus::Allowed)
-    {
         Geolocator locator;
         locator.DesiredAccuracy(PositionAccuracy::Default);
 
         Geoposition location = locator.GetGeopositionAsync().get();
+        auto pos = location.Coordinate().Point().Position();
 
-        return location.Coordinate().Point().Position();
-    }
-    else
-    {
-        if (Geolocator::DefaultGeoposition())
-        {
-            return Geolocator::DefaultGeoposition().Value();
-        }
-        else
-        {
-            Wh_Log(L"Location services are disabled");
+        lat = pos.Latitude;
+        lng = pos.Longitude;
 
-            winrt::Windows::System::Launcher::LaunchUriAsync(winrt::Windows::Foundation::Uri(L"ms-settings:privacy-location"));
+        wchar_t buf[32];
+        swprintf_s(buf, L"%.6f", lat);
+        Wh_SetStringValue(L"CachedLat", buf);
+        swprintf_s(buf, L"%.6f", lng);
+        Wh_SetStringValue(L"CachedLng", buf);
 
-            return {};
-        }
+        return true;
+    } catch (...) {
+        return false;
     }
 }
 
@@ -498,11 +495,74 @@ time_t UpdateThemeState() {
         double lat = g_settings.latitude;
         double lng = g_settings.longitude;
 
+        bool locSuccess = false;
         if (g_settings.scheduleMode == ScheduleMode::LocationService) {
-            BasicGeoposition pos = GetLocation();
-            lat = pos.Latitude; lng = pos.Longitude;
+            locSuccess = GetLocation(lat, lng);
+            if (locSuccess) {
+                g_settings.latitude = lat;
+                g_settings.longitude = lng;
+            } else {
+                wchar_t latBuf[32] = {0}, lngBuf[32] = {0};
+                if (Wh_GetStringValue(L"CachedLat", latBuf, 32) > 0 && 
+                    Wh_GetStringValue(L"CachedLng", lngBuf, 32) > 0) {
+                    lat = _wtof(latBuf);
+                    lng = _wtof(lngBuf);
+                    Wh_Log(L"Location fetch failed, using coordinates from local storage: %f, %f", lat, lng);
+                } else {
+                    Wh_Log(L"Location fetch failed and no cache found, using settings coordinates.");
+                    lat = g_settings.latitude;
+                    lng = g_settings.longitude;
+                }
+            }
         }
+        
         GetSunriseSunsetTimes(lat, lng, lightST, darkST);
+
+        if (locSuccess || g_settings.scheduleMode == ScheduleMode::CustomCoordinates) {
+            PCWSTR sourceStr = (g_settings.scheduleMode == ScheduleMode::CustomCoordinates) ? L"CustomCoordinates" : (locSuccess ? L"LocationService (Fresh)" : L"LocationService (Cached)");
+            Wh_Log(L"Active Schedule (%s): %f, %f", sourceStr, lat, lng);
+            Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d",
+                sourceStr,
+                lightST.wHour, lightST.wMinute, lightST.wSecond,
+                darkST.wHour, darkST.wMinute, darkST.wSecond);
+        }
+
+
+        if (g_settings.scheduleMode == ScheduleMode::LocationService && !locSuccess) {
+
+            auto getAbsInternal = [&](const SYSTEMTIME& st, int dayOffset) {
+                struct tm t = now_tm;
+                t.tm_hour = st.wHour; t.tm_min = st.wMinute; t.tm_sec = st.wSecond;
+                t.tm_mday += dayOffset; t.tm_isdst = -1;
+                return mktime(&t);
+            };
+            time_t lT = getAbsInternal(lightST, 0);
+            time_t dT = getAbsInternal(darkST, 0);
+            bool isLight = (lT < dT) ? (now >= lT && now < dT) : (now >= lT || now < dT);
+            Apply(isLight, g_settings.switchMode, g_settings.lightWallpaperPath, g_settings.darkWallpaperPath, g_settings.lightThemePath, g_settings.darkThemePath, g_settings.scriptPath, g_settings.lockScreen);
+
+
+            while (true) {
+                if (g_exitFlag) return 0;
+                HWND shellWnd = GetShellWindow();
+                HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                if (shellWnd && tray && IsWindowVisible(tray)) break;
+                Sleep(100);
+            }
+
+            if (GetLocation(lat, lng)) {
+                g_settings.latitude = lat;
+                g_settings.longitude = lng;
+                GetSunriseSunsetTimes(lat, lng, lightST, darkST);
+                
+                PCWSTR sourceStr = L"LocationService (Fresh)";
+                Wh_Log(L"Active Schedule (%s): %f, %f", sourceStr, lat, lng);
+                Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d",
+                    sourceStr,
+                    lightST.wHour, lightST.wMinute, lightST.wSecond,
+                    darkST.wHour, darkST.wMinute, darkST.wSecond);
+            }
+        }
     }
 
     auto getAbs = [&](const SYSTEMTIME& st, int dayOffset) {
@@ -628,35 +688,29 @@ void LoadSettings() {
         Wh_FreeStringSetting(switchMode);
     }
 
-    if (g_settings.scheduleMode == ScheduleMode::CustomHours) {
-        PCWSTR customLight = Wh_GetStringSetting(L"CustomLight");
-        g_settings.lightTime = ParseScheduleTime(customLight ? customLight : L"07:00:00");
-        Wh_FreeStringSetting(customLight);
+    PCWSTR latitude = Wh_GetStringSetting(L"Latitude");
+    g_settings.latitude = latitude ? _wtof(latitude) : 0.0;
+    Wh_FreeStringSetting(latitude);
 
-        PCWSTR customDark = Wh_GetStringSetting(L"CustomDark");
-        g_settings.darkTime = ParseScheduleTime(customDark ? customDark : L"19:00:00");
-        Wh_FreeStringSetting(customDark);
-    } else {
-        double lat = g_settings.latitude;
-        double lng = g_settings.longitude;
-        if (g_settings.scheduleMode == ScheduleMode::LocationService) {
-            BasicGeoposition pos = GetLocation();
-            lat = pos.Latitude; lng = pos.Longitude;
-        }
-        GetSunriseSunsetTimes(lat, lng, g_settings.lightTime, g_settings.darkTime);
-    }
+    PCWSTR longitude = Wh_GetStringSetting(L"Longitude");
+    g_settings.longitude = longitude ? _wtof(longitude) : 0.0;
+    Wh_FreeStringSetting(longitude);
+
+    PCWSTR customLight = Wh_GetStringSetting(L"CustomLight");
+    g_settings.lightTime = ParseScheduleTime(customLight ? customLight : L"07:00:00");
+    Wh_FreeStringSetting(customLight);
+
+    PCWSTR customDark = Wh_GetStringSetting(L"CustomDark");
+    g_settings.darkTime = ParseScheduleTime(customDark ? customDark : L"19:00:00");
+    Wh_FreeStringSetting(customDark);
 
     g_settings.lockScreen = Wh_GetIntSetting(L"LockScreen", 1) != 0;
 
-    PCWSTR scheduleModeName = 
-        g_settings.scheduleMode == ScheduleMode::CustomHours ? L"CustomHours" :
-        g_settings.scheduleMode == ScheduleMode::LocationService ? L"LocationService" : 
-        L"CustomCoordinates";
-
-    Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d", 
-        scheduleModeName,
-        g_settings.lightTime.wHour, g_settings.lightTime.wMinute, g_settings.lightTime.wSecond, 
-        g_settings.darkTime.wHour, g_settings.darkTime.wMinute, g_settings.darkTime.wSecond);
+    if (g_settings.scheduleMode == ScheduleMode::CustomHours) {
+        Wh_Log(L"Active Schedule (CustomHours): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d",
+            g_settings.lightTime.wHour, g_settings.lightTime.wMinute, g_settings.lightTime.wSecond,
+            g_settings.darkTime.wHour, g_settings.darkTime.wMinute, g_settings.darkTime.wSecond);
+    }
 }
 
 BOOL WhTool_ModInit() {
