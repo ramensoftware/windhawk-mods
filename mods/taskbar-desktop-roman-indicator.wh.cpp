@@ -25,7 +25,7 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
   Example symbols: `●`, `•`, `○`, `◉`
 * Configurable left and right padding
 * Configurable spacing between indicator characters
-* Optional bold indicator text
+* Configurable indicator weight and size
 * Configurable polling interval
 * Fast desktop change detection
 
@@ -71,6 +71,13 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
   $options:
     - normal: Normal
     - bold: Bold
+- indicatorSize: normal
+  $name: Indicator size
+  $description: Relative font size for the desktop indicator.
+  $options:
+    - smaller: Smaller
+    - normal: Normal
+    - larger: Larger
 - inactiveMarkerOpacity: 22
   $name: Inactive marker opacity
   $description: Opacity percentage for non-active workspace markers. 100 matches the active marker, lower values make inactive markers dimmer.
@@ -147,6 +154,12 @@ enum class IndicatorWeight {
     Bold,
 };
 
+enum class IndicatorSize {
+    Smaller,
+    Normal,
+    Larger,
+};
+
 struct ModSettings {
     IndicatorMode indicatorMode = IndicatorMode::Number;
     std::wstring markerSymbol = L"\u25cf";
@@ -157,6 +170,7 @@ struct ModSettings {
     int inactiveMarkerOpacity = 22;
     int pollIntervalMs = 100;
     IndicatorWeight indicatorWeight = IndicatorWeight::Normal;
+    IndicatorSize indicatorSize = IndicatorSize::Normal;
 };
 
 struct ClockEntry {
@@ -352,6 +366,18 @@ FontWeight GetConfiguredIndicatorFontWeight() {
     }
 }
 
+double GetConfiguredIndicatorFontSize(double baseFontSize) {
+    switch (g_settings.indicatorSize) {
+        case IndicatorSize::Smaller:
+            return baseFontSize * 0.9;
+        case IndicatorSize::Larger:
+            return baseFontSize * 1.15;
+        case IndicatorSize::Normal:
+        default:
+            return baseFontSize;
+    }
+}
+
 bool UseTabularNumeralsForIndicator() {
     return g_settings.indicatorMode == IndicatorMode::Number &&
            g_settings.numberingFormat == NumberingFormat::Arabic;
@@ -518,6 +544,15 @@ void LoadSettings() {
         g_settings.indicatorWeight = IndicatorWeight::Normal;
     }
 
+    StringSetting indicatorSize = StringSetting::make(L"indicatorSize");
+    if (wcscmp(indicatorSize.get(), L"smaller") == 0) {
+        g_settings.indicatorSize = IndicatorSize::Smaller;
+    } else if (wcscmp(indicatorSize.get(), L"larger") == 0) {
+        g_settings.indicatorSize = IndicatorSize::Larger;
+    } else {
+        g_settings.indicatorSize = IndicatorSize::Normal;
+    }
+
     g_settings.leftPadding = std::max(0, Wh_GetIntSetting(L"leftPadding"));
     g_settings.rightPadding = std::max(0, Wh_GetIntSetting(L"rightPadding"));
     g_settings.indicatorCharacterSpacing =
@@ -673,6 +708,7 @@ double MeasureSingleRunTextWidth(const Controls::TextBlock& source,
     Documents::Run run;
     run.Text(winrt::hstring(text));
     run.FontWeight(fontWeight);
+    run.FontSize(GetConfiguredIndicatorFontSize(source.FontSize()));
     if (UseTabularNumeralsForIndicator()) {
         Documents::Typography::SetNumeralAlignment(
             run, FontNumeralAlignment::Tabular);
@@ -711,6 +747,7 @@ double MeasureIndicatorTextWidth(const Controls::TextBlock& source,
         Documents::Run suffixRun;
         suffixRun.Text(winrt::hstring(suffix));
         suffixRun.FontWeight(GetConfiguredIndicatorFontWeight());
+        suffixRun.FontSize(GetConfiguredIndicatorFontSize(source.FontSize()));
         if (UseTabularNumeralsForIndicator()) {
             Documents::Typography::SetNumeralAlignment(
                 suffixRun, FontNumeralAlignment::Tabular);
@@ -860,7 +897,8 @@ void AppendRun(const TInlines& inlines,
                const std::wstring& text,
                FontWeight fontWeight,
                Media::Brush foreground = nullptr,
-               bool useIndicatorTypography = true) {
+               bool useIndicatorTypography = true,
+               double fontSize = 0) {
     if (text.empty()) {
         return;
     }
@@ -868,6 +906,9 @@ void AppendRun(const TInlines& inlines,
     Documents::Run run;
     run.Text(winrt::hstring(text));
     run.FontWeight(fontWeight);
+    if (fontSize > 0) {
+        run.FontSize(fontSize);
+    }
     if (useIndicatorTypography && UseTabularNumeralsForIndicator()) {
         Documents::Typography::SetNumeralAlignment(
             run, FontNumeralAlignment::Tabular);
@@ -904,11 +945,14 @@ void SetIndicatorTextBlockContent(Controls::TextBlock targetTextBlock,
     inlines.Clear();
 
     if (!baseText.empty()) {
-        AppendRun(inlines, baseText, targetTextBlock.FontWeight(), nullptr, false);
+        AppendRun(inlines, baseText, targetTextBlock.FontWeight(), nullptr, false,
+                  targetTextBlock.FontSize());
     }
 
     Media::Brush transparentBrush = CreateTransparentBrush();
     Media::Brush dimmedBrush = CreateDimmedIndicatorBrush(targetTextBlock);
+    double indicatorFontSize =
+        GetConfiguredIndicatorFontSize(targetTextBlock.FontSize());
 
     for (const auto& segment : layout.suffixSegments) {
         Media::Brush foreground = nullptr;
@@ -919,7 +963,7 @@ void SetIndicatorTextBlockContent(Controls::TextBlock targetTextBlock,
         }
 
         AppendRun(inlines, segment.text, GetConfiguredIndicatorFontWeight(),
-                  foreground);
+                  foreground, true, indicatorFontSize);
     }
 }
 
