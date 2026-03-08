@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.6
+// @version         1.7
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -34,13 +34,13 @@
 * Block automatic updates
 * Use the settings tab on the mod details page to configure the features
 ## Notes
-* Supported CEF versions: 90.4 to 143
+* Supported CEF versions: 90.4 to 144
     * This mod won't work with versions before 90.4
     * Newer versions may work, but are not tested. Some features, such as the JS API, are disabled on untested versions by default to prevent possible crashes, and transparent rendering may not work properly as well
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.80 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.85 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -62,7 +62,7 @@
     * The API is available with `window._getSpotifyModule('ctewh')` (1.2.4-1.2.55) or `window.cancelEsperantoCall('ctewh')` (1.2.33-latest)
     * Use `(window.cancelEsperantoCall || window._getSpotifyModule)('ctewh').query()` to get various information about the window and the mod
     * Various functions are available in the object returned by `_getSpotifyModule('ctewh')` or `cancelEsperantoCall('ctewh')`
-    * See [here](https://github.com/Ingan121/WMPotify/blob/master/theme/src/js/WindhawkComm.js) for a simple example of how to use the functions
+    * See [here](https://github.com/Ingan121/WMPotify/blob/master/theme/src/js/utils/WindhawkComm.ts) for a simple example of how to use the functions
     * This API is only available on Spotify 1.2.4 and above, and only if the mod is enabled before Spotify starts
     * The API is disabled by default on untested CEF versions
 ## JavaScript API Documentation
@@ -255,7 +255,8 @@
 139: 1.2.71-1.2.74
 140: 1.2.75-1.2.77
 142: 1.2.78-1.2.79
-143: 1.2.80
+143: 1.2.80-1.2.82
+144: 1.2.83-1.2.85
 See https://www.spotify.com/opensource/ for more
 */
 
@@ -285,7 +286,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 143
+#define LAST_TESTED_CEF_VERSION 144
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 // Win11 only DWM attributes for Windhawk 1.4
@@ -321,6 +322,7 @@ typedef struct cte_offset {
   int offset_x64;
 } cte_offset_t;
 
+// Apparently struct sizes are the same on x64 and arm64, so we don't need separate offsets for arm64
 cte_offset_t is_frameless_offsets[] = {
     {90, 4, 0x48, 0x90},
     {90, 5, 0x48, 0x90},
@@ -1021,8 +1023,12 @@ BOOL EnableTransparentRendering(char* pbExecutable) {
         targetPatch[4] = 0xFF; // Opaque
     }
 
-    #ifdef _WIN64
+    #if defined(_M_X64)
         std::string targetRegex = R"(\xba\x12\x12\x12\xff\xff)"; // mov edx, 0xff121212 (default background color)
+    #elif defined(_M_ARM64)
+        std::string targetRegex = R"(\xd6\x12\x12\x12\xff\x00)"; // apparently this long hex is saved in a dword before being used on arm64
+        targetPatch[0] = 0xd6;
+        targetPatch[5] = 0x00;
     #else
         std::string targetRegex = R"(\x68\x12\x12\x12\xff\x8b)"; // push 0xff121212
         targetPatch[0] = 0x68;
@@ -1049,7 +1055,7 @@ BOOL ForceEnableExtensions(char* pbExecutable) {
 #pragma endregion
 
 #pragma region Spotify.exe hooks (non-exported functions)
-#ifdef _WIN64
+#ifdef _M_X64
 // From https://windhawk.net/mods/chrome-ui-tweaks
 typedef struct {
     std::string_view search; // instructions to search for
@@ -1806,7 +1812,7 @@ void HandleWindhawkComm(LPCWSTR command) {
     } else if (wcscmp(command, L"/WH:OpenSpotifyMenu") == 0) {
         PostMessage(g_mainHwnd, WM_SYSCOMMAND, SC_KEYMENU, 0);
     // /WH:SetPlaybackSpeed:<speed> (64-bit only)
-    #ifdef _WIN64
+    #ifdef _M_X64
     } else if (wcsncmp(command, L"/WH:SetPlaybackSpeed:", 21) == 0) {
         double speed;
         if (swscanf(command + 21, L"%lf", &speed) == 1) {
@@ -1822,33 +1828,32 @@ void HandleWindhawkComm(LPCWSTR command) {
             return;
         }
         wchar_t queryResponse[256];
-        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:blockupdates:allowuntested:isMaximized:isTopMost:isLayered:isTransparent:isThemingEnabled:isDwmEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
         swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
-            cte_settings.showframe,
-            cte_settings.showframeonothers,
-            cte_settings.showmenu,
-            cte_settings.showcontrols,
-            cte_settings.transparentcontrols,
-            cte_settings.transparentrendering,
-            cte_settings.ignoreminsize,
-            cte_settings.noforceddarkmode,
-            cte_settings.forceextensions,
-            cte_settings.blockupdates,
-            cte_settings.allowuntested,
-            IsZoomed(g_mainHwnd),
-            GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST,
-            GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_LAYERED,
-            g_transparentMode,
-            IsAppThemed() && IsThemeActive(),
-            IsDwmEnabled(),
-            FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL,
-            g_minWidth,
-            g_minHeight,
-            g_titleLocked,
-            GetDpiForWindowWithFallback(g_mainHwnd),
-            CreateTrackPlayer_original != NULL,
-            g_playbackSpeed,
-            SetPlaybackSpeed != NULL
+            /* showframe */            cte_settings.showframe,
+            /* showframeonothers */    cte_settings.showframeonothers,
+            /* showmenu */             cte_settings.showmenu,
+            /* showcontrols */         cte_settings.showcontrols,
+            /* transparentcontrols */  cte_settings.transparentcontrols,
+            /* transparentrendering */ cte_settings.transparentrendering,
+            /* ignoreminsize */        cte_settings.ignoreminsize,
+            /* noforceddarkmode */     cte_settings.noforceddarkmode,
+            /* forceextensions */      cte_settings.forceextensions,
+            /* blockupdates */         cte_settings.blockupdates,
+            /* allowuntested */        cte_settings.allowuntested,
+            /* isMaximized */          IsZoomed(g_mainHwnd),
+            /* isTopMost */            GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST,
+            /* isLayered */            GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_LAYERED,
+            /* isTransparent */        g_transparentMode,
+            /* isThemingEnabled */     IsAppThemed() && IsThemeActive(),
+            /* isDwmEnabled */         IsDwmEnabled(),
+            /* hwAccelerated */        FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL,
+            /* minWidth */             g_minWidth,
+            /* minHeight */            g_minHeight,
+            /* titleLocked */          g_titleLocked,
+            /* dpi */                  GetDpiForWindowWithFallback(g_mainHwnd),
+            /* speedModSupported */    CreateTrackPlayer_original != NULL,
+            /* playbackSpeed */        g_playbackSpeed,
+            /* immediateSpeedChange */ SetPlaybackSpeed != NULL
         );
         DWORD bytesWritten;
         WriteFile(g_hPipe, queryResponse, wcslen(queryResponse) * sizeof(wchar_t), &bytesWritten, NULL);
@@ -2323,7 +2328,7 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
         }
     } else if (nameStr == u"openSpotifyMenu") {
         ipcRes = SendNamedPipeMessage(L"/WH:OpenSpotifyMenu");
-    #ifdef _WIN64
+    #ifdef _M_X64
     } else if (nameStr == u"setPlaybackSpeed") {
         if (argumentsCount == 1 && arguments[0]->is_double(arguments[0])) {
             double speed = arguments[0]->get_double_value(arguments[0]);
@@ -2374,7 +2379,7 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
             AddValueToObj(retobj, u"titleLocked", cef_v8value_create_bool(g_queryResponse.titleLocked));
             AddValueToObj(retobj, u"dpi", cef_v8value_create_int(g_queryResponse.dpi));
             AddValueToObj(retobj, u"speedModSupported", cef_v8value_create_bool(g_queryResponse.speedModSupported));
-            #ifdef _WIN64
+            #ifdef _M_X64
             AddValueToObj(retobj, u"playbackSpeed", cef_v8value_create_double(g_queryResponse.playbackSpeed));
             AddValueToObj(retobj, u"immediateSpeedChange", cef_v8value_create_bool(g_queryResponse.immediateSpeedChange));
             #endif
@@ -2424,7 +2429,7 @@ int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) 
         AddFunctionToObj(retobj, u"setTitle", cancelCosmosRequest_v8handler);
         AddFunctionToObj(retobj, u"lockTitle", cancelCosmosRequest_v8handler);
         AddFunctionToObj(retobj, u"openSpotifyMenu", cancelCosmosRequest_v8handler);
-        #ifdef _WIN64
+        #ifdef _M_X64
         AddFunctionToObj(retobj, u"setPlaybackSpeed", cancelCosmosRequest_v8handler);
         #endif
         cef_v8value_t* initialConfigObj = cef_v8value_create_object(NULL, NULL);
@@ -2589,7 +2594,7 @@ void ApplySpeedFromSettings(BOOL notifyInvalid = FALSE) {
     Wh_Log(L"ApplySpeedFromSettings: %s", newSpeedStr);
     if (*newSpeedStr == L'\0') {
         g_playbackSpeed = 1;
-        #ifdef _WIN64
+        #ifdef _M_X64
             if (SetPlaybackSpeed != NULL && g_currentTrackPlayer != NULL) {
                 SetPlaybackSpeed(g_currentTrackPlayer, 1);
             }
@@ -2601,7 +2606,7 @@ void ApplySpeedFromSettings(BOOL notifyInvalid = FALSE) {
         double newSpeed = std::stod(newSpeedStr);
         Wh_FreeStringSetting(newSpeedStr);
         if (fabs(newSpeed - g_playbackSpeed) > 1e-6) {
-            #ifdef _WIN64
+            #ifdef _M_X64
                 if (CreateTrackPlayer_original == NULL) {
                     if (notifyInvalid) {
                         MessageBoxW(NULL, L"Changing the playback speed is not supported in this version of Spotify client", L"CEF/Spotify Tweaks", MB_OK);
@@ -2666,8 +2671,10 @@ int FindOffset(int major, int minor, cte_offset_t offsets[], int offsets_size, B
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit() {
-    #ifdef _WIN64
+    #ifdef _M_X64
         Wh_Log(L"Init - x86_64");
+    #elif defined(_M_ARM64)
+        Wh_Log(L"Init - ARM64");
     #else
         Wh_Log(L"Init - x86");
     #endif
@@ -2828,7 +2835,7 @@ BOOL Wh_ModInit() {
             }
         }
 
-        #ifdef _WIN64
+        #ifdef _M_X64
         // Spotify 1.2.67+ hard blocked my way of changing the playback speed by calling the internal functions
         // So disable this for now until a workaround is found
         if (major >= 122 && major < 138 && isTestedVersion &&
