@@ -29,6 +29,14 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
 * Notification-based desktop change detection
 * Optional polling fallback
 
+## Screenshot
+
+Workspace markers mode (example):
+![Workspace markers mode](https://raw.githubusercontent.com/simon-ami/images/main/windhawk/taskbar-desktop-indicator/marker-indicator.png)
+
+Number mode (example):
+![Number mode](https://raw.githubusercontent.com/simon-ami/images/main/windhawk/taskbar-desktop-indicator/roman-number.png)
+
 ## Notes
 
 * Windows 11 only
