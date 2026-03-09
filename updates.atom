@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-09T14:52:30.000Z</updated>
+    <updated>2026-03-09T15:26:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar in Drive Properties 1.1]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-in-drive-properties#ded365a21ed5b60cb63a37e7cf9f23f5e2ba194f</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-in-drive-properties"/>
+        <updated>2026-03-09T15:26:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to display the disk usage percentage text with one decimal place (e.g., <code>64.1%</code>).</li>
+<li>Refined disk usage percentage rounding logic to cap values between 99.5% and 99.9% at 99% when displayed as whole numbers, ensuring "100%" is shown only when the disk is completely full.</li>
+</ul>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 2.1]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#b470cc70adf572d7d28d329cea2b3e6a66605280</id>
@@ -493,17 +507,6 @@ the second-level menus.</p>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Up → New Window/Tab (Ctrl-click or Middle-click) 1.4.1]]></title>
-        <id>https://windhawk.net/mods/explorer-up-new-window#2a2d29687df197f84b6def9da159231ada7cde43</id>
-        <link href="https://windhawk.net/mods/explorer-up-new-window"/>
-        <updated>2026-02-28T12:42:39.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix issue preventing Windhawk from exiting (applied updated "Mods-as-tools"-snippet)</p>]]></content>
-        <author>
-            <name>Tobias Lind</name>
-            <uri>https://github.com/TobbeLino</uri>
         </author>
     </entry>
 </feed>

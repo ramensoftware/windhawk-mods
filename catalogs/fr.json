@@ -2669,19 +2669,19 @@
                     10
                 ],
                 "ratingUsers": 11,
-                "updated": 1771003357000,
+                "updated": 1773069962000,
                 "users": 255
             },
             "metadata": {
                 "author": "Kitsune",
-                "compilerOptions": "-luxtheme -lgdi32",
+                "compilerOptions": "-lgdi32 -luxtheme",
                 "description": "Replaces the pie/donut chart in drive properties with a usage bar",
                 "github": "https://github.com/AromaKitsune",
                 "include": [
                     "*"
                 ],
                 "name": "Disk Usage Bar in Drive Properties",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "dot-hide": {
