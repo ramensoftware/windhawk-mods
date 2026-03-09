@@ -5783,6 +5783,34 @@
                 "version": "1.2.2"
             }
         },
+        "numbered-taskbar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773076919000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773076919000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "maciejlewand72",
+                "compilerOptions": "-luiautomationcore -lcomdlg32 -lole32 -loleaut32 -luser32 -lgdi32 -luuid -ld2d1 -ldwrite",
+                "description": "Adds numbers (1-0) to taskbar icons corresponding to Win + Number shortcut",
+                "github": "https://github.com/maciejlewand72",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Numbered taskbar",
+                "version": "1.0.0"
+            }
+        },
         "office-ui-reverter": {
             "details": {
                 "defaultSorting": 2190,
