@@ -178,17 +178,25 @@ struct ModSettings {
 struct ClockEntry {
     winrt::weak_ref<Controls::TextBlock> dateTextBlock;
     winrt::weak_ref<Controls::TextBlock> timeTextBlock;
+    winrt::weak_ref<Controls::Grid> containerGrid;
+    winrt::weak_ref<Controls::StackPanel> stackPanel;
+    winrt::weak_ref<Controls::TextBlock> indicatorTextBlock;
     std::wstring baseDateText;
     std::wstring baseTimeText;
     std::wstring lastAppliedSuffix;
+    std::vector<GridLength> originalContainerGridColumnWidths;
     double originalDateMinWidth = 0;
     double originalTimeMinWidth = 0;
     TextAlignment originalDateTextAlignment = TextAlignment::End;
     TextAlignment originalTimeTextAlignment = TextAlignment::End;
+    int originalStackPanelColumn = 0;
     bool originalDateMinWidthCaptured = false;
     bool originalTimeMinWidthCaptured = false;
     bool originalDateTextAlignmentCaptured = false;
     bool originalTimeTextAlignmentCaptured = false;
+    bool originalContainerGridColumnsCaptured = false;
+    bool originalStackPanelColumnCaptured = false;
+    bool usingSeparateIndicator = false;
     std::mutex mutex;
 };
 
@@ -1076,6 +1084,25 @@ bool TryGetClockTextBlocks(FrameworkElement root,
     return static_cast<bool>(*dateTextBlock || *timeTextBlock);
 }
 
+Controls::Grid TryGetClockContainerGrid(FrameworkElement root) {
+    return FindDescendantByName(root, L"ContainerGrid").try_as<Controls::Grid>();
+}
+
+Controls::StackPanel TryGetClockStackPanel(Controls::Grid containerGrid) {
+    if (!containerGrid) {
+        return nullptr;
+    }
+
+    for (const auto& child : containerGrid.Children()) {
+        auto stackPanel = child.try_as<Controls::StackPanel>();
+        if (stackPanel) {
+            return stackPanel;
+        }
+    }
+
+    return nullptr;
+}
+
 ClockEntryPtr AddOrGetClockEntry(Controls::TextBlock dateTextBlock,
                                  Controls::TextBlock timeTextBlock) {
     auto sameBlock = [&](const ClockEntryPtr& entry) {
@@ -1391,6 +1418,194 @@ void SetIndicatorTextBlockContent(Controls::TextBlock targetTextBlock,
     }
 }
 
+bool ShouldUseSeparateIndicator(const ClockEntryPtr& entry) {
+    auto dateTextBlock = entry->dateTextBlock.get();
+    auto timeTextBlock = entry->timeTextBlock.get();
+
+    return dateTextBlock && timeTextBlock &&
+           dateTextBlock.Visibility() == Visibility::Visible &&
+           timeTextBlock.Visibility() == Visibility::Visible;
+}
+
+void RestoreInlineClockTextOnly(const ClockEntryPtr& entry) {
+    auto dateTextBlock = entry->dateTextBlock.get();
+    auto timeTextBlock = entry->timeTextBlock.get();
+
+    if (dateTextBlock &&
+        (!entry->baseDateText.empty() || !entry->lastAppliedSuffix.empty())) {
+        dateTextBlock.Inlines().Clear();
+        dateTextBlock.Text(winrt::hstring(entry->baseDateText));
+        if (entry->originalDateMinWidthCaptured) {
+            dateTextBlock.MinWidth(entry->originalDateMinWidth);
+        }
+        if (entry->originalDateTextAlignmentCaptured) {
+            dateTextBlock.TextAlignment(entry->originalDateTextAlignment);
+        }
+    }
+
+    if (timeTextBlock &&
+        (!entry->baseTimeText.empty() || !entry->lastAppliedSuffix.empty())) {
+        timeTextBlock.Inlines().Clear();
+        timeTextBlock.Text(winrt::hstring(entry->baseTimeText));
+        if (entry->originalTimeMinWidthCaptured) {
+            timeTextBlock.MinWidth(entry->originalTimeMinWidth);
+        }
+        if (entry->originalTimeTextAlignmentCaptured) {
+            timeTextBlock.TextAlignment(entry->originalTimeTextAlignment);
+        }
+    }
+
+    entry->lastAppliedSuffix.clear();
+}
+
+void RestoreSeparateIndicatorOnly(const ClockEntryPtr& entry) {
+    auto containerGrid = entry->containerGrid.get();
+    auto indicatorTextBlock = entry->indicatorTextBlock.get();
+
+    if (containerGrid && indicatorTextBlock) {
+        auto children = containerGrid.Children();
+        for (uint32_t i = 0; i < children.Size(); ++i) {
+            if (children.GetAt(i) == indicatorTextBlock) {
+                children.RemoveAt(i);
+                break;
+            }
+        }
+    }
+
+    if (containerGrid) {
+        auto children = containerGrid.Children();
+        for (uint32_t i = 0; i < children.Size();) {
+            auto childTextBlock = children.GetAt(i).try_as<Controls::TextBlock>();
+            if (childTextBlock &&
+                childTextBlock.Name() == L"DesktopIndicatorTextBlock") {
+                children.RemoveAt(i);
+                continue;
+            }
+
+            ++i;
+        }
+    }
+
+    auto stackPanel = entry->stackPanel.get();
+    if (stackPanel && entry->originalStackPanelColumnCaptured) {
+        Controls::Grid::SetColumn(stackPanel, entry->originalStackPanelColumn);
+    }
+
+    if (containerGrid && entry->originalContainerGridColumnsCaptured) {
+        auto columnDefinitions = containerGrid.ColumnDefinitions();
+        columnDefinitions.Clear();
+        for (const auto& width : entry->originalContainerGridColumnWidths) {
+            Controls::ColumnDefinition columnDefinition;
+            columnDefinition.Width(width);
+            columnDefinitions.Append(columnDefinition);
+        }
+    }
+
+    entry->indicatorTextBlock = nullptr;
+    entry->usingSeparateIndicator = false;
+}
+
+Controls::TextBlock EnsureSeparateIndicatorTextBlock(
+    const ClockEntryPtr& entry,
+    Controls::TextBlock sourceTextBlock) {
+    auto containerGrid = entry->containerGrid.get();
+    if (!containerGrid || !sourceTextBlock) {
+        return nullptr;
+    }
+
+    auto stackPanel = entry->stackPanel.get();
+    if (!stackPanel) {
+        stackPanel = TryGetClockStackPanel(containerGrid);
+        entry->stackPanel = stackPanel;
+    }
+
+    if (!stackPanel) {
+        return nullptr;
+    }
+
+    if (!entry->originalContainerGridColumnsCaptured) {
+        auto columnDefinitions = containerGrid.ColumnDefinitions();
+        entry->originalContainerGridColumnWidths.clear();
+        for (const auto& columnDefinition : columnDefinitions) {
+            entry->originalContainerGridColumnWidths.push_back(
+                columnDefinition.Width());
+        }
+        entry->originalContainerGridColumnsCaptured = true;
+    }
+
+    if (!entry->originalStackPanelColumnCaptured) {
+        entry->originalStackPanelColumn = Controls::Grid::GetColumn(stackPanel);
+        entry->originalStackPanelColumnCaptured = true;
+    }
+
+    auto columnDefinitions = containerGrid.ColumnDefinitions();
+    if (columnDefinitions.Size() < 2) {
+        columnDefinitions.Clear();
+
+        Controls::ColumnDefinition mainColumn;
+        mainColumn.Width(GridLengthHelper::Auto());
+        columnDefinitions.Append(mainColumn);
+
+        Controls::ColumnDefinition indicatorColumn;
+        indicatorColumn.Width(GridLengthHelper::Auto());
+        columnDefinitions.Append(indicatorColumn);
+    }
+
+    Controls::Grid::SetColumn(stackPanel, 0);
+
+    auto indicatorTextBlock = entry->indicatorTextBlock.get();
+    if (!indicatorTextBlock) {
+        for (const auto& child : containerGrid.Children()) {
+            auto childTextBlock = child.try_as<Controls::TextBlock>();
+            if (childTextBlock &&
+                childTextBlock.Name() == L"DesktopIndicatorTextBlock") {
+                indicatorTextBlock = childTextBlock;
+                break;
+            }
+        }
+    }
+
+    if (!indicatorTextBlock) {
+        indicatorTextBlock = Controls::TextBlock();
+        indicatorTextBlock.Name(L"DesktopIndicatorTextBlock");
+        containerGrid.Children().Append(indicatorTextBlock);
+    }
+
+    indicatorTextBlock.FontFamily(sourceTextBlock.FontFamily());
+    indicatorTextBlock.FontSize(sourceTextBlock.FontSize());
+    indicatorTextBlock.FontStretch(sourceTextBlock.FontStretch());
+    indicatorTextBlock.FontStyle(sourceTextBlock.FontStyle());
+    indicatorTextBlock.FontWeight(sourceTextBlock.FontWeight());
+    indicatorTextBlock.CharacterSpacing(sourceTextBlock.CharacterSpacing());
+    indicatorTextBlock.Foreground(sourceTextBlock.Foreground());
+    indicatorTextBlock.TextWrapping(TextWrapping::NoWrap);
+    indicatorTextBlock.TextAlignment(TextAlignment::Start);
+    indicatorTextBlock.VerticalAlignment(VerticalAlignment::Center);
+    indicatorTextBlock.HorizontalAlignment(HorizontalAlignment::Left);
+
+    Controls::Grid::SetColumn(indicatorTextBlock, 1);
+    entry->indicatorTextBlock = indicatorTextBlock;
+    entry->usingSeparateIndicator = true;
+    return indicatorTextBlock;
+}
+
+void ApplySeparateIndicator(const ClockEntryPtr& entry,
+                            Controls::TextBlock sourceTextBlock,
+                            int currentDesktopNumber,
+                            int desktopCount) {
+    auto indicatorTextBlock =
+        EnsureSeparateIndicatorTextBlock(entry, sourceTextBlock);
+    if (!indicatorTextBlock) {
+        return;
+    }
+
+    IndicatorLayout layout =
+        BuildIndicatorLayout(sourceTextBlock, true, currentDesktopNumber,
+                             desktopCount);
+    indicatorTextBlock.MinWidth(layout.widestSuffixWidth);
+    SetIndicatorTextBlockContent(indicatorTextBlock, L"", layout);
+}
+
 void EnsureReservedWidth(const ClockEntryPtr& entry,
                          Controls::TextBlock targetTextBlock,
                          const std::wstring& baseText) {
@@ -1476,6 +1691,21 @@ void ApplyIndicator(const ClockEntryPtr& entry) {
 
     std::lock_guard<std::mutex> lock(entry->mutex);
 
+    if (ShouldUseSeparateIndicator(entry)) {
+        if (!entry->lastAppliedSuffix.empty()) {
+            RestoreInlineClockTextOnly(entry);
+        }
+
+        auto sourceTextBlock = dateTextBlock ? dateTextBlock : timeTextBlock;
+        ApplySeparateIndicator(entry, sourceTextBlock, currentDesktopNumber,
+                               desktopCount);
+        return;
+    }
+
+    if (entry->usingSeparateIndicator) {
+        RestoreSeparateIndicatorOnly(entry);
+    }
+
     bool useDateLine = dateTextBlock && !entry->baseDateText.empty();
     if (!useDateLine && dateTextBlock && !timeTextBlock) {
         useDateLine = true;
@@ -1538,32 +1768,8 @@ void RestoreClockText(const ClockEntryPtr& entry) {
     }
 
     std::lock_guard<std::mutex> lock(entry->mutex);
-
-    if (dateTextBlock &&
-        (!entry->baseDateText.empty() || !entry->lastAppliedSuffix.empty())) {
-        dateTextBlock.Inlines().Clear();
-        dateTextBlock.Text(winrt::hstring(entry->baseDateText));
-        if (entry->originalDateMinWidthCaptured) {
-            dateTextBlock.MinWidth(entry->originalDateMinWidth);
-        }
-        if (entry->originalDateTextAlignmentCaptured) {
-            dateTextBlock.TextAlignment(entry->originalDateTextAlignment);
-        }
-    }
-
-    if (timeTextBlock &&
-        (!entry->baseTimeText.empty() || !entry->lastAppliedSuffix.empty())) {
-        timeTextBlock.Inlines().Clear();
-        timeTextBlock.Text(winrt::hstring(entry->baseTimeText));
-        if (entry->originalTimeMinWidthCaptured) {
-            timeTextBlock.MinWidth(entry->originalTimeMinWidth);
-        }
-        if (entry->originalTimeTextAlignmentCaptured) {
-            timeTextBlock.TextAlignment(entry->originalTimeTextAlignment);
-        }
-    }
-
-    entry->lastAppliedSuffix.clear();
+    RestoreInlineClockTextOnly(entry);
+    RestoreSeparateIndicatorOnly(entry);
 }
 
 void DispatchToEntry(const ClockEntryPtr& entry, bool captureBaseText) {
@@ -1642,6 +1848,10 @@ void ProcessDateTimeIconContentElement(FrameworkElement root) {
     }
 
     auto entry = AddOrGetClockEntry(dateTextBlock, timeTextBlock);
+    entry->containerGrid = TryGetClockContainerGrid(root);
+    if (auto containerGrid = entry->containerGrid.get()) {
+        entry->stackPanel = TryGetClockStackPanel(containerGrid);
+    }
     CaptureClockBaseText(entry);
     ApplyIndicator(entry);
 }
