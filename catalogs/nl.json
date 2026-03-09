@@ -5355,6 +5355,35 @@
                 "version": "1.0.1"
             }
         },
+        "native-brightness": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773082808000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773082808000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Prash",
+                "compilerOptions": "-lole32 -loleaut32 -lwbemuuid -lgdi32 -luser32 -lshell32",
+                "description": "Use CTRL + ALT + UP/DOWN to change brightness. Runs in a dedicated stable windhawk.exe process (Tool Mode).",
+                "github": "https://github.com/prasmit2410",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Native Brightness Shortcut (Always On Top)",
+                "version": "1.0.0"
+            }
+        },
         "native-titlebars-uwp-lite": {
             "details": {
                 "defaultSorting": 459,

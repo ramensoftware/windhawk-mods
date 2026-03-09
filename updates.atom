@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-09T17:21:59.000Z</updated>
+    <updated>2026-03-09T19:00:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Native Brightness Shortcut (Always On Top) 1.0.0]]></title>
+        <id>https://windhawk.net/mods/native-brightness#22f78cd3c2c17539f69c24e5792f620b5e077d07</id>
+        <link href="https://windhawk.net/mods/native-brightness"/>
+        <updated>2026-03-09T19:00:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="brightnesscontrolwithosdtoolmode">Brightness Control with OSD (Tool Mode)</h1>
+<p>A standalone utility to control your monitor's brightness using keyboard shortcuts.</p>
+<h3 id="shortcuts">Shortcuts:</h3>
+<ul>
+<li><strong>Ctrl + Alt + Up Arrow:</strong> Increase brightness (+10%)</li>
+<li><strong>Ctrl + Alt + Down Arrow:</strong> Decrease brightness (-10%)</li>
+</ul>]]></content>
+        <author>
+            <name>Prash</name>
+            <uri>https://github.com/prasmit2410</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Numbered taskbar 1.0.0]]></title>
         <id>https://windhawk.net/mods/numbered-taskbar#e1576c0217723ec7c03bb83f59bf10a0bbbdf774</id>
@@ -505,17 +522,6 @@ the second-level menus.</p>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Logon & Sleep Fade Restorer 1.3]]></title>
-        <id>https://windhawk.net/mods/win7-login-fade#a77cfa03723dfc97b23c2cd06925ee4d02ad5b3b</id>
-        <link href="https://windhawk.net/mods/win7-login-fade"/>
-        <updated>2026-03-02T16:27:33.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix the monitor-off fade not working properly when an application uses a hacky way to turn the screen off</p>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>
