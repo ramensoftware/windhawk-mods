@@ -120,6 +120,7 @@ static void LoadSettings() {
 static void** g_pDocIOVtbl = nullptr;
 static void** g_pNotifFactoryVtbl = nullptr;
 static HANDLE g_hBalloonReady = nullptr;
+static volatile bool g_modUnloading = false;
 
 // Discord Process Monitor
 
@@ -211,6 +212,7 @@ static const WCHAR* TRAY_MUTEX_NAME = L"Local\\WindhawkDiscordBalloonTrayMutex";
 static void EnsureTrayIcon() {
     if (!g_hBalloonWnd) return;
     if (g_iconAdded) return;
+    if (g_modUnloading) return;  // Don't create icon if mod is unloading
     if (!IsAnyDiscordRunning()) return;
     
     // Only one process creates the tray icon
@@ -230,12 +232,14 @@ static void EnsureTrayIcon() {
         }
     }
     
-    // Check if icon already exists (another process might have created it)
-    NOTIFYICONDATAW nidCheck = {};
-    nidCheck.cbSize = sizeof(nidCheck);
-    nidCheck.hWnd = g_hBalloonWnd;
-    nidCheck.uID = 1;
-    nidCheck.uFlags = NIF_STATE;
+    // Don't proceed if unloading
+    if (g_modUnloading) {
+        if (g_ownsTray && g_hTrayMutex) {
+            ReleaseMutex(g_hTrayMutex);
+            g_ownsTray = false;
+        }
+        return;
+    }
     
     // Small delay to prevent race condition on first notification
     static bool s_firstTime = true;
@@ -261,7 +265,6 @@ static void EnsureTrayIcon() {
         Shell_NotifyIconW(NIM_SETVERSION, &nid);
         Wh_Log(L"Tray icon added (owner PID %lu)", GetCurrentProcessId());
     } else {
-        // Icon might already exist, try modify instead
         DWORD err = GetLastError();
         Wh_Log(L"NIM_ADD failed (error %lu), trying NIM_MODIFY", err);
     }
@@ -449,9 +452,15 @@ static void RemoveTrayIcon() {
         g_iconAdded = false;
         Wh_Log(L"Tray icon removed");
     }
-    if (g_ownsTray && g_hTrayMutex) {
-        ReleaseMutex(g_hTrayMutex);
-        g_ownsTray = false;
+    
+    // Release mutex ownership so no other process tries to recreate
+    if (g_hTrayMutex) {
+        if (g_ownsTray) {
+            ReleaseMutex(g_hTrayMutex);
+            g_ownsTray = false;
+        }
+        CloseHandle(g_hTrayMutex);
+        g_hTrayMutex = nullptr;
     }
 }
 
@@ -2024,6 +2033,8 @@ void Wh_ModSettingsChanged(void) {
 }
 
 void Wh_ModUninit(void) {
+    g_modUnloading = true;
+    
     RestoreVtableHooks();
     g_stopMonitor = true;
     
