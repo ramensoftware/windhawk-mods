@@ -144,49 +144,40 @@ LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
 // ---------------------------------------------------------------------------
 
 DWORD WINAPI HookThreadProc(LPVOID lpParam) {
-    // Initialize WMI for this thread
     InitWMI();
 
-    // Register OSD Class
     WNDCLASS wc = { 0 };
     wc.lpfnWndProc = OSDWndProc;
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = OSD_CLASS_NAME;
     RegisterClass(&wc);
 
-    // Create OSD Window
     int w = 220, h = 60;
     int x = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
     int y = GetSystemMetrics(SM_CYSCREEN) - 150;
     g_hOSD = CreateWindowEx(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, OSD_CLASS_NAME, L"", WS_POPUP, x, y, w, h, NULL, NULL, wc.hInstance, NULL);
 
-    // Set Hook
     g_hHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHook, GetModuleHandle(NULL), 0);
     
-    // Cleanup
-    if (g_hHook) UnhookWindowsHookEx(g_hHook);
-    if (g_hOSD) DestroyWindow(g_hOSD);
+    HANDLE hEvent = (HANDLE)lpParam;
+    if (hEvent) SetEvent(hEvent);
 
-    // WMI/COM cleanup moved here (per feedback)
-    if (pSvc) { pSvc->Release(); pSvc = NULL; }
-    if (pLoc) { pLoc->Release(); pLoc = NULL; }
-    CoUninitialize();
-
-    return 0;
-}
-
-    // The essential Message Loop
+    // MESSAGE LOOP - Keeps the thread alive
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
-    // Cleanup
+    // CLEANUP - Only happens when WM_QUIT is received
     if (g_hHook) UnhookWindowsHookEx(g_hHook);
     if (g_hOSD) DestroyWindow(g_hOSD);
-    return 0;
+    if (pSvc) { pSvc->Release(); pSvc = NULL; }
+    if (pLoc) { pLoc->Release(); pLoc = NULL; }
+    CoUninitialize();
 
+    return 0;
+}
 
 // ---------------------------------------------------------------------------
 // 4. Windhawk Tool Callbacks
@@ -197,7 +188,6 @@ BOOL WhTool_ModInit() {
     g_hookThread = CreateThread(NULL, 0, HookThreadProc, hThreadReadyEvent, 0, &g_hookThreadId);
     
     if (g_hookThread) {
-        // Wait briefly for the thread to set up
         WaitForSingleObject(hThreadReadyEvent, 2000);
         CloseHandle(hThreadReadyEvent);
         return TRUE;
@@ -210,10 +200,9 @@ void WhTool_ModUninit() {
         PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_hookThread, 1000);
         CloseHandle(g_hookThread);
+        g_hookThread = NULL;
+        g_hookThreadId = 0;
     }
-    if (pSvc) pSvc->Release();
-    if (pLoc) pLoc->Release();
-    CoUninitialize();
 }
 
 void WhTool_ModSettingsChanged() {}
@@ -380,5 +369,3 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
-
-
