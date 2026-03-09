@@ -18,12 +18,12 @@ Converts Discord's modern Windows toast notifications into balloon tips that app
 ![Picture](https://raw.githubusercontent.com/repensky/local-wh-mods/refs/heads/main/image.png)
 
 # WARNING!
-The use of third party Discord clients with this mod is **NOT** supported! This mod is designed for the official Discord app. It may or may not function properly with unofficial Discord clients. However some are reported to work fine with Vesktop clients. Try on your own risk.
+The use of third party Discord clients with this mod is **NOT** supported! This mod is designed for the official Discord app. It may or may not function properly with unofficial Discord clients. Try on your own risk.
 
 Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually. Otherwise, Discord may **crash** if not restarted on next notification.
 
 ## Requirement:
-Ensure EnableLegacyBalloonNotifications is set to 1 in ``HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications``
+Ensure **EnableLegacyBalloonNotifications** is set to **1** in ``HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications``
 
 ## Features:
 - Notification sender and message is shown in the balloon
@@ -39,6 +39,9 @@ This is tested on **Windows 10 21H2 IoT Enterprise LTSC**. It may or may not fun
 **Windows 11** versions may need to use **ExplorerPatcher** for notifications to be shown in a balloon format.
 
 ## Note 2:
+This mod **downloads** Discord emoji database only on first run for displaying emoji shortcode purposes as it does not support displaying all emojis.
+
+## Note 3:
 Balloon display duration is controlled by Windows.
 To change, navigate to **Control Panel > Ease of Access Center > Use the computer without a display > How long should Windows notification dialog boxes stay open**
 
@@ -47,6 +50,9 @@ To change, navigate to **Control Panel > Ease of Access Center > Use the compute
 
 // ==WindhawkModSettings==
 /*
+- showEmojiShortcodes: true
+  $name: Convert emojis to shortcodes
+  $description: When enabled, emojis are converted to Discord shortcode format (e.g. :smile:). Requires internet connection only on first run to download emoji database.
 - keepBasicEmoji: true
   $name: Use native unicode for supported emojis
   $description: When enabled, supported emojis are displayed as their Unicode symbols instead of being converted to shortcode format.
@@ -84,11 +90,13 @@ struct {
     bool showProfilePicture;
     IconSizeOption iconSize;
     bool keepBasicEmoji;
+    bool showEmojiShortcodes;
 } g_settings;
 
 static void LoadSettings() {
     g_settings.showProfilePicture = Wh_GetIntSetting(L"showProfilePicture", 1) != 0;
     g_settings.keepBasicEmoji = Wh_GetIntSetting(L"keepBasicEmoji", 1) != 0;
+    g_settings.showEmojiShortcodes = Wh_GetIntSetting(L"showEmojiShortcodes", 1) != 0;
     
     LPCWSTR iconSizeSetting = Wh_GetStringSetting(L"iconSize");
     if (wcscmp(iconSizeSetting, L"small") == 0) {
@@ -106,6 +114,12 @@ static void LoadSettings() {
 #ifndef MIN_VAL
 #define MIN_VAL(a, b) (((a) < (b)) ? (a) : (b))
 #endif
+
+// Global variables
+
+static void** g_pDocIOVtbl = nullptr;
+static void** g_pNotifFactoryVtbl = nullptr;
+static HANDLE g_hBalloonReady = nullptr;
 
 // Discord Process Monitor
 
@@ -133,13 +147,7 @@ static bool IsAnyDiscordRunning() {
     return found;
 }
 
-// Find and click Discord's own tray icon to wake it up
-
-struct TrayButtonInfo {
-    HWND hToolbar;
-    int buttonIndex;
-    DWORD ownerPid;
-};
+// Find and click Discord's own tray icon to bring it to foreground
 
 static void FocusDiscordWindow() {
     WCHAR discordPath[MAX_PATH] = {};
@@ -328,6 +336,7 @@ static HICON LoadPngAsIcon(const WCHAR* path, int targetSize, int drawSize, int 
     }
 
     pShutdown(token);
+    FreeLibrary(hGdiPlus);
     return hIcon;
 }
 
@@ -465,7 +474,9 @@ static void ShowTrayContextMenu(HWND hWnd) {
     DestroyMenu(hMenu);
     
     if (cmd == IDM_EXIT_DISCORD) {
-        // Find and terminate all Discord processes
+        DWORD currentPid = GetCurrentProcessId();
+        
+        // Find and terminate all other Discord processes first
         HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if (hSnap != INVALID_HANDLE_VALUE) {
             PROCESSENTRY32W pe = {};
@@ -473,7 +484,7 @@ static void ShowTrayContextMenu(HWND hWnd) {
             
             if (Process32FirstW(hSnap, &pe)) {
                 do {
-                    if (_wcsicmp(pe.szExeFile, L"Discord.exe") == 0) {
+                    if (_wcsicmp(pe.szExeFile, L"Discord.exe") == 0 && pe.th32ProcessID != currentPid) {
                         HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
                         if (hProc) {
                             TerminateProcess(hProc, 0);
@@ -485,6 +496,10 @@ static void ShowTrayContextMenu(HWND hWnd) {
             }
             CloseHandle(hSnap);
         }
+        
+        // Terminate current process last - this call does not return
+        Wh_Log(L"Terminating current Discord process (PID %lu)", currentPid);
+        TerminateProcess(GetCurrentProcess(), 0);
     }
     
     // Required to dismiss the menu if user clicks elsewhere
@@ -539,7 +554,7 @@ static LRESULT CALLBACK BalloonWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
         return 0;
     }
 
-        if (msg == WM_TRAY_CALLBACK) {
+    if (msg == WM_TRAY_CALLBACK) {
         UINT event = LOWORD(lParam);
         if (event == NIN_BALLOONUSERCLICK ||
             event == WM_LBUTTONUP ||
@@ -648,10 +663,14 @@ static DWORD WINAPI BalloonThread(LPVOID) {
 
     if (!g_hBalloonWnd) {
         Wh_Log(L"Failed to create balloon window");
+        if (g_hBalloonReady) SetEvent(g_hBalloonReady);
         return 1;
     }
-    
+
     Wh_Log(L"Balloon window created: %p", g_hBalloonWnd);
+
+    // Signal that we're ready
+    if (g_hBalloonReady) SetEvent(g_hBalloonReady);
     
     // Allow TaskbarCreated message through UIPI
     if (g_wmTaskbarCreated) {
@@ -757,176 +776,43 @@ static volatile LONG g_emojiCount = 0;
 static volatile LONG g_emojiTableReady = 0;
 
 static WCHAR g_emojiCachePath[MAX_PATH] = {};
-struct BasicGlyphEntry {
-    WCHAR codepoint;  // Single BMP codepoint
+
+static const WCHAR g_basicGlyphs[] = {
+    0x263A, 0x2639, 0x263B,
+    0x2764, 0x2763, 0x2765, 0x2661, 0x2665,
+    0x2B50, 0x2728, 0x2606, 0x2605, 0x269D,
+    0x2600, 0x2601, 0x2602, 0x2603, 0x2604, 0x26C5, 0x26C8, 0x2744, 0x26A1,
+    0x270C, 0x270B, 0x270A, 0x261D, 0x270D,
+    0x2714, 0x2716, 0x2718, 0x271D, 0x2721,
+    0x262E, 0x262F, 0x2622, 0x2623,
+    0x267B, 0x269B, 0x2699, 0x2696, 0x2694, 0x2695,
+    0x266A, 0x266B, 0x266C, 0x266D, 0x266E, 0x266F,
+    0x2B05, 0x2B06, 0x2B07, 0x27A1,
+    0x2194, 0x2195, 0x21A9, 0x21AA, 0x2934, 0x2935,
+    0x2660, 0x2663, 0x2666,
+    0x00A9, 0x00AE, 0x2122,
+    0x203C, 0x2049,
+    0x2757, 0x2753, 0x2754, 0x2755,
+    0x2733, 0x2734, 0x2747,
+    0x273F, 0x2740, 0x2742,
+    0x26AA, 0x26AB,
+    0x2B1B, 0x2B1C,
+    0x25AA, 0x25AB, 0x25FE, 0x25FD, 0x25FC, 0x25FB,
+    0x2B55, 0x274C, 0x274E,
+    0x26A0, 0x2139, 0x26D4, 0x267F,
+    0x2648, 0x2649, 0x264A, 0x264B, 0x264C, 0x264D,
+    0x264E, 0x264F, 0x2650, 0x2651, 0x2652, 0x2653,
+    0x260E, 0x2709, 0x270F, 0x2712,
+    0x26BD, 0x26BE, 0x26F3, 0x26F5, 0x26FA, 0x26FD, 0x26EA, 0x26F2,
+    0x2702, 0x2615,
+    0x231A, 0x231B, 0x23F0, 0x23F3,
+    0x23E9, 0x23EA, 0x23EB, 0x23EC,
+    0x25B6, 0x25C0
 };
 
-#define MAX_BASIC_GLYPHS 512
-
-static BasicGlyphEntry* g_basicGlyphTable = nullptr;
-static volatile LONG g_basicGlyphCount = 0;
-static volatile LONG g_basicGlyphReady = 0;
-static WCHAR g_basicGlyphCachePath[MAX_PATH] = {};
-
-static void GetBasicGlyphCachePath() {
-    WCHAR winDir[MAX_PATH];
-    GetWindowsDirectoryW(winDir, MAX_PATH);
-    swprintf_s(g_basicGlyphCachePath, L"%s\\Temp\\windhawk_discord_basic_glyphs.json", winDir);
-}
-
-static bool IsBasicGlyphCacheFresh() {
-    if (g_basicGlyphCachePath[0] == L'\0') return false;
-    WIN32_FILE_ATTRIBUTE_DATA attrs;
-    if (!GetFileAttributesExW(g_basicGlyphCachePath, GetFileExInfoStandard, &attrs)) return false;
-    FILETIME now;
-    GetSystemTimeAsFileTime(&now);
-    ULARGE_INTEGER fileTime, currentTime;
-    fileTime.LowPart = attrs.ftLastWriteTime.dwLowDateTime;
-    fileTime.HighPart = attrs.ftLastWriteTime.dwHighDateTime;
-    currentTime.LowPart = now.dwLowDateTime;
-    currentTime.HighPart = now.dwHighDateTime;
-    ULONGLONG sevenDays = (ULONGLONG)7 * 24 * 60 * 60 * 10000000ULL;
-    return (currentTime.QuadPart - fileTime.QuadPart) < sevenDays;
-}
-
-static char* DownloadBasicGlyphJson(DWORD* outSize) {
-    *outSize = 0;
-    
-    HINTERNET hInternet = InternetOpenW(L"WindhawkDiscordBalloon/1.0",
-        INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hInternet) return nullptr;
-    
-    HINTERNET hUrl = InternetOpenUrlW(hInternet,
-        L"https://raw.githubusercontent.com/repensky/local-wh-mods/refs/heads/main/discord-basic-glyphs.json", //Downloads basic glyphs list
-        nullptr, 0,
-        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE,
-        0);
-    
-    if (!hUrl) {
-        InternetCloseHandle(hInternet);
-        return nullptr;
-    }
-    
-    DWORD capacity = 32 * 1024;
-    char* buf = (char*)HeapAlloc(GetProcessHeap(), 0, capacity);
-    if (!buf) {
-        InternetCloseHandle(hUrl);
-        InternetCloseHandle(hInternet);
-        return nullptr;
-    }
-    
-    DWORD totalRead = 0;
-    DWORD bytesRead;
-    char tmp[4096];
-    while (InternetReadFile(hUrl, tmp, sizeof(tmp), &bytesRead) && bytesRead > 0) {
-        if (totalRead + bytesRead >= capacity) {
-            capacity *= 2;
-            char* newBuf = (char*)HeapReAlloc(GetProcessHeap(), 0, buf, capacity);
-            if (!newBuf) { HeapFree(GetProcessHeap(), 0, buf); buf = nullptr; break; }
-            buf = newBuf;
-        }
-        if (buf) {
-            memcpy(buf + totalRead, tmp, bytesRead);
-            totalRead += bytesRead;
-        }
-    }
-    
-    InternetCloseHandle(hUrl);
-    InternetCloseHandle(hInternet);
-    
-    if (buf) {
-        buf[totalRead] = '\0';
-        *outSize = totalRead;
-        Wh_Log(L"Downloaded basic glyph JSON: %lu bytes", totalRead);
-    }
-    return buf;
-}
-
-static void SaveBasicGlyphCache(const char* json, DWORD size) {
-    if (g_basicGlyphCachePath[0] == L'\0' || !json) return;
-    HANDLE hFile = CreateFileW(g_basicGlyphCachePath, GENERIC_WRITE, 0, nullptr,
-        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile != INVALID_HANDLE_VALUE) {
-        DWORD written;
-        WriteFile(hFile, json, size, &written, nullptr);
-        CloseHandle(hFile);
-    }
-}
-
-static char* LoadBasicGlyphCache(DWORD* outSize) {
-    *outSize = 0;
-    if (g_basicGlyphCachePath[0] == L'\0') return nullptr;
-    HANDLE hFile = CreateFileW(g_basicGlyphCachePath, GENERIC_READ, FILE_SHARE_READ,
-        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) return nullptr;
-    DWORD fileSize = GetFileSize(hFile, nullptr);
-    if (fileSize == 0 || fileSize > 1 * 1024 * 1024) {
-        CloseHandle(hFile);
-        return nullptr;
-    }
-    char* buf = (char*)HeapAlloc(GetProcessHeap(), 0, fileSize + 1);
-    if (!buf) { CloseHandle(hFile); return nullptr; }
-    DWORD bytesRead;
-    if (!ReadFile(hFile, buf, fileSize, &bytesRead, nullptr)) {
-        HeapFree(GetProcessHeap(), 0, buf);
-        CloseHandle(hFile);
-        return nullptr;
-    }
-    CloseHandle(hFile);
-    buf[bytesRead] = '\0';
-    *outSize = bytesRead;
-    return buf;
-}
-
-static void ParseBasicGlyphJson(const char* json, DWORD jsonSize) {
-    if (!json || !g_basicGlyphTable) return;
-    
-    // Format: { "glyphs": ["263A", "2639", "2764", ...] }
-    const char* p = strstr(json, "\"glyphs\"");
-    if (!p) { Wh_Log(L"No 'glyphs' key in basic glyph JSON"); return; }
-    
-    p += 8;
-    while (*p == ' ' || *p == ':' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-    if (*p != '[') { Wh_Log(L"Expected '[' after glyphs"); return; }
-    p++;
-    
-    LONG count = 0;
-    
-    while (*p && count < MAX_BASIC_GLYPHS) {
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == ',') p++;
-        if (*p == ']') break;
-        
-        if (*p == '"') {
-            p++;
-            char hex[8] = {};
-            int hi = 0;
-            while (*p && *p != '"' && hi < 6) {
-                hex[hi++] = *p++;
-            }
-            hex[hi] = '\0';
-            if (*p == '"') p++;
-            
-            unsigned long val = strtoul(hex, nullptr, 16);
-            if (val > 0 && val <= 0xFFFF) {
-                g_basicGlyphTable[count].codepoint = (WCHAR)val;
-                count++;
-            }
-        } else {
-            p++;
-        }
-    }
-    
-    InterlockedExchange(&g_basicGlyphCount, count);
-    InterlockedExchange(&g_basicGlyphReady, 1);
-    Wh_Log(L"Loaded %ld basic glyph entries", count);
-}
-
 static bool IsBasicEmojiGlyph(WCHAR c) {
-    if (!InterlockedCompareExchange(&g_basicGlyphReady, 1, 1)) return false;
-    
-    LONG count = g_basicGlyphCount;
-    for (LONG i = 0; i < count; i++) {
-        if (g_basicGlyphTable[i].codepoint == c) return true;
+    for (size_t i = 0; i < ARRAYSIZE(g_basicGlyphs); i++) {
+        if (g_basicGlyphs[i] == c) return true;
     }
     return false;
 }
@@ -943,93 +829,19 @@ static int IsBasicEmojiSequence(const WCHAR* str) {
     return len;
 }
 
-static const WCHAR* BASIC_GLYPH_DOWNLOAD_MUTEX_NAME = L"Global\\WindhawkDiscordBasicGlyphDownload";
-
-static DWORD WINAPI BasicGlyphLoadThread(LPVOID) {
-    GetBasicGlyphCachePath();
-    
-    char* json = nullptr;
-    DWORD jsonSize = 0;
-    
-    if (IsBasicGlyphCacheFresh()) {
-        json = LoadBasicGlyphCache(&jsonSize);
-        if (json && jsonSize > 0) {
-            ParseBasicGlyphJson(json, jsonSize);
-            HeapFree(GetProcessHeap(), 0, json);
-            return 0;
-        }
-        if (json) HeapFree(GetProcessHeap(), 0, json);
-    }
-    
-    HANDLE hDownloadMutex = CreateMutexW(nullptr, FALSE, BASIC_GLYPH_DOWNLOAD_MUTEX_NAME);
-    if (!hDownloadMutex) {
-        json = LoadBasicGlyphCache(&jsonSize);
-        if (json && jsonSize > 0) {
-            ParseBasicGlyphJson(json, jsonSize);
-            HeapFree(GetProcessHeap(), 0, json);
-        } else if (json) {
-            HeapFree(GetProcessHeap(), 0, json);
-        }
-        return 0;
-    }
-    
-    DWORD waitResult = WaitForSingleObject(hDownloadMutex, 30000);
-    
-    if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_ABANDONED) {
-        if (IsBasicGlyphCacheFresh()) {
-            json = LoadBasicGlyphCache(&jsonSize);
-            if (json && jsonSize > 0) {
-                Wh_Log(L"Another process already downloaded basic glyph cache");
-                ParseBasicGlyphJson(json, jsonSize);
-                HeapFree(GetProcessHeap(), 0, json);
-                ReleaseMutex(hDownloadMutex);
-                CloseHandle(hDownloadMutex);
-                return 0;
-            }
-            if (json) HeapFree(GetProcessHeap(), 0, json);
-        }
-        
-        Wh_Log(L"Downloading basic glyph JSON (PID %lu)", GetCurrentProcessId());
-        json = DownloadBasicGlyphJson(&jsonSize);
-        if (json && jsonSize > 0) {
-            SaveBasicGlyphCache(json, jsonSize);
-            ParseBasicGlyphJson(json, jsonSize);
-            HeapFree(GetProcessHeap(), 0, json);
-        } else {
-            if (json) HeapFree(GetProcessHeap(), 0, json);
-            json = LoadBasicGlyphCache(&jsonSize);
-            if (json && jsonSize > 0) {
-                Wh_Log(L"Using stale basic glyph cache as fallback");
-                ParseBasicGlyphJson(json, jsonSize);
-                HeapFree(GetProcessHeap(), 0, json);
-            } else {
-                Wh_Log(L"No basic glyph data available");
-                if (json) HeapFree(GetProcessHeap(), 0, json);
-            }
-        }
-        
-        ReleaseMutex(hDownloadMutex);
-    } else {
-        Wh_Log(L"Basic glyph download mutex timeout, waiting for cache...");
-        Sleep(5000);
-        json = LoadBasicGlyphCache(&jsonSize);
-        if (json && jsonSize > 0) {
-            ParseBasicGlyphJson(json, jsonSize);
-            HeapFree(GetProcessHeap(), 0, json);
-        } else {
-            Wh_Log(L"No basic glyph data available after wait");
-            if (json) HeapFree(GetProcessHeap(), 0, json);
-        }
-    }
-    
-    CloseHandle(hDownloadMutex);
-    return 0;
-}
-
 static void GetEmojiCachePath() {
-    WCHAR winDir[MAX_PATH];
-    GetWindowsDirectoryW(winDir, MAX_PATH);
-    swprintf_s(g_emojiCachePath, L"%s\\Temp\\windhawk_discord_emojis.json", winDir);
+    WCHAR storagePath[MAX_PATH] = {};
+    size_t len = Wh_GetModStoragePath(storagePath, MAX_PATH);
+    if (len > 0) {
+        // Ensure directory exists
+        CreateDirectoryW(storagePath, nullptr);
+        swprintf_s(g_emojiCachePath, L"%s\\windhawk_discord_emojis.json", storagePath);
+    } else {
+        // Fallback
+        WCHAR winDir[MAX_PATH];
+        GetWindowsDirectoryW(winDir, MAX_PATH);
+        swprintf_s(g_emojiCachePath, L"%s\\Temp\\windhawk_discord_emojis.json", winDir);
+    }
 }
 
 // Download the JSON file from GitHub
@@ -1122,19 +934,10 @@ static char* LoadEmojiCache(DWORD* outSize) {
     return buf;
 }
 
-static bool IsEmojiCacheFresh() {
+static bool IsEmojiCachePresent() {
     if (g_emojiCachePath[0] == L'\0') return false;
-    WIN32_FILE_ATTRIBUTE_DATA attrs;
-    if (!GetFileAttributesExW(g_emojiCachePath, GetFileExInfoStandard, &attrs)) return false;
-    FILETIME now;
-    GetSystemTimeAsFileTime(&now);
-    ULARGE_INTEGER fileTime, currentTime;
-    fileTime.LowPart = attrs.ftLastWriteTime.dwLowDateTime;
-    fileTime.HighPart = attrs.ftLastWriteTime.dwHighDateTime;
-    currentTime.LowPart = now.dwLowDateTime;
-    currentTime.HighPart = now.dwHighDateTime;
-    ULONGLONG sevenDays = (ULONGLONG)7 * 24 * 60 * 60 * 10000000ULL;
-    return (currentTime.QuadPart - fileTime.QuadPart) < sevenDays;
+    DWORD attrs = GetFileAttributesW(g_emojiCachePath);
+    return (attrs != INVALID_FILE_ATTRIBUTES);
 }
 
 // UTF-8 decode helper: decode one codepoint from UTF-8, advance pointer
@@ -1379,41 +1182,41 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
 static const WCHAR* EMOJI_DOWNLOAD_MUTEX_NAME = L"Global\\WindhawkDiscordEmojiDownload";
 
 static DWORD WINAPI EmojiLoadThread(LPVOID) {
+    // If shortcodes are disabled, don't bother loading or downloading
+    if (!g_settings.showEmojiShortcodes) {
+        Wh_Log(L"Emoji shortcodes disabled, skipping emoji database load");
+        return 0;
+    }
+    
     GetEmojiCachePath();
     
     char* json = nullptr;
     DWORD jsonSize = 0;
     
-    // Try fresh cache first - no lock needed for reading
-    if (IsEmojiCacheFresh()) {
+    // Try loading existing cache first - if present, use it and skip download
+    if (IsEmojiCachePresent()) {
         json = LoadEmojiCache(&jsonSize);
         if (json && jsonSize > 0) {
             ParseEmojiJson(json, jsonSize);
             HeapFree(GetProcessHeap(), 0, json);
+            Wh_Log(L"Loaded emoji data from existing cache");
             return 0;
         }
         if (json) HeapFree(GetProcessHeap(), 0, json);
     }
     
-    // Need to download - use a named mutex so only one process downloads
+    // No cache exists - need to download
     HANDLE hDownloadMutex = CreateMutexW(nullptr, FALSE, EMOJI_DOWNLOAD_MUTEX_NAME);
     if (!hDownloadMutex) {
-        // Can't create mutex, try stale cache
-        json = LoadEmojiCache(&jsonSize);
-        if (json && jsonSize > 0) {
-            ParseEmojiJson(json, jsonSize);
-            HeapFree(GetProcessHeap(), 0, json);
-        } else if (json) {
-            HeapFree(GetProcessHeap(), 0, json);
-        }
+        Wh_Log(L"Failed to create download mutex, emoji conversion disabled");
         return 0;
     }
     
-    DWORD waitResult = WaitForSingleObject(hDownloadMutex, 30000);  // 30s timeout
+    DWORD waitResult = WaitForSingleObject(hDownloadMutex, 30000);
     
     if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_ABANDONED) {
-        // Got the lock - check if another process already downloaded while we waited
-        if (IsEmojiCacheFresh()) {
+        // Check again if another process downloaded while we waited
+        if (IsEmojiCachePresent()) {
             json = LoadEmojiCache(&jsonSize);
             if (json && jsonSize > 0) {
                 Wh_Log(L"Another process already downloaded emoji cache");
@@ -1432,32 +1235,25 @@ static DWORD WINAPI EmojiLoadThread(LPVOID) {
             SaveEmojiCache(json, jsonSize);
             ParseEmojiJson(json, jsonSize);
             HeapFree(GetProcessHeap(), 0, json);
+            Wh_Log(L"Emoji data downloaded and cached successfully");
         } else {
+            Wh_Log(L"Failed to download emoji data - emoji conversion will be disabled");
             if (json) HeapFree(GetProcessHeap(), 0, json);
-            // Fallback to stale cache
-            json = LoadEmojiCache(&jsonSize);
-            if (json && jsonSize > 0) {
-                Wh_Log(L"Using stale emoji cache as fallback");
-                ParseEmojiJson(json, jsonSize);
-                HeapFree(GetProcessHeap(), 0, json);
-            } else {
-                Wh_Log(L"No emoji data available");
-                if (json) HeapFree(GetProcessHeap(), 0, json);
-            }
         }
         
         ReleaseMutex(hDownloadMutex);
     } else {
-        // Timeout or error - another process is probably downloading, wait and use cache
+        // Timeout - another process might be downloading, wait and check
         Wh_Log(L"Emoji download mutex timeout, waiting for cache...");
         Sleep(5000);
-        json = LoadEmojiCache(&jsonSize);
-        if (json && jsonSize > 0) {
-            ParseEmojiJson(json, jsonSize);
-            HeapFree(GetProcessHeap(), 0, json);
-        } else {
-            Wh_Log(L"No emoji data available after wait");
-            if (json) HeapFree(GetProcessHeap(), 0, json);
+        if (IsEmojiCachePresent()) {
+            json = LoadEmojiCache(&jsonSize);
+            if (json && jsonSize > 0) {
+                ParseEmojiJson(json, jsonSize);
+                HeapFree(GetProcessHeap(), 0, json);
+            } else if (json) {
+                HeapFree(GetProcessHeap(), 0, json);
+            }
         }
     }
     
@@ -1483,7 +1279,18 @@ static int GetEmojiLength(const WCHAR* str) {
         return len;
     }
     
-    // Single-char emoji in BMP
+    // Check if it's a basic glyph from our table
+    if (IsBasicEmojiGlyph(c)) {
+        int len = 1;
+        while (str[len] >= 0xFE00 && str[len] <= 0xFE0F) len++;
+        if (str[len] == 0x200D) {
+            int next = GetEmojiLength(str + len + 1);
+            if (next > 0) len += 1 + next;
+        }
+        return len;
+    }
+    
+    // Other known emoji ranges in BMP
     if ((c >= 0x2600 && c <= 0x27BF) ||  // Misc symbols, dingbats
         (c >= 0x2700 && c <= 0x27BF) ||
         (c >= 0x2B00 && c <= 0x2BFF) ||
@@ -1494,8 +1301,7 @@ static int GetEmojiLength(const WCHAR* str) {
         (c >= 0x2900 && c <= 0x297F) ||  // Supplemental arrows
         (c == 0x200D) ||                  // ZWJ
         (c == 0x20E3) ||                  // Combining enclosing keycap
-        (c >= 0xFE00 && c <= 0xFE0F) ||  // Variation selectors
-        (c == 0x00A9) || (c == 0x00AE))  // Copyright/reserved glyphs © ®
+        (c >= 0xFE00 && c <= 0xFE0F))    // Variation selectors
     {
         int len = 1;
         while (str[len] >= 0xFE00 && str[len] <= 0xFE0F) len++;
@@ -1531,6 +1337,143 @@ static const WCHAR* LookupEmoji(const WCHAR* str, int* matchLen) {
     return nullptr;
 }
 
+static const WCHAR* LookupBasicGlyphName(WCHAR c) {
+    // Hardcoded mappings for basic glyphs that may not be in Discord's database
+    // or are stored with variation selectors
+    switch (c) {
+        case 0x263A: return L":relaxed:";       // ☺
+        case 0x2639: return L":frowning2:";     // ☹
+        case 0x263B: return L":smile:";         // ☻
+        case 0x2764: return L":heart:";         // ❤
+        case 0x2763: return L":heart_exclamation:"; // ❣
+        case 0x2765: return L":heart_decoration:";  // ❥
+        case 0x2661: return L":heart_outline:"; // ♡
+        case 0x2665: return L":hearts:";        // ♥
+        case 0x2B50: return L":star:";          // ⭐
+        case 0x2728: return L":sparkles:";      // ✨
+        case 0x2606: return L":star_outline:";  // ☆
+        case 0x2605: return L":star:";         // ★
+        case 0x269D: return L":star_outlined:"; // ⚝
+        case 0x2600: return L":sunny:";         // ☀
+        case 0x2601: return L":cloud:";         // ☁
+        case 0x2602: return L":umbrella2:";     // ☂
+        case 0x2603: return L":snowman2:";      // ☃
+        case 0x2604: return L":comet:";         // ☄
+        case 0x26C5: return L":partly_sunny:";  // ⛅
+        case 0x26C8: return L":thunder_cloud_rain:"; // ⛈
+        case 0x2744: return L":snowflake:";     // ❄
+        case 0x26A1: return L":zap:";           // ⚡
+        case 0x270C: return L":v:";             // ✌
+        case 0x270B: return L":raised_hand:";   // ✋
+        case 0x270A: return L":fist:";          // ✊
+        case 0x261D: return L":point_up:";      // ☝
+        case 0x270D: return L":writing_hand:";  // ✍
+        case 0x2714: return L":heavy_check_mark:"; // ✔
+        case 0x2716: return L":heavy_multiplication_x:"; // ✖
+        case 0x2718: return L":x:";             // ✘
+        case 0x271D: return L":cross:";         // ✝
+        case 0x2721: return L":star_of_david:"; // ✡
+        case 0x262E: return L":peace:";         // ☮
+        case 0x262F: return L":yin_yang:";      // ☯
+        case 0x2622: return L":radioactive:";   // ☢
+        case 0x2623: return L":biohazard:";     // ☣
+        case 0x267B: return L":recycle:";       // ♻
+        case 0x269B: return L":atom:";          // ⚛
+        case 0x2699: return L":gear:";          // ⚙
+        case 0x2696: return L":scales:";        // ⚖
+        case 0x2694: return L":crossed_swords:"; // ⚔
+        case 0x2695: return L":medical_symbol:"; // ⚕
+        case 0x266A: return L":eighth_note:";   // ♪
+        case 0x266B: return L":beamed_eighth_notes:"; // ♫
+        case 0x266C: return L":beamed_sixteenth_notes:"; // ♬
+        case 0x266D: return L":flat:";          // ♭
+        case 0x266E: return L":natural:";       // ♮
+        case 0x266F: return L":sharp:";         // ♯
+        case 0x2B05: return L":arrow_left:";    // ⬅
+        case 0x2B06: return L":arrow_up:";      // ⬆
+        case 0x2B07: return L":arrow_down:";    // ⬇
+        case 0x27A1: return L":arrow_right:";   // ➡
+        case 0x2194: return L":left_right_arrow:"; // ↔
+        case 0x2195: return L":arrow_up_down:"; // ↕
+        case 0x21A9: return L":leftwards_arrow_with_hook:"; // ↩
+        case 0x21AA: return L":arrow_right_hook:"; // ↪
+        case 0x2934: return L":arrow_heading_up:"; // ⤴
+        case 0x2935: return L":arrow_heading_down:"; // ⤵
+        case 0x2660: return L":spades:";        // ♠
+        case 0x2663: return L":clubs:";         // ♣
+        case 0x2666: return L":diamonds:";      // ♦
+        case 0x00A9: return L":copyright:";     // ©
+        case 0x00AE: return L":registered:";    // ®
+        case 0x2122: return L":tm:";            // ™
+        case 0x203C: return L":bangbang:";      // ‼
+        case 0x2049: return L":interrobang:";   // ⁉
+        case 0x2757: return L":exclamation:";   // ❗
+        case 0x2753: return L":question:";      // ❓
+        case 0x2754: return L":grey_question:"; // ❔
+        case 0x2755: return L":grey_exclamation:"; // ❕
+        case 0x2733: return L":eight_spoked_asterisk:"; // ✳
+        case 0x2734: return L":eight_pointed_star:"; // ✴
+        case 0x2747: return L":sparkle:";       // ❇
+        case 0x273F: return L":flower:";        // ✿
+        case 0x2740: return L":flower2:";       // ❀
+        case 0x2742: return L":flower3:";       // ❂
+        case 0x26AA: return L":white_circle:";  // ⚪
+        case 0x26AB: return L":black_circle:";  // ⚫
+        case 0x2B1B: return L":black_large_square:"; // ⬛
+        case 0x2B1C: return L":white_large_square:"; // ⬜
+        case 0x25AA: return L":black_small_square:"; // ▪
+        case 0x25AB: return L":white_small_square:"; // ▫
+        case 0x25FE: return L":black_medium_small_square:"; // ◾
+        case 0x25FD: return L":white_medium_small_square:"; // ◽
+        case 0x25FC: return L":black_medium_square:"; // ◼
+        case 0x25FB: return L":white_medium_square:"; // ◻
+        case 0x2B55: return L":o:";             // ⭕
+        case 0x274C: return L":x:";             // ❌
+        case 0x274E: return L":negative_squared_cross_mark:"; // ❎
+        case 0x26A0: return L":warning:";       // ⚠
+        case 0x2139: return L":information_source:"; // ℹ
+        case 0x26D4: return L":no_entry:";      // ⛔
+        case 0x267F: return L":wheelchair:";    // ♿
+        case 0x2648: return L":aries:";         // ♈
+        case 0x2649: return L":taurus:";        // ♉
+        case 0x264A: return L":gemini:";        // ♊
+        case 0x264B: return L":cancer:";        // ♋
+        case 0x264C: return L":leo:";           // ♌
+        case 0x264D: return L":virgo:";         // ♍
+        case 0x264E: return L":libra:";         // ♎
+        case 0x264F: return L":scorpius:";      // ♏
+        case 0x2650: return L":sagittarius:";   // ♐
+        case 0x2651: return L":capricorn:";     // ♑
+        case 0x2652: return L":aquarius:";      // ♒
+        case 0x2653: return L":pisces:";        // ♓
+        case 0x260E: return L":telephone:";     // ☎
+        case 0x2709: return L":envelope:";      // ✉
+        case 0x270F: return L":pencil2:";       // ✏
+        case 0x2712: return L":black_nib:";     // ✒
+        case 0x26BD: return L":soccer:";        // ⚽
+        case 0x26BE: return L":baseball:";      // ⚾
+        case 0x26F3: return L":golf:";          // ⛳
+        case 0x26F5: return L":sailboat:";      // ⛵
+        case 0x26FA: return L":tent:";          // ⛺
+        case 0x26FD: return L":fuelpump:";      // ⛽
+        case 0x26EA: return L":church:";        // ⛪
+        case 0x26F2: return L":fountain:";      // ⛲
+        case 0x2702: return L":scissors:";      // ✂
+        case 0x2615: return L":coffee:";        // ☕
+        case 0x231A: return L":watch:";         // ⌚
+        case 0x231B: return L":hourglass:";     // ⌛
+        case 0x23F0: return L":alarm_clock:";   // ⏰
+        case 0x23F3: return L":hourglass_flowing_sand:"; // ⏳
+        case 0x23E9: return L":fast_forward:";  // ⏩
+        case 0x23EA: return L":rewind:";        // ⏪
+        case 0x23EB: return L":arrow_double_up:"; // ⏫
+        case 0x23EC: return L":arrow_double_down:"; // ⏬
+        case 0x25B6: return L":arrow_forward:"; // ▶
+        case 0x25C0: return L":arrow_backward:"; // ◀
+        default: return nullptr;
+    }
+}
+
 static void ConvertEmojisToNames(WCHAR* str, int bufSize) {
     if (!str || !str[0]) return;
     
@@ -1540,11 +1483,11 @@ static void ConvertEmojisToNames(WCHAR* str, int bufSize) {
     int srcLen = (int)wcslen(str);
     
     while (srcPos < srcLen && tempPos < (int)ARRAYSIZE(temp) - 32) {
-        // If keepBasicEmoji is enabled, check if this is a basic BMP emoji to exempt
+        // If keepBasicEmoji is enabled, check if this is a basic BMP emoji to preserve as unicode
         if (g_settings.keepBasicEmoji) {
             int basicLen = IsBasicEmojiSequence(str + srcPos);
             if (basicLen > 0) {
-                // Copy the basic emoji glyph as-is (skip the lookup)
+                // Copy the basic emoji glyph as-is (skip shortcode conversion)
                 for (int k = 0; k < basicLen && tempPos < (int)ARRAYSIZE(temp) - 1; k++) {
                     temp[tempPos++] = str[srcPos++];
                 }
@@ -1552,31 +1495,41 @@ static void ConvertEmojisToNames(WCHAR* str, int bufSize) {
             }
         }
         
-        // Try to match a known emoji
-        int matchLen = 0;
-        const WCHAR* name = LookupEmoji(str + srcPos, &matchLen);
-        
-        if (name) {
-            int nameLen = (int)wcslen(name);
-            if (tempPos + nameLen < (int)ARRAYSIZE(temp) - 1) {
-                wcscpy(temp + tempPos, name);
-                tempPos += nameLen;
-                srcPos += matchLen;
-                continue;
+        // Try shortcode lookup if enabled
+        if (g_settings.showEmojiShortcodes) {
+            // First check hardcoded basic glyph names
+            const WCHAR* basicName = LookupBasicGlyphName(str[srcPos]);
+            if (basicName) {
+                int nameLen = (int)wcslen(basicName);
+                if (tempPos + nameLen < (int)ARRAYSIZE(temp) - 1) {
+                    wcscpy(temp + tempPos, basicName);
+                    tempPos += nameLen;
+                    srcPos++;
+                    // Skip variation selectors
+                    while (srcPos < srcLen && str[srcPos] >= 0xFE00 && str[srcPos] <= 0xFE0F) srcPos++;
+                    continue;
+                }
+            }
+            
+            // Then try database lookup
+            int matchLen = 0;
+            const WCHAR* name = LookupEmoji(str + srcPos, &matchLen);
+            
+            if (name) {
+                int nameLen = (int)wcslen(name);
+                if (tempPos + nameLen < (int)ARRAYSIZE(temp) - 1) {
+                    wcscpy(temp + tempPos, name);
+                    tempPos += nameLen;
+                    srcPos += matchLen;
+                    continue;
+                }
             }
         }
         
-        // Check if it's an unknown emoji (surrogate pair not in table)
+        // Check if it's an emoji (surrogate pair or known emoji codepoint)
         int emojiLen = GetEmojiLength(str + srcPos);
         if (emojiLen > 0) {
-            if (g_settings.keepBasicEmoji && IsBasicEmojiGlyph(str[srcPos])) {
-                temp[tempPos++] = str[srcPos++];
-                while (srcPos < srcLen && str[srcPos] >= 0xFE00 && str[srcPos] <= 0xFE0F) {
-                    temp[tempPos++] = str[srcPos++];
-                }
-                continue;
-            }
-            // Unknown emoji - skip it entirely
+            // Emoji not in database or shortcodes disabled - skip it entirely
             srcPos += emojiLen;
             continue;
         }
@@ -1840,6 +1793,7 @@ static void TryHookLoadXml(void* pXmlDocInstance) {
 
     void** ioVtbl = *(void***)pDocIO;
     if (PatchVtableEntry(ioVtbl, 6, (void*)LoadXml_Hook, (void**)&LoadXml_Orig)) {
+        g_pDocIOVtbl = ioVtbl;
         g_loadXmlHooked = true;
         Wh_Log(L"Hooked LoadXml via vtable patch");
     }
@@ -1885,6 +1839,7 @@ static void TryHookNotificationFactory(void* pFactory) {
     if (!vtbl) return;
 
     if (PatchVtableEntry(vtbl, 6, (void*)CreateToastNotification_Hook, (void**)&CreateToastNotification_Orig)) {
+        g_pNotifFactoryVtbl = vtbl;
         g_notifFactoryHooked = true;
         Wh_Log(L"Hooked CreateToastNotification via vtable patch");
     }
@@ -1984,6 +1939,38 @@ HRESULT WINAPI RoActivateInstance_Hook(HSTRING classId, void** instance) {
     return hr;
 }
 
+// Vtable restore hooks
+
+static void RestoreVtableHooks() {
+    if (g_loadXmlHooked && g_pDocIOVtbl && LoadXml_Orig) {
+        DWORD oldProtect;
+        if (VirtualProtect(&g_pDocIOVtbl[6], sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+            g_pDocIOVtbl[6] = (void*)LoadXml_Orig;
+            VirtualProtect(&g_pDocIOVtbl[6], sizeof(void*), oldProtect, &oldProtect);
+            Wh_Log(L"Restored LoadXml vtable entry");
+        } else if (VirtualProtect(&g_pDocIOVtbl[6], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            g_pDocIOVtbl[6] = (void*)LoadXml_Orig;
+            VirtualProtect(&g_pDocIOVtbl[6], sizeof(void*), oldProtect, &oldProtect);
+            Wh_Log(L"Restored LoadXml vtable entry");
+        }
+        g_loadXmlHooked = false;
+    }
+
+    if (g_notifFactoryHooked && g_pNotifFactoryVtbl && CreateToastNotification_Orig) {
+        DWORD oldProtect;
+        if (VirtualProtect(&g_pNotifFactoryVtbl[6], sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+            g_pNotifFactoryVtbl[6] = (void*)CreateToastNotification_Orig;
+            VirtualProtect(&g_pNotifFactoryVtbl[6], sizeof(void*), oldProtect, &oldProtect);
+            Wh_Log(L"Restored CreateToastNotification vtable entry");
+        } else if (VirtualProtect(&g_pNotifFactoryVtbl[6], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            g_pNotifFactoryVtbl[6] = (void*)CreateToastNotification_Orig;
+            VirtualProtect(&g_pNotifFactoryVtbl[6], sizeof(void*), oldProtect, &oldProtect);
+            Wh_Log(L"Restored CreateToastNotification vtable entry");
+        }
+        g_notifFactoryHooked = false;
+    }
+}
+
 // Windhawk functions
 
 BOOL Wh_ModInit(void) {
@@ -2003,20 +1990,17 @@ BOOL Wh_ModInit(void) {
     g_dynamicEmojiTable = (DynamicEmojiEntry*)HeapAlloc(GetProcessHeap(), 
         HEAP_ZERO_MEMORY, sizeof(DynamicEmojiEntry) * MAX_EMOJI_ENTRIES);
     
-    // Allocate basic glyph table
-    g_basicGlyphTable = (BasicGlyphEntry*)HeapAlloc(GetProcessHeap(),
-        HEAP_ZERO_MEMORY, sizeof(BasicGlyphEntry) * MAX_BASIC_GLYPHS);
-    
     // Start emoji loading in background
     HANDLE hEmojiThread = CreateThread(nullptr, 0, EmojiLoadThread, nullptr, 0, nullptr);
     if (hEmojiThread) CloseHandle(hEmojiThread);
     
-    // Start basic glyph loading in background
-    HANDLE hGlyphThread = CreateThread(nullptr, 0, BasicGlyphLoadThread, nullptr, 0, nullptr);
-    if (hGlyphThread) CloseHandle(hGlyphThread);
-
+    g_hBalloonReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hThread = CreateThread(nullptr, 0, BalloonThread, nullptr, 0, nullptr);
-    Sleep(200);
+    if (g_hBalloonReady) {
+        WaitForSingleObject(g_hBalloonReady, 5000);  // Wait up to 5 seconds
+        CloseHandle(g_hBalloonReady);
+        g_hBalloonReady = nullptr;
+    }
     
     g_stopMonitor = false;
     g_hMonitorThread = CreateThread(nullptr, 0, DiscordMonitorThread, nullptr, 0, nullptr);
@@ -2040,7 +2024,9 @@ void Wh_ModSettingsChanged(void) {
 }
 
 void Wh_ModUninit(void) {
+    RestoreVtableHooks();
     g_stopMonitor = true;
+    
     if (g_hMonitorThread) {
         WaitForSingleObject(g_hMonitorThread, 3000);
         CloseHandle(g_hMonitorThread);
@@ -2077,11 +2063,6 @@ void Wh_ModUninit(void) {
     if (g_dynamicEmojiTable) {
         HeapFree(GetProcessHeap(), 0, g_dynamicEmojiTable);
         g_dynamicEmojiTable = nullptr;
-    }
-    
-    if (g_basicGlyphTable) {
-        HeapFree(GetProcessHeap(), 0, g_basicGlyphTable);
-        g_basicGlyphTable = nullptr;
     }
 
     DeleteCriticalSection(&g_cs);
