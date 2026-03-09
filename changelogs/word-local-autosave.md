@@ -1,3 +1,34 @@
+## 2.1 ([Mar 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b470cc70adf572d7d28d329cea2b3e6a66605280/mods/word-local-autosave.wh.cpp))
+
+- Version bumped to 2.1
+- Completely redesigned safety system from timing-based to state-based approach
+- Removed keyboard state snapshot comparison - unnecessary with instant checks
+- Removed message queue checking via PeekMessageW - unnecessary with instant checks
+- Removed HasQuietPeriodPassed() function - no longer needed
+- Removed HasPendingKeyboardMessages() function - no longer needed
+- Removed CaptureKeyboardSnapshot() function - no longer needed
+- Removed HasKeyboardStateChanged() function - no longer needed
+- Removed IsAnyKeyPressedFull() 256-key scan - replaced with targeted IsAnyKeyPhysicallyPressed()
+- Removed AtomicAbort() function - replaced with simple ReleaseAllKeys()
+- Removed g_abortRequested flag - no longer needed
+- Removed g_keyboardSnapshot array - no longer needed
+- Removed all Sleep() calls from critical path for faster execution
+- Removed staged delays (PRE_SEND_VERIFY_DELAY_MS, POST_CTRL_VERIFY_DELAY_MS, INTER_KEY_DELAY_MS, etc.)
+- Removed POST_CTRL_CHECK_COUNT constant - no longer needed
+- Removed PRE_SEND_CHECK_COUNT constant - no longer needed
+- Removed KEYBOARD_SNAPSHOT_DELAY_MS constant - no longer needed
+- Removed MESSAGE_QUEUE_CHECK_DELAY_MS constant - no longer needed
+- Removed POST_RELEASE_DELAY_MS constant - no longer needed
+- Removed QUIET_PERIOD_MS constant - no longer needed
+- Removed verbose security logging with [SECURITY] prefixes - cleaner logs
+- Added ReleaseAllKeys() helper function for simple cleanup
+- Simplified SendCtrlS() to 3 checks: pre-send, post-Ctrl, post-S
+- Simplified TrySave() to 2 checks: foreground and keys pressed
+- Changed RETRY_INTERVAL_MS from 100ms to 50ms for faster recovery
+- Changed MAX_RETRY_COUNT from 100 to 200 (10 seconds total retry time)
+- Reduced code size from ~950 lines to ~450 lines
+- New approach: check physical key state (instant) instead of waiting for timing-based quiet period
+
 ## 2.0 ([Mar 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/50ecdda554f97aa7fac4b4f41879e206d11474b1/mods/word-local-autosave.wh.cpp))
 
 - Version bumped to 2.0
