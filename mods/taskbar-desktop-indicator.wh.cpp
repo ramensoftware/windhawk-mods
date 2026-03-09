@@ -32,11 +32,11 @@ Displays the current virtual desktop as a number or marker in the Windows 11 tas
 
 ## Screenshot
 
-Workspace markers mode (example):
-![Workspace markers mode](https://raw.githubusercontent.com/simon-ami/images/main/windhawk/taskbar-desktop-indicator/marker-indicator.png)
+![Workspace markers mode](https://raw.githubusercontent.com/simon-ami/images/main/windhawk/taskbar-desktop-indicator/marker-indicator.png) \
+_Workspace markers mode (example)_
 
-Number mode (example):
-![Number mode](https://raw.githubusercontent.com/simon-ami/images/main/windhawk/taskbar-desktop-indicator/roman-number.png)
+![Number mode](https://raw.githubusercontent.com/simon-ami/images/main/windhawk/taskbar-desktop-indicator/roman-number.png) \
+_Number mode (example)_
 
 ## Notes
 
