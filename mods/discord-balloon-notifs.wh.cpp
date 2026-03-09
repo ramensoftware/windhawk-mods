@@ -862,7 +862,7 @@ static char* DownloadEmojiJson(DWORD* outSize) {
     if (!hInternet) return nullptr;
     
     HINTERNET hUrl = InternetOpenUrlW(hInternet,
-        L"https://raw.githubusercontent.com/repensky/local-wh-mods/refs/heads/main/discord-emojis.json", //Downloads Discord emoji database
+        L"https://raw.githubusercontent.com/repensky/local-wh-mods/ac919c0ffe39ea171086c80a589c83bcabf432b5/discord-emojis.json", //Downloads Discord emoji database
         nullptr, 0,
         INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE,
         0);
