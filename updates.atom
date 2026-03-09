@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-09T15:26:02.000Z</updated>
+    <updated>2026-03-09T15:40:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[VSCode Tweaker 1.1]]></title>
+        <id>https://windhawk.net/mods/vscode-tweaker#e09cb88489b44788b8ed9e5ea46e6b8c8845f673</id>
+        <link href="https://windhawk.net/mods/vscode-tweaker"/>
+        <updated>2026-03-09T15:40:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with latest VSCode versions.</li>
+<li>Improved initialization performance.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Usage Bar in Drive Properties 1.1]]></title>
         <id>https://windhawk.net/mods/disk-usage-bar-in-drive-properties#ded365a21ed5b60cb63a37e7cf9f23f5e2ba194f</id>
@@ -496,17 +510,6 @@ the second-level menus.</p>
         <author>
             <name>mode0192</name>
             <uri>https://github.com/mode0192</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Shadow & Border 1.0.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-shadow-border#41b22ece71797fbdef290fbc18ece19c1aa8ef40</id>
-        <link href="https://windhawk.net/mods/taskbar-shadow-border"/>
-        <updated>2026-02-28T15:26:54.000Z</updated>
-        <content type="html"><![CDATA[<p>Reworked top-most setting logic and updated Wh_ModTool implementation</p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>

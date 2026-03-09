@@ -9531,7 +9531,7 @@
                     3
                 ],
                 "ratingUsers": 4,
-                "updated": 1659090573000,
+                "updated": 1773070854000,
                 "users": 139
             },
             "metadata": {
@@ -9545,7 +9545,7 @@
                 ],
                 "name": "VSCode Tweaker",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.1"
             }
         },
         "w11-dwm-fix": {
