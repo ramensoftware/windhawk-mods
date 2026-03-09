@@ -1,7 +1,7 @@
 // ==WindhawkMod==
-// @id              taskbar-desktop-roman-indicator
-// @name            Taskbar Desktop Roman Indicator
-// @description     Appends the current virtual desktop number in Roman numerals to the Windows 11 taskbar clock
+// @id              taskbar-desktop-indicator
+// @name            Taskbar Desktop Indicator
+// @description     Displays the current virtual desktop as a number or marker in the Windows 11 taskbar clock area
 // @version         1.0.0
 // @author          Simon Benedict
 // @github          https://github.com/simon-ami
@@ -13,19 +13,20 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Desktop Roman Indicator
+# Taskbar Desktop Indicator
 
-Shows the current virtual desktop number in the Windows 11 taskbar clock area.
+Displays the current virtual desktop as a number or marker in the Windows 11 taskbar clock area.
 
 ## Features
 
-* Roman or Arabic numbering
 * Number mode or workspace markers mode
-* Custom marker symbol for workspace markers mode
-  Example symbols: `●`, `•`, `○`, `◉`
-* Configurable left and right padding
-* Configurable spacing between indicator characters
+* Workspace markers mode with `⬤` markers by default
+* Roman or Arabic numbering in number mode
+* Custom marker symbol and inactive-marker dimming in workspace markers mode
+  Example symbols: `⬤`, `●`, `•`, `○`, `◉`
 * Configurable indicator weight and size
+* Configurable spacing and padding
+* Centered side indicator layout for two-line clock/date taskbar clocks
 * Notification-based desktop change detection
 * Optional polling fallback
 
@@ -40,7 +41,9 @@ Number mode (example):
 ## Notes
 
 * Windows 11 only
-* The indicator is shown on the date line when available
+* On a one-line taskbar clock, the indicator is appended inline
+* On a two-line taskbar clock, the indicator is shown as a separate vertically centered side label
+* The default appearance is workspace markers with dimmed inactive markers
 * The mod uses virtual desktop notifications as the primary update path
 * Polling fallback is disabled by default
 * If the indicator doesn't update when switching desktops on your system, set the poll interval to `50` or `100` ms
@@ -58,38 +61,38 @@ Number mode (example):
     - markers: Workspace markers
 - markerSymbol: ⬤
   $name: Marker symbol
-  $description: Symbol or short text used for each workspace marker when indicator mode is set to workspace markers. E.g. ┃, ⬤, ●, •, ○, ◉, ⎕, ∎, ◆, ♦, ★ [Default ⬤]
+  $description: Symbol or short text used for each workspace marker in workspace markers mode. E.g. ┃, ⬤, ●, •, ○, ◉, ⎕, ∎, ◆, ♦, ★ [Default ⬤]
+- inactiveMarkerOpacity: 20
+  $name: Inactive marker opacity
+  $description: Opacity percentage for non-active markers in workspace markers mode. 100 matches the active marker, lower values make inactive markers dimmer. [Default 20]
 - numberingFormat: roman
   $name: Numbering format
-  $description: Choose whether the desktop indicator uses Roman or Arabic numerals. [Default Roman numerals]
+  $description: Choose whether the desktop indicator uses Roman or Arabic numerals in number mode. [Default Roman numerals]
   $options:
     - roman: Roman numerals
     - arabic: Arabic numerals
+- indicatorWeight: normal
+  $name: Indicator weight
+  $description: Font weight for the desktop indicator in both modes. [Default normal]
+  $options:
+    - normal: Normal
+    - bold: Bold
+- indicatorSize: normal
+  $name: Indicator size
+  $description: Relative font size for the desktop indicator in both modes. [Default normal]
+  $options:
+    - smaller: Smaller
+    - normal: Normal
+    - larger: Larger
+- indicatorCharacterSpacing: 1
+  $name: Indicator character spacing
+  $description: Number of spaces inserted between indicator characters in both modes. [Default 1]
 - leftPadding: 6
   $name: Left padding
   $description: Number of spaces between the clock text and the desktop indicator. [Default 6]
 - rightPadding: 0
   $name: Right padding
   $description: Number of spaces after the desktop indicator. [Default 0]
-- indicatorCharacterSpacing: 1
-  $name: Indicator character spacing
-  $description: Number of spaces inserted between characters in the desktop indicator. [Default 1]
-- indicatorWeight: normal
-  $name: Indicator weight
-  $description: Font weight for the desktop indicator. [Default normal]
-  $options:
-    - normal: Normal
-    - bold: Bold
-- indicatorSize: normal
-  $name: Indicator size
-  $description: Relative font size for the desktop indicator. [Default normal]
-  $options:
-    - smaller: Smaller
-    - normal: Normal
-    - larger: Larger
-- inactiveMarkerOpacity: 20
-  $name: Inactive marker opacity
-  $description: Opacity percentage for non-active workspace markers. 100 matches the active marker, lower values make inactive markers dimmer. [Default 20]
 - pollIntervalMs: 0
   $name: Poll interval (ms)
   $description: Optional polling fallback for desktop changes. 0 disables polling. If notifications don't update on your system, try 50 or 100. [Default 0]
@@ -2034,7 +2037,7 @@ void RefreshClockButtonWindow(HWND hWnd) {
 
 void TriggerWin11ClockUpdateWatcher() {
     constexpr WCHAR kTempValueName[] =
-        L"_temp_windhawk_taskbar-desktop-roman-indicator";
+        L"_temp_windhawk_taskbar-desktop-indicator";
 
     HKEY hSubKey;
     LONG result = RegOpenKeyExW(HKEY_CURRENT_USER,
