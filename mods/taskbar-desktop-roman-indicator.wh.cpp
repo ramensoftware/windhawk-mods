@@ -26,64 +26,65 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
 * Configurable left and right padding
 * Configurable spacing between indicator characters
 * Configurable indicator weight and size
-* Configurable polling interval
-* Fast desktop change detection
+* Notification-based desktop change detection
+* Optional polling fallback
 
 ## Notes
 
 * Windows 11 only
 * The indicator is shown on the date line when available
-* The current desktop is detected by polling Explorer's virtual desktop state
-* Lower poll intervals react faster but increase registry reads in Explorer;
-  50-100 ms is usually fine, while going much lower is rarely worth it
+* The mod uses virtual desktop notifications as the primary update path
+* Polling fallback is disabled by default
+* If the indicator doesn't update when switching desktops on your system, set the poll interval to `50` or `100` ms
+* Lower poll intervals increase registry reads in Explorer
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- indicatorMode: number
+- indicatorMode: markers
   $name: Indicator mode
-  $description: Show either the current desktop number or one marker per desktop with the active desktop highlighted.
+  $description: Show either the current desktop number or one marker per desktop with the active desktop highlighted. [Default workspace markers]
   $options:
     - number: Current desktop number
     - markers: Workspace markers
-- markerSymbol: ●
+- markerSymbol: ⬤
   $name: Marker symbol
-  $description: Symbol or short text used for each workspace marker when indicator mode is set to workspace markers. E.g. ┃, ⬤, ●, •, ○, ◉, ⎕, ∎, ◆, ♦, ★
+  $description: Symbol or short text used for each workspace marker when indicator mode is set to workspace markers. E.g. ┃, ⬤, ●, •, ○, ◉, ⎕, ∎, ◆, ♦, ★ [Default ⬤]
 - numberingFormat: roman
   $name: Numbering format
-  $description: Choose whether the desktop indicator uses Roman or Arabic numerals.
+  $description: Choose whether the desktop indicator uses Roman or Arabic numerals. [Default Roman numerals]
   $options:
     - roman: Roman numerals
     - arabic: Arabic numerals
 - leftPadding: 6
   $name: Left padding
-  $description: Number of spaces between the clock text and the desktop indicator.
+  $description: Number of spaces between the clock text and the desktop indicator. [Default 6]
 - rightPadding: 0
   $name: Right padding
-  $description: Number of spaces after the desktop indicator.
+  $description: Number of spaces after the desktop indicator. [Default 0]
 - indicatorCharacterSpacing: 1
   $name: Indicator character spacing
-  $description: Number of spaces inserted between characters in the desktop indicator.
-- indicatorWeight: bold
+  $description: Number of spaces inserted between characters in the desktop indicator. [Default 1]
+- indicatorWeight: normal
   $name: Indicator weight
-  $description: Font weight for the desktop indicator.
+  $description: Font weight for the desktop indicator. [Default normal]
   $options:
     - normal: Normal
     - bold: Bold
 - indicatorSize: normal
   $name: Indicator size
-  $description: Relative font size for the desktop indicator.
+  $description: Relative font size for the desktop indicator. [Default normal]
   $options:
     - smaller: Smaller
     - normal: Normal
     - larger: Larger
-- inactiveMarkerOpacity: 22
+- inactiveMarkerOpacity: 20
   $name: Inactive marker opacity
-  $description: Opacity percentage for non-active workspace markers. 100 matches the active marker, lower values make inactive markers dimmer.
-- pollIntervalMs: 100
+  $description: Opacity percentage for non-active workspace markers. 100 matches the active marker, lower values make inactive markers dimmer. [Default 20]
+- pollIntervalMs: 0
   $name: Poll interval (ms)
-  $description: How often Explorer checks for desktop changes. Lower values react faster but do more registry reads; 50-100 ms is usually fine, and values much lower than that are rarely worthwhile.
+  $description: Optional polling fallback for desktop changes. 0 disables polling. If notifications don't update on your system, try 50 or 100. [Default 0]
 */
 // ==/WindhawkModSettings==
 
@@ -99,6 +100,7 @@ Shows the current virtual desktop number in the Windows 11 taskbar clock area.
 
 #undef GetCurrentTime
 
+#include <servprov.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.h>
@@ -161,14 +163,14 @@ enum class IndicatorSize {
 };
 
 struct ModSettings {
-    IndicatorMode indicatorMode = IndicatorMode::Number;
-    std::wstring markerSymbol = L"\u25cf";
+    IndicatorMode indicatorMode = IndicatorMode::Markers;
+    std::wstring markerSymbol = L"\u2b24";
     NumberingFormat numberingFormat = NumberingFormat::Roman;
-    int leftPadding = 3;
+    int leftPadding = 6;
     int rightPadding = 0;
     int indicatorCharacterSpacing = 1;
-    int inactiveMarkerOpacity = 22;
-    int pollIntervalMs = 100;
+    int inactiveMarkerOpacity = 20;
+    int pollIntervalMs = 0;
     IndicatorWeight indicatorWeight = IndicatorWeight::Normal;
     IndicatorSize indicatorSize = IndicatorSize::Normal;
 };
@@ -192,18 +194,39 @@ struct ClockEntry {
 
 using ClockEntryPtr = std::shared_ptr<ClockEntry>;
 
+struct NotificationInterfaceConfig {
+    int64_t iidPart1 = 0;
+    int64_t iidPart2 = 0;
+    int methodCount = 0;
+    int currentChangedIndex = -1;
+    bool currentChangedHasMonitors = false;
+};
+
+struct VirtualDesktopNotificationObject {
+    void** vtable = nullptr;
+    LONG refCount = 1;
+};
+
 WinVersion g_winVersion = WinVersion::Unsupported;
+WORD g_explorerBuildNumber = 0;
+WORD g_explorerRevisionNumber = 0;
 std::atomic<bool> g_taskbarViewDllLoaded = false;
 std::atomic<bool> g_unloading = false;
 std::atomic<int> g_currentDesktopNumber = 1;
-std::atomic<int> g_pollIntervalMs = 100;
+std::atomic<int> g_pollIntervalMs = 0;
+std::atomic<bool> g_virtualDesktopNotificationsRegistered = false;
 
 std::mutex g_clockEntriesMutex;
 std::vector<ClockEntryPtr> g_clockEntries;
 
 HANDLE g_stopEvent = nullptr;
 HANDLE g_pollThread = nullptr;
+HANDLE g_notificationStopEvent = nullptr;
+HANDLE g_notificationThread = nullptr;
+HANDLE g_notificationReadyEvent = nullptr;
 ModSettings g_settings;
+DWORD g_virtualDesktopNotificationCookie = 0;
+VirtualDesktopNotificationObject* g_virtualDesktopNotificationObject = nullptr;
 
 using ClockSystemTrayIconDataModel_RefreshIcon_t = void(WINAPI*)(LPVOID, LPVOID);
 ClockSystemTrayIconDataModel_RefreshIcon_t
@@ -220,6 +243,45 @@ BadgeIconContent_get_ViewModel_t BadgeIconContent_get_ViewModel_Original;
 
 using ClockButton_v_OnDisplayStateChange_t = void(WINAPI*)(LPVOID, bool);
 ClockButton_v_OnDisplayStateChange_t ClockButton_v_OnDisplayStateChange_Original;
+
+int ReadCurrentDesktopNumberFromRegistry();
+void UpdateAllClockEntries(bool captureBaseText);
+
+const CLSID CLSID_ImmersiveShell = {
+    0xc2f03a33,
+    0x21f5,
+    0x47fa,
+    {0xb4, 0xbb, 0x15, 0x63, 0x62, 0xa2, 0xf2, 0x39},
+};
+
+const GUID SID_VirtualDesktopNotificationService = {
+    0xa501fdec,
+    0x4a09,
+    0x464c,
+    {0xae, 0x4e, 0x1b, 0x9c, 0x21, 0xb8, 0x49, 0x18},
+};
+
+const GUID IID_IUnknown_Local = {
+    0x00000000,
+    0x0000,
+    0x0000,
+    {0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46},
+};
+
+const GUID IID_IVirtualDesktopNotificationService = {
+    0x0cd45e71,
+    0xd927,
+    0x4f15,
+    {0x8b, 0x0a, 0x8f, 0xef, 0x52, 0x53, 0x37, 0xbf},
+};
+
+MIDL_INTERFACE("0CD45E71-D927-4F15-8B0A-8FEF525337BF")
+IVirtualDesktopNotificationService : public IUnknown {
+   public:
+    virtual HRESULT STDMETHODCALLTYPE Register(IUnknown* pNotification,
+                                               DWORD* pdwCookie) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Unregister(DWORD dwCookie) = 0;
+};
 
 bool EndsWith(const std::wstring& value, const std::wstring& suffix) {
     return value.size() >= suffix.size() &&
@@ -287,7 +349,7 @@ std::wstring BuildIndicatorGap() {
 }
 
 std::wstring GetConfiguredMarkerSymbol() {
-    return g_settings.markerSymbol.empty() ? std::wstring(L"\u25cf")
+    return g_settings.markerSymbol.empty() ? std::wstring(L"\u2b24")
                                            : g_settings.markerSymbol;
 }
 
@@ -384,6 +446,159 @@ double GetConfiguredIndicatorFontSize(double baseFontSize) {
 bool UseTabularNumeralsForIndicator() {
     return g_settings.indicatorMode == IndicatorMode::Number &&
            g_settings.numberingFormat == NumberingFormat::Arabic;
+}
+
+NotificationInterfaceConfig GetNotificationInterfaceConfig() {
+    if (g_explorerBuildNumber < 22000) {
+        return {};
+    }
+
+    if (g_explorerBuildNumber < 22483 ||
+        (g_explorerBuildNumber == 22621 && g_explorerRevisionNumber < 2215)) {
+        return {
+            5481970284372180562ll,
+            -1679294552252794956ll,
+            13,
+            11,
+            true,
+        };
+    }
+
+    if (g_explorerBuildNumber < 22631 ||
+        (g_explorerBuildNumber == 22631 && g_explorerRevisionNumber < 3085)) {
+        return {
+            5123538856297626140ll,
+            8491238173783613346ll,
+            14,
+            10,
+            false,
+        };
+    }
+
+    return {
+        5308375338100058445ll,
+        -2401892766147978065ll,
+        14,
+        10,
+        false,
+    };
+}
+
+bool IsCurrentNotificationInterface(REFIID riid) {
+    auto config = GetNotificationInterfaceConfig();
+    if (config.methodCount == 0) {
+        return false;
+    }
+
+    auto riidParts = reinterpret_cast<const int64_t*>(&riid);
+    return riidParts[0] == config.iidPart1 && riidParts[1] == config.iidPart2;
+}
+
+void HandleVirtualDesktopChangedNotification() {
+    if (g_unloading) {
+        return;
+    }
+
+    int currentDesktopNumber = ReadCurrentDesktopNumberFromRegistry();
+    int previousDesktopNumber = g_currentDesktopNumber.exchange(currentDesktopNumber);
+    if (currentDesktopNumber != previousDesktopNumber) {
+        UpdateAllClockEntries(false);
+    }
+}
+
+HRESULT STDMETHODCALLTYPE VirtualDesktopNotification_QueryInterface(
+    VirtualDesktopNotificationObject* pThis,
+    REFIID riid,
+    void** ppvObject) {
+    if (!ppvObject) {
+        return E_POINTER;
+    }
+
+    *ppvObject = nullptr;
+
+    if (InlineIsEqualGUID(riid, IID_IUnknown_Local) ||
+        IsCurrentNotificationInterface(riid)) {
+        *ppvObject = pThis;
+        InterlockedIncrement(&pThis->refCount);
+        return S_OK;
+    }
+
+    return E_NOINTERFACE;
+}
+
+ULONG STDMETHODCALLTYPE
+VirtualDesktopNotification_AddRef(VirtualDesktopNotificationObject* pThis) {
+    return static_cast<ULONG>(InterlockedIncrement(&pThis->refCount));
+}
+
+ULONG STDMETHODCALLTYPE
+VirtualDesktopNotification_Release(VirtualDesktopNotificationObject* pThis) {
+    LONG refCount = InterlockedDecrement(&pThis->refCount);
+    if (refCount == 0) {
+        delete[] pThis->vtable;
+        delete pThis;
+    }
+
+    return static_cast<ULONG>(std::max<LONG>(refCount, 0));
+}
+
+HRESULT STDMETHODCALLTYPE VirtualDesktopNotification_NoOp() {
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE VirtualDesktopNotification_CurrentChanged(
+    VirtualDesktopNotificationObject*) {
+    HandleVirtualDesktopChangedNotification();
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE VirtualDesktopNotification_CurrentChangedWithMonitors(
+    VirtualDesktopNotificationObject*,
+    void*,
+    void*,
+    void*) {
+    HandleVirtualDesktopChangedNotification();
+    return S_OK;
+}
+
+VirtualDesktopNotificationObject* CreateVirtualDesktopNotificationObject() {
+    auto config = GetNotificationInterfaceConfig();
+    if (config.methodCount == 0 || config.currentChangedIndex < 0 ||
+        config.currentChangedIndex >= config.methodCount) {
+        return nullptr;
+    }
+
+    auto object = new (std::nothrow) VirtualDesktopNotificationObject();
+    if (!object) {
+        return nullptr;
+    }
+
+    object->vtable = new (std::nothrow) void*[config.methodCount];
+    if (!object->vtable) {
+        delete object;
+        return nullptr;
+    }
+
+    for (int i = 0; i < config.methodCount; ++i) {
+        object->vtable[i] = reinterpret_cast<void*>(
+            &VirtualDesktopNotification_NoOp);
+    }
+
+    object->vtable[0] = reinterpret_cast<void*>(
+        &VirtualDesktopNotification_QueryInterface);
+    object->vtable[1] = reinterpret_cast<void*>(
+        &VirtualDesktopNotification_AddRef);
+    object->vtable[2] = reinterpret_cast<void*>(
+        &VirtualDesktopNotification_Release);
+    if (config.currentChangedHasMonitors) {
+        object->vtable[config.currentChangedIndex] = reinterpret_cast<void*>(
+            &VirtualDesktopNotification_CurrentChangedWithMonitors);
+    } else {
+        object->vtable[config.currentChangedIndex] = reinterpret_cast<void*>(
+            &VirtualDesktopNotification_CurrentChanged);
+    }
+
+    return object;
 }
 
 std::vector<BYTE> ReadRegistryValue(HKEY root,
@@ -521,16 +736,16 @@ int ReadDesktopCountFromRegistry() {
 
 void LoadSettings() {
     StringSetting indicatorMode = StringSetting::make(L"indicatorMode");
-    if (wcscmp(indicatorMode.get(), L"markers") == 0) {
-        g_settings.indicatorMode = IndicatorMode::Markers;
-    } else {
+    if (wcscmp(indicatorMode.get(), L"number") == 0) {
         g_settings.indicatorMode = IndicatorMode::Number;
+    } else {
+        g_settings.indicatorMode = IndicatorMode::Markers;
     }
 
     StringSetting markerSymbol = StringSetting::make(L"markerSymbol");
     g_settings.markerSymbol = markerSymbol.get();
     if (g_settings.markerSymbol.empty()) {
-        g_settings.markerSymbol = L"\u25cf";
+        g_settings.markerSymbol = L"\u2b24";
     }
 
     StringSetting numberingFormat = StringSetting::make(L"numberingFormat");
@@ -562,7 +777,7 @@ void LoadSettings() {
         std::max(0, Wh_GetIntSetting(L"indicatorCharacterSpacing"));
     g_settings.inactiveMarkerOpacity =
         std::clamp(Wh_GetIntSetting(L"inactiveMarkerOpacity"), 0, 100);
-    g_settings.pollIntervalMs = std::clamp(Wh_GetIntSetting(L"pollIntervalMs"), 25, 2000);
+    g_settings.pollIntervalMs = std::clamp(Wh_GetIntSetting(L"pollIntervalMs"), 0, 2000);
     g_pollIntervalMs.store(g_settings.pollIntervalMs);
 }
 
@@ -601,6 +816,10 @@ WinVersion GetExplorerVersion() {
 
     WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
     WORD build = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD revision = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    g_explorerBuildNumber = build;
+    g_explorerRevisionNumber = revision;
 
     if (major != 10) {
         return WinVersion::Unsupported;
@@ -619,6 +838,208 @@ WinVersion GetExplorerVersion() {
     }
 
     return WinVersion::Win11_24H2;
+}
+
+bool RegisterVirtualDesktopNotificationsOnCurrentThread() {
+    if (g_virtualDesktopNotificationsRegistered) {
+        return true;
+    }
+
+    auto config = GetNotificationInterfaceConfig();
+    if (config.methodCount == 0) {
+        Wh_Log(L"Virtual desktop notifications unavailable for Explorer build %u.%u",
+               g_explorerBuildNumber, g_explorerRevisionNumber);
+        return false;
+    }
+
+    IServiceProvider* serviceProvider = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_ImmersiveShell, nullptr,
+                                  CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER,
+                                  IID_PPV_ARGS(&serviceProvider));
+    if (FAILED(hr)) {
+        Wh_Log(L"Virtual desktop notification registration failed at CoCreateInstance: hr=0x%08X",
+               hr);
+        return false;
+    }
+
+    IVirtualDesktopNotificationService* notificationService = nullptr;
+    hr = serviceProvider->QueryService(SID_VirtualDesktopNotificationService,
+                                       IID_IVirtualDesktopNotificationService,
+                                       reinterpret_cast<void**>(&notificationService));
+    serviceProvider->Release();
+    if (FAILED(hr)) {
+        Wh_Log(L"Virtual desktop notification registration failed at QueryService: hr=0x%08X",
+               hr);
+        return false;
+    }
+
+    auto notificationObject = CreateVirtualDesktopNotificationObject();
+    if (!notificationObject) {
+        Wh_Log(L"Virtual desktop notification registration failed: couldn't create notification object");
+        notificationService->Release();
+        return false;
+    }
+
+    DWORD cookie = 0;
+    hr = notificationService->Register(reinterpret_cast<IUnknown*>(notificationObject),
+                                       &cookie);
+    notificationService->Release();
+
+    if (FAILED(hr) || cookie == 0) {
+        Wh_Log(L"Virtual desktop notification registration failed at Register: hr=0x%08X, cookie=%lu",
+               hr, cookie);
+        VirtualDesktopNotification_Release(notificationObject);
+        return false;
+    }
+
+    g_virtualDesktopNotificationObject = notificationObject;
+    g_virtualDesktopNotificationCookie = cookie;
+    g_virtualDesktopNotificationsRegistered = true;
+    return true;
+}
+
+void UnregisterVirtualDesktopNotificationsOnCurrentThread() {
+    if (!g_virtualDesktopNotificationsRegistered) {
+        return;
+    }
+
+    IServiceProvider* serviceProvider = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_ImmersiveShell, nullptr,
+                                  CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER,
+                                  IID_PPV_ARGS(&serviceProvider));
+    if (SUCCEEDED(hr)) {
+        IVirtualDesktopNotificationService* notificationService = nullptr;
+        hr = serviceProvider->QueryService(
+            SID_VirtualDesktopNotificationService,
+            IID_IVirtualDesktopNotificationService,
+            reinterpret_cast<void**>(&notificationService));
+        serviceProvider->Release();
+
+        if (SUCCEEDED(hr)) {
+            notificationService->Unregister(g_virtualDesktopNotificationCookie);
+            notificationService->Release();
+        }
+    }
+
+    if (g_virtualDesktopNotificationObject) {
+        VirtualDesktopNotification_Release(g_virtualDesktopNotificationObject);
+        g_virtualDesktopNotificationObject = nullptr;
+    }
+
+    g_virtualDesktopNotificationCookie = 0;
+    g_virtualDesktopNotificationsRegistered = false;
+}
+
+DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
+    HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(initHr)) {
+        Wh_Log(L"Virtual desktop notification thread failed to initialize COM: hr=0x%08X",
+               initHr);
+        if (g_notificationReadyEvent) {
+            SetEvent(g_notificationReadyEvent);
+        }
+        return 0;
+    }
+
+    bool registered = RegisterVirtualDesktopNotificationsOnCurrentThread();
+    if (g_notificationReadyEvent) {
+        SetEvent(g_notificationReadyEvent);
+    }
+
+    if (registered && g_notificationStopEvent) {
+        bool stopping = false;
+        while (!stopping) {
+            DWORD waitResult = MsgWaitForMultipleObjects(
+                1, &g_notificationStopEvent, FALSE, INFINITE, QS_ALLINPUT);
+            switch (waitResult) {
+                case WAIT_OBJECT_0:
+                    stopping = true;
+                    break;
+                case WAIT_OBJECT_0 + 1: {
+                    MSG msg;
+                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                    break;
+                }
+                default:
+                    Wh_Log(L"Virtual desktop notification thread wait returned unexpectedly: %lu",
+                           waitResult);
+                    stopping = true;
+                    break;
+            }
+        }
+    }
+
+    if (registered) {
+        UnregisterVirtualDesktopNotificationsOnCurrentThread();
+    }
+
+    CoUninitialize();
+    return 0;
+}
+
+bool EnsureVirtualDesktopNotificationThread() {
+    if (g_notificationThread) {
+        return g_virtualDesktopNotificationsRegistered.load();
+    }
+
+    g_notificationStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_notificationStopEvent) {
+        Wh_Log(L"Failed to create virtual desktop notification stop event");
+        return false;
+    }
+
+    g_notificationReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_notificationReadyEvent) {
+        Wh_Log(L"Failed to create virtual desktop notification ready event");
+        CloseHandle(g_notificationStopEvent);
+        g_notificationStopEvent = nullptr;
+        return false;
+    }
+
+    g_notificationThread = CreateThread(nullptr, 0,
+                                        VirtualDesktopNotificationThreadProc,
+                                        nullptr, 0, nullptr);
+    if (!g_notificationThread) {
+        Wh_Log(L"Failed to create virtual desktop notification thread");
+        CloseHandle(g_notificationReadyEvent);
+        g_notificationReadyEvent = nullptr;
+        CloseHandle(g_notificationStopEvent);
+        g_notificationStopEvent = nullptr;
+        return false;
+    }
+
+    DWORD waitResult = WaitForSingleObject(g_notificationReadyEvent, 3000);
+    if (waitResult != WAIT_OBJECT_0) {
+        Wh_Log(L"Timed out waiting for virtual desktop notification thread readiness: %lu",
+               waitResult);
+    }
+
+    return g_virtualDesktopNotificationsRegistered.load();
+}
+
+void StopVirtualDesktopNotificationThread() {
+    if (g_notificationStopEvent) {
+        SetEvent(g_notificationStopEvent);
+    }
+
+    if (g_notificationThread) {
+        WaitForSingleObject(g_notificationThread, 3000);
+        CloseHandle(g_notificationThread);
+        g_notificationThread = nullptr;
+    }
+
+    if (g_notificationReadyEvent) {
+        CloseHandle(g_notificationReadyEvent);
+        g_notificationReadyEvent = nullptr;
+    }
+
+    if (g_notificationStopEvent) {
+        CloseHandle(g_notificationStopEvent);
+        g_notificationStopEvent = nullptr;
+    }
 }
 
 FrameworkElement FindDescendantByName(const DependencyObject& parent,
@@ -1476,6 +1897,7 @@ DWORD WINAPI DesktopPollThreadProc(LPVOID) {
 bool StartDesktopPollThread() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
+        Wh_Log(L"Failed to create desktop poll stop event");
         return false;
     }
 
@@ -1485,7 +1907,6 @@ bool StartDesktopPollThread() {
         g_stopEvent = nullptr;
         return false;
     }
-
     return true;
 }
 
@@ -1503,6 +1924,24 @@ void StopDesktopPollThread() {
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
+    }
+}
+
+void EnsureDesktopChangeTracking() {
+    bool notificationsRegistered = EnsureVirtualDesktopNotificationThread();
+
+    if (g_settings.pollIntervalMs <= 0) {
+        if (g_pollThread || g_stopEvent) {
+            StopDesktopPollThread();
+        }
+    } else if (!g_pollThread && !g_stopEvent) {
+        if (!StartDesktopPollThread()) {
+            Wh_Log(L"Failed to start desktop poll thread");
+        }
+    }
+
+    if (!notificationsRegistered && g_settings.pollIntervalMs <= 0) {
+        Wh_Log(L"Desktop change tracking has no active update mechanism");
     }
 }
 
@@ -1536,16 +1975,14 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
                                    &LoadLibraryExW_Original);
 
-    if (!StartDesktopPollThread()) {
-        Wh_Log(L"Failed to start desktop poll thread");
-        return FALSE;
-    }
+    EnsureDesktopChangeTracking();
 
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    EnsureDesktopChangeTracking();
     RefreshLiveTaskbarClock();
     UpdateAllClockEntries(true);
 }
@@ -1560,12 +1997,14 @@ void Wh_ModAfterInit() {
         }
     }
 
+    EnsureDesktopChangeTracking();
     RefreshLiveTaskbarClock();
     UpdateAllClockEntries(true);
 }
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
+    StopVirtualDesktopNotificationThread();
     StopDesktopPollThread();
     RestoreAllClockEntries();
     Sleep(200);
