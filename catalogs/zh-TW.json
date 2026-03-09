@@ -2655,6 +2655,34 @@
                 "version": "1.0.0"
             }
         },
+        "discord-balloon-notifs": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773100370000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773100370000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "repensky",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -lwininet",
+                "description": "Converts Discord toast notifications to classic Windows balloon notifications",
+                "github": "https://github.com/repensky",
+                "include": [
+                    "Discord.exe"
+                ],
+                "name": "Discord Balloon Notifications",
+                "version": "1.0"
+            }
+        },
         "disk-pie-chart": {
             "details": {
                 "defaultSorting": 25250,
@@ -7685,7 +7713,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1773076456000,
+                "updated": 1773100527000,
                 "users": 0
             },
             "metadata": {
@@ -7701,7 +7729,7 @@
                 ],
                 "license": "MIT",
                 "name": "Taskbar Desktop Indicator",
-                "version": "1.1.0"
+                "version": "1.2.0"
             }
         },
         "taskbar-disappearing-icon-fix-win11": {

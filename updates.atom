@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-09T23:46:32.000Z</updated>
+    <updated>2026-03-09T23:55:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Desktop Indicator 1.2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-desktop-indicator#f00beff69e901b08bbfd500d8fe2f59c2a861720</id>
+        <link href="https://windhawk.net/mods/taskbar-desktop-indicator"/>
+        <updated>2026-03-09T23:55:27.000Z</updated>
+        <content type="html"><![CDATA[<p>Adds optional custom color settings for the taskbar desktop indicator:</p>
+<ul>
+<li>custom color for the active indicator / number</li>
+<li>custom color for inactive workspace markers</li>
+<li>inactive marker opacity now also applies when a custom inactive color is set</li>
+<li>updates the settings descriptions accordingly</li>
+<li>bumps the mod version to 1.2.0</li>
+</ul>]]></content>
+        <author>
+            <name>Simon Benedict</name>
+            <uri>https://github.com/simon-ami</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Discord Balloon Notifications 1.0]]></title>
+        <id>https://windhawk.net/mods/discord-balloon-notifs#15fbe890bd7b4b772eae51e25bbb2e32ac34405f</id>
+        <link href="https://windhawk.net/mods/discord-balloon-notifs"/>
+        <updated>2026-03-09T23:52:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="discordballoonnotifications">Discord Balloon Notifications</h1>
+<p>Converts Discord's modern Windows toast notifications into balloon tips that appear from the system tray using Shell_NotifyIconW.</p>
+<p><img src="https://raw.githubusercontent.com/repensky/local-wh-mods/refs/heads/main/image.png" alt="Picture" /></p>
+<h1 id="warning">WARNING!</h1>
+<p>The use of third party Discord clients with this mod is <strong>NOT</strong> supported! This mod is designed for the official Discord app. It may or may not function properly with unofficial Discord clients. Try on your own risk.</p>
+<p>Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually. Otherwise, Discord may <strong>crash</strong> if not restarted on next notification.</p>
+<h2 id="requirement">Requirement:</h2>
+<p>Ensure <strong>EnableLegacyBalloonNotifications</strong> is set to <strong>1</strong> in <code>HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications</code></p>
+<h2 id="features">Features:</h2>
+<ul>
+<li>Notification sender and message is shown in the balloon</li>
+<li>Optionally shows the sender's profile picture as an icon in the balloon</li>
+<li>Configurable PFP icon size (Small 16px, Medium 24px, Large 32px)</li>
+<li>Clicking the balloon or tray icon brings Discord to the foreground</li>
+<li>Tray icon automatically removed when Discord exits</li>
+<li>Emoji decoding with an option to use basic glyphs supported by the font</li>
+<li>Right clicking on the tray icon features exiting Discord</li>
+</ul>
+<h2 id="note">Note:</h2>
+<p>This is tested on <strong>Windows 10 21H2 IoT Enterprise LTSC</strong>. It may or may not function properly on other Windows versions.
+<strong>Windows 11</strong> versions may need to use <strong>ExplorerPatcher</strong> for notifications to be shown in a balloon format.</p>
+<h2 id="note2">Note 2:</h2>
+<p>This mod <strong>downloads</strong> Discord emoji database only on first run for displaying emoji shortcode purposes as it does not support displaying all emojis.</p>
+<h2 id="note3">Note 3:</h2>
+<p>Balloon display duration is controlled by Windows.
+To change, navigate to <strong>Control Panel > Ease of Access Center > Use the computer without a display > How long should Windows notification dialog boxes stay open</strong></p>]]></content>
+        <author>
+            <name>repensky</name>
+            <uri>https://github.com/repensky</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Photos Fullscreen Mode 1.0.3]]></title>
         <id>https://windhawk.net/mods/photos-fullscreen#595da2d5c2a3de07112c5ad0bdabe7d4599d4dba</id>
@@ -500,35 +554,6 @@ the second-level menus.</p>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Dialogs 1.0]]></title>
-        <id>https://windhawk.net/mods/better-dialogs#46b704d449ad5b1960f330e8fcf6c8626c86512f</id>
-        <link href="https://windhawk.net/mods/better-dialogs"/>
-        <updated>2026-03-04T00:39:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="betterdialogs">Better Dialogs</h1>
-<p>This mod improves certain Windows dialogs. It also re-translates messages for those dialogs to make sure that apps that expect the original dialogs still work properly.</p>
-<p>More dialogs coming soon! (or maybe not so soon, just in the future)</p>
-<h2 id="dialogschanged">Dialogs changed</h2>
-<ul>
-<li>Message boxes changed to Task Dialogs</li>
-<li>Legacy folder picker replaced with modern directory selector</li>
-</ul>]]></content>
-        <author>
-            <name>FireBlade</name>
-            <uri>https://github.com/FireBlade211</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Power Buttons 1.0.1]]></title>
-        <id>https://windhawk.net/mods/win11-power-buttons#0ee1b2a4f3f4611c9150e46f6f9cbce0d012e8dc</id>
-        <link href="https://windhawk.net/mods/win11-power-buttons"/>
-        <updated>2026-03-03T14:41:55.000Z</updated>
-        <content type="html"><![CDATA[<p>Add Lock button option</p>]]></content>
-        <author>
-            <name>Hakuuyosei</name>
-            <uri>https://github.com/ahzvenol</uri>
         </author>
     </entry>
 </feed>
