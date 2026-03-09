@@ -6125,6 +6125,38 @@
                 "version": "1.0.0"
             }
         },
+        "photos-fullscreen": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773099992000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773099992000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "mak7im01",
+                "compilerOptions": "-luser32",
+                "description": "Forces Windows Photos app to open in fullscreen mode instead of windowed mode",
+                "github": "https://github.com/mak7im01",
+                "include": [
+                    "Microsoft.Photos.exe",
+                    "Photos.exe"
+                ],
+                "name": "Windows Photos Fullscreen Mode",
+                "version": "1.0.3"
+            }
+        },
         "pinned-items-double-click": {
             "details": {
                 "defaultSorting": 8140,
