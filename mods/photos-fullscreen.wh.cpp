@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              photos-fullscreen
-// @name            Photos Fullscreen Mode
+// @name            Windows Photos Fullscreen Mode
 // @description     Forces Windows Photos app to open in fullscreen mode instead of windowed mode
-// @version         1.0.2
+// @version         1.0.3
 // @author          mak7im01
 // @github          https://github.com/mak7im01
 // @include         Microsoft.Photos.exe
@@ -13,7 +13,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Photos Fullscreen Mode
+# Windows Photos Fullscreen Mode
 
 This mod automatically opens the Windows Photos app in fullscreen (maximized) mode.
 
@@ -110,7 +110,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 
 // Mod initialization
 BOOL Wh_ModInit() {
-    Wh_Log(L"Photos Fullscreen Mode - Initializing");
+    Wh_Log(L"Windows Photos Fullscreen Mode - Initializing");
     
     // Set hook for CreateWindowExW
     Wh_SetFunctionHook(
@@ -126,13 +126,13 @@ BOOL Wh_ModInit() {
         (void**)&ShowWindow_Original
     );
     
-    Wh_Log(L"Photos Fullscreen Mode - Initialized successfully");
+    Wh_Log(L"Windows Photos Fullscreen Mode - Initialized successfully");
     return TRUE;
 }
 
 // Called after initialization
 void Wh_ModAfterInit() {
-    Wh_Log(L"Photos Fullscreen Mode - After init");
+    Wh_Log(L"Windows Photos Fullscreen Mode - After init");
     
     // Maximize all existing application windows
     HWND hWnd = GetTopWindow(NULL);
@@ -153,5 +153,5 @@ void Wh_ModAfterInit() {
 
 // Mod uninitialization
 void Wh_ModUninit() {
-    Wh_Log(L"Photos Fullscreen Mode - Uninitializing");
+    Wh_Log(L"Windows Photos Fullscreen Mode - Uninitializing");
 }
