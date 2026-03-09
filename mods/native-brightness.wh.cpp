@@ -163,9 +163,17 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     // Set Hook
     g_hHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHook, GetModuleHandle(NULL), 0);
     
-    // Signal that initialization is complete if needed
-    HANDLE hEvent = (HANDLE)lpParam;
-    if (hEvent) SetEvent(hEvent);
+    // Cleanup
+    if (g_hHook) UnhookWindowsHookEx(g_hHook);
+    if (g_hOSD) DestroyWindow(g_hOSD);
+
+    // WMI/COM cleanup moved here (per feedback)
+    if (pSvc) { pSvc->Release(); pSvc = NULL; }
+    if (pLoc) { pLoc->Release(); pLoc = NULL; }
+    CoUninitialize();
+
+    return 0;
+}
 
     // The essential Message Loop
     MSG msg;
@@ -372,3 +380,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
