@@ -10,6 +10,7 @@ env:
 
 permissions:
   pull-requests: write
+  issues: write
 
 jobs:
   run:
@@ -59,7 +60,7 @@ jobs:
             exit 0
           fi
           echo "Adding label: $add_label"
-          gh pr edit "$pr" --add-label "$add_label"
+          gh pr edit "$pr" --add-label "$add_label" || true  # TODO: remove " || true" 
           gh pr edit "$pr" --remove-label "$remove_label" || true
 
       - name: Validate the changes
