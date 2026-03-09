@@ -8,6 +8,9 @@ on:
 env:
   PYTHONUTF8: '1'
 
+permissions:
+  pull-requests: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
