@@ -1814,14 +1814,42 @@ void RefreshClockButtonWindow(HWND hWnd) {
     }
 }
 
+void TriggerWin11ClockUpdateWatcher() {
+    constexpr WCHAR kTempValueName[] =
+        L"_temp_windhawk_taskbar-desktop-roman-indicator";
+
+    HKEY hSubKey;
+    LONG result = RegOpenKeyExW(HKEY_CURRENT_USER,
+                                L"Control Panel\\TimeDate\\AdditionalClocks", 0,
+                                KEY_WRITE, &hSubKey);
+    if (result != ERROR_SUCCESS) {
+        Wh_Log(L"Failed to open clock update watcher key: %ld", result);
+        return;
+    }
+
+    if (RegSetValueExW(hSubKey, kTempValueName, 0, REG_SZ, (const BYTE*)L"",
+                       sizeof(WCHAR)) != ERROR_SUCCESS) {
+        Wh_Log(L"Failed to create temp clock update watcher value");
+    } else if (RegDeleteValueW(hSubKey, kTempValueName) != ERROR_SUCCESS) {
+        Wh_Log(L"Failed to remove temp clock update watcher value");
+    }
+
+    RegCloseKey(hSubKey);
+}
+
 void RefreshLiveTaskbarClock() {
-    if (g_winVersion < WinVersion::Win11 ||
-        !ClockButton_v_OnDisplayStateChange_Original) {
+    if (g_winVersion < WinVersion::Win11) {
         return;
     }
 
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!taskbarWnd) {
+        return;
+    }
+
+    TriggerWin11ClockUpdateWatcher();
+
+    if (!ClockButton_v_OnDisplayStateChange_Original) {
         return;
     }
 
