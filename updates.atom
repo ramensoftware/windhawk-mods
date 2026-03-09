@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-09T15:40:54.000Z</updated>
+    <updated>2026-03-09T16:33:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic This PC Item Sorting 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-this-pc-sort-order#081bcaf5e6931ad7f5788f7541e4ae0adb64679b</id>
+        <link href="https://windhawk.net/mods/classic-this-pc-sort-order"/>
+        <updated>2026-03-09T16:33:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicthispcitemsorting">Classic This PC Item Sorting</h1>
+<p>Makes the sort order in "This PC" folder like in Windows XP and before.<br />
+Restarting Explorer is recommended after installing the mod.</p>
+<p><strong>Before</strong></p>
+<p><img src="https://i.imgur.com/sRULNeY.png" alt="Before" /></p>
+<p><strong>After</strong></p>
+<p><img src="https://i.imgur.com/f5wskMi.png" alt="After" /></p>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VSCode Tweaker 1.1]]></title>
         <id>https://windhawk.net/mods/vscode-tweaker#e09cb88489b44788b8ed9e5ea46e6b8c8845f673</id>
@@ -492,24 +509,6 @@ the second-level menus.</p>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA["Sign in with a passkey" popup blocker 3.1.0]]></title>
-        <id>https://windhawk.net/mods/passkey-popup-blocker#d555d48688bd3e832f9ffef9b012cc236dffbff2</id>
-        <link href="https://windhawk.net/mods/passkey-popup-blocker"/>
-        <updated>2026-03-02T03:16:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Changed</strong>: Increased default <strong>Interaction Timeout</strong> from <strong>500ms</strong> to <strong>800ms</strong>.</li>
-<li><strong>Improved</strong>: <strong>WebAuthn hook is now initialized first</strong> (before message loop hooks) — mod fails cleanly early if the critical hook can't be established, avoiding partial hook state.</li>
-<li><strong>Improved</strong>: <code>GetLastTick()</code> now uses <code>InterlockedOr(&amp;val, 0)</code> instead of <code>InterlockedCompareExchange</code> for a more correct and idiomatic atomic read on LONG-aligned memory.</li>
-<li><strong>Improved</strong>: <code>SetLastTick()</code> local fallback now also uses <code>InterlockedExchange</code> (was a plain assignment before), making it thread-safe in all cases.</li>
-<li><strong>Fixed</strong>: Removed <code>m-&gt;time</code> as a tick source in message hooks — it was unreliable (can be 0 or stale in some browser message loops). <code>GetTickCount()</code> is now used consistently.</li>
-<li><strong>Code</strong>: Replaced C-style casts with <code>static_cast</code> / <code>reinterpret_cast</code> throughout for cleaner, safer code.</li>
-</ul>]]></content>
-        <author>
-            <name>mode0192</name>
-            <uri>https://github.com/mode0192</uri>
         </author>
     </entry>
 </feed>

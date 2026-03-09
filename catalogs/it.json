@@ -1690,6 +1690,33 @@
                 "version": "1.2.1"
             }
         },
+        "classic-this-pc-sort-order": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773073991000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773073991000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "xalejandro",
+                "description": "Makes the sort order in \"This PC\" folder like in Windows XP and before",
+                "github": "https://github.com/tetawaves",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic This PC Item Sorting",
+                "version": "1.0"
+            }
+        },
         "classic-uwp-fix": {
             "details": {
                 "defaultSorting": 4550,
