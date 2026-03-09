@@ -218,6 +218,9 @@ DateTimeIconContent_OnApplyTemplate_t
 using BadgeIconContent_get_ViewModel_t = HRESULT(WINAPI*)(LPVOID, LPVOID);
 BadgeIconContent_get_ViewModel_t BadgeIconContent_get_ViewModel_Original;
 
+using ClockButton_v_OnDisplayStateChange_t = void(WINAPI*)(LPVOID, bool);
+ClockButton_v_OnDisplayStateChange_t ClockButton_v_OnDisplayStateChange_Original;
+
 bool EndsWith(const std::wstring& value, const std::wstring& suffix) {
     return value.size() >= suffix.size() &&
            value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
@@ -1332,6 +1335,102 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     return true;
 }
 
+bool HookExplorerExeSymbols() {
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
+        {
+            {LR"(protected: virtual void __cdecl ClockButton::v_OnDisplayStateChange(bool))"},
+            &ClockButton_v_OnDisplayStateChange_Original,
+            nullptr,
+            true,
+        },
+    };
+
+    if (!HookSymbols(GetModuleHandle(nullptr), explorerExeHooks,
+                     ARRAYSIZE(explorerExeHooks))) {
+        Wh_Log(L"HookSymbols for explorer.exe failed");
+        return false;
+    }
+
+    return true;
+}
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND taskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD processId = 0;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &processId) &&
+                processId == GetCurrentProcessId() &&
+                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&taskbarWnd));
+
+    return taskbarWnd;
+}
+
+void RefreshClockButtonWindow(HWND hWnd) {
+    if (!hWnd || !ClockButton_v_OnDisplayStateChange_Original) {
+        return;
+    }
+
+    HWND clockButtonWnd = FindWindowExW(hWnd, nullptr, L"ClockButton", nullptr);
+    if (!clockButtonWnd) {
+        return;
+    }
+
+    LONG_PTR clockButtonLongPtr = GetWindowLongPtrW(clockButtonWnd, 0);
+    if (clockButtonLongPtr) {
+        ClockButton_v_OnDisplayStateChange_Original((LPVOID)clockButtonLongPtr,
+                                                    true);
+    }
+}
+
+void RefreshLiveTaskbarClock() {
+    if (g_winVersion < WinVersion::Win11 ||
+        !ClockButton_v_OnDisplayStateChange_Original) {
+        return;
+    }
+
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!taskbarWnd) {
+        return;
+    }
+
+    RefreshClockButtonWindow(taskbarWnd);
+
+    DWORD taskbarThreadId = GetWindowThreadProcessId(taskbarWnd, nullptr);
+    if (!taskbarThreadId) {
+        return;
+    }
+
+    auto enumWindowsProc = [](HWND hWnd) {
+        WCHAR className[32];
+        if (!GetClassNameW(hWnd, className, ARRAYSIZE(className)) ||
+            _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0) {
+            return;
+        }
+
+        RefreshClockButtonWindow(hWnd);
+    };
+
+    EnumThreadWindows(
+        taskbarThreadId,
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(enumWindowsProc)*>(lParam);
+            proc(hWnd);
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&enumWindowsProc));
+}
+
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR moduleName) {
     if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
         GetTaskbarViewModuleHandle() == module &&
@@ -1339,6 +1438,7 @@ void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR moduleName) {
         Wh_Log(L"Loaded %s", moduleName);
         if (HookTaskbarViewDllSymbols(module)) {
             Wh_ApplyHookOperations();
+            RefreshLiveTaskbarClock();
         }
     }
 }
@@ -1417,6 +1517,8 @@ BOOL Wh_ModInit() {
 
     g_currentDesktopNumber.store(ReadCurrentDesktopNumberFromRegistry());
 
+    HookExplorerExeSymbols();
+
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
@@ -1444,6 +1546,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    RefreshLiveTaskbarClock();
     UpdateAllClockEntries(true);
 }
 
@@ -1457,6 +1560,7 @@ void Wh_ModAfterInit() {
         }
     }
 
+    RefreshLiveTaskbarClock();
     UpdateAllClockEntries(true);
 }
 
