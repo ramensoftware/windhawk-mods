@@ -186,7 +186,7 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     if (g_hHook) UnhookWindowsHookEx(g_hHook);
     if (g_hOSD) DestroyWindow(g_hOSD);
     return 0;
-}
+
 
 // ---------------------------------------------------------------------------
 // 4. Windhawk Tool Callbacks
@@ -380,4 +380,5 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
 
