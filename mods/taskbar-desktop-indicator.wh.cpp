@@ -2,7 +2,7 @@
 // @id              taskbar-desktop-indicator
 // @name            Taskbar Desktop Indicator
 // @description     Displays the current virtual desktop as a number or marker in the Windows 11 taskbar clock area
-// @version         1.0.0
+// @version         1.1.0
 // @author          Simon Benedict
 // @github          https://github.com/simon-ami
 // @include         explorer.exe
