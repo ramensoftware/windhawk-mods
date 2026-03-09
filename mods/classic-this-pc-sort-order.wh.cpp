@@ -37,7 +37,10 @@ Restarting Explorer is recommended after installing the mod.
     - classic: All Items shortcut
 - hidecplfrompc: true
   $name: Hide Control Panel from This PC folder view
-  $description: Hides Control Panel shortcut on the folder view and keeps it in the navigation pane.
+  $description: Hides Control Panel shortcut on the This PC folder view and keeps it in the navigation pane.
+- hidecplfromdesktop: true
+  $name: Hide Control Panel from Desktop folder view
+  $description: Hides Control Panel shortcut on the desktop folder.
 */
 // ==/WindhawkModSettings==
 
@@ -72,6 +75,7 @@ struct
 {
     ADDCPLTYPE fAddCPL;
     bool fHideCPLFromThisPC;
+    bool fHideCPLFromDesktop;
 } g_settings;
 
 typedef struct
@@ -160,6 +164,33 @@ HRESULT STDCALL CDrivesViewCallback_ShouldShow_hook(void *pThis, IShellFolder *p
     return hr;
 }
 
+// public: virtual long __cdecl CDesktopFolder::ShouldShow(struct IShellFolder *,struct _ITEMIDLIST_ABSOLUTE const *,struct _ITEMID_CHILD const __unaligned *)
+HRESULT (STDCALL *CDesktopFolder_ShouldShow_orig)(void *, IShellFolder *, LPCITEMIDLIST, LPCITEMIDLIST);
+HRESULT STDCALL CDesktopFolder_ShouldShow_hook(void *pThis, IShellFolder *psf, LPCITEMIDLIST pidlFolder, LPCITEMIDLIST pidlItem)
+{
+    HRESULT hr = CDesktopFolder_ShouldShow_orig(pThis, psf, pidlFolder, pidlItem);
+
+    if (hr != S_FALSE&& g_settings.fHideCPLFromDesktop)
+    {
+        IShellItem2 *psi2 = NULL;
+        if (SUCCEEDED(SHCreateItemWithParent(nullptr, psf, pidlItem, IID_PPV_ARGS(&psi2))))
+        {
+            CLSID clsid;
+            if (SUCCEEDED(psi2->GetCLSID(PKEY_NamespaceCLSID, &clsid)))
+            {
+                if (IsEqualCLSID(clsid, *pguidCplCategory))
+                {
+                    hr = S_FALSE;
+                }
+            }
+            if (psi2)
+                psi2->Release();
+        }     
+    }
+
+    return hr;
+}
+
 void LoadSettings(void)
 {
     PCWSTR szCplType = Wh_GetStringSetting(L"addcpltype"); 
@@ -179,6 +210,7 @@ void LoadSettings(void)
 
     Wh_FreeStringSetting(szCplType);
     g_settings.fHideCPLFromThisPC = Wh_GetIntSetting(L"hidecplfrompc");
+    g_settings.fHideCPLFromDesktop = Wh_GetIntSetting(L"hidecplfromdesktop");
 }
 
 BOOL Wh_ModInit() 
@@ -201,7 +233,8 @@ BOOL Wh_ModInit()
     }
 
     // windows.storage.dll
-    WindhawkUtils::SYMBOL_HOOK windowsStorageHook
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[]
+    {
         {
             {
                 L"public: virtual long " SSTDCALL " CRegFolder::Initialize(struct REGITEMSINFO const *)"
@@ -209,8 +242,20 @@ BOOL Wh_ModInit()
             &CRegFolder_Initialize_orig,
             CRegFolder_Initialize_hook,
             false
-        };
-
+        },
+        {
+            {
+                #ifdef _WIN64
+                L"public: virtual long __cdecl CDesktopFolder::ShouldShow(struct IShellFolder *,struct _ITEMIDLIST_ABSOLUTE const *,struct _ITEMID_CHILD const __unaligned *)"
+                #else
+                L"public: virtual long __stdcall CDesktopFolder::ShouldShow(struct IShellFolder *,struct _ITEMIDLIST_ABSOLUTE const *,struct _ITEMID_CHILD const *)"
+                #endif
+            },
+            &CDesktopFolder_ShouldShow_orig,
+            CDesktopFolder_ShouldShow_hook,
+            false
+        },
+    };
 
     const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[]
     {
@@ -252,7 +297,8 @@ BOOL Wh_ModInit()
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(hWindowsStorage, &windowsStorageHook, 1)) 
+    if (!WindhawkUtils::HookSymbols(hWindowsStorage, windowsStorageHooks,
+                                    ARRAYSIZE(windowsStorageHooks))) 
     {
         Wh_Log(L"Failed to hook windows.storage.dll");
         return FALSE;
