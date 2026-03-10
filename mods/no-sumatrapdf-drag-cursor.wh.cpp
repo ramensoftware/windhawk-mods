@@ -12,7 +12,8 @@
 
 // ==WindhawkModReadme==
 /*
-# No SumatraPDF drag cursor
+# No SumatraPDF Drag Cursor
+
 This mod removes the drag cursor which is shown when panning a document by dragging with the cursor.
 ![SumatraPDF Drag Cursor](https://raw.githubusercontent.com/ItsProfessional/Screenshots/refs/heads/main/Windhawk/no-sumatrapdf-drag-cursor.png)
 */
@@ -20,17 +21,11 @@ This mod removes the drag cursor which is shown when panning a document by dragg
 
 #include <Windows.h>
 
-#ifdef _WIN64
-#define STDCALL  __cdecl
-#else
-#define STDCALL  __stdcall
-#endif
-
 HCURSOR g_hCursor{0};
 
 using LoadCursor_t = decltype(&LoadCursor);
 LoadCursor_t LoadCursor_orig;
-HCURSOR STDCALL LoadCursor_hook(HINSTANCE hInstance, LPCWSTR lpCursorName) {
+HCURSOR WINAPI LoadCursor_hook(HINSTANCE hInstance, LPCWSTR lpCursorName) {
     HCURSOR hCursor = LoadCursor_orig(hInstance, lpCursorName);
     
     if(!g_hCursor && IS_INTRESOURCE(lpCursorName) && (ULONG_PTR)lpCursorName == 132)
@@ -41,7 +36,7 @@ HCURSOR STDCALL LoadCursor_hook(HINSTANCE hInstance, LPCWSTR lpCursorName) {
 
 using SetCursor_t = decltype(&SetCursor);
 SetCursor_t SetCursor_orig;
-HCURSOR STDCALL SetCursor_hook(HCURSOR hCursor) {
+HCURSOR WINAPI SetCursor_hook(HCURSOR hCursor) {
     if(hCursor == g_hCursor) return GetCursor();
 
     return SetCursor_orig(hCursor);
