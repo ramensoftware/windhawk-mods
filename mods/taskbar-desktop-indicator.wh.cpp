@@ -1033,16 +1033,21 @@ DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
         return 0;
     }
 
-    bool registered = RegisterVirtualDesktopNotificationsOnCurrentThread();
+    RegisterVirtualDesktopNotificationsOnCurrentThread();
     if (g_notificationReadyEvent) {
         SetEvent(g_notificationReadyEvent);
     }
 
-    if (registered && g_notificationStopEvent) {
+    if (g_notificationStopEvent) {
         bool stopping = false;
         while (!stopping) {
+            if (!g_virtualDesktopNotificationsRegistered) {
+                RegisterVirtualDesktopNotificationsOnCurrentThread();
+            }
+
+            DWORD waitTimeout = g_virtualDesktopNotificationsRegistered ? INFINITE : 1000;
             DWORD waitResult = MsgWaitForMultipleObjects(
-                1, &g_notificationStopEvent, FALSE, INFINITE, QS_ALLINPUT);
+                1, &g_notificationStopEvent, FALSE, waitTimeout, QS_ALLINPUT);
             switch (waitResult) {
                 case WAIT_OBJECT_0:
                     stopping = true;
@@ -1055,6 +1060,8 @@ DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
                     }
                     break;
                 }
+                case WAIT_TIMEOUT:
+                    break;
                 default:
                     Wh_Log(L"Virtual desktop notification thread wait returned unexpectedly: %lu",
                            waitResult);
@@ -1064,7 +1071,7 @@ DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
         }
     }
 
-    if (registered) {
+    if (g_virtualDesktopNotificationsRegistered) {
         UnregisterVirtualDesktopNotificationsOnCurrentThread();
     }
 
@@ -1073,6 +1080,22 @@ DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
 }
 
 bool EnsureVirtualDesktopNotificationThread() {
+    if (g_notificationThread &&
+        WaitForSingleObject(g_notificationThread, 0) == WAIT_OBJECT_0) {
+        CloseHandle(g_notificationThread);
+        g_notificationThread = nullptr;
+
+        if (g_notificationReadyEvent) {
+            CloseHandle(g_notificationReadyEvent);
+            g_notificationReadyEvent = nullptr;
+        }
+
+        if (g_notificationStopEvent) {
+            CloseHandle(g_notificationStopEvent);
+            g_notificationStopEvent = nullptr;
+        }
+    }
+
     if (g_notificationThread) {
         return g_virtualDesktopNotificationsRegistered.load();
     }
