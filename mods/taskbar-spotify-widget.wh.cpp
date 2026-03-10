@@ -4,6 +4,7 @@
 // @description     A native-style Spotify widget for the taskbar. Windows 10/11 
 // @version         1.0
 // @author          memeri121
+// @github          https://github.com/memeri121
 // @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus -lshell32 -lcomctl32
 // ==/WindhawkMod==
@@ -1597,4 +1598,5 @@ void Wh_ModUninit() {
 
     WhTool_ModUninit();
     ExitProcess(0);
+
 }
