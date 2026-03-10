@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              no-sumatrapdf-drag-cursor
 // @name            No SumatraPDF Drag Cursor
-// @description     Remove the drag cursor which is shown when panning a document using by dragging with the cursor.
+// @description     Remove the drag cursor which is shown when panning a document by dragging with the cursor.
 // @version         1.0.0
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
@@ -13,7 +13,7 @@
 // ==WindhawkModReadme==
 /*
 # No SumatraPDF drag cursor
-This mod removes the drag cursor which is shown when panning a document using by dragging with the cursor.
+This mod removes the drag cursor which is shown when panning a document by dragging with the cursor.
 ![SumatraPDF Drag Cursor](https://raw.githubusercontent.com/ItsProfessional/Screenshots/refs/heads/main/Windhawk/no-sumatrapdf-drag-cursor.png)
 */
 // ==/WindhawkModReadme==
