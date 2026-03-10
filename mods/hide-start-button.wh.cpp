@@ -35,7 +35,6 @@ Based on "Start button always on the left" (taskbar-start-button-position) mod.
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
-#include <winrt/base.h>
 
 using namespace winrt::Windows::UI::Xaml;
 
@@ -188,7 +187,6 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
 
     size_t taskbarElementIUnknownOffset = 0x48;
 
-#if defined(_M_X64)
     {
         const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
         if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
@@ -198,11 +196,6 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
         }
     }
-#elif defined(_M_ARM64)
-    // Just use the default offset.
-#else
-#error "Unsupported architecture"
-#endif
 
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
@@ -270,18 +263,11 @@ XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
     return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
 }
 
-using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
+using RunFromWindowThreadProc_t = void(WINAPI*)();
 
-bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         void* procParam) {
+bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc) {
     static const UINT runFromWindowThreadRegisteredMsg =
         RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        void* procParam;
-    };
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) {
@@ -289,7 +275,7 @@ bool RunFromWindowThread(HWND hWnd,
     }
 
     if (dwThreadId == GetCurrentThreadId()) {
-        proc(procParam);
+        proc();
         return true;
     }
 
@@ -299,9 +285,8 @@ bool RunFromWindowThread(HWND hWnd,
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                    RUN_FROM_WINDOW_THREAD_PARAM* param =
-                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
-                    param->proc(param->procParam);
+                    auto proc = (RunFromWindowThreadProc_t)cwp->lParam;
+                    proc();
                 }
             }
 
@@ -312,10 +297,8 @@ bool RunFromWindowThread(HWND hWnd,
         return false;
     }
 
-    RUN_FROM_WINDOW_THREAD_PARAM param;
-    param.proc = proc;
-    param.procParam = procParam;
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0,
+                (LPARAM)(RunFromWindowThreadProc_t)proc);
 
     UnhookWindowsHookEx(hook);
 
@@ -358,8 +341,8 @@ void ApplySettingsFromTaskbarThread() {
 }
 
 void ApplySettings(HWND hTaskbarWnd) {
-    RunFromWindowThread(
-        hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
+    RunFromWindowThread(hTaskbarWnd,
+                        []() { ApplySettingsFromTaskbarThread(); });
 }
 
 bool HookTaskbarDllSymbols() {
