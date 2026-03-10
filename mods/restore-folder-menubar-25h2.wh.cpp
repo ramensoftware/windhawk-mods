@@ -176,7 +176,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK explorerframe_hooks[] =
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] =
     {
         {{ L"protected: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)" },
             (void**)&CBSInitializeOriginal, (void*)CBSInitializeHook, FALSE },
@@ -184,7 +184,7 @@ BOOL Wh_ModInit()
             (void**)&CSBSetFlagsOriginal, (void*)CSBSetFlagsHook, FALSE }
     };
 
-    if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_hooks, ARRAYSIZE(explorerframe_hooks)))
+    if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks)))
     {
         Wh_Log(L"Failed to hook explorerframe.dll");
         return FALSE;
