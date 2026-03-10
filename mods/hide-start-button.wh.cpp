@@ -27,7 +27,6 @@ Based on "Start button always on the left" (taskbar-start-button-position) mod.
 #include <windhawk_utils.h>
 
 #include <atomic>
-#include <functional>
 
 #undef GetCurrentTime
 
@@ -36,54 +35,22 @@ Based on "Start button always on the left" (taskbar-start-button-position) mod.
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
-#include <winrt/base.h>
 
 using namespace winrt::Windows::UI::Xaml;
 
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
-
 thread_local bool g_inArrangeOverride;
 
-HWND FindCurrentProcessTaskbarWnd() {
-    HWND hTaskbarWnd = nullptr;
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD dwProcessId;
-            WCHAR className[32];
-            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
-                dwProcessId == GetCurrentProcessId() &&
-                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                *reinterpret_cast<HWND*>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&hTaskbarWnd));
-
-    return hTaskbarWnd;
-}
-
-FrameworkElement EnumChildElements(
-    FrameworkElement element,
-    std::function<bool(FrameworkElement)> enumCallback) {
-    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
-
-    for (int i = 0; i < childrenCount; i++) {
+template <typename F>
+FrameworkElement EnumChildElements(FrameworkElement element, F callback) {
+    int count = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < count; i++) {
         auto child = Media::VisualTreeHelper::GetChild(element, i)
                          .try_as<FrameworkElement>();
-        if (!child) {
-            Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
-            continue;
-        }
-
-        if (enumCallback(child)) {
+        if (child && callback(child))
             return child;
-        }
     }
-
     return nullptr;
 }
 
@@ -93,64 +60,33 @@ FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
     });
 }
 
-FrameworkElement FindChildByClassName(FrameworkElement element,
-                                      PCWSTR className) {
-    return EnumChildElements(element, [className](FrameworkElement child) {
-        return winrt::get_class_name(child) == className;
-    });
-}
-
 bool ApplyStyle(XamlRoot xamlRoot) {
-    FrameworkElement xamlRootContent =
+    FrameworkElement child =
         xamlRoot.Content().try_as<FrameworkElement>();
 
-    FrameworkElement taskbarFrameRepeater = nullptr;
-
-    FrameworkElement child = xamlRootContent;
-    if (child &&
-        (child = FindChildByClassName(child, L"Taskbar.TaskbarFrame")) &&
-        (child = FindChildByName(child, L"RootGrid")) &&
-        (child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
-        taskbarFrameRepeater = child;
-    }
-
-    if (!taskbarFrameRepeater) {
+    if (!child ||
+        !(child = EnumChildElements(child, [](FrameworkElement c) {
+            return winrt::get_class_name(c) == L"Taskbar.TaskbarFrame";
+        })) ||
+        !(child = FindChildByName(child, L"RootGrid")) ||
+        !(child = FindChildByName(child, L"TaskbarFrameRepeater")))
         return false;
-    }
 
-    auto startButton =
-        EnumChildElements(taskbarFrameRepeater, [](FrameworkElement child) {
-            auto childClassName = winrt::get_class_name(child);
-            if (childClassName != L"Taskbar.ExperienceToggleButton") {
-                return false;
-            }
+    auto startButton = EnumChildElements(child, [](FrameworkElement c) {
+        return winrt::get_class_name(c) ==
+                   L"Taskbar.ExperienceToggleButton" &&
+               Automation::AutomationProperties::GetAutomationId(c) ==
+                   L"StartButton";
+    });
 
-            auto automationId =
-                Automation::AutomationProperties::GetAutomationId(child);
-            return automationId == L"StartButton";
-        });
-
-    if (startButton) {
-        if (!g_unloading) {
-            startButton.Visibility(Visibility::Collapsed);
-            startButton.Opacity(0);
-            startButton.IsHitTestVisible(false);
-        } else {
-            startButton.Visibility(Visibility::Visible);
-            startButton.Opacity(1);
-            startButton.IsHitTestVisible(true);
-
-            Thickness margin = startButton.Margin();
-            margin.Right = 0;
-            startButton.Margin(margin);
-        }
-    }
+    if (startButton)
+        startButton.Visibility(g_unloading ? Visibility::Visible
+                                           : Visibility::Collapsed);
 
     return true;
 }
 
 void* CTaskBand_ITaskListWndSite_vftable;
-
 void* CSecondaryTaskBand_ITaskListWndSite_vftable;
 
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
@@ -166,184 +102,108 @@ using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
 
 XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
-    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1])
         return nullptr;
-    }
 
-    size_t taskbarElementIUnknownOffset = 0x48;
+    size_t offset = 0x48;
+    const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+    if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+        b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F)
+        offset = b[7];
 
-#if defined(_M_X64)
-    {
-        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
-        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
-            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
-            taskbarElementIUnknownOffset = b[7];
-        } else {
-            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
-        }
-    }
-#elif defined(_M_ARM64)
-    // Just use the default offset.
-#else
-#error "Unsupported architecture"
-#endif
+    auto* unk = *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] + offset);
+    FrameworkElement fe = nullptr;
+    unk->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                        winrt::put_abi(fe));
 
-    auto* taskbarElementIUnknown =
-        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
-                      taskbarElementIUnknownOffset);
-
-    FrameworkElement taskbarElement = nullptr;
-    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                                           winrt::put_abi(taskbarElement));
-
-    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
-
+    auto result = fe ? fe.XamlRoot() : nullptr;
     std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-
     return result;
 }
 
-XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
-    if (!hTaskSwWnd) {
+XamlRoot GetTaskbarXamlRoot(HWND hWnd, bool isSecondary) {
+    HWND hTaskSwWnd = isSecondary
+        ? (HWND)FindWindowEx(hWnd, nullptr, L"WorkerW", nullptr)
+        : (HWND)GetProp(hWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd)
         return nullptr;
-    }
 
-    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
-    void* taskBandForTaskListWndSite = taskBand;
-    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
-                    CTaskBand_ITaskListWndSite_vftable;
-         i++) {
-        if (i == 20) {
+    void* vftable = isSecondary ? CSecondaryTaskBand_ITaskListWndSite_vftable
+                                : CTaskBand_ITaskListWndSite_vftable;
+    void* p = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    for (int i = 0; *(void**)p != vftable; i++) {
+        if (i == 20)
             return nullptr;
-        }
-
-        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
+        p = (void**)p + 1;
     }
 
-    void* taskbarHostSharedPtr[2]{};
-    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
-                                      taskbarHostSharedPtr);
-
-    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+    void* sharedPtr[2]{};
+    if (isSecondary)
+        CSecondaryTaskBand_GetTaskbarHost_Original(p, sharedPtr);
+    else
+        CTaskBand_GetTaskbarHost_Original(p, sharedPtr);
+    return XamlRootFromTaskbarHostSharedPtr(sharedPtr);
 }
 
-XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
-    HWND hTaskSwWnd =
-        (HWND)FindWindowEx(hSecondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
-    if (!hTaskSwWnd) {
-        return nullptr;
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hWnd = nullptr;
+    while ((hWnd = FindWindowEx(nullptr, hWnd, L"Shell_TrayWnd", nullptr))) {
+        DWORD pid;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid == GetCurrentProcessId())
+            return hWnd;
     }
-
-    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
-    void* taskBandForTaskListWndSite = taskBand;
-    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
-                    CSecondaryTaskBand_ITaskListWndSite_vftable;
-         i++) {
-        if (i == 20) {
-            return nullptr;
-        }
-
-        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
-    }
-
-    void* taskbarHostSharedPtr[2]{};
-    CSecondaryTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
-                                               taskbarHostSharedPtr);
-
-    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
-}
-
-using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
-
-bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         void* procParam) {
-    static const UINT runFromWindowThreadRegisteredMsg =
-        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        void* procParam;
-    };
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
-        return false;
-    }
-
-    if (dwThreadId == GetCurrentThreadId()) {
-        proc(procParam);
-        return true;
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                    RUN_FROM_WINDOW_THREAD_PARAM* param =
-                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
-                    param->proc(param->procParam);
-                }
-            }
-
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, dwThreadId);
-    if (!hook) {
-        return false;
-    }
-
-    RUN_FROM_WINDOW_THREAD_PARAM param;
-    param.proc = proc;
-    param.procParam = procParam;
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
-
-    UnhookWindowsHookEx(hook);
-
-    return true;
+    return nullptr;
 }
 
 void ApplySettingsFromTaskbarThread() {
-    Wh_Log(L"Applying settings");
-
     EnumThreadWindows(
         GetCurrentThreadId(),
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            WCHAR szClassName[32];
-            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+        [](HWND hWnd, LPARAM) -> BOOL {
+            WCHAR cls[32];
+            if (GetClassName(hWnd, cls, ARRAYSIZE(cls)) == 0)
                 return TRUE;
-            }
 
             XamlRoot xamlRoot = nullptr;
-            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
-                xamlRoot = GetTaskbarXamlRoot(hWnd);
-            } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
-                xamlRoot = GetSecondaryTaskbarXamlRoot(hWnd);
-            } else {
-                return TRUE;
-            }
+            if (_wcsicmp(cls, L"Shell_TrayWnd") == 0)
+                xamlRoot = GetTaskbarXamlRoot(hWnd, false);
+            else if (_wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0)
+                xamlRoot = GetTaskbarXamlRoot(hWnd, true);
 
-            if (!xamlRoot) {
-                Wh_Log(L"Getting XamlRoot failed");
-                return TRUE;
-            }
-
-            if (!ApplyStyle(xamlRoot)) {
-                Wh_Log(L"ApplyStyles failed");
-                return TRUE;
-            }
-
+            if (xamlRoot)
+                ApplyStyle(xamlRoot);
             return TRUE;
         },
         0);
 }
 
 void ApplySettings(HWND hTaskbarWnd) {
-    RunFromWindowThread(
-        hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
+    static const UINT msg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    DWORD threadId = GetWindowThreadProcessId(hTaskbarWnd, nullptr);
+    if (!threadId)
+        return;
+
+    if (threadId == GetCurrentThreadId()) {
+        ApplySettingsFromTaskbarThread();
+        return;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION &&
+                ((const CWPSTRUCT*)lParam)->message == msg)
+                ApplySettingsFromTaskbarThread();
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook)
+        return;
+
+    SendMessage(hTaskbarWnd, msg, 0, 0);
+    UnhookWindowsHookEx(hook);
 }
 
 using IUIElement_Arrange_t =
@@ -353,34 +213,23 @@ HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
                                        winrt::Windows::Foundation::Rect rect) {
     auto original = [=] { return IUIElement_Arrange_Original(pThis, rect); };
 
-    if (!g_inArrangeOverride || g_unloading) {
+    if (!g_inArrangeOverride || g_unloading)
         return original();
-    }
 
     FrameworkElement element = nullptr;
     ((IUnknown*)pThis)
         ->QueryInterface(winrt::guid_of<FrameworkElement>(),
                          winrt::put_abi(element));
-    if (!element) {
+    if (!element)
         return original();
-    }
 
-    auto className = winrt::get_class_name(element);
-    if (className != L"Taskbar.ExperienceToggleButton") {
+    if (winrt::get_class_name(element) != L"Taskbar.ExperienceToggleButton" ||
+        Automation::AutomationProperties::GetAutomationId(element) !=
+            L"StartButton")
         return original();
-    }
 
-    auto automationId =
-        Automation::AutomationProperties::GetAutomationId(element);
-    if (automationId != L"StartButton") {
-        return original();
-    }
-
-    // Collapse so the layout reclaims the space on the next pass.
     element.Visibility(Visibility::Collapsed);
-
-    winrt::Windows::Foundation::Rect zeroRect = {0, 0, 0, rect.Height};
-    return IUIElement_Arrange_Original(pThis, zeroRect);
+    return IUIElement_Arrange_Original(pThis, {0, 0, 0, rect.Height});
 }
 
 using TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_t =
@@ -398,94 +247,56 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
     [[maybe_unused]] static bool hooked = [] {
         Shapes::Rectangle rectangle;
         IUIElement element = rectangle;
-
         void** vtable = *(void***)winrt::get_abi(element);
-        auto arrange = (IUIElement_Arrange_t)vtable[92];
-
-        WindhawkUtils::SetFunctionHook(arrange, IUIElement_Arrange_Hook,
+        WindhawkUtils::SetFunctionHook((IUIElement_Arrange_t)vtable[92],
+                                       IUIElement_Arrange_Hook,
                                        &IUIElement_Arrange_Original);
         Wh_ApplyHookOperations();
         return true;
     }();
 
     g_inArrangeOverride = true;
-
     HRESULT ret = TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original(
         pThis, context, size, resultSize);
-
     g_inArrangeOverride = false;
-
     return ret;
 }
 
 bool HookTaskbarDllSymbols() {
     HMODULE module =
         LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!module) {
-        Wh_Log(L"Failed to load taskbar.dll");
+    if (!module)
         return false;
-    }
 
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        {
-            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
-            &CTaskBand_ITaskListWndSite_vftable,
-        },
-        {
-            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
-            &CSecondaryTaskBand_ITaskListWndSite_vftable,
-        },
-        {
-            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
-            &CTaskBand_GetTaskbarHost_Original,
-        },
-        {
-            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
-            &TaskbarHost_FrameHeight_Original,
-        },
-        {
-            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
-            &CSecondaryTaskBand_GetTaskbarHost_Original,
-        },
-        {
-            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
-            &std__Ref_count_base__Decref_Original,
-        },
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CTaskBand_ITaskListWndSite_vftable},
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CSecondaryTaskBand_ITaskListWndSite_vftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+         &CTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+         &TaskbarHost_FrameHeight_Original},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &CSecondaryTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+         &std__Ref_count_base__Decref_Original},
     };
-
-    return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
-            &TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original,
-            TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook,
-        },
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
+         &TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original,
+         TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook},
     };
-
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
-    if (!module) {
-        module = GetModuleHandle(L"ExplorerExtensions.dll");
-    }
-
-    return module;
-}
-
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
-        Wh_Log(L"Loaded %s", lpLibFileName);
-
-        if (HookTaskbarViewDllSymbols(module)) {
-            Wh_ApplyHookOperations();
-        }
-    }
+    HMODULE m = GetModuleHandle(L"Taskbar.View.dll");
+    return m ? m : GetModuleHandle(L"ExplorerExtensions.dll");
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -494,72 +305,53 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module) {
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+    if (module && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        if (HookTaskbarViewDllSymbols(module))
+            Wh_ApplyHookOperations();
     }
-
     return module;
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L">");
-
-    if (!HookTaskbarDllSymbols()) {
+    if (!HookTaskbarDllSymbols())
         return FALSE;
-    }
 
-    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+    if (HMODULE m = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
-        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+        if (!HookTaskbarViewDllSymbols(m))
             return FALSE;
-        }
     } else {
-        Wh_Log(L"Taskbar view module not loaded yet");
-
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-        auto pKernelBaseLoadLibraryExW =
-            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
-                                                      "LoadLibraryExW");
-        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
+        HMODULE kb = GetModuleHandle(L"kernelbase.dll");
+        auto pLoadLib =
+            (decltype(&LoadLibraryExW))GetProcAddress(kb, "LoadLibraryExW");
+        WindhawkUtils::SetFunctionHook(pLoadLib, LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
     }
-
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(L">");
-
     if (!g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+        if (HMODULE m = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"Got Taskbar.View.dll");
-
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                if (HookTaskbarViewDllSymbols(m))
                     Wh_ApplyHookOperations();
-                }
             }
         }
     }
 
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (hTaskbarWnd) {
+    if (hTaskbarWnd)
         ApplySettings(hTaskbarWnd);
-    }
 }
 
 void Wh_ModBeforeUninit() {
-    Wh_Log(L">");
-
     g_unloading = true;
-
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (hTaskbarWnd) {
+    if (hTaskbarWnd)
         ApplySettings(hTaskbarWnd);
-    }
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L">");
-}
+void Wh_ModUninit() {}
