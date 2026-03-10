@@ -34,16 +34,12 @@ Based on "Start button always on the left" (taskbar-start-button-position) mod.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/base.h>
 
 using namespace winrt::Windows::UI::Xaml;
 
-std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
-
-thread_local bool g_inArrangeOverride;
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -366,79 +362,6 @@ void ApplySettings(HWND hTaskbarWnd) {
         hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
 }
 
-using IUIElement_Arrange_t =
-    HRESULT(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect rect);
-IUIElement_Arrange_t IUIElement_Arrange_Original;
-HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
-                                       winrt::Windows::Foundation::Rect rect) {
-    Wh_Log(L">");
-
-    auto original = [=] { return IUIElement_Arrange_Original(pThis, rect); };
-
-    if (!g_inArrangeOverride || g_unloading) {
-        return original();
-    }
-
-    FrameworkElement element = nullptr;
-    ((IUnknown*)pThis)
-        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                         winrt::put_abi(element));
-    if (!element) {
-        return original();
-    }
-
-    auto className = winrt::get_class_name(element);
-    if (className != L"Taskbar.ExperienceToggleButton") {
-        return original();
-    }
-
-    auto automationId =
-        Automation::AutomationProperties::GetAutomationId(element);
-    if (automationId != L"StartButton") {
-        return original();
-    }
-
-    winrt::Windows::Foundation::Rect zeroRect = {0, 0, 0, rect.Height};
-    return IUIElement_Arrange_Original(pThis, zeroRect);
-}
-
-using TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_t =
-    HRESULT(WINAPI*)(void* pThis,
-                     void* context,
-                     winrt::Windows::Foundation::Size size,
-                     winrt::Windows::Foundation::Size* resultSize);
-TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_t
-    TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original;
-HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
-    void* pThis,
-    void* context,
-    winrt::Windows::Foundation::Size size,
-    winrt::Windows::Foundation::Size* resultSize) {
-    Wh_Log(L">");
-
-    [[maybe_unused]] static bool hooked = [] {
-        Shapes::Rectangle rectangle;
-        IUIElement element = rectangle;
-
-        void** vtable = *(void***)winrt::get_abi(element);
-        auto arrange = (IUIElement_Arrange_t)vtable[92];
-
-        WindhawkUtils::SetFunctionHook(arrange, IUIElement_Arrange_Hook,
-                                       &IUIElement_Arrange_Original);
-        Wh_ApplyHookOperations();
-        return true;
-    }();
-
-    g_inArrangeOverride = true;
-
-    HRESULT ret = TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original(
-        pThis, context, size, resultSize);
-
-    g_inArrangeOverride = false;
-
-    return ret;
-}
-
 bool HookTaskbarDllSymbols() {
     HMODULE module =
         LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -477,51 +400,6 @@ bool HookTaskbarDllSymbols() {
     return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
-            &TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original,
-            TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook,
-        },
-    };
-
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
-}
-
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
-    if (!module) {
-        module = GetModuleHandle(L"ExplorerExtensions.dll");
-    }
-
-    return module;
-}
-
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
-        Wh_Log(L"Loaded %s", lpLibFileName);
-
-        if (HookTaskbarViewDllSymbols(module)) {
-            Wh_ApplyHookOperations();
-        }
-    }
-}
-
-using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-LoadLibraryExW_t LoadLibraryExW_Original;
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
-                                   HANDLE hFile,
-                                   DWORD dwFlags) {
-    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module) {
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
-    }
-
-    return module;
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -529,40 +407,11 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-        g_taskbarViewDllLoaded = true;
-        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
-            return FALSE;
-        }
-    } else {
-        Wh_Log(L"Taskbar view module not loaded yet");
-
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-        auto pKernelBaseLoadLibraryExW =
-            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
-                                                      "LoadLibraryExW");
-        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
-    }
-
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
-
-    if (!g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"Got Taskbar.View.dll");
-
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
-                    Wh_ApplyHookOperations();
-                }
-            }
-        }
-    }
 
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
