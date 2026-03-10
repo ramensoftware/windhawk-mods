@@ -22,10 +22,8 @@ This mod removes the drag cursor which is shown when panning a document by dragg
 
 #ifdef _WIN64
 #define STDCALL  __cdecl
-#define SSTDCALL L"__cdecl"
 #else
 #define STDCALL  __stdcall
-#define SSTDCALL L"__stdcall"
 #endif
 
 HCURSOR g_hCursor{0};
