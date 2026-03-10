@@ -20,11 +20,13 @@ been recently inactive while recent builds of Windows became incompatible.
 
 This mod restores the menubar in recent builds of 24h2 and in 25h2.
 
-**!Important!** You would need to use the [vivetool](https://github.com/thebookisclosed/ViVe/releases) utility
+**!Important!** You would need to use the [ViVeTool](https://github.com/thebookisclosed/ViVe/releases) utility
 with the following command before using this mod:
 
 `vivetool /disable /id:55063786`
 
+Alternatively, you can use the [ViVeToolGUI](https://apps.microsoft.com/detail/9P1BW5WB82MH) from
+Windows Store.
 On later builds you may also need to replace the file Explorerframe.dll with the one from an older Windows version.
 
 */
