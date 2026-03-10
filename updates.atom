@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-10T10:30:07.000Z</updated>
+    <updated>2026-03-10T13:21:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[No SumatraPDF Drag Cursor 1.0.0]]></title>
+        <id>https://windhawk.net/mods/no-sumatrapdf-drag-cursor#df31498aec56f9a9cb1a8944f2120af88ed38b4a</id>
+        <link href="https://windhawk.net/mods/no-sumatrapdf-drag-cursor"/>
+        <updated>2026-03-10T13:21:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="nosumatrapdfdragcursor">No SumatraPDF Drag Cursor</h1>
+<p>This mod removes the drag cursor which is shown when panning a document by dragging with the cursor.
+<img src="https://raw.githubusercontent.com/ItsProfessional/Screenshots/refs/heads/main/Windhawk/no-sumatrapdf-drag-cursor.png" alt="SumatraPDF Drag Cursor" /></p>]]></content>
+        <author>
+            <name>ItsProfessional</name>
+            <uri>https://github.com/ItsProfessional</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Desktop Indicator 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-desktop-indicator#d205b0c73e8dacf528c684eac03b444da31b803a</id>
@@ -454,19 +467,6 @@ movimiento moderno de WinUI utilizado en Windows 11</strong>.</p>
         <link href="https://windhawk.net/mods/legacy-sound-flyout"/>
         <updated>2026-03-04T17:58:39.000Z</updated>
         <content type="html"><![CDATA[<p>New method, support for 24h2 and later</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.0.0]]></title>
-        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#f2218777d0edd317dcebe26e444176231202e103</id>
-        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
-        <updated>2026-03-04T17:54:41.000Z</updated>
-        <content type="html"><![CDATA[<p>Replaces the UWP titlebars with native Win32 titlebars.</p>
-<p>This mod is focused on the Classic theme, so may produce sub-optimal results in other cases.</p>
-<p><img src="https://i.imgur.com/Pf6RQTk.png" alt="Screenshot" /></p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>

@@ -5635,6 +5635,33 @@
                 "version": "1.0.0"
             }
         },
+        "no-sumatrapdf-drag-cursor": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773148884000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773148884000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Remove the drag cursor which is shown when panning a document by dragging with the cursor.",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "SumatraPDF.exe"
+                ],
+                "name": "No SumatraPDF Drag Cursor",
+                "version": "1.0.0"
+            }
+        },
         "no-taskbar-item-glow": {
             "details": {
                 "defaultSorting": 927,
