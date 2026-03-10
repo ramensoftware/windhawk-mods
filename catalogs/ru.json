@@ -6707,6 +6707,37 @@
                 "version": "1.2.0"
             }
         },
+        "restore-folder-menubar-25h2": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773138544000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773138544000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Anixx",
+                "compilerOptions": "-lcomctl32",
+                "description": "Restores the menubar in folder windows in 24h2, 25h2 and later",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Restore folder menubar in 24h2, 25h2",
+                "version": "1.0.0"
+            }
+        },
         "ribbon-caption-icon-fix": {
             "details": {
                 "defaultSorting": 3370,
@@ -7713,7 +7744,7 @@
                     2
                 ],
                 "ratingUsers": 2,
-                "updated": 1773100527000,
+                "updated": 1773138607000,
                 "users": 0
             },
             "metadata": {
@@ -7729,7 +7760,7 @@
                 ],
                 "license": "MIT",
                 "name": "Taskbar Desktop Indicator",
-                "version": "1.2.0"
+                "version": "1.2.1"
             }
         },
         "taskbar-disappearing-icon-fix-win11": {
