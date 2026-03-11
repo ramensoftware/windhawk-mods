@@ -357,14 +357,15 @@ class ModMetadataValidator:
         if not prop.value.startswith('https://github.com/'):
             prop.warn('@@ must start with "https://github.com/"')
         elif prop.value != expected and prop.value.lower() == expected.lower():
-            prop.warn(f'Expected @@ to be "{expected}" (case-sensitive)')
+            prop.warn(f'Expected @@ to be {expected} (case-sensitive)')
         elif prop.value == expected + '/':
-            prop.warn(f'Expected @@ to be "{expected}" (no trailing slash)')
+            prop.warn(f'Expected @@ to be {expected} (no trailing slash)')
         elif prop.value.startswith(expected + '/'):
-            prop.warn(f'Expected @@ to be "{expected}" (user profile URL only)')
+            prop.warn(f'Expected @@ to be {expected} (user profile URL only)')
         elif prop.value != expected:
             prop.warn(
-                f'Expected @@ to be "{expected}".\n'
+                f'Expected @@ ({prop.value}) to match the pull request author'
+                f' ({expected}).\n'
                 'Note that only the original author of the mod is allowed to submit'
                 ' updates.\n'
                 'If you are not the original author, you might want to contact them to'
