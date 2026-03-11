@@ -2,7 +2,7 @@
 // @id              taskbar-media-widget
 // @name            Taskbar Media Widget
 // @description     A customizable taskbar media widget with transparency, alignment, and media controls.
-// @version         1.0
+// @version         1.1
 // @author          kevinoe
 // @github          https://github.com/kevinoes
 // @include         explorer.exe
@@ -15,7 +15,9 @@
 
 A customizable taskbar media widget for Windows that shows the current track and lets you control playback directly from the taskbar.
 
-This mod is based on the original **Taskbar Music Lounge** by **Hashah2311**, but has been significantly reworked with new rendering, layout, and customization options.
+This mod is based on the original **Taskbar Music Lounge** by **Hashah2311**, but has been extensively redesigned.
+
+Unlike the original version, this widget uses custom layered rendering instead of Windows acrylic styling, allowing configurable transparency, alignment, corner radius, font weight, album art visibility, and scrolling behavior.
 
 ## ✨ Features
 * **Universal Support:** Works with any media player that exposes Windows media sessions through GSMTC.
@@ -432,6 +434,10 @@ void DrawMediaPanel(Graphics& graphics, int width, int height) {
     graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
     graphics.Clear(Color(0, 0, 0, 0));
 
+    int dynamicSidePadding = max(0, min(6, (height - 36) / 8));
+    int leftPaddingNoArt = 11 + dynamicSidePadding;
+    int rightPadding = 10 + dynamicSidePadding;
+
     BYTE bgA = (g_Settings.backgroundColor >> 24) & 0xFF;
     BYTE bgR = (g_Settings.backgroundColor >> 16) & 0xFF;
     BYTE bgG = (g_Settings.backgroundColor >> 8) & 0xFF;
@@ -461,23 +467,32 @@ void DrawMediaPanel(Graphics& graphics, int width, int height) {
         state.isPlaying = g_MediaState.isPlaying;
     }
 
-    int contentLeft = 6;
+    int contentLeft = leftPaddingNoArt;
 
     if (g_Settings.showAlbumArt) {
         int artSize = height - 12;
         int artX = 6;
         int artY = 6;
+        int artRadius = max(0, g_Settings.cornerRadius - artX);
+
+        GraphicsPath artPath;
+        CreateRoundedRectPath(artPath, artX, artY, artSize, artSize, artRadius);
+
+        GraphicsState artState = graphics.Save();
+        graphics.SetClip(&artPath);
 
         if (state.albumArt) {
             graphics.DrawImage(state.albumArt, artX, artY, artSize, artSize);
         } else {
             SolidBrush placeBrush{Color(40, 128, 128, 128)};
-            graphics.FillRectangle(&placeBrush, artX, artY, artSize, artSize);
+            graphics.FillPath(&placeBrush, &artPath);
         }
+
+        graphics.Restore(artState);
 
         contentLeft = artX + artSize + 12;
     } else {
-        contentLeft = 11;  // 6 + 5px extra padding
+        contentLeft = leftPaddingNoArt;
     }
 
     if (state.albumArt) {
@@ -542,7 +557,7 @@ void DrawMediaPanel(Graphics& graphics, int width, int height) {
 
     // Text
     int textX = nX + 20;
-    int textMaxW = width - textX - 10;
+    int textMaxW = width - textX - rightPadding;
 
     wstring fullText = state.title;
     if (!state.artist.empty()) {
