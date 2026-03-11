@@ -80,6 +80,28 @@ Also check out the **Taskbar tray icon spacing and grid** mod.
 
     Used in newer Windows 11 builds with support for small taskbar icons (around
     July 2025)
+- CustomRules:
+    - - regexPattern: ""
+      - altButtonWidth: -1
+      - altButtonWidthSmall: -1
+  $name: Custom Rules
+  $description: >-
+    Set regex rule-based overwrites for specific taskbar elements. 
+
+    Side-note: use "[ \t\xA0]" to match empty spaces; "-1" to use default values
+
+    Example: 
+    
+    "^[ \t\xA0]*pinned[ \t\xA0]*$" -> matches all "Task Seperator 11" dividers
+
+    "^.*Thunderbird.*$" -> matches all buttons with name Thunderbird (running / pinned)
+
+    "^.*[ \t\xA0]pinned$" -> matches all pinned buttons
+
+    "^.*[ \t\xA0]running[ \t\xA0]window$" -> matches all running buttons
+
+    "^.*Windhawk.*running[ \t\xA0]window$" -> matches all running instances of Windhawk
+
 */
 // ==/WindhawkModSettings==
 
@@ -100,12 +122,17 @@ Also check out the **Taskbar tray icon spacing and grid** mod.
 
 using namespace winrt::Windows::UI::Xaml;
 
+struct iconOverrideRule {std::wstring pattern; 
+double iconSize; double buttonWidth; double iconSizeSmall; double buttonWidthSmall;
+};
+
 struct {
     int taskbarHeight;
     int iconSize;
     int taskbarButtonWidth;
     int iconSizeSmall;
     int taskbarButtonWidthSmall;
+    std::vector<iconOverrideRule> overrideRules;
 } g_settings;
 
 std::atomic<bool> g_taskbarViewDllLoaded;
@@ -1363,6 +1390,32 @@ TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     Wh_Log(L">");
 
+    // fetch c-string names of the actual button element
+    FrameworkElement fe = nullptr;
+    ((IUnknown*)pThis + 3)->QueryInterface(winrt::guid_of<FrameworkElement>(), 
+    winrt::put_abi(fe));
+
+    Wh_Log(L"pThis=%p  AutoName=%s", pThis, fe ? 
+    winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(fe).c_str() : L"<null>");
+    
+    double btn_width_overwrite {-1};
+    double s_btn_width_overwrite {-1};
+
+    auto btn_name = winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(fe);
+    std::wstring_view name{ btn_name.c_str(), btn_name.size() };
+
+
+    for (iconOverrideRule it: g_settings.overrideRules){    
+        std::wregex match_re(it.pattern);
+        Wh_Log(L"Matching: %s", it.pattern.c_str());
+        if (std::regex_match(name.begin(), name.end(), match_re)) {
+            Wh_Log(L"Matched: %s", btn_name.c_str());
+            btn_width_overwrite = it.buttonWidth;
+            s_btn_width_overwrite = it.buttonWidth;
+        }
+    };
+
+
     if (TaskListButton_UpdateIconColumnDefinition_Original &&
         (g_applyingSettings || g_taskbarButtonWidthCustomized)) {
         LONG mediumTaskbarButtonExtentOffset =
@@ -1375,7 +1428,12 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
             if (*mediumTaskbarButtonExtent >= 1 &&
                 *mediumTaskbarButtonExtent < 10000) {
                 double newValue =
-                    g_unloading ? 44 : g_settings.taskbarButtonWidth;
+                    g_unloading 
+                        ? 44 
+                        : (btn_width_overwrite != -1
+                            ? btn_width_overwrite 
+                            : g_settings.taskbarButtonWidth
+                        );
                 if (newValue != *mediumTaskbarButtonExtent) {
                     Wh_Log(
                         L"Updating MediumTaskbarButtonExtent for "
@@ -1383,6 +1441,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
                         *mediumTaskbarButtonExtent, newValue);
                     *mediumTaskbarButtonExtent = newValue;
                     updateButtonPadding = true;
+
                 }
             }
 
@@ -1392,7 +1451,12 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
             if (smallTaskbarButtonExtent && *smallTaskbarButtonExtent >= 1 &&
                 *smallTaskbarButtonExtent < 10000) {
                 double newValue =
-                    g_unloading ? 32 : g_settings.taskbarButtonWidthSmall;
+                    g_unloading 
+                        ? 32 
+                        : (s_btn_width_overwrite != -1
+                            ? s_btn_width_overwrite
+                            : g_settings.taskbarButtonWidthSmall
+                        );
                 if (newValue != *smallTaskbarButtonExtent) {
                     Wh_Log(
                         L"Updating SmallTaskbarButtonExtent for "
@@ -1793,6 +1857,25 @@ void LoadSettings() {
     g_settings.iconSizeSmall = Wh_GetIntSetting(L"IconSizeSmall");
     g_settings.taskbarButtonWidthSmall =
         Wh_GetIntSetting(L"TaskbarButtonWidthSmall");
+
+    using WindhawkUtils::StringSetting;
+    g_settings.overrideRules.clear();
+    for (int i = 0; i < 50; i++) // the loop will get interrupted by empty item
+    {
+        iconOverrideRule newRule;
+
+        newRule.pattern = std::wstring(StringSetting(Wh_GetStringSetting(L"CustomRules[%d].regexPattern", i)));
+        newRule.buttonWidth = Wh_GetIntSetting(L"CustomRules[%d].altButtonWidth", i);
+        newRule.buttonWidthSmall = Wh_GetIntSetting(L"CustomRules[%d].altButtonWidthSmall", i);
+        Wh_Log(L"Loaded pattern: %s",newRule.pattern.c_str());
+        if (newRule.pattern.empty())
+        {
+            break;
+        }
+        g_settings.overrideRules.push_back(newRule);
+
+    }
+
 }
 
 HWND FindCurrentProcessTaskbarWnd() {
