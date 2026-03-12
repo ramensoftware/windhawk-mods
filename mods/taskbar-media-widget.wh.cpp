@@ -2,7 +2,7 @@
 // @id              taskbar-media-widget
 // @name            Taskbar Media Widget
 // @description     A customizable taskbar media widget with transparency, alignment, and media controls.
-// @version         1.1
+// @version         1.2
 // @author          kevinoe
 // @github          https://github.com/kevinoes
 // @include         explorer.exe
@@ -15,9 +15,7 @@
 
 A customizable taskbar media widget for Windows that shows the current track and lets you control playback directly from the taskbar.
 
-This mod is based on the original **Taskbar Music Lounge** by **Hashah2311**, but has been extensively redesigned.
-
-Unlike the original version, this widget uses custom layered rendering instead of Windows acrylic styling, allowing configurable transparency, alignment, corner radius, font weight, album art visibility, and scrolling behavior.
+This mod is based on the original **Taskbar Music Lounge** by **Hashah2311**, but has been significantly reworked with new rendering, layout, and customization options.
 
 ## ✨ Features
 * **Universal Support:** Works with any media player that exposes Windows media sessions through GSMTC.
@@ -28,6 +26,7 @@ Unlike the original version, this widget uses custom layered rendering instead o
 * **Flexible Layout:** Supports left, center, or right taskbar alignment with adjustable X/Y offsets.
 * **Album Art Toggle:** Show or hide album artwork.
 * **Scrolling Text Toggle:** Enable or disable scrolling for long track titles.
+* **Track Progress:** Optional track progress indicator with customizable background color.
 * **Auto Hide:** Hides automatically when no active media session is available.
 
 ## ⚠️ Notes
@@ -67,6 +66,11 @@ Unlike the original version, this widget uses custom layered rendering instead o
   $description: "Format R,G,B,A. Example: 32,32,32,0.85"
 - ShowAlbumArt: true
   $name: Show Album Art
+- ShowTrackProgress: false
+  $name: Show Track Progress
+- TrackProgressColor: "255,255,255,0.12"
+  $name: Track Progress Color (RGBA)
+  $description: "Format R,G,B,A. Example: 255,255,255,0.12"
 */
 // ==/WindhawkModSettings==
 
@@ -82,6 +86,7 @@ Unlike the original version, this widget uses custom layered rendering instead o
 #include <mutex>
 #include <cstdio>
 #include <stdint.h>
+#include <cmath>
 
 // WinRT
 #include <winrt/Windows.Foundation.h>
@@ -175,6 +180,8 @@ struct ModSettings {
     DWORD textColor = 0xFFFFFFFF;
     DWORD backgroundColor = 0xD8202020;
     bool showAlbumArt = true;
+    bool showTrackProgress = false;
+    DWORD trackProgressColor = 0x1FFFFFFF;
 } g_Settings;
 
 // --- Global State ---
@@ -197,6 +204,8 @@ int g_ScrollOffset = 0;
 int g_TextWidth = 0;
 bool g_IsScrolling = false;
 int g_ScrollWait = 60;
+float g_TrackProgress = 0.0f;
+
 
 // Read RGBA
 DWORD ParseRgbaColorSetting(PCWSTR value, DWORD fallback) {
@@ -248,6 +257,7 @@ void LoadSettings() {
     g_Settings.horizontalAlignment = Wh_GetIntSetting(L"HorizontalAlignment");
     if (g_Settings.horizontalAlignment < 0) g_Settings.horizontalAlignment = 0;
     if (g_Settings.horizontalAlignment > 2) g_Settings.horizontalAlignment = 2;
+    g_Settings.showTrackProgress = Wh_GetIntSetting(L"ShowTrackProgress") != 0;
 
     PCWSTR textColorStr = Wh_GetStringSetting(L"TextColor");
     g_Settings.textColor = ParseRgbaColorSetting(textColorStr, 0xFFFFFFFF);
@@ -259,6 +269,12 @@ void LoadSettings() {
     g_Settings.backgroundColor = ParseRgbaColorSetting(backgroundColorStr, 0xD8202020);
     if (backgroundColorStr) {
         Wh_FreeStringSetting(backgroundColorStr);
+    }
+
+    PCWSTR trackProgressColorStr = Wh_GetStringSetting(L"TrackProgressColor");
+    g_Settings.trackProgressColor = ParseRgbaColorSetting(trackProgressColorStr, 0x1FFFFFFF);
+    if (trackProgressColorStr) {
+        Wh_FreeStringSetting(trackProgressColorStr);
     }
 
     if (g_Settings.width < 100) g_Settings.width = 300;
@@ -297,6 +313,7 @@ bool UpdateMediaInfo() {
         if (session) {
             auto props = session.TryGetMediaPropertiesAsync().get();
             auto info = session.GetPlaybackInfo();
+            auto timeline = session.GetTimelineProperties();
 
             wstring newTitle = props.Title().c_str();
             wstring newArtist = props.Artist().c_str();
@@ -306,18 +323,48 @@ bool UpdateMediaInfo() {
             auto thumbRef = props.Thumbnail();
             bool newHasThumbnail = (thumbRef != nullptr);
 
+            float newTrackProgress = 0.0f;
+            auto start = timeline.StartTime();
+            auto end = timeline.EndTime();
+            auto position = timeline.Position();
+            auto lastUpdated = timeline.LastUpdatedTime();
+
+            auto duration = end - start;
+            if (duration.count() > 0) {
+                auto effectivePosition = position;
+
+                if (newIsPlaying) {
+                    auto now = winrt::clock::now();
+                    auto elapsed = now - lastUpdated;
+                    if (elapsed.count() > 0) {
+                        effectivePosition += elapsed;
+                    }
+                }
+
+                if (effectivePosition < start) effectivePosition = start;
+                if (effectivePosition > end) effectivePosition = end;
+
+                double progress =
+                    (double)(effectivePosition - start).count() / (double)duration.count();
+                if (progress < 0.0) progress = 0.0;
+                if (progress > 1.0) progress = 1.0;
+                newTrackProgress = (float)progress;
+            }
+
             lock_guard<mutex> guard(g_MediaState.lock);
 
             bool oldHasMedia = g_MediaState.hasMedia;
             bool oldIsPlaying = g_MediaState.isPlaying;
             bool oldHasThumbnail = (g_MediaState.albumArt != nullptr);
+            bool progressChanged = (fabs(g_TrackProgress - newTrackProgress) >= 0.0001f);
 
             changed =
                 !oldHasMedia ||
                 (g_MediaState.title != newTitle) ||
                 (g_MediaState.artist != newArtist) ||
                 (oldIsPlaying != newIsPlaying) ||
-                (oldHasThumbnail != newHasThumbnail);
+                (oldHasThumbnail != newHasThumbnail) ||
+                progressChanged;
 
             if ((g_MediaState.title != newTitle) || (oldHasThumbnail != newHasThumbnail)) {
                 if (g_MediaState.albumArt) {
@@ -340,6 +387,7 @@ bool UpdateMediaInfo() {
             g_MediaState.artist = newArtist;
             g_MediaState.isPlaying = newIsPlaying;
             g_MediaState.hasMedia = true;
+            g_TrackProgress = newTrackProgress;
         } else {
             lock_guard<mutex> guard(g_MediaState.lock);
 
@@ -347,11 +395,14 @@ bool UpdateMediaInfo() {
                 g_MediaState.hasMedia ||
                 (g_MediaState.title != L"No Media") ||
                 !g_MediaState.artist.empty() ||
-                (g_MediaState.albumArt != nullptr);
+                (g_MediaState.albumArt != nullptr) ||
+                (g_TrackProgress != 0.0f);
 
             g_MediaState.hasMedia = false;
             g_MediaState.title = L"No Media";
             g_MediaState.artist = L"";
+            g_TrackProgress = 0.0f;
+
             if (g_MediaState.albumArt) {
                 delete g_MediaState.albumArt;
                 g_MediaState.albumArt = nullptr;
@@ -364,11 +415,14 @@ bool UpdateMediaInfo() {
             g_MediaState.hasMedia ||
             (g_MediaState.title != L"No Media") ||
             !g_MediaState.artist.empty() ||
-            (g_MediaState.albumArt != nullptr);
+            (g_MediaState.albumArt != nullptr) ||
+            (g_TrackProgress != 0.0f);
 
         g_MediaState.hasMedia = false;
         g_MediaState.title = L"No Media";
         g_MediaState.artist = L"";
+        g_TrackProgress = 0.0f;
+
         if (g_MediaState.albumArt) {
             delete g_MediaState.albumArt;
             g_MediaState.albumArt = nullptr;
@@ -454,6 +508,19 @@ void DrawMediaPanel(Graphics& graphics, int width, int height) {
     graphics.SetClip(&panelPath);
     SolidBrush bgBrush(Color(bgA, bgR, bgG, bgB));
     graphics.FillPath(&bgBrush, &panelPath);
+
+    if (g_Settings.showTrackProgress && g_TrackProgress > 0.0f) {
+        BYTE progA = (g_Settings.trackProgressColor >> 24) & 0xFF;
+        BYTE progR = (g_Settings.trackProgressColor >> 16) & 0xFF;
+        BYTE progG = (g_Settings.trackProgressColor >> 8) & 0xFF;
+        BYTE progB = g_Settings.trackProgressColor & 0xFF;
+
+        int progressWidth = (int)(width * g_TrackProgress + 0.5f);
+        if (progressWidth > 0) {
+            SolidBrush progressBrush(Color(progA, progR, progG, progB));
+            graphics.FillRectangle(&progressBrush, 0, 0, progressWidth, height);
+        }
+    }
 
     Color mainColor{GetCurrentTextColor()};
 
