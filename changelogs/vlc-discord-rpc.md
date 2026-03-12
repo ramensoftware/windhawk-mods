@@ -1,3 +1,17 @@
+## 1.1.3 ([Mar 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9f9bae05d7e71f4194161e0eafabfe182458ff1c/mods/vlc-discord-rpc.wh.cpp))
+
+**Fixed slow Discord status updates:**
+- Your status now updates instantly when a song or video changes. Cover art uploading now runs in the background, so Discord no longer freezes while waiting for images.
+
+**Fixed local album art not showing:**
+- Some users could not upload local artwork because our previous image host (~~`0x0.st`~~) was silently blocking certain connections. We have switched to `uguu.se`, which is more reliable and automatically deletes images after 24 hours.
+
+**New "Minimal Mode" toggle:**
+- You can now enable Minimal Mode in the settings. Instead of choosing a separate theme, this toggle hides the play/pause/stop badges while keeping your current theme (such as Dark Mode) active. This allows the cover art to fill the entire square.
+
+**Formatting and search improvements:**
+- Episode formatting now uses proper spacing (e.g., S01 E01 instead of S01E01). This improves readability and makes the Search This button results more accurate.
+
 ## 1.1.2 ([Feb 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e07ad9a662659b593b03547496fb6930809acbab/mods/vlc-discord-rpc.wh.cpp))
 
 _Fixes & Performance Improvements_

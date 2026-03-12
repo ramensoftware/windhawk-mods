@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-12T13:35:26.000Z</updated>
+    <updated>2026-03-12T22:16:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.3]]></title>
+        <id>https://windhawk.net/mods/vlc-discord-rpc#9f9bae05d7e71f4194161e0eafabfe182458ff1c</id>
+        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
+        <updated>2026-03-12T22:16:57.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Fixed slow Discord status updates:</strong></p>
+<ul>
+<li>Your status now updates instantly when a song or video changes. Cover art uploading now runs in the background, so Discord no longer freezes while waiting for images.</li>
+</ul>
+<p><strong>Fixed local album art not showing:</strong></p>
+<ul>
+<li>Some users could not upload local artwork because our previous image host (~~<code>0x0.st</code>~~) was silently blocking certain connections. We have switched to <code>uguu.se</code>, which is more reliable and automatically deletes images after 24 hours.</li>
+</ul>
+<p><strong>New "Minimal Mode" toggle:</strong></p>
+<ul>
+<li>You can now enable Minimal Mode in the settings. Instead of choosing a separate theme, this toggle hides the play/pause/stop badges while keeping your current theme (such as Dark Mode) active. This allows the cover art to fill the entire square.</li>
+</ul>
+<p><strong>Formatting and search improvements:</strong></p>
+<ul>
+<li>Episode formatting now uses proper spacing (e.g., S01 E01 instead of S01E01). This improves readability and makes the Search This button results more accurate.</li>
+</ul>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme 1.2.3]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#e1b8e2ff94ab78003a632952e797e356b2b81a76</id>
@@ -363,109 +389,6 @@ Restarting Explorer is recommended after installing the mod.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinUI Context Menu Animation 1.0]]></title>
-        <id>https://windhawk.net/mods/winui-context-menu-animation#5de798ced9a02dfd9c48f2728fd11ddf9e4acdfa</id>
-        <link href="https://windhawk.net/mods/winui-context-menu-animation"/>
-        <updated>2026-03-05T10:45:51.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Menu%20de%20Contexto%20com%20Anima%C3%A7%C3%A3o%20WinUI.gif" alt="Preview" />
-<img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Menu%20de%20Contexto%202%20com%20Anima%C3%A7%C3%A3o%20WinUI.gif" alt="Preview" /></p>
-<h1 id="winuicontextmenuanimation">WinUI Context Menu Animation</h1>
-<h2 id="english">English</h2>
-<p>This mod brings the smooth vertical slide animation used in modern <strong>WinUI applications</strong>
-to classic <strong>Win32 context menus and popup menus</strong> in Windows 11.</p>
-<p>Instead of appearing instantly, menus smoothly slide into view using a <strong>WinUI-style
-cubic-bezier easing curve</strong> combined with a subtle fade-in.</p>
-<p>Each menu and submenu independently determines whether it should animate <strong>upward or
-downward</strong> based on its actual position on the screen. This ensures consistent behavior
-with how Windows naturally flips menus near screen edges.</p>
-<h3 id="features">Features</h3>
-<p>• Smooth WinUI-style vertical slide animation<br />
-• Configurable animation and fade times<br />
-• Accurate cubic-bezier easing matching modern Windows apps<br />
-• Independent direction detection for menus and submenus<br />
-• Compatible with context menus, menu bars, and nested submenus<br />
-• Lightweight implementation using native Win32 hooks</p>
-<h3 id="credits">Credits</h3>
-<p>This mod is based on the excellent work by <strong>aubymori</strong>:</p>
-<p>Menu/Tooltip Slide Animation<br />
-https://windhawk.net/mods/menu-tooltip-slide-animation</p>
-<p>The original mod restored the classic Windows 98/XP menu animation system.
-This fork adapts the animation engine to replicate the <strong>modern WinUI motion style</strong>
-used throughout Windows 11.</p>
-<p>Changes in this version include:</p>
-<p>• Replacing the classic animation with a WinUI-style vertical easing motion<br />
-• Removing tooltip animation logic<br />
-• Removing horizontal animation<br />
-• Improving submenu direction detection<br />
-• Implementing an accurate cubic-bezier solver for smooth motion</p>
-<hr />
-<h2 id="portugusbrasil">Português (Brasil)</h2>
-<p>Este mod traz a animação suave de <strong>deslizamento vertical usada em aplicativos
-modernos com WinUI</strong> para os <strong>menus de contexto e menus popup clássicos do Win32</strong>
-no Windows 11.</p>
-<p>Em vez de aparecerem instantaneamente, os menus passam a surgir com um movimento
-suave utilizando uma <strong>curva de easing cubic-bezier semelhante à do WinUI</strong>,
-acompanhada por um leve efeito de fade-in.</p>
-<p>Cada menu e submenu determina <strong>de forma independente</strong> se deve animar para cima
-ou para baixo com base em sua posição real na tela. Isso garante um comportamento
-natural quando o menu precisa inverter sua direção próximo às bordas da tela.</p>
-<h3 id="recursos">Recursos</h3>
-<p>• Animação vertical suave inspirada no WinUI<br />
-• Tempo de animação e fade configuráveis<br />
-• Curva de easing cubic-bezier equivalente à usada no Windows moderno<br />
-• Detecção independente de direção para menus e submenus<br />
-• Compatível com menus de contexto, barras de menu e submenus aninhados<br />
-• Implementação leve baseada em hooks nativos do Win32</p>
-<h3 id="crditos">Créditos</h3>
-<p>Este mod é baseado no trabalho de <strong>aubymori</strong>:</p>
-<p>Menu/Tooltip Slide Animation<br />
-https://windhawk.net/mods/menu-tooltip-slide-animation</p>
-<p>O mod original restaurava as animações clássicas de menus do Windows 98/XP.
-Esta versão adapta o mecanismo de animação para reproduzir o <strong>estilo de
-movimento moderno do WinUI presente no Windows 11</strong>.</p>
-<p>Principais mudanças nesta versão:</p>
-<p>• Substituição da animação clássica por movimento vertical estilo WinUI<br />
-• Remoção da animação de tooltips<br />
-• Remoção da animação horizontal<br />
-• Melhoria na detecção de direção de submenus<br />
-• Implementação de um solver cubic-bezier preciso para animação suave</p>
-<hr />
-<h2 id="espaol">Español</h2>
-<p>Este mod añade la animación vertical suave utilizada en las <strong>aplicaciones modernas
-basadas en WinUI</strong> a los <strong>menús de contexto y menús emergentes clásicos de Win32</strong>
-en Windows 11.</p>
-<p>En lugar de aparecer instantáneamente, los menús se deslizan suavemente utilizando
-una <strong>curva de easing cubic-bezier similar a la del WinUI</strong>, combinada con un
-ligero efecto de aparición gradual (fade-in).</p>
-<p>Cada menú y submenú determina <strong>de forma independiente</strong> si debe animarse hacia
-arriba o hacia abajo según su posición real en la pantalla, manteniendo un
-comportamiento natural cuando Windows invierte la dirección cerca de los bordes.</p>
-<h3 id="caractersticas">Características</h3>
-<p>• Animación vertical suave inspirada en WinUI<br />
-• Tiempos de animación y desvanecimiento configurables<br />
-• Curva de easing cubic-bezier equivalente a la usada en Windows moderno<br />
-• Detección independiente de dirección para menús y submenús<br />
-• Compatible con menús de contexto, barras de menú y submenús anidados<br />
-• Implementación ligera basada en hooks nativos de Win32</p>
-<h3 id="crditos-1">Créditos</h3>
-<p>Este mod está basado en el trabajo de <strong>aubymori</strong>:</p>
-<p>Menu/Tooltip Slide Animation<br />
-https://windhawk.net/mods/menu-tooltip-slide-animation</p>
-<p>El mod original restauraba las animaciones clásicas de menús de Windows 98/XP.
-Esta versión adapta el motor de animación para reproducir el <strong>estilo de
-movimiento moderno de WinUI utilizado en Windows 11</strong>.</p>
-<p>Cambios principales en esta versión:</p>
-<p>• Reemplazo de la animación clásica por movimiento vertical estilo WinUI<br />
-• Eliminación de la animación de tooltips<br />
-• Eliminación de la animación horizontal<br />
-• Mejora en la detección de dirección de submenús<br />
-• Implementación precisa de la curva cubic-bezier</p>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>
