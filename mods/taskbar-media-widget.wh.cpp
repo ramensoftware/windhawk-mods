@@ -2,7 +2,7 @@
 // @id              taskbar-media-widget
 // @name            Taskbar Media Widget
 // @description     A customizable taskbar media widget with transparency, alignment, and media controls.
-// @version         1.2
+// @version         1.3
 // @author          kevinoe
 // @github          https://github.com/kevinoes
 // @include         explorer.exe
@@ -27,7 +27,7 @@ This mod is based on the original **Taskbar Music Lounge** by **Hashah2311**, bu
 * **Album Art Toggle:** Show or hide album artwork.
 * **Scrolling Text Toggle:** Enable or disable scrolling for long track titles.
 * **Track Progress:** Optional track progress indicator with customizable background color.
-* **Auto Hide:** Hides automatically when no active media session is available.
+* **Auto Hide:** Automatically hides when no active media session is available or when an application enters fullscreen.
 
 ## ⚠️ Notes
 * **Disable Widgets:** Taskbar Settings -> Widgets -> Off.
@@ -747,6 +747,57 @@ void RenderLayeredWindow(HWND hwnd) {
     ReleaseDC(nullptr, screenDC);
 }
 
+bool IsForegroundWindowFullscreen(HWND hwndWidget) {
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == hwndWidget) {
+        return false;
+    }
+
+    // Ignore taskbar / shell windows
+    WCHAR className[128] = {};
+    GetClassNameW(fg, className, ARRAYSIZE(className));
+    if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
+        wcscmp(className, L"Progman") == 0 ||
+        wcscmp(className, L"WorkerW") == 0) {
+        return false;
+    }
+
+    // Ignore minimized windows
+    if (IsIconic(fg)) {
+        return false;
+    }
+
+    RECT winRect{};
+    if (!GetWindowRect(fg, &winRect)) {
+        return false;
+    }
+
+    HMONITOR monitor = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+    if (!monitor) {
+        return false;
+    }
+
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(monitor, &mi)) {
+        return false;
+    }
+
+    const RECT& monRect = mi.rcMonitor;
+
+    // Treat it as fullscreen if it covers the monitor almost exactly.
+    // Small tolerance helps with borderless fullscreen / browser F11 quirks.
+    const int tolerance = 2;
+
+    bool coversMonitor =
+        abs(winRect.left   - monRect.left)   <= tolerance &&
+        abs(winRect.top    - monRect.top)    <= tolerance &&
+        abs(winRect.right  - monRect.right)  <= tolerance &&
+        abs(winRect.bottom - monRect.bottom) <= tolerance;
+
+    return coversMonitor;
+}
+
 LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: 
@@ -787,10 +838,11 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     hasMedia = g_MediaState.hasMedia;
                 }
 
+                bool fullscreenApp = IsForegroundWindowFullscreen(hwnd);
                 bool isVisible = IsWindowVisible(hwnd) != FALSE;
                 bool needsRender = mediaChanged;
 
-                if (!hasMedia) {
+                if (!hasMedia || fullscreenApp) {
                     if (isVisible) {
                         ShowWindow(hwnd, SW_HIDE);
                     }
@@ -803,6 +855,11 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     }
 
                     return 0;
+                }
+
+                if (!isVisible) {
+                    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                    needsRender = true;
                 }
 
                 if (!isVisible) {
@@ -833,7 +890,7 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     if (myRc.left != x || myRc.top != y ||
                         (myRc.right - myRc.left) != g_Settings.width ||
                         (myRc.bottom - myRc.top) != g_Settings.height) {
-                        SetWindowPos(hwnd, HWND_TOPMOST, x, y, g_Settings.width, g_Settings.height, SWP_NOACTIVATE);
+                        SetWindowPos(hwnd, HWND_TOP, x, y, g_Settings.width, g_Settings.height, SWP_NOACTIVATE);
                         needsRender = true;
                     }
                 }
@@ -935,7 +992,7 @@ void MediaThread() {
 
     if (CreateWindowInBand) {
         g_hMediaWindow = CreateWindowInBand(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW,
             wc.lpszClassName, TEXT("MusicLounge"),
             WS_POPUP | WS_VISIBLE,
             0, 0, g_Settings.width, g_Settings.height,
@@ -951,7 +1008,7 @@ void MediaThread() {
     if (!g_hMediaWindow) {
         Wh_Log(L"CreateWindowInBand failed or unavailable, falling back to CreateWindowEx");
         g_hMediaWindow = CreateWindowEx(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW,
             wc.lpszClassName, TEXT("MusicLounge"),
             WS_POPUP | WS_VISIBLE,
             0, 0, g_Settings.width, g_Settings.height,
