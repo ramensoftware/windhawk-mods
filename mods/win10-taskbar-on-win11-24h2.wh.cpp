@@ -2,7 +2,7 @@
 // @id              win10-taskbar-on-win11-24h2
 // @name            Win10 taskbar on Win11 24H2 or 25H2
 // @description     Installs Windows 10 taskbar on Windows 11 version 24H2, 25H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024
-// @version         0.1.6
+// @version         0.1.7
 // @architecture    x86-64
 // @author          Anixx
 // @github          https://github.com/Anixx
@@ -30,7 +30,8 @@ restore the menu:
 
 [*Windows 10 Taskbar Context Menu Fix for Win11 24H2+*](https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2).
 
-If you are using Classic theme, you should also install mods "Classic Theme Explorer Lite" and "Non Immersive Taskbar Context Menu".
+If you are using Classic theme, you should also install mods [Classic Theme Explorer Lite](https://windhawk.net/mods/classic-theme-explorer-lite)
+and [Non Immersive Taskbar Context Menu Lite](https://windhawk.net/mods/classic-taskbar-context-menu-lite).
 
 The taskbar by default will have no labels on the task buttons shown. You can change this behavior
 via the Settings app.
