@@ -3,8 +3,8 @@
 // @name            Taskbar Music Lounge
 // @description     A native-style music ticker with media controls.
 // @version         3.1
-// @author          Hashah2311
-// @github          https://github.com/Hashah2311
+// @author          dogukannparlak
+// @github          https://github.com/dogukannparlak
 // @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus
 // ==/WindhawkMod==
@@ -819,3 +819,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
