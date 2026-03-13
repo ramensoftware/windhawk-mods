@@ -2,9 +2,9 @@
 // @id              taskbar-music-lounge
 // @name            Taskbar Music Lounge
 // @description     A native-style music ticker with media controls.
-// @version         3.0
-// @author          Hashah2311
-// @github          https://github.com/Hashah2311
+// @version         3.1
+// @author          dogukannparlak
+// @github          https://github.com/dogukannparlak
 // @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus
 // ==/WindhawkMod==
@@ -53,7 +53,7 @@ A media controller that uses Windows 11 native DWM styling for a seamless look.
 #include <shellapi.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
-#include <shcore.h> 
+#include <shcore.h>
 #include <string>
 #include <vector>
 #include <atomic>
@@ -73,7 +73,7 @@ using namespace Windows::Media::Control;
 using namespace Windows::Storage::Streams;
 
 // --- Constants ---
-const WCHAR* FONT_NAME = L"Segoe UI Variable Display"; 
+const WCHAR* FONT_NAME = L"Segoe UI Variable Display";
 
 // --- DWM API ---
 
@@ -81,7 +81,7 @@ typedef enum _WINDOWCOMPOSITIONATTRIB { WCA_ACCENT_POLICY = 19 } WINDOWCOMPOSITI
 typedef enum _ACCENT_STATE {
     ACCENT_DISABLED = 0,
     ACCENT_ENABLE_BLURBEHIND = 3,
-    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4, 
+    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
     ACCENT_INVALID_STATE = 5
 } ACCENT_STATE;
 typedef struct _ACCENT_POLICY {
@@ -147,14 +147,14 @@ struct ModSettings {
     int offsetX = 12;
     int offsetY = 0;
     bool autoTheme = true;
-    DWORD manualTextColor = 0xFFFFFFFF; 
-    int bgOpacity = 0;   
+    DWORD manualTextColor = 0xFFFFFFFF;
+    int bgOpacity = 0;
 } g_Settings;
 
 // --- Global State ---
 HWND g_hMediaWindow = NULL;
-bool g_Running = true; 
-int g_HoverState = 0; 
+bool g_Running = true;
+int g_HoverState = 0;
 
 // Data Model
 struct MediaState {
@@ -180,7 +180,7 @@ void LoadSettings() {
     g_Settings.offsetX = Wh_GetIntSetting(L"OffsetX");
     g_Settings.offsetY = Wh_GetIntSetting(L"OffsetY");
     g_Settings.autoTheme = Wh_GetIntSetting(L"AutoTheme") != 0;
-    
+
     PCWSTR textHex = Wh_GetStringSetting(L"TextColor");
     DWORD textRGB = 0xFFFFFF;
     if (textHex) {
@@ -188,7 +188,7 @@ void LoadSettings() {
         Wh_FreeStringSetting(textHex);
     }
     g_Settings.manualTextColor = 0xFF000000 | textRGB;
-    
+
     g_Settings.bgOpacity = Wh_GetIntSetting(L"BgOpacity");
     if (g_Settings.bgOpacity < 0) g_Settings.bgOpacity = 0;
     if (g_Settings.bgOpacity > 255) g_Settings.bgOpacity = 255;
@@ -225,7 +225,7 @@ void UpdateMediaInfo() {
             auto info = session.GetPlaybackInfo();
 
             lock_guard<mutex> guard(g_MediaState.lock);
-            
+
             wstring newTitle = props.Title().c_str();
             if (newTitle != g_MediaState.title || g_MediaState.albumArt == nullptr) {
                 if (g_MediaState.albumArt) { delete g_MediaState.albumArt; g_MediaState.albumArt = nullptr; }
@@ -309,14 +309,14 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
     graphics.SetSmoothingMode(SmoothingModeAntiAlias);
     // FIX: AntiAlias (Greyscale) looks smoother on glass than ClearType
     graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
-    graphics.Clear(Color(0, 0, 0, 0)); 
+    graphics.Clear(Color(0, 0, 0, 0));
 
-    // NO BACKGROUND DRAWING HERE. 
+    // NO BACKGROUND DRAWING HERE.
     // We let the DWM Acrylic blur handle the background.
     // This prevents the "Rectangle" artifact because we aren't drawing a shape that conflicts with the window bounds.
 
     Color mainColor{GetCurrentTextColor()};
-    
+
     // Lock Data
     MediaState state;
     {
@@ -332,7 +332,7 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
     int artSize = height - 12;
     int artX = 6;
     int artY = 6;
-    
+
     if (state.albumArt) {
         graphics.DrawImage(state.albumArt, artX, artY, artSize, artSize);
         delete state.albumArt;
@@ -377,15 +377,15 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
     // 3. Text
     int textX = nX + 20;
     int textMaxW = width - textX - 10;
-    
+
     wstring fullText = state.title;
     if (!state.artist.empty()) fullText += L" • " + state.artist;
 
     FontFamily fontFamily(FONT_NAME, nullptr);
     Font font(&fontFamily, (REAL)g_Settings.fontSize, FontStyleBold, UnitPixel);
     SolidBrush textBrush{mainColor};
-    
-    RectF layoutRect(0, 0, 2000, 100); 
+
+    RectF layoutRect(0, 0, 2000, 100);
     RectF boundRect;
     graphics.MeasureString(fullText.c_str(), -1, &font, layoutRect, &boundRect);
     g_TextWidth = (int)boundRect.Width;
@@ -416,12 +416,12 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
 
 LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
-        case WM_CREATE: 
+        case WM_CREATE:
             UpdateAppearance(hwnd); // Apply DWM Rounding + Acrylic
-            SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL); 
+            SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL);
             return 0;
 
-        case WM_ERASEBKGND: 
+        case WM_ERASEBKGND:
             return 1;
 
         case WM_CLOSE:
@@ -445,21 +445,46 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (wParam == IDT_POLL_MEDIA) {
                 UpdateMediaInfo();
                 InvalidateRect(hwnd, NULL, FALSE);
-                
+
+                bool shouldShow = false;
                 HWND hTaskbar = FindWindow(TEXT("Shell_TrayWnd"), NULL);
-                if (hTaskbar) {
+                if (hTaskbar && IsWindowVisible(hTaskbar)) {
                     RECT rc; GetWindowRect(hTaskbar, &rc);
-                    int x = rc.left + g_Settings.offsetX; 
                     int taskbarHeight = rc.bottom - rc.top;
-                    int y = rc.top + (taskbarHeight / 2) - (g_Settings.height / 2) + g_Settings.offsetY;
-                    
-                    RECT myRc; GetWindowRect(hwnd, &myRc);
-                    if (myRc.left != x || myRc.top != y || 
-                        (myRc.right - myRc.left) != g_Settings.width || 
-                        (myRc.bottom - myRc.top) != g_Settings.height) {
-                         SetWindowPos(hwnd, HWND_TOPMOST, x, y, g_Settings.width, g_Settings.height, SWP_NOACTIVATE);
+                    int taskbarWidth = rc.right - rc.left;
+                    // Taskbar gizli (auto-hide kapalı) veya çok küçükse widget'ı gösterme
+                    if (taskbarHeight >= 10 && taskbarWidth >= 10) {
+                        // Tam ekran kontrolü: öndeki pencere tam ekran mı?
+                        HWND hForeground = GetForegroundWindow();
+                        bool isFullscreen = false;
+                        if (hForeground && hForeground != hwnd) {
+                            RECT fgRc; GetWindowRect(hForeground, &fgRc);
+                            MONITORINFO mi = { sizeof(mi) };
+                            if (GetMonitorInfo(MonitorFromWindow(hForeground, MONITOR_DEFAULTTONEAREST), &mi)) {
+                                RECT work = mi.rcMonitor;
+                                int fgW = fgRc.right - fgRc.left, fgH = fgRc.bottom - fgRc.top;
+                                int monW = work.right - work.left, monH = work.bottom - work.top;
+                                if (fgW >= monW - 10 && fgH >= monH - 10)
+                                    isFullscreen = true;
+                            }
+                        }
+                        if (!isFullscreen)
+                            shouldShow = true;
                     }
                 }
+                if (shouldShow) {
+                    RECT rc; GetWindowRect(hTaskbar, &rc);
+                    int taskbarHeight = rc.bottom - rc.top;
+                    int x = rc.left + g_Settings.offsetX;
+                    int y = rc.top + (taskbarHeight / 2) - (g_Settings.height / 2) + g_Settings.offsetY;
+                    RECT myRc; GetWindowRect(hwnd, &myRc);
+                    if (myRc.left != x || myRc.top != y ||
+                        (myRc.right - myRc.left) != g_Settings.width ||
+                        (myRc.bottom - myRc.top) != g_Settings.height) {
+                        SetWindowPos(hwnd, HWND_TOPMOST, x, y, g_Settings.width, g_Settings.height, SWP_NOACTIVATE);
+                    }
+                }
+                ShowWindow(hwnd, shouldShow ? SW_SHOWNOACTIVATE : SW_HIDE);
             }
             else if (wParam == IDT_ANIMATION) {
                 if (g_IsScrolling) {
@@ -469,12 +494,12 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         g_ScrollOffset++;
                         if (g_ScrollOffset > g_TextWidth + 40) {
                             g_ScrollOffset = 0;
-                            g_ScrollWait = 60; 
+                            g_ScrollWait = 60;
                         }
                         InvalidateRect(hwnd, NULL, FALSE);
                     }
                 } else {
-                    KillTimer(hwnd, IDT_ANIMATION); 
+                    KillTimer(hwnd, IDT_ANIMATION);
                 }
             }
             return 0;
@@ -485,18 +510,18 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             int artSize = g_Settings.height - 12;
             int startControlX = 6 + artSize + 12;
             int newState = 0;
-            
+
             if (y > 10 && y < g_Settings.height - 10) {
                 if (x >= startControlX - 10 && x < startControlX + 14) newState = 1;
                 else if (x >= startControlX + 14 && x < startControlX + 42) newState = 2;
                 else if (x >= startControlX + 42 && x < startControlX + 66) newState = 3;
             }
-            
+
             if (newState != g_HoverState) {
                 g_HoverState = newState;
                 InvalidateRect(hwnd, NULL, FALSE);
             }
-            
+
             TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0 };
             TrackMouseEvent(&tme);
             return 0;
@@ -521,9 +546,9 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             HDC memDC = CreateCompatibleDC(hdc);
             HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
             HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
-            
+
             DrawMediaPanel(memDC, rc.right, rc.bottom);
-            
+
             if (g_IsScrolling) SetTimer(hwnd, IDT_ANIMATION, 16, NULL);
 
             BitBlt(hdc, 0, 0, rc.right, rc.bottom, memDC, 0, 0, SRCCOPY);
@@ -584,7 +609,7 @@ void MediaThread() {
     }
 
     SetLayeredWindowAttributes(g_hMediaWindow, 0, 255, LWA_ALPHA);
-    
+
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
@@ -600,7 +625,7 @@ std::thread* g_pMediaThread = nullptr;
 
 // --- CALLBACKS ---
 BOOL WhTool_ModInit() {
-    LoadSettings(); 
+    LoadSettings();
     g_Running = true;
     g_pMediaThread = new std::thread(MediaThread);
     return TRUE;
@@ -620,7 +645,7 @@ void WhTool_ModSettingsChanged() {
     LoadSettings();
     if (g_hMediaWindow) {
          SendMessage(g_hMediaWindow, WM_TIMER, IDT_POLL_MEDIA, 0);
-         SendMessage(g_hMediaWindow, WM_SETTINGCHANGE, 0, 0); 
+         SendMessage(g_hMediaWindow, WM_SETTINGCHANGE, 0, 0);
     }
 }
 
@@ -794,3 +819,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
