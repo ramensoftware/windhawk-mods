@@ -8258,6 +8258,39 @@
                 "version": "3.0"
             }
         },
+        "taskbar-no-minimize": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773398540000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773398540000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "Disable the minimize window function when clicking an already active window on the taskbar",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar: no minimize on click",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-notification-icon-spacing": {
             "details": {
                 "defaultSorting": 253100,
