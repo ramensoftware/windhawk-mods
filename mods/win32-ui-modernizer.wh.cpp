@@ -127,7 +127,64 @@ Moderniza elementos heredados de la interfaz Win32 en todas las aplicaciones.
 
 // ==WindhawkModSettings==
 /*
-- ComboBoxSection: TRUE
+- ComboBoxSection:
+  - Enabled: TRUE
+
+  - CornerRadius: 5
+    $name: Corner radius
+    $name:pt: Raio dos cantos
+    $name:es: Radio de las esquinas
+    $description: Radius of the rounded corners in pixels (default 5, 0 for square)
+    $description:pt: Raio dos cantos arredondados em pixels (padrão 5, 0 para quadrado)
+    $description:es: Radio de las esquinas redondeadas en píxeles (predeterminado 5, 0 para cuadrado)
+
+  - AutoColors: TRUE
+    $name: Automatic colors (light/dark mode)
+    $name:pt: Cores automáticas (modo claro/escuro)
+    $name:es: Colores automáticos (modo claro/oscuro)
+    $description: >-
+     Automatically detect light/dark mode and use appropriate colors.
+     Disable to use the custom colors below.
+    $description:pt: >-
+     Detecta automaticamente o modo claro/escuro e usa as cores apropriadas.
+     Desative para usar as cores personalizadas abaixo.
+    $description:es: >-
+     Detecta automáticamente el modo claro/oscuro y usa los colores apropiados.
+     Desactívelo para usar los colores personalizados de abajo.
+
+  - BorderColor: "454545"
+    $name: Custom border color
+    $name:pt: Cor da borda personalizada
+    $name:es: Color de borde personalizado
+    $description: >-
+     Hex RGB e.g. 454545 (only when Automatic colors is off)
+    $description:pt: >-
+     Hex RGB por exemplo 454545 (apenas quando cores automáticas estiverem desativadas)
+    $description:es: >-
+     Hex RGB por ejemplo 454545 (solo cuando los colores automáticos estén desactivados)
+
+  - BackgroundColor: "191919"
+    $name: Custom background color
+    $name:pt: Cor de fundo personalizada
+    $name:es: Color de fondo personalizado
+    $description: >-
+     Hex RGB e.g. 191919 (only when Automatic colors is off)
+    $description:pt: >-
+     Hex RGB por exemplo 191919 (apenas quando cores automáticas estiverem desativadas)
+    $description:es: >-
+     Hex RGB por ejemplo 191919 (solo cuando los colores automáticos estén desactivados)
+
+  - TextColor: "FFFFFF"
+    $name: Custom text color
+    $name:pt: Cor de texto personalizada
+    $name:es: Color de texto personalizado
+    $description: >-
+     Hex RGB e.g. FFFFFF (only when Automatic colors is off)
+    $description:pt: >-
+     Hex RGB por exemplo FFFFFF (apenas quando cores automáticas estiverem desativadas)
+    $description:es: >-
+     Hex RGB por ejemplo FFFFFF (solo cuando los colores automáticos estén desactivados)
+
   $name: ── ComboBox Dropdowns ──
   $name:pt: ── Menus suspensos do ComboBox ──
   $name:es: ── Menús desplegables de ComboBox ──
@@ -135,62 +192,25 @@ Moderniza elementos heredados de la interfaz Win32 en todas las aplicaciones.
   $description:pt: Ativa a estilização dos menus suspensos do ComboBox (cores, borda e fundo)
   $description:es: Activa el estilo de los menús desplegables de ComboBox (colores, borde y fondo)
 
-- CornerRadius: 5
-  $name: Corner radius
-  $name:pt: Raio dos cantos
-  $name:es: Radio de las esquinas
-  $description: Radius of the rounded corners in pixels (default 5, 0 for square)
-  $description:pt: Raio dos cantos arredondados em pixels (padrão 5, 0 para quadrado)
-  $description:es: Radio de las esquinas redondeadas en píxeles (predeterminado 5, 0 para cuadrado)
+- TreeViewSection:
+  - Enabled: TRUE
+  
+  - ModernInsertMark: TRUE
+    $name: Modern insertion mark
+    $name:pt: Marca de inserção moderna
+    $name:es: Marca de inserción moderna
+    $description: Replace the legacy drag insertion mark with a clean line
+    $description:pt: Substitui a marca de inserção de arrastar antiga por uma linha limpa
+    $description:es: Reemplaza la marca de inserción antigua al arrastrar por una línea limpia
 
-- AutoColors: TRUE
-  $name: Automatic colors (light/dark mode)
-  $name:pt: Cores automáticas (modo claro/escuro)
-  $name:es: Colores automáticos (modo claro/oscuro)
-  $description: >-
-    Automatically detect light/dark mode and use appropriate colors.
-    Disable to use the custom colors below.
-  $description:pt: >-
-    Detecta automaticamente o modo claro/escuro e usa as cores apropriadas.
-    Desative para usar as cores personalizadas abaixo.
-  $description:es: >-
-    Detecta automáticamente el modo claro/oscuro y usa los colores apropiados.
-    Desactívelo para usar los colores personalizados de abajo.
+  - RemoveTreeLines: TRUE
+    $name: Remove dotted tree lines
+    $name:pt: Remover linhas pontilhadas da árvore
+    $name:es: Eliminar líneas punteadas del árbol
+    $description: Remove the dotted connecting lines (e.g. in regedit)
+    $description:pt: Remove as linhas pontilhadas de conexão (ex. no regedit)
+    $description:es: Elimina las líneas punteadas de conexión (por ejemplo en regedit)
 
-- BorderColor: "454545"
-  $name: Custom border color
-  $name:pt: Cor da borda personalizada
-  $name:es: Color de borde personalizado
-  $description: >-
-    Hex RGB e.g. 454545 (only when Automatic colors is off)
-  $description:pt: >-
-    Hex RGB por exemplo 454545 (apenas quando cores automáticas estiverem desativadas)
-  $description:es: >-
-    Hex RGB por ejemplo 454545 (solo cuando los colores automáticos estén desactivados)
-
-- BackgroundColor: "191919"
-  $name: Custom background color
-  $name:pt: Cor de fundo personalizada
-  $name:es: Color de fondo personalizado
-  $description: >-
-    Hex RGB e.g. 191919 (only when Automatic colors is off)
-  $description:pt: >-
-    Hex RGB por exemplo 191919 (apenas quando cores automáticas estiverem desativadas)
-  $description:es: >-
-    Hex RGB por ejemplo 191919 (solo cuando los colores automáticos estén desactivados)
-
-- TextColor: "FFFFFF"
-  $name: Custom text color
-  $name:pt: Cor de texto personalizada
-  $name:es: Color de texto personalizado
-  $description: >-
-    Hex RGB e.g. FFFFFF (only when Automatic colors is off)
-  $description:pt: >-
-    Hex RGB por exemplo FFFFFF (apenas quando cores automáticas estiverem desativadas)
-  $description:es: >-
-    Hex RGB por ejemplo FFFFFF (solo cuando los colores automáticos estén desactivados)
-
-- TreeViewSection: TRUE
   $name: ── TreeView ──
   $name:pt: ── TreeView ──
   $name:es: ── TreeView ──
@@ -198,160 +218,142 @@ Moderniza elementos heredados de la interfaz Win32 en todas las aplicaciones.
   $description:pt: Ativa modernizações do TreeView
   $description:es: Activa modernizaciones del TreeView
 
-- ModernInsertMark: TRUE
-  $name: Modern insertion mark
-  $name:pt: Marca de inserção moderna
-  $name:es: Marca de inserción moderna
-  $description: Replace the legacy drag insertion mark with a clean line
-  $description:pt: Substitui a marca de inserção de arrastar antiga por uma linha limpa
-  $description:es: Reemplaza la marca de inserción antigua al arrastrar por una línea limpia
+- GeneralSection:
+  - Enabled: TRUE
 
-- RemoveTreeLines: TRUE
-  $name: Remove dotted tree lines
-  $name:pt: Remover linhas pontilhadas da árvore
-  $name:es: Eliminar líneas punteadas del árbol
-  $description: Remove the dotted connecting lines (e.g. in regedit)
-  $description:pt: Remove as linhas pontilhadas de conexão (ex. no regedit)
-  $description:es: Elimina las líneas punteadas de conexión (por ejemplo en regedit)
+  - ModernFocusRect: TRUE
+    $name: Modern focus rectangle
+    $name:pt: Retângulo de foco moderno
+    $name:es: Rectángulo de enfoque moderno
+    $description: >-
+     Replace the dotted focus rectangle with a subtle rounded highlight.
+     Affects legacy controls like TreeView and ListView in apps like regedit.
+    $description:pt: >-
+     Substitui o retângulo de foco pontilhado por um destaque arredondado sutil.
+     Afeta controles antigos como TreeView e ListView em apps como o regedit.
+    $description:es: >-
+     Reemplaza el rectángulo de enfoque punteado por un resaltado redondeado sutil.
+     Afecta controles heredados como TreeView y ListView en aplicaciones como regedit.
+  - AccentMarquee: FALSE
+    $name: Accent color marquee selection
+    $name:pt: Seleção de arrasto com cor de destaque
+    $name:es: Selección de arrastre con color de acento
+    $description: >-
+     Use the Windows accent color for the drag-selection rectangle
+     system-wide (affects COLOR_HOTLIGHT)
+    $description:pt: >-
+     Usa a cor de destaque do Windows para o retângulo de seleção por arrasto
+     em todo o sistema (afeta COLOR_HOTLIGHT)
+    $description:es: >-
+     Usa el color de acento de Windows para el rectángulo de selección por arrastre
+     en todo el sistema (afecta COLOR_HOTLIGHT)
+  - AccentColorize: FALSE
+    $name: Accent colorize system colors
+    $name:pt: Colorir cores do sistema com a cor de destaque
+    $name:es: Colorear colores del sistema con el color de acento
+    $description: >-
+     Shift system UI colors (highlight, hotlight, menus, captions) to match
+     the Windows accent color hue. Based on AccentColorizer by krlvm.
+    $description:pt: >-
+     Ajusta as cores da interface do sistema (highlight, hotlight, menus, títulos)
+     para combinar com o matiz da cor de destaque do Windows.
+     Baseado no AccentColorizer de krlvm.
+    $description:es: >-
+     Ajusta los colores de la interfaz del sistema (highlight, hotlight, menús, títulos)
+     para coincidir con el tono del color de acento de Windows.
+     Basado en AccentColorizer de krlvm.
+  - AccentStyles: FALSE
+    $name: Accent colorize theme bitmaps
+    $name:pt: Colorir bitmaps do tema com a cor de destaque
+    $name:es: Colorear bitmaps del tema con el color de acento
+    $description: >-
+     Shift the hue of theme bitmaps (selection backgrounds, buttons, scrollbars)
+     to match the accent color. Based on AccentColorizer by krlvm.
+     Applies to Explorer TreeView, ListView, ItemsView selections etc.
+    $description:pt: >-
+     Ajusta o matiz dos bitmaps do tema (fundos de seleção, botões, barras de rolagem)
+     para combinar com a cor de destaque. Baseado no AccentColorizer de krlvm.
+    $description:es: >-
+     Ajusta el tono de los bitmaps del tema (fondos de selección, botones, barras de desplazamiento)
+     para coincidir con el color de acento. Basado en AccentColorizer de krlvm.
+  - NormalizeDragDrop: FALSE
+    $name: Normalize drag-drop overlay
+    $name:pt: Normalizar sobreposição de arrastar e soltar
+    $name:es: Normalizar superposición de arrastrar y soltar
+    $description: >-
+     Replace the drag-drop overlay bitmap with a clean rounded rectangle.
+     Based on DragDropNormalizer by krlvm.
+    $description:pt: >-
+     Substitui o bitmap de sobreposição de arrastar e soltar por um retângulo arredondado limpo.
+     Baseado no DragDropNormalizer de krlvm.
+    $description:es: >-
+     Reemplaza el bitmap de superposición de arrastrar y soltar por un rectángulo redondeado limpio.
+     Basado en DragDropNormalizer de krlvm.
 
-- GeneralSection: TRUE
   $name: ── General ──
   $name:pt: ── Geral ──
   $name:es: ── General ──
   $description: Enable general UI modernizations. Do not use the accent color options with AccentColorizer or Translucent Windows.
   $description:pt: Ativa modernizações gerais da interface. Não use as opções de cor de destaque com o AccentColorizer ou o Translucent Windows.
   $description:es: Activa modernizaciones generales de la interfaz. No utilice las opciones de color de acento con AccentColorizer o Translucent Windows.
-- ModernFocusRect: TRUE
-  $name: Modern focus rectangle
-  $name:pt: Retângulo de foco moderno
-  $name:es: Rectángulo de enfoque moderno
-  $description: >-
-    Replace the dotted focus rectangle with a subtle rounded highlight.
-    Affects legacy controls like TreeView and ListView in apps like regedit.
-  $description:pt: >-
-    Substitui o retângulo de foco pontilhado por um destaque arredondado sutil.
-    Afeta controles antigos como TreeView e ListView em apps como o regedit.
-  $description:es: >-
-    Reemplaza el rectángulo de enfoque punteado por un resaltado redondeado sutil.
-    Afecta controles heredados como TreeView y ListView en aplicaciones como regedit.
 
-- AccentMarquee: FALSE
-  $name: Accent color marquee selection
-  $name:pt: Seleção de arrasto com cor de destaque
-  $name:es: Selección de arrastre con color de acento
-  $description: >-
-    Use the Windows accent color for the drag-selection rectangle
-    system-wide (affects COLOR_HOTLIGHT)
-  $description:pt: >-
-    Usa a cor de destaque do Windows para o retângulo de seleção por arrasto
-    em todo o sistema (afeta COLOR_HOTLIGHT)
-  $description:es: >-
-    Usa el color de acento de Windows para el rectángulo de selección por arrastre
-    en todo el sistema (afecta COLOR_HOTLIGHT)
+- ExplorerSection:
+  - Enabled: TRUE
+  
+  - RoundedSelection: FALSE
+    $name: Rounded selection backgrounds
+    $name:pt: Fundos de seleção arredondados
+    $name:es: Fondos de selección redondeados
+    $description: >-
+     Round the corners of item selection/hover backgrounds in Explorer
+     navigation pane and content area. May conflict with Translucent Windows.
+    $description:pt: >-
+     Arredonda os cantos dos fundos de seleção/hover no painel de navegação
+     e área de conteúdo do Explorer. Pode conflitar com Translucent Windows.
+    $description:es: >-
+     Redondea las esquinas de los fondos de selección/hover en el panel
+     de navegación y el área de contenido del Explorador.
+  - RemoveNavDivider: FALSE
+    $name: Remove navigation divider
+    $name:pt: Remover divisor de navegação
+    $name:es: Eliminar divisor de navegación
+    $description: Remove the vertical divider line between panels (off by default)
+    $description:pt: Remove a linha divisória vertical entre os painéis (desativado por padrão)
+    $description:es: Elimina la línea divisoria vertical entre paneles (desactivado por defecto)
+  - RemoveNavDividerTW: FALSE
+    $name: Remove navigation divider (Translucent Windows compatibility)
+    $name:pt: Remover divisor de navegação (compatibilidade com Translucent Windows)
+    $name:es: Eliminar divisor de navegación (compatibilidad con Translucent Windows)
+    $description: >-
+     Use this method instead when Translucent Windows mod is active.
+     May need reapplying after explorer.exe restarts.
+    $description:pt: >-
+     Use este método quando o mod Translucent Windows estiver ativo.
+     Pode ser necessário reaplicar após reiniciar o explorer.exe.
+    $description:es: >-
+     Use este método cuando el mod Translucent Windows esté activo.
+     Puede ser necesario reaplicarlo después de reiniciar explorer.exe.
+  - ModernGroupHeaders: FALSE
+    $name: Modern group headers (WinUI-style pills)
+    $name:pt: Cabeçalhos de grupo modernos (estilo WinUI)
+    $name:es: Encabezados de grupo modernos (estilo WinUI)
+    $description: >-
+     Replaces the flat section headers (Folders, Devices and Drives) with
+     compact pill-shaped backgrounds. Suppresses the separator line.
+     Compatible with Translucent Windows.
+    $description:pt: >-
+     Substitui os cabeçalhos planos de seção (Pastas, Dispositivos e unidades)
+     por fundos compactos em formato de pílula. Remove a linha separadora.
+    $description:es: >-
+     Reemplaza los encabezados planos de sección (Carpetas, Dispositivos y unidades)
+     por fondos compactos con forma de píldora. Elimina la línea separadora.
 
-- AccentColorize: FALSE
-  $name: Accent colorize system colors
-  $name:pt: Colorir cores do sistema com a cor de destaque
-  $name:es: Colorear colores del sistema con el color de acento
-  $description: >-
-    Shift system UI colors (highlight, hotlight, menus, captions) to match
-    the Windows accent color hue. Based on AccentColorizer by krlvm.
-  $description:pt: >-
-    Ajusta as cores da interface do sistema (highlight, hotlight, menus, títulos)
-    para combinar com o matiz da cor de destaque do Windows.
-    Baseado no AccentColorizer de krlvm.
-  $description:es: >-
-    Ajusta los colores de la interfaz del sistema (highlight, hotlight, menús, títulos)
-    para coincidir con el tono del color de acento de Windows.
-    Basado en AccentColorizer de krlvm.
-
-- AccentStyles: FALSE
-  $name: Accent colorize theme bitmaps
-  $name:pt: Colorir bitmaps do tema com a cor de destaque
-  $name:es: Colorear bitmaps del tema con el color de acento
-  $description: >-
-    Shift the hue of theme bitmaps (selection backgrounds, buttons, scrollbars)
-    to match the accent color. Based on AccentColorizer by krlvm.
-    Applies to Explorer TreeView, ListView, ItemsView selections etc.
-  $description:pt: >-
-    Ajusta o matiz dos bitmaps do tema (fundos de seleção, botões, barras de rolagem)
-    para combinar com a cor de destaque. Baseado no AccentColorizer de krlvm.
-  $description:es: >-
-    Ajusta el tono de los bitmaps del tema (fondos de selección, botones, barras de desplazamiento)
-    para coincidir con el color de acento. Basado en AccentColorizer de krlvm.
-
-- NormalizeDragDrop: FALSE
-  $name: Normalize drag-drop overlay
-  $name:pt: Normalizar sobreposição de arrastar e soltar
-  $name:es: Normalizar superposición de arrastrar y soltar
-  $description: >-
-    Replace the drag-drop overlay bitmap with a clean rounded rectangle.
-    Based on DragDropNormalizer by krlvm.
-  $description:pt: >-
-    Substitui o bitmap de sobreposição de arrastar e soltar por um retângulo arredondado limpo.
-    Baseado no DragDropNormalizer de krlvm.
-  $description:es: >-
-    Reemplaza el bitmap de superposición de arrastrar y soltar por un rectángulo redondeado limpio.
-    Basado en DragDropNormalizer de krlvm.
-
-- ExplorerSection: TRUE
   $name: ── Explorer ──
   $name:pt: ── Explorer ──
   $name:es: ── Explorador ──
   $description: Enable Explorer-specific modernizations
   $description:pt: Ativa modernizações específicas do Explorer
   $description:es: Activa modernizaciones específicas del Explorador
-
-- RoundedSelection: FALSE
-  $name: Rounded selection backgrounds
-  $name:pt: Fundos de seleção arredondados
-  $name:es: Fondos de selección redondeados
-  $description: >-
-    Round the corners of item selection/hover backgrounds in Explorer
-    navigation pane and content area. May conflict with Translucent Windows.
-  $description:pt: >-
-    Arredonda os cantos dos fundos de seleção/hover no painel de navegação
-    e área de conteúdo do Explorer. Pode conflitar com Translucent Windows.
-  $description:es: >-
-    Redondea las esquinas de los fondos de selección/hover en el panel
-    de navegación y el área de contenido del Explorador.
-
-- RemoveNavDivider: FALSE
-  $name: Remove navigation divider
-  $name:pt: Remover divisor de navegação
-  $name:es: Eliminar divisor de navegación
-  $description: Remove the vertical divider line between panels (off by default)
-  $description:pt: Remove a linha divisória vertical entre os painéis (desativado por padrão)
-  $description:es: Elimina la línea divisoria vertical entre paneles (desactivado por defecto)
-
-- RemoveNavDividerTW: FALSE
-  $name: Remove navigation divider (Translucent Windows compatibility)
-  $name:pt: Remover divisor de navegação (compatibilidade com Translucent Windows)
-  $name:es: Eliminar divisor de navegación (compatibilidad con Translucent Windows)
-  $description: >-
-    Use this method instead when Translucent Windows mod is active.
-    May need reapplying after explorer.exe restarts.
-  $description:pt: >-
-    Use este método quando o mod Translucent Windows estiver ativo.
-    Pode ser necessário reaplicar após reiniciar o explorer.exe.
-  $description:es: >-
-    Use este método cuando el mod Translucent Windows esté activo.
-    Puede ser necesario reaplicarlo después de reiniciar explorer.exe.
-
-- ModernGroupHeaders: FALSE
-  $name: Modern group headers (WinUI-style pills)
-  $name:pt: Cabeçalhos de grupo modernos (estilo WinUI)
-  $name:es: Encabezados de grupo modernos (estilo WinUI)
-  $description: >-
-    Replaces the flat section headers (Folders, Devices and Drives) with
-    compact pill-shaped backgrounds. Suppresses the separator line.
-    Compatible with Translucent Windows.
-  $description:pt: >-
-    Substitui os cabeçalhos planos de seção (Pastas, Dispositivos e unidades)
-    por fundos compactos em formato de pílula. Remove a linha separadora.
-  $description:es: >-
-    Reemplaza los encabezados planos de sección (Carpetas, Dispositivos y unidades)
-    por fondos compactos con forma de píldora. Elimina la línea separadora.
 */
 // ==/WindhawkModSettings==
 
@@ -400,7 +402,8 @@ struct {
 
 static HBRUSH        g_bgBrush       = nullptr;
 static ID2D1Factory* g_d2dFactory    = nullptr;
-static HHOOK         g_msgHook       = nullptr;
+static HANDLE        g_themeThread   = nullptr;
+static HWND          g_themeWnd      = nullptr;
 static COLORREF      g_origHotlight  = 0;
 static COLORREF      g_origHighlight = 0;
 static bool          g_hotlightSaved = false;
@@ -662,15 +665,14 @@ static std::wstring GetThemeClassName(HTHEME hTheme)
 
 static bool IsInsideExplorer(HWND hFrom)
 {
-    for (HWND h = hFrom; h; h = GetParent(h))
-    {
-        wchar_t cls[64] = {};
-        GetClassNameW(h, cls, ARRAYSIZE(cls));
-        if (_wcsicmp(cls, L"CabinetWClass") == 0 ||
-            _wcsicmp(cls, L"ExploreWClass") == 0)
-            return true;
-    }
-    return false;
+    HWND root = GetAncestor(hFrom, GA_ROOT);
+    if (!root) return false;
+
+    wchar_t cls[64] = {};
+    GetClassNameW(root, cls, ARRAYSIZE(cls));
+
+    return (_wcsicmp(cls, L"CabinetWClass") == 0 ||
+            _wcsicmp(cls, L"ExploreWClass") == 0);
 }
 
 static bool IsResizableCombo(HWND hwnd)
@@ -690,19 +692,47 @@ static bool IsResizableCombo(HWND hwnd)
 
 // ── Theme change hook ────────────────────────────────────────────────────────
 
-static LRESULT CALLBACK ThemeMsgProc(int nCode, WPARAM wParam, LPARAM lParam)
+static LRESULT CALLBACK ThemeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (nCode >= 0)
+    if ((msg == WM_SETTINGCHANGE && lParam &&
+        wcscmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0) ||
+        msg == WM_THEMECHANGED)
     {
-        MSG* msg = (MSG*)lParam;
-        if ((msg->message == WM_SETTINGCHANGE && msg->lParam &&
-             wcscmp((LPCWSTR)msg->lParam, L"ImmersiveColorSet") == 0) ||
-            msg->message == WM_THEMECHANGED)
-        {
-            UpdateThemeColors();
-        }
+        UpdateThemeColors();
     }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+static DWORD WINAPI ThemeThreadProc(LPVOID)
+{
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = ThemeWndProc;
+    wc.hInstance = GetModuleHandle(nullptr);
+    wc.lpszClassName = L"WHModernUIThemeWnd";
+
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+       return 0;
+
+    g_themeWnd = CreateWindowExW(
+        0,
+        wc.lpszClassName,
+        L"",
+        0,
+        0,0,0,0,
+        HWND_MESSAGE,
+        nullptr,
+        wc.hInstance,
+        nullptr);
+        if (!g_themeWnd)
+           return 0;
+    
+
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0))
+        DispatchMessage(&msg);
+
+    return 0;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -922,6 +952,8 @@ constexpr INT LVP_LISTITEM_ = 1;
 
 static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
+    if (!g_settings.ExplorerSection && !g_settings.RoundedSelection && !g_settings.ModernGroupHeaders)
+       return false;
     if (!pRect) return false;
 
     // Nav divider removal
@@ -1397,35 +1429,101 @@ static void NormalizeDragDrop()
 
 static void LoadSettings()
 {
-    g_settings.ComboSection    = Wh_GetIntSetting(L"ComboBoxSection");
-    g_settings.CornerRadius    = Wh_GetIntSetting(L"CornerRadius");
+    g_settings.ComboSection = Wh_GetIntSetting(L"ComboBoxSection.Enabled");
+
+    g_settings.CornerRadius = Wh_GetIntSetting(L"ComboBoxSection.CornerRadius");
     if (g_settings.CornerRadius < 0) g_settings.CornerRadius = 0;
     if (g_settings.CornerRadius > 20) g_settings.CornerRadius = 20;
 
-    g_settings.AutoColors = Wh_GetIntSetting(L"AutoColors");
-    if (g_settings.AutoColors) ApplyAutoColors();
-    else {
-        auto s1 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor"));   ParseHexColor(s1, g_settings.BorderClr);
-        auto s2 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BackgroundColor")); ParseHexColor(s2, g_settings.BgColor);
-        auto s3 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TextColor"));      ParseHexColor(s3, g_settings.TextColor);
+    g_settings.AutoColors = Wh_GetIntSetting(L"ComboBoxSection.AutoColors");
+
+    if (g_settings.AutoColors)
+    {
+        ApplyAutoColors();
+    }
+    else
+    {
+        auto s1 = WindhawkUtils::StringSetting(
+            Wh_GetStringSetting(L"ComboBoxSection.BorderColor"));
+        ParseHexColor(s1, g_settings.BorderClr);
+
+        auto s2 = WindhawkUtils::StringSetting(
+            Wh_GetStringSetting(L"ComboBoxSection.BackgroundColor"));
+        ParseHexColor(s2, g_settings.BgColor);
+
+        auto s3 = WindhawkUtils::StringSetting(
+            Wh_GetStringSetting(L"ComboBoxSection.TextColor"));
+        ParseHexColor(s3, g_settings.TextColor);
     }
 
-    g_settings.TreeSection     = Wh_GetIntSetting(L"TreeViewSection");
-    g_settings.ModernInsert    = Wh_GetIntSetting(L"ModernInsertMark");
-    g_settings.RemoveTreeLines = Wh_GetIntSetting(L"RemoveTreeLines");
-    g_settings.GeneralSection    = Wh_GetIntSetting(L"GeneralSection");
-    g_settings.ModernFocusRect   = Wh_GetIntSetting(L"ModernFocusRect");
-    g_settings.AccentMarquee     = Wh_GetIntSetting(L"AccentMarquee");
-    g_settings.AccentColorize    = Wh_GetIntSetting(L"AccentColorize");
-    g_settings.AccentStyles      = Wh_GetIntSetting(L"AccentStyles");
-    g_settings.NormalizeDragDrop = Wh_GetIntSetting(L"NormalizeDragDrop");
-    g_settings.ExplorerSection   = Wh_GetIntSetting(L"ExplorerSection");
-    g_settings.RoundedSelection  = Wh_GetIntSetting(L"RoundedSelection");
-    g_settings.RemoveNavDivider  = Wh_GetIntSetting(L"RemoveNavDivider");
-    g_settings.RemoveNavDividerTW = Wh_GetIntSetting(L"RemoveNavDividerTW");
-    g_settings.ModernGroupHeaders = Wh_GetIntSetting(L"ModernGroupHeaders");
+    g_settings.TreeSection =
+        Wh_GetIntSetting(L"TreeViewSection.Enabled");
+
+    g_settings.ModernInsert =
+        Wh_GetIntSetting(L"TreeViewSection.ModernInsertMark");
+
+    g_settings.RemoveTreeLines =
+        Wh_GetIntSetting(L"TreeViewSection.RemoveTreeLines");
+
+
+    g_settings.GeneralSection =
+        Wh_GetIntSetting(L"GeneralSection.Enabled");
+
+    g_settings.ModernFocusRect =
+        Wh_GetIntSetting(L"GeneralSection.ModernFocusRect");
+
+    g_settings.AccentMarquee =
+        Wh_GetIntSetting(L"GeneralSection.AccentMarquee");
+
+    g_settings.AccentColorize =
+        Wh_GetIntSetting(L"GeneralSection.AccentColorize");
+
+    g_settings.AccentStyles =
+        Wh_GetIntSetting(L"GeneralSection.AccentStyles");
+
+    g_settings.NormalizeDragDrop =
+        Wh_GetIntSetting(L"GeneralSection.NormalizeDragDrop");
+
+
+    g_settings.ExplorerSection =
+        Wh_GetIntSetting(L"ExplorerSection.Enabled");
+
+    g_settings.RoundedSelection =
+        Wh_GetIntSetting(L"ExplorerSection.RoundedSelection");
+
+    g_settings.RemoveNavDivider =
+        Wh_GetIntSetting(L"ExplorerSection.RemoveNavDivider");
+
+    g_settings.RemoveNavDividerTW =
+        Wh_GetIntSetting(L"ExplorerSection.RemoveNavDividerTW");
+
+    g_settings.ModernGroupHeaders =
+        Wh_GetIntSetting(L"ExplorerSection.ModernGroupHeaders");
+
 
     RecreateBrush();
+}
+
+static BOOL CALLBACK RemoveAllSubclassesEnum(HWND hwnd, LPARAM)
+{
+    if (GetPropW(hwnd, PROP_LB_SUB)) {
+        RemoveWindowSubclass(hwnd, ComboLBoxSubclass, 0);
+        RemovePropW(hwnd, PROP_LB_SUB);
+    }
+
+    if (GetPropW(hwnd, PROP_CB_SUB)) {
+        RemoveWindowSubclass(hwnd, ComboParentSubclass, 1);
+        RemovePropW(hwnd, PROP_CB_SUB);
+    }
+
+    if (GetPropW(hwnd, PROP_TV_SUB)) {
+        RemoveWindowSubclass(hwnd, TreeViewSubclass, 2);
+        RemovePropW(hwnd, PROP_TV_SUB);
+    }
+
+    EnumChildWindows(hwnd, RemoveAllSubclassesEnum, 0);
+
+    return TRUE;
 }
 
 // ── Mod lifecycle ────────────────────────────────────────────────────────────
@@ -1434,16 +1532,52 @@ BOOL Wh_ModInit()
 {
     LoadSettings();
 
-    g_msgHook = SetWindowsHookExW(WH_GETMESSAGE, ThemeMsgProc, nullptr, GetCurrentThreadId());
-    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2dFactory);
+    g_themeThread = CreateThread(nullptr, 0, ThemeThreadProc, nullptr, 0, nullptr);
+    if (!g_themeThread) {
+    Wh_Log(L"Theme thread creation failed");
+}
+    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2dFactory)))
+{
+    g_d2dFactory = nullptr;
+}
 
     HMODULE hUx = GetModuleHandleW(L"uxtheme.dll");
     if (hUx) pGetThemeClass = (GetThemeClass_t)GetProcAddress(hUx, MAKEINTRESOURCEA(74));
 
     HMODULE hW32 = GetModuleHandleW(L"win32u.dll");
-    if (!hW32) return FALSE;
+if (!hW32)
+{
+    if (g_d2dFactory)
+    {
+        g_d2dFactory->Release();
+        g_d2dFactory = nullptr;
+    }
+
+    if (g_themeThread)
+    {
+        CloseHandle(g_themeThread);
+        g_themeThread = nullptr;
+    }
+
+    return FALSE;
+}
     auto pCreate = (NtUserCreateWindowEx_t)GetProcAddress(hW32, "NtUserCreateWindowEx");
-    if (!pCreate) return FALSE;
+    if (!pCreate)
+{
+    if (g_d2dFactory)
+    {
+        g_d2dFactory->Release();
+        g_d2dFactory = nullptr;
+    }
+
+    if (g_themeThread)
+    {
+        CloseHandle(g_themeThread);
+        g_themeThread = nullptr;
+    }
+
+    return FALSE;
+}
 
     WindhawkUtils::SetFunctionHook(pCreate, NtUserCreateWindowEx_hook, &NtUserCreateWindowEx_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeBackground, DrawThemeBackground_hook, &DrawThemeBackground_orig);
@@ -1461,7 +1595,9 @@ BOOL Wh_ModInit()
 
 void Wh_ModUninit()
 {
-    if (g_msgHook) { UnhookWindowsHookEx(g_msgHook); g_msgHook = nullptr; }
+    // Remove all window subclasses before unloading
+    EnumWindows(RemoveAllSubclassesEnum, 0);
+
     if (g_accentSaved) { SetSysColors(g_nAccentElems, g_accentElems, g_origAccentCols); g_accentSaved = false; }
     if (g_hotlightSaved) {
         INT elems[2] = { COLOR_HOTLIGHT, COLOR_HIGHLIGHT };
@@ -1471,6 +1607,18 @@ void Wh_ModUninit()
     }
     if (g_bgBrush)    { DeleteObject(g_bgBrush); g_bgBrush = nullptr; }
     if (g_d2dFactory) { g_d2dFactory->Release();  g_d2dFactory = nullptr; }
+    if (g_themeWnd)
+{
+    PostMessage(g_themeWnd, WM_CLOSE, 0, 0);
+    g_themeWnd = nullptr;
+}
+
+if (g_themeThread)
+{
+    WaitForSingleObject(g_themeThread, 3000);
+    CloseHandle(g_themeThread);
+    g_themeThread = nullptr;
+}
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) { *bReload = TRUE; return TRUE; }
