@@ -161,7 +161,7 @@ Moderniza elementos heredados de la interfaz Win32 en todas las aplicaciones.
     $description:pt: >-
      Hex RGB por exemplo 454545 (apenas quando cores automáticas estiverem desativadas)
     $description:es: >-
-     Hex RGB por ejemplo 454545 (solo cuando los colores automáticos estén desactivados)
+      Hex RGB por ejemplo 454545 (solo cuando los colores automáticos estén desactivados)
 
   - BackgroundColor: "191919"
     $name: Custom background color
@@ -402,8 +402,7 @@ struct {
 
 static HBRUSH        g_bgBrush       = nullptr;
 static ID2D1Factory* g_d2dFactory    = nullptr;
-static HANDLE        g_themeThread   = nullptr;
-static HWND          g_themeWnd      = nullptr;
+static HHOOK         g_msgHook       = nullptr;
 static COLORREF      g_origHotlight  = 0;
 static COLORREF      g_origHighlight = 0;
 static bool          g_hotlightSaved = false;
@@ -692,47 +691,19 @@ static bool IsResizableCombo(HWND hwnd)
 
 // ── Theme change hook ────────────────────────────────────────────────────────
 
-static LRESULT CALLBACK ThemeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+static LRESULT CALLBACK ThemeMsgProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
-    if ((msg == WM_SETTINGCHANGE && lParam &&
-        wcscmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0) ||
-        msg == WM_THEMECHANGED)
+    if (nCode >= 0)
     {
-        UpdateThemeColors();
+        MSG* msg = (MSG*)lParam;
+        if ((msg->message == WM_SETTINGCHANGE && msg->lParam &&
+             wcscmp((LPCWSTR)msg->lParam, L"ImmersiveColorSet") == 0) ||
+            msg->message == WM_THEMECHANGED)
+        {
+            UpdateThemeColors();
+        }
     }
-
-    return DefWindowProc(hwnd, msg, wParam, lParam);
-}
-
-static DWORD WINAPI ThemeThreadProc(LPVOID)
-{
-    WNDCLASSW wc = {};
-    wc.lpfnWndProc = ThemeWndProc;
-    wc.hInstance = GetModuleHandle(nullptr);
-    wc.lpszClassName = L"WHModernUIThemeWnd";
-
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-       return 0;
-
-    g_themeWnd = CreateWindowExW(
-        0,
-        wc.lpszClassName,
-        L"",
-        0,
-        0,0,0,0,
-        HWND_MESSAGE,
-        nullptr,
-        wc.hInstance,
-        nullptr);
-        if (!g_themeWnd)
-           return 0;
-    
-
-    MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0))
-        DispatchMessage(&msg);
-
-    return 0;
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -952,8 +923,6 @@ constexpr INT LVP_LISTITEM_ = 1;
 
 static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
-    if (!g_settings.ExplorerSection && !g_settings.RoundedSelection && !g_settings.ModernGroupHeaders)
-       return false;
     if (!pRect) return false;
 
     // Nav divider removal
@@ -1429,101 +1398,35 @@ static void NormalizeDragDrop()
 
 static void LoadSettings()
 {
-    g_settings.ComboSection = Wh_GetIntSetting(L"ComboBoxSection.Enabled");
-
-    g_settings.CornerRadius = Wh_GetIntSetting(L"ComboBoxSection.CornerRadius");
+    g_settings.ComboSection    = Wh_GetIntSetting(L"ComboBoxSection");
+    g_settings.CornerRadius    = Wh_GetIntSetting(L"CornerRadius");
     if (g_settings.CornerRadius < 0) g_settings.CornerRadius = 0;
     if (g_settings.CornerRadius > 20) g_settings.CornerRadius = 20;
 
-    g_settings.AutoColors = Wh_GetIntSetting(L"ComboBoxSection.AutoColors");
-
-    if (g_settings.AutoColors)
-    {
-        ApplyAutoColors();
-    }
-    else
-    {
-        auto s1 = WindhawkUtils::StringSetting(
-            Wh_GetStringSetting(L"ComboBoxSection.BorderColor"));
-        ParseHexColor(s1, g_settings.BorderClr);
-
-        auto s2 = WindhawkUtils::StringSetting(
-            Wh_GetStringSetting(L"ComboBoxSection.BackgroundColor"));
-        ParseHexColor(s2, g_settings.BgColor);
-
-        auto s3 = WindhawkUtils::StringSetting(
-            Wh_GetStringSetting(L"ComboBoxSection.TextColor"));
-        ParseHexColor(s3, g_settings.TextColor);
+    g_settings.AutoColors = Wh_GetIntSetting(L"AutoColors");
+    if (g_settings.AutoColors) ApplyAutoColors();
+    else {
+        auto s1 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor"));   ParseHexColor(s1, g_settings.BorderClr);
+        auto s2 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BackgroundColor")); ParseHexColor(s2, g_settings.BgColor);
+        auto s3 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TextColor"));      ParseHexColor(s3, g_settings.TextColor);
     }
 
-    g_settings.TreeSection =
-        Wh_GetIntSetting(L"TreeViewSection.Enabled");
-
-    g_settings.ModernInsert =
-        Wh_GetIntSetting(L"TreeViewSection.ModernInsertMark");
-
-    g_settings.RemoveTreeLines =
-        Wh_GetIntSetting(L"TreeViewSection.RemoveTreeLines");
-
-
-    g_settings.GeneralSection =
-        Wh_GetIntSetting(L"GeneralSection.Enabled");
-
-    g_settings.ModernFocusRect =
-        Wh_GetIntSetting(L"GeneralSection.ModernFocusRect");
-
-    g_settings.AccentMarquee =
-        Wh_GetIntSetting(L"GeneralSection.AccentMarquee");
-
-    g_settings.AccentColorize =
-        Wh_GetIntSetting(L"GeneralSection.AccentColorize");
-
-    g_settings.AccentStyles =
-        Wh_GetIntSetting(L"GeneralSection.AccentStyles");
-
-    g_settings.NormalizeDragDrop =
-        Wh_GetIntSetting(L"GeneralSection.NormalizeDragDrop");
-
-
-    g_settings.ExplorerSection =
-        Wh_GetIntSetting(L"ExplorerSection.Enabled");
-
-    g_settings.RoundedSelection =
-        Wh_GetIntSetting(L"ExplorerSection.RoundedSelection");
-
-    g_settings.RemoveNavDivider =
-        Wh_GetIntSetting(L"ExplorerSection.RemoveNavDivider");
-
-    g_settings.RemoveNavDividerTW =
-        Wh_GetIntSetting(L"ExplorerSection.RemoveNavDividerTW");
-
-    g_settings.ModernGroupHeaders =
-        Wh_GetIntSetting(L"ExplorerSection.ModernGroupHeaders");
-
+    g_settings.TreeSection     = Wh_GetIntSetting(L"TreeViewSection");
+    g_settings.ModernInsert    = Wh_GetIntSetting(L"ModernInsertMark");
+    g_settings.RemoveTreeLines = Wh_GetIntSetting(L"RemoveTreeLines");
+    g_settings.GeneralSection    = Wh_GetIntSetting(L"GeneralSection");
+    g_settings.ModernFocusRect   = Wh_GetIntSetting(L"ModernFocusRect");
+    g_settings.AccentMarquee     = Wh_GetIntSetting(L"AccentMarquee");
+    g_settings.AccentColorize    = Wh_GetIntSetting(L"AccentColorize");
+    g_settings.AccentStyles      = Wh_GetIntSetting(L"AccentStyles");
+    g_settings.NormalizeDragDrop = Wh_GetIntSetting(L"NormalizeDragDrop");
+    g_settings.ExplorerSection   = Wh_GetIntSetting(L"ExplorerSection");
+    g_settings.RoundedSelection  = Wh_GetIntSetting(L"RoundedSelection");
+    g_settings.RemoveNavDivider  = Wh_GetIntSetting(L"RemoveNavDivider");
+    g_settings.RemoveNavDividerTW = Wh_GetIntSetting(L"RemoveNavDividerTW");
+    g_settings.ModernGroupHeaders = Wh_GetIntSetting(L"ModernGroupHeaders");
 
     RecreateBrush();
-}
-
-static BOOL CALLBACK RemoveAllSubclassesEnum(HWND hwnd, LPARAM)
-{
-    if (GetPropW(hwnd, PROP_LB_SUB)) {
-        RemoveWindowSubclass(hwnd, ComboLBoxSubclass, 0);
-        RemovePropW(hwnd, PROP_LB_SUB);
-    }
-
-    if (GetPropW(hwnd, PROP_CB_SUB)) {
-        RemoveWindowSubclass(hwnd, ComboParentSubclass, 1);
-        RemovePropW(hwnd, PROP_CB_SUB);
-    }
-
-    if (GetPropW(hwnd, PROP_TV_SUB)) {
-        RemoveWindowSubclass(hwnd, TreeViewSubclass, 2);
-        RemovePropW(hwnd, PROP_TV_SUB);
-    }
-
-    EnumChildWindows(hwnd, RemoveAllSubclassesEnum, 0);
-
-    return TRUE;
 }
 
 // ── Mod lifecycle ────────────────────────────────────────────────────────────
@@ -1532,14 +1435,8 @@ BOOL Wh_ModInit()
 {
     LoadSettings();
 
-    g_themeThread = CreateThread(nullptr, 0, ThemeThreadProc, nullptr, 0, nullptr);
-    if (!g_themeThread) {
-    Wh_Log(L"Theme thread creation failed");
-}
-    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2dFactory)))
-{
-    g_d2dFactory = nullptr;
-}
+    g_msgHook = SetWindowsHookExW(WH_GETMESSAGE, ThemeMsgProc, nullptr, GetCurrentThreadId());
+    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2dFactory);
 
     HMODULE hUx = GetModuleHandleW(L"uxtheme.dll");
     if (hUx) pGetThemeClass = (GetThemeClass_t)GetProcAddress(hUx, MAKEINTRESOURCEA(74));
@@ -1547,33 +1444,30 @@ BOOL Wh_ModInit()
     HMODULE hW32 = GetModuleHandleW(L"win32u.dll");
 if (!hW32)
 {
-    if (g_d2dFactory)
-    {
-        g_d2dFactory->Release();
-        g_d2dFactory = nullptr;
+    if (g_msgHook) {
+        UnhookWindowsHookEx(g_msgHook);
+        g_msgHook = nullptr;
     }
 
-    if (g_themeThread)
-    {
-        CloseHandle(g_themeThread);
-        g_themeThread = nullptr;
+    if (g_d2dFactory) {
+        g_d2dFactory->Release();
+        g_d2dFactory = nullptr;
     }
 
     return FALSE;
 }
-    auto pCreate = (NtUserCreateWindowEx_t)GetProcAddress(hW32, "NtUserCreateWindowEx");
-    if (!pCreate)
+
+auto pCreate = (NtUserCreateWindowEx_t)GetProcAddress(hW32, "NtUserCreateWindowEx");
+if (!pCreate)
 {
-    if (g_d2dFactory)
-    {
-        g_d2dFactory->Release();
-        g_d2dFactory = nullptr;
+    if (g_msgHook) {
+        UnhookWindowsHookEx(g_msgHook);
+        g_msgHook = nullptr;
     }
 
-    if (g_themeThread)
-    {
-        CloseHandle(g_themeThread);
-        g_themeThread = nullptr;
+    if (g_d2dFactory) {
+        g_d2dFactory->Release();
+        g_d2dFactory = nullptr;
     }
 
     return FALSE;
@@ -1595,9 +1489,7 @@ if (!hW32)
 
 void Wh_ModUninit()
 {
-    // Remove all window subclasses before unloading
-    EnumWindows(RemoveAllSubclassesEnum, 0);
-
+    if (g_msgHook) { UnhookWindowsHookEx(g_msgHook); g_msgHook = nullptr; }
     if (g_accentSaved) { SetSysColors(g_nAccentElems, g_accentElems, g_origAccentCols); g_accentSaved = false; }
     if (g_hotlightSaved) {
         INT elems[2] = { COLOR_HOTLIGHT, COLOR_HIGHLIGHT };
@@ -1607,18 +1499,6 @@ void Wh_ModUninit()
     }
     if (g_bgBrush)    { DeleteObject(g_bgBrush); g_bgBrush = nullptr; }
     if (g_d2dFactory) { g_d2dFactory->Release();  g_d2dFactory = nullptr; }
-    if (g_themeWnd)
-{
-    PostMessage(g_themeWnd, WM_CLOSE, 0, 0);
-    g_themeWnd = nullptr;
-}
-
-if (g_themeThread)
-{
-    WaitForSingleObject(g_themeThread, 3000);
-    CloseHandle(g_themeThread);
-    g_themeThread = nullptr;
-}
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) { *bReload = TRUE; return TRUE; }
