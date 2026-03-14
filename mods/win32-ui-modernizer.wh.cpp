@@ -695,7 +695,8 @@ static LRESULT CALLBACK ThemeMsgProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
     if (nCode >= 0)
     {
-        MSG* msg = (MSG*)lParam;
+        CWPSTRUCT* msg = (CWPSTRUCT*)lParam;
+
         if ((msg->message == WM_SETTINGCHANGE && msg->lParam &&
              wcscmp((LPCWSTR)msg->lParam, L"ImmersiveColorSet") == 0) ||
             msg->message == WM_THEMECHANGED)
@@ -703,6 +704,7 @@ static LRESULT CALLBACK ThemeMsgProc(int nCode, WPARAM wParam, LPARAM lParam)
             UpdateThemeColors();
         }
     }
+
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
@@ -1474,7 +1476,7 @@ BOOL Wh_ModInit()
 {
     LoadSettings();
 
-    g_msgHook = SetWindowsHookExW(WH_GETMESSAGE, ThemeMsgProc, nullptr, GetCurrentThreadId());
+    g_msgHook = SetWindowsHookExW(WH_CALLWNDPROC, ThemeMsgProc, nullptr, GetCurrentThreadId());
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2dFactory);
 
     HMODULE hUx = GetModuleHandleW(L"uxtheme.dll");
