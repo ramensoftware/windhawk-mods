@@ -1398,33 +1398,72 @@ static void NormalizeDragDrop()
 
 static void LoadSettings()
 {
-    g_settings.ComboSection    = Wh_GetIntSetting(L"ComboBoxSection");
-    g_settings.CornerRadius    = Wh_GetIntSetting(L"CornerRadius");
+    g_settings.ComboSection = Wh_GetIntSetting(L"ComboBoxSection.Enabled");
+    g_settings.CornerRadius = Wh_GetIntSetting(L"ComboBoxSection.CornerRadius");
     if (g_settings.CornerRadius < 0) g_settings.CornerRadius = 0;
     if (g_settings.CornerRadius > 20) g_settings.CornerRadius = 20;
 
-    g_settings.AutoColors = Wh_GetIntSetting(L"AutoColors");
-    if (g_settings.AutoColors) ApplyAutoColors();
-    else {
-        auto s1 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor"));   ParseHexColor(s1, g_settings.BorderClr);
-        auto s2 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BackgroundColor")); ParseHexColor(s2, g_settings.BgColor);
-        auto s3 = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TextColor"));      ParseHexColor(s3, g_settings.TextColor);
+    g_settings.AutoColors = Wh_GetIntSetting(L"ComboBoxSection.AutoColors");
+    if (g_settings.AutoColors)
+    {
+        ApplyAutoColors();
+    }
+    else
+    {
+        auto s1 = WindhawkUtils::StringSetting(
+            Wh_GetStringSetting(L"ComboBoxSection.BorderColor"));
+        ParseHexColor(s1, g_settings.BorderClr);
+
+        auto s2 = WindhawkUtils::StringSetting(
+            Wh_GetStringSetting(L"ComboBoxSection.BackgroundColor"));
+        ParseHexColor(s2, g_settings.BgColor);
+
+        auto s3 = WindhawkUtils::StringSetting(
+            Wh_GetStringSetting(L"ComboBoxSection.TextColor"));
+        ParseHexColor(s3, g_settings.TextColor);
     }
 
-    g_settings.TreeSection     = Wh_GetIntSetting(L"TreeViewSection");
-    g_settings.ModernInsert    = Wh_GetIntSetting(L"ModernInsertMark");
-    g_settings.RemoveTreeLines = Wh_GetIntSetting(L"RemoveTreeLines");
-    g_settings.GeneralSection    = Wh_GetIntSetting(L"GeneralSection");
-    g_settings.ModernFocusRect   = Wh_GetIntSetting(L"ModernFocusRect");
-    g_settings.AccentMarquee     = Wh_GetIntSetting(L"AccentMarquee");
-    g_settings.AccentColorize    = Wh_GetIntSetting(L"AccentColorize");
-    g_settings.AccentStyles      = Wh_GetIntSetting(L"AccentStyles");
-    g_settings.NormalizeDragDrop = Wh_GetIntSetting(L"NormalizeDragDrop");
-    g_settings.ExplorerSection   = Wh_GetIntSetting(L"ExplorerSection");
-    g_settings.RoundedSelection  = Wh_GetIntSetting(L"RoundedSelection");
-    g_settings.RemoveNavDivider  = Wh_GetIntSetting(L"RemoveNavDivider");
-    g_settings.RemoveNavDividerTW = Wh_GetIntSetting(L"RemoveNavDividerTW");
-    g_settings.ModernGroupHeaders = Wh_GetIntSetting(L"ModernGroupHeaders");
+    g_settings.TreeSection =
+        Wh_GetIntSetting(L"TreeViewSection.Enabled");
+
+    g_settings.ModernInsert =
+        Wh_GetIntSetting(L"TreeViewSection.ModernInsertMark");
+
+    g_settings.RemoveTreeLines =
+        Wh_GetIntSetting(L"TreeViewSection.RemoveTreeLines");
+
+    g_settings.GeneralSection =
+        Wh_GetIntSetting(L"GeneralSection.Enabled");
+
+    g_settings.ModernFocusRect =
+        Wh_GetIntSetting(L"GeneralSection.ModernFocusRect");
+
+    g_settings.AccentMarquee =
+        Wh_GetIntSetting(L"GeneralSection.AccentMarquee");
+
+    g_settings.AccentColorize =
+        Wh_GetIntSetting(L"GeneralSection.AccentColorize");
+
+    g_settings.AccentStyles =
+        Wh_GetIntSetting(L"GeneralSection.AccentStyles");
+
+    g_settings.NormalizeDragDrop =
+        Wh_GetIntSetting(L"GeneralSection.NormalizeDragDrop");
+
+    g_settings.ExplorerSection =
+        Wh_GetIntSetting(L"ExplorerSection.Enabled");
+
+    g_settings.RoundedSelection =
+        Wh_GetIntSetting(L"ExplorerSection.RoundedSelection");
+
+    g_settings.RemoveNavDivider =
+        Wh_GetIntSetting(L"ExplorerSection.RemoveNavDivider");
+
+    g_settings.RemoveNavDividerTW =
+        Wh_GetIntSetting(L"ExplorerSection.RemoveNavDividerTW");
+
+    g_settings.ModernGroupHeaders =
+        Wh_GetIntSetting(L"ExplorerSection.ModernGroupHeaders");
 
     RecreateBrush();
 }
@@ -1487,8 +1526,37 @@ if (!pCreate)
     return TRUE;
 }
 
+static BOOL CALLBACK RemoveSubclassesFromWindow(HWND hwnd, LPARAM)
+{
+    if (GetPropW(hwnd, PROP_LB_SUB)) {
+        RemoveWindowSubclass(hwnd, ComboLBoxSubclass, 0);
+        RemovePropW(hwnd, PROP_LB_SUB);
+    }
+
+    if (GetPropW(hwnd, PROP_CB_SUB)) {
+        RemoveWindowSubclass(hwnd, ComboParentSubclass, 1);
+        RemovePropW(hwnd, PROP_CB_SUB);
+    }
+
+    if (GetPropW(hwnd, PROP_TV_SUB)) {
+        RemoveWindowSubclass(hwnd, TreeViewSubclass, 2);
+        RemovePropW(hwnd, PROP_TV_SUB);
+    }
+
+    return TRUE;
+}
+
+static BOOL CALLBACK EnumWindowsRemoveSubclasses(HWND hwnd, LPARAM)
+{
+    RemoveSubclassesFromWindow(hwnd, 0);
+    EnumChildWindows(hwnd, RemoveSubclassesFromWindow, 0);
+    return TRUE;
+}
+
 void Wh_ModUninit()
 {
+    EnumWindows(EnumWindowsRemoveSubclasses, 0);
+
     if (g_msgHook) { UnhookWindowsHookEx(g_msgHook); g_msgHook = nullptr; }
     if (g_accentSaved) { SetSysColors(g_nAccentElems, g_accentElems, g_origAccentCols); g_accentSaved = false; }
     if (g_hotlightSaved) {
