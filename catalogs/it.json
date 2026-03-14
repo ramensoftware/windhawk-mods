@@ -2724,7 +2724,7 @@
                     12
                 ],
                 "ratingUsers": 13,
-                "updated": 1773069962000,
+                "updated": 1773497645000,
                 "users": 291
             },
             "metadata": {
@@ -2736,7 +2736,7 @@
                     "*"
                 ],
                 "name": "Disk Usage Bar in Drive Properties",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "dot-hide": {
