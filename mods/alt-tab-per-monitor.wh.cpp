@@ -2,9 +2,9 @@
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
 // @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.1.1
-// @author          L3r0y
-// @github          https://github.com/L3r0yThingz
+// @version         2.0.0
+// @author          L3r0y (https://github.com/L3r0yThingz) & trosha_b
+// @github          https://github.com/troshab
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lversion
@@ -12,16 +12,26 @@
 
 // ==WindhawkModReadme==
 /*
-# Alt+Tab per monitor
+# Alt+Tab per monitor v2
 
-When you press the Alt+Tab combination, the window switcher will appear on the
-primary display, showing all open windows across all monitors. This mod
-customizes the behavior to display the switcher on the monitor where the cursor
-is currently located, showing only the windows present on that specific monitor.
+Rewritten version of [Alt+Tab per monitor](https://windhawk.net/mods/alt-tab-per-monitor)
+by [L3r0y](https://github.com/L3r0yThingz).
 
-Additionally, the previous known Windows behavior can still be achieved by
-pressing Win+Alt+Tab, which will show all windows across all monitors. You can
-configure where the Win+Alt+Tab UI appears in the mod settings.
+## Changes in v2.0.0
+- **State machine** instead of fragile timing hack (hardcoded 200ms threshold)
+- **RAII PhaseGuard** for safe phase transitions (no leaked flags on error paths)
+- **SRWLOCK** synchronization instead of 3 unsynchronized atomic variables
+- **Wh_ModUninit** with hook call counter for safe unloading
+- **Configurable threshold** (`postCreateThresholdMs`) in mod settings
+- **Deduplicated** common symbol hooks between Win10/Win11 paths
+- Removed per-window `Wh_Log` spam from IsViewVisible
+
+## How it works
+When you press Alt+Tab, the window switcher appears on the monitor where the
+cursor is located, showing only the windows on that monitor.
+
+Win+Alt+Tab still shows all windows across all monitors. You can configure
+where the Win+Alt+Tab UI appears in the mod settings.
 
 ![Gif](https://i.imgur.com/Hpg8TKh.gif)
 */
@@ -37,6 +47,13 @@ configure where the Win+Alt+Tab UI appears in the mod settings.
   $options:
   - primary: Primary monitor (default Windows behavior)
   - cursor: Monitor where cursor is located
+- postCreateThresholdMs: 200
+  $name: Post-creation filter window (ms)
+  $description: |
+    After the Alt+Tab window list is built, additional window visibility checks
+    may occur for the focused window. This controls how long after creation
+    these checks are still filtered by monitor. Increase if windows from other
+    monitors leak through. Decrease if non-Alt+Tab components are affected.
 */
 // ==/WindhawkModSettings==
 
@@ -47,6 +64,10 @@ configure where the Win+Alt+Tab UI appears in the mod settings.
 
 #include <winrt/windows.foundation.collections.h>
 
+// ============================================================================
+// Settings
+// ============================================================================
+
 enum class WinAltTabLocation {
     primary,
     cursor,
@@ -54,7 +75,12 @@ enum class WinAltTabLocation {
 
 struct {
     WinAltTabLocation winAltTabLocation;
+    ULONGLONG postCreateThresholdMs;
 } g_settings;
+
+// ============================================================================
+// Version detection
+// ============================================================================
 
 enum class WinVersion {
     Unsupported,
@@ -63,12 +89,6 @@ enum class WinVersion {
 };
 
 WinVersion g_winVersion;
-
-std::atomic<DWORD> g_threadIdForAltTabShowWindow;
-std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
-std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
-ULONGLONG g_CreateInstance_TickCount;
-constexpr ULONGLONG kDeltaThreshold = 200;
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     void* pFixedFileInfo = nullptr;
@@ -123,6 +143,87 @@ WinVersion GetWindowsVersion() {
     return WinVersion::Unsupported;
 }
 
+// ============================================================================
+// Alt+Tab session state machine
+//
+// Lifecycle:
+//   [Inactive] --CreateInstance--> [Creating] --return--> [PostCreate]
+//        ^                                                    |
+//        |                                         Show called|
+//        |                                                    v
+//        +------------------Show returns------------- [Showing]
+//
+// IsViewVisible filters windows only during Creating and PostCreate phases.
+// PostCreate has a configurable timeout (postCreateThresholdMs) to catch
+// late IsViewVisible calls for the focused window that Windows adds after
+// the initial window list is built.
+// ============================================================================
+
+enum class AltTabPhase {
+    Inactive,
+    Creating,    // Inside CreateInstance - building window list
+    PostCreate,  // CreateInstance returned, may still get late visibility checks
+    Showing,     // Inside Show - positioning the Alt+Tab window
+};
+
+struct AltTabSession {
+    SRWLOCK lock = SRWLOCK_INIT;
+    DWORD threadId = 0;
+    AltTabPhase phase = AltTabPhase::Inactive;
+    ULONGLONG createReturnedAt = 0;
+};
+
+AltTabSession g_session;
+
+// RAII guard for phase transitions. Sets enterPhase on construction,
+// exitPhase on destruction. Records tick when transitioning to PostCreate.
+class PhaseGuard {
+    AltTabSession& m_session;
+    AltTabPhase m_exitPhase;
+
+public:
+    PhaseGuard(AltTabSession& session, AltTabPhase enterPhase,
+               AltTabPhase exitPhase)
+        : m_session(session), m_exitPhase(exitPhase) {
+        AcquireSRWLockExclusive(&m_session.lock);
+        m_session.threadId = GetCurrentThreadId();
+        m_session.phase = enterPhase;
+        ReleaseSRWLockExclusive(&m_session.lock);
+    }
+
+    ~PhaseGuard() {
+        AcquireSRWLockExclusive(&m_session.lock);
+        m_session.phase = m_exitPhase;
+        if (m_exitPhase == AltTabPhase::PostCreate) {
+            m_session.createReturnedAt = GetTickCount64();
+        } else if (m_exitPhase == AltTabPhase::Inactive) {
+            m_session.threadId = 0;
+        }
+        ReleaseSRWLockExclusive(&m_session.lock);
+    }
+
+    PhaseGuard(const PhaseGuard&) = delete;
+    PhaseGuard& operator=(const PhaseGuard&) = delete;
+};
+
+// ============================================================================
+// Unload safety
+// ============================================================================
+
+std::atomic<bool> g_unloading{false};
+std::atomic<int> g_hookCallCounter{0};
+
+struct HookCallCounterGuard {
+    HookCallCounterGuard() { g_hookCallCounter++; }
+    ~HookCallCounterGuard() { g_hookCallCounter--; }
+    HookCallCounterGuard(const HookCallCounterGuard&) = delete;
+    HookCallCounterGuard& operator=(const HookCallCounterGuard&) = delete;
+};
+
+// ============================================================================
+// Utility functions
+// ============================================================================
+
 bool IsWinKeyPressed() {
     return GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0;
 }
@@ -149,6 +250,10 @@ bool HandleAltTabWindow(RECT* rect) {
     *rect = monInfo.rcWork;
     return true;
 }
+
+// ============================================================================
+// ApplicationView helpers
+// ============================================================================
 
 void* CWin32ApplicationView_vtable;
 void* CWinRTApplicationView_vtable;
@@ -193,6 +298,13 @@ bool IsWindowOnCursorMonitor(HWND windowHandle) {
     return hMon == hMonFromWindow;
 }
 
+// ============================================================================
+// Hook: CVirtualDesktop::IsViewVisible
+//
+// Called for every window to check visibility. Also used by Win+Tab and
+// the taskbar, so we only filter during our Alt+Tab session phases.
+// ============================================================================
+
 using CVirtualDesktop_IsViewVisible_t = HRESULT(WINAPI*)(void* pThis,
                                                          void* applicationView,
                                                          BOOL* isVisible);
@@ -200,27 +312,42 @@ CVirtualDesktop_IsViewVisible_t CVirtualDesktop_IsViewVisible_Original;
 HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
                                                   void* applicationView,
                                                   BOOL* isVisible) {
-    Wh_Log(L">");
+    HookCallCounterGuard counter;
+    if (g_unloading) {
+        return CVirtualDesktop_IsViewVisible_Original(pThis, applicationView,
+                                                      isVisible);
+    }
+
     auto ret = CVirtualDesktop_IsViewVisible_Original(pThis, applicationView,
                                                       isVisible);
-    if (FAILED(ret)) {
+    if (FAILED(ret) || !*isVisible) {
         return ret;
     }
 
-    if (g_threadIdForXamlAltTabViewHost_CreateInstance !=
-        GetCurrentThreadId()) {
-        // A focused window might be added after a short period. Filter windows
-        // using our monitor rules if the alt tab window was just opened.
-        // Otherwise, don't play with the filter anymore, as it's also used by
-        // other components such as Win+Tab and the taskbar.
-        if ((GetTickCount64() - g_CreateInstance_TickCount) > kDeltaThreshold ||
-            g_lastThreadIdForXamlAltTabViewHost_CreateInstance !=
-                GetCurrentThreadId()) {
-            return ret;
+    // Check if this call belongs to our Alt+Tab session
+    bool shouldFilter = false;
+    {
+        AcquireSRWLockShared(&g_session.lock);
+        DWORD currentThread = GetCurrentThreadId();
+        if (g_session.threadId == currentThread) {
+            switch (g_session.phase) {
+                case AltTabPhase::Creating:
+                    shouldFilter = true;
+                    break;
+                case AltTabPhase::PostCreate:
+                    if ((GetTickCount64() - g_session.createReturnedAt) <=
+                        g_settings.postCreateThresholdMs) {
+                        shouldFilter = true;
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
+        ReleaseSRWLockShared(&g_session.lock);
     }
 
-    if (!*isVisible) {
+    if (!shouldFilter) {
         return ret;
     }
 
@@ -239,6 +366,14 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
     return ret;
 }
 
+// ============================================================================
+// Hook: Show (XamlAltTabViewHost / CAltTabViewHost)
+//
+// Called when Alt+Tab window is being displayed. PhaseGuard sets Showing
+// on entry and Inactive on exit, so Position/CreateFrame can detect they're
+// being called from within Show.
+// ============================================================================
+
 using XamlAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
                                                    void* param1,
                                                    int param2,
@@ -248,12 +383,14 @@ HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* pThis,
                                             void* param1,
                                             int param2,
                                             void* param3) {
+    HookCallCounterGuard counter;
+    if (g_unloading) {
+        return XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
+    }
+
     Wh_Log(L">");
-    g_threadIdForAltTabShowWindow = GetCurrentThreadId();
-    HRESULT ret =
-        XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
-    g_threadIdForAltTabShowWindow = 0;
-    return ret;
+    PhaseGuard guard(g_session, AltTabPhase::Showing, AltTabPhase::Inactive);
+    return XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
 }
 
 using CAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
@@ -265,12 +402,22 @@ HRESULT WINAPI CAltTabViewHost_Show_Hook(void* pThis,
                                          void* param1,
                                          int param2,
                                          void* param3) {
+    HookCallCounterGuard counter;
+    if (g_unloading) {
+        return CAltTabViewHost_Show_Original(pThis, param1, param2, param3);
+    }
+
     Wh_Log(L">");
-    g_threadIdForAltTabShowWindow = GetCurrentThreadId();
-    HRESULT ret = CAltTabViewHost_Show_Original(pThis, param1, param2, param3);
-    g_threadIdForAltTabShowWindow = 0;
-    return ret;
+    PhaseGuard guard(g_session, AltTabPhase::Showing, AltTabPhase::Inactive);
+    return CAltTabViewHost_Show_Original(pThis, param1, param2, param3);
 }
+
+// ============================================================================
+// Hook: Position / CreateFrame
+//
+// Called from within Show to position the Alt+Tab window on a monitor.
+// Reads phase but does NOT clear it - PhaseGuard in Show handles cleanup.
+// ============================================================================
 
 using ITaskGroupWindowInformation_Position_t =
     HRESULT(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect* rect);
@@ -279,10 +426,19 @@ ITaskGroupWindowInformation_Position_t
 HRESULT WINAPI ITaskGroupWindowInformation_Position_Hook(
     void* pThis,
     winrt::Windows::Foundation::Rect* rect) {
-    if (g_threadIdForAltTabShowWindow != GetCurrentThreadId()) {
+    HookCallCounterGuard counter;
+
+    bool isOurCall = false;
+    {
+        AcquireSRWLockShared(&g_session.lock);
+        isOurCall = (g_session.phase == AltTabPhase::Showing &&
+                     g_session.threadId == GetCurrentThreadId());
+        ReleaseSRWLockShared(&g_session.lock);
+    }
+
+    if (!isOurCall || g_unloading) {
         return ITaskGroupWindowInformation_Position_Original(pThis, rect);
     }
-    g_threadIdForAltTabShowWindow = 0;
 
     RECT newRectNative;
     if (!HandleAltTabWindow(&newRectNative)) {
@@ -296,10 +452,7 @@ HRESULT WINAPI ITaskGroupWindowInformation_Position_Hook(
         static_cast<float>(newRectNative.bottom - newRectNative.top),
     };
 
-    HRESULT ret =
-        ITaskGroupWindowInformation_Position_Original(pThis, &newRect);
-
-    return ret;
+    return ITaskGroupWindowInformation_Position_Original(pThis, &newRect);
 }
 
 using CMultitaskingViewFrame_CreateFrame_t = HRESULT(WINAPI*)(void* pThis,
@@ -310,33 +463,46 @@ CMultitaskingViewFrame_CreateFrame_t
 HRESULT WINAPI CMultitaskingViewFrame_CreateFrame_Hook(void* pThis,
                                                        RECT* rect,
                                                        void* param2) {
-    if (g_threadIdForAltTabShowWindow != GetCurrentThreadId()) {
+    HookCallCounterGuard counter;
+
+    bool isOurCall = false;
+    {
+        AcquireSRWLockShared(&g_session.lock);
+        isOurCall = (g_session.phase == AltTabPhase::Showing &&
+                     g_session.threadId == GetCurrentThreadId());
+        ReleaseSRWLockShared(&g_session.lock);
+    }
+
+    if (!isOurCall || g_unloading) {
         return CMultitaskingViewFrame_CreateFrame_Original(pThis, rect, param2);
     }
-    g_threadIdForAltTabShowWindow = 0;
 
     RECT newRect;
     if (!HandleAltTabWindow(&newRect)) {
         return CMultitaskingViewFrame_CreateFrame_Original(pThis, rect, param2);
     }
 
-    HRESULT ret =
-        CMultitaskingViewFrame_CreateFrame_Original(pThis, &newRect, param2);
-
-    return ret;
+    return CMultitaskingViewFrame_CreateFrame_Original(pThis, &newRect, param2);
 }
 
+// ============================================================================
+// Hook: CreateInstance
+//
+// Called when Alt+Tab session starts. PhaseGuard transitions:
+//   Creating (during original call) -> PostCreate (after return)
+// PostCreate allows late IsViewVisible calls to still be filtered
+// within the configured threshold.
+// ============================================================================
+
 HRESULT CreateInstanceHook(std::function<HRESULT()> original) {
-    if (IsWinKeyPressed()) {
+    HookCallCounterGuard counter;
+
+    if (g_unloading || IsWinKeyPressed()) {
         return original();
     }
 
-    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_CreateInstance_TickCount = GetTickCount64();
-    HRESULT ret = original();
-    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
-    return ret;
+    PhaseGuard guard(g_session, AltTabPhase::Creating, AltTabPhase::PostCreate);
+    return original();
 }
 
 using XamlAltTabViewHost_CreateInstance_t = HRESULT(WINAPI*)(void* pThis,
@@ -420,6 +586,10 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Win11_Hook(void* pThis,
     });
 }
 
+// ============================================================================
+// Settings
+// ============================================================================
+
 void LoadSettings() {
     PCWSTR winAltTabLocation = Wh_GetStringSetting(L"winAltTabLocation");
     g_settings.winAltTabLocation = WinAltTabLocation::primary;
@@ -427,10 +597,45 @@ void LoadSettings() {
         g_settings.winAltTabLocation = WinAltTabLocation::cursor;
     }
     Wh_FreeStringSetting(winAltTabLocation);
+
+    int threshold = Wh_GetIntSetting(L"postCreateThresholdMs");
+    g_settings.postCreateThresholdMs =
+        (threshold > 0) ? static_cast<ULONGLONG>(threshold) : 200;
 }
+
+// ============================================================================
+// Mod lifecycle
+// ============================================================================
+
+// Common symbol hooks shared between Win10 and Win11
+WindhawkUtils::SYMBOL_HOOK commonSymbolHooks[] = {
+    {
+        {LR"(public: virtual long __cdecl CVirtualDesktop::IsViewVisible(struct IApplicationView *,int *))"},
+        &CVirtualDesktop_IsViewVisible_Original,
+        CVirtualDesktop_IsViewVisible_Hook,
+    },
+    {
+        {LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"},
+        &CWin32ApplicationView_vtable,
+    },
+    {
+        {LR"(private: virtual long __cdecl CWin32ApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
+        &CWin32ApplicationView_v_GetNativeWindow,
+    },
+    {
+        {LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"},
+        &CWinRTApplicationView_vtable,
+    },
+    {
+        {LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
+        &CWinRTApplicationView_v_GetNativeWindow,
+    },
+};
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    LoadSettings();
 
     g_winVersion = GetWindowsVersion();
 
@@ -440,30 +645,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if (!HookSymbols(twinuiPcshellModule, commonSymbolHooks,
+                     ARRAYSIZE(commonSymbolHooks))) {
+        Wh_Log(L"HookSymbols failed for common hooks");
+        return FALSE;
+    }
+
     if (g_winVersion == WinVersion::Win11) {
-        // twinui.pcshell.dll
-        WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
-            {
-                {LR"(public: virtual long __cdecl CVirtualDesktop::IsViewVisible(struct IApplicationView *,int *))"},
-                &CVirtualDesktop_IsViewVisible_Original,
-                CVirtualDesktop_IsViewVisible_Hook,
-            },
-            {
-                {LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"},
-                &CWin32ApplicationView_vtable,
-            },
-            {
-                {LR"(private: virtual long __cdecl CWin32ApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
-                &CWin32ApplicationView_v_GetNativeWindow,
-            },
-            {
-                {LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"},
-                &CWinRTApplicationView_vtable,
-            },
-            {
-                {LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
-                &CWinRTApplicationView_v_GetNativeWindow,
-            },
+        WindhawkUtils::SYMBOL_HOOK win11Hooks[] = {
             {
                 {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 &XamlAltTabViewHost_Show_Original,
@@ -479,8 +668,7 @@ BOOL Wh_ModInit() {
                 &XamlAltTabViewHost_CreateInstance_Original,
                 XamlAltTabViewHost_CreateInstance_Hook,
             },
-            // For the old Win10 (non-XAML) Alt+Tab (can be enabled with
-            // ExplorerPatcher):
+            // ExplorerPatcher compatibility: Win10-style Alt+Tab on Win11
             {
                 {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 &CAltTabViewHost_Show_Original,
@@ -501,35 +689,13 @@ BOOL Wh_ModInit() {
             },
         };
 
-        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
-                         ARRAYSIZE(twinuiPcshellSymbolHooks))) {
-            Wh_Log(L"HookSymbols failed");
+        if (!HookSymbols(twinuiPcshellModule, win11Hooks,
+                         ARRAYSIZE(win11Hooks))) {
+            Wh_Log(L"HookSymbols failed for Win11 hooks");
             return FALSE;
         }
     } else if (g_winVersion == WinVersion::Win10) {
-        // twinui.pcshell.dll
-        WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
-            {
-                {LR"(public: virtual long __cdecl CVirtualDesktop::IsViewVisible(struct IApplicationView *,int *))"},
-                &CVirtualDesktop_IsViewVisible_Original,
-                CVirtualDesktop_IsViewVisible_Hook,
-            },
-            {
-                {LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"},
-                &CWin32ApplicationView_vtable,
-            },
-            {
-                {LR"(private: virtual long __cdecl CWin32ApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
-                &CWin32ApplicationView_v_GetNativeWindow,
-            },
-            {
-                {LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"},
-                &CWinRTApplicationView_vtable,
-            },
-            {
-                {LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
-                &CWinRTApplicationView_v_GetNativeWindow,
-            },
+        WindhawkUtils::SYMBOL_HOOK win10Hooks[] = {
             {
                 {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 &CAltTabViewHost_Show_Original,
@@ -547,9 +713,9 @@ BOOL Wh_ModInit() {
             },
         };
 
-        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
-                         ARRAYSIZE(twinuiPcshellSymbolHooks))) {
-            Wh_Log(L"HookSymbols failed");
+        if (!HookSymbols(twinuiPcshellModule, win10Hooks,
+                         ARRAYSIZE(win10Hooks))) {
+            Wh_Log(L"HookSymbols failed for Win10 hooks");
             return FALSE;
         }
     } else {
@@ -560,8 +726,19 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+void Wh_ModUninit() {
+    Wh_Log(L">");
+    g_unloading = true;
+
+    // Wait for any in-flight hook calls to complete
+    int waitCount = 0;
+    while (g_hookCallCounter > 0 && waitCount < 50) {
+        Sleep(100);
+        waitCount++;
+    }
+}
+
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
-
     LoadSettings();
 }
