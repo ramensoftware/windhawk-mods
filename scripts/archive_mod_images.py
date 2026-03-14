@@ -1,5 +1,4 @@
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 from urllib.parse import unquote
@@ -80,20 +79,7 @@ def process_code_files(code_folder: Path, images_folder: Path):
                 f"Image path {image_path} is outside of images folder {images_folder}"
             )
 
-        # Temporary for updating a specific image
-        force_download = False
-        if url == "https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/disk-usage-bar-in-drive-properties.png":
-            now = datetime.now(timezone.utc)
-            if (
-                now.weekday() == 5  # Saturday
-                and now.year == 2026
-                and now.month == 3
-                and now.day == 14
-                and 14 * 60 + 50 <= now.hour * 60 + now.minute <= 15 * 60 + 10
-            ):
-                force_download = True
-
-        if force_download or not image_path.exists():
+        if not image_path.exists():
             download_image(url, image_path)
 
         if image_path in stale_images:
