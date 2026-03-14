@@ -8,10 +8,6 @@ on:
 env:
   PYTHONUTF8: '1'
 
-permissions:
-  pull-requests: write
-  issues: write
-
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -35,33 +31,6 @@ jobs:
           # environment variable to store the output and avoid command
           # injection.
           escape_json: false
-
-      - name: Tag pull request
-        env:
-          ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
-          MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
-          ALL_CHANGED_AND_MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.all_changed_and_modified_files_count }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          a=$ADDED_FILES_COUNT
-          b=$MODIFIED_FILES_COUNT
-          c=$ALL_CHANGED_AND_MODIFIED_FILES_COUNT
-          pr="${{ github.event.pull_request.number }}"
-          if [[ $a -eq 1 && $b -eq 0 && $c -eq 1 ]]; then
-            add_label="pr-mod-new"
-            remove_label="pr-mod-update"
-          elif [[ $a -eq 0 && $b -eq 1 && $c -eq 1 ]]; then
-            add_label="pr-mod-update"
-            remove_label="pr-mod-new"
-          else
-            echo "Not a single mod addition or update, removing labels if any"
-            gh pr edit "$pr" --remove-label "pr-mod-new" || true
-            gh pr edit "$pr" --remove-label "pr-mod-update" || true
-            exit 0
-          fi
-          echo "Adding label: $add_label"
-          gh pr edit "$pr" --add-label "$add_label" || true  # TODO: remove " || true" 
-          gh pr edit "$pr" --remove-label "$remove_label" || true
 
       - name: Validate the changes
         env:

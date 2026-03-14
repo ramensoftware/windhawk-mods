@@ -2,7 +2,7 @@
 // @id              taskbar-desktop-indicator
 // @name            Taskbar Desktop Indicator
 // @description     Displays the current virtual desktop as a number or marker in the Windows 11 taskbar clock area
-// @version         1.1.0
+// @version         1.2.1
 // @author          Simon Benedict
 // @github          https://github.com/simon-ami
 // @include         explorer.exe
@@ -22,8 +22,9 @@ Displays the current virtual desktop as a number or marker in the Windows 11 tas
 * Number mode or workspace markers mode
 * Workspace markers mode with `⬤` markers by default
 * Roman or Arabic numbering in number mode
-* Custom marker symbol and inactive-marker dimming in workspace markers mode
+* Custom marker symbol and inactive-marker dimming in workspace markers mode \
   Example symbols: `⬤`, `●`, `•`, `○`, `◉`
+* Optional custom colors for the active indicator and inactive markers
 * Configurable indicator weight and size
 * Configurable spacing and padding
 * Centered side indicator layout for two-line clock/date taskbar clocks
@@ -65,6 +66,17 @@ _Number mode (example)_
 - inactiveMarkerOpacity: 20
   $name: Inactive marker opacity
   $description: Opacity percentage for non-active markers in workspace markers mode. 100 matches the active marker, lower values make inactive markers dimmer. [Default 20]
+- activeIndicatorColor: ""
+  $name: Indicator color
+  $description: >-
+    Optional custom color for number mode and the active workspace marker. Use
+    #RRGGBB or #AARRGGBB. Leave empty to inherit the clock color. [Default
+    empty]
+- inactiveMarkerColor: ""
+  $name: Inactive marker color
+  $description: >-
+    Optional custom color for inactive workspace markers. Use #RRGGBB or
+    #AARRGGBB. Leave empty to use opacity-based dimming. [Default empty]
 - numberingFormat: roman
   $name: Numbering format
   $description: Choose whether the desktop indicator uses Roman or Arabic numerals in number mode. [Default Roman numerals]
@@ -95,7 +107,7 @@ _Number mode (example)_
   $description: Number of spaces after the desktop indicator. [Default 0]
 - pollIntervalMs: 0
   $name: Poll interval (ms)
-  $description: Optional polling fallback for desktop changes. 0 disables polling. If notifications don't update on your system, try 50 or 100. [Default 0]
+  $description: Optional polling fallback for desktop changes. 0 disables polling. If indicator doesn't update on your system, try 50 or 100. [Default 0]
 */
 // ==/WindhawkModSettings==
 
@@ -103,6 +115,7 @@ _Number mode (example)_
 
 #include <algorithm>
 #include <atomic>
+#include <cwctype>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -176,6 +189,8 @@ enum class IndicatorSize {
 struct ModSettings {
     IndicatorMode indicatorMode = IndicatorMode::Markers;
     std::wstring markerSymbol = L"\u2b24";
+    std::wstring activeIndicatorColor;
+    std::wstring inactiveMarkerColor;
     NumberingFormat numberingFormat = NumberingFormat::Roman;
     int leftPadding = 6;
     int rightPadding = 0;
@@ -370,6 +385,58 @@ std::wstring BuildIndicatorGap() {
 std::wstring GetConfiguredMarkerSymbol() {
     return g_settings.markerSymbol.empty() ? std::wstring(L"\u2b24")
                                            : g_settings.markerSymbol;
+}
+
+bool TryParseColorString(const std::wstring& value,
+                         winrt::Windows::UI::Color* color) {
+    if (!color) {
+        return false;
+    }
+
+    const wchar_t* start = value.c_str();
+    while (*start && iswspace(*start)) {
+        ++start;
+    }
+
+    const wchar_t* end = start + wcslen(start);
+    while (end > start && iswspace(*(end - 1))) {
+        --end;
+    }
+
+    if (start == end) {
+        return false;
+    }
+
+    std::wstring trimmed(start, end);
+    if (trimmed.rfind(L"#", 0) == 0) {
+        trimmed.erase(0, 1);
+    } else if (trimmed.rfind(L"0x", 0) == 0 || trimmed.rfind(L"0X", 0) == 0) {
+        trimmed.erase(0, 2);
+    }
+
+    if (trimmed.size() != 6 && trimmed.size() != 8) {
+        return false;
+    }
+
+    if (!std::all_of(trimmed.begin(), trimmed.end(),
+                     [](wchar_t ch) { return iswxdigit(ch) != 0; })) {
+        return false;
+    }
+
+    unsigned long parsed = wcstoul(trimmed.c_str(), nullptr, 16);
+    if (trimmed.size() == 6) {
+        color->A = 0xFF;
+        color->R = static_cast<BYTE>((parsed >> 16) & 0xFF);
+        color->G = static_cast<BYTE>((parsed >> 8) & 0xFF);
+        color->B = static_cast<BYTE>(parsed & 0xFF);
+    } else {
+        color->A = static_cast<BYTE>((parsed >> 24) & 0xFF);
+        color->R = static_cast<BYTE>((parsed >> 16) & 0xFF);
+        color->G = static_cast<BYTE>((parsed >> 8) & 0xFF);
+        color->B = static_cast<BYTE>(parsed & 0xFF);
+    }
+
+    return true;
 }
 
 std::wstring ApplyIndicatorCharacterSpacing(const std::wstring& text) {
@@ -767,6 +834,12 @@ void LoadSettings() {
         g_settings.markerSymbol = L"\u2b24";
     }
 
+    StringSetting activeIndicatorColor = StringSetting::make(L"activeIndicatorColor");
+    g_settings.activeIndicatorColor = activeIndicatorColor.get();
+
+    StringSetting inactiveMarkerColor = StringSetting::make(L"inactiveMarkerColor");
+    g_settings.inactiveMarkerColor = inactiveMarkerColor.get();
+
     StringSetting numberingFormat = StringSetting::make(L"numberingFormat");
     if (wcscmp(numberingFormat.get(), L"arabic") == 0) {
         g_settings.numberingFormat = NumberingFormat::Arabic;
@@ -960,16 +1033,21 @@ DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
         return 0;
     }
 
-    bool registered = RegisterVirtualDesktopNotificationsOnCurrentThread();
+    RegisterVirtualDesktopNotificationsOnCurrentThread();
     if (g_notificationReadyEvent) {
         SetEvent(g_notificationReadyEvent);
     }
 
-    if (registered && g_notificationStopEvent) {
+    if (g_notificationStopEvent) {
         bool stopping = false;
         while (!stopping) {
+            if (!g_virtualDesktopNotificationsRegistered) {
+                RegisterVirtualDesktopNotificationsOnCurrentThread();
+            }
+
+            DWORD waitTimeout = g_virtualDesktopNotificationsRegistered ? INFINITE : 1000;
             DWORD waitResult = MsgWaitForMultipleObjects(
-                1, &g_notificationStopEvent, FALSE, INFINITE, QS_ALLINPUT);
+                1, &g_notificationStopEvent, FALSE, waitTimeout, QS_ALLINPUT);
             switch (waitResult) {
                 case WAIT_OBJECT_0:
                     stopping = true;
@@ -982,6 +1060,8 @@ DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
                     }
                     break;
                 }
+                case WAIT_TIMEOUT:
+                    break;
                 default:
                     Wh_Log(L"Virtual desktop notification thread wait returned unexpectedly: %lu",
                            waitResult);
@@ -991,7 +1071,7 @@ DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
         }
     }
 
-    if (registered) {
+    if (g_virtualDesktopNotificationsRegistered) {
         UnregisterVirtualDesktopNotificationsOnCurrentThread();
     }
 
@@ -1000,6 +1080,22 @@ DWORD WINAPI VirtualDesktopNotificationThreadProc(LPVOID) {
 }
 
 bool EnsureVirtualDesktopNotificationThread() {
+    if (g_notificationThread &&
+        WaitForSingleObject(g_notificationThread, 0) == WAIT_OBJECT_0) {
+        CloseHandle(g_notificationThread);
+        g_notificationThread = nullptr;
+
+        if (g_notificationReadyEvent) {
+            CloseHandle(g_notificationReadyEvent);
+            g_notificationReadyEvent = nullptr;
+        }
+
+        if (g_notificationStopEvent) {
+            CloseHandle(g_notificationStopEvent);
+            g_notificationStopEvent = nullptr;
+        }
+    }
+
     if (g_notificationThread) {
         return g_virtualDesktopNotificationsRegistered.load();
     }
@@ -1385,17 +1481,28 @@ Media::Brush CreateTransparentBrush() {
     return Media::SolidColorBrush(winrt::Windows::UI::Color{0, 255, 255, 255});
 }
 
-Media::Brush CreateDimmedIndicatorBrush(Controls::TextBlock targetTextBlock) {
-    BYTE opacity = static_cast<BYTE>(
-        std::clamp(g_settings.inactiveMarkerOpacity, 0, 100) * 255 / 100);
-    winrt::Windows::UI::Color color{opacity, 255, 255, 255};
-
-    auto solidBrush = targetTextBlock.Foreground().try_as<Media::SolidColorBrush>();
-    if (solidBrush) {
-        color = solidBrush.Color();
-        color.A = static_cast<BYTE>((color.A * std::clamp(
-            g_settings.inactiveMarkerOpacity, 0, 100)) / 100);
+Media::Brush CreateConfiguredIndicatorBrush(const std::wstring& colorValue) {
+    winrt::Windows::UI::Color color{};
+    if (!TryParseColorString(colorValue, &color)) {
+        return nullptr;
     }
+
+    return Media::SolidColorBrush(color);
+}
+
+Media::Brush CreateDimmedIndicatorBrush(Controls::TextBlock targetTextBlock) {
+    winrt::Windows::UI::Color color{255, 255, 255, 255};
+
+    if (!TryParseColorString(g_settings.inactiveMarkerColor, &color)) {
+        auto solidBrush =
+            targetTextBlock.Foreground().try_as<Media::SolidColorBrush>();
+        if (solidBrush) {
+            color = solidBrush.Color();
+        }
+    }
+
+    color.A = static_cast<BYTE>((color.A * std::clamp(
+        g_settings.inactiveMarkerOpacity, 0, 100)) / 100);
 
     return Media::SolidColorBrush(color);
 }
@@ -1412,6 +1519,8 @@ void SetIndicatorTextBlockContent(Controls::TextBlock targetTextBlock,
     }
 
     Media::Brush transparentBrush = CreateTransparentBrush();
+    Media::Brush indicatorBrush =
+        CreateConfiguredIndicatorBrush(g_settings.activeIndicatorColor);
     Media::Brush dimmedBrush = CreateDimmedIndicatorBrush(targetTextBlock);
     double indicatorFontSize =
         GetConfiguredIndicatorFontSize(targetTextBlock.FontSize());
@@ -1422,6 +1531,8 @@ void SetIndicatorTextBlockContent(Controls::TextBlock targetTextBlock,
             foreground = transparentBrush;
         } else if (segment.style == IndicatorSegmentStyle::Dimmed) {
             foreground = dimmedBrush;
+        } else if (indicatorBrush) {
+            foreground = indicatorBrush;
         }
 
         AppendRun(inlines, segment.text, GetConfiguredIndicatorFontWeight(),
