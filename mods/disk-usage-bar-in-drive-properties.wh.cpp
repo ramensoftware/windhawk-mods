@@ -2,7 +2,7 @@
 // @id              disk-usage-bar-in-drive-properties
 // @name            Disk Usage Bar in Drive Properties
 // @description     Replaces the pie/donut chart in drive properties with a usage bar
-// @version         1.1
+// @version         1.2
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -29,6 +29,12 @@ This mod provides the following options:
   usage exceeds 90%.
 * **Show decimal percentage**: Displays the disk usage percentage text with one
   decimal place (e.g., `64.1%`).
+* **Hide storage management button**: Hides the "Details" (Windows 11) or "Disk
+  Clean-up" (Windows 8.1/10) button.
+  * It is recommended to hide this button for localized systems to prevent a UI
+    collision with a long "Space used" string for the disk usage percentage
+    text.
+  * The `Alt+D` keyboard shortcut remains functional.
 
 ## Supported Windows versions
 * Windows 11
@@ -50,6 +56,9 @@ Based on the "[Disk Pie Chart](https://windhawk.net/mods/disk-pie-chart)" mod by
 - showDecimalPercentage: false
   $name: Show decimal percentage
   $description: Displays the disk usage percentage text with one decimal place (e.g., 64.1%)
+- hideStorageMgmtButton: true
+  $name: Hide storage management button
+  $description: Hides the "Details" (Windows 11) or "Disk Clean-up" (Windows 8.1/10) button
 */
 // ==/WindhawkModSettings==
 
@@ -69,6 +78,7 @@ Based on the "[Disk Pie Chart](https://windhawk.net/mods/disk-pie-chart)" mod by
 struct {
     bool showRedUsageBar;
     bool showDecimalPercentage;
+    bool hideStorageMgmtButton;
 } settings;
 
 // Helper: Restore the AutoRun icon
@@ -162,7 +172,7 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent,
     DWORD dwUsagePer1000, const RECT& rcChart)
 {
     // Define the unique control ID for the custom usage percentage label
-    const int IDC_USAGE_PERCENT_LABEL = 14999;
+    constexpr int IDC_USAGE_PERCENT_LABEL = 14999;
 
     // Find the static control with the SS_CENTER style
     // Expected text format: "Drive C:" or similar
@@ -276,7 +286,7 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent,
     {
         // Dynamically resize the label window to fit the text area exactly
         // The label window's default boundary is large, which causes it to draw
-        // over the adjacent horizontal separator and "Details" / "Disk
+        // over the adjacent horizontal separator and "Details" or "Disk
         // Clean-up" button when the text changes.
         HDC hTextDC = GetDC(hLabelWnd);
         HFONT hCurrentFont = reinterpret_cast<HFONT>(
@@ -367,49 +377,50 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent,
 void HideLegendsAndAlignLabels(HWND hPropPageWnd)
 {
     // Define control IDs for the standard drive storage properties page
-    const int IDC_SHELL32_LEGEND_USED     = 14403;
-    const int IDC_SHELL32_LEGEND_FREE     = 14404;
-    const int IDC_SHELL32_LABEL_USED      = 14416;
-    const int IDC_SHELL32_LABEL_FREE      = 14417;
-    const int IDC_SHELL32_LABEL_CAPACITY  = 14415;
+    constexpr int IDC_SHELL32_LEGEND_USED     = 14403;
+    constexpr int IDC_SHELL32_LEGEND_FREE     = 14404;
+    constexpr int IDC_SHELL32_LABEL_USED      = 14416;
+    constexpr int IDC_SHELL32_LABEL_FREE      = 14417;
+    constexpr int IDC_SHELL32_LABEL_CAPACITY  = 14415;
 
     // Define control IDs for the portable device storage properties page
-    const int IDC_WPDSHEXT_LEGEND_USED    = 834;
-    const int IDC_WPDSHEXT_LEGEND_FREE    = 838;
-    const int IDC_WPDSHEXT_LABEL_USED     = 835;
-    const int IDC_WPDSHEXT_LABEL_FREE     = 839;
-    const int IDC_WPDSHEXT_LABEL_CAPACITY = 843;
+    constexpr int IDC_WPDSHEXT_LEGEND_USED    = 834;
+    constexpr int IDC_WPDSHEXT_LEGEND_FREE    = 838;
+    constexpr int IDC_WPDSHEXT_LABEL_USED     = 835;
+    constexpr int IDC_WPDSHEXT_LABEL_FREE     = 839;
+    constexpr int IDC_WPDSHEXT_LABEL_CAPACITY = 843;
 
     // Handle the standard drive storage properties page
-    HWND hLegendWnd = GetDlgItem(hPropPageWnd, IDC_SHELL32_LEGEND_USED);
-    if (hLegendWnd)
+    HWND hLegendUsedWnd = GetDlgItem(hPropPageWnd, IDC_SHELL32_LEGEND_USED);
+    if (hLegendUsedWnd)
     {
         // Check if the layout has already been adjusted
-        if (IsWindowVisible(hLegendWnd))
+        if (IsWindowVisible(hLegendUsedWnd))
         {
             // Retrieve the X position of the legend window as the margin
-            RECT rcLegendWnd;
-            GetWindowRect(hLegendWnd, &rcLegendWnd);
+            RECT rcLegendUsedWnd;
+            GetWindowRect(hLegendUsedWnd, &rcLegendUsedWnd);
             MapWindowPoints(nullptr, hPropPageWnd,
-                reinterpret_cast<LPPOINT>(&rcLegendWnd), 2);
-            int xLeft = rcLegendWnd.left;
+                reinterpret_cast<LPPOINT>(&rcLegendUsedWnd), 2);
+            int xLeft = rcLegendUsedWnd.left;
 
             // Hide the legend windows
-            ShowWindow(hLegendWnd, SW_HIDE);
+            ShowWindow(hLegendUsedWnd, SW_HIDE);
             HWND hLegendFreeWnd = GetDlgItem(hPropPageWnd,
                 IDC_SHELL32_LEGEND_FREE);
             ShowWindow(hLegendFreeWnd, SW_HIDE);
 
-            // Move the label windows to the left margin
-            const int rgLabelIds[] = {
+            // List the control IDs for the labels
+            constexpr int rgLabelIds[] = {
                 IDC_SHELL32_LABEL_USED,
                 IDC_SHELL32_LABEL_FREE,
                 IDC_SHELL32_LABEL_CAPACITY
             };
 
-            for (int id : rgLabelIds)
+            // Move the label windows to the left margin
+            for (int ctrlId : rgLabelIds)
             {
-                HWND hLabelWnd = GetDlgItem(hPropPageWnd, id);
+                HWND hLabelWnd = GetDlgItem(hPropPageWnd, ctrlId);
                 if (hLabelWnd)
                 {
                     RECT rcLabelWnd;
@@ -425,35 +436,36 @@ void HideLegendsAndAlignLabels(HWND hPropPageWnd)
     }
 
     // Handle the portable device storage properties page
-    hLegendWnd = GetDlgItem(hPropPageWnd, IDC_WPDSHEXT_LEGEND_USED);
-    if (hLegendWnd)
+    hLegendUsedWnd = GetDlgItem(hPropPageWnd, IDC_WPDSHEXT_LEGEND_USED);
+    if (hLegendUsedWnd)
     {
         // Check if the layout has already been adjusted
-        if (IsWindowVisible(hLegendWnd))
+        if (IsWindowVisible(hLegendUsedWnd))
         {
             // Retrieve the X position of the legend window as the margin
-            RECT rcLegendWnd;
-            GetWindowRect(hLegendWnd, &rcLegendWnd);
+            RECT rcLegendUsedWnd;
+            GetWindowRect(hLegendUsedWnd, &rcLegendUsedWnd);
             MapWindowPoints(nullptr, hPropPageWnd,
-                reinterpret_cast<LPPOINT>(&rcLegendWnd), 2);
-            int xLeft = rcLegendWnd.left;
+                reinterpret_cast<LPPOINT>(&rcLegendUsedWnd), 2);
+            int xLeft = rcLegendUsedWnd.left;
 
             // Hide the legend windows
-            ShowWindow(hLegendWnd, SW_HIDE);
+            ShowWindow(hLegendUsedWnd, SW_HIDE);
             HWND hLegendFreeWnd = GetDlgItem(hPropPageWnd,
                 IDC_WPDSHEXT_LEGEND_FREE);
             ShowWindow(hLegendFreeWnd, SW_HIDE);
 
-            // Move the label windows to the left margin
-            const int rgLabelIds[] = {
+            // List the control IDs for the labels
+            constexpr int rgLabelIds[] = {
                 IDC_WPDSHEXT_LABEL_USED,
                 IDC_WPDSHEXT_LABEL_FREE,
                 IDC_WPDSHEXT_LABEL_CAPACITY
             };
 
-            for (int id : rgLabelIds)
+            // Move the label windows to the left margin
+            for (int ctrlId : rgLabelIds)
             {
-                HWND hLabelWnd = GetDlgItem(hPropPageWnd, id);
+                HWND hLabelWnd = GetDlgItem(hPropPageWnd, ctrlId);
                 if (hLabelWnd)
                 {
                     RECT rcLabelWnd;
@@ -466,6 +478,32 @@ void HideLegendsAndAlignLabels(HWND hPropPageWnd)
             }
         }
         return;
+    }
+}
+
+// Helper: Hide the storage management button
+void HideStorageManagementButton(HWND hPropPageWnd)
+{
+    if (!settings.hideStorageMgmtButton) return;
+
+    // List the control IDs for the storage management buttons
+    constexpr int rgStorageMgmtBtnIds[] = {
+        14430, // Details (Windows 11)
+        14428  // Disk Clean-up (Windows 8.1/10)
+    };
+
+    // Hide the storage management button
+    for (int ctrlId : rgStorageMgmtBtnIds)
+    {
+        HWND hStorageMgmtBtn = GetDlgItem(hPropPageWnd, ctrlId);
+        if (hStorageMgmtBtn)
+        {
+            if (IsWindowVisible(hStorageMgmtBtn))
+            {
+                ShowWindow(hStorageMgmtBtn, SW_HIDE);
+            }
+            break;
+        }
     }
 }
 
@@ -514,6 +552,9 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
 
     // Hide legends and align labels to the left
     HideLegendsAndAlignLabels(hPropPageWnd);
+
+    // Hide the storage management button
+    HideStorageManagementButton(hPropPageWnd);
 
     // Define the usage bar height in Dialog Units
     RECT rcBarDlu = { 0, 0, 0, 14 };
@@ -575,9 +616,7 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
         reinterpret_cast<LPPOINT>(&rcChartWnd), 2);
     if (!EqualRect(&rcBar, &rcChartWnd))
     {
-        SetWindowPos(hChartWnd, nullptr,
-            rcBar.left, rcBar.top,
-            rcBar.right - rcBar.left, rcBar.bottom - rcBar.top,
+        SetWindowPos(hChartWnd, nullptr, rcBar.left, rcBar.top, cxBar, cyBar,
             SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
@@ -713,6 +752,7 @@ void LoadSettings()
 {
     settings.showRedUsageBar = Wh_GetIntSetting(L"showRedUsageBar");
     settings.showDecimalPercentage = Wh_GetIntSetting(L"showDecimalPercentage");
+    settings.hideStorageMgmtButton = Wh_GetIntSetting(L"hideStorageMgmtButton");
 }
 
 // Mod initialization
