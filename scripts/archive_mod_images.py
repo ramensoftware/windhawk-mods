@@ -82,7 +82,7 @@ def process_code_files(code_folder: Path, images_folder: Path):
 
         # Temporary for updating a specific image
         force_download = False
-        if url == "https://github.com/AromaKitsune/My-Windhawk-Mods/blob/main/screenshots/disk-usage-bar-in-drive-properties.png":
+        if url == "https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/disk-usage-bar-in-drive-properties.png":
             now = datetime.now(timezone.utc)
             if (
                 now.weekday() == 5  # Saturday
