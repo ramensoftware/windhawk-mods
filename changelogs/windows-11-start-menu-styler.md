@@ -1,3 +1,14 @@
+## 1.4 ([Mar 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7e05bbe573b538403775170df7259a4f434e20f3/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added more layout options to the mod settings. Now the classic layout with Phone Link can be selected, as well as the new (redesigned) layout.
+* Added the following themes: SunValley, LiquidGlass, Windows10X, TintedGlass.
+* Update the following themes:
+  * Classic start menu: TranslucentStartMenu, NoRecommendedSection, Down Aero.
+  * Redesigned start menu: Windows10_Minimal, Windows11_Metro10, Windows11_Metro10Minimal, SunValley (Legacy, formerly 21996), OnlySearch, WindowGlass, Oversimplified&Accentuated.
+  * Both variants: SideBySide, SideBySide2, SideBySideMinimal, UniMenu.
+* Added the following properties to `WindhawkBlur`: `TintLuminosityOpacity`, `TintSaturation`, `NoiseOpacity`, and `NoiseDensity`. The implementation was contributed by [Jhen](https://github.com/Lockframe). For details, refer to [the styling guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide#windhawkblur-effect-as-color).
+* Added a way to define theme-aware resources. For example, different colors for an element can be defined for light mode and dark mode.
+
 ## 1.3.3 ([Oct 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5c85ef0b642d596f595e2135430dd345ae896bfb/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Fixed the NoRecommendedSection theme for [the redesigned Start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/).
