@@ -4,7 +4,7 @@
 // @description     Completely hides the taskbar on all monitors
 // @version         1.0
 // @author          miraquel
-// @github          miraquel
+// @github          https://github.com/miraquel
 // @include         explorer.exe
 // @include         StartMenuExperienceHost.exe
 // @architecture    x86-64
