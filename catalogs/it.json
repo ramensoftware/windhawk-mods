@@ -9078,7 +9078,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1771266574000,
+                "updated": 1773572826000,
                 "users": 29
             },
             "metadata": {
@@ -9090,7 +9090,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Tiling Helper",
-                "version": "1.0.0"
+                "version": "2.0.0"
             }
         },
         "timer-resolution-control": {

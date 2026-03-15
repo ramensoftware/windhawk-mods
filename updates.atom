@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-15T00:23:45.000Z</updated>
+    <updated>2026-03-15T11:07:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Tiling Helper 2.0.0]]></title>
+        <id>https://windhawk.net/mods/tiling-helper#b25cbfb1fa555527b71e6c68a5ddedd4816e51b5</id>
+        <link href="https://windhawk.net/mods/tiling-helper"/>
+        <updated>2026-03-15T11:07:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Reworked Tiling Helper around a simpler always-on <code>Master+Stack</code> workflow. After tiling a monitor, windows stay managed until automatic tiling is paused.</li>
+<li>Dragging a tiled window now untile it and removes it from the current layout, while the remaining tiled windows are rearranged automatically.</li>
+<li>Removed layout cycling and the extra layouts, and focused the settings on a single configurable <code>Master+Stack</code> layout with horizontal/vertical orientation and adjustable master size.</li>
+<li>Updated hotkeys and controls: the retile toggle now pauses/resumes automatic tiling without disabling manual tiling, and a new shortcut can switch which window is the master.</li>
+</ul>
+<p>Credit to @Meteony for the majority of code changes in this release.</p>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.4]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#7e05bbe573b538403775170df7259a4f434e20f3</id>
@@ -380,17 +397,6 @@ Restarting Explorer is recommended after installing the mod.</p>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinUI Context Menu Animation 1.0.1]]></title>
-        <id>https://windhawk.net/mods/winui-context-menu-animation#9af17d490cabe9f9f226b3aa19476b935e64b7ec</id>
-        <link href="https://windhawk.net/mods/winui-context-menu-animation"/>
-        <updated>2026-03-08T22:16:11.000Z</updated>
-        <content type="html"><![CDATA[<p>Migrating to per-pixel alpha compositing via UpdateLayeredWindow to eliminate the flashbang bug and added Translucent Windows compatibility mode</p>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>
