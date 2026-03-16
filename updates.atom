@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-15T11:07:06.000Z</updated>
+    <updated>2026-03-16T20:40:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Keep Rainmeter Always on Desktop 1.1.2]]></title>
+        <id>https://windhawk.net/mods/keep-rainmeter-always-bottom#7c9c4b91a3aeec51d6aa80d44442dce83fa073fb</id>
+        <link href="https://windhawk.net/mods/keep-rainmeter-always-bottom"/>
+        <updated>2026-03-16T20:40:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="keeprainmeteralwaysondesktop">Keep Rainmeter Always on Desktop</h1>
+<p>Keeps Rainmeter windows to stay on desktop. Rainmeter skin windows can unexpectedly appear on top of other windows during window switching events (e.g. Alt+Tab), application focus changes, or when triggered by external scripts. This mod forces all Rainmeter windows to remain below all other windows at all times, using a <code>EVENT_SYSTEM_FOREGROUND</code> event hook to push them to the bottom of the Z-order whenever any window comes to the foreground.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 10 and Windows 11</li>
+<li>Targets <code>windhawk.exe</code> only</li>
+</ul>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Tiling Helper 2.0.0]]></title>
         <id>https://windhawk.net/mods/tiling-helper#b25cbfb1fa555527b71e6c68a5ddedd4816e51b5</id>
@@ -357,46 +374,6 @@ Restarting Explorer is recommended after installing the mod.</p>
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 2.1]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#b470cc70adf572d7d28d329cea2b3e6a66605280</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-03-09T14:52:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Version bumped to 2.1</li>
-<li>Completely redesigned safety system from timing-based to state-based approach</li>
-<li>Removed keyboard state snapshot comparison - unnecessary with instant checks</li>
-<li>Removed message queue checking via PeekMessageW - unnecessary with instant checks</li>
-<li>Removed HasQuietPeriodPassed() function - no longer needed</li>
-<li>Removed HasPendingKeyboardMessages() function - no longer needed</li>
-<li>Removed CaptureKeyboardSnapshot() function - no longer needed</li>
-<li>Removed HasKeyboardStateChanged() function - no longer needed</li>
-<li>Removed IsAnyKeyPressedFull() 256-key scan - replaced with targeted IsAnyKeyPhysicallyPressed()</li>
-<li>Removed AtomicAbort() function - replaced with simple ReleaseAllKeys()</li>
-<li>Removed g_abortRequested flag - no longer needed</li>
-<li>Removed g_keyboardSnapshot array - no longer needed</li>
-<li>Removed all Sleep() calls from critical path for faster execution</li>
-<li>Removed staged delays (PRE<em>SEND</em>VERIFY<em>DELAY</em>MS, POST<em>CTRL</em>VERIFY<em>DELAY</em>MS, INTER<em>KEY</em>DELAY_MS, etc.)</li>
-<li>Removed POST<em>CTRL</em>CHECK_COUNT constant - no longer needed</li>
-<li>Removed PRE<em>SEND</em>CHECK_COUNT constant - no longer needed</li>
-<li>Removed KEYBOARD<em>SNAPSHOT</em>DELAY_MS constant - no longer needed</li>
-<li>Removed MESSAGE<em>QUEUE</em>CHECK<em>DELAY</em>MS constant - no longer needed</li>
-<li>Removed POST<em>RELEASE</em>DELAY_MS constant - no longer needed</li>
-<li>Removed QUIET<em>PERIOD</em>MS constant - no longer needed</li>
-<li>Removed verbose security logging with [SECURITY] prefixes - cleaner logs</li>
-<li>Added ReleaseAllKeys() helper function for simple cleanup</li>
-<li>Simplified SendCtrlS() to 3 checks: pre-send, post-Ctrl, post-S</li>
-<li>Simplified TrySave() to 2 checks: foreground and keys pressed</li>
-<li>Changed RETRY<em>INTERVAL</em>MS from 100ms to 50ms for faster recovery</li>
-<li>Changed MAX<em>RETRY</em>COUNT from 100 to 200 (10 seconds total retry time)</li>
-<li>Reduced code size from ~950 lines to ~450 lines</li>
-<li>New approach: check physical key state (instant) instead of waiting for timing-based quiet period</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

@@ -4640,6 +4640,36 @@
                 "version": "1"
             }
         },
+        "keep-rainmeter-always-bottom": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773693603000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773693603000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "BCRTVKCS",
+                "compilerOptions": "-luser32 -lkernel32",
+                "description": "Keeps Rainmeter windows to stay on desktop.",
+                "github": "https://github.com/bcrtvkcs",
+                "homepage": "https://grdigital.pro",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Keep Rainmeter Always on Desktop",
+                "twitter": "https://x.com/bcrtvkcs",
+                "version": "1.1.2"
+            }
+        },
         "keyboard-shortcut-actions": {
             "details": {
                 "defaultSorting": 1190,
