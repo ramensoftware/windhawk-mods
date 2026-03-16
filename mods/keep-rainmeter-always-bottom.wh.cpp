@@ -2,7 +2,7 @@
 // @id              keep-rainmeter-always-bottom
 // @name            Keep Rainmeter Always on Desktop
 // @description     Keeps Rainmeter windows to stay on desktop.
-// @version         1.1.0
+// @version         1.1.1
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -82,12 +82,22 @@ BOOL WhTool_ModInit()
         return FALSE;
     }
 
-    Wh_Log(L"WinEvent hook installed");
+    Wh_Log(L"WinEvent hook installed, running message loop");
+
+    // WINEVENT_OUTOFCONTEXT requires a message loop to dispatch events
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0) > 0)
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
     return TRUE;
 }
 
 void WhTool_ModUninit()
 {
+    PostThreadMessage(GetCurrentThreadId(), WM_QUIT, 0, 0);
     if (g_eventHook)
     {
         UnhookWinEvent(g_eventHook);
