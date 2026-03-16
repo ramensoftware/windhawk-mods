@@ -2,7 +2,7 @@
 // @id              keep-rainmeter-always-bottom
 // @name            Keep Rainmeter Always on Desktop
 // @description     Keeps Rainmeter windows to stay on desktop.
-// @version         1.1.1
+// @version         1.1.2
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -66,9 +66,11 @@ static void CALLBACK WinEventProc(
         PushRainmeterToBottom();
 }
 
-BOOL WhTool_ModInit()
+DWORD g_messageLoopThreadId = 0;
+
+DWORD WINAPI MessageLoopThread(LPVOID)
 {
-    Wh_Log(L"keep-rainmeter-always-bottom init");
+    g_messageLoopThreadId = GetCurrentThreadId();
 
     g_eventHook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
@@ -79,12 +81,11 @@ BOOL WhTool_ModInit()
     if (!g_eventHook)
     {
         Wh_Log(L"SetWinEventHook failed: %u", GetLastError());
-        return FALSE;
+        return 1;
     }
 
     Wh_Log(L"WinEvent hook installed, running message loop");
 
-    // WINEVENT_OUTOFCONTEXT requires a message loop to dispatch events
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0) > 0)
     {
@@ -92,12 +93,28 @@ BOOL WhTool_ModInit()
         DispatchMessage(&msg);
     }
 
+    return 0;
+}
+
+BOOL WhTool_ModInit()
+{
+    Wh_Log(L"keep-rainmeter-always-bottom init");
+
+    HANDLE hThread = CreateThread(nullptr, 0, MessageLoopThread, nullptr, 0, nullptr);
+    if (!hThread)
+    {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        return FALSE;
+    }
+    CloseHandle(hThread);
     return TRUE;
 }
 
 void WhTool_ModUninit()
 {
-    PostThreadMessage(GetCurrentThreadId(), WM_QUIT, 0, 0);
+    if (g_messageLoopThreadId)
+        PostThreadMessage(g_messageLoopThreadId, WM_QUIT, 0, 0);
+
     if (g_eventHook)
     {
         UnhookWinEvent(g_eventHook);
