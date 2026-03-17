@@ -2,9 +2,9 @@
 // @id              win11-power-buttons
 // @name            Windows 11 Start Menu Power Buttons
 // @name:zh-CN      Windows 11 开始菜单一键电源按钮
-// @description     Adds customizable one-click Shutdown, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
+// @description     Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 // @description:zh-CN 添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
-// @version         1.0.1
+// @version         1.0.2
 // @author          Hakuuyosei
 // @author:zh-CN    灵弦
 // @github          https://github.com/ahzvenol
@@ -18,13 +18,13 @@
 /*
 # Windows 11 Start Menu Power Buttons
 
-Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate buttons to the Windows 11 Start menu, replacing the default power flyout.
+Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 
 ![](https://i.imgur.com/M7xcCgb.png)
 
 ---
 
-添加可配置的一键关机/重启/注销/睡眠/休眠按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
+添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
 */
 // ==/WindhawkModReadme==
 
@@ -56,7 +56,7 @@ Adds customizable one-click Shutdown, Restart, Sign out, Sleep, and Hibernate bu
   $description: Select which buttons to display and their order. Duplicates are ignored.
   $description:zh-CN: 选择要显示的按钮以及它们的顺序，重复项会被忽略。
   $options:
-    - shutdown: Shutdown
+    - shutdown: Shut down
     - restart: Restart
     - signout: Sign out
     - sleep: Sleep
@@ -188,13 +188,12 @@ struct ButtonDefinition {
 };
 
 // Glyphs are from Segoe Fluent Icons.
-// Hibernate shares the Sleep icon as there isn't a dedicated standard glyph.
 static const std::vector<ButtonDefinition> g_buttonDefinitions = {
     {L"shutdown",  PowerAction::Shutdown,  L"\uE7E8"},
     {L"restart",   PowerAction::Restart,   L"\uE777"},
     {L"signout",   PowerAction::SignOut,   L"\uF3B1"},
     {L"sleep",     PowerAction::Sleep,     L"\uE708"},
-    {L"hibernate", PowerAction::Hibernate, L"\uE708"},
+    {L"hibernate", PowerAction::Hibernate, L"\uE823"},
     {L"lock",      PowerAction::Lock,      L"\uE72E"},
 };
 
