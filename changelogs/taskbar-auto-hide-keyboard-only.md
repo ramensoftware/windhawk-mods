@@ -1,3 +1,10 @@
+## 2.0 ([Mar 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b99b0e5e0cfbe608e0657ef8ab21a8f3c555ca8a/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
+
+* Renamed from "Taskbar keyboard-only auto-hide" to "Taskbar auto-hide fine tuning".
+* Added multiple auto-hide modes: Keyboard or mouse click, Keyboard only (previously "Fully hide"), and Never (blocks all unhiding including notifications and Win key).
+* Added configurable hotkeys for showing the taskbar temporarily and toggling permanent visibility (always-show mode).
+* Added a mouse event option (middle click or double click) on the Win11 taskbar to toggle always-show mode.
+
 ## 1.1.2 ([Jul 19, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e857f64901909ed4e2aa2bc83ab06898effdb4a1/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
 
 * Fixed the taskbar unhiding in some cases when the "Fully hide" option is enabled.

@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-16T20:40:03.000Z</updated>
+    <updated>2026-03-17T00:32:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#b99b0e5e0cfbe608e0657ef8ab21a8f3c555ca8a</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
+        <updated>2026-03-17T00:32:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed from "Taskbar keyboard-only auto-hide" to "Taskbar auto-hide fine tuning".</li>
+<li>Added multiple auto-hide modes: Keyboard or mouse click, Keyboard only (previously "Fully hide"), and Never (blocks all unhiding including notifications and Win key).</li>
+<li>Added configurable hotkeys for showing the taskbar temporarily and toggling permanent visibility (always-show mode).</li>
+<li>Added a mouse event option (middle click or double click) on the Win11 taskbar to toggle always-show mode.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Keep Rainmeter Always on Desktop 1.1.2]]></title>
         <id>https://windhawk.net/mods/keep-rainmeter-always-bottom#7c9c4b91a3aeec51d6aa80d44442dce83fa073fb</id>
@@ -360,20 +376,6 @@ Restarting Explorer is recommended after installing the mod.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disk Usage Bar in Drive Properties 1.1]]></title>
-        <id>https://windhawk.net/mods/disk-usage-bar-in-drive-properties#ded365a21ed5b60cb63a37e7cf9f23f5e2ba194f</id>
-        <link href="https://windhawk.net/mods/disk-usage-bar-in-drive-properties"/>
-        <updated>2026-03-09T15:26:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to display the disk usage percentage text with one decimal place (e.g., <code>64.1%</code>).</li>
-<li>Refined disk usage percentage rounding logic to cap values between 99.5% and 99.9% at 99% when displayed as whole numbers, ensuring "100%" is shown only when the disk is completely full.</li>
-</ul>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
