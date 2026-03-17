@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-17T10:26:19.000Z</updated>
+    <updated>2026-03-17T21:58:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Power Buttons 1.0.2]]></title>
+        <id>https://windhawk.net/mods/win11-power-buttons#7507d4c089a0cb722bc29e0207b6a661b980bfc3</id>
+        <link href="https://windhawk.net/mods/win11-power-buttons"/>
+        <updated>2026-03-17T21:58:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix "Shutdown" label to "Shut down"</li>
+<li>Update hibernate icon to match native Windows icon</li>
+<li>Add missing Lock button to readme</li>
+</ul>]]></content>
+        <author>
+            <name>Hakuuyosei</name>
+            <uri>https://github.com/ahzvenol</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Helper 2.4.0]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-helper#0e5eb31430c7c36664389f737cc3b68fcd50e6d5</id>
@@ -352,47 +367,6 @@ the respective applications.</p>
         <author>
             <name>maciejlewand72</name>
             <uri>https://github.com/maciejlewand72</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Desktop Indicator 1.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-desktop-indicator#b55674f7fd91fa6e0c83f02d2993d9969d0dbc00</id>
-        <link href="https://windhawk.net/mods/taskbar-desktop-indicator"/>
-        <updated>2026-03-09T17:14:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbardesktopindicator">Taskbar Desktop Indicator</h1>
-<p>Displays the current virtual desktop as a number or marker in the Windows 11 taskbar clock area.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Number mode or workspace markers mode</li>
-<li>Workspace markers mode with <code>⬤</code> markers by default</li>
-<li>Roman or Arabic numbering in number mode</li>
-<li>Custom marker symbol and inactive-marker dimming in workspace markers mode
-Example symbols: <code>⬤</code>, <code>●</code>, <code>•</code>, <code>○</code>, <code>◉</code></li>
-<li>Configurable indicator weight and size</li>
-<li>Configurable spacing and padding</li>
-<li>Centered side indicator layout for two-line clock/date taskbar clocks</li>
-<li>Notification-based desktop change detection</li>
-<li>Optional polling fallback</li>
-</ul>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/simon-ami/images/main/windhawk/taskbar-desktop-indicator/marker-indicator.png" alt="Workspace markers mode" /><br />
-<em>Workspace markers mode (example)</em></p>
-<p><img src="https://raw.githubusercontent.com/simon-ami/images/main/windhawk/taskbar-desktop-indicator/roman-number.png" alt="Number mode" /><br />
-<em>Number mode (example)</em></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Windows 11 only</li>
-<li>On a one-line taskbar clock, the indicator is appended inline</li>
-<li>On a two-line taskbar clock, the indicator is shown as a separate vertically centered side label</li>
-<li>The default appearance is workspace markers with dimmed inactive markers</li>
-<li>The mod uses virtual desktop notifications as the primary update path</li>
-<li>Polling fallback is disabled by default</li>
-<li>If the indicator doesn't update when switching desktops on your system, set the poll interval to <code>50</code> or <code>100</code> ms</li>
-<li>Lower poll intervals increase registry reads in Explorer</li>
-</ul>]]></content>
-        <author>
-            <name>Simon Benedict</name>
-            <uri>https://github.com/simon-ami</uri>
         </author>
     </entry>
 </feed>

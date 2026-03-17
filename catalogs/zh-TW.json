@@ -10190,7 +10190,7 @@
                     24
                 ],
                 "ratingUsers": 26,
-                "updated": 1772548915000,
+                "updated": 1773784713000,
                 "users": 829
             },
             "metadata": {
@@ -10206,7 +10206,7 @@
                     "explorer.exe"
                 ],
                 "name": "Windows 11 开始菜单一键电源按钮",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "win11-start-power-text-renamer": {

@@ -10190,7 +10190,7 @@
                     24
                 ],
                 "ratingUsers": 26,
-                "updated": 1772548915000,
+                "updated": 1773784713000,
                 "users": 829
             },
             "metadata": {
@@ -10199,14 +10199,14 @@
                 ],
                 "author": "Hakuuyosei",
                 "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols -luser32 -lwtsapi32 -lpowrprof",
-                "description": "Adds customizable one-click Shutdown, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.",
+                "description": "Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.",
                 "github": "https://github.com/ahzvenol",
                 "include": [
                     "StartMenuExperienceHost.exe",
                     "explorer.exe"
                 ],
                 "name": "Windows 11 Start Menu Power Buttons",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "win11-start-power-text-renamer": {
