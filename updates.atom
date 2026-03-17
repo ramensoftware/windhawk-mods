@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-17T09:52:32.000Z</updated>
+    <updated>2026-03-17T10:26:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 2.4.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#0e5eb31430c7c36664389f737cc3b68fcd50e6d5</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2026-03-17T10:26:19.000Z</updated>
+        <content type="html"><![CDATA[<p>Rename confusingly named cycling functions for clarity:</p>
+<ul>
+<li>SwitchToPreviousDesktop (toggle last visited) → SwitchToLastDesktop</li>
+<li>SwitchToPreviousIndexDesktop (idx-1) → SwitchToPreviousDesktop</li>
+<li>Rename HK<em>PREV → HK</em>LAST, HK<em>PREV</em>INDEX → HK_PREV</li>
+<li>Rename settings keys: PrevDesktopKey → LastDesktopKey, PrevIndexKey → PrevDesktopKey</li>
+<li>Reorder and clarify settings group as [Previous/Next/Last Desktop]</li>
+<li>Update README with clearer descriptions and add See Also link</li>
+<li>Customize modifier keys with string </li>
+<li>Bump version to 2.4.0</li>
+</ul>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Perform Speed Test Redirect 1.2.1]]></title>
         <id>https://windhawk.net/mods/perform-speedtest-redirect#dbb0144332992d59b8ce96d8a8dafe2a8f84d698</id>
@@ -372,23 +393,6 @@ Example symbols: <code>⬤</code>, <code>●</code>, <code>•</code>, <code>○
         <author>
             <name>Simon Benedict</name>
             <uri>https://github.com/simon-ami</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic This PC Item Sorting 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-this-pc-sort-order#081bcaf5e6931ad7f5788f7541e4ae0adb64679b</id>
-        <link href="https://windhawk.net/mods/classic-this-pc-sort-order"/>
-        <updated>2026-03-09T16:33:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicthispcitemsorting">Classic This PC Item Sorting</h1>
-<p>Makes the sort order in "This PC" folder like in Windows XP and before.<br />
-Restarting Explorer is recommended after installing the mod.</p>
-<p><strong>Before</strong></p>
-<p><img src="https://i.imgur.com/sRULNeY.png" alt="Before" /></p>
-<p><strong>After</strong></p>
-<p><img src="https://i.imgur.com/f5wskMi.png" alt="After" /></p>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>
