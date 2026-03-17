@@ -6210,6 +6210,40 @@
                 "version": "1.0.0"
             }
         },
+        "perform-speedtest-redirect": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1773741152000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1773741152000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "mynameistito",
+                "compilerOptions": "-lshell32 -lkernel32",
+                "description": "Redirects the \"Perform speed test\" link in the taskbar network right-click menu from the default Microsoft page to a custom URL (defaults to speedtest.net).",
+                "github": "https://github.com/mynameistito",
+                "include": [
+                    "explorer.exe",
+                    "ShellExperienceHost.exe",
+                    "RuntimeBroker.exe"
+                ],
+                "license": "MIT",
+                "name": "Perform Speed Test Redirect",
+                "version": "1.2.1"
+            }
+        },
         "photos-fullscreen": {
             "details": {
                 "defaultSorting": 630,

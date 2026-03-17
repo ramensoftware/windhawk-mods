@@ -2,12 +2,39 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-17T00:32:56.000Z</updated>
+    <updated>2026-03-17T09:52:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Perform Speed Test Redirect 1.2.1]]></title>
+        <id>https://windhawk.net/mods/perform-speedtest-redirect#dbb0144332992d59b8ce96d8a8dafe2a8f84d698</id>
+        <link href="https://windhawk.net/mods/perform-speedtest-redirect"/>
+        <updated>2026-03-17T09:52:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="performspeedtestredirect">Perform Speed Test Redirect</h1>
+<p>When you right-click the network icon in the Windows taskbar and click
+<strong>"Perform speed test"</strong>, Windows normally opens:</p>
+<pre><code>https://go.microsoft.com/fwlink/?linkid=2324916
+</code></pre>
+<p>This mod intercepts that URL and replaces it with a URL of your choice.
+By default it redirects to <strong>https://www.speedtest.net</strong> (or any URL you set).</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Redirect URL</strong> – the URL to open instead of the default Microsoft speed
+test link. Change this to any speed test site you prefer, e.g.
+<code>https://fast.com</code> or <code>https://cloudflare.com/speed</code>.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>Hooks <code>ShellExecuteW</code>, <code>ShellExecuteExW</code>, and <code>CreateProcessW</code> across
+<code>explorer.exe</code>, <code>ShellExperienceHost.exe</code>, and <code>RuntimeBroker.exe</code> —
+covering every known code path Windows uses to open the speed test URL.</p>]]></content>
+        <author>
+            <name>mynameistito</name>
+            <uri>https://github.com/mynameistito</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.0]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#b99b0e5e0cfbe608e0657ef8ab21a8f3c555ca8a</id>
@@ -362,20 +389,6 @@ Restarting Explorer is recommended after installing the mod.</p>
         <author>
             <name>xalejandro</name>
             <uri>https://github.com/tetawaves</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VSCode Tweaker 1.1]]></title>
-        <id>https://windhawk.net/mods/vscode-tweaker#e09cb88489b44788b8ed9e5ea46e6b8c8845f673</id>
-        <link href="https://windhawk.net/mods/vscode-tweaker"/>
-        <updated>2026-03-09T15:40:54.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with latest VSCode versions.</li>
-<li>Improved initialization performance.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
