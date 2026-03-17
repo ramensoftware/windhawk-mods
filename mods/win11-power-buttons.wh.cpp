@@ -4,7 +4,7 @@
 // @name:zh-CN      Windows 11 开始菜单一键电源按钮
 // @description     Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 // @description:zh-CN 添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
-// @version         1.0.1
+// @version         1.0.2
 // @author          Hakuuyosei
 // @author:zh-CN    灵弦
 // @github          https://github.com/ahzvenol
