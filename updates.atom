@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-18T00:13:15.000Z</updated>
+    <updated>2026-03-18T02:47:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Perform Speed Test Redirect 1.2.2]]></title>
+        <id>https://windhawk.net/mods/perform-speedtest-redirect#1c888f9b5404e1f03ca934fce7524bfa68bfb597</id>
+        <link href="https://windhawk.net/mods/perform-speedtest-redirect"/>
+        <updated>2026-03-18T02:47:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Refactors implementation with no functional changes: same 3 hooks, same URL detection and
+replacement logic, same setting key</li>
+<li>Replaces manual case-insensitive loop in <code>HasLinkId</code> with <code>wcsstr</code> (LINK_ID is already lowercase)</li>
+<li>Drops <code>std::wstring lower</code> copy and <code>std::transform</code> call from <code>ReplaceUrl</code></li>
+<li>Adds <code>LOG</code> macro to eliminate repeated <code>[speedtest]</code> prefix literals</li>
+<li>Removes <code>#include &lt;algorithm&gt;</code> (no longer needed)</li>
+<li>Trims hook log verbosity; removes dead <code>inApp</code>-only branch in <code>CreateProcessW_Hook</code></li>
+</ul>]]></content>
+        <author>
+            <name>mynameistito</name>
+            <uri>https://github.com/mynameistito</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#20436b3a478ab7a2f7ba4d5e5414bf3abe232de0</id>
@@ -349,23 +368,6 @@ To change, navigate to <strong>Control Panel > Ease of Access Center > Use the c
         <author>
             <name>mak7im01</name>
             <uri>https://github.com/mak7im01</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Native Brightness Shortcut (Always On Top) 1.0.0]]></title>
-        <id>https://windhawk.net/mods/native-brightness#22f78cd3c2c17539f69c24e5792f620b5e077d07</id>
-        <link href="https://windhawk.net/mods/native-brightness"/>
-        <updated>2026-03-09T19:00:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="brightnesscontrolwithosdtoolmode">Brightness Control with OSD (Tool Mode)</h1>
-<p>A standalone utility to control your monitor's brightness using keyboard shortcuts.</p>
-<h3 id="shortcuts">Shortcuts:</h3>
-<ul>
-<li><strong>Ctrl + Alt + Up Arrow:</strong> Increase brightness (+10%)</li>
-<li><strong>Ctrl + Alt + Down Arrow:</strong> Decrease brightness (-10%)</li>
-</ul>]]></content>
-        <author>
-            <name>Prash</name>
-            <uri>https://github.com/prasmit2410</uri>
         </author>
     </entry>
 </feed>

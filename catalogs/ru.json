@@ -6223,7 +6223,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1773741152000,
+                "updated": 1773802072000,
                 "users": 9
             },
             "metadata": {
@@ -6241,7 +6241,7 @@
                 ],
                 "license": "MIT",
                 "name": "Perform Speed Test Redirect",
-                "version": "1.2.1"
+                "version": "1.2.2"
             }
         },
         "photos-fullscreen": {
