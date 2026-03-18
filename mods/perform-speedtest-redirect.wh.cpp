@@ -2,7 +2,7 @@
 // @id              perform-speedtest-redirect
 // @name            Perform Speed Test Redirect
 // @description     Redirects the "Perform speed test" link in the taskbar network right-click menu from the default Microsoft page to a custom URL (defaults to speedtest.net).
-// @version         1.2.1
+// @version         1.2.2
 // @author          mynameistito
 // @github          https://github.com/mynameistito
 // @license         MIT
@@ -52,20 +52,14 @@ covering every known code path Windows uses to open the speed test URL.
 #include <windows.h>
 #include <shellapi.h>
 #include <string>
-#include <algorithm>
 
 #define LINK_ID L"linkid=2324916"
+#define LOG(fmt, ...) Wh_Log(L"[speedtest] " fmt, ##__VA_ARGS__)
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 static bool HasLinkId(LPCWSTR s) {
-    if (!s) return false;
-    const size_t nlen = wcslen(LINK_ID);
-    const size_t hlen = wcslen(s);
-    for (size_t i = 0; i + nlen <= hlen; i++) {
-        if (_wcsnicmp(s + i, LINK_ID, nlen) == 0) return true;
-    }
-    return false;
+    return s && wcsstr(s, LINK_ID);
 }
 
 // Replace the full URL that contains LINK_ID with redirectUrl.
@@ -73,24 +67,19 @@ static bool HasLinkId(LPCWSTR s) {
 static std::wstring ReplaceUrl(LPCWSTR src) {
     if (!src) return {};
     std::wstring s(src);
-    std::wstring lower(s);
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
 
-    const std::wstring needle(LINK_ID);
-    size_t pos = lower.find(needle);
-    if (pos == std::wstring::npos) return {};
+    const wchar_t* hit = wcsstr(src, LINK_ID);
+    if (!hit) return {};
 
-    // Walk back to find start of "http" or "https"
-    size_t urlStart = lower.rfind(L"http", pos);
+    size_t pos      = hit - src;
+    size_t urlStart = s.rfind(L"http", pos);
     if (urlStart == std::wstring::npos) urlStart = pos;
+    size_t urlEnd   = s.find_first_of(L" \t\r\n\"'", pos);
+    if (urlEnd   == std::wstring::npos) urlEnd   = s.size();
 
-    // Walk forward to find end of URL (whitespace, quote, or end of string)
-    size_t urlEnd = s.find_first_of(L" \t\r\n\"'", pos);
-    if (urlEnd == std::wstring::npos) urlEnd = s.size();
-
-    PCWSTR redirectUrl = Wh_GetStringSetting(L"redirectUrl");
-    s.replace(urlStart, urlEnd - urlStart, redirectUrl);
-    Wh_FreeStringSetting(redirectUrl);
+    PCWSTR url = Wh_GetStringSetting(L"redirectUrl");
+    s.replace(urlStart, urlEnd - urlStart, url);
+    Wh_FreeStringSetting(url);
     return s;
 }
 
@@ -102,18 +91,11 @@ ShellExecuteExW_t ShellExecuteExW_Original;
 BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pei) {
     if (!pei) return ShellExecuteExW_Original(pei);
 
-    bool inFile   = HasLinkId(pei->lpFile);
-    bool inParams = HasLinkId(pei->lpParameters);
-
-    if (inFile || inParams) {
-        Wh_Log(L"[speedtest] ShellExecuteExW intercepted — file=%s params=%s",
-               pei->lpFile       ? pei->lpFile       : L"(null)",
-               pei->lpParameters ? pei->lpParameters : L"(null)");
-
+    if (HasLinkId(pei->lpFile) || HasLinkId(pei->lpParameters)) {
         std::wstring newFile, newParams;
         SHELLEXECUTEINFOW mod = *pei;
 
-        if (inFile) {
+        if (HasLinkId(pei->lpFile)) {
             newFile = ReplaceUrl(pei->lpFile);
             mod.lpFile       = newFile.c_str();
             mod.lpParameters = nullptr;
@@ -122,8 +104,7 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pei) {
             mod.lpParameters = newParams.c_str();
         }
 
-        Wh_Log(L"[speedtest] Redirecting ShellExecuteExW to: %s",
-               inFile ? mod.lpFile : mod.lpParameters);
+        LOG(L"ShellExecuteExW → %s", mod.lpFile ? mod.lpFile : mod.lpParameters);
         return ShellExecuteExW_Original(&mod);
     }
 
@@ -137,26 +118,15 @@ ShellExecuteW_t ShellExecuteW_Original;
 
 HINSTANCE WINAPI ShellExecuteW_Hook(HWND hwnd, LPCWSTR op, LPCWSTR file,
                                     LPCWSTR params, LPCWSTR dir, INT show) {
-    bool inFile   = HasLinkId(file);
-    bool inParams = HasLinkId(params);
-
-    if (inFile || inParams) {
-        Wh_Log(L"[speedtest] ShellExecuteW intercepted — file=%s params=%s",
-               file   ? file   : L"(null)",
-               params ? params : L"(null)");
-
-        std::wstring newFile, newParams;
-        if (inFile) {
-            newFile = ReplaceUrl(file);
-            Wh_Log(L"[speedtest] Redirecting ShellExecuteW to: %s", newFile.c_str());
-            return ShellExecuteW_Original(hwnd, op, newFile.c_str(),
-                                          nullptr, dir, show);
-        } else {
-            newParams = ReplaceUrl(params);
-            Wh_Log(L"[speedtest] Redirecting ShellExecuteW params to: %s", newParams.c_str());
-            return ShellExecuteW_Original(hwnd, op, file,
-                                          newParams.c_str(), dir, show);
-        }
+    if (HasLinkId(file)) {
+        std::wstring newFile = ReplaceUrl(file);
+        LOG(L"ShellExecuteW → %s", newFile.c_str());
+        return ShellExecuteW_Original(hwnd, op, newFile.c_str(), nullptr, dir, show);
+    }
+    if (HasLinkId(params)) {
+        std::wstring newParams = ReplaceUrl(params);
+        LOG(L"ShellExecuteW params → %s", newParams.c_str());
+        return ShellExecuteW_Original(hwnd, op, file, newParams.c_str(), dir, show);
     }
 
     return ShellExecuteW_Original(hwnd, op, file, params, dir, show);
@@ -173,22 +143,11 @@ BOOL WINAPI CreateProcessW_Hook(LPCWSTR app, LPWSTR cmd,
                                 LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES tsa,
                                 BOOL inherit, DWORD flags, LPVOID env,
                                 LPCWSTR dir, LPSTARTUPINFOW si, LPPROCESS_INFORMATION pi) {
-    bool inApp = HasLinkId(app);
-    bool inCmd = HasLinkId(cmd);
-
-    if (inApp || inCmd) {
-        Wh_Log(L"[speedtest] CreateProcessW intercepted — app=%s cmd=%s",
-               app ? app : L"(null)",
-               cmd ? cmd : L"(null)");
-
-        std::wstring newCmd;
-        if (inCmd) {
-            newCmd = ReplaceUrl(cmd);
-            Wh_Log(L"[speedtest] New command line: %s", newCmd.c_str());
-            return CreateProcessW_Original(app, newCmd.data(), psa, tsa,
-                                           inherit, flags, env, dir, si, pi);
-        }
-        // inApp only — unlikely, but forward unchanged
+    if (HasLinkId(cmd)) {
+        std::wstring newCmd = ReplaceUrl(cmd);
+        LOG(L"CreateProcessW → %s", newCmd.c_str());
+        return CreateProcessW_Original(app, newCmd.data(), psa, tsa,
+                                       inherit, flags, env, dir, si, pi);
     }
 
     return CreateProcessW_Original(app, cmd, psa, tsa, inherit, flags, env, dir, si, pi);
@@ -198,19 +157,19 @@ BOOL WINAPI CreateProcessW_Hook(LPCWSTR app, LPWSTR cmd,
 
 static bool HookFn(void* target, void* hook, void** orig, const wchar_t* name) {
     if (!target) {
-        Wh_Log(L"[speedtest] Could not resolve %s", name);
+        LOG(L"Could not resolve %s", name);
         return false;
     }
     if (!Wh_SetFunctionHook(target, hook, orig)) {
-        Wh_Log(L"[speedtest] Hook failed for %s", name);
+        LOG(L"Hook failed for %s", name);
         return false;
     }
-    Wh_Log(L"[speedtest] Hooked %s", name);
+    LOG(L"Hooked %s", name);
     return true;
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[speedtest] Init in %s", GetCommandLineW());
+    LOG(L"Init in %s", GetCommandLineW());
 
     HMODULE hShell32  = GetModuleHandleW(L"shell32.dll");
     HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
@@ -230,10 +189,10 @@ BOOL Wh_ModInit() {
                  L"CreateProcessW");
 
     if (!ok) {
-        Wh_Log(L"[speedtest] One or more hooks failed — aborting");
+        LOG(L"One or more hooks failed — aborting");
         return FALSE;
     }
 
-    Wh_Log(L"[speedtest] All hooks installed");
+    LOG(L"All hooks installed");
     return TRUE;
 }
