@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-18T02:47:52.000Z</updated>
+    <updated>2026-03-18T17:04:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#ccbf8d62b852558521be1be12194cb2f2df85a56</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
+        <updated>2026-03-18T17:04:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to configure the time the taskbar stays visible after being shown temporarily.</li>
+<li>Improved "Show taskbar, open Start menu if already shown" Win key action to always trigger the primary taskbar, and to open the Start menu even if the taskbar wasn't shown by the mod (e.g. by hovering).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Perform Speed Test Redirect 1.2.2]]></title>
         <id>https://windhawk.net/mods/perform-speedtest-redirect#1c888f9b5404e1f03ca934fce7524bfa68bfb597</id>
@@ -346,28 +360,6 @@ To change, navigate to <strong>Control Panel > Ease of Access Center > Use the c
         <author>
             <name>repensky</name>
             <uri>https://github.com/repensky</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Photos Fullscreen Mode 1.0.3]]></title>
-        <id>https://windhawk.net/mods/photos-fullscreen#595da2d5c2a3de07112c5ad0bdabe7d4599d4dba</id>
-        <link href="https://windhawk.net/mods/photos-fullscreen"/>
-        <updated>2026-03-09T23:46:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowsphotosfullscreenmode">Windows Photos Fullscreen Mode</h1>
-<p>This mod automatically opens the Windows Photos app in fullscreen (maximized) mode.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod intercepts the creation of the Photos app main window and automatically applies the maximized window style, forcing the application to open in fullscreen.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 10</li>
-<li>Windows 11</li>
-<li>Photos app (Microsoft.Photos.exe / Photos.exe)</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<p>After installing this mod, the Photos app will automatically open in fullscreen mode. You can still manually resize or minimize the window if needed.</p>]]></content>
-        <author>
-            <name>mak7im01</name>
-            <uri>https://github.com/mak7im01</uri>
         </author>
     </entry>
 </feed>

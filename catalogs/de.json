@@ -7443,7 +7443,7 @@
                     28
                 ],
                 "ratingUsers": 34,
-                "updated": 1773792795000,
+                "updated": 1773853459000,
                 "users": 1023
             },
             "metadata": {
@@ -7460,7 +7460,7 @@
                 ],
                 "name": "Taskbar auto-hide fine tuning",
                 "twitter": "https://twitter.com/m417z",
-                "version": "2.1"
+                "version": "2.2"
             }
         },
         "taskbar-auto-hide-per-monitor": {
