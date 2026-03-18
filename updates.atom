@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-17T21:58:33.000Z</updated>
+    <updated>2026-03-18T00:13:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#20436b3a478ab7a2f7ba4d5e5414bf3abe232de0</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
+        <updated>2026-03-18T00:13:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to customize the action to perform when the Win key is pressed: show the taskbar without showing the Start menu, or toggle permanent taskbar visibility.</li>
+<li>Fixed hotkeys not working on system startup (they only worked if the mod is enabled later on).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Power Buttons 1.0.2]]></title>
         <id>https://windhawk.net/mods/win11-power-buttons#7507d4c089a0cb722bc29e0207b6a661b980bfc3</id>
@@ -352,21 +366,6 @@ To change, navigate to <strong>Control Panel > Ease of Access Center > Use the c
         <author>
             <name>Prash</name>
             <uri>https://github.com/prasmit2410</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Numbered taskbar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/numbered-taskbar#e1576c0217723ec7c03bb83f59bf10a0bbbdf774</id>
-        <link href="https://windhawk.net/mods/numbered-taskbar"/>
-        <updated>2026-03-09T17:21:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="numberedtaskbar">Numbered taskbar</h1>
-<p>Displays numbers 1 through 0 on the first 10 application icons in the taskbar.
-These numbers correspond to the <code>Win + Number</code> keyboard shortcuts which launch
-the respective applications.</p>
-<p><img src="https://i.imgur.com/K4eY6yd.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>maciejlewand72</name>
-            <uri>https://github.com/maciejlewand72</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,8 @@
+## 2.1 ([Mar 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/20436b3a478ab7a2f7ba4d5e5414bf3abe232de0/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
+
+* Added an option to customize the action to perform when the Win key is pressed: show the taskbar without showing the Start menu, or toggle permanent taskbar visibility.
+* Fixed hotkeys not working on system startup (they only worked if the mod is enabled later on).
+
 ## 2.0 ([Mar 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b99b0e5e0cfbe608e0657ef8ab21a8f3c555ca8a/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
 
 * Renamed from "Taskbar keyboard-only auto-hide" to "Taskbar auto-hide fine tuning".
