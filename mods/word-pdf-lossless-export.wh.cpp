@@ -234,7 +234,7 @@ void ScanAndHookMso() {
 
     // We will first try the official API, which is more efficient and reliable if it works. However, for MS Office DLLs, it's extremely likely to fail due to DIA refusing to load symbols, so we have a fallback plan using DbgHelp to do a brute-force symbol scan.
     
-    WindhawkUtils::SYMBOL_HOOK officialHook[] = {
+    WindhawkUtils::SYMBOL_HOOK msoDllHook[] = {
         { { L"public: virtual long __cdecl DOCEXIMAGE::HrComputeSize(float *,struct Gdiplus::PointF const *)" }, 
           (void**)&pOrig_HrComputeSize, (void*)Hook_HrComputeSize, false },
           
@@ -242,7 +242,7 @@ void ScanAndHookMso() {
           (void**)&pOrig_HrCheckForLosslessOutput, (void*)Hook_HrCheckForLosslessOutput, false }
     };
 
-    if (WindhawkUtils::HookSymbols(hMso, officialHook, ARRAYSIZE(officialHook))) {
+    if (WindhawkUtils::HookSymbols(hMso, msoDllHook, ARRAYSIZE(msoDllHook))) {
         Wh_Log(L"[Dynamic] Windhawk official API succeeded! Hooks deployed.");
         return;
     }
