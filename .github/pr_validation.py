@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 import urllib.error
 import urllib.request
 from functools import cache
@@ -782,6 +783,21 @@ def validate_specific_keywords(path: Path):
                 warnings += add_warning(
                     path, line_num, f'Line requires manual inspection for "{word}"'
                 )
+
+        hidden_ws = [
+            c
+            for c in line
+            if unicodedata.category(c) == 'Cf'
+            or (unicodedata.category(c) == 'Zs' and c != ' ')
+        ]
+        if hidden_ws:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in set(hidden_ws))
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line contains {len(hidden_ws)} non-standard whitespace characters'
+                f' ({chars}), requires manual inspection',
+            )
 
     return warnings
 
