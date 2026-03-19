@@ -8,7 +8,6 @@
 // @author        Joe Ye
 // @github        https://github.com/JoeYe-233
 // @include       winword.exe
-// @compilerOptions -lversion
 // ==/WindhawkMod==
 
 
@@ -37,7 +36,7 @@ This mod performs a deep, memory-level intervention on Word's internal graphics 
 
 * **Lossless performance guaranteed for JPEGs, BMPs, and other non-transparent formats**: 100% lossless pixel-perfect accuracy. No downscaling, no compression artifacts or quality loss.
 
-* **Lossless performance guaranteed for PNGs**: 
+* **Lossless performance guaranteed for PNGs**:
   * 100% lossless for pngs that **does not contain** transparent regions. (same as above, no downscaling, no compression artifacts or quality loss).
   * 99% (absolute visually lossless) for PNGs that **contain** transparent regions. (No downscaling, no compression artifacts, and negligible quality loss). This is because of how GDI+ handles transparent images (Pre-multiplied Alpha and Float to Integer rounding error). Combined, these may cause up to ±4 drift out of 255 (±0.016%) on each of 3 RGB channels. Also, RGB values for pixels on complete transparent regions (i.e., alpha strictly equals 0) are discarded by GDI+ for better performance. (which is actually a good thing as it increases redundancy, thus decreasing size of end product).
 
@@ -47,16 +46,16 @@ Lossless picture extractor of PDF files are also provided to help you verify the
 
 ### Before (input vs output)
 
-![Before](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-before.png) 
+![Before](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-before.png)
 
 (Image courtesy of [Nicky ❤️🌿🐞🌿❤️](https://pixabay.com/photos/winter-nature-trees-snow-cold-6762640/) from Pixabay)
 ### After (input vs output)
 
-![After](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-after.png) 
+![After](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-after.png)
 
 ### Before vs After at 800% Zoom (Left: After, Right: Before)
 
-![Before vs After](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-before-vs-after.png) 
+![Before vs After](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-before-vs-after.png)
 
 (Left: After, Right: Before. Notice the severe downscaling and compression artifacts in the "Before" image, which are completely gone in the "After" image.)
 
@@ -65,11 +64,11 @@ Lossless picture extractor of PDF files are also provided to help you verify the
 
 Before (input vs output):
 
-![Before](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-png-before.png) 
+![Before](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-png-before.png)
 
 After (input vs output):
 
-![After](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-png-after.png) 
+![After](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-png-after.png)
 
 (Notice the pixel value difference of A=0 (fully transparent) pixels, which is caused by GDI+'s handling of transparent images. This is expected.)
 
@@ -77,14 +76,13 @@ After (input vs output):
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
-#include <dbghelp.h>
 #include <windows.h>
 #include <atomic>
 
 std::atomic<bool> g_bMsoHooked{false};
 
 #ifdef _WIN64
-    // 64 位 Office 偏移
+    // 64-bit Office offsets
     #define OFFSET_ORIG_W 48
     #define OFFSET_ORIG_H 52
     #define OFFSET_TARG_W 120
@@ -92,7 +90,7 @@ std::atomic<bool> g_bMsoHooked{false};
     #define OFFSET_FLAG   355
     #define CC_CALL __fastcall
 #else
-    // 32 位 Office 偏移
+    // 32-bit Office offsets
     #define OFFSET_ORIG_W 44
     #define OFFSET_ORIG_H 48
     #define OFFSET_TARG_W 104
@@ -148,10 +146,8 @@ Then, LOSSLESS_FLAG_OFFSET can be determined as follows:
 */
 
 #ifdef _WIN64
-    #define CC_CALL __fastcall
     #define LOSSLESS_FLAG_OFFSET 224
 #else
-    #define CC_CALL __thiscall
     #define LOSSLESS_FLAG_OFFSET 164
 #endif
 
@@ -171,138 +167,100 @@ int CC_CALL Hook_HrCheckForLosslessOutput(void* pThis, int a1) {
     }
     return res;
 }
+
 // =============================================================
-// Brute-force symbol scan using DbgHelp to find the target functions in case the official API fails (which is extremely likely for MS Office DLLs due to DIA refusing to load symbols). This is a bit hacky but should be quite robust as long as the function names don't change drastically (which is generally the case).
+// Core logic: Use Windhawk official iteration API for fuzzy matching
 // =============================================================
-static BOOL CALLBACK SymEnumCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, PVOID UserContext) {
-    const char* name = pSymInfo->Name;
-
-    if (strstr(name, "HrComputeSize") != nullptr && strstr(name, "DOCEXIMAGE") != nullptr) {
-        if (!pOrig_HrComputeSize) {
-            Wh_SetFunctionHook((void*)pSymInfo->Address, (void*)Hook_HrComputeSize, (void**)&pOrig_HrComputeSize);
-            Wh_Log(L"[Dynamic] Hooked DOCEXIMAGE::HrComputeSize at 0x%p", pSymInfo->Address);
-        }
-    }
-    // Precisely avoiding the OptimizeForQuality and OptimizeForSize functions, specifically targeting HrCheckForLosslessOutput
-    else if (strstr(name, "HrCheckForLosslessOutput") != nullptr &&
-             strstr(name, "DOCEXIMAGE") != nullptr) {
-        if (!pOrig_HrCheckForLosslessOutput) {
-            Wh_SetFunctionHook((void*)pSymInfo->Address, (void*)Hook_HrCheckForLosslessOutput, (void**)&pOrig_HrCheckForLosslessOutput);
-            Wh_Log(L"[Dynamic] Hooked ImageAnalyzer::Hook_HrCheckForLosslessOutput at 0x%p", pSymInfo->Address);
-        }
-    }
-    return TRUE;
-}
-
-bool GetDynamicPdbPath(HMODULE hModule, char* outPath, size_t maxLen) {
-    auto dosHeader = (PIMAGE_DOS_HEADER)hModule;
-    if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return false;
-    auto ntHeaders = (PIMAGE_NT_HEADERS)((BYTE*)hModule + dosHeader->e_lfanew);
-    if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return false;
-    DWORD debugDirRva = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress;
-    DWORD debugDirSize = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].Size;
-    if (!debugDirRva || !debugDirSize) return false;
-    auto debugDir = (PIMAGE_DEBUG_DIRECTORY)((BYTE*)hModule + debugDirRva);
-    DWORD numEntries = debugDirSize / sizeof(IMAGE_DEBUG_DIRECTORY);
-    for (DWORD i = 0; i < numEntries; i++) {
-        if (debugDir[i].Type == IMAGE_DEBUG_TYPE_CODEVIEW) {
-            struct CV_INFO_PDB70 { DWORD CvSignature; GUID Signature; DWORD Age; char PdbFileName[1]; };
-            auto cvInfo = (CV_INFO_PDB70*)((BYTE*)hModule + debugDir[i].AddressOfRawData);
-            if (cvInfo->CvSignature == 0x53445352) {
-                const char* pdbName = strrchr(cvInfo->PdbFileName, '\\');
-                pdbName = pdbName ? pdbName + 1 : cvInfo->PdbFileName;
-                char guidStr[64];
-                sprintf_s(guidStr, "%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X",
-                    cvInfo->Signature.Data1, cvInfo->Signature.Data2, cvInfo->Signature.Data3,
-                    cvInfo->Signature.Data4[0], cvInfo->Signature.Data4[1], cvInfo->Signature.Data4[2], cvInfo->Signature.Data4[3],
-                    cvInfo->Signature.Data4[4], cvInfo->Signature.Data4[5], cvInfo->Signature.Data4[6], cvInfo->Signature.Data4[7]);
-                char windhawkSymBase[MAX_PATH];
-                ExpandEnvironmentStringsA("%ProgramData%\\Windhawk\\Engine\\Symbols", windhawkSymBase, MAX_PATH);
-                sprintf_s(outPath, maxLen, "%s\\%s\\%s%X", windhawkSymBase, pdbName, guidStr, cvInfo->Age);
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 void ScanAndHookMso() {
     HMODULE hMso = GetModuleHandleW(L"mso.dll");
     if (!hMso || g_bMsoHooked.exchange(true)) return;
-    
-    Wh_Log(L"[Dynamic] Stage 1: Attempting official Windhawk PDB download and hook API (triggering automatic PDB download)...");
 
-    // We will first try the official API, which is more efficient and reliable if it works. However, for MS Office DLLs, it's extremely likely to fail due to DIA refusing to load symbols, so we have a fallback plan using DbgHelp to do a brute-force symbol scan.
-    
-    WindhawkUtils::SYMBOL_HOOK msoDllHook[] = {
-        { { L"public: virtual long __cdecl DOCEXIMAGE::HrComputeSize(float *,struct Gdiplus::PointF const *)" }, 
-          (void**)&pOrig_HrComputeSize, (void*)Hook_HrComputeSize, false },
-          
-        { { L"protected: virtual long __cdecl DOCEXIMAGE::HrCheckForLosslessOutput(int) const" }, 
-          (void**)&pOrig_HrCheckForLosslessOutput, (void*)Hook_HrCheckForLosslessOutput, false }
-    };
+    WH_FIND_SYMBOL_OPTIONS options = {0};
+    options.optionsSize = sizeof(options);
+    options.symbolServer = nullptr;
+    options.noUndecoratedSymbols = TRUE; // Core optimization: Only fetch decorated names, greatly improving parsing speed for huge PDBs
 
-    if (WindhawkUtils::HookSymbols(hMso, msoDllHook, ARRAYSIZE(msoDllHook))) {
-        Wh_Log(L"[Dynamic] Windhawk official API succeeded! Hooks deployed.");
+    WH_FIND_SYMBOL findData = {0};
+    HANDLE hFind = Wh_FindFirstSymbol(hMso, &options, &findData);
+
+    if (!hFind) {
+        Wh_Log(L"[Error] Wh_FindFirstSymbol failed! Unable to open mso.dll symbol table.");
         return;
     }
 
-    Wh_Log(L"[Dynamic] Official API failed (rejected by DIA). Starting DbgHelp brute-force takeover...");
+    do {
+        if (!findData.symbolDecorated) continue;
 
-    HMODULE hDbgHelp = LoadLibraryW(L"dbghelp.dll");
-    if (!hDbgHelp) return;
+        // Fuzzy match for HrComputeSize
+        if (!pOrig_HrComputeSize &&
+            wcsstr(findData.symbolDecorated, L"HrComputeSize") &&
+            wcsstr(findData.symbolDecorated, L"DOCEXIMAGE")) {
 
-    auto pSymInitialize = (decltype(&SymInitialize))GetProcAddress(hDbgHelp, "SymInitialize");
-    auto pSymSetOptions = (decltype(&SymSetOptions))GetProcAddress(hDbgHelp, "SymSetOptions");
-    auto pSymLoadModuleEx = (decltype(&SymLoadModuleEx))GetProcAddress(hDbgHelp, "SymLoadModuleEx");
-    auto pSymEnumSymbols = (decltype(&SymEnumSymbols))GetProcAddress(hDbgHelp, "SymEnumSymbols");
-    auto pSymCleanup = (decltype(&SymCleanup))GetProcAddress(hDbgHelp, "SymCleanup");
-    auto pSymSetSearchPath = (decltype(&SymSetSearchPath))GetProcAddress(hDbgHelp, "SymSetSearchPath");
+            Wh_SetFunctionHook(findData.address, (void*)Hook_HrComputeSize, (void**)&pOrig_HrComputeSize);
+            Wh_Log(L"[Success] Captured DOCEXIMAGE::HrComputeSize at 0x%p", findData.address);
+        }
+        // Fuzzy match for HrCheckForLosslessOutput
+        else if (!pOrig_HrCheckForLosslessOutput &&
+                 wcsstr(findData.symbolDecorated, L"HrCheckForLosslessOutput") &&
+                 wcsstr(findData.symbolDecorated, L"DOCEXIMAGE")) {
 
-    HANDLE hSymProcess = (HANDLE)(ULONG_PTR)GetCurrentThreadId();
+            Wh_SetFunctionHook(findData.address, (void*)Hook_HrCheckForLosslessOutput, (void**)&pOrig_HrCheckForLosslessOutput);
+            Wh_Log(L"[Success] Captured DOCEXIMAGE::HrCheckForLosslessOutput at 0x%p", findData.address);
+        }
 
-    pSymSetOptions(0x40); // SYMOPT_LOAD_ANYTHING
-    pSymInitialize(hSymProcess, NULL, FALSE);
+        // Optimization: Stop iterating early if both are found
+        if (pOrig_HrComputeSize && pOrig_HrCheckForLosslessOutput) {
+            Wh_Log(L"[Main] All target functions found, terminating iteration early.");
+            break;
+        }
 
-    char dynamicPdbPath[MAX_PATH] = {0};
-    if (GetDynamicPdbPath(hMso, dynamicPdbPath, MAX_PATH)) {
-        pSymSetSearchPath(hSymProcess, dynamicPdbPath);
-    } else {
-        pSymCleanup(hSymProcess);
-        return;
-    }
+    } while (Wh_FindNextSymbol(hFind, &findData));
 
-    char modulePath[MAX_PATH];
-    GetModuleFileNameA(hMso, modulePath, MAX_PATH);
-    DWORD64 baseAddr = pSymLoadModuleEx(hSymProcess, NULL, modulePath, NULL, (DWORD64)hMso, 0, NULL, 0);
-
-    Wh_Log(L"[Dynamic] Initiating brute-force symbol scan for mso.dll...");
-    pSymEnumSymbols(hSymProcess, baseAddr, "*", SymEnumCallback, nullptr);
-    pSymCleanup(hSymProcess);
+    Wh_FindCloseSymbol(hFind);
     Wh_ApplyHookOperations();
-    Wh_Log(L"[Dynamic] Surgery tools fully deployed!");
+
+    if (!pOrig_HrComputeSize || !pOrig_HrCheckForLosslessOutput)
+        Wh_Log(L"[Warning] Iteration complete, but failed to find all target functions.");
 }
 
-DWORD WINAPI ScoutThread(LPVOID lpParam) {
-    HMODULE hMso = nullptr;
-    
-    // We have to do this because MS Office loads mso.dll dynamically after startup, and we need to hook it as soon as it's loaded. This is a bit hacky but should be effective and doesn't cause significant overhead.
-    
-    while (!hMso) {
-        hMso = GetModuleHandleW(L"mso.dll");
-        if (!hMso) Sleep(500);
-    }
-    
-    // Wait slightly more to ensure mso.dll is fully initialized before we start hooking (this is based on testing and may need adjustment for different versions of Office)
-    
-    Sleep(500);
+// =============================================================
+// Intercept LoadLibraryExW to elegantly monitor mso.dll loading
+// =============================================================
+typedef HMODULE (WINAPI *LoadLibraryExW_t)(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags);
+LoadLibraryExW_t pOrig_LoadLibraryExW = nullptr;
+
+// Standard WINAPI thread startup function
+DWORD WINAPI DelayedHookThread(LPVOID lpParam) {
     ScanAndHookMso();
     return 0;
 }
 
+HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    HMODULE hModule = pOrig_LoadLibraryExW(lpLibFileName, hFile, dwFlags);
+
+    if (hModule && lpLibFileName && !g_bMsoHooked.load()) {
+        const wchar_t* fileName = wcsrchr(lpLibFileName, L'\\');
+        fileName = fileName ? fileName + 1 : lpLibFileName;
+
+        if (_wcsicmp(fileName, L"mso.dll") == 0) {
+            CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
+        }
+    }
+
+    return hModule;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Word PDF Lossless Export Ultimate Loaded");
-    CreateThread(nullptr, 0, ScoutThread, nullptr, 0, nullptr);
+
+    if (GetModuleHandleW(L"mso.dll")) {
+        // If already loaded, start thread directly
+        CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
+    } else {
+        // Not loaded yet, hook LoadLibrary to stand guard
+        Wh_SetFunctionHook((void*)LoadLibraryExW, (void*)Hook_LoadLibraryExW, (void**)&pOrig_LoadLibraryExW);
+    }
+
     return TRUE;
 }
 
