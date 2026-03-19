@@ -2,7 +2,7 @@
 // @id              scroll-window-opacity
 // @name            Scroll Window Opacity
 // @description     Hold a key combination and scroll the mouse wheel to change the opacity of the window under the cursor
-// @version         1.0.0
+// @version         1.0.1
 // @author          Sondre Myrmel
 // @github          https://github.com/Sondre234
 // @twitter         https://x.com/ShaolinLoL
@@ -16,7 +16,7 @@
 # Scroll Window Opacity
 
 Hold a configurable key combination (default: **Ctrl + Alt**) and scroll the mouse
-wheel to adjust the transparency of whichever window the cursor is hovering over.
+wheel to adjust the transparency of the top-level window under the cursor.
 
 - **Scroll up** — decrease opacity (more transparent)
 - **Scroll down** — increase opacity (more opaque)
@@ -24,8 +24,9 @@ wheel to adjust the transparency of whichever window the cursor is hovering over
 The opacity step, minimum opacity, and modifier keys are all configurable in the
 settings panel.
 
-System windows (taskbar, desktop) are never affected. When a window is scrolled
-back to 100% opacity it is fully restored to its original state.
+Common shell windows such as the taskbar and desktop are excluded. For windows
+that this mod makes layered, the original window style is restored when returned
+to 100% opacity.
 */
 // ==/WindhawkModReadme==
 
@@ -68,7 +69,7 @@ struct Settings {
     bool needCtrl  = true;
     bool needAlt   = true;
     bool needShift = false;
-    int  step      = 10;  // percent per tick
+    int  step      = 2;   // percent per tick
     int  minPct    = 10;  // minimum opacity percent
 } g_settings;
 
@@ -134,8 +135,8 @@ static HWND GetRootWindowAt(POINT pt) {
 
 // ── Core opacity adjustment (called from hook thread) ─────────────────────────
 
-static void AdjustOpacity(HWND hwnd, int delta) {
-    if (!hwnd || !IsWindow(hwnd) || IsSystemWindow(hwnd)) return;
+static bool AdjustOpacity(HWND hwnd, int delta) {
+    if (!hwnd || !IsWindow(hwnd) || IsSystemWindow(hwnd)) return false;
 
     std::lock_guard<std::mutex> lock(g_mutex);
 
@@ -178,9 +179,13 @@ static void AdjustOpacity(HWND hwnd, int delta) {
         if (!(exStyle & WS_EX_LAYERED)) {
             SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
         }
-        SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+        if (!SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)) {
+            Wh_Log(L"SetLayeredWindowAttributes failed for 0x%p: %u", (void*)hwnd, GetLastError());
+            return false;
+        }
         Wh_Log(L"Window 0x%p opacity → %d%%", (void*)hwnd, newPct);
     }
+    return true;
 }
 
 static void RestoreAllWindows() {
@@ -212,9 +217,9 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         int delta      = (wheelDelta > 0) ? -g_settings.step : g_settings.step;
 
         HWND target = GetRootWindowAt(ms->pt);
-        AdjustOpacity(target, delta);
-
-        return 1; // swallow the scroll event so the window doesn't also scroll
+        if (AdjustOpacity(target, delta)) {
+            return 1; // swallow only when opacity was actually changed
+        }
     }
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
