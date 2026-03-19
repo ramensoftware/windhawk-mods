@@ -5,6 +5,7 @@
 // @version         1.0.0
 // @author          kanak-buet19
 // @homepage        https://github.com/kanak-buet19
+// @github          kanak-buet19
 // @include         dwm.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
