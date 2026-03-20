@@ -1,3 +1,24 @@
+## 3.0 ([Mar 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9d08e8f1ebd6a28659c4546c4aa8852f3cec4d21/mods/word-local-autosave.wh.cpp))
+
+- Version bumped to 3.0.
+- Replaced synthetic `Ctrl+S` saving with direct Word automation calls (`Document.Save`).
+- Completely removed `SendInput`-based keyboard injection.
+- Eliminated the root cause of false shortcut triggers at very low save cooldowns.
+- Removed the old “press-state verification” approach that tried to make injected `Ctrl+S` safe.
+- Removed the separate retry/send pipeline built around synthetic key presses.
+- Reworked auto-save execution so it stays on a single owner Word UI thread.
+- Switched save scheduling to a simpler owner-thread timer flow.
+- Added direct access to the active Word object from the active document window via `AccessibleObjectFromWindow`.
+- Added fallback access to Word through the Running Object Table (`GetActiveObject`) if window-based access is unavailable.
+- Added dynamic runtime loading of required OLE/COM functions instead of relying on linker-resolved imports.
+- Preserved the configurable save delay and minimum time between saves.
+- Kept manual `Ctrl+S` detection, but now it only updates internal timing state instead of interacting with synthetic save logic.
+- Kept foreground-window checks so auto-save only runs when the active Word document window is focused.
+- Kept postponing saves while user input is still active or modifiers/mouse buttons are held.
+- Kept skipping unsaved documents to avoid triggering “Save As”.
+- Kept skipping read-only documents.
+- Updated the readme/metadata text to describe the new direct-save architecture and shortcut-safety model.
+
 ## 2.1 ([Mar 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b470cc70adf572d7d28d329cea2b3e6a66605280/mods/word-local-autosave.wh.cpp))
 
 - Version bumped to 2.1

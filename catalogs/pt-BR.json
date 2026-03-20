@@ -10831,7 +10831,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1773067950000,
+                "updated": 1774025855000,
                 "users": 101
             },
             "metadata": {
@@ -10839,13 +10839,13 @@
                     "x86-64"
                 ],
                 "author": "communism420",
-                "description": "Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S",
+                "description": "Enables AutoSave functionality for local documents in Microsoft Word via direct Word saves",
                 "github": "https://github.com/communism420",
                 "include": [
                     "WINWORD.EXE"
                 ],
                 "name": "Word Local AutoSave",
-                "version": "2.1"
+                "version": "3.0"
             }
         },
         "word-pdf-lossless-export": {
