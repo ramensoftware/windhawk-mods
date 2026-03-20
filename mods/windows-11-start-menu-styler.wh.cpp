@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     Customize the start menu with themes contributed by others or create your own
-// @version         1.4
+// @version         1.4.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -132,6 +132,10 @@ Windows10X](https://github.com/ramensoftware/windows-11-start-menu-styling-guide
 \
 TintedGlass](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/TintedGlass/README.md)
 
+[![LayerMicaUI](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/LayerMicaUI/screenshot-small.png)
+\
+LayerMicaUI](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/LayerMicaUI/README.md)
+
 More themes can be found in the **Themes** section of [The Windows 11 start menu
 styling
 guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/README.md#themes).
@@ -232,6 +236,14 @@ Background:=<SolidColorBrush Color="{ThemeResource AutoAccent}" />
 
 The value will automatically update when the system accent color changes.
 
+#### Using XAML syntax
+
+The `:=` syntax can be used to set a XAML value as a resource, for example:
+`MyBrush:=<SolidColorBrush Color="Red"/>`. This can be combined with theme
+variants: `MyBrush@Dark:=<SolidColorBrush Color="#FF202020"/>`. Specifying an
+empty value with the XAML syntax will clear the resource value, for example:
+`MyBrush:=`.
+
 ### Style constants
 
 Style constants allow defining a value once and referencing it in multiple
@@ -327,6 +339,7 @@ from the **TranslucentTB** project.
   - LiquidGlass: LiquidGlass (for the redesigned Start menu)
   - Windows10X: Windows10X
   - TintedGlass: TintedGlass
+  - LayerMicaUI: LayerMicaUI (for the redesigned Start menu)
 - disableNewStartMenuLayout: ""
   $name: Disable the new start menu layout
   $description: >-
@@ -349,6 +362,16 @@ from the **TranslucentTB** project.
     - styles: [""]
       $name: Styles
   $name: Control styles
+- themeResourceVariables: [""]
+  $name: Resource variables
+  $description: >-
+    Use "Key=Value" to override an existing resource with a new value.
+
+    Use "Key@Dark=Value" or "Key@Light=Value" to define theme-aware resources
+    that can be referenced with {ThemeResource Key} in styles.
+
+    The ":=" syntax can be used to set a XAML value. For details, refer to the
+    mod description.
 - webContentStyles:
   - - target: ""
       $name: Target
@@ -357,13 +380,6 @@ from the **TranslucentTB** project.
   $name: Search WebView styles
 - webContentCustomJs: ""
   $name: Search WebView custom JavaScript code
-- themeResourceVariables: [""]
-  $name: Resource variables
-  $description: >-
-    Use "Key=Value" to override an existing resource with a new value.
-
-    Use "Key@Dark=Value" or "Key@Light=Value" to define theme-aware resources
-    that can be referenced with {ThemeResource Key} in styles.
 */
 // ==/WindhawkModSettings==
 
@@ -383,8 +399,9 @@ struct ThemeTargetStyles {
 
 struct Theme {
     std::vector<ThemeTargetStyles> targetStyles;
-    std::vector<ThemeTargetStyles> webViewTargetStyles;
     std::vector<PCWSTR> styleConstants;
+    std::vector<PCWSTR> themeResourceVariables;
+    std::vector<ThemeTargetStyles> webViewTargetStyles;
 };
 
 // clang-format off
@@ -484,7 +501,7 @@ const Theme g_themeTranslucentStartMenu = {{
         L"Background@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.9\"/>",
         L"BorderThickness=1",
         L"CornerRadius=5"}},
-}, {}, {
+}, {
     L"CommonBgBrush=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#25323232\"/>",
 }};
 
@@ -583,7 +600,7 @@ const Theme g_themeTranslucentStartMenu_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"StartDocked.AllAppsGridListViewItem > Grid#ContentBorder@CommonStates", {
         L"Background@PointerOver:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15C0C0C0\"/>",
         L"CornerRadius=4"}},
-}, {}, {
+}, {
     L"CommonBgBrush=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#25323232\"/>",
 }};
 
@@ -1753,8 +1770,9 @@ const Theme g_themeWindows10_variant_Minimal = {{
         L"RequestedTheme=2"}},
     ThemeTargetStyles{L"Grid#FrameRoot", {
         L"Height=754",
-        L"Margin=-3,0,220,-4",
-        L"Padding=0"}},
+        L"Margin=0,0,0,-4",
+        L"Padding=0",
+        L"MaxWidth=389"}},
     ThemeTargetStyles{L"Grid#MainMenu > Windows.UI.Xaml.Controls.Border#AcrylicBorder", {
         L"Margin=0",
         L"BorderThickness=42,2,0,0",
@@ -1965,7 +1983,7 @@ const Theme g_themeWindows10_variant_Minimal = {{
         L"Style:=<ResourceKey=\"ButtonRevealStyle\" />"}},
     ThemeTargetStyles{L"Border#AcrylicOverlay", {
         L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\"/>",
-        L"BorderThickness=2",
+        L"BorderThickness=2,2,3,2",
         L"Margin=0,0,240,0"}},
     ThemeTargetStyles{L"Grid#CompanionRoot > Grid#MainContent > Border#AcrylicOverlay", {
         L"Margin=-1,2,1,-63",
@@ -4173,7 +4191,7 @@ const Theme g_themeLegacyFluent = {{
         L"BorderBrush@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\"/>",
         L"Background@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.7\"/>",
         L"Background@Pressed=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.7\"/>"}},
-}, {
+}, {}, {}, {
     ThemeTargetStyles{L"#chatButtonRight", {
         L"display: none !important"}},
     ThemeTargetStyles{L".groupTitle", {
@@ -4373,7 +4391,7 @@ const Theme g_themeLegacyFluent_variant_ClassicStartMenu = {{
         L"CornerRadius=0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#HideMoreSuggestionsButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.FontIcon > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.TextBlock", {
         L"FontSize=10"}},
-}, {
+}, {}, {}, {
     ThemeTargetStyles{L"#chatButtonRight", {
         L"display: none !important"}},
     ThemeTargetStyles{L".groupTitle", {
@@ -4647,11 +4665,12 @@ const Theme g_themeWindowGlass = {{
     ThemeTargetStyles{L"ToggleMenuFlyoutItem", {
         L"CornerRadius:=$HoverCornerRadius",
         L"Margin=4,0,4,0"}},
-}, {}, {
+}, {
+    L"Translucent=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#10808080\"/>",
     L"Glass=<WindhawkBlur BlurAmount=\"5\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.7\" />",
     L"Frosted=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.7\" />",
     L"Acrylic=<WindhawkBlur BlurAmount=\"30\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.8\" />",
-    L"Background=$Frosted",
+    L"Background=$Glass",
     L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#60808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#40808080\" Offset=\"1\" /></LinearGradientBrush>",
     L"BorderBrush2=<WindhawkBlur BlurAmount=\"10\" TintColor=\"#909090\" TintOpacity=\"0.3\"/>",
     L"ClockBG=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\"1\"/>",
@@ -4786,13 +4805,13 @@ const Theme g_themeFluid = {{
         L"RenderTransform@Pressed:=<ScaleTransform ScaleX=\"0.8\" ScaleY=\"0.8\" />",
         L"RenderTransformOrigin=0.5,0.5"}},
 }, {
-    ThemeTargetStyles{L"*", {
-        L"transition: background-color 0.083s ease-in-out !important"}},
-}, {
     L"borderColor=<LinearGradientBrush x:Key=\"ShellTaskbarItemGradientStrokeColorSecondaryBrush\" MappingMode=\"Absolute\" StartPoint=\"0,0\" EndPoint=\"0,3\"><LinearGradientBrush.GradientStops><GradientStop Offset=\"0.33\" Color=\"#1AFFFFFF\" /><GradientStop Offset=\"1\" Color=\"#0FFFFFFF\" /></LinearGradientBrush.GradientStops></LinearGradientBrush>",
     L"backgroundNormal=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\" />",
     L"backgroundHover=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\" />",
     L"backgroundPressed=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\" />",
+}, {}, {
+    ThemeTargetStyles{L"*", {
+        L"transition: background-color 0.083s ease-in-out !important"}},
 }};
 
 const Theme g_themeOversimplified_Accentuated = {{
@@ -4941,6 +4960,12 @@ const Theme g_themeOversimplified_Accentuated = {{
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AnimatedIcon#SearchIconPlayer", {
         L"Width=20"}},
 }, {
+    L"Alt=<AcrylicBrush TintColor=\"{ThemeResource SystemAltHighColor}\" TintOpacity=\"0.6\" TintLuminosityOpacity=\"0.6\" FallbackColor=\"{ThemeResource SystemAltHighColor}\" />",
+    L"Accent=<AcrylicBrush TintColor=\"{ThemeResource SystemAccentColor}\" TintOpacity=\"0.6\" TintLuminosityOpacity=\"0.6\" FallbackColor=\"{ThemeResource SystemAccentColor}\" />",
+    L"DarkAccent=<AcrylicBrush TintColor=\"{ThemeResource SystemAccentColorDark1}\" TintOpacity=\"0.6\" TintLuminosityOpacity=\"0.3\" FallbackColor=\"{ThemeResource SystemAccentColorDark1}\" />",
+    L"SolidAccent=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\"1\"/>",
+    L"Reveal=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
+}, {}, {
     ThemeTargetStyles{L"li.rightHeaderButtons.itemTooltip.MouseHoverTooltip", {
         L"display: none"}},
     ThemeTargetStyles{L".scope-with-background__backButton", {
@@ -4974,12 +4999,6 @@ const Theme g_themeOversimplified_Accentuated = {{
         L"border-radius: 20px !important"}},
     ThemeTargetStyles{L"ul.contextMenu::before", {
         L"display: none !important"}},
-}, {
-    L"Alt=<AcrylicBrush TintColor=\"{ThemeResource SystemAltHighColor}\" TintOpacity=\"0.6\" TintLuminosityOpacity=\"0.6\" FallbackColor=\"{ThemeResource SystemAltHighColor}\" />",
-    L"Accent=<AcrylicBrush TintColor=\"{ThemeResource SystemAccentColor}\" TintOpacity=\"0.6\" TintLuminosityOpacity=\"0.6\" FallbackColor=\"{ThemeResource SystemAccentColor}\" />",
-    L"DarkAccent=<AcrylicBrush TintColor=\"{ThemeResource SystemAccentColorDark1}\" TintOpacity=\"0.6\" TintLuminosityOpacity=\"0.3\" FallbackColor=\"{ThemeResource SystemAccentColorDark1}\" />",
-    L"SolidAccent=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\"1\"/>",
-    L"Reveal=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
 }};
 
 const Theme g_themeLiquidGlass = {{
@@ -5135,9 +5154,6 @@ const Theme g_themeLiquidGlass = {{
         L"RenderTransform@Pressed:=<ScaleTransform ScaleX=\"0.8\" ScaleY=\"0.8\" />",
         L"RenderTransformOrigin=0.5,0.5"}},
 }, {
-    ThemeTargetStyles{L"*", {
-        L"transition: background-color 0.083s ease-in-out !important"}},
-}, {
     L"borderColor=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#50808080\" Offset=\"1\" /></LinearGradientBrush>\"",
     L"borderColor2=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>",
     L"background=<WindhawkBlur BlurAmount=\"10\" TintColor=\"#25323232\" TintOpacity=\"0.2\" />",
@@ -5145,6 +5161,9 @@ const Theme g_themeLiquidGlass = {{
     L"borderThickness2=0.3,0.3,0.3,1",
     L"cornerRadius=6",
     L"cornerRadius2=4",
+}, {}, {
+    ThemeTargetStyles{L"*", {
+        L"transition: background-color 0.083s ease-in-out !important"}},
 }};
 
 const Theme g_themeWindows10X = {{
@@ -5382,6 +5401,25 @@ const Theme g_themeWindows10X = {{
         L"Height=40",
         L"Width=40"}},
 }, {
+    L"lightAccent=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorDark1}\"/>",
+    L"lightAccentHover=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorDark1}\" Opacity=\".9\"/>",
+    L"lightAccentPress=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorDark1}\" Opacity=\".8\"/>",
+    L"darkAccent=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight2}\"/>",
+    L"darkAccentHover=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight2}\" Opacity=\".9\"/>",
+    L"darkAccentPress=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight2}\" Opacity=\".8\"/>",
+    L"subtleButtonHover=<SolidColorBrush Color=\"{ThemeResource SubtleFillColorSecondary}\"/>",
+    L"subtleButtonPress=<SolidColorBrush Color=\"{ThemeResource SubtleFillColorTertiary}\"/>",
+    L"button=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\"/>",
+    L"buttonHover=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\"/>",
+    L"buttonPress=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\"/>",
+    L"textPrimary=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\"/>",
+    L"textSecondary=<SolidColorBrush Color=\"{ThemeResource TextFillColorSecondary}\"/>",
+    L"textDisabled=<SolidColorBrush Color=\"{ThemeResource TextFillColorDisabled}\"/>",
+    L"textInverse=<SolidColorBrush Color=\"{ThemeResource TextFillColorInverse}\"/>",
+    L"acrylic=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\".0\" TintLuminosityOpacity=\".86\"/>",
+    L"fakeShadow=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#10000000\" Offset=\"0.84\" /><GradientStop Color=\"#26000000\" Offset=\"0.85\" /><GradientStop Color=\"#00000000\" Offset=\"1.0\" /></LinearGradientBrush>",
+    L"acrylicMenu=<AcrylicBrush TintColor=\"{ThemeResource LayerOnMicaBaseAltFillColorTertiary}\" FallbackColor=\"{ThemeResource SystemChromeHighColor}\" TintOpacity=\".0\" TintLuminosityOpacity=\".75\"/>",
+}, {}, {
     ThemeTargetStyles{L"#qfPreviewPane, #qfPreviewPane *, .leftPill::before, #temporaryMessages, .scope-with-background__backButton, #gr11, #pp_Share, #pp_Review, #chatButtonRight, .curatedSettingsGroup, .scope-with-background__rightCaret, #topHitHeader, .userProfileMenuIcon, .scope-tile__button, .additionalInfoText.annotation, #root:not(.zeroInput19H1):not(.fileExplorer) .topResults .openPreviewPaneBtn .iconContent, .openPreviewIcon .iconContent.cortanaFontIcon, #scopesHeader, #scopesHeader *, #gr36, div[data-region=\"TopApps\"], #gr43, .openPreviewPaneBtn, .suggContainer.largerSearchIcon14 .secondaryText", {
         L"display: none !important",
         L"visibility: hidden !important"}},
@@ -5422,25 +5460,6 @@ const Theme g_themeWindows10X = {{
         L"background: transparent !important"}},
     ThemeTargetStyles{L".topResults .suggDetailsContainer .primaryText", {
         L"margin-bottom: -2px !important"}},
-}, {
-    L"lightAccent=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorDark1}\"/>",
-    L"lightAccentHover=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorDark1}\" Opacity=\".9\"/>",
-    L"lightAccentPress=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorDark1}\" Opacity=\".8\"/>",
-    L"darkAccent=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight2}\"/>",
-    L"darkAccentHover=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight2}\" Opacity=\".9\"/>",
-    L"darkAccentPress=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight2}\" Opacity=\".8\"/>",
-    L"subtleButtonHover=<SolidColorBrush Color=\"{ThemeResource SubtleFillColorSecondary}\"/>",
-    L"subtleButtonPress=<SolidColorBrush Color=\"{ThemeResource SubtleFillColorTertiary}\"/>",
-    L"button=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\"/>",
-    L"buttonHover=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\"/>",
-    L"buttonPress=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\"/>",
-    L"textPrimary=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\"/>",
-    L"textSecondary=<SolidColorBrush Color=\"{ThemeResource TextFillColorSecondary}\"/>",
-    L"textDisabled=<SolidColorBrush Color=\"{ThemeResource TextFillColorDisabled}\"/>",
-    L"textInverse=<SolidColorBrush Color=\"{ThemeResource TextFillColorInverse}\"/>",
-    L"acrylic=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\".0\" TintLuminosityOpacity=\".86\"/>",
-    L"fakeShadow=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#10000000\" Offset=\"0.84\" /><GradientStop Color=\"#26000000\" Offset=\"0.85\" /><GradientStop Color=\"#00000000\" Offset=\"1.0\" /></LinearGradientBrush>",
-    L"acrylicMenu=<AcrylicBrush TintColor=\"{ThemeResource LayerOnMicaBaseAltFillColorTertiary}\" FallbackColor=\"{ThemeResource SystemChromeHighColor}\" TintOpacity=\".0\" TintLuminosityOpacity=\".75\"/>",
 }};
 
 const Theme g_themeWindows10X_variant_ClassicStartMenu = {{
@@ -5686,6 +5705,23 @@ const Theme g_themeWindows10X_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"GridView#PinnedList > Border > ScrollViewer > Border#Root > Grid > ScrollContentPresenter > ItemsPresenter", {
         L"MinHeight=340"}},
 }, {
+    L"accent=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\"/>",
+    L"accentHover=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\".9\"/>",
+    L"accentPress=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\".8\"/>",
+    L"subtleButtonHover=<SolidColorBrush Color=\"{ThemeResource SubtleFillColorSecondary}\"/>",
+    L"subtleButtonPress=<SolidColorBrush Color=\"{ThemeResource SubtleFillColorTertiary}\"/>",
+    L"button=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\"/>",
+    L"buttonHover=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\"/>",
+    L"buttonPress=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\"/>",
+    L"textPrimary=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\"/>",
+    L"textSecondary=<SolidColorBrush Color=\"{ThemeResource TextFillColorSecondary}\"/>",
+    L"textDisabled=<SolidColorBrush Color=\"{ThemeResource TextFillColorDisabled}\"/>",
+    L"textInverse=<SolidColorBrush Color=\"{ThemeResource TextFillColorInverse}\"/>",
+    L"acrylic=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0\" TintLuminosityOpacity=\"1\"/>",
+    L"fakeShadow=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#10000000\" Offset=\"0.84\" /><GradientStop Color=\"#26000000\" Offset=\"0.85\" /><GradientStop Color=\"#00000000\" Offset=\"1.0\" /></LinearGradientBrush>",
+    L"inputActive=<SolidColorBrush Color=\"{ThemeResource ControlFillColorInputActive}\"/>",
+    L"separator=<SolidColorBrush Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Opacity=\".5\"/>",
+}, {}, {
     ThemeTargetStyles{L"#qfPreviewPane, #qfPreviewPane *, .leftPill::before, #temporaryMessages, .scope-with-background__backButton, #gr11, #pp_Share, #pp_Review, #chatButtonRight, .curatedSettingsGroup, .scope-with-background__rightCaret, #topHitHeader, .userProfileMenuIcon, .scope-tile__button, .additionalInfoText.annotation, #root:not(.zeroInput19H1):not(.fileExplorer) .topResults .openPreviewPaneBtn .iconContent, .openPreviewIcon .iconContent.cortanaFontIcon, #scopesHeader, #scopesHeader *, #gr36, div[data-region=\"TopApps\"], #gr43, .openPreviewPaneBtn, .suggContainer.largerSearchIcon14 .secondaryText", {
         L"display: none !important",
         L"visibility: hidden !important"}},
@@ -5726,23 +5762,6 @@ const Theme g_themeWindows10X_variant_ClassicStartMenu = {{
         L"background: transparent !important"}},
     ThemeTargetStyles{L".topResults .suggDetailsContainer .primaryText", {
         L"margin-bottom: -2px !important"}},
-}, {
-    L"accent=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\"/>",
-    L"accentHover=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\".9\"/>",
-    L"accentPress=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\".8\"/>",
-    L"subtleButtonHover=<SolidColorBrush Color=\"{ThemeResource SubtleFillColorSecondary}\"/>",
-    L"subtleButtonPress=<SolidColorBrush Color=\"{ThemeResource SubtleFillColorTertiary}\"/>",
-    L"button=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\"/>",
-    L"buttonHover=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\"/>",
-    L"buttonPress=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\"/>",
-    L"textPrimary=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\"/>",
-    L"textSecondary=<SolidColorBrush Color=\"{ThemeResource TextFillColorSecondary}\"/>",
-    L"textDisabled=<SolidColorBrush Color=\"{ThemeResource TextFillColorDisabled}\"/>",
-    L"textInverse=<SolidColorBrush Color=\"{ThemeResource TextFillColorInverse}\"/>",
-    L"acrylic=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0\" TintLuminosityOpacity=\"1\"/>",
-    L"fakeShadow=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#10000000\" Offset=\"0.84\" /><GradientStop Color=\"#26000000\" Offset=\"0.85\" /><GradientStop Color=\"#00000000\" Offset=\"1.0\" /></LinearGradientBrush>",
-    L"inputActive=<SolidColorBrush Color=\"{ThemeResource ControlFillColorInputActive}\"/>",
-    L"separator=<SolidColorBrush Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Opacity=\".5\"/>",
 }};
 
 const Theme g_themeTintedGlass = {{
@@ -5840,7 +5859,7 @@ const Theme g_themeTintedGlass = {{
         L"Background@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.9\"/>",
         L"BorderThickness=1",
         L"CornerRadius=5"}},
-}, {}, {
+}, {
     L"CommonBgBrush=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#80000000\"/>",
 }};
 
@@ -5937,8 +5956,323 @@ const Theme g_themeTintedGlass_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"StartDocked.AllAppsGridListViewItem > Grid#ContentBorder@CommonStates", {
         L"Background@PointerOver:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15C0C0C0\"/>",
         L"CornerRadius=14"}},
-}, {}, {
+}, {
     L"CommonBgBrush=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#80000000\"/>",
+}};
+
+const Theme g_themeLayerMicaUI = {{
+    ThemeTargetStyles{L"Border#AcrylicBorder", {
+        L"CornerRadius=$OuterRadius",
+        L"BorderThickness=1",
+        L"Width=445"}},
+    ThemeTargetStyles{L"Grid#MainMenu > Grid#MainContent > Border#AcrylicOverlay", {
+        L"Margin=9,-3,9,-55",
+        L"CornerRadius=8,8,10,10",
+        L"BorderThickness=1",
+        L"Background:=$ThemeOverlay"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView > StartDocked.NavigationPaneButton > Grid@CommonStates > Border", {
+        L"CornerRadius=0,8,8,0",
+        L"Margin=-2,-1,-2,-1",
+        L"BorderThickness=1",
+        L"Background@Normal:=$ThemeOverlay",
+        L"Background@Pressed:=$ThemeBtn",
+        L"Background@PointerOver:=$ThemeBtn",
+        L"Background@Disabled:=$ThemeOverlay",
+        L"BorderBrush:=$ThemeControlBorder"}},
+    ThemeTargetStyles{L"StartDocked.UserTileView > StartDocked.NavigationPaneButton > Grid@CommonStates > Border", {
+        L"Margin=0,-1,0,-1",
+        L"CornerRadius=0",
+        L"Background@Pressed:=$ThemeBtn",
+        L"BorderThickness=0,1,0,1",
+        L"Width=48",
+        L"Background@PointerOver:=$ThemeBtn",
+        L"Background@Normal:=$ThemeOverlay",
+        L"Background@Disabled:=$ThemeOverlay",
+        L"Background:=$ThemeOverlay",
+        L"BorderBrush:=$ThemeControlBorder"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid@CommonStates > Border", {
+        L"Background@Normal:=$ThemeOverlay",
+        L"CornerRadius=8,0,0,8",
+        L"BorderBrush:=$ThemeControlBorder",
+        L"BorderThickness=1",
+        L"Background@PointerOver:=$ThemeBtn",
+        L"Background@Pressed:=$ThemeBtn",
+        L"Background:=$ThemeOverlay"}},
+    ThemeTargetStyles{L"Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border@CommonStates", {
+        L"Margin=1"}},
+    ThemeTargetStyles{L"StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"BorderThickness=1",
+        L"Width=340",
+        L"Height=350",
+        L"Margin=5,0,0,0",
+        L"BorderBrush:=$ThemeOutBorder",
+        L"Background:=$ThemeFlyout"}},
+    ThemeTargetStyles{L"Border#StartDropShadow", {
+        L"Width=445",
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Border#AcrylicBorder", {
+        L"Width=225",
+        L"CornerRadius=0,$OuterRadius,$OuterRadius,0",
+        L"BorderBrush:=$ThemeOutBorder",
+        L"BorderThickness=0,1,1,1"}},
+    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Grid#MainContent > Border#AcrylicOverlay", {
+        L"Margin=20,170,20,-2",
+        L"BorderThickness=0,1,0,1",
+        L"CornerRadius=0",
+        L"Background:=Transparent",
+        L"BorderBrush:=$ThemeControlBorder"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion > Border", {
+        L"Background:=$ThemeOverlay",
+        L"BorderBrush:=$ThemeControlBorder",
+        L"BorderThickness=1",
+        L"Background:=$ThemeOverlay"}},
+    ThemeTargetStyles{L"Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"CornerRadius=$InnerRadius"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border", {
+        L"Padding=0,5,0,10",
+        L"BorderThickness=0,0,0,1",
+        L"BorderBrush:=$ThemeControlBorder",
+        L"Margin=0,0,0,-25"}},
+    ThemeTargetStyles{L"ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ListViewItem > Grid#ContentBorder > Border#BorderBackground", {
+        L"CornerRadius=$InnerRadius"}},
+    ThemeTargetStyles{L"GridViewHeaderItem > Border > ContentPresenter#ContentPresenter > Button#Header > Border#Border", {
+        L"CornerRadius=$InnerRadius"}},
+    ThemeTargetStyles{L"ScrollContentPresenter > Border", {
+        L"MaxHeight=665",
+        L"VerticalAlignment=Bottom",
+        L"MinWidth=700"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#LayerBorder", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AppBorder", {
+        L"BorderBrush:=$ThemeOutBorder",
+        L"CornerRadius=$OuterRadius",
+        L"Margin=1"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter > Border", {
+        L"Background:=$ThemeFlyout",
+        L"BorderBrush:=$ThemeOutBorder"}},
+    ThemeTargetStyles{L"Button#ZoomInButton > Grid > Border#BackgroundBorder", {
+        L"CornerRadius=$InnerRadius"}},
+    ThemeTargetStyles{L"ListView#ZoomedOutListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > ListViewItem > Grid#ContentBorder > Border#BorderBackground", {
+        L"CornerRadius=$InnerRadius",
+        L"BorderBrush:=$ThemeControlBorder"}},
+    ThemeTargetStyles{L"Border#RightCompanionDropShadowDismissTarget", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#RightCompanionDropShadow", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#LeftCompanionDropShadowDismissTarget", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#DropShadowDismissTarget", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid", {
+        L"RenderTransform:=<TranslateTransform X=\"3\" Y=\"-8\" />",
+        L"Canvas.ZIndex=99"}},
+    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Grid#MainContent > ContentPresenter#PrimaryCardContainer", {
+        L"Margin=0,0,0,-8"}},
+    ThemeTargetStyles{L"Grid#CommandSpace > Button#PrimaryButton > ContentPresenter#ContentPresenter", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"Grid#CommandSpace > Button#SecondaryButton > Button#CloseButton > ContentPresenter#ContentPresenter", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion > Border > ContentPresenter#ContentPresenter", {
+        L"Height=42",
+        L"Width=45",
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox", {
+        L"FontFamily=$ThFnt",
+        L"FontSize=14",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"Frame#StartFrame", {
+        L"Margin=0,-10,0,0"}},
+    ThemeTargetStyles{L"Grid#SuggestionsParentContainer", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsListHeader", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#GridViewContainer", {
+        L"Width=360",
+        L"Margin=5,0,-5,0"}},
+    ThemeTargetStyles{L"Grid#FrameRoot", {
+        L"Height=665"}},
+    ThemeTargetStyles{L"Grid#MainMenu", {
+        L"Width=445",
+        L"CornerRadius=$OuterRadius"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Grid#RightCompanionContainerGrid", {
+        L"Width=221",
+        L"Padding=-10,0,0,0",
+        L"RenderTransform:=<TranslateTransform X=\"-9\" />"}},
+    ThemeTargetStyles{L"Grid#CompanionRoot", {
+        L"Width=225"}},
+    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Grid#MainContent > Grid#ActionsBar", {
+        L"Transform3D:=<CompositeTransform3D TranslateX=\"-3\"/>"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton > Grid#RootGrid", {
+        L"CornerRadius=$InnerRadius",
+        L"Margin=2,0,0,0"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Margin=52,-577,52,576"}},
+    ThemeTargetStyles{L"Grid#AllListHeading", {
+        L"Margin=0,80,-5,0"}},
+    ThemeTargetStyles{L"Grid#NoTopLevelSuggestionsText", {
+        L"Height=0",
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#ShowMoreSuggestions", {
+        L"Height=0",
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot > Grid[2]", {
+        L"MinHeight=0",
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"GridView#PinnedList", {
+        L"Margin=9,0,-9,-60"}},
+    ThemeTargetStyles{L"GridView#RecommendedList", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList", {
+        L"Margin=0,-30,0,0",
+        L"Padding=0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.PipsPager#PipsPager", {
+        L"Margin=-30,-10,0,10"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView", {
+        L"Margin=0,0,-44,0"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#QueryFormulationRoot", {
+        L"Margin=0,-4,0,10"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
+        L"Height=42",
+        L"Margin=-23,-2,72,0"}},
+    ThemeTargetStyles{L"StartMenu.StartHome", {
+        L"Width=450",
+        L"Margin=-15,8,5,-53"}},
+    ThemeTargetStyles{L"TextBlock#ZoomedOutHeading", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"TextBlock#DisplayName", {
+        L"Margin=8,3,8,0",
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt",
+        L"Margin=62,6,0,-6"}},
+    ThemeTargetStyles{L"TextBlock#AllListHeadingText", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt"}},
+    ThemeTargetStyles{L"TextBlock#UserTileNameText", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton > Grid > ContentPresenter > TextBlock#PlaceholderText", {
+        L"FontFamily=$ThFnt",
+        L"FontSize=14",
+        L"FontWeight=$ThFntWt",
+        L"RenderTransform:=<TranslateTransform Y=\"1.5\" />"}},
+    ThemeTargetStyles{L"TextBlock#AppDisplayName", {
+        L"FontFamily=$ThFnt",
+        L"FontSize=12.5",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"Button#Header > Border > TextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontSize=14",
+        L"FontWeight=$ThHdnWt"}},
+    ThemeTargetStyles{L"TextBlock#PlaceholderTextContentPresenter", {
+        L"FontFamily=$ThFnt"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton > Grid > ContentPresenter > TextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontSize=14",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"TextBlock#ShowMorePinnedButtonText", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > ContentControl > Grid > TextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontSize=12.5",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"TextBlock[FontSize=12]", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt",
+        L"FontSize=12.5"}},
+    ThemeTargetStyles{L"TextBlock[FontSize=14]", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"TextBlock[FontSize=18]", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt"}},
+    ThemeTargetStyles{L"ToolTip > ContentPresenter > TextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt",
+        L"FontSize=13"}},
+    ThemeTargetStyles{L"ContentPresenter#PrimaryCardContainer > Grid > Grid > TextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt",
+        L"FontSize=15"}},
+    ThemeTargetStyles{L"ContentPresenter > TextBlock#FolderNameTextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt"}},
+    ThemeTargetStyles{L"MenuFlyoutItem > Grid#LayoutRoot > TextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt",
+        L"FontSize=14.5",
+        L"RenderTransform:=<TranslateTransform X=\"1\" Y=\"0.5\" />"}},
+    ThemeTargetStyles{L"Button#ZoomInButton > Grid > ContentPresenter#ContentPresenter > StackPanel > TextBlock", {
+        L"FontFamily=$ThFnt"}},
+    ThemeTargetStyles{L"ListView#ZoomedOutListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > ListViewItem > Grid#ContentBorder > ContentPresenter#ContentPresenter > Viewbox > Border > TextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"TextBlock#SeeAllButtonLabelTextblock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThFntWt"}},
+    ThemeTargetStyles{L"TextBlock#FolderNameTextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt"}},
+    ThemeTargetStyles{L"TextBox#MutableFolderNameTextBox", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt"}},
+    ThemeTargetStyles{L"TextBox#MutableFolderNameTextBox > Grid > ScrollViewer#ContentElement > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Windows.UI.Xaml.Internal.TextBoxView", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion", {
+        L"Margin=-73,-1,73,1",
+        L"Height=42",
+        L"Width=45"}},
+    ThemeTargetStyles{L"ToolTip", {
+        L"CornerRadius=$OuterRadius",
+        L"BorderBrush:=$ThemeOutBorder",
+        L"Background:=$ThemeFlyout"}},
+    ThemeTargetStyles{L"StartDocked.UserTileView", {
+        L"Margin=286,0,-23,0"}},
+    ThemeTargetStyles{L"TextBlock#SubFolderNameTextBlock", {
+        L"FontFamily=$ThFnt",
+        L"FontWeight=$ThHdnWt"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid > Button", {
+        L"RenderTransform:=<TranslateTransform X=\"5\" />"}},
+}, {
+    L"ThemeBorder=<SolidColorBrush Color=\"{ThemeResource Border}\" />",
+    L"OuterRadius=10",
+    L"InnerRadius=8",
+    L"ThFnt=Nunito",
+    L"ThemeOverlay=<SolidColorBrush Color=\"{ThemeResource Overlay}\" />",
+    L"ThFntWt=Normal",
+    L"ThHdnWt=Semibold",
+    L"ThemeBtn=<SolidColorBrush Color=\"{ThemeResource Btn}\"/>",
+    L"ThemeControlBorder=<SolidColorBrush Color=\"{ThemeResource ControlBorder}\" />",
+    L"ThemeOutBorder=<SolidColorBrush Color=\"#66757575\"/>",
+    L"ThemeFlyout=<AcrylicBrush BackgroundSource=\"Backdrop\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.1\" TintLuminosityOpacity=\"0.8\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" />",
+}, {
+    L"Overlay@Light=#40FFFFFF",
+    L"Overlay@Dark=#09FFFFFF",
+    L"Border@Light=#0F000000",
+    L"Border@Dark=#19000000",
+    L"ControlBorder@Light=#0F000000",
+    L"ControlBorder@Dark=#15FFFFFF",
+    L"Btn@Light=#90FFFFFF",
+    L"Btn@Dark=#20FFFFFF",
+}, {
+    ThemeTargetStyles{L".curatedSettingsGroup, #scopesHeader", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L"#qfPreviewPane", {
+        L"margin-right: -10px !important",
+        L"border-radius: 8px !important"}},
+    ThemeTargetStyles{L".suggsList, .suggContainer", {
+        L"margin-right: 5px !important",
+        L"margin-left: 0px !important"}},
 }};
 
 // clang-format on
@@ -6522,11 +6856,20 @@ enum class ResourceVariableTheme {
     Light,
 };
 
+enum class ResourceVariableType {
+    String,
+    Xaml,
+    ThemeResourceReference,
+};
+
 struct ResourceVariableEntry {
     std::wstring key;
     std::wstring value;
     ResourceVariableTheme theme;
+    ResourceVariableType type;
 };
+
+std::vector<ResourceVariableEntry> g_resourceVariables;
 
 // Track original resource values for restoration (per-thread since
 // Application::Current().Resources() is per-thread).
@@ -6535,11 +6878,6 @@ std::unordered_map<std::wstring, winrt::Windows::Foundation::IInspectable>
 
 // Track our merged theme dictionary for cleanup (per-thread).
 ResourceDictionary g_resourceVariablesThemeDict{nullptr};
-bool g_resourceVariablesThemeDictMerged = false;
-
-// Track theme resource entries that reference {ThemeResource ...} for refresh
-// (per-thread).
-std::vector<ResourceVariableEntry> g_themeResourceEntries;
 
 // For listening to theme color changes (per-thread).
 winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
@@ -6557,17 +6895,34 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
             Wh_Log(L"Using GetValue workaround for AcrylicBorder background");
             getValueWorkaround = true;
         }
-    } else if (property == FrameworkElement::MaxHeightProperty()) {
-        auto grid = elementDo.try_as<Controls::Grid>();
-        if (grid && grid.Name() == L"FrameRoot") {
-            Wh_Log(L"Using GetValue workaround for FrameRoot MaxHeight");
-            getValueWorkaround = true;
-        }
-    } else if (property == FrameworkElement::WidthProperty()) {
-        auto grid = elementDo.try_as<Controls::Grid>();
-        if (grid && grid.Name() == L"MainMenu") {
-            Wh_Log(L"Using GetValue workaround for MainMenu Width");
-            getValueWorkaround = true;
+    } else {
+        // The properties below return null from ReadLocalValue for some reason.
+        struct {
+            DependencyProperty property;
+            std::wstring_view elementType;
+            std::wstring_view elementName;
+        } propertiesForWorkaround[] = {
+            {FrameworkElement::MaxHeightProperty(),
+             L"Windows.UI.Xaml.Controls.Grid", L"FrameRoot"},
+            {FrameworkElement::WidthProperty(),
+             L"Windows.UI.Xaml.Controls.Grid", L"MainMenu"},
+            {FrameworkElement::WidthProperty(),
+             L"Windows.UI.Xaml.Controls.GridView", L"PinnedList"},
+        };
+
+        auto element = elementDo.try_as<FrameworkElement>();
+        if (element) {
+            auto elementName = element.Name();
+            auto elementClassName = winrt::get_class_name(element);
+            for (const auto& [prop, type, name] : propertiesForWorkaround) {
+                if (property == prop && elementName == name &&
+                    elementClassName == type) {
+                    Wh_Log(L"Using GetValue workaround for %.*s",
+                           static_cast<int>(name.length()), name.data());
+                    getValueWorkaround = true;
+                    break;
+                }
+            }
         }
     }
 
@@ -9195,16 +9550,16 @@ void ClearWebViewCustomizations(
     }
 }
 
+void MergeResourceVariables();
+
 void ApplyCustomizations(InstanceHandle handle,
                          FrameworkElement element,
                          PCWSTR fallbackClassName) {
-    // Merge resource dictionary on first element add. Merging it eariler on
+    // Merge resource dictionary on first element add. Merging it earlier on
     // window creation doesn't work, perhaps merged dictionaries are reset
     // during initialization.
-    if (!g_resourceVariablesThemeDictMerged) {
-        auto resources = Application::Current().Resources();
-        resources.MergedDictionaries().Append(g_resourceVariablesThemeDict);
-        g_resourceVariablesThemeDictMerged = true;
+    if (!g_resourceVariablesThemeDict) {
+        MergeResourceVariables();
     }
 
     if (!g_webContentCss.empty() || !g_webContentJs.empty()) {
@@ -9660,6 +10015,295 @@ void ProcessWebStylesFromSettings(
             .get();
 }
 
+std::optional<ResourceVariableEntry> ParseResourceVariable(
+    std::wstring_view entry,
+    const StyleConstants& styleConstants) {
+    // Skip if commented.
+    if (entry.starts_with(L"//")) {
+        return std::nullopt;
+    }
+
+    // Find the first '=' to split key and value.
+    auto eqPos = entry.find(L'=');
+    if (eqPos == entry.npos) {
+        Wh_Log(L"Skipping entry with no '=': %.*s",
+               static_cast<int>(entry.length()), entry.data());
+        return std::nullopt;
+    }
+
+    auto keyPart = TrimStringView(entry.substr(0, eqPos));
+    auto valueRaw = TrimStringView(entry.substr(eqPos + 1));
+    auto value = ApplyStyleConstants(valueRaw, styleConstants);
+
+    constexpr std::wstring_view kThemeResourcePrefix = L"{ThemeResource ";
+
+    ResourceVariableType type = ResourceVariableType::String;
+    if (keyPart.size() > 0 && keyPart.back() == L':') {
+        type = ResourceVariableType::Xaml;
+        keyPart = keyPart.substr(0, keyPart.size() - 1);
+        keyPart = TrimStringView(keyPart);
+    } else if (value.starts_with(kThemeResourcePrefix) &&
+               value.ends_with(L"}")) {
+        type = ResourceVariableType::ThemeResourceReference;
+        value = TrimStringView(
+            value.substr(kThemeResourcePrefix.size(),
+                         value.size() - kThemeResourcePrefix.size() - 1));
+    }
+
+    ResourceVariableTheme theme = ResourceVariableTheme::None;
+    std::wstring key;
+
+    // Check for @theme suffix in key part.
+    auto atPos = keyPart.find(L'@');
+    if (atPos != keyPart.npos) {
+        key = TrimStringView(keyPart.substr(0, atPos));
+        auto themePart = TrimStringView(keyPart.substr(atPos + 1));
+        if (themePart == L"Dark") {
+            theme = ResourceVariableTheme::Dark;
+        } else if (themePart == L"Light") {
+            theme = ResourceVariableTheme::Light;
+        } else {
+            Wh_Log(L"Unknown theme '%.*s', expected 'Dark' or 'Light'",
+                   static_cast<int>(themePart.size()), themePart.data());
+            return std::nullopt;
+        }
+    } else {
+        key = std::wstring(keyPart);
+    }
+
+    return ResourceVariableEntry{std::move(key), std::move(value), theme, type};
+}
+
+winrt::Windows::Foundation::IInspectable ParseXamlValue(
+    std::wstring_view xamlValue) {
+    std::wstring xaml;
+    xaml += L"        <Setter Property=\"Tag\">\n";
+    xaml += L"            <Setter.Value>\n";
+    xaml += xamlValue;
+    xaml += L"\n";
+    xaml += L"            </Setter.Value>\n";
+    xaml += L"        </Setter>\n";
+
+    auto style = GetStyleFromXamlSetters(L"FrameworkElement", xaml);
+    return style.Setters().GetAt(0).as<Setter>().Value();
+}
+
+bool ProcessResourceVariable(ResourceDictionary resources,
+                             ResourceDictionary darkDict,
+                             ResourceDictionary lightDict,
+                             const ResourceVariableEntry& entry) {
+    auto boxedKey = winrt::box_value(entry.key);
+
+    if (entry.theme != ResourceVariableTheme::None) {
+        ResourceDictionary& targetDict =
+            entry.theme == ResourceVariableTheme::Dark ? darkDict : lightDict;
+
+        if (targetDict.HasKey(boxedKey)) {
+            Wh_Log(
+                L"Resource variable key '%s' already exists in theme '%s', "
+                L"skipping",
+                entry.key.c_str(),
+                entry.theme == ResourceVariableTheme::Dark ? L"Dark"
+                                                           : L"Light");
+            return false;
+        }
+
+        winrt::Windows::Foundation::IInspectable value;
+        switch (entry.type) {
+            case ResourceVariableType::String:
+                value = winrt::box_value(entry.value);
+                break;
+            case ResourceVariableType::Xaml:
+                value =
+                    entry.value.empty() ? nullptr : ParseXamlValue(entry.value);
+                break;
+            case ResourceVariableType::ThemeResourceReference:
+                value = resources.Lookup(winrt::box_value(entry.value));
+                break;
+        }
+
+        targetDict.Insert(boxedKey, value);
+
+        return true;
+    }
+
+    // key= - convert using existing resource type.
+    auto existingResource = resources.TryLookup(boxedKey);
+    if (!existingResource) {
+        Wh_Log(L"Resource variable key '%s' not found, skipping",
+               entry.key.c_str());
+        return false;
+    }
+
+    auto [it, inserted] =
+        g_originalResourceValues.try_emplace(entry.key, existingResource);
+    if (!inserted) {
+        Wh_Log(L"Resource variable key '%s' already modified, skipping",
+               entry.key.c_str());
+        return false;
+    }
+
+    winrt::Windows::Foundation::IInspectable value;
+    switch (entry.type) {
+        case ResourceVariableType::String: {
+            auto resourceClassName = winrt::get_class_name(existingResource);
+
+            // Unwrap IReference<T> to get inner type name.
+            if (resourceClassName.starts_with(
+                    L"Windows.Foundation.IReference`1<") &&
+                resourceClassName.ends_with(L'>')) {
+                size_t prefixSize =
+                    sizeof("Windows.Foundation.IReference`1<") - 1;
+                resourceClassName =
+                    winrt::hstring(resourceClassName.data() + prefixSize,
+                                   resourceClassName.size() - prefixSize - 1);
+            }
+
+            value = Markup::XamlBindingHelper::ConvertValue(
+                Interop::TypeName{resourceClassName},
+                winrt::box_value(entry.value));
+            break;
+        }
+
+        case ResourceVariableType::Xaml:
+            value = entry.value.empty() ? nullptr : ParseXamlValue(entry.value);
+            break;
+
+        case ResourceVariableType::ThemeResourceReference:
+            value = resources.Lookup(winrt::box_value(entry.value));
+            break;
+    }
+
+    resources.Insert(boxedKey, value);
+
+    return true;
+}
+
+void RefreshThemeResourceEntries() {
+    if (g_resourceVariables.empty()) {
+        return;
+    }
+
+    Wh_Log(L"Refreshing theme resource entries");
+
+    auto resources = Application::Current().Resources();
+
+    auto darkDict = g_resourceVariablesThemeDict.ThemeDictionaries()
+                        .TryLookup(winrt::box_value(L"Dark"))
+                        .try_as<ResourceDictionary>();
+    auto lightDict = g_resourceVariablesThemeDict.ThemeDictionaries()
+                         .TryLookup(winrt::box_value(L"Light"))
+                         .try_as<ResourceDictionary>();
+
+    for (const auto& entry : g_resourceVariables) {
+        if (entry.type != ResourceVariableType::ThemeResourceReference) {
+            continue;
+        }
+
+        try {
+            auto boxedKey = winrt::box_value(entry.key);
+            auto value = resources.Lookup(winrt::box_value(entry.value));
+
+            if (entry.theme == ResourceVariableTheme::Dark && darkDict) {
+                darkDict.Insert(boxedKey, value);
+            } else if (entry.theme == ResourceVariableTheme::Light &&
+                       lightDict) {
+                lightDict.Insert(boxedKey, value);
+            } else {
+                resources.Insert(boxedKey, value);
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error refreshing '%s': %08X", entry.key.c_str(),
+                   ex.code());
+        }
+    }
+}
+
+std::vector<ResourceVariableEntry> ProcessResourceVariablesFromSettings(
+    const StyleConstants& styleConstants,
+    const std::vector<PCWSTR>& themeResourceVariables) {
+    std::vector<ResourceVariableEntry> resourceVariables;
+
+    for (const auto& themeResourceVariable : themeResourceVariables) {
+        Wh_Log(L"Processing theme resource variable %s", themeResourceVariable);
+
+        auto parsed =
+            ParseResourceVariable(themeResourceVariable, styleConstants);
+        if (parsed) {
+            resourceVariables.push_back(std::move(*parsed));
+        }
+    }
+
+    for (int i = 0;; i++) {
+        string_setting_unique_ptr setting(
+            Wh_GetStringSetting(L"themeResourceVariables[%d]", i));
+        if (!*setting.get()) {
+            break;
+        }
+
+        Wh_Log(L"Processing resource variable %s", setting.get());
+
+        auto parsed = ParseResourceVariable(setting.get(), styleConstants);
+        if (parsed) {
+            resourceVariables.push_back(std::move(*parsed));
+        }
+    }
+
+    return resourceVariables;
+}
+
+void MergeResourceVariables() {
+    auto resources = Application::Current().Resources();
+
+    // Create theme dictionaries for @Dark/@Light resources.
+    g_resourceVariablesThemeDict = ResourceDictionary();
+    ResourceDictionary darkDict;
+    ResourceDictionary lightDict;
+    bool hasThemeResources = false;
+    bool hasThemeResourceReferences = false;
+
+    for (auto it = g_resourceVariables.rbegin();
+         it != g_resourceVariables.rend(); ++it) {
+        Wh_Log(L"Processing resource variable %s", it->key.c_str());
+
+        try {
+            if (ProcessResourceVariable(resources, darkDict, lightDict, *it)) {
+                if (it->theme != ResourceVariableTheme::None) {
+                    hasThemeResources = true;
+                }
+
+                if (it->type == ResourceVariableType::ThemeResourceReference) {
+                    hasThemeResourceReferences = true;
+                }
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        } catch (std::exception const& ex) {
+            Wh_Log(L"Error: %S", ex.what());
+        }
+    }
+
+    if (hasThemeResources) {
+        g_resourceVariablesThemeDict.ThemeDictionaries().Insert(
+            winrt::box_value(L"Dark"), darkDict);
+        g_resourceVariablesThemeDict.ThemeDictionaries().Insert(
+            winrt::box_value(L"Light"), lightDict);
+
+        resources.MergedDictionaries().Append(g_resourceVariablesThemeDict);
+    }
+
+    // Register for color changes to refresh theme resource references.
+    if (hasThemeResourceReferences) {
+        g_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
+        auto dispatcherQueue =
+            winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+        g_colorValuesChangedToken =
+            g_uiSettings.ColorValuesChanged([dispatcherQueue](auto&&, auto&&) {
+                dispatcherQueue.TryEnqueue(RefreshThemeResourceEntries);
+            });
+    }
+}
+
 void ProcessAllStylesFromSettings() {
     PCWSTR themeName = Wh_GetStringSetting(L"theme");
     const Theme* theme = nullptr;
@@ -9752,6 +10396,8 @@ void ProcessAllStylesFromSettings() {
         theme = g_isRedesignedStartMenu
                     ? &g_themeTintedGlass
                     : &g_themeTintedGlass_variant_ClassicStartMenu;
+    } else if (wcscmp(themeName, L"LayerMicaUI") == 0) {
+        theme = &g_themeLayerMicaUI;
     }
     Wh_FreeStringSetting(themeName);
 
@@ -9789,222 +10435,14 @@ void ProcessAllStylesFromSettings() {
         }
     }
 
+    g_resourceVariables = ProcessResourceVariablesFromSettings(
+        styleConstants,
+        theme ? theme->themeResourceVariables : std::vector<PCWSTR>{});
+
     if (g_target == Target::SearchHost) {
         ProcessWebStylesFromSettings(styleConstants,
                                      theme ? theme->webViewTargetStyles
                                            : std::vector<ThemeTargetStyles>{});
-    }
-}
-
-std::optional<ResourceVariableEntry> ParseResourceVariable(
-    std::wstring_view entry,
-    const StyleConstants& styleConstants) {
-    // Skip if commented.
-    if (entry.starts_with(L"//")) {
-        return std::nullopt;
-    }
-
-    // Find the first '=' to split key and value.
-    auto eqPos = entry.find(L'=');
-    if (eqPos == entry.npos) {
-        Wh_Log(L"Skipping entry with no '=': %.*s",
-               static_cast<int>(entry.length()), entry.data());
-        return std::nullopt;
-    }
-
-    auto keyPart = TrimStringView(entry.substr(0, eqPos));
-    auto valueRaw = TrimStringView(entry.substr(eqPos + 1));
-    auto value = ApplyStyleConstants(valueRaw, styleConstants);
-
-    ResourceVariableTheme theme = ResourceVariableTheme::None;
-    std::wstring key;
-
-    // Check for @theme suffix in key part.
-    auto atPos = keyPart.find(L'@');
-    if (atPos != keyPart.npos) {
-        key = TrimStringView(keyPart.substr(0, atPos));
-        auto themePart = TrimStringView(keyPart.substr(atPos + 1));
-        if (themePart == L"Dark") {
-            theme = ResourceVariableTheme::Dark;
-        } else if (themePart == L"Light") {
-            theme = ResourceVariableTheme::Light;
-        } else {
-            Wh_Log(L"Unknown theme '%.*s', expected 'Dark' or 'Light'",
-                   static_cast<int>(themePart.size()), themePart.data());
-            return std::nullopt;
-        }
-    } else {
-        key = std::wstring(keyPart);
-    }
-
-    return ResourceVariableEntry{std::move(key), std::move(value), theme};
-}
-
-constexpr std::wstring_view kThemeResourcePrefix = L"{ThemeResource ";
-
-bool IsThemeResourceReference(std::wstring_view value) {
-    return value.starts_with(kThemeResourcePrefix) && value.ends_with(L"}");
-}
-
-winrt::Windows::Foundation::IInspectable ResolveResourceVariableValue(
-    ResourceDictionary resources,
-    std::wstring_view value) {
-    // Check for {ThemeResource X} syntax - look up the resource directly
-    // to preserve dynamic theme-aware behavior.
-    if (IsThemeResourceReference(value)) {
-        auto resourceKey =
-            value.substr(kThemeResourcePrefix.size(),
-                         value.size() - kThemeResourcePrefix.size() - 1);
-        return resources.Lookup(
-            winrt::box_value(winrt::hstring(TrimStringView(resourceKey))));
-    }
-
-    // For other values, use boxed string (works for colors, etc.).
-    return winrt::box_value(winrt::hstring(value));
-}
-
-// Returns true if a theme resource was added.
-bool ProcessResourceVariableFromSetting(ResourceDictionary resources,
-                                        ResourceDictionary darkDict,
-                                        ResourceDictionary lightDict,
-                                        const ResourceVariableEntry& entry) {
-    auto boxedKey = winrt::box_value(entry.key);
-
-    if (entry.theme != ResourceVariableTheme::None) {
-        // Key@Dark= or Key@Light= - add to theme dict.
-        auto value = ResolveResourceVariableValue(resources, entry.value);
-        if (entry.theme == ResourceVariableTheme::Dark) {
-            darkDict.Insert(boxedKey, value);
-        } else {
-            lightDict.Insert(boxedKey, value);
-        }
-        return true;
-    }
-
-    // key= - convert using existing resource type.
-    auto existingResource = resources.TryLookup(boxedKey);
-    if (!existingResource) {
-        Wh_Log(L"Resource variable key '%s' not found, skipping",
-               entry.key.c_str());
-        return false;
-    }
-
-    if (!g_originalResourceValues.contains(entry.key)) {
-        g_originalResourceValues[entry.key] = existingResource;
-    }
-
-    auto resourceClassName = winrt::get_class_name(existingResource);
-
-    // Unwrap IReference<T> to get inner type name.
-    if (resourceClassName.starts_with(L"Windows.Foundation.IReference`1<") &&
-        resourceClassName.ends_with(L'>')) {
-        size_t prefixSize = sizeof("Windows.Foundation.IReference`1<") - 1;
-        resourceClassName =
-            winrt::hstring(resourceClassName.data() + prefixSize,
-                           resourceClassName.size() - prefixSize - 1);
-    }
-
-    resources.Insert(boxedKey, Markup::XamlBindingHelper::ConvertValue(
-                                   Interop::TypeName{resourceClassName},
-                                   winrt::box_value(entry.value)));
-    return false;
-}
-
-void RefreshThemeResourceEntries() {
-    if (g_themeResourceEntries.empty()) {
-        return;
-    }
-
-    Wh_Log(L"Refreshing %zu theme resource entries",
-           g_themeResourceEntries.size());
-
-    auto resources = Application::Current().Resources();
-
-    auto darkDict = g_resourceVariablesThemeDict.ThemeDictionaries()
-                        .TryLookup(winrt::box_value(L"Dark"))
-                        .try_as<ResourceDictionary>();
-    auto lightDict = g_resourceVariablesThemeDict.ThemeDictionaries()
-                         .TryLookup(winrt::box_value(L"Light"))
-                         .try_as<ResourceDictionary>();
-
-    for (const auto& entry : g_themeResourceEntries) {
-        try {
-            auto boxedKey = winrt::box_value(entry.key);
-            auto value = ResolveResourceVariableValue(resources, entry.value);
-
-            if (entry.theme == ResourceVariableTheme::Dark && darkDict) {
-                darkDict.Insert(boxedKey, value);
-            } else if (entry.theme == ResourceVariableTheme::Light &&
-                       lightDict) {
-                lightDict.Insert(boxedKey, value);
-            }
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Error refreshing '%s': %08X", entry.key.c_str(),
-                   ex.code());
-        }
-    }
-}
-
-void ProcessResourceVariablesFromSettings() {
-    StyleConstants styleConstants = LoadStyleConstants(std::vector<PCWSTR>{});
-
-    auto resources = Application::Current().Resources();
-
-    // Create theme dictionaries for @Dark/@Light resources.
-    g_resourceVariablesThemeDict = ResourceDictionary();
-    ResourceDictionary darkDict;
-    ResourceDictionary lightDict;
-    bool hasThemeResources = false;
-
-    for (int i = 0;; i++) {
-        string_setting_unique_ptr setting(
-            Wh_GetStringSetting(L"themeResourceVariables[%d]", i));
-        if (!*setting.get()) {
-            break;
-        }
-
-        Wh_Log(L"Processing theme resource variable %s", setting.get());
-
-        auto parsed = ParseResourceVariable(setting.get(), styleConstants);
-        if (!parsed) {
-            continue;
-        }
-
-        try {
-            if (ProcessResourceVariableFromSetting(resources, darkDict,
-                                                   lightDict, *parsed)) {
-                hasThemeResources = true;
-
-                // Track entries with {ThemeResource ...} for refresh on color
-                // change.
-                if (IsThemeResourceReference(parsed->value)) {
-                    g_themeResourceEntries.push_back(*parsed);
-                }
-            }
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-        } catch (std::exception const& ex) {
-            Wh_Log(L"Error: %S", ex.what());
-        }
-    }
-
-    if (hasThemeResources) {
-        g_resourceVariablesThemeDict.ThemeDictionaries().Insert(
-            winrt::box_value(L"Dark"), darkDict);
-        g_resourceVariablesThemeDict.ThemeDictionaries().Insert(
-            winrt::box_value(L"Light"), lightDict);
-    }
-
-    // Register for color changes to refresh theme resource references.
-    if (!g_themeResourceEntries.empty()) {
-        g_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
-        auto dispatcherQueue =
-            winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
-        g_colorValuesChangedToken =
-            g_uiSettings.ColorValuesChanged([dispatcherQueue](auto&&, auto&&) {
-                dispatcherQueue.TryEnqueue(
-                    []() { RefreshThemeResourceEntries(); });
-            });
     }
 }
 
@@ -10015,7 +10453,7 @@ void UninitializeResourceVariables() {
         g_colorValuesChangedToken = {};
     }
     g_uiSettings = nullptr;
-    g_themeResourceEntries.clear();
+    g_resourceVariables.clear();
 
     // Restore original resource values.
     auto resources = Application::Current().Resources();
@@ -10031,13 +10469,10 @@ void UninitializeResourceVariables() {
 
     // Remove our merged theme dictionary.
     if (g_resourceVariablesThemeDict) {
-        if (g_resourceVariablesThemeDictMerged) {
-            auto merged = resources.MergedDictionaries();
-            uint32_t index;
-            if (merged.IndexOf(g_resourceVariablesThemeDict, index)) {
-                merged.RemoveAt(index);
-            }
-            g_resourceVariablesThemeDictMerged = false;
+        auto merged = resources.MergedDictionaries();
+        uint32_t index;
+        if (merged.IndexOf(g_resourceVariablesThemeDict, index)) {
+            merged.RemoveAt(index);
         }
         g_resourceVariablesThemeDict = nullptr;
     }
@@ -10093,7 +10528,6 @@ void InitializeSettingsAndTap() {
     }
 
     ProcessAllStylesFromSettings();
-    ProcessResourceVariablesFromSettings();
 
     HRESULT hr = InjectWindhawkTAP();
     if (FAILED(hr)) {
