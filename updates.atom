@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-20T16:57:35.000Z</updated>
+    <updated>2026-03-20T20:50:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.4]]></title>
+        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#9c7f3656e98a7ece5e213dae90a01b8b8fe4ed5a</id>
+        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
+        <updated>2026-03-20T20:50:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the LiquidGlass theme.</li>
+<li>Some of the settings, such as the Explorer frame container height and the background style, are now applied right away.</li>
+<li>Added the following properties to <code>WindhawkBlur</code>: <code>TintLuminosityOpacity</code>, <code>TintSaturation</code>, <code>NoiseOpacity</code>, and <code>NoiseDensity</code>. The implementation was contributed by <a href="https://github.com/Lockframe">Jhen</a>. For details, refer to <a href="https://github.com/ramensoftware/windows-11-file-explorer-styling-guide#windhawkblur-effect-as-color">the styling guide</a>.</li>
+<li>Added XAML syntax support for resource variables.</li>
+<li>Improved resource variable handling and theme resource refresh logic.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 3.0]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#9d08e8f1ebd6a28659c4546c4aa8852f3cec4d21</id>
@@ -366,19 +383,6 @@ foreground, the window will stay in place instead of being minimized.</p>]]></co
         <author>
             <name>ItsProfessional</name>
             <uri>https://github.com/ItsProfessional</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Desktop Indicator 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-desktop-indicator#d205b0c73e8dacf528c684eac03b444da31b803a</id>
-        <link href="https://windhawk.net/mods/taskbar-desktop-indicator"/>
-        <updated>2026-03-10T10:30:07.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixes the case where taskbar-desktop-indicator can stop updating after explorer.exe restarts if notification registration initially fails and polling fallback is disabled.</p>
-<p>This keeps the notification thread alive and retries registration until the virtual desktop notification service becomes available, instead of attempting registration only once during startup.</p>
-<p>Related issue: <a href="https://github.com/ramensoftware/windhawk-mods/issues/3520">#3520</a></p>]]></content>
-        <author>
-            <name>Simon Benedict</name>
-            <uri>https://github.com/simon-ami</uri>
         </author>
     </entry>
 </feed>

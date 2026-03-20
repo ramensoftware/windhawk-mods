@@ -1,3 +1,11 @@
+## 1.4 ([Mar 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9c7f3656e98a7ece5e213dae90a01b8b8fe4ed5a/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Added the LiquidGlass theme.
+* Some of the settings, such as the Explorer frame container height and the background style, are now applied right away.
+* Added the following properties to `WindhawkBlur`: `TintLuminosityOpacity`, `TintSaturation`, `NoiseOpacity`, and `NoiseDensity`. The implementation was contributed by [Jhen](https://github.com/Lockframe). For details, refer to [the styling guide](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide#windhawkblur-effect-as-color).
+* Added XAML syntax support for resource variables.
+* Improved resource variable handling and theme resource refresh logic.
+
 ## 1.3 ([Feb 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4cdb11502fa5f68111eaf7cc6a54cf3ff68f2246/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Added new options for translucent background effects. You can choose between Acrylic, Mica, or Mica Alt (File Explorer default), and optionally apply the effect for the whole window (only supported in dark mode).
