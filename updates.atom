@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-18T17:04:19.000Z</updated>
+    <updated>2026-03-20T12:48:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word PDF Lossless Export 1.0]]></title>
+        <id>https://windhawk.net/mods/word-pdf-lossless-export#de2754e1d4e4ba64ccf0be547f78037a523311fb</id>
+        <link href="https://windhawk.net/mods/word-pdf-lossless-export"/>
+        <updated>2026-03-20T12:48:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wordpdflosslessexport">Word PDF Lossless Export</h1>
+<p><em>Downsampling and JPEG lossy compression are now over, for good.</em></p>
+<p>Microsoft Word has a notorious, long-standing issue when exporting documents to PDF (via <code>File-&gt; Export -&gt; Create PDF / XPS</code>): it aggressively downsamples and re-compresses images. Even if you enable "Do not compress images in file" and select "High fidelity" in Word's options, the internal PDF rendering engine (<code>mso.dll</code> / <code>exp_pdf.dll</code>) still runs a hidden optimization pass. It calculates the physical dimensions of the image on the page, (almost always) <em>decides</em> your high-resolution image is "too big", downscales it via GDI+, and forces a secondary JPEG compression. This ruins pixel-perfect diagrams, degrades high-res photos, and introduces irreversible compression artifacts. Which is especially frustrating and super annoying because Word's PDF export is often the go-to solution for sharing documents. We expect it to be every bit as good as the original.</p>
+<p>This mod performs a deep, memory-level intervention on Word's internal graphics rendering pipeline to bypass these limitations. It intercepts the core image resolution calculator (<code>DOCEXIMAGE::HrComputeSize</code>) to prevent dimensional downscaling, and hooks the output validator (<code>DOCEXIMAGE::HrCheckForLosslessOutput</code>) to force the engine to use a lossless FLATE (Zlib) stream instead of the default JPEG encoder.</p>
+<p><strong>Key Improvements:</strong></p>
+<ul>
+<li><strong>Pixel-Perfect Pictures:</strong> Solid PNG images, JPEGs and BMPs, etc. are exported with absolute 100% pixel accuracy. No quality loss, no artifacts. PNGs with transparency are guaranteed 99% pixel accuracy (this is due to limits of GDI+, which does not handle alpha channel perfectly, but it's still a huge improvement over what we currently have. For detailed information, see Test Results below).</li>
+<li><strong>True Lossless Quality:</strong> Bypasses Word's forced secondary JPEG compression entirely, preserving the exact quality of your original high-resolution inserts.</li>
+<li><strong>Overrides Broken Settings:</strong> Bypasses the hardcoded internal DPI limits that Word's built-in <em>so called</em> "High fidelity" setting fails to disable.</li>
+<li><strong>Cross-Architecture Support:</strong> Dynamically adapts to both 64-bit and 32-bit versions of Office using precise memory offsets and calling conventions.</li>
+</ul>
+<p><em>Note: this mod needs pdb symbol of <code>exp_pdf.dll</code> and <code>mso.dll</code> to work. And for <code>mso.dll</code> the symbol file is expected to be quite large (~90mb in size). Windhawk will download these automatically when launching Word first time after you installed the mod (the popup at right bottom corner of your screen) please wait patiently and relaunch Word after it finishes.</em></p>
+<p><strong>Attention</strong>: this mod utilizes functions and data structures in <code>DOCEXIMAGE</code> class, which is undocumented and is subject to change without notice. If the mod causes crash when exporting PDFs, please <strong>open an issue</strong> at my <a href="https://github.com/JoeYe-233/windhawk-mods">GitHub repository</a> and provide your version of <code>mso.dll</code> (usually located in <code>C:\Program Files\Microsoft Office\root\vfs\ProgramFilesCommon[X64, X86]\Microsoft Shared\OFFICE16\MSO.DLL</code> where <code>[X64, X86]</code> varies based on your Microsoft Office architecture. For 64-bit Office, usually both X86 and X64 are available, use the X64 one; for 32-bit Office, use the X86 one).</p>
+<p><strong>Test Results and Verifications:</strong></p>
+<ul>
+<li><p><strong>Lossless performance guaranteed for JPEGs, BMPs, and other non-transparent formats</strong>: 100% lossless pixel-perfect accuracy. No downscaling, no compression artifacts or quality loss.</p></li>
+<li><p><strong>Lossless performance guaranteed for PNGs</strong>:</p></li>
+<li><p>100% lossless for pngs that <strong>does not contain</strong> transparent regions. (same as above, no downscaling, no compression artifacts or quality loss).</p></li>
+<li><p>99% (absolute visually lossless) for PNGs that <strong>contain</strong> transparent regions. (No downscaling, no compression artifacts, and negligible quality loss). This is because of how GDI+ handles transparent images (Pre-multiplied Alpha and Float to Integer rounding error). Combined, these may cause up to ±4 drift out of 255 (±0.016%) on each of 3 RGB channels. Also, RGB values for pixels on complete transparent regions (i.e., alpha strictly equals 0) are discarded by GDI+ for better performance. (which is actually a good thing as it increases redundancy, thus decreasing size of end product).</p></li>
+<li><p>Also, pictures embedded in SVGs are lossless too, because the mod hooks the core image processing pipeline, which applies to all images regardless of their source.</p></li>
+</ul>
+<p>Lossless picture extractor of PDF files are also provided to help you verify the output PDF files. You can get the Python script <a href="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/PDF_Image_Extractor_Lossless.py">here</a>.</p>
+<h3 id="beforeinputvsoutput">Before (input vs output)</h3>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-before.png" alt="Before" /></p>
+<p>(Image courtesy of <a href="https://pixabay.com/photos/winter-nature-trees-snow-cold-6762640/">Nicky ❤️🌿🐞🌿❤️</a> from Pixabay)</p>
+<h3 id="afterinputvsoutput">After (input vs output)</h3>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-after.png" alt="After" /></p>
+<h3 id="beforevsafterat800zoomleftafterrightbefore">Before vs After at 800% Zoom (Left: After, Right: Before)</h3>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-before-vs-after.png" alt="Before vs After" /></p>
+<p>(Left: After, Right: Before. Notice the severe downscaling and compression artifacts in the "Before" image, which are completely gone in the "After" image.)</p>
+<h3 id="pngwithtransparencytest">PNG with Transparency Test</h3>
+<p>(Image courtesy of <a href="https://pixabay.com/illustrations/fruit-nutrition-organic-healthy-6925630/">Sunriseforever</a> from Pixabay)</p>
+<p>Before (input vs output):</p>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-png-before.png" alt="Before" /></p>
+<p>After (input vs output):</p>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-png-after.png" alt="After" /></p>
+<p>(Notice the pixel value difference of A=0 (fully transparent) pixels, which is caused by GDI+'s handling of transparent images. This is expected.)</p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#ccbf8d62b852558521be1be12194cb2f2df85a56</id>
@@ -324,42 +371,6 @@ On later builds you may also need to replace the file Explorerframe.dll with the
         <author>
             <name>Simon Benedict</name>
             <uri>https://github.com/simon-ami</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Discord Balloon Notifications 1.0]]></title>
-        <id>https://windhawk.net/mods/discord-balloon-notifs#15fbe890bd7b4b772eae51e25bbb2e32ac34405f</id>
-        <link href="https://windhawk.net/mods/discord-balloon-notifs"/>
-        <updated>2026-03-09T23:52:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="discordballoonnotifications">Discord Balloon Notifications</h1>
-<p>Converts Discord's modern Windows toast notifications into balloon tips that appear from the system tray using Shell_NotifyIconW.</p>
-<p><img src="https://raw.githubusercontent.com/repensky/local-wh-mods/refs/heads/main/image.png" alt="Picture" /></p>
-<h1 id="warning">WARNING!</h1>
-<p>The use of third party Discord clients with this mod is <strong>NOT</strong> supported! This mod is designed for the official Discord app. It may or may not function properly with unofficial Discord clients. Try on your own risk.</p>
-<p>Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually. Otherwise, Discord may <strong>crash</strong> if not restarted on next notification.</p>
-<h2 id="requirement">Requirement:</h2>
-<p>Ensure <strong>EnableLegacyBalloonNotifications</strong> is set to <strong>1</strong> in <code>HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications</code></p>
-<h2 id="features">Features:</h2>
-<ul>
-<li>Notification sender and message is shown in the balloon</li>
-<li>Optionally shows the sender's profile picture as an icon in the balloon</li>
-<li>Configurable PFP icon size (Small 16px, Medium 24px, Large 32px)</li>
-<li>Clicking the balloon or tray icon brings Discord to the foreground</li>
-<li>Tray icon automatically removed when Discord exits</li>
-<li>Emoji decoding with an option to use basic glyphs supported by the font</li>
-<li>Right clicking on the tray icon features exiting Discord</li>
-</ul>
-<h2 id="note">Note:</h2>
-<p>This is tested on <strong>Windows 10 21H2 IoT Enterprise LTSC</strong>. It may or may not function properly on other Windows versions.
-<strong>Windows 11</strong> versions may need to use <strong>ExplorerPatcher</strong> for notifications to be shown in a balloon format.</p>
-<h2 id="note2">Note 2:</h2>
-<p>This mod <strong>downloads</strong> Discord emoji database only on first run for displaying emoji shortcode purposes as it does not support displaying all emojis.</p>
-<h2 id="note3">Note 3:</h2>
-<p>Balloon display duration is controlled by Windows.
-To change, navigate to <strong>Control Panel > Ease of Access Center > Use the computer without a display > How long should Windows notification dialog boxes stay open</strong></p>]]></content>
-        <author>
-            <name>repensky</name>
-            <uri>https://github.com/repensky</uri>
         </author>
     </entry>
 </feed>
