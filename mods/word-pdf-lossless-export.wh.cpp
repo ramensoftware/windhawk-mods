@@ -145,9 +145,18 @@ Then, LOSSLESS_FLAG_OFFSET can be determined as follows:
 32-bit platform：*((_DWORD *)this + 41) ---> LOSSLESS_FLAG_OFFSET = 41 * 4 = 164
 */
 
+// =============================================================
+// Architecture-dependent offsets and symbol signatures
+// =============================================================
 #ifdef _WIN64
+    // 64-bit Mangled Names
+    #define SYM_HrComputeSize          L"?HrComputeSize@DOCEXIMAGE@@AEAAJPEAMPEBVPointF@Gdiplus@@@Z"
+    #define SYM_HrCheckForLossless     L"?HrCheckForLosslessOutput@DOCEXIMAGE@@MEBAJH@Z"
     #define LOSSLESS_FLAG_OFFSET 224
 #else
+    // 32-bit Mangled Names
+    #define SYM_HrComputeSize          L"?HrComputeSize@DOCEXIMAGE@@AAEJPAMPBVPointF@Gdiplus@@@Z"
+    #define SYM_HrCheckForLossless     L"?HrCheckForLosslessOutput@DOCEXIMAGE@@MBEJH@Z"
     #define LOSSLESS_FLAG_OFFSET 164
 #endif
 
@@ -169,58 +178,45 @@ int CC_CALL Hook_HrCheckForLosslessOutput(void* pThis, int a1) {
 }
 
 // =============================================================
-// Core logic: Use Windhawk official iteration API for fuzzy matching
+// Core Symbol Hook logic
 // =============================================================
 void ScanAndHookMso() {
     HMODULE hMso = GetModuleHandleW(L"mso.dll");
     if (!hMso || g_bMsoHooked.exchange(true)) return;
 
-    WH_FIND_SYMBOL_OPTIONS options = {0};
+    WindhawkUtils::SYMBOL_HOOK msoDllHook[] = {
+        {
+            // private: long __thiscall DOCEXIMAGE::HrComputeSize(float *,class Gdiplus::PointF const *)
+            // (Note: MSVC DIA quirk adds a trailing space after "const *)" in undecorated names)
+            { SYM_HrComputeSize },
+            (void**)&pOrig_HrComputeSize,
+            (void*)Hook_HrComputeSize,
+            false
+        },
+        {
+            // protected: virtual long __thiscall DOCEXIMAGE::HrCheckForLosslessOutput(int)const
+            // (Note: MSVC DIA quirk adds a trailing space after "const" in undecorated names,
+            // using exact mangled names with noUndecoratedSymbols=TRUE bypasses this issue entirely)
+            { SYM_HrCheckForLossless },
+            (void**)&pOrig_HrCheckForLosslessOutput,
+            (void*)Hook_HrCheckForLosslessOutput,
+            false
+        }
+    };
+
+    WH_HOOK_SYMBOLS_OPTIONS options = {0};
     options.optionsSize = sizeof(options);
-    options.symbolServer = nullptr;
-    options.noUndecoratedSymbols = TRUE; // Core optimization: Only fetch decorated names, greatly improving parsing speed for huge PDBs
+    options.noUndecoratedSymbols = TRUE;
 
-    WH_FIND_SYMBOL findData = {0};
-    HANDLE hFind = Wh_FindFirstSymbol(hMso, &options, &findData);
+    if (WindhawkUtils::HookSymbols(hMso, msoDllHook, ARRAYSIZE(msoDllHook), &options)) {
 
-    if (!hFind) {
-        Wh_Log(L"[Error] Wh_FindFirstSymbol failed! Unable to open mso.dll symbol table.");
-        return;
+        // Don't forget to apply the hooks after setting them up, otherwise they won't take effect!
+        Wh_ApplyHookOperations();
+
+        Wh_Log(L"[Success] Hooks applied successfully to mso.dll! HrComputeSize and HrCheckForLosslessOutput are now hooked.");
+    } else {
+        Wh_Log(L"[Error] Failed to hook symbols in mso.dll. HrComputeSize and HrCheckForLosslessOutput are not hooked, and the mod will not work. Please make sure your Office version is supported and the symbol files are properly downloaded.");
     }
-
-    do {
-        if (!findData.symbolDecorated) continue;
-
-        // Fuzzy match for HrComputeSize
-        if (!pOrig_HrComputeSize &&
-            wcsstr(findData.symbolDecorated, L"HrComputeSize") &&
-            wcsstr(findData.symbolDecorated, L"DOCEXIMAGE")) {
-
-            Wh_SetFunctionHook(findData.address, (void*)Hook_HrComputeSize, (void**)&pOrig_HrComputeSize);
-            Wh_Log(L"[Success] Captured DOCEXIMAGE::HrComputeSize at 0x%p", findData.address);
-        }
-        // Fuzzy match for HrCheckForLosslessOutput
-        else if (!pOrig_HrCheckForLosslessOutput &&
-                 wcsstr(findData.symbolDecorated, L"HrCheckForLosslessOutput") &&
-                 wcsstr(findData.symbolDecorated, L"DOCEXIMAGE")) {
-
-            Wh_SetFunctionHook(findData.address, (void*)Hook_HrCheckForLosslessOutput, (void**)&pOrig_HrCheckForLosslessOutput);
-            Wh_Log(L"[Success] Captured DOCEXIMAGE::HrCheckForLosslessOutput at 0x%p", findData.address);
-        }
-
-        // Optimization: Stop iterating early if both are found
-        if (pOrig_HrComputeSize && pOrig_HrCheckForLosslessOutput) {
-            Wh_Log(L"[Main] All target functions found, terminating iteration early.");
-            break;
-        }
-
-    } while (Wh_FindNextSymbol(hFind, &findData));
-
-    Wh_FindCloseSymbol(hFind);
-    Wh_ApplyHookOperations();
-
-    if (!pOrig_HrComputeSize || !pOrig_HrCheckForLosslessOutput)
-        Wh_Log(L"[Warning] Iteration complete, but failed to find all target functions.");
 }
 
 // =============================================================
@@ -243,7 +239,10 @@ HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         fileName = fileName ? fileName + 1 : lpLibFileName;
 
         if (_wcsicmp(fileName, L"mso.dll") == 0) {
-            CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
+            HANDLE hThread = CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
+            if (hThread) {
+                CloseHandle(hThread);
+            }
         }
     }
 
@@ -255,7 +254,10 @@ BOOL Wh_ModInit() {
 
     if (GetModuleHandleW(L"mso.dll")) {
         // If already loaded, start thread directly
-        CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
+        HANDLE hThread = CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
+        if (hThread) {
+            CloseHandle(hThread);
+        }
     } else {
         // Not loaded yet, hook LoadLibrary to stand guard
         Wh_SetFunctionHook((void*)LoadLibraryExW, (void*)Hook_LoadLibraryExW, (void**)&pOrig_LoadLibraryExW);
