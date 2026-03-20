@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-20T12:48:44.000Z</updated>
+    <updated>2026-03-20T16:45:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.4.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#f6d529d39999d0cdbca3ca5f3a1233e09f4f13a3</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2026-03-20T16:45:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the LayerMicaUI theme.</li>
+<li>Updated themes: Windows10 (Minimal), WindowGlass.</li>
+<li>Added XAML syntax support for resource variables.</li>
+<li>Improved resource variable handling and theme resource refresh logic.</li>
+<li>Fixed restoration of pinned items column count.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word PDF Lossless Export 1.0]]></title>
         <id>https://windhawk.net/mods/word-pdf-lossless-export#de2754e1d4e4ba64ccf0be547f78037a523311fb</id>
@@ -353,24 +370,6 @@ On later builds you may also need to replace the file Explorerframe.dll with the
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Desktop Indicator 1.2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-desktop-indicator#f00beff69e901b08bbfd500d8fe2f59c2a861720</id>
-        <link href="https://windhawk.net/mods/taskbar-desktop-indicator"/>
-        <updated>2026-03-09T23:55:27.000Z</updated>
-        <content type="html"><![CDATA[<p>Adds optional custom color settings for the taskbar desktop indicator:</p>
-<ul>
-<li>custom color for the active indicator / number</li>
-<li>custom color for inactive workspace markers</li>
-<li>inactive marker opacity now also applies when a custom inactive color is set</li>
-<li>updates the settings descriptions accordingly</li>
-<li>bumps the mod version to 1.2.0</li>
-</ul>]]></content>
-        <author>
-            <name>Simon Benedict</name>
-            <uri>https://github.com/simon-ami</uri>
         </author>
     </entry>
 </feed>

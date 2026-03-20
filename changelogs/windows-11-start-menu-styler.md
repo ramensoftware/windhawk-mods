@@ -1,3 +1,11 @@
+## 1.4.1 ([Mar 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f6d529d39999d0cdbca3ca5f3a1233e09f4f13a3/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added the LayerMicaUI theme.
+* Updated themes: Windows10 (Minimal), WindowGlass.
+* Added XAML syntax support for resource variables.
+* Improved resource variable handling and theme resource refresh logic.
+* Fixed restoration of pinned items column count.
+
 ## 1.4 ([Mar 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7e05bbe573b538403775170df7259a4f434e20f3/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added more layout options to the mod settings. Now the classic layout with Phone Link can be selected, as well as the new (redesigned) layout.
