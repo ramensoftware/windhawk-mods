@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-20T20:50:24.000Z</updated>
+    <updated>2026-03-21T07:52:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Office UI Reverter (32/64-bit Universal) 1.0]]></title>
+        <id>https://windhawk.net/mods/office-ui-reverter-universal#a3b8e6191ffac4c94d2aff9583740019face5fc1</id>
+        <link href="https://windhawk.net/mods/office-ui-reverter-universal"/>
+        <updated>2026-03-21T07:52:41.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="officeuireverter3264bituniversal">Office UI Reverter (32/64-bit Universal)</h1>
+<p><em>(Updated to support both 32-bit and 64-bit via PDB Symbol Hooking)</em></p>
+<p><em>This mod is an enhanced fork of the original <a href="https://windhawk.net/mods/office-ui-reverter">Office UI Reverter</a> created by <strong>Amrsatrio</strong>.</em></p>
+<p>Reverts the <strong>Office 2022+/Microsoft 365 UI</strong> back to the look of <strong>Office 2019</strong> or <strong>Office 2016</strong>. Can be changed through mod settings.</p>
+<h2 id="note">⚠️ Note:</h2>
+<ul>
+<li>Early injection to Office processes is required to patch the UI style. This means the process used to launch Office must not be excluded from Windhawk injection.</li>
+<li>Please close all windows of an Office program and relaunch it to apply the new style.</li>
+<li>Older styles may lack icons for new features such as <em>Copilot</em>. Those are not covered by this mod.</li>
+<li>Be advised that Microsoft can remove the older style remaining in the application anytime in the future. When that happens, this mod will no longer work until a new workaround is found.</li>
+</ul>
+<h2 id="creditsacknowledgements">Credits &amp; Acknowledgements</h2>
+<ul>
+<li><strong><a href="https://github.com/Amrsatrio">Amrsatrio</a></strong>: For the original concept, the initial discovery of the <code>GetVisualStyleForSurface</code> function, and the UI style enumeration.</li>
+</ul>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.4]]></title>
         <id>https://windhawk.net/mods/windows-11-file-explorer-styler#9c7f3656e98a7ece5e213dae90a01b8b8fe4ed5a</id>
@@ -370,19 +395,6 @@ foreground, the window will stay in place instead of being minimized.</p>]]></co
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No SumatraPDF Drag Cursor 1.0.0]]></title>
-        <id>https://windhawk.net/mods/no-sumatrapdf-drag-cursor#df31498aec56f9a9cb1a8944f2120af88ed38b4a</id>
-        <link href="https://windhawk.net/mods/no-sumatrapdf-drag-cursor"/>
-        <updated>2026-03-10T13:21:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="nosumatrapdfdragcursor">No SumatraPDF Drag Cursor</h1>
-<p>This mod removes the drag cursor which is shown when panning a document by dragging with the cursor.
-<img src="https://raw.githubusercontent.com/ItsProfessional/Screenshots/refs/heads/main/Windhawk/no-sumatrapdf-drag-cursor.png" alt="SumatraPDF Drag Cursor" /></p>]]></content>
-        <author>
-            <name>ItsProfessional</name>
-            <uri>https://github.com/ItsProfessional</uri>
         </author>
     </entry>
 </feed>
