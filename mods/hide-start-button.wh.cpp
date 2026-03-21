@@ -268,7 +268,7 @@ bool HookTaskbarDllSymbols() {
     if (!module)
         return false;
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CTaskBand_ITaskListWndSite_vftable},
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
@@ -282,10 +282,11 @@ bool HookTaskbarDllSymbols() {
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
          &std__Ref_count_base__Decref_Original},
     };
-    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          &TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original,
