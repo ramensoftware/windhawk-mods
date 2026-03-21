@@ -2,7 +2,7 @@
 // @id              scroll-window-opacity
 // @name            Scroll Window Opacity
 // @description     Hold a key combination and scroll the mouse wheel to change the opacity of the window under the cursor
-// @version         1.0.2
+// @version         1.0.3
 // @author          Sondre Myrmel
 // @github          https://github.com/Sondre234
 // @twitter         https://x.com/ShaolinLoL
@@ -18,8 +18,8 @@
 Hold a configurable key combination (default: **Ctrl + Alt**) and scroll the mouse
 wheel to adjust the transparency of the top-level window under the cursor.
 
-- **Scroll up** — decrease opacity (more transparent)
-- **Scroll down** — increase opacity (more opaque)
+- **Scroll up** - decrease opacity (more transparent)
+- **Scroll down** - increase opacity (more opaque)
 
 The opacity step, minimum opacity, and modifier keys are all configurable in the
 settings panel.
@@ -50,11 +50,11 @@ to 100% opacity.
 
 - opacityStep: 1
   $name: Opacity Step (%)
-  $description: How much opacity changes per wheel notch (1–50)
+  $description: How much opacity changes per wheel notch (1-50)
 
 - minOpacity: 10
   $name: Minimum Opacity (%)
-  $description: Lowest opacity a window can be set to (1–90)
+  $description: Lowest opacity a window can be set to (1-90)
 */
 // ==/WindhawkModSettings==
 
