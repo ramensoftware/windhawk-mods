@@ -1,3 +1,7 @@
+## 2.1.1 ([Mar 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b997341ac65e9740a4f3ca291636e78b859c9e13/mods/taskbar-fade.wh.cpp))
+
+Fixed unintended desktop icon show/hide state override. The mod now checks if the user has naturally hidden their desktop icons via the Windows context menu, and will no longer force them to reappear when the taskbar wakes up or when the mod unloads.
+
 ## 2.1 ([Feb 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/24fd1c92dd79a8061eed9e2432e8d540ea1cc301/mods/taskbar-fade.wh.cpp))
 
 Cleaned the code a bit
