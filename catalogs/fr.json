@@ -6951,6 +6951,38 @@
                 "version": "1.0"
             }
         },
+        "scroll-window-opacity": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774080888000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774080888000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86",
+                    "x86-64"
+                ],
+                "author": "Sondre Myrmel",
+                "description": "Hold a key combination and scroll the mouse wheel to change the opacity of the window under the cursor",
+                "github": "https://github.com/Sondre234",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Scroll Window Opacity",
+                "twitter": "https://x.com/ShaolinLoL",
+                "version": "1.0.3"
+            }
+        },
         "search-menu-inspect-helper": {
             "details": {
                 "defaultSorting": 304,
