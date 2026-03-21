@@ -6,6 +6,7 @@
 // @description:zh-CN 将 Office 2022+/365 的 UI 界面外观还原为 Office 2016/2019
 // @version       1.0
 // @author        Joe Ye
+// @github        https://github.com/JoeYe-233
 // @include       WINWORD.EXE
 // @include       EXCEL.EXE
 // @include       POWERPNT.EXE
