@@ -4243,6 +4243,38 @@
                 "version": "1.0.2"
             }
         },
+        "hide-start-button": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774088836000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774088836000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "ptrkhh",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Hides the start button from the taskbar (Windows 11 only). The start menu can still be opened via keyboard or touchscreen.",
+                "github": "https://github.com/ptrkhh",
+                "homepage": "https://www.linkedin.com/in/patrick-hermawan/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Hide Start Button",
+                "version": "1.0"
+            }
+        },
         "hide-unc": {
             "details": {
                 "defaultSorting": 240,
