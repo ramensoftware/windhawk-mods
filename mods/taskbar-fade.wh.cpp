@@ -76,7 +76,7 @@ This mod is designed to prevent OLED burn-in and reduce visual distractions by l
 std::atomic<bool> g_stopThread(false);
 std::thread g_workerThread;
 std::mutex g_settingsMutex;
-std::atomic<bool> g_weHidIcons(false); // Tracks if WE were the ones who hid the icons
+std::atomic<bool> g_weHidIcons(false); // Tracks if we were the ones who hid the icons
 
 // State Machine
 enum class FadeState {
