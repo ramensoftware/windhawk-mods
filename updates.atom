@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-21T10:27:16.000Z</updated>
+    <updated>2026-03-21T16:16:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word PDF Lossless Export 1.1]]></title>
+        <id>https://windhawk.net/mods/word-pdf-lossless-export#eac39ccd38078c62c2b5af644f39b71e5cbc5b9a</id>
+        <link href="https://windhawk.net/mods/word-pdf-lossless-export"/>
+        <updated>2026-03-21T16:16:31.000Z</updated>
+        <content type="html"><![CDATA[<p>Ditched async hook for better reliability</p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Start Button 1.0]]></title>
         <id>https://windhawk.net/mods/hide-start-button#a947466f6d6bede2e97ab37eb6eeb347d03ed918</id>
@@ -386,26 +397,6 @@ covering every known code path Windows uses to open the speed test URL.</p>]]></
         <author>
             <name>u2x1</name>
             <uri>https://github.com/u2x1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.4]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#7e05bbe573b538403775170df7259a4f434e20f3</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2026-03-15T00:23:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added more layout options to the mod settings. Now the classic layout with Phone Link can be selected, as well as the new (redesigned) layout.</li>
-<li>Added the following themes: SunValley, LiquidGlass, Windows10X, TintedGlass.</li>
-<li>Update the following themes:</li>
-<li>Classic start menu: TranslucentStartMenu, NoRecommendedSection, Down Aero.</li>
-<li>Redesigned start menu: Windows10<em>Minimal, Windows11</em>Metro10, Windows11_Metro10Minimal, SunValley (Legacy, formerly 21996), OnlySearch, WindowGlass, Oversimplified&amp;Accentuated.</li>
-<li>Both variants: SideBySide, SideBySide2, SideBySideMinimal, UniMenu.</li>
-<li>Added the following properties to <code>WindhawkBlur</code>: <code>TintLuminosityOpacity</code>, <code>TintSaturation</code>, <code>NoiseOpacity</code>, and <code>NoiseDensity</code>. The implementation was contributed by <a href="https://github.com/Lockframe">Jhen</a>. For details, refer to <a href="https://github.com/ramensoftware/windows-11-start-menu-styling-guide#windhawkblur-effect-as-color">the styling guide</a>.</li>
-<li>Added a way to define theme-aware resources. For example, different colors for an element can be defined for light mode and dark mode.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

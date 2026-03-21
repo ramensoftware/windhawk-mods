@@ -10960,7 +10960,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1774010924000,
+                "updated": 1774109791000,
                 "users": 3
             },
             "metadata": {
@@ -10971,7 +10971,7 @@
                     "winword.exe"
                 ],
                 "name": "Word PDF Lossless Export",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "xs-discord-control-registered-games": {
