@@ -1,9 +1,9 @@
 // ==WindhawkMod==
-// @id              clientedge-in-apps-fork
-// @name            Clientedge Everywhere - Fork
+// @id              clientedge-in-apps
+// @name            Clientedge Everywhere
 // @description     Adds 3D border (WS_EX_CLIENTEDGE style) to some windows to look better in Classic theme.
 // @version         1.5.0
-// @author          anixx
+// @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
 // ==/WindhawkMod==
@@ -22,8 +22,6 @@ After:
 ![After](https://i.imgur.com/42jJDs6.png)
 */
 // ==/WindhawkModReadme==
-
-
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Orig;
@@ -78,7 +76,6 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
     return CreateWindowExW_Orig(dwExStyle, lpClassName, lpWindowName, 
                                       dwStyle, X, Y, nWidth, nHeight, 
                                       hWndParent, hMenu, hInstance, lpParam);
-
 }
 
 
