@@ -152,7 +152,7 @@ void LoadSettings() {
     g_cache.smartIdle = smartIdle;
     g_cache.hideDesktopIcons = hideIcons;
 
-    // Safety: (DWORD) cast prevents signed integer overflow during multiplication
+    // (DWORD) cast prevents signed integer overflow during multiplication
     // if user enters a large duration (e.g. > 24 days)
     g_cache.idleTimeoutMs = (DWORD)rawTimeout * 1000;
 
@@ -413,7 +413,7 @@ void WorkerLoop() {
 
         // 4. Reactive Geometry & State Updates
         if (targetState != lastState) {
-            // Hide Desktop Icons (Smart tracking)
+            // Hide Desktop Icons
             if (hideDesktopIcons) {
                 HWND hIcons = GetDesktopListView();
                 if (hIcons) {
@@ -426,7 +426,7 @@ void WorkerLoop() {
                             g_weHidIcons = false;
                         }
                     } else if (lastState == FadeState::Idle) {
-                        // Waking up: Only show them if WE were the ones who hid them
+                        // Waking up: Only show them if we were the ones who hid them
                         if (g_weHidIcons) {
                             ShowWindow(hIcons, SW_SHOW);
                             g_weHidIcons = false;
@@ -554,8 +554,8 @@ void WhTool_ModUninit() {
         RestoreTaskbarStyle(hSec);
     }
 
-    // Safety: Ensure desktop icons are visible when mod unloads,
-    // BUT ONLY if we were the ones who hid them!
+    // Ensure desktop icons are visible when mod unloads,
+    // but only if we were the ones who hid them!
     if (g_weHidIcons) {
         HWND hIcons = GetDesktopListView();
         if (hIcons && !IsWindowVisible(hIcons)) {
