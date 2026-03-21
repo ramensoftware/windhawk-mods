@@ -4,7 +4,7 @@
 // @name:zh-CN    Word 图像无损导出 PDF
 // @description   Forces Word to export PDFs with lossless image quality
 // @description:zh-CN   强制 Word 导出 PDF 时使用 100% 无损图像质量
-// @version       1.0
+// @version       1.1
 // @author        Joe Ye
 // @github        https://github.com/JoeYe-233
 // @include       winword.exe
@@ -17,28 +17,28 @@
 
 *Downsampling and JPEG lossy compression are now over, for good.*
 
-Microsoft Word has a notorious, long-standing issue when exporting documents to PDF (via `File-> Export -> Create PDF / XPS`): it aggressively downsamples and re-compresses images. Even if you enable "Do not compress images in file" and select "High fidelity" in Word's options, the internal PDF rendering engine (`mso.dll` / `exp_pdf.dll`) still runs a hidden optimization pass. It calculates the physical dimensions of the image on the page, (almost always) *decides* your high-resolution image is "too big", downscales it via GDI+, and forces a secondary JPEG compression. This ruins pixel-perfect diagrams, degrades high-res photos, and introduces irreversible compression artifacts. Which is especially frustrating and super annoying because Word's PDF export is often the go-to solution for sharing documents. We expect it to be every bit as good as the original.
+Microsoft Word has a notorious, long-standing issue when exporting documents to PDF (via `File -> Export -> Create PDF/XPS`): it aggressively downsamples and re-compresses images. Even if you enable "Do not compress images in file" and select "High fidelity" in Word's options, the internal PDF rendering engine (`mso.dll`) still runs a hidden optimization pass. It calculates the physical dimensions of the image on the page, *(almost always) decides* your high-resolution image is "too big", downscales it via GDI+, and forces a secondary JPEG compression. This ruins pixel-perfect diagrams, degrades high-res photos, and introduces irreversible compression artifacts. Which is especially frustrating and super annoying because Word's PDF export is often the go-to solution for sharing documents. We expect it to be every bit as good as the original.
 
 This mod performs a deep, memory-level intervention on Word's internal graphics rendering pipeline to bypass these limitations. It intercepts the core image resolution calculator (`DOCEXIMAGE::HrComputeSize`) to prevent dimensional downscaling, and hooks the output validator (`DOCEXIMAGE::HrCheckForLosslessOutput`) to force the engine to use a lossless FLATE (Zlib) stream instead of the default JPEG encoder.
 
 **Key Improvements:**
 
-  * **Pixel-Perfect Pictures:** Solid PNG images, JPEGs and BMPs, etc. are exported with absolute 100% pixel accuracy. No quality loss, no artifacts. PNGs with transparency are guaranteed 99% pixel accuracy (this is due to limits of GDI+, which does not handle alpha channel perfectly, but it's still a huge improvement over what we currently have. For detailed information, see Test Results below).
+  * **Pixel-Perfect Pictures:** Solid PNG images, JPEGs and BMPs, etc. are exported with absolute 100% pixel accuracy. No quality loss, no artifacts. PNGs with transparency are guaranteed > 98% pixel accuracy (this is due to limits of GDI+, which does not handle alpha channel perfectly, but it's still a huge improvement over what we currently have. For detailed information, see Test Results below).
   * **True Lossless Quality:** Bypasses Word's forced secondary JPEG compression entirely, preserving the exact quality of your original high-resolution inserts.
   * **Overrides Broken Settings:** Bypasses the hardcoded internal DPI limits that Word's built-in *so called* "High fidelity" setting fails to disable.
   * **Cross-Architecture Support:** Dynamically adapts to both 64-bit and 32-bit versions of Office using precise memory offsets and calling conventions.
 
-*Note: this mod needs pdb symbol of `exp_pdf.dll` and `mso.dll` to work. And for `mso.dll` the symbol file is expected to be quite large (~90mb in size). Windhawk will download these automatically when launching Word first time after you installed the mod (the popup at right bottom corner of your screen) please wait patiently and relaunch Word after it finishes.*
+*Note: this mod needs pdb symbol of `mso.dll` to work. The symbol file is expected to be quite large (~90MB in size). Windhawk will download it automatically when launching Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols... 0% (mso.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and relaunch Word after it finishes.*
 
-**Attention**: this mod utilizes functions and data structures in `DOCEXIMAGE` class, which is undocumented and is subject to change without notice. If the mod causes crash when exporting PDFs, please **open an issue** at my [GitHub repository](https://github.com/JoeYe-233/windhawk-mods) and provide your version of `mso.dll` (usually located in `C:\Program Files\Microsoft Office\root\vfs\ProgramFilesCommon[X64, X86]\Microsoft Shared\OFFICE16\MSO.DLL` where `[X64, X86]` varies based on your Microsoft Office architecture. For 64-bit Office, usually both X86 and X64 are available, use the X64 one; for 32-bit Office, use the X86 one).
+**Attention**: this mod utilizes functions and data structures in `DOCEXIMAGE` class, which is undocumented and is subject to change without notice. If the mod causes crash when exporting PDFs, please **open an issue** at my [GitHub repository](https://github.com/JoeYe-233/windhawk-mods/issues) and provide your version of `mso.dll` (usually located in `C:\Program Files\Microsoft Office\root\vfs\ProgramFilesCommon[X64, X86]\Microsoft Shared\OFFICE16\MSO.DLL` where `[X64, X86]` varies based on your Microsoft Office architecture. For 64-bit Office, usually both X86 and X64 are available, use the X64 one; for 32-bit Office, use the X86 one).
 
 **Test Results and Verifications:**
 
 * **Lossless performance guaranteed for JPEGs, BMPs, and other non-transparent formats**: 100% lossless pixel-perfect accuracy. No downscaling, no compression artifacts or quality loss.
 
 * **Lossless performance guaranteed for PNGs**:
-  * 100% lossless for pngs that **does not contain** transparent regions. (same as above, no downscaling, no compression artifacts or quality loss).
-  * 99% (absolute visually lossless) for PNGs that **contain** transparent regions. (No downscaling, no compression artifacts, and negligible quality loss). This is because of how GDI+ handles transparent images (Pre-multiplied Alpha and Float to Integer rounding error). Combined, these may cause up to ±4 drift out of 255 (±0.016%) on each of 3 RGB channels. Also, RGB values for pixels on complete transparent regions (i.e., alpha strictly equals 0) are discarded by GDI+ for better performance. (which is actually a good thing as it increases redundancy, thus decreasing size of end product).
+  * 100% lossless for pngs that **do not contain** transparent regions. (same as above, no downscaling, no compression artifacts or quality loss).
+  * > 98.4% (absolute visually lossless) for PNGs that **contain** transparent regions. (No downscaling, no compression artifacts, and negligible quality loss). This is because of how GDI+ handles transparent images (Pre-multiplied Alpha and Float to Integer rounding error). Combined, these may cause up to ±4 drift out of 255 (±1.6%) on each of 3 RGB channels. Also, RGB values for pixels on complete transparent regions (i.e., alpha strictly equals 0) are discarded by GDI+ for better performance. (which is actually a good thing as it increases redundancy, thus decreasing size of end product).
 
 * Also, pictures embedded in SVGs are lossless too, because the mod hooks the core image processing pipeline, which applies to all images regardless of their source.
 
@@ -53,11 +53,11 @@ Lossless picture extractor of PDF files are also provided to help you verify the
 
 ![After](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-after.png)
 
-### Before vs After at 800% Zoom (Left: After, Right: Before)
+### Before vs After at 800% Zoom
 
 ![Before vs After](https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-pdf-lossless-export-before-vs-after.png)
 
-(Left: After, Right: Before. Notice the severe downscaling and compression artifacts in the "Before" image, which are completely gone in the "After" image.)
+(Notice the severe downscaling and compression artifacts in the "Before" image, which are completely gone in the "After" image.)
 
 ### PNG with Transparency Test
 (Image courtesy of [Sunriseforever](https://pixabay.com/illustrations/fruit-nutrition-organic-healthy-6925630/) from Pixabay)
@@ -225,12 +225,6 @@ void ScanAndHookMso() {
 typedef HMODULE (WINAPI *LoadLibraryExW_t)(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags);
 LoadLibraryExW_t pOrig_LoadLibraryExW = nullptr;
 
-// Standard WINAPI thread startup function
-DWORD WINAPI DelayedHookThread(LPVOID lpParam) {
-    ScanAndHookMso();
-    return 0;
-}
-
 HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE hModule = pOrig_LoadLibraryExW(lpLibFileName, hFile, dwFlags);
 
@@ -239,10 +233,7 @@ HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         fileName = fileName ? fileName + 1 : lpLibFileName;
 
         if (_wcsicmp(fileName, L"mso.dll") == 0) {
-            HANDLE hThread = CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
-            if (hThread) {
-                CloseHandle(hThread);
-            }
+            ScanAndHookMso();
         }
     }
 
@@ -254,10 +245,7 @@ BOOL Wh_ModInit() {
 
     if (GetModuleHandleW(L"mso.dll")) {
         // If already loaded, start thread directly
-        HANDLE hThread = CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
-        if (hThread) {
-            CloseHandle(hThread);
-        }
+        ScanAndHookMso();
     } else {
         // Not loaded yet, hook LoadLibrary to stand guard
         Wh_SetFunctionHook((void*)LoadLibraryExW, (void*)Hook_LoadLibraryExW, (void**)&pOrig_LoadLibraryExW);
