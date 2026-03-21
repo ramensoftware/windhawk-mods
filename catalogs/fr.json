@@ -7359,7 +7359,7 @@
                     56
                 ],
                 "ratingUsers": 65,
-                "updated": 1771032136000,
+                "updated": 1774114297000,
                 "users": 3542
             },
             "metadata": {
@@ -7368,15 +7368,16 @@
                 ],
                 "author": "m417z",
                 "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-                "description": "Set a custom size for the Start menu on Windows 11",
+                "description": "Set a custom size for the Start menu and search menu on Windows 11",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
-                    "StartMenuExperienceHost.exe"
+                    "StartMenuExperienceHost.exe",
+                    "explorer.exe"
                 ],
                 "name": "Start Menu Size",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.1"
             }
         },
         "suppress-run-box-error-message": {

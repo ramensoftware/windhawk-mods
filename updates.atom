@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-21T16:16:31.000Z</updated>
+    <updated>2026-03-21T17:31:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Size 1.1]]></title>
+        <id>https://windhawk.net/mods/start-menu-size#cc7bb194b5c59a00a396d51a4e6d7a5f119fe25c</id>
+        <link href="https://windhawk.net/mods/start-menu-size"/>
+        <updated>2026-03-21T17:31:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for setting the search menu size as well. By default, the size that's configured for the Start menu is used for the search menu as well.</li>
+<li>Minor fixes and size calculation improvements.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word PDF Lossless Export 1.1]]></title>
         <id>https://windhawk.net/mods/word-pdf-lossless-export#eac39ccd38078c62c2b5af644f39b71e5cbc5b9a</id>
@@ -380,23 +394,6 @@ covering every known code path Windows uses to open the speed test URL.</p>]]></
         <author>
             <name>BCRTVKCS</name>
             <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tiling Helper 2.0.0]]></title>
-        <id>https://windhawk.net/mods/tiling-helper#b25cbfb1fa555527b71e6c68a5ddedd4816e51b5</id>
-        <link href="https://windhawk.net/mods/tiling-helper"/>
-        <updated>2026-03-15T11:07:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Reworked Tiling Helper around a simpler always-on <code>Master+Stack</code> workflow. After tiling a monitor, windows stay managed until automatic tiling is paused.</li>
-<li>Dragging a tiled window now untile it and removes it from the current layout, while the remaining tiled windows are rearranged automatically.</li>
-<li>Removed layout cycling and the extra layouts, and focused the settings on a single configurable <code>Master+Stack</code> layout with horizontal/vertical orientation and adjustable master size.</li>
-<li>Updated hotkeys and controls: the retile toggle now pauses/resumes automatic tiling without disabling manual tiling, and a new shortcut can switch which window is the master.</li>
-</ul>
-<p>Credit to @Meteony for the majority of code changes in this release.</p>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>

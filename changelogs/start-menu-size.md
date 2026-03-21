@@ -1,3 +1,8 @@
+## 1.1 ([Mar 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc7bb194b5c59a00a396d51a4e6d7a5f119fe25c/mods/start-menu-size.wh.cpp))
+
+* Added support for setting the search menu size as well. By default, the size that's configured for the Start menu is used for the search menu as well.
+* Minor fixes and size calculation improvements.
+
 ## 1.0.1 ([Feb 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4636d9d145e6aa1858d4955fc422f816aac37b39/mods/start-menu-size.wh.cpp))
 
 * Fixed compatibility with the classic Start menu in some cases.
