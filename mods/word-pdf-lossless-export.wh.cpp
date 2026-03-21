@@ -4,7 +4,7 @@
 // @name:zh-CN    Word 图像无损导出 PDF
 // @description   Forces Word to export PDFs with lossless image quality
 // @description:zh-CN   强制 Word 导出 PDF 时使用 100% 无损图像质量
-// @version       1.1
+// @version       1.1.1
 // @author        Joe Ye
 // @github        https://github.com/JoeYe-233
 // @include       winword.exe
