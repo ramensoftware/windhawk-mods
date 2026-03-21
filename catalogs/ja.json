@@ -8374,19 +8374,19 @@
                     79
                 ],
                 "ratingUsers": 135,
-                "updated": 1765982611000,
+                "updated": 1774084140000,
                 "users": 1922
             },
             "metadata": {
                 "author": "Hashah2311",
-                "compilerOptions": "-lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus",
+                "compilerOptions": "-lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus -lshell32",
                 "description": "A native-style music ticker with media controls.",
                 "github": "https://github.com/Hashah2311",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Taskbar Music Lounge",
-                "version": "3.0"
+                "version": "4.0"
             }
         },
         "taskbar-no-minimize": {

@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-21T08:14:48.000Z</updated>
+    <updated>2026-03-21T09:09:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Music Lounge 4.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-music-lounge#fddd032c9c986776e98105654f3a7aa5fa3a43ec</id>
+        <link href="https://windhawk.net/mods/taskbar-music-lounge"/>
+        <updated>2026-03-21T09:09:00.000Z</updated>
+        <content type="html"><![CDATA[<p>This version addresses and incorporates multiple suggestions. A detailed diff table has been added to the README.</p>
+<p>Addressed Issues &amp; Fixes:</p>
+<ul>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3666395914">#3666395914</a> - Add AppID for compatibility with taskbar auto-hide mod</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3666527577">#3666527577</a> - Rounded corners, scalable icons for high-DPI, hide during fullscreen gaming</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/commit/2eddf6953b7aaee9ad5eb050bb329e135f4c7798#commitcomment-173045991">2eddf69</a> - Fix widget lagging behind taskbar with smooth following</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3671818092">#3671818092</a> - Support for AIMP/MPC-BE players, larger 4K icons, fullscreen hide option</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/issues/2828">#2828</a> - Event-driven positioning for smoother auto-hide and fullscreen sync</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3689038965">#3689038965</a> - Comprehensive rework fixing auto-hide lag, fullscreen detection, and high-DPI scaling</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3690241518">#3690241518</a> - Auto-hide widget when no media is playing</li>
+</ul>
+<p>Credits:
+Special thanks to @Cinabutts and @Deykii for code references and the community for testing.</p>
+<p>Testing Note:
+AIMP and MPC-BE integration is implemented but currently untested. Please report any issues with these players.</p>]]></content>
+        <author>
+            <name>Hashah2311</name>
+            <uri>https://github.com/Hashah2311</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Scroll Window Opacity 1.0.3]]></title>
         <id>https://windhawk.net/mods/scroll-window-opacity#0e2de27cbade7621e5af9791789e6ca196f2c2ed</id>
@@ -377,20 +402,6 @@ covering every known code path Windows uses to open the speed test URL.</p>]]></
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar: no minimize on click 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-no-minimize#4dc3292c7ed8bec555e8ce057dc2e78acfd86e19</id>
-        <link href="https://windhawk.net/mods/taskbar-no-minimize"/>
-        <updated>2026-03-13T10:42:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarnominimizeonclick">Taskbar: no minimize on click</h1>
-<p>Disable the "minimize window" function when clicking an already active window on
-the taskbar. When you click a taskbar button for a window that is already in the
-foreground, the window will stay in place instead of being minimized.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
