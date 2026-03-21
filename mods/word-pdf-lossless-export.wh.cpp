@@ -28,7 +28,8 @@ This mod performs a deep, memory-level intervention on Word's internal graphics 
   * **Overrides Broken Settings:** Bypasses the hardcoded internal DPI limits that Word's built-in *so called* "High fidelity" setting fails to disable.
   * **Cross-Architecture Support:** Dynamically adapts to both 64-bit and 32-bit versions of Office using precise memory offsets and calling conventions.
 
-*Note: this mod needs pdb symbol of `mso.dll` to work. The symbol file is expected to be quite large (~90MB in size). Windhawk will download it automatically when launching Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols... 0% (mso.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and relaunch Word after it finishes.*
+*Note: this mod needs pdb symbol of `mso.dll` to work. The symbol file is expected to be quite large (~90MB in size). Windhawk will download it automatically when launching Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols... 0% (mso.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and **relaunch Word AS ADMINISTRATOR** first time after it finishes,this is to write symbols being used to SymbolCache, which speeds up word launching later on.*
+
 
 **Attention**: this mod utilizes functions and data structures in `DOCEXIMAGE` class, which is undocumented and is subject to change without notice. If the mod causes crash when exporting PDFs, please **open an issue** at my [GitHub repository](https://github.com/JoeYe-233/windhawk-mods/issues) and provide your version of `mso.dll` (usually located in `C:\Program Files\Microsoft Office\root\vfs\ProgramFilesCommon[X64, X86]\Microsoft Shared\OFFICE16\MSO.DLL` where `[X64, X86]` varies based on your Microsoft Office architecture. For 64-bit Office, usually both X86 and X64 are available, use the X64 one; for 32-bit Office, use the X86 one).
 
@@ -207,6 +208,7 @@ void ScanAndHookMso() {
     WH_HOOK_SYMBOLS_OPTIONS options = {0};
     options.optionsSize = sizeof(options);
     options.noUndecoratedSymbols = TRUE;
+    options.onlineCacheUrl = L""; // Gracefully stops it from trying to get online symbols. We will rely entirely on local symbol cache, which is populated when you launch Word as administrator after installing the mod and waiting for symbol download to complete.
 
     if (WindhawkUtils::HookSymbols(hMso, msoDllHook, ARRAYSIZE(msoDllHook), &options)) {
 
