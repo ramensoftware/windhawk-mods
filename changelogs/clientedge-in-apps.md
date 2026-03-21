@@ -1,3 +1,7 @@
+## 1.5.0 ([Mar 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d2b64d62431db4d19e45ae39f67a84781e2b0f35/mods/clientedge-in-apps.wh.cpp))
+
+Add support for "Add network place" dialog
+
 ## 1.4.0 ([Jun 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/afbc62ee034d63d1a2513594de420ae3eee1a97f/mods/clientedge-in-apps.wh.cpp))
 
 The issue with Regedit was caused by another mod, whose fixed version is to be submitted soon. As such, it is not needed anymore.

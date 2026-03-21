@@ -1792,18 +1792,18 @@
                     2
                 ],
                 "ratingUsers": 3,
-                "updated": 1751151841000,
+                "updated": 1774080464000,
                 "users": 402
             },
             "metadata": {
-                "author": "anixx",
+                "author": "Anixx",
                 "description": "Adds 3D border (WS_EX_CLIENTEDGE style) to some windows to look better in Classic theme.",
                 "github": "https://github.com/Anixx",
                 "include": [
                     "*"
                 ],
                 "name": "Clientedge Everywhere",
-                "version": "1.4.0"
+                "version": "1.5.0"
             }
         },
         "clipboard-history-upgrade": {
