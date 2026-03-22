@@ -1,3 +1,7 @@
+## 0.8.4 ([Mar 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b8aef2acb5387beafa57d674f1ebe4f843823ec4/mods/internet-status-indicator.wh.cpp))
+
+logout bug fix
+
 ## 0.8.2 ([Feb 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6e80e7cab1bfd36a5bcf7fd8a6fa0d225d40e483/mods/internet-status-indicator.wh.cpp))
 
 boot up bug fix

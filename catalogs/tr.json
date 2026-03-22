@@ -4597,12 +4597,12 @@
                     16
                 ],
                 "ratingUsers": 25,
-                "updated": 1770846004000,
+                "updated": 1774211245000,
                 "users": 1588
             },
             "metadata": {
                 "author": "ALMAS CP",
-                "compilerOptions": "-lwininet -lws2_32 -liphlpapi -lgdi32 -luser32",
+                "compilerOptions": "-lwininet -lws2_32 -liphlpapi -lgdi32 -luser32 -lwtsapi32",
                 "description": "Real-time network connectivity monitoring with visual indicators as a Tray Icon",
                 "github": "https://github.com/almas-cp",
                 "homepage": "https://github.com/almas-cp",
@@ -4610,7 +4610,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Internet Status Indicator",
-                "version": "0.8.2"
+                "version": "0.8.4"
             }
         },
         "invisible-borders": {
