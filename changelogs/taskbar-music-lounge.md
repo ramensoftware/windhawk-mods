@@ -1,3 +1,7 @@
+## 4.0.1 ([Mar 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/de1c1388c6aadf16637ba7ebe4051f310cb2605a/mods/taskbar-music-lounge.wh.cpp))
+
+Fixes the widget appearing at top-left of screen on startup.
+
 ## 4.0 ([Mar 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fddd032c9c986776e98105654f3a7aa5fa3a43ec/mods/taskbar-music-lounge.wh.cpp))
 
 This version addresses and incorporates multiple suggestions. A detailed diff table has been added to the README.

@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-22T20:27:25.000Z</updated>
+    <updated>2026-03-22T23:06:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Music Lounge 4.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-music-lounge#de1c1388c6aadf16637ba7ebe4051f310cb2605a</id>
+        <link href="https://windhawk.net/mods/taskbar-music-lounge"/>
+        <updated>2026-03-22T23:06:30.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixes the widget appearing at top-left of screen on startup.</p>]]></content>
+        <author>
+            <name>Hashah2311</name>
+            <uri>https://github.com/Hashah2311</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Internet Status Indicator 0.8.4]]></title>
         <id>https://windhawk.net/mods/internet-status-indicator#b8aef2acb5387beafa57d674f1ebe4f843823ec4</id>
@@ -346,27 +357,6 @@ replacement logic, same setting key</li>
         <author>
             <name>Hakuuyosei</name>
             <uri>https://github.com/ahzvenol</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Helper 2.4.0]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-helper#0e5eb31430c7c36664389f737cc3b68fcd50e6d5</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
-        <updated>2026-03-17T10:26:19.000Z</updated>
-        <content type="html"><![CDATA[<p>Rename confusingly named cycling functions for clarity:</p>
-<ul>
-<li>SwitchToPreviousDesktop (toggle last visited) → SwitchToLastDesktop</li>
-<li>SwitchToPreviousIndexDesktop (idx-1) → SwitchToPreviousDesktop</li>
-<li>Rename HK<em>PREV → HK</em>LAST, HK<em>PREV</em>INDEX → HK_PREV</li>
-<li>Rename settings keys: PrevDesktopKey → LastDesktopKey, PrevIndexKey → PrevDesktopKey</li>
-<li>Reorder and clarify settings group as [Previous/Next/Last Desktop]</li>
-<li>Update README with clearer descriptions and add See Also link</li>
-<li>Customize modifier keys with string </li>
-<li>Bump version to 2.4.0</li>
-</ul>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>
