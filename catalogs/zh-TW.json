@@ -10961,7 +10961,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1774109791000,
+                "updated": 1774175059000,
                 "users": 17
             },
             "metadata": {
@@ -10972,7 +10972,7 @@
                     "winword.exe"
                 ],
                 "name": "Word 图像无损导出 PDF",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "xs-discord-control-registered-games": {

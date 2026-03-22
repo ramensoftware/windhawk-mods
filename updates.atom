@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-21T17:31:37.000Z</updated>
+    <updated>2026-03-22T10:24:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word PDF Lossless Export 1.1.1]]></title>
+        <id>https://windhawk.net/mods/word-pdf-lossless-export#9bcd4574bc24f4fe78d3818a65a576fea7a35e47</id>
+        <link href="https://windhawk.net/mods/word-pdf-lossless-export"/>
+        <updated>2026-03-22T10:24:19.000Z</updated>
+        <content type="html"><![CDATA[<p>Avoid fetching for online cache</p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Size 1.1]]></title>
         <id>https://windhawk.net/mods/start-menu-size#cc7bb194b5c59a00a396d51a4e6d7a5f119fe25c</id>
@@ -377,23 +388,6 @@ covering every known code path Windows uses to open the speed test URL.</p>]]></
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Keep Rainmeter Always on Desktop 1.1.2]]></title>
-        <id>https://windhawk.net/mods/keep-rainmeter-always-bottom#7c9c4b91a3aeec51d6aa80d44442dce83fa073fb</id>
-        <link href="https://windhawk.net/mods/keep-rainmeter-always-bottom"/>
-        <updated>2026-03-16T20:40:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="keeprainmeteralwaysondesktop">Keep Rainmeter Always on Desktop</h1>
-<p>Keeps Rainmeter windows to stay on desktop. Rainmeter skin windows can unexpectedly appear on top of other windows during window switching events (e.g. Alt+Tab), application focus changes, or when triggered by external scripts. This mod forces all Rainmeter windows to remain below all other windows at all times, using a <code>EVENT_SYSTEM_FOREGROUND</code> event hook to push them to the bottom of the Z-order whenever any window comes to the foreground.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 10 and Windows 11</li>
-<li>Targets <code>windhawk.exe</code> only</li>
-</ul>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>
