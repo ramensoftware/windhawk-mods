@@ -2,7 +2,7 @@
 // @id              nilesoft-shell-animator
 // @name            Nilesoft Shell Animator
 // @description     Adds customizable animations to Nilesoft Shell.
-// @version         0.2.6
+// @version         1.0
 // @author          Lockframe
 // @github          https://www.github.com/Lockframe
 // @include         explorer.exe
@@ -15,7 +15,21 @@
 
 Adds customizable and position-aware animations to Nilesoft Shell's context menu without touching Windows' native menus.
 
-![](https://i.imgur.com/rEZsF9Y.gif)
+Slide animation mode:
+
+![](https://i.imgur.com/lugdazk.gif)
+
+Fade animation mode:
+
+![](https://i.imgur.com/omQGzOV.gif)
+
+Slide + Fade animation mode:
+
+![](https://i.imgur.com/THFUeBK.gif)
+
+Native animation mode:
+
+![](https://i.imgur.com/qA0Zxhg.gif)
 
 */
 // ==/WindhawkModReadme==
