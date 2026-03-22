@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-22T23:06:30.000Z</updated>
+    <updated>2026-03-22T23:32:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab per monitor 1.2]]></title>
+        <id>https://windhawk.net/mods/alt-tab-per-monitor#2eec6038eb43a1847f7cf4dfa0fa65a101aafd18</id>
+        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
+        <updated>2026-03-22T23:32:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added customization options for both the display location and the windows to show. Win+Alt+Tab can have different options.</li>
+</ul>]]></content>
+        <author>
+            <name>L3r0y</name>
+            <uri>https://github.com/L3r0yThingz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Music Lounge 4.0.1]]></title>
         <id>https://windhawk.net/mods/taskbar-music-lounge#de1c1388c6aadf16637ba7ebe4051f310cb2605a</id>
@@ -342,21 +355,6 @@ replacement logic, same setting key</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Power Buttons 1.0.2]]></title>
-        <id>https://windhawk.net/mods/win11-power-buttons#7507d4c089a0cb722bc29e0207b6a661b980bfc3</id>
-        <link href="https://windhawk.net/mods/win11-power-buttons"/>
-        <updated>2026-03-17T21:58:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix "Shutdown" label to "Shut down"</li>
-<li>Update hibernate icon to match native Windows icon</li>
-<li>Add missing Lock button to readme</li>
-</ul>]]></content>
-        <author>
-            <name>Hakuuyosei</name>
-            <uri>https://github.com/ahzvenol</uri>
         </author>
     </entry>
 </feed>

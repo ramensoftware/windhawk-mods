@@ -232,7 +232,7 @@
                     209
                 ],
                 "ratingUsers": 224,
-                "updated": 1761689419000,
+                "updated": 1774222332000,
                 "users": 14275
             },
             "metadata": {
@@ -247,7 +247,7 @@
                     "explorer.exe"
                 ],
                 "name": "Alt+Tab per monitor",
-                "version": "1.1.1"
+                "version": "1.2"
             }
         },
         "app-theme-crash-fixer": {

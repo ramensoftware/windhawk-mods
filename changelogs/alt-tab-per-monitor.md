@@ -1,3 +1,7 @@
+## 1.2 ([Mar 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2eec6038eb43a1847f7cf4dfa0fa65a101aafd18/mods/alt-tab-per-monitor.wh.cpp))
+
+* Added customization options for both the display location and the windows to show. Win+Alt+Tab can have different options.
+
 ## 1.1.1 ([Oct 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/2d1ff5b6c4891f684f71b5a8bffff9e2f8c68ef6/mods/alt-tab-per-monitor.wh.cpp))
 
 * The Windows behavior can now be achieved by pressing Win+Alt+Tab, which will show all windows across all monitors. You can configure where the Win+Alt+Tab UI appears in the mod settings.
