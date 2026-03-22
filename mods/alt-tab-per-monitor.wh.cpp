@@ -2,7 +2,7 @@
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
 // @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.1.1
+// @version         1.2
 // @author          L3r0y
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
@@ -14,14 +14,16 @@
 /*
 # Alt+Tab per monitor
 
-When you press the Alt+Tab combination, the window switcher will appear on the
-primary display, showing all open windows across all monitors. This mod
-customizes the behavior to display the switcher on the monitor where the cursor
-is currently located, showing only the windows present on that specific monitor.
+By default, pressing Alt+Tab shows all open windows on the primary display. This
+mod customizes the behavior so that Alt+Tab displays the switcher on the monitor
+where the cursor is located, showing only the windows on that monitor.
 
-Additionally, the previous known Windows behavior can still be achieved by
-pressing Win+Alt+Tab, which will show all windows across all monitors. You can
-configure where the Win+Alt+Tab UI appears in the mod settings.
+Both Alt+Tab and Win+Alt+Tab can be independently configured with:
+
+- **Display location**: Primary monitor or monitor where cursor is located.
+- **Windows to show**: All monitors, cursor's monitor only, or cursor's monitor
+  with an exception for the primary monitor (shows all windows when cursor is on
+  the primary monitor).
 
 ![Gif](https://i.imgur.com/Hpg8TKh.gif)
 */
@@ -29,14 +31,35 @@ configure where the Win+Alt+Tab UI appears in the mod settings.
 
 // ==WindhawkModSettings==
 /*
-- winAltTabLocation: primary
-  $name: Win+Alt+Tab display location
-  $description: |
-    Choose where the Alt+Tab switcher appears when using Win+Alt+Tab (which
-    shows all windows from all monitors)
+- altTabLocation: cursor
+  $name: "Alt+Tab: Display location"
+  $description: Choose which monitor the Alt+Tab switcher appears on
   $options:
-  - primary: Primary monitor (default Windows behavior)
   - cursor: Monitor where cursor is located
+  - primary: Primary monitor
+- altTabWindows: cursorMonitor
+  $name: "Alt+Tab: Windows to show"
+  $description: Choose which windows to show when using Alt+Tab
+  $options:
+  - cursorMonitor: Windows from the monitor where cursor is located
+  - allMonitors: Windows from all monitors
+  - cursorMonitorExceptPrimary: >-
+      Windows from cursor's monitor, but all windows when on primary
+- winAltTabLocation: primary
+  $name: "Win+Alt+Tab: Display location"
+  $description: >-
+    Choose which monitor the Alt+Tab switcher appears on when using Win+Alt+Tab
+  $options:
+  - primary: Primary monitor
+  - cursor: Monitor where cursor is located
+- winAltTabWindows: allMonitors
+  $name: "Win+Alt+Tab: Windows to show"
+  $description: Choose which windows to show when using Win+Alt+Tab
+  $options:
+  - allMonitors: Windows from all monitors
+  - cursorMonitor: Windows from the monitor where cursor is located
+  - cursorMonitorExceptPrimary: >-
+      Windows from cursor's monitor, but all windows when on primary
 */
 // ==/WindhawkModSettings==
 
@@ -47,13 +70,22 @@ configure where the Win+Alt+Tab UI appears in the mod settings.
 
 #include <winrt/windows.foundation.collections.h>
 
-enum class WinAltTabLocation {
+enum class Location {
     primary,
     cursor,
 };
 
+enum class WindowsToShow {
+    allMonitors,
+    cursorMonitor,
+    cursorMonitorExceptPrimary,
+};
+
 struct {
-    WinAltTabLocation winAltTabLocation;
+    Location altTabLocation;
+    WindowsToShow altTabWindows;
+    Location winAltTabLocation;
+    WindowsToShow winAltTabWindows;
 } g_settings;
 
 enum class WinVersion {
@@ -67,7 +99,7 @@ WinVersion g_winVersion;
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
 std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
 std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
-ULONGLONG g_CreateInstance_TickCount;
+std::atomic<ULONGLONG> g_CreateInstance_TickCount;
 constexpr ULONGLONG kDeltaThreshold = 200;
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -128,8 +160,10 @@ bool IsWinKeyPressed() {
 }
 
 bool HandleAltTabWindow(RECT* rect) {
-    if (g_settings.winAltTabLocation == WinAltTabLocation::primary &&
-        IsWinKeyPressed()) {
+    auto location = IsWinKeyPressed() ? g_settings.winAltTabLocation
+                                      : g_settings.altTabLocation;
+
+    if (location == Location::primary) {
         return false;
     }
 
@@ -327,8 +361,24 @@ HRESULT WINAPI CMultitaskingViewFrame_CreateFrame_Hook(void* pThis,
 }
 
 HRESULT CreateInstanceHook(std::function<HRESULT()> original) {
-    if (IsWinKeyPressed()) {
+    auto windows = IsWinKeyPressed() ? g_settings.winAltTabWindows
+                                     : g_settings.altTabWindows;
+
+    if (windows == WindowsToShow::allMonitors) {
         return original();
+    }
+
+    if (windows == WindowsToShow::cursorMonitorExceptPrimary) {
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO monInfo;
+            monInfo.cbSize = sizeof(MONITORINFO);
+            if (GetMonitorInfo(hMon, &monInfo) &&
+                (monInfo.dwFlags & MONITORINFOF_PRIMARY)) {
+                return original();
+            }
+        }
     }
 
     g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
@@ -421,16 +471,46 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Win11_Hook(void* pThis,
 }
 
 void LoadSettings() {
-    PCWSTR winAltTabLocation = Wh_GetStringSetting(L"winAltTabLocation");
-    g_settings.winAltTabLocation = WinAltTabLocation::primary;
-    if (wcscmp(winAltTabLocation, L"cursor") == 0) {
-        g_settings.winAltTabLocation = WinAltTabLocation::cursor;
-    }
-    Wh_FreeStringSetting(winAltTabLocation);
+    auto loadLocation = [](PCWSTR name, Location defaultVal) {
+        PCWSTR val = Wh_GetStringSetting(name);
+        Location result = defaultVal;
+        if (wcscmp(val, L"primary") == 0) {
+            result = Location::primary;
+        } else if (wcscmp(val, L"cursor") == 0) {
+            result = Location::cursor;
+        }
+        Wh_FreeStringSetting(val);
+        return result;
+    };
+
+    auto loadWindows = [](PCWSTR name, WindowsToShow defaultVal) {
+        PCWSTR val = Wh_GetStringSetting(name);
+        WindowsToShow result = defaultVal;
+        if (wcscmp(val, L"allMonitors") == 0) {
+            result = WindowsToShow::allMonitors;
+        } else if (wcscmp(val, L"cursorMonitor") == 0) {
+            result = WindowsToShow::cursorMonitor;
+        } else if (wcscmp(val, L"cursorMonitorExceptPrimary") == 0) {
+            result = WindowsToShow::cursorMonitorExceptPrimary;
+        }
+        Wh_FreeStringSetting(val);
+        return result;
+    };
+
+    g_settings.altTabLocation =
+        loadLocation(L"altTabLocation", Location::cursor);
+    g_settings.altTabWindows =
+        loadWindows(L"altTabWindows", WindowsToShow::cursorMonitor);
+    g_settings.winAltTabLocation =
+        loadLocation(L"winAltTabLocation", Location::primary);
+    g_settings.winAltTabWindows =
+        loadWindows(L"winAltTabWindows", WindowsToShow::allMonitors);
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    LoadSettings();
 
     g_winVersion = GetWindowsVersion();
 
