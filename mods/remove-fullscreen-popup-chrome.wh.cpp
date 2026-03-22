@@ -1,19 +1,10 @@
 // ==WindhawkMod==
 // @id              remove-fullscreen-popup-chrome
 // @name            Remove "Exit Fullscreen" popup in Chrome
-// @description     Removes “TO EXIT FULLSCREEN PRESS ESC/F11” popup in Chrome/Opera/OperaGX/Edge/Brave/Comet
+// @description     Removes “TO EXIT FULLSCREEN PRESS ESC/F11” popup in Chromium based browsers like Chrome/Opera/OperaGX/Edge/Brave and more
 // @version         1.3
 // @author          lorenzoc01
 // @github          https://github.com/lorenzoc01
-// @include         opera.exe
-// @include         chrome.exe
-// @include         msedge.exe
-// @include         brave.exe
-// @include         comet.exe
-// @include         Maxthon.exe
-// @include         whale.exe
-// @include         aloha.exe
-// @include         thorium.exe
 // @compilerOptions -lgdi32
 // ==/WindhawkMod==
 
@@ -28,7 +19,10 @@ A simple mod to remove the annoying “TO EXIT FULLSCREEN PRESS ESC/F11” popup
 
 ## Browsers
 
-Supported browsers:
+To apply the mod to a browser you need to add the executable name (like "chrome.exe")
+in the "Custom process inclusion list" in the "Advanced" tab of the mod.
+
+Known supported browsers:
 - Google Chrome
 - Microsoft Edge
 - Opera/OperaGX
@@ -39,14 +33,10 @@ Supported browsers:
 - Comet
 - Thorium
 
-Unsupported (not working):
+Known unsupported browsers:
 - Vivaldi
 - Yandex
 
-
-The mod might work with other browsers. If you want to test it, you can add the executable name in the mod includes:
-
-`// @include         yourbrowser.exe`
 
 ## ⚠ Important
 
