@@ -32,7 +32,12 @@ Numbers correspond to Windows + [number] keyboard shortcuts for quick app launch
 - After initially enabling mod: numbers don't appear until first taskbar interaction (like hovering). If mod is enabled, numbers will be there on Windows startup.
 
 ## Customization
-Configure number position (corners), font size (8-16px), text color, and stroke color through mod settings.
+The following settings can be configured through mod settings:
+- Number position (corner)
+- Font size
+- Text color
+- Stroke color
+- Enable/disable showing numbers on secondary taskbars
 
 ## Special Thanks
 - [jsfdez](https://github.com/jsfdez): Created the base for this mod in [this pull request](https://github.com/ramensoftware/windhawk-mods/pull/2260).
@@ -57,6 +62,9 @@ Configure number position (corners), font size (8-16px), text color, and stroke 
 - backgroundColor: "#80000000"
   $name: Stroke/outline color
   $description: Outline color around the numbers for better visibility (hex format "#RRGGBB" or "#AARRGBB")
+- showOnAllTaskbars: false
+  $name: Show numbers on all taskbars
+  $description: 'If enabled and Windows is set to show taskbar apps on all taskbars, numbers appear on secondary taskbar(s) as well.'
 */
 // ==/WindhawkModSettings==
 
@@ -78,6 +86,7 @@ Configure number position (corners), font size (8-16px), text color, and stroke 
 #include <atomic>
 #include <string>
 #include <unordered_set>
+#include <unordered_map>
 #include <mutex>
 #include <vector>
 #include <functional>
@@ -87,6 +96,7 @@ using namespace winrt::Windows::UI;
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
+using namespace winrt::Windows::UI::Core;
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
@@ -147,6 +157,7 @@ struct {
     int numberSize;
     std::wstring numberColor;
     std::wstring backgroundColor;
+    bool showOnAllTaskbars;
 } g_settings;
 
 // Track only primary taskbar buttons with their overlay state
@@ -157,20 +168,24 @@ struct ButtonInformation {
     bool isVisible = false;
 
     // Constructor for easier creation
-    explicit ButtonInformation(const FrameworkElement& button = nullptr) : button(button) {}
+    explicit ButtonInformation(const FrameworkElement& button = nullptr)
+        : button(button) {}
 
     bool isSameButton(const FrameworkElement& otherButton) const {
         auto thisButton = button.get();
         if (!thisButton) return false;
-        return winrt::get_abi(thisButton.as<winrt::Windows::Foundation::IUnknown>()) == winrt::get_abi(otherButton.as<winrt::Windows::Foundation::IUnknown>());
+        return winrt::get_abi(thisButton.as<winrt::Windows::Foundation::IUnknown>()) 
+            == winrt::get_abi(otherButton.as<winrt::Windows::Foundation::IUnknown>());
     }
 };
+
+using XamlRootKey = void*;
 
 // Simplified globals
 std::atomic<bool> g_taskbarViewDllLoaded{false};
 std::atomic<bool> g_unloading{false};
 std::mutex g_overlayMutex;
-std::vector<ButtonInformation> g_trackedButtons;
+std::unordered_map<XamlRootKey, std::vector<ButtonInformation>> g_trackedButtonsByRoot;
 
 // Helper function to find button in vector
 auto FindButtonInVector = [](const std::vector<ButtonInformation>& buttons, const FrameworkElement& targetButton) {
@@ -193,8 +208,8 @@ void LogException(const char* functionName) {
     }
 }
 
-winrt::Windows::UI::Color ParseHexColor(const std::wstring& hex) {
-    winrt::Windows::UI::Color color{};
+Color ParseHexColor(const std::wstring& hex) {
+    Color color{};
     if (hex.length() >= 7 && hex[0] == L'#') {
         try {
             if (hex.length() == 9) { // #AARRGGBB
@@ -219,10 +234,10 @@ winrt::Windows::UI::Color ParseHexColor(const std::wstring& hex) {
 }
 
 FrameworkElement EnumerateChildren(FrameworkElement element, std::function<bool(FrameworkElement)> callback) {
-    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    int childrenCount = VisualTreeHelper::GetChildrenCount(element);
 
     for (int i = 0; i < childrenCount; i++) {
-        auto child = Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
+        auto child = VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
         if (!child) continue;
         if (callback(child)) return child;
     }
@@ -234,9 +249,9 @@ FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
     if (!element) return nullptr;
 
     try {
-        int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+        int childrenCount = VisualTreeHelper::GetChildrenCount(element);
         for (int i = 0; i < childrenCount; i++) {
-            auto child = Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
+            auto child = VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
             if (child && child.Name() == name) {
                 return child;
             }
@@ -265,35 +280,6 @@ bool IsSecondaryTaskbar(XamlRoot xamlRoot) {
     }
     if (!controlCenterButton) return false;
     return controlCenterButton.ActualWidth() < 5;
-}
-
-HWND FindCurrentProcessTaskbarWnd() {
-    HWND hTaskbarWnd = nullptr;
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD dwProcessId;
-            DWORD dwCurrentProcessId = GetCurrentProcessId();
-            WCHAR className[32];
-
-            if (GetWindowThreadProcessId(hWnd, &dwProcessId) == FALSE)
-            {
-                Wh_Log(L"GetWindowThreadProcessId failed");
-                return TRUE;
-            }
-
-            if (dwProcessId != dwCurrentProcessId) return TRUE;
-            if (GetClassName(hWnd, className, ARRAYSIZE(className)) == FALSE) return TRUE;
-            if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                Wh_Log(L"Found %s in %u", className, dwProcessId);
-                *reinterpret_cast<HWND*>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&hTaskbarWnd));
-
-    return hTaskbarWnd;
 }
 
 bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
@@ -336,7 +322,7 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
 }
 
 // Simplified text creation helper
-TextBlock CreateTextBlock(const std::wstring& text, double fontSize, const winrt::Windows::UI::Color& color, const Thickness& margin = {}) {
+TextBlock CreateTextBlock(const std::wstring& text, double fontSize, const Color& color, const Thickness& margin = {}) {
     TextBlock textBlock;
     textBlock.Text(text);
     textBlock.FontSize(fontSize);
@@ -349,7 +335,7 @@ TextBlock CreateTextBlock(const std::wstring& text, double fontSize, const winrt
     return textBlock;
 }
 
-void setNumberPosition(Grid& textContainer) {
+void SetNumberPosition(Grid& textContainer) {
     switch (g_settings.numberPosition) {
         case NumberPosition::bottomRight:
             textContainer.HorizontalAlignment(HorizontalAlignment::Right);
@@ -400,7 +386,7 @@ FrameworkElement CreateNumberOverlay(int number) {
         textContainer.Children().Append(numberText);
 
         // Set position and properties
-        setNumberPosition(textContainer);
+        SetNumberPosition(textContainer);
 
         textContainer.Margin(Thickness{4, 2, 4, 2});
         Canvas::SetZIndex(textContainer, 1000);
@@ -441,69 +427,46 @@ void CleanupButtonOverlays(const ButtonInformation& buttonInfo) {
     }
 }
 
+XamlRootKey GetXamlRootKeyFromElement(const FrameworkElement& element) {
+    if (!element) return nullptr;
+    auto root = element.XamlRoot();
+    if (!root) return nullptr;
+    return winrt::get_abi(root);
+}
+
 void RemoveAllNumberOverlays() {
     try {
-        HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-        if (!taskbarWnd) return;
-
-        RunFromWindowThread(taskbarWnd, [](void*) {
-            try {
-                std::lock_guard<std::mutex> lock(g_overlayMutex);
-                for (const auto& buttonInfo : g_trackedButtons) {
-                    CleanupButtonOverlays(buttonInfo);
-                }
-                g_trackedButtons.clear();
-            } catch (...) {
-                LogException(__FUNCTION__);
-            }
-        }, nullptr);
-    } catch (...) {
-        LogException(__FUNCTION__);
-    }
-}
-
-// Simplified overlay update for settings changes
-void UpdateOverlayAppearance(Grid& grid, const std::wstring& text) {
-    auto children = grid.Children();
-    children.Clear();
-
-    auto textColor = ParseHexColor(g_settings.numberColor);
-    auto strokeColor = ParseHexColor(g_settings.backgroundColor);
-
-    // Create stroke effect
-    for (int dx = -1; dx <= 1; dx++) {
-        for (int dy = -1; dy <= 1; dy++) {
-            if (dx == 0 && dy == 0) continue;
-
-            auto strokeText = CreateTextBlock(text, g_settings.numberSize, strokeColor,
-                Thickness{static_cast<double>(dx), static_cast<double>(dy), 0, 0});
-            children.Append(strokeText);
+        std::unordered_map<XamlRootKey, std::vector<ButtonInformation>> copy;
+        {
+            std::lock_guard<std::mutex> lock(g_overlayMutex);
+            copy = g_trackedButtonsByRoot;
+            g_trackedButtonsByRoot.clear();
         }
-    }
 
-    // Main text
-    auto numberText = CreateTextBlock(text, g_settings.numberSize, textColor);
-    children.Append(numberText);
-}
+        Wh_Log(L"RemoveAllNumberOverlays: Cleaning %zu XamlRoots", copy.size());
 
-void UpdateOverlayWithNewSettings(const ButtonInformation& buttonInformation) {
-    if (!buttonInformation.overlay) {
-        Wh_Log(L"UpdateOverlayWithNewSettings: No overlay to update");
-        return;
-    }
+        for (auto& [key, buttons] : copy) {
+            FrameworkElement anyButton = nullptr;
+            for (auto& bi : buttons) {
+                anyButton = bi.button.get();
+                if (anyButton) break;
+            }
+            if (!anyButton) continue;
 
-    try {
-        auto grid = buttonInformation.overlay.as<Grid>();
-        std::wstring text = (buttonInformation.currentNumber == 10) ? L"0" : std::to_wstring(buttonInformation.currentNumber);
+            auto dispatcher = anyButton.Dispatcher();
+            if (!dispatcher) continue;
 
-        UpdateOverlayAppearance(grid, text);
-
-        setNumberPosition(grid);
-
-        Wh_Log(L"UpdateOverlayWithNewSettings: Successfully updated overlay");
-
+            auto buttonsCopy = buttons;
+            dispatcher.RunAsync(
+                CoreDispatcherPriority::Normal,
+                DispatchedHandler([buttonsCopy]() {
+                    for (const auto& bi : buttonsCopy) {
+                        CleanupButtonOverlays(bi);
+                    }
+                })
+            );
+        }
     } catch (...) {
-        Wh_Log(L"UpdateOverlayWithNewSettings: Failed to update overlay");
         LogException(__FUNCTION__);
     }
 }
@@ -538,18 +501,25 @@ void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, voi
             return;
         }
 
-        std::lock_guard<std::mutex> lock(g_overlayMutex);
-
         winrt::Windows::Foundation::IUnknown buttonIUnknown;
         winrt::copy_from_abi(buttonIUnknown, buttonPointer);
         auto button = buttonIUnknown.as<FrameworkElement>();
 
-        auto it = FindButtonInVector(g_trackedButtons, button);
+        auto key = GetXamlRootKeyFromElement(button);
+        if (!key) {
+            Wh_Log(L"UpdateButtonOverlay: No XamlRoot for button");
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(g_overlayMutex);
+        auto& vector = g_trackedButtonsByRoot[key];
+
+        auto it = FindButtonInVector(vector, button);
         ButtonInformation buttonInfo;
 
-        if (it != g_trackedButtons.end()) {
+        if (it != vector.end()) {
             buttonInfo = *it;
-            g_trackedButtons.erase(it);
+            vector.erase(it);
             Wh_Log(L"UpdateButtonOverlay: Found existing button, current number %d, new number %d",
                    buttonInfo.currentNumber, number);
         } else {
@@ -563,7 +533,7 @@ void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, voi
         const bool needsNewOverlay = !buttonInfo.overlay || (numberChanged && buttonInfo.overlay);
 
         if (!visibilityChanged && !numberChanged && !needsNewOverlay) {
-            g_trackedButtons.push_back(buttonInfo);
+            vector.push_back(buttonInfo);
             return;
         }
 
@@ -586,7 +556,7 @@ void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, voi
 
         buttonInfo.currentNumber = number;
         buttonInfo.isVisible = shouldShow;
-        g_trackedButtons.push_back(buttonInfo);
+        vector.push_back(buttonInfo);
 
     } catch (...) {
         LogException(__FUNCTION__);
@@ -624,12 +594,38 @@ void* GetTaskGroupFromTaskListButton(UIElement element) {
     return g_clickSentinel_TaskGroup;
 }
 
+// Only when user setting is enabled and Windows taskbar mode is set to "All taskbars"
+bool ShouldShowOnAllTaskbars() {
+    if (!g_settings.showOnAllTaskbars) return false;
+
+    try {
+        DWORD value = 0;
+        DWORD size = sizeof(value);
+        if (RegGetValueW(
+                HKEY_CURRENT_USER,
+                L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                L"MMTaskbarMode",
+                RRF_RT_REG_DWORD,
+                nullptr,
+                &value,
+                &size) == ERROR_SUCCESS) {
+            return value == 0; // 0 = All taskbars
+        }
+        return false; // Default to safe behavior
+    } catch (...) {
+        LogException(__FUNCTION__);
+        return false; // Default to safe behavior on error
+    }
+}
+
+
 void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
     if (g_unloading) return;
 
     try {
         const auto xamlRoot = taskbarRepeater.XamlRoot();
-        if (!xamlRoot || IsSecondaryTaskbar(xamlRoot)) return;
+        if (!xamlRoot) return;
+        if (!ShouldShowOnAllTaskbars() && IsSecondaryTaskbar(xamlRoot)) return;
 
         auto panel = taskbarRepeater.as<Panel>();
         if (!panel) return;
@@ -669,21 +665,28 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
             currentButtons.insert(button);
         }
 
+        auto key = GetXamlRootKeyFromElement(taskbarRepeater);
+        if (!key) return;
+
         {
             std::lock_guard<std::mutex> lock(g_overlayMutex);
-            auto it = g_trackedButtons.begin();
-            size_t removedCount = 0;
-            while (it != g_trackedButtons.end()) {
-                auto button = it->button.get();
-                if (!button || currentButtons.find(button) == currentButtons.end()) {
-                    it = g_trackedButtons.erase(it);
-                    removedCount++;
-                } else {
-                    ++it;
+            auto itMap = g_trackedButtonsByRoot.find(key);
+            if (itMap != g_trackedButtonsByRoot.end()) {
+                auto& vector = itMap->second;
+                auto it = vector.begin();
+                size_t removedCount = 0;
+                while (it != vector.end()) {
+                    auto button = it->button.get();
+                    if (!button || currentButtons.find(button) == currentButtons.end()) {
+                        it = vector.erase(it);
+                        removedCount++;
+                    } else {
+                        ++it;
+                    }
                 }
-            }
-            if (removedCount > 0) {
-                Wh_Log(L"UpdateAllTaskbarNumbers: Removed %zu buttons no longer present", removedCount);
+                if (removedCount > 0) {
+                    Wh_Log(L"UpdateAllTaskbarNumbers: Removed %zu buttons no longer present", removedCount);
+                }
             }
         }
 
@@ -735,10 +738,10 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
         if (!taskListButtonElement) return;
 
         if (auto xamlRoot = taskListButtonElement.XamlRoot()) {
-            if (IsSecondaryTaskbar(xamlRoot)) return;
+            if (!ShouldShowOnAllTaskbars() && IsSecondaryTaskbar(xamlRoot)) return;
         }
 
-        auto parent = Media::VisualTreeHelper::GetParent(taskListButtonElement).as<FrameworkElement>();
+        auto parent = VisualTreeHelper::GetParent(taskListButtonElement).as<FrameworkElement>();
         if (!parent || parent.Name() != L"TaskbarFrameRepeater") return;
 
         if (!g_unloading) UpdateAllTaskbarNumbers(parent);
@@ -825,6 +828,8 @@ void LoadSettings() {
     PCWSTR backgroundColor = Wh_GetStringSetting(L"backgroundColor");
     g_settings.backgroundColor = backgroundColor;
     Wh_FreeStringSetting(backgroundColor);
+
+    g_settings.showOnAllTaskbars = Wh_GetIntSetting(L"showOnAllTaskbars");
 }
 
 BOOL Wh_ModInit() {
@@ -860,19 +865,7 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {}
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"Settings changed, updating existing overlays");
+    Wh_Log(L"Settings changed, clearing existing overlays");
     LoadSettings();
-
-    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (taskbarWnd) {
-        RunFromWindowThread(taskbarWnd, [](void*) {
-            std::lock_guard<std::mutex> lock(g_overlayMutex);
-
-            Wh_Log(L"Updating %zu tracked buttons with new settings", g_trackedButtons.size());
-
-            for (const auto& buttonInfo : g_trackedButtons) {
-                UpdateOverlayWithNewSettings(buttonInfo);
-            }
-        }, nullptr);
-    }
+    RemoveAllNumberOverlays();
 }
