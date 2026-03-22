@@ -2,7 +2,7 @@
 // @id              file-explorer-remove-suffixes
 // @name            Remove Taskbar Window Suffixes
 // @description     Remove suffixes from taskbar window titles for File Explorer and other programs, or configure custom text replacement rules
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -147,6 +147,36 @@ struct {
     SuffixRemovalMode suffixRemovalMode;
     std::vector<SuffixRule> suffixRules;
 } g_settings;
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+HWND GetTaskBandWnd() {
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        return (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    }
+
+    return nullptr;
+}
 
 // https://gist.github.com/m417z/451dfc2dad88d7ba88ed1814779a26b4
 std::wstring GetWindowAppId(HWND hWnd) {
@@ -300,8 +330,8 @@ HRSRC WINAPI FindResourceExW_Hook(HMODULE hModule,
                                   LPCWSTR lpType,
                                   LPCWSTR lpName,
                                   WORD wLanguage) {
-    if (g_settings.suffixRemovalMode != SuffixRemovalMode::Off && hModule &&
-        lpType == RT_STRING && lpName == MAKEINTRESOURCE(2195) &&
+    if (g_settings.suffixRemovalMode == SuffixRemovalMode::FileExplorerOnly &&
+        hModule && lpType == RT_STRING && lpName == MAKEINTRESOURCE(2195) &&
         hModule == GetModuleHandle(L"explorerframe.dll")) {
         Wh_Log(L">");
         SetLastError(ERROR_RESOURCE_NAME_NOT_FOUND);
@@ -418,6 +448,25 @@ int WINAPI InternalGetWindowText_Hook(HWND hWnd,
     return result;
 }
 
+void ApplySettings() {
+    HWND hTaskBandWnd = GetTaskBandWnd();
+    if (!hTaskBandWnd) {
+        return;
+    }
+
+    static const UINT WM_SHELLHOOK = RegisterWindowMessage(L"SHELLHOOK");
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            if (IsWindowVisible(hWnd)) {
+                PostMessage(reinterpret_cast<HWND>(lParam), WM_SHELLHOOK,
+                            HSHELL_REDRAW, reinterpret_cast<LPARAM>(hWnd));
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(hTaskBandWnd));
+}
+
 void LoadSettings() {
     Wh_Log(L"LoadSettings");
 
@@ -525,12 +574,22 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    ApplySettings();
+}
+
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    ApplySettings();
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     LoadSettings();
+
+    ApplySettings();
 }
