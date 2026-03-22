@@ -7,7 +7,7 @@
 // @github          https://github.com/St0RM53
 // @include         RadeonSoftware.exe
 // @compilerOptions -luser32 -lcomctl32
-// @license         GNU GPLv3
+// @license         GPL-3.0-or-later
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
