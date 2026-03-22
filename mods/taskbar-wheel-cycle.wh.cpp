@@ -2,7 +2,7 @@
 // @id              taskbar-wheel-cycle
 // @name            Cycle taskbar buttons with mouse wheel
 // @description     Use the mouse wheel and/or keyboard shortcuts to cycle between taskbar buttons
-// @version         1.1.9
+// @version         1.1.10
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -114,6 +114,13 @@ std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
+struct TaskBtnGroupButtonInfo {
+    void* taskBtnGroup;
+    int buttonIndex;
+};
+
+std::unordered_map<void*, TaskBtnGroupButtonInfo> g_lastTaskListActiveItem;
+
 HWND g_lastScrollTarget = nullptr;
 DWORD g_lastScrollTime;
 short g_lastScrollDeltaRemainder;
@@ -163,11 +170,6 @@ void* CImmersiveTaskItem_vftable;
 
 using CTaskListWnd_GetButtonGroupCount_t = int(WINAPI*)(void* pThis);
 CTaskListWnd_GetButtonGroupCount_t CTaskListWnd_GetButtonGroupCount;
-
-using CTaskListWnd_GetActiveBtn_t = HRESULT(WINAPI*)(void* pThis,
-                                                     void** taskGroup,
-                                                     int* buttonIndex);
-CTaskListWnd_GetActiveBtn_t CTaskListWnd_GetActiveBtn;
 
 using CTaskListWnd__GetTBGroupFromGroup_t = void*(WINAPI*)(void* pThis,
                                                            void* taskGroup,
@@ -427,18 +429,16 @@ LONG_PTR* TaskbarScroll(LONG_PTR lpMMTaskListLongPtr,
     int button_groups_count = (int)plp[0];
     LONG_PTR** button_groups = (LONG_PTR**)plp[1];
 
-    int button_group_index_active, button_index_active;
+    int button_group_index_active = -1;
+    int button_index_active = -1;
 
     if (src_task_item) {
-        int i;
-        for (i = 0; i < button_groups_count; i++) {
+        for (int i = 0; i < button_groups_count; i++) {
             int button_group_type =
                 CTaskBtnGroup_GetGroupType(button_groups[i]);
             if (button_group_type == 1 || button_group_type == 3) {
                 int buttons_count = CTaskBtnGroup_GetNumItems(button_groups[i]);
-
-                int j;
-                for (j = 0; j < buttons_count; j++) {
+                for (int j = 0; j < buttons_count; j++) {
                     if ((LONG_PTR*)CTaskBtnGroup_GetTaskItem(
                             button_groups[i], j) == src_task_item) {
                         button_group_index_active = i;
@@ -447,46 +447,29 @@ LONG_PTR* TaskbarScroll(LONG_PTR lpMMTaskListLongPtr,
                     }
                 }
 
-                if (j < buttons_count) {
+                if (button_group_index_active != -1) {
                     break;
                 }
             }
         }
-
-        if (i == button_groups_count) {
-            button_group_index_active = -1;
-            button_index_active = -1;
-        }
-    } else {
-        void* taskList_ITaskListAcc = QueryViaVtable(
-            (void*)lpMMTaskListLongPtr, CTaskListWnd_vftable_ITaskListAcc);
-
-        winrt::com_ptr<IUnknown> task_group_active;
-        CTaskListWnd_GetActiveBtn(taskList_ITaskListAcc,
-                                  task_group_active.put_void(),
-                                  &button_index_active);
-
-        LONG_PTR* button_group_active =
-            task_group_active ? (LONG_PTR*)CTaskListWnd__GetTBGroupFromGroup(
-                                    (void*)lpMMTaskListLongPtr,
-                                    task_group_active.get(), nullptr)
-                              : nullptr;
-
-        if (button_group_active && button_index_active >= 0) {
-            int i;
-            for (i = 0; i < button_groups_count; i++) {
-                if (button_groups[i] == button_group_active) {
-                    button_group_index_active = i;
+    } else if (auto it =
+                   g_lastTaskListActiveItem.find((void*)lpMMTaskListLongPtr);
+               it != g_lastTaskListActiveItem.end()) {
+        LONG_PTR* last_button_group_active = (LONG_PTR*)it->second.taskBtnGroup;
+        int last_button_index_active = it->second.buttonIndex;
+        if (last_button_group_active && last_button_index_active >= 0) {
+            for (int i = 0; i < button_groups_count; i++) {
+                if (button_groups[i] == last_button_group_active) {
+                    int buttons_count =
+                        CTaskBtnGroup_GetNumItems(button_groups[i]);
+                    if (buttons_count > 0) {
+                        button_group_index_active = i;
+                        button_index_active = std::min(last_button_index_active,
+                                                       buttons_count - 1);
+                    }
                     break;
                 }
             }
-
-            if (i == button_groups_count) {
-                return nullptr;
-            }
-        } else {
-            button_group_index_active = -1;
-            button_index_active = -1;
         }
     }
 
@@ -973,6 +956,23 @@ enum {
     HOTKEY_UPDATE,
 };
 
+using CTaskListWnd__SetActiveItem_t = void(WINAPI*)(void* pThis,
+                                                    void* taskBtnGroup,
+                                                    int buttonIndex);
+CTaskListWnd__SetActiveItem_t CTaskListWnd__SetActiveItem_Original;
+void WINAPI CTaskListWnd__SetActiveItem_Hook(void* pThis,
+                                             void* taskBtnGroup,
+                                             int buttonIndex) {
+    Wh_Log(L">");
+
+    g_lastTaskListActiveItem[pThis] = {
+        .taskBtnGroup = taskBtnGroup,
+        .buttonIndex = buttonIndex,
+    };
+
+    CTaskListWnd__SetActiveItem_Original(pThis, taskBtnGroup, buttonIndex);
+}
+
 using CTaskBand_v_WndProc_t = LRESULT(
     WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 CTaskBand_v_WndProc_t CTaskBand_v_WndProc_Original;
@@ -1244,7 +1244,8 @@ bool HookTaskbarSymbols() {
     if (g_winVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
     } else {
-        module = LoadLibrary(L"taskbar.dll");
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
@@ -1274,10 +1275,6 @@ bool HookTaskbarSymbols() {
             &CTaskListWnd_GetButtonGroupCount,
         },
         {
-            {LR"(public: virtual long __cdecl CTaskListWnd::GetActiveBtn(struct ITaskGroup * *,int *))"},
-            &CTaskListWnd_GetActiveBtn,
-        },
-        {
             {LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *))"},
             &CTaskListWnd__GetTBGroupFromGroup,
         },
@@ -1304,6 +1301,11 @@ bool HookTaskbarSymbols() {
         {
             {LR"(public: virtual void __cdecl CTaskListWnd::SwitchToItem(struct ITaskItem *))"},
             &CTaskListWnd_SwitchToItem_Original,
+        },
+        {
+            {LR"(protected: void __cdecl CTaskListWnd::_SetActiveItem(struct ITaskBtnGroup *,int))"},
+            &CTaskListWnd__SetActiveItem_Original,
+            CTaskListWnd__SetActiveItem_Hook,
         },
         {
             {LR"(protected: virtual __int64 __cdecl CTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
@@ -1423,8 +1425,6 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
          &CImmersiveTaskItem_vftable},
         {R"(?GetButtonGroupCount@CTaskListWnd@@UEAAHXZ)",
          &CTaskListWnd_GetButtonGroupCount},
-        {R"(?GetActiveBtn@CTaskListWnd@@UEAAJPEAPEAUITaskGroup@@PEAH@Z)",
-         &CTaskListWnd_GetActiveBtn},
         {R"(?_GetTBGroupFromGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@PEAH@Z)",
          &CTaskListWnd__GetTBGroupFromGroup},
         {R"(?GetGroupType@CTaskBtnGroup@@UEAA?AW4eTBGROUPTYPE@@XZ)",
@@ -1438,6 +1438,9 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
          &CImmersiveTaskItem_GetWindow_Original},
         {R"(?SwitchToItem@CTaskListWnd@@UEAAXPEAUITaskItem@@@Z)",
          &CTaskListWnd_SwitchToItem_Original},
+        {R"(?_SetActiveItem@CTaskListWnd@@IEAAXPEAUITaskBtnGroup@@H@Z)",
+         &CTaskListWnd__SetActiveItem_Original,
+         CTaskListWnd__SetActiveItem_Hook},
         {R"(?v_WndProc@CTaskBand@@MEAA_JPEAUHWND__@@I_K_J@Z)",
          &CTaskBand_v_WndProc_Original, CTaskBand_v_WndProc_Hook},
         {R"(?WndProc@TrayUI@@UEAA_JPEAUHWND__@@I_K_JPEA_N@Z)",

@@ -2,7 +2,7 @@
 // @id              internet-status-indicator
 // @name            Internet Status Indicator
 // @description     Real-time network connectivity monitoring with visual indicators as a Tray Icon
-// @version         0.7
+// @version         0.8.2
 // @author          ALMAS CP
 // @github          https://github.com/almas-cp
 // @homepage        https://github.com/almas-cp
@@ -154,10 +154,15 @@ This mod runs as part of the windhawk.exe process for better stability and resou
 #include <algorithm>
 #include <condition_variable>
 #include <mutex>
+#include <functional>
 
 
 #define WM_TRAYICON (WM_USER + 1)
 #define ID_TRAYICON 1001
+#define WM_UPDATE_STATUS (WM_USER + 2)
+#define TIMER_REFRESH_ICON 2001
+#define BOOT_REFRESH_DURATION_MS 60000
+#define BOOT_REFRESH_INTERVAL_MS 2000
 
 
 // Icon shape constants
@@ -194,6 +199,7 @@ private:
     bool iconVisible;
     bool currentConnectionState;
     bool isInitialized;
+    bool firstUpdateDone;  // Track if initial status update has occurred
     
     // Clamp color values to valid range
     int ClampColor(int value) {
@@ -323,7 +329,8 @@ private:
     
 public:
     TrayIconManager() : hwnd(NULL), hIconConnected(NULL), hIconDisconnected(NULL), 
-                        iconVisible(false), currentConnectionState(false), isInitialized(false) {
+                        iconVisible(false), currentConnectionState(false), isInitialized(false),
+                        firstUpdateDone(false) {
         memset(&nid, 0, sizeof(nid));
     }
     
@@ -365,11 +372,46 @@ public:
         if (!hwnd || !isInitialized) return false;
         if (iconVisible) return true;
         
-        bool result = Shell_NotifyIcon(NIM_ADD, &nid) != FALSE;
-        if (result) {
-            iconVisible = true;
+        Wh_Log(L"🔄 Attempting to show tray icon...");
+        
+        // Try to add the icon, with retries for boot scenarios
+        // Extended to 15 seconds total (15 attempts x 1 second)
+        const int maxRetries = 15;
+        const int retryDelayMs = 1000;
+        
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            bool result = Shell_NotifyIcon(NIM_ADD, &nid) != FALSE;
+            if (result) {
+                iconVisible = true;
+                Wh_Log(L"✅ Tray icon shown successfully (attempt %d)", attempt);
+                return true;
+            }
+            
+            if (attempt < maxRetries) {
+                Wh_Log(L"⏳ Tray icon add failed (attempt %d/%d), retrying...", 
+                       attempt, maxRetries);
+                
+                // Pump messages while waiting - this allows TaskbarCreated to be received!
+                DWORD startTick = GetTickCount();
+                while (GetTickCount() - startTick < (DWORD)retryDelayMs) {
+                    MSG msg;
+                    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                        TranslateMessage(&msg);
+                        DispatchMessage(&msg);
+                        
+                        // If TaskbarCreated was received and handled, icon might be visible now
+                        if (iconVisible) {
+                            Wh_Log(L"✅ Tray icon created via TaskbarCreated message");
+                            return true;
+                        }
+                    }
+                    Sleep(50);  // Small sleep to avoid busy-waiting
+                }
+            }
         }
-        return result;
+        
+        Wh_Log(L"⚠️ Failed to show tray icon after %d attempts, will wait for TaskbarCreated...", maxRetries);
+        return false;
     }
     
     bool Hide() {
@@ -384,6 +426,13 @@ public:
     
     void UpdateStatus(bool connected, bool forceUpdate = false) {
         if (!iconVisible || !isInitialized) return;
+        
+        // Always force the first update to change "Starting..." to actual status
+        if (!firstUpdateDone) {
+            forceUpdate = true;
+            firstUpdateDone = true;
+        }
+        
         if (!forceUpdate && currentConnectionState == connected) return;
         
         currentConnectionState = connected;
@@ -411,10 +460,31 @@ public:
     
     bool IsVisible() const { return iconVisible; }
     
+    // Recreate the tray icon (called when taskbar restarts)
+    bool RecreateTrayIcon() {
+        if (!isInitialized || !hwnd) return false;
+        
+        Wh_Log(L"🔄 Taskbar restarted, recreating tray icon...");
+        
+        // The icon was automatically removed when explorer/taskbar restarted
+        // So we just need to add it again
+        iconVisible = false;
+        
+        bool result = Shell_NotifyIcon(NIM_ADD, &nid) != FALSE;
+        if (result) {
+            iconVisible = true;
+            Wh_Log(L"✅ Tray icon recreated successfully");
+        } else {
+            Wh_Log(L"❌ Failed to recreate tray icon");
+        }
+        return result;
+    }
+    
     void Cleanup() {
         Hide();
         isInitialized = false;
         currentConnectionState = false;
+        firstUpdateDone = false;
     }
 };
 
@@ -424,10 +494,43 @@ class TrayWindow {
 private:
     HWND hwnd;
     static const wchar_t* CLASS_NAME;
+    static UINT s_uTaskbarRestart;  // Message ID for TaskbarCreated
+    static std::function<void()> s_onTaskbarCreated;  // Callback when taskbar restarts
+    static std::function<void(bool)> s_onStatusUpdate;  // Callback for status updates on UI thread
+    static std::function<bool()> s_getConnectionState;  // Getter for current connection state
+    static DWORD s_timerStartTick;  // When the boot refresh timer was started
     
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-        if (uMsg == WM_TRAYICON) {
-            return 0;
+        switch (uMsg) {
+            case WM_TRAYICON:
+                return 0;
+            case WM_UPDATE_STATUS:
+                if (s_onStatusUpdate) {
+                    s_onStatusUpdate(wParam != 0);
+                }
+                return 0;
+            case WM_TIMER:
+                if (wParam == TIMER_REFRESH_ICON) {
+                    if (s_onStatusUpdate && s_getConnectionState) {
+                        s_onStatusUpdate(s_getConnectionState());
+                    }
+                    // Kill timer after boot refresh period
+                    if (GetTickCount() - s_timerStartTick >= BOOT_REFRESH_DURATION_MS) {
+                        KillTimer(hwnd, TIMER_REFRESH_ICON);
+                        Wh_Log(L"✅ Boot refresh timer stopped");
+                    }
+                }
+                return 0;
+            default:
+                // Handle TaskbarCreated message
+                if (s_uTaskbarRestart != 0 && uMsg == s_uTaskbarRestart) {
+                    Wh_Log(L"📢 TaskbarCreated message received");
+                    if (s_onTaskbarCreated) {
+                        s_onTaskbarCreated();
+                    }
+                    return 0;
+                }
+                break;
         }
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
@@ -455,22 +558,60 @@ public:
             0,
             CLASS_NAME,
             L"Internet Status Indicator",
-            0,
+            WS_OVERLAPPED,  // Use a hidden regular window instead of message-only
             0, 0, 0, 0,
-            HWND_MESSAGE,
+            NULL,  // Changed from HWND_MESSAGE - message-only windows don't receive broadcasts!
             NULL,
             hInstance,
             NULL
         );
         
+        if (hwnd) {
+            // Register the TaskbarCreated message
+            // This message is broadcast when the taskbar is created/recreated
+            s_uTaskbarRestart = RegisterWindowMessage(L"TaskbarCreated");
+            if (s_uTaskbarRestart == 0) {
+                Wh_Log(L"⚠️ Failed to register TaskbarCreated message");
+            } else {
+                Wh_Log(L"✅ Registered TaskbarCreated message (ID: %u)", s_uTaskbarRestart);
+            }
+        }
+        
         return hwnd != NULL;
     }
     
     HWND GetHandle() const { return hwnd; }
+    
+    // Set the callback for when taskbar is created/recreated
+    static void SetTaskbarCreatedCallback(std::function<void()> callback) {
+        s_onTaskbarCreated = callback;
+    }
+    
+    static void SetStatusUpdateCallback(std::function<void(bool)> callback) {
+        s_onStatusUpdate = callback;
+    }
+    
+    static void SetConnectionStateGetter(std::function<bool()> getter) {
+        s_getConnectionState = getter;
+    }
+    
+    void StartBootRefreshTimer() {
+        if (hwnd) {
+            s_timerStartTick = GetTickCount();
+            SetTimer(hwnd, TIMER_REFRESH_ICON, BOOT_REFRESH_INTERVAL_MS, NULL);
+            Wh_Log(L"🔄 Boot refresh timer started (every %dms for %ds)",
+                   BOOT_REFRESH_INTERVAL_MS, BOOT_REFRESH_DURATION_MS / 1000);
+        }
+    }
 };
 
 
 const wchar_t* TrayWindow::CLASS_NAME = L"InternetStatusTrayWindow";
+UINT TrayWindow::s_uTaskbarRestart = 0;
+std::function<void()> TrayWindow::s_onTaskbarCreated = nullptr;
+std::function<void(bool)> TrayWindow::s_onStatusUpdate = nullptr;
+std::function<bool()> TrayWindow::s_getConnectionState = nullptr;
+DWORD TrayWindow::s_timerStartTick = 0;
 
 
 class InternetStatusMonitor {
@@ -519,6 +660,12 @@ public:
             Wh_Log(L"❌ Failed to create tray window.");
             return false;
         }
+        
+        // Set up the TaskbarCreated callback to recreate the icon when explorer restarts
+        TrayWindow::SetTaskbarCreatedCallback([this]() {
+            OnTaskbarCreated();
+        });
+        
         if (!trayIcon->Initialize(trayWindow->GetHandle(), settings)) {
             Wh_Log(L"❌ Failed to initialize tray icon manager.");
             return false;
@@ -528,8 +675,34 @@ public:
             return false;
         }
         
+        // Set up status update callback (runs on UI thread via window messages)
+        TrayWindow::SetStatusUpdateCallback([this](bool connected) {
+            if (trayIcon && trayIcon->IsVisible()) {
+                trayIcon->UpdateStatus(connected, false);
+            }
+        });
+        
+        // Set up connection state getter for timer-based refresh
+        TrayWindow::SetConnectionStateGetter([this]() {
+            return isConnected.load();
+        });
+        
+        // Start boot refresh timer for reliable icon updates during system startup
+        trayWindow->StartBootRefreshTimer();
+        
         trayIconInitialized = true;
         return true;
+    }
+    
+    // Called when TaskbarCreated message is received (explorer restarted)
+    void OnTaskbarCreated() {
+        if (!trayIconInitialized || !trayIcon) return;
+        
+        // Recreate the tray icon
+        if (trayIcon->RecreateTrayIcon()) {
+            // Update with current connection status
+            trayIcon->UpdateStatus(isConnected.load(), true);
+        }
     }
     
     bool InitializeIcmp() {
@@ -612,9 +785,10 @@ public:
             }
         }
         
-        // Update tray icon
-        if (settings.showTrayIcon && trayIcon && trayIcon->IsVisible()) {
-            trayIcon->UpdateStatus(currentlyConnected, false);
+        // Post to UI thread for thread-safe tray icon update
+        if (settings.showTrayIcon && trayWindow && trayWindow->GetHandle()) {
+            PostMessage(trayWindow->GetHandle(), WM_UPDATE_STATUS, 
+                       currentlyConnected ? 1 : 0, 0);
         }
         
         // Verbose logging
@@ -630,11 +804,33 @@ public:
     void MonitorLoop() {
         Wh_Log(L"🚀 Internet Status Monitor started (windhawk.exe)");
         
-        Sleep(1000);
+        // Startup mode: Check more frequently for first 15 seconds
+        const int startupDurationMs = 15000;
+        const int startupCheckIntervalMs = 1000;  // Check every 1 second during startup
+        
+        auto startupBegin = std::chrono::steady_clock::now();
+        Wh_Log(L"⚡ Entering startup mode (fast checking for %d seconds)...", startupDurationMs / 1000);
+        
+        // Initial check
         PerformConnectivityCheck();
         
         while (isRunning.load()) {
-            auto startTime = std::chrono::steady_clock::now();
+            auto now = std::chrono::steady_clock::now();
+            auto timeSinceStart = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - startupBegin).count();
+            
+            // Determine check interval based on mode
+            bool inStartupMode = (timeSinceStart < startupDurationMs);
+            int currentInterval = inStartupMode ? startupCheckIntervalMs : settings.checkInterval;
+            
+            // Log when transitioning from startup to normal mode
+            static bool startupModeEnded = false;
+            if (!inStartupMode && !startupModeEnded) {
+                startupModeEnded = true;
+                Wh_Log(L"✅ Startup mode complete, switching to normal interval (%dms)", settings.checkInterval);
+            }
+            
+            auto checkStart = std::chrono::steady_clock::now();
             
             try {
                 PerformConnectivityCheck();
@@ -645,11 +841,11 @@ public:
             // Check if we should stop before waiting
             if (!isRunning.load()) break;
             
-            auto endTime = std::chrono::steady_clock::now();
+            auto checkEnd = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                endTime - startTime).count();
+                checkEnd - checkStart).count();
             
-            int sleepTime = settings.checkInterval - (int)elapsed;
+            int sleepTime = currentInterval - (int)elapsed;
             if (sleepTime > 0) {
                 // Use condition variable for interruptible wait
                 std::unique_lock<std::mutex> lock(cv_mutex);

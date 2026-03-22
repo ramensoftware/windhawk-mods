@@ -2,7 +2,7 @@
 // @id              notifications-placement
 // @name            Customize Windows notifications placement
 // @description     Move notifications to another monitor or another corner of the screen
-// @version         1.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,7 +10,7 @@
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lshcore
+// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -30,6 +30,48 @@ Move notifications to another monitor or another corner of the screen.
 Only Windows 10 64-bit and Windows 11 are supported.
 
 ![Screenshot](https://i.imgur.com/4PxMvLg.png)
+
+## Selecting a monitor
+
+You can select a monitor by its number or by its interface name in the mod
+settings.
+
+### By monitor number
+
+Set the **Monitor** setting to the desired monitor number (1, 2, 3, etc.). Note
+that this number may differ from the monitor number shown in Windows Display
+Settings.
+
+Set the **Monitor** setting to 0 to use the monitor where the mouse cursor is
+currently located.
+
+### By interface name
+
+If monitor numbers change frequently (e.g., after locking your PC or
+restarting), you can use the monitor's interface name instead. To find the
+interface name:
+
+1. Go to the mod's **Advanced** tab.
+2. Set **Debug logging** to **Mod logs**.
+3. Click on **Show log output**.
+4. In the mod settings, enter any text (e.g., `TEST`) in the **Monitor interface
+   name** field.
+5. Trigger a notification to appear.
+6. In the log output, look for lines containing `Found display device`. You will
+   see one line per monitor, for example:
+   ```
+   Found display device \\.\DISPLAY1, interface name: \\?\DISPLAY#DELA1D2#5&abc123#0#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+   Found display device \\.\DISPLAY2, interface name: \\?\DISPLAY#GSM5B09#4&def456#0#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+   ```
+   Use the interface name that follows the "interface name:" text. You may need
+   to experiment to determine which interface name corresponds to which physical
+   monitor.
+7. Copy the relevant interface name (or a unique substring of it) into the
+   **Monitor interface name** setting.
+8. Set **Debug logging** back to **None** when done.
+
+The **Monitor interface name** setting takes priority over the **Monitor**
+number when both are configured.
 */
 // ==/WindhawkModReadme==
 
@@ -64,15 +106,32 @@ Only Windows 10 64-bit and Windows 11 are supported.
   - center: Center
 - verticalDistanceFromScreenEdge: 0
   $name: Distance from the bottom/top side of the screen
+- animationDirection: automatic
+  $name: Notification appearance animation direction
+  $options:
+  - automatic: Automatic
+  - fromLeft: From left
+  - fromRight: From right
+  - fromTop: From top
+  - fromBottom: From bottom
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
+#undef GetCurrentTime
+
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/base.h>
+
 #include <atomic>
+#include <functional>
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+using namespace winrt::Windows::UI::Xaml;
 
 std::atomic<bool> g_unloading;
 
@@ -88,6 +147,14 @@ enum class VerticalPlacement {
     center,
 };
 
+enum class AnimationDirection {
+    automatic,
+    fromLeft,
+    fromRight,
+    fromTop,
+    fromBottom,
+};
+
 struct {
     int monitor;
     WindhawkUtils::StringSetting monitorInterfaceName;
@@ -95,7 +162,19 @@ struct {
     int horizontalDistanceFromScreenEdge;
     VerticalPlacement verticalPlacement;
     int verticalDistanceFromScreenEdge;
+    AnimationDirection animationDirection;
 } g_settings;
+
+enum class Target {
+    Explorer,
+    ShellExperienceHost,
+};
+
+Target g_target;
+
+bool g_inCToastCenterExperienceManager_PositionView;
+
+bool g_customAnimationDirectionApplied;
 
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 typedef enum MONITOR_DPI_TYPE {
@@ -198,13 +277,47 @@ std::wstring GetProcessFileName(DWORD dwProcessId) {
 
     CloseHandle(hProcess);
 
-    PCWSTR processFileNameUpper = wcsrchr(processPath, L'\\');
-    if (!processFileNameUpper) {
+    PCWSTR processFileName = wcsrchr(processPath, L'\\');
+    if (!processFileName) {
         return std::wstring{};
     }
 
-    processFileNameUpper++;
-    return processFileNameUpper;
+    processFileName++;
+    return processFileName;
+}
+
+FrameworkElement EnumChildElements(
+    FrameworkElement element,
+    std::function<bool(FrameworkElement)> enumCallback) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child) {
+            Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
+            continue;
+        }
+
+        if (enumCallback(child)) {
+            return child;
+        }
+    }
+
+    return nullptr;
+}
+
+FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
+    return EnumChildElements(element, [name](FrameworkElement child) {
+        return child.Name() == name;
+    });
+}
+
+FrameworkElement FindChildByClassName(FrameworkElement element,
+                                      PCWSTR className) {
+    return EnumChildElements(element, [className](FrameworkElement child) {
+        return winrt::get_class_name(child) == className;
+    });
 }
 
 bool IsTargetCoreWindow(HWND hWnd) {
@@ -230,51 +343,104 @@ bool IsTargetCoreWindow(HWND hWnd) {
     // String resource: \ActionCenter\AC_ToastCenter_Title
     // The strings were collected from here:
     // https://github.com/m417z/windows-language-files
-    static const std::unordered_set<std::wstring> newNotificationStrings = {
-        L"Jakinarazpen berria",
-        L"Jauns paziņojums",
-        L"Naujas pranešimas",
-        L"Neue Benachrichtigung",
-        L"New notification",
-        L"Nieuwe melding",
-        L"Notificació nova",
-        L"Notificación nueva",
-        L"Notificare nouă",
-        L"Nouvelle notification",
-        L"Nova notificação",
-        L"Nova notificación",
-        L"Nova obavijesti",
-        L"Nové oznámení",
-        L"Nové oznámenie",
-        L"Novo obaveštenje",
-        L"Novo obvestilo",
-        L"Nowe powiadomienie",
-        L"Nueva notificación",
-        L"Nuova notifica",
-        L"Ny meddelelse",
-        L"Ny varsling",
-        L"Nytt meddelande",
-        L"Pemberitahuan baru",
-        L"Thông báo mới",
-        L"Új értesítés",
-        L"Uus teatis",
-        L"Uusi ilmoitus",
-        L"Yeni bildirim",
-        L"Νέα ειδοποίηση",
-        L"Нове сповіщення",
-        L"Ново известие",
-        L"Новое уведомление",
-        L"הודעה חדשה",
-        L"\u200f\u200fإعلام جديد",
-        L"การแจ้งให้ทราบใหม่",
-        L"새 알림",
-        L"新しい通知",
-        L"新通知",
-    };
 
-    WCHAR szWindowText[256];
+    // clang-format off
+    static const std::unordered_set<std::wstring> newNotificationStrings = {
+        L"Nuwe kennisgewing", // AF-ZA
+        L"አዲስ ማሳወቂያ", // AM-ET
+        L"নতুন জাননী", // AS-IN
+        L"Yeni bildiriş", // AZ-LATN-AZ
+        L"Новае апавяшчэнне", // BE-BY
+        L"নতুন বিজ্ঞপ্তি", // BN-IN
+        L"Novo obavještenje", // BS-LATN-BA
+        L"Notificació nova", // CA-ES-VALENCIA
+        L"ᎢᏤᎢ ᎧᏃᎮᏓ", // CHR-CHER-US
+        L"Hysbysiad newydd", // CY-GB
+        L"اعلان جدید", // FA-IR
+        L"Bagong notification", // FIL-PH
+        L"Fógra nua", // GA-IE
+        L"Brath ùr", // GD-GB
+        L"નવી સૂચના", // GU-IN
+        L"नई अधिसूचना", // HI-IN
+        L"Նոր ծանուցում", // HY-AM
+        L"Ný tilkynning", // IS-IS
+        L"ახალი შეტყობინება", // KA-GE
+        L"Жаңа хабарландыру", // KK-KZ
+        L"ការ​ជូន​ដំណឹង​ថ្មី", // KM-KH
+        L"ಹೊಸ ಪ್ರಕಟಣೆ", // KN-IN
+        L"नवी अधिसुचोवणी", // KOK-IN
+        L"Nei Notifikatioun", // LB-LU
+        L"ການແຈ້ງເຕືອນໃໝ່", // LO-LA
+        L"Whakamōhiotanga hōu", // MI-NZ
+        L"Ново известување", // MK-MK
+        L"പുതിയ അറിയിപ്പ്", // ML-IN
+        L"नवीन सूचना", // MR-IN
+        L"Pemberitahuan baharu", // MS-MY
+        L"Notifika ġdida", // MT-MT
+        L"नयाँ सूचना", // NE-NP
+        L"Nytt varsel", // NN-NO
+        L"ନୂତନ ବିଜ୍ଞପ୍ତି", // OR-IN
+        L"ਨਵੀਂ ਸੂਚਨਾ", // PA-IN
+        L"Musuq willana", // QUZ-PE
+        L"Njoftim i ri", // SQ-AL
+        L"Ново обавјештење", // SR-CYRL-BA
+        L"Ново обавештење", // SR-CYRL-RS
+        L"புதிய அறிவிப்பு", // TA-IN
+        L"కొత్త నోటిఫికేషన్", // TE-IN
+        L"Яңа белдерү", // TT-RU
+        L"يېڭى ئۇقتۇرۇش", // UG-CN
+        L"نئی اطلاع", // UR-PK
+        L"Yangi xabarnoma", // UZ-LATN-UZ
+        L"\u200f\u200fإعلام جديد", // AR-SA
+        L"Ново известие", // BG-BG
+        L"Notificació nova", // CA-ES
+        L"Nové oznámení", // CS-CZ
+        L"Ny meddelelse", // DA-DK
+        L"Neue Benachrichtigung", // DE-DE
+        L"Νέα ειδοποίηση", // EL-GR
+        L"New notification", // EN-GB
+        L"New notification", // EN-US
+        L"Notificación nueva", // ES-ES
+        L"Nueva notificación", // ES-MX
+        L"Uus teatis", // ET-EE
+        L"Jakinarazpen berria", // EU-ES
+        L"Uusi ilmoitus", // FI-FI
+        L"Nouvelle notification", // FR-CA
+        L"Nouvelle notification", // FR-FR
+        L"Nova notificación", // GL-ES
+        L"הודעה חדשה", // HE-IL
+        L"Nova obavijesti", // HR-HR
+        L"Új értesítés", // HU-HU
+        L"Pemberitahuan baru", // ID-ID
+        L"Nuova notifica", // IT-IT
+        L"新しい通知", // JA-JP
+        L"새 알림", // KO-KR
+        L"Naujas pranešimas", // LT-LT
+        L"Jauns paziņojums", // LV-LV
+        L"Ny varsling", // NB-NO
+        L"Nieuwe melding", // NL-NL
+        L"Nowe powiadomienie", // PL-PL
+        L"Nova notificação", // PT-BR
+        L"Nova notificação", // PT-PT
+        L"Notificare nouă", // RO-RO
+        L"Новое уведомление", // RU-RU
+        L"Nové oznámenie", // SK-SK
+        L"Novo obvestilo", // SL-SI
+        L"Novo obaveštenje", // SR-LATN-RS
+        L"Nytt meddelande", // SV-SE
+        L"การแจ้งให้ทราบใหม่", // TH-TH
+        L"Yeni bildirim", // TR-TR
+        L"Нове сповіщення", // UK-UA
+        L"Thông báo mới", // VI-VN
+        L"新通知", // ZH-CN
+        L"新通知", // ZH-TW
+    };
+    // clang-format on
+
+    WCHAR szWindowText[256]{};
     if (GetWindowText(hWnd, szWindowText, ARRAYSIZE(szWindowText)) == 0 ||
         !newNotificationStrings.contains(szWindowText)) {
+        Wh_Log(L"Not targeting CoreWindow, window text: %s", szWindowText);
         return false;
     }
 
@@ -289,7 +455,7 @@ std::vector<HWND> GetCoreWindows() {
     std::vector<HWND> hWnds;
     ENUM_WINDOWS_PARAM param = {&hWnds};
     EnumWindows(
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
             ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
 
             if (IsTargetCoreWindow(hWnd)) {
@@ -306,11 +472,13 @@ std::vector<HWND> GetCoreWindows() {
 void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
     Wh_Log(L"Before: %dx%d %dx%d", *x, *y, *cx, *cy);
 
-    HMONITOR primaryMonitor =
-        MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
-
-    HMONITOR srcMonitor = MonitorFromPoint({*x + *cx / 2, *y + *cy * 2},
-                                           MONITOR_DEFAULTTONEAREST);
+    RECT rc{
+        .left = *x,
+        .top = *y,
+        .right = *x + *cx,
+        .bottom = *y + *cy,
+    };
+    HMONITOR srcMonitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
 
     UINT srcMonitorDpiX = 96;
     UINT srcMonitorDpiY = 96;
@@ -337,6 +505,9 @@ void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
     }
 
     if (!destMonitor) {
+        HMONITOR primaryMonitor =
+            MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
+
         destMonitor = primaryMonitor;
     }
 
@@ -389,21 +560,6 @@ void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
         }
     }
 
-    if (destMonitor != primaryMonitor) {
-        UINT destMonitorDpiX = 96;
-        UINT destMonitorDpiY = 96;
-        GetDpiForMonitor(destMonitor, MDT_DEFAULT, &destMonitorDpiX,
-                         &destMonitorDpiY);
-
-        UINT primaryMonitorDpiX = 96;
-        UINT primaryMonitorDpiY = 96;
-        GetDpiForMonitor(primaryMonitor, MDT_DEFAULT, &primaryMonitorDpiX,
-                         &primaryMonitorDpiY);
-
-        *cx = MulDiv(*cx, destMonitorDpiX, primaryMonitorDpiX);
-        // *cy = MulDiv(*cy, destMonitorDpiY, primaryMonitorDpiY);
-    }
-
     switch (g_unloading ? HorizontalPlacement::right
                         : g_settings.horizontalPlacement) {
         case HorizontalPlacement::right:
@@ -443,6 +599,171 @@ void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
     }
 
     Wh_Log(L"After: %dx%d %dx%d", *x, *y, *cx, *cy);
+}
+
+using CToastCenterExperienceManager_PositionView_t =
+    HRESULT(WINAPI*)(void* pThis);
+CToastCenterExperienceManager_PositionView_t
+    CToastCenterExperienceManager_PositionView_Original;
+HRESULT WINAPI CToastCenterExperienceManager_PositionView_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    g_inCToastCenterExperienceManager_PositionView = true;
+    HRESULT ret = CToastCenterExperienceManager_PositionView_Original(pThis);
+    g_inCToastCenterExperienceManager_PositionView = false;
+
+    return ret;
+}
+
+using MonitorFromPoint_t = decltype(&MonitorFromPoint);
+MonitorFromPoint_t MonitorFromPoint_Original;
+HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD dwFlags) {
+    Wh_Log(L">");
+
+    if (g_inCToastCenterExperienceManager_PositionView && !g_unloading &&
+        pt.x == 0 && pt.y == 0) {
+        HMONITOR monitor = nullptr;
+
+        if (*g_settings.monitorInterfaceName.get()) {
+            monitor = GetMonitorByInterfaceNameSubstr(
+                g_settings.monitorInterfaceName.get());
+        } else if (g_settings.monitor == 0) {
+            POINT cursorPt;
+            GetCursorPos(&cursorPt);
+            monitor =
+                MonitorFromPoint_Original(cursorPt, MONITOR_DEFAULTTONEAREST);
+        } else if (g_settings.monitor >= 1) {
+            monitor = GetMonitorById(g_settings.monitor - 1);
+        }
+
+        if (monitor) {
+            return monitor;
+        }
+    }
+
+    return MonitorFromPoint_Original(pt, dwFlags);
+}
+
+void UpdateAnimationDirectionStyle() {
+    int angle = 0;
+
+    switch (g_unloading ? AnimationDirection::fromRight
+                        : g_settings.animationDirection) {
+        case AnimationDirection::automatic:
+            if (g_settings.horizontalPlacement == HorizontalPlacement::center) {
+                if (g_settings.verticalPlacement == VerticalPlacement::bottom) {
+                    angle = 90;
+                } else {
+                    angle = -90;
+                }
+            } else if (g_settings.horizontalPlacement ==
+                       HorizontalPlacement::left) {
+                angle = 180;
+            }
+            break;
+
+        case AnimationDirection::fromLeft:
+            angle = 180;
+            break;
+
+        case AnimationDirection::fromRight:
+            break;
+
+        case AnimationDirection::fromTop:
+            angle = 90;
+            break;
+
+        case AnimationDirection::fromBottom:
+            angle = -90;
+            break;
+    }
+
+    if (!g_customAnimationDirectionApplied && !angle) {
+        return;
+    }
+
+    auto window = Window::Current();
+    if (!window) {
+        Wh_Log(L"Failed to get current window");
+        return;
+    }
+
+    FrameworkElement windowContent = window.Content().as<FrameworkElement>();
+    if (!windowContent) {
+        Wh_Log(L"Failed to get window content");
+        return;
+    }
+
+    FrameworkElement launcherFrame = nullptr;
+
+    FrameworkElement child = windowContent;
+    if ((child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.ContentPresenter")) &&
+        (child =
+             FindChildByClassName(child, L"ActionCenter.ToastCenterPage")) &&
+        (child = FindChildByName(child, L"ToastCenterMainGrid")) &&
+        (child = FindChildByName(child, L"ToastCenterView")) &&
+        (child = FindChildByName(child, L"ToastCenterScrollViewer")) &&
+        (child = FindChildByName(child, L"Root")) &&
+        (child =
+             FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid")) &&
+        (child = FindChildByName(child, L"ScrollContentPresenter")) &&
+        (child = FindChildByName(child, L"ToastCenterGrid"))) {
+        launcherFrame = child;
+    }
+
+    if (!launcherFrame) {
+        Wh_Log(L"Failed to find launcher frame");
+        return;
+    }
+
+    auto origin = winrt::Windows::Foundation::Point{0.5, 0.5};
+
+    bool foundAnyRootGridContent = false;
+    EnumChildElements(launcherFrame, [&](FrameworkElement toastView) {
+        auto name = toastView.Name();
+        if (name.empty()) {
+            return false;  // continue enumeration
+        }
+
+        if (!name.starts_with(L"FlexibleNormalToastView") &&
+            !name.starts_with(L"FlexiblePriorityToastView")) {
+            return false;  // continue enumeration
+        }
+
+        FrameworkElement mainGrid = FindChildByName(toastView, L"MainGrid");
+        if (!mainGrid) {
+            return false;  // continue enumeration
+        }
+
+        FrameworkElement revealGrid2 =
+            FindChildByName(mainGrid, L"RevealGrid2");
+        if (!revealGrid2) {
+            return false;  // continue enumeration
+        }
+
+        Wh_Log(L"Applying transform to toast view %s", name.c_str());
+
+        Media::RotateTransform transform;
+        transform.Angle(-angle);
+        revealGrid2.RenderTransform(transform);
+        revealGrid2.RenderTransformOrigin(origin);
+
+        foundAnyRootGridContent = true;
+        return false;  // continue enumeration to find all matching children
+    });
+
+    if (!foundAnyRootGridContent) {
+        Wh_Log(L"Failed to find root grid content");
+        return;
+    }
+
+    Media::RotateTransform transform;
+    transform.Angle(angle);
+    launcherFrame.RenderTransform(transform);
+    launcherFrame.RenderTransformOrigin(origin);
+
+    g_customAnimationDirectionApplied = (angle != 0);
 }
 
 using SetWindowPos_t = decltype(&SetWindowPos);
@@ -489,14 +810,20 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
 
     AdjustCoreWindowPos(&X, &Y, &cx, &cy);
 
-    return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
-}
+    BOOL ret =
+        SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 
-void ApplySettings() {
-    if (!GetModuleHandle(L"ShellExperienceHost.exe")) {
-        return;
+    if (g_target == Target::ShellExperienceHost &&
+        GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId()) {
+        UpdateAnimationDirectionStyle();
     }
 
+    return ret;
+}
+
+namespace ShellExperienceHost {
+
+void ApplySettings() {
     for (HWND hCoreWnd : GetCoreWindows()) {
         Wh_Log(L"Adjusting core window %08X", (DWORD)(ULONG_PTR)hCoreWnd);
 
@@ -515,6 +842,33 @@ void ApplySettings() {
         SetWindowPos_Original(hCoreWnd, nullptr, x, y, cx, cy,
                               SWP_NOZORDER | SWP_NOACTIVATE);
     }
+}
+
+}  // namespace ShellExperienceHost
+
+bool HookTwinuiPcshellSymbols() {
+    HMODULE module = LoadLibraryEx(L"twinui.pcshell.dll", nullptr,
+                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Loading twinui.pcshell.dll failed");
+        return false;
+    }
+
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: long __cdecl CToastCenterExperienceManager::PositionView(void))"},
+            &CToastCenterExperienceManager_PositionView_Original,
+            CToastCenterExperienceManager_PositionView_Hook,
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
 void LoadSettings() {
@@ -545,6 +899,19 @@ void LoadSettings() {
 
     g_settings.verticalDistanceFromScreenEdge =
         Wh_GetIntSetting(L"verticalDistanceFromScreenEdge");
+
+    PCWSTR animationDirection = Wh_GetStringSetting(L"animationDirection");
+    g_settings.animationDirection = AnimationDirection::automatic;
+    if (wcscmp(animationDirection, L"fromLeft") == 0) {
+        g_settings.animationDirection = AnimationDirection::fromLeft;
+    } else if (wcscmp(animationDirection, L"fromRight") == 0) {
+        g_settings.animationDirection = AnimationDirection::fromRight;
+    } else if (wcscmp(animationDirection, L"fromTop") == 0) {
+        g_settings.animationDirection = AnimationDirection::fromTop;
+    } else if (wcscmp(animationDirection, L"fromBottom") == 0) {
+        g_settings.animationDirection = AnimationDirection::fromBottom;
+    }
+    Wh_FreeStringSetting(animationDirection);
 }
 
 BOOL Wh_ModInit() {
@@ -552,8 +919,40 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook,
-                       (void**)&SetWindowPos_Original);
+    g_target = Target::Explorer;
+
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            Wh_Log(L"GetModuleFileName failed");
+            break;
+
+        default:
+            if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
+                moduleFileName++;
+                if (_wcsicmp(moduleFileName, L"ShellExperienceHost.exe") == 0) {
+                    g_target = Target::ShellExperienceHost;
+                }
+            } else {
+                Wh_Log(L"GetModuleFileName returned an unsupported path");
+            }
+            break;
+    }
+
+    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
+                                   &SetWindowPos_Original);
+
+    if (g_target == Target::Explorer) {
+        if (!HookTwinuiPcshellSymbols()) {
+            return FALSE;
+        }
+
+        WindhawkUtils::Wh_SetFunctionHookT(MonitorFromPoint,
+                                           MonitorFromPoint_Hook,
+                                           &MonitorFromPoint_Original);
+    }
 
     return TRUE;
 }
@@ -561,7 +960,9 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    ApplySettings();
+    if (g_target == Target::ShellExperienceHost) {
+        ShellExperienceHost::ApplySettings();
+    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -569,7 +970,9 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    ApplySettings();
+    if (g_target == Target::ShellExperienceHost) {
+        ShellExperienceHost::ApplySettings();
+    }
 }
 
 void Wh_ModUninit() {
@@ -581,5 +984,7 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    ApplySettings();
+    if (g_target == Target::ShellExperienceHost) {
+        ShellExperienceHost::ApplySettings();
+    }
 }

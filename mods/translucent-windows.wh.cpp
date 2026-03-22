@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.6.3
+// @version         1.7.4
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -11,6 +11,8 @@
 
 // ==WindhawkModReadme==
 /*
+
+# ⚠️ FAQ section below ⚠️
 
 ### Blur (AccentBlurBehind)
 ![AccentBlurBehind](https://i.imgur.com/tSf5ztk.png)
@@ -23,24 +25,42 @@
 
 # FAQ
 
-* Use Windows 11 File Explorer Styler mod and select the Translucent Explorer11 theme
-in order to get translucent WinUI parts of the new file explorer
+* ⚠️Use Windows 11 File Explorer Styler mod and select the Translucent Explorer11 theme
+in order to get translucent WinUI parts of the new file explorer.⚠️
 
-* Prerequisited windows settings to enable the background effects
+* ❗The new system colors setting option adjusts the [system colors](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getsyscolor) 
+in order to blend with the background translucency / custom theme rendering. 
+This setting option overrides any process exclusion as these colors are applied system-wide using 
+the [SetSysColor](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setsyscolors) API.
+Intercepting and changing the system colors in a proper way is quite difficult, more details
+in another software project that faced the same problem: https://github.com/namazso/SecureUxTheme/issues/9#issuecomment-611897882 ❗
+
+* ⚠️Set a process rule in the mod's settings with custom theme rendering disabled, in order to reset (if possible) the custom system colors to default for the target process.⚠️
+
+* ❗The Windows custom theme rendering also fixes invisible text by restoring alpha and modifying text colors.
+Extending effects to the entire window can result in text being barely readable or even invisible in some cases. 
+Enabling HDR, 10bit color depth output, having a black color, or a white background behind the window can cause this. 
+This is because most GDI rendering operations ignore or do not preserve alpha values.❗
+
+* ⚠️The background color of the properties window may remain unchanged after applying the Windows theme custom rendering.
+Restart explorer.exe to change the background color.⚠️
+
+* ⚠️Prerequisited windows settings to enable the background effects⚠️
     - Transparency effects enabled
     - Energy saver disabled
 #
-* The background effects do not affect most modern windows (UWP/WinUI), 
-apps with different front-end rendering (e.g Electron, Chromium etc.. programs) and native windows with hardcoded colors
+* ⚠️The background effects do not affect most modern windows (UWP/WinUI), 
+apps with different front-end rendering (e.g Qt, Electron, Chromium etc.. programs) and native windows with hardcoded colors.⚠️
 
-* It is highly recommended to use the mod with black/dark window themes like the Rectify11 "Dark theme with Mica".
+* ⚠️If parts of the Windows UI colors remain modified after disabling the modification, this is happening when new system colors are applied in a selected Windows custom theme.
+Changing the theme to the default and vice versa fixes the problem. As a last resort, you can delete the registry key HKEY_CURRENT_USER\Control Panel\Colors and reboot.⚠️
 
-* Extending effects to the entire window can result in text being unreadable or even invisible in some cases. 
-HDR enabled, 10bit color depth output, black color or white background behind the window can cause this. 
-This is because most GDI rendering operations do not preserve alpha values.
+* ❕The blur effect may show a bleeding effect at the edges of a window when maximized or snapped to the edge of the screen. 
+This is caused by default by the AccentBlur API.❕
 
-* Blur effect may show a bleeding effect at the edges of a window when 
-maximized or snapped to the edge of the screen, this is caused by default.
+* ✨It is recommended to use the mod with a custom black/dark window themes like the Rectify11 "Dark theme with Mica".✨
+
+* ✨The mod works best on the default dark theme.✨
 
 */
 // ==/WindhawkModReadme==
@@ -48,21 +68,25 @@ maximized or snapped to the edge of the screen, this is caused by default.
 // ==WindhawkModSettings==
 /*
 - RenderingMod:
-    - ThemeBackground: FALSE
+    - ThemeBackground: TRUE
       $name: Windows theme custom rendering
       $description: >-
-       Modifies parts of the Windows theme using the Direct2D graphics API.
-    - AccentColorControls: FALSE
+       Modifies parts of the Windows theme using the Direct2D graphics API and modifies 
+       Windows GDI text rendering by patching the alpha channel and adjusting text colors.
+        ✨It is recommended to enable this with background translucent effects.
+    - SysColors: TRUE
+      $name: New system colors
+      $description: >-
+       Modifies additional system UI colors by calling SetSysColors API.
+        ⚠️For issues with excluded processes, use process rules in mod's settings. For more refer to the FAQ.
+         ✨It is recommended to enable this with Windows theme custom rendering.
+    - AccentColorControls: TRUE
       $name: Windows theme accent colorizer
       $description: >-
        Paint with accent color parts of windows theme. (Requires Windows theme custom rendering)
-    - TextAlphaBlend: FALSE
-      $name: Text alpha blending
-      $description: >-
-       Alpha blends Windows GDI text rendering.
   $name: Rendering Customization
-- type: none
-  $name: Effects
+- type: acrylicblur
+  $name: Background translucent effects
   $description: >-
      Windows 11 version >= 22621.xxx (22H2) is required for SystemBackdrop effects.
   $options:
@@ -71,19 +95,26 @@ maximized or snapped to the edge of the screen, this is caused by default.
   - acrylicsystem: Acrylic (SystemBackdrop)
   - mica: Mica (SystemBackdrop)
   - mica_tabbed: MicaAlt (SystemBackdrop)
-- AccentBlurBehind: "00000000"
+- AccentBlurBehind: "3A232323"
   $name: AccentBlurBehind color blend
   $description: >-
     Blending color with blur background.
-     Color in hexadecimal ARGB format e.g. 0F000000
-- ImmersiveDarkTitle: FALSE
+     Color in hexadecimal ARGB format e.g. 3A232323
+- FlyoutsEffects: TRUE
+  $name: Flyout effects
+  $description: >-
+    Expand the effects to Win32 flyouts (context menus, dropdown menus, tooltips)
+     ✨It is recommended to enable this with both background translucent effects and Windows theme custom rendering.
+- ImmersiveDarkTitle: TRUE
   $name: Immersive darkmode titlebar
   $description: >-
-    Enables the flag for immersive darkmode titlebars, affects the tintcolor of SystemBackdrop effects and caption buttons color state
-- ExtendFrame: FALSE
+    Affects the tintcolor of SystemBackdrop effects and the glyph color of the titlebar caption buttons.
+     ✨It is recommended to enable this with background translucent effects.
+- ExtendFrame: TRUE
   $name: Extend effects into entire window
   $description: >-
     Extends the effects into the entire window background using DwmExtendFrameIntoClientArea.
+     ✨It is recommended to enable this with background translucent effects.
 - CornerOption: default
   $name: Window corner type
   $description: >-
@@ -156,9 +187,6 @@ maximized or snapped to the edge of the screen, this is caused by default.
         Transparent = 0
         Default = 1
         SystemAccentColor = 2
-    - MenuBorderColor: FALSE
-      $name: Extend colored borders to classic context menus
-      $description: Enable this option to get colored borders on windows classic context menus.
   $name: Border color
   $description: >-
       Windows 11 version >= 22000.xxx (21H2) is required.
@@ -169,8 +197,19 @@ maximized or snapped to the edge of the screen, this is caused by default.
          Entries can be process names or paths, for example:
           mspaint.exe
           C:\Windows\System32\notepad.exe
+      - RenderingMod:
+          - ThemeBackground: FALSE
+            $name: Windows theme custom rendering
+            $description: >-
+              Modifies parts of the Windows theme using the Direct2D graphics API and modifies 
+              Windows GDI text rendering by patching the alpha channel and adjusting text colors.
+               ✨It is recommended to enable this with background translucent effects.
+          - AccentColorControls: FALSE
+            $name: Windows theme accent colorizer
+            $description: >-
+              Paint with accent color parts of windows theme. (Requires Windows theme custom rendering)
       - type: none
-        $name: Effects
+        $name: Background translucent effects
         $description: >-
          Windows 11 version >= 22621.xxx (22H2) is required for SystemBackdrop effects.
         $options:
@@ -179,19 +218,21 @@ maximized or snapped to the edge of the screen, this is caused by default.
           - acrylicsystem: Acrylic (SystemBackdrop)
           - mica: Mica (SystemBackdrop)
           - mica_tabbed: MicaAlt (SystemBackdrop)
-      - AccentBlurBehind: "00000000"
+      - AccentBlurBehind: "3A232323"
         $name: AccentBlurBehind color blend
         $description: >-
           Blending color with blur background.
-           Color in hexadecimal ARGB format e.g. 0F000000
+           Color in hexadecimal ARGB format e.g. 3A232323
       - ImmersiveDarkTitle: FALSE
         $name: Immersive darkmode titlebar
         $description: >-
-            Enables the flag for immersive darkmode titlebars, affects the tintcolor of SystemBackdrop effects and caption buttons color state
+            Affects the tintcolor of SystemBackdrop effects and the glyph color of the titlebar caption buttons.
+             ✨It is recommended to enable this with background translucent effects.
       - ExtendFrame: FALSE
         $name: Extend effects into entire window
         $description: >-
           Extends the effects into the entire window background using DwmExtendFrameIntoClientArea.
+           ✨It is recommended to enable this with background translucent effects.
       - CornerOption: default
         $name: Window corner type
         $description: >-
@@ -286,6 +327,8 @@ maximized or snapped to the edge of the screen, this is caused by default.
 #include <wrl.h>
 #include <ShellScalingApi.h>
 
+#define RECTWIDTH(lprc)     ((lprc)->right - (lprc)->left)
+#define RECTHEIGHT(lprc)    ((lprc)->bottom - (lprc)->top)
 
 static UINT ENABLE = 1;
 static constexpr UINT AUTO = 0; // DWMSBT_AUTO
@@ -294,9 +337,10 @@ static constexpr UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
 static constexpr UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
 static constexpr UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
 
-static constexpr UINT DEFAULT = 0; // DWMWCP_DEFAULT
+static constexpr UINT DEFAULTROUND = 0; // DWMWCP_DEFAULT
 static constexpr UINT DONTROUND = 1; // DWMWCP_DONOTROUND
-static constexpr UINT SMALLROUND = 3; // DWMWCP_ROUNDSMALL
+//static constexpr UINT ROUND = 2; // DWMWCP_ROUND
+//static constexpr UINT SMALLROUND = 3; // DWMWCP_ROUNDSMALL
 
 // Get DPI value from the primary monitor without dependance to DPI-aware API
 // TODO: Get DPI per window monitor
@@ -315,7 +359,18 @@ UINT g_msgRainbowTimer = RegisterWindowMessage(L"Rainbow_effect");
 
 enum {
     RAINBOW_LOAD,
-    RAINBOW_UNLOAD
+    RAINBOW_UNLOAD,
+    RAINBOW_PAUSED,
+    RAINBOW_RESTART
+};
+
+struct RainbowData {
+    DOUBLE initialHue = 0.0;
+    DOUBLE baseTime = 0.0;        // when timer first started
+    DOUBLE pausedTotal = 0.0;     // accumulated paused duration
+    DOUBLE pausedStart = 0.0;     // when current pause began
+    BOOL isPaused = FALSE;
+    UINT_PTR timerId = 0;
 };
 
 std::wstring g_RainbowPropStr = L"Windhawk_TranslucentMod_Rainbow";
@@ -324,32 +379,46 @@ std::unordered_set<HWND> g_rainbowWindows;
 
 thread_local BOOL g_DrawTextWithGlowEntry;
 
-typedef HRESULT(WINAPI* pDrawTextWithGlow)(HDC, LPCWSTR, UINT, const RECT*, DWORD, COLORREF, COLORREF, UINT, UINT, BOOL, DTT_CALLBACK_PROC, LPARAM);
+typedef HRESULT(WINAPI* pDrawTextWithGlow)(HDC hdcMem, wchar_t const* pszText, unsigned cch, RECT* prc, DWORD dwFlags, COLORREF crText,
+                                          COLORREF crGlow, unsigned nGlowRadius, unsigned nGlowIntensity, BOOL fPreMultiply,
+                                          DTT_CALLBACK_PROC pfnDrawTextCallback, LPARAM lParam);
 static auto DrawTextWithGlow = (pDrawTextWithGlow)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(126));
 
 // Detect system dark/light theme mode
-//typedef HRESULT(WINAPI* pShouldSystemUseDarkMode)();
-//static auto ShouldSystemUseDarkMode = (pShouldSystemUseDarkMode)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(138));
+typedef HRESULT(WINAPI* pShouldSystemUseDarkMode)();
+static auto ShouldSystemUseDarkMode = (pShouldSystemUseDarkMode)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(138));
+HRESULT g_IsSysThemeDarkMode = ShouldSystemUseDarkMode();
 
 thread_local HHOOK g_callWndProcHook;
 std::mutex g_allCallWndProcHooksMutex;
 std::unordered_set<HHOOK> g_allCallWndProcHooks;
 
+std::mutex g_subclassedflyoutsmutex;
+std::unordered_set<HWND> g_subclassedflyouts;
+
+HTHEME g_hTheme = nullptr;
+BOOL g_DefaultSysColors = FALSE;
+std::array<HBRUSH, COLOR_MENUBAR> g_themeCachedCustomSysColorBrushes {nullptr};
+std::array<HBRUSH, COLOR_MENUBAR> g_themeCachedDefaultSysColorBrushes {nullptr};
+
 using PUNICODE_STRING = PVOID;
+constexpr auto MENUPOPUP_CLASS = L"#32768";
+constexpr UINT THEMECLS_COMMONPROPS_PART = 0;
 
 struct Settings{
     BOOL FillBg = FALSE;
     BOOL AccentColorize = FALSE;
     COLORREF AccentColor = 0xFFFFFFFF;
     BOOL TextAlphaBlend = FALSE;
+    BOOL SetSystemColors = FALSE;
     COLORREF AccentBlurBehindClr = 0x00000000;
-    BOOL ImmersiveDarkmode = TRUE;
+    BOOL ImmersiveDarkmode = FALSE;
+    BOOL FlyoutsEffects = FALSE;
     BOOL ExtendFrame = FALSE;
     BOOL Unload = FALSE;
     BOOL TitlebarFlag = FALSE;
     BOOL CaptionTextFlag = FALSE;
     BOOL BorderFlag = FALSE;
-    BOOL MenuBorderFlag = FALSE;
     COLORREF TitlebarActiveColor = DWMWA_COLOR_DEFAULT;
     COLORREF CaptionActiveTextColor = DWMWA_COLOR_DEFAULT;
     COLORREF BorderActiveColor = DWMWA_COLOR_DEFAULT;
@@ -379,10 +448,11 @@ struct Settings{
 
     enum CORNERTYPE
     {
-        DefaultRounded,
-        NotRounded,
+        DefaultRound = 0,
+        NotRounded = 1,
+        Rounded = 2,
         SmallRounded = 3
-    } CornerPref = DefaultRounded;
+    } CornerPref = DefaultRound;
 
 } g_settings;
 
@@ -462,9 +532,9 @@ enum WINDOWCOMPOSITIONATTRIB
     WCA_LAST
 };
 
-ACCENT_POLICY accent = {};
-WINCOMPATTRDATA attrib = {};
-DWM_BLURBEHIND bb = { 0 };
+ACCENT_POLICY g_accent = {};
+WINCOMPATTRDATA g_attrib = {};
+DWM_BLURBEHIND g_bb = { 0 };
 
 ID2D1Factory* g_d2dFactory = nullptr;
 
@@ -502,8 +572,10 @@ NtUserCreateWindowEx_t NtUserCreateWindowEx_Original;
 
 static decltype(&DwmExtendFrameIntoClientArea) DwmExtendFrameIntoClientArea_orig = nullptr;
 static decltype(&DwmSetWindowAttribute) DwmSetWindowAttribute_orig = nullptr;
+decltype(&TrackPopupMenuEx) TrackPopupMenuEx_orig;
 
 static decltype(&DrawTextW) DrawTextW_orig = nullptr;
+static decltype(&DrawTextExW) DrawTextExW_orig = nullptr;
 static decltype(&ExtTextOutW) ExtTextOutW_orig = nullptr;
 static decltype(&DrawThemeText) DrawThemeText_orig = nullptr;
 static decltype(&DrawThemeTextEx) DrawThemeTextEx_orig = nullptr;
@@ -512,44 +584,101 @@ static decltype(&GetThemeBitmap) GetThemeBitmap_orig = nullptr;
 static decltype(&GetThemeColor) GetThemeColor_orig = nullptr;
 static decltype(&DrawThemeBackground) DrawThemeBackground_orig = nullptr;
 static decltype(&DrawThemeBackgroundEx) DrawThemeBackgroundEx_orig = nullptr;
+static decltype(&GetThemeMargins) GetThemeMargins_orig = nullptr;
+static decltype(&GetSysColor) GetSysColor_orig = nullptr;
+static decltype(&GetSysColorBrush) GetSysColorBrush_orig = nullptr;
 static decltype(&DefWindowProcW) DefWindowProc_orig = nullptr;
 
-VOID NewWindowShown(HWND); 
+VOID NewWindowShown(HWND);
+VOID HandleEffects(HWND hWnd);
 
-BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
+std::wstring GetWindowClass(HWND hWnd)
 {
-    WCHAR ClassNameBuffer[256]; 
-    GetClassNameW(hWnd, ClassNameBuffer, sizeof(ClassNameBuffer));
-    if(!wcscmp(ClassName, ClassNameBuffer))
-        return TRUE;
-    return FALSE;
+    WCHAR buffer[MAX_PATH];
+    GetClassNameW(hWnd, buffer, MAX_PATH);
+    return buffer;
+}
+
+BOOL IsWindowClass(HWND hWnd, LPCWSTR className)
+{
+    return GetWindowClass(hWnd) == className;
+}
+
+BOOL IsWindowCloaked(HWND hwnd) {
+    BOOL isCloaked = FALSE;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked,
+                                           sizeof(isCloaked))) &&
+           isCloaked;
 }
 
 BOOL IsWindowEligible(HWND hWnd) 
-{      
+{    
+    BOOL isFlyoutWindow = IsWindowClass(hWnd, TOOLTIPS_CLASS) || IsWindowClass(hWnd, L"DropDown") || IsWindowClass(hWnd, L"ViewControlClass");
+    if (isFlyoutWindow && g_settings.FlyoutsEffects)
+        return TRUE;   
+    
     LONG_PTR styleEx = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
     
-    // Fixes Snipping Tool rec
-    if ((styleEx & WS_EX_NOACTIVATE) || (styleEx & WS_EX_TRANSPARENT))
-        return FALSE;
-
     HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
     if (hParentWnd && hParentWnd != GetDesktopWindow())
         return FALSE;
+    
+    BOOL hasTitleBar = (style & WS_CAPTION) == WS_CAPTION;
+    BOOL hasCaptionButtons = (style & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) != 0;
+    BOOL hasSystemMenu = (style & WS_SYSMENU) != 0;
+    BOOL hasThickFrame = (style & WS_THICKFRAME) == WS_THICKFRAME;
+    BOOL isWindowCEF = (IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0"));
 
-    BOOL hasTitleBar = (style & WS_BORDER) && (style & WS_DLGFRAME);
-
-    if (!hasTitleBar && ((styleEx & WS_EX_TOOLWINDOW) ||
-       (style & WS_POPUP) || (styleEx & WS_EX_APPWINDOW)))
+    //https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507
+    // Allow containers of Windows Store apps (WinStore.exe, Settings.exe, etc.)
+    // Allow also Chromium Embedded Framework (Brave.exe) created as cloaked.
+    if (IsWindowCloaked(hWnd) && !IsWindowClass(hWnd, L"ApplicationFrameWindow") && !isWindowCEF)
         return FALSE;
 
-    // Don't block CEF apps
-    if (!((IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0")) || style & WS_POPUP || styleEx & WS_EX_APPWINDOW || styleEx & WS_EX_DLGMODALFRAME)
-        && !(style & WS_THICKFRAME || style & WS_MINIMIZEBOX || style & WS_MAXIMIZEBOX || style & 0x00000080l)) // Firefox dialog
+    // Windows become disabled even when they are displayed (e.g. Recycle Bin) when a pop-up window opens in front.
+    if (!IsWindowEnabled(hWnd) && !IsWindowVisible(hWnd))
         return FALSE;
     
-    return TRUE;
+    // Pass ineligible CEF windows like Discord/Vencord
+    if (isWindowCEF && (hasCaptionButtons || hasTitleBar))
+        return TRUE;
+    // Fixes Snipping Tool recording
+    if ((styleEx & WS_EX_NOACTIVATE) || (styleEx & WS_EX_TRANSPARENT))
+        return FALSE;
+    // Most top-level windows
+    if ((style & WS_POPUPWINDOW) == WS_POPUPWINDOW || (style & WS_OVERLAPPEDWINDOW) == WS_OVERLAPPEDWINDOW 
+       || (styleEx & WS_EX_DLGMODALFRAME) == WS_EX_DLGMODALFRAME)
+            return TRUE;
+    // Overlapped windows like the Win32 progress window
+    if (hasTitleBar && hasSystemMenu && (hasCaptionButtons || hasThickFrame))
+        return TRUE;
+
+    return FALSE;
+}
+
+BOOL IsWindowFullscreen(HWND hWnd)
+{
+    WINDOWPLACEMENT wp{.length = sizeof(WINDOWPLACEMENT)};
+
+    if (GetWindowPlacement(hWnd, &wp) && wp.showCmd == SW_SHOWMAXIMIZED)
+        return TRUE;
+
+    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (!hMon)
+        return FALSE;
+
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfoW(hMon, &mi);
+
+    RECT windowRect{};
+    DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
+                          sizeof(windowRect));
+
+    if (EqualRect(&windowRect, &mi.rcMonitor))
+        return TRUE;
+
+    return FALSE;
 }
 
 enum AccentColorShade
@@ -584,7 +713,7 @@ BOOL AccentPalette::LoadAccentPalette()
 
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kAccentRegPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
-        return false;
+        return FALSE;
 
     BYTE data[32] = {};
     DWORD dataSize = sizeof(data);
@@ -593,18 +722,116 @@ BOOL AccentPalette::LoadAccentPalette()
     if (RegQueryValueExW(hKey, kAccentPaletteValue, nullptr, &type, data, &dataSize) != ERROR_SUCCESS || type != REG_BINARY || dataSize < AccentColorCount * 4)
     {
         RegCloseKey(hKey);
-        return false;
+        return FALSE;
     }
 
     RegCloseKey(hKey);
 
-    for (int i = 0; i < AccentColorCount; ++i)
+    for (INT i = 0; i < AccentColorCount; ++i)
     {
         DWORD color = *reinterpret_cast<DWORD*>(&data[i * 4]);
         Colors[i] = color;
     }
-    return true;
+    return TRUE;
 }
+
+static COLORREF HSLToRGB(FLOAT h, FLOAT s, FLOAT l) {
+    FLOAT c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
+    FLOAT x = c * (1.0f - fabs(fmod(h / 60.0f, 2.0f) - 1.0f));
+    FLOAT m = l - c / 2.0f;
+
+    FLOAT r_prime, g_prime, b_prime;
+    if (0.0f <= h && h < 60.0f) {
+        r_prime = c; g_prime = x; b_prime = 0.0f;
+    } else if (60.0f <= h && h < 120.0f) {
+        r_prime = x; g_prime = c; b_prime = 0.0f;
+    } else if (120.0f <= h && h < 180.0f) {
+        r_prime = 0.0f; g_prime = c; b_prime = x;
+    } else if (180.0f <= h && h < 240.0f) {
+        r_prime = 0.0f; g_prime = x; b_prime = c;
+    } else if (240.0f <= h && h < 300.0f) {
+        r_prime = x; g_prime = 0.0f; b_prime = c;
+    } else {
+        r_prime = c; g_prime = 0.0f; b_prime = x;
+    }
+
+    BYTE r = static_cast<BYTE>((r_prime + m) * 255.0f);
+    BYTE g = static_cast<BYTE>((g_prime + m) * 255.0f);
+    BYTE b = static_cast<BYTE>((b_prime + m) * 255.0f);
+    return RGB(r, g, b);
+}
+
+/*
+struct HSL
+{
+    DOUBLE h; // Hue:        0–360
+    DOUBLE s; // Saturation: 0–1
+    DOUBLE l; // Lightness:  0–1
+};
+
+static HSL RGBToHSL(COLORREF color)
+{
+    DOUBLE r = GetRValue(color) / 255.0;
+    DOUBLE g = GetGValue(color) / 255.0;
+    DOUBLE b = GetBValue(color) / 255.0;
+
+    DOUBLE maxc = std::max({ r, g, b });
+    DOUBLE minc = std::min({ r, g, b });
+    DOUBLE delta = maxc - minc;
+
+    HSL hsl{};
+    hsl.l = (maxc + minc) * 0.5;
+
+    if (delta == 0.0)
+    {
+        // Gray (no saturation)
+        hsl.h = 0.0;
+        hsl.s = 0.0;
+    }
+    else
+    {
+        // Saturation
+        hsl.s = (hsl.l > 0.5)
+            ? delta / (2.0 - maxc - minc)
+            : delta / (maxc + minc);
+
+        // Hue
+        if (maxc == r)
+            hsl.h = (g - b) / delta + (g < b ? 6.0 : 0.0);
+        else if (maxc == g)
+            hsl.h = (b - r) / delta + 2.0;
+        else
+            hsl.h = (r - g) / delta + 4.0;
+
+        hsl.h *= 60.0;
+    }
+
+    return hsl;
+}
+
+
+// Lazy AI gen'd glow generator
+static COLORREF ComputeGlowHSL(COLORREF textColor)
+{
+    HSL hsl = RGBToHSL(textColor);
+
+    // --- Opposite lightness ---
+    float glowL = 1.0f - hsl.l;
+
+    // Clamp extremes (avoid harsh halos)
+    glowL = std::clamp(glowL, 0.10f, 0.90f);
+
+    // --- Suppress saturation ---
+    float glowS = hsl.s * 0.15f;
+
+    // If text is clearly colored → fully neutral glow
+    if (hsl.s > 0.25f)
+        glowS = 0.0f;
+
+    // Hue irrelevant when S ≈ 0
+    return HSLToRGB(hsl.h, glowS, glowL);
+}
+*/
 
 BOOL GetAccentColor(COLORREF& outColor)
 {
@@ -694,15 +921,31 @@ D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE R, BYTE G, BYTE B, AccentColorShade A
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    if(dwAttribute == DWMWA_BORDER_COLOR && IsWindowClass(hWnd, L"#32768") && g_settings.MenuBorderFlag && g_settings.BorderActiveColor != DWMWA_COLOR_NONE)
-            return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
+    // Popup menus (#32768) pass here by default to paint 
+    // the window border and corners
+    if (IsWindowClass(hWnd, MENUPOPUP_CLASS) && g_settings.FlyoutsEffects)
+    {
+        if (dwAttribute == DWMWA_BORDER_COLOR && g_settings.BorderFlag)
+        {
+            if (g_settings.BorderActiveColor == DWMWA_COLOR_NONE) {
+                COLORREF Transparent = DWMWA_COLOR_NONE;
+                return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &Transparent, sizeof(COLORREF));
+            }
+            else if (g_settings.BorderActiveColor != DWMWA_COLOR_DEFAULT)
+                return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
+        }
+        else if (dwAttribute == DWMWA_WINDOW_CORNER_PREFERENCE && g_settings.BgType != g_settings.Default) {
+            UINT cornerType = (g_settings.CornerPref == DEFAULTROUND) ? g_settings.Rounded : g_settings.CornerPref;
+            return DwmSetWindowAttribute_orig(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerType, sizeof(UINT));
+        }
+    }
             
     if(!IsWindowEligible(hWnd))
         return DwmSetWindowAttribute_orig(hWnd, dwAttribute, pvAttribute, cbAttribute);
     
     if(!g_settings.TitlebarFlag)
     {
-        if (dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE || dwAttribute == DWMWA_USE_HOSTBACKDROPBRUSH)
+        if ((dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE || dwAttribute == DWMWA_USE_HOSTBACKDROPBRUSH) && g_settings.BgType != g_settings.Default)
         {
             if (g_settings.BgType == g_settings.AccentBlurBehind)
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &AUTO, sizeof(UINT));
@@ -714,8 +957,8 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &MAINWINDOW, sizeof(UINT));
         }
     }
-    else if (dwAttribute == DWMWA_CAPTION_COLOR || (dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE 
-        && (IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"TaskManagerWindow"))))
+    else if ((dwAttribute == DWMWA_CAPTION_COLOR || (dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE 
+        && (IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"TaskManagerWindow")))) && g_settings.TitlebarFlag)
             return DwmSetWindowAttribute_orig(hWnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
     
     // Effects on VS Studio, Windows Terminal ...
@@ -730,15 +973,12 @@ HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMar
     if(!IsWindowEligible(hWnd))
         [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
     
-    if(g_settings.ExtendFrame)
-    {
-        if (!IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS") )
-        {
-            static const MARGINS margins = {-1, -1, -1, -1};
-            [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
-        }
+    if(g_settings.ExtendFrame && !IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS")) {
+        static const MARGINS margins = {-1, -1, -1, -1};
+        [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
     }
-    [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
+    else
+        [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
 }
 
 HWND WINAPI HookedNtUserCreateWindowEx(DWORD dwExStyle,
@@ -812,10 +1052,25 @@ INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, 
         SetBkColor(hDC, GetBkColor(hdc));
         SetTextAlign(hDC, GetTextAlign(hdc));
         SetTextCharacterExtra(hDC, GetTextCharacterExtra(hdc));
-        //SetTextColor(hDC, GetTextColor(hdc));
+        SetMapMode(hDC, GetMapMode(hdc));
+
+        COLORREF TextColor = GetTextColor(hdc);
+        COLORREF GlowColor = 0;
+        UINT GlowIntensity = 0;
+        UINT GlowRadius = 0;
+        BOOL Premultiply = FALSE;
+        
+        // Glow blends with Desktop folders list view shadowed texts
+        // creating a very opaque effect
+        /* 
+        GlowColor = ComputeGlowHSL(textcolor);
+        GlowIntensity = GlowColor ? 32 : GlowIntensity;
+        GlowRadius = GlowIntensity ? 2 : GlowRadius;
+        Premultiply = TRUE;
+        */
 
         hr = DrawTextWithGlow(hDC, lpchText, cchText, lprc, format,
-        GetTextColor(hdc), 0, 0, 0, 0,
+        TextColor, GlowColor, GlowRadius, GlowIntensity, Premultiply,
         [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI
         {
             return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
@@ -829,6 +1084,16 @@ INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, 
     return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
 }
 
+BOOL WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp)
+{
+    if (!lpdtp && !(format & DT_CALCRECT) && !g_DrawTextWithGlowEntry) {
+
+        auto ret = HookedDrawTextW(hdc, lpchText, cchText, lprc, format);
+        return ret;
+    }
+    return DrawTextExW_orig(hdc, lpchText, cchText, lprc, format, lpdtp);
+}
+
 BOOL WINAPI HookedExtTextOutW(
     HDC hdc,
     INT x,
@@ -839,16 +1104,24 @@ BOOL WINAPI HookedExtTextOutW(
     UINT c,
     const INT* lpDx)
 {
-    if (!hdc || (!lpString && options != ETO_OPAQUE)  || g_DrawTextWithGlowEntry)
-        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);  
+    if (!hdc || (!lpString && options != ETO_OPAQUE) || g_DrawTextWithGlowEntry)
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    
+    if (options == (ETO_CLIPPED | ETO_OPAQUE) && lprect) {
+        RECT rect = *lprect;
+        auto ret = HookedDrawTextW(hdc, lpString, c, &rect, DT_LEFT | DT_TOP | DT_SINGLELINE);
+        return (ret) ? TRUE : FALSE;
+    }
+
+    if (options & ETO_OPAQUE && !lprect)
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
     RECT textRect {0};
     SIZE textSize = {0};
     
     if (lprect) {
         // Pass one line (borders) drawings
-        if (options == ETO_OPAQUE && 
-        ((lprect->right-lprect->left) == 1 || (lprect->bottom-lprect->top) == 1))
+        if (options == ETO_OPAQUE && (RECTWIDTH(lprect) == 1 || RECTHEIGHT(lprect) == 1))
             textRect = *lprect;
         else if (options != ETO_OPAQUE)
             textRect = *lprect;
@@ -870,7 +1143,7 @@ BOOL WINAPI HookedExtTextOutW(
         if(!GetClipBox(hdc, &textRect)) // GetClipBox has a performance impact, not ideal
             return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
     }
-    else
+    else if (options)
     {
         if (GetTextExtentPoint32W(hdc, lpString, c, &textSize))
         {
@@ -883,16 +1156,12 @@ BOOL WINAPI HookedExtTextOutW(
             return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
     }
     
-    INT textRectWidth = textRect.right - textRect.left;
-    INT textRectHeight = textRect.bottom - textRect.top;
+    INT textRectWidth = RECTWIDTH(&textRect);
+    INT textRectHeight = RECTHEIGHT(&textRect);
 
     if (textRectWidth <= 0 || textRectHeight <= 0)
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    
-    COLORREF origTextColor = GetTextColor(hdc);
-    COLORREF origBkColor = GetBkColor(hdc);
-    COLORREF highlightSysClr = GetSysColor(COLOR_HIGHLIGHT);
-    
+        
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth       = textRectWidth;
@@ -914,6 +1183,12 @@ BOOL WINAPI HookedExtTextOutW(
     HGDIOBJ oldBmp  = SelectObject(memDC, dib);
     HGDIOBJ oldFont = SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
     SetTextAlign(memDC, GetTextAlign(hdc));
+
+    COLORREF origTextColor = GetTextColor(hdc);
+    COLORREF origBkColor = GetBkColor(hdc);
+    COLORREF highlightSysClr = GetSysColor(COLOR_HIGHLIGHT);
+
+    origTextColor = (options == ETO_OPAQUE && !lpString) ? origBkColor : origTextColor;
     SetBkMode(memDC, TRANSPARENT);
 
     RECT pRect;
@@ -923,7 +1198,7 @@ BOOL WINAPI HookedExtTextOutW(
     }
     
     // The opaque text background applied to the background of text within editboxes
-    if (options & ETO_OPAQUE)
+    if (options & ETO_OPAQUE && lprect)
     {
         if (origBkColor == highlightSysClr) {
             FillRect(hdc, lprect, (HBRUSH)GetStockObject(BLACK_BRUSH));
@@ -989,6 +1264,13 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iS
         INT cchText, DWORD dwTextFlags, LPRECT pRect, const DTTOPTS* pOptions)
 {
     std::wstring ThemeClassName = GetThemeClass(hTheme);
+
+    if (pOptions == nullptr) {
+        DTTOPTS Options = { sizeof(DTTOPTS) };
+        GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &Options.crText);
+        Options.dwFlags = DTT_TEXTCOLOR;
+        return DrawThemeTextEx_orig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags, (LPRECT)pRect, &Options);
+    }
     
     if (pOptions && !(pOptions->dwFlags & DTT_CALCRECT) && !((pOptions->dwFlags & DTT_COMPOSITED) && ThemeClassName != L"Menu"))
     {
@@ -1014,11 +1296,30 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iS
             SetTextCharacterExtra(hDC, GetTextCharacterExtra(hdc));
             //SetTextColor(hDC, GetTextColor(hdc));
 
-            COLORREF color = pOptions->crText;
-            GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &color);
+            COLORREF TextColor = pOptions->crText;
+            GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &TextColor);
+
+            COLORREF GlowColor = 0;
+            UINT GlowIntensity = 0;
+            UINT GlowRadius = 0;
+            BOOL Premultiply = FALSE;
             
+            // Text drawing with both alpha composited and text shadows doesn't seem to work with DrawThemeTextEx.
+            // (DTT_COMPOSITED | DTT_SHADOWCOLOR | DTT_SHADOWTYPE | DTT_SHADOWOFFSET)
+            // Instead the internal DrawTextWithGlow is already used which composites the texts and also adds a glow effect.
+            // Unfortunately, not all text passes here for the HTHEME class to detect and handle.
+            /*
+            GlowColor = ComputeGlowHSL(textcolor);
+            GlowIntensity = GlowColor ? 32 : GlowIntensity;
+            GlowRadius = GlowIntensity ? 2 : GlowRadius;
+            Premultiply = GlowRadius ? TRUE : Premultiply;
+
+            // Move the text so the glow doesn't get cut off
+            OffsetRect(pRect, 1, 0);
+            */
+
             hr = DrawTextWithGlow(hDC, pszText, cchText, pRect, dwTextFlags,
-                color, 0, 0, 0, 0, pOptions->pfnDrawTextCallback, pOptions->lParam);
+            TextColor, GlowColor, GlowRadius, GlowIntensity, Premultiply, pOptions->pfnDrawTextCallback, pOptions->lParam);
 
             EndBufferedPaint(pbuffer, TRUE);
             g_DrawTextWithGlowEntry = FALSE;
@@ -1046,7 +1347,9 @@ HRESULT WINAPI HookedDrawThemeText(HTHEME hTheme, HDC hdc, INT iPartId, INT iSta
 typedef VOID(CALLBACK *Element_PaintBgT)(class Element*, HDC , class Value*, LPRECT, LPRECT, LPRECT, LPRECT);
 Element_PaintBgT Element_PaintBg;
 VOID CALLBACK Element_PaintBgHook(class Element* This, HDC hdc, class Value* value, LPRECT pRect, LPRECT pClipRect, LPRECT pExcludeRect, LPRECT pTargetRect)
-{
+{   
+    Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
+
     //unsigned char byteValue = *(reinterpret_cast<unsigned char*>(value) + 8);
     if ((INT)(*(DWORD *)value << 26) >> 26 != 9 )
     {
@@ -1059,10 +1362,10 @@ VOID CALLBACK Element_PaintBgHook(class Element* This, HDC hdc, class Value* val
         if (v45 == 4)
             FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         else
-            Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
+            return;
     }
     else
-        Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
+        return;
 }
 
 VOID CplDuiHook()
@@ -1071,11 +1374,7 @@ VOID CplDuiHook()
     {
         {
             {
-                #ifdef _WIN64
-                    L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"
-                #else
-                    L"public: void __thiscall DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"
-                #endif
+                L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"
             },
             &Element_PaintBg,
             Element_PaintBgHook,
@@ -1120,38 +1419,148 @@ constexpr INT SysColorElements[] = {
     COLOR_HOTLIGHT
 };
 
-HTHEME hTh = nullptr;
-
-VOID SetCurrentTheme(LPCWSTR themeclass)
+BOOL SetCurrentTheme(LPCWSTR themeclass)
 {
-    if (hTh != nullptr)
-        hTh = nullptr;
+    if (g_hTheme != nullptr)
+        g_hTheme = nullptr;
 
-    hTh = OpenThemeData(NULL, themeclass); 
+    g_hTheme = OpenThemeData(NULL, themeclass);
+    return (g_hTheme) ? TRUE : FALSE;
+}
+
+void ClearSysColorsRegKey() {
+    RegDeleteTreeW(HKEY_CURRENT_USER, L"Control Panel\\Colors");
 }
 
 VOID RevertSysColors()
 {
-    SetCurrentTheme(L"SysMetrics");
+    if (!SetCurrentTheme(L"sysmetrics")) {
+        CloseThemeData(g_hTheme);
+        return;
+    }
     COLORREF aNewColors[ARRAYSIZE(SysColorElements)];
 
     for (UINT i = 0; i < ARRAYSIZE(SysColorElements); i++)
-    {
-        aNewColors[i] = GetThemeSysColor(hTh, i);
-    }
+        aNewColors[i] = GetThemeSysColor(g_hTheme, i);
     SetSysColors(ARRAYSIZE(SysColorElements), SysColorElements, aNewColors);
 
-    CloseThemeData(hTh);
-    hTh = nullptr;
+    CloseThemeData(g_hTheme);
+    g_hTheme = nullptr;
+
+    ClearSysColorsRegKey();
+}
+
+static COLORREF GetDefaultSysColor(INT nIndex)
+{
+    if (nIndex == COLOR_SCROLLBAR)
+        return RGB(200, 200, 200);
+    else if (nIndex == COLOR_BACKGROUND || nIndex == COLOR_MENUTEXT || nIndex == COLOR_WINDOWTEXT || nIndex == COLOR_CAPTIONTEXT
+            || nIndex == COLOR_BTNTEXT || nIndex == COLOR_INACTIVECAPTIONTEXT || nIndex == COLOR_INFOTEXT)
+                return RGB(0, 0, 0);
+    else if (nIndex == COLOR_ACTIVECAPTION)
+        return RGB(153, 180, 209);
+    else if (nIndex == COLOR_INACTIVECAPTION)
+        return RGB (191, 205, 219);
+    else if (nIndex == COLOR_MENU || nIndex == COLOR_BTNFACE || nIndex == COLOR_MENUBAR)  
+        return RGB(240, 240, 240);
+    else if (nIndex == COLOR_WINDOW || nIndex == COLOR_BTNHIGHLIGHT || nIndex == COLOR_INFOBK || nIndex == COLOR_HIGHLIGHTTEXT)
+        return RGB(255, 255, 255);
+    else if (nIndex == COLOR_WINDOWFRAME)
+        return RGB(100, 100, 100);
+    else if (nIndex == COLOR_ACTIVEBORDER)
+        return RGB(180, 180, 180);
+    else if (nIndex == COLOR_INACTIVEBORDER)
+        return RGB(244, 247, 252);
+    else if (nIndex == COLOR_APPWORKSPACE)
+        return RGB(171, 171, 171);
+    else if (nIndex == COLOR_HIGHLIGHT || nIndex == COLOR_MENUHILIGHT)
+        return RGB(0, 120, 212);
+    else if (nIndex == COLOR_BTNSHADOW)
+        return RGB(160, 160, 160);
+    else if (nIndex == COLOR_GRAYTEXT)
+        return RGB(109, 109, 109);
+    else if (nIndex == COLOR_3DDKSHADOW)
+        return RGB(105, 105, 105);
+    else if (nIndex == COLOR_3DLIGHT)
+        return RGB(227, 227, 227);
+    else if (nIndex == COLOR_HOTLIGHT)
+        return RGB(0, 102, 204);
+    else if (nIndex == COLOR_GRADIENTACTIVECAPTION)
+        return RGB(185, 209, 234);
+    else if (nIndex == COLOR_GRADIENTINACTIVECAPTION)
+        return RGB(215, 228, 242);
+    
+    return GetSysColor_orig(nIndex);
+}
+
+static COLORREF GetCustomSysColor(INT nIndex) 
+{
+    if (nIndex == COLOR_SCROLLBAR || nIndex == COLOR_BACKGROUND || nIndex == COLOR_MENU ||
+        nIndex == COLOR_WINDOW || nIndex == COLOR_INACTIVEBORDER || nIndex == COLOR_INFOBK ||
+        nIndex == COLOR_MENUBAR)
+        return RGB(0, 0, 0);
+    else if (nIndex == COLOR_GRADIENTACTIVECAPTION || nIndex == COLOR_INACTIVECAPTION)
+        return (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 0, 0);
+    else if (nIndex == COLOR_ACTIVECAPTION || nIndex == COLOR_GRADIENTINACTIVECAPTION)
+        return (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(32, 32, 32);
+    else if (nIndex == COLOR_ACTIVEBORDER || nIndex == COLOR_BTNSHADOW)
+        return RGB(32, 32, 32);
+    else if (nIndex == COLOR_WINDOWFRAME || nIndex == COLOR_BTNHIGHLIGHT)
+        return RGB(64, 64, 64);
+    else if (nIndex == COLOR_MENUTEXT || nIndex == COLOR_CAPTIONTEXT ||
+             nIndex == COLOR_BTNTEXT || nIndex == COLOR_INFOTEXT || nIndex == COLOR_HIGHLIGHTTEXT)
+        return RGB(220, 220, 220);
+    else if (nIndex == COLOR_WINDOWTEXT)
+        return RGB(198, 198, 198);
+    else if (nIndex == COLOR_APPWORKSPACE)
+        return RGB(8, 8, 8);
+    else if (nIndex == COLOR_HIGHLIGHT || nIndex == COLOR_MENUHILIGHT)
+        return (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 120, 215);
+    else if (nIndex == COLOR_BTNFACE)
+        return RGB(1, 1, 1);
+    else if (nIndex == COLOR_GRAYTEXT)
+        return RGB(128, 128, 128);
+    else if (nIndex == COLOR_INACTIVECAPTIONTEXT)
+        return RGB(160, 160, 160);
+    else if (nIndex == COLOR_3DDKSHADOW)
+        return RGB(16, 16, 16);
+    else if (nIndex == COLOR_3DLIGHT)
+        return RGB(4, 4, 4);
+    else if (nIndex == COLOR_HOTLIGHT)
+        return (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 148, 251);
+
+    return GetSysColor_orig(nIndex);
+}
+
+COLORREF WINAPI HookedGetSysColor(INT nIndex) {
+    if (g_DefaultSysColors)
+        return GetDefaultSysColor(nIndex);
+    else
+        return GetCustomSysColor(nIndex);
+}
+
+HBRUSH WINAPI HookedGetSysColorBrush(INT nIndex) 
+{
+    COLORREF color = HookedGetSysColor(nIndex);
+    if (g_DefaultSysColors) {
+        if (!g_themeCachedDefaultSysColorBrushes[nIndex])
+            g_themeCachedDefaultSysColorBrushes[nIndex] = CreateSolidBrush(color);
+        return g_themeCachedDefaultSysColorBrushes[nIndex];
+    }
+    else {
+        if (!g_themeCachedCustomSysColorBrushes[nIndex])
+            g_themeCachedCustomSysColorBrushes[nIndex] = CreateSolidBrush(color);
+        return g_themeCachedCustomSysColorBrushes[nIndex];
+    }
 }
 
 VOID ColorizeSysColors()
 {
     // Stop recalling SetSysColors if syscolor changes have been applied.
     // SetSysColors redraws all top level windows causing flickering.
-    if (GetSysColor(5) == RGB(0, 0, 0))
+    if (GetSysColor(COLOR_WINDOW) == RGB(0, 0, 0))
     {
-        if (g_settings.AccentColorize && GetSysColor(13) == g_settings.AccentColor)
+        if (g_settings.AccentColorize && GetSysColor(COLOR_HIGHLIGHT) == g_settings.AccentColor)
             return;
         else if (!g_settings.AccentColorize)
             return ;
@@ -1159,41 +1568,8 @@ VOID ColorizeSysColors()
     
     COLORREF aNewColors[ARRAYSIZE(SysColorElements)];
     for (UINT i = 0; i < ARRAYSIZE(SysColorElements); i++)
-    {
-        if (SysColorElements[i] == COLOR_SCROLLBAR || SysColorElements[i] == COLOR_BACKGROUND || SysColorElements[i] == COLOR_MENU 
-            || SysColorElements[i] == COLOR_WINDOW || SysColorElements[i] == COLOR_INACTIVEBORDER || SysColorElements[i] == COLOR_INFOBK
-            || SysColorElements[i] == COLOR_MENUBAR)
-                aNewColors[i] = RGB(0, 0, 0);
-        else if (SysColorElements[i] == COLOR_GRADIENTACTIVECAPTION || SysColorElements[i] == COLOR_INACTIVECAPTION)
-            aNewColors[i] = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 0, 0);
-        else if (SysColorElements[i] == COLOR_ACTIVECAPTION || SysColorElements[i] == COLOR_GRADIENTINACTIVECAPTION)
-            aNewColors[i] = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(32, 32, 32);
-        else if (SysColorElements[i] == COLOR_ACTIVEBORDER || SysColorElements[i] == COLOR_BTNSHADOW)
-                aNewColors[i] = RGB(32, 32, 32);
-        else if (SysColorElements[i] == COLOR_WINDOWFRAME || SysColorElements[i] == COLOR_BTNHIGHLIGHT)
-            aNewColors[i] = RGB(64, 64, 64);
-        else if (SysColorElements[i] == COLOR_MENUTEXT || SysColorElements[i] == COLOR_CAPTIONTEXT 
-            || SysColorElements[i] == COLOR_BTNTEXT || SysColorElements[i] == COLOR_INFOTEXT || SysColorElements[i] == COLOR_HIGHLIGHTTEXT)
-                aNewColors[i] = RGB(220, 220, 220);
-        else if (SysColorElements[i] == COLOR_WINDOWTEXT)
-            aNewColors[i] = RGB(240, 240, 240);
-        else if (SysColorElements[i] == COLOR_APPWORKSPACE)
-            aNewColors[i] = RGB(8, 8, 8);
-        else if (SysColorElements[i] == COLOR_HIGHLIGHT || SysColorElements[i] == COLOR_MENUHILIGHT)
-            aNewColors[i] = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 120, 215);
-        else if (SysColorElements[i] == COLOR_BTNFACE)
-            aNewColors[i] = RGB(1, 1, 1);
-        else if (SysColorElements[i] == COLOR_GRAYTEXT)
-            aNewColors[i] = RGB(128, 128, 128);
-        else if (SysColorElements[i] == COLOR_INACTIVECAPTIONTEXT)
-            aNewColors[i] = RGB(160, 160, 160);
-        else if (SysColorElements[i] == COLOR_3DDKSHADOW)
-            aNewColors[i] = RGB(16, 16, 16);
-        else if (SysColorElements[i] == COLOR_3DLIGHT)
-            aNewColors[i] = RGB(4, 4, 4);
-        else if (SysColorElements[i] == COLOR_HOTLIGHT)
-            aNewColors[i] = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 148, 251);
-    }
+        aNewColors[i] = GetCustomSysColor(SysColorElements[i]);
+
     SetSysColors(ARRAYSIZE(SysColorElements), SysColorElements, aNewColors);
 }
 
@@ -1204,7 +1580,7 @@ HRESULT WINAPI HookedGetThemeBitmap(
     INT iPropId,
     ULONG dwFlags,
     HBITMAP* phBitmap)
-{
+{   
     std::wstring ThemeClassName = GetThemeClass(hTheme);
 
     if (ThemeClassName == L"Tab" && iPartId == 10)
@@ -1249,8 +1625,18 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
 {
     HRESULT hr = GetThemeColor_orig(hTheme, iPartId, iStateId, iPropId, pColor);
     std::wstring ThemeClassName = GetThemeClass(hTheme);
-
-    if (ThemeClassName == L"PreviewPane" && (iPartId == 5 || iPartId == 7 || iPartId == 6) && iPropId == TMT_FILLCOLOR) {
+    
+    if (ThemeClassName == L"ItemsView" && iPropId == TMT_TEXTCOLOR && ((iPartId == 4 && iStateId == 1) || iPartId == 5))
+    {
+        *pColor = (!g_IsSysThemeDarkMode && *pColor == 0x006D6D6D) ? RGB(0, 0, 0) : *pColor;
+        return S_OK;
+    }
+    if (ThemeClassName == L"ListView" && iPropId == TMT_TEXTCOLOR && iPartId == LVP_LISTITEM)
+    {
+        *pColor = (!g_IsSysThemeDarkMode && *pColor == 0x006D6D6D) ? RGB(0, 0, 0) : *pColor;
+        return S_OK;
+    }
+    else if (ThemeClassName == L"PreviewPane" && (iPartId == 5 || iPartId == 7 || iPartId == 6) && iPropId == TMT_FILLCOLOR) {
         *pColor = (iPartId == 6) ? RGB(192, 192, 192) : RGB(255, 255, 255);
         return S_OK;
     } 
@@ -1259,49 +1645,38 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
         if ((iPartId == CPANEL_BODYTITLE || iPartId == CPANEL_GROUPTEXT || iPartId == CPANEL_MESSAGETEXT 
             || iPartId == CPANEL_BODYTEXT || iPartId == CPANEL_TITLE || iPartId == CPANEL_CONTENTPANELABEL) && iStateId == 0)
         {
-            *pColor =  RGB(255, 255, 255);
+            *pColor =  (g_IsSysThemeDarkMode) ? RGB(255, 255, 255) : *pColor;
             return S_OK;
         }
         else if (iPartId == CPANEL_SECTIONTITLELINK && (iStateId == CPCL_NORMAL || iStateId == CPCL_HOT))
         {
-            *pColor = (iStateId == CPCL_NORMAL) ? RGB(240, 255, 240) : RGB(224, 255, 224);
+            *pColor = (g_IsSysThemeDarkMode) ? ((iStateId == CPCL_NORMAL) ? RGB(240, 255, 240) : RGB(224, 255, 224)) : *pColor;
             return S_OK;                   
         }
         else if (iPartId == CPANEL_CONTENTLINK || iPartId == CPANEL_HELPLINK)
         {
-            *pColor = (iStateId == CPHL_NORMAL) ? RGB(96, 205, 255) : (iStateId == CPHL_HOT) ? RGB(153, 236, 255) : 
-                      (iStateId == CPHL_PRESSED) ? RGB(0, 148, 251) : RGB(96, 96, 96);
+            *pColor = (g_IsSysThemeDarkMode) ? ((iStateId == CPHL_NORMAL) ? RGB(96, 205, 255) : (iStateId == CPHL_HOT) ? RGB(153, 236, 255) : 
+                      (iStateId == CPHL_PRESSED) ? RGB(0, 148, 251) : RGB(96, 96, 96)) : *pColor;
             return S_OK;
         }
         else if (iPartId == CPANEL_TASKLINK) 
         {
-            *pColor = (iStateId == CPTL_NORMAL) ? RGB(190, 190, 190): (iStateId == CPTL_HOT) ? RGB(255, 255, 255) : 
-                      (iStateId == CPTL_PRESSED) ? RGB(160, 160, 160) : (iStateId == CPTL_DISABLED) ? RGB(96, 96, 96) : RGB(255, 255, 255);
+            *pColor = (g_IsSysThemeDarkMode) ? ((iStateId == CPTL_NORMAL) ? RGB(190, 190, 190): (iStateId == CPTL_HOT) ? RGB(255, 255, 255) : 
+                      (iStateId == CPTL_PRESSED) ? RGB(160, 160, 160) : (iStateId == CPTL_DISABLED) ? RGB(96, 96, 96) : RGB(255, 255, 255)) : *pColor;
             return S_OK;
         }
     }     
-    else if (ThemeClassName == L"ControlPanelStyle" && iPropId == TMT_FILLCOLORHINT)
+    else if (ThemeClassName == L"ControlPanelStyle" && iPropId == TMT_FILLCOLORHINT && (iPartId == CPANEL_CONTENTPANELINE && iStateId == 0))
     {
-        if (iPartId == CPANEL_CONTENTPANELINE && iStateId == 0)
-        {
-            *pColor = RGB(64, 64, 64);
-            return S_OK;
-        }
-    }
-    else if (ThemeClassName == L"ControlPanel" && iPropId == TMT_FILLCOLOR)
-    {
-        if(iPartId == CPANEL_CONTENTPANE && iStateId == 0)
-        {
-            *pColor = RGB(0, 0, 0);
-            return S_OK;
-        }
+        *pColor = RGB(64, 64, 64);
+        return S_OK;
     }
     else if (ThemeClassName == L"CommandModule" && iPropId == TMT_TEXTCOLOR)
     {
         // TASKBUTTON
         if(iPartId == 3 && iStateId == 1)
         {
-            *pColor = RGB(255, 255, 255);
+            *pColor = *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
             return S_OK;
         }
         // LYBRARYPANETOPVIEW
@@ -1311,73 +1686,93 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
             return S_OK;
         }  
     }
-    else if (ThemeClassName == L"TaskDialogStyle" && iPartId == TDLG_MAININSTRUCTIONPANE)
+    else if (ThemeClassName == L"TaskDialogStyle" && iPropId == TMT_TEXTCOLOR)
     {
-        *pColor = RGB(96,205,255);
-        return S_OK;
+        if (iPartId == TDLG_MAININSTRUCTIONPANE) {
+            *pColor = RGB(96, 205, 255);
+            return S_OK;
+        }
+        else if (iPartId == TDLG_CONTENTPANE || iPartId == TDLG_VERIFICATIONTEXT) {
+            *pColor =  (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
+            return S_OK;
+        }
     }
     else if (ThemeClassName == L"Button" && iPropId == TMT_TEXTCOLOR)
     {
         if (iPartId == BP_PUSHBUTTON && iStateId != PBS_DISABLED)
         {
-            *pColor = RGB(255, 255, 255);
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
             return S_OK;
         }
         else if (iPartId != BP_PUSHBUTTON)
         {
-            *pColor = RGB(192, 192, 192);
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(192, 192, 192) : *pColor;
             return S_OK;
-        }
+        }   
     }
-    /*
     else if (ThemeClassName == L"Static")
     {
-        *pColor = RGB(192, 192, 192);
+        *pColor = (g_IsSysThemeDarkMode && *pColor < RGB(16, 16, 16)) ? RGB(255, 255, 255) : *pColor;
         return S_OK;
     }
-    */
+    else if (ThemeClassName == L"TreeView" && iPropId == TMT_TEXTCOLOR)
+    {
+        *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
+        return S_OK;
+    }
     else if (ThemeClassName == L"Tab" && iPropId == TMT_TEXTCOLOR)
     {
         if (iStateId == CSTB_HOT)
-            *pColor = RGB(224, 224, 224);
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(224, 224, 224) : *pColor;
         else if (iStateId == CSTB_SELECTED)
-            *pColor = RGB(255, 255, 255);
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
         else
-            *pColor = RGB(192, 192, 192);
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(192, 192, 192) : *pColor;
         return S_OK;
+    }
+    else if (ThemeClassName == L"Edit" && iPropId == TMT_TEXTCOLOR)
+    {
+        if (iPartId == 1) {
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
+            return S_OK;
+        }
+        else if (iPartId == THEMECLS_COMMONPROPS_PART) {
+            *pColor = RGB(255, 255, 255);
+            return S_OK;
+        }
     }
     else if (ThemeClassName == L"Combobox" && iPropId == TMT_TEXTCOLOR)
     {
         if (iStateId != CBXS_DISABLED)
-            *pColor = RGB(255, 255, 255);
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
         return S_OK;
     }
     
     else if (ThemeClassName == L"Menu" && iPropId == TMT_TEXTCOLOR)
     {
         if (iPartId == MENU_BARITEM && (iStateId != MBI_DISABLED && iStateId != MBI_DISABLEDPUSHED)) {
-            *pColor = RGB(255, 255, 255);
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
             return S_OK;
         }
         else if ((iPartId == MENU_POPUPITEM || iPartId == 27) && (iStateId != 3 && iStateId != 4)) {
-            *pColor = RGB(255, 255, 255);
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0)) ? RGB(255, 255, 255) : *pColor;
             return S_OK;
         }
     }
     else if (ThemeClassName == L"Menu" && (iPropId == TMT_FILLCOLOR || iPropId == TMT_FILLCOLORHINT))
     {
         if (iPartId == 10) {
-            if (g_settings.MenuBorderFlag && g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
-                *pColor = RGB(32, 32, 32);
+            if (g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
+                *pColor = (g_settings.FlyoutsEffects) ? RGB(0, 0, 0) : (g_settings.FillBg) ? RGB(32, 32, 32) : *pColor;
         }
         else
-            *pColor = RGB(32, 32, 32);
+            *pColor = (g_settings.FlyoutsEffects) ? RGB(0, 0, 0) : (g_settings.FillBg) ? RGB(32, 32, 32) : *pColor;
         return S_OK;
     }
     else if ((ThemeClassName == L"Toolbar") && iPropId == TMT_TEXTCOLOR)
     {
-        if (iPartId == 0 && iStateId != TS_DISABLED) {
-            *pColor = RGB(255, 255, 255);
+        if (iPartId == THEMECLS_COMMONPROPS_PART && iStateId != TS_DISABLED) {
+            *pColor = (g_IsSysThemeDarkMode) ? RGB(255, 255, 255) : RGB(0, 0, 0);
             return S_OK;
         }
         if (iStateId == TS_DISABLED) {
@@ -1385,12 +1780,47 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
             return S_OK;
         }
     }
-    else if (ThemeClassName == L"ChartView")
+    else if (ThemeClassName == L"Tooltip" && iPropId == TMT_TEXTCOLOR)
     {
-        if ((iPartId == 30 || iPartId == 31 || iPartId == 32) && iStateId == 1) {
-            *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(32, 102, 128);
+        if (iPartId== TTP_STANDARD || iPartId == TTP_BALLOON) {
+            *pColor = (g_IsSysThemeDarkMode) ? RGB(255, 255, 255) : RGB(0, 0, 0);
             return S_OK;
         }
+        else if (iPartId == TTP_BALLOONTITLE) {
+            *pColor = (g_IsSysThemeDarkMode) ? RGB(96, 205, 255) : *pColor;
+            return hr;        
+        }        
+    }
+    else if (ThemeClassName == L"DragDrop" && iPropId == TMT_TEXTCOLOR)
+    {
+        *pColor = (iStateId == 1) ? RGB(96, 205, 255) : RGB(255, 255, 255);
+        return S_OK;
+    }
+    else if (ThemeClassName == L"ChartView")
+    {
+        if ((iPartId == 29 || iPartId == 31 || iPartId == 32 || iPartId == 33) && iStateId == 1) {
+            if (iPropId == TMT_FILLCOLOR)
+                *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(96,205,255);
+            // Instead of the 1st byte of the DWORD/COLORREF variable, the last byte is used as the alpha of the fill color
+            else if (iPropId == TMT_ALPHALEVEL)
+                *pColor = RGB(255, 0, 0);
+            return S_OK;
+        }
+        if ((iPartId == 34) && iStateId == 1) {
+            if (iPropId == TMT_FILLCOLOR)
+                *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(96,205,255);
+            else if (iPropId == TMT_ALPHALEVEL)
+                *pColor = RGB(96, 0, 0);
+            return S_OK;
+        }
+    }
+    else if (ThemeClassName == L"MonthCal") {
+        return hr;
+    }
+    else if (ThemeClassName == L"AeroWizardStyle" && iPropId == TMT_TEXTCOLOR)
+    {
+        *pColor = RGB(255, 255, 255);
+        return S_OK;
     }
     else if (ThemeClassName == L"TaskManager")
     {
@@ -1398,65 +1828,83 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
         {
             case 2: case 41:
             case 42:
-                *pColor = RGB(21, 21, 21);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(21, 21, 21) : *pColor;
+                break;
             case 3: case 20:
             case 26:
-                *pColor = RGB(0, 0, 0);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(0, 0, 0) : *pColor;
+                break;
             case 4:
-                *pColor = RGB(8, 4, 0);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(8, 4, 0) : *pColor;
+                break;
             case 5:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(20, 8, 0);
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(0, 0, 0);
+                break;
             case 6:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(36, 12, 0);
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(12, 0, 0);
+                break;
             case 7:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(56, 16, 0);
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(24, 0, 0);
+                break;
             case 8:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(80, 20, 0);
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(40, 0, 0);
+                break;
             case 9:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(108, 24, 0);
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(60, 0, 0);
+                break;
             case 10:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(140, 24, 0);
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(84, 0, 0);
+                break;
             case 11:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(176, 32, 0);
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(112, 0, 0);
+                break;
             case 12:
                 if (iPropId == TMT_FILLCOLOR) *pColor = RGB(252, 104, 42);
                 else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(140, 0, 0);
+                break;
             case 13:
-                *pColor = RGB(241, 112, 122);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(241, 112, 122) : *pColor;
+                break;
             case 14: case 15:
             case 16: case 17:
             case 18: case 19:
             case 24: case 25:
-                *pColor = RGB(255, 255, 255);
-            case 21: *pColor = RGB(97, 113, 186);
-            case 22: *pColor = RGB(68, 79, 125);
-            case 23: *pColor = RGB(64, 64, 64);
-            case 27: *pColor = RGB(32, 36, 44);
-            case 28: *pColor = RGB(32, 40, 56);
-            case 29: *pColor = RGB(32, 44, 68);
-            case 30: *pColor = RGB(32, 48, 80);
-            case 31: *pColor = RGB(32, 52, 92);
-            case 32: *pColor = RGB(32, 52, 104);
-            case 33: *pColor = RGB(32, 60, 116);
-            case 34: *pColor = RGB(32, 64, 128);
-            case 35: *pColor = RGB(32, 68, 140);
-            case 36: *pColor = RGB(32, 72, 152);
-            case 37: *pColor = RGB(32, 76, 164);
-            case 38: *pColor = RGB(17, 125, 187);
-            case 39: *pColor = RGB(34, 38, 55);
-            case 40: *pColor = RGB(35, 45, 71);
+                *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(255, 255, 255) : *pColor;
+                break;
+            case 21: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(97, 113, 186) : *pColor; break;
+            case 22: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(68, 79, 125) : *pColor; break;
+            case 23: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(64, 64, 64) : *pColor; break;
+            case 27: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 36, 44) : *pColor; break;
+            case 28: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 40, 56) : *pColor; break;
+            case 29: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 44, 68) : *pColor; break;
+            case 30: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 48, 80) : *pColor; break;
+            case 31: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 52, 92) : *pColor; break;
+            case 32: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 52, 104) : *pColor; break;
+            case 33: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 60, 116) : *pColor; break;
+            case 34: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 64, 128) : *pColor; break;
+            case 35: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 68, 140) : *pColor; break;
+            case 36: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 72, 152) : *pColor; break;
+            case 37: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(32, 76, 164) : *pColor; break;
+            case 38: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(17, 125, 187) : *pColor; break;
+            case 39: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(34, 38, 55) : *pColor; break;
+            case 40: *pColor = (iPropId == TMT_FILLCOLOR) ? RGB(35, 45, 71) : *pColor; break;
         }
         return S_OK;
     }
     else
     {
+        if (iPropId == TMT_TEXTCOLOR)
+        {
+            *pColor = (g_IsSysThemeDarkMode && *pColor == RGB(0, 0, 0) ) ? RGB(255, 255, 255) : *pColor;
+            return S_OK;
+        }
         if (iPropId == TMT_FILLCOLOR)
         {
             *pColor = RGB(0,0,0);
@@ -1467,12 +1915,6 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
             *pColor = RGB(0,0,0);
             return S_OK;
         }
-    }
-
-    if (iPropId == TMT_TEXTCOLOR)
-    {
-        *pColor = RGB(255,255,255);
-        return S_OK;
     }
     
     return hr;
@@ -1522,6 +1964,7 @@ public:
     std::array<HDC, 8> combobox;
     std::array<HDC, 4> editbox;
     std::array<HDC, 5> treeview;
+    std::array<HDC, 8> treeviewglyph;
     std::array<HDC, 6> itemsview;
     std::array<HDC, 10> progressbar;
     std::array<HDC, 2> indeterminatebar;
@@ -1535,7 +1978,9 @@ public:
     std::array<HDC, 12> navigationbutton;
     std::array<HDC, 5> toolbarbutton;
     std::array<HDC, 4> addressband;
-    std::array<HDC, 3> menuitem;
+    std::array<HDC, 4> menuitem;
+    std::array<HDC, 1> dragdrop;
+    std::array<HDC, 8> spin;
 
     BOOL CachePushButton(HDC, INT, INT);
     BOOL CacheRadioButton(HDC, LPCRECT, INT, INT);
@@ -1549,7 +1994,8 @@ public:
     BOOL CacheTab(HDC, INT, INT);
     BOOL CacheCombobox(HDC, INT, INT, INT);
     BOOL CacheEditBox(HDC, INT, INT, INT);
-    BOOL CacheTreeView(HDC, INT, INT, INT);
+    BOOL CacheTreeViewButton(HDC, INT, INT, INT);
+    BOOL CacheTreeViewGlyph(HDC, INT, INT, INT, BOOL);
     BOOL CacheItemsView(HDC, INT, INT, INT);
     BOOL CacheProgressBar(HDC, INT, INT, INT);
     BOOL CacheIndeterminateBar(HDC, INT, INT);
@@ -1565,6 +2011,8 @@ public:
     BOOL CacheToolbarButton(HDC, INT, INT);
     BOOL CacheAddressBand(HDC, INT, INT);
     BOOL CacheMenuItem(HDC, INT, INT, INT);
+    BOOL CacheDragDrop(HDC);
+    BOOL CacheSpinButton(HDC, INT, INT, INT);
 
     BOOL CreateDIB(HDC& elementHdc, HDC hDC, INT Width, INT Height)
     {
@@ -1619,6 +2067,8 @@ public:
             DeleteHDC(hDC);
         for (HDC& hDC : treeview)
             DeleteHDC(hDC);
+        for (HDC& hDC : treeviewglyph)
+            DeleteHDC(hDC);
         for (HDC& hDC : itemsview)
             DeleteHDC(hDC);
         for (HDC& hDC : progressbar)
@@ -1647,6 +2097,10 @@ public:
             DeleteHDC(hDC);
         for (HDC& hDC : menuitem)
             DeleteHDC(hDC);
+        for (HDC& hDC : dragdrop)
+            DeleteHDC(hDC);
+        for (HDC& hDC : spin)
+            DeleteHDC(hDC);
     }
 
     VOID DeleteHDC(HDC& hDC)
@@ -1662,7 +2116,7 @@ public:
         ClearCache();
     }
 };
-CThemeCache g_cache;
+CThemeCache g_themeCache;
 
 VOID DrawNineGridStretch(HDC hdc, HDC& srcDC, LPCRECT dstRect, INT left = 0, INT top = 0, INT right = 0, INT bottom = 0)
 {
@@ -1769,14 +2223,14 @@ BOOL PaintScroll(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iStateId == SCRBS_NORMAL) ? 0 : 1;
     if (iPartId == SBP_THUMBBTNHORZ) index += 2;
 
-    if (!g_cache.scrollbar[index])
-        if (!g_cache.CacheScrollbar(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.scrollbar[index])
+        if (!g_themeCache.CacheScrollbar(hdc, iPartId, iStateId, index))
             return FALSE;
     // Make scrollbar thinner by moving the rect's left and right edges
     RECT rc = (iPartId == SBP_THUMBBTNVERT) ? 
-    RECT(static_cast<LONG>(pRect->left + ((pRect->right - pRect->left) * 0.25f)), pRect->top, static_cast<LONG>(pRect->right - ((pRect->right - pRect->left) * 0.25f)), pRect->bottom)
-    : RECT(pRect->left, static_cast<LONG>(pRect->top + ((pRect->bottom - pRect->top) * 0.25f)) , pRect->right, static_cast<LONG>(pRect->bottom - ((pRect->bottom - pRect->top) * 0.25f)));
-    DrawNineGridStretch(hdc, g_cache.scrollbar[index], &rc, 6, 6, 6, 6);
+    RECT(static_cast<LONG>(pRect->left + (RECTWIDTH(pRect) * 0.25f)), pRect->top, static_cast<LONG>(pRect->right - (RECTWIDTH(pRect) * 0.25f)), pRect->bottom)
+    : RECT(pRect->left, static_cast<LONG>(pRect->top + (RECTHEIGHT(pRect) * 0.25f)) , pRect->right, static_cast<LONG>(pRect->bottom - (RECTHEIGHT(pRect) * 0.25f)));
+    DrawNineGridStretch(hdc, g_themeCache.scrollbar[index], &rc, 6, 6, 6, 6);
     return TRUE;
 }
 
@@ -1786,12 +2240,12 @@ BOOL CThemeCache::CacheScrollbar(HDC hdc, INT iPartId, INT iStateId, INT stateIn
     INT width = 18, height = 18;
     FLOAT cornerRadius = 4.f * scale;
 
-    if (!g_cache.CreateDIB(g_cache.scrollbar[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.scrollbar[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.scrollbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.scrollbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     D2D1_RECT_F Rect{D2D1::Rect(0, 0, width, height)};
@@ -1818,8 +2272,8 @@ BOOL PaintScrollBarArrows(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
         return FALSE;
 
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
-    FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left);
-    FLOAT height = static_cast<FLOAT>(pRect->bottom - pRect->top);
+    FLOAT width = static_cast<FLOAT>RECTWIDTH(pRect);
+    FLOAT height = static_cast<FLOAT>RECTHEIGHT(pRect);
 
     FLOAT triangleBaseWidth = 7.0f * scale;
     FLOAT triangleHeight = 4.5f * scale;
@@ -1902,18 +2356,22 @@ BOOL PaintScrollBarArrows(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     return TRUE;
 }
 
-BOOL PaintPushButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+BOOL PaintPushButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, LPCRECT pClipRect)
 {
     if (iPartId != BP_PUSHBUTTON || !g_d2dFactory)
         return FALSE;
+    
+    RECT clipRect{ *pRect };
+    if (pClipRect)
+        IntersectRect(&clipRect, &clipRect, pClipRect);
 
     INT index = (iStateId == PBS_HOT) ? 1 : (iStateId == PBS_PRESSED) ? 2
     : (iStateId == PBS_DISABLED) ? 3 : 0;
 
-    if (!g_cache.pushbutton[index])
-        if (!g_cache.CachePushButton(hdc, iStateId, index))
+    if (!g_themeCache.pushbutton[index])
+        if (!g_themeCache.CachePushButton(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.pushbutton[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.pushbutton[index], &clipRect, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -1923,12 +2381,12 @@ BOOL CThemeCache::CachePushButton(HDC hdc, INT iStateId, INT stateIndex)
     INT width = 18, height = 18;
     FLOAT cornerRadius = 3.f * scale;
 
-    if (!g_cache.CreateDIB(g_cache.pushbutton[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.pushbutton[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.pushbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.pushbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     D2D1_ROUNDED_RECT rr = {
@@ -1962,24 +2420,24 @@ BOOL PaintRadioButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     
     INT index = iStateId - 1;
 
-    if (!g_cache.radiobutton[index])
-        if (!g_cache.CacheRadioButton(hdc, pRect, iStateId, index))
+    if (!g_themeCache.radiobutton[index])
+        if (!g_themeCache.CacheRadioButton(hdc, pRect, iStateId, index))
             return FALSE;
     // Some theme parts are always fixed size so no stretching is needed
-    DrawNineGridStretch(hdc, g_cache.radiobutton[index], pRect);
+    DrawNineGridStretch(hdc, g_themeCache.radiobutton[index], pRect);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheRadioButton(HDC hdc, LPCRECT pRect,  INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
-    FLOAT width = pRect->right-pRect->left, height = pRect->bottom-pRect->top;
-    if (!g_cache.CreateDIB(g_cache.radiobutton[stateIndex], hdc, width, height))
+    FLOAT width = RECTWIDTH(pRect), height = RECTHEIGHT(pRect);
+    if (!g_themeCache.CreateDIB(g_themeCache.radiobutton[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, (INT)width, (INT)height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.radiobutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.radiobutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     FLOAT diameter = width - 1.f;
@@ -1999,6 +2457,7 @@ BOOL CThemeCache::CacheRadioButton(HDC hdc, LPCRECT pRect,  INT iStateId, INT st
         case CBS_UNCHECKEDNORMAL:
             borderColor = MyD2D1Color(96, 128, 128, 128);
             radioColor = MyD2D1Color(64, 64, 64, 64);
+            break;
         case RBS_UNCHECKEDHOT:
             borderColor = MyD2D1Color(144, 144, 144);
             radioColor = MyD2D1Color(48, 144, 144, 144);
@@ -2059,25 +2518,25 @@ BOOL PaintCheckBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     
     INT index = iStateId - 1;
 
-    if (!g_cache.checkbutton[index])
-        if (!g_cache.CacheCheckButton(hdc, pRect, iStateId, index))
+    if (!g_themeCache.checkbutton[index])
+        if (!g_themeCache.CacheCheckButton(hdc, pRect, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.checkbutton[index], pRect);
+    DrawNineGridStretch(hdc, g_themeCache.checkbutton[index], pRect);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheCheckButton(HDC hdc, LPCRECT pRect, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
-    FLOAT width = pRect->right-pRect->left, height = pRect->bottom-pRect->top;
+    FLOAT width = RECTWIDTH(pRect), height = RECTHEIGHT(pRect);
     FLOAT cornerRadius = 3.f * scale;
 
-    if (!g_cache.CreateDIB(g_cache.checkbutton[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.checkbutton[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, (INT)width, (INT)height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.checkbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.checkbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     D2D1_ROUNDED_RECT roundedRect = {
@@ -2182,8 +2641,8 @@ BOOL PaintGroupBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, LPCRECT pC
     const FLOAT radius = 4.0f;
     const FLOAT x = 0.5f;
     const FLOAT y = 0.5f;
-    const FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left) - 0.5f;
-    const FLOAT h = static_cast<FLOAT>(pRect->bottom - pRect->top) - 0.5f;
+    const FLOAT width = static_cast<FLOAT>RECTWIDTH(pRect) - 0.5f;
+    const FLOAT h = static_cast<FLOAT>RECTHEIGHT(pRect) - 0.5f;
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &brush);
@@ -2239,10 +2698,10 @@ BOOL PaintCommandLink(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iStateId == CMDLS_NORMAL || iStateId == CMDLS_DISABLED) ? 0 : (iStateId == CMDLS_HOT) ? 1
     : (iStateId == CMDLS_PRESSED) ? 2 : 3;
 
-    if (!g_cache.commandlinkbutton[index])
-        if (!g_cache.CacheCommandlinkButton(hdc, iStateId, index))
+    if (!g_themeCache.commandlinkbutton[index])
+        if (!g_themeCache.CacheCommandlinkButton(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.commandlinkbutton[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.commandlinkbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -2252,12 +2711,12 @@ BOOL CThemeCache::CacheCommandlinkButton(HDC hdc, INT iStateId, INT stateIndex)
     INT width = 18, height = 18;
     FLOAT cornerRadius = 4.f * scale;
 
-    if (!g_cache.CreateDIB(g_cache.commandlinkbutton[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.commandlinkbutton[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.commandlinkbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.commandlinkbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     D2D1_ROUNDED_RECT roundedRect = { D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius};
@@ -2298,10 +2757,10 @@ BOOL PaintCommandLinkGlyph(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iStateId == CMDLGS_HOT) ? 1 : (iStateId == CMDLGS_PRESSED) ? 2
     : (iStateId == CMDLGS_DISABLED) ? 3 : 0;
 
-    if (!g_cache.commandlinkglyph[index])
-        if (!g_cache.CacheCommandlinkGlyph(hdc, iStateId, index))
+    if (!g_themeCache.commandlinkglyph[index])
+        if (!g_themeCache.CacheCommandlinkGlyph(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.commandlinkglyph[index], pRect);
+    DrawNineGridStretch(hdc, g_themeCache.commandlinkglyph[index], pRect);
     return TRUE;
 }
 
@@ -2310,12 +2769,12 @@ BOOL CThemeCache::CacheCommandlinkGlyph(HDC hdc, INT iStateId, INT stateIndex)
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     INT x = 0;
     INT width = 20 * scale, height = 20 * scale;
-    if (!g_cache.CreateDIB(g_cache.commandlinkglyph[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.commandlinkglyph[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.commandlinkglyph[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.commandlinkglyph[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     FLOAT tailScale = 1.f;
@@ -2379,10 +2838,10 @@ BOOL PaintCombobox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     
     INT index = (iPartId == CP_READONLY) ? iStateId - 1 : iStateId + 3;
     
-    if (!g_cache.combobox[index])
-        if (!g_cache.CacheCombobox(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.combobox[index])
+        if (!g_themeCache.CacheCombobox(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.combobox[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.combobox[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -2392,13 +2851,13 @@ BOOL CThemeCache::CacheCombobox(HDC hdc, INT iPartId, INT iStateId, INT stateInd
     FLOAT cornerRadius = 3.f * scale;
     INT width = 18, height = 18;
 
-    if (!g_cache.CreateDIB(g_cache.combobox[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.combobox[stateIndex], hdc, width, height))
         return FALSE;
     
     // Direct2D render target
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.combobox[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.combobox[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     D2D1_ROUNDED_RECT roundedRect = {D2D1::RectF(0.5, 0.5, width - .5f, height - .5f), cornerRadius, cornerRadius};
@@ -2433,8 +2892,8 @@ BOOL CThemeCache::CacheCombobox(HDC hdc, INT iPartId, INT iStateId, INT stateInd
                 borderBrush.Get()
             );
             pRenderTarget->DrawLine(
-                D2D1::Point2F(1.5f * scale, height - .5f),
-                D2D1::Point2F(width - 1.5f * scale, height - .5f),
+                D2D1::Point2F(2.f * scale, height - .5f),
+                D2D1::Point2F(width - 2.f * scale, height - .5f),
                 borderBrush.Get()
             );
         }
@@ -2477,12 +2936,12 @@ BOOL PaintEditBox(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCRECT pRe
     }
     INT index = (iPartId == EP_BACKGROUNDWITHBORDER) ? 3 : (iStateId == 1) ? 0 : iStateId - 2;
 
-    if (!g_cache.editbox[index])
-        if (!g_cache.CacheEditBox(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.editbox[index])
+        if (!g_themeCache.CacheEditBox(hdc, iPartId, iStateId, index))
             return FALSE;
     // hide the borders of the inner black background of EP_BACKGROUNDWITHBORDER theme class by expanding the black drawing.
     RECT rc = (iPartId == EP_BACKGROUNDWITHBORDER) ? RECT{pRect->left-1, pRect->top-1, pRect->right+3,pRect->bottom+1} : *pRect;
-    DrawNineGridStretch(hdc, g_cache.editbox[index], &rc, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.editbox[index], &rc, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -2492,12 +2951,12 @@ BOOL CThemeCache::CacheEditBox(HDC hdc, INT iPartId, INT iStateId, INT stateInde
     FLOAT cornerRadius = 3.f * scale;
     INT x = 0, y = 0;
     INT width = 18, height = 18;
-    if(!g_cache.CreateDIB(g_cache.editbox[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.editbox[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.editbox[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.editbox[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x + .5f, y + .5f, width - .5f, height - .5f), cornerRadius, cornerRadius);
@@ -2526,7 +2985,7 @@ BOOL CThemeCache::CacheEditBox(HDC hdc, INT iPartId, INT iStateId, INT stateInde
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> linebrush;
         pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(105, 205, 255, SystemAccentColorLight2), &linebrush);
         pRenderTarget->DrawLine(D2D1::Point2F(cornerRadius/2 - 1.f * scale, Height - 1.f), D2D1::Point2F(width - cornerRadius/2 + 1.f * scale, Height - 1.f), linebrush.Get());
-        pRenderTarget->DrawLine(D2D1::Point2F(X + 1.f * scale, Height), D2D1::Point2F(Width - 1.f * scale , Height), linebrush.Get());
+        pRenderTarget->DrawLine(D2D1::Point2F(X + 2.f * scale, Height), D2D1::Point2F(Width - 2.f * scale , Height), linebrush.Get());
     }
     else if (iStateId == ETS_DISABLED)
     {
@@ -2549,12 +3008,11 @@ BOOL PaintListBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
-    D2D1_RECT_F rect((FLOAT)pRect->left, (FLOAT)pRect->top,
-                    (FLOAT)pRect->right - pRect->left, (FLOAT)pRect->bottom - pRect->top);
+    D2D1_RECT_F rect((FLOAT)pRect->left, (FLOAT)pRect->top, (FLOAT)RECTWIDTH(pRect), (FLOAT)RECTHEIGHT(pRect));
 
     pRenderTarget->BeginDraw();
 
-    if (iPartId == 0)
+    if (iPartId == THEMECLS_COMMONPROPS_PART)
     {   
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> Brush;
         pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &Brush);
@@ -2617,8 +3075,8 @@ BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, BOOL 
     }
 
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
-    FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left);
-    FLOAT height = static_cast<FLOAT>(pRect->bottom - pRect->top);
+    FLOAT width = static_cast<FLOAT>RECTWIDTH(pRect);
+    FLOAT height = static_cast<FLOAT>RECTHEIGHT(pRect);
     FLOAT centerX = width / 2.f;
     FLOAT centerY = height / 2.f;
 
@@ -2649,11 +3107,11 @@ BOOL PaintTab(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iStateId == TIS_NORMAL) ? 0 
               : (iStateId == TIS_HOT) ? 1 : (iStateId == TIS_DISABLED) ? 2 : 3;
 
-    if (!g_cache.tab[index])
-        if (!g_cache.CacheTab(hdc, iStateId, index))
+    if (!g_themeCache.tab[index])
+        if (!g_themeCache.CacheTab(hdc, iStateId, index))
             return FALSE;
     RECT newRc = {pRect->left-1, pRect->top-1, pRect->right+1, pRect->bottom+1};
-    DrawNineGridStretch(hdc, g_cache.tab[index], &newRc, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.tab[index], &newRc, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -2663,12 +3121,12 @@ BOOL CThemeCache::CacheTab(HDC hdc, INT iStateId, INT stateIndex)
     FLOAT cornerRadius = 4.f * scale;
     INT width = 18, height = 18;
 
-    if(!g_cache.CreateDIB(g_cache.tab[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.tab[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.tab[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.tab[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     pRenderTarget->BeginDraw();
@@ -2723,22 +3181,22 @@ BOOL PaintTrackbar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     
     INT index = (iPartId == TKP_TRACK) ? 0 : 1;
 
-    if (!g_cache.trackbar[index])
-        if (!g_cache.CacheTrackBar(hdc, iPartId, index))
+    if (!g_themeCache.trackbar[index])
+        if (!g_themeCache.CacheTrackBar(hdc, iPartId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.trackbar[index], pRect, 2, 2, 2, 2);
+    DrawNineGridStretch(hdc, g_themeCache.trackbar[index], pRect, 2, 2, 2, 2);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheTrackBar(HDC hdc, INT iPartId, INT stateIndex)
 {
     INT width = 6, height = 6;
-    if(!g_cache.CreateDIB(g_cache.trackbar[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.trackbar[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.trackbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.trackbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     pRenderTarget->BeginDraw();
@@ -2760,10 +3218,10 @@ BOOL PaintTrackbarThumb(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     else if (iStateId == TUBS_DISABLED) iStateId = 4;
     INT index = (iPartId == TKP_THUMB) ? iStateId - 1 : iStateId + 3;
 
-    if (!g_cache.trackbarthumb[index])
-        if (!g_cache.CacheTrackBarThumb(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.trackbarthumb[index])
+        if (!g_themeCache.CacheTrackBarThumb(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.trackbarthumb[index], pRect);
+    DrawNineGridStretch(hdc, g_themeCache.trackbarthumb[index], pRect);
     return TRUE;
 }
 
@@ -2776,12 +3234,12 @@ BOOL CThemeCache::CacheTrackBarThumb(HDC hdc, INT iPartId, INT iStateId, INT sta
     if (iPartId == TKP_THUMBVERT)
         width = std::exchange(height, width);
     
-    if(!g_cache.CreateDIB(g_cache.trackbarthumb[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.trackbarthumb[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.trackbarthumb[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.trackbarthumb[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     D2D1_COLOR_F fillColor = (iStateId == TUBS_HOT) ? IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight3) : 
@@ -2808,10 +3266,10 @@ BOOL PaintTrackBarPointedThumb(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect
     INT index = (iPartId == TKP_THUMBBOTTOM) ? iStateId + 7 : (iPartId == TKP_THUMBTOP) ? iStateId + 11 :
                 (iPartId == TKP_THUMBLEFT) ? iStateId + 15 : iStateId + 19;
 
-    if (!g_cache.trackbarthumb[index])
-        if (!g_cache.CacheTrackBarPointedThumb(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.trackbarthumb[index])
+        if (!g_themeCache.CacheTrackBarPointedThumb(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.trackbarthumb[index], pRect);
+    DrawNineGridStretch(hdc, g_themeCache.trackbarthumb[index], pRect);
     return TRUE;
 }
 
@@ -2823,12 +3281,12 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, INT iPartId, INT iStateId, 
     if (iPartId == TKP_THUMBLEFT || iPartId == TKP_THUMBRIGHT)
         width = std::exchange(height, width);
     
-    if(!g_cache.CreateDIB(g_cache.trackbarthumb[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.trackbarthumb[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.trackbarthumb[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.trackbarthumb[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     D2D1_COLOR_F fillColor = (iStateId == TUBS_HOT) ? IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight3) : 
@@ -2948,15 +3406,15 @@ BOOL PaintProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iPartId == PP_FILL) ? iStateId - 1 : (iPartId == PP_FILLVERT) ? iStateId + 3 
               : (iPartId == PP_CHUNK || iPartId == PP_CHUNKVERT) ? 8 : 9;
     
-    if (!g_cache.progressbar[index])
-        if (!g_cache.CacheProgressBar(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.progressbar[index])
+        if (!g_themeCache.CacheProgressBar(hdc, iPartId, iStateId, index))
             return FALSE;
     if (iPartId == PP_FILL)
-        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 8, 10, 8, 10);
+        DrawNineGridStretch(hdc, g_themeCache.progressbar[index], pRect, 8, 10, 8, 10);
     else if (iPartId == PP_FILLVERT)
-        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 10, 8, 10, 8);
+        DrawNineGridStretch(hdc, g_themeCache.progressbar[index], pRect, 10, 8, 10, 8);
     else
-        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 8, 8, 9, 9);
+        DrawNineGridStretch(hdc, g_themeCache.progressbar[index], pRect, 8, 8, 9, 9);
     return TRUE;
 }
 
@@ -2972,12 +3430,12 @@ BOOL CThemeCache::CacheProgressBar(HDC hdc, INT iPartId, INT iStateId, INT state
     else if (iPartId == PP_FILLVERT)
         width = 23, height = 50;
 
-    if(!g_cache.CreateDIB(g_cache.progressbar[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.progressbar[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { x, y, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.progressbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.progressbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     D2D1_RECT_F rect = D2D1::RectF(0, 0, width, height);
@@ -3070,21 +3528,21 @@ BOOL PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT p
     RECT overlayRect;
     if (iPartId == PP_MOVEOVERLAY)
     {
-        INT overlayHeight = (pRect->bottom - pRect->top) / 3;
-        INT overlayY = ((pRect->bottom - pRect->top) - overlayHeight) / 1.5f;
+        INT overlayHeight = RECTHEIGHT(pRect) / 3;
+        INT overlayY = (RECTHEIGHT(pRect) - overlayHeight) / 1.5f;
         overlayRect = RECT(pRect->left, overlayY, pRect->right, overlayY + overlayHeight);
     }
     else if (iPartId == PP_MOVEOVERLAYVERT)
     {
-        FLOAT overlayWidth = (pRect->right - pRect->left) / 3.0f;
-        FLOAT overlayX = ((pRect->right - pRect->left) - overlayWidth) / 1.5f;
+        FLOAT overlayWidth = RECTWIDTH(pRect) / 3.0f;
+        FLOAT overlayX = (RECTWIDTH(pRect) - overlayWidth) / 1.5f;
         overlayRect = RECT(overlayX, pRect->top, overlayX + overlayWidth, pRect->bottom);
     }
     
-    if (!g_cache.indeterminatebar[index])
-        if (!g_cache.CacheIndeterminateBar(hdc, iStateId, index))
+    if (!g_themeCache.indeterminatebar[index])
+        if (!g_themeCache.CacheIndeterminateBar(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.indeterminatebar[index], &overlayRect, 6, 6, 5, 5);
+    DrawNineGridStretch(hdc, g_themeCache.indeterminatebar[index], &overlayRect, 6, 6, 5, 5);
     return TRUE;
 }
 
@@ -3097,12 +3555,12 @@ BOOL CThemeCache::CacheIndeterminateBar(HDC hdc, INT iPartId, INT stateIndex)
     if (iPartId == PP_MOVEOVERLAYVERT)
         width = std::exchange(height, width);
 
-    if(!g_cache.CreateDIB(g_cache.indeterminatebar[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.indeterminatebar[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = {0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.indeterminatebar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.indeterminatebar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
@@ -3118,12 +3576,12 @@ BOOL CThemeCache::CacheIndeterminateBar(HDC hdc, INT iPartId, INT stateIndex)
 
 BOOL PaintListView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
-    if (!g_d2dFactory || (iPartId != 0 && iPartId != LVP_LISTITEM 
+    if (!g_d2dFactory || (iPartId != THEMECLS_COMMONPROPS_PART && iPartId != LVP_LISTITEM 
         && iPartId != LVP_GROUPHEADER && iPartId != LVP_GROUPHEADERLINE && iPartId != LVP_COLUMNDETAIL))
         return FALSE;
 
     INT index;
-    if (iPartId == 0 || iPartId == LVP_LISTITEM) 
+    if (iPartId == THEMECLS_COMMONPROPS_PART || iPartId == LVP_LISTITEM) 
         index = (!iPartId) ? 0 : iStateId;
     else if (iPartId == LVP_GROUPHEADER)
     {
@@ -3139,24 +3597,24 @@ BOOL PaintListView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     else if (iPartId == LVP_COLUMNDETAIL) index = 13;
     else return FALSE;
 
-    if (!g_cache.listview[index])
+    if (!g_themeCache.listview[index])
     {
         if (index <= 6)
         {
-            if (!g_cache.CacheListItem(hdc, iPartId, iStateId, index))
+            if (!g_themeCache.CacheListItem(hdc, iPartId, iStateId, index))
                 return FALSE;
         }
         else
-            if (!g_cache.CacheListGroupHeader(hdc, iPartId, iStateId, index))
+            if (!g_themeCache.CacheListGroupHeader(hdc, iPartId, iStateId, index))
                 return FALSE;
     }
-    DrawNineGridStretch(hdc, g_cache.listview[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.listview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheListItem(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
-    if (iPartId != 0 && iPartId != LVP_LISTITEM)
+    if (iPartId != THEMECLS_COMMONPROPS_PART && iPartId != LVP_LISTITEM)
         return FALSE;
     
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
@@ -3164,16 +3622,16 @@ BOOL CThemeCache::CacheListItem(HDC hdc, INT iPartId, INT iStateId, INT stateInd
     INT x = 0, y = 0;
     INT width = 18, height = 18;
 
-    if(!g_cache.CreateDIB(g_cache.listview[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.listview[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.listview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.listview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    if (iPartId == 0)
+    if (iPartId == THEMECLS_COMMONPROPS_PART)
     {
         D2D1_RECT_F rect = D2D1::RectF(x, y, width, height);
         pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &brush);
@@ -3239,12 +3697,12 @@ BOOL CThemeCache::CacheListGroupHeader(HDC hdc, INT iPartId, INT iStateId, INT s
     INT x = 0, y = 0;
     INT width = (iPartId == LVP_COLUMNDETAIL) ? 2 : 18, height = (iPartId == LVP_COLUMNDETAIL) ? 1 : 18;
 
-    if (!g_cache.CreateDIB(g_cache.listview[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.listview[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.listview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.listview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
@@ -3319,39 +3777,39 @@ BOOL CThemeCache::CacheListGroupHeader(HDC hdc, INT iPartId, INT iStateId, INT s
     return TRUE;
 }
 
-BOOL PaintTreeView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+BOOL PaintTreeViewButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
-    if (!g_d2dFactory || (iPartId != 0 && iPartId != TVP_TREEITEM))
+    if (!g_d2dFactory || (iPartId != THEMECLS_COMMONPROPS_PART && iPartId != TVP_TREEITEM))
         return FALSE;
     
-    INT index = (iPartId == 0) ? 0 : (iStateId == TREIS_HOT) ? 1 : (iStateId == TREIS_SELECTED) ? 2 :
+    INT index = (iPartId == THEMECLS_COMMONPROPS_PART) ? 0 : (iStateId == TREIS_HOT) ? 1 : (iStateId == TREIS_SELECTED) ? 2 :
                 (iStateId == TREIS_SELECTEDNOTFOCUS) ? 3 : 4;
 
-    if (!g_cache.treeview[index])
-        if (!g_cache.CacheTreeView(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.treeview[index])
+        if (!g_themeCache.CacheTreeViewButton(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.treeview[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.treeview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheTreeView(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheTreeViewButton(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
     INT width = 18, height = 18;
 
-    if (!g_cache.CreateDIB(g_cache.treeview[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.treeview[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.treeview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.treeview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     D2D1_ROUNDED_RECT roundedRect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), cornerRadius, cornerRadius);
     pRenderTarget->BeginDraw();
-    if (iPartId == 0)
+    if (iPartId == THEMECLS_COMMONPROPS_PART)
     {
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
         pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &borderBrush);
@@ -3387,18 +3845,112 @@ BOOL CThemeCache::CacheTreeView(HDC hdc, INT iPartId, INT iStateId, INT stateInd
     return TRUE;
 }
 
+BOOL PaintTreeViewGlyph(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != TVP_GLYPH && iPartId != TVP_HOTGLYPH))
+        return FALSE;
+
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT width = RECTWIDTH(pRect);
+
+    // TreeView glyph symbols have a fixed bitmap size (marked as SIZINGTYPE=TRUESIZE)
+    // The TreeView theme class has a bitmap size of 9x9px, while the Explorer::TreeView theme class has a bitmap size of 16x16px
+    // Unfortunately, OpenThemeData only detects the parent TreeView theme class by passing the current HDC
+    BOOL ExplorerTreeView = FALSE;
+    if (width / (16 * scale) == 1)
+        ExplorerTreeView = TRUE;
+
+    INT index = (iPartId == TVP_GLYPH) ? index = iStateId - 1 : index = iStateId + 1;
+    index = (ExplorerTreeView) ? index + 4 : index;
+
+    if (!g_themeCache.treeviewglyph[index])
+        if (!g_themeCache.CacheTreeViewGlyph(hdc, iPartId, iStateId, index, ExplorerTreeView))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_themeCache.treeviewglyph[index], pRect);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheTreeViewGlyph(HDC hdc, INT iPartId, INT iStateId, INT stateIndex, BOOL ExplorerTreeView)
+{
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 9 * scale;
+    INT height = 9 * scale;
+
+    if (ExplorerTreeView)
+        width = height = 16 * scale;
+
+    if (!g_themeCache.CreateDIB(g_themeCache.treeviewglyph[stateIndex], hdc, width, height))
+        return FALSE;
+
+    RECT rc {0, 0, width, height};
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.treeviewglyph[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_COLOR_F arrowColor;
+    if (iPartId == TVP_HOTGLYPH) {
+        if (iStateId == HGLPS_CLOSED) arrowColor =  MyD2D1Color(255, 255, 255);
+        else if (iStateId == HGLPS_OPENED) arrowColor = (g_IsSysThemeDarkMode) ? MyD2D1Color(192, 192, 192) : MyD2D1Color(128, 128, 128);
+    }
+    else if (iPartId == TVP_GLYPH) {
+        if (iStateId == GLPS_CLOSED) arrowColor = (g_IsSysThemeDarkMode) ? MyD2D1Color(148, 148, 148) : MyD2D1Color(64, 64, 64);
+        else if (iStateId == GLPS_OPENED) arrowColor = MyD2D1Color(255, 255, 255);
+    }
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> arrowBrush;
+    pRenderTarget->CreateSolidColorBrush(arrowColor, &arrowBrush);
+
+    FLOAT centerX = width / 2.f;
+    FLOAT centerY = height / 2.f;
+    FLOAT arrowLength = (ExplorerTreeView) ? width * 0.3f * scale : width * 0.55f * scale;
+    // 60 degrees
+    FLOAT dx = arrowLength * 0.866f;
+    FLOAT dy = arrowLength * 0.5f;
+
+    D2D1_POINT_2F ptTip, ptLeft, ptRight;
+
+    if (iStateId == GLPS_OPENED)
+    {
+        ptTip   = {centerX, centerY + dy};
+        ptLeft  = {centerX - dx, centerY - dy};
+        ptRight = {centerX + dx, centerY - dy};
+    }
+    else if (iStateId == GLPS_CLOSED)
+    {
+        ptTip   = { centerX + dy, centerY };
+        ptLeft  = { centerX - dy, centerY - dx };
+        ptRight = { centerX - dy, centerY + dx };
+    }
+
+    pRenderTarget->BeginDraw();
+
+    pRenderTarget->DrawLine(ptLeft, ptTip, arrowBrush.Get(), 2.f);
+    pRenderTarget->DrawLine(ptRight, ptTip, arrowBrush.Get(), 2.f);
+
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
 BOOL PaintItemsView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
-    if (!g_d2dFactory || (iPartId != 1 && iPartId != 3 && iPartId != 6))
+    if (!g_d2dFactory || (iPartId != 1 && iPartId != 3 && iPartId != 6
+        && (iPartId != 4 && (iStateId == 11 || iStateId == 12))))
         return FALSE;
 
     INT index = (iPartId == 1 && (iStateId % 2 == 1)) ? 0 :
                 (iPartId == 1 && (iStateId % 2 == 0)) ? 1 : (iPartId == 6) ? iStateId + 1 : iStateId + 3;
     
-    if (!g_cache.itemsview[index])
-        if (!g_cache.CacheItemsView(hdc, iPartId, iStateId, index))
+    // New DarkTheme file conflict dialog buttons
+    if (iPartId == 4 && iStateId == 11)
+        return PaintListView(hdc, 1, 6, pRect);
+    else if (iPartId == 4 && iStateId == 12)
+        return PaintListView(hdc, 1, 2, pRect);
+    
+    if (!g_themeCache.itemsview[index])
+        if (!g_themeCache.CacheItemsView(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.itemsview[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.itemsview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -3409,12 +3961,12 @@ BOOL CThemeCache::CacheItemsView(HDC hdc, INT iPartId, INT iStateId, INT stateIn
     INT x = 0, y = 0;
     INT width = 18, height = 18;
 
-    if(!g_cache.CreateDIB(g_cache.itemsview[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.itemsview[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { x, y, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.itemsview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.itemsview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     x = y += 1;
@@ -3473,10 +4025,10 @@ BOOL PaintHeader(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (iStateId % 3 == 1) return TRUE;
     INT index = (iStateId % 3 == 2) ? 0 : 1;
     
-    if (!g_cache.header[index])
-        if (!g_cache.CacheHeader(hdc, iStateId, index))
+    if (!g_themeCache.header[index])
+        if (!g_themeCache.CacheHeader(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.header[index], pRect, 12, 0, 11, 12);
+    DrawNineGridStretch(hdc, g_themeCache.header[index], pRect, 12, 0, 11, 12);
     return TRUE;
 }
 
@@ -3487,12 +4039,12 @@ BOOL CThemeCache::CacheHeader(HDC hdc, INT iStateId, INT stateIndex)
     INT x = 0, y = 0;
     INT width = 24, height = 24;
 
-    if(!g_cache.CreateDIB(g_cache.header[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.header[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { x, y, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.header[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.header[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     D2D1_COLOR_F fillColor;
@@ -3543,12 +4095,12 @@ BOOL PaintPreviewPaneSeperator(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect
     if (!g_d2dFactory || (iPartId != 3 && iPartId != 4))
         return FALSE;
 
-    if (!g_cache.previewseperator[0])
-        if (!g_cache.CachePreviewPaneSeperator(hdc))
+    if (!g_themeCache.previewseperator[0])
+        if (!g_themeCache.CachePreviewPaneSeperator(hdc))
             return FALSE;
     
     RECT rc{pRect->left+1, pRect->top, pRect->right, pRect->bottom};
-    DrawNineGridStretch(hdc, g_cache.previewseperator[0], &rc, 1, 0, 0, 0);
+    DrawNineGridStretch(hdc, g_themeCache.previewseperator[0], &rc, 1, 0, 0, 0);
     return TRUE;
 }
 
@@ -3556,16 +4108,16 @@ BOOL CThemeCache::CachePreviewPaneSeperator(HDC hdc)
 {
     INT x = 0, y = 0;
     INT width = 3, height = 3;
-    if(!g_cache.CreateDIB(g_cache.previewseperator[0], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.previewseperator[0], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { x, y, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.previewseperator[0], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.previewseperator[0], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    pRenderTarget->CreateSolidColorBrush(MyD2D1Color(128, 160, 160, 160), &brush);
+    pRenderTarget->CreateSolidColorBrush(g_IsSysThemeDarkMode ? MyD2D1Color(128, 160, 160, 160) : MyD2D1Color(128, 0, 0, 0), &brush);
 
     pRenderTarget->BeginDraw();
     pRenderTarget->DrawLine(D2D1_POINT_2F(x, y), D2D1_POINT_2F(x, height), brush.Get());
@@ -3583,10 +4135,10 @@ BOOL PaintModuleButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (iStateId == 1 || iStateId == 6) return FALSE;
     INT index = iStateId - 2; 
 
-    if (!g_cache.modulebutton[index])
-        if (!g_cache.CacheModuleButton(hdc, iStateId, index))
+    if (!g_themeCache.modulebutton[index])
+        if (!g_themeCache.CacheModuleButton(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.modulebutton[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.modulebutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -3597,12 +4149,12 @@ BOOL CThemeCache::CacheModuleButton(HDC hdc, INT iStateId, INT stateIndex)
     INT x = 0, y = 0;
     INT width = 18, height = 18;
 
-    if(!g_cache.CreateDIB(g_cache.modulebutton[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.modulebutton[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { x, y, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.modulebutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.modulebutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     D2D1_COLOR_F fillColor;
@@ -3654,10 +4206,10 @@ BOOL PaintModuleLocation(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (iStateId == 6) return FALSE;
     INT index = iStateId - 1; 
 
-    if (!g_cache.modulelocationbutton[index])
-        if (!g_cache.CacheModuleLocationButton(hdc, iStateId, index))
+    if (!g_themeCache.modulelocationbutton[index])
+        if (!g_themeCache.CacheModuleLocationButton(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.modulelocationbutton[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.modulelocationbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -3667,12 +4219,12 @@ BOOL CThemeCache::CacheModuleLocationButton(HDC hdc, INT iStateId, INT stateInde
     FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
     INT width = 18, height = 18;
-    if(!g_cache.CreateDIB(g_cache.modulelocationbutton[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.modulelocationbutton[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { x, y, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.modulelocationbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.modulelocationbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     D2D1_COLOR_F fillColor;
@@ -3729,11 +4281,11 @@ BOOL PaintModuleSplitButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (iStateId == 1 || iStateId == 6) return FALSE;
     INT index = (iPartId == 4) ? iStateId - 2 : iStateId + 2; 
 
-    if (!g_cache.modulesplitbutton[index])
-        if (!g_cache.CacheModuleSplitButton(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.modulesplitbutton[index])
+        if (!g_themeCache.CacheModuleSplitButton(hdc, iPartId, iStateId, index))
             return FALSE;
     RECT newRc = (iPartId == 4 && iStateId == 4) ? RECT{pRect->left, pRect->top, pRect->right+2, pRect->bottom} : *pRect;
-    DrawNineGridStretch(hdc, g_cache.modulesplitbutton[index], &newRc, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.modulesplitbutton[index], &newRc, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -3744,12 +4296,12 @@ BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, INT iPartId, INT iStateId, INT
     INT x = 0, y = 0;
     INT width = 18, height = 18;
 
-    if(!g_cache.CreateDIB(g_cache.modulesplitbutton[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.modulesplitbutton[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { x, y, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.modulesplitbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.modulesplitbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
     D2D1_COLOR_F fillColor;
@@ -3844,10 +4396,10 @@ BOOL PaintNavigationButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
         return FALSE;
     INT index = (iPartId == NAV_BACKBUTTON) ? iStateId - 1 : (iPartId == NAV_FORWARDBUTTON) ? iStateId + 3 : iStateId + 7;
 
-    if (!g_cache.navigationbutton[index])
-        if (!g_cache.CacheNavigationButton(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.navigationbutton[index])
+        if (!g_themeCache.CacheNavigationButton(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.navigationbutton[index], pRect);
+    DrawNineGridStretch(hdc, g_themeCache.navigationbutton[index], pRect);
     return TRUE;
 }
 
@@ -3861,27 +4413,27 @@ BOOL CThemeCache::CacheNavigationButton(HDC hdc, INT iPartId, INT iStateId, INT 
     if (iPartId == NAV_MENUBUTTON)
         width = 13 * scale, height = 27 * scale;
     
-    if(!g_cache.CreateDIB(g_cache.navigationbutton[stateIndex], hdc, width, height))
+    if(!g_themeCache.CreateDIB(g_themeCache.navigationbutton[stateIndex], hdc, width, height))
         return FALSE;
     
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { x, y, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.navigationbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.navigationbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     D2D1_COLOR_F fillColor, arrowColor;
     switch (iStateId) 
     {
         case NAV_BB_NORMAL:
-            arrowColor = MyD2D1Color(255, 255, 255);
+            arrowColor = g_IsSysThemeDarkMode ? MyD2D1Color(255, 255, 255) : MyD2D1Color(32, 32, 32);
             fillColor = MyD2D1Color(0, 0, 0, 0);
             break;
         case NAV_BB_HOT:
             fillColor = MyD2D1Color(32, 255, 255, 255);
-            arrowColor = MyD2D1Color(200, 255, 255, 255);
+            arrowColor = g_IsSysThemeDarkMode ? MyD2D1Color(200, 255, 255, 255) : MyD2D1Color(200, 32, 32, 32);
             break;
         case NAV_BB_PRESSED:
             fillColor = MyD2D1Color(16, 255, 255, 255);
-            arrowColor = MyD2D1Color(200, 160, 160, 160);
+            arrowColor = g_IsSysThemeDarkMode ?MyD2D1Color(200, 160, 160, 160) : MyD2D1Color(200, 96, 96, 96);
             break;
         case NAV_BB_DISABLED:
             arrowColor = MyD2D1Color(160, 64, 64, 64);
@@ -3985,10 +4537,10 @@ BOOL PaintToolbarButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
     INT index = (iStateId == TS_HOTCHECKED) ? 0 : (iStateId == TS_PRESSED) ? 1 : (iStateId == TS_CHECKED) ? 2 : 3;
 
-    if (!g_cache.toolbarbutton[index])
-        if (!g_cache.CacheToolbarButton(hdc, iStateId, index))
+    if (!g_themeCache.toolbarbutton[index])
+        if (!g_themeCache.CacheToolbarButton(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.toolbarbutton[index], pRect, 9, 9, 8, 8);
+    DrawNineGridStretch(hdc, g_themeCache.toolbarbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -3998,12 +4550,12 @@ BOOL CThemeCache::CacheToolbarButton(HDC hdc, INT iStateId, INT stateIndex)
     FLOAT cornerRadius = 4.f * scale;
     INT width = 18, height = 18;
 
-    if (!g_cache.CreateDIB(g_cache.toolbarbutton[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.toolbarbutton[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.toolbarbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.toolbarbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     D2D1_COLOR_F fillColor = (iStateId == TS_HOT || iStateId == TS_OTHERSIDEHOT) ? MyD2D1Color(96, 144, 144, 144) :
                              (iStateId == TS_PRESSED || iStateId == TS_CHECKED) ? MyD2D1Color(64, 144, 144, 144) : MyD2D1Color(80, 144, 144, 144);
@@ -4034,7 +4586,7 @@ BOOL PaintToolbarSplitDropDown(HDC hdc, INT iPartId,  INT iStateId, LPCRECT pRec
     
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
-    INT width = (pRect->right - pRect->left), height = (pRect->bottom - pRect->top);
+    INT width = RECTWIDTH(pRect), height = RECTHEIGHT(pRect);
 
     ID2D1DCRenderTarget* pRenderTarget = nullptr;
     if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRenderTarget)))
@@ -4059,7 +4611,7 @@ BOOL PaintToolbarSplitDropDown(HDC hdc, INT iPartId,  INT iStateId, LPCRECT pRec
     if (iStateId == TS_DISABLED) 
         brush->SetColor(MyD2D1Color(64, 64, 64));
     else
-        brush->SetColor(MyD2D1Color(255, 255, 255));
+        brush->SetColor( g_IsSysThemeDarkMode ?  MyD2D1Color(255, 255, 255) : MyD2D1Color(0, 0, 0));
 
     if (iStateId == TS_PRESSED) {
         pRenderTarget->DrawLine(D2D1::Point2F(centerX , centerY + arrowLen/2.f), D2D1::Point2F(centerX - dx , centerY - arrowLen/2.f), brush.Get(), scale * 1.5f);
@@ -4081,10 +4633,10 @@ BOOL PaintAddressBand(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
         return FALSE;
     INT index = iStateId - 1;
 
-    if (!g_cache.addressband[index])
-        if (!g_cache.CacheAddressBand(hdc, iStateId, index))
+    if (!g_themeCache.addressband[index])
+        if (!g_themeCache.CacheAddressBand(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.addressband[index], pRect, 12, 12, 11, 11);
+    DrawNineGridStretch(hdc, g_themeCache.addressband[index], pRect, 12, 12, 11, 11);
     return TRUE;
 }
 
@@ -4094,12 +4646,12 @@ BOOL CThemeCache::CacheAddressBand(HDC hdc, INT iStateId, INT stateIndex)
     FLOAT cornerRadius = 5.f * scale;
     INT width = 24, height = 24;
 
-    if (!g_cache.CreateDIB(g_cache.addressband[stateIndex], hdc, width, height))
+    if (!g_themeCache.CreateDIB(g_themeCache.addressband[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.addressband[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.addressband[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     D2D1_COLOR_F fillColor, borderColor;
     switch (iStateId) 
@@ -4140,18 +4692,21 @@ BOOL CThemeCache::CacheAddressBand(HDC hdc, INT iStateId, INT stateIndex)
 BOOL PaintMenu(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     // Part:14 (Win10) - Part:27 (Win11)
-    if (!g_d2dFactory || (iPartId != 27 && iPartId != MENU_POPUPITEM && iPartId != MENU_BARITEM))
+    if (!g_d2dFactory || (iPartId != 27 && iPartId != MENU_POPUPITEM && iPartId != MENU_BARITEM && iPartId != MENU_POPUPSEPARATOR))
         return FALSE;
     if ((iPartId == 27 || iPartId == MENU_POPUPITEM) && iStateId != 2) return FALSE;
     if ((iPartId == MENU_BARITEM) && 
         (iStateId == MBI_NORMAL || iStateId == MBI_DISABLED || iStateId == MBI_DISABLEDPUSHED)) return FALSE;
 
-    INT index = (iPartId == 27 || iPartId == MENU_POPUPITEM) ? 0 : (MBI_PUSHED) ? 1 : 2;
+    INT index = (iPartId == 27 || iPartId == MENU_POPUPITEM) ? 0 : (iStateId == MBI_PUSHED) ? 1 : (iPartId == MENU_POPUPSEPARATOR) ? 3 : 2;
 
-    if (!g_cache.menuitem[index])
-        if (!g_cache.CacheMenuItem(hdc, iPartId, iStateId, index))
+    if (!g_themeCache.menuitem[index])
+        if (!g_themeCache.CacheMenuItem(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.menuitem[index], pRect, 9, 9, 8, 8);
+    if (iPartId != MENU_POPUPSEPARATOR)
+        DrawNineGridStretch(hdc, g_themeCache.menuitem[index], pRect, 9, 9, 8, 8);
+    else
+        DrawNineGridStretch(hdc, g_themeCache.menuitem[index], pRect, 1, 5, 0, 0);
     return TRUE;
 }
 
@@ -4161,12 +4716,17 @@ BOOL CThemeCache::CacheMenuItem(HDC hdc, INT iPartId, INT iStateId, INT indexSta
     FLOAT cornerRadius = 4.f * scale;
     INT width = 18, height = 18;
 
-    if (!g_cache.CreateDIB(g_cache.menuitem[indexState], hdc, width, height))
+    if (iPartId == MENU_POPUPSEPARATOR) {
+        width = 1;
+        height = 5;
+    }
+
+    if (!g_themeCache.CreateDIB(g_themeCache.menuitem[indexState], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
     RECT rc = { 0, 0, width, height};
-    if (FAILED(CreateBoundD2DRenderTarget(g_cache.menuitem[indexState], &rc, g_d2dFactory, &pRenderTarget)))
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.menuitem[indexState], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
     pRenderTarget->BeginDraw();
@@ -4179,14 +4739,187 @@ BOOL CThemeCache::CacheMenuItem(HDC hdc, INT iPartId, INT iStateId, INT indexSta
         pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
         pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
     }
-    else 
-    {
+    else if (iPartId == MENU_POPUPSEPARATOR) {
+        D2D1_COLOR_F lineColor = (g_IsSysThemeDarkMode) ? MyD2D1Color(96, 255, 255, 255) : MyD2D1Color(64, 0, 0, 0);
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> lineBrush;
+        pRenderTarget->CreateSolidColorBrush(lineColor, &lineBrush);
+
+        pRenderTarget->DrawLine({0, (FLOAT)height/2}, {(FLOAT)width, (FLOAT)height/2}, lineBrush.Get());
+    }
+    else {
         D2D1_COLOR_F fillColor = (iPartId == MBI_PUSHED) ? MyD2D1Color(64, 144, 144, 144) : MyD2D1Color(128, 96, 96, 96);
         D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
         pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
         pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
     }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintDragDrop(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || iPartId != DD_IMAGEBG)
+        return FALSE;
+
+    if (!g_themeCache.dragdrop[0])
+        if (!g_themeCache.CacheDragDrop(hdc))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_themeCache.dragdrop[0], pRect);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheDragDrop(HDC hdc)
+{
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 108, height = 108;
+    FLOAT cornerRadius = 4.f * scale;
+
+    if (!g_themeCache.CreateDIB(g_themeCache.dragdrop[0], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.dragdrop[0], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_ROUNDED_RECT roundedRect = { D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius};
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->BeginDraw();
+
+    pRenderTarget->CreateSolidColorBrush(MyD2D1Color(128, 96, 96, 96), &brush);
+    pRenderTarget->FillRoundedRectangle(&roundedRect, brush.Get());
+
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return FALSE;
+}
+
+BOOL PaintSpinArrowGlyph(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory)
+        return FALSE;
+
+    INT width = RECTWIDTH(pRect);
+    INT height = RECTHEIGHT(pRect);
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_COLOR_F arrowColor =
+        (iStateId == UPS_HOT)      ? MyD2D1Color(255, 255, 255) :
+        (iStateId == UPS_PRESSED)  ? MyD2D1Color(128, 128, 128)  :
+        (iStateId == UPS_DISABLED) ? MyD2D1Color(64, 64, 64)  :
+                                     MyD2D1Color(192, 192, 192);
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> arrowBrush;
+    pRenderTarget->CreateSolidColorBrush(arrowColor, &arrowBrush);
+
+    FLOAT centerX = width / 2.f;
+    FLOAT centerY = height / 2.f;
+    FLOAT arrowLength = (iPartId == SPNP_UP || iPartId == SPNP_DOWN) ? std::min(width, height) * 0.5f
+                        : std::min(width, height) * 0.3f;
+    FLOAT dx = arrowLength * 0.866f;
+    FLOAT dy = arrowLength * .5f;
+
+    D2D1_POINT_2F ptTip, ptLeft, ptRight;
+
+    if (iPartId == SPNP_UP) {
+        ptTip   = { centerX,      centerY - dy };
+        ptLeft  = { centerX - dx, centerY + dy };
+        ptRight = { centerX + dx, centerY + dy };
+    }
+    else if (iPartId == SPNP_DOWN) {
+        ptTip   = {centerX, centerY + dy};
+        ptLeft  = {centerX - dx, centerY - dy};
+        ptRight = {centerX + dx, centerY - dy};
+    }
+    else if (iPartId == SPNP_DOWNHORZ)
+    {
+        ptTip   = { centerX - dy, centerY };
+        ptLeft  = { centerX + dy, centerY - dx };
+        ptRight = { centerX + dy, centerY + dx };
+    }
+    else if (iPartId == SPNP_UPHORZ)
+    {
+        ptTip   = { centerX + dy, centerY };
+        ptLeft  = { centerX - dy, centerY - dx };
+        ptRight = { centerX - dy, centerY + dx };
+    }
+
+    pRenderTarget->BeginDraw();
+
+    pRenderTarget->DrawLine(ptLeft, ptTip, arrowBrush.Get(), 1.5f);
+    pRenderTarget->DrawLine(ptRight, ptTip, arrowBrush.Get(), 1.5f);
+    
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintSpin(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory)
+        return FALSE;
+
+    INT index = (iStateId == UPS_HOT) ? 1 : (iStateId == UPS_PRESSED) ? 2
+            : (iStateId == UPS_DISABLED) ? 3 : 0;
+
+    index = (iPartId == SPNP_DOWNHORZ || iPartId == SPNP_UPHORZ) ? index + 4 : index;
+    
+    // Clean previous paintings
+    PatBlt(hdc, pRect->left, pRect->top, RECTWIDTH(pRect), RECTHEIGHT(pRect), BLACKNESS);
+
+    if (!g_themeCache.spin[index])
+        if (!g_themeCache.CacheSpinButton(hdc, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_themeCache.spin[index], pRect, 6, 5, 6, 5);
+
+    // Custom glyphs aren't cached due to no image stretching, draw them at runtime
+    if (PaintSpinArrowGlyph(hdc, iPartId, iStateId, pRect))
+        return TRUE;
+    else {
+        // Erase any previous custom drawing
+        PatBlt(hdc, pRect->left, pRect->top, RECTWIDTH(pRect), RECTHEIGHT(pRect), BLACKNESS);
+        return FALSE;
+    }
+}
+
+BOOL CThemeCache::CacheSpinButton(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
+{
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 12, height = 12;
+    FLOAT cornerRadius = 2.f * scale;
+
+    if (!g_themeCache.CreateDIB(g_themeCache.spin[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_themeCache.spin[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_ROUNDED_RECT roundedRect = {{0.f, 0.f, (FLOAT)width, (FLOAT)height}, cornerRadius, cornerRadius};
+    D2D1_RECT_F Rect = {0.f, 0.f, (FLOAT)width, (FLOAT)height};
+
+    D2D1_COLOR_F fillColor =
+        (iStateId == UPS_HOT)      ? MyD2D1Color(128, 96, 96, 96) :
+        (iStateId == UPS_PRESSED)  ? MyD2D1Color(180, 60, 60, 60)  :
+        (iStateId == UPS_DISABLED) ? MyD2D1Color(160, 0, 0, 0)  :
+                                     MyD2D1Color(96, 80, 80, 80);
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+
+    pRenderTarget->BeginDraw();
+
+    if (iPartId == SPNP_UP || iPartId == SPNP_DOWN)
+        pRenderTarget->FillRectangle(&Rect, fillBrush.Get());
+    else
+        pRenderTarget->FillRoundedRectangle(&roundedRect, fillBrush.Get());
+
     auto hr = pRenderTarget->EndDraw();
     if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
     return TRUE;
@@ -4211,7 +4944,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
     }
     else if (ThemeClassName == L"Button")
     {
-        if (PaintPushButton(hdc, iPartId, iStateId, pRect))
+        if (PaintPushButton(hdc, iPartId, iStateId, pRect, pClipRect))
             return S_OK;
         else if (PaintRadioButton(hdc, iPartId, iStateId, pRect))
             return S_OK;
@@ -4303,7 +5036,9 @@ HRESULT WINAPI HookedDrawThemeBackground(
     }
     else if (ThemeClassName == L"TreeView")
     {
-        if (PaintTreeView(hdc, iPartId, iStateId, pRect))
+        if (PaintTreeViewButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        if (PaintTreeViewGlyph(hdc, iPartId, iStateId, pRect))
             return S_OK;
     }
     else if (ThemeClassName == L"Header")
@@ -4340,46 +5075,60 @@ HRESULT WINAPI HookedDrawThemeBackground(
         if (PaintMenu(hdc, iPartId, iStateId, pRect))
             return S_OK;
     }
+    else if (ThemeClassName == L"DragDrop")
+    {
+        if (PaintDragDrop(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Spin")
+    {
+        if (PaintSpin(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
 
     HRESULT hr = DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
     
-    if((ThemeClassName == L"Rebar" && (iPartId == 3 || iPartId == 6) && iStateId == 0)
-        || (ThemeClassName == L"Header" && (iPartId == 0 || (iPartId == 1 && (iStateId == 1 || iStateId == 4 || iStateId == 7 ))))
-        || (ThemeClassName == L"TaskDialog" && iPartId == 15 && iStateId == 0)
-        || (ThemeClassName == L"Tab" && iPartId == 9)
-        || (ThemeClassName == L"Status" && iPartId == 0)
-        || (ThemeClassName == L"Tooltip" && iPartId == 1))
+    if((ThemeClassName == L"Rebar" && (iPartId == RP_BAND || iPartId == RP_BACKGROUND) && iStateId == 0)
+        || (ThemeClassName == L"Header" && (iPartId == THEMECLS_COMMONPROPS_PART || (iPartId == HP_HEADERITEM && (iStateId == HIS_NORMAL || iStateId == HIS_SORTEDNORMAL || iStateId == HIS_ICONNORMAL))))
+        || (ThemeClassName == L"TaskDialog" && iPartId == TDLG_FOOTNOTEPANE && iStateId == 0)
+        || (ThemeClassName == L"Tab" && iPartId == TABP_PANE)
+        || (ThemeClassName == L"Status" && iPartId == THEMECLS_COMMONPROPS_PART)
+        || (ThemeClassName == L"Tooltip" && (iPartId == TTP_STANDARD || iPartId == TTP_BALLOON || iPartId == TTP_BALLOONSTEM)))
     {
         FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return S_OK;
     }
     else if (ThemeClassName == L"Menu" && (iPartId == MENU_BARBACKGROUND || iPartId == MENU_BARITEM))
     {
+        RECT clipRect{*pRect};
         if (pClipRect)
-            FillRect(hdc, pClipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
-        else
-            FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            IntersectRect(&clipRect, pRect, pClipRect);
+        FillRect(hdc, &clipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return S_OK;
     }
     else if (ThemeClassName == L"Menu" && (iPartId == MENU_POPUPBACKGROUND || iPartId == MENU_POPUPBORDERS || iPartId == MENU_POPUPGUTTER || 
-            ((iPartId == MENU_POPUPITEM || iPartId == 27) && iStateId != 2)))
+            ((iPartId == MENU_POPUPITEM || iPartId == 27) && iStateId != MPI_HOT)))
     {
-        HBRUSH brush = CreateSolidBrush(RGB(32, 32, 32));
+        RECT clipRect{*pRect};
         if (pClipRect)
-            FillRect(hdc, pClipRect, brush);
-        else
-            FillRect(hdc, pRect, brush);
-
-        DeleteObject(brush);
+            IntersectRect(&clipRect, pRect, pClipRect);
+        if (g_settings.FlyoutsEffects)
+            FillRect(hdc, &clipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        else if (g_settings.FillBg) {
+            HBRUSH brush = CreateSolidBrush(RGB(32, 32, 32));
+            FillRect(hdc, &clipRect, brush);
+            DeleteObject(brush);
+        }
         return S_OK;
     }
-    else if (ThemeClassName == L"Toolbar" && iPartId == 0) {
+    else if (ThemeClassName == L"Toolbar" && iPartId == THEMECLS_COMMONPROPS_PART) {
         HTHEME Toolbar;
         if ((Toolbar = OpenThemeData(WindowFromDC(hdc), L"Placesbar::Toolbar"))) {
             FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
             CloseThemeData(Toolbar);
             return S_OK;
         }
+        CloseThemeData(Toolbar);
     }
     return hr;
 }
@@ -4406,7 +5155,7 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(
     }
     else if (ThemeClassName == L"Button")
     {
-        if (PaintPushButton(hdc, iPartId, iStateId, pRect))
+        if (PaintPushButton(hdc, iPartId, iStateId, pRect, &pOptions->rcClip))
             return S_OK;
         else if (PaintRadioButton(hdc, iPartId, iStateId, pRect))
             return S_OK;
@@ -4463,24 +5212,61 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(
 
     HRESULT hr = DrawThemeBackgroundEx_orig(hTheme, hdc, iPartId, iStateId, pRect, pOptions);
 
-    if ((ThemeClassName == L"Rebar" && (iPartId == 3 || iPartId == 6) && iStateId == 0) 
-        || (ThemeClassName == L"TreeView" && iPartId == 0))
+    if ((ThemeClassName == L"Rebar" && (iPartId == RP_BAND || iPartId == RP_BACKGROUND) && iStateId == 0) 
+        || (ThemeClassName == L"TreeView" && iPartId == THEMECLS_COMMONPROPS_PART))
     {
         return S_OK;    
     }
     else if ((ThemeClassName == L"PreviewPane" && iPartId == 1)
-        || (ThemeClassName == L"Header" && iPartId == 0)
+        || (ThemeClassName == L"Header" && iPartId == THEMECLS_COMMONPROPS_PART)
         || (ThemeClassName == L"CommandModule" && iPartId == 1 && iStateId == 0)
-        || (ThemeClassName == L"TaskDialog" && (iPartId == 4 || iPartId == 15 || iPartId == 8) && iStateId == 0)
-        || (ThemeClassName == L"TaskDialog" && iPartId == 1)
-        || (ThemeClassName == L"AeroWizard" && (iPartId == 1 || iPartId == 2 || iPartId == 3 || iPartId == 4))
+        || (ThemeClassName == L"TaskDialog" && (iPartId == TDLG_CONTENTPANE || iPartId == TDLG_FOOTNOTESEPARATOR ||  iPartId == TDLG_FOOTNOTEPANE || iPartId == TDLG_SECONDARYPANEL) && iStateId == 0)
+        || (ThemeClassName == L"TaskDialog" && iPartId == TDLG_PRIMARYPANEL)
+        || (ThemeClassName == L"AeroWizard" && (iPartId == AW_TITLEBAR || iPartId == AW_HEADERAREA || iPartId == AW_CONTENTAREA || iPartId == AW_COMMANDAREA))
         || (ThemeClassName == L"CommonItemsDialog" && iPartId == 1)
-        || (ThemeClassName == L"ControlPanel" && (iPartId == 2 || iPartId == 17 || iPartId == 18 || iPartId == 12 || iPartId == 13)))
+        || (ThemeClassName == L"ControlPanel" && (iPartId == CPANEL_CONTENTPANE || iPartId == CPANEL_CONTENTPANELINE || iPartId == CPANEL_BANNERAREA || iPartId == CPANEL_LARGECOMMANDAREA || iPartId == CPANEL_SMALLCOMMANDAREA)))
     {
         FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return S_OK;
     }
     return hr;
+}
+
+HRESULT WINAPI HookedGetThemeMargins(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, INT iPropId, RECT* prc, MARGINS *pMargins)
+{
+    std::wstring ThemeClassName = GetThemeClass(hTheme);
+
+    auto ret = GetThemeMargins_orig(hTheme, hdc, iPartId, iStateId, iPropId, prc, pMargins);
+
+    if (ThemeClassName == L"Tooltip" && iPartId == TTP_STANDARD) {
+        if (iPropId == TMT_CONTENTMARGINS)
+            *pMargins = {8, 8, 8, 8};
+        else if (iPropId == TMT_CAPTIONMARGINS)
+            *pMargins = {10, 10, 10, 10};
+    }
+    else if (ThemeClassName == L"Menu")
+    {
+        if (iPartId == MENU_POPUPITEM || iPartId == 27 || iPartId == 26) 
+        {
+            if (iPropId == TMT_CONTENTMARGINS)
+                *pMargins = {2, 2, 4, 4};
+            else if (iPropId == TMT_SIZINGMARGINS)
+                *pMargins = {10, 10, 10, 10};
+            else if (iPropId == 10000)
+                *pMargins = {0, 0, 4, 4};
+        }
+        else if (iPartId == MENU_BARITEM) {
+            if (iPropId == 10000)
+                *pMargins = {9, 9, 3, 3};
+        }
+    }
+    else if (ThemeClassName == L"Edit")
+    {
+        if (iPropId == TMT_SIZINGMARGINS)
+            *pMargins = {8, 8, 8, 8};
+    }   
+    
+    return ret;
 }
 
 VOID ApplyFrameExtension(HWND hWnd) 
@@ -4489,134 +5275,258 @@ VOID ApplyFrameExtension(HWND hWnd)
     DwmExtendFrameIntoClientArea(hWnd, &margins);
 }
 
+//https://github.com/ALTaleX531/TranslucentFlyouts/blob/master/TFMain/EffectHelper.hpp
+// Required for flyouts with DWM SYSTEMBACKDROP effects
+VOID TriggerWindowNCRendering(HWND hwnd)
+{
+    // NOTICE WINDOWS THAT WE HAVE ACTIVATED THE WINDOW
+    DefWindowProcW(hwnd, WM_NCACTIVATE, TRUE, 0);
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_DRAWFRAME | SWP_NOACTIVATE);
+}
+
+VOID DwmMakeWindowTransparent(HWND hwnd)
+{
+    DWM_BLURBEHIND bb{ DWM_BB_ENABLE | DWM_BB_BLURREGION | DWM_BB_TRANSITIONONMAXIMIZED, TRUE, CreateRectRgn(0, 0, -1, -1), TRUE };
+    DwmEnableBlurBehindWindow(hwnd, &bb);
+    DeleteObject(bb.hRgnBlur);
+}
+
 VOID EnableBlurBehind(HWND hWnd)
 {
     // Does not interfere with the Windows Terminal, GameBar overlay
     if(!(IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS") || IsWindowClass(hWnd, L"ApplicationFrameWindow")))
     {
-        bb.fEnable = TRUE;
-        bb.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION | DWM_BB_TRANSITIONONMAXIMIZED;
+        g_bb.fEnable = TRUE;
+        g_bb.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION | DWM_BB_TRANSITIONONMAXIMIZED;
         // Blurs window client area
         HRGN hRgn = CreateRectRgn(0, 0, -1, -1);
-        bb.hRgnBlur = hRgn;
+        g_bb.hRgnBlur = hRgn;
+        g_bb.fTransitionOnMaximized = TRUE;
 
-        DwmEnableBlurBehindWindow(hWnd, &bb);
+        DwmEnableBlurBehindWindow(hWnd, &g_bb);
         DeleteObject(hRgn);
 
-        accent.AccentState = ACCENT_STATE_ENABLE_ACRYLICBLURBEHIND;
-        accent.GradientColor = g_settings.AccentBlurBehindClr;
+        g_accent.AccentState = ACCENT_STATE_ENABLE_ACRYLICBLURBEHIND;
+        g_accent.GradientColor = g_settings.AccentBlurBehindClr;
+        //accent.AccentFlags = ACCENT_FLAG_ENABLE_BORDER;
+        //accent.AnimationId = NULL;
 
-        attrib.Attrib = WCA_ACCENT_POLICY;
-        attrib.pvData = &accent;
-        attrib.cbData = sizeof(accent);
+        g_attrib.Attrib = WCA_ACCENT_POLICY;
+        g_attrib.pvData = &g_accent;
+        g_attrib.cbData = sizeof(g_accent);
 
         typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
         auto SetWindowCompositionAttribute = (pSetWindowCompositionAttribute) GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
         if (SetWindowCompositionAttribute) 
-            SetWindowCompositionAttribute(hWnd, &attrib);
+            SetWindowCompositionAttribute(hWnd, &g_attrib);
     }
 }
 
-VOID SetSystemBackdrop(HWND hWnd, const UINT type)
-{
+VOID SetSystemBackdrop(HWND hWnd, const UINT type) {
     DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &type, sizeof(UINT));
 }
 
-VOID EnableColoredTitlebar(HWND hWnd)
-{
+VOID EnableColoredTitlebar(HWND hWnd) {
     g_settings.g_TitlebarColor = g_settings.TitlebarActiveColor;
     DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
 }
 
-VOID EnableCaptionTextColor(HWND hWnd)
-{
+VOID EnableCaptionTextColor(HWND hWnd) {
     g_settings.g_CaptionColor = g_settings.CaptionActiveTextColor;
     DwmSetWindowAttribute(hWnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
 }
 
-VOID EnableColoredBorder(HWND hWnd)
-{
+VOID EnableColoredBorder(HWND hWnd) {
     g_settings.g_BorderColor = g_settings.BorderActiveColor;
     DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &g_settings.g_BorderColor, sizeof(COLORREF));
 }
 
-VOID SetCornerType(HWND hWnd, const UINT type)
-{
+VOID SetCornerType(HWND hWnd, UINT type) {
+    BOOL isFlyoutWindow = IsWindowClass(hWnd, MENUPOPUP_CLASS) || IsWindowClass(hWnd, L"DropDown") 
+                    || IsWindowClass(hWnd, L"ViewControlClass") || IsWindowClass(hWnd, TOOLTIPS_CLASS);
+    if (g_settings.CornerPref == DEFAULTROUND && isFlyoutWindow)
+        type = g_settings.Rounded;
+    else if (g_settings.CornerPref == DEFAULTROUND)
+        return;
     DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &type , sizeof(UINT));
 }
 
-static COLORREF HSLToRGB(FLOAT h, FLOAT s, FLOAT l) {
-    FLOAT c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
-    FLOAT x = c * (1.0f - fabs(fmod(h / 60.0f, 2.0f) - 1.0f));
-    FLOAT m = l - c / 2.0f;
+constexpr UINT MN_SIZEWINDOW{ 0x01E2 };
 
-    FLOAT r_prime, g_prime, b_prime;
-    if (0.0f <= h && h < 60.0f) {
-        r_prime = c; g_prime = x; b_prime = 0.0f;
-    } else if (60.0f <= h && h < 120.0f) {
-        r_prime = x; g_prime = c; b_prime = 0.0f;
-    } else if (120.0f <= h && h < 180.0f) {
-        r_prime = 0.0f; g_prime = c; b_prime = x;
-    } else if (180.0f <= h && h < 240.0f) {
-        r_prime = 0.0f; g_prime = x; b_prime = c;
-    } else if (240.0f <= h && h < 300.0f) {
-        r_prime = x; g_prime = 0.0f; b_prime = c;
-    } else {
-        r_prime = c; g_prime = 0.0f; b_prime = x;
+// https://github.com/ALTaleX531/TranslucentFlyouts/blob/017970cbac7b77758ab6217628912a8d551fcf7c/TFMain/MenuHandler.cpp#L236C31-L236C47
+LRESULT CALLBACK FlyoutsSubclassProc(
+    HWND hWnd,
+    UINT uMsg,
+    WPARAM wParam,
+    LPARAM lParam,
+    DWORD_PTR dwRefData)
+{
+    switch (uMsg)
+    {
+        case WM_PRINT:
+        {   
+            if (!IsWindowClass(hWnd, MENUPOPUP_CLASS))
+                break;     
+            // Let the system/theme draw first
+            LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+            if (g_settings.BorderRainbowFlag) {
+                SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
+                break;
+            }
+            else if (!g_settings.BorderFlag || g_settings.BorderActiveColor == DWMWA_COLOR_DEFAULT)
+                break;
+            
+            HDC hdc = reinterpret_cast<HDC>(wParam);
+            // Remove desktop context menu white outline
+            RECT paintRect{};
+            GetWindowRect(hWnd, &paintRect);
+            OffsetRect(&paintRect, -paintRect.left, -paintRect.top);
+            
+            if (g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
+                FrameRect(hdc, &paintRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            else {
+                HBRUSH brush = CreateSolidBrush(g_settings.BorderActiveColor);
+                FrameRect(hdc, &paintRect, brush);
+                DeleteObject(brush);
+            }
+            
+            return result;
+        }
+        // The WM_PRINT command is not fired when the user selects a menu item
+        // and then very quickly activates a new menu with the keyboard (SHIFT+F10)
+        // or by right-clicking
+        case WM_NCPAINT:
+        {    
+            if (g_settings.BorderRainbowFlag) {
+                SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
+                break;
+            }
+            else if (!g_settings.BorderFlag || g_settings.BorderActiveColor == DWMWA_COLOR_DEFAULT)
+                break;
+            
+            HDC hdc = GetWindowDC(hWnd);
+            if (wParam != NULLREGION && wParam != ERROR)
+				SelectClipRgn(hdc, reinterpret_cast<HRGN>(wParam));
+            
+            RECT windowRect{};
+            GetWindowRect(hWnd, &windowRect);
+
+            MENUBARINFO mbi{ sizeof(MENUBARINFO) };
+            GetMenuBarInfo(hWnd, OBJID_CLIENT, 0, &mbi);
+            MARGINS mr{ mbi.rcBar.left - windowRect.left, windowRect.right - mbi.rcBar.right, mbi.rcBar.top - windowRect.top, windowRect.bottom - mbi.rcBar.bottom };
+
+			RECT paintRect{};
+			GetWindowRect(hWnd, &paintRect);
+			OffsetRect(&paintRect, -paintRect.left, -paintRect.top);
+            ExcludeClipRect(hdc, paintRect.left + mr.cxLeftWidth, paintRect.top + mr.cyTopHeight, paintRect.right - mr.cxRightWidth, paintRect.bottom - mr.cyBottomHeight);
+            PatBlt(hdc, paintRect.left, paintRect.top, paintRect.right-paintRect.left, paintRect.bottom-paintRect.top, BLACKNESS);
+
+            if (g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
+                FrameRect(hdc, &paintRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            else {
+                HBRUSH brush = CreateSolidBrush(g_settings.BorderActiveColor);
+                FrameRect(hdc, &paintRect, brush);
+                DeleteObject(brush);
+            }
+
+            return 0;
+        }
+        case MN_SIZEWINDOW:
+        {
+            if (!IsWindowClass(hWnd, MENUPOPUP_CLASS))
+                break;
+            HandleEffects(hWnd);
+            break;
+        }
     }
-
-    BYTE r = static_cast<BYTE>((r_prime + m) * 255.0f);
-    BYTE g = static_cast<BYTE>((g_prime + m) * 255.0f);
-    BYTE b = static_cast<BYTE>((b_prime + m) * 255.0f);
-    return RGB(r, g, b);
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 VOID CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 {
     HWND WndHwnd= nullptr;
+    RainbowData* pRainbowWndData = nullptr;
     {
         std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
         for(auto& hWnd : g_rainbowWindows)
         {
-            HANDLE value = GetPropW(hWnd, g_RainbowPropStr.c_str());
-            if (value && (UINT_PTR)value == t_id)
+            RainbowData* pTempRainbowWndData = reinterpret_cast<RainbowData*>(
+                GetPropW(hWnd, g_RainbowPropStr.c_str()));
+            
+            if (pTempRainbowWndData && pTempRainbowWndData->timerId == t_id)
             {
                 WndHwnd = hWnd;
+                pRainbowWndData = pTempRainbowWndData;
                 break;
             }
         }
     }
 
-    if (WndHwnd)
+    if (!WndHwnd)
+        return;
+    
+    DOUBLE tNow = TimerGetSeconds();
+    DOUBLE effectiveTime = (tNow - pRainbowWndData->baseTime) - pRainbowWndData->pausedTotal;
+    DOUBLE wndHue = fmod(pRainbowWndData->initialHue + effectiveTime * g_settings.RainbowSpeed, 360.0);
+
+    if (g_settings.TitlebarRainbowFlag)
     {
-	    // Credits to @m417z
-        std::mt19937 gen((UINT_PTR)WndHwnd);
-        std::uniform_real_distribution<> distr(0.0, 360.0);
-        DOUBLE InitialHueOffset = distr(gen);
-
-        DOUBLE wndHue = fmod(InitialHueOffset + TimerGetSeconds() * g_settings.RainbowSpeed, 360.0);
-
+        COLORREF titlebarColor = HSLToRGB(wndHue, 1.0f, 0.5f); 
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
+    }
+    if (g_settings.CaptionRainbowFlag)
+    {
+        COLORREF captionColor;
         if (g_settings.TitlebarRainbowFlag)
-        {
-            COLORREF titlebarColor = HSLToRGB(wndHue, 1.0f, 0.5f); 
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
-        }
-        if (g_settings.CaptionRainbowFlag)
-        {
-            COLORREF captionColor;
-            if (g_settings.TitlebarRainbowFlag)
-                captionColor = HSLToRGB(fmod(wndHue + 120.0f, 360.0f), 1.0f, 0.5f);
-            else
-                captionColor = HSLToRGB(wndHue, 1.0f, 0.5f);
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
-        }
-        if (g_settings.BorderRainbowFlag)
-        {
-            COLORREF borderColor = HSLToRGB(wndHue, 1.0f, 0.5f);  
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
+            captionColor = HSLToRGB(fmod(wndHue + 120.0f, 360.0f), 1.0f, 0.5f);
+        else
+            captionColor = HSLToRGB(wndHue, 1.0f, 0.5f);
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
+    }
+    if (g_settings.BorderRainbowFlag)
+    {
+        COLORREF borderColor = HSLToRGB(wndHue, 1.0f, 0.5f);  
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
+    }
+}
+
+VOID AddFlyoutsSubclass(HWND hWnd)
+{
+    auto it = g_subclassedflyouts.find(hWnd);
+    if (it == g_subclassedflyouts.end()) {
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, FlyoutsSubclassProc, NULL)) {
+            std::lock_guard<std::mutex> guard(g_subclassedflyoutsmutex);
+            g_subclassedflyouts.insert(hWnd);
         }
     }
 }
+
+VOID RemoveOrUnloadFlyoutSubclass(HWND hWnd = nullptr, BOOL Clean = FALSE)
+{
+    if (Clean && !g_subclassedflyouts.empty())
+    {
+        std::unordered_set<HWND> subclassedflyouts;
+        {
+            std::lock_guard<std::mutex> guard(g_subclassedflyoutsmutex);
+            subclassedflyouts = std::move(g_subclassedflyouts);
+            g_subclassedflyouts.clear();
+        }
+        for(auto hwnd : subclassedflyouts)
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, FlyoutsSubclassProc);
+        subclassedflyouts.clear();
+    }
+    else 
+    {
+        auto it = g_subclassedflyouts.find(hWnd);
+        if (it != g_subclassedflyouts.end()) {
+            std::lock_guard<std::mutex> guard(g_subclassedflyoutsmutex);
+            g_subclassedflyouts.erase(hWnd);
+        }
+    }
+}
+
+VOID RemoveOrUnloadWindowsHooks(BOOL);
 
 LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
 {
@@ -4627,66 +5537,151 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
 
     switch (cwp->message)
     {
-        case WM_ACTIVATE:
+        case WM_CREATE:
         {
-            BOOL isMinimized = HIWORD(cwp->wParam);
-            if (!isMinimized && IsWindowEligible(cwp->hwnd))
-            {
-                WORD activationState = LOWORD(cwp->wParam);
+            BOOL isFlyoutWindow = IsWindowClass(cwp->hwnd, MENUPOPUP_CLASS) || IsWindowClass(cwp->hwnd, L"DropDown") || IsWindowClass(cwp->hwnd, L"ViewControlClass");
+            if (!isFlyoutWindow || !g_settings.FlyoutsEffects)
+                break;
 
-                if ((activationState == WA_ACTIVE || activationState == WA_CLICKACTIVE))
-                {
-                    if(g_settings.TitlebarFlag && !g_settings.TitlebarRainbowFlag)
-                    {
-                        g_settings.g_TitlebarColor = g_settings.TitlebarActiveColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
-                    }
-                    if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
-                    {
-                        g_settings.g_CaptionColor = g_settings.CaptionActiveTextColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
-                    }
-                    if((g_settings.BorderFlag && !g_settings.BorderRainbowFlag))
-                    {
-                        g_settings.g_BorderColor = g_settings.BorderActiveColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
-                    }
-                }
-                else if (activationState == WA_INACTIVE)
-                {
-                    if(g_settings.TitlebarFlag && !g_settings.TitlebarRainbowFlag)
-                    {
-                        g_settings.g_TitlebarColor = g_settings.TitlebarInactiveColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
-                    }
-                    if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
-                    {
-                        g_settings.g_CaptionColor = g_settings.CaptionInactiveTextColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
-                    }
-                    if((g_settings.BorderFlag && !g_settings.BorderRainbowFlag))
-                    {
-                        g_settings.g_BorderColor = g_settings.BorderInactiveColor;
-                        DwmSetWindowAttribute(cwp->hwnd, DWMWA_BORDER_COLOR, &g_settings.BorderInactiveColor, sizeof(COLORREF));
-                    }
+            AddFlyoutsSubclass(cwp->hwnd);
+            break;
+        }
+        case WM_SIZE:
+        {
+            // Due to applying effects too early in NtUserCreateWindowEx
+            // effects are passed on to unelegible child windows such as fullscreen borderless DirectX windows
+            // e.g. Duckstation Qt emulator, PCSX2 Qt emulator, Windows Legacy Photos etc.
+            // providing a minimal filtering for unwanted windows.
+            LONG_PTR styleEx = GetWindowLongPtrW(cwp->hwnd, GWL_EXSTYLE);
+            LONG_PTR style = GetWindowLongPtrW(cwp->hwnd, GWL_STYLE);
+            
+            HWND hParentWnd = GetAncestor(cwp->hwnd, GA_PARENT);
+            if (hParentWnd && hParentWnd != GetDesktopWindow())
+                break;
+
+            if (IsWindowCloaked(cwp->hwnd) && !IsWindowClass(cwp->hwnd, L"ApplicationFrameWindow"))
+                return FALSE;
+            if (!IsWindowEnabled(cwp->hwnd) && !IsWindowVisible(cwp->hwnd))
+                return FALSE;
+
+            if (style & WS_CHILD || (styleEx & WS_EX_NOACTIVATE) || (styleEx & WS_EX_TRANSPARENT))
+                break;
+
+            BOOL isFullscreen = IsWindowFullscreen(cwp->hwnd);
+            // hide colored borders on fullscreen/maximized windows
+            if (isFullscreen) {
+                UINT borderType;
+                DwmGetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &borderType, sizeof(UINT));
+                if (borderType != DONTROUND)
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DONTROUND, sizeof(UINT));
+
+                if (g_settings.BorderRainbowFlag)
+                    SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_PAUSED, 0);
+            }
+            else if (IsWindowEligible(cwp->hwnd)) {
+                BOOL isFlyoutWindow = IsWindowClass(cwp->hwnd, MENUPOPUP_CLASS) || IsWindowClass(cwp->hwnd, TOOLTIPS_CLASS) 
+                                || IsWindowClass(cwp->hwnd, L"DropDown") || IsWindowClass(cwp->hwnd, L"ViewControlClass");
+                UINT borderType;
+                DwmGetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &borderType, sizeof(UINT));
+                if (borderType != g_settings.CornerPref && !isFlyoutWindow) {
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &g_settings.CornerPref, sizeof(UINT));
+                    if (g_settings.BorderRainbowFlag)
+                        SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_RESTART, 0);
                 }
             }
             break;
-        }   
+        }
+        case WM_ACTIVATE:
+        {
+            BOOL isMinimized = HIWORD(cwp->wParam);
+            if (isMinimized || !IsWindowEligible(cwp->hwnd))
+                break;
+            
+            WORD activationState = LOWORD(cwp->wParam);
+
+            if ((activationState == WA_ACTIVE || activationState == WA_CLICKACTIVE))
+            {
+                if(g_settings.TitlebarFlag && !g_settings.TitlebarRainbowFlag)
+                {
+                    g_settings.g_TitlebarColor = g_settings.TitlebarActiveColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
+                }
+                if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
+                {
+                    g_settings.g_CaptionColor = g_settings.CaptionActiveTextColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
+                }
+                if((g_settings.BorderFlag && !g_settings.BorderRainbowFlag))
+                {
+                    g_settings.g_BorderColor = g_settings.BorderActiveColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
+                }
+            }
+            else if (activationState == WA_INACTIVE)
+            {
+                // Workaround in order to bypass the neutral background color in SystemBackdrop effects on inactive windows
+                //if (g_settings.BgType > g_settings.AccentBlurBehind)
+                    //DefWindowProcW(cwp->hwnd, WM_NCACTIVATE, TRUE, 0);
+            
+                if(g_settings.TitlebarFlag && !g_settings.TitlebarRainbowFlag)
+                {
+                    g_settings.g_TitlebarColor = g_settings.TitlebarInactiveColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
+                }
+                if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
+                {
+                    g_settings.g_CaptionColor = g_settings.CaptionInactiveTextColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
+                }
+                if((g_settings.BorderFlag && !g_settings.BorderRainbowFlag))
+                {
+                    g_settings.g_BorderColor = g_settings.BorderInactiveColor;
+                    DwmSetWindowAttribute(cwp->hwnd, DWMWA_BORDER_COLOR, &g_settings.BorderInactiveColor, sizeof(COLORREF));
+                }
+            }
+
+            break;
+        }
+        case WM_ENTERSIZEMOVE:
+        {
+            if (!g_settings.BorderRainbowFlag && !g_settings.CaptionRainbowFlag && !g_settings.TitlebarRainbowFlag)
+                break;
+            
+            if (!IsWindowEligible(cwp->hwnd))
+                break;
+
+            // Pause rainbow effects while the window is being moved/resized.
+            SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_PAUSED, 0);
+            break;
+        }
+        case WM_EXITSIZEMOVE:
+        {
+            if (!g_settings.BorderRainbowFlag && !g_settings.CaptionRainbowFlag && !g_settings.TitlebarRainbowFlag)
+                break;
+
+            if (!IsWindowEligible(cwp->hwnd))
+                break;
+            // Resume rainbow effects after move/resize ends.
+            SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_RESTART, 0);
+            break;
+        }
         case WM_DESTROY:
         {       
-            HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
-            if (value)
+           RainbowData* pRainbowWndData = reinterpret_cast<RainbowData*>(RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str()));
+            if (!pRainbowWndData)
+                break;
+
+            if (KillTimer(NULL, pRainbowWndData->timerId))
             {
-                if (KillTimer(NULL, (UINT_PTR)value))
-                {
-                    std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-                    g_rainbowWindows.erase(cwp->hwnd);
-                    Wh_Log(L"Timer termination success for window: %p", cwp->hwnd);
-                }
-                else
-                    Wh_Log(L"[ERROR] Timer termination failure for window: %p", cwp->hwnd);
+                std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+                g_rainbowWindows.erase(cwp->hwnd);
+                Wh_Log(L"Timer termination success for window: %p", cwp->hwnd);
+                delete pRainbowWndData;
             }
+            else
+                Wh_Log(L"[ERROR] Timer termination failure for window: %p", cwp->hwnd);
+
+            RemoveOrUnloadFlyoutSubclass(cwp->hwnd);
             break;
         }
         default:
@@ -4697,34 +5692,92 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
                 {
                     case RAINBOW_LOAD:
                     {
-                        HANDLE value = GetPropW(cwp->hwnd, g_RainbowPropStr.c_str());
-                        if (!value)
+                        HANDLE Data = GetPropW(cwp->hwnd, g_RainbowPropStr.c_str());
+                        if (Data)
+                            break;
+                        
+                        RainbowData* pRainbowWndData = new RainbowData();
+                        DOUBLE now = TimerGetSeconds();
+                        
+                        std::mt19937 gen((UINT_PTR)cwp->hwnd);
+                        std::uniform_real_distribution<> distr(0.0, 360.0);
+                        pRainbowWndData->initialHue = distr(gen);
+                        pRainbowWndData->baseTime = now;
+                        pRainbowWndData->pausedTotal = 0.0;
+                        pRainbowWndData->pausedStart = 0.0;
+                        pRainbowWndData->isPaused = FALSE;                        
+
+                        pRainbowWndData->timerId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
+                        if (pRainbowWndData->timerId)
                         {
-                            UINT_PTR timersId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
-                            if (timersId)
+                            SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), reinterpret_cast<HANDLE>(pRainbowWndData));
                             {
-                                SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), (HANDLE)timersId);
-                                {
-                                    std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-                                    g_rainbowWindows.insert(cwp->hwnd);
-                                }
-                                Wh_Log(L"Timer set success for window: %p", cwp->hwnd);
+                                std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+                                g_rainbowWindows.insert(cwp->hwnd);
                             }
-                            else
-                                Wh_Log(L"[ERROR] Timer set failure for window: %p", cwp->hwnd);
+                            Wh_Log(L"Timer set success for window: %p", cwp->hwnd);
                         }
+                        else {
+                            Wh_Log(L"[ERROR] Timer set failure for window: %p", cwp->hwnd);
+                            delete pRainbowWndData;
+                        }
+                        
+                        break;
+                    }
+                    case RAINBOW_RESTART:
+                    {
+                        RainbowData* pRainbowWndData = reinterpret_cast<RainbowData*>(GetPropW(cwp->hwnd, g_RainbowPropStr.c_str()));
+                        if (!pRainbowWndData)
+                            break;
+
+                        DOUBLE now = TimerGetSeconds();
+                        if (pRainbowWndData->isPaused) {
+                            pRainbowWndData->pausedTotal += now - pRainbowWndData->pausedStart;
+                            pRainbowWndData->isPaused = FALSE;
+                        }
+                        
+                        if (!pRainbowWndData->timerId) {
+                            pRainbowWndData->timerId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
+                            if (!pRainbowWndData->timerId)
+                                Wh_Log(L"[ERROR] Timer restart failure for window: %p", cwp->hwnd);
+                        }
+
+                        break;
+                    }
+                    case RAINBOW_PAUSED:
+                    {
+                        RainbowData* pRainbowWndData = reinterpret_cast<RainbowData*>(GetPropW(cwp->hwnd, g_RainbowPropStr.c_str()));
+                        if (!pRainbowWndData)
+                            break;
+
+                        DOUBLE now = TimerGetSeconds();
+                        if (!pRainbowWndData->isPaused) {
+                            pRainbowWndData->pausedStart = now;
+                            pRainbowWndData->isPaused = TRUE;
+                        }
+                        
+                        if (pRainbowWndData->timerId) {
+                            if (KillTimer(NULL, (UINT_PTR)pRainbowWndData->timerId))
+                                pRainbowWndData->timerId = 0;
+                            else
+                                Wh_Log(L"[ERROR] Timer pause failure for window: %p", cwp->hwnd);
+                        }
+                            
                         break;
                     }
                     case RAINBOW_UNLOAD:
                     {
-                        HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
-                        if (value)
-                        {
-                            if (KillTimer(NULL, (UINT_PTR)value))
-                                Wh_Log(L"Timer unload success for window: %p", cwp->hwnd);
-                            else
-                                Wh_Log(L"[ERROR] Timer unload failure for window: %p", cwp->hwnd);
-                        }        
+                        RainbowData* pRainbowWndData = reinterpret_cast<RainbowData*>(RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str()));
+                        if (!pRainbowWndData)
+                            break;
+                                                    
+                        if (KillTimer(NULL, (UINT_PTR)pRainbowWndData->timerId))
+                            Wh_Log(L"Timer unload success for window: %p", cwp->hwnd);
+                        else
+                            Wh_Log(L"[ERROR] Timer unload failure for window: %p", cwp->hwnd);
+
+                        delete pRainbowWndData;
+    
                         break;
                     }
                 }
@@ -4734,6 +5787,45 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
     }
 
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+VOID AddWindowHookPerWindowThread(HWND hWnd)
+{   
+    if(g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.TitlebarFlag || g_settings.BgType != g_settings.Default)
+    {
+        {
+            std::lock_guard<std::mutex> guard(g_allCallWndProcHooksMutex);   
+            DWORD dwThreadId = GetWindowThreadProcessId(hWnd, NULL);
+            HHOOK callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProc, nullptr, dwThreadId);
+            if (callWndProcHook) {
+                g_callWndProcHook = callWndProcHook;
+                g_allCallWndProcHooks.insert(callWndProcHook);
+            }
+            else
+                Wh_Log(L"[ERROR] SetWindowsHookEx failed for thread %u", dwThreadId);
+        }
+        if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
+            SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
+    }
+}
+
+VOID RemoveOrUnloadWindowsHooks(BOOL Clean)
+{
+    if (Clean) 
+    {
+        for (HHOOK hook : g_allCallWndProcHooks)
+            UnhookWindowsHookEx(hook);
+        g_allCallWndProcHooks.clear();
+    }
+    else if (g_callWndProcHook)
+    {
+        auto it = g_allCallWndProcHooks.find(g_callWndProcHook);
+        if (it != g_allCallWndProcHooks.end()) {
+            std::lock_guard<std::mutex> guard(g_allCallWndProcHooksMutex);
+            UnhookWindowsHookEx(g_callWndProcHook);
+            g_allCallWndProcHooks.erase(it);
+        }
+    }
 }
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
@@ -4746,15 +5838,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
         break;
 
     case DLL_THREAD_DETACH:
-        if (g_callWndProcHook) {
-            std::lock_guard<std::mutex> guard(g_allCallWndProcHooksMutex);
-
-            auto it = g_allCallWndProcHooks.find(g_callWndProcHook);
-            if (it != g_allCallWndProcHooks.end()) {
-                UnhookWindowsHookEx(g_callWndProcHook);
-                g_allCallWndProcHooks.erase(it);
-            }
-        }
+        RemoveOrUnloadWindowsHooks(FALSE);
         break;
 
     case DLL_PROCESS_DETACH:
@@ -4764,105 +5848,105 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
     return TRUE;
 }
 
-static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+BOOL WINAPI HookedTrackPopupMenuEx(HMENU hMenu, UINT uFlags, INT x, INT y, HWND hWnd, LPTPMPARAMS lptpm)
 {
-    if (Msg == WM_DWMCOLORIZATIONCOLORCHANGED && g_settings.AccentColorize)
+    // System tray popup menus
+    AddWindowHookPerWindowThread(hWnd);
+    return TrackPopupMenuEx_orig(hMenu, uFlags, x, y, hWnd, lptpm);
+}
+
+static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+{  
+    if (Msg == WM_DWMCOLORIZATIONCOLORCHANGED)
     {
         COLORREF oldAccentClr = g_settings.AccentColor;
         GetAccentColor(g_settings.AccentColor);
-        if (oldAccentClr != g_settings.AccentColor) {
+        if (oldAccentClr != g_settings.AccentColor) 
+        {            
+            if (g_settings.BorderActiveColor == oldAccentClr)
+                g_settings.BorderActiveColor = g_settings.AccentColor;
+            if (g_settings.BorderInactiveColor == oldAccentClr)
+                g_settings.BorderInactiveColor = g_settings.AccentColor;
             ColorizeSysColors();
             g_AccentPalette.LoadAccentPalette();
-            g_cache.ClearCache();
+            g_themeCache.ClearCache();
+            g_IsSysThemeDarkMode = ShouldSystemUseDarkMode();
         }
     }
     return DefWindowProc_orig(hWnd, Msg, wParam, lParam);
 }
 
+VOID HandleEffects(HWND hWnd)
+{
+    BOOL isFlyoutWindow = (IsWindowClass(hWnd, TOOLTIPS_CLASS) || IsWindowClass(hWnd, MENUPOPUP_CLASS) 
+        || IsWindowClass(hWnd, L"DropDown") || IsWindowClass(hWnd, L"ViewControlClass"));
+
+    if (g_settings.ExtendFrame && !isFlyoutWindow)
+            ApplyFrameExtension(hWnd);
+
+    if (g_settings.ImmersiveDarkmode)
+        DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(UINT));
+
+    if(g_settings.BgType == g_settings.AccentBlurBehind)
+        EnableBlurBehind(hWnd);
+    else if (g_settings.BgType > g_settings.AccentBlurBehind)
+    {
+        if (isFlyoutWindow) {
+            DwmMakeWindowTransparent(hWnd);
+            TriggerWindowNCRendering(hWnd);
+        }
+        SetSystemBackdrop(hWnd, g_settings.BgType);
+    }
+
+    if(g_settings.BorderFlag && !g_settings.BorderRainbowFlag)
+        EnableColoredBorder(hWnd);
+    
+    SetCornerType(hWnd, g_settings.CornerPref);
+}
+
 VOID NewWindowShown(HWND hWnd) 
 {
     if(!IsWindowEligible(hWnd))
-        return;
+        return;        
     else
         Wh_Log(L"Eligible window: %p", hWnd);
 
-    if(g_settings.ExtendFrame)
-        ApplyFrameExtension(hWnd);
-
-    if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
-        EnableCaptionTextColor(hWnd);
-    
-    if(g_settings.BorderFlag && !g_settings.BorderRainbowFlag)
-        EnableColoredBorder(hWnd);
-        
-    if(!g_settings.TitlebarFlag)
-    {
-        if (g_settings.ImmersiveDarkmode)
-            DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(UINT));
-        if(g_settings.BgType == g_settings.AccentBlurBehind)
-            EnableBlurBehind(hWnd);
-        else if(g_settings.BgType == g_settings.AcrylicSystemBackdrop)
-            SetSystemBackdrop(hWnd, TRANSIENTWINDOW);
-        else if(g_settings.BgType == g_settings.Mica)
-            SetSystemBackdrop(hWnd, MAINWINDOW);
-        else if(g_settings.BgType == g_settings.MicaAlt)
-            SetSystemBackdrop(hWnd, TABBEDWINDOW);
-    }
-    else if (!g_settings.TitlebarRainbowFlag)
-        EnableColoredTitlebar(hWnd);
-
-    if (g_settings.CornerPref  == g_settings.NotRounded)
-        SetCornerType(hWnd, DONTROUND);
-    else if (g_settings.CornerPref  == g_settings.SmallRounded)
-        SetCornerType(hWnd, SMALLROUND);
-    
-    if(g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.TitlebarFlag)
-    {
-        {
-            std::lock_guard<std::mutex> guard(g_allCallWndProcHooksMutex);   
-            DWORD dwThreadId = GetWindowThreadProcessId(hWnd, NULL);
-            HHOOK callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProc, nullptr, dwThreadId);
-            if (callWndProcHook) {
-                g_callWndProcHook = callWndProcHook;
-                g_allCallWndProcHooks.insert(callWndProcHook);
-                Wh_Log(L"SetWindowsHookEx succeeded for thread %u", dwThreadId);
-            }
-            else
-                Wh_Log(L"[ERROR] SetWindowsHookEx failed for thread %u", dwThreadId);
-        }
-        if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
-            SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
-    }
+    HandleEffects(hWnd);
+    AddWindowHookPerWindowThread(hWnd);
 }
 
-VOID DwmExpandFrameIntoClientAreaHook()
-{
+VOID DwmExpandFrameIntoClientAreaHook(){
     WindhawkUtils::SetFunctionHook(DwmExtendFrameIntoClientArea, HookedDwmExtendFrameIntoClientArea, &DwmExtendFrameIntoClientArea_orig);
 }
 
-VOID DwmSetWindowAttributeHook()
-{
+VOID DwmSetWindowAttributeHook(){
     WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, HookedDwmSetWindowAttribute, &DwmSetWindowAttribute_orig); 
 }
 
-VOID FillBackgroundElements()
+VOID CustomRendering()
 {
     InitDirect2D();
-    ColorizeSysColors();
-    CplDuiHook();
+    #ifdef _WIN64
+        CplDuiHook();
+    #endif
     WindhawkUtils::SetFunctionHook(DefWindowProc, HookedDefWindowProcW, &DefWindowProc_orig);
     WindhawkUtils::SetFunctionHook(GetThemeBitmap, HookedGetThemeBitmap, &GetThemeBitmap_orig);
     WindhawkUtils::SetFunctionHook(GetThemeColor, HookedGetColorTheme, &GetThemeColor_orig);   
     WindhawkUtils::SetFunctionHook(DrawThemeBackground, HookedDrawThemeBackground, &DrawThemeBackground_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeBackgroundEx, HookedDrawThemeBackgroundEx, &DrawThemeBackgroundEx_orig);
-}
-
-VOID TextRenderingHook()
-{
+    if (!g_settings.SetSystemColors) {
+        WindhawkUtils::SetFunctionHook(GetSysColor, HookedGetSysColor, &GetSysColor_orig);
+        WindhawkUtils::SetFunctionHook(GetSysColorBrush, HookedGetSysColorBrush, &GetSysColorBrush_orig);
+    }
     WindhawkUtils::SetFunctionHook(DrawTextW, HookedDrawTextW, &DrawTextW_orig);
-    WindhawkUtils::SetFunctionHook(ExtTextOutW, HookedExtTextOutW, &ExtTextOutW_orig);
+    WindhawkUtils::SetFunctionHook(DrawTextExW, HookedDrawTextExW, &DrawTextExW_orig);
+    // Edtiboxes get black without proper custom system colors
+    if (g_settings.SetSystemColors)
+        WindhawkUtils::SetFunctionHook(ExtTextOutW, HookedExtTextOutW, &ExtTextOutW_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeText, HookedDrawThemeText, &DrawThemeText_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeTextEx, HookedDrawThemeTextEx, &DrawThemeTextEx_orig);
+    if (g_settings.FlyoutsEffects)
+        WindhawkUtils::SetFunctionHook(GetThemeMargins, HookedGetThemeMargins, &GetThemeMargins_orig);
 }
 
 VOID RestoreWindowCustomizations(HWND hWnd)
@@ -4886,24 +5970,24 @@ VOID RestoreWindowCustomizations(HWND hWnd)
     g_settings.CaptionActiveTextColor = DWMWA_COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, DWMWA_TEXT_COLOR , &g_settings.CaptionActiveTextColor, sizeof(COLORREF));
 
-    if (g_settings.CornerPref != g_settings.DefaultRounded)
-        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DEFAULT , sizeof(UINT));
+    if (g_settings.CornerPref != g_settings.Rounded)
+        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DEFAULTROUND , sizeof(UINT));
 
     // Disabling AccentBlurBehind temp workaround
-    bb.fEnable = FALSE;
-    bb.hRgnBlur = NULL;
-    DwmEnableBlurBehindWindow(hWnd, &bb);
+    g_bb.fEnable = FALSE;
+    g_bb.hRgnBlur = NULL;
+    DwmEnableBlurBehindWindow(hWnd, &g_bb);
 
-    accent.AccentState = 0;
+    g_accent.AccentState = 0;
 
-    attrib.Attrib = WCA_ACCENT_POLICY;
-    attrib.pvData = &accent;
-    attrib.cbData = sizeof(accent);
+    g_attrib.Attrib = WCA_ACCENT_POLICY;
+    g_attrib.pvData = &g_accent;
+    g_attrib.cbData = sizeof(g_accent);
 
     typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
     auto SetWindowCompositionAttribute = (pSetWindowCompositionAttribute)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
     if (SetWindowCompositionAttribute) 
-        SetWindowCompositionAttribute(hWnd, &attrib);
+        SetWindowCompositionAttribute(hWnd, &g_attrib);
     
     DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &AUTO, sizeof(UINT));
 }
@@ -4913,7 +5997,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
     DWORD dwProcessId = 0;
     // Pass console window, it might be called from other processes like Clink:https://github.com/chrisant996/clink
     if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && !IsWindowClass(hWnd, L"ConsoleWindowClass")) 
-            return TRUE;
+        return TRUE;
     else
     {
         HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
@@ -5041,91 +6125,25 @@ VOID GetCurrProcInfo(std::wstring& outName, DWORD& outPID) {
     outPID = GetCurrentProcessId();
 }
 
-VOID LoadSettings(VOID)
+VOID ApplyHooks()
 {
-    g_settings.AccentColorize = Wh_GetIntSetting(L"RenderingMod.AccentColorControls");
-    if (g_settings.AccentColorize)
-       g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
-
-    g_settings.FillBg = Wh_GetIntSetting(L"RenderingMod.ThemeBackground");
     if(g_settings.FillBg)
-        FillBackgroundElements();
-    
-    g_settings.TextAlphaBlend = Wh_GetIntSetting(L"RenderingMod.TextAlphaBlend");
-    if(g_settings.TextAlphaBlend)
-        TextRenderingHook();
-     
-    auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"type"));
-    if (0 == wcscmp(strStyle, L"acrylicblur"))
-        g_settings.BgType = g_settings.AccentBlurBehind;
-    else if (0 == wcscmp(strStyle, L"acrylicsystem"))
-        g_settings.BgType = g_settings.AcrylicSystemBackdrop;
-    else if (0 == wcscmp(strStyle, L"mica"))
-        g_settings.BgType = g_settings.Mica;
-    else if (0 == wcscmp(strStyle, L"mica_tabbed"))
-        g_settings.BgType = g_settings.MicaAlt;
-    else 
-        g_settings.BgType = g_settings.Default;
-
-    GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"AccentBlurBehind")), g_settings.AccentBlurBehindClr);
-
-    g_settings.ImmersiveDarkmode = Wh_GetIntSetting(L"ImmersiveDarkTitle");
-    
-    g_settings.ExtendFrame = Wh_GetIntSetting(L"ExtendFrame");
+        CustomRendering();
+    if (g_settings.SetSystemColors)
+        ColorizeSysColors();
     if(g_settings.ExtendFrame)
         DwmExpandFrameIntoClientAreaHook();
-    
-    auto strCornerType = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"CornerOption"));
-    if (0 == wcscmp(strCornerType, L"notrounded"))
-        g_settings.CornerPref = g_settings.NotRounded;
-    else if (0 == wcscmp(strCornerType, L"smallround"))
-        g_settings.CornerPref = g_settings.SmallRounded;
-    else
-        g_settings.CornerPref = g_settings.DefaultRounded;
-
-    g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RainbowSpeed"));
-
-    g_settings.TitlebarFlag = Wh_GetIntSetting(L"TitlebarColor.ColorTitlebar");
-    g_settings.TitlebarRainbowFlag = Wh_GetIntSetting(L"TitlebarColor.RainbowTitlebar") && g_settings.TitlebarFlag;
-    if(g_settings.TitlebarFlag)
-    {
-        auto strTitlebarStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_active"));
-        g_settings.TitlebarFlag = GetColorSetting(strTitlebarStyle, g_settings.TitlebarActiveColor);
-        strTitlebarStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_inactive"));
-        g_settings.TitlebarFlag = GetColorSetting(strTitlebarStyle, g_settings.TitlebarInactiveColor) || g_settings.TitlebarFlag;
-
-        if ((g_settings.TitlebarActiveColor == DWMWA_COLOR_DEFAULT || g_settings.TitlebarActiveColor == DWMWA_COLOR_NONE) ||
-            (g_settings.TitlebarInactiveColor == DWMWA_COLOR_DEFAULT || g_settings.TitlebarInactiveColor == DWMWA_COLOR_NONE))
-                g_settings.TitlebarFlag = FALSE;
-    }
-
-    g_settings.CaptionTextFlag = Wh_GetIntSetting(L"TitlebarTextColor.ColorTitlebarText");
-    g_settings.CaptionRainbowFlag = Wh_GetIntSetting(L"TitlebarTextColor.RainbowTextColor") && g_settings.CaptionTextFlag;
-    if(g_settings.CaptionTextFlag)
-    {
-        auto strTitlebarTextColorStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_active"));
-        g_settings.CaptionTextFlag = GetColorSetting(strTitlebarTextColorStyle, g_settings.CaptionActiveTextColor);
-        strTitlebarTextColorStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_inactive"));
-        g_settings.CaptionTextFlag = GetColorSetting(strTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor) || g_settings.CaptionTextFlag;
-    }
-
-    g_settings.BorderFlag = Wh_GetIntSetting(L"BorderColor.ColorBorder");
-    g_settings.BorderRainbowFlag = Wh_GetIntSetting(L"BorderColor.RainbowBorder") && g_settings.BorderFlag;
-    if(g_settings.BorderFlag)
-    {
-        auto strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor.borderstyles_active"));
-        g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderActiveColor);
-        strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor.borderstyles_inactive"));
-        g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
-    }
-
-    g_settings.MenuBorderFlag = Wh_GetIntSetting(L"BorderColor.MenuBorderColor");
-
     if (g_settings.TitlebarFlag || g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.BgType != g_settings.Default)
         DwmSetWindowAttributeHook();
+    if (g_settings.FlyoutsEffects) {
+        // Intercept and subclass system tray popupmenus
+        WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, HookedTrackPopupMenuEx, &TrackPopupMenuEx_orig);
+    }
+}
 
+VOID LoadWindowProcessRules()
+{
     // Process Rules
-
     DWORD currProcID = NULL;
     std::wstring currproc = {};
     GetCurrProcInfo(currproc, currProcID);
@@ -5142,6 +6160,20 @@ VOID LoadSettings(VOID)
             
             if(currproc == ruledproc)
             {
+                g_settings.AccentColorize = Wh_GetIntSetting(L"RuledPrograms[%d].RenderingMod.AccentColorControls", i);
+                if (g_settings.AccentColorize)
+                    g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
+                
+                g_settings.FillBg = Wh_GetIntSetting(L"RuledPrograms[%d].RenderingMod.ThemeBackground", i);
+
+                // Check if custom system colors have been already applied, 
+                // not need to hook if custom system colors haven't been applied
+                if (!g_settings.FillBg && GetSysColor(COLOR_WINDOW) == RGB(0, 0, 0)) {
+                    g_DefaultSysColors = TRUE;
+                    WindhawkUtils::SetFunctionHook(GetSysColor, HookedGetSysColor, &GetSysColor_orig);
+                    WindhawkUtils::SetFunctionHook(GetSysColorBrush, HookedGetSysColorBrush, &GetSysColorBrush_orig);
+                }
+                
                 auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].type", i));
                 if (0 == wcscmp(strStyle, L"acrylicblur"))
                     g_settings.BgType = g_settings.AccentBlurBehind;
@@ -5159,8 +6191,6 @@ VOID LoadSettings(VOID)
                 g_settings.ImmersiveDarkmode = Wh_GetIntSetting(L"RuledPrograms[%d].ImmersiveDarkTitle", i);
 
                 g_settings.ExtendFrame = Wh_GetIntSetting(L"RuledPrograms[%d].ExtendFrame", i);
-                if(g_settings.ExtendFrame)
-                    DwmExpandFrameIntoClientAreaHook();
 
                 auto strCornerType = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].CornerOption", i));
                 if (0 == wcscmp(strCornerType, L"notrounded"))
@@ -5168,7 +6198,7 @@ VOID LoadSettings(VOID)
                 else if (0 == wcscmp(strCornerType, L"smallround"))
                     g_settings.CornerPref = g_settings.SmallRounded;
                 else
-                    g_settings.CornerPref = g_settings.DefaultRounded;
+                    g_settings.CornerPref = g_settings.DefaultRound;
                 
                 g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RuledPrograms[%d].RainbowSpeed", i));
 
@@ -5207,18 +6237,92 @@ VOID LoadSettings(VOID)
                     strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].BorderColor.borderstyles_inactive", i));
                     g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
                 }
-
-                g_settings.MenuBorderFlag = g_settings.BorderFlag;
-
-                if (g_settings.TitlebarFlag || g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.BgType != g_settings.Default)
-                    DwmSetWindowAttributeHook();
             }
         }
 
         if (!hasProgram) {
             break;
         }
-    }   
+    }
+}
+
+VOID LoadSettings()
+{
+    g_settings.AccentColorize = Wh_GetIntSetting(L"RenderingMod.AccentColorControls");
+    if (g_settings.AccentColorize)
+       g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
+
+    g_settings.FillBg = Wh_GetIntSetting(L"RenderingMod.ThemeBackground");
+    
+    g_settings.SetSystemColors = Wh_GetIntSetting(L"RenderingMod.Syscolors");
+    
+    auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"type"));
+    if (0 == wcscmp(strStyle, L"acrylicblur"))
+        g_settings.BgType = g_settings.AccentBlurBehind;
+    else if (0 == wcscmp(strStyle, L"acrylicsystem"))
+        g_settings.BgType = g_settings.AcrylicSystemBackdrop;
+    else if (0 == wcscmp(strStyle, L"mica"))
+        g_settings.BgType = g_settings.Mica;
+    else if (0 == wcscmp(strStyle, L"mica_tabbed"))
+        g_settings.BgType = g_settings.MicaAlt;
+    else 
+        g_settings.BgType = g_settings.Default;
+    
+    GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"AccentBlurBehind")), g_settings.AccentBlurBehindClr);
+
+    g_settings.FlyoutsEffects = Wh_GetIntSetting(L"FlyoutsEffects");
+
+    g_settings.ImmersiveDarkmode = Wh_GetIntSetting(L"ImmersiveDarkTitle");
+    
+    g_settings.ExtendFrame = Wh_GetIntSetting(L"ExtendFrame");
+    
+    auto strCornerType = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"CornerOption"));
+    if (0 == wcscmp(strCornerType, L"notrounded"))
+        g_settings.CornerPref = g_settings.NotRounded;
+    else if (0 == wcscmp(strCornerType, L"smallround"))
+        g_settings.CornerPref = g_settings.SmallRounded;
+    else
+        g_settings.CornerPref = g_settings.DefaultRound;
+
+    g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RainbowSpeed"));
+
+    g_settings.TitlebarFlag = Wh_GetIntSetting(L"TitlebarColor.ColorTitlebar");
+    g_settings.TitlebarRainbowFlag = Wh_GetIntSetting(L"TitlebarColor.RainbowTitlebar") && g_settings.TitlebarFlag;
+    if(g_settings.TitlebarFlag)
+    {
+        auto strTitlebarStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_active"));
+        g_settings.TitlebarFlag = GetColorSetting(strTitlebarStyle, g_settings.TitlebarActiveColor);
+        strTitlebarStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_inactive"));
+        g_settings.TitlebarFlag = GetColorSetting(strTitlebarStyle, g_settings.TitlebarInactiveColor) || g_settings.TitlebarFlag;
+
+        if ((g_settings.TitlebarActiveColor == DWMWA_COLOR_DEFAULT || g_settings.TitlebarActiveColor == DWMWA_COLOR_NONE) ||
+            (g_settings.TitlebarInactiveColor == DWMWA_COLOR_DEFAULT || g_settings.TitlebarInactiveColor == DWMWA_COLOR_NONE))
+                g_settings.TitlebarFlag = FALSE;
+    }
+
+    g_settings.CaptionTextFlag = Wh_GetIntSetting(L"TitlebarTextColor.ColorTitlebarText");
+    g_settings.CaptionRainbowFlag = Wh_GetIntSetting(L"TitlebarTextColor.RainbowTextColor") && g_settings.CaptionTextFlag;
+    if(g_settings.CaptionTextFlag)
+    {
+        auto strTitlebarTextColorStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_active"));
+        g_settings.CaptionTextFlag = GetColorSetting(strTitlebarTextColorStyle, g_settings.CaptionActiveTextColor);
+        strTitlebarTextColorStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_inactive"));
+        g_settings.CaptionTextFlag = GetColorSetting(strTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor) || g_settings.CaptionTextFlag;
+    }
+
+    g_settings.BorderFlag = Wh_GetIntSetting(L"BorderColor.ColorBorder");
+    g_settings.BorderRainbowFlag = Wh_GetIntSetting(L"BorderColor.RainbowBorder") && g_settings.BorderFlag;
+    if(g_settings.BorderFlag)
+    {
+        auto strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor.borderstyles_active"));
+        g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderActiveColor);
+        strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor.borderstyles_inactive"));
+        g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
+    }
+
+    LoadWindowProcessRules();
+    
+    ApplyHooks();   
 }
 
 BOOL Wh_ModInit(VOID) 
@@ -5235,7 +6339,7 @@ BOOL Wh_ModInit(VOID)
         (NtUserCreateWindowEx_t)GetProcAddress(hModule, "NtUserCreateWindowEx");
     if (!pNtUserCreateWindowEx)
         return FALSE;
-
+    
     WindhawkUtils::SetFunctionHook(pNtUserCreateWindowEx,
                        HookedNtUserCreateWindowEx,
                        &NtUserCreateWindowEx_Original);
@@ -5259,10 +6363,15 @@ VOID Wh_ModUninit(VOID)
 { 
     g_settings.Unload = TRUE;
     if (g_settings.FillBg)
-    {
-        RevertSysColors();
         g_d2dFactory->Release();
-    }
+    
+    if (g_settings.SetSystemColors)
+        RevertSysColors();
+
+    for (HBRUSH& brush : g_themeCachedCustomSysColorBrushes)
+        DeleteObject(brush);
+    for (HBRUSH& brush : g_themeCachedDefaultSysColorBrushes)
+        DeleteObject(brush);
 
     if (!g_rainbowWindows.empty())
     {
@@ -5283,16 +6392,8 @@ VOID Wh_ModUninit(VOID)
         RainbowWindows.clear();
     }
     
-    {
-        std::lock_guard<std::mutex> guard(g_allCallWndProcHooksMutex);
-
-        for (HHOOK hook : g_allCallWndProcHooks) {
-            UnhookWindowsHookEx(hook);
-        }
-
-        g_allCallWndProcHooks.clear();
-    }
-    
+    RemoveOrUnloadWindowsHooks(TRUE);
+    RemoveOrUnloadFlyoutSubclass(nullptr, TRUE);    
     ApplyForExistingWindows();
 }
 
