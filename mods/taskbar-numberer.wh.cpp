@@ -29,7 +29,7 @@ Numbers correspond to Windows + [number] keyboard shortcuts for quick app launch
 
 ## Known issues
 - After reordering task bar items, numbering might be incorrect. This self-corrects in the next render.
-- After initially enabling mod: numbers don't appear until first taskbar interaction (like hovering). If mod is enabled, numbers will be there on Windows startup.
+- After initially enabling mod or updating settings: numbers don't appear until first taskbar interaction (like hovering). If mod is enabled, numbers will be there on Windows startup.
 
 ## Customization
 The following settings can be configured through mod settings:
