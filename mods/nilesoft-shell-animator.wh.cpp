@@ -4,7 +4,7 @@
 // @description     Adds customizable animations to Nilesoft Shell.
 // @version         1.0
 // @author          Lockframe
-// @github          https://www.github.com/Lockframe
+// @github          https://github.com/Lockframe
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -lwinmm
 // ==/WindhawkMod==
