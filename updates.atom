@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-22T10:24:19.000Z</updated>
+    <updated>2026-03-22T15:59:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove "Exit Fullscreen" popup in Chrome 1.3]]></title>
+        <id>https://windhawk.net/mods/remove-fullscreen-popup-chrome#025a1b56cb1df44cc2eb38d5c65dde2e99d9f661</id>
+        <link href="https://windhawk.net/mods/remove-fullscreen-popup-chrome"/>
+        <updated>2026-03-22T15:59:33.000Z</updated>
+        <content type="html"><![CDATA[<p>Add support for more browsers</p>]]></content>
+        <author>
+            <name>lorenzoc01</name>
+            <uri>https://github.com/lorenzoc01</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word PDF Lossless Export 1.1.1]]></title>
         <id>https://windhawk.net/mods/word-pdf-lossless-export#9bcd4574bc24f4fe78d3818a65a576fea7a35e47</id>
@@ -372,22 +383,6 @@ covering every known code path Windows uses to open the speed test URL.</p>]]></
         <author>
             <name>mynameistito</name>
             <uri>https://github.com/mynameistito</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#b99b0e5e0cfbe608e0657ef8ab21a8f3c555ca8a</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
-        <updated>2026-03-17T00:32:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Renamed from "Taskbar keyboard-only auto-hide" to "Taskbar auto-hide fine tuning".</li>
-<li>Added multiple auto-hide modes: Keyboard or mouse click, Keyboard only (previously "Fully hide"), and Never (blocks all unhiding including notifications and Win key).</li>
-<li>Added configurable hotkeys for showing the taskbar temporarily and toggling permanent visibility (always-show mode).</li>
-<li>Added a mouse event option (middle click or double click) on the Win11 taskbar to toggle always-show mode.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
