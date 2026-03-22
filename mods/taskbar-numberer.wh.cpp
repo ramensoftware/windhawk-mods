@@ -14,7 +14,7 @@
 /*
 # Taskbar Numberer for Windows 11
 Displays keyboard shortcut numbers (1-9, 0) on Windows 11 taskbar items, replicating the functionality of the classic 7+ Taskbar Numberer tool.
-![](https://raw.githubusercontent.com/jsfdez/images/main/taskbar-icon-numberer.wh.cpp.png)
+![](https://raw.githubusercontent.com/rik-smeets/images/refs/heads/main/taskbar-numberer.png)
 
 ## Features
 - Numbers 1-9 for first nine apps, 0 for tenth app
