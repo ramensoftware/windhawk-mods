@@ -73,7 +73,6 @@ Configure number position (corners), font size (8-16px), text color, and stroke 
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/base.h>
 #include <winrt/Windows.UI.ViewManagement.h>
-#include <winrt/Windows.UI.Xaml.Automation.h>
 
 #include <algorithm>
 #include <atomic>
@@ -97,6 +96,45 @@ using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
+// For resolving a button's app group from its TaskItem.
+// Button → TaskListWindowViewModel → WindowsUdk TaskItem → ReportClicked
+// sentinel → CTaskListWnd::HandleClick → native ITaskGroup*.
+using TryGetItemFromContainer_TaskListWindowViewModel_t =
+    void*(WINAPI*)(void** output, UIElement* container);
+TryGetItemFromContainer_TaskListWindowViewModel_t
+    TryGetItemFromContainer_TaskListWindowViewModel_Original;
+
+using TaskListWindowViewModel_get_TaskItem_t = int(WINAPI*)(void* pThis,
+                                                            void** taskItem);
+TaskListWindowViewModel_get_TaskItem_t
+    TaskListWindowViewModel_get_TaskItem_Original;
+
+using TaskItem_ReportClicked_t = int(WINAPI*)(void* pThis, void* param);
+TaskItem_ReportClicked_t TaskItem_ReportClicked_Original;
+
+// Click sentinel — triggers CTaskListWnd::HandleClick to capture the native
+// ITaskGroup pointer.
+WCHAR g_clickSentinel[] = L"click-sentinel";
+void* g_clickSentinel_TaskGroup = nullptr;
+
+using CTaskListWnd_HandleClick_t = HRESULT(WINAPI*)(void* pThis,
+                                                    void* taskGroup,
+                                                    void* taskItem,
+                                                    void** launcherOptions);
+CTaskListWnd_HandleClick_t CTaskListWnd_HandleClick_Original;
+HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
+                                             void* taskGroup,
+                                             void* taskItem,
+                                             void** launcherOptions) {
+    if (*launcherOptions == &g_clickSentinel) {
+        g_clickSentinel_TaskGroup = taskGroup;
+        return S_OK;
+    }
+
+    return CTaskListWnd_HandleClick_Original(pThis, taskGroup, taskItem,
+                                             launcherOptions);
+}
+
 enum class NumberPosition {
     topLeft,
     topRight,
@@ -117,10 +155,10 @@ struct ButtonInformation {
     FrameworkElement overlay = nullptr;
     int currentNumber = -1;
     bool isVisible = false;
-    
+
     // Constructor for easier creation
     explicit ButtonInformation(const FrameworkElement& button = nullptr) : button(button) {}
-    
+
     bool isSameButton(const FrameworkElement& otherButton) const {
         auto thisButton = button.get();
         if (!thisButton) return false;
@@ -136,7 +174,7 @@ std::vector<ButtonInformation> g_trackedButtons;
 
 // Helper function to find button in vector
 auto FindButtonInVector = [](const std::vector<ButtonInformation>& buttons, const FrameworkElement& targetButton) {
-    return std::find_if(buttons.begin(), buttons.end(), 
+    return std::find_if(buttons.begin(), buttons.end(),
         [&targetButton](const ButtonInformation& info) {
             return info.isSameButton(targetButton);
         });
@@ -194,7 +232,7 @@ FrameworkElement EnumerateChildren(FrameworkElement element, std::function<bool(
 
 FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
     if (!element) return nullptr;
-    
+
     try {
         int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
         for (int i = 0; i < childrenCount; i++) {
@@ -303,11 +341,11 @@ TextBlock CreateTextBlock(const std::wstring& text, double fontSize, const winrt
     textBlock.Text(text);
     textBlock.FontSize(fontSize);
     textBlock.Margin(margin);
-    
+
     auto brush = SolidColorBrush();
     brush.Color(color);
     textBlock.Foreground(brush);
-    
+
     return textBlock;
 }
 
@@ -337,43 +375,43 @@ FrameworkElement CreateNumberOverlay(int number) {
         Wh_Log(L"CreateNumberOverlay: Invalid number %d, skipping creation", number);
         return nullptr;
     }
-    
+
     try {
         std::wstring text = (number == 10) ? L"0" : std::to_wstring(number);
         auto textColor = ParseHexColor(g_settings.numberColor);
         auto strokeColor = ParseHexColor(g_settings.backgroundColor);
-        
+
         Grid textContainer;
         textContainer.Name(L"WindhawkNumberOverlay");
-        
+
         // Create stroke effect
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
                 if (dx == 0 && dy == 0) continue;
-                
-                auto strokeText = CreateTextBlock(text, g_settings.numberSize, strokeColor, 
+
+                auto strokeText = CreateTextBlock(text, g_settings.numberSize, strokeColor,
                     Thickness{static_cast<double>(dx), static_cast<double>(dy), 0, 0});
                 textContainer.Children().Append(strokeText);
             }
         }
-        
+
         // Main text
         auto numberText = CreateTextBlock(text, g_settings.numberSize, textColor);
         textContainer.Children().Append(numberText);
-        
+
         // Set position and properties
         setNumberPosition(textContainer);
 
         textContainer.Margin(Thickness{4, 2, 4, 2});
         Canvas::SetZIndex(textContainer, 1000);
-        
+
         if (number > 10) {
             textContainer.Visibility(Visibility::Collapsed);
         }
-        
+
         Wh_Log(L"CreateNumberOverlay: Created overlay with number %d", number);
         return textContainer;
-        
+
     } catch (...) {
         LogException(__FUNCTION__);
         return nullptr;
@@ -385,10 +423,10 @@ void CleanupButtonOverlays(const ButtonInformation& buttonInfo) {
     try {
         auto button = buttonInfo.button.get();
         if (!button) return;
-        
+
         auto iconPanel = FindChildByName(button, L"IconPanel");
         if (!iconPanel) return;
-        
+
         auto panelChildren = iconPanel.as<Panel>().Children();
         for (uint32_t j = 0; j < panelChildren.Size();) {
             auto child = panelChildren.GetAt(j).try_as<FrameworkElement>();
@@ -407,7 +445,7 @@ void RemoveAllNumberOverlays() {
     try {
         HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
         if (!taskbarWnd) return;
-        
+
         RunFromWindowThread(taskbarWnd, [](void*) {
             try {
                 std::lock_guard<std::mutex> lock(g_overlayMutex);
@@ -428,21 +466,21 @@ void RemoveAllNumberOverlays() {
 void UpdateOverlayAppearance(Grid& grid, const std::wstring& text) {
     auto children = grid.Children();
     children.Clear();
-    
+
     auto textColor = ParseHexColor(g_settings.numberColor);
     auto strokeColor = ParseHexColor(g_settings.backgroundColor);
-    
+
     // Create stroke effect
     for (int dx = -1; dx <= 1; dx++) {
         for (int dy = -1; dy <= 1; dy++) {
             if (dx == 0 && dy == 0) continue;
-            
+
             auto strokeText = CreateTextBlock(text, g_settings.numberSize, strokeColor,
                 Thickness{static_cast<double>(dx), static_cast<double>(dy), 0, 0});
             children.Append(strokeText);
         }
     }
-    
+
     // Main text
     auto numberText = CreateTextBlock(text, g_settings.numberSize, textColor);
     children.Append(numberText);
@@ -453,17 +491,17 @@ void UpdateOverlayWithNewSettings(const ButtonInformation& buttonInformation) {
         Wh_Log(L"UpdateOverlayWithNewSettings: No overlay to update");
         return;
     }
-    
+
     try {
         auto grid = buttonInformation.overlay.as<Grid>();
         std::wstring text = (buttonInformation.currentNumber == 10) ? L"0" : std::to_wstring(buttonInformation.currentNumber);
-        
+
         UpdateOverlayAppearance(grid, text);
-        
+
         setNumberPosition(grid);
-        
+
         Wh_Log(L"UpdateOverlayWithNewSettings: Successfully updated overlay");
-        
+
     } catch (...) {
         Wh_Log(L"UpdateOverlayWithNewSettings: Failed to update overlay");
         LogException(__FUNCTION__);
@@ -492,7 +530,7 @@ void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, voi
         if (number < 1) Wh_Log(L"UpdateButtonOverlay: Invalid number %d, skipping", number);
         return;
     }
-    
+
     try {
         auto iconPanelElement = FindChildByName(taskListButtonElement, L"IconPanel");
         if (!iconPanelElement) {
@@ -501,139 +539,136 @@ void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, voi
         }
 
         std::lock_guard<std::mutex> lock(g_overlayMutex);
-        
+
         winrt::Windows::Foundation::IUnknown buttonIUnknown;
         winrt::copy_from_abi(buttonIUnknown, buttonPointer);
         auto button = buttonIUnknown.as<FrameworkElement>();
 
         auto it = FindButtonInVector(g_trackedButtons, button);
         ButtonInformation buttonInfo;
-        
+
         if (it != g_trackedButtons.end()) {
             buttonInfo = *it;
             g_trackedButtons.erase(it);
-            Wh_Log(L"UpdateButtonOverlay: Found existing button, current number %d, new number %d", 
+            Wh_Log(L"UpdateButtonOverlay: Found existing button, current number %d, new number %d",
                    buttonInfo.currentNumber, number);
         } else {
             buttonInfo = ButtonInformation(button);
             Wh_Log(L"UpdateButtonOverlay: New button, number %d", number);
         }
-        
+
         const bool shouldShow = number <= 10;
         const bool visibilityChanged = buttonInfo.isVisible != shouldShow;
         const bool numberChanged = buttonInfo.currentNumber != number;
         const bool needsNewOverlay = !buttonInfo.overlay || (numberChanged && buttonInfo.overlay);
-        
+
         if (!visibilityChanged && !numberChanged && !needsNewOverlay) {
             g_trackedButtons.push_back(buttonInfo);
             return;
         }
-        
+
         // Create new overlay if needed
         if (needsNewOverlay) {
             RemoveExistingOverlays(iconPanelElement);
             buttonInfo.overlay = nullptr;
-            
+
             auto newOverlay = CreateNumberOverlay(number);
             if (newOverlay) {
                 iconPanelElement.as<Panel>().Children().Append(newOverlay);
                 buttonInfo.overlay = newOverlay;
             }
         }
-        
+
         // Update visibility
         if (buttonInfo.overlay && visibilityChanged) {
             buttonInfo.overlay.Visibility(shouldShow ? Visibility::Visible : Visibility::Collapsed);
         }
-        
+
         buttonInfo.currentNumber = number;
         buttonInfo.isVisible = shouldShow;
         g_trackedButtons.push_back(buttonInfo);
-        
+
     } catch (...) {
         LogException(__FUNCTION__);
     }
 }
 
-// Normalizes names to determine icon groups, examples:
-// 'Untitled - Notepad - 2 running windows' --> 'Notepad'
-// 'Title of note - Notepad - 2 running windows' --> 'Notepad'
-// 'github.com - Personal - Microsoft Edge - 1 running window' --> 'Personal - Microsoft Edge'
-std::wstring NormalizeName(const std::wstring& input) {
-    if (input.empty()) return input;
-
-    const std::wstring sep = L" - ";
-
-    size_t first = input.find(sep);
-    size_t last  = input.rfind(sep);
-
-    size_t start = (first != std::wstring::npos) ? first + sep.size() : 0;
-    size_t end   = (last != std::wstring::npos && last > start) ? last : input.size();
-
-    return input.substr(start, end - start);
-}
-
-std::wstring GetElementName(FrameworkElement element) {
-    if (!element) return L"";
-
-    try {
-        auto name = winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(element);
-        if (!name.empty()) {
-            return name.c_str();
-        }
-
-        return L"";
-    } catch (...) {
-        LogException(__FUNCTION__);
-        return L"";
+// Get the native ITaskGroup pointer for a taskbar button.
+// For grouped items each group is already a single button, so they naturally
+// get distinct numbers. This function is only needed for ungrouped items where
+// multiple windows of the same app each have their own button.
+void* GetTaskGroupFromTaskListButton(UIElement element) {
+    if (!TryGetItemFromContainer_TaskListWindowViewModel_Original ||
+        !TaskListWindowViewModel_get_TaskItem_Original ||
+        !TaskItem_ReportClicked_Original) {
+        return nullptr;
     }
+
+    winrt::com_ptr<IUnknown> windowViewModel;
+    TryGetItemFromContainer_TaskListWindowViewModel_Original(
+        windowViewModel.put_void(), &element);
+    if (!windowViewModel) {
+        return nullptr;
+    }
+
+    winrt::com_ptr<IUnknown> windowsUdkTaskItem;
+    TaskListWindowViewModel_get_TaskItem_Original(
+        windowViewModel.get(), windowsUdkTaskItem.put_void());
+    if (!windowsUdkTaskItem) {
+        return nullptr;
+    }
+
+    g_clickSentinel_TaskGroup = nullptr;
+    TaskItem_ReportClicked_Original(windowsUdkTaskItem.get(),
+                                    &g_clickSentinel);
+    return g_clickSentinel_TaskGroup;
 }
 
 void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
     if (g_unloading) return;
-    
+
     try {
         const auto xamlRoot = taskbarRepeater.XamlRoot();
         if (!xamlRoot || IsSecondaryTaskbar(xamlRoot)) return;
-        
+
         auto panel = taskbarRepeater.as<Panel>();
         if (!panel) return;
-        
+
         auto children = panel.Children();
         std::vector<std::pair<double, FrameworkElement>> buttons;
-        
+
         for (uint32_t i = 0; i < children.Size(); i++) {
             auto child = children.GetAt(i).try_as<FrameworkElement>();
             if (!child) continue;
-            
+
             if (child.Name() != L"TaskListButton") continue;
             if (child.Visibility() != Visibility::Visible) continue;
             if (child.ActualWidth() <= 0 || child.ActualHeight() <= 0) continue;
             if (child.Opacity() <= 0.1) continue;
-            
+
             double x = child.ActualOffset().x;
             if (x < 0) continue;
-            
+
             buttons.push_back({x, child});
         }
-        
+
         if (buttons.empty()) {
             Wh_Log(L"UpdateAllTaskbarNumbers: No valid buttons found, skipping");
             return;
         }
-        
-        std::sort(buttons.begin(), buttons.end(), [](const auto& a, const auto& b) { 
-            return a.first < b.first; 
+
+        std::sort(buttons.begin(), buttons.end(), [](const auto& a, const auto& b) {
+            return a.first < b.first;
         });
-        
+
         Wh_Log(L"UpdateAllTaskbarNumbers: Found %zu taskbar buttons", buttons.size());
-        
+
         // Clean up buttons no longer present
         std::unordered_set<FrameworkElement> currentButtons;
         for (const auto& [pos, button] : buttons) {
             currentButtons.insert(button);
         }
-        
+
         {
             std::lock_guard<std::mutex> lock(g_overlayMutex);
             auto it = g_trackedButtons.begin();
@@ -653,35 +688,33 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
         }
 
         int currentNumber = 0;
-        std::wstring lastTitle;
+        void* lastGroupId = nullptr;
 
         for (size_t i = 0; i < buttons.size(); i++) {
             auto button = buttons[i].second;
             void* buttonPointer = winrt::get_abi(button.as<winrt::Windows::Foundation::IUnknown>());
 
-            std::wstring rawTitle = GetElementName(button);
-            std::wstring title = NormalizeName(rawTitle);
+            // Use the native ITaskGroup pointer as group identity.
+            // Buttons in the same app group share the same ITaskGroup.
+            UIElement buttonElement = button.as<UIElement>();
+            void* groupId = GetTaskGroupFromTaskListButton(buttonElement);
 
-            // Normalize empty titles to avoid grouping everything together
-            if (title.empty()) {
-                title = L"__EMPTY__" + std::to_wstring(i);
-            }
-
-            // Only increment when title changes
-            if (i == 0 || title != lastTitle) {
+            // Increment when group changes, or when group is unknown.
+            if (!groupId || groupId != lastGroupId) {
                 currentNumber++;
-                lastTitle = title;
             }
+
+            lastGroupId = groupId;
 
             int buttonNumber = currentNumber;
 
-            Wh_Log(L"Button %zu title='%s' assigned number %d", i, title.c_str(), buttonNumber);
+            Wh_Log(L"Button %zu groupId=%p assigned number %d", i, groupId, buttonNumber);
 
             UpdateButtonOverlay(button, buttonNumber, buttonPointer);
         }
-        
+
         Wh_Log(L"UpdateAllTaskbarNumbers: Processing complete");
-    } catch (...) { 
+    } catch (...) {
         Wh_Log(L"UpdateAllTaskbarNumbers: Exception occurred");
         LogException(__FUNCTION__);
     }
@@ -692,7 +725,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     if (TaskListButton_UpdateVisualStates_Original) {
         TaskListButton_UpdateVisualStates_Original(pThis);
     }
-    
+
     try {
         void* taskListButtonIUnknownPointer = (void**)pThis + 3;
         winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
@@ -700,7 +733,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
 
         auto taskListButtonElement = taskListButtonIUnknown.as<FrameworkElement>();
         if (!taskListButtonElement) return;
-        
+
         if (auto xamlRoot = taskListButtonElement.XamlRoot()) {
             if (IsSecondaryTaskbar(xamlRoot)) return;
         }
@@ -722,9 +755,40 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             &TaskListButton_UpdateVisualStates_Original,
             TaskListButton_UpdateVisualStates_Hook,
         },
+        {
+            {LR"(struct winrt::Taskbar::TaskListWindowViewModel __cdecl TryGetItemFromContainer<struct winrt::Taskbar::TaskListWindowViewModel>(struct winrt::Windows::UI::Xaml::UIElement const &))"},
+            &TryGetItemFromContainer_TaskListWindowViewModel_Original,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskListWindowViewModel>::get_TaskItem(void * *))"},
+            &TaskListWindowViewModel_get_TaskItem_Original,
+        },
     };
 
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+}
+
+bool HookTaskbarDllSymbols() {
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Couldn't load taskbar.dll");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(public: virtual long __cdecl CTaskListWnd::HandleClick(struct ITaskGroup *,struct ITaskItem *,struct winrt::Windows::System::LauncherOptions const &))"},
+            &CTaskListWnd_HandleClick_Original,
+            CTaskListWnd_HandleClick_Hook,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskItem,struct winrt::WindowsUdk::UI::Shell::ITaskItem>::ReportClicked(void *))"},
+            &TaskItem_ReportClicked_Original,
+        },
+    };
+
+    return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
@@ -766,6 +830,8 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
+    if (!HookTaskbarDllSymbols()) return FALSE;
+
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) return FALSE;
@@ -796,14 +862,14 @@ void Wh_ModUninit() {}
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, updating existing overlays");
     LoadSettings();
-    
+
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (taskbarWnd) {
         RunFromWindowThread(taskbarWnd, [](void*) {
             std::lock_guard<std::mutex> lock(g_overlayMutex);
-            
+
             Wh_Log(L"Updating %zu tracked buttons with new settings", g_trackedButtons.size());
-            
+
             for (const auto& buttonInfo : g_trackedButtons) {
                 UpdateOverlayWithNewSettings(buttonInfo);
             }
