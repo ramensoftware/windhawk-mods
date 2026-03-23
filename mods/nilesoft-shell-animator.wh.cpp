@@ -820,9 +820,6 @@ static DWORD WINAPI PersistentAnimationThread(LPVOID) {
     // Bump to HIGHEST to combat CPU starvation and ensure smooth UI scheduling
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST); 
     
-    // Bind 1ms timer resolution to the thread lifecycle to prevent kernel scheduler thrashing
-    timeBeginPeriod(1); 
-    
     while (g_modRunning.load(std::memory_order_acquire)) {
         AnimationGroup* group = nullptr;
         {
@@ -837,12 +834,15 @@ static DWORD WINAPI PersistentAnimationThread(LPVOID) {
             }
         }
         if (group) {
+            // Request 1ms resolution ONLY during the active animation burst
+            timeBeginPeriod(1);
             RunAnimation(group);
+            timeEndPeriod(1); // Then release it so the CPU can idle deeply
+            
             FreeGroup(group);
         }
     }
     
-    timeEndPeriod(1); // Release global timer resolution only when the mod unloads
     return 0;
 }
 
