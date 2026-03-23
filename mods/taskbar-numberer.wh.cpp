@@ -53,7 +53,7 @@ The following settings can be configured through mod settings:
   - topRight: Top right
   - bottomLeft: Bottom left
   - bottomRight: Bottom right
-- numberSize: 10
+- numberSize: 12
   $name: Number font size
   $description: Size of the overlay numbers (8-16)
 - numberColor: "#FFFFFF"
