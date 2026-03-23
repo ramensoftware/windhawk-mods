@@ -5,8 +5,8 @@
 // @description     Allows mouse cursor to wrap around screen edges (horizontal & vertical). Creates an infinite screen effect.
 // @description:zh-CN 允许鼠标光标在屏幕边缘之间循环穿越（水平与垂直方向），创造无限屏幕效果。
 // @version         1.2
-// @author          Your Name
-// @author:zh-CN    你的名字
+// @author          VisJoker
+// @author:zh-CN    VisJoker
 // @github          https://github.com/VisJoker
 // @homepage        https://github.com/VisJoker/windhawk-mouse-wrap
 // @include         *
