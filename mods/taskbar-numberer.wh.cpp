@@ -431,11 +431,10 @@ void RemoveAllNumberOverlays() {
             auto dispatcher = anyButton.Dispatcher();
             if (!dispatcher) continue;
 
-            auto buttonsCopy = buttons;
             dispatcher.RunAsync(
                 CoreDispatcherPriority::Normal,
-                DispatchedHandler([buttonsCopy]() {
-                    for (const auto& bi : buttonsCopy) {
+                DispatchedHandler([buttons]() {
+                    for (const auto& bi : buttons) {
                         CleanupButtonOverlays(bi);
                     }
                 })
@@ -679,8 +678,6 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
 
         for (size_t i = 0; i < buttons.size(); i++) {
             auto button = buttons[i].second;
-            void* buttonPointer = winrt::get_abi(button.as<winrt::Windows::Foundation::IUnknown>());
-
             // Use the native ITaskGroup pointer as group identity.
             // Buttons in the same app group share the same ITaskGroup.
             UIElement buttonElement = button.as<UIElement>();
@@ -697,7 +694,7 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
 
             Wh_Log(L"Button %zu groupId=%p assigned number %d", i, groupId, buttonNumber);
 
-            UpdateButtonOverlay(button, buttonNumber, buttonPointer);
+            UpdateButtonOverlay(button, buttonNumber);
         }
 
         Wh_Log(L"UpdateAllTaskbarNumbers: Processing complete");
