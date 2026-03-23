@@ -353,7 +353,6 @@ FrameworkElement CreateNumberOverlay(int number) {
         SetNumberPosition(textContainer);
 
         textContainer.Margin(Thickness{4, 2, 4, 2});
-        Canvas::SetZIndex(textContainer, 1000);
 
         if (number > 10) {
             textContainer.Visibility(Visibility::Collapsed);
