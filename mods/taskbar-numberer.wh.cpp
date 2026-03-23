@@ -86,7 +86,6 @@ The following settings can be configured through mod settings:
 #include <atomic>
 #include <string>
 #include <unordered_set>
-#include <unordered_map>
 #include <mutex>
 #include <vector>
 #include <functional>
@@ -353,6 +352,7 @@ FrameworkElement CreateNumberOverlay(int number) {
         SetNumberPosition(textContainer);
 
         textContainer.Margin(Thickness{4, 2, 4, 2});
+        Canvas::SetZIndex(textContainer, 0);
 
         if (number > 10) {
             textContainer.Visibility(Visibility::Collapsed);
