@@ -2990,7 +2990,7 @@
                     6
                 ],
                 "ratingUsers": 11,
-                "updated": 1769809139000,
+                "updated": 1774291255000,
                 "users": 219
             },
             "metadata": {
@@ -3002,7 +3002,7 @@
                     "explorer.exe"
                 ],
                 "name": "Explorer Breadcrumb Middle-Click New Tab",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "explorer-context-menu-classic": {

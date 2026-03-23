@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-23T18:30:52.000Z</updated>
+    <updated>2026-03-23T18:40:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Breadcrumb Middle-Click New Tab 1.1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab#3b18c32d213fdf0e1047f5e9615ba1e334fbbdcd</id>
+        <link href="https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab"/>
+        <updated>2026-03-23T18:40:55.000Z</updated>
+        <content type="html"><![CDATA[<p>🚀 Release v1.1.0: The Clipboard-Free Update
+This major update completely redesigns how the mod reads and writes folder paths, moving away from the clipboard-dependent logic of v1.0.0 to a much safer and less intrusive architecture.</p>
+<p>✨ Key Improvements &amp; Fixes
+Preserves Copied Files (Non-Destructive): In v1.0.0, the mod temporarily hijacked the Windows Clipboard to read and paste paths, which inadvertently destroyed any copied files or complex data sitting in your clipboard. Version 1.1.0 is 100% Clipboard-Free. You can now copy a file, middle-click a folder to open a new tab, and safely paste your file without interruption.</p>
+<p>Increased Reliability: Removed the reliance on simulated Ctrl+C and Ctrl+V commands, which could sometimes misfire depending on system lag or clipboard history monitors.</p>
+<p>⚙️ Under the Hood (v1.0.0 vs v1.1.0)
+Native UIA Probing: Replaced ProbeAddressBarWithClipboard with ProbeAddressBarWithUIA. Instead of forcing a copy command, the mod now securely reads the ValuePattern of the active XAML address bar directly through UIAutomation.</p>
+<p>Unicode Injection: Replaced the clipboard-paste navigation sequence. Target folder paths are now instantly typed into the new tab's address bar using native KEYEVENTF_UNICODE input vectors, bypassing the clipboard entirely.</p>
+<p>Code Cleanup: Completely removed the old BackupClipboard and RestoreClipboard structures, resulting in a cleaner and more efficient execution flow.</p>]]></content>
+        <author>
+            <name>osmanonurkoc</name>
+            <uri>https://github.com/osmanonurkoc</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Nilesoft Shell Animator 1.0]]></title>
         <id>https://windhawk.net/mods/nilesoft-shell-animator#34ed4db043f361f89303e921edc69d3dafa8bd15</id>
@@ -342,25 +361,6 @@ to 100% opacity.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Perform Speed Test Redirect 1.2.2]]></title>
-        <id>https://windhawk.net/mods/perform-speedtest-redirect#1c888f9b5404e1f03ca934fce7524bfa68bfb597</id>
-        <link href="https://windhawk.net/mods/perform-speedtest-redirect"/>
-        <updated>2026-03-18T02:47:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Refactors implementation with no functional changes: same 3 hooks, same URL detection and
-replacement logic, same setting key</li>
-<li>Replaces manual case-insensitive loop in <code>HasLinkId</code> with <code>wcsstr</code> (LINK_ID is already lowercase)</li>
-<li>Drops <code>std::wstring lower</code> copy and <code>std::transform</code> call from <code>ReplaceUrl</code></li>
-<li>Adds <code>LOG</code> macro to eliminate repeated <code>[speedtest]</code> prefix literals</li>
-<li>Removes <code>#include &lt;algorithm&gt;</code> (no longer needed)</li>
-<li>Trims hook log verbosity; removes dead <code>inApp</code>-only branch in <code>CreateProcessW_Hook</code></li>
-</ul>]]></content>
-        <author>
-            <name>mynameistito</name>
-            <uri>https://github.com/mynameistito</uri>
         </author>
     </entry>
 </feed>
