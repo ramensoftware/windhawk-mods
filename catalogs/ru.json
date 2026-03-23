@@ -5506,6 +5506,34 @@
                 "version": "1.0.0"
             }
         },
+        "nilesoft-shell-animator": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774290652000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774290652000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lockframe",
+                "compilerOptions": "-lgdi32 -lwinmm",
+                "description": "Adds customizable animations to Nilesoft Shell.",
+                "github": "https://github.com/Lockframe",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Nilesoft Shell Animator",
+                "version": "1.0"
+            }
+        },
         "nilesoft-text-shrinker": {
             "details": {
                 "defaultSorting": 690,

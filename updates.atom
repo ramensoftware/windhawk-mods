@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-22T23:32:12.000Z</updated>
+    <updated>2026-03-23T18:30:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Nilesoft Shell Animator 1.0]]></title>
+        <id>https://windhawk.net/mods/nilesoft-shell-animator#34ed4db043f361f89303e921edc69d3dafa8bd15</id>
+        <link href="https://windhawk.net/mods/nilesoft-shell-animator"/>
+        <updated>2026-03-23T18:30:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="nilesoftshellanimator">Nilesoft Shell Animator</h1>
+<p>Adds customizable and position-aware animations to Nilesoft Shell's context menu without touching Windows' native menus.</p>
+<p>Slide animation mode:</p>
+<p><img src="https://i.imgur.com/lugdazk.gif" alt="" /></p>
+<p>Fade animation mode:</p>
+<p><img src="https://i.imgur.com/omQGzOV.gif" alt="" /></p>
+<p>Slide + Fade animation mode:</p>
+<p><img src="https://i.imgur.com/THFUeBK.gif" alt="" /></p>
+<p>Native animation mode:</p>
+<p><img src="https://i.imgur.com/qA0Zxhg.gif" alt="" /></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab per monitor 1.2]]></title>
         <id>https://windhawk.net/mods/alt-tab-per-monitor#2eec6038eb43a1847f7cf4dfa0fa65a101aafd18</id>
@@ -341,20 +361,6 @@ replacement logic, same setting key</li>
         <author>
             <name>mynameistito</name>
             <uri>https://github.com/mynameistito</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#20436b3a478ab7a2f7ba4d5e5414bf3abe232de0</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
-        <updated>2026-03-18T00:13:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to customize the action to perform when the Win key is pressed: show the taskbar without showing the Start menu, or toggle permanent taskbar visibility.</li>
-<li>Fixed hotkeys not working on system startup (they only worked if the mod is enabled later on).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
