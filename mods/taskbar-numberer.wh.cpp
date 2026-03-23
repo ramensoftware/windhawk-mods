@@ -352,7 +352,6 @@ FrameworkElement CreateNumberOverlay(int number) {
         SetNumberPosition(textContainer);
 
         textContainer.Margin(Thickness{4, 2, 4, 2});
-        Canvas::SetZIndex(textContainer, 0);
 
         if (number > 10) {
             textContainer.Visibility(Visibility::Collapsed);
@@ -519,7 +518,10 @@ void UpdateButtonOverlay(FrameworkElement button, int number) {
 
             auto newOverlay = CreateNumberOverlay(number);
             if (newOverlay) {
-                iconPanelElement.as<Panel>().Children().Append(newOverlay);
+                auto children = iconPanelElement.as<Panel>().Children();
+                
+                // Insert the new overlay just before the last child to ensure it appears above the icon, but below any other elements like badges or progress indicators
+                children.InsertAt(children.Size() - 1, newOverlay);
                 buttonInfo.overlay = newOverlay;
             }
         }
