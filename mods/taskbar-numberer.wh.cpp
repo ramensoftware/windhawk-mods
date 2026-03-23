@@ -3,11 +3,11 @@
 // @name            Taskbar Numberer for Windows 11
 // @description     Displays keyboard shortcut numbers (1-9, 0) on taskbar items like 7+ Taskbar Numberer
 // @version         1.0.0
-// @author          Rik Smeets & jsfdez
+// @author          Rik Smeets
 // @github          https://github.com/rik-smeets
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -40,7 +40,7 @@ The following settings can be configured through mod settings:
 - Enable/disable showing numbers on secondary taskbars
 
 ## Special Thanks
-- [jsfdez](https://github.com/jsfdez): Created the base for this mod in [this pull request](https://github.com/ramensoftware/windhawk-mods/pull/2260).
+- [jsfdez](https://github.com/jsfdez): Created the base for this mod in [this pull request](https://github.com/ramensoftware/windhawk-mods/pull/2260) after [this research](https://tightcorner.substack.com/p/reverse-engineering-windows-11s-taskbar).
 */
 // ==/WindhawkModReadme==
 
@@ -58,10 +58,10 @@ The following settings can be configured through mod settings:
   $description: Size of the overlay numbers (8-16)
 - numberColor: "#FFFFFF"
   $name: Number color
-  $description: Text color for the numbers (hex format "#RRGGBB" or "#AARRGBB")
+  $description: Text color for the numbers (hex format "#RRGGBB" or "##AARRGGBB")
 - backgroundColor: "#80000000"
   $name: Stroke/outline color
-  $description: Outline color around the numbers for better visibility (hex format "#RRGGBB" or "#AARRGBB")
+  $description: Outline color around the numbers for better visibility (hex format "#RRGGBB" or "#AARRGGBB")
 - showOnAllTaskbars: false
   $name: Show numbers on all taskbars
   $description: 'If enabled and Windows is set to show taskbar apps on all taskbars, numbers appear on secondary taskbar(s) as well.'
@@ -179,13 +179,16 @@ struct ButtonInformation {
     }
 };
 
-using XamlRootKey = void*;
+struct RootEntry {
+    winrt::weak_ref<XamlRoot> root;
+    std::vector<ButtonInformation> buttons;
+};
 
 // Simplified globals
 std::atomic<bool> g_taskbarViewDllLoaded{false};
 std::atomic<bool> g_unloading{false};
 std::mutex g_overlayMutex;
-std::unordered_map<XamlRootKey, std::vector<ButtonInformation>> g_trackedButtonsByRoot;
+std::vector<RootEntry> g_trackedRoots;
 
 // Helper function to find button in vector
 auto FindButtonInVector = [](const std::vector<ButtonInformation>& buttons, const FrameworkElement& targetButton) {
@@ -280,45 +283,6 @@ bool IsSecondaryTaskbar(XamlRoot xamlRoot) {
     }
     if (!controlCenterButton) return false;
     return controlCenterButton.ActualWidth() < 5;
-}
-
-bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
-    static const UINT runFromWindowThreadRegisteredMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        void* procParam;
-    };
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) return false;
-    if (dwThreadId == GetCurrentThreadId()) {
-        proc(procParam);
-        return true;
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                    RUN_FROM_WINDOW_THREAD_PARAM* param =
-                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
-                    param->proc(param->procParam);
-                }
-            }
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, dwThreadId);
-    if (!hook) return false;
-
-    RUN_FROM_WINDOW_THREAD_PARAM param;
-    param.proc = proc;
-    param.procParam = procParam;
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
-    UnhookWindowsHookEx(hook);
-    return true;
 }
 
 // Simplified text creation helper
@@ -427,25 +391,36 @@ void CleanupButtonOverlays(const ButtonInformation& buttonInfo) {
     }
 }
 
-XamlRootKey GetXamlRootKeyFromElement(const FrameworkElement& element) {
+auto FindRootEntry = [](const XamlRoot& targetRoot) -> RootEntry* {
+    for (auto& entry : g_trackedRoots) {
+        auto existing = entry.root.get();
+        if (!existing) continue;
+
+        if (winrt::get_abi(existing) == winrt::get_abi(targetRoot)) {
+            return &entry;
+        }
+    }
+    return nullptr;
+};
+
+XamlRoot GetXamlRootFromElement(const FrameworkElement& element) {
     if (!element) return nullptr;
-    auto root = element.XamlRoot();
-    if (!root) return nullptr;
-    return winrt::get_abi(root);
+    return element.XamlRoot();
 }
 
 void RemoveAllNumberOverlays() {
     try {
-        std::unordered_map<XamlRootKey, std::vector<ButtonInformation>> copy;
+        std::vector<RootEntry> copy;
         {
             std::lock_guard<std::mutex> lock(g_overlayMutex);
-            copy = g_trackedButtonsByRoot;
-            g_trackedButtonsByRoot.clear();
+            copy = g_trackedRoots;
+            g_trackedRoots.clear();
         }
 
         Wh_Log(L"RemoveAllNumberOverlays: Cleaning %zu XamlRoots", copy.size());
 
-        for (auto& [key, buttons] : copy) {
+        for (auto& entry : copy) {
+            auto& buttons = entry.buttons;
             FrameworkElement anyButton = nullptr;
             for (auto& bi : buttons) {
                 anyButton = bi.button.get();
@@ -464,7 +439,7 @@ void RemoveAllNumberOverlays() {
                         CleanupButtonOverlays(bi);
                     }
                 })
-            );
+            ).get(); // Wait for cleanup to finish before allowing mod to unload, to avoid crashes from pending UI updates after mod is unloaded.
         }
     } catch (...) {
         LogException(__FUNCTION__);
@@ -488,31 +463,33 @@ void RemoveExistingOverlays(FrameworkElement iconPanel) {
     }
 }
 
-void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, void* buttonPointer) {
-    if (!taskListButtonElement || g_unloading || number < 1) {
-        if (number < 1) Wh_Log(L"UpdateButtonOverlay: Invalid number %d, skipping", number);
+void UpdateButtonOverlay(FrameworkElement button, int number) {
+    if (!button || g_unloading || number < 1) {
+        if (number < 1) {
+            Wh_Log(L"UpdateButtonOverlay: Invalid number %d, skipping", number);
+        }
         return;
     }
 
     try {
-        auto iconPanelElement = FindChildByName(taskListButtonElement, L"IconPanel");
+        auto iconPanelElement = FindChildByName(button, L"IconPanel");
         if (!iconPanelElement) {
             Wh_Log(L"UpdateButtonOverlay: No IconPanel found");
             return;
         }
 
-        winrt::Windows::Foundation::IUnknown buttonIUnknown;
-        winrt::copy_from_abi(buttonIUnknown, buttonPointer);
-        auto button = buttonIUnknown.as<FrameworkElement>();
-
-        auto key = GetXamlRootKeyFromElement(button);
-        if (!key) {
-            Wh_Log(L"UpdateButtonOverlay: No XamlRoot for button");
-            return;
-        }
+        auto root = GetXamlRootFromElement(button);
+        if (!root) return;
 
         std::lock_guard<std::mutex> lock(g_overlayMutex);
-        auto& vector = g_trackedButtonsByRoot[key];
+
+        auto* entry = FindRootEntry(root);
+        if (!entry) {
+            g_trackedRoots.push_back({ root, {} });
+            entry = &g_trackedRoots.back();
+        }
+
+        auto& vector = entry->buttons;
 
         auto it = FindButtonInVector(vector, button);
         ButtonInformation buttonInfo;
@@ -568,12 +545,6 @@ void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, voi
 // get distinct numbers. This function is only needed for ungrouped items where
 // multiple windows of the same app each have their own button.
 void* GetTaskGroupFromTaskListButton(UIElement element) {
-    if (!TryGetItemFromContainer_TaskListWindowViewModel_Original ||
-        !TaskListWindowViewModel_get_TaskItem_Original ||
-        !TaskItem_ReportClicked_Original) {
-        return nullptr;
-    }
-
     winrt::com_ptr<IUnknown> windowViewModel;
     TryGetItemFromContainer_TaskListWindowViewModel_Original(
         windowViewModel.put_void(), &element);
@@ -626,6 +597,19 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
         const auto xamlRoot = taskbarRepeater.XamlRoot();
         if (!xamlRoot) return;
         if (!ShouldShowOnAllTaskbars() && IsSecondaryTaskbar(xamlRoot)) return;
+        
+        // Clean up any tracked roots that are no longer valid
+        {
+            std::lock_guard<std::mutex> lock(g_overlayMutex);
+
+            g_trackedRoots.erase(
+                std::remove_if(g_trackedRoots.begin(), g_trackedRoots.end(),
+                    [](const RootEntry& entry) {
+                        return !entry.root.get();
+                    }),
+                g_trackedRoots.end()
+            );
+        }
 
         auto panel = taskbarRepeater.as<Panel>();
         if (!panel) return;
@@ -665,14 +649,14 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
             currentButtons.insert(button);
         }
 
-        auto key = GetXamlRootKeyFromElement(taskbarRepeater);
-        if (!key) return;
+        auto root = taskbarRepeater.XamlRoot();
+        if (!root) return;
 
         {
             std::lock_guard<std::mutex> lock(g_overlayMutex);
-            auto itMap = g_trackedButtonsByRoot.find(key);
-            if (itMap != g_trackedButtonsByRoot.end()) {
-                auto& vector = itMap->second;
+            auto* entry = FindRootEntry(root);
+            if (entry) {
+                auto& vector = entry->buttons;
                 auto it = vector.begin();
                 size_t removedCount = 0;
                 while (it != vector.end()) {
@@ -859,7 +843,6 @@ void Wh_ModAfterInit() {
 void Wh_ModBeforeUninit() {
     g_unloading = true;
     RemoveAllNumberOverlays();
-    Sleep(100);
 }
 
 void Wh_ModUninit() {}
