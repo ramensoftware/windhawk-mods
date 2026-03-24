@@ -580,6 +580,35 @@
                 "version": "1.7"
             }
         },
+        "center-new-windows": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774352909000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774352909000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "crazyboyybs",
+                "compilerOptions": "-luser32 -ldwmapi",
+                "description": "Abre todas las ventanas nuevas centradas en la pantalla, incluyendo apps UWP y WinUI",
+                "github": "https://github.com/crazyboyybs",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "Centrar Nuevas Ventanas Automáticamente",
+                "version": "1.0.0"
+            }
+        },
         "center-titlebar": {
             "details": {
                 "defaultSorting": 7856,

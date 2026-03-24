@@ -2,12 +2,170 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-24T11:42:32.000Z</updated>
+    <updated>2026-03-24T11:48:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Center New Windows 1.0.0]]></title>
+        <id>https://windhawk.net/mods/center-new-windows#7d0b212e3305a746d709da156f06012b3713acef</id>
+        <link href="https://windhawk.net/mods/center-new-windows"/>
+        <updated>2026-03-24T11:48:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="centernewwindows">Center New Windows</h1>
+<p>Automatically centers newly created application windows on the active
+monitor, similar to the default behavior in macOS. Also centers UWP and
+WinUI application windows such as Windows Settings, Microsoft Store,
+Calculator, and other modern apps.</p>
+<hr />
+<h2 id="howitworks">How it works</h2>
+<h3 id="regularwindows">Regular windows</h3>
+<p>The mod hooks <code>ShowWindow()</code> in every process. When a suitable window is
+shown for the first time, it is optionally resized and then centered on
+the monitor before becoming visible.</p>
+<p>Windows restored from the system tray (e.g. WhatsApp, Discord) are
+<strong>always re-centered</strong> but <strong>never resized</strong>, preserving any size the
+user may have set previously.</p>
+<p>Owned windows — dialogs, settings panels, export windows, the Run
+dialog, and similar pop-ups — are intentionally ignored by default.</p>
+<p>The <strong>Always center dialogs</strong> option is an exception: when enabled,
+standard Win32 dialogs (window class <code>#32770</code>) such as the file picker,
+print dialogs, and font pickers are <strong>always centered</strong> every time they
+appear. Child dialogs inside property sheets and sub-dialogs are
+automatically excluded.</p>
+<p>Some applications reposition their windows after <code>ShowWindow</code>. For those
+cases, the <strong>Fade Trick</strong> can be enabled in settings to temporarily make
+the window transparent while it is being repositioned.</p>
+<h3 id="uwpandwinuiwindows">UWP and WinUI windows</h3>
+<p>UWP windows have two layers:</p>
+<ul>
+<li><strong>ApplicationFrameWindow</strong> — the top-level frame (title bar, borders)</li>
+<li><strong>CoreWindow</strong> — the app content, positioned as a child of the frame</li>
+</ul>
+<p>The Windows shell (<code>explorer.exe</code>) positions the CoreWindow via
+<code>SetWindowPos</code>. This mod detects that moment, finds the parent
+ApplicationFrameWindow, and moves the <strong>frame</strong> to the center of
+the screen. A grace period prevents the shell from overriding the
+centered position.</p>
+<p>As a fallback, the mod also intercepts <code>ShowWindow</code> in
+<code>ApplicationFrameHost.exe</code> to catch frames at first appearance,
+using short timer-based polling until the frame has its real size.</p>
+<blockquote>
+  <p><strong>Note:</strong> Some UWP apps like Microsoft Store may show a brief position
+  jump when opening. This happens because these apps create and
+  reposition multiple internal windows during initialization, and the
+  shell may momentarily override the centered position before the grace
+  period takes effect.</p>
+</blockquote>
+<hr />
+<h2 id="settings">Settings</h2>
+<h3 id="fadetrickfadedelayms">Fade Trick + Fade delay (ms)</h3>
+<p>When <strong>Fade Trick</strong> is enabled, the window is made transparent before
+being shown, repositioned while invisible, and then restored after
+the configured delay.</p>
+<p>At 60 Hz one frame takes about <strong>16 ms</strong>; the default value of
+<strong>25 ms</strong> adds a small safety margin.</p>
+<p>Safe range: <strong>1–500 ms</strong>.</p>
+<h3 id="resizewindowstodefaultsize">Resize windows to default size</h3>
+<p>When enabled, new windows are resized to the configured width and
+height before being centered. Dialogs and UWP windows are never resized.</p>
+<h3 id="alwayscenterdialogs">Always center dialogs</h3>
+<p>When enabled, all standard Win32 top-level dialogs (<code>#32770</code>) are
+centered every time they appear. This includes file pickers (Save As,
+Open File), print dialogs, font pickers, and other standard dialogs.</p>
+<p>Child dialogs inside property sheets (such as the tab pages in
+"Drive Properties") and sub-dialogs opened from another dialog are
+automatically excluded — only the first-level dialog is ever centered.</p>
+<h3 id="centeruwpandwinuiwindows">Center UWP and WinUI windows</h3>
+<p>When enabled, UWP and WinUI application windows (Settings, Store,
+Calculator, etc.) are centered on the screen when they first appear.</p>
+<h3 id="exclusionlists">Exclusion lists</h3>
+<p>The mod maintains an internal list of always-excluded processes and
+window classes that are known to break or have no visible content.</p>
+<p>You can add your own entries in the settings panel for any additional
+apps or window classes you want to skip.</p>
+<p><strong>Always excluded (hardcoded processes):</strong></p>
+<p>| Entry | Reason |
+|------|------|
+| <code>photoshop.exe</code> | Adobe Photoshop — blank layout after splash |
+| <code>shellexperiencehost.exe</code> | Start menu, Action Center |
+| <code>startmenuexperiencehost.exe</code> | Start menu |
+| <code>searchhost.exe</code> | Windows Search UI |
+| <code>lockapp.exe</code> | Lock screen |
+| <code>systemsettings.exe</code> | Windows Settings (UWP host process) |
+| <code>textinputhost.exe</code> | Touch keyboard / emoji panel |
+| <code>widgets.exe</code> | Windows Widgets |
+| <code>phoneexperiencehost.exe</code> | Phone Link host |
+| <code>gamebarpresencewriter.exe</code> | Xbox Game Bar |
+| <code>runtimebroker.exe</code> | UWP permission broker |
+| <code>dllhost.exe</code> | COM surrogate host |
+| <code>sihost.exe</code> | Shell Infrastructure Host |
+| <code>taskhostw.exe</code> | Task scheduler host |
+| <code>ctfmon.exe</code> | Input method framework |
+| <code>credentialuibroker.exe</code> | Credential dialog broker |
+| <code>windowsterminal.exe</code> | Manages its own window |
+| <code>backgroundtaskhost.exe</code> | Background task runner |
+| <code>securityhealthsystray.exe</code> | Windows Security tray |
+| <code>onedrive.exe</code> | OneDrive tray pop-up |
+| <code>mspcmanager.exe</code> | PC Manager tray pop-up |
+| <code>msedgewebview2.exe</code> | WebView2 embedded browser |
+| <code>conhost.exe</code> | Console host |
+| <code>svchost.exe</code> | Service host |</p>
+<p><strong>Always excluded (hardcoded classes):</strong></p>
+<p>| Entry | Reason |
+|------|------|
+| <code>MsoSplash</code> | Office splash screens |
+| <code>Microsoft.UI.Content.PopupWindowSiteBridge</code> | WinUI pop-up host |
+| <code>DropdownWindow</code> | Generic drop-down menus |
+| <code>Windows.UI.Core.CoreWindow</code> | UWP core window |
+| <code>Shell_TrayWnd</code> | Taskbar |
+| <code>Shell_SecondaryTrayWnd</code> | Secondary monitor taskbar |
+| <code>NotifyIconOverflowWindow</code> | Tray overflow area |
+| <code>Progman</code> | Desktop program manager |
+| <code>WorkerW</code> | Desktop wallpaper worker |
+| <code>Windows.UI.Input.InputSite.WindowClass</code> | Input site host |
+| <code>XamlExplorerHostIslandWindow</code> | XAML island host |</p>
+<hr />
+<h1 id="centralizarnovasjanelasautomaticamente">Centralizar Novas Janelas Automaticamente</h1>
+<p>Centraliza automaticamente novas janelas de aplicativos no monitor
+ativo, de forma semelhante ao comportamento do macOS. Também centraliza
+janelas UWP e WinUI como Configurações, Microsoft Store, Calculadora
+e outros apps modernos.</p>
+<p>A opção <strong>Sempre centralizar diálogos</strong> centraliza diálogos Win32
+padrão de nível superior (classe <code>#32770</code>) toda vez que aparecem.
+Diálogos filhos dentro de property sheets e sub-diálogos são
+automaticamente excluídos. Diálogos nunca são redimensionados.</p>
+<p>A opção <strong>Centralizar janelas UWP e WinUI</strong> centraliza janelas de apps
+modernos. Alguns apps como a Microsoft Store podem apresentar um breve
+salto de posição ao abrir, pois criam e reposicionam múltiplas janelas
+internas durante a inicialização.</p>
+<p><strong>Sempre excluídos (fixos no código):</strong></p>
+<p>O mod mantém uma lista interna de processos e classes de janela sempre
+excluídos. Você pode adicionar exclusões adicionais nas configurações.</p>
+<hr />
+<h1 id="centrarnuevasventanasautomticamente">Centrar Nuevas Ventanas Automáticamente</h1>
+<p>Centra automáticamente las nuevas ventanas de aplicaciones en el
+monitor activo, similar al comportamiento de macOS. También centra
+ventanas UWP y WinUI como Configuración, Microsoft Store, Calculadora
+y otras apps modernas.</p>
+<p>La opción <strong>Centrar siempre los diálogos</strong> centra diálogos Win32
+estándar de nivel superior (clase <code>#32770</code>) cada vez que aparecen.
+Los diálogos hijo y sub-diálogos se excluyen automáticamente. Los
+diálogos nunca se redimensionan.</p>
+<p>La opción <strong>Centrar ventanas UWP y WinUI</strong> centra ventanas de apps
+modernas. Algunas apps como Microsoft Store pueden mostrar un breve
+salto de posición al abrirse, ya que crean y reposicionan múltiples
+ventanas internas durante la inicialización.</p>
+<p><strong>Siempre excluidos (fijos en el código):</strong></p>
+<p>El mod mantiene una lista interna de procesos y clases de ventana
+siempre excluidos. Puede agregar exclusiones adicionales en la
+configuración.</p>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Corner Click Fix 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#8e16036ab2ebeffb1e2f456a027a736bc4026aa5</id>
@@ -332,23 +490,6 @@ to 100% opacity.</p>]]></content>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.4.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#f6d529d39999d0cdbca3ca5f3a1233e09f4f13a3</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2026-03-20T16:45:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the LayerMicaUI theme.</li>
-<li>Updated themes: Windows10 (Minimal), WindowGlass.</li>
-<li>Added XAML syntax support for resource variables.</li>
-<li>Improved resource variable handling and theme resource refresh logic.</li>
-<li>Fixed restoration of pinned items column count.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
