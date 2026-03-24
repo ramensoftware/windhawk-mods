@@ -6,6 +6,7 @@
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lshell32 -ladvapi32 -loleaut32
 // ==/WindhawkMod==
 
@@ -13,8 +14,8 @@
 /*
 # Auto Time Sync On Startup
 
-This mod asks Windows to synchronize the clock once when `explorer.exe` starts
-after sign-in. It doesn't set a custom NTP server or change the time zone. It
+This mod asks Windows to synchronize the clock once after sign-in from
+`explorer.exe`. It doesn't set a custom NTP server or change the time zone. It
 simply triggers the standard Windows time sync flow, so the current system date
 and time settings continue to apply.
 
@@ -24,14 +25,14 @@ immediately after startup.
 
 ## Notes
 
-- Windhawk mods are user-mode mods, so this runs after sign-in when Explorer
-  starts, not before the logon screen.
-- The mod runs only once per logon session, even if Explorer is restarted.
+- Windhawk mods are user-mode mods, so this runs after sign-in, not before the
+  logon screen.
+- The mod is intended for 64-bit Windows.
 - The primary method is `SystemSettingsAdminFlows.exe ForceTimeSync 0`, which
   matches the Windows Settings "Sync now" flow.
 - If enabled and the mod is already running elevated, it can fall back to
   `w32tm /resync /nowait`.
-- After a successful request, the mod shows a notification from Explorer.
+- After a successful synchronization, the mod shows a notification.
 - Windows can still show a UAC prompt for the sync request because time sync is
   a privileged operation.
 */
@@ -83,10 +84,13 @@ constexpr DWORD kSleepPollMs = 200;
 constexpr DWORD kNotificationLifetimeMs = 5000;
 constexpr DWORD kSyncConfirmationTimeoutMs = 45000;
 constexpr DWORD kSyncConfirmationPollMs = 2000;
+constexpr PCWSTR kAdminBrokerArguments = L"ForceTimeSync 0";
 constexpr PCWSTR kRunGuardKey =
     L"Software\\Windhawk\\" WH_MOD_ID L"\\SessionRunGuard";
-constexpr PCWSTR kAdminBrokerArguments = L"ForceTimeSync 0";
+constexpr PCWSTR kRunGuardValueName = L"Claimed";
 constexpr UINT kNotificationIconId = 1;
+constexpr PCWSTR kNotificationWindowClassName =
+    L"AutoTimeSyncNotificationWindow_" WH_MOD_ID;
 constexpr GUID kNotificationGuid = {
     0x0c69f59d, 0x59f7, 0x42dd, {0x85, 0xd6, 0xc7, 0x77, 0x64, 0x9c, 0x8a, 0x1f}
 };
@@ -147,6 +151,64 @@ bool SleepWithStopCheck(DWORD durationMs) {
     return !g_stopWorker.load();
 }
 
+bool ClaimCurrentLogonRun() {
+    HKEY key = nullptr;
+    DWORD disposition = 0;
+    LONG result = RegCreateKeyExW(HKEY_CURRENT_USER,
+                                  kRunGuardKey,
+                                  0,
+                                  nullptr,
+                                  REG_OPTION_VOLATILE,
+                                  KEY_QUERY_VALUE | KEY_SET_VALUE,
+                                  nullptr,
+                                  &key,
+                                  &disposition);
+    if (result != ERROR_SUCCESS) {
+        Wh_Log(L"RegCreateKeyExW failed for the session guard (error %ld)",
+               result);
+        return true;
+    }
+
+    DWORD claimed = 0;
+    DWORD type = 0;
+    DWORD size = sizeof(claimed);
+    result = RegQueryValueExW(key,
+                              kRunGuardValueName,
+                              nullptr,
+                              &type,
+                              reinterpret_cast<BYTE*>(&claimed),
+                              &size);
+    if (result == ERROR_SUCCESS && type == REG_DWORD && claimed != 0) {
+        RegCloseKey(key);
+        return false;
+    }
+
+    claimed = 1;
+    result = RegSetValueExW(key,
+                            kRunGuardValueName,
+                            0,
+                            REG_DWORD,
+                            reinterpret_cast<const BYTE*>(&claimed),
+                            sizeof(claimed));
+    RegCloseKey(key);
+
+    if (result != ERROR_SUCCESS) {
+        Wh_Log(L"RegSetValueExW failed for the session guard (error %ld)",
+               result);
+    }
+
+    return true;
+}
+
+void ClearCurrentLogonRunClaim() {
+    LONG result = RegDeleteTreeW(HKEY_CURRENT_USER, kRunGuardKey);
+    if (result != ERROR_SUCCESS && result != ERROR_FILE_NOT_FOUND &&
+        result != ERROR_PATH_NOT_FOUND) {
+        Wh_Log(L"RegDeleteTreeW failed for the session guard (error %ld)",
+               result);
+    }
+}
+
 template <size_t N>
 void CopyToBuffer(WCHAR (&buffer)[N], const wchar_t* text) {
     if (!text) {
@@ -157,13 +219,72 @@ void CopyToBuffer(WCHAR (&buffer)[N], const wchar_t* text) {
     wcsncpy_s(buffer, text, _TRUNCATE);
 }
 
-HWND GetNotificationWindow() {
-    HWND hwnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (hwnd) {
-        return hwnd;
+LRESULT CALLBACK NotificationWindowProc(HWND hwnd,
+                                        UINT msg,
+                                        WPARAM wParam,
+                                        LPARAM lParam) {
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+HWND CreateNotificationWindowForCurrentThread() {
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.lpfnWndProc = NotificationWindowProc;
+    windowClass.hInstance = instance;
+    windowClass.lpszClassName = kNotificationWindowClassName;
+
+    if (!RegisterClassExW(&windowClass) &&
+        GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        Wh_Log(L"RegisterClassExW failed for the notification window (error %lu)",
+               GetLastError());
+        return nullptr;
     }
 
-    return GetShellWindow();
+    HWND notificationWindow = CreateWindowExW(0,
+                                              kNotificationWindowClassName,
+                                              kNotificationWindowClassName,
+                                              WS_OVERLAPPED,
+                                              0,
+                                              0,
+                                              0,
+                                              0,
+                                              nullptr,
+                                              nullptr,
+                                              instance,
+                                              nullptr);
+    if (!notificationWindow) {
+        Wh_Log(L"CreateWindowExW failed for the notification window "
+               L"(error %lu)",
+               GetLastError());
+        return nullptr;
+    }
+
+    return notificationWindow;
+}
+
+bool WaitWithMessageLoop(DWORD durationMs) {
+    DWORD elapsedMs = 0;
+
+    while (elapsedMs < durationMs) {
+        if (g_stopWorker.load()) {
+            return false;
+        }
+
+        MSG message;
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+
+        DWORD remainingMs = durationMs - elapsedMs;
+        DWORD sleepMs = std::min<DWORD>(50, remainingMs);
+        Sleep(sleepMs);
+        elapsedMs += sleepMs;
+    }
+
+    return !g_stopWorker.load();
 }
 
 std::wstring TrimString(const std::wstring& text) {
@@ -183,10 +304,54 @@ ULONGLONG FileTimeToUInt64(const FILETIME& fileTime) {
     return value.QuadPart;
 }
 
+bool IsCurrentProcessWow64() {
+    using IsWow64Process_t = BOOL(WINAPI*)(HANDLE, PBOOL);
+
+    HMODULE kernel32Module = GetModuleHandleW(L"kernel32.dll");
+    if (!kernel32Module) {
+        return false;
+    }
+
+    auto pIsWow64Process =
+        reinterpret_cast<IsWow64Process_t>(GetProcAddress(kernel32Module,
+                                                          "IsWow64Process"));
+    if (!pIsWow64Process) {
+        return false;
+    }
+
+    BOOL isWow64 = FALSE;
+    if (!pIsWow64Process(GetCurrentProcess(), &isWow64)) {
+        Wh_Log(L"IsWow64Process failed (error %lu)", GetLastError());
+        return false;
+    }
+
+    return isWow64 != FALSE;
+}
+
+bool FileExists(const std::wstring& path) {
+    DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+std::wstring GetNativeSystem32ExecutablePath(PCWSTR executableName) {
+    WCHAR windowsDirectory[MAX_PATH];
+    UINT length =
+        GetWindowsDirectoryW(windowsDirectory, ARRAYSIZE(windowsDirectory));
+    if (length == 0 || length >= ARRAYSIZE(windowsDirectory)) {
+        return {};
+    }
+
+    std::wstring path(windowsDirectory);
+    path += L"\\System32\\";
+    path += executableName;
+    return path;
+}
+
 void ShowSuccessNotification() {
-    HWND hwnd = GetNotificationWindow();
+    HWND hwnd = CreateNotificationWindowForCurrentThread();
     if (!hwnd) {
-        Wh_Log(L"Couldn't find a shell window for notifications");
+        Wh_Log(L"Couldn't create a notification window");
         return;
     }
 
@@ -204,6 +369,7 @@ void ShowSuccessNotification() {
 
     if (!Shell_NotifyIconW(NIM_ADD, &notifyIcon)) {
         Wh_Log(L"Shell_NotifyIconW(NIM_ADD) failed");
+        DestroyWindow(hwnd);
         return;
     }
 
@@ -220,11 +386,13 @@ void ShowSuccessNotification() {
     if (!Shell_NotifyIconW(NIM_MODIFY, &notifyIcon)) {
         Wh_Log(L"Shell_NotifyIconW(NIM_MODIFY) failed");
         Shell_NotifyIconW(NIM_DELETE, &notifyIcon);
+        DestroyWindow(hwnd);
         return;
     }
 
-    SleepWithStopCheck(kNotificationLifetimeMs);
+    WaitWithMessageLoop(kNotificationLifetimeMs);
     Shell_NotifyIconW(NIM_DELETE, &notifyIcon);
+    DestroyWindow(hwnd);
 }
 
 bool IsCurrentProcessElevated() {
@@ -253,17 +421,39 @@ bool IsCurrentProcessElevated() {
 }
 
 std::wstring GetSystemExecutablePath(PCWSTR executableName) {
-    WCHAR systemDirectory[MAX_PATH];
+    WCHAR windowsDirectory[MAX_PATH];
     UINT length =
-        GetSystemDirectoryW(systemDirectory, ARRAYSIZE(systemDirectory));
-    if (length == 0 || length >= ARRAYSIZE(systemDirectory)) {
+        GetWindowsDirectoryW(windowsDirectory, ARRAYSIZE(windowsDirectory));
+    if (length == 0 || length >= ARRAYSIZE(windowsDirectory)) {
         return {};
     }
 
-    std::wstring result(systemDirectory);
-    result += L"\\";
-    result += executableName;
-    return result;
+    std::wstring windowsDirectoryPath(windowsDirectory);
+
+    if (IsCurrentProcessWow64()) {
+        std::wstring sysnativePath = windowsDirectoryPath + L"\\Sysnative\\";
+        sysnativePath += executableName;
+        if (FileExists(sysnativePath)) {
+            return sysnativePath;
+        }
+    }
+
+    std::wstring system32Path = windowsDirectoryPath + L"\\System32\\";
+    system32Path += executableName;
+    if (FileExists(system32Path)) {
+        return system32Path;
+    }
+
+    WCHAR systemDirectory[MAX_PATH];
+    length = GetSystemDirectoryW(systemDirectory, ARRAYSIZE(systemDirectory));
+    if (length == 0 || length >= ARRAYSIZE(systemDirectory)) {
+        return system32Path;
+    }
+
+    std::wstring redirectedPath(systemDirectory);
+    redirectedPath += L"\\";
+    redirectedPath += executableName;
+    return redirectedPath;
 }
 
 bool RunHiddenProcess(const std::wstring& executablePath,
@@ -290,7 +480,7 @@ bool RunHiddenProcess(const std::wstring& executablePath,
     startupInfo.wShowWindow = SW_HIDE;
 
     PROCESS_INFORMATION processInfo{};
-    if (!CreateProcessW(executablePath.c_str(),
+    if (!CreateProcessW(nullptr,
                         mutableCommandLine.data(),
                         nullptr,
                         nullptr,
@@ -380,7 +570,7 @@ bool RunHiddenProcessCaptureOutput(const std::wstring& executablePath,
     startupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
 
     PROCESS_INFORMATION processInfo{};
-    if (!CreateProcessW(executablePath.c_str(),
+    if (!CreateProcessW(nullptr,
                         mutableCommandLine.data(),
                         nullptr,
                         nullptr,
@@ -555,65 +745,38 @@ bool WaitForConfirmedSync(const std::optional<FILETIME>& previousSyncTime,
 
 SyncAttemptResult RequestSyncViaSettingsBroker() {
     std::wstring executablePath =
-        GetSystemExecutablePath(L"SystemSettingsAdminFlows.exe");
+        GetNativeSystem32ExecutablePath(L"SystemSettingsAdminFlows.exe");
     if (executablePath.empty()) {
         Wh_Log(L"SystemSettingsAdminFlows.exe path couldn't be resolved");
         return SyncAttemptResult::RetryableFailure;
     }
 
-    SHELLEXECUTEINFOW executeInfo{};
-    executeInfo.cbSize = sizeof(executeInfo);
-    executeInfo.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOCLOSEPROCESS;
-    executeInfo.lpVerb = L"open";
-    executeInfo.lpFile = executablePath.c_str();
-    executeInfo.lpParameters = kAdminBrokerArguments;
-    executeInfo.nShow = SW_HIDE;
+    HINSTANCE result = ShellExecuteW(nullptr,
+                                     L"open",
+                                     executablePath.c_str(),
+                                     kAdminBrokerArguments,
+                                     nullptr,
+                                     SW_HIDE);
+    INT_PTR shellResult = reinterpret_cast<INT_PTR>(result);
+    if (shellResult <= 32) {
+        Wh_Log(L"ShellExecuteW failed for SystemSettingsAdminFlows.exe "
+               L"(path: %s, code: %Id)",
+               executablePath.c_str(),
+               shellResult);
 
-    if (!ShellExecuteExW(&executeInfo)) {
-        DWORD error = GetLastError();
-        Wh_Log(L"ShellExecuteExW for SystemSettingsAdminFlows.exe failed "
-               L"(error %lu)",
-               error);
-
-        if (error == ERROR_CANCELLED || error == ERROR_ACCESS_DENIED ||
-            error == ERROR_ELEVATION_REQUIRED || error == ERROR_FILE_NOT_FOUND ||
-            error == ERROR_PATH_NOT_FOUND) {
+        if (shellResult == SE_ERR_ACCESSDENIED ||
+            shellResult == ERROR_ACCESS_DENIED ||
+            shellResult == ERROR_CANCELLED) {
             return SyncAttemptResult::PermanentFailure;
         }
 
         return SyncAttemptResult::RetryableFailure;
     }
 
-    DWORD exitCode = 0;
-    if (executeInfo.hProcess) {
-        DWORD waitResult =
-            WaitForSingleObject(executeInfo.hProcess, kCommandTimeoutMs);
-        if (waitResult == WAIT_OBJECT_0) {
-            if (!GetExitCodeProcess(executeInfo.hProcess, &exitCode)) {
-                Wh_Log(L"GetExitCodeProcess failed for "
-                       L"SystemSettingsAdminFlows.exe (error %lu)",
-                       GetLastError());
-                CloseHandle(executeInfo.hProcess);
-                return SyncAttemptResult::RetryableFailure;
-            }
-        } else if (waitResult == WAIT_TIMEOUT) {
-            Wh_Log(L"Timed out waiting for SystemSettingsAdminFlows.exe");
-            CloseHandle(executeInfo.hProcess);
-            return SyncAttemptResult::RetryableFailure;
-        } else {
-            Wh_Log(L"WaitForSingleObject failed for "
-                   L"SystemSettingsAdminFlows.exe (error %lu)",
-                   GetLastError());
-            CloseHandle(executeInfo.hProcess);
-            return SyncAttemptResult::RetryableFailure;
-        }
-
-        CloseHandle(executeInfo.hProcess);
-    }
-
-    Wh_Log(L"SystemSettingsAdminFlows.exe returned exit code %lu", exitCode);
-    return exitCode == 0 ? SyncAttemptResult::Success
-                         : SyncAttemptResult::RetryableFailure;
+    Wh_Log(L"ShellExecuteW launched SystemSettingsAdminFlows.exe "
+           L"(path: %s)",
+           executablePath.c_str());
+    return SyncAttemptResult::Success;
 }
 
 SyncAttemptResult RequestSyncViaW32tm() {
@@ -648,54 +811,11 @@ SyncAttemptResult RequestTimeSynchronization(const Settings& settings) {
     }
 
     if (!IsCurrentProcessElevated()) {
-        Wh_Log(L"Explorer isn't elevated, skipping w32tm fallback");
+        Wh_Log(L"Explorer process isn't elevated, skipping w32tm fallback");
         return SyncAttemptResult::PermanentFailure;
     }
 
     return SyncAttemptResult::RetryableFailure;
-}
-
-bool ClaimCurrentLogonRun() {
-    HKEY key = nullptr;
-    DWORD disposition = 0;
-
-    LSTATUS status = RegCreateKeyExW(HKEY_CURRENT_USER,
-                                     kRunGuardKey,
-                                     0,
-                                     nullptr,
-                                     REG_OPTION_VOLATILE,
-                                     KEY_QUERY_VALUE | KEY_SET_VALUE,
-                                     nullptr,
-                                     &key,
-                                     &disposition);
-    if (status != ERROR_SUCCESS) {
-        Wh_Log(L"RegCreateKeyExW failed for run guard (error %ld)", status);
-        return true;
-    }
-
-    DWORD pid = GetCurrentProcessId();
-    RegSetValueExW(key,
-                   L"OwnerPid",
-                   0,
-                   REG_DWORD,
-                   reinterpret_cast<const BYTE*>(&pid),
-                   sizeof(pid));
-    RegCloseKey(key);
-
-    if (disposition == REG_CREATED_NEW_KEY) {
-        Wh_Log(L"Claimed startup sync for the current logon session");
-        return true;
-    }
-
-    Wh_Log(L"Startup sync already ran during this logon session");
-    return false;
-}
-
-void ClearCurrentLogonRunClaim() {
-    LSTATUS status = RegDeleteKeyW(HKEY_CURRENT_USER, kRunGuardKey);
-    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
-        Wh_Log(L"RegDeleteKeyW failed for run guard (error %ld)", status);
-    }
 }
 
 DWORD WINAPI WorkerThreadProc(void*) {
@@ -763,6 +883,8 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     if (!ClaimCurrentLogonRun()) {
+        Wh_Log(L"Skipping time sync because it already ran in this logon "
+               L"session");
         return;
     }
 
