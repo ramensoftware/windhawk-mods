@@ -587,6 +587,8 @@
 /*
 # Translucent Flyouts Controller for Windhawk
 
+![Preview](https://i.imgur.com/F64iYmG.gif)
+
 This mod provides a Windhawk settings interface for [TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyouts), a Windows utility that applies visual effects to system menus and tooltips. The controller bridges Windhawk's GUI to the registry keys that TranslucentFlyouts monitors.
 
 TranslucentFlyouts handles the actual rendering of transparency and effects. This controller simply lets you configure those effects without manual registry editing.
