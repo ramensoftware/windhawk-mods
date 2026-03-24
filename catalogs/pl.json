@@ -2035,6 +2035,34 @@
                 "version": "1.0.0"
             }
         },
+        "context-menu-preloader": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774392784000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774392784000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lockframe",
+                "compilerOptions": "-lgdi32 -lole32 -luuid -lshlwapi -lpsapi",
+                "description": "Preloads and pins your context menu handlers into RAM to improve performance.",
+                "github": "https://github.com/Lockframe",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Context Menu Preloader",
+                "version": "1.0"
+            }
+        },
         "control-panel-color-fix": {
             "details": {
                 "defaultSorting": 25128,

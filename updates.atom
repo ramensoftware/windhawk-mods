@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-24T11:48:29.000Z</updated>
+    <updated>2026-03-24T22:53:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Context Menu Preloader 1.0]]></title>
+        <id>https://windhawk.net/mods/context-menu-preloader#2cdc049b45f3043a33b507f7cd556b1c1a0380b0</id>
+        <link href="https://windhawk.net/mods/context-menu-preloader"/>
+        <updated>2026-03-24T22:53:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="contextmenupreloader">Context Menu Preloader</h1>
+<p>Preloads your desired context menu handlers (txt; mp4; svg) and pins them to your RAM for nigh-instant loading of context menus.</p>
+<p>Certain handlers are blocked by default because they interfere with Bluetooth.</p>
+<p>Does not affect context menus inside applications nor File Explorer's WinUI 3 context menu.</p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Center New Windows 1.0.0]]></title>
         <id>https://windhawk.net/mods/center-new-windows#7d0b212e3305a746d709da156f06012b3713acef</id>
@@ -460,36 +474,6 @@ to 100% opacity.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 3.0]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#9d08e8f1ebd6a28659c4546c4aa8852f3cec4d21</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-03-20T16:57:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Version bumped to 3.0.</li>
-<li>Replaced synthetic <code>Ctrl+S</code> saving with direct Word automation calls (<code>Document.Save</code>).</li>
-<li>Completely removed <code>SendInput</code>-based keyboard injection.</li>
-<li>Eliminated the root cause of false shortcut triggers at very low save cooldowns.</li>
-<li>Removed the old “press-state verification” approach that tried to make injected <code>Ctrl+S</code> safe.</li>
-<li>Removed the separate retry/send pipeline built around synthetic key presses.</li>
-<li>Reworked auto-save execution so it stays on a single owner Word UI thread.</li>
-<li>Switched save scheduling to a simpler owner-thread timer flow.</li>
-<li>Added direct access to the active Word object from the active document window via <code>AccessibleObjectFromWindow</code>.</li>
-<li>Added fallback access to Word through the Running Object Table (<code>GetActiveObject</code>) if window-based access is unavailable.</li>
-<li>Added dynamic runtime loading of required OLE/COM functions instead of relying on linker-resolved imports.</li>
-<li>Preserved the configurable save delay and minimum time between saves.</li>
-<li>Kept manual <code>Ctrl+S</code> detection, but now it only updates internal timing state instead of interacting with synthetic save logic.</li>
-<li>Kept foreground-window checks so auto-save only runs when the active Word document window is focused.</li>
-<li>Kept postponing saves while user input is still active or modifiers/mouse buttons are held.</li>
-<li>Kept skipping unsaved documents to avoid triggering “Save As”.</li>
-<li>Kept skipping read-only documents.</li>
-<li>Updated the readme/metadata text to describe the new direct-save architecture and shortcut-safety model.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>
