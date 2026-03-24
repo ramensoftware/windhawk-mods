@@ -8792,7 +8792,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1766911921000,
+                "updated": 1774352552000,
                 "users": 117
             },
             "metadata": {
@@ -8808,7 +8808,7 @@
                 ],
                 "license": "MIT",
                 "name": "Start Menu Corner Click Fix",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "taskbar-start-button-position": {
