@@ -73,6 +73,7 @@ Open the mod's **Settings** tab to configure:
 // ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <commctrl.h>
 #include <algorithm>
@@ -123,22 +124,27 @@ static void WriteResumeLastPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Subclass ID
+// Registered message
 // ---------------------------------------------------------------------------
-static constexpr UINT_PTR SUBCLASS_ID = 0x52574658; // 'RWFX'
+// Using RegisterWindowMessage avoids colliding with Qt's own WM_USER-range
+// messages, which it uses internally for cross-thread signalling.
+static UINT g_msgApplyMaximize = 0;
+
+// Saved handle of the subclassed window, used to remove the subclass on mod unload.
+static HWND g_subclassedHwnd = nullptr;
 
 // ---------------------------------------------------------------------------
 // Subclass procedure
 // ---------------------------------------------------------------------------
 static LRESULT CALLBACK SubclassProc(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
-    UINT_PTR uIdSubclass, DWORD_PTR /*dwRefData*/)
+    DWORD_PTR /*dwRefData*/)
 {
     if (uMsg == WM_WINDOWPOSCHANGING) {
         WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
 
         if (g_settings.maximized) {
-            // Don't interfere — we handle positioning in WM_USER+1 before
+            // Don't interfere — we handle positioning in the ApplyMaximize message before
             // calling SW_MAXIMIZE, and we must not block the maximize itself.
         } else if (!IsIconic(hWnd)) {
             wp->x   = g_settings.x;
@@ -156,11 +162,11 @@ static LRESULT CALLBACK SubclassProc(
             WriteResumeLastPage();
         }
         if (g_settings.maximized) {
-            PostMessage(hWnd, WM_USER + 1, 0, 0);
+            PostMessage(hWnd, g_msgApplyMaximize, 0, 0);
             Wh_Log(L"WM_SHOWWINDOW: posted maximize request");
         }
     }
-    else if (uMsg == WM_USER + 1) {
+    else if (uMsg != 0 && uMsg == g_msgApplyMaximize) {
         // Move onto the correct monitor first, then maximize.
         // SW_MAXIMIZE always maximizes on the monitor the window currently
         // occupies, so we nudge it to the target monitor beforehand.
@@ -172,14 +178,15 @@ static LRESULT CALLBACK SubclassProc(
             SetWindowPos(hWnd, nullptr,
                 mi.rcWork.left, mi.rcWork.top, 0, 0,
                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-            Wh_Log(L"WM_USER+1: moved to monitor work area (%ld,%ld) before maximize",
+            Wh_Log(L"ApplyMaximize: moved to monitor work area (%ld,%ld) before maximize",
                    mi.rcWork.left, mi.rcWork.top);
         }
         ShowWindow(hWnd, SW_MAXIMIZE);
-        Wh_Log(L"WM_USER+1: applied SW_MAXIMIZE");
+        Wh_Log(L"ApplyMaximize: applied SW_MAXIMIZE");
     }
     else if (uMsg == WM_NCDESTROY) {
-        RemoveWindowSubclass(hWnd, SubclassProc, uIdSubclass);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+        g_subclassedHwnd = nullptr;
         Wh_Log(L"WM_NCDESTROY: subclass removed");
     }
 
@@ -204,9 +211,9 @@ static BOOL WINAPI SetWindowPos_Hook(
         GetClassNameW(hWnd, className, _countof(className));
 
         if (wcscmp(className, L"Qt683QWindowIcon") == 0) {
-            DWORD_PTR existing = 0;
-            if (!GetWindowSubclass(hWnd, SubclassProc, SUBCLASS_ID, &existing)) {
-                if (SetWindowSubclass(hWnd, SubclassProc, SUBCLASS_ID, 0)) {
+            if (g_subclassedHwnd != hWnd) {
+                if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+                    g_subclassedHwnd = hWnd;
                     Wh_Log(L"SetWindowPos_Hook: subclass installed on hwnd=%p", hWnd);
                 } else {
                     Wh_Log(L"SetWindowPos_Hook: failed to install subclass (error=%lu)", GetLastError());
@@ -222,7 +229,14 @@ static BOOL WINAPI SetWindowPos_Hook(
 // Windhawk entry points
 // ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"Radeon Software Window Fix v2.4: initialising");
+    Wh_Log(L"AMD Radeon Software Window Fix v1.0: initialising");
+
+    g_msgApplyMaximize = RegisterWindowMessageW(L"WindhawkAMDRadeonSoftwareApplyMaximize");
+    if (!g_msgApplyMaximize) {
+        Wh_Log(L"RegisterWindowMessage failed (%lu)", GetLastError());
+        return FALSE;
+    }
+
     LoadSettings();
 
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
@@ -252,7 +266,12 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Radeon Software Window Fix: uninitialising");
+    Wh_Log(L"AMD Radeon Software Window Fix: uninitialising");
+    if (g_subclassedHwnd) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_subclassedHwnd, SubclassProc);
+        g_subclassedHwnd = nullptr;
+        Wh_Log(L"Wh_ModUninit: subclass removed");
+    }
 }
 
 void Wh_ModSettingsChanged() {
