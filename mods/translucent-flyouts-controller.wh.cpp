@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              translucent-flyouts-controller
 // @name            Translucent Flyouts Controller
-// @description     Controls original TranslucentFlyouts settings via Windhawk with registry bridge
+// @description     Controls TranslucentFlyouts settings through Windhawk (registry bridge)
 // @version         1.0.0
 // @author          GID0317
 // @github          https://github.com/GID0317
@@ -597,7 +597,8 @@ TranslucentFlyouts handles the actual rendering of transparency and effects. Thi
 
 You must have [TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyouts) already installed and running. If you don't have it, install it first. This controller won't work standalone.
 
-Minimum OS: Windows 11 22H2
+Minimum OS: Windows 10/11 (depends on selected effect)
+Recommended: Windows 11 22H2 or newer
 
 ## How Settings Are Applied
 
