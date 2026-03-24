@@ -10,7 +10,7 @@
 /*
 # Dark Title Bars
 
-Many classic Win32 and WPF applications (such as DS4Windows) implement custom dark themes for their internal UI and context menus, but their main window title bars remain glaringly white. 
+Many classic Win32 and WPF applications implement custom dark themes for their internal UI and context menus, but their main window title bars remain glaringly white. 
 
 This mod forces the standard Windows Desktop Window Manager (DWM) to render the title bars of these applications in the native **Dark Mode**.
 
