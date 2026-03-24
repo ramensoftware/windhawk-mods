@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              context-menu-preloader
 // @name            Context Menu Preloader
-// @description     Instantly loads context menus. Includes RAM usage monitoring and proper thread cleanup.
+// @description     Preloads and pins your context menu handlers into RAM to improve performance.
 // @version         1.0
 // @author          Lockframe
 // @github          https://github.com/Lockframe
@@ -17,7 +17,7 @@ Preloads your desired context menu handlers (txt; mp4; svg) and pins them to you
 
 Certain handlers are blocked by default because they interfere with Bluetooth.
 
-Does not affect context menus inside applications.
+Does not affect context menus inside applications nor File Explorer's WinUI 3 context menu.
 
 */
 // ==/WindhawkModReadme==
@@ -42,7 +42,7 @@ Does not affect context menus inside applications.
 #include <string>
 #include <sstream>
 #include <atomic>
-#include <set>
+#include <unordered_set>
 #include <algorithm>
 #include <mutex>
 
@@ -53,9 +53,10 @@ static std::atomic<int> g_delay{5};
 static std::atomic<bool> g_debug{false};
 static std::atomic<bool> g_quitting{false}; 
 static HANDLE g_hThread = NULL;             
+static HANDLE g_hQuitEvent = NULL;      
 
 static std::vector<std::wstring> g_customExts;
-static std::set<std::wstring> g_pinnedDlls; 
+static std::unordered_set<std::wstring> g_pinnedDlls;
 static std::mutex g_pinMutex;
 
 // -------------------------------------------------------------------------
@@ -196,7 +197,7 @@ HKEY OpenKey(HKEY hRoot, LPCWSTR path) {
 }
 
 std::wstring ReadDefaultValue(HKEY hKey, LPCWSTR subKey = NULL) {
-    WCHAR buf[MAX_PATH];
+    WCHAR buf[1024];
     DWORD size = sizeof(buf);
     HKEY hTarget = hKey;
     
@@ -209,16 +210,30 @@ std::wstring ReadDefaultValue(HKEY hKey, LPCWSTR subKey = NULL) {
     if (subKey) RegCloseKey(hTarget);
     
     if (res == ERROR_SUCCESS && size > 0) {
-        // Calculate max characters the buffer can hold
         DWORD maxChars = sizeof(buf) / sizeof(WCHAR);
         DWORD charsRead = size / sizeof(WCHAR);
         
-        // Ensure strictly safe null-termination
         if (charsRead < maxChars) {
             buf[charsRead] = L'\0';
         } else {
             buf[maxChars - 1] = L'\0';
         }
+        return std::wstring(buf);
+    }
+    return L"";
+}
+
+std::wstring ReadNamedValue(HKEY hKey, LPCWSTR valueName) {
+    WCHAR buf[1024];
+    DWORD size = sizeof(buf);
+    
+    if (RegQueryValueExW(hKey, valueName, NULL, NULL, (LPBYTE)buf, &size) == ERROR_SUCCESS && size > 0) {
+        DWORD maxChars = sizeof(buf) / sizeof(WCHAR);
+        DWORD charsRead = size / sizeof(WCHAR);
+        
+        if (charsRead < maxChars) buf[charsRead] = L'\0';
+        else buf[maxChars - 1] = L'\0';
+        
         return std::wstring(buf);
     }
     return L"";
@@ -257,8 +272,9 @@ void ProcessCLSID(const std::wstring& clsidStr, const std::wstring& parentName) 
             dllPath = dllPath.substr(0, commaPos);
         }
         
-        WCHAR expanded[MAX_PATH];
-        ExpandEnvironmentStringsW(dllPath.c_str(), expanded, MAX_PATH);
+        // Support extended length Windows paths since MAX_PATH is hardcoded to 260 characters
+        WCHAR expanded[32768];
+        ExpandEnvironmentStringsW(dllPath.c_str(), expanded, 32768);
         
         PinDLL(expanded, parentName.empty() ? clsidStr : parentName);
     }
@@ -307,32 +323,20 @@ void ScanShellVerbs(HKEY hRoot, const std::wstring& path) {
         
         HKEY hVerb = OpenKey(hKey, verbName);
         if (hVerb) {
-            // Check ExplorerCommandHandler (Modern Windows UI Handlers)
-            WCHAR cmdHandler[256];
-            DWORD hSize = sizeof(cmdHandler);
-            if (RegQueryValueExW(hVerb, L"ExplorerCommandHandler", NULL, NULL, (LPBYTE)cmdHandler, &hSize) == ERROR_SUCCESS) {
-                ProcessCLSID(std::wstring(cmdHandler), L"ExplorerCommandHandler");
-            }
+            std::wstring cmdHandler = ReadNamedValue(hVerb, L"ExplorerCommandHandler");
+            if (!cmdHandler.empty()) ProcessCLSID(cmdHandler, L"ExplorerCommandHandler");
 
-            // Check DropTarget (Drag & Drop UI Handlers)
             HKEY hDrop = OpenKey(hVerb, L"DropTarget");
             if (hDrop) {
-                WCHAR clsid[256];
-                DWORD cSize = sizeof(clsid);
-                if (RegQueryValueExW(hDrop, L"CLSID", NULL, NULL, (LPBYTE)clsid, &cSize) == ERROR_SUCCESS) {
-                    ProcessCLSID(std::wstring(clsid), L"DropTarget");
-                }
+                std::wstring clsid = ReadNamedValue(hDrop, L"CLSID");
+                if (!clsid.empty()) ProcessCLSID(clsid, L"DropTarget");
                 RegCloseKey(hDrop);
             }
 
-            // Check command subkey for DelegateExecute (Heavy Background Handlers)
             HKEY hCmd = OpenKey(hVerb, L"command");
             if (hCmd) {
-                WCHAR delegateId[256];
-                DWORD dSize = sizeof(delegateId);
-                if (RegQueryValueExW(hCmd, L"DelegateExecute", NULL, NULL, (LPBYTE)delegateId, &dSize) == ERROR_SUCCESS) {
-                    ProcessCLSID(std::wstring(delegateId), L"DelegateExecute");
-                }
+                std::wstring delegateId = ReadNamedValue(hCmd, L"DelegateExecute");
+                if (!delegateId.empty()) ProcessCLSID(delegateId, L"DelegateExecute");
                 RegCloseKey(hCmd);
             }
             RegCloseKey(hVerb);
@@ -384,13 +388,16 @@ DWORD WINAPI WalkerThread(LPVOID) {
     int delay = g_delay.load();
     if (delay < 1) delay = 1;
 
-    // Interruptible Sleep
-    for (int i = 0; i < delay * 10; i++) {
-        if (g_quitting.load()) return 0;
-        Sleep(100);
+    // 0% CPU Idle Wait
+    // Sleeps for 'delay' seconds. If g_hQuitEvent is signaled during this time, it wakes up and returns WAIT_OBJECT_0
+    if (WaitForSingleObject(g_hQuitEvent, delay * 1000) == WAIT_OBJECT_0) {
+        return 0; // The event was triggered (mod is shutting down or reloading), so exit early
     }
 
-    Log(L"Startup (v0.2.8)");
+    Log(L"Startup (v1.0)");
+    
+    // Initialize COM for this thread so Shell Extensions don't crash on load
+    HRESULT hrCom = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
     // Capture Baseline RAM
     SIZE_T startMem = GetRamUsage();
@@ -444,6 +451,12 @@ DWORD WINAPI WalkerThread(LPVOID) {
     }
 
     Log(L"Done. Total RAM Impact: %.2f MB", deltaMB);
+    
+    // Cleanup COM
+    if (SUCCEEDED(hrCom)) {
+        CoUninitialize();
+    }
+    
     return 0;
 }
 
@@ -464,18 +477,48 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
     g_quitting.store(false);
+    
+    // Manual-reset event, initially unsignaled
+    g_hQuitEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    
     g_hThread = CreateThread(NULL, 0, WalkerThread, NULL, 0, NULL);
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void Wh_ModSettingsChanged() {
+    Log(L"Settings changed. Restarting preloader thread...");
+    LoadSettings();
+
+    // Safely kill the existing thread
     g_quitting.store(true);
-    
+    if (g_hQuitEvent) SetEvent(g_hQuitEvent); // Wake up the sleeping thread
+
     if (g_hThread) {
-        // Wait infinitely. Because we check g_quitting religiously, it WILL exit.
-        // A timeout risks crashing Explorer if the DLL unloads while the thread is alive.
         WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = NULL;
+    }
+
+    // Spin up a new thread for the new settings
+    g_quitting.store(false);
+    if (g_hQuitEvent) ResetEvent(g_hQuitEvent); // Reset the event back to unsignaled
+    
+    g_hThread = CreateThread(NULL, 0, WalkerThread, NULL, 0, NULL);
+}
+
+void Wh_ModUninit() {
+    g_quitting.store(true);
+    if (g_hQuitEvent) SetEvent(g_hQuitEvent); // Wake up the sleeping thread
+    
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, INFINITE);
+        CloseHandle(g_hThread);
+        g_hThread = NULL;
+    }
+    
+    // Safely destroy the Event handle to prevent memory leaks
+    if (g_hQuitEvent) {
+        CloseHandle(g_hQuitEvent);
+        g_hQuitEvent = NULL;
     }
 }
