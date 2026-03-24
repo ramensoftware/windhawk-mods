@@ -2,7 +2,7 @@
 // @id              taskbar-start-button-corner-fix
 // @name            Start Menu Corner Click Fix
 // @description     Fixes the issue where clicking in the corner of the taskbar doesn't open the Start menu on multi monitor setups.
-// @version         1.0
+// @version         1.1
 // @author          Alchemy
 // @github          https://github.com/alchemyyy
 // @license         MIT
@@ -283,15 +283,19 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 if (g_settings.debugLogging) {
                     Wh_Log(L"Mouse down at (%d, %d) in corner", pMouse->pt.x, pMouse->pt.y);
                 }
+                // Consume the message so XAML doesn't process it
+                return 1;
             }
         }
         else if (wParam == WM_LBUTTONUP && g_mouseDownInCorner) {
+            g_mouseDownInCorner = false;
             // Only toggle if menu state hasn't changed (real button didn't handle it)
             if (g_menuOpenAtMouseDown == IsStartMenuOpen()) {
                 Wh_Log(L"Corner click at (%d, %d) - toggling Start menu", pMouse->pt.x, pMouse->pt.y);
                 ToggleStartMenu();
             }
-            g_mouseDownInCorner = false;
+            // Consume the up message too to keep the pair consistent.
+            return 1;
         }
     }
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
