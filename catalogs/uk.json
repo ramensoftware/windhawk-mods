@@ -250,6 +250,35 @@
                 "version": "1.2"
             }
         },
+        "amd-radeon-software-window-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774351414000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774351414000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "St0RM53",
+                "compilerOptions": "-luser32 -lcomctl32",
+                "description": "Forces the position, size, and maximized state of Radeon Software (RadeonSoftware.exe) every time its window is shown from the system tray. Optionally forces the startup page.",
+                "github": "https://github.com/St0RM53",
+                "include": [
+                    "RadeonSoftware.exe"
+                ],
+                "license": "GPL-3.0-or-later",
+                "name": "AMD Radeon Software Window Fix",
+                "version": "1.0"
+            }
+        },
         "app-theme-crash-fixer": {
             "details": {
                 "defaultSorting": 990,

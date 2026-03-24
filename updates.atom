@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-23T18:40:55.000Z</updated>
+    <updated>2026-03-24T11:23:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AMD Radeon Software Window Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/amd-radeon-software-window-fix#a0f2f99ab063edcbce98ba0bb8fb53a36a8c404d</id>
+        <link href="https://windhawk.net/mods/amd-radeon-software-window-fix"/>
+        <updated>2026-03-24T11:23:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="amdradeonsoftwarewindowfix">AMD Radeon Software Window Fix</h1>
+<p>AMD's Radeon Software runs persistently in the system tray. When you double-click
+the tray icon to open it, the app reads its size from the registry and then centers
+itself — ignoring any position you prefer, and doing so <em>after</em> any <code>SetWindowPos</code>
+call, making simple hooks ineffective.</p>
+<p>The behavior is especially frustrating on multi-monitor setups with extended desktop
+and has been most likely present since the Adrenalin edition release from 2018. Since
+AMD devs are unwilling to even acknowledge their incompetence or even attempt to fix
+it, i've used some of my knowledge and a few AI coding tools to give a working solution.</p>
+<p>This mod subclasses the main window to intercept <code>WM_WINDOWPOSCHANGING</code> — a message
+fired <em>before</em> any move or resize takes effect — and overrides the position and size
+there, which is the only intercept point that reliably wins against Qt's internal
+layout logic.</p>
+<p>Tested on version 26.3.1 (which introduced a metrics overlay bug), but should work on 
+any of the recent (2025-2026) versions that use the Qt 6.x.x framework.</p>
+<h2 id="settings">Settings</h2>
+<p>Open the mod's <strong>Settings</strong> tab to configure:</p>
+<p>| Setting | Description |
+|---|---|
+| <strong>Left (X)</strong> | Horizontal position of the window's left edge, in pixels |
+| <strong>Top (Y)</strong> | Vertical position of the window's top edge, in pixels |
+| <strong>Width</strong> | Width of the window in pixels, minimum 1280 (used when not maximized) |
+| <strong>Height</strong> | Height of the window in pixels, minimum 600 (used when not maximized) |
+| <strong>Maximized</strong> | When enabled, the window will always open maximized |
+| <strong>[Experimental] Force Startup Page</strong> | Forces the app to reopen on the last visited page instead of always defaulting to the Dashboard |</p>
+<blockquote>
+  <p><strong>Note:</strong> The startup page feature sets <code>ResumeLastPage=true</code> in the registry each time the window is shown. The app itself tracks and writes the last visited page — this mod simply ensures that value is always honoured.</p>
+</blockquote>]]></content>
+        <author>
+            <name>St0RM53</name>
+            <uri>https://github.com/St0RM53</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Breadcrumb Middle-Click New Tab 1.1.0]]></title>
         <id>https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab#3b18c32d213fdf0e1047f5e9615ba1e334fbbdcd</id>
@@ -347,20 +385,6 @@ to 100% opacity.</p>]]></content>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#ccbf8d62b852558521be1be12194cb2f2df85a56</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
-        <updated>2026-03-18T17:04:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to configure the time the taskbar stays visible after being shown temporarily.</li>
-<li>Improved "Show taskbar, open Start menu if already shown" Win key action to always trigger the primary taskbar, and to open the Start menu even if the taskbar wasn't shown by the mod (e.g. by hovering).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
