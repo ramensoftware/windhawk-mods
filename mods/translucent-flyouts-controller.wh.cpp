@@ -6,10 +6,6 @@
 // @author          GID0317
 // @github          https://github.com/GID0317
 // @include         windhawk.exe
-// @include         Windhawk.exe
-// @include         *windhawk.exe*
-// @architecture    x86
-// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
