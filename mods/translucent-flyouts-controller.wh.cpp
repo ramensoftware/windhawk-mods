@@ -1062,41 +1062,33 @@ static void NotifyTranslucentFlyoutsReload()
   }
 
 static constexpr const wchar_t* kLastResetActionValueName = L"last_reset_action";
-static constexpr const wchar_t* kPendingResetActionValueName = L"pending_reset_action";
 
-static void UpdatePendingResetActionInLauncher()
+static void MaybeApplyResetActionEdgeTriggered()
 {
-    LoadSettings();
+  const int lastResetAction = Wh_GetIntValue(kLastResetActionValueName, 0);
 
-    const int lastResetAction = Wh_GetIntValue(kLastResetActionValueName, 0);
-
-    // Reset action is intentionally edge-triggered to avoid repeated resets.
-    if (g_settings.resetAction == 0) {
-        if (lastResetAction != 0) {
-            Wh_SetIntValue(kLastResetActionValueName, 0);
-        }
-        return;
+  // Reset action is intentionally edge-triggered to avoid repeated resets.
+  if (g_settings.resetAction == 0) {
+    if (lastResetAction != 0) {
+      Wh_SetIntValue(kLastResetActionValueName, 0);
     }
+    return;
+  }
 
-    if (g_settings.resetAction == lastResetAction) {
-        return;
-    }
+  if (g_settings.resetAction == lastResetAction) {
+    return;
+  }
 
-    Wh_SetIntValue(kLastResetActionValueName, g_settings.resetAction);
-    Wh_SetIntValue(kPendingResetActionValueName, g_settings.resetAction);
-    Wh_Log(L"Launcher: queued reset action=%d (%s)", g_settings.resetAction, ResetActionToLabel(g_settings.resetAction));
+  ApplyResetAction(g_settings.resetAction);
+  Wh_SetIntValue(kLastResetActionValueName, g_settings.resetAction);
+  Wh_Log(L"Tool process: applied reset action=%d (%s)", g_settings.resetAction, ResetActionToLabel(g_settings.resetAction));
 }
 
 static void ApplySettingsOnceInToolProcess()
 {
     LoadSettings();
 
-    const int pendingResetAction = Wh_GetIntValue(kPendingResetActionValueName, 0);
-    if (pendingResetAction != 0) {
-        ApplyResetAction(pendingResetAction);
-        Wh_SetIntValue(kPendingResetActionValueName, 0);
-        Wh_Log(L"Tool process: applied pending reset action=%d (%s)", pendingResetAction, ResetActionToLabel(pendingResetAction));
-    }
+  MaybeApplyResetActionEdgeTriggered();
 
     ApplySettingsToOriginalTranslucentFlyouts();
 }
@@ -1687,8 +1679,8 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
 // Notes for this mod:
 // - The launcher instance runs inside windhawk.exe and spawns a dedicated
 //   windhawk.exe "tool" process for applying the registry changes.
-// - Settings changes in the launcher respawn the tool process, so "Save" applies
-//   immediately without injecting into arbitrary processes.
+// - The launcher also spawns the tool process on settings changes so "Save"
+//   applies immediately.
 
 bool WhTool_ModInit()
 {
@@ -1709,13 +1701,9 @@ void WhTool_ModUninit()
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
-HANDLE g_toolModLauncherMutex;
 
 static void LaunchToolModProcess()
 {
-  Wh_Log(L"Launcher: spawning tool process (%s)", WH_MOD_ID);
-
-  // The launcher is expected to run inside windhawk.exe.
   WCHAR currentProcessPath[MAX_PATH];
   switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
     case 0:
@@ -1725,27 +1713,47 @@ static void LaunchToolModProcess()
   }
 
   WCHAR commandLine[MAX_PATH + 2 +
-            (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) - 1];
-  swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+            (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+  swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+         WH_MOD_ID);
 
-  STARTUPINFO si = {};
-  si.cb = sizeof(si);
-  si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-  PROCESS_INFORMATION pi = {};
+  HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+  if (!kernelModule) {
+    kernelModule = GetModuleHandle(L"kernel32.dll");
+    if (!kernelModule) {
+      Wh_Log(L"No kernelbase.dll/kernel32.dll");
+      return;
+    }
+  }
 
-  // CreateProcessW requires a mutable command line buffer.
-  WCHAR commandLineMutable[ARRAYSIZE(commandLine)] = {};
-  wcscpy_s(commandLineMutable, commandLine);
-
-  if (!CreateProcessW(currentProcessPath, commandLineMutable, nullptr, nullptr,
-            FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si,
-            &pi)) {
-    const DWORD lastError = GetLastError();
-    Wh_Log(L"CreateProcessW failed (error=%lu)", lastError);
+  using CreateProcessInternalW_t = BOOL(WINAPI*)(
+    HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+    LPSECURITY_ATTRIBUTES lpProcessAttributes,
+    LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+    DWORD dwCreationFlags, LPVOID lpEnvironment,
+    LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+    LPPROCESS_INFORMATION lpProcessInformation,
+    PHANDLE hRestrictedUserToken);
+  CreateProcessInternalW_t pCreateProcessInternalW =
+    (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                         "CreateProcessInternalW");
+  if (!pCreateProcessInternalW) {
+    Wh_Log(L"No CreateProcessInternalW");
     return;
   }
 
-  Wh_Log(L"Launcher: tool process started");
+  STARTUPINFO si{
+    .cb = sizeof(STARTUPINFO),
+    .dwFlags = STARTF_FORCEOFFFEEDBACK,
+  };
+  PROCESS_INFORMATION pi;
+  if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                 nullptr, nullptr, FALSE,
+                 NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si,
+                 &pi, nullptr)) {
+    Wh_Log(L"CreateProcess failed");
+    return;
+  }
 
   CloseHandle(pi.hProcess);
   CloseHandle(pi.hThread);
@@ -1759,8 +1767,6 @@ void WINAPI EntryPoint_Hook()
 
 BOOL Wh_ModInit()
 {
-  Wh_Log(L"Tool-mod launcher init (%s)", WH_MOD_ID);
-  Wh_Log(L"Command line: %s", GetCommandLineW());
   bool isExcluded = false;
   bool isToolModProcess = false;
   bool isCurrentToolModProcess = false;
@@ -1772,8 +1778,8 @@ BOOL Wh_ModInit()
   }
 
   for (int i = 1; i < argc; i++) {
-    // Exclude one-shot service helper invocations.
-    if (wcscmp(argv[i], L"-service-start") == 0 || wcscmp(argv[i], L"-service-stop") == 0) {
+    if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 ||
+      wcscmp(argv[i], L"-service-stop") == 0) {
       isExcluded = true;
       break;
     }
@@ -1826,26 +1832,10 @@ BOOL Wh_ModInit()
   }
 
   if (isToolModProcess) {
-    Wh_Log(L"Other tool-mod process detected, not ours");
     return FALSE;
-  }
-
-  // Ensure only one windhawk.exe instance acts as the launcher (service/UI can
-  // both exist). This reduces duplicate tool spawns.
-  g_toolModLauncherMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod-launcher_" WH_MOD_ID);
-  if (!g_toolModLauncherMutex) {
-    Wh_Log(L"Launcher: CreateMutex failed");
-    return FALSE;
-  }
-
-  if (GetLastError() == ERROR_ALREADY_EXISTS) {
-    Wh_Log(L"Launcher: another instance already selected");
-    g_isToolModProcessLauncher = false;
-    return TRUE;
   }
 
   g_isToolModProcessLauncher = true;
-  Wh_Log(L"Launcher: selected");
   return TRUE;
 }
 
@@ -1855,17 +1845,12 @@ void Wh_ModAfterInit()
     return;
   }
 
-  Wh_Log(L"Launcher: after init");
-  UpdatePendingResetActionInLauncher();
   LaunchToolModProcess();
 }
 
 void Wh_ModSettingsChanged()
 {
   if (g_isToolModProcessLauncher) {
-    // Respawn a one-shot tool process to apply latest settings.
-    Wh_Log(L"Launcher: settings changed, respawning tool process");
-    UpdatePendingResetActionInLauncher();
     LaunchToolModProcess();
     return;
   }
