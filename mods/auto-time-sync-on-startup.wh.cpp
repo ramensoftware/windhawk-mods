@@ -14,8 +14,9 @@
 /*
 # Auto Time Sync On Startup
 
-This mod asks Windows to synchronize the clock once after sign-in from
-`explorer.exe`. It doesn't set a custom NTP server or change the time zone. It
+This mod asks Windows to synchronize the clock once after sign-in. It runs the
+actual sync logic in a separate `explorer.exe` host process instead of the main
+shell process. It doesn't set a custom NTP server or change the time zone. It
 simply triggers the standard Windows time sync flow, so the current system date
 and time settings continue to apply.
 
@@ -54,7 +55,7 @@ immediately after startup.
 
 - useScheduledTaskFallback: true
   $name: Use elevated w32tm fallback
-  $description: If the Windows sync broker isn't available, try w32tm only when Explorer is already elevated.
+  $description: If the Windows sync broker isn't available, try w32tm only when the dedicated host process is already elevated.
 */
 // ==/WindhawkModSettings==
 
@@ -99,6 +100,8 @@ Settings g_settings{};
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 std::atomic<bool> g_stopWorker = false;
 HANDLE g_workerThread = nullptr;
+bool g_isToolModProcessLauncher = false;
+HANDLE g_toolModProcessMutex = nullptr;
 
 enum class SyncAttemptResult {
     Success,
@@ -198,15 +201,6 @@ bool ClaimCurrentLogonRun() {
     }
 
     return true;
-}
-
-void ClearCurrentLogonRunClaim() {
-    LONG result = RegDeleteTreeW(HKEY_CURRENT_USER, kRunGuardKey);
-    if (result != ERROR_SUCCESS && result != ERROR_FILE_NOT_FOUND &&
-        result != ERROR_PATH_NOT_FOUND) {
-        Wh_Log(L"RegDeleteTreeW failed for the session guard (error %ld)",
-               result);
-    }
 }
 
 template <size_t N>
@@ -819,6 +813,12 @@ SyncAttemptResult RequestTimeSynchronization(const Settings& settings) {
 }
 
 DWORD WINAPI WorkerThreadProc(void*) {
+    if (!ClaimCurrentLogonRun()) {
+        Wh_Log(L"Skipping time sync because it already ran in this logon "
+               L"session");
+        ExitProcess(0);
+    }
+
     Settings settings = GetSettingsSnapshot();
 
     if (settings.initialDelaySeconds > 0) {
@@ -846,7 +846,7 @@ DWORD WINAPI WorkerThreadProc(void*) {
                 Wh_Log(L"Time sync completed successfully on attempt %d",
                        attempt);
                 ShowSuccessNotification();
-                return 0;
+                ExitProcess(0);
             }
 
             Wh_Log(L"Time sync request succeeded, but completion wasn't "
@@ -856,7 +856,7 @@ DWORD WINAPI WorkerThreadProc(void*) {
 
         if (result == SyncAttemptResult::PermanentFailure) {
             Wh_Log(L"Time sync failed permanently, stopping retries");
-            return 0;
+            ExitProcess(0);
         }
 
         if (attempt == totalAttempts) {
@@ -871,37 +871,29 @@ DWORD WINAPI WorkerThreadProc(void*) {
     }
 
     Wh_Log(L"All time sync attempts failed");
-    return 0;
+    ExitProcess(0);
 }
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
-    return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    if (!ClaimCurrentLogonRun()) {
-        Wh_Log(L"Skipping time sync because it already ran in this logon "
-               L"session");
-        return;
-    }
-
     g_stopWorker = false;
     g_workerThread =
         CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
     if (!g_workerThread) {
         Wh_Log(L"CreateThread failed (error %lu)", GetLastError());
-        ClearCurrentLogonRunClaim();
+        return FALSE;
     }
+
+    return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_stopWorker = true;
 
     if (g_workerThread) {
@@ -909,4 +901,189 @@ void Wh_ModUninit() {
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
+
+    if (g_toolModProcessMutex) {
+        CloseHandle(g_toolModProcessMutex);
+        g_toolModProcessMutex = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to
+// other processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated explorer.exe process.
+//
+// Use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileNameW(nullptr,
+                               currentProcessPath,
+                               ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileNameW failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
+                      1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFOW startupInfo{
+        .cb = sizeof(STARTUPINFOW),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION processInfo{};
+    if (!pCreateProcessInternalW(nullptr,
+                                 currentProcessPath,
+                                 commandLine,
+                                 nullptr,
+                                 nullptr,
+                                 FALSE,
+                                 NORMAL_PRIORITY_CLASS,
+                                 nullptr,
+                                 nullptr,
+                                 &startupInfo,
+                                 &processInfo,
+                                 nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(processInfo.hProcess);
+    CloseHandle(processInfo.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
