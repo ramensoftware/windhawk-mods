@@ -5,7 +5,10 @@
 // @version         1.0.0
 // @author          GID0317
 // @github          https://github.com/GID0317
-// @include         *
+// @include         windhawk.exe
+// @include         Windhawk.exe
+// @include         *windhawk.exe*
+// @architecture    x86
 // @architecture    x86-64
 // ==/WindhawkMod==
 
@@ -34,26 +37,20 @@
     - large_round: Large Round Corners
     - small_round: Small Round Corners
 
-- global_enableDropShadow: no
+- global_enableDropShadow: false
   $name: Global / Enable Drop Shadow
   $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
 
-- global_noBorderColor: no
+
+- global_noBorderColor: false
   $name: Global / Disable Border Color
   $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
 
-- global_enableThemeColorization: no
+
+- global_enableThemeColorization: false
   $name: Global / Enable Theme Colorization
   $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
+
 
 - global_darkModeThemeColorizationType: start_hover
   $name: Global / Dark Accent Source
@@ -95,19 +92,15 @@
 - global_lightModeGradientColor: "0x9EDDDDDD"
   $name: Global / Light Gradient Color
   $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- global_enableMiniDump: yes
+- global_enableMiniDump: true
   $name: Global / Enable MiniDump
   $description: Write crash minidump files for troubleshooting when TranslucentFlyouts fails
-  $options:
-    - no: No
-    - yes: Yes
 
-- global_disabled: no
+
+- global_disabled: false
   $name: Global / Disabled
   $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-  $options:
-    - no: No
-    - yes: Yes
+
 
 - dropDown_effectType: use_global
   $name: DropDown / Effect Type
@@ -142,12 +135,10 @@
     - yes: Yes
     - use_global: Use Global Setting
 
-- dropDown_enableFluentAnimation: no
+- dropDown_enableFluentAnimation: false
   $name: DropDown / Enable Fluent Animation
   $description: Enable fluent pop-up animations for this category
-  $options:
-    - no: No
-    - yes: Yes
+
 
 - dropDown_noBorderColor: use_global
   $name: DropDown / Disable Border Color
@@ -168,9 +159,29 @@
 - dropDown_darkModeThemeColorizationType: 1
   $name: DropDown / Dark Accent Source
   $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - dropDown_lightModeThemeColorizationType: 1
   $name: DropDown / Light Accent Source
   $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - dropDown_darkModeBorderColor: "0xFF2B2B2B"
   $name: DropDown / Dark Border Color
   $description: Dark mode border color in ARGB hex format 0xAARRGGBB
@@ -212,54 +223,40 @@
 - dropDown_animation_startRatio: 50
   $name: DropDown / Start Ratio
   $description: Start ratio for pop-in animation. Higher values start closer to final state
-- dropDown_animation_enableImmediateInterupting: no
+- dropDown_animation_enableImmediateInterupting: false
   $name: DropDown / Enable Immediate Interrupting
   $description: Allow running animations to be interrupted immediately by a new state change
-  $options:
-    - no: No
-    - yes: Yes
 
-- menu_noSystemDropShadow: no
+
+- menu_noSystemDropShadow: false
   $name: Menu / Disable System Drop Shadow
   $description: Disable system-provided menu shadow
-  $options:
-    - no: No
-    - yes: Yes
 
-- menu_enableImmersiveStyle: yes
+
+- menu_enableImmersiveStyle: true
   $name: Menu / Enable Immersive Style
   $description: Use modern uniformly styled pop-up menus. Recommended on Windows 11
-  $options:
-    - no: No
-    - yes: Yes
 
-- menu_enableCustomRendering: no
+
+- menu_enableCustomRendering: false
   $name: Menu / Enable Custom Rendering
   $description: Fully render pop-up menus using custom rendering. Required for several advanced Menu visual options
-  $options:
-    - no: No
-    - yes: Yes
 
-- menu_enableFluentAnimation: no
+
+- menu_enableFluentAnimation: false
   $name: Menu / Enable Fluent Animation
   $description: Enable fluent menu animations
-  $options:
-    - no: No
-    - yes: Yes
 
-- menu_enableCompatibilityMode: no
+
+- menu_enableCompatibilityMode: false
   $name: Menu / Enable Compatibility Mode
   $description: Use compatibility mode for apps that misbehave with normal menu rendering
-  $options:
-    - no: No
-    - yes: Yes
 
-- menu_noModernAppBackgroundColor: yes
+
+- menu_noModernAppBackgroundColor: true
   $name: Menu / Disable Modern App Background Color
   $description: Ignore modern app provided background color and use configured TranslucentFlyouts appearance instead
-  $options:
-    - no: No
-    - yes: Yes
+
 
 - menu_colorTreatAsTransparentEnabled: false
   $name: Menu / Color Treat As Transparent(Enable)
@@ -322,9 +319,29 @@
 - menu_darkModeThemeColorizationType: 1
   $name: Menu / Dark Accent Source
   $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_lightModeThemeColorizationType: 1
   $name: Menu / Light Accent Source
   $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_darkModeBorderColor: "0xFF2B2B2B"
   $name: Menu / Dark Border Color
   $description: Dark mode border color in ARGB hex format 0xAARRGGBB
@@ -365,107 +382,183 @@
 - menu_animation_startRatio: 50
   $name: Menu / Start Ratio
   $description: Start ratio for pop-in animation. Higher values start closer to final state
-- menu_animation_enableImmediateInterupting: no
+- menu_animation_enableImmediateInterupting: false
   $name: Menu / Enable Immediate Interrupting
   $description: Allow running animations to be interrupted immediately by a new state change
-  $options:
-    - no: No
-    - yes: Yes
+
 
 - menu_separator_disabled: 0
-  $name: Menu / Disabled
+  $name: Menu / Separator / Disabled
   $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
 - menu_separator_width: 1000
-  $name: Menu / Width
+  $name: Menu / Separator / Width
   $description: Separator line thickness control. 1000 equals full default thickness
 - menu_separator_darkModeColor: "0x30D9D9D9"
-  $name: Menu / Dark Color
+  $name: Menu / Separator / Dark Color
   $description: Dark mode color in ARGB hex format 0xAARRGGBB
 - menu_separator_lightModeColor: "0x30262626"
-  $name: Menu / Light Color
+  $name: Menu / Separator / Light Color
   $description: Light mode color in ARGB hex format 0xAARRGGBB
 - menu_separator_enableThemeColorization: 0
-  $name: Menu / Enable Theme Colorization
+  $name: Menu / Separator / Enable Theme Colorization
   $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
 - menu_separator_darkThemeColorizationType: 1
-  $name: Menu / Dark Accent Source
+  $name: Menu / Separator / Dark Accent Source
   $description: Choose which immersive color slot is used in dark mode for this sub-part
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_separator_lightThemeColorizationType: 1
-  $name: Menu / Light Accent Source
+  $name: Menu / Separator / Light Accent Source
   $description: Choose which immersive color slot is used in light mode for this sub-part
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_focusing_disabled: 0
-  $name: Menu / Disabled
+  $name: Menu / Focusing / Disabled
   $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
 - menu_focusing_cornerRadius: 8
-  $name: Menu / Corner Radius
+  $name: Menu / Focusing / Corner Radius
   $description: Corner radius for focused item highlight
 - menu_focusing_width: 1000
-  $name: Menu / Width
+  $name: Menu / Focusing / Width
   $description: Width control for focused item highlight. 1000 equals full item width
 - menu_focusing_darkModeColor: "0xFFFFFFFF"
-  $name: Menu / Dark Color
+  $name: Menu / Focusing / Dark Color
   $description: Dark mode color in ARGB hex format 0xAARRGGBB
 - menu_focusing_lightModeColor: "0xFF000000"
-  $name: Menu / Light Color
+  $name: Menu / Focusing / Light Color
   $description: Light mode color in ARGB hex format 0xAARRGGBB
 - menu_focusing_enableThemeColorization: 0
-  $name: Menu / Enable Theme Colorization
+  $name: Menu / Focusing / Enable Theme Colorization
   $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
 - menu_focusing_darkThemeColorizationType: 1
-  $name: Menu / Dark Accent Source
+  $name: Menu / Focusing / Dark Accent Source
   $description: Choose which immersive color slot is used in dark mode for this sub-part
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_focusing_lightThemeColorizationType: 1
-  $name: Menu / Light Accent Source
+  $name: Menu / Focusing / Light Accent Source
   $description: Choose which immersive color slot is used in light mode for this sub-part
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_disabledHot_disabled: 0
-  $name: Menu / Disabled
+  $name: Menu / Disabled Hot / Disabled
   $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
 - menu_disabledHot_cornerRadius: 8
-  $name: Menu / Corner Radius
+  $name: Menu / Disabled Hot / Corner Radius
   $description: Corner radius for disabled hot item highlight
 - menu_disabledHot_darkModeColor: "0x00000000"
-  $name: Menu / Dark Color
+  $name: Menu / Disabled Hot / Dark Color
   $description: Dark mode color in ARGB hex format 0xAARRGGBB
 - menu_disabledHot_lightModeColor: "0x00000000"
-  $name: Menu / Light Color
+  $name: Menu / Disabled Hot / Light Color
   $description: Light mode color in ARGB hex format 0xAARRGGBB
 - menu_disabledHot_enableThemeColorization: 0
-  $name: Menu / Enable Theme Colorization
+  $name: Menu / Disabled Hot / Enable Theme Colorization
   $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
 - menu_disabledHot_darkThemeColorizationType: 1
-  $name: Menu / Dark Accent Source
+  $name: Menu / Disabled Hot / Dark Accent Source
   $description: Choose which immersive color slot is used in dark mode for this sub-part
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_disabledHot_lightThemeColorizationType: 1
-  $name: Menu / Light Accent Source
+  $name: Menu / Disabled Hot / Light Accent Source
   $description: Choose which immersive color slot is used in light mode for this sub-part
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_hot_disabled: 0
-  $name: Menu / Disabled
+  $name: Menu / Hot / Disabled
   $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
 - menu_hot_cornerRadius: 8
-  $name: Menu / Corner Radius
+  $name: Menu / Hot / Corner Radius
   $description: Corner radius for hot or hover item highlight
 - menu_hot_darkModeColor: "0x41808080"
-  $name: Menu / Dark Color
+  $name: Menu / Hot / Dark Color
   $description: Dark mode color in ARGB hex format 0xAARRGGBB
 - menu_hot_lightModeColor: "0x30000000"
-  $name: Menu / Light Color
+  $name: Menu / Hot / Light Color
   $description: Light mode color in ARGB hex format 0xAARRGGBB
 - menu_hot_enableThemeColorization: 0
-  $name: Menu / Enable Theme Colorization
+  $name: Menu / Hot / Enable Theme Colorization
   $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
 - menu_hot_darkThemeColorizationType: 1
-  $name: Menu / Dark Accent Source
+  $name: Menu / Hot / Dark Accent Source
   $description: Choose which immersive color slot is used in dark mode for this sub-part
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - menu_hot_lightThemeColorizationType: 1
-  $name: Menu / Light Accent Source
+  $name: Menu / Hot / Light Accent Source
   $description: Choose which immersive color slot is used in light mode for this sub-part
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 
-- tooltip_noSystemDropShadow: no
+- tooltip_noSystemDropShadow: false
   $name: Tooltip / Disable System Drop Shadow
   $description: Disable system-provided tooltip shadow
-  $options:
-    - no: No
-    - yes: Yes
+
 
 - tooltip_effectType: use_global
   $name: Tooltip / Effect Type
@@ -519,9 +612,29 @@
 - tooltip_darkModeThemeColorizationType: 1
   $name: Tooltip / Dark Accent Source
   $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - tooltip_lightModeThemeColorizationType: 1
   $name: Tooltip / Light Accent Source
   $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
+  $options:
+    - 0: ImmersiveStartBackground
+    - 1: ImmersiveStartHoverBackground
+    - 2: ImmersiveSystemAccent
+    - 3: ImmersiveSystemAccentDark1
+    - 4: ImmersiveSystemAccentDark2
+    - 5: ImmersiveSystemAccentDark3
+    - 6: ImmersiveSystemAccentLight1
+    - 7: ImmersiveSystemAccentLight2
+    - 8: ImmersiveSystemAccentLight3
 - tooltip_darkModeBorderColor: "0xFF2B2B2B"
   $name: Tooltip / Dark Border Color
   $description: Dark mode border color in ARGB hex format 0xAARRGGBB
@@ -780,32 +893,6 @@ struct Settings {
 };
 
 static Settings g_settings;
-static int g_prevResetAction = 0;
-
-// Dynamic OS check (no static ntdll import)
-static bool IsWindows11_22H2OrLater()
-{
-    typedef LONG(WINAPI* RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
-
-    HMODULE ntdll = LoadLibraryW(L"ntdll.dll");
-    if (!ntdll) {
-        return false;
-    }
-
-    auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
-        GetProcAddress(ntdll, "RtlGetVersion"));
-    if (!rtlGetVersion) {
-        FreeLibrary(ntdll);
-        return false;
-    }
-
-    RTL_OSVERSIONINFOW vi = {};
-    vi.dwOSVersionInfoSize = sizeof(vi);
-    LONG status = rtlGetVersion(&vi);
-    FreeLibrary(ntdll);
-
-    return status == 0 && vi.dwMajorVersion >= 10 && vi.dwBuildNumber >= 22621;
-}
 
 static DWORD ClampDword(int v, int lo, int hi)
 {
@@ -816,19 +903,6 @@ static DWORD ClampDword(int v, int lo, int hi)
         return static_cast<DWORD>(hi);
     }
     return static_cast<DWORD>(v);
-}
-
-static DWORD BlurAmountToAlpha(int blurAmount)
-{
-    // Map 1..20 to a practical alpha range for ARGB gradient tint.
-    int b = static_cast<int>(ClampDword(blurAmount, 1, 20));
-    int alpha = 0x30 + ((b - 1) * (0xC0 - 0x30) / 19);
-    return static_cast<DWORD>(alpha & 0xFF);
-}
-
-static DWORD MakeArgb(DWORD alpha, DWORD rgb)
-{
-    return ((alpha & 0xFF) << 24) | (rgb & 0x00FFFFFF);
 }
 
 static bool WriteDwordHKCU(const wchar_t* subKey, const wchar_t* valueName, DWORD value)
@@ -957,64 +1031,6 @@ static void SetOrDeleteThemeTypes(const wchar_t* subKey, int enableThemeColoriza
     }
 }
 
-static void ClearPartGeneralOverrides(const wchar_t* part)
-{
-    wchar_t key[256] = {};
-    wsprintfW(key, L"Software\\TranslucentFlyouts\\%s", part);
-
-    DeleteValueHKCU(key, L"EffectType");
-    DeleteValueHKCU(key, L"CornerType");
-    DeleteValueHKCU(key, L"EnableDropShadow");
-    DeleteValueHKCU(key, L"EnableThemeColorization");
-    DeleteValueHKCU(key, L"DarkMode_BorderColor");
-    DeleteValueHKCU(key, L"LightMode_BorderColor");
-    DeleteValueHKCU(key, L"DarkMode_GradientColor");
-    DeleteValueHKCU(key, L"LightMode_GradientColor");
-}
-
-static void WritePartSettings(
-    const wchar_t* part,
-    DWORD effectType,
-    DWORD cornerType,
-    DWORD enableDropShadow,
-    DWORD enableThemeColorization,
-    DWORD darkModeBorderColor,
-    DWORD lightModeBorderColor,
-    DWORD darkModeGradientColor,
-    DWORD lightModeGradientColor)
-{
-    wchar_t key[256] = {};
-
-    // Write general settings
-    wsprintfW(key, L"Software\\TranslucentFlyouts\\%s", part);
-    WriteDwordHKCU(key, L"EffectType", effectType);
-    WriteDwordHKCU(key, L"CornerType", cornerType);
-    WriteDwordHKCU(key, L"EnableDropShadow", enableDropShadow);
-    WriteDwordHKCU(key, L"EnableThemeColorization", enableThemeColorization);
-    WriteDwordHKCU(key, L"DarkMode_BorderColor", darkModeBorderColor);
-    WriteDwordHKCU(key, L"LightMode_BorderColor", lightModeBorderColor);
-    WriteDwordHKCU(key, L"DarkMode_GradientColor", darkModeGradientColor);
-    WriteDwordHKCU(key, L"LightMode_GradientColor", lightModeGradientColor);
-}
-
-static void WritePartAnimationSettings(const wchar_t* part, bool enableAnimations, int popInStyle)
-{
-    wchar_t key[256] = {};
-
-    // EnableFluentAnimation is read from the part root key.
-    wsprintfW(key, L"Software\\TranslucentFlyouts\\%s", part);
-    WriteDwordHKCU(key, L"EnableFluentAnimation", enableAnimations ? 1 : 0);
-
-    // Timing/style values are read from Animation\\{Part}.
-    wsprintfW(key, L"Software\\TranslucentFlyouts\\%s\\Animation", part);
-    WriteDwordHKCU(key, L"PopInStyle", popInStyle);
-}
-
-static void WriteMenuSpecificSettings(bool noSystemDropShadow)
-{
-    WriteDwordHKCU(L"Software\\TranslucentFlyouts\\Menu", L"NoSystemDropShadow", noSystemDropShadow ? 1 : 0);
-}
-
 static void NotifyTranslucentFlyoutsReload()
 {
     // Fast path: notify listeners without forcing full TF detach/attach cycle.
@@ -1030,6 +1046,63 @@ static void NotifyTranslucentFlyoutsReload()
         PostMessageW(HWND_BROADCAST, msgDetach, 0, 0);
         PostMessageW(HWND_BROADCAST, msgAttach, 0, 0);
     }
+}
+
+  // Forward declarations (RunControllerOnce is defined before these helpers).
+  static void LoadSettings();
+  static void ApplyResetAction(int resetAction);
+  static void ApplySettingsToOriginalTranslucentFlyouts();
+
+  static const wchar_t* ResetActionToLabel(int resetAction)
+  {
+    switch (resetAction) {
+      case 1: return L"Global";
+      case 2: return L"DropDown";
+      case 3: return L"Menu";
+      case 4: return L"Tooltip";
+      case 5: return L"All";
+      default: return L"None";
+    }
+  }
+
+static constexpr const wchar_t* kLastResetActionValueName = L"last_reset_action";
+static constexpr const wchar_t* kPendingResetActionValueName = L"pending_reset_action";
+
+static void UpdatePendingResetActionInLauncher()
+{
+    LoadSettings();
+
+    const int lastResetAction = Wh_GetIntValue(kLastResetActionValueName, 0);
+
+    // Reset action is intentionally edge-triggered to avoid repeated resets.
+    if (g_settings.resetAction == 0) {
+        if (lastResetAction != 0) {
+            Wh_SetIntValue(kLastResetActionValueName, 0);
+        }
+        return;
+    }
+
+    if (g_settings.resetAction == lastResetAction) {
+        return;
+    }
+
+    Wh_SetIntValue(kLastResetActionValueName, g_settings.resetAction);
+    Wh_SetIntValue(kPendingResetActionValueName, g_settings.resetAction);
+    Wh_Log(L"Launcher: queued reset action=%d (%s)", g_settings.resetAction, ResetActionToLabel(g_settings.resetAction));
+}
+
+static void ApplySettingsOnceInToolProcess()
+{
+    LoadSettings();
+
+    const int pendingResetAction = Wh_GetIntValue(kPendingResetActionValueName, 0);
+    if (pendingResetAction != 0) {
+        ApplyResetAction(pendingResetAction);
+        Wh_SetIntValue(kPendingResetActionValueName, 0);
+        Wh_Log(L"Tool process: applied pending reset action=%d (%s)", pendingResetAction, ResetActionToLabel(pendingResetAction));
+    }
+
+    ApplySettingsToOriginalTranslucentFlyouts();
 }
 
 struct SettingChoice {
@@ -1054,6 +1127,33 @@ static int GetMappedIntSetting(const wchar_t* name, const SettingChoice* choices
     Wh_FreeStringSetting(value);
     return fallback;
 }
+
+  static int GetBoolSettingCompat(const wchar_t* name, int fallback)
+  {
+    PCWSTR value = Wh_GetStringSetting(name);
+    if (value) {
+      if (*value) {
+        if (_wcsicmp(value, L"yes") == 0 || _wcsicmp(value, L"true") == 0 || wcscmp(value, L"1") == 0) {
+          Wh_FreeStringSetting(value);
+          return 1;
+        }
+
+        if (_wcsicmp(value, L"no") == 0 || _wcsicmp(value, L"false") == 0 || wcscmp(value, L"0") == 0) {
+          Wh_FreeStringSetting(value);
+          return 0;
+        }
+      }
+
+      Wh_FreeStringSetting(value);
+    }
+
+    int v = Wh_GetIntSetting(name);
+    if (v == 0 || v == 1) {
+      return v;
+    }
+
+    return fallback;
+  }
 
 static bool TryParseColorValue(const wchar_t* value, DWORD* out)
 {
@@ -1104,11 +1204,6 @@ static DWORD GetColorSetting(const wchar_t* name)
 
     return static_cast<DWORD>(Wh_GetIntSetting(name));
 }
-
-static constexpr SettingChoice kYesNo[] = {
-    {L"no", 0},
-    {L"yes", 1},
-};
 
 static constexpr SettingChoice kTriState[] = {
     {L"no", 0},
@@ -1193,22 +1288,22 @@ static void LoadSettings()
 {
     g_settings.globalEffectType = GetMappedIntSetting(L"global_effectType", kGlobalEffect, _countof(kGlobalEffect), 5);
     g_settings.globalCornerType = GetMappedIntSetting(L"global_cornerType", kGlobalCorner, _countof(kGlobalCorner), 3);
-    g_settings.globalEnableDropShadow = GetMappedIntSetting(L"global_enableDropShadow", kYesNo, _countof(kYesNo), 0);
-    g_settings.globalNoBorderColor = GetMappedIntSetting(L"global_noBorderColor", kYesNo, _countof(kYesNo), 0);
-    g_settings.globalEnableThemeColorization = GetMappedIntSetting(L"global_enableThemeColorization", kYesNo, _countof(kYesNo), 0);
+  g_settings.globalEnableDropShadow = GetBoolSettingCompat(L"global_enableDropShadow", 0);
+  g_settings.globalNoBorderColor = GetBoolSettingCompat(L"global_noBorderColor", 0);
+  g_settings.globalEnableThemeColorization = GetBoolSettingCompat(L"global_enableThemeColorization", 0);
     g_settings.globalDarkModeThemeColorizationType = GetMappedIntSetting(L"global_darkModeThemeColorizationType", kThemeColorizationType, _countof(kThemeColorizationType), 1);
     g_settings.globalLightModeThemeColorizationType = GetMappedIntSetting(L"global_lightModeThemeColorizationType", kThemeColorizationType, _countof(kThemeColorizationType), 1);
     g_settings.globalDarkModeBorderColor = GetColorSetting(L"global_darkModeBorderColor");
     g_settings.globalLightModeBorderColor = GetColorSetting(L"global_lightModeBorderColor");
     g_settings.globalDarkModeGradientColor = GetColorSetting(L"global_darkModeGradientColor");
     g_settings.globalLightModeGradientColor = GetColorSetting(L"global_lightModeGradientColor");
-    g_settings.globalEnableMiniDump = GetMappedIntSetting(L"global_enableMiniDump", kYesNo, _countof(kYesNo), 1);
-    g_settings.globalDisabled = GetMappedIntSetting(L"global_disabled", kYesNo, _countof(kYesNo), 0);
+    g_settings.globalEnableMiniDump = GetBoolSettingCompat(L"global_enableMiniDump", 1);
+    g_settings.globalDisabled = GetBoolSettingCompat(L"global_disabled", 0);
 
     g_settings.dropDownEffectType = GetMappedIntSetting(L"dropDown_effectType", kPartEffect, _countof(kPartEffect), 9);
     g_settings.dropDownCornerType = GetMappedIntSetting(L"dropDown_cornerType", kPartCorner, _countof(kPartCorner), 4);
     g_settings.dropDownEnableDropShadow = GetMappedIntSetting(L"dropDown_enableDropShadow", kTriState, _countof(kTriState), 2);
-    g_settings.dropDownEnableFluentAnimation = GetMappedIntSetting(L"dropDown_enableFluentAnimation", kYesNo, _countof(kYesNo), 0);
+    g_settings.dropDownEnableFluentAnimation = GetBoolSettingCompat(L"dropDown_enableFluentAnimation", 0);
     g_settings.dropDownNoBorderColor = GetMappedIntSetting(L"dropDown_noBorderColor", kTriState, _countof(kTriState), 2);
     g_settings.dropDownEnableThemeColorization = GetMappedIntSetting(L"dropDown_enableThemeColorization", kTriState, _countof(kTriState), 2);
     g_settings.dropDownDarkModeThemeColorizationType = Wh_GetIntSetting(L"dropDown_darkModeThemeColorizationType");
@@ -1223,14 +1318,14 @@ static void LoadSettings()
     g_settings.dropDownFadeInTime = Wh_GetIntSetting(L"dropDown_animation_fadeInTime");
     g_settings.dropDownPopInStyle = GetMappedIntSetting(L"dropDown_animation_popInStyle", kPopInStyle, _countof(kPopInStyle), 0);
     g_settings.dropDownStartRatio = Wh_GetIntSetting(L"dropDown_animation_startRatio");
-    g_settings.dropDownEnableImmediateInterupting = GetMappedIntSetting(L"dropDown_animation_enableImmediateInterupting", kYesNo, _countof(kYesNo), 0);
+    g_settings.dropDownEnableImmediateInterupting = GetBoolSettingCompat(L"dropDown_animation_enableImmediateInterupting", 0);
 
-    g_settings.menuNoSystemDropShadow = GetMappedIntSetting(L"menu_noSystemDropShadow", kYesNo, _countof(kYesNo), 0);
-    g_settings.menuEnableImmersiveStyle = GetMappedIntSetting(L"menu_enableImmersiveStyle", kYesNo, _countof(kYesNo), 1);
-    g_settings.menuEnableCustomRendering = GetMappedIntSetting(L"menu_enableCustomRendering", kYesNo, _countof(kYesNo), 0);
-    g_settings.menuEnableFluentAnimation = GetMappedIntSetting(L"menu_enableFluentAnimation", kYesNo, _countof(kYesNo), 0);
-    g_settings.menuEnableCompatibilityMode = GetMappedIntSetting(L"menu_enableCompatibilityMode", kYesNo, _countof(kYesNo), 0);
-    g_settings.menuNoModernAppBackgroundColor = GetMappedIntSetting(L"menu_noModernAppBackgroundColor", kYesNo, _countof(kYesNo), 1);
+    g_settings.menuNoSystemDropShadow = GetBoolSettingCompat(L"menu_noSystemDropShadow", 0);
+    g_settings.menuEnableImmersiveStyle = GetBoolSettingCompat(L"menu_enableImmersiveStyle", 1);
+    g_settings.menuEnableCustomRendering = GetBoolSettingCompat(L"menu_enableCustomRendering", 0);
+    g_settings.menuEnableFluentAnimation = GetBoolSettingCompat(L"menu_enableFluentAnimation", 0);
+    g_settings.menuEnableCompatibilityMode = GetBoolSettingCompat(L"menu_enableCompatibilityMode", 0);
+    g_settings.menuNoModernAppBackgroundColor = GetBoolSettingCompat(L"menu_noModernAppBackgroundColor", 1);
     g_settings.menuColorTreatAsTransparentEnabled = Wh_GetIntSetting(L"menu_colorTreatAsTransparentEnabled");
     g_settings.menuColorTreatAsTransparent = GetColorSetting(L"menu_colorTreatAsTransparent");
     g_settings.menuColorTreatAsTransparentThreshold = Wh_GetIntSetting(L"menu_colorTreatAsTransparentThreshold");
@@ -1251,7 +1346,7 @@ static void LoadSettings()
     g_settings.menuFadeInTime = Wh_GetIntSetting(L"menu_animation_fadeInTime");
     g_settings.menuPopInStyle = GetMappedIntSetting(L"menu_animation_popInStyle", kPopInStyle, _countof(kPopInStyle), 0);
     g_settings.menuStartRatio = Wh_GetIntSetting(L"menu_animation_startRatio");
-    g_settings.menuEnableImmediateInterupting = GetMappedIntSetting(L"menu_animation_enableImmediateInterupting", kYesNo, _countof(kYesNo), 0);
+    g_settings.menuEnableImmediateInterupting = GetBoolSettingCompat(L"menu_animation_enableImmediateInterupting", 0);
 
     g_settings.menuSeparatorDisabled = Wh_GetIntSetting(L"menu_separator_disabled");
     g_settings.menuSeparatorWidth = Wh_GetIntSetting(L"menu_separator_width");
@@ -1286,7 +1381,7 @@ static void LoadSettings()
     g_settings.menuHotDarkThemeColorizationType = Wh_GetIntSetting(L"menu_hot_darkThemeColorizationType");
     g_settings.menuHotLightThemeColorizationType = Wh_GetIntSetting(L"menu_hot_lightThemeColorizationType");
 
-    g_settings.tooltipNoSystemDropShadow = GetMappedIntSetting(L"tooltip_noSystemDropShadow", kYesNo, _countof(kYesNo), 0);
+    g_settings.tooltipNoSystemDropShadow = GetBoolSettingCompat(L"tooltip_noSystemDropShadow", 0);
     g_settings.tooltipEffectType = GetMappedIntSetting(L"tooltip_effectType", kPartEffect, _countof(kPartEffect), 9);
     g_settings.tooltipCornerType = GetMappedIntSetting(L"tooltip_cornerType", kPartCorner, _countof(kPartCorner), 4);
     g_settings.tooltipEnableDropShadow = GetMappedIntSetting(L"tooltip_enableDropShadow", kTriState, _countof(kTriState), 2);
@@ -1586,56 +1681,208 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
     NotifyTranslucentFlyoutsReload();
 }
 
-BOOL Wh_ModInit(void)
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions.
+//
+// Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// Notes for this mod:
+// - The launcher instance runs inside windhawk.exe and spawns a dedicated
+//   windhawk.exe "tool" process for applying the registry changes.
+// - Settings changes in the launcher respawn the tool process, so "Save" applies
+//   immediately without injecting into arbitrary processes.
+
+bool WhTool_ModInit()
 {
-    Wh_Log(L"========================================");
-    Wh_Log(L"Translucent Flyouts controller initializing...");
-    Wh_Log(L"========================================");
-
-    if (!IsWindows11_22H2OrLater()) {
-        Wh_Log(L"ERROR: Controller is scoped to Windows 11 22H2+ only");
-        return FALSE;
-    }
-
-    LoadSettings();
-    g_prevResetAction = g_settings.resetAction;
-    ApplySettingsToOriginalTranslucentFlyouts();
-
-    Wh_Log(L"Controller initialized successfully");
-    return TRUE;
+  Wh_Log(L"Tool process: applying TranslucentFlyouts settings");
+  ApplySettingsOnceInToolProcess();
+  return true;
 }
 
-void Wh_ModAfterInit(void)
+void WhTool_ModSettingsChanged()
 {
-    Wh_Log(L"Translucent Flyouts controller post-init");
+  // Not expected to be called for a one-shot tool, but keep behavior sane.
+  ApplySettingsOnceInToolProcess();
 }
 
-void Wh_ModBeforeUninit(void)
+void WhTool_ModUninit()
 {
-    Wh_Log(L"Translucent Flyouts controller unloading...");
 }
 
-void Wh_ModUninit(void)
-{
-    Wh_Log(L"Translucent Flyouts controller unloaded");
-}
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+HANDLE g_toolModLauncherMutex;
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload)
+static void LaunchToolModProcess()
 {
-    LoadSettings();
+  Wh_Log(L"Launcher: spawning tool process (%s)", WH_MOD_ID);
 
-  if (g_settings.resetAction != 0 && g_settings.resetAction != g_prevResetAction) {
-    ApplyResetAction(g_settings.resetAction);
-    Wh_Log(L"Applied reset action=%d (set Controller / Reset To Defaults back to None to run again)", g_settings.resetAction);
+  // The launcher is expected to run inside windhawk.exe.
+  WCHAR currentProcessPath[MAX_PATH];
+  switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+    case 0:
+    case ARRAYSIZE(currentProcessPath):
+      Wh_Log(L"GetModuleFileName failed");
+      return;
   }
 
-  g_prevResetAction = g_settings.resetAction;
-    ApplySettingsToOriginalTranslucentFlyouts();
+  WCHAR commandLine[MAX_PATH + 2 +
+            (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) - 1];
+  swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
 
-    // No need to reload this Windhawk module; we only write registry + notify.
-    if (bReload) {
-        *bReload = FALSE;
+  STARTUPINFO si = {};
+  si.cb = sizeof(si);
+  si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+  PROCESS_INFORMATION pi = {};
+
+  // CreateProcessW requires a mutable command line buffer.
+  WCHAR commandLineMutable[ARRAYSIZE(commandLine)] = {};
+  wcscpy_s(commandLineMutable, commandLine);
+
+  if (!CreateProcessW(currentProcessPath, commandLineMutable, nullptr, nullptr,
+            FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si,
+            &pi)) {
+    const DWORD lastError = GetLastError();
+    Wh_Log(L"CreateProcessW failed (error=%lu)", lastError);
+    return;
+  }
+
+  Wh_Log(L"Launcher: tool process started");
+
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+}
+
+void WINAPI EntryPoint_Hook()
+{
+  Wh_Log(L">");
+  ExitThread(0);
+}
+
+BOOL Wh_ModInit()
+{
+  Wh_Log(L"Tool-mod launcher init (%s)", WH_MOD_ID);
+  Wh_Log(L"Command line: %s", GetCommandLineW());
+  bool isExcluded = false;
+  bool isToolModProcess = false;
+  bool isCurrentToolModProcess = false;
+  int argc;
+  LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+  if (!argv) {
+    Wh_Log(L"CommandLineToArgvW failed");
+    return FALSE;
+  }
+
+  for (int i = 1; i < argc; i++) {
+    // Exclude one-shot service helper invocations.
+    if (wcscmp(argv[i], L"-service-start") == 0 || wcscmp(argv[i], L"-service-stop") == 0) {
+      isExcluded = true;
+      break;
+    }
+  }
+
+  for (int i = 1; i < argc - 1; i++) {
+    if (wcscmp(argv[i], L"-tool-mod") == 0) {
+      isToolModProcess = true;
+      if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+        isCurrentToolModProcess = true;
+      }
+      break;
+    }
+  }
+
+  LocalFree(argv);
+
+  if (isExcluded) {
+    return FALSE;
+  }
+
+  if (isCurrentToolModProcess) {
+    Wh_Log(L"Tool process instance detected (%s)", WH_MOD_ID);
+    g_toolModProcessMutex =
+      CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+    if (!g_toolModProcessMutex) {
+      Wh_Log(L"CreateMutex failed");
+      ExitProcess(1);
     }
 
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+      Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+      ExitProcess(1);
+    }
+
+    if (!WhTool_ModInit()) {
+      ExitProcess(1);
+    }
+
+    IMAGE_DOS_HEADER* dosHeader =
+      (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+    IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader +
+                              dosHeader->e_lfanew);
+
+    DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+    void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+    Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
     return TRUE;
+  }
+
+  if (isToolModProcess) {
+    Wh_Log(L"Other tool-mod process detected, not ours");
+    return FALSE;
+  }
+
+  // Ensure only one windhawk.exe instance acts as the launcher (service/UI can
+  // both exist). This reduces duplicate tool spawns.
+  g_toolModLauncherMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod-launcher_" WH_MOD_ID);
+  if (!g_toolModLauncherMutex) {
+    Wh_Log(L"Launcher: CreateMutex failed");
+    return FALSE;
+  }
+
+  if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    Wh_Log(L"Launcher: another instance already selected");
+    g_isToolModProcessLauncher = false;
+    return TRUE;
+  }
+
+  g_isToolModProcessLauncher = true;
+  Wh_Log(L"Launcher: selected");
+  return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+  if (!g_isToolModProcessLauncher) {
+    return;
+  }
+
+  Wh_Log(L"Launcher: after init");
+  UpdatePendingResetActionInLauncher();
+  LaunchToolModProcess();
+}
+
+void Wh_ModSettingsChanged()
+{
+  if (g_isToolModProcessLauncher) {
+    // Respawn a one-shot tool process to apply latest settings.
+    Wh_Log(L"Launcher: settings changed, respawning tool process");
+    UpdatePendingResetActionInLauncher();
+    LaunchToolModProcess();
+    return;
+  }
+
+  WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit()
+{
+  if (g_isToolModProcessLauncher) {
+    return;
+  }
+
+  WhTool_ModUninit();
+  ExitProcess(0);
 }
