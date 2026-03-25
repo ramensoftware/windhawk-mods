@@ -338,6 +338,37 @@
                 "version": "1.2.0"
             }
         },
+        "auto-time-sync-on-startup": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774476509000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774476509000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "communism420",
+                "compilerOptions": "-lshell32 -ladvapi32 -loleaut32",
+                "description": "Requests a Windows time synchronization when Explorer starts after sign-in.",
+                "github": "https://github.com/communism420",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Auto Time Sync On Startup",
+                "version": "1.0"
+            }
+        },
         "balloon-sound-fix": {
             "details": {
                 "defaultSorting": 3520,
