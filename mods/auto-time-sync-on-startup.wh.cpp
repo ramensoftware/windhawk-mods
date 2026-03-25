@@ -86,9 +86,9 @@ constexpr DWORD kNotificationLifetimeMs = 5000;
 constexpr DWORD kSyncConfirmationTimeoutMs = 45000;
 constexpr DWORD kSyncConfirmationPollMs = 2000;
 constexpr PCWSTR kAdminBrokerArguments = L"ForceTimeSync 0";
-constexpr PCWSTR kRunGuardKey =
-    L"Software\\Windhawk\\" WH_MOD_ID L"\\SessionRunGuard";
-constexpr PCWSTR kRunGuardValueName = L"Claimed";
+constexpr PCWSTR kRunGuardKey = L"Software";
+constexpr PCWSTR kRunGuardValueName =
+    L"Windhawk\\" WH_MOD_ID L"_SessionRunGuard_Claimed";
 constexpr UINT kNotificationIconId = 1;
 constexpr PCWSTR kNotificationWindowClassName =
     L"AutoTimeSyncNotificationWindow_" WH_MOD_ID;
@@ -298,30 +298,6 @@ ULONGLONG FileTimeToUInt64(const FILETIME& fileTime) {
     return value.QuadPart;
 }
 
-bool IsCurrentProcessWow64() {
-    using IsWow64Process_t = BOOL(WINAPI*)(HANDLE, PBOOL);
-
-    HMODULE kernel32Module = GetModuleHandleW(L"kernel32.dll");
-    if (!kernel32Module) {
-        return false;
-    }
-
-    auto pIsWow64Process =
-        reinterpret_cast<IsWow64Process_t>(GetProcAddress(kernel32Module,
-                                                          "IsWow64Process"));
-    if (!pIsWow64Process) {
-        return false;
-    }
-
-    BOOL isWow64 = FALSE;
-    if (!pIsWow64Process(GetCurrentProcess(), &isWow64)) {
-        Wh_Log(L"IsWow64Process failed (error %lu)", GetLastError());
-        return false;
-    }
-
-    return isWow64 != FALSE;
-}
-
 bool FileExists(const std::wstring& path) {
     DWORD attributes = GetFileAttributesW(path.c_str());
     return attributes != INVALID_FILE_ATTRIBUTES &&
@@ -423,14 +399,6 @@ std::wstring GetSystemExecutablePath(PCWSTR executableName) {
     }
 
     std::wstring windowsDirectoryPath(windowsDirectory);
-
-    if (IsCurrentProcessWow64()) {
-        std::wstring sysnativePath = windowsDirectoryPath + L"\\Sysnative\\";
-        sysnativePath += executableName;
-        if (FileExists(sysnativePath)) {
-            return sysnativePath;
-        }
-    }
 
     std::wstring system32Path = windowsDirectoryPath + L"\\System32\\";
     system32Path += executableName;
@@ -825,14 +793,14 @@ DWORD WINAPI WorkerThreadProc(void*) {
         DWORD delayMs =
             static_cast<DWORD>(settings.initialDelaySeconds) * 1000;
         if (!SleepWithStopCheck(delayMs)) {
-            return 0;
+            ExitProcess(0);
         }
     }
 
     int totalAttempts = settings.retryCount + 1;
     for (int attempt = 1; attempt <= totalAttempts; ++attempt) {
         if (g_stopWorker.load()) {
-            return 0;
+            ExitProcess(0);
         }
 
         Wh_Log(L"Time sync attempt %d of %d", attempt, totalAttempts);
@@ -866,7 +834,7 @@ DWORD WINAPI WorkerThreadProc(void*) {
         DWORD retryDelayMs =
             static_cast<DWORD>(settings.retryIntervalSeconds) * 1000;
         if (!SleepWithStopCheck(retryDelayMs)) {
-            return 0;
+            ExitProcess(0);
         }
     }
 
