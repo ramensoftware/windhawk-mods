@@ -88,7 +88,7 @@ constexpr DWORD kSyncConfirmationPollMs = 2000;
 constexpr PCWSTR kAdminBrokerArguments = L"ForceTimeSync 0";
 constexpr PCWSTR kRunGuardKey = L"Software";
 constexpr PCWSTR kRunGuardValueName =
-    L"Windhawk\\" WH_MOD_ID L"_SessionRunGuard_Claimed";
+    L"Windhawk_" WH_MOD_ID L"_SessionRunGuard_Claimed";
 constexpr UINT kNotificationIconId = 1;
 constexpr PCWSTR kNotificationWindowClassName =
     L"AutoTimeSyncNotificationWindow_" WH_MOD_ID;
