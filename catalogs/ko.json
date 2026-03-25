@@ -8640,6 +8640,37 @@
                 "version": "1.0"
             }
         },
+        "taskbar-numberer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774439497000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774439497000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Rik Smeets",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Displays keyboard shortcut numbers (1-9, 0) on taskbar items like 7+ Taskbar Numberer",
+                "github": "https://github.com/rik-smeets",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Numberer for Windows 11",
+                "version": "1.0.0"
+            }
+        },
         "taskbar-on-top": {
             "details": {
                 "defaultSorting": 186930,

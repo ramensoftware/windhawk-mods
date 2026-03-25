@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-24T22:53:04.000Z</updated>
+    <updated>2026-03-25T11:51:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Numberer for Windows 11 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-numberer#053f76ad008b82a28cc1318b7d318acdd2135883</id>
+        <link href="https://windhawk.net/mods/taskbar-numberer"/>
+        <updated>2026-03-25T11:51:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarnumbererforwindows11">Taskbar Numberer for Windows 11</h1>
+<p>Displays keyboard shortcut numbers (1-9, 0) on Windows 11 taskbar items, replicating the functionality of the classic 7+ Taskbar Numberer tool.
+<img src="https://raw.githubusercontent.com/rik-smeets/images/refs/heads/main/taskbar-numberer.png" alt="" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Numbers 1-9 for first nine apps, 0 for tenth app</li>
+<li>Fully customizable appearance (position, size, colors)</li>
+<li>Stroke outline for better visibility on any background</li>
+<li>Supports light and dark themes</li>
+<li>Hidden overlays for apps beyond position 10</li>
+<li>Efficient overlay management with minimal performance impact</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<p>Numbers correspond to Windows + [number] keyboard shortcuts for quick app launching. Simply press Win+1 to open the first app, Win+2 for second, etc.</p>
+<h2 id="knownissues">Known issues</h2>
+<ul>
+<li>After reordering task bar items, numbering might be incorrect. This self-corrects in the next render.</li>
+<li>After initially enabling mod or updating settings: numbers don't appear until first taskbar interaction (like hovering). If mod is enabled, numbers will be there on Windows startup.</li>
+</ul>
+<h2 id="customization">Customization</h2>
+<p>The following settings can be configured through mod settings:</p>
+<ul>
+<li>Number position (corner)</li>
+<li>Font size</li>
+<li>Text color</li>
+<li>Stroke color</li>
+<li>Enable/disable showing numbers on secondary taskbars</li>
+</ul>
+<h2 id="specialthanks">Special Thanks</h2>
+<ul>
+<li><a href="https://github.com/jsfdez">jsfdez</a>: Created the base for this mod in <a href="https://github.com/ramensoftware/windhawk-mods/pull/2260">this pull request</a> after <a href="https://tightcorner.substack.com/p/reverse-engineering-windows-11s-taskbar">this research</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>Rik Smeets</name>
+            <uri>https://github.com/rik-smeets</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Context Menu Preloader 1.0]]></title>
         <id>https://windhawk.net/mods/context-menu-preloader#2cdc049b45f3043a33b507f7cd556b1c1a0380b0</id>
@@ -457,23 +499,6 @@ to 100% opacity.</p>]]></content>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.4]]></title>
-        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#9c7f3656e98a7ece5e213dae90a01b8b8fe4ed5a</id>
-        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
-        <updated>2026-03-20T20:50:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the LiquidGlass theme.</li>
-<li>Some of the settings, such as the Explorer frame container height and the background style, are now applied right away.</li>
-<li>Added the following properties to <code>WindhawkBlur</code>: <code>TintLuminosityOpacity</code>, <code>TintSaturation</code>, <code>NoiseOpacity</code>, and <code>NoiseDensity</code>. The implementation was contributed by <a href="https://github.com/Lockframe">Jhen</a>. For details, refer to <a href="https://github.com/ramensoftware/windows-11-file-explorer-styling-guide#windhawkblur-effect-as-color">the styling guide</a>.</li>
-<li>Added XAML syntax support for resource variables.</li>
-<li>Improved resource variable handling and theme resource refresh logic.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
