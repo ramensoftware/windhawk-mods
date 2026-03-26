@@ -2,11 +2,12 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word via direct Word saves
-// @version         3.0
+// @version         3.1
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
 // @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -loleacc
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,8 +19,9 @@ how AutoSave works with OneDrive files.
 
 ## How it works
 
-The mod monitors keyboard input in Microsoft Word. When you type, delete, paste,
-or make other text-editing changes, it schedules a save after a short delay.
+The mod monitors keyboard input and document dirty-state changes in Microsoft
+Word. When you type, paste, format text, or make other editing changes, it
+schedules a save after a short delay.
 
 This build does **not** send `Ctrl+S`. It talks to Word directly through
 automation and calls document save APIs, which removes the root cause of false
@@ -28,13 +30,14 @@ shortcut activations.
 ## Features
 
 - Detects typing, backspace, delete, enter, punctuation, numpad, and clipboard operations
-- Detects Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+Y, Ctrl+Enter (page break)
+- Detects Ctrl+V, Ctrl+X, Ctrl+Y, Ctrl+Z, Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+Enter
+- Detects context-menu paste and non-keyboard formatting changes after Word marks the document dirty
 - Configurable delay before saving
 - Optional minimum interval between saves to prevent excessive disk writes
 - Direct Word save calls with zero synthetic keyboard input
 - Only saves when the active Word document window is focused
 
-## Shortcut Safety (v3.0)
+## Shortcut Safety (v3.1)
 
 - No `SendInput`
 - No synthetic `Ctrl` state
@@ -44,9 +47,9 @@ shortcut activations.
 
 ## Limitations
 
-- Mouse operations (click, drag & drop, context menu paste) are not detected
 - Only works with documents that have already been saved at least once
 - New unsaved documents are skipped to avoid opening "Save As"
+- Operations that don't make Word mark the document as modified are ignored
 */
 // ==/WindhawkModReadme==
 
@@ -63,6 +66,7 @@ shortcut activations.
 
 #include <windows.h>
 #include <oleauto.h>
+#include <oleacc.h>
 
 // ============================================================================
 // Constants
@@ -73,6 +77,7 @@ const int MAX_SAVE_DELAY_MS = 60000;
 const int MAX_MIN_TIME_BETWEEN_SAVES = 300000;
 const DWORD RETRY_INTERVAL_MS = 50;
 const DWORD INPUT_SETTLE_DELAY_MS = 25;
+const DWORD DOCUMENT_STATE_POLL_INTERVAL_MS = 350;
 const DWORD OBJID_NATIVEOM_VALUE = 0xFFFFFFF0u;
 
 const int VK_KEY_0 = 0x30;
@@ -89,35 +94,10 @@ const IID kIIDIDispatch = {
 };
 
 // ============================================================================
-// Runtime Imports
+// Function Types
 // ============================================================================
 
 typedef BOOL (WINAPI* TranslateMessage_t)(const MSG*);
-typedef void (WINAPI* VariantInit_t)(VARIANTARG*);
-typedef HRESULT (WINAPI* VariantClear_t)(VARIANTARG*);
-typedef HRESULT (WINAPI* VariantChangeType_t)(VARIANTARG*, const VARIANTARG*, USHORT, VARTYPE);
-typedef BSTR (WINAPI* SysAllocString_t)(const OLECHAR*);
-typedef void (WINAPI* SysFreeString_t)(BSTR);
-typedef UINT (WINAPI* SysStringLen_t)(BSTR);
-typedef HRESULT (WINAPI* CLSIDFromProgID_t)(LPCOLESTR, LPCLSID);
-typedef HRESULT (WINAPI* GetActiveObject_t)(REFCLSID, void*, IUnknown**);
-typedef HRESULT (WINAPI* CoInitializeEx_t)(LPVOID, DWORD);
-typedef void (WINAPI* CoUninitialize_t)(void);
-typedef HRESULT (STDAPICALLTYPE* AccessibleObjectFromWindow_t)(HWND, DWORD, REFIID, void**);
-
-struct RuntimeImports {
-    VariantInit_t VariantInit = nullptr;
-    VariantClear_t VariantClear = nullptr;
-    VariantChangeType_t VariantChangeType = nullptr;
-    SysAllocString_t SysAllocString = nullptr;
-    SysFreeString_t SysFreeString = nullptr;
-    SysStringLen_t SysStringLen = nullptr;
-    CLSIDFromProgID_t CLSIDFromProgID = nullptr;
-    GetActiveObject_t GetActiveObject = nullptr;
-    CoInitializeEx_t CoInitializeEx = nullptr;
-    CoUninitialize_t CoUninitialize = nullptr;
-    AccessibleObjectFromWindow_t AccessibleObjectFromWindow = nullptr;
-} g_runtime;
 
 // ============================================================================
 // Global State
@@ -132,9 +112,12 @@ TranslateMessage_t g_originalTranslateMessage = nullptr;
 DWORD g_wordProcessId = 0;
 DWORD g_ownerThreadId = 0;
 UINT_PTR g_saveTimerId = 0;
+UINT_PTR g_documentStateTimerId = 0;
 ULONGLONG g_lastEditTime = 0;
 ULONGLONG g_lastSaveTime = 0;
 volatile LONG g_pendingSave = FALSE;
+volatile LONG g_documentDirtyKnown = FALSE;
+volatile LONG g_documentDirty = FALSE;
 volatile LONG g_moduleActive = FALSE;
 
 // ============================================================================
@@ -166,81 +149,53 @@ bool HasClassName(HWND hwnd, const wchar_t* className) {
     return lstrcmpW(actualClass, className) == 0;
 }
 
-bool LoadRuntimeImports() {
-    if (g_runtime.VariantInit &&
-        g_runtime.VariantClear &&
-        g_runtime.VariantChangeType &&
-        g_runtime.SysAllocString &&
-        g_runtime.SysFreeString &&
-        g_runtime.SysStringLen &&
-        g_runtime.CLSIDFromProgID &&
-        g_runtime.GetActiveObject &&
-        g_runtime.CoInitializeEx &&
-        g_runtime.CoUninitialize &&
-        g_runtime.AccessibleObjectFromWindow) {
-        return true;
+bool IsOwnerCandidateMessage(UINT message) {
+    switch (message) {
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        case WM_CHAR:
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
+        case WM_XBUTTONUP:
+        case WM_COMMAND:
+        case WM_PASTE:
+        case WM_CUT:
+        case WM_UNDO:
+        case WM_CONTEXTMENU:
+            return true;
     }
 
-    HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
-    if (!ole32) {
-        ole32 = LoadLibraryW(L"ole32.dll");
+    return false;
+}
+
+bool IsDocumentStateRefreshMessage(UINT message) {
+    switch (message) {
+        case WM_COMMAND:
+        case WM_PASTE:
+        case WM_CUT:
+        case WM_UNDO:
+            return true;
     }
 
-    HMODULE oleaut32 = GetModuleHandleW(L"oleaut32.dll");
-    if (!oleaut32) {
-        oleaut32 = LoadLibraryW(L"oleaut32.dll");
-    }
+    return false;
+}
 
-    HMODULE oleacc = GetModuleHandleW(L"oleacc.dll");
-    if (!oleacc) {
-        oleacc = LoadLibraryW(L"oleacc.dll");
-    }
+void MarkObservedDocumentClean() {
+    InterlockedExchange(&g_documentDirtyKnown, TRUE);
+    InterlockedExchange(&g_documentDirty, FALSE);
+}
 
-    if (!ole32 || !oleaut32 || !oleacc) {
-        Wh_Log(L"ERROR: Failed to load OLE runtime modules");
-        return false;
-    }
+void ResetObservedDocumentState() {
+    InterlockedExchange(&g_documentDirtyKnown, FALSE);
+    InterlockedExchange(&g_documentDirty, FALSE);
+}
 
-    g_runtime.VariantInit =
-        reinterpret_cast<VariantInit_t>(GetProcAddress(oleaut32, "VariantInit"));
-    g_runtime.VariantClear =
-        reinterpret_cast<VariantClear_t>(GetProcAddress(oleaut32, "VariantClear"));
-    g_runtime.VariantChangeType =
-        reinterpret_cast<VariantChangeType_t>(GetProcAddress(oleaut32, "VariantChangeType"));
-    g_runtime.SysAllocString =
-        reinterpret_cast<SysAllocString_t>(GetProcAddress(oleaut32, "SysAllocString"));
-    g_runtime.SysFreeString =
-        reinterpret_cast<SysFreeString_t>(GetProcAddress(oleaut32, "SysFreeString"));
-    g_runtime.SysStringLen =
-        reinterpret_cast<SysStringLen_t>(GetProcAddress(oleaut32, "SysStringLen"));
-    g_runtime.CLSIDFromProgID =
-        reinterpret_cast<CLSIDFromProgID_t>(GetProcAddress(ole32, "CLSIDFromProgID"));
-    g_runtime.GetActiveObject =
-        reinterpret_cast<GetActiveObject_t>(GetProcAddress(oleaut32, "GetActiveObject"));
-    g_runtime.CoInitializeEx =
-        reinterpret_cast<CoInitializeEx_t>(GetProcAddress(ole32, "CoInitializeEx"));
-    g_runtime.CoUninitialize =
-        reinterpret_cast<CoUninitialize_t>(GetProcAddress(ole32, "CoUninitialize"));
-    g_runtime.AccessibleObjectFromWindow =
-        reinterpret_cast<AccessibleObjectFromWindow_t>(
-            GetProcAddress(oleacc, "AccessibleObjectFromWindow"));
-
-    if (!g_runtime.VariantInit ||
-        !g_runtime.VariantClear ||
-        !g_runtime.VariantChangeType ||
-        !g_runtime.SysAllocString ||
-        !g_runtime.SysFreeString ||
-        !g_runtime.SysStringLen ||
-        !g_runtime.CLSIDFromProgID ||
-        !g_runtime.GetActiveObject ||
-        !g_runtime.CoInitializeEx ||
-        !g_runtime.CoUninitialize ||
-        !g_runtime.AccessibleObjectFromWindow) {
-        Wh_Log(L"ERROR: Failed to resolve required OLE runtime functions");
-        return false;
-    }
-
-    return true;
+bool NoteObservedDocumentDirty() {
+    const LONG wasKnown = InterlockedCompareExchange(&g_documentDirtyKnown, TRUE, TRUE);
+    const LONG wasDirty = InterlockedExchange(&g_documentDirty, TRUE);
+    InterlockedExchange(&g_documentDirtyKnown, TRUE);
+    return wasKnown == FALSE || wasDirty == FALSE;
 }
 
 bool IsActiveWordDocumentWindow() {
@@ -333,28 +288,33 @@ HWND FindNativeWordViewWindow() {
     return result;
 }
 
-void AdoptOwnerThreadIfNeeded(const MSG* lpMsg) {
-    if (!lpMsg || g_ownerThreadId != 0) {
-        return;
-    }
+bool ArmDocumentStateTimer(DWORD delayMs);
 
-    switch (lpMsg->message) {
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
-        case WM_CHAR:
-            break;
-        default:
-            return;
+void AdoptOwnerThreadIfNeeded(const MSG* lpMsg) {
+    if (!lpMsg || g_ownerThreadId != 0 || !IsOwnerCandidateMessage(lpMsg->message)) {
+        return;
     }
 
     if (!IsActiveWordDocumentWindow()) {
         return;
     }
 
-    InterlockedCompareExchange(
+    HWND foregroundWindow = GetForegroundWindow();
+    if (!foregroundWindow) {
+        return;
+    }
+
+    const DWORD foregroundThreadId = GetWindowThreadProcessId(foregroundWindow, nullptr);
+    if (foregroundThreadId != GetCurrentThreadId()) {
+        return;
+    }
+
+    if (InterlockedCompareExchange(
         reinterpret_cast<volatile LONG*>(&g_ownerThreadId),
         static_cast<LONG>(GetCurrentThreadId()),
-        0);
+        0) == 0) {
+        ArmDocumentStateTimer(DOCUMENT_STATE_POLL_INTERVAL_MS);
+    }
 }
 
 void CancelSaveTimer() {
@@ -364,8 +324,33 @@ void CancelSaveTimer() {
     }
 }
 
+void CancelDocumentStateTimer() {
+    if (g_documentStateTimerId != 0) {
+        KillTimer(nullptr, g_documentStateTimerId);
+        g_documentStateTimerId = 0;
+    }
+}
+
 bool ArmSaveTimer(DWORD delayMs);
 void HandleAutosaveTick();
+void HandleDocumentStateTick();
+void CALLBACK DocumentStateTimerProc(HWND, UINT, UINT_PTR, DWORD);
+
+bool ArmDocumentStateTimer(DWORD delayMs) {
+    if (!IsOwnerThread()) {
+        return false;
+    }
+
+    CancelDocumentStateTimer();
+    g_documentStateTimerId =
+        SetTimer(nullptr, 0, delayMs ? delayMs : 1, DocumentStateTimerProc);
+    if (g_documentStateTimerId == 0) {
+        Wh_Log(L"Document state monitor: SetTimer failed, error=%lu", GetLastError());
+        return false;
+    }
+
+    return true;
+}
 
 void ScheduleSaveFromEdit() {
     g_lastEditTime = GetTickCount64();
@@ -379,6 +364,7 @@ void ClearPendingSave() {
 
 void HandleManualSave() {
     g_lastSaveTime = GetTickCount64();
+    MarkObservedDocumentClean();
     ClearPendingSave();
     CancelSaveTimer();
 }
@@ -390,7 +376,7 @@ void HandleManualSave() {
 class ScopedComInit {
 public:
     ScopedComInit() {
-        m_hr = g_runtime.CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        m_hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         if (m_hr == RPC_E_CHANGED_MODE) {
             m_hr = S_OK;
             m_shouldUninitialize = false;
@@ -402,7 +388,7 @@ public:
 
     ~ScopedComInit() {
         if (m_shouldUninitialize) {
-            g_runtime.CoUninitialize();
+            CoUninitialize();
         }
     }
 
@@ -459,31 +445,31 @@ HRESULT GetDispatchProperty(IDispatch* dispatch, const wchar_t* name, IDispatch*
     *result = nullptr;
 
     VARIANT value;
-    g_runtime.VariantInit(&value);
+    VariantInit(&value);
 
     HRESULT hr = InvokeDispatch(dispatch,
                                 DISPATCH_PROPERTYGET,
                                 const_cast<LPOLESTR>(name),
                                 &value);
     if (FAILED(hr)) {
-        g_runtime.VariantClear(&value);
+        VariantClear(&value);
         return hr;
     }
 
     if (value.vt == VT_DISPATCH && value.pdispVal) {
         *result = value.pdispVal;
         value.pdispVal = nullptr;
-        g_runtime.VariantClear(&value);
+        VariantClear(&value);
         return S_OK;
     }
 
     if (value.vt == VT_UNKNOWN && value.punkVal) {
         hr = value.punkVal->QueryInterface(IID_PPV_ARGS(result));
-        g_runtime.VariantClear(&value);
+        VariantClear(&value);
         return hr;
     }
 
-    g_runtime.VariantClear(&value);
+    VariantClear(&value);
     return DISP_E_TYPEMISMATCH;
 }
 
@@ -496,22 +482,22 @@ HRESULT GetBoolProperty(IDispatch* dispatch, const wchar_t* name, bool* result) 
 
     VARIANT value;
     VARIANT converted;
-    g_runtime.VariantInit(&value);
-    g_runtime.VariantInit(&converted);
+    VariantInit(&value);
+    VariantInit(&converted);
 
     HRESULT hr = InvokeDispatch(dispatch,
                                 DISPATCH_PROPERTYGET,
                                 const_cast<LPOLESTR>(name),
                                 &value);
     if (SUCCEEDED(hr)) {
-        hr = g_runtime.VariantChangeType(&converted, &value, 0, VT_BOOL);
+        hr = VariantChangeType(&converted, &value, 0, VT_BOOL);
         if (SUCCEEDED(hr)) {
             *result = converted.boolVal != VARIANT_FALSE;
         }
     }
 
-    g_runtime.VariantClear(&converted);
-    g_runtime.VariantClear(&value);
+    VariantClear(&converted);
+    VariantClear(&value);
     return hr;
 }
 
@@ -524,23 +510,23 @@ HRESULT GetBstrProperty(IDispatch* dispatch, const wchar_t* name, BSTR* result) 
 
     VARIANT value;
     VARIANT converted;
-    g_runtime.VariantInit(&value);
-    g_runtime.VariantInit(&converted);
+    VariantInit(&value);
+    VariantInit(&converted);
 
     HRESULT hr = InvokeDispatch(dispatch,
                                 DISPATCH_PROPERTYGET,
                                 const_cast<LPOLESTR>(name),
                                 &value);
     if (SUCCEEDED(hr)) {
-        hr = g_runtime.VariantChangeType(&converted, &value, 0, VT_BSTR);
+        hr = VariantChangeType(&converted, &value, 0, VT_BSTR);
         if (SUCCEEDED(hr) && converted.bstrVal) {
-            *result = g_runtime.SysAllocString(converted.bstrVal);
+            *result = SysAllocString(converted.bstrVal);
             hr = *result ? S_OK : E_OUTOFMEMORY;
         }
     }
 
-    g_runtime.VariantClear(&converted);
-    g_runtime.VariantClear(&value);
+    VariantClear(&converted);
+    VariantClear(&value);
     return hr;
 }
 
@@ -552,13 +538,13 @@ HRESULT GetWordApplicationFromRot(IDispatch** application) {
     *application = nullptr;
 
     CLSID wordClsid;
-    HRESULT hr = g_runtime.CLSIDFromProgID(L"Word.Application", &wordClsid);
+    HRESULT hr = CLSIDFromProgID(L"Word.Application", &wordClsid);
     if (FAILED(hr)) {
         return hr;
     }
 
     IUnknown* unknown = nullptr;
-    hr = g_runtime.GetActiveObject(wordClsid, nullptr, &unknown);
+    hr = GetActiveObject(wordClsid, nullptr, &unknown);
     if (FAILED(hr) || !unknown) {
         return hr;
     }
@@ -581,7 +567,7 @@ HRESULT GetWordApplicationFromActiveWindow(IDispatch** application) {
     }
 
     IDispatch* nativeObject = nullptr;
-    HRESULT hr = g_runtime.AccessibleObjectFromWindow(
+    HRESULT hr = AccessibleObjectFromWindow(
         viewWindow,
         OBJID_NATIVEOM_VALUE,
         kIIDIDispatch,
@@ -624,10 +610,83 @@ enum class SaveAttemptResult {
     RetryLater,
 };
 
-SaveAttemptResult TrySaveActiveDocument() {
-    if (!LoadRuntimeImports()) {
-        return SaveAttemptResult::RetryLater;
+enum class DocumentDirtyState {
+    Clean,
+    Dirty,
+    RetryLater,
+};
+
+DocumentDirtyState QueryActiveDocumentDirtyState() {
+    ScopedComInit comInit;
+    if (FAILED(comInit.GetResult())) {
+        Wh_Log(L"Document state monitor: CoInitializeEx failed, hr=0x%08X", comInit.GetResult());
+        return DocumentDirtyState::RetryLater;
     }
+
+    IDispatch* application = nullptr;
+    HRESULT hr = GetWordApplication(&application);
+    if (FAILED(hr) || !application) {
+        if (hr == RPC_E_CALL_REJECTED || hr == RPC_E_SERVERCALL_RETRYLATER) {
+            return DocumentDirtyState::RetryLater;
+        }
+
+        return DocumentDirtyState::Clean;
+    }
+
+    IDispatch* document = nullptr;
+    hr = GetDispatchProperty(application, L"ActiveDocument", &document);
+    application->Release();
+    if (FAILED(hr) || !document) {
+        if (hr == RPC_E_CALL_REJECTED || hr == RPC_E_SERVERCALL_RETRYLATER) {
+            return DocumentDirtyState::RetryLater;
+        }
+
+        return DocumentDirtyState::Clean;
+    }
+
+    bool readOnly = false;
+    hr = GetBoolProperty(document, L"ReadOnly", &readOnly);
+    if (FAILED(hr)) {
+        document->Release();
+        Wh_Log(L"Document state monitor: failed to query ReadOnly, hr=0x%08X", hr);
+        return DocumentDirtyState::RetryLater;
+    }
+
+    if (readOnly) {
+        document->Release();
+        return DocumentDirtyState::Clean;
+    }
+
+    BSTR path = nullptr;
+    hr = GetBstrProperty(document, L"Path", &path);
+    if (FAILED(hr)) {
+        document->Release();
+        Wh_Log(L"Document state monitor: failed to query Path, hr=0x%08X", hr);
+        return DocumentDirtyState::RetryLater;
+    }
+
+    const bool hasPath = path && SysStringLen(path) > 0;
+    if (path) {
+        SysFreeString(path);
+    }
+
+    if (!hasPath) {
+        document->Release();
+        return DocumentDirtyState::Clean;
+    }
+
+    bool saved = true;
+    hr = GetBoolProperty(document, L"Saved", &saved);
+    document->Release();
+    if (FAILED(hr)) {
+        Wh_Log(L"Document state monitor: failed to query Saved state, hr=0x%08X", hr);
+        return DocumentDirtyState::RetryLater;
+    }
+
+    return saved ? DocumentDirtyState::Clean : DocumentDirtyState::Dirty;
+}
+
+SaveAttemptResult TrySaveActiveDocument() {
 
     ScopedComInit comInit;
     if (FAILED(comInit.GetResult())) {
@@ -678,9 +737,9 @@ SaveAttemptResult TrySaveActiveDocument() {
         return SaveAttemptResult::RetryLater;
     }
 
-    const bool hasPath = path && g_runtime.SysStringLen(path) > 0;
+    const bool hasPath = path && SysStringLen(path) > 0;
     if (path) {
-        g_runtime.SysFreeString(path);
+        SysFreeString(path);
     }
 
     if (!hasPath) {
@@ -729,6 +788,19 @@ void CALLBACK SaveTimerProc(HWND, UINT, UINT_PTR idEvent, DWORD) {
     HandleAutosaveTick();
 }
 
+void CALLBACK DocumentStateTimerProc(HWND, UINT, UINT_PTR idEvent, DWORD) {
+    if (InterlockedCompareExchange(&g_moduleActive, TRUE, TRUE) == FALSE) {
+        return;
+    }
+
+    if (idEvent != g_documentStateTimerId) {
+        return;
+    }
+
+    g_documentStateTimerId = 0;
+    HandleDocumentStateTick();
+}
+
 bool ArmSaveTimer(DWORD delayMs) {
     if (!IsOwnerThread()) {
         return false;
@@ -742,6 +814,47 @@ bool ArmSaveTimer(DWORD delayMs) {
     }
 
     return true;
+}
+
+void HandleDocumentStateTick() {
+    if (!IsOwnerThread()) {
+        return;
+    }
+
+    if (!IsActiveWordDocumentWindow()) {
+        ResetObservedDocumentState();
+        ArmDocumentStateTimer(DOCUMENT_STATE_POLL_INTERVAL_MS);
+        return;
+    }
+
+    if (InterlockedCompareExchange(&g_pendingSave, TRUE, TRUE) == TRUE) {
+        ArmDocumentStateTimer(DOCUMENT_STATE_POLL_INTERVAL_MS);
+        return;
+    }
+
+    if (GetInputState() || AreModifiersOrMouseButtonsHeld()) {
+        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+        return;
+    }
+
+    switch (QueryActiveDocumentDirtyState()) {
+        case DocumentDirtyState::Dirty:
+            if (NoteObservedDocumentDirty()) {
+                Wh_Log(L"Document state monitor: detected non-keyboard document change");
+                ScheduleSaveFromEdit();
+            }
+            break;
+
+        case DocumentDirtyState::Clean:
+            MarkObservedDocumentClean();
+            break;
+
+        case DocumentDirtyState::RetryLater:
+            ArmDocumentStateTimer(RETRY_INTERVAL_MS);
+            return;
+    }
+
+    ArmDocumentStateTimer(DOCUMENT_STATE_POLL_INTERVAL_MS);
 }
 
 void HandleAutosaveTick() {
@@ -780,11 +893,13 @@ void HandleAutosaveTick() {
     switch (TrySaveActiveDocument()) {
         case SaveAttemptResult::Saved:
             g_lastSaveTime = GetTickCount64();
+            MarkObservedDocumentClean();
             ClearPendingSave();
             Wh_Log(L"Auto-save: document saved directly");
             break;
 
         case SaveAttemptResult::Cleared:
+            MarkObservedDocumentClean();
             ClearPendingSave();
             break;
 
@@ -809,7 +924,8 @@ bool IsEditingKey(WPARAM wParam) {
     }
 
     if (ctrlPressed && !altPressed) {
-        if (wParam == 'V' || wParam == 'X' || wParam == 'Y' || wParam == 'Z') {
+        if (wParam == 'B' || wParam == 'I' || wParam == 'U' ||
+            wParam == 'V' || wParam == 'X' || wParam == 'Y' || wParam == 'Z') {
             return true;
         }
 
@@ -874,10 +990,16 @@ BOOL WINAPI TranslateMessage_Hook(const MSG* lpMsg) {
         AdoptOwnerThreadIfNeeded(lpMsg);
 
         if (IsOwnerThread()) {
+            if (g_documentStateTimerId == 0) {
+                ArmDocumentStateTimer(DOCUMENT_STATE_POLL_INTERVAL_MS);
+            }
+
             if (lpMsg->message == WM_KEYDOWN && IsEditingKey(lpMsg->wParam)) {
                 ScheduleSaveFromEdit();
             } else if (lpMsg->message == WM_CHAR && lpMsg->wParam >= 0x20) {
                 ScheduleSaveFromEdit();
+            } else if (IsDocumentStateRefreshMessage(lpMsg->message)) {
+                ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
             }
         }
     }
@@ -911,15 +1033,10 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave v3.0 initializing...");
+    Wh_Log(L"Word Local AutoSave v3.1 initializing...");
 
     g_wordProcessId = GetCurrentProcessId();
     LoadSettings();
-
-    if (!LoadRuntimeImports()) {
-        Wh_Log(L"ERROR: Failed to initialize required runtime imports");
-        return FALSE;
-    }
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
@@ -955,15 +1072,19 @@ void Wh_ModUninit() {
     Wh_Log(L"Word Local AutoSave uninitializing...");
 
     InterlockedExchange(&g_moduleActive, FALSE);
+    ResetObservedDocumentState();
     ClearPendingSave();
     CancelSaveTimer();
+    CancelDocumentStateTimer();
 
     Wh_Log(L"Word Local AutoSave uninitialized");
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading...");
+    ResetObservedDocumentState();
     ClearPendingSave();
     CancelSaveTimer();
+    CancelDocumentStateTimer();
     LoadSettings();
 }
