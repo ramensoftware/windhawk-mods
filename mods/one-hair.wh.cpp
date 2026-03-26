@@ -4,7 +4,7 @@
 // @description     A hair on your screen. Always on top.
 // @version         1.0
 // @author          Acercandr0
-// @github          https://github.com/acercandr0
+// @github          https://github.com/Acercandr0
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -luser32
 // ==/WindhawkMod==
