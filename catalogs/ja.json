@@ -11112,7 +11112,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1774025855000,
+                "updated": 1774516062000,
                 "users": 112
             },
             "metadata": {
@@ -11120,13 +11120,14 @@
                     "x86-64"
                 ],
                 "author": "communism420",
+                "compilerOptions": "-lole32 -loleaut32 -loleacc",
                 "description": "Enables AutoSave functionality for local documents in Microsoft Word via direct Word saves",
                 "github": "https://github.com/communism420",
                 "include": [
                     "WINWORD.EXE"
                 ],
                 "name": "Word Local AutoSave",
-                "version": "3.0"
+                "version": "3.1"
             }
         },
         "word-pdf-lossless-export": {

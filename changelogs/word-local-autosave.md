@@ -1,3 +1,11 @@
+## 3.1 ([Mar 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1bc0e23eb43c7bad97ad22df81f2a3da9231a605/mods/word-local-autosave.wh.cpp))
+
+- Added detection for paste via the context menu so it also triggers auto-save.
+- Added detection for text formatting changes: font changes, bold, italic, and underline now also trigger auto-save.
+- Expanded keyboard-based change detection to include `Ctrl+B`, `Ctrl+I`, `Ctrl+U`, while keeping support for `Ctrl+V`, `Ctrl+X`, `Ctrl+Y`, `Ctrl+Z`, and `Ctrl+Enter`.
+- Added document dirty-state monitoring via `ActiveDocument.Saved` to catch changes made through the ribbon, context menu, and mouse, not just keyboard input.
+- Replaced dynamic OLE/COM runtime loading with normal linker-based imports via `@compilerOptions -lole32 -loleaut32 -loleacc` for m417z's aesthetic pleasure.
+
 ## 3.0 ([Mar 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9d08e8f1ebd6a28659c4546c4aa8852f3cec4d21/mods/word-local-autosave.wh.cpp))
 
 - Version bumped to 3.0.
