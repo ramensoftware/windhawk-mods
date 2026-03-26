@@ -2,7 +2,7 @@
 // @id              auto-time-sync-on-startup
 // @name            Auto Time Sync On Startup
 // @description     Requests a Windows time synchronization when Explorer starts after sign-in.
-// @version         1.0
+// @version         1.1
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         explorer.exe
@@ -86,8 +86,11 @@ constexpr DWORD kNotificationLifetimeMs = 5000;
 constexpr DWORD kSyncConfirmationTimeoutMs = 45000;
 constexpr DWORD kSyncConfirmationPollMs = 2000;
 constexpr PCWSTR kAdminBrokerArguments = L"ForceTimeSync 0";
-constexpr PCWSTR kRunGuardKey = L"Software";
-constexpr PCWSTR kRunGuardValueName =
+constexpr PCWSTR kRunGuardParentKey = L"Software";
+constexpr PCWSTR kRunGuardSubKey =
+    L"Windhawk_" WH_MOD_ID L"_SessionRunGuard";
+constexpr PCWSTR kRunGuardValueName = L"Claimed";
+constexpr PCWSTR kLegacyRunGuardValueName =
     L"Windhawk_" WH_MOD_ID L"_SessionRunGuard_Claimed";
 constexpr UINT kNotificationIconId = 1;
 constexpr PCWSTR kNotificationWindowClassName =
@@ -155,17 +158,38 @@ bool SleepWithStopCheck(DWORD durationMs) {
 }
 
 bool ClaimCurrentLogonRun() {
+    HKEY parentKey = nullptr;
+    LONG result = RegOpenKeyExW(HKEY_CURRENT_USER,
+                                kRunGuardParentKey,
+                                0,
+                                KEY_CREATE_SUB_KEY | KEY_SET_VALUE,
+                                &parentKey);
+    if (result != ERROR_SUCCESS) {
+        Wh_Log(L"RegOpenKeyExW failed for the session guard parent key "
+               L"(error %ld)",
+               result);
+        return true;
+    }
+
+    result = RegDeleteValueW(parentKey, kLegacyRunGuardValueName);
+    if (result != ERROR_SUCCESS && result != ERROR_FILE_NOT_FOUND) {
+        Wh_Log(L"RegDeleteValueW failed for the legacy session guard value "
+               L"(error %ld)",
+               result);
+    }
+
     HKEY key = nullptr;
     DWORD disposition = 0;
-    LONG result = RegCreateKeyExW(HKEY_CURRENT_USER,
-                                  kRunGuardKey,
-                                  0,
-                                  nullptr,
-                                  REG_OPTION_VOLATILE,
-                                  KEY_QUERY_VALUE | KEY_SET_VALUE,
-                                  nullptr,
-                                  &key,
-                                  &disposition);
+    result = RegCreateKeyExW(parentKey,
+                             kRunGuardSubKey,
+                             0,
+                             nullptr,
+                             REG_OPTION_VOLATILE,
+                             KEY_QUERY_VALUE | KEY_SET_VALUE,
+                             nullptr,
+                             &key,
+                             &disposition);
+    RegCloseKey(parentKey);
     if (result != ERROR_SUCCESS) {
         Wh_Log(L"RegCreateKeyExW failed for the session guard (error %ld)",
                result);
