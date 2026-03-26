@@ -351,7 +351,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1774476509000,
+                "updated": 1774522781000,
                 "users": 0
             },
             "metadata": {
@@ -366,7 +366,7 @@
                     "explorer.exe"
                 ],
                 "name": "Auto Time Sync On Startup",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "balloon-sound-fix": {
