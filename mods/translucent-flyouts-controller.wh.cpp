@@ -686,6 +686,14 @@
     - tooltip: Reset Tooltip
     - all: Reset All
 
+- controller_confirmRegistryWrite: true
+  $name: Controller / Confirm Registry Write
+  $description: Show a confirmation the first time this controller writes settings to HKCU\Software\TranslucentFlyouts
+
+- controller_confirmReset: true
+  $name: Controller / Confirm Reset
+  $description: Show a confirmation before applying a reset-to-defaults action
+
 - controller_hardReloadOnApply: false
   $name: Controller / Hard Reload On Apply
   $description: Also send TranslucentFlyouts detach and attach messages after apply. Slower, but can fix stale visuals
@@ -763,6 +771,7 @@ Both projects are well maintained and worth exploring if you want to understand 
 
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <CommCtrl.h>
 #include <cstdint>
 #include <cstdlib>
 #include <cwctype>
@@ -884,6 +893,9 @@ struct Settings {
     int tooltipMarginBottom = 6;
     int tooltipDisabled = 2;
     int resetAction = 0;
+
+    bool confirmRegistryWrite = true;
+    bool confirmReset = true;
 
     bool hardReloadOnApply = false;
 };
@@ -1062,8 +1074,108 @@ static void NotifyTranslucentFlyoutsReload()
   }
 
 static constexpr const wchar_t* kLastResetActionValueName = L"last_reset_action";
+static constexpr const wchar_t* kRegistryWriteConfirmedValueName = L"registry_write_confirmed";
 
-static void MaybeApplyResetActionEdgeTriggered()
+static bool ConfirmWithDontShowAgain(
+  bool allowUi,
+  PCWSTR title,
+  PCWSTR message,
+  PCWSTR verificationText,
+  const wchar_t* dontShowAgainIntValueName,
+  const wchar_t* disableSettingName)
+{
+  if (!allowUi) {
+    return true;
+  }
+
+  if (dontShowAgainIntValueName) {
+    const int suppressed = Wh_GetIntValue(dontShowAgainIntValueName, 0);
+    if (suppressed != 0) {
+      return true;
+    }
+  }
+
+  HMODULE comctl32 = LoadLibraryW(L"comctl32.dll");
+  const auto pTaskDialogIndirect = reinterpret_cast<decltype(&TaskDialogIndirect)>(
+    comctl32 ? GetProcAddress(comctl32, "TaskDialogIndirect") : nullptr);
+
+  if (pTaskDialogIndirect) {
+    TASKDIALOGCONFIG config{};
+    config.cbSize = sizeof(config);
+    config.hwndParent = nullptr;
+    config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
+    config.dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON;
+    config.pszWindowTitle = title;
+    config.pszMainIcon = TD_WARNING_ICON;
+    config.pszMainInstruction = title;
+    config.pszContent = message;
+    config.pszVerificationText = verificationText;
+
+    int button = 0;
+    BOOL verificationChecked = FALSE;
+    HRESULT hr = pTaskDialogIndirect(
+      &config,
+      &button,
+      nullptr,
+      verificationText ? &verificationChecked : nullptr);
+
+    if (comctl32) {
+      FreeLibrary(comctl32);
+    }
+
+    if (SUCCEEDED(hr)) {
+      if (button == IDYES) {
+        if (verificationText && verificationChecked) {
+          if (dontShowAgainIntValueName) {
+            Wh_SetIntValue(dontShowAgainIntValueName, 1);
+          }
+          if (disableSettingName) {
+            Wh_SetIntValue(disableSettingName, 0);
+          }
+        }
+        return true;
+      }
+
+      return false;
+    }
+  }
+
+  if (comctl32) {
+    FreeLibrary(comctl32);
+  }
+
+  const int response = MessageBoxW(
+    nullptr,
+    message,
+    title,
+    MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2);
+
+  return response == IDYES;
+}
+
+static bool ShouldProceedWithRegistryWritePrompt(bool allowUi)
+{
+  if (!allowUi || !g_settings.confirmRegistryWrite) {
+    return true;
+  }
+
+  const int alreadyConfirmed = Wh_GetIntValue(kRegistryWriteConfirmedValueName, 0);
+  if (alreadyConfirmed != 0) {
+    return true;
+  }
+
+  const bool confirmed = ConfirmWithDontShowAgain(
+    allowUi,
+    L"Translucent Flyouts Controller",
+    L"This will write settings to HKCU\\Software\\TranslucentFlyouts and trigger a reload so TranslucentFlyouts can apply them.\n\nContinue?",
+    L"Don't show this again",
+    kRegistryWriteConfirmedValueName,
+    L"controller_confirmRegistryWrite");
+
+  return confirmed;
+}
+
+static bool MaybeApplyResetActionEdgeTriggered(bool allowUi)
 {
   const int lastResetAction = Wh_GetIntValue(kLastResetActionValueName, 0);
 
@@ -1072,25 +1184,58 @@ static void MaybeApplyResetActionEdgeTriggered()
     if (lastResetAction != 0) {
       Wh_SetIntValue(kLastResetActionValueName, 0);
     }
-    return;
+    return false;
   }
 
   if (g_settings.resetAction == lastResetAction) {
-    return;
+    return false;
+  }
+
+  if (allowUi && g_settings.confirmReset) {
+    const bool confirmed = ConfirmWithDontShowAgain(
+      allowUi,
+      L"Translucent Flyouts Controller",
+      L"This will reset the selected category to its default values.\n\nContinue?",
+      L"Don't show this again",
+      nullptr,
+      L"controller_confirmReset");
+
+    if (!confirmed) {
+      return false;
+    }
   }
 
   ApplyResetAction(g_settings.resetAction);
   Wh_SetIntValue(kLastResetActionValueName, g_settings.resetAction);
   Wh_Log(L"Tool process: applied reset action=%d (%s)", g_settings.resetAction, ResetActionToLabel(g_settings.resetAction));
+
+  if (g_settings.resetAction == 5) {
+    // "Reset All" is treated as a full reset, including safety prompts.
+    Wh_SetIntValue(L"controller_confirmRegistryWrite", 1);
+    Wh_SetIntValue(L"controller_confirmReset", 1);
+    Wh_SetIntValue(kRegistryWriteConfirmedValueName, 0);
+  }
+
+  return true;
 }
 
-static void ApplySettingsOnceInToolProcess()
+static bool ApplySettingsOnceInToolProcess(bool allowUi)
 {
     LoadSettings();
 
-  MaybeApplyResetActionEdgeTriggered();
+  if (!ShouldProceedWithRegistryWritePrompt(allowUi)) {
+    return false;
+  }
+
+  const bool didReset = MaybeApplyResetActionEdgeTriggered(allowUi);
+
+  // If the user chose a reset action, we still want to write the registry so
+  // TranslucentFlyouts picks up the default values.
 
     ApplySettingsToOriginalTranslucentFlyouts();
+
+    (void)didReset;
+    return true;
 }
 
 struct SettingChoice {
@@ -1391,6 +1536,9 @@ static void LoadSettings()
     g_settings.tooltipDisabled = GetMappedIntSetting(L"tooltip_disabled", kTriState, _countof(kTriState), 2);
     g_settings.resetAction = GetMappedIntSetting(L"controller_resetAction", kResetAction, _countof(kResetAction), 0);
 
+    g_settings.confirmRegistryWrite = (Wh_GetIntSetting(L"controller_confirmRegistryWrite") != 0);
+    g_settings.confirmReset = (Wh_GetIntSetting(L"controller_confirmReset") != 0);
+
     g_settings.hardReloadOnApply = (Wh_GetIntSetting(L"controller_hardReloadOnApply") != 0);
 
     g_settings.globalEffectType = static_cast<int>(ClampDword(g_settings.globalEffectType, 0, 8));
@@ -1686,7 +1834,7 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
 bool WhTool_ModInit()
 {
     Wh_Log(L"Tool process: applying TranslucentFlyouts settings");
-    ApplySettingsOnceInToolProcess();
+  ApplySettingsOnceInToolProcess(false);
 
   // Return true to signal success. The tool-mod process exits because the
   // snippet hooks windhawk.exe's entry point and EntryPoint_Hook() calls
@@ -1696,7 +1844,7 @@ bool WhTool_ModInit()
 
 void WhTool_ModSettingsChanged()
 {
-    ApplySettingsOnceInToolProcess();
+  ApplySettingsOnceInToolProcess(false);
 }
 
 void WhTool_ModUninit()
@@ -1853,7 +2001,12 @@ void Wh_ModSettingsChanged()
     if (g_isToolModProcessLauncher) {
     // The wiki snippet only spawns the tool process once (in Wh_ModAfterInit).
     // To make "Save" re-apply the updated settings, we spawn it again here.
-    Wh_ModAfterInit();
+  // Show any confirmations in the launcher (interactive) context.
+  if (!ApplySettingsOnceInToolProcess(true)) {
+    return;
+  }
+
+  Wh_ModAfterInit();
         return;
     }
 
