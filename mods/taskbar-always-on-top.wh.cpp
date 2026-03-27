@@ -7,6 +7,17 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
+// ==WindhawkModSettings==
+/*
+- TaskbarZOrder: top
+  $name: Taskbar Z-Order
+  $description: Choose whether the taskbar is forced to the topmost/bottom band, or acts as a normal window 
+  $options:
+    - top: Always on top
+    - bottom: Always at bottom
+    - interactive: Mouse Interactive
+*/
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <string>
