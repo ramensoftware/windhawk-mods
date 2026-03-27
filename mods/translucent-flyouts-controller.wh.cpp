@@ -686,10 +686,6 @@
     - tooltip: Reset Tooltip
     - all: Reset All
 
-- controller_confirmRegistryWrite: true
-  $name: Controller / Confirm Registry Write
-  $description: Show a confirmation the first time this controller writes settings to HKCU\Software\TranslucentFlyouts
-
 - controller_confirmReset: true
   $name: Controller / Confirm Reset
   $description: Show a confirmation before applying a reset-to-defaults action
@@ -894,7 +890,6 @@ struct Settings {
     int tooltipDisabled = 2;
     int resetAction = 0;
 
-    bool confirmRegistryWrite = true;
     bool confirmReset = true;
 
     bool hardReloadOnApply = false;
@@ -1075,21 +1070,75 @@ static void NotifyTranslucentFlyoutsReload()
 
 static constexpr const wchar_t* kLastResetActionValueName = L"last_reset_action";
 static constexpr const wchar_t* kRegistryWriteConfirmedValueName = L"registry_write_confirmed";
+static constexpr const wchar_t* kControllerStateSubKey = L"Software\\TranslucentFlyouts\\WindhawkController";
+
+static int GetControllerStateInt(const wchar_t* valueName, int fallback)
+{
+  HKEY hKey = nullptr;
+  LONG rc = RegOpenKeyExW(
+    HKEY_CURRENT_USER,
+    kControllerStateSubKey,
+    0,
+    KEY_QUERY_VALUE,
+    &hKey);
+
+  if (rc == ERROR_SUCCESS) {
+    DWORD type = 0;
+    DWORD data = 0;
+    DWORD dataSize = sizeof(data);
+    rc = RegQueryValueExW(
+      hKey,
+      valueName,
+      nullptr,
+      &type,
+      reinterpret_cast<LPBYTE>(&data),
+      &dataSize);
+    RegCloseKey(hKey);
+
+    if (rc == ERROR_SUCCESS && type == REG_DWORD && dataSize == sizeof(DWORD)) {
+      return static_cast<int>(data);
+    }
+  }
+
+  return Wh_GetIntValue(valueName, fallback);
+}
+
+static void SetControllerStateInt(const wchar_t* valueName, int value)
+{
+  Wh_SetIntValue(valueName, value);
+  WriteDwordHKCU(kControllerStateSubKey, valueName, static_cast<DWORD>(value));
+}
+
+static HRESULT CALLBACK TopmostTaskDialogCallback(
+  HWND hwnd,
+  UINT msg,
+  WPARAM,
+  LPARAM,
+  LONG_PTR)
+{
+  if (msg == TDN_CREATED) {
+    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+  }
+
+  return S_OK;
+}
 
 static bool ConfirmWithDontShowAgain(
   bool allowUi,
   PCWSTR title,
+  PCWSTR mainInstruction,
   PCWSTR message,
+  PCWSTR actionButtonText,
+  PCWSTR mainIcon,
   PCWSTR verificationText,
-  const wchar_t* dontShowAgainIntValueName,
-  const wchar_t* disableSettingName)
+  const wchar_t* dontShowAgainIntValueName)
 {
   if (!allowUi) {
     return true;
   }
 
   if (dontShowAgainIntValueName) {
-    const int suppressed = Wh_GetIntValue(dontShowAgainIntValueName, 0);
+    const int suppressed = GetControllerStateInt(dontShowAgainIntValueName, 0);
     if (suppressed != 0) {
       return true;
     }
@@ -1100,14 +1149,22 @@ static bool ConfirmWithDontShowAgain(
     comctl32 ? GetProcAddress(comctl32, "TaskDialogIndirect") : nullptr);
 
   if (pTaskDialogIndirect) {
+    TASKDIALOG_BUTTON actionButton{};
+    actionButton.nButtonID = IDOK;
+    actionButton.pszButtonText = actionButtonText ? actionButtonText : L"Continue";
+
     TASKDIALOGCONFIG config{};
     config.cbSize = sizeof(config);
     config.hwndParent = nullptr;
+    config.pfCallback = TopmostTaskDialogCallback;
     config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
-    config.dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON;
+    config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
+    config.cButtons = 1;
+    config.pButtons = &actionButton;
+    config.nDefaultButton = IDCANCEL;
     config.pszWindowTitle = title;
-    config.pszMainIcon = TD_WARNING_ICON;
-    config.pszMainInstruction = title;
+    config.pszMainIcon = mainIcon ? mainIcon : TD_INFORMATION_ICON;
+    config.pszMainInstruction = mainInstruction ? mainInstruction : title;
     config.pszContent = message;
     config.pszVerificationText = verificationText;
 
@@ -1124,13 +1181,10 @@ static bool ConfirmWithDontShowAgain(
     }
 
     if (SUCCEEDED(hr)) {
-      if (button == IDYES) {
-        if (verificationText && verificationChecked) {
-          if (dontShowAgainIntValueName) {
-            Wh_SetIntValue(dontShowAgainIntValueName, 1);
-          }
-          if (disableSettingName) {
-            Wh_SetIntValue(disableSettingName, 0);
+      if (button == IDOK) {
+        if (dontShowAgainIntValueName) {
+          if (!verificationText || verificationChecked) {
+            SetControllerStateInt(dontShowAgainIntValueName, 1);
           }
         }
         return true;
@@ -1144,45 +1198,47 @@ static bool ConfirmWithDontShowAgain(
     FreeLibrary(comctl32);
   }
 
+  UINT fallbackIcon = MB_ICONINFORMATION;
+  if (mainIcon == TD_WARNING_ICON) {
+    fallbackIcon = MB_ICONWARNING;
+  }
+
   const int response = MessageBoxW(
     nullptr,
-    message,
+    message ? message : (mainInstruction ? mainInstruction : title),
     title,
-    MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2);
+    fallbackIcon | MB_OKCANCEL | MB_DEFBUTTON2);
 
-  return response == IDYES;
+  return response == IDOK;
 }
 
 static bool ShouldProceedWithRegistryWritePrompt(bool allowUi)
 {
-  if (!allowUi || !g_settings.confirmRegistryWrite) {
-    return true;
-  }
-
-  const int alreadyConfirmed = Wh_GetIntValue(kRegistryWriteConfirmedValueName, 0);
-  if (alreadyConfirmed != 0) {
+  if (!allowUi) {
     return true;
   }
 
   const bool confirmed = ConfirmWithDontShowAgain(
     allowUi,
     L"Translucent Flyouts Controller",
-    L"This will write settings to HKCU\\Software\\TranslucentFlyouts and trigger a reload so TranslucentFlyouts can apply them.\n\nContinue?",
-    L"Don't show this again",
-    kRegistryWriteConfirmedValueName,
-    L"controller_confirmRegistryWrite");
+    L"Apply settings to TranslucentFlyouts?",
+    L"This will write settings to HKCU\\Software\\TranslucentFlyouts and trigger a reload.",
+    L"Apply",
+    TD_INFORMATION_ICON,
+    nullptr,
+    kRegistryWriteConfirmedValueName);
 
   return confirmed;
 }
 
 static bool MaybeApplyResetActionEdgeTriggered(bool allowUi)
 {
-  const int lastResetAction = Wh_GetIntValue(kLastResetActionValueName, 0);
+  const int lastResetAction = GetControllerStateInt(kLastResetActionValueName, 0);
 
   // Reset action is intentionally edge-triggered to avoid repeated resets.
   if (g_settings.resetAction == 0) {
     if (lastResetAction != 0) {
-      Wh_SetIntValue(kLastResetActionValueName, 0);
+      SetControllerStateInt(kLastResetActionValueName, 0);
     }
     return false;
   }
@@ -1195,25 +1251,28 @@ static bool MaybeApplyResetActionEdgeTriggered(bool allowUi)
     const bool confirmed = ConfirmWithDontShowAgain(
       allowUi,
       L"Translucent Flyouts Controller",
-      L"This will reset the selected category to its default values.\n\nContinue?",
-      L"Don't show this again",
+      L"Are you sure you want to reset to defaults?",
+      L"This will restore the selected category to its default values.",
+      L"Reset",
+      TD_WARNING_ICON,
       nullptr,
-      L"controller_confirmReset");
+      nullptr);
 
     if (!confirmed) {
+      // Consume this edge so a canceled reset doesn't keep prompting until the
+      // user explicitly changes the reset selector again.
+      SetControllerStateInt(kLastResetActionValueName, g_settings.resetAction);
       return false;
     }
   }
 
   ApplyResetAction(g_settings.resetAction);
-  Wh_SetIntValue(kLastResetActionValueName, g_settings.resetAction);
+  SetControllerStateInt(kLastResetActionValueName, g_settings.resetAction);
   Wh_Log(L"Tool process: applied reset action=%d (%s)", g_settings.resetAction, ResetActionToLabel(g_settings.resetAction));
 
   if (g_settings.resetAction == 5) {
-    // "Reset All" is treated as a full reset, including safety prompts.
-    Wh_SetIntValue(L"controller_confirmRegistryWrite", 1);
-    Wh_SetIntValue(L"controller_confirmReset", 1);
-    Wh_SetIntValue(kRegistryWriteConfirmedValueName, 0);
+    // "Reset All" is treated as a full reset, including one-time prompt state.
+    SetControllerStateInt(kRegistryWriteConfirmedValueName, 0);
   }
 
   return true;
@@ -1536,7 +1595,6 @@ static void LoadSettings()
     g_settings.tooltipDisabled = GetMappedIntSetting(L"tooltip_disabled", kTriState, _countof(kTriState), 2);
     g_settings.resetAction = GetMappedIntSetting(L"controller_resetAction", kResetAction, _countof(kResetAction), 0);
 
-    g_settings.confirmRegistryWrite = (Wh_GetIntSetting(L"controller_confirmRegistryWrite") != 0);
     g_settings.confirmReset = (Wh_GetIntSetting(L"controller_confirmReset") != 0);
 
     g_settings.hardReloadOnApply = (Wh_GetIntSetting(L"controller_hardReloadOnApply") != 0);
@@ -1992,7 +2050,7 @@ void Wh_ModAfterInit()
 BOOL Wh_ModSettingsChanged(BOOL* bReload)
 {
     *bReload = TRUE;
-    return TRUE
+  return TRUE;
 }
 
 void Wh_ModUninit()
