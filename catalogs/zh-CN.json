@@ -9591,6 +9591,33 @@
                 "version": "1.0.0"
             }
         },
+        "translucent-flyouts-controller": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774613617000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774613617000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "GID0317",
+                "description": "Controls TranslucentFlyouts settings through Windhawk (registry bridge)",
+                "github": "https://github.com/GID0317",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Translucent Flyouts Controller",
+                "version": "1.0.0"
+            }
+        },
         "translucent-windows": {
             "details": {
                 "defaultSorting": 551034,
