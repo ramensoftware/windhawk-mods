@@ -1100,15 +1100,13 @@ static int GetControllerStateInt(const wchar_t* valueName, int fallback)
     }
   }
 
-  return Wh_GetIntValue(valueName, fallback);
+  return fallback;
 }
 
 static void SetControllerStateInt(const wchar_t* valueName, int value)
 {
-  Wh_SetIntValue(valueName, value);
   WriteDwordHKCU(kControllerStateSubKey, valueName, static_cast<DWORD>(value));
 }
-
 static HRESULT CALLBACK TopmostTaskDialogCallback(
   HWND hwnd,
   UINT msg,
@@ -1122,7 +1120,6 @@ static HRESULT CALLBACK TopmostTaskDialogCallback(
 
   return S_OK;
 }
-
 static bool ConfirmWithDontShowAgain(
   bool allowUi,
   PCWSTR title,
@@ -1211,7 +1208,6 @@ static bool ConfirmWithDontShowAgain(
 
   return response == IDOK;
 }
-
 static bool ShouldProceedWithRegistryWritePrompt(bool allowUi)
 {
   if (!allowUi) {
@@ -1230,7 +1226,6 @@ static bool ShouldProceedWithRegistryWritePrompt(bool allowUi)
 
   return confirmed;
 }
-
 static bool MaybeApplyResetActionEdgeTriggered(bool allowUi)
 {
   const int lastResetAction = GetControllerStateInt(kLastResetActionValueName, 0);
