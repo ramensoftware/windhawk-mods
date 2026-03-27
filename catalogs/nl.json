@@ -6102,6 +6102,36 @@
                 "version": "1.0.0"
             }
         },
+        "nvidia-control-panel-missing-dialog-hider": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774614573000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774614573000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "BCRTVKCS",
+                "compilerOptions": "-luser32 -lkernel32",
+                "description": "Hides the nvcontainer.exe popup that says NVIDIA Control Panel is not found",
+                "github": "https://github.com/bcrtvkcs",
+                "homepage": "https://grdigital.pro",
+                "include": [
+                    "nvcontainer.exe"
+                ],
+                "name": "Hide NVIDIA Control Panel Missing Dialog",
+                "twitter": "https://x.com/bcrtvkcs",
+                "version": "1.1.0"
+            }
+        },
         "office-ui-reverter": {
             "details": {
                 "defaultSorting": 1950,

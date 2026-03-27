@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-27T12:13:37.000Z</updated>
+    <updated>2026-03-27T12:29:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide NVIDIA Control Panel Missing Dialog 1.1.0]]></title>
+        <id>https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider#b83161afe9e3090495743124c1192750a3f5920c</id>
+        <link href="https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider"/>
+        <updated>2026-03-27T12:29:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hidenvidiacontrolpanelmissingdialog">Hide NVIDIA Control Panel Missing Dialog</h1>
+<p><img src="https://i.imgur.com/8vaxTpN.png" alt="Screenshot" /></p>
+<p>Silences the <strong>"NVIDIA Control Panel not found"</strong> notification that appears in the bottom-right corner every time Windows starts.</p>
+<h2 id="background">Background</h2>
+<p>Tools like <a href="https://www.techpowerup.com/nvcleanstall/">NVCleanstall</a> allow you to strip components from the NVIDIA driver package during installation. Certain options — such as disabling or not installing the NVIDIA Control Panel — break the Control Panel integration intentionally or as a side effect. Once broken, <code>nvcontainer.exe</code> detects that the Control Panel is missing or non-functional and displays a dialog on every startup prompting you to reinstall it from the Microsoft Store.</p>
+<p>Since the <strong>NVIDIA App</strong> now covers everything the classic Control Panel offered — display settings, GPU overclocking, driver management, and more — there is no practical reason to have the Control Panel installed. The dialog serves no purpose and becomes permanent noise.</p>
+<h2 id="whatitdoes">What it does</h2>
+<p>This mod suppresses the "NVIDIA Control Panel not found" dialog completely. It never appears on screen, neither at startup nor at any other time.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks into <code>nvcontainer.exe</code> and intercepts <code>ShowWindow</code> and <code>SetWindowPos</code> calls. Any top-level <code>#32770</code> dialog whose child windows contain the text "NVIDIA" is immediately blocked from becoming visible. A cache of confirmed dialog handles ensures the detection logic runs only once per window, keeping overhead minimal on subsequent calls.</p>
+<p>On mod initialization, any already-visible instance of the dialog is also hidden immediately.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 10 and Windows 11</li>
+<li>Targets <code>nvcontainer.exe</code> only</li>
+</ul>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Flyouts Controller 1.0.0]]></title>
         <id>https://windhawk.net/mods/translucent-flyouts-controller#5ce1d85477d2d642a676c043d6b045dc89c9030e</id>
@@ -528,31 +554,6 @@ via Win key, Ctrl+Esc key or touchscreen gestures.</p>
         <author>
             <name>ptrkhh</name>
             <uri>https://github.com/ptrkhh</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Music Lounge 4.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-music-lounge#fddd032c9c986776e98105654f3a7aa5fa3a43ec</id>
-        <link href="https://windhawk.net/mods/taskbar-music-lounge"/>
-        <updated>2026-03-21T09:09:00.000Z</updated>
-        <content type="html"><![CDATA[<p>This version addresses and incorporates multiple suggestions. A detailed diff table has been added to the README.</p>
-<p>Addressed Issues &amp; Fixes:</p>
-<ul>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3666395914">#3666395914</a> - Add AppID for compatibility with taskbar auto-hide mod</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3666527577">#3666527577</a> - Rounded corners, scalable icons for high-DPI, hide during fullscreen gaming</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/commit/2eddf6953b7aaee9ad5eb050bb329e135f4c7798#commitcomment-173045991">2eddf69</a> - Fix widget lagging behind taskbar with smooth following</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3671818092">#3671818092</a> - Support for AIMP/MPC-BE players, larger 4K icons, fullscreen hide option</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/issues/2828">#2828</a> - Event-driven positioning for smoother auto-hide and fullscreen sync</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3689038965">#3689038965</a> - Comprehensive rework fixing auto-hide lag, fullscreen detection, and high-DPI scaling</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/2746#issuecomment-3690241518">#3690241518</a> - Auto-hide widget when no media is playing</li>
-</ul>
-<p>Credits:
-Special thanks to @Cinabutts and @Deykii for code references and the community for testing.</p>
-<p>Testing Note:
-AIMP and MPC-BE integration is implemented but currently untested. Please report any issues with these players.</p>]]></content>
-        <author>
-            <name>Hashah2311</name>
-            <uri>https://github.com/Hashah2311</uri>
         </author>
     </entry>
 </feed>
