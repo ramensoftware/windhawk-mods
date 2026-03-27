@@ -8084,7 +8084,7 @@
                     6
                 ],
                 "ratingUsers": 7,
-                "updated": 1767471886000,
+                "updated": 1774620175000,
                 "users": 107
             },
             "metadata": {
@@ -8099,7 +8099,7 @@
                     "explorer.exe"
                 ],
                 "name": "Taskbar ContentPresenter Injector",
-                "version": "1.2"
+                "version": "1.3"
             }
         },
         "taskbar-desktop-indicator": {

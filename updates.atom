@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-27T12:29:33.000Z</updated>
+    <updated>2026-03-27T14:02:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-content-presenter-injector#d770227ef3dda830a140a36b06c144e8ec7a5bae</id>
+        <link href="https://windhawk.net/mods/taskbar-content-presenter-injector"/>
+        <updated>2026-03-27T14:02:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed 25H2 support by implementing deferred injection</li>
+<li>Improved structure tracking logic and performance</li>
+<li>Added multi-monitor support</li>
+<li>The mod now injects into certain system tray elements as well</li>
+</ul>
+<p>Initial deferred injection patch by <a href="https://github.com/acercandr0">Acercandro</a></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide NVIDIA Control Panel Missing Dialog 1.1.0]]></title>
         <id>https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider#b83161afe9e3090495743124c1192750a3f5920c</id>
@@ -539,21 +556,6 @@ Native UIA Probing: Replaced ProbeAddressBarWithClipboard with ProbeAddressBarWi
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Start Button 1.0]]></title>
-        <id>https://windhawk.net/mods/hide-start-button#a947466f6d6bede2e97ab37eb6eeb347d03ed918</id>
-        <link href="https://windhawk.net/mods/hide-start-button"/>
-        <updated>2026-03-21T10:27:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidestartbutton">Hide Start Button</h1>
-<p>Hides the start button from the taskbar. The start menu can still be opened
-via Win key, Ctrl+Esc key or touchscreen gestures.</p>
-<p>Only Windows 11 is supported.</p>
-<p>Based on "Start button always on the left" (taskbar-start-button-position) mod.</p>]]></content>
-        <author>
-            <name>ptrkhh</name>
-            <uri>https://github.com/ptrkhh</uri>
         </author>
     </entry>
 </feed>
