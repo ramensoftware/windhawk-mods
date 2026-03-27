@@ -2,7 +2,7 @@
 // @id              nvidia-control-panel-missing-dialog-hider
 // @name            Hide NVIDIA Control Panel Missing Dialog
 // @description     Hides the nvcontainer.exe popup that says NVIDIA Control Panel is not found
-// @version         1.0.0
+// @version         1.1.0
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -43,10 +43,6 @@ On mod initialization, any already-visible instance of the dialog is also hidden
 
 #include <windows.h>
 #include <string>
-#include <unordered_set>
-
-static SRWLOCK g_lock = SRWLOCK_INIT;
-static std::unordered_set<HWND> g_nvidiaDialogs;
 
 static BOOL CALLBACK CheckNvidiaChild(HWND child, LPARAM lParam) {
     WCHAR buf[512] = {};
@@ -58,7 +54,6 @@ static BOOL CALLBACK CheckNvidiaChild(HWND child, LPARAM lParam) {
     return TRUE;
 }
 
-// Full check — no lock held, only called when HWND is not in cache
 static bool IsNvidiaDialog(HWND hWnd) {
     WCHAR cls[256] = {};
     GetClassNameW(hWnd, cls, 256);
@@ -69,34 +64,13 @@ static bool IsNvidiaDialog(HWND hWnd) {
     return found;
 }
 
-// Fast check — acquire shared lock for read, exclusive for write
-static bool IsNvidiaDialogCached(HWND hWnd) {
-    AcquireSRWLockShared(&g_lock);
-    bool inCache = g_nvidiaDialogs.count(hWnd) > 0;
-    ReleaseSRWLockShared(&g_lock);
-
-    if (inCache) return true;
-
-    // Full check outside the lock — EnumChildWindows can be slow
-    bool isNvidia = IsNvidiaDialog(hWnd);
-
-    if (isNvidia) {
-        AcquireSRWLockExclusive(&g_lock);
-        g_nvidiaDialogs.insert(hWnd);
-        ReleaseSRWLockExclusive(&g_lock);
-    }
-
-    return isNvidia;
-}
-
-static void RemoveFromCache(HWND hWnd) {
-    AcquireSRWLockExclusive(&g_lock);
-    g_nvidiaDialogs.erase(hWnd);
-    ReleaseSRWLockExclusive(&g_lock);
-}
-
 static BOOL CALLBACK HideExistingNvidiaDialogs(HWND hWnd, LPARAM lParam) {
-    if (IsWindowVisible(hWnd) && IsNvidiaDialogCached(hWnd)) {
+    // Only process windows belonging to the current process
+    DWORD windowPid = 0;
+    GetWindowThreadProcessId(hWnd, &windowPid);
+    if (windowPid != GetCurrentProcessId()) return TRUE;
+
+    if (IsWindowVisible(hWnd) && IsNvidiaDialog(hWnd)) {
         ShowWindow(hWnd, SW_HIDE);
     }
     return TRUE;
@@ -106,11 +80,8 @@ using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t originalShowWindow;
 
 BOOL WINAPI ShowWindowHook(HWND hWnd, int nCmdShow) {
-    if (hWnd && nCmdShow != SW_HIDE && IsNvidiaDialogCached(hWnd)) {
+    if (hWnd && nCmdShow != SW_HIDE && IsNvidiaDialog(hWnd)) {
         return TRUE;
-    }
-    if (hWnd && nCmdShow == SW_HIDE) {
-        RemoveFromCache(hWnd);
     }
     return originalShowWindow(hWnd, nCmdShow);
 }
@@ -122,11 +93,12 @@ BOOL WINAPI SetWindowPosHook(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
                               int cx, int cy, UINT uFlags) {
     if (!hWnd) return originalSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 
-    if (!GetParent(hWnd)) {
+    if ((uFlags & SWP_SHOWWINDOW) && !GetParent(hWnd)) {
         WCHAR cls[256] = {};
         GetClassNameW(hWnd, cls, 256);
-        if (std::wstring(cls) == L"#32770" && IsNvidiaDialogCached(hWnd)) {
-            return TRUE;
+        if (std::wstring(cls) == L"#32770" && IsNvidiaDialog(hWnd)) {
+            // Remove SWP_SHOWWINDOW instead of blocking the call entirely
+            uFlags &= ~SWP_SHOWWINDOW;
         }
     }
 
