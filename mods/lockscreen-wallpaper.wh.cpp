@@ -4,7 +4,7 @@
 // @description     Set any static image (JPG, PNG, BMP, WEBP) as your Windows lock screen background. Works without admin prompts. Includes file picker.
 // @version         2.1
 // @author          Siddharthxd99
-// @github          https://github.com/Siddharthxd99/windhawk-mod-lockscreen-wallpaper
+// @github          https://github.com/Siddharthxd99
 // @include         explorer.exe
 // @include         winlogon.exe
 // @compilerOptions -lgdiplus -lcomdlg32 -luser32 -ladvapi32 -lgdi32 -lole32
