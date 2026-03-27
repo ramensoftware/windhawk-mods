@@ -40,24 +40,26 @@ Due to how Windows 11 calculates taskbar dimensions, if you want to change the W
 
 #include <atomic>
 #include <mutex>
-#include <map>
-#include <set>
 
 using namespace winrt::Windows::UI::Xaml;
 
 std::atomic<bool> g_taskbarViewDllLoaded = false;
 
 // --- Global Trackers ---
+struct TrackedPanelRef {
+    winrt::weak_ref<Controls::Panel> ref;
+};
+
 struct PendingHook {
     winrt::weak_ref<Controls::Panel> panelRef;
     winrt::event_token token;
 };
 
-std::map<void*, winrt::weak_ref<Controls::Panel>> g_trackedPanels;
+std::vector<TrackedPanelRef> g_trackedPanels;
 std::mutex g_panelMutex;
 
-std::map<void*, PendingHook> g_pendingHooks;
-std::set<void*> g_scannedFrames; // Replaces g_cachedTaskbarFrame
+std::vector<PendingHook> g_pendingHooks;
+std::vector<winrt::weak_ref<FrameworkElement>> g_scannedFrames;
 std::mutex g_pendingMutex;
 
 std::atomic<bool> g_scanPending = false;
@@ -97,23 +99,24 @@ FrameworkElement GetFrameworkElementFromNative(void* pThis) {
 void RegisterPanelForCleanup(Controls::Panel const& panel) {
     if (!panel) return;
     void* pAbi = winrt::get_abi(panel);
-
+    
     std::lock_guard<std::mutex> lock(g_panelMutex);
-    
-    // O(log N) insertion/update
-    g_trackedPanels[pAbi] = winrt::make_weak(panel);
-    
-    // Throttle pruning to prevent O(N^2) bottleneck during recursive scans
-    static int insertCount = 0;
-    if (++insertCount % 10 == 0) {
-        for (auto it = g_trackedPanels.begin(); it != g_trackedPanels.end(); ) {
-            if (!it->second.get()) {
-                it = g_trackedPanels.erase(it);
-            } else {
-                ++it;
+
+    // Prune dead references and check for duplicates simultaneously
+    auto it = g_trackedPanels.begin();
+    while (it != g_trackedPanels.end()) {
+        auto existing = it->ref.get();
+        if (!existing) {
+            it = g_trackedPanels.erase(it);
+        } else {
+            if (winrt::get_abi(existing) == pAbi) {
+                return; // Already tracked
             }
+            ++it;
         }
     }
+    
+    g_trackedPanels.push_back({ winrt::make_weak(panel) });
 }
 
 bool IsAlreadyInjected(Controls::Panel panel) {
@@ -139,7 +142,6 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
 
     if (IsAlreadyInjected(panel)) return;
 
-    // If the panel is already physically rendered, inject immediately and skip the event overhead
     if (targetPanel.ActualWidth() > 0 && targetPanel.ActualHeight() > 0) {
         Controls::ContentPresenter presenter;
         presenter.Name(c_InjectedControlName);
@@ -149,39 +151,41 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
         return;
     }
 
-    // Deferred event path
     void* pAbi = winrt::get_abi(panel);
     
     {
         std::lock_guard<std::mutex> lock(g_pendingMutex);
-        if (auto it = g_pendingHooks.find(pAbi); it != g_pendingHooks.end()) {
-            if (it->second.panelRef.get()) return; 
+        for (const auto& hook : g_pendingHooks) {
+            auto existing = hook.panelRef.get();
+            if (existing && winrt::get_abi(existing) == pAbi) return; // Already waiting
         }
-        g_pendingHooks[pAbi] = { winrt::weak_ref<Controls::Panel>(), winrt::event_token{} };
     }
 
     auto weakPanel = winrt::make_weak(panel);
     auto tokenHolder = std::make_shared<winrt::event_token>();
 
     try {
-        // Swap LayoutUpdated for SizeChanged to eliminate global event spam
         *tokenHolder = targetPanel.SizeChanged(
             [weakPanel, tokenHolder, pAbi](winrt::Windows::Foundation::IInspectable const&,
                                            winrt::Windows::UI::Xaml::SizeChangedEventArgs const&) {
                 
                 auto p = weakPanel.get();
-                if (!p) {
-                    std::lock_guard<std::mutex> lock(g_pendingMutex);
-                    g_pendingHooks.erase(pAbi);
-                    return;
-                }
+                if (!p) return; // Safely ignore dead objects
 
                 if (p.ActualWidth() > 0 && p.ActualHeight() > 0) {
                     p.SizeChanged(*tokenHolder); // Safely Unsubscribe
                     
                     {
                         std::lock_guard<std::mutex> lock(g_pendingMutex);
-                        g_pendingHooks.erase(pAbi);
+                        auto it = g_pendingHooks.begin();
+                        while (it != g_pendingHooks.end()) {
+                            auto existing = it->panelRef.get();
+                            if (!existing || winrt::get_abi(existing) == pAbi) {
+                                it = g_pendingHooks.erase(it);
+                            } else {
+                                ++it;
+                            }
+                        }
                     }
 
                     if (!IsAlreadyInjected(p)) {
@@ -194,16 +198,12 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
                 }
             });
     } catch (...) {
-        std::lock_guard<std::mutex> lock(g_pendingMutex);
-        g_pendingHooks.erase(pAbi);
         return; 
     }
 
     {
         std::lock_guard<std::mutex> lock(g_pendingMutex);
-        if (g_pendingHooks.count(pAbi)) {
-            g_pendingHooks[pAbi] = { weakPanel, *tokenHolder };
-        }
+        g_pendingHooks.push_back({ weakPanel, *tokenHolder });
     }
 }
 
@@ -243,9 +243,21 @@ void ScheduleScanAsync(FrameworkElement startNode) {
                             void* frameAbi = winrt::get_abi(current);
                             {
                                 std::lock_guard<std::mutex> lock(g_pendingMutex);
-                                // If we already scanned this monitor's taskbar, we're done!
-                                if (g_scannedFrames.count(frameAbi)) return;
-                                g_scannedFrames.insert(frameAbi);
+                                bool found = false;
+                                auto it = g_scannedFrames.begin();
+                                while (it != g_scannedFrames.end()) {
+                                    auto existing = it->get();
+                                    if (!existing) {
+                                        it = g_scannedFrames.erase(it);
+                                    } else if (winrt::get_abi(existing) == frameAbi) {
+                                        found = true;
+                                        ++it;
+                                    } else {
+                                        ++it;
+                                    }
+                                }
+                                if (found) return; // Already scanned this monitor
+                                g_scannedFrames.push_back(winrt::make_weak(current));
                             }
                             ScanAndInjectRecursive(current);
                             return;
@@ -378,14 +390,14 @@ void Wh_ModUninit() {
     }
 
     // 2. Remove injected ContentPresenters
-    std::map<void*, winrt::weak_ref<Controls::Panel>> localTracked;
+    std::vector<TrackedPanelRef> localTracked;
     {
         std::lock_guard<std::mutex> lock(g_panelMutex);
         localTracked = std::move(g_trackedPanels);
     }
 
-    for (auto& [pAbi, weakRef] : localTracked) {
-        if (auto panel = weakRef.get()) {
+    for (auto& tracked : localTracked) {
+        if (auto panel = tracked.ref.get()) {
             auto dispatcher = panel.Dispatcher();
             auto cleanupFn = [panel]() { RemoveInjectedFromPanel(panel); };
 
