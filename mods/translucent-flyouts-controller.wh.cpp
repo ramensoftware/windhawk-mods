@@ -1831,15 +1831,13 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
 //
 // Currently, other callbacks are not supported.
 
-bool WhTool_ModInit()
+BOOL WhTool_ModInit()
 {
     Wh_Log(L"Tool process: applying TranslucentFlyouts settings");
-  ApplySettingsOnceInToolProcess(false);
+    ApplySettingsOnceInToolProcess(true);
 
-  // Return true to signal success. The tool-mod process exits because the
-  // snippet hooks windhawk.exe's entry point and EntryPoint_Hook() calls
-  // ExitThread(0) (see EntryPoint_Hook below).
-    return true;
+    // Unload the mod and exit the tool process.
+    return FALSE;
 }
 
 void WhTool_ModSettingsChanged()
