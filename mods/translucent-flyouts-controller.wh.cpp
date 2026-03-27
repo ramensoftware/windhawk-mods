@@ -10,689 +10,647 @@
 
 // ==WindhawkModSettings==
 /*
-- global_effectType: modern_acrylic
-  $name: Global / Effect Type
-  $description: Choose the background effect used for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - none: None / Disabled
-    - transparent: Fully Transparent
-    - solid: Solid Color
-    - blurred: Blurred
-    - acrylic: Acrylic
-    - modern_acrylic: Modern Acrylic (Recommended)
-    - acrylic_bg: Acrylic Background Layer
-    - mica_bg: Mica Background Layer
-    - mica_variant: Mica Variant Background Layer
+- global:
+  - effectType: modern_acrylic
+    $name: Effect Type
+    $description: Choose the background effect used for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - none: None / Disabled
+      - transparent: Fully Transparent
+      - solid: Solid Color
+      - blurred: Blurred
+      - acrylic: Acrylic
+      - modern_acrylic: Modern Acrylic (Recommended)
+      - acrylic_bg: Acrylic Background Layer
+      - mica_bg: Mica Background Layer
+      - mica_variant: Mica Variant Background Layer
+  - cornerType: small_round
+    $name: Corner Style
+    $description: Choose the corner shape and roundness for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - dont_change: Don't Change
+      - sharp: Sharp Corners
+      - large_round: Large Round Corners
+      - small_round: Small Round Corners
+  - enableDropShadow: false
+    $name: Enable Drop Shadow
+    $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
+  - noBorderColor: false
+    $name: Disable Border Color
+    $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
+  - enableThemeColorization: false
+    $name: Enable Theme Colorization
+    $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
+  - darkModeThemeColorizationType: start_hover
+    $name: Dark Accent Source
+    $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
+    $options:
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - lightModeThemeColorizationType: start_hover
+    $name: Light Accent Source
+    $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
+    $options:
+      - start_background: ImmersiveStartBackground
+      - start_hover: ImmersiveStartHoverBackground
+      - system_accent: ImmersiveSystemAccent
+      - accent_dark1: ImmersiveSystemAccentDark1
+      - accent_dark2: ImmersiveSystemAccentDark2
+      - accent_dark3: ImmersiveSystemAccentDark3
+      - accent_light1: ImmersiveSystemAccentLight1
+      - accent_light2: ImmersiveSystemAccentLight2
+      - accent_light3: ImmersiveSystemAccentLight3
+  - darkModeBorderColor: "0xFF2B2B2B"
+    $name: Dark Border Color
+    $description: Dark mode border color in ARGB hex format 0xAARRGGBB
+  - lightModeBorderColor: "0xFFDDDDDD"
+    $name: Light Border Color
+    $description: Light mode border color in ARGB hex format 0xAARRGGBB
+  - darkModeGradientColor: "0x412B2B2B"
+    $name: Dark Gradient Color
+    $description: Dark mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
+  - lightModeGradientColor: "0x9EDDDDDD"
+    $name: Light Gradient Color
+    $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
+  - enableMiniDump: true
+    $name: Enable MiniDump
+    $description: Write crash minidump files for troubleshooting when TranslucentFlyouts fails
+  - disabled: false
+    $name: Disabled
+    $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
+  $name: Global
 
-- global_cornerType: small_round
-  $name: Global / Corner Style
-  $description: Choose the corner shape and roundness for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - dont_change: Don't Change
-    - sharp: Sharp Corners
-    - large_round: Large Round Corners
-    - small_round: Small Round Corners
+- dropDown:
+  - effectType: use_global
+    $name: Effect Type
+    $description: Choose the background effect used for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - none: None
+      - transparent: Fully Transparent
+      - solid: Solid Color
+      - blurred: Blurred
+      - acrylic: Acrylic
+      - modern_acrylic: Modern Acrylic
+      - acrylic_bg: Acrylic Background Layer
+      - mica_bg: Mica Background Layer
+      - mica_variant: Mica Variant Background Layer
+      - use_global: Use Global Setting
+  - cornerType: use_global
+    $name: Corner Style
+    $description: Choose the corner shape and roundness for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - dont_change: Don't Change
+      - sharp: Sharp
+      - large_round: Large Round
+      - small_round: Small Round
+      - use_global: Use Global Setting
+  - enableDropShadow: use_global
+    $name: Enable Drop Shadow
+    $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - enableFluentAnimation: false
+    $name: Enable Fluent Animation
+    $description: Enable fluent pop-up animations for this category
+  - noBorderColor: use_global
+    $name: Disable Border Color
+    $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - enableThemeColorization: use_global
+    $name: Enable Theme Colorization
+    $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - darkModeThemeColorizationType: 1
+    $name: Dark Accent Source
+    $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - lightModeThemeColorizationType: 1
+    $name: Light Accent Source
+    $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - darkModeBorderColor: "0xFF2B2B2B"
+    $name: Dark Border Color
+    $description: Dark mode border color in ARGB hex format 0xAARRGGBB
+  - lightModeBorderColor: "0xFFDDDDDD"
+    $name: Light Border Color
+    $description: Light mode border color in ARGB hex format 0xAARRGGBB
+  - darkModeGradientColor: "0x412B2B2B"
+    $name: Dark Gradient Color
+    $description: Dark mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
+  - lightModeGradientColor: "0x9EDDDDDD"
+    $name: Light Gradient Color
+    $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
+  - disabled: use_global
+    $name: Disabled
+    $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - animation_fadeOutTime: 350
+    $name: Fade Out Time
+    $description: Duration of fade-out animation in milliseconds
+  - animation_popInTime: 250
+    $name: Pop In Time
+    $description: Duration of pop-in animation in milliseconds
+  - animation_fadeInTime: 87
+    $name: Fade In Time
+    $description: Duration of fade-in animation in milliseconds
+  - animation_popInStyle: slide_down
+    $name: Pop In Style
+    $description: Style of the pop-in animation when the element appears
+    $options:
+      - slide_down: Slide Down
+      - ripple: Ripple
+      - smooth_scroll: Smooth Scroll
+      - smooth_zoom: Smooth Zoom
+  - animation_startRatio: 50
+    $name: Start Ratio
+    $description: Start ratio for pop-in animation. Higher values start closer to final state
+  - animation_enableImmediateInterupting: false
+    $name: Enable Immediate Interrupting
+    $description: Allow running animations to be interrupted immediately by a new state change
+  $name: DropDown
 
-- global_enableDropShadow: false
-  $name: Global / Enable Drop Shadow
-  $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
+- menu:
+  - noSystemDropShadow: false
+    $name: Disable System Drop Shadow
+    $description: Disable system-provided menu shadow
+  - enableImmersiveStyle: true
+    $name: Enable Immersive Style
+    $description: Use modern uniformly styled pop-up menus. Recommended on Windows 11
+  - enableCustomRendering: false
+    $name: Enable Custom Rendering
+    $description: Fully render pop-up menus using custom rendering. Required for several advanced Menu visual options
+  - enableFluentAnimation: false
+    $name: Enable Fluent Animation
+    $description: Enable fluent menu animations
+  - enableCompatibilityMode: false
+    $name: Enable Compatibility Mode
+    $description: Use compatibility mode for apps that misbehave with normal menu rendering
+  - noModernAppBackgroundColor: true
+    $name: Disable Modern App Background Color
+    $description: Ignore modern app provided background color and use configured TranslucentFlyouts appearance instead
+  - colorTreatAsTransparentEnabled: false
+    $name: Color Treat As Transparent(Enable)
+    $description: Treat a specific menu color as transparent during rendering
+  - colorTreatAsTransparent: "0x00000000"
+    $name: Color Treat As Transparent(ARGB)
+    $description: ARGB key color treated as transparent in menu rendering, format 0xAARRGGBB
+  - colorTreatAsTransparentThreshold: 50
+    $name: Color Treat As Transparent Threshold
+    $description: Tolerance for transparent color matching. Higher values match a wider color range
+  - effectType: use_global
+    $name: Effect Type
+    $description: Choose the background effect used for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - none: None
+      - transparent: Fully Transparent
+      - solid: Solid Color
+      - blurred: Blurred
+      - acrylic: Acrylic
+      - modern_acrylic: Modern Acrylic
+      - acrylic_bg: Acrylic Background Layer
+      - mica_bg: Mica Background Layer
+      - mica_variant: Mica Variant Background Layer
+      - use_global: Use Global Setting
+  - cornerType: use_global
+    $name: Corner Style
+    $description: Choose the corner shape and roundness for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - dont_change: Don't Change
+      - sharp: Sharp
+      - large_round: Large Round
+      - small_round: Small Round
+      - use_global: Use Global Setting
+  - enableDropShadow: use_global
+    $name: Enable Drop Shadow
+    $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - noBorderColor: use_global
+    $name: Disable Border Color
+    $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - enableThemeColorization: use_global
+    $name: Enable Theme Colorization
+    $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - darkModeThemeColorizationType: 1
+    $name: Dark Accent Source
+    $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - lightModeThemeColorizationType: 1
+    $name: Light Accent Source
+    $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - darkModeBorderColor: "0xFF2B2B2B"
+    $name: Dark Border Color
+    $description: Dark mode border color in ARGB hex format 0xAARRGGBB
+  - lightModeBorderColor: "0xFFDDDDDD"
+    $name: Light Border Color
+    $description: Light mode border color in ARGB hex format 0xAARRGGBB
+  - darkModeGradientColor: "0x412B2B2B"
+    $name: Dark Gradient Color
+    $description: Dark mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
+  - lightModeGradientColor: "0x9EDDDDDD"
+    $name: Light Gradient Color
+    $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
+  - disabled: use_global
+    $name: Disabled
+    $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - animation_fadeOutTime: 350
+    $name: Fade Out Time
+    $description: Duration of fade-out animation in milliseconds
+  - animation_popInTime: 250
+    $name: Pop In Time
+    $description: Duration of pop-in animation in milliseconds
+  - animation_fadeInTime: 87
+    $name: Fade In Time
+    $description: Duration of fade-in animation in milliseconds
+  - animation_popInStyle: slide_down
+    $name: Pop In Style
+    $description: Style of the pop-in animation when the element appears
+    $options:
+      - slide_down: Slide Down
+      - ripple: Ripple
+      - smooth_scroll: Smooth Scroll
+      - smooth_zoom: Smooth Zoom
+  - animation_startRatio: 50
+    $name: Start Ratio
+    $description: Start ratio for pop-in animation. Higher values start closer to final state
+  - animation_enableImmediateInterupting: false
+    $name: Enable Immediate Interrupting
+    $description: Allow running animations to be interrupted immediately by a new state change
+  - separator_disabled: 0
+    $name: Separator / Disabled
+    $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
+  - separator_width: 1000
+    $name: Separator / Width
+    $description: Separator line thickness control. 1000 equals full default thickness
+  - separator_darkModeColor: "0x30D9D9D9"
+    $name: Separator / Dark Color
+    $description: Dark mode color in ARGB hex format 0xAARRGGBB
+  - separator_lightModeColor: "0x30262626"
+    $name: Separator / Light Color
+    $description: Light mode color in ARGB hex format 0xAARRGGBB
+  - separator_enableThemeColorization: 0
+    $name: Separator / Enable Theme Colorization
+    $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
+  - separator_darkThemeColorizationType: 1
+    $name: Separator / Dark Accent Source
+    $description: Choose which immersive color slot is used in dark mode for this sub-part
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - separator_lightThemeColorizationType: 1
+    $name: Separator / Light Accent Source
+    $description: Choose which immersive color slot is used in light mode for this sub-part
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - focusing_disabled: 0
+    $name: Focusing / Disabled
+    $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
+  - focusing_cornerRadius: 8
+    $name: Focusing / Corner Radius
+    $description: Corner radius for focused item highlight
+  - focusing_width: 1000
+    $name: Focusing / Width
+    $description: Width control for focused item highlight. 1000 equals full item width
+  - focusing_darkModeColor: "0xFFFFFFFF"
+    $name: Focusing / Dark Color
+    $description: Dark mode color in ARGB hex format 0xAARRGGBB
+  - focusing_lightModeColor: "0xFF000000"
+    $name: Focusing / Light Color
+    $description: Light mode color in ARGB hex format 0xAARRGGBB
+  - focusing_enableThemeColorization: 0
+    $name: Focusing / Enable Theme Colorization
+    $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
+  - focusing_darkThemeColorizationType: 1
+    $name: Focusing / Dark Accent Source
+    $description: Choose which immersive color slot is used in dark mode for this sub-part
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - focusing_lightThemeColorizationType: 1
+    $name: Focusing / Light Accent Source
+    $description: Choose which immersive color slot is used in light mode for this sub-part
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - disabledHot_disabled: 0
+    $name: Disabled Hot / Disabled
+    $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
+  - disabledHot_cornerRadius: 8
+    $name: Disabled Hot / Corner Radius
+    $description: Corner radius for disabled hot item highlight
+  - disabledHot_darkModeColor: "0x00000000"
+    $name: Disabled Hot / Dark Color
+    $description: Dark mode color in ARGB hex format 0xAARRGGBB
+  - disabledHot_lightModeColor: "0x00000000"
+    $name: Disabled Hot / Light Color
+    $description: Light mode color in ARGB hex format 0xAARRGGBB
+  - disabledHot_enableThemeColorization: 0
+    $name: Disabled Hot / Enable Theme Colorization
+    $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
+  - disabledHot_darkThemeColorizationType: 1
+    $name: Disabled Hot / Dark Accent Source
+    $description: Choose which immersive color slot is used in dark mode for this sub-part
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - disabledHot_lightThemeColorizationType: 1
+    $name: Disabled Hot / Light Accent Source
+    $description: Choose which immersive color slot is used in light mode for this sub-part
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - hot_disabled: 0
+    $name: Hot / Disabled
+    $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
+  - hot_cornerRadius: 8
+    $name: Hot / Corner Radius
+    $description: Corner radius for hot or hover item highlight
+  - hot_darkModeColor: "0x41808080"
+    $name: Hot / Dark Color
+    $description: Dark mode color in ARGB hex format 0xAARRGGBB
+  - hot_lightModeColor: "0x30000000"
+    $name: Hot / Light Color
+    $description: Light mode color in ARGB hex format 0xAARRGGBB
+  - hot_enableThemeColorization: 0
+    $name: Hot / Enable Theme Colorization
+    $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
+  - hot_darkThemeColorizationType: 1
+    $name: Hot / Dark Accent Source
+    $description: Choose which immersive color slot is used in dark mode for this sub-part
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - hot_lightThemeColorizationType: 1
+    $name: Hot / Light Accent Source
+    $description: Choose which immersive color slot is used in light mode for this sub-part
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  $name: Menu
 
+- tooltip:
+  - noSystemDropShadow: false
+    $name: Disable System Drop Shadow
+    $description: Disable system-provided tooltip shadow
+  - effectType: use_global
+    $name: Effect Type
+    $description: Choose the background effect used for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - none: None
+      - transparent: Fully Transparent
+      - solid: Solid Color
+      - blurred: Blurred
+      - acrylic: Acrylic
+      - modern_acrylic: Modern Acrylic
+      - acrylic_bg: Acrylic Background Layer
+      - mica_bg: Mica Background Layer
+      - mica_variant: Mica Variant Background Layer
+      - use_global: Use Global Setting
+  - cornerType: use_global
+    $name: Corner Style
+    $description: Choose the corner shape and roundness for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - dont_change: Don't Change
+      - sharp: Sharp
+      - large_round: Large Round
+      - small_round: Small Round
+      - use_global: Use Global Setting
+  - enableDropShadow: use_global
+    $name: Enable Drop Shadow
+    $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - noBorderColor: use_global
+    $name: Disable Border Color
+    $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - enableThemeColorization: use_global
+    $name: Enable Theme Colorization
+    $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  - darkModeThemeColorizationType: 1
+    $name: Dark Accent Source
+    $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - lightModeThemeColorizationType: 1
+    $name: Light Accent Source
+    $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
+    $options:
+      - 0: ImmersiveStartBackground
+      - 1: ImmersiveStartHoverBackground
+      - 2: ImmersiveSystemAccent
+      - 3: ImmersiveSystemAccentDark1
+      - 4: ImmersiveSystemAccentDark2
+      - 5: ImmersiveSystemAccentDark3
+      - 6: ImmersiveSystemAccentLight1
+      - 7: ImmersiveSystemAccentLight2
+      - 8: ImmersiveSystemAccentLight3
+  - darkModeBorderColor: "0xFF2B2B2B"
+    $name: Dark Border Color
+    $description: Dark mode border color in ARGB hex format 0xAARRGGBB
+  - lightModeBorderColor: "0xFFDDDDDD"
+    $name: Light Border Color
+    $description: Light mode border color in ARGB hex format 0xAARRGGBB
+  - darkModeGradientColor: "0x412B2B2B"
+    $name: Dark Gradient Color
+    $description: Dark mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
+  - lightModeGradientColor: "0x9EDDDDDD"
+    $name: Light Gradient Color
+    $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
+  - darkModeColor: "0xFFFFFFFF"
+    $name: Dark Fill Color
+    $description: Dark mode color in ARGB hex format 0xAARRGGBB
+  - lightModeColor: "0xFF1A1A1A"
+    $name: Light Fill Color
+    $description: Light mode color in ARGB hex format 0xAARRGGBB
+  - marginsType: add_to_existing
+    $name: Margins Mode
+    $description: Define how tooltip margins are applied, add to existing or replace existing values
+    $options:
+      - add_to_existing: AddToExisting
+      - replace_existing: ReplaceExisting
+  - marginLeft: 6
+    $name: Margin Left
+    $description: Tooltip left margin in pixels
+  - marginRight: 6
+    $name: Margin Right
+    $description: Tooltip right margin in pixels
+  - marginTop: 6
+    $name: Margin Top
+    $description: Tooltip top margin in pixels
+  - marginBottom: 6
+    $name: Margin Bottom
+    $description: Tooltip bottom margin in pixels
+  - disabled: use_global
+    $name: Disabled
+    $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
+    $options:
+      - no: No
+      - yes: Yes
+      - use_global: Use Global Setting
+  $name: Tooltip
 
-- global_noBorderColor: false
-  $name: Global / Disable Border Color
-  $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
-
-
-- global_enableThemeColorization: false
-  $name: Global / Enable Theme Colorization
-  $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-
-
-- global_darkModeThemeColorizationType: start_hover
-  $name: Global / Dark Accent Source
-  $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
-  $options:
-    - start_background: ImmersiveStartBackground
-    - start_hover: ImmersiveStartHoverBackground
-    - system_accent: ImmersiveSystemAccent
-    - accent_dark1: ImmersiveSystemAccentDark1
-    - accent_dark2: ImmersiveSystemAccentDark2
-    - accent_dark3: ImmersiveSystemAccentDark3
-    - accent_light1: ImmersiveSystemAccentLight1
-    - accent_light2: ImmersiveSystemAccentLight2
-    - accent_light3: ImmersiveSystemAccentLight3
-
-- global_lightModeThemeColorizationType: start_hover
-  $name: Global / Light Accent Source
-  $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
-  $options:
-    - start_background: ImmersiveStartBackground
-    - start_hover: ImmersiveStartHoverBackground
-    - system_accent: ImmersiveSystemAccent
-    - accent_dark1: ImmersiveSystemAccentDark1
-    - accent_dark2: ImmersiveSystemAccentDark2
-    - accent_dark3: ImmersiveSystemAccentDark3
-    - accent_light1: ImmersiveSystemAccentLight1
-    - accent_light2: ImmersiveSystemAccentLight2
-    - accent_light3: ImmersiveSystemAccentLight3
-
-- global_darkModeBorderColor: "0xFF2B2B2B"
-  $name: Global / Dark Border Color
-  $description: Dark mode border color in ARGB hex format 0xAARRGGBB
-- global_lightModeBorderColor: "0xFFDDDDDD"
-  $name: Global / Light Border Color
-  $description: Light mode border color in ARGB hex format 0xAARRGGBB
-- global_darkModeGradientColor: "0x412B2B2B"
-  $name: Global / Dark Gradient Color
-  $description: Dark mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- global_lightModeGradientColor: "0x9EDDDDDD"
-  $name: Global / Light Gradient Color
-  $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- global_enableMiniDump: true
-  $name: Global / Enable MiniDump
-  $description: Write crash minidump files for troubleshooting when TranslucentFlyouts fails
-
-
-- global_disabled: false
-  $name: Global / Disabled
-  $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-
-
-- dropDown_effectType: use_global
-  $name: DropDown / Effect Type
-  $description: Choose the background effect used for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - none: None
-    - transparent: Fully Transparent
-    - solid: Solid Color
-    - blurred: Blurred
-    - acrylic: Acrylic
-    - modern_acrylic: Modern Acrylic
-    - acrylic_bg: Acrylic Background Layer
-    - mica_bg: Mica Background Layer
-    - mica_variant: Mica Variant Background Layer
-    - use_global: Use Global Setting
-
-- dropDown_cornerType: use_global
-  $name: DropDown / Corner Style
-  $description: Choose the corner shape and roundness for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - dont_change: Don't Change
-    - sharp: Sharp
-    - large_round: Large Round
-    - small_round: Small Round
-    - use_global: Use Global Setting
-
-- dropDown_enableDropShadow: use_global
-  $name: DropDown / Enable Drop Shadow
-  $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- dropDown_enableFluentAnimation: false
-  $name: DropDown / Enable Fluent Animation
-  $description: Enable fluent pop-up animations for this category
-
-
-- dropDown_noBorderColor: use_global
-  $name: DropDown / Disable Border Color
-  $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- dropDown_enableThemeColorization: use_global
-  $name: DropDown / Enable Theme Colorization
-  $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- dropDown_darkModeThemeColorizationType: 1
-  $name: DropDown / Dark Accent Source
-  $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- dropDown_lightModeThemeColorizationType: 1
-  $name: DropDown / Light Accent Source
-  $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- dropDown_darkModeBorderColor: "0xFF2B2B2B"
-  $name: DropDown / Dark Border Color
-  $description: Dark mode border color in ARGB hex format 0xAARRGGBB
-- dropDown_lightModeBorderColor: "0xFFDDDDDD"
-  $name: DropDown / Light Border Color
-  $description: Light mode border color in ARGB hex format 0xAARRGGBB
-- dropDown_darkModeGradientColor: "0x412B2B2B"
-  $name: DropDown / Dark Gradient Color
-  $description: Dark mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- dropDown_lightModeGradientColor: "0x9EDDDDDD"
-  $name: DropDown / Light Gradient Color
-  $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- dropDown_disabled: use_global
-  $name: DropDown / Disabled
-  $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- dropDown_animation_fadeOutTime: 350
-  $name: DropDown / Fade Out Time
-  $description: Duration of fade-out animation in milliseconds
-- dropDown_animation_popInTime: 250
-  $name: DropDown / Pop In Time
-  $description: Duration of pop-in animation in milliseconds
-- dropDown_animation_fadeInTime: 87
-  $name: DropDown / Fade In Time
-  $description: Duration of fade-in animation in milliseconds
-- dropDown_animation_popInStyle: slide_down
-  $name: DropDown / Pop In Style
-  $description: Style of the pop-in animation when the element appears
-  $options:
-    - slide_down: Slide Down
-    - ripple: Ripple
-    - smooth_scroll: Smooth Scroll
-    - smooth_zoom: Smooth Zoom
-
-- dropDown_animation_startRatio: 50
-  $name: DropDown / Start Ratio
-  $description: Start ratio for pop-in animation. Higher values start closer to final state
-- dropDown_animation_enableImmediateInterupting: false
-  $name: DropDown / Enable Immediate Interrupting
-  $description: Allow running animations to be interrupted immediately by a new state change
-
-
-- menu_noSystemDropShadow: false
-  $name: Menu / Disable System Drop Shadow
-  $description: Disable system-provided menu shadow
-
-
-- menu_enableImmersiveStyle: true
-  $name: Menu / Enable Immersive Style
-  $description: Use modern uniformly styled pop-up menus. Recommended on Windows 11
-
-
-- menu_enableCustomRendering: false
-  $name: Menu / Enable Custom Rendering
-  $description: Fully render pop-up menus using custom rendering. Required for several advanced Menu visual options
-
-
-- menu_enableFluentAnimation: false
-  $name: Menu / Enable Fluent Animation
-  $description: Enable fluent menu animations
-
-
-- menu_enableCompatibilityMode: false
-  $name: Menu / Enable Compatibility Mode
-  $description: Use compatibility mode for apps that misbehave with normal menu rendering
-
-
-- menu_noModernAppBackgroundColor: true
-  $name: Menu / Disable Modern App Background Color
-  $description: Ignore modern app provided background color and use configured TranslucentFlyouts appearance instead
-
-
-- menu_colorTreatAsTransparentEnabled: false
-  $name: Menu / Color Treat As Transparent(Enable)
-  $description: Treat a specific menu color as transparent during rendering
-- menu_colorTreatAsTransparent: "0x00000000"
-  $name: Menu / Color Treat As Transparent(ARGB)
-  $description: ARGB key color treated as transparent in menu rendering, format 0xAARRGGBB
-- menu_colorTreatAsTransparentThreshold: 50
-  $name: Menu / Color Treat As Transparent Threshold
-  $description: Tolerance for transparent color matching. Higher values match a wider color range
-- menu_effectType: use_global
-  $name: Menu / Effect Type
-  $description: Choose the background effect used for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - none: None
-    - transparent: Fully Transparent
-    - solid: Solid Color
-    - blurred: Blurred
-    - acrylic: Acrylic
-    - modern_acrylic: Modern Acrylic
-    - acrylic_bg: Acrylic Background Layer
-    - mica_bg: Mica Background Layer
-    - mica_variant: Mica Variant Background Layer
-    - use_global: Use Global Setting
-
-- menu_cornerType: use_global
-  $name: Menu / Corner Style
-  $description: Choose the corner shape and roundness for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - dont_change: Don't Change
-    - sharp: Sharp
-    - large_round: Large Round
-    - small_round: Small Round
-    - use_global: Use Global Setting
-
-- menu_enableDropShadow: use_global
-  $name: Menu / Enable Drop Shadow
-  $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- menu_noBorderColor: use_global
-  $name: Menu / Disable Border Color
-  $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- menu_enableThemeColorization: use_global
-  $name: Menu / Enable Theme Colorization
-  $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- menu_darkModeThemeColorizationType: 1
-  $name: Menu / Dark Accent Source
-  $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_lightModeThemeColorizationType: 1
-  $name: Menu / Light Accent Source
-  $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_darkModeBorderColor: "0xFF2B2B2B"
-  $name: Menu / Dark Border Color
-  $description: Dark mode border color in ARGB hex format 0xAARRGGBB
-- menu_lightModeBorderColor: "0xFFDDDDDD"
-  $name: Menu / Light Border Color
-  $description: Light mode border color in ARGB hex format 0xAARRGGBB
-- menu_darkModeGradientColor: "0x412B2B2B"
-  $name: Menu / Dark Gradient Color
-  $description: Dark mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- menu_lightModeGradientColor: "0x9EDDDDDD"
-  $name: Menu / Light Gradient Color
-  $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- menu_disabled: use_global
-  $name: Menu / Disabled
-  $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- menu_animation_fadeOutTime: 350
-  $name: Menu / Fade Out Time
-  $description: Duration of fade-out animation in milliseconds
-- menu_animation_popInTime: 250
-  $name: Menu / Pop In Time
-  $description: Duration of pop-in animation in milliseconds
-- menu_animation_fadeInTime: 87
-  $name: Menu / Fade In Time
-  $description: Duration of fade-in animation in milliseconds
-- menu_animation_popInStyle: slide_down
-  $name: Menu / Pop In Style
-  $description: Style of the pop-in animation when the element appears
-  $options:
-    - slide_down: Slide Down
-    - ripple: Ripple
-    - smooth_scroll: Smooth Scroll
-    - smooth_zoom: Smooth Zoom
-- menu_animation_startRatio: 50
-  $name: Menu / Start Ratio
-  $description: Start ratio for pop-in animation. Higher values start closer to final state
-- menu_animation_enableImmediateInterupting: false
-  $name: Menu / Enable Immediate Interrupting
-  $description: Allow running animations to be interrupted immediately by a new state change
-
-
-- menu_separator_disabled: 0
-  $name: Menu / Separator / Disabled
-  $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-- menu_separator_width: 1000
-  $name: Menu / Separator / Width
-  $description: Separator line thickness control. 1000 equals full default thickness
-- menu_separator_darkModeColor: "0x30D9D9D9"
-  $name: Menu / Separator / Dark Color
-  $description: Dark mode color in ARGB hex format 0xAARRGGBB
-- menu_separator_lightModeColor: "0x30262626"
-  $name: Menu / Separator / Light Color
-  $description: Light mode color in ARGB hex format 0xAARRGGBB
-- menu_separator_enableThemeColorization: 0
-  $name: Menu / Separator / Enable Theme Colorization
-  $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-- menu_separator_darkThemeColorizationType: 1
-  $name: Menu / Separator / Dark Accent Source
-  $description: Choose which immersive color slot is used in dark mode for this sub-part
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_separator_lightThemeColorizationType: 1
-  $name: Menu / Separator / Light Accent Source
-  $description: Choose which immersive color slot is used in light mode for this sub-part
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_focusing_disabled: 0
-  $name: Menu / Focusing / Disabled
-  $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-- menu_focusing_cornerRadius: 8
-  $name: Menu / Focusing / Corner Radius
-  $description: Corner radius for focused item highlight
-- menu_focusing_width: 1000
-  $name: Menu / Focusing / Width
-  $description: Width control for focused item highlight. 1000 equals full item width
-- menu_focusing_darkModeColor: "0xFFFFFFFF"
-  $name: Menu / Focusing / Dark Color
-  $description: Dark mode color in ARGB hex format 0xAARRGGBB
-- menu_focusing_lightModeColor: "0xFF000000"
-  $name: Menu / Focusing / Light Color
-  $description: Light mode color in ARGB hex format 0xAARRGGBB
-- menu_focusing_enableThemeColorization: 0
-  $name: Menu / Focusing / Enable Theme Colorization
-  $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-- menu_focusing_darkThemeColorizationType: 1
-  $name: Menu / Focusing / Dark Accent Source
-  $description: Choose which immersive color slot is used in dark mode for this sub-part
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_focusing_lightThemeColorizationType: 1
-  $name: Menu / Focusing / Light Accent Source
-  $description: Choose which immersive color slot is used in light mode for this sub-part
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_disabledHot_disabled: 0
-  $name: Menu / Disabled Hot / Disabled
-  $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-- menu_disabledHot_cornerRadius: 8
-  $name: Menu / Disabled Hot / Corner Radius
-  $description: Corner radius for disabled hot item highlight
-- menu_disabledHot_darkModeColor: "0x00000000"
-  $name: Menu / Disabled Hot / Dark Color
-  $description: Dark mode color in ARGB hex format 0xAARRGGBB
-- menu_disabledHot_lightModeColor: "0x00000000"
-  $name: Menu / Disabled Hot / Light Color
-  $description: Light mode color in ARGB hex format 0xAARRGGBB
-- menu_disabledHot_enableThemeColorization: 0
-  $name: Menu / Disabled Hot / Enable Theme Colorization
-  $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-- menu_disabledHot_darkThemeColorizationType: 1
-  $name: Menu / Disabled Hot / Dark Accent Source
-  $description: Choose which immersive color slot is used in dark mode for this sub-part
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_disabledHot_lightThemeColorizationType: 1
-  $name: Menu / Disabled Hot / Light Accent Source
-  $description: Choose which immersive color slot is used in light mode for this sub-part
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_hot_disabled: 0
-  $name: Menu / Hot / Disabled
-  $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-- menu_hot_cornerRadius: 8
-  $name: Menu / Hot / Corner Radius
-  $description: Corner radius for hot or hover item highlight
-- menu_hot_darkModeColor: "0x41808080"
-  $name: Menu / Hot / Dark Color
-  $description: Dark mode color in ARGB hex format 0xAARRGGBB
-- menu_hot_lightModeColor: "0x30000000"
-  $name: Menu / Hot / Light Color
-  $description: Light mode color in ARGB hex format 0xAARRGGBB
-- menu_hot_enableThemeColorization: 0
-  $name: Menu / Hot / Enable Theme Colorization
-  $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-- menu_hot_darkThemeColorizationType: 1
-  $name: Menu / Hot / Dark Accent Source
-  $description: Choose which immersive color slot is used in dark mode for this sub-part
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- menu_hot_lightThemeColorizationType: 1
-  $name: Menu / Hot / Light Accent Source
-  $description: Choose which immersive color slot is used in light mode for this sub-part
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-
-- tooltip_noSystemDropShadow: false
-  $name: Tooltip / Disable System Drop Shadow
-  $description: Disable system-provided tooltip shadow
-
-
-- tooltip_effectType: use_global
-  $name: Tooltip / Effect Type
-  $description: Choose the background effect used for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - none: None
-    - transparent: Fully Transparent
-    - solid: Solid Color
-    - blurred: Blurred
-    - acrylic: Acrylic
-    - modern_acrylic: Modern Acrylic
-    - acrylic_bg: Acrylic Background Layer
-    - mica_bg: Mica Background Layer
-    - mica_variant: Mica Variant Background Layer
-    - use_global: Use Global Setting
-
-- tooltip_cornerType: use_global
-  $name: Tooltip / Corner Style
-  $description: Choose the corner shape and roundness for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - dont_change: Don't Change
-    - sharp: Sharp
-    - large_round: Large Round
-    - small_round: Small Round
-    - use_global: Use Global Setting
-
-- tooltip_enableDropShadow: use_global
-  $name: Tooltip / Enable Drop Shadow
-  $description: Enable or disable drop shadow behind this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- tooltip_noBorderColor: use_global
-  $name: Tooltip / Disable Border Color
-  $description: Choose whether to render system borders for this pop-up type. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- tooltip_enableThemeColorization: use_global
-  $name: Tooltip / Enable Theme Colorization
-  $description: Use current theme accent color for borders instead of fixed custom border colors. Use use_global to inherit the Global value
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- tooltip_darkModeThemeColorizationType: 1
-  $name: Tooltip / Dark Accent Source
-  $description: Choose which immersive color slot is used in dark mode when theme colorization is enabled
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- tooltip_lightModeThemeColorizationType: 1
-  $name: Tooltip / Light Accent Source
-  $description: Choose which immersive color slot is used in light mode when theme colorization is enabled
-  $options:
-    - 0: ImmersiveStartBackground
-    - 1: ImmersiveStartHoverBackground
-    - 2: ImmersiveSystemAccent
-    - 3: ImmersiveSystemAccentDark1
-    - 4: ImmersiveSystemAccentDark2
-    - 5: ImmersiveSystemAccentDark3
-    - 6: ImmersiveSystemAccentLight1
-    - 7: ImmersiveSystemAccentLight2
-    - 8: ImmersiveSystemAccentLight3
-- tooltip_darkModeBorderColor: "0xFF2B2B2B"
-  $name: Tooltip / Dark Border Color
-  $description: Dark mode border color in ARGB hex format 0xAARRGGBB
-- tooltip_lightModeBorderColor: "0xFFDDDDDD"
-  $name: Tooltip / Light Border Color
-  $description: Light mode border color in ARGB hex format 0xAARRGGBB
-- tooltip_darkModeGradientColor: "0x412B2B2B"
-  $name: Tooltip / Dark Gradient Color
-  $description: Dark mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- tooltip_lightModeGradientColor: "0x9EDDDDDD"
-  $name: Tooltip / Light Gradient Color
-  $description: Light mode gradient or acrylic tint in ARGB hex format 0xAARRGGBB
-- tooltip_darkModeColor: "0xFFFFFFFF"
-  $name: Tooltip / Dark Fill Color
-  $description: Dark mode color in ARGB hex format 0xAARRGGBB
-- tooltip_lightModeColor: "0xFF1A1A1A"
-  $name: Tooltip / Light Fill Color
-  $description: Light mode color in ARGB hex format 0xAARRGGBB
-- tooltip_marginsType: add_to_existing
-  $name: Tooltip / Margins Mode
-  $description: Define how tooltip margins are applied, add to existing or replace existing values
-  $options:
-    - add_to_existing: AddToExisting
-    - replace_existing: ReplaceExisting
-- tooltip_marginLeft: 6
-  $name: Tooltip / Margin Left
-  $description: Tooltip left margin in pixels
-- tooltip_marginRight: 6
-  $name: Tooltip / Margin Right
-  $description: Tooltip right margin in pixels
-- tooltip_marginTop: 6
-  $name: Tooltip / Margin Top
-  $description: Tooltip top margin in pixels
-- tooltip_marginBottom: 6
-  $name: Tooltip / Margin Bottom
-  $description: Tooltip bottom margin in pixels
-- tooltip_disabled: use_global
-  $name: Tooltip / Disabled
-  $description: Disable all effects for this pop-up type. Use use_global to inherit the Global value where available
-  $options:
-    - no: No
-    - yes: Yes
-    - use_global: Use Global Setting
-
-- controller_resetAction: none
-  $name: Controller / Reset To Defaults
-  $description: Choose a category to reset to defaults. Set back to None before triggering another reset
-  $options:
-    - none: None
-    - global: Reset Global
-    - dropdown: Reset DropDown
-    - menu: Reset Menu
-    - tooltip: Reset Tooltip
-    - all: Reset All
-
-- controller_confirmReset: true
-  $name: Controller / Confirm Reset
-  $description: Show a confirmation before applying a reset-to-defaults action
-
-- controller_hardReloadOnApply: false
-  $name: Controller / Hard Reload On Apply
-  $description: Also send TranslucentFlyouts detach and attach messages after apply. Slower, but can fix stale visuals
+- controller:
+  - resetAction: none
+    $name: Reset To Defaults
+    $description: Choose a category to reset to defaults. Set back to None before triggering another reset
+    $options:
+      - none: None
+      - global: Reset Global
+      - dropdown: Reset DropDown
+      - menu: Reset Menu
+      - tooltip: Reset Tooltip
+      - all: Reset All
+  - confirmReset: true
+    $name: Confirm Reset
+    $description: Show a confirmation before applying a reset-to-defaults action
+  - hardReloadOnApply: false
+    $name: Hard Reload On Apply
+    $description: Also send TranslucentFlyouts detach and attach messages after apply. Slower, but can fix stale visuals
+  $name: Controller
 */
 // ==/WindhawkModSettings==
 
@@ -1473,126 +1431,126 @@ static constexpr SettingChoice kResetAction[] = {
 
 static void LoadSettings()
 {
-    g_settings.globalEffectType = GetMappedIntSetting(L"global_effectType", kGlobalEffect, _countof(kGlobalEffect), 5);
-    g_settings.globalCornerType = GetMappedIntSetting(L"global_cornerType", kGlobalCorner, _countof(kGlobalCorner), 3);
-  g_settings.globalEnableDropShadow = GetBoolSettingCompat(L"global_enableDropShadow", 0);
-  g_settings.globalNoBorderColor = GetBoolSettingCompat(L"global_noBorderColor", 0);
-  g_settings.globalEnableThemeColorization = GetBoolSettingCompat(L"global_enableThemeColorization", 0);
-    g_settings.globalDarkModeThemeColorizationType = GetMappedIntSetting(L"global_darkModeThemeColorizationType", kThemeColorizationType, _countof(kThemeColorizationType), 1);
-    g_settings.globalLightModeThemeColorizationType = GetMappedIntSetting(L"global_lightModeThemeColorizationType", kThemeColorizationType, _countof(kThemeColorizationType), 1);
-    g_settings.globalDarkModeBorderColor = GetColorSetting(L"global_darkModeBorderColor");
-    g_settings.globalLightModeBorderColor = GetColorSetting(L"global_lightModeBorderColor");
-    g_settings.globalDarkModeGradientColor = GetColorSetting(L"global_darkModeGradientColor");
-    g_settings.globalLightModeGradientColor = GetColorSetting(L"global_lightModeGradientColor");
-    g_settings.globalEnableMiniDump = GetBoolSettingCompat(L"global_enableMiniDump", 1);
-    g_settings.globalDisabled = GetBoolSettingCompat(L"global_disabled", 0);
+    g_settings.globalEffectType = GetMappedIntSetting(L"global.effectType", kGlobalEffect, _countof(kGlobalEffect), 5);
+    g_settings.globalCornerType = GetMappedIntSetting(L"global.cornerType", kGlobalCorner, _countof(kGlobalCorner), 3);
+  g_settings.globalEnableDropShadow = GetBoolSettingCompat(L"global.enableDropShadow", 0);
+  g_settings.globalNoBorderColor = GetBoolSettingCompat(L"global.noBorderColor", 0);
+  g_settings.globalEnableThemeColorization = GetBoolSettingCompat(L"global.enableThemeColorization", 0);
+    g_settings.globalDarkModeThemeColorizationType = GetMappedIntSetting(L"global.darkModeThemeColorizationType", kThemeColorizationType, _countof(kThemeColorizationType), 1);
+    g_settings.globalLightModeThemeColorizationType = GetMappedIntSetting(L"global.lightModeThemeColorizationType", kThemeColorizationType, _countof(kThemeColorizationType), 1);
+    g_settings.globalDarkModeBorderColor = GetColorSetting(L"global.darkModeBorderColor");
+    g_settings.globalLightModeBorderColor = GetColorSetting(L"global.lightModeBorderColor");
+    g_settings.globalDarkModeGradientColor = GetColorSetting(L"global.darkModeGradientColor");
+    g_settings.globalLightModeGradientColor = GetColorSetting(L"global.lightModeGradientColor");
+    g_settings.globalEnableMiniDump = GetBoolSettingCompat(L"global.enableMiniDump", 1);
+    g_settings.globalDisabled = GetBoolSettingCompat(L"global.disabled", 0);
 
-    g_settings.dropDownEffectType = GetMappedIntSetting(L"dropDown_effectType", kPartEffect, _countof(kPartEffect), 9);
-    g_settings.dropDownCornerType = GetMappedIntSetting(L"dropDown_cornerType", kPartCorner, _countof(kPartCorner), 4);
-    g_settings.dropDownEnableDropShadow = GetMappedIntSetting(L"dropDown_enableDropShadow", kTriState, _countof(kTriState), 2);
-    g_settings.dropDownEnableFluentAnimation = GetBoolSettingCompat(L"dropDown_enableFluentAnimation", 0);
-    g_settings.dropDownNoBorderColor = GetMappedIntSetting(L"dropDown_noBorderColor", kTriState, _countof(kTriState), 2);
-    g_settings.dropDownEnableThemeColorization = GetMappedIntSetting(L"dropDown_enableThemeColorization", kTriState, _countof(kTriState), 2);
-    g_settings.dropDownDarkModeThemeColorizationType = Wh_GetIntSetting(L"dropDown_darkModeThemeColorizationType");
-    g_settings.dropDownLightModeThemeColorizationType = Wh_GetIntSetting(L"dropDown_lightModeThemeColorizationType");
-    g_settings.dropDownDarkModeBorderColor = GetColorSetting(L"dropDown_darkModeBorderColor");
-    g_settings.dropDownLightModeBorderColor = GetColorSetting(L"dropDown_lightModeBorderColor");
-    g_settings.dropDownDarkModeGradientColor = GetColorSetting(L"dropDown_darkModeGradientColor");
-    g_settings.dropDownLightModeGradientColor = GetColorSetting(L"dropDown_lightModeGradientColor");
-    g_settings.dropDownDisabled = GetMappedIntSetting(L"dropDown_disabled", kTriState, _countof(kTriState), 2);
-    g_settings.dropDownFadeOutTime = Wh_GetIntSetting(L"dropDown_animation_fadeOutTime");
-    g_settings.dropDownPopInTime = Wh_GetIntSetting(L"dropDown_animation_popInTime");
-    g_settings.dropDownFadeInTime = Wh_GetIntSetting(L"dropDown_animation_fadeInTime");
-    g_settings.dropDownPopInStyle = GetMappedIntSetting(L"dropDown_animation_popInStyle", kPopInStyle, _countof(kPopInStyle), 0);
-    g_settings.dropDownStartRatio = Wh_GetIntSetting(L"dropDown_animation_startRatio");
-    g_settings.dropDownEnableImmediateInterupting = GetBoolSettingCompat(L"dropDown_animation_enableImmediateInterupting", 0);
+    g_settings.dropDownEffectType = GetMappedIntSetting(L"dropDown.effectType", kPartEffect, _countof(kPartEffect), 9);
+    g_settings.dropDownCornerType = GetMappedIntSetting(L"dropDown.cornerType", kPartCorner, _countof(kPartCorner), 4);
+    g_settings.dropDownEnableDropShadow = GetMappedIntSetting(L"dropDown.enableDropShadow", kTriState, _countof(kTriState), 2);
+    g_settings.dropDownEnableFluentAnimation = GetBoolSettingCompat(L"dropDown.enableFluentAnimation", 0);
+    g_settings.dropDownNoBorderColor = GetMappedIntSetting(L"dropDown.noBorderColor", kTriState, _countof(kTriState), 2);
+    g_settings.dropDownEnableThemeColorization = GetMappedIntSetting(L"dropDown.enableThemeColorization", kTriState, _countof(kTriState), 2);
+    g_settings.dropDownDarkModeThemeColorizationType = Wh_GetIntSetting(L"dropDown.darkModeThemeColorizationType");
+    g_settings.dropDownLightModeThemeColorizationType = Wh_GetIntSetting(L"dropDown.lightModeThemeColorizationType");
+    g_settings.dropDownDarkModeBorderColor = GetColorSetting(L"dropDown.darkModeBorderColor");
+    g_settings.dropDownLightModeBorderColor = GetColorSetting(L"dropDown.lightModeBorderColor");
+    g_settings.dropDownDarkModeGradientColor = GetColorSetting(L"dropDown.darkModeGradientColor");
+    g_settings.dropDownLightModeGradientColor = GetColorSetting(L"dropDown.lightModeGradientColor");
+    g_settings.dropDownDisabled = GetMappedIntSetting(L"dropDown.disabled", kTriState, _countof(kTriState), 2);
+    g_settings.dropDownFadeOutTime = Wh_GetIntSetting(L"dropDown.animation_fadeOutTime");
+    g_settings.dropDownPopInTime = Wh_GetIntSetting(L"dropDown.animation_popInTime");
+    g_settings.dropDownFadeInTime = Wh_GetIntSetting(L"dropDown.animation_fadeInTime");
+    g_settings.dropDownPopInStyle = GetMappedIntSetting(L"dropDown.animation_popInStyle", kPopInStyle, _countof(kPopInStyle), 0);
+    g_settings.dropDownStartRatio = Wh_GetIntSetting(L"dropDown.animation_startRatio");
+    g_settings.dropDownEnableImmediateInterupting = GetBoolSettingCompat(L"dropDown.animation_enableImmediateInterupting", 0);
 
-    g_settings.menuNoSystemDropShadow = GetBoolSettingCompat(L"menu_noSystemDropShadow", 0);
-    g_settings.menuEnableImmersiveStyle = GetBoolSettingCompat(L"menu_enableImmersiveStyle", 1);
-    g_settings.menuEnableCustomRendering = GetBoolSettingCompat(L"menu_enableCustomRendering", 0);
-    g_settings.menuEnableFluentAnimation = GetBoolSettingCompat(L"menu_enableFluentAnimation", 0);
-    g_settings.menuEnableCompatibilityMode = GetBoolSettingCompat(L"menu_enableCompatibilityMode", 0);
-    g_settings.menuNoModernAppBackgroundColor = GetBoolSettingCompat(L"menu_noModernAppBackgroundColor", 1);
-    g_settings.menuColorTreatAsTransparentEnabled = Wh_GetIntSetting(L"menu_colorTreatAsTransparentEnabled");
-    g_settings.menuColorTreatAsTransparent = GetColorSetting(L"menu_colorTreatAsTransparent");
-    g_settings.menuColorTreatAsTransparentThreshold = Wh_GetIntSetting(L"menu_colorTreatAsTransparentThreshold");
-    g_settings.menuEffectType = GetMappedIntSetting(L"menu_effectType", kPartEffect, _countof(kPartEffect), 9);
-    g_settings.menuCornerType = GetMappedIntSetting(L"menu_cornerType", kPartCorner, _countof(kPartCorner), 4);
-    g_settings.menuEnableDropShadow = GetMappedIntSetting(L"menu_enableDropShadow", kTriState, _countof(kTriState), 2);
-    g_settings.menuNoBorderColor = GetMappedIntSetting(L"menu_noBorderColor", kTriState, _countof(kTriState), 2);
-    g_settings.menuEnableThemeColorization = GetMappedIntSetting(L"menu_enableThemeColorization", kTriState, _countof(kTriState), 2);
-    g_settings.menuDarkModeThemeColorizationType = Wh_GetIntSetting(L"menu_darkModeThemeColorizationType");
-    g_settings.menuLightModeThemeColorizationType = Wh_GetIntSetting(L"menu_lightModeThemeColorizationType");
-    g_settings.menuDarkModeBorderColor = GetColorSetting(L"menu_darkModeBorderColor");
-    g_settings.menuLightModeBorderColor = GetColorSetting(L"menu_lightModeBorderColor");
-    g_settings.menuDarkModeGradientColor = GetColorSetting(L"menu_darkModeGradientColor");
-    g_settings.menuLightModeGradientColor = GetColorSetting(L"menu_lightModeGradientColor");
-    g_settings.menuDisabled = GetMappedIntSetting(L"menu_disabled", kTriState, _countof(kTriState), 2);
-    g_settings.menuFadeOutTime = Wh_GetIntSetting(L"menu_animation_fadeOutTime");
-    g_settings.menuPopInTime = Wh_GetIntSetting(L"menu_animation_popInTime");
-    g_settings.menuFadeInTime = Wh_GetIntSetting(L"menu_animation_fadeInTime");
-    g_settings.menuPopInStyle = GetMappedIntSetting(L"menu_animation_popInStyle", kPopInStyle, _countof(kPopInStyle), 0);
-    g_settings.menuStartRatio = Wh_GetIntSetting(L"menu_animation_startRatio");
-    g_settings.menuEnableImmediateInterupting = GetBoolSettingCompat(L"menu_animation_enableImmediateInterupting", 0);
+    g_settings.menuNoSystemDropShadow = GetBoolSettingCompat(L"menu.noSystemDropShadow", 0);
+    g_settings.menuEnableImmersiveStyle = GetBoolSettingCompat(L"menu.enableImmersiveStyle", 1);
+    g_settings.menuEnableCustomRendering = GetBoolSettingCompat(L"menu.enableCustomRendering", 0);
+    g_settings.menuEnableFluentAnimation = GetBoolSettingCompat(L"menu.enableFluentAnimation", 0);
+    g_settings.menuEnableCompatibilityMode = GetBoolSettingCompat(L"menu.enableCompatibilityMode", 0);
+    g_settings.menuNoModernAppBackgroundColor = GetBoolSettingCompat(L"menu.noModernAppBackgroundColor", 1);
+    g_settings.menuColorTreatAsTransparentEnabled = Wh_GetIntSetting(L"menu.colorTreatAsTransparentEnabled");
+    g_settings.menuColorTreatAsTransparent = GetColorSetting(L"menu.colorTreatAsTransparent");
+    g_settings.menuColorTreatAsTransparentThreshold = Wh_GetIntSetting(L"menu.colorTreatAsTransparentThreshold");
+    g_settings.menuEffectType = GetMappedIntSetting(L"menu.effectType", kPartEffect, _countof(kPartEffect), 9);
+    g_settings.menuCornerType = GetMappedIntSetting(L"menu.cornerType", kPartCorner, _countof(kPartCorner), 4);
+    g_settings.menuEnableDropShadow = GetMappedIntSetting(L"menu.enableDropShadow", kTriState, _countof(kTriState), 2);
+    g_settings.menuNoBorderColor = GetMappedIntSetting(L"menu.noBorderColor", kTriState, _countof(kTriState), 2);
+    g_settings.menuEnableThemeColorization = GetMappedIntSetting(L"menu.enableThemeColorization", kTriState, _countof(kTriState), 2);
+    g_settings.menuDarkModeThemeColorizationType = Wh_GetIntSetting(L"menu.darkModeThemeColorizationType");
+    g_settings.menuLightModeThemeColorizationType = Wh_GetIntSetting(L"menu.lightModeThemeColorizationType");
+    g_settings.menuDarkModeBorderColor = GetColorSetting(L"menu.darkModeBorderColor");
+    g_settings.menuLightModeBorderColor = GetColorSetting(L"menu.lightModeBorderColor");
+    g_settings.menuDarkModeGradientColor = GetColorSetting(L"menu.darkModeGradientColor");
+    g_settings.menuLightModeGradientColor = GetColorSetting(L"menu.lightModeGradientColor");
+    g_settings.menuDisabled = GetMappedIntSetting(L"menu.disabled", kTriState, _countof(kTriState), 2);
+    g_settings.menuFadeOutTime = Wh_GetIntSetting(L"menu.animation_fadeOutTime");
+    g_settings.menuPopInTime = Wh_GetIntSetting(L"menu.animation_popInTime");
+    g_settings.menuFadeInTime = Wh_GetIntSetting(L"menu.animation_fadeInTime");
+    g_settings.menuPopInStyle = GetMappedIntSetting(L"menu.animation_popInStyle", kPopInStyle, _countof(kPopInStyle), 0);
+    g_settings.menuStartRatio = Wh_GetIntSetting(L"menu.animation_startRatio");
+    g_settings.menuEnableImmediateInterupting = GetBoolSettingCompat(L"menu.animation_enableImmediateInterupting", 0);
 
-    g_settings.menuSeparatorDisabled = Wh_GetIntSetting(L"menu_separator_disabled");
-    g_settings.menuSeparatorWidth = Wh_GetIntSetting(L"menu_separator_width");
-    g_settings.menuSeparatorDarkModeColor = GetColorSetting(L"menu_separator_darkModeColor");
-    g_settings.menuSeparatorLightModeColor = GetColorSetting(L"menu_separator_lightModeColor");
-    g_settings.menuSeparatorEnableThemeColorization = Wh_GetIntSetting(L"menu_separator_enableThemeColorization");
-    g_settings.menuSeparatorDarkThemeColorizationType = Wh_GetIntSetting(L"menu_separator_darkThemeColorizationType");
-    g_settings.menuSeparatorLightThemeColorizationType = Wh_GetIntSetting(L"menu_separator_lightThemeColorizationType");
+    g_settings.menuSeparatorDisabled = Wh_GetIntSetting(L"menu.separator_disabled");
+    g_settings.menuSeparatorWidth = Wh_GetIntSetting(L"menu.separator_width");
+    g_settings.menuSeparatorDarkModeColor = GetColorSetting(L"menu.separator_darkModeColor");
+    g_settings.menuSeparatorLightModeColor = GetColorSetting(L"menu.separator_lightModeColor");
+    g_settings.menuSeparatorEnableThemeColorization = Wh_GetIntSetting(L"menu.separator_enableThemeColorization");
+    g_settings.menuSeparatorDarkThemeColorizationType = Wh_GetIntSetting(L"menu.separator_darkThemeColorizationType");
+    g_settings.menuSeparatorLightThemeColorizationType = Wh_GetIntSetting(L"menu.separator_lightThemeColorizationType");
 
-    g_settings.menuFocusingDisabled = Wh_GetIntSetting(L"menu_focusing_disabled");
-    g_settings.menuFocusingCornerRadius = Wh_GetIntSetting(L"menu_focusing_cornerRadius");
-    g_settings.menuFocusingWidth = Wh_GetIntSetting(L"menu_focusing_width");
-    g_settings.menuFocusingDarkModeColor = GetColorSetting(L"menu_focusing_darkModeColor");
-    g_settings.menuFocusingLightModeColor = GetColorSetting(L"menu_focusing_lightModeColor");
-    g_settings.menuFocusingEnableThemeColorization = Wh_GetIntSetting(L"menu_focusing_enableThemeColorization");
-    g_settings.menuFocusingDarkThemeColorizationType = Wh_GetIntSetting(L"menu_focusing_darkThemeColorizationType");
-    g_settings.menuFocusingLightThemeColorizationType = Wh_GetIntSetting(L"menu_focusing_lightThemeColorizationType");
+    g_settings.menuFocusingDisabled = Wh_GetIntSetting(L"menu.focusing_disabled");
+    g_settings.menuFocusingCornerRadius = Wh_GetIntSetting(L"menu.focusing_cornerRadius");
+    g_settings.menuFocusingWidth = Wh_GetIntSetting(L"menu.focusing_width");
+    g_settings.menuFocusingDarkModeColor = GetColorSetting(L"menu.focusing_darkModeColor");
+    g_settings.menuFocusingLightModeColor = GetColorSetting(L"menu.focusing_lightModeColor");
+    g_settings.menuFocusingEnableThemeColorization = Wh_GetIntSetting(L"menu.focusing_enableThemeColorization");
+    g_settings.menuFocusingDarkThemeColorizationType = Wh_GetIntSetting(L"menu.focusing_darkThemeColorizationType");
+    g_settings.menuFocusingLightThemeColorizationType = Wh_GetIntSetting(L"menu.focusing_lightThemeColorizationType");
 
-    g_settings.menuDisabledHotDisabled = Wh_GetIntSetting(L"menu_disabledHot_disabled");
-    g_settings.menuDisabledHotCornerRadius = Wh_GetIntSetting(L"menu_disabledHot_cornerRadius");
-    g_settings.menuDisabledHotDarkModeColor = GetColorSetting(L"menu_disabledHot_darkModeColor");
-    g_settings.menuDisabledHotLightModeColor = GetColorSetting(L"menu_disabledHot_lightModeColor");
-    g_settings.menuDisabledHotEnableThemeColorization = Wh_GetIntSetting(L"menu_disabledHot_enableThemeColorization");
-    g_settings.menuDisabledHotDarkThemeColorizationType = Wh_GetIntSetting(L"menu_disabledHot_darkThemeColorizationType");
-    g_settings.menuDisabledHotLightThemeColorizationType = Wh_GetIntSetting(L"menu_disabledHot_lightThemeColorizationType");
+    g_settings.menuDisabledHotDisabled = Wh_GetIntSetting(L"menu.disabledHot_disabled");
+    g_settings.menuDisabledHotCornerRadius = Wh_GetIntSetting(L"menu.disabledHot_cornerRadius");
+    g_settings.menuDisabledHotDarkModeColor = GetColorSetting(L"menu.disabledHot_darkModeColor");
+    g_settings.menuDisabledHotLightModeColor = GetColorSetting(L"menu.disabledHot_lightModeColor");
+    g_settings.menuDisabledHotEnableThemeColorization = Wh_GetIntSetting(L"menu.disabledHot_enableThemeColorization");
+    g_settings.menuDisabledHotDarkThemeColorizationType = Wh_GetIntSetting(L"menu.disabledHot_darkThemeColorizationType");
+    g_settings.menuDisabledHotLightThemeColorizationType = Wh_GetIntSetting(L"menu.disabledHot_lightThemeColorizationType");
 
-    g_settings.menuHotDisabled = Wh_GetIntSetting(L"menu_hot_disabled");
-    g_settings.menuHotCornerRadius = Wh_GetIntSetting(L"menu_hot_cornerRadius");
-    g_settings.menuHotDarkModeColor = GetColorSetting(L"menu_hot_darkModeColor");
-    g_settings.menuHotLightModeColor = GetColorSetting(L"menu_hot_lightModeColor");
-    g_settings.menuHotEnableThemeColorization = Wh_GetIntSetting(L"menu_hot_enableThemeColorization");
-    g_settings.menuHotDarkThemeColorizationType = Wh_GetIntSetting(L"menu_hot_darkThemeColorizationType");
-    g_settings.menuHotLightThemeColorizationType = Wh_GetIntSetting(L"menu_hot_lightThemeColorizationType");
+    g_settings.menuHotDisabled = Wh_GetIntSetting(L"menu.hot_disabled");
+    g_settings.menuHotCornerRadius = Wh_GetIntSetting(L"menu.hot_cornerRadius");
+    g_settings.menuHotDarkModeColor = GetColorSetting(L"menu.hot_darkModeColor");
+    g_settings.menuHotLightModeColor = GetColorSetting(L"menu.hot_lightModeColor");
+    g_settings.menuHotEnableThemeColorization = Wh_GetIntSetting(L"menu.hot_enableThemeColorization");
+    g_settings.menuHotDarkThemeColorizationType = Wh_GetIntSetting(L"menu.hot_darkThemeColorizationType");
+    g_settings.menuHotLightThemeColorizationType = Wh_GetIntSetting(L"menu.hot_lightThemeColorizationType");
 
-    g_settings.tooltipNoSystemDropShadow = GetBoolSettingCompat(L"tooltip_noSystemDropShadow", 0);
-    g_settings.tooltipEffectType = GetMappedIntSetting(L"tooltip_effectType", kPartEffect, _countof(kPartEffect), 9);
-    g_settings.tooltipCornerType = GetMappedIntSetting(L"tooltip_cornerType", kPartCorner, _countof(kPartCorner), 4);
-    g_settings.tooltipEnableDropShadow = GetMappedIntSetting(L"tooltip_enableDropShadow", kTriState, _countof(kTriState), 2);
-    g_settings.tooltipNoBorderColor = GetMappedIntSetting(L"tooltip_noBorderColor", kTriState, _countof(kTriState), 2);
-    g_settings.tooltipEnableThemeColorization = GetMappedIntSetting(L"tooltip_enableThemeColorization", kTriState, _countof(kTriState), 2);
-    g_settings.tooltipDarkModeThemeColorizationType = Wh_GetIntSetting(L"tooltip_darkModeThemeColorizationType");
-    g_settings.tooltipLightModeThemeColorizationType = Wh_GetIntSetting(L"tooltip_lightModeThemeColorizationType");
-    g_settings.tooltipDarkModeBorderColor = GetColorSetting(L"tooltip_darkModeBorderColor");
-    g_settings.tooltipLightModeBorderColor = GetColorSetting(L"tooltip_lightModeBorderColor");
-    g_settings.tooltipDarkModeGradientColor = GetColorSetting(L"tooltip_darkModeGradientColor");
-    g_settings.tooltipLightModeGradientColor = GetColorSetting(L"tooltip_lightModeGradientColor");
-    g_settings.tooltipDarkModeColor = GetColorSetting(L"tooltip_darkModeColor");
-    g_settings.tooltipLightModeColor = GetColorSetting(L"tooltip_lightModeColor");
-    g_settings.tooltipMarginsType = GetMappedIntSetting(L"tooltip_marginsType", kMarginsType, _countof(kMarginsType), 0);
-    g_settings.tooltipMarginLeft = Wh_GetIntSetting(L"tooltip_marginLeft");
-    g_settings.tooltipMarginRight = Wh_GetIntSetting(L"tooltip_marginRight");
-    g_settings.tooltipMarginTop = Wh_GetIntSetting(L"tooltip_marginTop");
-    g_settings.tooltipMarginBottom = Wh_GetIntSetting(L"tooltip_marginBottom");
-    g_settings.tooltipDisabled = GetMappedIntSetting(L"tooltip_disabled", kTriState, _countof(kTriState), 2);
-    g_settings.resetAction = GetMappedIntSetting(L"controller_resetAction", kResetAction, _countof(kResetAction), 0);
+    g_settings.tooltipNoSystemDropShadow = GetBoolSettingCompat(L"tooltip.noSystemDropShadow", 0);
+    g_settings.tooltipEffectType = GetMappedIntSetting(L"tooltip.effectType", kPartEffect, _countof(kPartEffect), 9);
+    g_settings.tooltipCornerType = GetMappedIntSetting(L"tooltip.cornerType", kPartCorner, _countof(kPartCorner), 4);
+    g_settings.tooltipEnableDropShadow = GetMappedIntSetting(L"tooltip.enableDropShadow", kTriState, _countof(kTriState), 2);
+    g_settings.tooltipNoBorderColor = GetMappedIntSetting(L"tooltip.noBorderColor", kTriState, _countof(kTriState), 2);
+    g_settings.tooltipEnableThemeColorization = GetMappedIntSetting(L"tooltip.enableThemeColorization", kTriState, _countof(kTriState), 2);
+    g_settings.tooltipDarkModeThemeColorizationType = Wh_GetIntSetting(L"tooltip.darkModeThemeColorizationType");
+    g_settings.tooltipLightModeThemeColorizationType = Wh_GetIntSetting(L"tooltip.lightModeThemeColorizationType");
+    g_settings.tooltipDarkModeBorderColor = GetColorSetting(L"tooltip.darkModeBorderColor");
+    g_settings.tooltipLightModeBorderColor = GetColorSetting(L"tooltip.lightModeBorderColor");
+    g_settings.tooltipDarkModeGradientColor = GetColorSetting(L"tooltip.darkModeGradientColor");
+    g_settings.tooltipLightModeGradientColor = GetColorSetting(L"tooltip.lightModeGradientColor");
+    g_settings.tooltipDarkModeColor = GetColorSetting(L"tooltip.darkModeColor");
+    g_settings.tooltipLightModeColor = GetColorSetting(L"tooltip.lightModeColor");
+    g_settings.tooltipMarginsType = GetMappedIntSetting(L"tooltip.marginsType", kMarginsType, _countof(kMarginsType), 0);
+    g_settings.tooltipMarginLeft = Wh_GetIntSetting(L"tooltip.marginLeft");
+    g_settings.tooltipMarginRight = Wh_GetIntSetting(L"tooltip.marginRight");
+    g_settings.tooltipMarginTop = Wh_GetIntSetting(L"tooltip.marginTop");
+    g_settings.tooltipMarginBottom = Wh_GetIntSetting(L"tooltip.marginBottom");
+    g_settings.tooltipDisabled = GetMappedIntSetting(L"tooltip.disabled", kTriState, _countof(kTriState), 2);
+    g_settings.resetAction = GetMappedIntSetting(L"controller.resetAction", kResetAction, _countof(kResetAction), 0);
 
-    g_settings.confirmReset = (Wh_GetIntSetting(L"controller_confirmReset") != 0);
+    g_settings.confirmReset = (Wh_GetIntSetting(L"controller.confirmReset") != 0);
 
-    g_settings.hardReloadOnApply = (Wh_GetIntSetting(L"controller_hardReloadOnApply") != 0);
+    g_settings.hardReloadOnApply = (Wh_GetIntSetting(L"controller.hardReloadOnApply") != 0);
 
     g_settings.globalEffectType = static_cast<int>(ClampDword(g_settings.globalEffectType, 0, 8));
     g_settings.globalCornerType = static_cast<int>(ClampDword(g_settings.globalCornerType, 0, 3));
