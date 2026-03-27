@@ -1840,11 +1840,6 @@ BOOL WhTool_ModInit()
     return FALSE;
 }
 
-void WhTool_ModSettingsChanged()
-{
-  ApplySettingsOnceInToolProcess(false);
-}
-
 void WhTool_ModUninit()
 {
 }
