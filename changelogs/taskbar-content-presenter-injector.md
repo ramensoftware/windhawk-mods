@@ -3,7 +3,6 @@
 * Fixed 25H2 support by implementing deferred injection
 * Improved structure tracking logic and performance
 * Added multi-monitor support
-* The mod now injects into certain system tray elements as well
 
 Initial deferred injection patch by [Acercandro](https://github.com/acercandr0)
 
