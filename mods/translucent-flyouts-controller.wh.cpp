@@ -1996,21 +1996,10 @@ void Wh_ModAfterInit()
     CloseHandle(pi.hThread);
 }
 
-void Wh_ModSettingsChanged()
+BOOL Wh_ModSettingsChanged(BOOL* bReload)
 {
-    if (g_isToolModProcessLauncher) {
-    // The wiki snippet only spawns the tool process once (in Wh_ModAfterInit).
-    // To make "Save" re-apply the updated settings, we spawn it again here.
-  // Show any confirmations in the launcher (interactive) context.
-  if (!ApplySettingsOnceInToolProcess(true)) {
-    return;
-  }
-
-  Wh_ModAfterInit();
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
+    *bReload = TRUE;
+    return TRUE
 }
 
 void Wh_ModUninit()
