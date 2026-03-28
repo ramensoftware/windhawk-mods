@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-28T20:31:34.000Z</updated>
+    <updated>2026-03-28T22:44:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.6]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#7568990b9f5176ab4b6646ed48c9a637790352b0</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2026-03-28T22:44:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the following themes: LayerMicaUI, Fluid, TintedGlass, TaskbarToStatusbar, UltraWideFriendly, LiquidGlass, Borderless.</li>
+<li>Updated the following themes: SimplyTransparent, WinXP, CleanSlate, WindowGlass, Luminosity.</li>
+<li>If mod initialization requires an explorer restart, a message box for restarting explorer is now shown. Previously, the themes silently failed to apply.</li>
+<li>Added detection for conflicting programs which use the XAML Diagnostics API, and an option to block such programs. Refer to the mod description for more details.</li>
+<li>Added a way to define theme-aware resources. For example, different colors for an element can be defined for light mode and dark mode.</li>
+<li>Added XAML syntax support for resource variables.</li>
+<li>Added the following properties to&nbsp;<code>WindhawkBlur</code>:&nbsp;<code>TintLuminosityOpacity</code>,&nbsp;<code>TintSaturation</code>,&nbsp;<code>NoiseOpacity</code>, and&nbsp;<code>NoiseDensity</code>. The implementation was contributed by&nbsp;<a href="https://github.com/Lockframe">Jhen</a>. For details, refer to&nbsp;<a href="https://github.com/ramensoftware/windows-11-taskbar-styling-guide#windhawkblur-effect-as-color">the styling guide</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Shell Animation Disabler 1.0]]></title>
         <id>https://windhawk.net/mods/shell-animation-disabler#0df13a9a16e18c36e1b09a6fd7d11ec2c68de08c</id>
@@ -602,25 +621,6 @@ any of the recent (2025-2026) versions that use the Qt 6.x.x framework.</p>
         <author>
             <name>St0RM53</name>
             <uri>https://github.com/St0RM53</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Breadcrumb Middle-Click New Tab 1.1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab#3b18c32d213fdf0e1047f5e9615ba1e334fbbdcd</id>
-        <link href="https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab"/>
-        <updated>2026-03-23T18:40:55.000Z</updated>
-        <content type="html"><![CDATA[<p>🚀 Release v1.1.0: The Clipboard-Free Update
-This major update completely redesigns how the mod reads and writes folder paths, moving away from the clipboard-dependent logic of v1.0.0 to a much safer and less intrusive architecture.</p>
-<p>✨ Key Improvements &amp; Fixes
-Preserves Copied Files (Non-Destructive): In v1.0.0, the mod temporarily hijacked the Windows Clipboard to read and paste paths, which inadvertently destroyed any copied files or complex data sitting in your clipboard. Version 1.1.0 is 100% Clipboard-Free. You can now copy a file, middle-click a folder to open a new tab, and safely paste your file without interruption.</p>
-<p>Increased Reliability: Removed the reliance on simulated Ctrl+C and Ctrl+V commands, which could sometimes misfire depending on system lag or clipboard history monitors.</p>
-<p>⚙️ Under the Hood (v1.0.0 vs v1.1.0)
-Native UIA Probing: Replaced ProbeAddressBarWithClipboard with ProbeAddressBarWithUIA. Instead of forcing a copy command, the mod now securely reads the ValuePattern of the active XAML address bar directly through UIAutomation.</p>
-<p>Unicode Injection: Replaced the clipboard-paste navigation sequence. Target folder paths are now instantly typed into the new tab's address bar using native KEYEVENTF_UNICODE input vectors, bypassing the clipboard entirely.</p>
-<p>Code Cleanup: Completely removed the old BackupClipboard and RestoreClipboard structures, resulting in a cleaner and more efficient execution flow.</p>]]></content>
-        <author>
-            <name>osmanonurkoc</name>
-            <uri>https://github.com/osmanonurkoc</uri>
         </author>
     </entry>
 </feed>

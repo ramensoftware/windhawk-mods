@@ -1,3 +1,13 @@
+## 1.6 ([Mar 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7568990b9f5176ab4b6646ed48c9a637790352b0/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added the following themes: LayerMicaUI, Fluid, TintedGlass, TaskbarToStatusbar, UltraWideFriendly, LiquidGlass, Borderless.
+* Updated the following themes: SimplyTransparent, WinXP, CleanSlate, WindowGlass, Luminosity.
+* If mod initialization requires an explorer restart, a message box for restarting explorer is now shown. Previously, the themes silently failed to apply.
+* Added detection for conflicting programs which use the XAML Diagnostics API, and an option to block such programs. Refer to the mod description for more details.
+* Added a way to define theme-aware resources. For example, different colors for an element can be defined for light mode and dark mode.
+* Added XAML syntax support for resource variables.
+* Added the following properties to `WindhawkBlur`: `TintLuminosityOpacity`, `TintSaturation`, `NoiseOpacity`, and `NoiseDensity`. The implementation was contributed by [Jhen](https://github.com/Lockframe). For details, refer to [the styling guide](https://github.com/ramensoftware/windows-11-taskbar-styling-guide#windhawkblur-effect-as-color).
+
 ## 1.5.2 ([Dec 16, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9345ef955e6053e4e564c66a511146e60e4470dc/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added new themes: SunValley, Surface, Oversimplified&Accentuated, Luminosity.
