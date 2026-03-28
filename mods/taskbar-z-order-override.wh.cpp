@@ -70,7 +70,7 @@ struct InternalZOrderGuard {
   InternalZOrderGuard()  { g_state.internalZOrderUpdate = true; }
   ~InternalZOrderGuard() { g_state.internalZOrderUpdate = false; }
 };
-
+}
 static bool IsMainTaskbarWindow(HWND hWnd) {
   return hWnd && hWnd == g_state.taskbarWnd;
 }
@@ -79,7 +79,7 @@ static bool IsTaskbarThreadCall() {
   return GetCurrentThreadId() == g_state.taskbarThreadId;
 }
 
-static bool InsertTaskbarAfter(HWND insertAfter) {
+static bool SetTaskbarZOrder(HWND insertAfter) {
   if (!g_state.taskbarWnd || !SetWindowPos_Original) {
     return false;
   }
@@ -121,7 +121,7 @@ static void EndInteraction() {
   }
 
   g_state.userInteractionActive = false;
-  InsertTaskbarAfter(HWND_NOTOPMOST);
+  SetTaskbarZOrder(HWND_NOTOPMOST);
 }
 
 static bool InteractionTimedOut() {
@@ -136,15 +136,15 @@ static void ApplyConfiguredMode() {
 
   switch (g_state.mode) {
     case TaskbarZOrder::Top:
-      InsertTaskbarAfter(HWND_TOPMOST);
+      SetTaskbarZOrder(HWND_TOPMOST);
       break;
 
     case TaskbarZOrder::Bottom:
-      InsertTaskbarAfter(HWND_BOTTOM);
+      SetTaskbarZOrder(HWND_BOTTOM);
       break;
 
     case TaskbarZOrder::Interactive:
-      InsertTaskbarAfter(HWND_TOP);
+      SetTaskbarZOrder(HWND_NOTOPMOST);
       break;
   }
 }
@@ -313,7 +313,7 @@ static void ReadSettings() {
   }
 }
 
-} 
+
 
 BOOL Wh_ModInit() {
   ReadSettings();
