@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              force-kill-active-window1
+// @id              force-kill-active-window
 // @name            Force Kill Active Window
 // @description     Press Ctrl+Alt+F4 to forcefully kill the active foreground window.
 // @version         1.0
