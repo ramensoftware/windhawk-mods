@@ -1,8 +1,7 @@
 // ==WindhawkMod==
-// @id              force-kill-active-window
+// @id              force-kill-active-window1
 // @name            Force Kill Active Window
-// @description     Press Ctrl+Alt+F4 to forcefully kill the active foreground
-// window.
+// @description     Press Ctrl+Alt+F4 to forcefully kill the active foreground window.
 // @version         1.0
 // @author          vfxturjo
 // @include         windhawk.exe
@@ -48,8 +47,7 @@ the mod is forbidden from killing to protect your most critical work.
   $name: Require Windows key
 - protected_apps: "devenv.exe, winword.exe, excel.exe"
   $name: Protected Applications (Blacklist)
-  $description: Comma-separated list of executable names that this mod will
-refuse to terminate.
+  $description: Comma-separated list of executable names that this mod will refuse to terminate.
 */
 // ==/WindhawkModSettings==
 
