@@ -5,20 +5,42 @@
 // @version         1.0
 // @author          Acercandr0
 // @github          https://github.com/Acercandr0
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lgdi32 -luser32
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# One Hair
+
+**The first mod designed to make your Windows experience slightly worse.**
+
+One Hair places a single, slightly annoying hair on your screen. It’s always on top, and moves randomly.
+
+## Why?
+Why not?
+
+## Features
+- **One persistent hair** always on top, always there.
+- **Configurable movement interval** – default: 5 minutes (or whatever you set).
+- **Random positions** because a hair that stays still is boring.
+- **Runs in its own process** won't crash your Explorer. (But it might annoy you.)
+*/
+// ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
-- moveInterval: 60
+- moveInterval: 300
   $name: Move interval (seconds)
-  $description: Seconds between each random jump (minimum 1)
+  $description: Seconds between each random jump (minimum 1, default 300)
 */
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <cstdlib>
 #include <ctime>
+#include <shellapi.h>
+#include <strsafe.h>
 
 // ─────────────────────────────────────────────
 //  Config
@@ -35,8 +57,7 @@ static const BYTE  HAIR_G = 22;
 static const BYTE  HAIR_B = 10;
 static const BYTE  HAIR_A = 240;
 
-// Loaded from settings — default 4 seconds
-static DWORD g_moveIntervalMs = 4000;
+static DWORD g_moveIntervalMs = 300000; // 300 segundos por defecto
 
 // ─────────────────────────────────────────────
 //  Globals
@@ -44,6 +65,7 @@ static DWORD g_moveIntervalMs = 4000;
 static HWND   g_hwnd   = nullptr;
 static HANDLE g_hThread = nullptr;
 static HANDLE g_hExitEvent = nullptr;
+static HANDLE g_hWindowReady = nullptr;
 
 // ─────────────────────────────────────────────
 //  DIB helper
@@ -69,6 +91,10 @@ static void RenderHair(HWND hwnd, int posX, int posY)
     const int SH = HAIR_H * SS;
 
     HDC hdcScr = GetDC(nullptr);
+    if (!hdcScr) {
+        Wh_Log(L"RenderHair: GetDC failed");
+        return;
+    }
     HDC hdcBig = CreateCompatibleDC(hdcScr);
     HDC hdcOut = CreateCompatibleDC(hdcScr);
 
@@ -77,6 +103,16 @@ static void RenderHair(HWND hwnd, int posX, int posY)
 
     HBITMAP hBig    = CreateDIB32(hdcScr, SW, SH, &bigBits);
     HBITMAP hOut    = CreateDIB32(hdcScr, HAIR_W, HAIR_H, &outBits);
+    if (!hBig || !hOut) {
+        Wh_Log(L"RenderHair: CreateDIB32 failed");
+        if (hBig) DeleteObject(hBig);
+        if (hOut) DeleteObject(hOut);
+        DeleteDC(hdcBig);
+        DeleteDC(hdcOut);
+        ReleaseDC(nullptr, hdcScr);
+        return;
+    }
+
     HBITMAP hOldBig = (HBITMAP)SelectObject(hdcBig, hBig);
     HBITMAP hOldOut = (HBITMAP)SelectObject(hdcOut, hOut);
 
@@ -132,8 +168,11 @@ static void RenderHair(HWND hwnd, int posX, int posY)
     SIZE  sz    = { HAIR_W, HAIR_H };
     BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
-    UpdateLayeredWindow(hwnd, hdcScr, &ptDst, &sz,
-                        hdcOut, &ptSrc, 0, &bf, ULW_ALPHA);
+    BOOL result = UpdateLayeredWindow(hwnd, hdcScr, &ptDst, &sz,
+                                      hdcOut, &ptSrc, 0, &bf, ULW_ALPHA);
+    if (!result) {
+        Wh_Log(L"RenderHair: UpdateLayeredWindow failed, error=%d", GetLastError());
+    }
 
     SelectObject(hdcBig, hOldBig);
     SelectObject(hdcOut, hOldOut);
@@ -151,8 +190,14 @@ static void PickRandomPosition(int& posX, int& posY)
 {
     int sw = GetSystemMetrics(SM_CXSCREEN);
     int sh = GetSystemMetrics(SM_CYSCREEN);
-    posX = HAIR_W + rand() % (sw - HAIR_W * 2);
-    posY = HAIR_H + rand() % (sh - HAIR_H * 2);
+    if (sw > HAIR_W * 2)
+        posX = HAIR_W + rand() % (sw - HAIR_W * 2);
+    else
+        posX = 10;
+    if (sh > HAIR_H * 2)
+        posY = HAIR_H + rand() % (sh - HAIR_H * 2);
+    else
+        posY = 10;
 }
 
 // ─────────────────────────────────────────────
@@ -166,13 +211,17 @@ static LRESULT CALLBACK HairWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CREATE:
         srand((unsigned)time(nullptr));
         PickRandomPosition(posX, posY);
+        Wh_Log(L"WM_CREATE: window created, pos=%d,%d", posX, posY);
         RenderHair(hwnd, posX, posY);
         SetTimer(hwnd, TIMER_ID, g_moveIntervalMs, nullptr);
+        if (g_hWindowReady)
+            SetEvent(g_hWindowReady);
         return 0;
 
     case WM_TIMER:
         if (wp == TIMER_ID) {
             PickRandomPosition(posX, posY);
+            Wh_Log(L"WM_TIMER: moving to %d,%d", posX, posY);
             RenderHair(hwnd, posX, posY);
         }
         return 0;
@@ -204,7 +253,10 @@ static DWORD WINAPI HairThreadProc(LPVOID lpParam)
     wc.lpfnWndProc   = HairWndProc;
     wc.hInstance     = GetModuleHandle(nullptr);
     wc.lpszClassName = L"OneHairOverlay";
-    RegisterClassEx(&wc);
+    if (!RegisterClassEx(&wc)) {
+        Wh_Log(L"HairThreadProc: RegisterClassEx failed, error=%d", GetLastError());
+        return 1;
+    }
 
     g_hwnd = CreateWindowEx(
         WS_EX_LAYERED     |
@@ -215,107 +267,233 @@ static DWORD WINAPI HairThreadProc(LPVOID lpParam)
         L"One Hair",
         WS_POPUP,
         0, 0, HAIR_W, HAIR_H,
-        nullptr, nullptr,
-        GetModuleHandle(nullptr),
-        nullptr
-    );
+        nullptr, nullptr, wc.hInstance, nullptr);
 
     if (!g_hwnd) {
+        Wh_Log(L"HairThreadProc: CreateWindowEx failed, error=%d", GetLastError());
         return 1;
     }
 
-    ShowWindow(g_hwnd, SW_SHOWNA);
-
-    // Create a manual-reset event for exit signaling
-    g_hExitEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!g_hExitEvent) {
-        DestroyWindow(g_hwnd);
-        return 1;
-    }
+    ShowWindow(g_hwnd, SW_SHOW);
+    Wh_Log(L"HairThreadProc: window created successfully, HWND=0x%p", g_hwnd);
 
     MSG msg;
-    HANDLE handles[2] = { g_hExitEvent, nullptr };
-
-    while (true) {
-        DWORD dwResult = MsgWaitForMultipleObjects(1, handles, FALSE, INFINITE, QS_ALLINPUT);
-
-        if (dwResult == WAIT_OBJECT_0) {
-            // Exit event signaled → break out of the loop
-            break;
-        }
-
-        // Process all pending messages
-        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_QUIT) {
-                // Quit message received → exit
-                goto cleanup;
-            }
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
+    while (GetMessage(&msg, nullptr, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
-cleanup:
-    // Clean up
-    if (g_hwnd) {
-        DestroyWindow(g_hwnd);  // just in case it wasn't destroyed already
-        g_hwnd = nullptr;
-    }
-    
-    if (g_hExitEvent) {
-        CloseHandle(g_hExitEvent);
-        g_hExitEvent = nullptr;
-    }
-    
+    Wh_Log(L"HairThreadProc: exiting message loop");
     return 0;
 }
 
 // ─────────────────────────────────────────────
-//  Settings loader
+//  Tool mod implementation
 // ─────────────────────────────────────────────
-void Wh_ModSettingsChanged()
+BOOL WhTool_ModInit()
 {
-    int secs = Wh_GetIntSetting(L"moveInterval", 4);
-    if (secs < 1) secs = 1;
-    g_moveIntervalMs = (DWORD)(secs * 1000);
+    Wh_Log(L"WhTool_ModInit called");
 
-    if (g_hwnd) {
-        PostMessage(g_hwnd, WM_UPDATE_INTERVAL, 0, 0);
-    }
-}
-
-// ─────────────────────────────────────────────
-//  Mod entry / exit
-// ─────────────────────────────────────────────
-BOOL Wh_ModInit()
-{
-    // Load settings before creating the window
-    Wh_ModSettingsChanged();
-
-    g_hThread = CreateThread(nullptr, 0, HairThreadProc, nullptr, 0, nullptr);
-    if (!g_hThread) {
+    g_hExitEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    g_hWindowReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hExitEvent || !g_hWindowReady) {
+        Wh_Log(L"CreateEvent failed");
+        if (g_hExitEvent) CloseHandle(g_hExitEvent);
+        if (g_hWindowReady) CloseHandle(g_hWindowReady);
         return FALSE;
     }
 
+    g_hThread = CreateThread(nullptr, 0, HairThreadProc, nullptr, 0, nullptr);
+    if (!g_hThread) {
+        Wh_Log(L"CreateThread failed");
+        CloseHandle(g_hExitEvent);
+        CloseHandle(g_hWindowReady);
+        return FALSE;
+    }
+
+    WaitForSingleObject(g_hWindowReady, 5000);
     return TRUE;
 }
 
-void Wh_ModUninit()
+void WhTool_ModSettingsChanged()
 {
-    // Signal the thread to exit
-    if (g_hExitEvent) {
-        SetEvent(g_hExitEvent);
-    }
+    int newInterval = Wh_GetIntSetting(L"moveInterval");
+    if (newInterval < 1) newInterval = 1;
+    g_moveIntervalMs = newInterval * 1000;
+    Wh_Log(L"Settings changed: interval=%d ms", g_moveIntervalMs);
 
-    // Post a message to the window to destroy itself (optional, but ensures cleanup)
+    if (g_hwnd) {
+        PostMessage(g_hwnd, WM_UPDATE_INTERVAL, 0, 0);
+    } else {
+        Wh_Log(L"g_hwnd is null, cannot update interval");
+    }
+}
+
+void WhTool_ModUninit()
+{
+    Wh_Log(L"WhTool_ModUninit called");
+
     if (g_hwnd) {
         PostMessage(g_hwnd, WM_EXIT_THREAD, 0, 0);
     }
 
-    // Wait for the thread to finish (max 5 seconds)
     if (g_hThread) {
         WaitForSingleObject(g_hThread, 5000);
         CloseHandle(g_hThread);
-        g_hThread = nullptr;
     }
+
+    if (g_hExitEvent) CloseHandle(g_hExitEvent);
+    if (g_hWindowReady) CloseHandle(g_hWindowReady);
+}
+
+// ============================================================================
+//  Tool mod launcher code (from Windhawk wiki)
+// ============================================================================
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    if (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath)) == 0) {
+        Wh_Log(L"GetModuleFileName failed");
+        return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 64];
+    StringCchPrintfW(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken,
+        LPCWSTR lpApplicationName,
+        LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes,
+        WINBOOL bInheritHandles,
+        DWORD dwCreationFlags,
+        LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+
+    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{ .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK };
+    PROCESS_INFORMATION pi;
+
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr,
+                                 FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
