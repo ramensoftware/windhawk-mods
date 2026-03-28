@@ -10030,6 +10030,33 @@
                 "version": "1.0.4"
             }
         },
+        "visio-hd-thumbnail": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774710161000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774710161000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Joe Ye",
+                "description": "Fix low-resolution thumbnails for Visio documents in File Explorer",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "visio.exe"
+                ],
+                "name": "Visio Thumbnail HD Fix",
+                "version": "1.0.0"
+            }
+        },
         "visio-pan-zoom": {
             "details": {
                 "defaultSorting": 160,
