@@ -6,6 +6,7 @@
 // @description:zh-CN 修复资源管理器中 Visio 文档低质量缩略图问题
 // @version         1.0.0
 // @author          Joe Ye
+// @github          https://github.com/JoeYe-233
 // @include         visio.exe
 // ==/WindhawkMod==
 
