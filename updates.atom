@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-28T19:13:01.000Z</updated>
+    <updated>2026-03-28T20:31:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Shell Animation Disabler 1.0]]></title>
+        <id>https://windhawk.net/mods/shell-animation-disabler#0df13a9a16e18c36e1b09a6fd7d11ec2c68de08c</id>
+        <link href="https://windhawk.net/mods/shell-animation-disabler"/>
+        <updated>2026-03-28T20:31:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="shellanimationdisabler">Shell Animation Disabler</h1>
+<p>This mod allows you to selectively disable the animations for the start menu, the search menu, the quick settings panel and the notification center.</p>
+<p><img src="https://i.imgur.com/YeEeM4M.gif" alt="" /></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Change Tray Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/change-tray-icons#ef2b66ea7d81e120629daaf0d285dd5a8d41bf42</id>
+        <link href="https://windhawk.net/mods/change-tray-icons"/>
+        <updated>2026-03-28T20:30:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="forcetrayicons">Force Tray Icons</h1>
+<p>This mod will change all tray icons for an application to a specific other icon.</p>
+<p><strong>Example</strong>: Steam with its pre-2011 icon</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/change-tray-icons-example.png" alt="Example: *Steam with its pre-2011 icon" /></p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Go to the "Advanced" tab of this mod</li>
+<li>Find the "Custom process inclusion list"</li>
+<li>Add the name of the EXE you want to disable tray icons for.</li>
+</ol>
+<ul>
+<li>If you don't know the name of the EXE, you can find it using 
+ Task Manager.</li>
+</ul>
+<ol>
+<li>Click Save.</li>
+<li>Configure the mod as you want it to be.</li>
+<li>If the program is open already, restart it.</li>
+</ol>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[One Hair 1.0]]></title>
         <id>https://windhawk.net/mods/one-hair#74f45c84c96abe191f6aaaf5d72b4a965519338f</id>
@@ -579,39 +621,6 @@ Native UIA Probing: Replaced ProbeAddressBarWithClipboard with ProbeAddressBarWi
         <author>
             <name>osmanonurkoc</name>
             <uri>https://github.com/osmanonurkoc</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Nilesoft Shell Animator 1.0]]></title>
-        <id>https://windhawk.net/mods/nilesoft-shell-animator#34ed4db043f361f89303e921edc69d3dafa8bd15</id>
-        <link href="https://windhawk.net/mods/nilesoft-shell-animator"/>
-        <updated>2026-03-23T18:30:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="nilesoftshellanimator">Nilesoft Shell Animator</h1>
-<p>Adds customizable and position-aware animations to Nilesoft Shell's context menu without touching Windows' native menus.</p>
-<p>Slide animation mode:</p>
-<p><img src="https://i.imgur.com/lugdazk.gif" alt="" /></p>
-<p>Fade animation mode:</p>
-<p><img src="https://i.imgur.com/omQGzOV.gif" alt="" /></p>
-<p>Slide + Fade animation mode:</p>
-<p><img src="https://i.imgur.com/THFUeBK.gif" alt="" /></p>
-<p>Native animation mode:</p>
-<p><img src="https://i.imgur.com/qA0Zxhg.gif" alt="" /></p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab per monitor 1.2]]></title>
-        <id>https://windhawk.net/mods/alt-tab-per-monitor#2eec6038eb43a1847f7cf4dfa0fa65a101aafd18</id>
-        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
-        <updated>2026-03-22T23:32:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added customization options for both the display location and the windows to show. Win+Alt+Tab can have different options.</li>
-</ul>]]></content>
-        <author>
-            <name>L3r0y</name>
-            <uri>https://github.com/L3r0yThingz</uri>
         </author>
     </entry>
 </feed>

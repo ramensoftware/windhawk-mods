@@ -724,6 +724,31 @@
                 "version": "1.0.0"
             }
         },
+        "change-tray-icons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774729804000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774729804000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lshell32 -lgdi32",
+                "description": "Change all tray icons for an application to a specific other icon",
+                "github": "https://github.com/aubymori",
+                "name": "Change Tray Icons",
+                "version": "1.0.0"
+            }
+        },
         "chinese-ime-fixed-mode": {
             "details": {
                 "defaultSorting": 740,
@@ -7364,6 +7389,38 @@
                 ],
                 "name": "ShadowPlay Save Folder Override",
                 "version": "1.1"
+            }
+        },
+        "shell-animation-disabler": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774729894000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774729894000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lockframe",
+                "compilerOptions": "-luser32",
+                "description": "Selectively disable UWP shell animations while preserving other system animations.",
+                "github": "https://github.com/Lockframe",
+                "include": [
+                    "StartMenuExperienceHost.exe",
+                    "ShellExperienceHost.exe",
+                    "ShellHost.exe",
+                    "SearchHost.exe",
+                    "explorer.exe"
+                ],
+                "name": "Shell Animation Disabler",
+                "version": "1.0"
             }
         },
         "shell-flyout-positions": {
