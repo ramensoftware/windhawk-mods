@@ -6182,7 +6182,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1774079561000,
+                "updated": 1774701519000,
                 "users": 25
             },
             "metadata": {
@@ -6200,8 +6200,8 @@
                     "MSPUB.EXE",
                     "MSACCESS.EXE"
                 ],
-                "name": "Office 还原旧版 UI 界面（32/64 位通用版）",
-                "version": "1.0"
+                "name": "Office 还原旧版 UI 界面（32/64 位通用）",
+                "version": "1.0.1"
             }
         },
         "old-auto-colorization": {

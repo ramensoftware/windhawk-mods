@@ -6182,7 +6182,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1774079561000,
+                "updated": 1774701519000,
                 "users": 25
             },
             "metadata": {
@@ -6201,7 +6201,7 @@
                     "MSACCESS.EXE"
                 ],
                 "name": "Office UI Reverter (32/64-bit Universal)",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "old-auto-colorization": {
