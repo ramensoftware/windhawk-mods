@@ -159,6 +159,31 @@ BOOL WINAPI SystemParametersInfoW_Hook(UINT uiAction, UINT uiParam, PVOID pvPara
 }
 
 // ==============================================================================
+// TASKBAR HELPER
+// ==============================================================================
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            } 
+            return TRUE;
+        }, 
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+  
+    return hTaskbarWnd;
+}
+
+// ==============================================================================
 // INITIALIZATION, UNINITIALIZATION & SETTINGS UPDATES
 // ==============================================================================
 
@@ -178,7 +203,10 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     if (g_CurrentApp == AppType::Explorer) {
-        RestartTargetProcesses();
+        // Only restart processes if this explorer instance owns the taskbar
+        if (FindCurrentProcessTaskbarWnd() != nullptr) {
+            RestartTargetProcesses();
+        }
     } else {
         Wh_SetFunctionHook((void*)SystemParametersInfoW, (void*)SystemParametersInfoW_Hook, (void**)&SystemParametersInfoW_Original);
     }
@@ -187,7 +215,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    if (g_CurrentApp == AppType::Explorer) {
+    if (g_CurrentApp == AppType::Explorer && FindCurrentProcessTaskbarWnd() != nullptr) {
         RestartTargetProcesses();
     }
 }
@@ -195,7 +223,7 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
 
-    if (g_CurrentApp == AppType::Explorer) {
+    if (g_CurrentApp == AppType::Explorer && FindCurrentProcessTaskbarWnd() != nullptr) {
         RestartTargetProcesses();
     }
 }
