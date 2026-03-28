@@ -4186,6 +4186,33 @@
                 "version": "1.0.2"
             }
         },
+        "force-kill-active-window": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774705040000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774705040000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "vfxturjo",
+                "description": "Press Ctrl+Alt+F4 to forcefully kill the active foreground window.",
+                "github": "https://github.com/zunaidFarouque",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Force Kill Active Window",
+                "version": "1.0"
+            }
+        },
         "force-thick-frames": {
             "details": {
                 "defaultSorting": 18248,

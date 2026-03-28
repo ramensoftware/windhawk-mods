@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-28T12:38:39.000Z</updated>
+    <updated>2026-03-28T13:37:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Force Kill Active Window 1.0]]></title>
+        <id>https://windhawk.net/mods/force-kill-active-window#e3d4505be854f2fee52fadd2bf1d05b7aff4712e</id>
+        <link href="https://windhawk.net/mods/force-kill-active-window"/>
+        <updated>2026-03-28T13:37:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="forcekillactivewindow">Force Kill Active Window</h1>
+<p>Instantly terminate any frozen or unresponsive application with a keyboard shortcut.</p>
+<p>By default, pressing <strong>Ctrl+Alt+F4</strong> will execute a hard system kill on the currently active foreground window, bypassing the standard Windows polite closure request.</p>
+<h3 id="warning">⚠️ Warning</h3>
+<p>This performs a hard system termination (<code>TerminateProcess</code>). The target application will <strong>not</strong> be given a chance to save your work. Use strictly as a last resort.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Customizable Hotkey:</strong> Change the trigger shortcut in the settings. Updates apply instantly.</li>
+<li><strong>Process Blacklist:</strong> Define apps (like <code>winword.exe</code> or <code>chrome.exe</code>) that the mod is forbidden from killing to protect your most critical work.</li>
+</ul>]]></content>
+        <author>
+            <name>vfxturjo</name>
+            <uri>https://github.com/zunaidFarouque</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Office UI Reverter (32/64-bit Universal) 1.0.1]]></title>
         <id>https://windhawk.net/mods/office-ui-reverter-universal#930d54229ce6b8af9f00da0307d8dcf0024d6800</id>
@@ -541,20 +561,6 @@ Native UIA Probing: Replaced ProbeAddressBarWithClipboard with ProbeAddressBarWi
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Size 1.1]]></title>
-        <id>https://windhawk.net/mods/start-menu-size#cc7bb194b5c59a00a396d51a4e6d7a5f119fe25c</id>
-        <link href="https://windhawk.net/mods/start-menu-size"/>
-        <updated>2026-03-21T17:31:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for setting the search menu size as well. By default, the size that's configured for the Start menu is used for the search menu as well.</li>
-<li>Minor fixes and size calculation improvements.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
