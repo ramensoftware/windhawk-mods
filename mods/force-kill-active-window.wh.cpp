@@ -12,23 +12,16 @@
 /*
 # Force Kill Active Window
 
-Instantly terminate any frozen or unresponsive application with a keyboard
-shortcut.
+Instantly terminate any frozen or unresponsive application with a keyboard shortcut.
 
-By default, pressing **Ctrl+Alt+F4** will execute a hard system kill on the
-currently active foreground window, bypassing the standard Windows polite
-closure request.
+By default, pressing **Ctrl+Alt+F4** will execute a hard system kill on the currently active foreground window, bypassing the standard Windows polite closure request.
 
 ### ⚠️ Warning
-This performs a hard system termination (`TerminateProcess`). The target
-application will **not** be given a chance to save your work. Use strictly as a
-last resort.
+This performs a hard system termination (`TerminateProcess`). The target application will **not** be given a chance to save your work. Use strictly as a last resort.
 
 ### Features
-* **Customizable Hotkey:** Change the trigger shortcut in the settings. Updates
-apply instantly.
-* **Process Blacklist:** Define apps (like `winword.exe` or `chrome.exe`) that
-the mod is forbidden from killing to protect your most critical work.
+* **Customizable Hotkey:** Change the trigger shortcut in the settings. Updates apply instantly.
+* **Process Blacklist:** Define apps (like `winword.exe` or `chrome.exe`) that the mod is forbidden from killing to protect your most critical work.
 */
 // ==/WindhawkModReadme==
 
@@ -45,7 +38,7 @@ the mod is forbidden from killing to protect your most critical work.
   $name: Require Shift key
 - req_win: false
   $name: Require Windows key
-- protected_apps: "devenv.exe, winword.exe, excel.exe"
+- protected_apps: "devenv.exe, winword.exe, excel.exe, explorer.exe"
   $name: Protected Applications (Blacklist)
   $description: Comma-separated list of executable names that this mod will refuse to terminate.
 */
@@ -101,6 +94,7 @@ void LoadSettings() {
     g_modifiers |= MOD_SHIFT;
   if (Wh_GetIntSetting(L"req_win"))
     g_modifiers |= MOD_WIN;
+  g_modifiers |= MOD_NOREPEAT;
 
   PCWSTR keyStr = Wh_GetStringSetting(L"kill_key");
   g_vkCode = ParseKeyCode(keyStr);
@@ -267,10 +261,19 @@ void WhTool_ModSettingsChanged() {
   }
 }
 
-// ============================================================================
-// Windhawk tool mod wrapper (m417z): launcher in main windhawk.exe spawns a
-// dedicated child; mod logic runs only in that child.
-// ============================================================================
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -285,7 +288,7 @@ BOOL Wh_ModInit() {
   bool isToolModProcess = false;
   bool isCurrentToolModProcess = false;
   int argc;
-  LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
   if (!argv) {
     Wh_Log(L"CommandLineToArgvW failed");
     return FALSE;
@@ -303,7 +306,7 @@ BOOL Wh_ModInit() {
   for (int i = 1; i < argc - 1; i++) {
     if (wcscmp(argv[i], L"-tool-mod") == 0) {
       isToolModProcess = true;
-      if (wcscmp(argv[i + 1], L"force-kill-active-window") == 0) {
+      if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
         isCurrentToolModProcess = true;
       }
       break;
@@ -317,15 +320,15 @@ BOOL Wh_ModInit() {
   }
 
   if (isCurrentToolModProcess) {
-    g_toolModProcessMutex = CreateMutex(
-        nullptr, TRUE, L"windhawk-tool-mod_force-kill-active-window");
+    g_toolModProcessMutex =
+        CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
     if (!g_toolModProcessMutex) {
       Wh_Log(L"CreateMutex failed");
       ExitProcess(1);
     }
 
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-      Wh_Log(L"Tool mod already running (force-kill-active-window)");
+      Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
       ExitProcess(1);
     }
 
@@ -358,20 +361,19 @@ void Wh_ModAfterInit() {
   }
 
   WCHAR currentProcessPath[MAX_PATH];
-  switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                             ARRAYSIZE(currentProcessPath))) {
+  switch (GetModuleFileName(nullptr, currentProcessPath,
+                            ARRAYSIZE(currentProcessPath))) {
   case 0:
   case ARRAYSIZE(currentProcessPath):
     Wh_Log(L"GetModuleFileName failed");
     return;
   }
 
-  WCHAR commandLine[MAX_PATH + 2 +
-                    (sizeof(L" -tool-mod \"force-kill-active-window\"") /
-                     sizeof(WCHAR)) -
-                    1];
-  swprintf_s(commandLine, L"\"%s\" -tool-mod \"force-kill-active-window\"",
-             currentProcessPath);
+  WCHAR
+  commandLine[MAX_PATH + 2 +
+              (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+  swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+             WH_MOD_ID);
 
   HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
   if (!kernelModule) {
@@ -417,6 +419,7 @@ void Wh_ModSettingsChanged() {
   if (g_isToolModProcessLauncher) {
     return;
   }
+
   WhTool_ModSettingsChanged();
 }
 
@@ -424,6 +427,7 @@ void Wh_ModUninit() {
   if (g_isToolModProcessLauncher) {
     return;
   }
+
   WhTool_ModUninit();
   ExitProcess(0);
 }
