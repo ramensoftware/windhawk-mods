@@ -64,7 +64,6 @@ static DWORD g_moveIntervalMs = 300000; // 300 segundos por defecto
 // ─────────────────────────────────────────────
 static HWND   g_hwnd   = nullptr;
 static HANDLE g_hThread = nullptr;
-static HANDLE g_hExitEvent = nullptr;
 static HANDLE g_hWindowReady = nullptr;
 
 // ─────────────────────────────────────────────
@@ -290,23 +289,29 @@ static DWORD WINAPI HairThreadProc(LPVOID lpParam)
 // ─────────────────────────────────────────────
 //  Tool mod implementation
 // ─────────────────────────────────────────────
+static void LoadSettings()
+{
+    int newInterval = Wh_GetIntSetting(L"moveInterval");
+    if (newInterval < 1) newInterval = 1;
+    g_moveIntervalMs = newInterval * 1000;
+    Wh_Log(L"Settings loaded: interval=%d ms", g_moveIntervalMs);
+}
+
 BOOL WhTool_ModInit()
 {
     Wh_Log(L"WhTool_ModInit called");
 
-    g_hExitEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    LoadSettings();
+
     g_hWindowReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!g_hExitEvent || !g_hWindowReady) {
+    if (!g_hWindowReady) {
         Wh_Log(L"CreateEvent failed");
-        if (g_hExitEvent) CloseHandle(g_hExitEvent);
-        if (g_hWindowReady) CloseHandle(g_hWindowReady);
         return FALSE;
     }
 
     g_hThread = CreateThread(nullptr, 0, HairThreadProc, nullptr, 0, nullptr);
     if (!g_hThread) {
         Wh_Log(L"CreateThread failed");
-        CloseHandle(g_hExitEvent);
         CloseHandle(g_hWindowReady);
         return FALSE;
     }
@@ -315,12 +320,10 @@ BOOL WhTool_ModInit()
     return TRUE;
 }
 
+
 void WhTool_ModSettingsChanged()
 {
-    int newInterval = Wh_GetIntSetting(L"moveInterval");
-    if (newInterval < 1) newInterval = 1;
-    g_moveIntervalMs = newInterval * 1000;
-    Wh_Log(L"Settings changed: interval=%d ms", g_moveIntervalMs);
+    LoadSettings();
 
     if (g_hwnd) {
         PostMessage(g_hwnd, WM_UPDATE_INTERVAL, 0, 0);
@@ -342,12 +345,11 @@ void WhTool_ModUninit()
         CloseHandle(g_hThread);
     }
 
-    if (g_hExitEvent) CloseHandle(g_hExitEvent);
     if (g_hWindowReady) CloseHandle(g_hWindowReady);
 }
 
 // ============================================================================
-//  Tool mod launcher code (from Windhawk wiki)
+//  Tool mod launcher code (from Windhawk wiki — unmodified)
 // ============================================================================
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -361,7 +363,6 @@ BOOL Wh_ModInit() {
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
@@ -395,7 +396,8 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -410,8 +412,11 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
@@ -433,13 +438,19 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    if (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath)) == 0) {
-        Wh_Log(L"GetModuleFileName failed");
-        return;
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
-    WCHAR commandLine[MAX_PATH + 64];
-    StringCchPrintfW(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
@@ -451,30 +462,29 @@ void Wh_ModAfterInit() {
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken,
-        LPCWSTR lpApplicationName,
-        LPWSTR lpCommandLine,
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes,
-        WINBOOL bInheritHandles,
-        DWORD dwCreationFlags,
-        LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-
-    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFO si{ .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK };
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
-
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr,
-                                 FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
@@ -487,6 +497,7 @@ void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModSettingsChanged();
 }
 
@@ -494,6 +505,7 @@ void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
