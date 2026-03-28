@@ -1,4 +1,4 @@
-// ==WindhawkMod==
+        // ==WindhawkMod==
 // @id            windows-11-start-menu-buttons
 // @name          Windows 11 Start Menu Buttons
 // @description   Customizable buttons for the Windows 11 Start menu.
@@ -23,12 +23,14 @@ Each button has three fields:
 
 3. **Action** — what the button does.
 
+![img](https://i.imgur.com/FpVm6OR.png)
+
 ### Action formats
 
 - `cmd:explorer.exe` — runs through `cmd.exe`.
-- `shell:shutdown /r` — runs console window.
+- `shell:shutdown /r` — runs console window. 
 - `"C:\Program Files"` — opens a folder.
-- `"C:\Program Files\Google\Chrome\Application\chrome.exe"` — оpens a file or app.
+- `"C:\Program Files\Google\Chrome\Application\chrome.exe"` — opens a file or app.
 - `~Downloads` — searches for a folder by name in common system locations.
 - `~chrome.exe` — searches for a file by name in common system locations.
 - `https://www.youtube.com/` — opens a website.
@@ -588,18 +590,17 @@ static void ExecuteActionText(const std::wstring& rawAction) {
 static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == WM_COPYDATA) {
         const COPYDATASTRUCT* cds = reinterpret_cast<const COPYDATASTRUCT*>(lParam);
-        if (cds && cds->dwData == kCopyDataMagic && cds->lpData && cds->cbData >= sizeof(wchar_t)) {
-            const wchar_t* data = static_cast<const wchar_t*>(cds->lpData);
-            size_t len = cds->cbData / sizeof(wchar_t);
-            if (len > 0 && data[len - 1] == L'\0') {
-                ExecuteActionText(std::wstring(data));
-            }
+        if (cds && cds->dwData == kCopyDataMagic && cds->cbData == sizeof(int)) {
+            int idx = *static_cast<const int*>(cds->lpData);
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            if (idx >= 0 && idx < (int)g_buttons.size())
+            ExecuteActionText(g_buttons[idx].action);
         }
         return 0;
-    }
+    }  
 
     switch (message) {
-        case WM_CLOSE:
+        case WM_CLOSE:  
             DestroyWindow(hWnd);
             return 0;
         case WM_DESTROY:
@@ -608,7 +609,7 @@ static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             return 0;
     }
 
-    return DefWindowProcW(hWnd, message, wParam, lParam);
+    return DefWindowProcW(hWnd, message, wParam, lParam); 
 }
 
 static DWORD WINAPI ProxyWindowThread(LPVOID) {
@@ -634,8 +635,6 @@ static DWORD WINAPI ProxyWindowThread(LPVOID) {
         return 1;
     }
 
-    ChangeWindowMessageFilterEx(g_proxyWindow, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
-
     MSG msg{};
     while (GetMessageW(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
@@ -653,21 +652,20 @@ static void StartProxyThread() {
     if (!g_proxyThread) Wh_Log(L"Proxy: CreateThread failed, error %lu", GetLastError());
 }
 
-static inline bool SendActionToProxy(const std::wstring& action) {
+static inline bool SendActionToProxy(int buttonIndex) {
     HWND hProxy = FindWindowW(PROXY_WINDOW_CLASS, PROXY_WINDOW_NAME);
-
     if (!hProxy) {
-        Wh_Log(L"Proxy: window not found, executing directly");
-        ExecuteActionText(action);
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        if (buttonIndex >= 0 && buttonIndex < (int)g_buttons.size())
+            ExecuteActionText(g_buttons[buttonIndex].action);
         return false;
     }
 
     COPYDATASTRUCT cds{};
     cds.dwData = kCopyDataMagic;
-    cds.cbData = (DWORD)((action.size() + 1) * sizeof(wchar_t));
-    cds.lpData = (PVOID)action.c_str();
-
-    return SendMessageW(hProxy, WM_COPYDATA, 0, (LPARAM)&cds) != 0;
+    cds.cbData = sizeof(int);
+    cds.lpData = &buttonIndex;
+    return SendMessageW(hProxy, WM_COPYDATA, 0, (LPARAM)&cds) != 0; 
 }
 
 static bool IsExplorerProcess() {
@@ -693,7 +691,8 @@ static wux::FrameworkElement FindOriginalPowerButton(wux::DependencyObject paren
     return nullptr;
 }
 
-static void AddMenuItemsFromActions(wuxc::MenuFlyout flyout, const std::vector<ActionItem>& items) {
+static void AddMenuItemsFromActions(wuxc::MenuFlyout flyout,
+                                    const std::vector<ActionItem>& items) {
     for (const auto& item : items) {
         wuxc::MenuFlyoutItem menuItem;
         menuItem.Text(item.name);
@@ -704,18 +703,17 @@ static void AddMenuItemsFromActions(wuxc::MenuFlyout flyout, const std::vector<A
             icon.FontSize(16);
             menuItem.Icon(icon);
         }
-
         std::wstring action = item.action;
         menuItem.Click([action](auto&&, auto&&) {
-            SendActionToProxy(action);
+            ExecuteActionText(action);
             CloseStartMenuAfterClick();
         });
-
         flyout.Items().Append(menuItem);
     }
 }
 
-static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement originalPowerButton) {
+static void InjectButtons(wuxc::Panel parentPanel,
+                          wux::FrameworkElement /*originalPowerButton*/) {
     try {
         Settings currentSettings;
         std::vector<ActionItem> currentButtons;
@@ -724,10 +722,16 @@ static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement origina
             currentSettings = g_settings;
             currentButtons  = g_buttons;
         }
+ 
+        // Сохраняем оригинальные индексы ДО разворота
+        std::vector<int> origIdx(currentButtons.size());
+        for (int i = 0; i < (int)origIdx.size(); i++) origIdx[i] = i;
+ 
         if (currentSettings.invertButtons) {
             std::reverse(currentButtons.begin(), currentButtons.end());
+            std::reverse(origIdx.begin(), origIdx.end());
         }
-
+ 
         auto children = parentPanel.Children();
         for (uint32_t i = 0; i < children.Size(); i++) {
             auto child = children.GetAt(i);
@@ -735,46 +739,36 @@ static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement origina
                 auto tag = fe.Tag();
                 if (tag && winrt::unbox_value_or<winrt::hstring>(tag, L"") == CONTAINER_TAG)
                     continue;
-
                 bool isUserTile = (fe.Name() == L"UserTileButton" ||
                                    fe.Name() == L"UserTile" ||
                                    fe.Name() == L"ProfileButton");
                 if (!currentSettings.hideAccountButton && isUserTile) {
-                    fe.Visibility(wux::Visibility::Visible);
-                    continue;
+                    fe.Visibility(wux::Visibility::Visible); continue;
                 }
                 fe.Visibility(wux::Visibility::Collapsed);
             }
         }
-
+ 
         wuxc::StackPanel container = g_buttonContainer.get();
         if (container) {
             try {
                 auto parent = wuxm::VisualTreeHelper::GetParent(container);
-                if (!parent || parent != parentPanel) {
-                    container = nullptr;
-                    g_buttonContainer = nullptr;
-                }
-            } catch (...) {
-                container = nullptr;
-                g_buttonContainer = nullptr;
-            }
+                if (!parent || parent != parentPanel) { container = nullptr; g_buttonContainer = nullptr; }
+            } catch (...) { container = nullptr; g_buttonContainer = nullptr; }
         }
-
+ 
         if (!container) {
             for (uint32_t i = 0; i < children.Size(); i++) {
                 auto child = children.GetAt(i);
                 if (auto panel = child.try_as<wuxc::StackPanel>()) {
                     auto tag = panel.Tag();
                     if (tag && winrt::unbox_value_or<winrt::hstring>(tag, L"") == CONTAINER_TAG) {
-                        container = panel;
-                        g_buttonContainer = container;
-                        break;
+                        container = panel; g_buttonContainer = container; break;
                     }
                 }
             }
         }
-
+ 
         if (!container) {
             container = wuxc::StackPanel();
             container.Tag(winrt::box_value(CONTAINER_TAG));
@@ -783,38 +777,37 @@ static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement origina
             parentPanel.Children().Append(container);
             g_buttonContainer = container;
         }
-
+ 
         container.Visibility(wux::Visibility::Visible);
         container.HorizontalAlignment(currentSettings.alignment);
         container.Margin({ (double)currentSettings.containerMarginLeft, 0,
                            (double)currentSettings.containerMarginRight, 0 });
-
+ 
         bool needRebuild = g_forceRebuild.exchange(false) ||
                            container.Children().Size() != currentButtons.size();
         if (!needRebuild) return;
-
+ 
         container.Children().Clear();
-
+ 
         for (size_t i = 0; i < currentButtons.size(); i++) {
             const auto& btnDef = currentButtons[i];
-
+            int btnIdx = origIdx[i];
+ 
             wuxc::Button btn;
-            btn.Width(40);
-            btn.Height(40);
+            btn.Width(40); btn.Height(40);
             btn.Margin({ 0, 0,
-                i + 1 < currentButtons.size() ? (double)currentSettings.buttonSpacing : 0.0,
-                0 });
+                i + 1 < currentButtons.size() ? (double)currentSettings.buttonSpacing : 0.0, 0 });
             btn.Background(wuxm::SolidColorBrush(wu::Colors::Transparent()));
             btn.BorderThickness({ 0, 0, 0, 0 });
             btn.CornerRadius({ 4, 4, 4, 4 });
-
+ 
             wuxc::FontIcon icon;
             icon.Glyph(btnDef.icon);
             icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
             icon.FontSize(16);
             btn.Content(icon);
             wuxc::ToolTipService::SetToolTip(btn, winrt::box_value(btnDef.name));
-
+ 
             if (!btnDef.submenu.empty()) {
                 auto submenu = btnDef.submenu;
                 btn.Click([submenu, btn](auto&&, auto&&) mutable {
@@ -823,16 +816,15 @@ static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement origina
                     flyout.ShowAt(btn);
                 });
             } else {
-                std::wstring action = btnDef.action;
-                btn.Click([action](auto&&, auto&&) {
-                    SendActionToProxy(action);
+                btn.Click([btnIdx](auto&&, auto&&) {
+                    SendActionToProxy(btnIdx);
                     CloseStartMenuAfterClick();
                 });
             }
-
+ 
             container.Children().Append(btn);
         }
-
+ 
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Inject: WinRT error 0x%08X", (unsigned)ex.code());
     } catch (...) {
@@ -952,13 +944,14 @@ static void StopVisibilityMonitoring() {
 
 static HWND g_retryHwnd = NULL;
 
+static constexpr UINT_PTR kRetryTimerId = 0xB77D1A3C;
 static void CALLBACK RetryTimerProc(HWND hwnd, UINT, UINT_PTR idEvent, DWORD) {
     KillTimer(hwnd, idEvent);
     if (!g_unloading) {
         g_buttonsInjected = false;
         HWND h = g_retryHwnd ? g_retryHwnd : hwnd;
         if (!StartVisibilityMonitoring())
-            SetTimer(h, idEvent, 100, RetryTimerProc);
+            SetTimer(h, kRetryTimerId, 100, RetryTimerProc);
     }
 }
 
@@ -970,7 +963,7 @@ static void InitWithRetry(HWND hwnd) {
     if (hwnd) g_retryHwnd = hwnd;
 
     if (!StartVisibilityMonitoring())
-        SetTimer(hwnd, 1772058423, 100, RetryTimerProc);
+        SetTimer(hwnd, kRetryTimerId, 100, RetryTimerProc); 
 }
 
 using CreateWindowInBand_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, PVOID, DWORD);
@@ -985,7 +978,7 @@ static HWND WINAPI CreateWindowInBand_Hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam, dwBand);
 
-    if (hWnd && lpClassName && _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0)
+    if (hWnd && lpClassName && _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) 
         InitWithRetry(hWnd);
 
     return hWnd;
@@ -1113,19 +1106,29 @@ void Wh_ModUninit() {
         return;
     }
 
-    StopVisibilityMonitoring();
+    HWND hWnd = FindCoreWindow();
+    if (hWnd) {
+        CallOnWindowThread(hWnd, [](PVOID) {
+            StopVisibilityMonitoring();
+        }, nullptr);
+    }
 }
 
-void Wh_ModSettingsChanged() {
+void Wh_ModSettingsChanged() { 
     LoadSettings();
     BuildButtons();
     g_forceRebuild    = true;
     g_buttonsInjected = false;
 
-    try {
-        if (auto coreWindow = wuc::CoreWindow::GetForCurrentThread()) {
-            if (coreWindow.Visible())
-                OnWindowVisible();
-        }
-    } catch (...) {}
+    HWND hWnd = FindCoreWindow();
+    if (hWnd) {
+        CallOnWindowThread(hWnd, [](PVOID) {
+            try {
+                if (auto coreWindow = wuc::CoreWindow::GetForCurrentThread()) {
+                    if (coreWindow.Visible())
+                        OnWindowVisible();
+                }
+            } catch (...) {}
+        }, nullptr);
+    }
 }
