@@ -2,7 +2,7 @@
 // @id              taskbar-music-lounge
 // @name            Taskbar Music Lounge
 // @description     A native-style music ticker with media controls.
-// @version         4.0
+// @version         4.0.1
 // @author          Hashah2311
 // @github          https://github.com/Hashah2311
 // @include         explorer.exe
@@ -175,6 +175,7 @@ HWND g_hMediaWindow = NULL;
 bool g_Running = true; 
 int g_HoverState = 0; 
 HWINEVENTHOOK g_TaskbarHook = nullptr; 
+UINT g_TaskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
 
 // Idle Tracking
 int g_IdleSecondsCounter = 0;
@@ -495,6 +496,27 @@ void CALLBACK TaskbarEventProc(
     PostMessage(g_hMediaWindow, WM_APP + 10, 0, 0);
 }
 
+// Register Event Hook scoped to Taskbar Thread
+void RegisterTaskbarHook(HWND hwnd)
+{
+    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", nullptr);
+    if (hTaskbar) {
+        DWORD pid = 0;
+        DWORD tid = GetWindowThreadProcessId(hTaskbar, &pid);
+        if (tid != 0) {
+            g_TaskbarHook = SetWinEventHook(
+                EVENT_OBJECT_LOCATIONCHANGE,
+                EVENT_OBJECT_LOCATIONCHANGE,
+                nullptr,
+                TaskbarEventProc,
+                pid, tid,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
+            );
+        }
+    }
+    PostMessage(hwnd, WM_APP + 10, 0, 0);
+}
+
 // --- Window Procedure ---
 #define IDT_POLL_MEDIA 1001
 #define IDT_ANIMATION  1002
@@ -505,26 +527,7 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_CREATE: 
             UpdateAppearance(hwnd); 
             SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL); 
-            
-            // Register Event Hook scoped to Taskbar Thread
-            {
-                HWND hTaskbar = FindWindow(L"Shell_TrayWnd", nullptr);
-                if (hTaskbar) {
-                    DWORD pid = 0;
-                    DWORD tid = GetWindowThreadProcessId(hTaskbar, &pid);
-                    if (tid != 0) {
-                        g_TaskbarHook = SetWinEventHook(
-                            EVENT_OBJECT_LOCATIONCHANGE,
-                            EVENT_OBJECT_LOCATIONCHANGE,
-                            nullptr,
-                            TaskbarEventProc,
-                            pid, tid,
-                            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
-                        );
-                    }
-                }
-                PostMessage(hwnd, WM_APP + 10, 0, 0);
-            }
+            RegisterTaskbarHook(hwnd);
             return 0;
 
         case WM_ERASEBKGND: 
@@ -729,6 +732,16 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             EndPaint(hwnd, &ps);
             return 0;
         }
+        default:
+            if (msg == g_TaskbarCreatedMsg) {
+                if (g_TaskbarHook) {
+                    UnhookWinEvent(g_TaskbarHook);
+                    g_TaskbarHook = nullptr;
+                }
+                RegisterTaskbarHook(hwnd);
+                return 0;
+            }
+            break;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
