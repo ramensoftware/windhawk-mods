@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              taskbar-z-order-override
 // @name            Taskbar Z-Order Override
-// @description     Forces the main taskbar to stay at the top or bottom of the Z-order
-// @version         0.4
+// @description     Control whether the taskbar stays always on top, always at the bottom, or behaves like a normal window
+// @version         0.5
 // @author          meteoni
+// @github          https://github.com/Meteony
 // @include         explorer.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
@@ -11,11 +12,11 @@
 /*
 - TaskbarZOrder: top
   $name: Taskbar Z-Order
-  $description: Choose whether the taskbar is forced to the topmost/bottom band, or acts as a normal window 
+  $description: Choose how the main taskbar should behave in the window Z-order
   $options:
     - top: Always on top
     - bottom: Always at bottom
-    - interactive: Mouse Interactive
+    - interactive: Mimics normal window
 */
 // ==/WindhawkModSettings==
 
@@ -46,12 +47,14 @@ struct ModState {
   WNDPROC originalTaskbarProc = nullptr;
   DWORD taskbarThreadId = 0;
 
-  // In interactive mode we let the taskbar temporarily come forward during active
-  // clicking or dragging events. Outside of that we mimic normal top-leven windows
+  // In interactive mode, the taskbar is allowed to come forward briefly while the
+  // user is actively clicking or dragging on it. Outside that interaction window,
+  // it should behave like a normal non-topmost window.
   bool userInteractionActive = false;
 
-  // Several helpers move the taskbar with SetWindowPos(); and generate WINDOWPOS
-  // traffic too. We excludes out own ZOrder reorder attempts to prevent such fighting. 
+  // Several helpers move the taskbar with SetWindowPos(), which also generates
+  // WINDOWPOS traffic. This flag prevents our own reorder attempts from being
+  // treated as external Z-order changes by the subclass logic.
   bool internalZOrderUpdate = false;
   
   // Timestamp of the most recent taskbar interaction. Interactive mode uses a
@@ -70,7 +73,7 @@ struct InternalZOrderGuard {
   InternalZOrderGuard()  { g_state.internalZOrderUpdate = true; }
   ~InternalZOrderGuard() { g_state.internalZOrderUpdate = false; }
 };
-}
+
 static bool IsMainTaskbarWindow(HWND hWnd) {
   return hWnd && hWnd == g_state.taskbarWnd;
 }
@@ -94,19 +97,19 @@ static bool SetTaskbarZOrder(HWND insertAfter) {
 
 // Forces the taskbar to the front of the normal (non-topmost)
 // Z-order band.
-static void BumpTaskbarToFrontOfNormalBand(HWND hWnd) {
-  if (!hWnd || !SetWindowPos_Original) {
+static void BumpTaskbarToFrontOfNormalBand() {
+  if (!g_state.taskbarWnd || !SetWindowPos_Original) {
     return;
   }
 
   InternalZOrderGuard guard;
 
   SetWindowPos_Original(
-      hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+      g_state.taskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
       SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 
   SetWindowPos_Original(
-      hWnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+      g_state.taskbarWnd, HWND_NOTOPMOST, 0, 0, 0, 0,
       SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
@@ -149,7 +152,10 @@ static void ApplyConfiguredMode() {
   }
 }
 
-static void NormalizeTaskbarBeforeUnload() {
+
+// Before removing the subclass, temporarily force the taskbar into a stable
+// top state so that it is not left between other top-level windows post-unload.
+static void ForceTaskbarTopStateBeforeUnload() {
   const auto oldMode = g_state.mode;
   g_state.mode = TaskbarZOrder::Top;
   ApplyConfiguredMode();
@@ -226,12 +232,18 @@ static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter,
   return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 
+
+// Explorer may try to move the taskbar to a different window band.
+// In interactive mode, we block that change for the main taskbar and 
+// instead keep it at the front of the normal desktop band using the helper below.
+//
+// kDesktopBand = 1: undocumented value for normal desktop band.
 static BOOL WINAPI SetWindowBand_Hook(HWND hWnd, HWND hwndInsertAfter, DWORD dwBand) {
   if (g_state.mode == TaskbarZOrder::Interactive &&
       IsTaskbarThreadCall() &&
       IsMainTaskbarWindow(hWnd) &&
       dwBand != kDesktopBand) {
-    BumpTaskbarToFrontOfNormalBand(hWnd);
+    BumpTaskbarToFrontOfNormalBand();
     return TRUE;
   }
 
@@ -313,7 +325,7 @@ static void ReadSettings() {
   }
 }
 
-
+} // namespace
 
 BOOL Wh_ModInit() {
   ReadSettings();
@@ -323,30 +335,35 @@ BOOL Wh_ModInit() {
     user32 = LoadLibraryW(L"user32.dll");
   }
   if (!user32) {
+    Wh_Log(L"Failed to load user32.dll");
     return FALSE;
   }
 
   auto pSetWindowPos =
       reinterpret_cast<SetWindowPos_t>(GetProcAddress(user32, "SetWindowPos"));
   if (!pSetWindowPos) {
+    Wh_Log(L"Failed to resolve SetWindowPos");
     return FALSE;
   }
 
   if (!Wh_SetFunctionHook(reinterpret_cast<void*>(pSetWindowPos),
                           reinterpret_cast<void*>(SetWindowPos_Hook),
                           reinterpret_cast<void**>(&SetWindowPos_Original))) {
+    Wh_Log(L"Failed to set SetWindowPos function hook");
     return FALSE;
   }
 
   auto pSetWindowBand =
       reinterpret_cast<SetWindowBand_t>(GetProcAddress(user32, "SetWindowBand"));
   if (!pSetWindowBand) {
+    Wh_Log(L"Failed to resolve SetWindowBand");
     return FALSE;
   }
 
   if (!Wh_SetFunctionHook(reinterpret_cast<void*>(pSetWindowBand),
                           reinterpret_cast<void*>(SetWindowBand_Hook),
                           reinterpret_cast<void**>(&SetWindowBand_Original))) {
+    Wh_Log(L"Failed to set SetWindowBand function hook");
     return FALSE;
   }
 
@@ -365,6 +382,6 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
-  NormalizeTaskbarBeforeUnload();
+  ForceTaskbarTopStateBeforeUnload();
   RemoveTaskbarSubclass();
 }
