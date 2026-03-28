@@ -13,7 +13,7 @@
 # Force Tray Icons
 This mod will change all tray icons for an application to a specific other icon.
 
-**Example**: *Steam with its pre-2011 icon
+**Example**: Steam with its pre-2011 icon
 
 ![Example: *Steam with its pre-2011 icon](https://raw.githubusercontent.com/aubymori/images/refs/heads/main/change-tray-icons-example.png)
 
