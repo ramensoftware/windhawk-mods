@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-28T17:25:14.000Z</updated>
+    <updated>2026-03-28T19:13:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[One Hair 1.0]]></title>
+        <id>https://windhawk.net/mods/one-hair#74f45c84c96abe191f6aaaf5d72b4a965519338f</id>
+        <link href="https://windhawk.net/mods/one-hair"/>
+        <updated>2026-03-28T19:13:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="onehair">One Hair</h1>
+<p><strong>The first mod designed to make your Windows experience slightly worse.</strong></p>
+<p>One Hair places a single, slightly annoying hair on your screen. It’s always on top, and moves randomly.</p>
+<h2 id="why">Why?</h2>
+<p>Why not?</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>One persistent hair</strong> always on top, always there.</li>
+<li><strong>Configurable movement interval</strong> – default: 5 minutes (or whatever you set).</li>
+<li><strong>Random positions</strong> because a hair that stays still is boring.</li>
+<li><strong>Runs in its own process</strong> won't crash your Explorer. (But it might annoy you.)</li>
+</ul>]]></content>
+        <author>
+            <name>Acercandr0</name>
+            <uri>https://github.com/Acercandr0</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DirectWrite Font Fallback Override 1.0]]></title>
         <id>https://windhawk.net/mods/dwrite-font-fallback-override#9a65e3674e7c1c8f8265f346bd561a76bce6667c</id>
@@ -590,17 +612,6 @@ Native UIA Probing: Replaced ProbeAddressBarWithClipboard with ProbeAddressBarWi
         <author>
             <name>L3r0y</name>
             <uri>https://github.com/L3r0yThingz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Music Lounge 4.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-music-lounge#de1c1388c6aadf16637ba7ebe4051f310cb2605a</id>
-        <link href="https://windhawk.net/mods/taskbar-music-lounge"/>
-        <updated>2026-03-22T23:06:30.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixes the widget appearing at top-left of screen on startup.</p>]]></content>
-        <author>
-            <name>Hashah2311</name>
-            <uri>https://github.com/Hashah2311</uri>
         </author>
     </entry>
 </feed>
