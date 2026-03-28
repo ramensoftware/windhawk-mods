@@ -1,4 +1,4 @@
-        // ==WindhawkMod==
+// ==WindhawkMod==
 // @id            windows-11-start-menu-buttons
 // @name          Windows 11 Start Menu Buttons
 // @description   Customizable buttons for the Windows 11 Start menu.
