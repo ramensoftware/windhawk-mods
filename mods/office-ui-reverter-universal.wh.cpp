@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id            office-ui-reverter-universal
 // @name          Office UI Reverter (32/64-bit Universal)
-// @name:zh-CN    Office 还原旧版 UI 界面（32/64 位通用版）
+// @name:zh-CN    Office 还原旧版 UI 界面（32/64 位通用）
 // @description   Reverts Office 2022+/365 UI to Office 2016/2019
 // @description:zh-CN 将 Office 2022+/365 的 UI 界面外观还原为 Office 2016/2019
-// @version       1.0
+// @version       1.0.1
 // @author        Joe Ye
 // @github        https://github.com/JoeYe-233
 // @include       WINWORD.EXE
@@ -27,7 +27,11 @@
 
 Reverts the **Office 2022+/Microsoft 365 UI** back to the look of **Office 2019** or **Office 2016**. Can be changed through mod settings.
 
+*Note: this mod needs pdb symbol of `mso40uiWin32Client.dll` to work. The symbol file is expected to be a bit large (~40MB in size). Windhawk will download it automatically when you launch Office apps first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols... 0% (mso40uiWin32Client.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and **relaunch your Office app AS ADMINISTRATOR at least once** after it finishes, this is to write symbols being used to SymbolCache, which speeds up launching later on.*
+
 ## ⚠️ Note:
+- It is advised to **turn off automatic updates** for Office applications, as PDB may need to be downloaded every time after updates.
+- Please relaunch your Office app as administrator *at least once* after installing the mod and wait for symbol download to complete, this is to write symbols being used to SymbolCache, which speeds up launching later on.
 - Early injection to Office processes is required to patch the UI style. This means the process used to launch Office must not be excluded from Windhawk injection.
 - Please close all windows of an Office program and relaunch it to apply the new style.
 - Older styles may lack icons for new features such as *Copilot*. Those are not covered by this mod.
@@ -114,6 +118,7 @@ void ScanAndHookMso40UI() {
     WH_HOOK_SYMBOLS_OPTIONS options = {0};
     options.optionsSize = sizeof(options);
     options.noUndecoratedSymbols = TRUE; // Bypass DIA undecoration quirks
+    options.onlineCacheUrl = L""; // Gracefully stops it from trying to get online symbols. We will rely entirely on local symbol cache, which is populated when you launch Word as administrator after installing the mod and waiting for symbol download to complete.
 
     if (WindhawkUtils::HookSymbols(hMso40UI, mso40uiWin32ClientDllHook, ARRAYSIZE(mso40uiWin32ClientDllHook), &options)) {
         Wh_ApplyHookOperations();
@@ -129,12 +134,6 @@ void ScanAndHookMso40UI() {
 typedef HMODULE (WINAPI *LoadLibraryExW_t)(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags);
 LoadLibraryExW_t pOrig_LoadLibraryExW = nullptr;
 
-// Thread wrapper to avoid blocking the main thread during PDB downloads
-DWORD WINAPI DelayedHookThread(LPVOID lpParam) {
-    ScanAndHookMso40UI();
-    return 0;
-}
-
 HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE hModule = pOrig_LoadLibraryExW(lpLibFileName, hFile, dwFlags);
 
@@ -143,10 +142,7 @@ HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         fileName = fileName ? fileName + 1 : lpLibFileName;
 
         if (_wcsicmp(fileName, L"mso40uiWin32Client.dll") == 0) {
-            HANDLE hThread = CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
-            if (hThread) {
-                CloseHandle(hThread);
-            }
+            ScanAndHookMso40UI();
         }
     }
 
@@ -170,10 +166,7 @@ BOOL Wh_ModInit() {
 
     if (GetModuleHandleW(L"mso40uiWin32Client.dll")) {
         // If already loaded, start the hook thread directly
-        HANDLE hThread = CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
-        if (hThread) {
-            CloseHandle(hThread);
-        }
+        ScanAndHookMso40UI();
     } else {
         // Not loaded yet, stand guard on LoadLibraryExW
         Wh_SetFunctionHook((void*)LoadLibraryExW, (void*)Hook_LoadLibraryExW, (void**)&pOrig_LoadLibraryExW);
