@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          aubymori
 // @github          https://github.com/aubymori
-// @compilerOptions -lshell32
+// @compilerOptions -lshell32 -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -55,10 +55,6 @@ BOOL WINAPI Shell_NotifyIconW_hook(
     && lpData->cbSize >= offsetof(NOTIFYICONDATAW, hIcon)
     && (lpData->uFlags & NIF_ICON))
     {
-        /* Probably best to toss the old icon out. */
-        if (lpData->hIcon)
-            DestroyIcon(lpData->hIcon);
-
         lpData->hIcon = g_hIcon;
     }
     return Shell_NotifyIconW_orig(dwMessage, lpData);
@@ -91,13 +87,32 @@ void Wh_ModSettingsChanged(void)
         if (0 == wcsicmp(szAppPath, pszPath)
         || (pBackslash && 0 == wcsicmp(pBackslash + 1, pszPath)))
         {
+            int cxIcon, cyIcon;
+
+            typedef UINT (WINAPI *GetSystemMetricsForDpi_t)(int nIndex, UINT dpi);
+            static GetSystemMetricsForDpi_t pfnGetSystemMetricsForDpi
+                 = (GetSystemMetricsForDpi_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi");
+            if (pfnGetSystemMetricsForDpi)
+            {
+                HDC hdc = GetDC(NULL);
+                int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+                ReleaseDC(NULL, hdc);
+
+                cxIcon = pfnGetSystemMetricsForDpi(SM_CXSMICON, dpi);
+                cyIcon = pfnGetSystemMetricsForDpi(SM_CYSMICON, dpi);
+            }
+            else
+            {
+                cxIcon = GetSystemMetrics(SM_CXSMICON);
+                cyIcon = GetSystemMetrics(SM_CYSMICON);
+            }
+
             LPCWSTR pszIconPath = Wh_GetStringSetting(L"icons[%d].icon", i);
             g_hIcon = (HICON)LoadImageW(
                 NULL,
                 pszIconPath,
                 IMAGE_ICON,
-                GetSystemMetrics(SM_CXSMICON),
-                GetSystemMetrics(SM_CYSMICON),
+                cxIcon, cyIcon,
                 LR_LOADFROMFILE | LR_DEFAULTCOLOR);
             Wh_FreeStringSetting(pszIconPath);
         }
