@@ -268,6 +268,8 @@ static void LoadSettings() {
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = newSettings;
+
+    Wh_Log(L"Settings Loaded: CloseStartMenu = %d", newSettings.closeStartMenu);
 }
 
 static std::wstring GetSettingStringIndex(const wchar_t* key, int index) {
@@ -388,13 +390,19 @@ static inline void CloseStartMenuAfterClick() {
         auto dq = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
         if (dq) {
             dq.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::Low, []() {
-                SendEscapeKey();
+                std::thread([]() {
+                    Sleep(100); 
+                    SendEscapeKey();
+                }).detach();
             });
             return;
         }
     } catch (...) {}
 
-    SendEscapeKey();
+    std::thread([]() {
+        Sleep(100);
+        SendEscapeKey();
+    }).detach();
 }
 
 // -------------------- executing actions --------------------
@@ -642,7 +650,7 @@ static DWORD WINAPI ProxyWindowThread(LPVOID) {
     }
 
     UnregisterClassW(PROXY_WINDOW_CLASS, GetModuleHandleW(nullptr));
-    g_proxyWindow = NULL;
+    g_proxyWindow = NULL; 
     return 0;
 }
 
@@ -1067,6 +1075,8 @@ static void WINAPI InitOnWindowThread(PVOID param) {
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
+    LoadSettings();
+    BuildButtons();
 
     if (IsExplorerProcess()) {
         StartProxyThread();
