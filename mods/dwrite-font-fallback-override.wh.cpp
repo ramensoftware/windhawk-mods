@@ -7,7 +7,6 @@
 // @author          Muhammad Ragib Hasin
 // @github          https://github.com/RagibHasin
 // @include         *
-// @exclude         vscodium.exe
 // @compilerOptions -ldwrite -lole32 -lwindowsapp
 // ==/WindhawkMod==
 
@@ -295,9 +294,9 @@ BOOL Wh_ModInit() {
     // IDWriteFactory1 :  2 : 24
     // IDWriteFactory2 :  5 : 26
     // IDWriteFactory3 :  9 : 31
-    // IDWriteFactory4 :  4 : 40
-    // IDWriteFactory5 :  5 : 44
-    // IDWriteFactory6 :  7 : 49
+    // IDWriteFactory4 :  3 : 40
+    // IDWriteFactory5 :  5 : 43
+    // IDWriteFactory6 :  7 : 48
 
     auto pGetSystemFontFallback =
         get_item_in_vtable(factory, 26);  // 1st of IDWriteFactory2
@@ -306,7 +305,7 @@ BOOL Wh_ModInit() {
     auto pCreateTextLayout0 =
         get_item_in_vtable(factory, 18);  // 16th of IDWriteFactory
     auto pCreateTextFormat6 =
-        get_item_in_vtable(factory, 55);  // 7th of IDWriteFactory6
+        get_item_in_vtable(factory, 54);  // 7th of IDWriteFactory6
 
     com_ptr<IDWriteFactory> factory0(factory, take_ownership_from_abi);
     bool supportsFactory6 = (bool)factory0.try_as<IDWriteFactory6>();
