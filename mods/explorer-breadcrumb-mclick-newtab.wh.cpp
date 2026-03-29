@@ -2,7 +2,7 @@
 // @id              explorer-breadcrumb-mclick-newtab
 // @name            Explorer Breadcrumb Middle-Click New Tab
 // @description     Opens folders in a new tab by middle-clicking breadcrumb items (Linux style).
-// @version         1.0.0
+// @version         1.1.0
 // @author          osmanonurkoc
 // @github          https://github.com/osmanonurkoc
 // @include         explorer.exe
@@ -21,30 +21,26 @@ in the breadcrumb bar to instantly open that location in a new background tab.
 
 ## ⚙️ How it Works (Technical Deep Dive)
 Windows 11 Explorer (specifically versions using XAML Islands) presents unique 
-challenges for automation, as standard API calls often return data for inactive/background tabs.
-This mod uses a **Pure Input-Driven Approach** to ensure 100% accuracy.
+challenges for automation. Version 1.1.0 completely abandons the Windows Clipboard 
+to ensure absolute stability and preserve the user's copied files.
 
 1.  **Threaded Hook:** Installs a Low-Level Mouse Hook (WH_MOUSE_LL) on a 
     dedicated native thread to detect middle-clicks without freezing the UI.
-2.  **Active Focus Probe (The Clipboard Proxy):** * Instead of guessing the active tab via complex memory queries (COM), the mod asks Windows directly.
-    * It momentarily forces the Address Bar into Edit Mode (`Alt+D`), simulates a Copy command (`Ctrl+C`), 
-      and reads the **Clipboard**. 
-    * This guarantees retrieval of the path for the **currently visible tab**, bypassing all internal ambiguity.
-3.  **Sibling Counting (The Duplicate Fix):** * Instead of unreliable string matching (which fails with duplicate names like `...\Source\Source`), 
-      the mod uses **Visual Geometry**.
-    * It identifies the clicked item and counts how many folders are visually to its right.
-    * *Example:* If you middle-click the 3rd folder from the end, the mod intelligently strips 
-      the last 2 folders from the full path retrieved in Step 2.
-4.  **Smart Navigation Sequence:**
-    * **Silent Clipboard:** It backs up your current clipboard, performs the navigation using a temporary clipboard entry 
-      (flagged to be ignored by Clipboard History), and then **restores your original clipboard data**.
-    * **Focus Guard:** Simulates `Ctrl+T` -> `Alt+D` -> `Paste` -> `Enter`. The `Alt+D` step is 
-      crucial to ensure focus isn't lost to the file view during animation.
+2.  **UIA Focus Probe:** * Simulates `Alt+D` to focus the address bar.
+    * Uses `UIAutomation` to grab the currently focused element and extract its `ValuePattern` or `Name`.
+    * Simulates `Esc` to safely exit edit mode.
+3.  **Sibling Counting (The Duplicate Fix):** * Identifies the clicked item and counts how many folders are visually to its right to resolve duplicate folder names (e.g., `...\Source\Source`).
+4.  **Unicode Injection Navigation:**
+    * Simulates `Ctrl+T` (New Tab) -> `Alt+D` (Focus Address Bar).
+    * Converts the target path into an array of `KEYEVENTF_UNICODE` input structures.
+    * "Types" the path directly into the address bar at machine speed, bypassing the clipboard entirely.
+    * Simulates `Enter`.
 
 ## ✨ Key Features & Fixes
+* **100% Clipboard-Free:** Will not interfere with your copied files, images, or formatting.
+* **Crash-Free:** Removes legacy clipboard polling that caused Explorer instability.
 * **Duplicate Folder Support:** Perfectly handles paths with repeating names.
-* **Zombie Tab Prevention:** Uses strict "Breadcrumb Whitelisting" to ensure middle-clicking 
-    Tab Titles or the Window Title Bar allows Windows to close the tab natively.
+* **Zombie Tab Prevention:** Strict "Breadcrumb Whitelisting" ensures middle-clicking other areas doesn't trigger false positives.
 * **Drive Letter Support:** Detects `(C:)` style items and opens the drive root instantly.
 * **Hidden Address Bar Support:** Works even if "Display full path in title bar" is disabled.
 
@@ -64,6 +60,7 @@ This mod uses a **Pure Input-Driven Approach** to ensure 100% accuracy.
 #include <windhawk_utils.h>
 #include <UIAutomation.h>
 #include <string>
+#include <vector>
 #include <cwctype> 
 #include <shlwapi.h>
 
@@ -194,86 +191,50 @@ int CountVisuallyToRight(IUIAutomation* pAutomation, IUIAutomationElement* pClic
 }
 
 // ----------------------------------------------------------------------------
-// HELPER: BACKUP & RESTORE CLIPBOARD
+// CORE: PROBE ADDRESS BAR (UIA METHOD - NO CLIPBOARD)
 // ----------------------------------------------------------------------------
-struct ClipboardBackup {
-    bool hasData;
-    HANDLE hData;
-    UINT format;
-};
-
-ClipboardBackup BackupClipboard() {
-    ClipboardBackup backup = { false, NULL, 0 };
-    if (OpenClipboard(NULL)) {
-        if (IsClipboardFormatAvailable(CF_UNICODETEXT)) {
-            HANDLE hRaw = GetClipboardData(CF_UNICODETEXT);
-            if (hRaw) {
-                size_t size = GlobalSize(hRaw);
-                HANDLE hCopy = GlobalAlloc(GMEM_MOVEABLE, size);
-                if (hCopy) {
-                    void* pSrc = GlobalLock(hRaw);
-                    void* pDst = GlobalLock(hCopy);
-                    memcpy(pDst, pSrc, size);
-                    GlobalUnlock(hCopy);
-                    GlobalUnlock(hRaw);
-                    
-                    backup.hasData = true;
-                    backup.hData = hCopy;
-                    backup.format = CF_UNICODETEXT;
-                }
-            }
-        }
-        CloseClipboard();
-    }
-    return backup;
-}
-
-void RestoreClipboard(ClipboardBackup backup) {
-    if (!backup.hasData || !backup.hData) return;
-
-    if (OpenClipboard(NULL)) {
-        EmptyClipboard();
-        SetClipboardData(backup.format, backup.hData);
-        CloseClipboard();
-    } else {
-        GlobalFree(backup.hData);
-    }
-}
-
-// ----------------------------------------------------------------------------
-// CORE: PROBE ADDRESS BAR (CLIPBOARD METHOD)
-// ----------------------------------------------------------------------------
-std::wstring ProbeAddressBarWithClipboard() {
+std::wstring ProbeAddressBarWithUIA(IUIAutomation* pAutomation) {
     std::wstring foundPath = L"";
     
-    // 1. Backup User's Clipboard
-    ClipboardBackup backup = BackupClipboard();
-
-    // 2. Perform Input Sequence: Alt+D -> Ctrl+C -> Esc
-    INPUT inputs[8] = {};
+    // 1. Alt+D to force focus on the address bar
+    INPUT inputs[4] = {};
     int idx = 0;
-    
-    // Alt+D (Focus & Select All)
-    memset(inputs, 0, sizeof(inputs)); idx = 0;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
     SendInput(idx, inputs, sizeof(INPUT));
     
-    Sleep(60); 
+    // Wait for XAML animation and focus shift
+    Sleep(150); 
 
-    // Ctrl+C (Copy)
-    memset(inputs, 0, sizeof(inputs)); idx = 0;
-    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; idx++;
-    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'C'; idx++;
-    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'C'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
-    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
-    SendInput(idx, inputs, sizeof(INPUT));
+    // 2. Read the focused element using UIA
+    IUIAutomationElement* pFocusedElement = NULL;
+    if (SUCCEEDED(pAutomation->GetFocusedElement(&pFocusedElement)) && pFocusedElement) {
+        
+        // Try to get the Value Pattern (standard for edit boxes)
+        IUIAutomationValuePattern* pValuePattern = NULL;
+        if (SUCCEEDED(pFocusedElement->GetCurrentPattern(UIA_ValuePatternId, (IUnknown**)&pValuePattern)) && pValuePattern) {
+            BSTR valBstr = NULL;
+            if (SUCCEEDED(pValuePattern->get_CurrentValue(&valBstr)) && valBstr) {
+                foundPath = std::wstring(valBstr);
+                SysFreeString(valBstr);
+            }
+            pValuePattern->Release();
+        }
+        
+        // Fallback: If Value Pattern fails, try getting the Name property
+        if (foundPath.empty()) {
+            BSTR nameBstr = NULL;
+            if (SUCCEEDED(pFocusedElement->get_CurrentName(&nameBstr)) && nameBstr) {
+                foundPath = std::wstring(nameBstr);
+                SysFreeString(nameBstr);
+            }
+        }
+        pFocusedElement->Release();
+    }
 
-    Sleep(60); 
-
-    // Esc (Restore View)
+    // 3. Esc to exit address bar edit mode
     memset(inputs, 0, sizeof(inputs)); idx = 0;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_ESCAPE; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_ESCAPE; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
@@ -281,94 +242,68 @@ std::wstring ProbeAddressBarWithClipboard() {
     
     Sleep(50); 
 
-    // 3. Read Probe Result
-    if (OpenClipboard(NULL)) {
-        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-        if (hData) {
-            WCHAR* pszText = (WCHAR*)GlobalLock(hData);
-            if (pszText) {
-                foundPath = std::wstring(pszText);
-                GlobalUnlock(hData);
-            }
-        }
-        CloseClipboard();
-    }
-
-    // 4. Restore User's Clipboard
-    RestoreClipboard(backup);
-
     return foundPath;
 }
 
 // ============================================================================
-// NAVIGATION
+// NAVIGATION (UNICODE INJECTION - NO CLIPBOARD)
 // ============================================================================
+void TypeUnicodeString(const std::wstring& text) {
+    if (text.empty()) return;
+
+    std::vector<INPUT> inputs;
+    inputs.reserve(text.length() * 2);
+
+    for (wchar_t c : text) {
+        INPUT inDown = {};
+        inDown.type = INPUT_KEYBOARD;
+        inDown.ki.wVk = 0; // wVk must be 0 for Unicode
+        inDown.ki.wScan = c;
+        inDown.ki.dwFlags = KEYEVENTF_UNICODE;
+        inputs.push_back(inDown);
+
+        INPUT inUp = {};
+        inUp.type = INPUT_KEYBOARD;
+        inUp.ki.wVk = 0;
+        inUp.ki.wScan = c;
+        inUp.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+        inputs.push_back(inUp);
+    }
+
+    if (!inputs.empty()) {
+        SendInput((UINT)inputs.size(), inputs.data(), sizeof(INPUT));
+    }
+}
+
 void NavigateNewTab(const std::wstring& targetPath) {
     if (targetPath.length() < 2) return;
-
-    static UINT cfExclude = RegisterClipboardFormat(L"ExcludeClipboardContentFromMonitorProcessing");
-    static UINT cfCanInclude = RegisterClipboardFormat(L"CanIncludeInClipboardHistory");
-
-    if (OpenClipboard(NULL)) {
-        EmptyClipboard();
-        size_t size = (targetPath.length() + 1) * sizeof(WCHAR);
-        HGLOBAL hGlobalPath = GlobalAlloc(GMEM_MOVEABLE, size);
-        if (hGlobalPath) {
-            void* pData = GlobalLock(hGlobalPath);
-            memcpy(pData, targetPath.c_str(), size);
-            GlobalUnlock(hGlobalPath);
-            SetClipboardData(CF_UNICODETEXT, hGlobalPath);
-        }
-        
-        // Mark as "Do Not Record" in Clipboard History
-        HGLOBAL hGlobalExclude = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
-        if (hGlobalExclude) {
-            void* pData = GlobalLock(hGlobalExclude);
-            *(DWORD*)pData = 0; 
-            GlobalUnlock(hGlobalExclude);
-            SetClipboardData(cfExclude, hGlobalExclude);
-        }
-        HGLOBAL hGlobalCanInclude = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
-        if (hGlobalCanInclude) {
-            void* pData = GlobalLock(hGlobalCanInclude);
-            *(DWORD*)pData = 0; 
-            GlobalUnlock(hGlobalCanInclude);
-            SetClipboardData(cfCanInclude, hGlobalCanInclude);
-        }
-        CloseClipboard();
-    }
 
     INPUT inputs[4] = {};
     int idx = 0;
     
-    // Ctrl+T
+    // 1. Ctrl+T (New Tab)
     idx = 0; memset(inputs, 0, sizeof(inputs));
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'T'; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'T'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
     SendInput(idx, inputs, sizeof(INPUT));
-    Sleep(450); 
+    Sleep(450); // Wait for tab creation
 
-    // Alt+D
+    // 2. Alt+D (Focus Address Bar)
     idx = 0; memset(inputs, 0, sizeof(inputs));
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; idx++; 
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'D'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_MENU; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
     SendInput(idx, inputs, sizeof(INPUT));
-    Sleep(100);
+    Sleep(150); // Wait for focus
 
-    // Ctrl+V
-    idx = 0; memset(inputs, 0, sizeof(inputs));
-    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; idx++;
-    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'V'; idx++;
-    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = 'V'; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
-    inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_CONTROL; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
-    SendInput(idx, inputs, sizeof(INPUT));
+    // 3. Inject Path directly (Bypasses Clipboard)
+    TypeUnicodeString(targetPath);
     Sleep(50);
 
-    // Enter
+    // 4. Enter
     idx = 0; memset(inputs, 0, sizeof(inputs));
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_RETURN; idx++;
     inputs[idx].type = INPUT_KEYBOARD; inputs[idx].ki.wVk = VK_RETURN; inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
@@ -426,7 +361,8 @@ void AnalyzeElement(POINT pt) {
                      int levelsUp = CountVisuallyToRight(pAutomation, pBreadcrumbItem);
                      
                      if (levelsUp >= 0) {
-                         std::wstring fullPath = ProbeAddressBarWithClipboard();
+                         // Uses the new clipboard-free UIA probe
+                         std::wstring fullPath = ProbeAddressBarWithUIA(pAutomation);
                          if (!fullPath.empty()) {
                              std::wstring targetPath = AscendPath(fullPath, levelsUp);
                              if (!targetPath.empty()) {

@@ -2,11 +2,11 @@
 // @id              disk-usage-bar-in-drive-properties
 // @name            Disk Usage Bar in Drive Properties
 // @description     Replaces the pie/donut chart in drive properties with a usage bar
-// @version         1.0
+// @version         1.2
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
-// @compilerOptions -luxtheme -lgdi32
+// @compilerOptions -lgdi32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,16 +21,25 @@ with a usage bar.
 ## Features
 * Replaces the pie/donut chart with a blue usage bar, like in "This PC".
 * Switches the bar color to red when the disk is almost full.
-* Displays the usage percentage text below the bar.
+* Displays the disk usage percentage text below the bar.
+
+## Configuration
+This mod provides the following options:
+* **Show red bar on low space**: Switches the usage bar color to red when disk
+  usage exceeds 90%.
+* **Show decimal percentage**: Displays the disk usage percentage text with one
+  decimal place (e.g., `64.1%`).
+* **Hide storage management button**: Hides the "Details" (Windows 11) or "Disk
+  Clean-up" (Windows 8.1/10) button.
+  * It is recommended to hide this button for localized systems to prevent a UI
+    collision with a long "Space used" string for the disk usage percentage
+    text.
+  * The `Alt+D` keyboard shortcut remains functional.
 
 ## Supported Windows versions
 * Windows 11
 * Windows 10
 * Windows 8.1
-
-## Configuration
-You can enable the option to switch the usage bar color to red when disk usage
-exceeds 90%.
 
 ---
 
@@ -42,15 +51,21 @@ Based on the "[Disk Pie Chart](https://windhawk.net/mods/disk-pie-chart)" mod by
 // ==WindhawkModSettings==
 /*
 - showRedUsageBar: false
-  $name: Switch to red bar when disk is almost full
-  $description: Switches the usage bar color to red when disk usage exceeds 90%.
+  $name: Show red bar on low space
+  $description: Switches the usage bar color to red when disk usage exceeds 90%
+- showDecimalPercentage: false
+  $name: Show decimal percentage
+  $description: Displays the disk usage percentage text with one decimal place (e.g., 64.1%)
+- hideStorageMgmtButton: true
+  $name: Hide storage management button
+  $description: Hides the "Details" (Windows 11) or "Disk Clean-up" (Windows 8.1/10) button
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+#include <shellapi.h>
 #include <uxtheme.h>
 #include <vssym32.h>
-#include <shellapi.h>
 
 #ifdef _WIN64
 #   define SHELL32_DRAWPIE L"DrawPie"
@@ -62,9 +77,11 @@ Based on the "[Disk Pie Chart](https://windhawk.net/mods/disk-pie-chart)" mod by
 
 struct {
     bool showRedUsageBar;
+    bool showDecimalPercentage;
+    bool hideStorageMgmtButton;
 } settings;
 
-// Helper to restore the AutoRun icon
+// Helper: Restore the AutoRun icon
 // Since Windows 2000, the drive properties dialog never displays the AutoRun
 // icon on the General tab, leaving a blank space.
 // This function restores the AutoRun icon back where it belongs.
@@ -145,15 +162,17 @@ void RestoreCustomDriveIcon(HWND hPropPageWnd)
     if (SHGetFileInfoW(szDriveRoot, 0, &shFileInfo, sizeof(shFileInfo),
             SHGFI_ICON | SHGFI_LARGEICON))
     {
-        SendMessage(hIconWnd, STM_SETICON, (WPARAM)shFileInfo.hIcon, 0);
+        SendMessage(hIconWnd, STM_SETICON,
+            reinterpret_cast<WPARAM>(shFileInfo.hIcon), 0);
     }
 }
 
-// Helper to update the disk usage percentage label below the disk usage bar
-void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const RECT& rcChart)
+// Helper: Update the disk usage percentage label below the disk usage bar
+void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent,
+    DWORD dwUsagePer1000, const RECT& rcChart)
 {
     // Define the unique control ID for the custom usage percentage label
-    const int IDC_USAGE_PERCENT_LABEL = 14999;
+    constexpr int IDC_USAGE_PERCENT_LABEL = 14999;
 
     // Find the static control with the SS_CENTER style
     // Expected text format: "Drive C:" or similar
@@ -178,6 +197,7 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const 
     // Create a custom usage percentage label window for the portable device
     // storage properties page
     bool isUsagePercentLabel = false;
+
     if (!hLabelWnd)
     {
         // Check if the custom usage percentage label window has already been
@@ -189,20 +209,23 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const 
         if (!hLabelWnd)
         {
             hLabelWnd = CreateWindowExW(0, L"Static", L"",
-                WS_CHILD | WS_VISIBLE | SS_CENTER | SS_NOPREFIX,
-                0, 0, 0, 0, // Positioned dynamically
-                hPropPageWnd, (HMENU)IDC_USAGE_PERCENT_LABEL,
-                (HINSTANCE)GetWindowLongPtrW(hPropPageWnd, GWLP_HINSTANCE),
+                WS_CHILD | WS_VISIBLE | SS_CENTER | SS_NOPREFIX, 0, 0, 0, 0,
+                hPropPageWnd, reinterpret_cast<HMENU>(IDC_USAGE_PERCENT_LABEL),
+                reinterpret_cast<HINSTANCE>(
+                    GetWindowLongPtrW(hPropPageWnd, GWLP_HINSTANCE)),
                 nullptr);
 
             // Apply the property page's font to the custom usage percentage
             // label window
             if (hLabelWnd)
             {
-                HFONT hPropPageFont = (HFONT)SendMessage(hPropPageWnd, WM_GETFONT, 0, 0);
-                SendMessage(hLabelWnd, WM_SETFONT, (WPARAM)hPropPageFont, TRUE);
+                HFONT hPropPageFont = reinterpret_cast<HFONT>(
+                    SendMessage(hPropPageWnd, WM_GETFONT, 0, 0));
+                SendMessage(hLabelWnd, WM_SETFONT,
+                    reinterpret_cast<WPARAM>(hPropPageFont), TRUE);
             }
         }
+
         isUsagePercentLabel = true;
     }
 
@@ -215,7 +238,8 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const 
         LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hPropSys)
     {
-        if (LoadStringW(hPropSys, 38652, szLabelTemplate, ARRAYSIZE(szLabelTemplate)))
+        if (LoadStringW(hPropSys, 38652, szLabelTemplate,
+                ARRAYSIZE(szLabelTemplate)))
         {
             isStringLoaded = true;
         }
@@ -233,9 +257,26 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const 
         lstrcpyW(szLabelTemplate, L"Space used");
     }
 
-    // Format the string: "Space used: 64%"
+    // Buffer for the disk usage percentage text
     WCHAR szUpdatedText[128];
-    wsprintfW(szUpdatedText, L"%s: %u%%", szLabelTemplate, dwUsagePercent);
+    if (settings.showDecimalPercentage)
+    {
+        // Get the system's localized decimal separator
+        WCHAR szDecimalSeparator[4] = L".";
+        GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_SDECIMAL, szDecimalSeparator,
+            ARRAYSIZE(szDecimalSeparator));
+
+        // Format the text with one decimal place
+        // Example: "Space used: 64.1%"
+        wsprintfW(szUpdatedText, L"%s: %u%s%u%%", szLabelTemplate,
+            dwUsagePer1000 / 10, szDecimalSeparator, dwUsagePer1000 % 10);
+    }
+    else
+    {
+        // Format the text as a whole number
+        // Example: "Space used: 64%"
+        wsprintfW(szUpdatedText, L"%s: %u%%", szLabelTemplate, dwUsagePercent);
+    }
 
     // Prevent infinite re-paint loops and flickering by updating only when
     // necessary
@@ -245,14 +286,15 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const 
     {
         // Dynamically resize the label window to fit the text area exactly
         // The label window's default boundary is large, which causes it to draw
-        // over the adjacent horizontal separator and "Details" / "Disk
+        // over the adjacent horizontal separator and "Details" or "Disk
         // Clean-up" button when the text changes.
         HDC hTextDC = GetDC(hLabelWnd);
-        HFONT hCurrentFont = (HFONT)SendMessage(hLabelWnd, WM_GETFONT, 0, 0);
-        HFONT hOriginalFont = (HFONT)SelectObject(hTextDC,
+        HFONT hCurrentFont = reinterpret_cast<HFONT>(
+            SendMessage(hLabelWnd, WM_GETFONT, 0, 0));
+        HFONT hOriginalFont = reinterpret_cast<HFONT>(SelectObject(hTextDC,
             hCurrentFont
                 ? hCurrentFont
-                : GetStockObject(DEFAULT_GUI_FONT));
+                : GetStockObject(DEFAULT_GUI_FONT)));
 
         // Calculate the required dimensions of the text area
         RECT rcLabelText = { 0 };
@@ -266,7 +308,8 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const 
             // Retrieve the geometry of the label window
             RECT rcLabelWnd;
             GetWindowRect(hLabelWnd, &rcLabelWnd);
-            MapWindowPoints(nullptr, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcLabelWnd), 2);
+            MapWindowPoints(nullptr, hPropPageWnd,
+                reinterpret_cast<LPPOINT>(&rcLabelWnd), 2);
 
             // Align with the horizontal separator window's geometry by finding
             // the static control with the SS_ETCHEDHORZ style
@@ -298,7 +341,8 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const 
             {
                 RECT rcSeparatorWnd;
                 GetWindowRect(hSeparatorWnd, &rcSeparatorWnd);
-                MapWindowPoints(nullptr, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcSeparatorWnd), 2);
+                MapWindowPoints(nullptr, hPropPageWnd,
+                    reinterpret_cast<LPPOINT>(&rcSeparatorWnd), 2);
                 centerX = (rcSeparatorWnd.left + rcSeparatorWnd.right) / 2;
             }
 
@@ -329,55 +373,60 @@ void UpdateDiskUsagePercentLabel(HWND hPropPageWnd, DWORD dwUsagePercent, const 
     }
 }
 
-// Helper to hide legends and align labels to the left
+// Helper: Hide legends and align labels to the left
 void HideLegendsAndAlignLabels(HWND hPropPageWnd)
 {
     // Define control IDs for the standard drive storage properties page
-    const int IDC_SHELL32_LEGEND_USED     = 14403;
-    const int IDC_SHELL32_LEGEND_FREE     = 14404;
-    const int IDC_SHELL32_LABEL_USED      = 14416;
-    const int IDC_SHELL32_LABEL_FREE      = 14417;
-    const int IDC_SHELL32_LABEL_CAPACITY  = 14415;
+    constexpr int IDC_SHELL32_LEGEND_USED     = 14403;
+    constexpr int IDC_SHELL32_LEGEND_FREE     = 14404;
+    constexpr int IDC_SHELL32_LABEL_USED      = 14416;
+    constexpr int IDC_SHELL32_LABEL_FREE      = 14417;
+    constexpr int IDC_SHELL32_LABEL_CAPACITY  = 14415;
 
     // Define control IDs for the portable device storage properties page
-    const int IDC_WPDSHEXT_LEGEND_USED    = 834;
-    const int IDC_WPDSHEXT_LEGEND_FREE    = 838;
-    const int IDC_WPDSHEXT_LABEL_USED     = 835;
-    const int IDC_WPDSHEXT_LABEL_FREE     = 839;
-    const int IDC_WPDSHEXT_LABEL_CAPACITY = 843;
+    constexpr int IDC_WPDSHEXT_LEGEND_USED    = 834;
+    constexpr int IDC_WPDSHEXT_LEGEND_FREE    = 838;
+    constexpr int IDC_WPDSHEXT_LABEL_USED     = 835;
+    constexpr int IDC_WPDSHEXT_LABEL_FREE     = 839;
+    constexpr int IDC_WPDSHEXT_LABEL_CAPACITY = 843;
 
     // Handle the standard drive storage properties page
-    HWND hLegendWnd = GetDlgItem(hPropPageWnd, IDC_SHELL32_LEGEND_USED);
-    if (hLegendWnd)
+    HWND hLegendUsedWnd = GetDlgItem(hPropPageWnd, IDC_SHELL32_LEGEND_USED);
+    if (hLegendUsedWnd)
     {
         // Check if the layout has already been adjusted
-        if (IsWindowVisible(hLegendWnd))
+        if (IsWindowVisible(hLegendUsedWnd))
         {
             // Retrieve the X position of the legend window as the margin
-            RECT rcLegendWnd;
-            GetWindowRect(hLegendWnd, &rcLegendWnd);
-            MapWindowPoints(nullptr, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcLegendWnd), 2);
-            int xLeft = rcLegendWnd.left;
+            RECT rcLegendUsedWnd;
+            GetWindowRect(hLegendUsedWnd, &rcLegendUsedWnd);
+            MapWindowPoints(nullptr, hPropPageWnd,
+                reinterpret_cast<LPPOINT>(&rcLegendUsedWnd), 2);
+            int xLeft = rcLegendUsedWnd.left;
 
             // Hide the legend windows
-            ShowWindow(hLegendWnd, SW_HIDE);
-            ShowWindow(GetDlgItem(hPropPageWnd, IDC_SHELL32_LEGEND_FREE), SW_HIDE);
+            ShowWindow(hLegendUsedWnd, SW_HIDE);
+            HWND hLegendFreeWnd = GetDlgItem(hPropPageWnd,
+                IDC_SHELL32_LEGEND_FREE);
+            ShowWindow(hLegendFreeWnd, SW_HIDE);
 
-            // Move the label windows to the left margin
-            const int rgLabelIds[] = {
+            // List the control IDs for the labels
+            constexpr int rgLabelIds[] = {
                 IDC_SHELL32_LABEL_USED,
                 IDC_SHELL32_LABEL_FREE,
                 IDC_SHELL32_LABEL_CAPACITY
             };
 
-            for (int id : rgLabelIds)
+            // Move the label windows to the left margin
+            for (int ctrlId : rgLabelIds)
             {
-                HWND hLabelWnd = GetDlgItem(hPropPageWnd, id);
+                HWND hLabelWnd = GetDlgItem(hPropPageWnd, ctrlId);
                 if (hLabelWnd)
                 {
                     RECT rcLabelWnd;
                     GetWindowRect(hLabelWnd, &rcLabelWnd);
-                    MapWindowPoints(nullptr, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcLabelWnd), 2);
+                    MapWindowPoints(nullptr, hPropPageWnd,
+                        reinterpret_cast<LPPOINT>(&rcLabelWnd), 2);
                     SetWindowPos(hLabelWnd, nullptr, xLeft, rcLabelWnd.top,
                         0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                 }
@@ -387,37 +436,42 @@ void HideLegendsAndAlignLabels(HWND hPropPageWnd)
     }
 
     // Handle the portable device storage properties page
-    hLegendWnd = GetDlgItem(hPropPageWnd, IDC_WPDSHEXT_LEGEND_USED);
-    if (hLegendWnd)
+    hLegendUsedWnd = GetDlgItem(hPropPageWnd, IDC_WPDSHEXT_LEGEND_USED);
+    if (hLegendUsedWnd)
     {
         // Check if the layout has already been adjusted
-        if (IsWindowVisible(hLegendWnd))
+        if (IsWindowVisible(hLegendUsedWnd))
         {
             // Retrieve the X position of the legend window as the margin
-            RECT rcLegendWnd;
-            GetWindowRect(hLegendWnd, &rcLegendWnd);
-            MapWindowPoints(nullptr, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcLegendWnd), 2);
-            int xLeft = rcLegendWnd.left;
+            RECT rcLegendUsedWnd;
+            GetWindowRect(hLegendUsedWnd, &rcLegendUsedWnd);
+            MapWindowPoints(nullptr, hPropPageWnd,
+                reinterpret_cast<LPPOINT>(&rcLegendUsedWnd), 2);
+            int xLeft = rcLegendUsedWnd.left;
 
             // Hide the legend windows
-            ShowWindow(hLegendWnd, SW_HIDE);
-            ShowWindow(GetDlgItem(hPropPageWnd, IDC_WPDSHEXT_LEGEND_FREE), SW_HIDE);
+            ShowWindow(hLegendUsedWnd, SW_HIDE);
+            HWND hLegendFreeWnd = GetDlgItem(hPropPageWnd,
+                IDC_WPDSHEXT_LEGEND_FREE);
+            ShowWindow(hLegendFreeWnd, SW_HIDE);
 
-            // Move the label windows to the left margin
-            const int rgLabelIds[] = {
+            // List the control IDs for the labels
+            constexpr int rgLabelIds[] = {
                 IDC_WPDSHEXT_LABEL_USED,
                 IDC_WPDSHEXT_LABEL_FREE,
                 IDC_WPDSHEXT_LABEL_CAPACITY
             };
 
-            for (int id : rgLabelIds)
+            // Move the label windows to the left margin
+            for (int ctrlId : rgLabelIds)
             {
-                HWND hLabelWnd = GetDlgItem(hPropPageWnd, id);
+                HWND hLabelWnd = GetDlgItem(hPropPageWnd, ctrlId);
                 if (hLabelWnd)
                 {
                     RECT rcLabelWnd;
                     GetWindowRect(hLabelWnd, &rcLabelWnd);
-                    MapWindowPoints(nullptr, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcLabelWnd), 2);
+                    MapWindowPoints(nullptr, hPropPageWnd,
+                        reinterpret_cast<LPPOINT>(&rcLabelWnd), 2);
                     SetWindowPos(hLabelWnd, nullptr, xLeft, rcLabelWnd.top,
                         0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                 }
@@ -427,7 +481,33 @@ void HideLegendsAndAlignLabels(HWND hPropPageWnd)
     }
 }
 
-// Helper to draw the disk usage bar
+// Helper: Hide the storage management button
+void HideStorageManagementButton(HWND hPropPageWnd)
+{
+    if (!settings.hideStorageMgmtButton) return;
+
+    // List the control IDs for the storage management buttons
+    constexpr int rgStorageMgmtBtnIds[] = {
+        14430, // Details (Windows 11)
+        14428  // Disk Clean-up (Windows 8.1/10)
+    };
+
+    // Hide the storage management button
+    for (int ctrlId : rgStorageMgmtBtnIds)
+    {
+        HWND hStorageMgmtBtn = GetDlgItem(hPropPageWnd, ctrlId);
+        if (hStorageMgmtBtn)
+        {
+            if (IsWindowVisible(hStorageMgmtBtn))
+            {
+                ShowWindow(hStorageMgmtBtn, SW_HIDE);
+            }
+            break;
+        }
+    }
+}
+
+// Helper: Draw the disk usage bar
 void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
 {
     HWND hChartWnd = WindowFromDC(hChartDC);
@@ -443,21 +523,38 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
     RestoreCustomDriveIcon(hPropPageWnd);
 
     // Convert the raw disk usage value (0-1000) to a rounded 0-100 integer for
-    // the disk usage percentage label and the disk usage bar fill color state
+    // the disk usage percentage text and the disk usage bar fill color state
     // Example: 635-644 → 64%
     //          645-654 → 65%
+    // Applies to the text when displayed as whole numbers.
     DWORD dwUsagePercent = (dwUsagePer1000 + 5) / 10;
-    if (dwUsagePercent > 100) dwUsagePercent = 100;
+
+    // Adjust disk usage percentage rounding to cap values between 99.5% and
+    // 99.9% at 99% when displayed as whole numbers, ensuring the disk usage
+    // percentage text displays "100%" only when the disk is completely full
+    if (dwUsagePercent == 100 && dwUsagePer1000 < 1000)
+    {
+        dwUsagePercent = 99;
+    }
+    else if (dwUsagePercent > 100)
+    {
+        dwUsagePercent = 100;
+    }
 
     // Retrieve the geometry of the original chart area
     RECT rcChart = *prcChart;
-    MapWindowPoints(hChartWnd, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcChart), 2);
+    MapWindowPoints(hChartWnd, hPropPageWnd,
+        reinterpret_cast<LPPOINT>(&rcChart), 2);
 
     // Update the disk usage percentage label below the disk usage bar
-    UpdateDiskUsagePercentLabel(hPropPageWnd, dwUsagePercent, rcChart);
+    UpdateDiskUsagePercentLabel(hPropPageWnd, dwUsagePercent, dwUsagePer1000,
+        rcChart);
 
     // Hide legends and align labels to the left
     HideLegendsAndAlignLabels(hPropPageWnd);
+
+    // Hide the storage management button
+    HideStorageManagementButton(hPropPageWnd);
 
     // Define the usage bar height in Dialog Units
     RECT rcBarDlu = { 0, 0, 0, 14 };
@@ -497,7 +594,8 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
     {
         RECT rcSeparatorWnd;
         GetWindowRect(hSeparatorWnd, &rcSeparatorWnd);
-        MapWindowPoints(nullptr, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcSeparatorWnd), 2);
+        MapWindowPoints(nullptr, hPropPageWnd,
+            reinterpret_cast<LPPOINT>(&rcSeparatorWnd), 2);
         cxBar = rcSeparatorWnd.right - rcSeparatorWnd.left;
         centerX = (rcSeparatorWnd.left + rcSeparatorWnd.right) / 2;
     }
@@ -514,12 +612,11 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
     // region covers the entire usage bar.
     RECT rcChartWnd;
     GetWindowRect(hChartWnd, &rcChartWnd);
-    MapWindowPoints(nullptr, hPropPageWnd, reinterpret_cast<LPPOINT>(&rcChartWnd), 2);
+    MapWindowPoints(nullptr, hPropPageWnd,
+        reinterpret_cast<LPPOINT>(&rcChartWnd), 2);
     if (!EqualRect(&rcBar, &rcChartWnd))
     {
-        SetWindowPos(hChartWnd, nullptr,
-            rcBar.left, rcBar.top,
-            rcBar.right - rcBar.left, rcBar.bottom - rcBar.top,
+        SetWindowPos(hChartWnd, nullptr, rcBar.left, rcBar.top, cxBar, cyBar,
             SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
@@ -557,15 +654,17 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
 
             int cxFill = (cxBar * static_cast<int>(dwUsagePer1000)) / 1000;
             rcFill.right = rcFill.left + cxFill;
+
             if (cxFill > 0)
-                DrawThemeBackground(hTheme, hPropPageDC, PP_FILL, iFillState, &rcFill, nullptr);
+            {
+                DrawThemeBackground(hTheme, hPropPageDC, PP_FILL, iFillState,
+                    &rcFill, nullptr);
+            }
         }
 
         CloseThemeData(hTheme);
     }
-
-    // Fallback for Classic theme
-    else
+    else // Fallback for Classic theme
     {
         // Draw the track (background)
         FillRect(hPropPageDC, &rcBar, GetSysColorBrush(COLOR_BTNFACE));
@@ -574,7 +673,6 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
         COLORREF crFill = (iFillState == PBFS_ERROR)
             ? RGB(196, 43, 28)              // Red (when disk is >90% full)
             : GetSysColor(COLOR_HIGHLIGHT); // System color: Highlight
-
         HBRUSH hFillBrush = CreateSolidBrush(crFill);
 
         // Draw the fill (foreground)
@@ -585,7 +683,9 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
             // Cap usage at 100% to prevent the fill from overflowing
             if (dwUsagePer1000 > 1000) dwUsagePer1000 = 1000;
 
-            rcFill.right = rcFill.left + ((cxBar * static_cast<int>(dwUsagePer1000)) / 1000);
+            int cxFill = (cxBar * static_cast<int>(dwUsagePer1000)) / 1000;
+            rcFill.right = rcFill.left + cxFill;
+
             FillRect(hPropPageDC, &rcFill, hFillBrush);
         }
 
@@ -599,17 +699,18 @@ void DrawDiskUsageBar(HDC hChartDC, LPCRECT prcChart, DWORD dwUsagePer1000)
 }
 
 // Hook DrawPie (shell32.dll) for standard drive storage properties
-using Shell32_DrawPie_t = int (__fastcall *)(HDC, LPRECT, DWORD, DWORD, const DWORD *);
+using Shell32_DrawPie_t =
+    int (__fastcall *)(HDC, LPRECT, DWORD, DWORD, const DWORD *);
 Shell32_DrawPie_t Shell32_DrawPie_Original;
 int __fastcall Shell32_DrawPie_Hook(
-    HDC hdc,
+    HDC hChartDC,
     LPRECT prcChart,
     DWORD dwUsagePer1000,
     DWORD dwCachePer1000,
     const DWORD *lpColors
 )
 {
-    DrawDiskUsageBar(hdc, prcChart, dwUsagePer1000);
+    DrawDiskUsageBar(hChartDC, prcChart, dwUsagePer1000);
     return 0; // Suppress the original chart
 }
 
@@ -623,17 +724,18 @@ const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
 };
 
 // Hook _DrawPie (wpdshext.dll) for portable device storage properties
-using WpdShExt_DrawPie_t = void (__fastcall *)(HDC, LPCRECT, DWORD, DWORD, const DWORD *);
+using WpdShExt_DrawPie_t =
+    void (__fastcall *)(HDC, LPCRECT, DWORD, DWORD, const DWORD *);
 WpdShExt_DrawPie_t WpdShExt_DrawPie_Original;
 void __fastcall WpdShExt_DrawPie_Hook(
-    HDC hdc,
+    HDC hChartDC,
     LPCRECT prcChart,
     DWORD dwUsagePer1000,
     DWORD dwCachePer1000,
     const DWORD *lpColors
 )
 {
-    DrawDiskUsageBar(hdc, prcChart, dwUsagePer1000);
+    DrawDiskUsageBar(hChartDC, prcChart, dwUsagePer1000);
 }
 
 const WindhawkUtils::SYMBOL_HOOK wpdshextDllHooks[] = {
@@ -649,6 +751,8 @@ const WindhawkUtils::SYMBOL_HOOK wpdshextDllHooks[] = {
 void LoadSettings()
 {
     settings.showRedUsageBar = Wh_GetIntSetting(L"showRedUsageBar");
+    settings.showDecimalPercentage = Wh_GetIntSetting(L"showDecimalPercentage");
+    settings.hideStorageMgmtButton = Wh_GetIntSetting(L"hideStorageMgmtButton");
 }
 
 // Mod initialization
@@ -662,11 +766,8 @@ BOOL Wh_ModInit()
         LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hShell32)
     {
-        if (!WindhawkUtils::HookSymbols(
-            hShell32,
-            shell32DllHooks,
-            ARRAYSIZE(shell32DllHooks)
-        ))
+        if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks,
+                ARRAYSIZE(shell32DllHooks)))
         {
             Wh_Log(L"Failed to hook DrawPie in shell32.dll");
         }
@@ -676,11 +777,8 @@ BOOL Wh_ModInit()
         LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hWpdShExt)
     {
-        if (!WindhawkUtils::HookSymbols(
-            hWpdShExt,
-            wpdshextDllHooks,
-            ARRAYSIZE(wpdshextDllHooks)
-        ))
+        if (!WindhawkUtils::HookSymbols(hWpdShExt, wpdshextDllHooks,
+                ARRAYSIZE(wpdshextDllHooks)))
         {
             Wh_Log(L"Failed to hook _DrawPie in wpdshext.dll");
         }
