@@ -2,14 +2,14 @@
 // @id              desktop-live-overlay
 // @name            Desktop Live Overlay
 // @description     Display live, customizable content on the desktop behind icons. Perfect for showing time, date, system metrics, weather, and more.
-// @version         1.0.3
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -ldxgi -ld2d1 -ldwrite -ld3d11 -ldcomp -lwininet -lpdh -lpowrprof -lshcore -lshlwapi
+// @compilerOptions -lcomctl32 -ldxgi -ld2d1 -ldwrite -ld3d11 -ldcomp -ldwmapi -lgdi32 -lwininet -lpdh -lpowrprof -lshcore -lshlwapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -177,6 +177,18 @@ showing time, date, system metrics, weather, and more.
   - cornerRadius: 8
     $name: Corner radius
     $description: Border radius for rounded corners in pixels
+  - blur: 0
+    $name: Blur
+    $description: >-
+      Blur radius for the wallpaper behind the background area. Set to 0 to
+      disable.
+  - borderSize: 0
+    $name: Border size
+    $description: Border width in pixels. Set to 0 to disable.
+  - borderColor: "#C0FFFFFF"
+    $name: Border color
+    $description: >-
+      Border color in ARGB hex format. Default is semi-transparent white.
   $name: Background
 - verticalPosition: 20
   $name: Vertical position
@@ -216,6 +228,7 @@ showing time, date, system metrics, weather, and more.
 #include <d2d1helper.h>
 #include <d3d11.h>
 #include <dcomp.h>
+#include <dwmapi.h>
 #include <dwrite.h>
 #include <dxgi1_3.h>
 #include <pdh.h>
@@ -239,10 +252,12 @@ using Microsoft::WRL::ComPtr;
 
 // Overlay window timer IDs.
 #define TIMER_ID_OVERLAY_REFRESH 1
+#define TIMER_ID_WALLPAPER_REFRESH 2
 
 // Message window timer IDs.
 #define TIMER_ID_MSG_DISPLAY_CHANGE 1
 #define TIMER_ID_MSG_RECREATE_OVERLAY 2
+#define TIMER_ID_MSG_WALLPAPER_REFRESH 3
 
 #define WM_APP_CLEANUP (WM_APP + 1)
 #define WM_APP_SETTINGS_CHANGED (WM_APP + 2)
@@ -284,6 +299,12 @@ struct Settings {
     BYTE backgroundColorB;
     int backgroundPadding;
     int backgroundCornerRadius;
+    int backgroundBlur;
+    int backgroundBorderSize;
+    BYTE backgroundBorderColorA;
+    BYTE backgroundBorderColorR;
+    BYTE backgroundBorderColorG;
+    BYTE backgroundBorderColorB;
     int verticalPosition;
     int horizontalPosition;
     int monitor;
@@ -357,6 +378,9 @@ std::optional<std::wstring> g_weatherContent;
 bool g_systemMetricsUsed = false;
 bool g_weatherUsed = false;
 
+// Last known wallpaper file time for change detection.
+FILETIME g_lastWallpaperTime = {};
+
 // DirectX device objects (shared).
 ComPtr<ID3D11Device> g_d3dDevice;
 ComPtr<IDXGIDevice> g_dxgiDevice;
@@ -380,6 +404,17 @@ ComPtr<ID2D1SolidColorBrush> g_topLineTextBrush;
 ComPtr<IDWriteTextFormat> g_bottomLineTextFormat;
 ComPtr<ID2D1SolidColorBrush> g_bottomLineTextBrush;
 ComPtr<ID2D1SolidColorBrush> g_backgroundBrush;
+ComPtr<ID2D1SolidColorBrush> g_borderBrush;
+ComPtr<ID2D1Bitmap> g_wallpaperBitmap;
+ComPtr<ID2D1Effect> g_blurEffect;
+
+// D2D1 Gaussian Blur effect CLSID.
+// {1FEB6D69-2FE6-4AC9-8C58-1D7F93E7A6A5}
+static const IID kCLSID_D2D1GaussianBlur = {
+    0x1feb6d69,
+    0x2fe6,
+    0x4ac9,
+    {0x8c, 0x58, 0x1d, 0x7f, 0x93, 0xe7, 0xa6, 0xa5}};
 
 // Current DPI scale factor (1.0 = 96 DPI).
 float g_dpiScale = 1.0f;
@@ -528,22 +563,30 @@ bool ParseColor(PCWSTR colorStr, BYTE* a, BYTE* r, BYTE* g, BYTE* b) {
 }
 
 DWRITE_FONT_WEIGHT GetDWriteFontWeight(int fontWeight) {
-    if (fontWeight <= 100)
+    if (fontWeight <= 100) {
         return DWRITE_FONT_WEIGHT_THIN;
-    if (fontWeight <= 200)
+    }
+    if (fontWeight <= 200) {
         return DWRITE_FONT_WEIGHT_EXTRA_LIGHT;
-    if (fontWeight <= 300)
+    }
+    if (fontWeight <= 300) {
         return DWRITE_FONT_WEIGHT_LIGHT;
-    if (fontWeight <= 400)
+    }
+    if (fontWeight <= 400) {
         return DWRITE_FONT_WEIGHT_NORMAL;
-    if (fontWeight <= 500)
+    }
+    if (fontWeight <= 500) {
         return DWRITE_FONT_WEIGHT_MEDIUM;
-    if (fontWeight <= 600)
+    }
+    if (fontWeight <= 600) {
         return DWRITE_FONT_WEIGHT_SEMI_BOLD;
-    if (fontWeight <= 700)
+    }
+    if (fontWeight <= 700) {
         return DWRITE_FONT_WEIGHT_BOLD;
-    if (fontWeight <= 800)
+    }
+    if (fontWeight <= 800) {
         return DWRITE_FONT_WEIGHT_EXTRA_BOLD;
+    }
     return DWRITE_FONT_WEIGHT_BLACK;
 }
 
@@ -710,18 +753,6 @@ std::wstring EscapeUrlComponent(PCWSTR input) {
     return out;
 }
 
-std::wstring GetWeatherCacheKey() {
-    // Change the URL every 10 minutes to avoid caching.
-    FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
-    ULARGE_INTEGER uli{
-        .LowPart = ft.dwLowDateTime,
-        .HighPart = ft.dwHighDateTime,
-    };
-    uli.QuadPart /= 10000000ULL * 60 * 10;
-    return std::to_wstring(uli.QuadPart);
-}
-
 bool UpdateWeatherContent() {
     std::wstring format = g_settings.weatherFormat.get();
     if (format.empty()) {
@@ -751,10 +782,8 @@ bool UpdateWeatherContent() {
     }
     weatherUrl += L"format=";
     weatherUrl += EscapeUrlComponent(format.c_str());
-    // Set a random language as a way to avoid caching the result.
-    // https://github.com/chubin/wttr.in/issues/705#issuecomment-3109898903
-    weatherUrl += L"&lang=_nocache_";
-    weatherUrl += GetWeatherCacheKey();
+
+    Wh_Log(L"Fetching weather from URL: %s", weatherUrl.c_str());
 
     std::optional<std::wstring> urlContent = GetUrlContent(weatherUrl.c_str());
     if (!urlContent) {
@@ -1883,7 +1912,123 @@ bool CreateSwapChainResources(UINT width, UINT height) {
     return true;
 }
 
+FILETIME GetWallpaperFileTime() {
+    WCHAR path[MAX_PATH] = {};
+    SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, path, 0);
+    FILETIME ft = {};
+    HANDLE hFile = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        GetFileTime(hFile, nullptr, nullptr, &ft);
+        CloseHandle(hFile);
+    }
+    return ft;
+}
+
+void CaptureWallpaperBitmap() {
+    g_wallpaperBitmap.Reset();
+
+    if (!g_overlayWnd || !g_dc || !g_swapChain) {
+        return;
+    }
+
+    g_lastWallpaperTime = GetWallpaperFileTime();
+
+    // Clear the overlay to transparent so the capture doesn't include
+    // our own previously rendered content.
+    g_dc->BeginDraw();
+    g_dc->Clear(D2D1::ColorF(0, 0, 0, 0));
+    g_dc->EndDraw();
+    g_swapChain->Present(1, 0);
+    DwmFlush();
+
+    HWND hParent = GetParent(g_overlayWnd);
+    if (!hParent) {
+        return;
+    }
+
+    RECT rc;
+    GetClientRect(hParent, &rc);
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    // Capture from Progman which paints the wallpaper. WorkerW's GDI
+    // surface is empty because DWM composites the wallpaper.
+    HWND hSource = FindWindow(L"Progman", nullptr);
+    if (!hSource) {
+        hSource = hParent;
+    }
+
+    HDC hdcScreen = GetDC(nullptr);
+    if (!hdcScreen) {
+        return;
+    }
+
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    if (!hdcMem) {
+        ReleaseDC(nullptr, hdcScreen);
+        return;
+    }
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;  // Top-down.
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pvBits = nullptr;
+    HBITMAP hBmp =
+        CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pvBits, nullptr, 0);
+    if (!hBmp) {
+        DeleteDC(hdcMem);
+        ReleaseDC(nullptr, hdcScreen);
+        return;
+    }
+
+    HGDIOBJ hOldBmp = SelectObject(hdcMem, hBmp);
+
+    // PW_RENDERFULLCONTENT (0x02) asks the window to render directly,
+    // bypassing the DWM redirect bitmap.
+    if (!PrintWindow(hSource, hdcMem, 0x02 /*PW_RENDERFULLCONTENT*/)) {
+        Wh_Log(L"PrintWindow failed: %u", GetLastError());
+        SelectObject(hdcMem, hOldBmp);
+        DeleteObject(hBmp);
+        DeleteDC(hdcMem);
+        ReleaseDC(nullptr, hdcScreen);
+        return;
+    }
+    GdiFlush();
+
+    // PrintWindow may produce alpha=0; set to 255 for premultiplied alpha.
+    BYTE* pixels = static_cast<BYTE*>(pvBits);
+    for (int i = 0; i < w * h; i++) {
+        pixels[i * 4 + 3] = 255;
+    }
+
+    D2D1_BITMAP_PROPERTIES bitmapProps =
+        D2D1::BitmapProperties(D2D1::PixelFormat(
+            DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    HRESULT hr = g_dc->CreateBitmap(D2D1::SizeU(w, h), pvBits, w * 4,
+                                    bitmapProps, &g_wallpaperBitmap);
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateBitmap (wallpaper) failed: 0x%08X", hr);
+    }
+
+    SelectObject(hdcMem, hOldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
+}
+
 void ReleaseTextResources() {
+    g_blurEffect.Reset();
+    g_wallpaperBitmap.Reset();
+    g_borderBrush.Reset();
     g_backgroundBrush.Reset();
     g_bottomLineTextBrush.Reset();
     g_bottomLineTextFormat.Reset();
@@ -1977,6 +2122,38 @@ bool RecreateTextResources() {
         if (FAILED(hr)) {
             Wh_Log(L"CreateSolidColorBrush (background) failed: 0x%08X", hr);
             return false;
+        }
+
+        // Create blur effect.
+        if (g_settings.backgroundBlur > 0) {
+            CaptureWallpaperBitmap();
+            if (g_wallpaperBitmap) {
+                hr = g_dc->CreateEffect(kCLSID_D2D1GaussianBlur, &g_blurEffect);
+                if (SUCCEEDED(hr)) {
+                    g_blurEffect->SetInput(0, g_wallpaperBitmap.Get());
+                    g_blurEffect->SetValue(
+                        0,  // D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION
+                        (FLOAT)g_settings.backgroundBlur);
+                    g_blurEffect->SetValue(
+                        2,           // D2D1_GAUSSIANBLUR_PROP_BORDER_MODE
+                        (UINT32)1);  // D2D1_BORDER_MODE_HARD
+                } else {
+                    Wh_Log(L"CreateEffect (blur) failed: 0x%08X", hr);
+                }
+            }
+        }
+
+        // Create border brush.
+        if (g_settings.backgroundBorderSize > 0) {
+            D2D1_COLOR_F borderColor =
+                D2D1::ColorF(g_settings.backgroundBorderColorR / 255.0f,
+                             g_settings.backgroundBorderColorG / 255.0f,
+                             g_settings.backgroundBorderColorB / 255.0f,
+                             g_settings.backgroundBorderColorA / 255.0f);
+            hr = g_dc->CreateSolidColorBrush(borderColor, &g_borderBrush);
+            if (FAILED(hr)) {
+                Wh_Log(L"CreateSolidColorBrush (border) failed: 0x%08X", hr);
+            }
         }
     }
 
@@ -2136,15 +2313,67 @@ void RenderOverlay() {
             if (g_backgroundBrush) {
                 float padding =
                     (float)g_settings.backgroundPadding * g_dpiScale;
-                float radius =
-                    (float)g_settings.backgroundCornerRadius * g_dpiScale;
+                float bgWidth = totalWidth + 2 * padding;
+                float bgHeight = totalHeight + 2 * padding;
+                float radius = std::min(
+                    (float)g_settings.backgroundCornerRadius * g_dpiScale,
+                    std::min(bgWidth, bgHeight) / 2.0f);
                 D2D1_ROUNDED_RECT backgroundRect = D2D1::RoundedRect(
                     D2D1::RectF(blockX - padding, blockY - padding,
                                 blockX + totalWidth + padding,
                                 blockY + totalHeight + padding),
                     radius, radius);
+
+                // Draw blurred wallpaper behind background.
+                if (g_blurEffect) {
+                    ComPtr<ID2D1RoundedRectangleGeometry> clipGeo;
+                    g_d2dFactory->CreateRoundedRectangleGeometry(backgroundRect,
+                                                                 &clipGeo);
+                    if (clipGeo) {
+                        g_dc->PushLayer(
+                            D2D1::LayerParameters(D2D1::InfiniteRect(),
+                                                  clipGeo.Get()),
+                            nullptr);
+                        g_dc->DrawImage(g_blurEffect.Get());
+                        g_dc->PopLayer();
+                    }
+                }
+
                 g_dc->FillRoundedRectangle(backgroundRect,
                                            g_backgroundBrush.Get());
+
+                // Draw border inside the background using a geometry
+                // ring (outer minus inner rounded rect) so corners
+                // match the fill exactly.
+                if (g_borderBrush) {
+                    float bw = std::min(
+                        (float)g_settings.backgroundBorderSize * g_dpiScale,
+                        std::min(bgWidth, bgHeight) / 2.0f);
+                    float innerRadius = std::max(0.0f, radius - bw);
+                    D2D1_ROUNDED_RECT innerRect = D2D1::RoundedRect(
+                        D2D1::RectF(backgroundRect.rect.left + bw,
+                                    backgroundRect.rect.top + bw,
+                                    backgroundRect.rect.right - bw,
+                                    backgroundRect.rect.bottom - bw),
+                        innerRadius, innerRadius);
+
+                    ComPtr<ID2D1RoundedRectangleGeometry> outerGeo;
+                    ComPtr<ID2D1RoundedRectangleGeometry> innerGeo;
+                    g_d2dFactory->CreateRoundedRectangleGeometry(backgroundRect,
+                                                                 &outerGeo);
+                    g_d2dFactory->CreateRoundedRectangleGeometry(innerRect,
+                                                                 &innerGeo);
+                    if (outerGeo && innerGeo) {
+                        ID2D1Geometry* geos[] = {outerGeo.Get(),
+                                                 innerGeo.Get()};
+                        ComPtr<ID2D1GeometryGroup> ring;
+                        g_d2dFactory->CreateGeometryGroup(
+                            D2D1_FILL_MODE_ALTERNATE, geos, 2, &ring);
+                        if (ring) {
+                            g_dc->FillGeometry(ring.Get(), g_borderBrush.Get());
+                        }
+                    }
+                }
             }
 
             // Draw top line.
@@ -2253,6 +2482,13 @@ void HandleDisplayChange() {
         CreateSwapChainResources(rc.right - rc.left, rc.bottom - rc.top);
         RenderOverlay();
     }
+
+    // Schedule a delayed wallpaper recapture so the system has time to
+    // repaint the wallpaper at the new resolution.
+    if (g_messageWnd && g_settings.backgroundEnabled &&
+        g_settings.backgroundBlur > 0) {
+        SetTimer(g_messageWnd, TIMER_ID_MSG_WALLPAPER_REFRESH, 500, nullptr);
+    }
 }
 
 // Forward declarations.
@@ -2317,6 +2553,18 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd,
             }
             return 0;
 
+        case WM_SETTINGCHANGE: {
+            if (g_overlayWnd && !g_unloading && g_settings.backgroundEnabled &&
+                g_settings.backgroundBlur > 0) {
+                FILETIME ft = GetWallpaperFileTime();
+                if (CompareFileTime(&ft, &g_lastWallpaperTime) != 0) {
+                    SetTimer(hWnd, TIMER_ID_MSG_WALLPAPER_REFRESH, 2000,
+                             nullptr);
+                }
+            }
+            return 0;
+        }
+
         case WM_TIMER:
             if (g_unloading) {
                 return 0;
@@ -2328,6 +2576,14 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd,
                 KillTimer(hWnd, TIMER_ID_MSG_RECREATE_OVERLAY);
                 Wh_Log(L"Recreating overlay window");
                 CreateOverlayWindow();
+            } else if (wParam == TIMER_ID_MSG_WALLPAPER_REFRESH) {
+                KillTimer(hWnd, TIMER_ID_MSG_WALLPAPER_REFRESH);
+                if (g_overlayWnd && g_settings.backgroundEnabled &&
+                    g_settings.backgroundBlur > 0) {
+                    ReleaseTextResources();
+                    RecreateTextResources();
+                    RenderOverlay();
+                }
             }
             return 0;
 
@@ -2621,6 +2877,29 @@ void LoadSettings() {
     if (g_settings.backgroundCornerRadius < 0) {
         g_settings.backgroundCornerRadius = 8;
     }
+
+    g_settings.backgroundBlur = Wh_GetIntSetting(L"background.blur");
+    if (g_settings.backgroundBlur < 0) {
+        g_settings.backgroundBlur = 0;
+    }
+
+    g_settings.backgroundBorderSize =
+        Wh_GetIntSetting(L"background.borderSize");
+    if (g_settings.backgroundBorderSize < 0) {
+        g_settings.backgroundBorderSize = 0;
+    }
+
+    PCWSTR borderColor = Wh_GetStringSetting(L"background.borderColor");
+    if (!ParseColor(borderColor, &g_settings.backgroundBorderColorA,
+                    &g_settings.backgroundBorderColorR,
+                    &g_settings.backgroundBorderColorG,
+                    &g_settings.backgroundBorderColorB)) {
+        g_settings.backgroundBorderColorA = 0x80;
+        g_settings.backgroundBorderColorR = 0xFF;
+        g_settings.backgroundBorderColorG = 0xFF;
+        g_settings.backgroundBorderColorB = 0xFF;
+    }
+    Wh_FreeStringSetting(borderColor);
 
     g_settings.verticalPosition = Wh_GetIntSetting(L"verticalPosition");
     g_settings.horizontalPosition = Wh_GetIntSetting(L"horizontalPosition");
