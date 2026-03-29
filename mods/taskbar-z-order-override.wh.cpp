@@ -2,7 +2,7 @@
 // @id              taskbar-z-order-override
 // @name            Taskbar Z-Order Override
 // @description     Control whether the taskbar stays always on top, always at the bottom, or behaves like a normal window
-// @version         0.5
+// @version         0.6
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -155,6 +155,7 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
     case TaskbarZOrder::Top:
     case TaskbarZOrder::Bottom:
       if (msg == WM_WINDOWPOSCHANGING) {
+        Wh_Log(L"Pos Changing");
         HandlePinnedTaskbarPosChanging(reinterpret_cast<WINDOWPOS*>(lParam));
       }
       break;
@@ -166,21 +167,121 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
   return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-static void InstallTaskbarSubclass() {
-  g_state.taskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-  if (!g_state.taskbarWnd) {
-    Wh_Log(L"Shell_TrayWnd not found");
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+static CreateWindowExW_t CreateWindowExW_Original = nullptr;
+
+static HWND FindCurrentProcessPrimaryTaskbar() {
+  HWND result = nullptr;
+
+  EnumWindows(
+      [](HWND hwnd, LPARAM lParam) -> BOOL {
+        auto* out = reinterpret_cast<HWND*>(lParam);
+
+        DWORD pid = 0;
+        if (!GetWindowThreadProcessId(hwnd, &pid) ||
+            pid != GetCurrentProcessId()) {
+          return TRUE;
+        }
+
+        wchar_t className[32] = {};
+        if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
+          return TRUE;
+        }
+
+        if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+          *out = hwnd;
+          return FALSE;
+        }
+
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&result));
+
+  return result;
+}
+
+static void TryAttachTaskbarWindow(HWND hwnd) {
+  if (!hwnd) {
     return;
   }
 
-  if (!WindhawkUtils::SetWindowSubclassFromAnyThread(g_state.taskbarWnd,
-                                                     TaskbarSubclassProc, 0)) {
-    Wh_Log(L"SetWindowSubclassFromAnyThread failed");
-    g_state.taskbarWnd = nullptr;
+  DWORD pid = 0;
+  if (!GetWindowThreadProcessId(hwnd, &pid) ||
+      pid != GetCurrentProcessId()) {
     return;
   }
+
+  wchar_t className[32] = {};
+  if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
+    return;
+  }
+
+  if (_wcsicmp(className, L"Shell_TrayWnd") != 0) {
+    return;
+  }
+
+  if (g_state.taskbarWnd == hwnd) {
+    return;
+  }
+
+  if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+          hwnd, TaskbarSubclassProc, 0)) {
+    Wh_Log(L"SetWindowSubclassFromAnyThread failed for hwnd=%p", hwnd);
+    return;
+  }
+
+  g_state.taskbarWnd = hwnd;
+  Wh_Log(L"Attached subclass to primary taskbar hwnd=%p", hwnd);
   ApplyConfiguredMode();
 }
+
+static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                        LPCWSTR lpClassName,
+                                        LPCWSTR lpWindowName,
+                                        DWORD dwStyle,
+                                        int X,
+                                        int Y,
+                                        int nWidth,
+                                        int nHeight,
+                                        HWND hWndParent,
+                                        HMENU hMenu,
+                                        HINSTANCE hInstance,
+                                        LPVOID lpParam) {
+  HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                       dwStyle, X, Y, nWidth, nHeight,
+                                       hWndParent, hMenu, hInstance, lpParam);
+
+  if (!hwnd || !lpClassName) {
+    return hwnd;
+  }
+
+  const bool textualClassName =
+      ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+
+  if (textualClassName &&
+      _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
+    Wh_Log(L"Shell_TrayWnd created: hwnd=%p", hwnd);
+    TryAttachTaskbarWindow(hwnd);
+  }
+
+  return hwnd;
+}
+
+
+static void InstallTaskbarSubclass() {
+  if (g_state.taskbarWnd) {
+    return;
+  }
+
+  HWND hwnd = FindCurrentProcessPrimaryTaskbar();
+  if (!hwnd) {
+    Wh_Log(L"No primary taskbar in this explorer.exe instance yet");
+    return;
+  }
+
+  TryAttachTaskbarWindow(hwnd);
+}
+
 
 static void RemoveTaskbarSubclass() {
   if (g_state.taskbarWnd) {
@@ -245,6 +346,13 @@ BOOL Wh_ModInit() {
                           reinterpret_cast<void*>(SetWindowBand_Hook),
                           reinterpret_cast<void**>(&SetWindowBand_Original))) {
     Wh_Log(L"Failed to set SetWindowBand function hook");
+    return FALSE;
+  }
+
+  if (!Wh_SetFunctionHook(reinterpret_cast<void*>(CreateWindowExW),
+                          reinterpret_cast<void*>(CreateWindowExW_Hook),
+                          reinterpret_cast<void**>(&CreateWindowExW_Original))) {
+    Wh_Log(L"Failed to set CreateWindowExW function hook");
     return FALSE;
   }
 
