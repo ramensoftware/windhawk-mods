@@ -34,7 +34,6 @@ enum class TaskbarZOrder {
 
 namespace {
 
-constexpr DWORD kInteractiveTimeoutMs = 1000;
 constexpr DWORD kDesktopBand = 1;
 
 using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
@@ -45,33 +44,11 @@ struct ModState {
   TaskbarZOrder mode = TaskbarZOrder::Interactive;
 
   HWND taskbarWnd = nullptr;
-
-  // In interactive mode, the taskbar is allowed to come forward briefly while
-  // the user is actively clicking or dragging on it. Outside that interaction
-  // window, it should behave like a normal non-topmost window.
-  bool userInteractionActive = false;
-
-  // Several helpers move the taskbar with SetWindowPos(), which also generates
-  // WINDOWPOS traffic. This flag prevents our own reorder attempts from being
-  // treated as external Z-order changes by the subclass logic.
-  bool internalZOrderUpdate = false;
-
-  // Timestamp of the most recent taskbar interaction. Interactive mode uses a
-  // short timeout.
-  DWORD lastInteractionTick = 0;
 };
 
 static ModState g_state;
 static SetWindowPos_t SetWindowPos_Original = nullptr;
 static SetWindowBand_t SetWindowBand_Original = nullptr;
-
-// Automates internalZorderUpdate flagging
-// Usage: IZG guard {};
-// Flag reset once guard goes out of scope
-struct InternalZOrderGuard {
-  InternalZOrderGuard() { g_state.internalZOrderUpdate = true; }
-  ~InternalZOrderGuard() { g_state.internalZOrderUpdate = false; }
-};
 
 static bool IsMainTaskbarWindow(HWND hWnd) {
   return hWnd && hWnd == g_state.taskbarWnd;
@@ -82,7 +59,6 @@ static bool SetTaskbarZOrder(HWND insertAfter) {
     return false;
   }
 
-  InternalZOrderGuard guard;
   return SetWindowPos_Original(g_state.taskbarWnd, insertAfter, 0, 0, 0, 0,
                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) !=
          FALSE;
@@ -95,8 +71,6 @@ static void BumpTaskbarToFrontOfNormalBand() {
     return;
   }
 
-  InternalZOrderGuard guard;
-
   SetWindowPos_Original(g_state.taskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
                         SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 
@@ -104,24 +78,6 @@ static void BumpTaskbarToFrontOfNormalBand() {
                         SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
-static void BeginInteraction() {
-  g_state.userInteractionActive = true;
-  g_state.lastInteractionTick = GetTickCount();
-}
-
-static void EndInteraction() {
-  if (!g_state.userInteractionActive) {
-    return;
-  }
-
-  g_state.userInteractionActive = false;
-  SetTaskbarZOrder(HWND_NOTOPMOST);
-}
-
-static bool InteractionTimedOut() {
-  return g_state.lastInteractionTick != 0 &&
-         GetTickCount() - g_state.lastInteractionTick > kInteractiveTimeoutMs;
-}
 
 static void ApplyConfiguredMode() {
   if (!g_state.taskbarWnd) {
@@ -153,56 +109,13 @@ static void ForceTaskbarTopStateBeforeUnload() {
 }
 
 static void HandlePinnedTaskbarPosChanging(WINDOWPOS* wp) {
+  Wh_Log(L"HandlePinnedTaskbarPosChanging");
   if (!wp || (wp->flags & SWP_NOZORDER)) {
     return;
   }
 
   wp->hwndInsertAfter =
       (g_state.mode == TaskbarZOrder::Top) ? HWND_TOPMOST : HWND_BOTTOM;
-}
-
-static void HandleInteractiveTaskbarPosChanging(WINDOWPOS* wp) {
-  if (!wp || g_state.internalZOrderUpdate || (wp->flags & SWP_NOZORDER)) {
-    return;
-  }
-
-  const bool timedOut = InteractionTimedOut();
-
-  if (g_state.userInteractionActive && !timedOut) {
-    return;
-  }
-
-  wp->flags |= SWP_NOZORDER;
-
-  if (timedOut) {
-    EndInteraction();
-  }
-}
-
-static void HandleInteractiveMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
-  switch (msg) {
-    case WM_ACTIVATE:
-      if (LOWORD(wParam) == WA_CLICKACTIVE) {
-        BeginInteraction();
-      } else if (LOWORD(wParam) == WA_INACTIVE) {
-        EndInteraction();
-      }
-      break;
-
-    case WM_MOUSEACTIVATE:
-    case WM_LBUTTONDOWN:
-    case WM_NCLBUTTONDOWN:
-      BeginInteraction();
-      break;
-
-    case WM_CAPTURECHANGED:
-      EndInteraction();
-      break;
-
-    case WM_WINDOWPOSCHANGING:
-      HandleInteractiveTaskbarPosChanging(reinterpret_cast<WINDOWPOS*>(lParam));
-      break;
-  }
 }
 
 // Explorer sometimes promotes the taskbar with HWND_TOPMOST.
@@ -247,7 +160,6 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
       break;
 
     case TaskbarZOrder::Interactive:
-      HandleInteractiveMessage(msg, wParam, lParam);
       break;
   }
 
@@ -343,8 +255,6 @@ void Wh_ModAfterInit() { InstallTaskbarSubclass(); }
 
 void Wh_ModSettingsChanged() {
   ReadSettings();
-  g_state.userInteractionActive = false;
-  g_state.lastInteractionTick = 0;
   ApplyConfiguredMode();
 }
 
