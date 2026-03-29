@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM, GPU, battery), media player info, custom fonts and colors, and more
-// @version         1.7.2
+// @version         1.7.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1009,18 +1009,6 @@ std::wstring EscapeUrlComponent(PCWSTR input,
     return out;
 }
 
-std::wstring GetWeatherCacheKey() {
-    // Change the URL every 10 minutes to avoid caching.
-    FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
-    ULARGE_INTEGER uli{
-        .LowPart = ft.dwLowDateTime,
-        .HighPart = ft.dwHighDateTime,
-    };
-    uli.QuadPart /= 10000000ULL * 60 * 10;
-    return std::to_wstring(uli.QuadPart);
-}
-
 bool UpdateWeatherWebContent() {
     std::wstring format = g_settings.webContentWeatherFormat.get();
     if (format.empty()) {
@@ -1050,10 +1038,6 @@ bool UpdateWeatherWebContent() {
     }
     weatherUrl += L"format=";
     weatherUrl += EscapeUrlComponent(format.c_str());
-    // Set a random language as a way to avoid caching the result.
-    // https://github.com/chubin/wttr.in/issues/705#issuecomment-3109898903
-    weatherUrl += L"&lang=_nocache_";
-    weatherUrl += GetWeatherCacheKey();
 
     Wh_Log(L"Fetching weather from URL: %s", weatherUrl.c_str());
 
