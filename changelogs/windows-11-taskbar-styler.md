@@ -1,3 +1,9 @@
+## 1.6.1 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fbe583ec54172125c1dcce0468a3cac3c3ab9ef4/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Updated the LiquidGlass theme and added LiquidGlass (Alternate).
+* Fixed the tray area being cut off for WindowGlass (Full-Length).
+* Improve secondary monitor support for TaskbarXII, WindowGlass, Luminosity, LayerMicaUI, UltraWideFriendly, and Borderless themes.
+
 ## 1.6 ([Mar 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7568990b9f5176ab4b6646ed48c9a637790352b0/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added the following themes: LayerMicaUI, Fluid, TintedGlass, TaskbarToStatusbar, UltraWideFriendly, LiquidGlass, Borderless.
