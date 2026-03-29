@@ -8191,7 +8191,7 @@
                     1239
                 ],
                 "ratingUsers": 1389,
-                "updated": 1774818553000,
+                "updated": 1774821053000,
                 "users": 73180
             },
             "featured": true,
@@ -8209,7 +8209,7 @@
                 ],
                 "name": "Taskbar Clock Customization",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.7.2"
+                "version": "1.7.3"
             }
         },
         "taskbar-content-presenter-injector": {

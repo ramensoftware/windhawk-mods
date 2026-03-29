@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-29T21:32:49.000Z</updated>
+    <updated>2026-03-29T21:50:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.7.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#3b3395d062442972c4a89a7ab97afb6832d08f1c</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2026-03-29T21:50:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed <code>%weather%</code> which stopped working in the previous update.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.5]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#4f639bb40e7da9b66efcf03ad36d9ceaf92ebc64</id>
@@ -395,38 +408,6 @@ Recommended: Windows 11 22H2 or newer</p>
 <li>Expanded keyboard-based change detection to include <code>Ctrl+B</code>, <code>Ctrl+I</code>, <code>Ctrl+U</code>, while keeping support for <code>Ctrl+V</code>, <code>Ctrl+X</code>, <code>Ctrl+Y</code>, <code>Ctrl+Z</code>, and <code>Ctrl+Enter</code>.</li>
 <li>Added document dirty-state monitoring via <code>ActiveDocument.Saved</code> to catch changes made through the ribbon, context menu, and mouse, not just keyboard input.</li>
 <li>Replaced dynamic OLE/COM runtime loading with normal linker-based imports via <code>@compilerOptions -lole32 -loleaut32 -loleacc</code> for m417z's aesthetic pleasure.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Time Sync On Startup 1.0]]></title>
-        <id>https://windhawk.net/mods/auto-time-sync-on-startup#c3079a58100cd96c3ec7cda1f12a83dc664fee45</id>
-        <link href="https://windhawk.net/mods/auto-time-sync-on-startup"/>
-        <updated>2026-03-25T22:08:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="autotimesynconstartup">Auto Time Sync On Startup</h1>
-<p>This mod asks Windows to synchronize the clock once after sign-in. It runs the
-actual sync logic in a separate <code>explorer.exe</code> host process instead of the main
-shell process. It doesn't set a custom NTP server or change the time zone. It
-simply triggers the standard Windows time sync flow, so the current system date
-and time settings continue to apply.</p>
-<p>The sync request is attempted in the background with an optional delay and
-retries, which helps when the network or Windows Time service isn't ready
-immediately after startup.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Windhawk mods are user-mode mods, so this runs after sign-in, not before the
-logon screen.</li>
-<li>The mod is intended for 64-bit Windows.</li>
-<li>The primary method is <code>SystemSettingsAdminFlows.exe ForceTimeSync 0</code>, which
-matches the Windows Settings "Sync now" flow.</li>
-<li>If enabled and the mod is already running elevated, it can fall back to
-<code>w32tm /resync /nowait</code>.</li>
-<li>After a successful synchronization, the mod shows a notification.</li>
-<li>Windows can still show a UAC prompt for the sync request because time sync is
-a privileged operation.</li>
 </ul>]]></content>
         <author>
             <name>communism420</name>

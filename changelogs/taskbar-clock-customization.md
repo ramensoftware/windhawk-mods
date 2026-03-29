@@ -1,3 +1,7 @@
+## 1.7.3 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3b3395d062442972c4a89a7ab97afb6832d08f1c/mods/taskbar-clock-customization.wh.cpp))
+
+* Fixed `%weather%` which stopped working in the previous update.
+
 ## 1.7.2 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9ef1fb4b9f5c423fdf927b0d56b67742ed063793/mods/taskbar-clock-customization.wh.cpp))
 
 * Added `%cpu_temp%` and `%cpu_temp_f%` for the CPU temperature in °C/°F (average of all ACPI thermal zones).
