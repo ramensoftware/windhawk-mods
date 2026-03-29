@@ -1,3 +1,8 @@
+## 1.1 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/594e5a7b6716156f9d49857aafbb3880e1f442df/mods/desktop-live-overlay.wh.cpp))
+
+* Fixed weather being stuck on "Loading...".
+* Added background blur and border options.
+
 ## 1.0.3 ([Jan 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/051f9f44200b3b3db02b4b5b95f0c8b17680be06/mods/desktop-live-overlay.wh.cpp))
 
 * Fixed compatibility with ExplorerPatcher.

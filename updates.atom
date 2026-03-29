@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-29T21:50:53.000Z</updated>
+    <updated>2026-03-29T23:37:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Live Overlay 1.1]]></title>
+        <id>https://windhawk.net/mods/desktop-live-overlay#594e5a7b6716156f9d49857aafbb3880e1f442df</id>
+        <link href="https://windhawk.net/mods/desktop-live-overlay"/>
+        <updated>2026-03-29T23:37:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed weather being stuck on "Loading…".</li>
+<li>Added background blur and border options.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.7.3]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#3b3395d062442972c4a89a7ab97afb6832d08f1c</id>
@@ -391,23 +405,6 @@ Recommended: Windows 11 22H2 or newer</p>
 <li>Fixed the session-run guard logic to use a real volatile registry subkey instead of a persistent value under <code>HKCU\Software</code>.</li>
 <li>Added cleanup for the legacy persistent guard value that could make the mod think the sync had already been done after reboot.</li>
 <li>Version bumped to <code>1.1</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 3.1]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#1bc0e23eb43c7bad97ad22df81f2a3da9231a605</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-03-26T09:07:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added detection for paste via the context menu so it also triggers auto-save.</li>
-<li>Added detection for text formatting changes: font changes, bold, italic, and underline now also trigger auto-save.</li>
-<li>Expanded keyboard-based change detection to include <code>Ctrl+B</code>, <code>Ctrl+I</code>, <code>Ctrl+U</code>, while keeping support for <code>Ctrl+V</code>, <code>Ctrl+X</code>, <code>Ctrl+Y</code>, <code>Ctrl+Z</code>, and <code>Ctrl+Enter</code>.</li>
-<li>Added document dirty-state monitoring via <code>ActiveDocument.Saved</code> to catch changes made through the ribbon, context menu, and mouse, not just keyboard input.</li>
-<li>Replaced dynamic OLE/COM runtime loading with normal linker-based imports via <code>@compilerOptions -lole32 -loleaut32 -loleacc</code> for m417z's aesthetic pleasure.</li>
 </ul>]]></content>
         <author>
             <name>communism420</name>
