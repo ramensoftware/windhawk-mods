@@ -35,7 +35,7 @@ where the mouse cursor is located.
 
 ## Changelog
 
-### 2025-11-23 (v1.1.20251123)
+### 2026-03-30 (v1.1.260330)
 - Fixed window control to use ShowWindow instead of PostMessage for better compatibility with windows that have popups, such as Excel
 - 修复窗口控制，使用 ShowWindow 而非 PostMessage，以更好地兼容带有弹出窗口的窗口，如 Excel
 
