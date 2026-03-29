@@ -1,3 +1,7 @@
+## 2.4.1 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d31cc9caa1d942878e751a16924b51ab1a8a4a90/mods/virtual-desktop-helper.wh.cpp))
+
+Update last desktop tracking when the foreground window changes, so desktop switches triggered by taskbar window activation are recorded correctly.
+
 ## 2.4.0 ([Mar 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0e5eb31430c7c36664389f737cc3b68fcd50e6d5/mods/virtual-desktop-helper.wh.cpp))
 
 Rename confusingly named cycling functions for clarity:

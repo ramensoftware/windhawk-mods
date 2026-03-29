@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-28T22:44:18.000Z</updated>
+    <updated>2026-03-29T09:48:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 2.4.1]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#d31cc9caa1d942878e751a16924b51ab1a8a4a90</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2026-03-29T09:48:21.000Z</updated>
+        <content type="html"><![CDATA[<p>Update last desktop tracking when the foreground window changes, so desktop switches triggered by taskbar window activation are recorded correctly.</p>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.6]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#7568990b9f5176ab4b6646ed48c9a637790352b0</id>
@@ -583,44 +594,6 @@ configuración.</p>]]></content>
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AMD Radeon Software Window Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/amd-radeon-software-window-fix#a0f2f99ab063edcbce98ba0bb8fb53a36a8c404d</id>
-        <link href="https://windhawk.net/mods/amd-radeon-software-window-fix"/>
-        <updated>2026-03-24T11:23:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="amdradeonsoftwarewindowfix">AMD Radeon Software Window Fix</h1>
-<p>AMD's Radeon Software runs persistently in the system tray. When you double-click
-the tray icon to open it, the app reads its size from the registry and then centers
-itself — ignoring any position you prefer, and doing so <em>after</em> any <code>SetWindowPos</code>
-call, making simple hooks ineffective.</p>
-<p>The behavior is especially frustrating on multi-monitor setups with extended desktop
-and has been most likely present since the Adrenalin edition release from 2018. Since
-AMD devs are unwilling to even acknowledge their incompetence or even attempt to fix
-it, i've used some of my knowledge and a few AI coding tools to give a working solution.</p>
-<p>This mod subclasses the main window to intercept <code>WM_WINDOWPOSCHANGING</code> — a message
-fired <em>before</em> any move or resize takes effect — and overrides the position and size
-there, which is the only intercept point that reliably wins against Qt's internal
-layout logic.</p>
-<p>Tested on version 26.3.1 (which introduced a metrics overlay bug), but should work on 
-any of the recent (2025-2026) versions that use the Qt 6.x.x framework.</p>
-<h2 id="settings">Settings</h2>
-<p>Open the mod's <strong>Settings</strong> tab to configure:</p>
-<p>| Setting | Description |
-|---|---|
-| <strong>Left (X)</strong> | Horizontal position of the window's left edge, in pixels |
-| <strong>Top (Y)</strong> | Vertical position of the window's top edge, in pixels |
-| <strong>Width</strong> | Width of the window in pixels, minimum 1280 (used when not maximized) |
-| <strong>Height</strong> | Height of the window in pixels, minimum 600 (used when not maximized) |
-| <strong>Maximized</strong> | When enabled, the window will always open maximized |
-| <strong>[Experimental] Force Startup Page</strong> | Forces the app to reopen on the last visited page instead of always defaulting to the Dashboard |</p>
-<blockquote>
-  <p><strong>Note:</strong> The startup page feature sets <code>ResumeLastPage=true</code> in the registry each time the window is shown. The app itself tracks and writes the last visited page — this mod simply ensures that value is always honoured.</p>
-</blockquote>]]></content>
-        <author>
-            <name>St0RM53</name>
-            <uri>https://github.com/St0RM53</uri>
         </author>
     </entry>
 </feed>
