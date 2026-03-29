@@ -7,6 +7,7 @@
 // @github          https://github.com/Meteony
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 // ==WindhawkModSettings==
 /*
@@ -20,7 +21,9 @@
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
+#include <commctrl.h>
 #include <string>
 
 enum class TaskbarZOrder {
@@ -34,29 +37,25 @@ namespace {
 constexpr DWORD kInteractiveTimeoutMs = 1000;
 constexpr DWORD kDesktopBand = 1;
 
-using SetWindowPos_t =
-    BOOL (WINAPI*)(HWND, HWND, int, int, int, int, UINT);
+using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
 
-using SetWindowBand_t =
-    BOOL (WINAPI*)(HWND, HWND, DWORD);
+using SetWindowBand_t = BOOL(WINAPI*)(HWND, HWND, DWORD);
 
 struct ModState {
   TaskbarZOrder mode = TaskbarZOrder::Interactive;
 
   HWND taskbarWnd = nullptr;
-  WNDPROC originalTaskbarProc = nullptr;
-  DWORD taskbarThreadId = 0;
 
-  // In interactive mode, the taskbar is allowed to come forward briefly while the
-  // user is actively clicking or dragging on it. Outside that interaction window,
-  // it should behave like a normal non-topmost window.
+  // In interactive mode, the taskbar is allowed to come forward briefly while
+  // the user is actively clicking or dragging on it. Outside that interaction
+  // window, it should behave like a normal non-topmost window.
   bool userInteractionActive = false;
 
   // Several helpers move the taskbar with SetWindowPos(), which also generates
   // WINDOWPOS traffic. This flag prevents our own reorder attempts from being
   // treated as external Z-order changes by the subclass logic.
   bool internalZOrderUpdate = false;
-  
+
   // Timestamp of the most recent taskbar interaction. Interactive mode uses a
   // short timeout.
   DWORD lastInteractionTick = 0;
@@ -70,16 +69,12 @@ static SetWindowBand_t SetWindowBand_Original = nullptr;
 // Usage: IZG guard {};
 // Flag reset once guard goes out of scope
 struct InternalZOrderGuard {
-  InternalZOrderGuard()  { g_state.internalZOrderUpdate = true; }
+  InternalZOrderGuard() { g_state.internalZOrderUpdate = true; }
   ~InternalZOrderGuard() { g_state.internalZOrderUpdate = false; }
 };
 
 static bool IsMainTaskbarWindow(HWND hWnd) {
   return hWnd && hWnd == g_state.taskbarWnd;
-}
-
-static bool IsTaskbarThreadCall() {
-  return GetCurrentThreadId() == g_state.taskbarThreadId;
 }
 
 static bool SetTaskbarZOrder(HWND insertAfter) {
@@ -88,11 +83,9 @@ static bool SetTaskbarZOrder(HWND insertAfter) {
   }
 
   InternalZOrderGuard guard;
-  return SetWindowPos_Original(
-             g_state.taskbarWnd,
-             insertAfter,
-             0, 0, 0, 0,
-             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) != FALSE;
+  return SetWindowPos_Original(g_state.taskbarWnd, insertAfter, 0, 0, 0, 0,
+                               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) !=
+         FALSE;
 }
 
 // Forces the taskbar to the front of the normal (non-topmost)
@@ -104,13 +97,11 @@ static void BumpTaskbarToFrontOfNormalBand() {
 
   InternalZOrderGuard guard;
 
-  SetWindowPos_Original(
-      g_state.taskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
-      SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  SetWindowPos_Original(g_state.taskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                        SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 
-  SetWindowPos_Original(
-      g_state.taskbarWnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-      SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  SetWindowPos_Original(g_state.taskbarWnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                        SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
 static void BeginInteraction() {
@@ -151,7 +142,6 @@ static void ApplyConfiguredMode() {
       break;
   }
 }
-
 
 // Before removing the subclass, temporarily force the taskbar into a stable
 // top state so that it is not left between other top-level windows post-unload.
@@ -210,8 +200,7 @@ static void HandleInteractiveMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
       break;
 
     case WM_WINDOWPOSCHANGING:
-      HandleInteractiveTaskbarPosChanging(
-          reinterpret_cast<WINDOWPOS*>(lParam));
+      HandleInteractiveTaskbarPosChanging(reinterpret_cast<WINDOWPOS*>(lParam));
       break;
   }
 }
@@ -219,30 +208,26 @@ static void HandleInteractiveMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
 // Explorer sometimes promotes the taskbar with HWND_TOPMOST.
 // In interactive mode we downgrade that to HWND_TOP -
 // top but not over all regular windows.
-static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter,
-                                     int X, int Y, int cx, int cy,
-                                     UINT uFlags) {
+static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X,
+                                     int Y, int cx, int cy, UINT uFlags) {
   if (g_state.mode == TaskbarZOrder::Interactive &&
-      IsTaskbarThreadCall() &&
-      IsMainTaskbarWindow(hWnd) &&
-      hWndInsertAfter == HWND_TOPMOST) {
+      IsMainTaskbarWindow(hWnd) && hWndInsertAfter == HWND_TOPMOST) {
     hWndInsertAfter = HWND_TOP;
   }
 
   return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 
-
 // Explorer may try to move the taskbar to a different window band.
-// In interactive mode, we block that change for the main taskbar and 
-// instead keep it at the front of the normal desktop band using the helper below.
+// In interactive mode, we block that change for the main taskbar and
+// instead keep it at the front of the normal desktop band using the helper
+// below.
 //
 // kDesktopBand = 1: undocumented value for normal desktop band.
-static BOOL WINAPI SetWindowBand_Hook(HWND hWnd, HWND hwndInsertAfter, DWORD dwBand) {
+static BOOL WINAPI SetWindowBand_Hook(HWND hWnd, HWND hwndInsertAfter,
+                                      DWORD dwBand) {
   if (g_state.mode == TaskbarZOrder::Interactive &&
-      IsTaskbarThreadCall() &&
-      IsMainTaskbarWindow(hWnd) &&
-      dwBand != kDesktopBand) {
+      IsMainTaskbarWindow(hWnd) && dwBand != kDesktopBand) {
     BumpTaskbarToFrontOfNormalBand();
     return TRUE;
   }
@@ -251,7 +236,8 @@ static BOOL WINAPI SetWindowBand_Hook(HWND hWnd, HWND hwndInsertAfter, DWORD dwB
 }
 
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
-                                            LPARAM lParam) {
+                                            LPARAM lParam,
+                                            DWORD_PTR dwRefData) {
   switch (g_state.mode) {
     case TaskbarZOrder::Top:
     case TaskbarZOrder::Bottom:
@@ -265,50 +251,33 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
       break;
   }
 
-  return CallWindowProcW(g_state.originalTaskbarProc, hwnd, msg, wParam, lParam);
+  return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 static void InstallTaskbarSubclass() {
-  if (g_state.originalTaskbarProc) {
-    return;
-  }
-
   g_state.taskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
   if (!g_state.taskbarWnd) {
     Wh_Log(L"Shell_TrayWnd not found");
     return;
   }
 
-  g_state.taskbarThreadId =
-      GetWindowThreadProcessId(g_state.taskbarWnd, nullptr);
-
-  SetLastError(0);
-  auto prev = reinterpret_cast<WNDPROC>(
-      SetWindowLongPtrW(g_state.taskbarWnd,
-                        GWLP_WNDPROC,
-                        reinterpret_cast<LONG_PTR>(TaskbarSubclassProc)));
-
-  if (!prev && GetLastError() != 0) {
-    Wh_Log(L"SetWindowLongPtrW failed: %lu", GetLastError());
+  if (!WindhawkUtils::SetWindowSubclassFromAnyThread(g_state.taskbarWnd,
+                                                     TaskbarSubclassProc, 0)) {
+    Wh_Log(L"SetWindowSubclassFromAnyThread failed");
     g_state.taskbarWnd = nullptr;
-    g_state.taskbarThreadId = 0;
     return;
   }
-
-  g_state.originalTaskbarProc = prev;
   ApplyConfiguredMode();
 }
 
 static void RemoveTaskbarSubclass() {
-  if (g_state.taskbarWnd && g_state.originalTaskbarProc) {
-    SetWindowLongPtrW(g_state.taskbarWnd,
-                      GWLP_WNDPROC,
-                      reinterpret_cast<LONG_PTR>(g_state.originalTaskbarProc));
+  if (g_state.taskbarWnd) {
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+        g_state.taskbarWnd,
+        TaskbarSubclassProc);
   }
 
-  g_state.originalTaskbarProc = nullptr;
   g_state.taskbarWnd = nullptr;
-  g_state.taskbarThreadId = 0;
 }
 
 static void ReadSettings() {
@@ -325,7 +294,7 @@ static void ReadSettings() {
   }
 }
 
-} // namespace
+}  // namespace
 
 BOOL Wh_ModInit() {
   ReadSettings();
@@ -353,8 +322,8 @@ BOOL Wh_ModInit() {
     return FALSE;
   }
 
-  auto pSetWindowBand =
-      reinterpret_cast<SetWindowBand_t>(GetProcAddress(user32, "SetWindowBand"));
+  auto pSetWindowBand = reinterpret_cast<SetWindowBand_t>(
+      GetProcAddress(user32, "SetWindowBand"));
   if (!pSetWindowBand) {
     Wh_Log(L"Failed to resolve SetWindowBand");
     return FALSE;
@@ -370,9 +339,7 @@ BOOL Wh_ModInit() {
   return TRUE;
 }
 
-void Wh_ModAfterInit() {
-  InstallTaskbarSubclass();
-}
+void Wh_ModAfterInit() { InstallTaskbarSubclass(); }
 
 void Wh_ModSettingsChanged() {
   ReadSettings();
