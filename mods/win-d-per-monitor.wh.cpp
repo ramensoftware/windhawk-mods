@@ -3,7 +3,7 @@
 // @name            Win+D per monitor(show desktop)
 // @description     Press Win+D to only manage the windows on the monitor where the mouse is located.
 // @description:zh-CN   按下Win+D时 只最小化/还原鼠标所在显示器的窗口
-// @version         1.1.20251123
+// @version         1.1.260330
 // @author          easyatm
 // @github          https://github.com/easyatm
 // @include         explorer.exe
