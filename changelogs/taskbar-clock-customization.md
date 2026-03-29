@@ -1,3 +1,11 @@
+## 1.7.2 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9ef1fb4b9f5c423fdf927b0d56b67742ed063793/mods/taskbar-clock-customization.wh.cpp))
+
+* Added `%cpu_temp%` and `%cpu_temp_f%` for the CPU temperature in °C/°F (average of all ACPI thermal zones).
+* Added leading zeros to single-digit `%weeknum%` and `%weeknum_iso%` values.
+* Increased tooltip length limit from 256 to 4096 characters.
+* Improved the "Show seconds" option to strip the trailing colon when disabled.
+* Improved initialization performance.
+
 ## 1.7.1 ([Jan 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/273b8d750fd41ccabba8d53a70d0d8ddb7d6fafd/mods/taskbar-clock-customization.wh.cpp))
 
 * Added an option to specify text for `%media_info%` when no media is playing.

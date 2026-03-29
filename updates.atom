@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-29T20:33:43.000Z</updated>
+    <updated>2026-03-29T21:09:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.7.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#9ef1fb4b9f5c423fdf927b0d56b67742ed063793</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2026-03-29T21:09:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <code>%cpu_temp%</code> and <code>%cpu_temp_f%</code> for the CPU temperature in °C/°F (average of all ACPI thermal zones).</li>
+<li>Added leading zeros to single-digit <code>%weeknum%</code> and <code>%weeknum_iso%</code> values.</li>
+<li>Increased tooltip length limit from 256 to 4096 characters.</li>
+<li>Improved the "Show seconds" option to strip the trailing colon when disabled.</li>
+<li>Improved initialization performance.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.2.5]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#b16bfcbc7666f2c36e256bbda8370ef78e3f2a63</id>
@@ -441,20 +458,6 @@ a privileged operation.</li>
         <author>
             <name>Rik Smeets</name>
             <uri>https://github.com/rik-smeets</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Context Menu Preloader 1.0]]></title>
-        <id>https://windhawk.net/mods/context-menu-preloader#2cdc049b45f3043a33b507f7cd556b1c1a0380b0</id>
-        <link href="https://windhawk.net/mods/context-menu-preloader"/>
-        <updated>2026-03-24T22:53:04.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="contextmenupreloader">Context Menu Preloader</h1>
-<p>Preloads your desired context menu handlers (txt; mp4; svg) and pins them to your RAM for nigh-instant loading of context menus.</p>
-<p>Certain handlers are blocked by default because they interfere with Bluetooth.</p>
-<p>Does not affect context menus inside applications nor File Explorer's WinUI 3 context menu.</p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>
