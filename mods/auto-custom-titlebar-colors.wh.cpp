@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              auto-custom-titlebar-colours
+// @id              auto-custom-titlebar-colors
 // @name            Auto Custom Titlebar Colors
 // @description     Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes
 // @version         1.0.0
