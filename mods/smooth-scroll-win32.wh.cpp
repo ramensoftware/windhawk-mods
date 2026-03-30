@@ -242,19 +242,42 @@ static int LVLineH(HWND h) {
 }
 
 // ---------------------------------------------------------------------------
-// UI Automation (lazy init + pattern caching)
+// Globals (declared early — needed by UIA lazy init)
 // ---------------------------------------------------------------------------
 
-static thread_local IUIAutomation* g_uia = nullptr;
-static thread_local bool g_uiaInit = false;
+static CRITICAL_SECTION g_cs;
+
+// ---------------------------------------------------------------------------
+// UI Automation (lazy init + pattern caching)
+//
+// g_uia is a process-wide singleton protected by g_cs.
+// COM is initialized per-thread; we track the result to know whether
+// to call CoUninitialize.
+// ---------------------------------------------------------------------------
+
+static IUIAutomation* g_uia = nullptr;
+static bool g_uiaInit = false;
+static thread_local bool g_comInitialized = false;
 
 static IUIAutomation* UIA() {
-    if (g_uiaInit) return g_uia;
-    g_uiaInit = true;
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
-                     __uuidof(IUIAutomation), (void**)&g_uia);
-    return g_uia;
+    // Ensure COM is initialized on the calling thread.
+    if (!g_comInitialized) {
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        g_comInitialized = SUCCEEDED(hr);
+    }
+
+    // Protect singleton creation. CRITICAL_SECTION is re-entrant on Windows,
+    // so this is safe even if the caller already holds g_cs.
+    EnterCriticalSection(&g_cs);
+    if (!g_uiaInit) {
+        g_uiaInit = true;
+        CoCreateInstance(__uuidof(CUIAutomation), nullptr,
+                         CLSCTX_INPROC_SERVER,
+                         __uuidof(IUIAutomation), (void**)&g_uia);
+    }
+    IUIAutomation* result = g_uia;
+    LeaveCriticalSection(&g_cs);
+    return result;
 }
 
 static IUIAutomationScrollPattern* GetPattern(HWND h) {
@@ -312,7 +335,6 @@ struct State {
     bool uiaOk = true;
 };
 
-static CRITICAL_SECTION g_cs;
 static std::map<HWND, State> g_st;
 static UINT g_sysLines = 3;
 
@@ -583,15 +605,19 @@ static bool Handle(const MSG* m) {
     }
 
     // Push with velocity boost for instant response.
+    // Horizontal: negate because our vertical convention (positive = scroll up)
+    // is opposite to horizontal convention (positive delta = scroll RIGHT,
+    // but LVM_SCROLL -dx = scroll right, SB_LINELEFT for positive ln, etc.).
+    // Negating here makes the timer code work correctly for both axes.
     if (vert) s.sV.Push(add, g_cfg.springK);
-    else      s.sH.Push(add, g_cfg.springK);
+    else      s.sH.Push(-add, g_cfg.springK);
 
     // Start timer.
     if (!s.timer) {
         s.timer = SetTimer(tgt, TID, (UINT)g_cfg.intervalMs, Tick);
         if (!s.timer) {
             if (vert) s.sV.target -= add;
-            else      s.sH.target -= add;
+            else      s.sH.target += add;  // undo Push(-add)
             LeaveCriticalSection(&g_cs);
             return false;
         }
@@ -646,7 +672,8 @@ void Wh_ModUninit() {
         Release(p.second);
     }
     g_st.clear();
+    if (g_uia) { g_uia->Release(); g_uia = nullptr; }
+    g_uiaInit = false;
     LeaveCriticalSection(&g_cs);
     DeleteCriticalSection(&g_cs);
-    if (g_uia) { g_uia->Release(); g_uia = nullptr; }
 }
