@@ -70,7 +70,8 @@ void WH_CALLCONV Hook_SetDarkMode(void* pThis, bool isDark, bool a2, unsigned lo
 void ScanAndHookWwlib() {
     HMODULE hWwlib = GetModuleHandleW(L"wwlib.dll");
     if (!hWwlib || g_wwlibHooked.exchange(true)) return;
-
+    
+    // wwlib.dll
     WindhawkUtils::SYMBOL_HOOK wwlibDllHook[] = {
         {
             { SYM_SetDarkMode },
