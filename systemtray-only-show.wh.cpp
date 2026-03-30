@@ -39,6 +39,22 @@ small floating overlay.
 ## Requirements
 
 Only Windows 11 version 25H2 (build 26200) is supported.
+
+## Background
+
+When using a third-party launcher (e.g. ObjectDock) as a taskbar replacement,
+hiding the Windows taskbar causes system tray (notification area) resident apps
+to become inaccessible. Apps pinned to the taskbar or Start menu can be
+replaced by the launcher itself, but there is no equivalent for tray icons.
+
+The practical workaround is either keeping the taskbar always visible — which
+defeats the purpose of the launcher setup — or tediously toggling its
+visibility whenever tray access is needed.
+
+This mod was developed to fill that gap. By stripping the taskbar down to just
+the system tray and displaying it as a minimal floating overlay, you can
+maintain a clean launcher-based desktop while keeping system tray apps fully
+accessible.
 */
 // ==/WindhawkModReadme==
 

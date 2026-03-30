@@ -10,6 +10,31 @@
 
 ---
 
+## 動機 / Motivation
+
+ObjectDock などのサードパーティランチャーを**タスクバーの代替**として使う場合、Windows タスクバーを非表示にして運用します。  
+タスクバーやスタートメニューにピン留めしたアプリはランチャー側で代替できますが、  
+**システムトレイ（通知領域）に常駐するアプリへのアクセス手段が失われてしまいます。**
+
+現実的なワークアラウンドは次のいずれかです：
+
+- タスクバーを常に表示したままにする（ランチャー運用の目的と矛盾する）
+- 必要なたびにタスクバーを表示・非表示する（非常に煩雑）
+
+このモッドはそのギャップを埋めるために開発しました。タスクバーをシステムトレイのみの最小フローティングオーバーレイに変換することで、ランチャーによるクリーンなデスクトップ運用を維持しながら、システムトレイアプリへのアクセスを保持します。
+
+---
+
+When using a third-party launcher (e.g. ObjectDock) as a **taskbar replacement**, the Windows taskbar is hidden entirely.  
+Apps pinned to the taskbar or Start menu can be replaced by the launcher itself —  
+but **system tray (notification area) resident apps become inaccessible**.
+
+The practical workarounds are either keeping the taskbar always visible (which defeats the purpose of using a launcher) or tediously toggling its visibility whenever tray access is needed.
+
+This mod was developed to fill that gap: it strips the taskbar down to just the system tray and presents it as a minimal floating overlay, letting you maintain a clean launcher-based desktop while keeping system tray apps fully accessible.
+
+---
+
 ## 概要 / Overview
 
 このモッドは Windows 11 のタスクバーからシステムトレイ（通知領域）以外のすべての要素を非表示にします。  
