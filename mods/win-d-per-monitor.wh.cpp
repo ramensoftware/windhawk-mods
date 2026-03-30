@@ -3,11 +3,11 @@
 // @name            Win+D per monitor(show desktop)
 // @description     Press Win+D to only manage the windows on the monitor where the mouse is located.
 // @description:zh-CN   按下Win+D时 只最小化/还原鼠标所在显示器的窗口
-// @version         1.1.260330
+// @version         1.3.260330
 // @author          easyatm
 // @github          https://github.com/easyatm
 // @include         explorer.exe
-// @compilerOptions -luser32 -lDwmapi
+// @compilerOptions -luser32 -lDwmapi -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -47,11 +47,11 @@ where the mouse cursor is located.
 
 ## Changelog
 
-### 2026-03-30 (v1.1.260330)
-- Fixed window control to use ShowWindowAsync instead of PostMessage for better compatibility with windows that have popups, such as Excel
-- 修复窗口控制，使用 ShowWindowAsync 而非 PostMessage，以更好地兼容带有弹出窗口的窗口，如 Excel
-- Added option to customize ignored windows by title and class name
-- 新增自定义忽略窗口标题和类名的选项
+### 2026-03-30 (v1.3.260330)
+- Improved window control selection: automatically choose ShowWindowAsync or PostMessage based on admin privileges and whether modal child windows exist
+- 改进窗口控制选择：根据管理员权限与是否存在模态子窗口，自动选择 ShowWindowAsync 或 PostMessage
+- Added custom ignored windows support by class name or window title
+- 新增自定义忽略窗口支持（按类名或窗口标题）
 
 Fixes:
 - https://github.com/ramensoftware/windhawk-mods/issues/2709
@@ -77,6 +77,7 @@ Fixes:
 #include <list>
 #include <map>
 #include <set>
+#include <shlobj.h>
 #include <string>
 #include <vector>
 #include <windhawk_api.h>
@@ -96,7 +97,7 @@ static std::wstring ansi_unicode(std::string_view str)
 }
 
 // 将Unicode宽字符串转换为ANSI字符串
-static std::string unicode_ansi(const wchar_t* wstr)
+static std::string unicode_ansi(const wchar_t *wstr)
 {
     if (!wstr || !wstr[0])
         return "";
@@ -123,6 +124,9 @@ struct
     int minWindowSize;
     std::vector<IgnoreRule> ignoreRules;
 } g_settings;
+
+// 仅在模块启动时检查一次管理员状态，避免每次窗口操作都调用 IsUserAnAdmin。
+bool g_isUserAdmin = false;
 
 #define HOTKEY_ID_WIN_D 0x201
 class WindShowDesktop
@@ -236,6 +240,25 @@ class WindShowDesktop
         return std::string(windowTitle);
     }
 
+    // 根据管理员权限自动选择窗口最小化/还原的实现方式
+    static BOOL controlWindow(HWND hwnd, bool restore)
+    {
+        if(IsWindowEnabled(hwnd))
+        {
+            return ::PostMessage(hwnd, WM_SYSCOMMAND, restore ? SC_RESTORE : SC_MINIMIZE, 0);
+        }
+
+        // 管理员：ShowWindowAsync；非管理员：PostMessage
+        if (g_isUserAdmin)
+        {
+            return ::ShowWindowAsync(hwnd, restore ? SW_RESTORE : SW_MINIMIZE);
+        }
+        else
+        {
+            return ::PostMessage(hwnd, WM_SYSCOMMAND, restore ? SC_RESTORE : SC_MINIMIZE, 0);
+        }
+    }
+
     // 判断是否应该忽略此窗口（置顶且无标题栏的工具窗口）
     static bool ignoreTopmostWindow(HWND hwnd)
     {
@@ -269,9 +292,9 @@ class WindShowDesktop
     }
 
     // 判断是否匹配用户自定义忽略规则（标题+类名，留空一项则只判断另一项）
-    static bool ignoreByCustomRule(const std::string& title, const std::string& className)
+    static bool ignoreByCustomRule(const std::string &title, const std::string &className)
     {
-        for (const auto& rule : g_settings.ignoreRules)
+        for (const auto &rule : g_settings.ignoreRules)
         {
             bool titleMatch = rule.title.empty() || title == rule.title;
             bool classMatch = rule.className.empty() || className == rule.className;
@@ -361,8 +384,6 @@ public:
                         continue;
                 }
 
-
-
                 vec.push_back({hWndCcc, wndClass, ownerWnd, windowTitle});
             }
             return vec;
@@ -386,7 +407,7 @@ public:
                 if (!curIt->ownerWnd)
                     listWnd.erase(curIt);
             }
-
+            
             for (auto &rc : vecCur)
             {
                 if (!IsWindowVisible(rc.wnd) || IsIconic(rc.wnd))
@@ -400,7 +421,7 @@ public:
                 else
                 {
                     log("minimizing window 0x{:x} title: {} class: {}", (uintptr_t)rc.wnd, rc.title, rc.cls);
-                    ::ShowWindowAsync(rc.wnd, SW_MINIMIZE);
+                    controlWindow(rc.wnd, false);
                 }
 
                 listWnd.emplace_back(std::move(rc));
@@ -428,7 +449,7 @@ public:
                 else
                 {
                     log("restoring window 0x{:x} title: {} class: {}", (uintptr_t)rc.wnd, rc.title, rc.cls);
-                    ::ShowWindowAsync(rc.wnd, SW_SHOWNOACTIVATE);
+                    controlWindow(rc.wnd, true);
                     hLastWnd = rc.wnd;
                 }
 
@@ -468,7 +489,7 @@ void LoadSettings()
 
     // 加载自定义忽略规则
     g_settings.ignoreRules.clear();
-    for (int i = 0; ; i++)
+    for (int i = 0;; i++)
     {
         auto titleW = Wh_GetStringSetting(L"ignoreRules[%d].title", i);
         auto classW = Wh_GetStringSetting(L"ignoreRules[%d].className", i);
@@ -493,6 +514,11 @@ void LoadSettings()
 BOOL Wh_ModInit()
 {
     Wh_Log(L"init");
+
+    g_isUserAdmin = !!IsUserAnAdmin();
+    log("Startup admin check: IsUserAnAdmin={} -> window control method: {}",
+        g_isUserAdmin ? "true" : "false",
+        g_isUserAdmin ? "ShowWindowAsync" : "PostMessage(WM_SYSCOMMAND)");
 
     LoadSettings();
 
