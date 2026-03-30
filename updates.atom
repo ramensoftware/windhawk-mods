@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-29T23:37:34.000Z</updated>
+    <updated>2026-03-30T07:23:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.6]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#2a7304911a79819683903696a3a7a34a1bb59633</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
+        <updated>2026-03-30T07:23:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed Alt+Tab always showing the taskbar. Now it no longer affects the taskbar visibility state.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Live Overlay 1.1]]></title>
         <id>https://windhawk.net/mods/desktop-live-overlay#594e5a7b6716156f9d49857aafbb3880e1f442df</id>
@@ -394,21 +407,6 @@ Recommended: Windows 11 22H2 or newer</p>
         <author>
             <name>GID0317</name>
             <uri>https://github.com/GID0317</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Time Sync On Startup 1.1]]></title>
-        <id>https://windhawk.net/mods/auto-time-sync-on-startup#abcbd90ab2482b23364890fda64981aab39f5b49</id>
-        <link href="https://windhawk.net/mods/auto-time-sync-on-startup"/>
-        <updated>2026-03-26T10:59:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the session-run guard logic to use a real volatile registry subkey instead of a persistent value under <code>HKCU\Software</code>.</li>
-<li>Added cleanup for the legacy persistent guard value that could make the mod think the sync had already been done after reboot.</li>
-<li>Version bumped to <code>1.1</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>
