@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM, GPU, battery), media player info, custom fonts and colors, and more
-// @version         1.7.1
+// @version         1.7.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -29,9 +29,6 @@ Custom date/time format, news feed, weather, performance metrics
 and colors, and more.
 
 Only Windows 10 64-bit and Windows 11 are supported.
-
-**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.
 
 ![News screenshot](https://i.imgur.com/p03o9l7.png) \
 _News (default mod settings)_
@@ -84,11 +81,15 @@ patterns can be used:
   * `%cpu%` - CPU usage.
   * `%ram%` - RAM usage.
   * `%gpu%` - GPU usage.
+  * `%cpu_temp%` - CPU temperature in °C (average of all ACPI thermal zones).
+  * `%cpu_temp_f%` - CPU temperature in °F (average of all ACPI thermal zones).
   * `%battery%` - battery level percentage.
   * `%battery_time%` - battery time remaining (charging time left / discharging
-    time left).
+    time left, in h:mm format). If the value is always zero, you might need to
+    enable battery time reporting in the BIOS.
   * `%power%` - battery power in watts (negative when discharging, positive when
-    charging).
+    charging). If the value is always zero, you might need to enable battery
+    time reporting in the BIOS.
 * Media player info (requires a
   [GSMTC-compatible](https://github.com/ModernFlyouts-Community/ModernFlyouts/blob/main/docs/GSMTC-Support-And-Popular-Apps.md)
   media player):
@@ -124,18 +125,21 @@ styles, such as the font color and size.
     hh':'mm':'ss tt
   $name: Time format
   $description: >-
-    Leave empty for the default format. For syntax refer to the following page:
+    The format for the %time% pattern. Leave empty for the default format. For
+    syntax refer to the following page:
 
     https://docs.microsoft.com/en-us/windows/win32/api/datetimeapi/nf-datetimeapi-gettimeformatex#remarks
 - DateFormat: >-
     ddd',' MMM dd yyyy
   $name: Date format
   $description: >-
-    Leave empty for the default format. For syntax refer to the following page:
+    The format for the %date% pattern. Leave empty for the default format. For
+    syntax refer to the following page:
 
     https://docs.microsoft.com/en-us/windows/win32/intl/day--month--year--and-era-format-pictures
 - WeekdayFormat: dddd
   $name: Week day format
+  $description: The format for the %weekday% pattern.
   $options:
   - dddd: Full day of the week
   - ddd: Abbreviated day of the week
@@ -216,13 +220,15 @@ styles, such as the font color and size.
     $description: >-
       The network adapter to use for upload/download metrics. Leave empty to
       sum all adapters. Partial match is supported. To list adapters, run:
+
       typeperf -qx "Network Interface"
   - GpuAdapterName: ""
     $name: GPU adapter name
     $description: >-
       The GPU adapter to use for GPU usage metrics. Leave empty to sum all
-      adapters. Partial match is supported. To list adapters, run: wmic path
-      win32_videocontroller get Name
+      adapters. Partial match is supported. To list adapters, run:
+
+      wmic path win32_videocontroller get Name
   $name: System performance metrics
 - MediaPlayer:
   - IgnoredPlayers: [""]
@@ -623,6 +629,8 @@ std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
+bool g_formattingInitialized;
+
 DWORD g_formatIndex;
 SYSTEMTIME g_formatTime;
 std::mutex g_formatLineMutex;
@@ -656,6 +664,8 @@ FormattedString<FORMATTED_BUFFER_SIZE> g_diskTotalSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_cpuFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_ramFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_gpuFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_cpuTempFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_cpuTempFFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_batteryFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_batteryTimeFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_powerFormatted;
@@ -1028,8 +1038,17 @@ bool UpdateWeatherWebContent() {
     }
     weatherUrl += L"format=";
     weatherUrl += EscapeUrlComponent(format.c_str());
+
+    Wh_Log(L"Fetching weather from URL: %s", weatherUrl.c_str());
+
     std::optional<std::wstring> urlContent = GetUrlContent(weatherUrl.c_str());
     if (!urlContent) {
+        return false;
+    }
+
+    // Ignore non-weather responses.
+    if (urlContent->empty() ||
+        *urlContent == L"This query is already being processed") {
         return false;
     }
 
@@ -1245,15 +1264,26 @@ void WebContentUpdateThreadInit() {
 }
 
 void WebContentUpdateThreadUninit() {
-    if (g_webContentUpdateThread) {
-        SetEvent(g_webContentUpdateStopEvent);
-        WaitForSingleObject(g_webContentUpdateThread, INFINITE);
-        CloseHandle(g_webContentUpdateThread);
+    HANDLE thread;
+    HANDLE stopEvent;
+    HANDLE refreshEvent;
+
+    {
+        std::lock_guard<std::mutex> guard(g_webContentMutex);
+        thread = g_webContentUpdateThread;
+        stopEvent = g_webContentUpdateStopEvent;
+        refreshEvent = g_webContentUpdateRefreshEvent;
         g_webContentUpdateThread = nullptr;
-        CloseHandle(g_webContentUpdateRefreshEvent);
-        g_webContentUpdateRefreshEvent = nullptr;
-        CloseHandle(g_webContentUpdateStopEvent);
         g_webContentUpdateStopEvent = nullptr;
+        g_webContentUpdateRefreshEvent = nullptr;
+    }
+
+    if (thread) {
+        SetEvent(stopEvent);
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+        CloseHandle(refreshEvent);
+        CloseHandle(stopEvent);
     }
 
     std::lock_guard<std::mutex> guard(g_webContentMutex);
@@ -1504,6 +1534,24 @@ std::vector<std::wstring> SplitTimeFormatString(std::wstring_view s) {
     return result;
 }
 
+int GetTimeFormatExWithShowSeconds(LPCWSTR lpLocaleName,
+                                   const SYSTEMTIME* lpTime,
+                                   LPCWSTR lpFormat,
+                                   LPWSTR lpTimeStr,
+                                   int cchTime) {
+    DWORD dwFlags = g_settings.showSeconds ? 0 : TIME_NOSECONDS;
+
+    if (!g_settings.showSeconds && lpFormat) {
+        std::wstring formatNoSeconds = ReplaceAll(lpFormat, L"':'ss", L"");
+        return GetTimeFormatEx_Original(lpLocaleName, dwFlags, lpTime,
+                                        formatNoSeconds.c_str(), lpTimeStr,
+                                        cchTime);
+    }
+
+    return GetTimeFormatEx_Original(lpLocaleName, dwFlags, lpTime, lpFormat,
+                                    lpTimeStr, cchTime);
+}
+
 PCWSTR GetTimeFormattedWithExtra(std::vector<std::wstring>** extra) {
     if (g_timeFormatted.formatIndex != g_formatIndex) {
         const SYSTEMTIME* time = &g_formatTime;
@@ -1511,19 +1559,19 @@ PCWSTR GetTimeFormattedWithExtra(std::vector<std::wstring>** extra) {
         auto timeFormatParts =
             SplitTimeFormatString(g_settings.timeFormat.get());
 
-        GetTimeFormatEx_Original(
-            nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
+        GetTimeFormatExWithShowSeconds(
+            nullptr, time,
             !timeFormatParts[0].empty() ? timeFormatParts[0].c_str() : nullptr,
             g_timeFormatted.buffer, ARRAYSIZE(g_timeFormatted.buffer));
 
         g_timeFormattedExtra.resize(timeFormatParts.size() - 1);
         for (size_t i = 1; i < timeFormatParts.size(); i++) {
             WCHAR formatted[FORMATTED_BUFFER_SIZE];
-            GetTimeFormatEx_Original(
-                nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
-                !timeFormatParts[i].empty() ? timeFormatParts[i].c_str()
-                                            : nullptr,
-                formatted, ARRAYSIZE(formatted));
+            GetTimeFormatExWithShowSeconds(nullptr, time,
+                                           !timeFormatParts[i].empty()
+                                               ? timeFormatParts[i].c_str()
+                                               : nullptr,
+                                           formatted, ARRAYSIZE(formatted));
             g_timeFormattedExtra[i - 1] = formatted;
         }
 
@@ -1570,8 +1618,8 @@ PCWSTR GetTimeFormattedTz(size_t index) {
             auto timeFormatParts =
                 SplitTimeFormatString(g_settings.timeFormat.get());
 
-            GetTimeFormatEx_Original(
-                nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
+            GetTimeFormatExWithShowSeconds(
+                nullptr, time,
                 !timeFormatParts[0].empty() ? timeFormatParts[0].c_str()
                                             : nullptr,
                 timeFormattedTz.buffer, ARRAYSIZE(timeFormattedTz.buffer));
@@ -1753,7 +1801,7 @@ PCWSTR GetWeeknumFormatted() {
 
         DWORD startDayOfWeek = GetStartDayOfWeek(time);
 
-        swprintf_s(g_weeknumFormatted.buffer, L"%d",
+        swprintf_s(g_weeknumFormatted.buffer, L"%02d",
                    CalculateWeeknum(time, startDayOfWeek));
 
         g_weeknumFormatted.formatIndex = g_formatIndex;
@@ -1766,7 +1814,7 @@ PCWSTR GetWeeknumIsoFormatted() {
     if (g_weeknumIsoFormatted.formatIndex != g_formatIndex) {
         const SYSTEMTIME* time = &g_formatTime;
 
-        swprintf_s(g_weeknumIsoFormatted.buffer, L"%d",
+        swprintf_s(g_weeknumIsoFormatted.buffer, L"%02d",
                    CalculateWeeknumIso(time));
 
         g_weeknumIsoFormatted.formatIndex = g_formatIndex;
@@ -1806,6 +1854,7 @@ enum class MetricType {
     kDiskWriteSpeed,
     kCpu,
     kGpuUsage,
+    kCpuTemp,
 
     kCount,
 };
@@ -1829,8 +1878,15 @@ class QueryDataCollectionSession {
     void UpdateMetric(MetricType type);
     bool SampleData();
     std::optional<double> QueryData(MetricType type);
+    std::optional<double> QueryDataAvg(MetricType type);
 
    private:
+    struct QueryDataResult {
+        double sum;
+        size_t count;
+    };
+    std::optional<QueryDataResult> QueryDataWithCount(MetricType type);
+
     std::vector<std::wstring> ExpandEnglishWildcard(PCWSTR wildcard_path,
                                                     bool quiet);
     static std::wstring_view ExtractInstanceName(std::wstring_view path);
@@ -1910,6 +1966,10 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
             is_wildcard = true;
             adapter_name = g_settings.dataCollection.gpuAdapterName;
             break;
+        case MetricType::kCpuTemp:
+            counter_path = L"\\Thermal Zone Information(*)\\Temperature";
+            is_wildcard = true;
+            break;
         default:
             return false;
     }
@@ -1928,7 +1988,7 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
 
         for (const auto& path : paths) {
             PDH_HCOUNTER counter;
-            HRESULT hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
+            PDH_STATUS hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
             if (SUCCEEDED(hr)) {
                 metric.counters.push_back({path, counter});
             } else {
@@ -1937,7 +1997,7 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
         }
     } else {
         PDH_HCOUNTER counter;
-        HRESULT hr = PdhAddEnglishCounter(query_, counter_path, 0, &counter);
+        PDH_STATUS hr = PdhAddEnglishCounter(query_, counter_path, 0, &counter);
         if (SUCCEEDED(hr)) {
             metric.counters.push_back({counter_path, counter});
         } else {
@@ -1965,6 +2025,9 @@ void QueryDataCollectionSession::UpdateMetric(MetricType type) {
             break;
         case MetricType::kGpuUsage:
             counter_path = L"\\GPU Engine(*)\\Utilization Percentage";
+            break;
+        case MetricType::kCpuTemp:
+            counter_path = L"\\Thermal Zone Information(*)\\Temperature";
             break;
         default:
             return;
@@ -1998,7 +2061,7 @@ void QueryDataCollectionSession::UpdateMetric(MetricType type) {
     for (const auto& path : current_paths) {
         if (existing_paths.find(path) == existing_paths.end()) {
             PDH_HCOUNTER counter;
-            HRESULT hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
+            PDH_STATUS hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
             if (SUCCEEDED(hr)) {
                 Wh_Log(L"Adding new counter: %s", path.c_str());
                 metric.counters.push_back({path, counter});
@@ -2010,7 +2073,7 @@ void QueryDataCollectionSession::UpdateMetric(MetricType type) {
 }
 
 bool QueryDataCollectionSession::SampleData() {
-    HRESULT hr = PdhCollectQueryData(query_);
+    PDH_STATUS hr = PdhCollectQueryData(query_);
     if (FAILED(hr)) {
         Wh_Log(L"PdhCollectQueryData error %08X", hr);
         return false;
@@ -2019,7 +2082,8 @@ bool QueryDataCollectionSession::SampleData() {
     return true;
 }
 
-std::optional<double> QueryDataCollectionSession::QueryData(MetricType type) {
+std::optional<QueryDataCollectionSession::QueryDataResult>
+QueryDataCollectionSession::QueryDataWithCount(MetricType type) {
     UpdateMetric(type);
 
     const auto& metric = metrics_[static_cast<int>(type)];
@@ -2029,18 +2093,41 @@ std::optional<double> QueryDataCollectionSession::QueryData(MetricType type) {
     }
 
     double sum = 0.0;
+    size_t count = 0;
     for (const auto& entry : metric.counters) {
         PDH_FMT_COUNTERVALUE val;
-        HRESULT hr = PdhGetFormattedCounterValue(entry.counter, PDH_FMT_DOUBLE,
-                                                 nullptr, &val);
+        PDH_STATUS hr = PdhGetFormattedCounterValue(
+            entry.counter, PDH_FMT_DOUBLE, nullptr, &val);
         if (SUCCEEDED(hr)) {
             sum += val.doubleValue;
+            count++;
         } else {
             Wh_Log(L"PdhGetFormattedCounterValue error %08X", hr);
         }
     }
 
-    return sum;
+    if (count == 0) {
+        return std::nullopt;
+    }
+
+    return QueryDataResult{sum, count};
+}
+
+std::optional<double> QueryDataCollectionSession::QueryData(MetricType type) {
+    auto result = QueryDataWithCount(type);
+    if (!result) {
+        return std::nullopt;
+    }
+    return result->sum;
+}
+
+std::optional<double> QueryDataCollectionSession::QueryDataAvg(
+    MetricType type) {
+    auto result = QueryDataWithCount(type);
+    if (!result) {
+        return std::nullopt;
+    }
+    return result->sum / result->count;
 }
 
 // Implemented according to the note here:
@@ -2050,7 +2137,8 @@ std::vector<std::wstring> QueryDataCollectionSession::ExpandEnglishWildcard(
     bool quiet) {
     // Step 1: Add English counter with wildcards to get localized path.
     PDH_HCOUNTER temp_counter;
-    HRESULT hr = PdhAddEnglishCounter(query_, wildcard_path, 0, &temp_counter);
+    PDH_STATUS hr =
+        PdhAddEnglishCounter(query_, wildcard_path, 0, &temp_counter);
     if (FAILED(hr)) {
         Wh_Log(L"PdhAddEnglishCounter error %08X", hr);
         return {};
@@ -2059,7 +2147,7 @@ std::vector<std::wstring> QueryDataCollectionSession::ExpandEnglishWildcard(
     // Step 2: Get counter info to obtain localized full path.
     DWORD required = 0;
     hr = PdhGetCounterInfo(temp_counter, FALSE, &required, nullptr);
-    if (FAILED(hr) && hr != static_cast<HRESULT>(PDH_MORE_DATA)) {
+    if (FAILED(hr) && hr != static_cast<PDH_STATUS>(PDH_MORE_DATA)) {
         Wh_Log(L"PdhGetCounterInfo (size) error %08X", hr);
         PdhRemoveCounter(temp_counter);
         return {};
@@ -2085,7 +2173,7 @@ std::vector<std::wstring> QueryDataCollectionSession::ExpandEnglishWildcard(
     required = 0;
     hr = PdhExpandWildCardPath(nullptr, counter_info->szFullPath, nullptr,
                                &required, 0);
-    if (FAILED(hr) && hr != static_cast<HRESULT>(PDH_MORE_DATA)) {
+    if (FAILED(hr) && hr != static_cast<PDH_STATUS>(PDH_MORE_DATA)) {
         Wh_Log(L"PdhExpandWildCardPath (localized, size) error %08X", hr);
         return {};
     }
@@ -2543,6 +2631,9 @@ void DataCollectionSessionInit() {
         IsStrInDateTimePatternSettings(L"%cpu%");
     metrics[static_cast<int>(MetricType::kGpuUsage)] =
         IsStrInDateTimePatternSettings(L"%gpu%");
+    metrics[static_cast<int>(MetricType::kCpuTemp)] =
+        IsStrInDateTimePatternSettings(L"%cpu_temp%") ||
+        IsStrInDateTimePatternSettings(L"%cpu_temp_f%");
 
     if (!std::any_of(std::begin(metrics), std::end(metrics),
                      [](bool x) { return x; })) {
@@ -3024,6 +3115,44 @@ PCWSTR GetGpuFormatted() {
     });
 }
 
+PCWSTR GetCpuTempFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_cpuTempFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            auto kelvin =
+                g_dataCollectionSession->QueryDataAvg(MetricType::kCpuTemp);
+            if (!kelvin) {
+                return false;
+            }
+            int celsius = static_cast<int>(*kelvin - 273.15);
+            swprintf_s(buffer, bufferSize, L"%d\u00B0C", celsius);
+            return true;
+        });
+}
+
+PCWSTR GetCpuTempFFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_cpuTempFFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            auto kelvin =
+                g_dataCollectionSession->QueryDataAvg(MetricType::kCpuTemp);
+            if (!kelvin) {
+                return false;
+            }
+            double celsius = *kelvin - 273.15;
+            double fahrenheit = celsius * 9.0 / 5.0 + 32.0;
+            swprintf_s(buffer, bufferSize, L"%d\u00B0F",
+                       static_cast<int>(fahrenheit));
+            return true;
+        });
+}
+
 PCWSTR GetBatteryFormatted() {
     return GetMetricFormatted(
         g_batteryFormatted, [](PWSTR buffer, size_t bufferSize) {
@@ -3139,7 +3268,7 @@ int ResolveFormatTokenWithDigit(std::wstring_view format,
         return 0;
     }
 
-    char digitChar = format[formatTokenPrefix.size()];
+    WCHAR digitChar = format[formatTokenPrefix.size()];
     if (digitChar < L'1' || digitChar > L'9') {
         return 0;
     }
@@ -3178,6 +3307,8 @@ size_t ResolveFormatToken(
         {L"%cpu%"sv, GetCpuFormatted},
         {L"%ram%"sv, GetRamFormatted},
         {L"%gpu%"sv, GetGpuFormatted},
+        {L"%cpu_temp%"sv, GetCpuTempFormatted},
+        {L"%cpu_temp_f%"sv, GetCpuTempFFormatted},
         {L"%battery%"sv, GetBatteryFormatted},
         {L"%battery_time%"sv, GetBatteryTimeFormatted},
         {L"%power%"sv, GetPowerFormatted},
@@ -3313,12 +3444,26 @@ size_t ResolveFormatToken(
     return 0;
 }
 
+void EnsureFormattingInitialized() {
+    if (g_formattingInitialized) {
+        return;
+    }
+
+    g_formattingInitialized = true;
+
+    WebContentUpdateThreadInit();
+    DataCollectionSessionInit();
+    MediaSessionInit();
+}
+
 int FormatLine(PWSTR buffer, size_t bufferSize, std::wstring_view format) {
     if (bufferSize == 0) {
         return 0;
     }
 
     std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
+    EnsureFormattingInitialized();
 
     std::wstring_view formatSuffix = format;
 
@@ -3449,7 +3594,7 @@ void WINAPI ClockSystemTrayIconDataModel2_RefreshIcon_Hook(LPVOID pThis,
 void UpdateToolTipString(LPVOID tooltipPtrPtr) {
     auto separator = L"\r\n\r\n"sv;
 
-    WCHAR extraLine[256];
+    WCHAR extraLine[4096];
     size_t extraLength = FormatLine(extraLine, ARRAYSIZE(extraLine),
                                     g_settings.tooltipLine.get());
     if (extraLength == 0) {
@@ -5224,10 +5369,6 @@ BOOL Wh_ModInit() {
                                            &SendMessageW_Original);
     }
 
-    WebContentUpdateThreadInit();
-    DataCollectionSessionInit();
-    MediaSessionInit();
-
     g_initialized = true;
 
     return TRUE;
@@ -5288,10 +5429,9 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    WebContentUpdateThreadUninit();
-
     {
         std::lock_guard<std::mutex> guard(g_formatLineMutex);
+        WebContentUpdateThreadUninit();
         DataCollectionSessionUninit();
         MediaSessionUninit();
     }
@@ -5302,29 +5442,21 @@ void Wh_ModUninit() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
-    WebContentUpdateThreadUninit();
-
     {
         std::lock_guard<std::mutex> guard(g_formatLineMutex);
+        WebContentUpdateThreadUninit();
         DataCollectionSessionUninit();
         MediaSessionUninit();
-    }
+        g_formattingInitialized = false;
 
-    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+        bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
 
-    LoadSettings();
+        LoadSettings();
 
-    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
-    if (*bReload) {
-        return TRUE;
-    }
-
-    WebContentUpdateThreadInit();
-
-    {
-        std::lock_guard<std::mutex> guard(g_formatLineMutex);
-        DataCollectionSessionInit();
-        MediaSessionInit();
+        *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
+        if (*bReload) {
+            return TRUE;
+        }
     }
 
     ApplySettings();
