@@ -6,7 +6,7 @@
 // @description:ja-JP システムトレイ以外を非表示にし、タスクバーを右下角の小さなフローティングトレイに変換します。サードパーティのドックなしで単独動作します。（Windows 11 25H2）
 // @version         0.14
 // @author          roflsunriz
-// @github          roflsunriz
+// @github          https://github.com/roflsunriz
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
