@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
-// @version         1.3.10
+// @version         1.3.11
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -65,11 +65,14 @@ With labels:
 
 // ==WindhawkModSettings==
 /*
-- taskbarLocation: left
-  $name: Taskbar location
-  $options:
-  - left: Left
-  - right: Right
+- monitorLocationsList: left, right, left
+  $name: Monitor locations list
+  $description: >-
+    Set taskbar sides for each monitor (e.g., left, right, left).
+
+    1st entry is MAIN, then numerical order from Windows Display Settings.
+    
+    e.g. If Monitor 2 is Main, then order is [2], [1], [3], etc.
 - TaskbarWidth: 80
   $name: Taskbar width
   $description: >-
@@ -77,12 +80,6 @@ With labels:
 
     Note: If the clock is too wide for the taskbar width you prefer, you can use
     the "Taskbar Clock Customization" mod to customize the taskbar clock format.
-- taskbarLocationSecondary: sameAsPrimary
-  $name: Taskbar location on secondary monitors
-  $options:
-  - sameAsPrimary: Same as on primary monitor
-  - left: Left
-  - right: Right
 - jumpListAlignment: top
   $name: Jump list vertical alignment
   $description: >-
@@ -163,7 +160,7 @@ enum class StartMenuAlignment {
 
 struct {
     TaskbarLocation taskbarLocation;
-    TaskbarLocation taskbarLocationSecondary;
+    std::vector<TaskbarLocation> monitorLocations;
     int taskbarWidth;
     JumpListAlignment jumpListAlignment;
     StartMenuAlignment startMenuAlignment;
@@ -404,15 +401,33 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
 }
 
 TaskbarLocation GetTaskbarLocationForMonitor(HMONITOR monitor) {
-    if (g_settings.taskbarLocation == g_settings.taskbarLocationSecondary) {
-        return g_settings.taskbarLocation;
+    HMONITOR primaryMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    if (monitor == primaryMonitor) {
+        return g_settings.monitorLocations.empty() ? g_settings.taskbarLocation : g_settings.monitorLocations[0];
     }
 
-    HMONITOR primaryMonitor =
-        MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    // For other monitors, we collect them and find their "non-primary" index
+    std::vector<HMONITOR> secondaryMonitors;
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hMon, HDC, LPRECT, LPARAM dwData) -> BOOL {
+        HMONITOR primary = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+        if (hMon != primary) {
+            auto* v = reinterpret_cast<std::vector<HMONITOR>*>(dwData);
+            v->push_back(hMon);
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&secondaryMonitors));
 
-    return monitor == primaryMonitor ? g_settings.taskbarLocation
-                                     : g_settings.taskbarLocationSecondary;
+    for (size_t i = 0; i < secondaryMonitors.size(); ++i) {
+        if (secondaryMonitors[i] == monitor) {
+            // Index i+1 because index 0 is reserved for the primary above
+            if (i + 1 < g_settings.monitorLocations.size()) {
+                return g_settings.monitorLocations[i + 1];
+            }
+            break;
+        }
+    }
+
+    return g_settings.taskbarLocation;
 }
 
 using IconContainer_IsStorageRecreationRequired_t = bool(WINAPI*)(void* pThis,
@@ -1385,26 +1400,6 @@ void WINAPI SystemTrayFrame_Height_Hook(void* pThis, double value) {
     SystemTrayFrame_Height_Original(pThis, value);
 }
 
-bool IsSecondaryTaskbar(XamlRoot xamlRoot) {
-    FrameworkElement controlCenterButton = nullptr;
-
-    FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
-    if (child &&
-        (child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame")) &&
-        (child = FindChildByName(child, L"SystemTrayFrameGrid")) &&
-        (child = FindChildByName(child, L"ControlCenterButton"))) {
-        controlCenterButton = child;
-    }
-
-    if (!controlCenterButton) {
-        return false;
-    }
-
-    // On secondary taskbars, the element that holds the system icons is empty
-    // and has the width of 2.
-    return controlCenterButton.ActualWidth() < 5;
-}
-
 bool ApplyStyle(XamlRoot xamlRoot) {
     FrameworkElement contentGrid =
         xamlRoot.Content().try_as<FrameworkElement>();
@@ -1459,10 +1454,10 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         }
     }
 
-    bool isSecondaryTaskbar = IsSecondaryTaskbar(xamlRoot);
-    TaskbarLocation taskbarLocation = isSecondaryTaskbar
-                                          ? g_settings.taskbarLocationSecondary
-                                          : g_settings.taskbarLocation;
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    TaskbarLocation taskbarLocation = GetTaskbarLocationForMonitor(MonitorFromWindow(
+        hTaskbarWnd, 
+        MONITOR_DEFAULTTONEAREST));
 
     FrameworkElement child = taskbarFrame;
     if ((child = FindChildByName(child, L"RootGrid")) &&
@@ -2322,22 +2317,11 @@ void UpdateTaskListButton(FrameworkElement taskListButtonElement) {
 
     bool indicatorsOnTop = false;
     if (!g_unloading) {
-        auto taskbarFrameRepeaterElement =
-            Media::VisualTreeHelper::GetParent(taskListButtonElement)
-                .as<FrameworkElement>();
+        HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+        TaskbarLocation taskbarLocation = GetTaskbarLocationForMonitor(MonitorFromWindow(
+            hTaskbarWnd, 
+            MONITOR_DEFAULTTONEAREST));
 
-        bool isSecondaryTaskbar = false;
-        if (!taskbarFrameRepeaterElement ||
-            taskbarFrameRepeaterElement.Name() != L"TaskbarFrameRepeater") {
-            // TODO: Can also be "OverflowFlyoutListRepeater".
-        } else {
-            isSecondaryTaskbar =
-                IsSecondaryTaskbar(taskListButtonElement.XamlRoot());
-        }
-
-        TaskbarLocation taskbarLocation =
-            isSecondaryTaskbar ? g_settings.taskbarLocationSecondary
-                               : g_settings.taskbarLocation;
         if (taskbarLocation == TaskbarLocation::right) {
             indicatorsOnTop = true;
         }
@@ -4391,21 +4375,32 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
 void LoadSettings() {
     PCWSTR taskbarLocation = Wh_GetStringSetting(L"taskbarLocation");
     g_settings.taskbarLocation = TaskbarLocation::left;
-    if (wcscmp(taskbarLocation, L"right") == 0) {
+    if (taskbarLocation && wcscmp(taskbarLocation, L"right") == 0) {
         g_settings.taskbarLocation = TaskbarLocation::right;
     }
     Wh_FreeStringSetting(taskbarLocation);
 
-    PCWSTR taskbarLocationSecondary =
-        Wh_GetStringSetting(L"taskbarLocationSecondary");
-    g_settings.taskbarLocationSecondary = g_settings.taskbarLocation;
-    if (wcscmp(taskbarLocationSecondary, L"left") == 0) {
-        g_settings.taskbarLocationSecondary = TaskbarLocation::left;
-    } else if (wcscmp(taskbarLocationSecondary, L"right") == 0) {
-        g_settings.taskbarLocationSecondary = TaskbarLocation::right;
+    g_settings.monitorLocations.clear();
+    PCWSTR locationsSetting = Wh_GetStringSetting(L"monitorLocationsList");
+    if (locationsSetting) {
+        std::wstring ws(locationsSetting);
+        size_t start = 0, end;
+        while ((end = ws.find(L",", start)) != std::wstring::npos) {
+            std::wstring part = ws.substr(start, end - start);
+            g_settings.monitorLocations.push_back(part.find(L"right") != std::wstring::npos ? TaskbarLocation::right : TaskbarLocation::left);
+            start = end + 1;
+        }
+        std::wstring lastPart = ws.substr(start);
+        if (!lastPart.find(L"left") != std::wstring::npos || lastPart.find(L"right") != std::wstring::npos) {
+             g_settings.monitorLocations.push_back(lastPart.find(L"right") != std::wstring::npos ? TaskbarLocation::right : TaskbarLocation::left);
+        }
+        Wh_FreeStringSetting(locationsSetting);
     }
-    Wh_FreeStringSetting(taskbarLocationSecondary);
 
+    if (!g_settings.monitorLocations.empty()) {
+        g_settings.taskbarLocation = g_settings.monitorLocations[0];
+    }
+    
     g_settings.taskbarWidth = Wh_GetIntSetting(L"TaskbarWidth");
 
     PCWSTR jumpListAlignment = Wh_GetStringSetting(L"jumpListAlignment");
