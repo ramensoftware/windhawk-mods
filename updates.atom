@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-30T07:23:00.000Z</updated>
+    <updated>2026-03-30T08:10:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Flyouts Controller 1.0.1]]></title>
+        <id>https://windhawk.net/mods/translucent-flyouts-controller#f3fe1074970431befb963fe69cc1ca2fa7e22cdd</id>
+        <link href="https://windhawk.net/mods/translucent-flyouts-controller"/>
+        <updated>2026-03-30T08:10:36.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix loading hang by running tool mod only for the active user session</p>]]></content>
+        <author>
+            <name>GID0317</name>
+            <uri>https://github.com/GID0317</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.6]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#2a7304911a79819683903696a3a7a34a1bb59633</id>
@@ -348,65 +359,6 @@ Each button has three fields:</p>
         <author>
             <name>BCRTVKCS</name>
             <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Flyouts Controller 1.0.0]]></title>
-        <id>https://windhawk.net/mods/translucent-flyouts-controller#5ce1d85477d2d642a676c043d6b045dc89c9030e</id>
-        <link href="https://windhawk.net/mods/translucent-flyouts-controller"/>
-        <updated>2026-03-27T12:13:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="translucentflyoutscontrollerforwindhawk">Translucent Flyouts Controller for Windhawk</h1>
-<p><img src="https://i.imgur.com/F64iYmG.gif" alt="Preview" /></p>
-<p>This mod provides a Windhawk settings interface for <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a>, a Windows utility that applies visual effects to system menus and tooltips. The controller bridges Windhawk's GUI to the registry keys that TranslucentFlyouts monitors.</p>
-<p>TranslucentFlyouts handles the actual rendering of transparency and effects. This controller simply lets you configure those effects without manual registry editing.</p>
-<h2 id="requirements">Requirements</h2>
-<p>You must have <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> already installed and running. If you don't have it, install it first. This controller won't work standalone.</p>
-<p>Minimum OS: Windows 10/11 (depends on selected effect)
-Recommended: Windows 11 22H2 or newer</p>
-<h2 id="howsettingsareapplied">How Settings Are Applied</h2>
-<p>When you adjust a setting and click Apply:</p>
-<ol>
-<li>The mod reads your Windhawk configuration</li>
-<li>Writes the corresponding values to TranslucentFlyouts registry keys (under HKCU\Software\TranslucentFlyouts)</li>
-<li>Sends a refresh signal so changes take effect immediately</li>
-</ol>
-<p>By default, this refresh is fast. It pokes the running TranslucentFlyouts process. If you enable "Hard Reload On Apply", it fully restarts the process instead, which is slower but sometimes necessary if visuals appear corrupted or stale.</p>
-<h2 id="thecategorysystem">The Category System</h2>
-<p>Settings are organized into four main categories:</p>
-<ul>
-<li><strong>Global</strong>: Default settings that apply across all menu types</li>
-<li><strong>DropDown</strong>: Behavior for standard dropdown menus</li>
-<li><strong>Menu</strong>: Styling for context menus and application menus</li>
-<li><strong>Tooltip</strong>: Appearance of system tooltips</li>
-</ul>
-<p>Each category can either use its own settings or inherit from Global via the "use global" option. This lets you have one consistent style throughout Windows, or customize specific menu types.</p>
-<h2 id="resettingtodefaults">Resetting to Defaults</h2>
-<p>Use the "Controller / Reset To Defaults" dropdown to restore a category to its built-in defaults:</p>
-<ol>
-<li>Select which category to reset: Global, DropDown, Menu, Tooltip, or All</li>
-<li>Click Apply</li>
-<li>The dropdown automatically returns to None</li>
-</ol>
-<p>You can trigger another reset anytime by picking a category again. This pattern exists because Windhawk doesn't support custom buttons in settings. Only dropdowns and toggles are available.</p>
-<h2 id="keydetails">Key Details</h2>
-<ul>
-<li>The "use global" setting (when available) makes a category inherit the corresponding Global setting value</li>
-<li>Color values use ARGB hex format: <code>0xAARRGGBB</code></li>
-<li>Example: <code>0xFF0000FF</code> is fully opaque blue</li>
-<li>Example: <code>0x801F75FF</code> is semi-transparent blue</li>
-<li>Some settings interact with each other. For example, "Enable Immersive Style" on menu applies Windows 11's modern visual language</li>
-<li>Effect types include options like Acrylic, Mica, Blur, and Transparent, each with different visual characteristics</li>
-</ul>
-<h2 id="references">References</h2>
-<p>This controller is built on top of two excellent projects:</p>
-<ul>
-<li><p><a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> by ALTaleX531 provides the original runtime and handles all the actual menu rendering that makes Windows menus truly customizable.</p></li>
-<li><p><a href="https://github.com/Satanarious/TranslucentFlyoutsConfig">TranslucentFlyoutsConfig</a> by Satanarious created a polished configuration application that became the standard way to manage these settings. The setting names, organization, and defaults used in this controller are based on that work.</p></li>
-</ul>
-<p>Both projects are well maintained and worth exploring if you want to understand how it all works together.</p>]]></content>
-        <author>
-            <name>GID0317</name>
-            <uri>https://github.com/GID0317</uri>
         </author>
     </entry>
 </feed>

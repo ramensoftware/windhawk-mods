@@ -9775,18 +9775,19 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1774613617000,
+                "updated": 1774858236000,
                 "users": 47
             },
             "metadata": {
                 "author": "GID0317",
+                "compilerOptions": "-lwtsapi32",
                 "description": "Controls TranslucentFlyouts settings through Windhawk (registry bridge)",
                 "github": "https://github.com/GID0317",
                 "include": [
                     "windhawk.exe"
                 ],
                 "name": "Translucent Flyouts Controller",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "translucent-windows": {
