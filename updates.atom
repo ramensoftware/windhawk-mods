@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-30T08:10:36.000Z</updated>
+    <updated>2026-03-30T08:19:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[HotCorner Hotkeys 3.1]]></title>
+        <id>https://windhawk.net/mods/hotcorner-hotkeys#1987aab8bd5af5b68db23a159698ef6641c072cb</id>
+        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
+        <updated>2026-03-30T08:19:28.000Z</updated>
+        <content type="html"><![CDATA[<p>v2.4 → v3 — region fallback chain, duplicate-combo guard, dispatch cleanup
+Settings schema:</p>
+<ul>
+<li>Replace flat (hotkey, zone) row model with grouped HotkeyActions where each hotkey entry holds a nested Regions list of region→action mappings with  intent to allow users to easily add action under a hotkey. </li>
+<li>Add Elsewhere region replacing NONE; 9 zones total (4 corners, 4 edges, Elsewhere)</li>
+<li>Duplicate hotkey group (same key combo appearing twice) rejected at LoadSettings time before any regions are read; first group wins</li>
+<li>Duplicate region rows within the same group: last row wins</li>
+<li>modifiers and vk parsed once in LoadSettings and stored on HotkeyBinding, eliminating redundant re-parsing in RegisterHotkeys.</li>
+</ul>
+<p>Dispatch:</p>
+<ul>
+<li>Delete GetCursorRegionChain() (returned heap-allocated std::vector on
+every WM_HOTKEY)</li>
+<li>Replace with inline tryFire lambda + || short-circuit fallback chains.</li>
+<li>Fallback chains: TOP<em>LEFT→TOP→LEFT→Elsewhere, TOP</em>RIGHT→TOP→RIGHT→
+Elsewhere, BOTTOM<em>LEFT→BOTTOM→LEFT→Elsewhere, BOTTOM</em>RIGHT→BOTTOM→
+RIGHT→Elsewhere; edges fall back to Elsewhere; Elsewhere is final catch-all</li>
+</ul>
+<p>Struct / registration cleanup:</p>
+<ul>
+<li>RegisterHotkeys uses stored modifiers/vk directly, no re-parse</li>
+<li>Remove affectedMappings/sample-pointer diagnostic block from RegisterHotkeys</li>
+<li>Invalid case removed from RegionNameToString and ActionTypeToString
+(unreachable at dispatch time); Invalid enumerator kept as parse sentinel</li>
+<li>ParseActionSetting: replace named Invalid case with default to silence
+-Wswitch; extract ParseOpacityUpArgs/ParseOpacityDownArgs helpers so
+OpacityUp and OpacityDown cases are single-line like all other actions</li>
+</ul>
+<p>Actions added vs v2.4:</p>
+<ul>
+<li>SelectActiveInExplorer: opens Explorer selecting active window's file,
+falls back to process executable path</li>
+<li>clip; prefix for StartProcess: URL-encodes clipboard and appends to
+remainder; built-in aliases: gpt, yt, google, copilot, x, reddit, translate</li>
+<li>uac; and clip; prefixes combinable (uac; must come first)</li>
+<li>OpacityUp/Down simplified to int alpha model (max;step / min;step)</li>
+<li>ToggleAlwaysOnTop added</li>
+</ul>]]></content>
+        <author>
+            <name>webberlv</name>
+            <uri>https://github.com/webberLV</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Flyouts Controller 1.0.1]]></title>
         <id>https://windhawk.net/mods/translucent-flyouts-controller#f3fe1074970431befb963fe69cc1ca2fa7e22cdd</id>
@@ -333,32 +381,6 @@ Each button has three fields:</p>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide NVIDIA Control Panel Missing Dialog 1.1.0]]></title>
-        <id>https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider#b83161afe9e3090495743124c1192750a3f5920c</id>
-        <link href="https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider"/>
-        <updated>2026-03-27T12:29:33.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidenvidiacontrolpanelmissingdialog">Hide NVIDIA Control Panel Missing Dialog</h1>
-<p><img src="https://i.imgur.com/8vaxTpN.png" alt="Screenshot" /></p>
-<p>Silences the <strong>"NVIDIA Control Panel not found"</strong> notification that appears in the bottom-right corner every time Windows starts.</p>
-<h2 id="background">Background</h2>
-<p>Tools like <a href="https://www.techpowerup.com/nvcleanstall/">NVCleanstall</a> allow you to strip components from the NVIDIA driver package during installation. Certain options — such as disabling or not installing the NVIDIA Control Panel — break the Control Panel integration intentionally or as a side effect. Once broken, <code>nvcontainer.exe</code> detects that the Control Panel is missing or non-functional and displays a dialog on every startup prompting you to reinstall it from the Microsoft Store.</p>
-<p>Since the <strong>NVIDIA App</strong> now covers everything the classic Control Panel offered — display settings, GPU overclocking, driver management, and more — there is no practical reason to have the Control Panel installed. The dialog serves no purpose and becomes permanent noise.</p>
-<h2 id="whatitdoes">What it does</h2>
-<p>This mod suppresses the "NVIDIA Control Panel not found" dialog completely. It never appears on screen, neither at startup nor at any other time.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks into <code>nvcontainer.exe</code> and intercepts <code>ShowWindow</code> and <code>SetWindowPos</code> calls. Any top-level <code>#32770</code> dialog whose child windows contain the text "NVIDIA" is immediately blocked from becoming visible. A cache of confirmed dialog handles ensures the detection logic runs only once per window, keeping overhead minimal on subsequent calls.</p>
-<p>On mod initialization, any already-visible instance of the dialog is also hidden immediately.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 10 and Windows 11</li>
-<li>Targets <code>nvcontainer.exe</code> only</li>
-</ul>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>

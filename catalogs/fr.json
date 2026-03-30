@@ -4563,20 +4563,20 @@
                     1
                 ],
                 "ratingUsers": 3,
-                "updated": 1771367816000,
+                "updated": 1774858768000,
                 "users": 10
             },
             "metadata": {
                 "author": "webberlv",
                 "compilerOptions": "-lcomctl32 -loleaut32 -lole32 -lversion",
-                "description": "Assign configurable keyboard hotkeys to up to 8 actions, gated by cursor zones (four corners + four edges) of the active monitor.",
+                "description": "Assign up to 9 distinct actions per hotkey, dispatched based on which screen zone the cursor is in when pressed (4 corners, 4 edges, or elsewhere).",
                 "github": "https://github.com/webberLV",
                 "include": [
                     "explorer.exe"
                 ],
                 "license": "GPL-3.0-only",
                 "name": "HotCorner Hotkeys",
-                "version": "2.4"
+                "version": "3.1"
             }
         },
         "hover-text-magnifier": {
