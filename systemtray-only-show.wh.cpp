@@ -6,6 +6,7 @@
 // @description:ja-JP システムトレイ以外を非表示にし、タスクバーを右下角の小さなフローティングトレイに変換します（Windows 11 25H2）
 // @version         0.14
 // @author          roflsunriz
+// @github          roflsunriz
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
