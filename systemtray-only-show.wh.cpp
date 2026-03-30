@@ -104,6 +104,9 @@ LONG g_originalExStyle;
 
 bool g_trayVisible = true;
 bool g_inOwnSetWindowPos = false;
+bool g_taskbarTouchRegistered = false;
+bool g_suppressAppBarReservation = false;
+bool g_originalWorkAreaValid = false;
 int g_desiredTrayX = 0;
 int g_desiredTrayY = 0;
 int g_desiredTrayWidth = 0;
@@ -111,9 +114,13 @@ int g_desiredTrayHeight = 0;
 int g_screenBottom = 0;
 int g_screenLeft = 0;
 int g_screenRight = 0;
+RECT g_originalWorkArea{};
 DWORD g_lastMouseInTrayTick;
 UINT_PTR g_autoHideTimerHandle = 0;
 DWORD g_lastDiagLogTick = 0;
+DWORD g_lastAppBarSuppressLogTick = 0;
+DWORD g_lastAppBarRemoveTick = 0;
+DWORD g_lastWorkAreaApplyTick = 0;
 HHOOK g_mouseHook = nullptr;
 std::atomic<bool> g_showRequested{false};
 DWORD g_lastXamlReapplyTick = 0;
@@ -122,8 +129,10 @@ constexpr UINT kAutoHidePollMs = 100;
 constexpr int kHotZoneHeight = 48;
 constexpr int kTrayDefaultHeight = 48;
 constexpr int kTrayMinWidth = 200;
-constexpr int kHiddenRevealStripHeight = 2;
 constexpr int kTrayMeasurementPadding = 8;
+constexpr DWORD kAppBarSuppressLogThrottleMs = 1000;
+constexpr DWORD kAppBarRemoveEnforceIntervalMs = 1000;
+constexpr DWORD kWorkAreaEnforceIntervalMs = 1000;
 
 // ---------------------------------------------------------------------------
 // XAML helpers (same patterns as existing Windhawk taskbar mods)
@@ -192,10 +201,32 @@ void* CTaskBand_ITaskListWndSite_vftable;
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
 
-void* TaskbarHost_FrameHeight_Original;
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void* pThis);
+TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original;
+DWORD g_lastFrameHeightSuppressLogTick = 0;
 
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+int WINAPI TaskbarHost_FrameHeight_Hook(void* pThis) {
+    int originalHeight =
+        TaskbarHost_FrameHeight_Original
+            ? TaskbarHost_FrameHeight_Original(pThis)
+            : 0;
+
+    if (g_suppressAppBarReservation && !g_unloading.load()) {
+        DWORD now = GetTickCount();
+        if (now - g_lastFrameHeightSuppressLogTick >=
+            kAppBarSuppressLogThrottleMs) {
+            g_lastFrameHeightSuppressLogTick = now;
+            Wh_Log(L"Suppressed TaskbarHost::FrameHeight original=%d",
+                   originalHeight);
+        }
+        return 0;
+    }
+
+    return originalHeight;
+}
 
 XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
@@ -231,8 +262,13 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     return result;
 }
 
+HWND GetTaskbandWindow(HWND hTaskbarWnd) {
+    return hTaskbarWnd ? (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND")
+                       : nullptr;
+}
+
 XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    HWND hTaskSwWnd = GetTaskbandWindow(hTaskbarWnd);
     if (!hTaskSwWnd) {
         return nullptr;
     }
@@ -279,6 +315,144 @@ HWND FindCurrentProcessTaskbarWnd() {
         reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
+}
+
+using SHAppBarMessage_t = decltype(&SHAppBarMessage);
+SHAppBarMessage_t SHAppBarMessage_Original;
+
+const wchar_t* GetAppBarMessageName(DWORD dwMessage) {
+    switch (dwMessage) {
+        case ABM_NEW:
+            return L"ABM_NEW";
+        case ABM_REMOVE:
+            return L"ABM_REMOVE";
+        case ABM_QUERYPOS:
+            return L"ABM_QUERYPOS";
+        case ABM_SETPOS:
+            return L"ABM_SETPOS";
+        case ABM_WINDOWPOSCHANGED:
+            return L"ABM_WINDOWPOSCHANGED";
+    }
+
+    return L"ABM_OTHER";
+}
+
+bool ShouldSuppressTaskbarAppBarMessage(DWORD dwMessage, PAPPBARDATA pData) {
+    if (!g_suppressAppBarReservation || g_unloading.load() || !pData) {
+        return false;
+    }
+
+    HWND taskbarWnd = g_hTaskbarWnd ? g_hTaskbarWnd : FindCurrentProcessTaskbarWnd();
+    if (!taskbarWnd || pData->hWnd != taskbarWnd) {
+        return false;
+    }
+
+    switch (dwMessage) {
+        case ABM_NEW:
+        case ABM_QUERYPOS:
+        case ABM_SETPOS:
+        case ABM_WINDOWPOSCHANGED:
+            return true;
+    }
+
+    return false;
+}
+
+UINT_PTR WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
+    if (ShouldSuppressTaskbarAppBarMessage(dwMessage, pData)) {
+        DWORD now = GetTickCount();
+        if (now - g_lastAppBarSuppressLogTick >= kAppBarSuppressLogThrottleMs) {
+            g_lastAppBarSuppressLogTick = now;
+            Wh_Log(L"Suppressed %s for taskbar AppBar reservation",
+                   GetAppBarMessageName(dwMessage));
+        }
+        return TRUE;
+    }
+
+    return SHAppBarMessage_Original(dwMessage, pData);
+}
+
+void ForceRemoveTaskbarAppBarReservation(HWND hTaskbarWnd, bool logResult) {
+    if (!hTaskbarWnd) {
+        return;
+    }
+
+    APPBARDATA abd = {sizeof(abd)};
+    abd.hWnd = hTaskbarWnd;
+
+    UINT_PTR result = SHAppBarMessage_Original
+                          ? SHAppBarMessage_Original(ABM_REMOVE, &abd)
+                          : SHAppBarMessage(ABM_REMOVE, &abd);
+    if (logResult) {
+        Wh_Log(L"Force ABM_REMOVE result=%llu",
+               static_cast<unsigned long long>(result));
+    }
+}
+
+bool GetTaskbarMonitorInfo(HWND hTaskbarWnd, MONITORINFO* monitorInfo) {
+    if (!hTaskbarWnd || !monitorInfo) {
+        return false;
+    }
+
+    HMONITOR hMon =
+        MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTOPRIMARY);
+    if (!hMon) {
+        return false;
+    }
+
+    monitorInfo->cbSize = sizeof(*monitorInfo);
+    return !!GetMonitorInfo(hMon, monitorInfo);
+}
+
+void CaptureOriginalWorkArea(HWND hTaskbarWnd) {
+    if (g_originalWorkAreaValid) {
+        return;
+    }
+
+    MONITORINFO monitorInfo{};
+    if (!GetTaskbarMonitorInfo(hTaskbarWnd, &monitorInfo)) {
+        Wh_Log(L"Failed to capture original work area");
+        return;
+    }
+
+    g_originalWorkArea = monitorInfo.rcWork;
+    g_originalWorkAreaValid = true;
+    Wh_Log(L"Captured original work area=(%ld,%ld,%ld,%ld)",
+           g_originalWorkArea.left, g_originalWorkArea.top,
+           g_originalWorkArea.right, g_originalWorkArea.bottom);
+}
+
+void ApplyFullMonitorWorkArea(HWND hTaskbarWnd, bool logResult) {
+    MONITORINFO monitorInfo{};
+    if (!GetTaskbarMonitorInfo(hTaskbarWnd, &monitorInfo)) {
+        if (logResult) {
+            Wh_Log(L"Failed to query monitor info for work area override");
+        }
+        return;
+    }
+
+    RECT workArea = monitorInfo.rcMonitor;
+    BOOL result = SystemParametersInfo(SPI_SETWORKAREA, 0, &workArea, 0);
+    if (logResult || !result) {
+        Wh_Log(L"Apply full work area result=%d rect=(%ld,%ld,%ld,%ld)",
+               result,
+               workArea.left, workArea.top, workArea.right, workArea.bottom);
+    }
+}
+
+void RestoreOriginalWorkArea(bool logResult) {
+    if (!g_originalWorkAreaValid) {
+        return;
+    }
+
+    BOOL result = SystemParametersInfo(SPI_SETWORKAREA, 0,
+                                       &g_originalWorkArea, 0);
+    if (logResult || !result) {
+        Wh_Log(L"Restore work area result=%d rect=(%ld,%ld,%ld,%ld)",
+               result,
+               g_originalWorkArea.left, g_originalWorkArea.top,
+               g_originalWorkArea.right, g_originalWorkArea.bottom);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +601,10 @@ bool ApplyTrayOnlyStyle(XamlRoot xamlRoot) {
             panel.Background(Media::SolidColorBrush(bgColor));
         }
     }
+
+    systemTrayFrameGrid.Visibility(Visibility::Visible);
+    systemTrayFrameGrid.Opacity(1.0);
+    systemTrayFrameGrid.IsHitTestVisible(true);
 
     if (!unloading && !g_settings.showClock) {
         FrameworkElement clockElement = nullptr;
@@ -631,10 +809,6 @@ bool RefreshTrayMetricsFromXaml(XamlRoot xamlRoot) {
     return changed;
 }
 
-int GetHiddenTrayY() {
-    return g_screenBottom - kHiddenRevealStripHeight;
-}
-
 bool IsAutoHideTriggerMouseMessage(WPARAM message) {
     switch (message) {
         case WM_MOUSEMOVE:
@@ -648,6 +822,38 @@ bool IsAutoHideTriggerMouseMessage(WPARAM message) {
     return false;
 }
 
+void RegisterTaskbarTouchWindow(HWND hWnd) {
+    if (!hWnd || g_taskbarTouchRegistered) {
+        return;
+    }
+
+    if (RegisterTouchWindow(hWnd, TWF_WANTPALM)) {
+        g_taskbarTouchRegistered = true;
+        Wh_Log(L"RegisterTouchWindow succeeded for taskbar window");
+    } else {
+        Wh_Log(L"RegisterTouchWindow failed for taskbar window: %lu",
+               GetLastError());
+    }
+}
+
+void UnregisterTaskbarTouchWindow(HWND hWnd) {
+    if (!hWnd || !g_taskbarTouchRegistered) {
+        return;
+    }
+
+    if (UnregisterTouchWindow(hWnd)) {
+        Wh_Log(L"UnregisterTouchWindow succeeded for taskbar window");
+    } else {
+        Wh_Log(L"UnregisterTouchWindow failed for taskbar window: %lu",
+               GetLastError());
+    }
+
+    g_taskbarTouchRegistered = false;
+}
+
+void ShowTrayWindow();
+void TransformToTrayOnly(HWND hTaskbarWnd);
+
 // ---------------------------------------------------------------------------
 // Auto-hide implementation
 // ---------------------------------------------------------------------------
@@ -660,9 +866,9 @@ void GetTrayRect(RECT* rc) {
         rc->bottom = g_desiredTrayY + g_desiredTrayHeight;
     } else {
         rc->left = g_desiredTrayX;
-        rc->top = GetHiddenTrayY();
+        rc->top = g_screenBottom;
         rc->right = g_desiredTrayX + g_desiredTrayWidth;
-        rc->bottom = GetHiddenTrayY() + g_desiredTrayHeight;
+        rc->bottom = g_screenBottom + g_desiredTrayHeight;
     }
 }
 
@@ -699,14 +905,14 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode,
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
-void EnsureWindowVisible(HWND hWnd) {
+void EnsureWindowVisible(HWND hWnd, PCWSTR windowName) {
     if (!hWnd || IsWindowVisible(hWnd)) {
         return;
     }
     g_inOwnSetWindowPos = true;
     ShowWindow(hWnd, SW_SHOWNOACTIVATE);
     g_inOwnSetWindowPos = false;
-    Wh_Log(L"Re-shown hidden taskbar window");
+    Wh_Log(L"Re-shown hidden %s", windowName);
 }
 
 void ShowTrayWindow() {
@@ -714,8 +920,7 @@ void ShowTrayWindow() {
         return;
     }
 
-    EnsureWindowVisible(g_hTaskbarWnd);
-
+    EnsureWindowVisible(g_hTaskbarWnd, L"taskbar window");
     XamlRoot xamlRoot = GetTaskbarXamlRoot(g_hTaskbarWnd);
     if (xamlRoot) {
         ApplyTrayOnlyStyle(xamlRoot);
@@ -740,23 +945,34 @@ void HideTrayWindow() {
         return;
     }
 
+    g_trayVisible = false;
+
     g_inOwnSetWindowPos = true;
     SetWindowPos(g_hTaskbarWnd, HWND_TOPMOST,
-                 g_desiredTrayX, GetHiddenTrayY(),
+                 g_desiredTrayX, g_screenBottom,
                  g_desiredTrayWidth, g_desiredTrayHeight,
                  SWP_NOACTIVATE);
     g_inOwnSetWindowPos = false;
 
-    g_trayVisible = false;
     Wh_Log(L"Tray hidden");
 }
 
 void CALLBACK AutoHideTimerProc(HWND, UINT, UINT_PTR, DWORD) {
-    if (!g_trayOnlyMode || !g_settings.autoHide || !g_hTaskbarWnd) {
+    if (!g_trayOnlyMode || !g_hTaskbarWnd) {
         return;
     }
 
-    EnsureWindowVisible(g_hTaskbarWnd);
+    EnsureWindowVisible(g_hTaskbarWnd, L"taskbar window");
+
+    DWORD now = GetTickCount();
+    if (now - g_lastAppBarRemoveTick >= kAppBarRemoveEnforceIntervalMs) {
+        g_lastAppBarRemoveTick = now;
+        ForceRemoveTaskbarAppBarReservation(g_hTaskbarWnd, false);
+    }
+    if (now - g_lastWorkAreaApplyTick >= kWorkAreaEnforceIntervalMs) {
+        g_lastWorkAreaApplyTick = now;
+        ApplyFullMonitorWorkArea(g_hTaskbarWnd, false);
+    }
 
     // LL mouse hook may have set this flag on any mouse move
     bool hookTriggered = g_showRequested.exchange(false);
@@ -773,7 +989,6 @@ void CALLBACK AutoHideTimerProc(HWND, UINT, UINT_PTR, DWORD) {
     bool inTray = g_trayVisible && PtInRect(&trayRect, pt);
     bool inHotZone = PtInRect(&hotZone, pt);
 
-    DWORD now = GetTickCount();
     if (now - g_lastDiagLogTick >= 10000) {
         g_lastDiagLogTick = now;
         Wh_Log(L"[Diag] cursor=(%ld,%ld) vis=%d inTray=%d inHZ=%d "
@@ -786,19 +1001,24 @@ void CALLBACK AutoHideTimerProc(HWND, UINT, UINT_PTR, DWORD) {
                 !!g_mouseHook);
     }
 
-    if (hookTriggered || inTray || inHotZone) {
-        g_lastMouseInTrayTick = now;
-        if (!g_trayVisible) {
-            ShowTrayWindow();
-        }
-    } else if (g_trayVisible) {
-        DWORD elapsed = now - g_lastMouseInTrayTick;
-        if (elapsed >= static_cast<DWORD>(g_settings.autoHideDelayMs)) {
-            HideTrayWindow();
+    if (g_settings.autoHide) {
+        if (hookTriggered || inTray || inHotZone) {
+            g_lastMouseInTrayTick = now;
+            if (!g_trayVisible) {
+                Wh_Log(L"Tray show reason: hook=%d inTray=%d inHZ=%d "
+                       L"cursor=(%ld,%ld)",
+                       hookTriggered, inTray, inHotZone, pt.x, pt.y);
+                ShowTrayWindow();
+            }
+        } else if (g_trayVisible) {
+            DWORD elapsed = now - g_lastMouseInTrayTick;
+            if (elapsed >= static_cast<DWORD>(g_settings.autoHideDelayMs)) {
+                HideTrayWindow();
+            }
         }
     }
 
-    // Re-apply XAML collapse every second (shell may restore elements)
+    // Re-apply XAML state every second while visible (shell may restore elements)
     if (g_trayVisible && (now - g_lastXamlReapplyTick >= 1000)) {
         g_lastXamlReapplyTick = now;
         XamlRoot xamlRoot = GetTaskbarXamlRoot(g_hTaskbarWnd);
@@ -869,9 +1089,10 @@ void TransformToTrayOnly(HWND hTaskbarWnd) {
         ShowWindow(hTaskbarWnd, SW_SHOWNOACTIVATE);
     }
 
-    APPBARDATA abd = {sizeof(abd)};
-    abd.hWnd = hTaskbarWnd;
-    SHAppBarMessage(ABM_REMOVE, &abd);
+    g_suppressAppBarReservation = true;
+    CaptureOriginalWorkArea(hTaskbarWnd);
+    ForceRemoveTaskbarAppBarReservation(hTaskbarWnd, true);
+    ApplyFullMonitorWorkArea(hTaskbarWnd, true);
 
     LONG exStyle = GetWindowLong(hTaskbarWnd, GWL_EXSTYLE);
     exStyle |= WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
@@ -899,10 +1120,10 @@ void TransformToTrayOnly(HWND hTaskbarWnd) {
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     g_inOwnSetWindowPos = false;
 
-    if (g_settings.autoHide) {
-        g_lastMouseInTrayTick = GetTickCount();
-        StartAutoHideTimer();
-    }
+    RegisterTaskbarTouchWindow(hTaskbarWnd);
+
+    g_lastMouseInTrayTick = GetTickCount();
+    StartAutoHideTimer();
 
     Wh_Log(L"Transform complete: pos=(%d,%d) size=%dx%d",
             g_desiredTrayX, g_desiredTrayY,
@@ -911,6 +1132,8 @@ void TransformToTrayOnly(HWND hTaskbarWnd) {
 
 void RestoreTaskbar(HWND hTaskbarWnd) {
     StopAutoHideTimer();
+    UnregisterTaskbarTouchWindow(hTaskbarWnd);
+    g_suppressAppBarReservation = false;
 
     g_inOwnSetWindowPos = true;
 
@@ -939,6 +1162,7 @@ void RestoreTaskbar(HWND hTaskbarWnd) {
     abd.rc = g_originalTaskbarRect;
     SHAppBarMessage(ABM_NEW, &abd);
     SHAppBarMessage(ABM_SETPOS, &abd);
+    RestoreOriginalWorkArea(true);
 
     g_inOwnSetWindowPos = false;
     g_trayOnlyMode = false;
@@ -993,6 +1217,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
         case WM_TOUCH:
             if (g_trayOnlyMode && g_settings.autoHide && !g_trayVisible) {
                 g_lastMouseInTrayTick = GetTickCount();
+                Wh_Log(L"Tray input activated: msg=%u", Msg);
                 ShowTrayWindow();
                 if (Msg == WM_TOUCH) {
                     CloseTouchInputHandle((HTOUCHINPUT)lParam);
@@ -1010,8 +1235,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                     desiredY = wp->y;
                 } else {
                     desiredX = g_desiredTrayX;
-                    desiredY =
-                        g_trayVisible ? g_desiredTrayY : GetHiddenTrayY();
+                    desiredY = g_desiredTrayY;
                 }
                 int desiredCX = g_inOwnSetWindowPos ? wp->cx
                                                     : g_desiredTrayWidth;
@@ -1052,9 +1276,8 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                 }
 
                 int x = g_desiredTrayX;
-                int y = g_trayVisible ? g_desiredTrayY : GetHiddenTrayY();
                 g_inOwnSetWindowPos = true;
-                SetWindowPos(hWnd, HWND_TOPMOST, x, y,
+                SetWindowPos(hWnd, HWND_TOPMOST, x, g_desiredTrayY,
                              g_desiredTrayWidth, g_desiredTrayHeight,
                              SWP_NOACTIVATE);
                 g_inOwnSetWindowPos = false;
@@ -1089,6 +1312,7 @@ bool HookTaskbarDllSymbols() {
         {
             {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
             &TaskbarHost_FrameHeight_Original,
+            TaskbarHost_FrameHeight_Hook,
         },
         {
             {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
@@ -1135,6 +1359,31 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return module;
 }
 
+bool HookShell32Functions() {
+    HMODULE shell32Module = GetModuleHandle(L"shell32.dll");
+    if (!shell32Module) {
+        shell32Module =
+            LoadLibraryEx(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!shell32Module) {
+        Wh_Log(L"Failed to load shell32.dll");
+        return false;
+    }
+
+    auto pSHAppBarMessage =
+        reinterpret_cast<decltype(&SHAppBarMessage)>(
+            GetProcAddress(shell32Module, "SHAppBarMessage"));
+    if (!pSHAppBarMessage) {
+        Wh_Log(L"SHAppBarMessage not found");
+        return false;
+    }
+
+    WindhawkUtils::SetFunctionHook(pSHAppBarMessage,
+                                   SHAppBarMessage_Hook,
+                                   &SHAppBarMessage_Original);
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Apply settings from taskbar thread
 // ---------------------------------------------------------------------------
@@ -1165,10 +1414,9 @@ void ApplySettingsFromTaskbarThread() {
         if (xamlRoot) {
             ApplyTrayOnlyStyle(xamlRoot);
             if (RefreshTrayMetricsFromXaml(xamlRoot)) {
-                int y = g_trayVisible ? g_desiredTrayY : GetHiddenTrayY();
                 g_inOwnSetWindowPos = true;
                 SetWindowPos(hTaskbarWnd, HWND_TOPMOST,
-                             g_desiredTrayX, y,
+                             g_desiredTrayX, g_desiredTrayY,
                              g_desiredTrayWidth, g_desiredTrayHeight,
                              SWP_NOACTIVATE);
                 g_inOwnSetWindowPos = false;
@@ -1177,9 +1425,8 @@ void ApplySettingsFromTaskbarThread() {
 
         // Update auto-hide timer
         StopAutoHideTimer();
-        if (g_settings.autoHide) {
-            StartAutoHideTimer();
-        } else {
+        StartAutoHideTimer();
+        if (!g_settings.autoHide) {
             ShowTrayWindow();
         }
     }
@@ -1221,9 +1468,15 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
+    g_suppressAppBarReservation = false;
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"HookTaskbarDllSymbols failed");
+        return FALSE;
+    }
+
+    if (!HookShell32Functions()) {
+        Wh_Log(L"HookShell32Functions failed");
         return FALSE;
     }
 
@@ -1263,6 +1516,7 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
     g_unloading = true;
+    g_suppressAppBarReservation = false;
 
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
