@@ -7,7 +7,7 @@
 // @author          easyatm
 // @github          https://github.com/easyatm
 // @include         explorer.exe
-// @compilerOptions -luser32 -lDwmapi -lshell32
+// @compilerOptions -luser32 -lDwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -77,7 +77,6 @@ Fixes:
 #include <list>
 #include <map>
 #include <set>
-#include <shlobj.h>
 #include <string>
 #include <vector>
 #include <windhawk_api.h>
