@@ -306,6 +306,7 @@ by [m417z](https://github.com/m417z).
 #include <string>
 #include <string_view>
 #include <unordered_map>
+
 #include <vector>
 
 #if defined(__GNUC__) && __GNUC__ > 8
@@ -1750,41 +1751,78 @@ HotkeyActionType TryParseActionType(const std::wstring& raw) {
 }
 
 const wchar_t* RegionNameToString(HotkeyRegionName region) {
-    if (region == HotkeyRegionName::TOP_LEFT) return L"TOP_LEFT";
-    if (region == HotkeyRegionName::TOP) return L"TOP";
-    if (region == HotkeyRegionName::TOP_RIGHT) return L"TOP_RIGHT";
-    if (region == HotkeyRegionName::LEFT) return L"LEFT";
-    if (region == HotkeyRegionName::Elsewhere) return L"Elsewhere";
-    if (region == HotkeyRegionName::RIGHT) return L"RIGHT";
-    if (region == HotkeyRegionName::BOTTOM_LEFT) return L"BOTTOM_LEFT";
-    if (region == HotkeyRegionName::BOTTOM) return L"BOTTOM";
-    if (region == HotkeyRegionName::BOTTOM_RIGHT) return L"BOTTOM_RIGHT";
-    return L"Unknown";
+    switch (region) {
+        case HotkeyRegionName::TOP_LEFT:
+            return L"TOP_LEFT";
+        case HotkeyRegionName::TOP:
+            return L"TOP";
+        case HotkeyRegionName::TOP_RIGHT:
+            return L"TOP_RIGHT";
+        case HotkeyRegionName::LEFT:
+            return L"LEFT";
+        case HotkeyRegionName::Elsewhere:
+            return L"Elsewhere";
+        case HotkeyRegionName::RIGHT:
+            return L"RIGHT";
+        case HotkeyRegionName::BOTTOM_LEFT:
+            return L"BOTTOM_LEFT";
+        case HotkeyRegionName::BOTTOM:
+            return L"BOTTOM";
+        case HotkeyRegionName::BOTTOM_RIGHT:
+            return L"BOTTOM_RIGHT";
+        case HotkeyRegionName::Invalid:
+            return L"Invalid";
+    }
+   return L"Unknown";
 }
 
 // Converts action enum to string for logging
 const wchar_t* ActionTypeToString(HotkeyActionType actionType) {
-    if (actionType == HotkeyActionType::Nothing) return L"Nothing";
-    if (actionType == HotkeyActionType::ShowDesktop) return L"ShowDesktop";
-    if (actionType == HotkeyActionType::AltTab) return L"AltTab";
-    if (actionType == HotkeyActionType::TaskManager) return L"TaskManager";
-    if (actionType == HotkeyActionType::Mute) return L"Mute";
-    if (actionType == HotkeyActionType::TaskbarAutohide) return L"TaskbarAutohide";
-    if (actionType == HotkeyActionType::WinTab) return L"WinTab";
-    if (actionType == HotkeyActionType::HideIcons) return L"HideIcons";
-    if (actionType == HotkeyActionType::CombineTaskbarButtons) return L"CombineTaskbarButtons";
-    if (actionType == HotkeyActionType::ToggleTaskbarAlignment) return L"ToggleTaskbarAlignment";
-    if (actionType == HotkeyActionType::OpenStartMenu) return L"OpenStartMenu";
-    if (actionType == HotkeyActionType::SendKeypress) return L"SendKeypress";
-    if (actionType == HotkeyActionType::StartProcess) return L"StartProcess";
-    if (actionType == HotkeyActionType::MediaPlayPause) return L"MediaPlayPause";
-    if (actionType == HotkeyActionType::MediaNext) return L"MediaNext";
-    if (actionType == HotkeyActionType::MediaPrev) return L"MediaPrev";
-    if (actionType == HotkeyActionType::SelectActiveInExplorer) return L"SelectActiveInExplorer";
-    if (actionType == HotkeyActionType::OpacityUp) return L"OpacityUp";
-    if (actionType == HotkeyActionType::OpacityDown) return L"OpacityDown";
-    if (actionType == HotkeyActionType::ToggleAlwaysOnTop) return L"ToggleAlwaysOnTop";
-    return L"Unknown";
+    switch (actionType) {
+        case HotkeyActionType::Nothing:
+            return L"Nothing";
+        case HotkeyActionType::ShowDesktop:
+            return L"ShowDesktop";
+        case HotkeyActionType::AltTab:
+            return L"AltTab";
+        case HotkeyActionType::TaskManager:
+            return L"TaskManager";
+        case HotkeyActionType::Mute:
+            return L"Mute";
+        case HotkeyActionType::TaskbarAutohide:
+            return L"TaskbarAutohide";
+        case HotkeyActionType::WinTab:
+            return L"WinTab";
+        case HotkeyActionType::HideIcons:
+            return L"HideIcons";
+        case HotkeyActionType::CombineTaskbarButtons:
+            return L"CombineTaskbarButtons";
+        case HotkeyActionType::ToggleTaskbarAlignment:
+            return L"ToggleTaskbarAlignment";
+        case HotkeyActionType::OpenStartMenu:
+            return L"OpenStartMenu";
+        case HotkeyActionType::SendKeypress:
+            return L"SendKeypress";
+        case HotkeyActionType::StartProcess:
+            return L"StartProcess";
+        case HotkeyActionType::MediaPlayPause:
+            return L"MediaPlayPause";
+        case HotkeyActionType::MediaNext:
+            return L"MediaNext";
+        case HotkeyActionType::MediaPrev:
+            return L"MediaPrev";
+        case HotkeyActionType::SelectActiveInExplorer:
+            return L"SelectActiveInExplorer";
+        case HotkeyActionType::OpacityUp:
+            return L"OpacityUp";
+        case HotkeyActionType::OpacityDown:
+            return L"OpacityDown";
+        case HotkeyActionType::ToggleAlwaysOnTop:
+            return L"ToggleAlwaysOnTop";
+        case HotkeyActionType::Invalid:
+            return L"Invalid";
+    }
+   return L"Unknown";
 }
 
 // Creates action executor from action type and arguments
@@ -1809,8 +1847,9 @@ std::function<void()> ParseActionSetting(HotkeyActionType actionType,
             return []() { HideIcons(); };
         case HotkeyActionType::CombineTaskbarButtons: {
             const auto [s1, s2, s3, s4] = ParseTaskBarButtonsState(args);
-            return [s1, s2, s3, s4]() { CombineTaskbarButtons(s1, s2, s3, s4); };
-        }
+            return
+                [s1, s2, s3, s4]() { CombineTaskbarButtons(s1, s2, s3, s4); };
+       }
         case HotkeyActionType::ToggleTaskbarAlignment:
             return []() { ToggleTaskbarAlignment(); };
         case HotkeyActionType::OpenStartMenu:
@@ -1844,9 +1883,10 @@ std::function<void()> ParseActionSetting(HotkeyActionType actionType,
             return []() { MediaNext(); };
         case HotkeyActionType::MediaPrev:
             return []() { MediaPrev(); };
-        default:
+        case HotkeyActionType::Invalid:
             return []() {};
     }
+    return []() {};
 }
 
 #pragma endregion  // actions
