@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              windows-11-taskbar-styler
-// @name            Windows 11 Taskbar Styler
+// @id              windows-11-taskbar-styler-r632
+// @name            Windows 11 Taskbar Styler - r632
 // @description     Customize the taskbar with themes contributed by others or create your own
 // @version         1.6.1
 // @author          m417z
@@ -3234,7 +3234,7 @@ const Theme g_themeWindowGlass_variant_Split = {{
         L"Margin=10,2,3,2",
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush",
-        L"CornerRadius=25,5,5,25",
+        L"CornerRadius=12,5,5,12",
         L"Background:=$Background",
         L"Padding=10,0,0,0"}},
     ThemeTargetStyles{L"Taskbar.TaskbarBackground#BackgroundControl > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Shapes.Rectangle#BackgroundFill", {
@@ -3254,7 +3254,7 @@ const Theme g_themeWindowGlass_variant_Split = {{
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
-        L"CornerRadius=5,25,25,5",
+        L"CornerRadius=5,12,12,5",
         L"Padding=0,0,10,0"}},
     ThemeTargetStyles{L"SystemTray.ChevronIconView", {
         L"Padding=$TrayPadding",
@@ -3410,7 +3410,7 @@ const Theme g_themeWindowGlass_variant_Split = {{
     L"ElementSysColor3=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight3}\" Opacity=\"1\" />",
     L"ElementSysColor4=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorDark1}\" Opacity=\"1\" />",
     L"BorderThickness=0.5,1,0.5,1",
-    L"CornerRadius=25",
+    L"CornerRadius=12",
     L"TrayPadding=2,4,2,4",
     L"Height=70",
     L"TaskbarFrameMaxWidth=1895",
@@ -5395,7 +5395,7 @@ HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementSt
 
 #include <ocidl.h>
 
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+std::vector<winrt::com_ptr<VisualTreeWatcher>> g_visualTreeWatchers;
 
 // {C85D8CC7-5463-40E8-A432-F5916B6427E5}
 static constexpr CLSID CLSID_WindhawkTAP = { 0xc85d8cc7, 0x5463, 0x40e8, { 0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5 } };
@@ -5416,13 +5416,6 @@ private:
 
 HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
 {
-    // Only ever 1 VTW at once.
-    if (g_visualTreeWatcher)
-    {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
-
     site.copy_from(pUnkSite);
 
     if (site)
@@ -5430,7 +5423,8 @@ HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
         // Decrease refcount increased by InitializeXamlDiagnosticsEx.
         FreeLibrary(GetCurrentModuleHandle());
 
-        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
+        // Support multiple XAML islands (e.g. primary + secondary taskbars).
+        g_visualTreeWatchers.push_back(winrt::make_self<VisualTreeWatcher>(site));
     }
 
     return S_OK;
@@ -5566,17 +5560,18 @@ HRESULT InjectWindhawkTAP() noexcept
     // https://github.com/microsoft/microsoft-ui-xaml/blob/d74a0332cf0d5e58f12eddce1070fa7a79b4c2db/src/dxaml/xcp/dxaml/lib/DXamlCore.cpp#L2782
     g_inInjectWindhawkTAP = true;
 
-    HRESULT hr;
+    HRESULT hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
     for (int i = 0; i < 10000; i++)
     {
         WCHAR connectionName[256];
         wsprintf(connectionName, L"VisualDiagConnection%d", i + 1);
 
-        hr = ixde(connectionName, GetCurrentProcessId(), L"", location, CLSID_WindhawkTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
+        HRESULT hrConn = ixde(connectionName, GetCurrentProcessId(), L"", location, CLSID_WindhawkTAP, nullptr);
+        if (hrConn == HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
         {
-            break;
+            break;  // No more connections.
         }
+        hr = hrConn;  // Inject into all available connections.
     }
 
     g_inInjectWindhawkTAP = false;
@@ -9097,10 +9092,10 @@ void UninitializeForCurrentThread() {
 }
 
 void UninitializeSettingsAndTap() {
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+    for (auto& watcher : g_visualTreeWatchers) {
+        watcher->UnadviseVisualTreeChange();
     }
+    g_visualTreeWatchers.clear();
 
     g_initialized = false;
 }
@@ -9189,8 +9184,12 @@ void OnWindowCreated(HWND hWnd,
         _wcsicmp(className,
                  L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 &&
         GetClassName(hWndParent, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+        (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+         _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0)) {
         Wh_Log(L"Initializing - Created DesktopWindowContentBridge window");
+        // Force re-init: XAML may have been recreated on the same thread
+        // (e.g. when a secondary display is toggled), so clear stale state.
+        UninitializeForCurrentThread();
         InitializeForCurrentThread();
         InitializeSettingsAndTap();
         return;
@@ -9201,6 +9200,7 @@ void OnWindowCreated(HWND hWnd,
          _wcsicmp(lpClassName, L"Shell_InputSwitchTopLevelWindow") == 0)) {
         Wh_Log(L"Initializing - Created XAML host window: %08X via %S",
                (DWORD)(ULONG_PTR)hWnd, funcName);
+        UninitializeForCurrentThread();
         InitializeForCurrentThread();
         InitializeSettingsAndTap();
         return;
@@ -9497,6 +9497,28 @@ HWND GetTaskbarUiWnd() {
                         nullptr);
 }
 
+std::vector<HWND> GetSecondaryTaskbarUiWnds() {
+    std::vector<HWND> result;
+    DWORD currentPid = GetCurrentProcessId();
+    HWND hSecondary = nullptr;
+    while ((hSecondary = FindWindowEx(nullptr, hSecondary,
+                                      L"Shell_SecondaryTrayWnd",
+                                      nullptr)) != nullptr) {
+        DWORD dwProcessId = 0;
+        GetWindowThreadProcessId(hSecondary, &dwProcessId);
+        if (dwProcessId != currentPid) {
+            continue;
+        }
+        HWND hUiWnd = FindWindowEx(
+            hSecondary, nullptr,
+            L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+        if (hUiWnd) {
+            result.push_back(hUiWnd);
+        }
+    }
+    return result;
+}
+
 PTP_TIMER g_statsTimer;
 
 bool StartStatsTimer() {
@@ -9699,6 +9721,15 @@ void Wh_ModAfterInit() {
         initialize = true;
     }
 
+    for (auto hSecondaryUiWnd : GetSecondaryTaskbarUiWnds()) {
+        Wh_Log(L"Initializing secondary taskbar %08X",
+               (DWORD)(ULONG_PTR)hSecondaryUiWnd);
+        RunFromWindowThread(
+            hSecondaryUiWnd, [](PVOID) { InitializeForCurrentThread(); },
+            nullptr);
+        initialize = true;
+    }
+
     if (initialize) {
         InitializeSettingsAndTap();
     }
@@ -9734,6 +9765,14 @@ void Wh_ModUninit() {
         Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hXamlHostWnd);
         RunFromWindowThread(
             hXamlHostWnd, [](PVOID) { UninitializeForCurrentThread(); },
+            nullptr);
+    }
+
+    for (auto hSecondaryUiWnd : GetSecondaryTaskbarUiWnds()) {
+        Wh_Log(L"Uninitializing secondary taskbar %08X",
+               (DWORD)(ULONG_PTR)hSecondaryUiWnd);
+        RunFromWindowThread(
+            hSecondaryUiWnd, [](PVOID) { UninitializeForCurrentThread(); },
             nullptr);
     }
 
@@ -9783,6 +9822,19 @@ void Wh_ModSettingsChanged() {
         Wh_Log(L"Reinitializing for %08X", (DWORD)(ULONG_PTR)hXamlHostWnd);
         RunFromWindowThread(
             hXamlHostWnd,
+            [](PVOID) {
+                UninitializeForCurrentThread();
+                InitializeForCurrentThread();
+            },
+            nullptr);
+        initialize = true;
+    }
+
+    for (auto hSecondaryUiWnd : GetSecondaryTaskbarUiWnds()) {
+        Wh_Log(L"Reinitializing secondary taskbar %08X",
+               (DWORD)(ULONG_PTR)hSecondaryUiWnd);
+        RunFromWindowThread(
+            hSecondaryUiWnd,
             [](PVOID) {
                 UninitializeForCurrentThread();
                 InitializeForCurrentThread();
