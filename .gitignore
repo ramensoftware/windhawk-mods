@@ -1,2 +1,5 @@
 /logs
 *.log
+
+/issues
+/issues/*.md
