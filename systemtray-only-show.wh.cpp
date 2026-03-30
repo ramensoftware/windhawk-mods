@@ -2,11 +2,12 @@
 // @id              systemtray-only-show
 // @name            System Tray Only
 // @name:ja-JP      システムトレイのみ表示
-// @description     Hides everything except the system tray, turning the taskbar into a small floating tray in the bottom-right corner (Windows 11 25H2)
-// @description:ja-JP システムトレイ以外を非表示にし、タスクバーを右下角の小さなフローティングトレイに変換します（Windows 11 25H2）
+// @description     Hides everything except the system tray, turning the taskbar into a small floating tray in the bottom-right corner. Works standalone without any third-party dock. (Windows 11 25H2)
+// @description:ja-JP システムトレイ以外を非表示にし、タスクバーを右下角の小さなフローティングトレイに変換します。サードパーティのドックなしで単独動作します。（Windows 11 25H2）
 // @version         0.14
 // @author          roflsunriz
 // @github          roflsunriz
+// @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
@@ -19,9 +20,23 @@
 Hides all taskbar elements except the system tray (notification area) and
 displays it as a small floating window in the bottom-right corner of the screen.
 
-Designed to work alongside ObjectDock 3 with its "Hide Taskbar" feature enabled.
-The mod intercepts the taskbar hide request, removes the AppBar space
-reservation, and keeps only the system tray visible.
+The mod activates automatically on load — no third-party dock or external
+trigger is required. It removes the AppBar space reservation so that maximized
+windows use the full screen, and keeps only the system tray visible as a
+small floating overlay.
+
+## Features
+
+- **Auto-hide**: The tray slides out of sight when the mouse leaves and
+  reappears when you hover near the bottom-right corner.
+- **Configurable delay**: Set how long to wait before hiding (milliseconds).
+- **Optional clock**: Show or hide the date/time in the tray.
+- **Optional "Show Desktop" button**: Show or hide the narrow strip at the
+  far right of the tray.
+- **Background opacity**: Adjust from fully transparent (0) to fully opaque
+  (100). Default is 80 for a subtle glass look.
+
+## Requirements
 
 Only Windows 11 version 25H2 (build 26200) is supported.
 */
@@ -49,9 +64,9 @@ Only Windows 11 version 25H2 (build 26200) is supported.
   $name: Background opacity (0-100)
   $name:ja-JP: 背景の不透明度（0-100）
   $description: >-
-    0 = fully transparent, 100 = fully opaque (default 80 for glass effect matching ObjectDock Aero Reflection)
+    0 = fully transparent, 100 = fully opaque (default 80 for a subtle glass effect)
   $description:ja-JP: >-
-    0 = 完全透明、100 = 完全不透明（デフォルト80でObjectDock Aero Reflectionに近いガラス効果）
+    0 = 完全透明、100 = 完全不透明（デフォルト80で控えめなガラス効果）
 */
 // ==/WindhawkModSettings==
 
@@ -1171,7 +1186,7 @@ void RestoreTaskbar(HWND hTaskbarWnd) {
 }
 
 // ---------------------------------------------------------------------------
-// TrayUI::WndProc hook — intercept hide requests from ObjectDock etc.
+// TrayUI::WndProc hook — intercept external hide requests while in tray-only mode.
 // ---------------------------------------------------------------------------
 
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis,
