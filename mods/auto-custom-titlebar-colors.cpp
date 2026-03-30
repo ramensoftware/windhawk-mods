@@ -4,6 +4,7 @@
 // @description     Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes
 // @version         1.1.0
 // @author          Lone
+// @github			https://github.com/Louis047
 // @include         *
 // @exclude         devenv.exe
 // @compilerOptions -ldwmapi -luxtheme -luser32
