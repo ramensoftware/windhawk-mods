@@ -72,7 +72,7 @@ void ScanAndHookWwlib() {
     if (!hWwlib || g_wwlibHooked.exchange(true)) return;
     
     // wwlib.dll
-    WindhawkUtils::SYMBOL_HOOK wwlibDllHook[] = {
+    WindhawkUtils::SYMBOL_HOOK wwlibHook[] = {
         {
             { SYM_SetDarkMode },
             (void**)&pOrig_SetDarkMode,
@@ -87,7 +87,7 @@ void ScanAndHookWwlib() {
     options.onlineCacheUrl = L"";        // Disable online cache to force using local symbol file, which is expected to be already downloaded by Windhawk
 
     Wh_Log(L"[Init] Attempting to hook wwlib.dll...");
-    if (WindhawkUtils::HookSymbols(hWwlib, wwlibDllHook, ARRAYSIZE(wwlibDllHook), &options)) {
+    if (WindhawkUtils::HookSymbols(hWwlib, wwlibHook, ARRAYSIZE(wwlibHook), &options)) {
         Wh_ApplyHookOperations();
         Wh_Log(L"[Success] DarkModeState::SetDarkMode hooked successfully.");
     } else {
