@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-30T08:19:28.000Z</updated>
+    <updated>2026-03-30T20:02:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[HotCorner Hotkeys 3.3]]></title>
+        <id>https://windhawk.net/mods/hotcorner-hotkeys#7a9ea32a9cd28fd914ba4c31ab7895a5270f8a67</id>
+        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
+        <updated>2026-03-30T20:02:36.000Z</updated>
+        <content type="html"><![CDATA[<p>added . <strong>Force Kill Active Window</strong> — Terminates the foreground window's process, except for the current <code>explorer.exe</code> host process.</p>]]></content>
+        <author>
+            <name>webberlv</name>
+            <uri>https://github.com/webberLV</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Win+D per monitor(show desktop) 1.3.260330]]></title>
+        <id>https://windhawk.net/mods/win-d-per-monitor#df4fa4ff702cbeb34e8ec0eb2e1ae65dd3e26767</id>
+        <link href="https://windhawk.net/mods/win-d-per-monitor"/>
+        <updated>2026-03-30T20:01:55.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="20260330v13260330">2026-03-30 (v1.3.260330)</h3>
+<ul>
+<li>Improved window control: try ShowWindowAsync first, then fall back to PostMessage (WM_SYSCOMMAND) if it fails</li>
+<li>改进窗口控制：优先尝试 ShowWindowAsync，失败时回退到 PostMessage（WM_SYSCOMMAND）</li>
+<li>Added custom ignored windows support by class name or window title</li>
+<li>新增自定义忽略窗口支持（按类名或窗口标题）</li>
+</ul>]]></content>
+        <author>
+            <name>easyatm</name>
+            <uri>https://github.com/easyatm</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[HotCorner Hotkeys 3.1]]></title>
         <id>https://windhawk.net/mods/hotcorner-hotkeys#1987aab8bd5af5b68db23a159698ef6641c072cb</id>
@@ -354,33 +382,6 @@ Each button has three fields:</p>
         <author>
             <name>vfxturjo</name>
             <uri>https://github.com/zunaidFarouque</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Office UI Reverter (32/64-bit Universal) 1.0.1]]></title>
-        <id>https://windhawk.net/mods/office-ui-reverter-universal#930d54229ce6b8af9f00da0307d8dcf0024d6800</id>
-        <link href="https://windhawk.net/mods/office-ui-reverter-universal"/>
-        <updated>2026-03-28T12:38:39.000Z</updated>
-        <content type="html"><![CDATA[<p>Ditched async hook for better reliability and avoid fetching for online symbol cache</p>]]></content>
-        <author>
-            <name>Joe Ye</name>
-            <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-content-presenter-injector#d770227ef3dda830a140a36b06c144e8ec7a5bae</id>
-        <link href="https://windhawk.net/mods/taskbar-content-presenter-injector"/>
-        <updated>2026-03-27T14:02:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed 25H2 support by implementing deferred injection</li>
-<li>Improved structure tracking logic and performance</li>
-<li>Added multi-monitor support</li>
-</ul>
-<p>Initial deferred injection patch by <a href="https://github.com/acercandr0">Acercandro</a></p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>

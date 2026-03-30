@@ -4563,7 +4563,7 @@
                     1
                 ],
                 "ratingUsers": 3,
-                "updated": 1774858768000,
+                "updated": 1774900956000,
                 "users": 10
             },
             "metadata": {
@@ -4576,7 +4576,7 @@
                 ],
                 "license": "GPL-3.0-only",
                 "name": "HotCorner Hotkeys",
-                "version": "3.1"
+                "version": "3.3"
             }
         },
         "hover-text-magnifier": {
@@ -10431,7 +10431,7 @@
                     67
                 ],
                 "ratingUsers": 75,
-                "updated": 1754905659000,
+                "updated": 1774900915000,
                 "users": 5069
             },
             "metadata": {
@@ -10443,7 +10443,7 @@
                     "explorer.exe"
                 ],
                 "name": "Win+D per monitor(show desktop)",
-                "version": "1.1.20250811"
+                "version": "1.3.260330"
             }
         },
         "win10-colored-borders": {

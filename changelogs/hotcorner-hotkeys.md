@@ -1,3 +1,7 @@
+## 3.3 ([Mar 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7a9ea32a9cd28fd914ba4c31ab7895a5270f8a67/mods/hotcorner-hotkeys.wh.cpp))
+
+added . **Force Kill Active Window** — Terminates the foreground window's process, except for the current `explorer.exe` host process.
+
 ## 3.1 ([Mar 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1987aab8bd5af5b68db23a159698ef6641c072cb/mods/hotcorner-hotkeys.wh.cpp))
 
 v2.4 → v3 — region fallback chain, duplicate-combo guard, dispatch cleanup
