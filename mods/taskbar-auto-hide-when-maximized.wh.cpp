@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-when-maximized
 // @name            Taskbar auto-hide when maximized
 // @description     Makes the taskbar auto-hide only when a window is maximized or intersects the taskbar
-// @version         1.2.5
+// @version         1.2.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -118,6 +118,7 @@ std::unordered_map<void*, HWND> g_taskbarsKeptShown;
 std::unordered_map<HWND, void*> g_taskbarToViewCoordinator;
 UINT_PTR g_pendingEventsTimer;
 std::atomic<HWND> g_multitaskingViewHwnd;
+std::atomic<HWND> g_altTabViewHwnd;
 
 // TrayUI::_HandleTrayPrivateSettingMessage
 constexpr UINT kHandleTrayPrivateSettingMessage = WM_USER + 0x1CA;
@@ -172,19 +173,25 @@ bool IsWindowCloaked(HWND hwnd) {
            isCloaked;
 }
 
-// Detects Alt+Tab or Win+Tab.
-bool IsMultitaskingViewWindow(HWND hWnd) {
+enum class MultitaskingViewType {
+    None,
+    WinTab,
+    AltTab,
+};
+
+// Detects Alt+Tab or Win+Tab and returns the type.
+MultitaskingViewType GetMultitaskingViewType(HWND hWnd) {
     // Must be in the current process (explorer.exe).
     DWORD dwProcessId = 0;
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, &dwProcessId);
     if (!dwThreadId || dwProcessId != GetCurrentProcessId()) {
-        return false;
+        return MultitaskingViewType::None;
     }
 
     WCHAR className[64];
     if (!GetClassName(hWnd, className, ARRAYSIZE(className)) ||
         _wcsicmp(className, L"XamlExplorerHostIslandWindow") != 0) {
-        return false;
+        return MultitaskingViewType::None;
     }
 
     // The Win+Tab window uses band ZBID_IMMERSIVE_APPCHROME.
@@ -196,18 +203,23 @@ bool IsMultitaskingViewWindow(HWND hWnd) {
 
     DWORD band = 0;
     if (!pGetWindowBand || !pGetWindowBand(hWnd, &band)) {
-        return false;
+        return MultitaskingViewType::None;
     }
 
-    if (band != ZBID_IMMERSIVE_APPCHROME && band != ZBID_SYSTEM_TOOLS) {
-        return false;
+    MultitaskingViewType type;
+    if (band == ZBID_IMMERSIVE_APPCHROME) {
+        type = MultitaskingViewType::WinTab;
+    } else if (band == ZBID_SYSTEM_TOOLS) {
+        type = MultitaskingViewType::AltTab;
+    } else {
+        return MultitaskingViewType::None;
     }
 
     // Check thread description for "MultitaskingView".
     HANDLE hThread =
         OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, dwThreadId);
     if (!hThread) {
-        return false;
+        return MultitaskingViewType::None;
     }
 
     bool isMultitaskingView = false;
@@ -218,7 +230,7 @@ bool IsMultitaskingViewWindow(HWND hWnd) {
     }
 
     CloseHandle(hThread);
-    return isMultitaskingView;
+    return isMultitaskingView ? type : MultitaskingViewType::None;
 }
 
 HWND FindCurrentProcessTaskbarWnd() {
@@ -488,6 +500,11 @@ bool CanHideTaskbarForWindow(HWND hWnd,
                              const RECT* taskbarRect) {
     if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd) ||
         (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
+        return false;
+    }
+
+    // Ignore the Alt+Tab overlay so it doesn't affect taskbar state.
+    if (hWnd == g_altTabViewHwnd) {
         return false;
     }
 
@@ -962,34 +979,49 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
         return;
     }
 
-    // Check for Multitasking View (Win+Tab) window state changes.
-    if (hWnd == g_multitaskingViewHwnd || IsMultitaskingViewWindow(hWnd)) {
-        bool entering = event == EVENT_OBJECT_SHOW ||
-                        event == EVENT_OBJECT_UNCLOAKED ||
-                        event == EVENT_OBJECT_CREATE;
-        bool leaving = event == EVENT_OBJECT_HIDE ||
-                       event == EVENT_OBJECT_CLOAKED ||
-                       event == EVENT_OBJECT_DESTROY;
+    // Check for Multitasking View window state changes.
+    {
+        auto multitaskingViewType = GetMultitaskingViewType(hWnd);
+        bool isTrackedWinTab = hWnd == g_multitaskingViewHwnd;
+        bool isTrackedAltTab = hWnd == g_altTabViewHwnd;
 
-        if (entering) {
-            HWND expected = nullptr;
-            if (!g_multitaskingViewHwnd.compare_exchange_strong(expected,
-                                                                hWnd)) {
+        if (multitaskingViewType != MultitaskingViewType::None ||
+            isTrackedWinTab || isTrackedAltTab) {
+            auto& targetHwnd =
+                (multitaskingViewType == MultitaskingViewType::AltTab ||
+                 isTrackedAltTab)
+                    ? g_altTabViewHwnd
+                    : g_multitaskingViewHwnd;
+
+            bool entering = event == EVENT_OBJECT_SHOW ||
+                            event == EVENT_OBJECT_UNCLOAKED ||
+                            event == EVENT_OBJECT_CREATE;
+            bool leaving = event == EVENT_OBJECT_HIDE ||
+                           event == EVENT_OBJECT_CLOAKED ||
+                           event == EVENT_OBJECT_DESTROY;
+
+            if (entering) {
+                HWND expected = nullptr;
+                if (!targetHwnd.compare_exchange_strong(expected, hWnd)) {
+                    return;
+                }
+                Wh_Log(
+                    L"MultitaskingView entering (%s)",
+                    &targetHwnd == &g_altTabViewHwnd ? L"Alt+Tab" : L"Win+Tab");
+            } else if (leaving) {
+                HWND expected = hWnd;
+                if (!targetHwnd.compare_exchange_strong(expected, nullptr)) {
+                    return;
+                }
+                Wh_Log(
+                    L"MultitaskingView leaving (%s)",
+                    &targetHwnd == &g_altTabViewHwnd ? L"Alt+Tab" : L"Win+Tab");
+            } else {
                 return;
             }
-            Wh_Log(L"MultitaskingView entering");
-        } else if (leaving) {
-            HWND expected = hWnd;
-            if (!g_multitaskingViewHwnd.compare_exchange_strong(expected,
-                                                                nullptr)) {
-                return;
-            }
-            Wh_Log(L"MultitaskingView leaving");
-        } else {
-            return;
+
+            // Fall through to trigger timer for all taskbars.
         }
-
-        // Fall through to trigger timer for all taskbars.
     }
 
     Wh_Log(
@@ -1107,6 +1139,7 @@ DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
     }
 
     g_multitaskingViewHwnd = nullptr;
+    g_altTabViewHwnd = nullptr;
 
     return 0;
 }
