@@ -21,7 +21,7 @@ Control whether the Windows taskbar stays always on top, always at the bottom, o
 
 Makes the taskbar behave like a regular window - like how it was possible pre-Vista. 
 
-![Behaves like a normal window](https://i.imgur.com/9aKHaB3.gif)
+![Behaves like a normal window](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/interactive.gif)
 
 ### Always on top
 
@@ -29,7 +29,7 @@ Keeps the taskbar above normal windows, no matter in games or in browser fullscr
 
 This is mainly useful for people who use **auto-hide** and want the taskbar to stay accessible consistently.
 
-![Always on top](https://i.imgur.com/xqQjpDb.gif)
+![Always on top](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/always_on_top_low.gif)
 
 ### Always at bottom
 
@@ -37,7 +37,7 @@ Keeps the taskbar at the bottom of the Z-order.
 
 If you are more of a window enjoyer than a taskbar enjoyer, this is for you. 
 
-![Always at bottom](https://i.imgur.com/6iKCcUQ.gif)
+![Always at bottom](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/always_bottom_low.gif)
 
 ## Notes
 
