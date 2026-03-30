@@ -2,7 +2,7 @@
 // @id                   hotcorner-hotkeys
 // @name                 HotCorner Hotkeys
 // @description          Assign up to 9 distinct actions per hotkey, dispatched based on which screen zone the cursor is in when pressed (4 corners, 4 edges, or elsewhere).
-// @version              3.1
+// @version              3.3
 // @author               webberlv
 // @github               https://github.com/webberLV
 // @license              GPL-3.0-only
@@ -57,6 +57,7 @@ When a hotkey fires, the mod determines which action to run using a
 17. **Opacity Up (active window)** — Increases the foreground window's opacity toward a configurable maximum.
 18. **Opacity Down (active window)** — Decreases the foreground window's opacity toward a configurable minimum.
 19. **Toggle Always On Top (active window)** — Toggles the foreground window's always-on-top state.
+20. **Force Kill Active Window** — Terminates the foreground window's process, except for the current `explorer.exe` host process.
 
 ## Hotkey format
 
@@ -221,6 +222,7 @@ To modifiy step you must include min first.
 - The mod runs inside `explorer.exe` and uses global hotkey registration.
 - Each unique key combination is registered with Windows exactly once.
 - Some windows may not respond to layered window attributes.
+- Force-killing elevated or protected processes may fail if `explorer.exe` lacks the required rights.
 
 ## Credits
 
@@ -281,6 +283,7 @@ by [m417z](https://github.com/m417z).
           - ACTION_OPACITY_UP_ACTIVE: Opacity Up (active window)
           - ACTION_OPACITY_DOWN_ACTIVE: Opacity Down (active window)
           - ACTION_TOGGLE_ALWAYSONTOP_ACTIVE: Toggle Always On Top (active window)
+          - ACTION_FORCE_KILL_ACTIVE: Force Kill Active Window
         - AdditionalArgs: ""
           $name: Additional Args
           $description: Optional arguments for this action (e.g., Ctrl+C, uac;cmd.exe, clip;google, 200;15). See Details tab.
@@ -363,6 +366,7 @@ enum class HotkeyActionType {
     OpacityUp,
     OpacityDown,
     ToggleAlwaysOnTop,
+    ForceKillActive,
     Invalid,
 };
 
@@ -1687,6 +1691,28 @@ void ToggleAlwaysOnTop() {
            topmost ? L"normal" : L"topmost");
 }
 
+void ForceKillActiveWindow() {
+    HWND hWnd = ForegroundWindow();
+    if (!hWnd) {
+        return;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == 0 || pid == GetCurrentProcessId()) {
+        return;
+    }
+
+    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    if (hProcess) {
+        TerminateProcess(hProcess, 1);
+        CloseHandle(hProcess);
+        Wh_Log(L"ForceKill: terminated PID %lu", pid);
+    } else {
+        Wh_Log(L"ForceKill: OpenProcess failed for PID %lu (UAC?)", pid);
+    }
+}
+
 HotkeyRegionName TryParseRegionName(const std::wstring& raw) {
     static const std::unordered_map<std::wstring, HotkeyRegionName> regionMap = 
         {
@@ -1738,6 +1764,7 @@ HotkeyActionType TryParseActionType(const std::wstring& raw) {
             {L"action_opacity_down_active", HotkeyActionType::OpacityDown},
             {L"action_toggle_alwaysontop_active",
              HotkeyActionType::ToggleAlwaysOnTop},
+            {L"action_force_kill_active", HotkeyActionType::ForceKillActive},
         };
 
     auto normalized = stringtools::toLower(stringtools::trim(raw));
@@ -1819,6 +1846,8 @@ const wchar_t* ActionTypeToString(HotkeyActionType actionType) {
             return L"OpacityDown";
         case HotkeyActionType::ToggleAlwaysOnTop:
             return L"ToggleAlwaysOnTop";
+        case HotkeyActionType::ForceKillActive:
+            return L"ForceKillActive";
         case HotkeyActionType::Invalid:
             return L"Invalid";
     }
@@ -1877,6 +1906,8 @@ std::function<void()> ParseActionSetting(HotkeyActionType actionType,
         }
         case HotkeyActionType::ToggleAlwaysOnTop:
             return []() { ToggleAlwaysOnTop(); };
+        case HotkeyActionType::ForceKillActive:
+            return []() { ForceKillActiveWindow(); };
         case HotkeyActionType::MediaPlayPause:
             return []() { MediaPlayPause(); };
         case HotkeyActionType::MediaNext:
