@@ -2,13 +2,54 @@
 // @id              taskbar-z-order-override
 // @name            Taskbar Z-Order Override
 // @description     Control whether the taskbar stays always on top, always at the bottom, or behaves like a normal window
-// @version         0.6
+// @version         0.7
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
+// ==WindhawkModReadme==
+/*
+# Taskbar Z-Order Override
+
+Control whether the Windows taskbar stays always on top, always at the bottom, or behaves like a normal window.
+
+## Working modes
+
+### Behaves like a normal window
+
+Makes the taskbar behave like a regular window - like how it was possible pre-Vista. 
+
+![Behaves like a normal window](https://i.imgur.com/9aKHaB3.gif)
+
+### Always on top
+
+Keeps the taskbar above normal windows, no matter in games or in browser fullscreen. 
+
+This is mainly useful for people who use **auto-hide** and want the taskbar to stay accessible consistently.
+
+![Always on top](https://i.imgur.com/xqQjpDb.gif)
+
+### Always at bottom
+
+Keeps the taskbar at the bottom of the Z-order.
+
+If you are more of a window enjoyer than a taskbar enjoyer, this is for you. 
+
+![Always at bottom](https://i.imgur.com/6iKCcUQ.gif)
+
+## Notes
+
+- Supports the main taskbar and secondary taskbars on multi-monitor setups.
+- Intended for Explorer's standard taskbar windows.
+- Since Windows taskbar behavior differs across versions and builds, some edge cases may vary depending on your system configuration.
+
+## Credits
+
+- Normal window mode original concept from **7+ Taskbar Tweaker** by m417z
+*/
+// ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
 - TaskbarZOrder: top
@@ -17,12 +58,14 @@
   $options:
     - top: Always on top
     - bottom: Always at bottom
-    - interactive: Mimics normal window
+    - interactive: Behaves like a normal window
 */
 // ==/WindhawkModSettings==
 
+#include <algorithm>
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <vector>
 #include <commctrl.h>
 #include <string>
 
@@ -43,73 +86,88 @@ using SetWindowBand_t = BOOL(WINAPI*)(HWND, HWND, DWORD);
 struct ModState {
   TaskbarZOrder mode = TaskbarZOrder::Interactive;
 
-  HWND taskbarWnd = nullptr;
+  HWND primaryTaskbarWnd = nullptr;
+  std::vector<HWND> secondaryTaskbarWnds;
+
 };
 
 static ModState g_state;
 static SetWindowPos_t SetWindowPos_Original = nullptr;
 static SetWindowBand_t SetWindowBand_Original = nullptr;
 
-static bool IsMainTaskbarWindow(HWND hWnd) {
-  return hWnd && hWnd == g_state.taskbarWnd;
+static bool IsPrimaryTaskbarWindow(HWND hWnd) {
+  return hWnd && hWnd == g_state.primaryTaskbarWnd;
 }
 
-static bool SetTaskbarZOrder(HWND insertAfter) {
-  if (!g_state.taskbarWnd || !SetWindowPos_Original) {
+static bool IsSecondaryTaskbarWindow(HWND hWnd) {
+  for (HWND hwnd : g_state.secondaryTaskbarWnds) {
+    if (hwnd == hWnd) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool IsTrackedTaskbarWindow(HWND hWnd) {
+  return IsPrimaryTaskbarWindow(hWnd) || IsSecondaryTaskbarWindow(hWnd);
+}
+
+static bool SetTaskbarZOrder(HWND hwnd, HWND insertAfter) {
+  if (!hwnd || !SetWindowPos_Original) {
     return false;
   }
 
-  return SetWindowPos_Original(g_state.taskbarWnd, insertAfter, 0, 0, 0, 0,
-                               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) !=
-         FALSE;
+  return SetWindowPos_Original(hwnd, insertAfter, 0, 0, 0, 0,
+                               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) != FALSE;
 }
 
 // Forces the taskbar to the front of the normal (non-topmost)
 // Z-order band.
-static void BumpTaskbarToFrontOfNormalBand() {
-  if (!g_state.taskbarWnd || !SetWindowPos_Original) {
+static void BumpTaskbarToFrontOfNormalBand(HWND hwnd) {
+  if (!hwnd || !SetWindowPos_Original) {
     return;
   }
 
-  SetWindowPos_Original(g_state.taskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
+  SetWindowPos_Original(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                         SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 
-  SetWindowPos_Original(g_state.taskbarWnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+  SetWindowPos_Original(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
                         SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
-
 
 static void ApplyConfiguredMode() {
-  if (!g_state.taskbarWnd) {
-    return;
-  }
+  auto applyOne = [](HWND hwnd, TaskbarZOrder mode) {
+    switch (mode) {
+      case TaskbarZOrder::Top:
+        SetTaskbarZOrder(hwnd, HWND_TOPMOST);
+        break;
 
-  switch (g_state.mode) {
-    case TaskbarZOrder::Top:
-      SetTaskbarZOrder(HWND_TOPMOST);
-      break;
+      case TaskbarZOrder::Bottom:
+        SetTaskbarZOrder(hwnd, HWND_BOTTOM);
+        break;
 
-    case TaskbarZOrder::Bottom:
-      SetTaskbarZOrder(HWND_BOTTOM);
-      break;
+      case TaskbarZOrder::Interactive:
+        SetTaskbarZOrder(hwnd, HWND_NOTOPMOST);
+        break;
+    }
+  };
 
-    case TaskbarZOrder::Interactive:
-      SetTaskbarZOrder(HWND_NOTOPMOST);
-      break;
+  applyOne(g_state.primaryTaskbarWnd, g_state.mode);
+
+  for (HWND hwnd : g_state.secondaryTaskbarWnds) {
+    applyOne(hwnd, g_state.mode);
   }
 }
 
-// Before removing the subclass, temporarily force the taskbar into a stable
-// top state so that it is not left between other top-level windows post-unload.
 static void ForceTaskbarTopStateBeforeUnload() {
-  const auto oldMode = g_state.mode;
-  g_state.mode = TaskbarZOrder::Top;
-  ApplyConfiguredMode();
-  g_state.mode = oldMode;
+  SetTaskbarZOrder(g_state.primaryTaskbarWnd, HWND_TOPMOST);
+
+  for (HWND hwnd : g_state.secondaryTaskbarWnds) {
+    SetTaskbarZOrder(hwnd, HWND_TOPMOST);
+  }
 }
 
 static void HandlePinnedTaskbarPosChanging(WINDOWPOS* wp) {
-  Wh_Log(L"HandlePinnedTaskbarPosChanging");
   if (!wp || (wp->flags & SWP_NOZORDER)) {
     return;
   }
@@ -124,7 +182,8 @@ static void HandlePinnedTaskbarPosChanging(WINDOWPOS* wp) {
 static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X,
                                      int Y, int cx, int cy, UINT uFlags) {
   if (g_state.mode == TaskbarZOrder::Interactive &&
-      IsMainTaskbarWindow(hWnd) && hWndInsertAfter == HWND_TOPMOST) {
+      IsTrackedTaskbarWindow(hWnd) && 
+      hWndInsertAfter == HWND_TOPMOST) {
     hWndInsertAfter = HWND_TOP;
   }
 
@@ -140,8 +199,9 @@ static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X,
 static BOOL WINAPI SetWindowBand_Hook(HWND hWnd, HWND hwndInsertAfter,
                                       DWORD dwBand) {
   if (g_state.mode == TaskbarZOrder::Interactive &&
-      IsMainTaskbarWindow(hWnd) && dwBand != kDesktopBand) {
-    BumpTaskbarToFrontOfNormalBand();
+      IsTrackedTaskbarWindow(hWnd)
+       && dwBand != kDesktopBand) {
+    BumpTaskbarToFrontOfNormalBand(hWnd);
     return TRUE;
   }
 
@@ -155,7 +215,6 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
     case TaskbarZOrder::Top:
     case TaskbarZOrder::Bottom:
       if (msg == WM_WINDOWPOSCHANGING) {
-        Wh_Log(L"Pos Changing");
         HandlePinnedTaskbarPosChanging(reinterpret_cast<WINDOWPOS*>(lParam));
       }
       break;
@@ -164,74 +223,80 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
       break;
   }
 
+  // handle destroyed taskbars
+  if (msg == WM_NCDESTROY){
+    if (hwnd == g_state.primaryTaskbarWnd) {
+      g_state.primaryTaskbarWnd = nullptr;
+    } else {
+      g_state.secondaryTaskbarWnds.erase(
+          std::remove(g_state.secondaryTaskbarWnds.begin(),
+                      g_state.secondaryTaskbarWnds.end(),
+                      hwnd),
+          g_state.secondaryTaskbarWnds.end());
+    }
+  }
+
   return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 static CreateWindowExW_t CreateWindowExW_Original = nullptr;
 
-static HWND FindCurrentProcessPrimaryTaskbar() {
-  HWND result = nullptr;
-
-  EnumWindows(
-      [](HWND hwnd, LPARAM lParam) -> BOOL {
-        auto* out = reinterpret_cast<HWND*>(lParam);
-
-        DWORD pid = 0;
-        if (!GetWindowThreadProcessId(hwnd, &pid) ||
-            pid != GetCurrentProcessId()) {
-          return TRUE;
-        }
-
-        wchar_t className[32] = {};
-        if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
-          return TRUE;
-        }
-
-        if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
-          *out = hwnd;
-          return FALSE;
-        }
-
-        return TRUE;
-      },
-      reinterpret_cast<LPARAM>(&result));
-
-  return result;
-}
-
-static void TryAttachTaskbarWindow(HWND hwnd) {
+static bool IsCurrentProcessTaskbarClass(HWND hwnd, const wchar_t* wantedClass) {
   if (!hwnd) {
-    return;
+    return false;
   }
 
   DWORD pid = 0;
-  if (!GetWindowThreadProcessId(hwnd, &pid) ||
-      pid != GetCurrentProcessId()) {
-    return;
+  if (!GetWindowThreadProcessId(hwnd, &pid) || pid != GetCurrentProcessId()) {
+    return false;
   }
 
   wchar_t className[32] = {};
   if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
+    return false;
+  }
+
+  return _wcsicmp(className, wantedClass) == 0;
+}
+
+static void TryAttachPrimaryTaskbarWindow(HWND hwnd) {
+  if (!IsCurrentProcessTaskbarClass(hwnd, L"Shell_TrayWnd")) {
     return;
   }
 
-  if (_wcsicmp(className, L"Shell_TrayWnd") != 0) {
-    return;
-  }
-
-  if (g_state.taskbarWnd == hwnd) {
+  if (g_state.primaryTaskbarWnd == hwnd) {
     return;
   }
 
   if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
           hwnd, TaskbarSubclassProc, 0)) {
-    Wh_Log(L"SetWindowSubclassFromAnyThread failed for hwnd=%p", hwnd);
+    Wh_Log(L"Failed to subclass primary taskbar hwnd=%p", hwnd);
     return;
   }
 
-  g_state.taskbarWnd = hwnd;
+  g_state.primaryTaskbarWnd = hwnd;
   Wh_Log(L"Attached subclass to primary taskbar hwnd=%p", hwnd);
+  ApplyConfiguredMode();
+}
+
+static void TryAttachSecondaryTaskbarWindow(HWND hwnd) {
+  if (!IsCurrentProcessTaskbarClass(hwnd, L"Shell_SecondaryTrayWnd")) {
+    return;
+  }
+
+  if (IsSecondaryTaskbarWindow(hwnd)) {
+    return;
+  }
+
+  if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+          hwnd, TaskbarSubclassProc, 0)) {
+    Wh_Log(L"Failed to subclass secondary taskbar hwnd=%p", hwnd);
+    return;
+  }
+
+  g_state.secondaryTaskbarWnds.push_back(hwnd);
+  Wh_Log(L"Attached subclass to secondary taskbar hwnd=%p", hwnd);
   ApplyConfiguredMode();
 }
 
@@ -258,39 +323,48 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
   const bool textualClassName =
       ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
 
-  if (textualClassName &&
-      _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
-    Wh_Log(L"Shell_TrayWnd created: hwnd=%p", hwnd);
-    TryAttachTaskbarWindow(hwnd);
+  if (textualClassName) {
+    if (_wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
+      Wh_Log(L"Shell_TrayWnd created: hwnd=%p", hwnd);
+      TryAttachPrimaryTaskbarWindow(hwnd);
+    } else if (_wcsicmp(lpClassName, L"Shell_SecondaryTrayWnd") == 0) {
+      Wh_Log(L"Shell_SecondaryTrayWnd created: hwnd=%p", hwnd);
+      TryAttachSecondaryTaskbarWindow(hwnd);
+    }
   }
 
   return hwnd;
 }
 
+static void FindAndSubclassExistingTaskbars() {
+  EnumWindows(
+      [](HWND hwnd, LPARAM) -> BOOL {
+        TryAttachPrimaryTaskbarWindow(hwnd);
+        TryAttachSecondaryTaskbarWindow(hwnd);
+        return TRUE;
+      },
+      0);
 
-static void InstallTaskbarSubclass() {
-  if (g_state.taskbarWnd) {
-    return;
-  }
-
-  HWND hwnd = FindCurrentProcessPrimaryTaskbar();
-  if (!hwnd) {
+  if (!g_state.primaryTaskbarWnd) {
     Wh_Log(L"No primary taskbar in this explorer.exe instance yet");
-    return;
   }
-
-  TryAttachTaskbarWindow(hwnd);
 }
 
-
-static void RemoveTaskbarSubclass() {
-  if (g_state.taskbarWnd) {
+static void RemoveTaskbarSubclasses() {
+  if (g_state.primaryTaskbarWnd) {
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-        g_state.taskbarWnd,
+        g_state.primaryTaskbarWnd,
         TaskbarSubclassProc);
   }
 
-  g_state.taskbarWnd = nullptr;
+  for (HWND hwnd : g_state.secondaryTaskbarWnds) {
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+        hwnd,
+        TaskbarSubclassProc);
+  }
+
+  g_state.primaryTaskbarWnd = nullptr;
+  g_state.secondaryTaskbarWnds.clear();
 }
 
 static void ReadSettings() {
@@ -359,7 +433,7 @@ BOOL Wh_ModInit() {
   return TRUE;
 }
 
-void Wh_ModAfterInit() { InstallTaskbarSubclass(); }
+void Wh_ModAfterInit() { FindAndSubclassExistingTaskbars(); }
 
 void Wh_ModSettingsChanged() {
   ReadSettings();
@@ -368,5 +442,5 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModBeforeUninit() {
   ForceTaskbarTopStateBeforeUnload();
-  RemoveTaskbarSubclass();
+  RemoveTaskbarSubclasses();
 }
