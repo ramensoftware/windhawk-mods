@@ -48,8 +48,8 @@ where the mouse cursor is located.
 ## Changelog
 
 ### 2026-03-30 (v1.3.260330)
-- Improved window control selection: automatically choose ShowWindowAsync or PostMessage based on admin privileges and whether modal child windows exist
-- 改进窗口控制选择：根据管理员权限与是否存在模态子窗口，自动选择 ShowWindowAsync 或 PostMessage
+- Improved window control: try ShowWindowAsync first, then fall back to PostMessage (WM_SYSCOMMAND) if it fails
+- 改进窗口控制：优先尝试 ShowWindowAsync，失败时回退到 PostMessage（WM_SYSCOMMAND）
 - Added custom ignored windows support by class name or window title
 - 新增自定义忽略窗口支持（按类名或窗口标题）
 
@@ -125,8 +125,6 @@ struct
     std::vector<IgnoreRule> ignoreRules;
 } g_settings;
 
-// 仅在模块启动时检查一次管理员状态，避免每次窗口操作都调用 IsUserAnAdmin。
-bool g_isUserAdmin = false;
 
 #define HOTKEY_ID_WIN_D 0x201
 class WindShowDesktop
@@ -240,23 +238,21 @@ class WindShowDesktop
         return std::string(windowTitle);
     }
 
-    // 根据管理员权限自动选择窗口最小化/还原的实现方式
+    // 窗口最小化/还原：优先 ShowWindowAsync，失败后回退到 PostMessage
     static BOOL controlWindow(HWND hwnd, bool restore)
     {
         if(IsWindowEnabled(hwnd))
         {
             return ::PostMessage(hwnd, WM_SYSCOMMAND, restore ? SC_RESTORE : SC_MINIMIZE, 0);
         }
+        
+        if (::ShowWindowAsync(hwnd, restore ? SW_RESTORE : SW_MINIMIZE))
+        {
+            return TRUE;
+        }
 
-        // 管理员：ShowWindowAsync；非管理员：PostMessage
-        if (g_isUserAdmin)
-        {
-            return ::ShowWindowAsync(hwnd, restore ? SW_RESTORE : SW_MINIMIZE);
-        }
-        else
-        {
-            return ::PostMessage(hwnd, WM_SYSCOMMAND, restore ? SC_RESTORE : SC_MINIMIZE, 0);
-        }
+        log("ShowWindowAsync failed for 0x{:x}, falling back to PostMessage", (uintptr_t)hwnd);
+        return ::PostMessage(hwnd, WM_SYSCOMMAND, restore ? SC_RESTORE : SC_MINIMIZE, 0);
     }
 
     // 判断是否应该忽略此窗口（置顶且无标题栏的工具窗口）
@@ -407,7 +403,7 @@ public:
                 if (!curIt->ownerWnd)
                     listWnd.erase(curIt);
             }
-            
+
             for (auto &rc : vecCur)
             {
                 if (!IsWindowVisible(rc.wnd) || IsIconic(rc.wnd))
@@ -514,11 +510,6 @@ void LoadSettings()
 BOOL Wh_ModInit()
 {
     Wh_Log(L"init");
-
-    g_isUserAdmin = !!IsUserAnAdmin();
-    log("Startup admin check: IsUserAnAdmin={} -> window control method: {}",
-        g_isUserAdmin ? "true" : "false",
-        g_isUserAdmin ? "ShowWindowAsync" : "PostMessage(WM_SYSCOMMAND)");
 
     LoadSettings();
 
