@@ -2,10 +2,11 @@
 // @id              translucent-flyouts-controller
 // @name            Translucent Flyouts Controller
 // @description     Controls TranslucentFlyouts settings through Windhawk (registry bridge)
-// @version         1.0.0
+// @version         1.0.1
 // @author          GID0317
 // @github          https://github.com/GID0317
 // @include         windhawk.exe
+// @compilerOptions -lwtsapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -726,6 +727,7 @@ Both projects are well maintained and worth exploring if you want to understand 
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <CommCtrl.h>
+#include <wtsapi32.h>
 #include <cstdint>
 #include <cstdlib>
 #include <cwctype>
@@ -1844,6 +1846,21 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
 
 BOOL WhTool_ModInit()
 {
+    WTS_CONNECTSTATE_CLASS* pConnectState = nullptr;
+    DWORD bytesReturned;
+    bool isActive = false;
+    if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE,
+                                    WTS_CURRENT_SESSION, WTSConnectState,
+                                    (LPWSTR*)&pConnectState, &bytesReturned) &&
+        pConnectState) {
+        isActive = (*pConnectState == WTSActive);
+        WTSFreeMemory(pConnectState);
+    }
+    if (!isActive) {
+        Wh_Log(L"Tool process: session is not active, skipping");
+        return FALSE;
+    }
+
     Wh_Log(L"Tool process: applying TranslucentFlyouts settings");
     ApplySettingsOnceInToolProcess(true);
 
@@ -1866,6 +1883,12 @@ void WINAPI EntryPoint_Hook()
 
 BOOL Wh_ModInit()
 {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
