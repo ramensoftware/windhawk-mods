@@ -11388,6 +11388,34 @@
                 "version": "3.1"
             }
         },
+        "word-mathtype-dark-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774906294000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774906294000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Joe Ye",
+                "compilerOptions": "-lgdi32 -lshlwapi",
+                "description": "解决 Word 深色模式下 MathType 公式的可读性问题",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "winword.exe"
+                ],
+                "name": "Word MathType 公式深色模式修复",
+                "version": "1.0.0"
+            }
+        },
         "word-pdf-lossless-export": {
             "details": {
                 "defaultSorting": 700,

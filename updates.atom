@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-30T20:02:36.000Z</updated>
+    <updated>2026-03-30T21:31:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word MathType Dark Mode Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/word-mathtype-dark-fix#922e3390d9cd03912080fbc81903590021ed5377</id>
+        <link href="https://windhawk.net/mods/word-mathtype-dark-fix"/>
+        <updated>2026-03-30T21:31:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wordmathtypedarkmodefix">Word MathType Dark Mode Fix</h1>
+<p>This mod fixes the broken dark mode rendering of MathType Equations in Word and solves the unreadable black-on-black issue by intercepting the dark mode state change and dynamically adjusting GDI colors for dark mode formula rendering.</p>
+<p><em>Note: this mod needs pdb symbol of <code>wwlib.dll</code> to work. The symbol file is expected to be a bit large (~90MB in size). Windhawk will download it automatically when you launch Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (wwlib.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and <strong>relaunch Word AS ADMINISTRATOR at least once</strong> after it finishes, this is to write symbols being used to SymbolCache, which speeds up launching later on.</em></p>
+<h2 id="note">⚠️ Note:</h2>
+<ul>
+<li>It is advised to <strong>turn off automatic updates</strong> for Office applications, as PDB may need to be downloaded every time after updates.</li>
+<li>Please relaunch Word as administrator <em>at least once</em> after installing the mod and wait for symbol download to complete, this is to write symbols being used to SymbolCache, which speeds up launching later on.</li>
+</ul>
+<p><em>This mod is part of <strong>The Ultimate Office Dark Mode Project</strong></em></p>
+<h1 id="beforeoriginalaftercomparison">Before-Original-After Comparison</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-mathtype-dark-fix-before-original-after.png" alt="Before-Original-After" /></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[HotCorner Hotkeys 3.3]]></title>
         <id>https://windhawk.net/mods/hotcorner-hotkeys#7a9ea32a9cd28fd914ba4c31ab7895a5270f8a67</id>
@@ -362,26 +383,6 @@ Each button has three fields:</p>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force Kill Active Window 1.0]]></title>
-        <id>https://windhawk.net/mods/force-kill-active-window#e3d4505be854f2fee52fadd2bf1d05b7aff4712e</id>
-        <link href="https://windhawk.net/mods/force-kill-active-window"/>
-        <updated>2026-03-28T13:37:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="forcekillactivewindow">Force Kill Active Window</h1>
-<p>Instantly terminate any frozen or unresponsive application with a keyboard shortcut.</p>
-<p>By default, pressing <strong>Ctrl+Alt+F4</strong> will execute a hard system kill on the currently active foreground window, bypassing the standard Windows polite closure request.</p>
-<h3 id="warning">⚠️ Warning</h3>
-<p>This performs a hard system termination (<code>TerminateProcess</code>). The target application will <strong>not</strong> be given a chance to save your work. Use strictly as a last resort.</p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Customizable Hotkey:</strong> Change the trigger shortcut in the settings. Updates apply instantly.</li>
-<li><strong>Process Blacklist:</strong> Define apps (like <code>winword.exe</code> or <code>chrome.exe</code>) that the mod is forbidden from killing to protect your most critical work.</li>
-</ul>]]></content>
-        <author>
-            <name>vfxturjo</name>
-            <uri>https://github.com/zunaidFarouque</uri>
         </author>
     </entry>
 </feed>
