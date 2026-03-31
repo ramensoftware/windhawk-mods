@@ -568,10 +568,7 @@ time_t UpdateThemeState(bool applyNow) {
         if (locSuccess || g_settings.scheduleMode == ScheduleMode::CustomCoordinates) {
             PCWSTR sourceStr = (g_settings.scheduleMode == ScheduleMode::CustomCoordinates) ? L"CustomCoordinates" : (locSuccess ? L"LocationService (Fresh)" : L"LocationService (Cached)");
             Wh_Log(L"Active Schedule (%s): %f, %f", sourceStr, lat, lng);
-            Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d",
-                   sourceStr,
-                   lightST.wHour, lightST.wMinute, lightST.wSecond,
-                   darkST.wHour, darkST.wMinute, darkST.wSecond);
+            Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d", sourceStr, lightST.wHour, lightST.wMinute, lightST.wSecond, darkST.wHour, darkST.wMinute, darkST.wSecond);
         }
 
         if (g_settings.scheduleMode == ScheduleMode::LocationService && !locSuccess) {
