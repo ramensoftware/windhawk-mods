@@ -6,6 +6,7 @@
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         explorer.exe
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
