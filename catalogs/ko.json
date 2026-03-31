@@ -9775,7 +9775,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1774858236000,
+                "updated": 1774939634000,
                 "users": 60
             },
             "metadata": {
@@ -9787,7 +9787,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Translucent Flyouts Controller",
-                "version": "1.0.1"
+                "version": "1.1.0"
             }
         },
         "translucent-windows": {

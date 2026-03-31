@@ -1,3 +1,7 @@
+## 1.1.0 ([Mar 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0b1c82f5251ea7dca29db56d92855ade37ca95bb/mods/translucent-flyouts-controller.wh.cpp))
+
+Compatibility for the Translucent Flyouts Config app and support for block lists in Advanced Functions controls
+
 ## 1.0.1 ([Mar 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f3fe1074970431befb963fe69cc1ca2fa7e22cdd/mods/translucent-flyouts-controller.wh.cpp))
 
 Fix loading hang by running tool mod only for the active user session
