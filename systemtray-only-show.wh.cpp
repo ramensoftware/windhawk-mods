@@ -4,10 +4,10 @@
 // @name:ja-JP      システムトレイのみ表示
 // @description     Hides everything except the system tray, turning the taskbar into a small floating tray in the bottom-right corner. Works standalone without any third-party dock. (Windows 11 25H2)
 // @description:ja-JP システムトレイ以外を非表示にし、タスクバーを右下角の小さなフローティングトレイに変換します。サードパーティのドックなしで単独動作します。（Windows 11 25H2）
-// @version         0.14
+// @version         0.15
 // @author          roflsunriz
 // @github          https://github.com/roflsunriz
-// @license         MIT
+// @license         GPL-3.0-or-later
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
@@ -126,7 +126,6 @@ struct {
 // Global state
 // ---------------------------------------------------------------------------
 
-std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
 std::atomic<bool> g_trayOnlyMode;
 
@@ -153,11 +152,16 @@ DWORD g_lastDiagLogTick = 0;
 DWORD g_lastAppBarSuppressLogTick = 0;
 DWORD g_lastAppBarRemoveTick = 0;
 DWORD g_lastWorkAreaApplyTick = 0;
+UINT_PTR g_initialApplyRetryTimerHandle = 0;
+int g_initialApplyRetryCount = 0;
 HHOOK g_mouseHook = nullptr;
 std::atomic<bool> g_showRequested{false};
 DWORD g_lastXamlReapplyTick = 0;
 
 constexpr UINT kAutoHidePollMs = 100;
+constexpr UINT_PTR kInitialApplyRetryTimerId = 1;
+constexpr UINT kInitialApplyRetryDelayMs = 500;
+constexpr int kInitialApplyMaxRetries = 20;
 constexpr int kHotZoneHeight = 48;
 constexpr int kTrayDefaultHeight = 48;
 constexpr int kTrayMinWidth = 200;
@@ -841,6 +845,47 @@ bool RefreshTrayMetricsFromXaml(XamlRoot xamlRoot) {
     return changed;
 }
 
+bool IsTrayVisualTreeReady(XamlRoot xamlRoot) {
+    FrameworkElement xamlRootContent =
+        xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
+    if (!xamlRootContent) {
+        return false;
+    }
+
+    return !!FindDescendantByName(xamlRootContent, L"SystemTrayFrameGrid");
+}
+
+void StopInitialApplyRetryTimer(HWND hTaskbarWnd) {
+    if (!g_initialApplyRetryTimerHandle || !hTaskbarWnd) {
+        return;
+    }
+
+    KillTimer(hTaskbarWnd, kInitialApplyRetryTimerId);
+    g_initialApplyRetryTimerHandle = 0;
+    g_initialApplyRetryCount = 0;
+}
+
+void StartInitialApplyRetryTimer(HWND hTaskbarWnd, PCWSTR reason) {
+    if (!hTaskbarWnd || g_unloading.load() || g_trayOnlyMode.load()) {
+        return;
+    }
+
+    if (g_initialApplyRetryTimerHandle) {
+        return;
+    }
+
+    g_initialApplyRetryCount = 0;
+    g_initialApplyRetryTimerHandle =
+        SetTimer(hTaskbarWnd, kInitialApplyRetryTimerId,
+                 kInitialApplyRetryDelayMs, nullptr);
+    if (g_initialApplyRetryTimerHandle) {
+        Wh_Log(L"Scheduled initial tray apply retry (%s)", reason);
+    } else {
+        Wh_Log(L"Failed to schedule initial tray apply retry (%s): err=%lu",
+               reason, GetLastError());
+    }
+}
+
 bool IsAutoHideTriggerMouseMessage(WPARAM message) {
     switch (message) {
         case WM_MOUSEMOVE:
@@ -885,6 +930,7 @@ void UnregisterTaskbarTouchWindow(HWND hWnd) {
 
 void ShowTrayWindow();
 void TransformToTrayOnly(HWND hTaskbarWnd);
+bool TryApplySettingsFromTaskbarThread(HWND hTaskbarWnd, bool logReadyState);
 
 // ---------------------------------------------------------------------------
 // Auto-hide implementation
@@ -1226,9 +1272,14 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     switch (Msg) {
         case WM_NCCREATE:
             g_hTaskbarWnd = hWnd;
+            StartInitialApplyRetryTimer(hWnd, L"WM_NCCREATE");
             break;
 
         case WM_SHOWWINDOW:
+            if (wParam != FALSE && !g_trayOnlyMode) {
+                StartInitialApplyRetryTimer(hWnd, L"WM_SHOWWINDOW");
+            }
+
             if (wParam == FALSE) {
                 if (g_trayOnlyMode) {
                     Wh_Log(L"Blocked external hide request");
@@ -1239,6 +1290,24 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                 }
                 Wh_Log(L"Hide request intercepted, transforming to tray-only");
                 TransformToTrayOnly(hWnd);
+                return 0;
+            }
+            break;
+
+        case WM_TIMER:
+            if (wParam == kInitialApplyRetryTimerId) {
+                if (TryApplySettingsFromTaskbarThread(hWnd,
+                                                      g_initialApplyRetryCount == 0)) {
+                    StopInitialApplyRetryTimer(hWnd);
+                    return 0;
+                }
+
+                g_initialApplyRetryCount++;
+                if (g_initialApplyRetryCount >= kInitialApplyMaxRetries) {
+                    StopInitialApplyRetryTimer(hWnd);
+                    Wh_Log(L"Initial tray apply timed out after %d retries",
+                           kInitialApplyMaxRetries);
+                }
                 return 0;
             }
             break;
@@ -1315,6 +1384,10 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                 g_inOwnSetWindowPos = false;
             }
             break;
+
+        case WM_DESTROY:
+            StopInitialApplyRetryTimer(hWnd);
+            break;
     }
 
     return TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag);
@@ -1358,37 +1431,6 @@ bool HookTaskbarDllSymbols() {
     };
 
     return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
-}
-
-// ---------------------------------------------------------------------------
-// Taskbar.View.dll load detection
-// ---------------------------------------------------------------------------
-
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
-    if (!module) {
-        module = GetModuleHandle(L"ExplorerExtensions.dll");
-    }
-    return module;
-}
-
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
-        Wh_Log(L"Loaded %s", lpLibFileName);
-    }
-}
-
-using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-LoadLibraryExW_t LoadLibraryExW_Original;
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
-                                    HANDLE hFile,
-                                    DWORD dwFlags) {
-    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module) {
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
-    }
-    return module;
 }
 
 bool HookShell32Functions() {
@@ -1471,6 +1513,23 @@ void ApplySettings(HWND hTaskbarWnd) {
         nullptr);
 }
 
+bool TryApplySettingsFromTaskbarThread(HWND hTaskbarWnd, bool logReadyState) {
+    if (!hTaskbarWnd) {
+        return false;
+    }
+
+    XamlRoot xamlRoot = GetTaskbarXamlRoot(hTaskbarWnd);
+    if (!IsTrayVisualTreeReady(xamlRoot)) {
+        if (logReadyState) {
+            Wh_Log(L"Taskbar visual tree not ready yet");
+        }
+        return false;
+    }
+
+    ApplySettingsFromTaskbarThread();
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
@@ -1512,35 +1571,17 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (GetTaskbarViewModuleHandle()) {
-        g_taskbarViewDllLoaded = true;
-    } else {
-        Wh_Log(L"Taskbar view module not loaded yet");
-
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-        auto pKernelBaseLoadLibraryExW =
-            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
-                                                      "LoadLibraryExW");
-        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
-    }
-
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!g_taskbarViewDllLoaded) {
-        if (GetTaskbarViewModuleHandle()) {
-            g_taskbarViewDllLoaded.exchange(true);
-        }
-    }
-
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
-        ApplySettings(hTaskbarWnd);
+        if (!TryApplySettingsFromTaskbarThread(hTaskbarWnd, true)) {
+            StartInitialApplyRetryTimer(hTaskbarWnd, L"Wh_ModAfterInit");
+        }
     }
 }
 
@@ -1552,6 +1593,7 @@ void Wh_ModBeforeUninit() {
 
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
+        StopInitialApplyRetryTimer(hTaskbarWnd);
         ApplySettings(hTaskbarWnd);
     }
 }
@@ -1567,6 +1609,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
+        StopInitialApplyRetryTimer(hTaskbarWnd);
         ApplySettings(hTaskbarWnd);
     }
 
