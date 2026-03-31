@@ -242,42 +242,25 @@ static int LVLineH(HWND h) {
 }
 
 // ---------------------------------------------------------------------------
-// Globals (declared early — needed by UIA lazy init)
-// ---------------------------------------------------------------------------
-
-static CRITICAL_SECTION g_cs;
-
-// ---------------------------------------------------------------------------
 // UI Automation (lazy init + pattern caching)
 //
-// g_uia is a process-wide singleton protected by g_cs.
-// COM is initialized per-thread; we track the result to know whether
-// to call CoUninitialize.
+// g_uia is per-thread (thread_local) because COM STA objects should not
+// be shared across apartment threads.  COM is initialized once per thread
+// and kept alive for the lifetime of the thread — CoUninitialize is not
+// called, which is acceptable:
+// https://github.com/microsoft/windows-rs/issues/1169#issuecomment-925107412
 // ---------------------------------------------------------------------------
 
-static IUIAutomation* g_uia = nullptr;
-static bool g_uiaInit = false;
-static thread_local bool g_comInitialized = false;
+static thread_local IUIAutomation* g_uia = nullptr;
+static thread_local bool g_uiaInit = false;
 
 static IUIAutomation* UIA() {
-    // Ensure COM is initialized on the calling thread.
-    if (!g_comInitialized) {
-        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        g_comInitialized = SUCCEEDED(hr);
-    }
-
-    // Protect singleton creation. CRITICAL_SECTION is re-entrant on Windows,
-    // so this is safe even if the caller already holds g_cs.
-    EnterCriticalSection(&g_cs);
-    if (!g_uiaInit) {
-        g_uiaInit = true;
-        CoCreateInstance(__uuidof(CUIAutomation), nullptr,
-                         CLSCTX_INPROC_SERVER,
-                         __uuidof(IUIAutomation), (void**)&g_uia);
-    }
-    IUIAutomation* result = g_uia;
-    LeaveCriticalSection(&g_cs);
-    return result;
+    if (g_uiaInit) return g_uia;
+    g_uiaInit = true;
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
+                     __uuidof(IUIAutomation), (void**)&g_uia);
+    return g_uia;
 }
 
 static IUIAutomationScrollPattern* GetPattern(HWND h) {
@@ -335,6 +318,7 @@ struct State {
     bool uiaOk = true;
 };
 
+static CRITICAL_SECTION g_cs;
 static std::map<HWND, State> g_st;
 static UINT g_sysLines = 3;
 
@@ -672,8 +656,9 @@ void Wh_ModUninit() {
         Release(p.second);
     }
     g_st.clear();
-    if (g_uia) { g_uia->Release(); g_uia = nullptr; }
-    g_uiaInit = false;
     LeaveCriticalSection(&g_cs);
     DeleteCriticalSection(&g_cs);
+    // Note: g_uia is thread_local and not released here — each thread's
+    // IUIAutomation instance lives until the process exits.  The cached
+    // ScrollPattern pointers in g_st are explicitly released above.
 }
