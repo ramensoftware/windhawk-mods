@@ -4,7 +4,7 @@
 // @description     A native-style music ticker with multiple media controls.
 // @version         1.0.0
 // @author          Messij
-// @github          https://github.com/Messij/Windhawk---Multiple-Taskbar-Music-Lounge
+// @github          https://github.com/Messij
 // @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus -lshell32
 // ==/WindhawkMod==
