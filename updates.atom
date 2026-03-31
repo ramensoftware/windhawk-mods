@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-03-31T08:06:27.000Z</updated>
+    <updated>2026-03-31T08:10:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.0]]></title>
+        <id>https://windhawk.net/mods/smooth-scroll-win32#6d6c2dd24ba263b22d599c4890233c2ae2f6a262</id>
+        <link href="https://windhawk.net/mods/smooth-scroll-win32"/>
+        <updated>2026-03-31T08:10:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="smoothscrollforwin32">Smooth Scroll for Win32</h1>
+<h2 id="english">English</h2>
+<p>Adds smooth scrolling with spring physics to legacy Win32 applications.
+Only modifies legacy controls — modern WinUI windows are not affected.</p>
+<h3 id="scrollmodesautodetectedperwindow">Scroll modes (auto-detected per window)</h3>
+<p>| Control | Method | Granularity |
+|---|---|---|
+| SysListView32 | LVM<em>SCROLL | Pixel |
+| DirectUIHWND | UIA SetScrollPercent | Continuous |
+| SysTreeView32, Edit, etc | WM</em>VSCROLL | Line |
+| Unknown / modern | Passthrough | Not modified |</p>
+<h3 id="addingmoreprograms">Adding more programs</h3>
+<p>Go to the mod's <strong>Advanced</strong> tab in Windhawk and add custom
+<code>@include</code> entries (e.g. <code>totalcmd.exe</code>). The mod auto-detects
+scrollable controls in any Win32 application. Modern WinUI windows
+inside any included process are automatically skipped.</p>
+<hr />
+<h2 id="portugus">Português</h2>
+<p>Adiciona rolagem suave com física de mola a aplicativos Win32 antigos.
+Só modifica controles legados. Janelas WinUI não são afetadas.</p>
+<h3 id="adicionandomaisprogramas">Adicionando mais programas</h3>
+<p>Vá na aba <strong>Avançado</strong> do mod no Windhawk e adicione entradas
+<code>@include</code> (ex: <code>totalcmd.exe</code>). O mod detecta automaticamente
+controles roláveis em qualquer aplicativo Win32.</p>
+<hr />
+<h2 id="espaol">Español</h2>
+<p>Añade desplazamiento suave con física de resorte a las aplicaciones Win32 antiguas.
+Solo modifica los controles antiguos. Las ventanas de WinUI no se ven afectadas.</p>
+<h3 id="agregarmasprogramas">Agregar mas programas</h3>
+<p>Ve a la pestaña <strong>Avanzado</strong> del mod en Windhawk y añade entradas:
+<code>@include</code> (p. ej., <code>totalcmd.exe</code>). El mod detecta automáticamente
+los controles desplazables en cualquier aplicación Win32.</p>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Z-Order Override 0.7]]></title>
         <id>https://windhawk.net/mods/taskbar-z-order-override#0560f4ebd214840acc9fb6c1eaed7dd4cfbd839f</id>
@@ -355,28 +397,6 @@ remainder; built-in aliases: gpt, yt, google, copilot, x, reddit, translate</li>
         <author>
             <name>Acercandr0</name>
             <uri>https://github.com/Acercandr0</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DirectWrite Font Fallback Override 1.0]]></title>
-        <id>https://windhawk.net/mods/dwrite-font-fallback-override#9a65e3674e7c1c8f8265f346bd561a76bce6667c</id>
-        <link href="https://windhawk.net/mods/dwrite-font-fallback-override"/>
-        <updated>2026-03-28T17:25:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="directwritefontfallbackoverride">DirectWrite Font Fallback Override</h1>
-<p>Hooks DirectWrite's font fallback system to override font selection for specific
-Unicode character ranges across all applications.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Global font fallback override</li>
-<li>Per-character-range customization</li>
-<li>Real-time configuration updates</li>
-</ul>
-<h2 id="usage">Usage</h2>
-<p>Configure fallback rules in settings to map character ranges to specific fonts.
-For example, force all CJK characters (U+4E00-U+9FFF) to use "Microsoft YaHei".</p>]]></content>
-        <author>
-            <name>Muhammad Ragib Hasin</name>
-            <uri>https://github.com/RagibHasin</uri>
         </author>
     </entry>
 </feed>

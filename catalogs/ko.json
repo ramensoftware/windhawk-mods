@@ -7575,6 +7575,38 @@
                 "version": "1.0.0"
             }
         },
+        "smooth-scroll-win32": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774944629000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774944629000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "crazyboyybs",
+                "compilerOptions": "-luser32 -lcomctl32 -lole32 -loleaut32",
+                "description": "Adds smooth scrolling with spring physics to legacy Win32 apps",
+                "github": "https://github.com/crazyboyybs",
+                "include": [
+                    "explorer.exe",
+                    "regedit.exe",
+                    "mmc.exe",
+                    "control.exe",
+                    "wordpad.exe"
+                ],
+                "name": "Smooth Scroll for Win32",
+                "version": "1.0.0"
+            }
+        },
         "spoof-light-dark-theme": {
             "details": {
                 "defaultSorting": 2912,
