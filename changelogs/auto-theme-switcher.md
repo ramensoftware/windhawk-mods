@@ -1,3 +1,8 @@
+## 1.3.0 ([Mar 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8af6954b1bbd43fae8577e287d460d19c9983500/mods/auto-theme-switcher.wh.cpp))
+
+- Added Hotkey support
+- Added Hotkey only scheduling mode
+
 ## 1.2.0 ([Mar 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ecdc1c019b82241836f41cdf8a8ec62c5c91cccd/mods/auto-theme-switcher.wh.cpp))
 
 - Fixed issues with Hibernation

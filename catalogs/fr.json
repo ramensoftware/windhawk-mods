@@ -323,19 +323,20 @@
                     14
                 ],
                 "ratingUsers": 19,
-                "updated": 1773001133000,
+                "updated": 1774964112000,
                 "users": 471
             },
             "metadata": {
                 "author": "tinodin",
                 "compilerOptions": "-lole32 -loleaut32 -lwindowsapp -lruntimeobject -lkernel32 -luser32 -lshell32",
-                "description": "Automatically switch between light and dark appearance/wallpapers/themes based on a custom hours/sunset to sunrise with custom script support",
+                "description": "Automatically switch between light and dark appearance/wallpapers/themes based on a schedule with hotkey and custom script support",
                 "github": "https://github.com/tinodin",
                 "include": [
                     "explorer.exe"
                 ],
+                "license": "GPL-3.0",
                 "name": "Auto Theme Switcher",
-                "version": "1.2.0"
+                "version": "1.3.0"
             }
         },
         "auto-time-sync-on-startup": {
