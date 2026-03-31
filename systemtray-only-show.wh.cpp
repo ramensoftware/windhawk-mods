@@ -866,7 +866,7 @@ void StopInitialApplyRetryTimer(HWND hTaskbarWnd) {
 }
 
 void StartInitialApplyRetryTimer(HWND hTaskbarWnd, PCWSTR reason) {
-    if (!hTaskbarWnd || g_unloading.load() || g_trayOnlyMode.load()) {
+    if (!hTaskbarWnd || g_unloading.load()) {
         return;
     }
 
@@ -930,7 +930,7 @@ void UnregisterTaskbarTouchWindow(HWND hWnd) {
 
 void ShowTrayWindow();
 void TransformToTrayOnly(HWND hTaskbarWnd);
-bool TryApplySettingsFromTaskbarThread(HWND hTaskbarWnd, bool logReadyState);
+void ApplySettingsFromTaskbarThread();
 
 // ---------------------------------------------------------------------------
 // Auto-hide implementation
@@ -1183,10 +1183,15 @@ void TransformToTrayOnly(HWND hTaskbarWnd) {
     g_desiredTrayHeight = kTrayDefaultHeight;
     g_desiredTrayWidth = g_screenRight - g_screenLeft;
     if (xamlRoot) {
-        ApplyTrayOnlyStyle(xamlRoot);
-        RefreshTrayMetricsFromXaml(xamlRoot);
+        if (ApplyTrayOnlyStyle(xamlRoot)) {
+            RefreshTrayMetricsFromXaml(xamlRoot);
+            StopInitialApplyRetryTimer(hTaskbarWnd);
+        } else {
+            StartInitialApplyRetryTimer(hTaskbarWnd, L"TransformToTrayOnly");
+        }
     } else {
         NormalizeTrayMetrics();
+        StartInitialApplyRetryTimer(hTaskbarWnd, L"TransformToTrayOnly");
     }
 
     g_trayOnlyMode = true;
@@ -1296,10 +1301,15 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
 
         case WM_TIMER:
             if (wParam == kInitialApplyRetryTimerId) {
-                if (TryApplySettingsFromTaskbarThread(hWnd,
-                                                      g_initialApplyRetryCount == 0)) {
+                XamlRoot xamlRoot = GetTaskbarXamlRoot(hWnd);
+                if (xamlRoot && IsTrayVisualTreeReady(xamlRoot)) {
+                    ApplySettingsFromTaskbarThread();
                     StopInitialApplyRetryTimer(hWnd);
                     return 0;
+                }
+
+                if (g_initialApplyRetryCount == 0) {
+                    Wh_Log(L"Taskbar visual tree not ready yet");
                 }
 
                 g_initialApplyRetryCount++;
@@ -1513,23 +1523,6 @@ void ApplySettings(HWND hTaskbarWnd) {
         nullptr);
 }
 
-bool TryApplySettingsFromTaskbarThread(HWND hTaskbarWnd, bool logReadyState) {
-    if (!hTaskbarWnd) {
-        return false;
-    }
-
-    XamlRoot xamlRoot = GetTaskbarXamlRoot(hTaskbarWnd);
-    if (!IsTrayVisualTreeReady(xamlRoot)) {
-        if (logReadyState) {
-            Wh_Log(L"Taskbar visual tree not ready yet");
-        }
-        return false;
-    }
-
-    ApplySettingsFromTaskbarThread();
-    return true;
-}
-
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
@@ -1579,9 +1572,7 @@ void Wh_ModAfterInit() {
 
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
-        if (!TryApplySettingsFromTaskbarThread(hTaskbarWnd, true)) {
-            StartInitialApplyRetryTimer(hTaskbarWnd, L"Wh_ModAfterInit");
-        }
+        ApplySettings(hTaskbarWnd);
     }
 }
 
