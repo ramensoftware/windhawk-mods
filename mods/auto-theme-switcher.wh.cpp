@@ -940,6 +940,7 @@ static void RegisterHotkey(HWND hWnd) {
     if (g_hotkeyRegistered) {
         UnregisterHotKey(hWnd, kToggleHotkeyId);
         g_hotkeyRegistered = false;
+        Wh_Log(L"Hotkey unregistered.");
     }
 
     if (g_settings.hotkeyString.empty()) {
@@ -987,6 +988,7 @@ DWORD WINAPI ThemeScheduler(LPVOID) {
         if (g_hotkeyRegistered) {
             UnregisterHotKey(nullptr, kToggleHotkeyId);
             g_hotkeyRegistered = false;
+            Wh_Log(L"Hotkey unregistered.");
         }
         Wh_Log(L"Theme scheduler stopped.");
         return 0;
@@ -1069,6 +1071,7 @@ DWORD WINAPI ThemeScheduler(LPVOID) {
     if (g_hotkeyRegistered) {
         UnregisterHotKey(nullptr, kToggleHotkeyId);
         g_hotkeyRegistered = false;
+        Wh_Log(L"Hotkey unregistered.");
     }
 
     Wh_Log(L"Theme scheduler stopped.");
