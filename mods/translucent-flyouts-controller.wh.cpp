@@ -657,24 +657,21 @@
   $name: Controller
 
 - advancedFunctions:
-  - enabled: false
-    $name: Enable Advanced Functions
-    $description: Turn on advanced process block/disabled controls. These options are for advanced users only
   - processBlockList: ""
     $name: Process Block List
-    $description: Advanced users only. Applied only when Enable Advanced Functions is on. Comma, semicolon, or newline separated process names to block TranslucentFlyouts loading (for example explorer.exe). This can require restarting Translucent Flyouts or Windows and may cause high CPU usage if misconfigured
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to block TranslucentFlyouts loading (for example explorer.exe). This can require restarting Translucent Flyouts or Windows and may cause high CPU usage if misconfigured
   - processDisabledList: ""
     $name: Process Disabled List (Global)
-    $description: Advanced users only. Applied only when Enable Advanced Functions is on. Comma, semicolon, or newline separated process names to disable all effects globally (for example app.exe)
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to disable all effects globally (for example app.exe)
   - menuProcessDisabledList: ""
     $name: Process Disabled List (Menu)
-    $description: Advanced users only. Applied only when Enable Advanced Functions is on. Comma, semicolon, or newline separated process names to disable only Menu effects
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to disable only Menu effects
   - tooltipProcessDisabledList: ""
     $name: Process Disabled List (Tooltip)
-    $description: Advanced users only. Applied only when Enable Advanced Functions is on. Comma, semicolon, or newline separated process names to disable only Tooltip effects
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to disable only Tooltip effects
   - dropDownProcessDisabledList: ""
     $name: Process Disabled List (DropDown)
-    $description: Advanced users only. Applied only when Enable Advanced Functions is on. Comma, semicolon, or newline separated process names to disable only DropDown effects
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to disable only DropDown effects
   $name: Advanced Functions
 */
 // ==/WindhawkModSettings==
@@ -882,7 +879,6 @@ struct Settings {
     int tooltipMarginTop = 6;
     int tooltipMarginBottom = 6;
     int tooltipDisabled = 2;
-    bool advancedFunctionsEnabled = false;
     std::vector<std::wstring> processBlockList;
     std::vector<std::wstring> processDisabledList;
     std::vector<std::wstring> menuProcessDisabledList;
@@ -1780,14 +1776,6 @@ static void LoadSettings()
     g_settings.menuProcessDisabledList = ParseProcessListSettingWithLegacy(L"advancedFunctions.menuProcessDisabledList", L"controller.menuProcessDisabledList");
     g_settings.tooltipProcessDisabledList = ParseProcessListSettingWithLegacy(L"advancedFunctions.tooltipProcessDisabledList", L"controller.tooltipProcessDisabledList");
     g_settings.dropDownProcessDisabledList = ParseProcessListSettingWithLegacy(L"advancedFunctions.dropDownProcessDisabledList", L"controller.dropDownProcessDisabledList");
-    const bool advancedFunctionsExplicitlyEnabled = (Wh_GetIntSetting(L"advancedFunctions.enabled") != 0);
-    const bool advancedFunctionsHasEntries =
-      !g_settings.processBlockList.empty() ||
-      !g_settings.processDisabledList.empty() ||
-      !g_settings.menuProcessDisabledList.empty() ||
-      !g_settings.tooltipProcessDisabledList.empty() ||
-      !g_settings.dropDownProcessDisabledList.empty();
-    g_settings.advancedFunctionsEnabled = advancedFunctionsExplicitlyEnabled || advancedFunctionsHasEntries;
     g_settings.resetAction = GetMappedIntSetting(L"controller.resetAction", kResetAction, _countof(kResetAction), 0);
 
     g_settings.confirmReset = (Wh_GetIntSetting(L"controller.confirmReset") != 0);
@@ -2081,20 +2069,11 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
     WriteDwordHKCU(kTooltip, L"Margins_cyBottomHeight", static_cast<DWORD>(g_settings.tooltipMarginBottom));
     SetOrDeleteDword(kTooltip, L"Disabled", g_settings.tooltipDisabled, 2);
 
-    if (g_settings.advancedFunctionsEnabled) {
-      SyncProcessListHKCU(kBlockList, g_settings.processBlockList);
-      SyncProcessListHKCU(kDisabledList, g_settings.processDisabledList);
-      SyncProcessListHKCU(kMenuDisabledList, g_settings.menuProcessDisabledList);
-      SyncProcessListHKCU(kTooltipDisabledList, g_settings.tooltipProcessDisabledList);
-      SyncProcessListHKCU(kDropDownDisabledList, g_settings.dropDownProcessDisabledList);
-    } else {
-      const std::vector<std::wstring> emptyList;
-      SyncProcessListHKCU(kBlockList, emptyList);
-      SyncProcessListHKCU(kDisabledList, emptyList);
-      SyncProcessListHKCU(kMenuDisabledList, emptyList);
-      SyncProcessListHKCU(kTooltipDisabledList, emptyList);
-      SyncProcessListHKCU(kDropDownDisabledList, emptyList);
-    }
+    SyncProcessListHKCU(kBlockList, g_settings.processBlockList);
+    SyncProcessListHKCU(kDisabledList, g_settings.processDisabledList);
+    SyncProcessListHKCU(kMenuDisabledList, g_settings.menuProcessDisabledList);
+    SyncProcessListHKCU(kTooltipDisabledList, g_settings.tooltipProcessDisabledList);
+    SyncProcessListHKCU(kDropDownDisabledList, g_settings.dropDownProcessDisabledList);
 
     Wh_Log(L"Controller applied ordered full-option profile (Global/DropDown/Menu/Tooltip), hardReload=%d", g_settings.hardReloadOnApply);
 
