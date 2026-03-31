@@ -228,6 +228,120 @@ FrameworkElement FindDescendantByName(FrameworkElement element, PCWSTR name) {
     return nullptr;
 }
 
+FrameworkElement FindDescendantByClassName(FrameworkElement element,
+                                           PCWSTR className) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child) {
+            continue;
+        }
+        if (winrt::get_class_name(child) == className) {
+            return child;
+        }
+        auto result = FindDescendantByClassName(child, className);
+        if (result) {
+            return result;
+        }
+    }
+
+    return nullptr;
+}
+
+void LogElementIdentity(PCWSTR label, FrameworkElement element) {
+    if (element) {
+        Wh_Log(L"%s: name='%s' class='%s'", label, element.Name().c_str(),
+               winrt::get_class_name(element).c_str());
+    } else {
+        Wh_Log(L"%s: not found", label);
+    }
+}
+
+FrameworkElement FindTrayFrameElement(FrameworkElement xamlRootContent,
+                                      bool logDiagnostics) {
+    if (!xamlRootContent) {
+        if (logDiagnostics) {
+            Wh_Log(L"Tray frame lookup skipped: XamlRoot content unavailable");
+        }
+        return nullptr;
+    }
+
+    FrameworkElement systemTrayFrameGrid =
+        FindDescendantByName(xamlRootContent, L"SystemTrayFrameGrid");
+    if (systemTrayFrameGrid) {
+        return systemTrayFrameGrid;
+    }
+
+    FrameworkElement systemTrayFrame =
+        FindDescendantByClassName(xamlRootContent, L"System Tray.SystemTrayFrame");
+    if (!systemTrayFrame) {
+        systemTrayFrame =
+            FindDescendantByClassName(xamlRootContent, L"System Tray.System TrayFrame");
+    }
+
+    if (systemTrayFrame) {
+        FrameworkElement fallbackGrid =
+            FindDescendantByClassName(systemTrayFrame,
+                                      L"Windows.UI.Xaml.Controls.Grid");
+        if (fallbackGrid) {
+            if (logDiagnostics) {
+                Wh_Log(L"Using fallback tray grid under SystemTrayFrame");
+                LogElementIdentity(L"SystemTrayFrame", systemTrayFrame);
+                LogElementIdentity(L"FallbackTrayGrid", fallbackGrid);
+            }
+            return fallbackGrid;
+        }
+    }
+
+    FrameworkElement notifyIconStack =
+        FindDescendantByClassName(xamlRootContent, L"System Tray.Stack");
+    if (notifyIconStack && notifyIconStack.Name() == L"NotifyIconStack") {
+        auto parent = Media::VisualTreeHelper::GetParent(notifyIconStack)
+                          .try_as<FrameworkElement>();
+        if (parent) {
+            if (logDiagnostics) {
+                Wh_Log(L"Using parent of NotifyIconStack as fallback tray frame");
+                LogElementIdentity(L"NotifyIconStack", notifyIconStack);
+                LogElementIdentity(L"NotifyIconStackParent", parent);
+            }
+            return parent;
+        }
+    }
+
+    if (logDiagnostics) {
+        Wh_Log(L"Failed to locate tray frame element");
+        LogElementIdentity(L"XamlRootContent", xamlRootContent);
+        LogElementIdentity(
+            L"taskbarFrame(name)",
+            FindDescendantByName(xamlRootContent, L"taskbarFrame"));
+        LogElementIdentity(
+            L"taskbarframe(name)",
+            FindDescendantByName(xamlRootContent, L"taskbarframe"));
+        LogElementIdentity(
+            L"SystemTrayFrameGrid(name)",
+            FindDescendantByName(xamlRootContent, L"SystemTrayFrameGrid"));
+        LogElementIdentity(
+            L"SystemTrayFrame(class)",
+            FindDescendantByClassName(xamlRootContent,
+                                      L"System Tray.SystemTrayFrame"));
+        LogElementIdentity(
+            L"System TrayFrame(class)",
+            FindDescendantByClassName(xamlRootContent,
+                                      L"System Tray.System TrayFrame"));
+        LogElementIdentity(
+            L"NotifyIconStack(name)",
+            FindDescendantByName(xamlRootContent, L"NotifyIconStack"));
+        LogElementIdentity(
+            L"NotificationAreaIcons(class)",
+            FindDescendantByClassName(xamlRootContent,
+                                      L"System Tray.NotificationAreaIcons"));
+    }
+
+    return nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // XamlRoot acquisition (CTaskBand -> TaskbarHost -> XamlRoot)
 // ---------------------------------------------------------------------------
@@ -563,9 +677,9 @@ bool ApplyTrayOnlyStyle(XamlRoot xamlRoot) {
     }
 
     FrameworkElement systemTrayFrameGrid =
-        FindDescendantByName(xamlRootContent, L"SystemTrayFrameGrid");
+        FindTrayFrameElement(xamlRootContent, !s_loggedTree);
     if (!systemTrayFrameGrid) {
-        Wh_Log(L"SystemTrayFrameGrid not found");
+        Wh_Log(L"Tray frame element not found");
         return false;
     }
 
@@ -810,7 +924,7 @@ bool RefreshTrayMetricsFromXaml(XamlRoot xamlRoot) {
         xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
     if (xamlRootContent) {
         FrameworkElement systemTrayFrameGrid =
-            FindDescendantByName(xamlRootContent, L"SystemTrayFrameGrid");
+            FindTrayFrameElement(xamlRootContent, false);
         if (systemTrayFrameGrid) {
             xamlRootContent.UpdateLayout();
             systemTrayFrameGrid.UpdateLayout();
@@ -852,7 +966,7 @@ bool IsTrayVisualTreeReady(XamlRoot xamlRoot) {
         return false;
     }
 
-    return !!FindDescendantByName(xamlRootContent, L"SystemTrayFrameGrid");
+    return !!FindTrayFrameElement(xamlRootContent, false);
 }
 
 void StopInitialApplyRetryTimer(HWND hTaskbarWnd) {
@@ -1187,9 +1301,11 @@ void TransformToTrayOnly(HWND hTaskbarWnd) {
             RefreshTrayMetricsFromXaml(xamlRoot);
             StopInitialApplyRetryTimer(hTaskbarWnd);
         } else {
+            Wh_Log(L"TransformToTrayOnly: tray frame lookup failed, scheduling retry");
             StartInitialApplyRetryTimer(hTaskbarWnd, L"TransformToTrayOnly");
         }
     } else {
+        Wh_Log(L"TransformToTrayOnly: XamlRoot unavailable, scheduling retry");
         NormalizeTrayMetrics();
         StartInitialApplyRetryTimer(hTaskbarWnd, L"TransformToTrayOnly");
     }
@@ -1309,7 +1425,9 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                 }
 
                 if (g_initialApplyRetryCount == 0) {
-                    Wh_Log(L"Taskbar visual tree not ready yet");
+                    Wh_Log(L"Initial retry: taskbar visual tree not ready yet "
+                           L"(xamlRoot=%d)",
+                           !!xamlRoot);
                 }
 
                 g_initialApplyRetryCount++;
