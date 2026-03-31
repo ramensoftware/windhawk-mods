@@ -25,7 +25,7 @@ Makes the taskbar behave like a regular window - like how it was possible pre-Vi
 
 ### Always on top
 
-Keeps the taskbar above normal windows, no matter in games or in browser fullscreen. 
+Keeps the taskbar above normal windows - no matter in games or browser fullscreen. 
 
 This is mainly useful for people who use **auto-hide** and want the taskbar to stay accessible consistently.
 
@@ -77,8 +77,6 @@ enum class TaskbarZOrder {
 
 namespace {
 
-constexpr DWORD kDesktopBand = 1;
-
 using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
 
 using SetWindowBand_t = BOOL(WINAPI*)(HWND, HWND, DWORD);
@@ -112,27 +110,18 @@ static bool IsTrackedTaskbarWindow(HWND hWnd) {
   return IsPrimaryTaskbarWindow(hWnd) || IsSecondaryTaskbarWindow(hWnd);
 }
 
-static bool SetTaskbarZOrder(HWND hwnd, HWND insertAfter) {
+static void SetTaskbarZOrder(HWND hwnd, HWND insertAfter) {
   if (!hwnd || !SetWindowPos_Original) {
-    return false;
-  }
-
-  return SetWindowPos_Original(hwnd, insertAfter, 0, 0, 0, 0,
-                               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) != FALSE;
-}
-
-// Forces the taskbar to the front of the normal (non-topmost)
-// Z-order band.
-static void BumpTaskbarToFrontOfNormalBand(HWND hwnd) {
-  if (!hwnd || !SetWindowPos_Original) {
+    Wh_Log(L"SetTaskbarZOrder skipped: hwnd=%p SetWindowPos_Original=%p",
+           hwnd, SetWindowPos_Original);
     return;
   }
 
-  SetWindowPos_Original(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                        SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-
-  SetWindowPos_Original(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-                        SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!SetWindowPos_Original(hwnd, insertAfter, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+    Wh_Log(L"SetTaskbarZOrder failed: hwnd=%p insertAfter=%p error=%lu",
+           hwnd, insertAfter, GetLastError());
+  }
 }
 
 static void ApplyConfiguredMode() {
@@ -177,8 +166,8 @@ static void HandlePinnedTaskbarPosChanging(WINDOWPOS* wp) {
 }
 
 // Explorer sometimes promotes the taskbar with HWND_TOPMOST.
-// In interactive mode we downgrade that to HWND_TOP -
-// top but not over all regular windows.
+// In interactive mode we downgrade that to HWND_TOP. 
+// Still top, but not above normal windows. 
 static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X,
                                      int Y, int cx, int cy, UINT uFlags) {
   if (g_state.mode == TaskbarZOrder::Interactive &&
@@ -191,21 +180,23 @@ static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X,
 }
 
 // Explorer may try to move the taskbar to a different window band.
-// In interactive mode, we block that change for the main taskbar and
-// instead keep it at the front of the normal desktop band using the helper
-// below.
+// e.g. opening the Star* menu -> taskbar raised to band 6. 
+// Each call bumps the taskbar to the top of the specified band even 
+// if the band number is identical. 
 //
-// kDesktopBand = 1: undocumented value for normal desktop band.
+// We block that change entirely to make sure Windows doesn't  
+// mess with our own order. 
+//
+// dwBand = 1: normal desktop band?
+// dwBand = 6: normal taskbar band?
 static BOOL WINAPI SetWindowBand_Hook(HWND hWnd, HWND hwndInsertAfter,
                                       DWORD dwBand) {
-  if (g_state.mode == TaskbarZOrder::Interactive &&
-      IsTrackedTaskbarWindow(hWnd)
-       && dwBand != kDesktopBand) {
-    BumpTaskbarToFrontOfNormalBand(hWnd);
+  // Wh_Log(L"Blocked Taskbar band change -> %lu", dwBand);
+  if (IsTrackedTaskbarWindow(hWnd)){
     return TRUE;
   }
 
-  return SetWindowBand_Original(hWnd, hwndInsertAfter, dwBand);
+  return SetWindowBand_Original(hWnd,hwndInsertAfter, dwBand);
 }
 
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
