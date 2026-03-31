@@ -9468,6 +9468,37 @@
                 "version": "1.1.10"
             }
         },
+        "taskbar-z-order-override": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1774944387000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1774944387000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "meteoni",
+                "compilerOptions": "-lcomctl32",
+                "description": "Control whether the taskbar stays always on top, always at the bottom, or behaves like a normal window",
+                "github": "https://github.com/Meteony",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Z-Order Override",
+                "version": "0.7"
+            }
+        },
         "taskmgr-esc": {
             "details": {
                 "defaultSorting": 3033,
