@@ -4,6 +4,7 @@
 // @description     Rearrange taskbar windows within and between groups by dragging with the LEFT mouse button (Windows 7-style)
 // @version         1.0
 // @author          Xenalin
+// @github          https://github.com/xenalin
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshlwapi
