@@ -12,7 +12,15 @@
 // ==WindhawkModReadme==
 /*
 # File Explorer Toolbar Position Fix
-Fixes issue with explorer toolbars not setting the position correctly when opening explorer.
+This mod fixes an issue with file explorer toolbars not setting the position correctly when opening explorer.
+
+**Before**  
+After opening explorer, all of the toolbars will be forced to be on a new line, ignoring the previous position and style.
+![Before](https://i.imgur.com/v8bj787.png)
+
+**After**  
+Now the toolbars will respect the previous position and style when opening explorer.
+![After](https://i.imgur.com/zGqzAfz.png)
 */
 // ==/WindhawkModReadme==
 
