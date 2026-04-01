@@ -2,13 +2,13 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.2.4
+// @version         1.2.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         *
-// @compilerOptions -lcomctl32 -lole32 -loleaut32
+// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -884,11 +884,10 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                 HMODULE module = LoadLibraryEx(szFileName, nullptr,
                                                LOAD_LIBRARY_AS_DATAFILE);
                 if (module) {
+                    bool resolved = false;
+
                     LPWSTR iconGroupName =
                         GetIconGroupNameByIndex(module, iconId);
-
-                    // Best effort: use the icon id if available, otherwise
-                    // continue using the index.
                     if (!iconGroupName) {
                         Wh_Log(L"[%u] Failed to get icon group name", c);
                     } else if (!IS_INTRESOURCE(iconGroupName)) {
@@ -906,6 +905,7 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
 
                             if (redirectIndex >= 0) {
                                 iconId = redirectIndex;
+                                resolved = true;
                                 Wh_Log(
                                     L"[%u] Found icon group name in redirect "
                                     L"file at index %d",
@@ -913,7 +913,7 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                             } else {
                                 Wh_Log(
                                     L"[%u] Icon group name not found in "
-                                    L"redirect file, using original index",
+                                    L"redirect file",
                                     c);
                             }
                         } else {
@@ -924,10 +924,26 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                         }
                     } else {
                         iconId = -(WORD)(ULONG_PTR)iconGroupName;
+                        resolved = true;
                         Wh_Log(L"[%u] Using icon group id %d", c, -iconId);
                     }
 
                     FreeLibrary(module);
+
+                    if (!resolved) {
+                        if (iconId == 0) {
+                            // Allow using index 0 as fallback for convenience,
+                            // which likely means that the exact match isn't
+                            // that important and the first icon will do.
+                            Wh_Log(L"[%u] Using icon index 0 as fallback", c);
+                        } else {
+                            Wh_Log(
+                                L"[%u] Failed to resolve icon group from "
+                                L"original index",
+                                c);
+                            return false;
+                        }
+                    }
                 } else {
                     // May happen e.g. for .ico files.
                     Wh_Log(L"[%u] Failed to get module handle", c);
@@ -1075,11 +1091,46 @@ HANDLE LoadImageAW_Hook(HINSTANCE hInst,
 
     HANDLE result;
     bool redirected;
+    DWORD lastError = 0;
 
     auto beforeFirstRedirectionFunction = [&]() {
         Wh_Log(L"[%u] Width: %d", c, cx);
         Wh_Log(L"[%u] Height: %d", c, cy);
         Wh_Log(L"[%u] Flags: 0x%08X", c, fuLoad);
+    };
+
+    // If `LR_EXACTSIZEONLY` is used and the exact size is missing, the function
+    // will return no result. If the replacement doesn't have this resource, we
+    // want to fall back to the original, but if it has other sizes, we prefer
+    // to return an error, hopefully the target app will try other sizes in this
+    // case.
+    auto handleExactSizeOnlyMiss =
+        [&](DWORD dwError, std::function<HANDLE(UINT)> loadFunc) -> bool {
+        if (!(fuLoad & LR_EXACTSIZEONLY) ||
+            (type != IMAGE_BITMAP && type != IMAGE_ICON &&
+             type != IMAGE_CURSOR)) {
+            return false;
+        }
+
+        HANDLE testResult = loadFunc(fuLoad & ~LR_EXACTSIZEONLY);
+        if (!testResult) {
+            return false;
+        }
+
+        if (!(fuLoad & LR_SHARED)) {
+            if (type == IMAGE_BITMAP) {
+                DeleteObject(testResult);
+            } else if (type == IMAGE_ICON) {
+                DestroyIcon((HICON)testResult);
+            } else {
+                DestroyCursor((HCURSOR)testResult);
+            }
+        }
+
+        result = nullptr;
+        lastError = dwError;
+        Wh_Log(L"[%u] Redirected successfully with error for exact size", c);
+        return true;
     };
 
     if (!hInst && (fuLoad & LR_LOADFROMFILE)) {
@@ -1094,6 +1145,14 @@ HANDLE LoadImageAW_Hook(HINSTANCE hInst,
                 }
 
                 DWORD dwError = GetLastError();
+
+                if (handleExactSizeOnlyMiss(dwError, [&](UINT flags) {
+                        return (*Original)(hInst, fileNameRedirect, type, cx,
+                                           cy, flags);
+                    })) {
+                    return true;
+                }
+
                 Wh_Log(L"[%u] LoadImage failed with error %u", c, dwError);
                 return false;
             });
@@ -1109,12 +1168,23 @@ HANDLE LoadImageAW_Hook(HINSTANCE hInst,
                 }
 
                 DWORD dwError = GetLastError();
+
+                if (handleExactSizeOnlyMiss(dwError, [&](UINT flags) {
+                        return (*Original)(hInstanceRedirect, name, type, cx,
+                                           cy, flags);
+                    })) {
+                    return true;
+                }
+
                 Wh_Log(L"[%u] LoadImage failed with error %u", c, dwError);
                 return false;
             });
     }
 
     if (redirected) {
+        if (!result) {
+            SetLastError(lastError);
+        }
         return result;
     }
 
@@ -2641,6 +2711,12 @@ void LoadSettings() {
     }
 
     // Reverse the order to allow later entries override earlier ones.
+    for (auto& [key, vec] : paths) {
+        std::reverse(vec.begin(), vec.end());
+    }
+    for (auto& [key, vec] : pathsA) {
+        std::reverse(vec.begin(), vec.end());
+    }
     std::reverse(pathPatterns.begin(), pathPatterns.end());
     std::reverse(pathPatternsA.begin(), pathPatternsA.end());
 

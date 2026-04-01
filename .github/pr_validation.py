@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 import urllib.error
 import urllib.request
 from functools import cache
@@ -357,14 +358,15 @@ class ModMetadataValidator:
         if not prop.value.startswith('https://github.com/'):
             prop.warn('@@ must start with "https://github.com/"')
         elif prop.value != expected and prop.value.lower() == expected.lower():
-            prop.warn(f'Expected @@ to be "{expected}" (case-sensitive)')
+            prop.warn(f'Expected @@ to be {expected} (case-sensitive)')
         elif prop.value == expected + '/':
-            prop.warn(f'Expected @@ to be "{expected}" (no trailing slash)')
+            prop.warn(f'Expected @@ to be {expected} (no trailing slash)')
         elif prop.value.startswith(expected + '/'):
-            prop.warn(f'Expected @@ to be "{expected}" (user profile URL only)')
+            prop.warn(f'Expected @@ to be {expected} (user profile URL only)')
         elif prop.value != expected:
             prop.warn(
-                f'Expected @@ to be "{expected}".\n'
+                f'Expected @@ ({prop.value}) to match the pull request author'
+                f' ({expected}).\n'
                 'Note that only the original author of the mod is allowed to submit'
                 ' updates.\n'
                 'If you are not the original author, you might want to contact them to'
@@ -603,7 +605,7 @@ class ModMetadataValidator:
 
 
 def validate_metadata(path: Path, expected_author: str) -> int:
-    with path.open(encoding='utf-8') as file:
+    with path.open(encoding='utf-8', errors='ignore') as file:
         properties, initial_warnings = get_mod_file_metadata(
             file, warn_callback=lambda line, msg: add_warning(path, line, msg)
         )
@@ -677,7 +679,7 @@ def get_target_modules_from_previous_line(previous_line: str):
 def validate_symbol_hooks(path: Path):
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8')
+    mod_source = path.read_text(encoding='utf-8', errors='ignore')
     mod_source_lines = mod_source.splitlines()
 
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
@@ -733,11 +735,28 @@ def validate_symbol_hooks(path: Path):
     return warnings
 
 
+def validate_encoding(path: Path):
+    """Validate that the file is valid UTF-8 without BOM."""
+    raw = path.read_bytes()
+
+    try:
+        raw.decode('utf-8')
+    except UnicodeDecodeError as e:
+        return add_warning(path, 1, f'File is not valid UTF-8: {e}')
+
+    warnings = 0
+
+    if raw.startswith(b'\xef\xbb\xbf'):
+        warnings += add_warning(path, 1, 'File must not start with a UTF-8 BOM')
+
+    return warnings
+
+
 def validate_specific_keywords(path: Path):
     """Check for specific keywords in mod source code."""
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8')
+    mod_source = path.read_text(encoding='utf-8', errors='ignore')
     mod_source_lines = mod_source.splitlines()
 
     # Words to check (pattern, description)
@@ -745,8 +764,8 @@ def validate_specific_keywords(path: Path):
         (r'InternalWh', 'InternalWh'),
         (r'WH_EDITING', 'WH_EDITING'),
         (r'\bWH_MOD\b', 'WH_MOD'),
-        (r'GWL_WNDPROC', 'GWL_WNDPROC'),
-        (r'GWLP_WNDPROC', 'GWLP_WNDPROC'),
+        (r'(^|,)\s*GWL_WNDPROC', 'GWL_WNDPROC'),
+        (r'(^|,)\s*GWLP_WNDPROC', 'GWLP_WNDPROC'),
         (r'Wh_FindFirstSymbol', 'Wh_FindFirstSymbol'),
         (r'Wh_FindNextSymbol', 'Wh_FindNextSymbol'),
         (r'Wh_FindCloseSymbol', 'Wh_FindCloseSymbol'),
@@ -765,6 +784,21 @@ def validate_specific_keywords(path: Path):
                     path, line_num, f'Line requires manual inspection for "{word}"'
                 )
 
+        hidden_ws = [
+            c
+            for c in line
+            if unicodedata.category(c) == 'Cf'
+            or (unicodedata.category(c) == 'Zs' and c != ' ')
+        ]
+        if hidden_ws:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in set(hidden_ws))
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line contains {len(hidden_ws)} non-standard whitespace characters'
+                f' ({chars}), requires manual inspection',
+            )
+
     return warnings
 
 
@@ -776,7 +810,7 @@ def test_run():
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = 0
+    warnings = validate_encoding(path)
     warnings += validate_metadata(path, pr_author)
     warnings += validate_symbol_hooks(path)
     warnings += validate_specific_keywords(path)
@@ -816,7 +850,8 @@ def main():
     for path in paths:
         print(f'Checking {path=}')
 
-        path_warnings = validate_metadata(path, pr_author)
+        path_warnings = validate_encoding(path)
+        path_warnings += validate_metadata(path, pr_author)
         path_warnings += validate_symbol_hooks(path)
         path_warnings += validate_specific_keywords(path)
         warnings += path_warnings
