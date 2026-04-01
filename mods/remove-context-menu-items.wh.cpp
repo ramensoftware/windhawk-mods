@@ -40,8 +40,7 @@ Clean up your Windows context menus by removing bloatware and unwanted items:
 - `Ask Copilot`
 - `Scan with Microsoft Defender`
 - `Create with Designer`
-- `Edit with Clipchamp`
-- `Ask Microsoft 365 Copilot`
+- ...and more!
 
 ### Basic Items
 - `Open`
