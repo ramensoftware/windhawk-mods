@@ -1,3 +1,8 @@
+## 1.8.0 ([Apr 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/52291cefbfc5af7de26d64e3e430a373e2352e78/mods/remove-context-menu-items.wh.cpp))
+
+- Added `Ask Microsoft 365 Copilot` to Bloatware Items with translations for `cs-CZ`, `de-DE`, `pt-BR`, and `pt-PT`
+- Fixed `Paste` removal to only hide the item when greyed out, preserving it when clickable
+
 ## 1.7.1 ([Mar 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5d5ac123fe3725cd883374758ac47def57af8891/mods/remove-context-menu-items.wh.cpp))
 
 - Renamed mod from `Remove Unwanted Context Menu Items (Classic Menu Only)` back to `Remove Context Menu Items`.
