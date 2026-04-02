@@ -6,7 +6,7 @@
 // @description     Adds smooth scrolling with spring physics to legacy Win32 apps
 // @description:pt  Adiciona rolagem suave com fisica de mola a aplicativos Win32 antigos
 // @description:es  Anade desplazamiento suave con fisica de resorte a aplicaciones Win32
-// @version         1.0.0
+// @version         1.0.1
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
@@ -316,6 +316,8 @@ struct State {
     double accV = 0, accH = 0;
     IUIAutomationScrollPattern* pat = nullptr;
     bool uiaOk = true;
+    bool hasVScroll = true;   // UIA: vertical scroll available
+    bool hasHScroll = false;  // UIA: horizontal scroll available
 };
 
 static CRITICAL_SECTION g_cs;
@@ -579,6 +581,17 @@ static bool Handle(const MSG* m) {
         }
     }
 
+    // Refresh scroll axis availability on every event — the user may
+    // switch between Details (vertical) and List (horizontal) views
+    // while the same DirectUIHWND is reused.
+    if (mt == Method::UIAPercent && s.pat) {
+        double pctV = -1, pctH = -1;
+        s.pat->get_CurrentVerticalScrollPercent(&pctV);
+        s.pat->get_CurrentHorizontalScrollPercent(&pctH);
+        s.hasVScroll = (pctV >= 0);
+        s.hasHScroll = (pctH >= 0);
+    }
+
     // Spring delta.
     double add = 0;
     switch (mt) {
@@ -588,20 +601,64 @@ static bool Handle(const MSG* m) {
     default: break;
     }
 
-    // Push with velocity boost for instant response.
-    // Horizontal: negate because our vertical convention (positive = scroll up)
-    // is opposite to horizontal convention (positive delta = scroll RIGHT,
-    // but LVM_SCROLL -dx = scroll right, SB_LINELEFT for positive ln, etc.).
-    // Negating here makes the timer code work correctly for both axes.
-    if (vert) s.sV.Push(add, g_cfg.springK);
-    else      s.sH.Push(-add, g_cfg.springK);
+    // Determine target axis and push.
+    // For UIAPercent, check which scroll axes are available.
+    // ListView mode in Explorer only has horizontal scroll — we reroute
+    // the vertical wheel to horizontal in that case.
+    Spring* pushedSpring = nullptr;
+    double pushValue = 0;
+
+    if (mt == Method::UIAPercent) {
+        if (vert) {
+            if (s.hasVScroll) {
+                // Vertical wheel -> vertical scroll.
+                // add = -lines: positive lines = scroll up = decrease %.
+                pushValue = add;
+                s.sV.Push(pushValue, g_cfg.springK);
+                pushedSpring = &s.sV;
+            } else if (s.hasHScroll) {
+                // Vertical wheel -> reroute to horizontal scroll.
+                // Wheel forward (lines>0) should scroll toward start (left).
+                // Decrease % = negative push = add = -lines.
+                pushValue = add;
+                s.sH.Push(pushValue, g_cfg.springK);
+                pushedSpring = &s.sH;
+            }
+        } else {
+            if (s.hasHScroll) {
+                // Horizontal wheel (WM_MOUSEHWHEEL) -> horizontal scroll.
+                // Tilt right (lines>0) should scroll right = increase %.
+                // Positive push = -add.
+                pushValue = -add;
+                s.sH.Push(pushValue, g_cfg.springK);
+                pushedSpring = &s.sH;
+            }
+        }
+    } else {
+        // Non-UIA methods: negate horizontal because convention is opposite
+        // (positive add = scroll up, but SB_LINELEFT / -dx = scroll left).
+        if (vert) {
+            pushValue = add;
+            s.sV.Push(pushValue, g_cfg.springK);
+            pushedSpring = &s.sV;
+        } else {
+            pushValue = -add;
+            s.sH.Push(pushValue, g_cfg.springK);
+            pushedSpring = &s.sH;
+        }
+    }
+
+    // If no scrollable axis found, let the original message through.
+    if (!pushedSpring) {
+        LeaveCriticalSection(&g_cs);
+        return false;
+    }
 
     // Start timer.
     if (!s.timer) {
         s.timer = SetTimer(tgt, TID, (UINT)g_cfg.intervalMs, Tick);
         if (!s.timer) {
-            if (vert) s.sV.target -= add;
-            else      s.sH.target += add;  // undo Push(-add)
+            pushedSpring->target -= pushValue;
             LeaveCriticalSection(&g_cs);
             return false;
         }
