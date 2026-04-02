@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-02T22:42:45.000Z</updated>
+    <updated>2026-04-02T23:50:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Pre-Vista File Copy Dialog 2.1.0]]></title>
+        <id>https://windhawk.net/mods/prevista-file-copy#a44a7e403dbeb79f3dd8e0934b6f3af779c779ba</id>
+        <link href="https://windhawk.net/mods/prevista-file-copy"/>
+        <updated>2026-04-02T23:50:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="previstafilecopydialog">Pre-Vista File Copy Dialog</h1>
+<p>This mod replaces the modern file copy/move/delete progress dialog with a
+pre-Vista style classic progress dialog.</p>
+<p>Based on the original Windows XP CProgressDialog implementation from browseui.
+Hooks CoCreateInstance to intercept CLSID_ProgressDialog and provide a custom
+implementation that reproduces XP's behavior for copy, move, delete,
+recycle, and empty recycle bin operations, including animations, per-file
+progress text, and time estimates.</p>
+<p>Works with shell32.dll from Windows 95 up to XP for loading the original AVI
+animations and strings.</p>
+<p><img src="https://i.imgur.com/wWq5rhx.png" alt="Copying" />
+<img src="https://i.imgur.com/Tiey5JK.png" alt="Moving" />
+<img src="https://i.imgur.com/5uFWHay.png" alt="Deleting" />
+<img src="https://i.imgur.com/nBMB7wB.png" alt="Emptying the Recycle Bin" /></p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Shell32 Path</strong>: Point this to a pre-Vista shell32.dll to load the original
+AVI animations (filecopy, filemove, filedel, filenuke, filedelreal). If not set
+or the file doesn't exist, animations will be skipped gracefully.</li>
+</ul>]]></content>
+        <author>
+            <name>arceus413</name>
+            <uri>https://github.com/arceuss</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 3.2]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#986dba20bfaf6c9b4fe1acf7c4c82b1aad598403</id>
@@ -360,21 +390,6 @@ remainder; built-in aliases: gpt, yt, google, copilot, x, reddit, translate</li>
 <li>Fixed redirection priority: Redirection resource paths take precedence over theme paths, which take precedence over the selected icon theme.</li>
 <li>Fixed <code>LoadImageW</code> redirection when an exact size is requested.</li>
 <li>Changed <code>PrivateExtractIconsW</code> redirection logic in some cases. Notably, if the first icon group is requested and there's no matching icon group with the same ID, redirection picks the first icon instead of failing.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.6.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#fbe583ec54172125c1dcce0468a3cac3c3ab9ef4</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2026-03-29T19:27:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the LiquidGlass theme and added LiquidGlass (Alternate).</li>
-<li>Fixed the tray area being cut off for WindowGlass (Full-Length).</li>
-<li>Improve secondary monitor support for TaskbarXII, WindowGlass, Luminosity, LayerMicaUI, UltraWideFriendly, and Borderless themes.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

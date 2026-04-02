@@ -6719,6 +6719,37 @@
                 "version": "1.0.1"
             }
         },
+        "prevista-file-copy": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1775173824000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1775173824000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "arceus413",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldbghelp -luxtheme -lcomctl32 -lshlwapi -lgdi32 -luuid",
+                "description": "Replaces the file copy dialog with a pre-Vista style progress dialog",
+                "github": "https://github.com/arceuss",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Pre-Vista File Copy Dialog",
+                "version": "2.1.0"
+            }
+        },
         "quicklaunch-3dbuttons": {
             "details": {
                 "defaultSorting": 412,
