@@ -156,11 +156,13 @@ const WCHAR* ICON_FONT = L"Segoe MDL2 Assets";
 struct ControlLayout { float nX, ppX, pX, vX, cY; };
 
 inline ControlLayout CalcLayout(int W, int H, int padRight) {
-    float cY  = H / 2.f;
-    float nX  = W - (float)padRight - 12.f;
-    float ppX = nX - 34.f;
-    float pX  = ppX - 34.f;
-    float vX  = pX  - 34.f;
+    float cY     = H / 2.f;
+    float scale  = H / 52.f; // 52 is the default/reference height
+    float step   = 34.f * scale;
+    float nX     = W - (float)padRight - 12.f * scale;
+    float ppX    = nX - step;
+    float pX     = ppX - step;
+    float vX     = pX  - step;
     return { nX, ppX, pX, vX, cY };
 }
 
@@ -287,6 +289,10 @@ UINT          g_TbCreatedMsg     = RegisterWindowMessage(L"TaskbarCreated");
 int           g_IdleSecs         = 0;
 bool          g_IdleHide         = false;
 bool          g_AnimTimerRunning = false;
+float         g_FadeAlpha        = 1.f;   // 0.0 = fully hidden, 1.0 = fully visible
+bool          g_FadeIn           = true;  // direction of current fade
+bool          g_FadeActive       = false;
+#define IDT_FADE 1004
 
 // Hover Animation States
 float         g_HoverProgress[5] = {0.f};
@@ -688,15 +694,20 @@ void DrawPanel(HDC hdc, int W, int H) {
         FillShape(&b);
     }
 
-    wstring title, artist; bool playing=false; std::unique_ptr<Bitmap> art;
+    wstring title, artist; bool playing=false, hasMedia=false; std::unique_ptr<Bitmap> art;
     {
         scoped_lock lk(g_M.mtx);
-        title=g_M.title; artist=g_M.artist; playing=g_M.playing;
+        title=g_M.title; artist=g_M.artist; playing=g_M.playing; hasMedia=g_M.hasMedia;
         if (g_M.art) art.reset(g_M.art->Clone());
     }
 
+    // Dim everything when no media source is open at all
+    BYTE panelAlpha = hasMedia ? 255 : 100;
+    if (!hasMedia) { title = L"Nothing Playing"; artist = L""; }
+
     Color tc(TxtARGB());
-    Color artistColor(128, tc.GetR(), tc.GetG(), tc.GetB());
+    tc = Color(panelAlpha, tc.GetR(), tc.GetG(), tc.GetB());
+    Color artistColor(min((int)panelAlpha, 128), tc.GetR(), tc.GetG(), tc.GetB());
 
     // ── Album Art
     int aX = g_S.padLeft, aY = g_S.padTop;
@@ -715,7 +726,8 @@ void DrawPanel(HDC hdc, int W, int H) {
 
     // ── Controls Layout
     auto [nX, ppX, pX, vX, cY] = CalcLayout(W, H, g_S.padRight);
-    const float ppBigR = 14.f, pnSmallR = 9.f;
+    float _scale = H / 52.f;
+    const float ppBigR = 14.f * _scale, pnSmallR = 9.f * _scale;
 
     // Determine Dynamic Hover Color
     Color targetHoverColor;
@@ -885,6 +897,40 @@ void HookTaskbar(HWND hwnd){
 #define IDT_ANIM   1002
 #define WM_APPCLOSE WM_APP
 
+struct FocusData { const wstring* aumid; HWND found; };
+
+// This helper function identifies the media app's window
+static BOOL CALLBACK EnumWindowsProc(HWND h, LPARAM lp) {
+    auto* fd = reinterpret_cast<FocusData*>(lp);
+    DWORD pid = 0; GetWindowThreadProcessId(h, &pid);
+
+    if (pid && IsWindowVisible(h) && GetWindow(h, GW_OWNER) == nullptr) {
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (hProc) {
+            WCHAR path[MAX_PATH] = {}; DWORD sz = MAX_PATH;
+            if (QueryFullProcessImageNameW(hProc, 0, path, &sz)) {
+                wstring exe = path;
+                size_t sl = exe.find_last_of(L"\\");
+                if (sl != wstring::npos) exe = exe.substr(sl + 1);
+                size_t dot = exe.find_last_of(L".");
+                if (dot != wstring::npos) exe = exe.substr(0, dot);
+
+                wstring lAumid = *fd->aumid, lExe = exe;
+                transform(lAumid.begin(), lAumid.end(), lAumid.begin(), ::towlower);
+                transform(lExe.begin(), lExe.end(), lExe.begin(), ::towlower);
+
+                if (lAumid.find(lExe) != wstring::npos || lExe.find(lAumid) != wstring::npos) {
+                    fd->found = h;
+                    CloseHandle(hProc);
+                    return FALSE; // Found it, stop searching
+                }
+            }
+            CloseHandle(hProc);
+        }
+    }
+    return TRUE; // Keep looking
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp){
     switch(msg){
     case WM_CREATE:
@@ -930,11 +976,25 @@ case WM_TIMER:
                 g_IdleHide = false;
             }
 
-            if(hi || g_IdleHide) {
-                ShowWindow(hwnd, SW_HIDE);
-            } else {
-                HWND tb = FindWindow(L"Shell_TrayWnd", NULL); 
-                if(tb && IsWindowVisible(tb)) ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            bool shouldShow = !(hi || g_IdleHide);
+            HWND tb = FindWindow(L"Shell_TrayWnd", NULL);
+            bool tbVisible = tb && IsWindowVisible(tb);
+
+            if (!shouldShow && g_FadeAlpha > 0.f && !(!g_FadeIn && g_FadeActive)) {
+                // Start fade out
+                g_FadeIn = false; g_FadeActive = true;
+                if (!g_FadeActive) SetTimer(hwnd, IDT_FADE, 16, NULL);
+                SetTimer(hwnd, IDT_FADE, 16, NULL);
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            } else if (shouldShow && tbVisible && g_FadeAlpha < 1.f && !(g_FadeIn && g_FadeActive)) {
+                // Start fade in
+                g_FadeIn = true; g_FadeActive = true;
+                SetTimer(hwnd, IDT_FADE, 16, NULL);
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            } else if (shouldShow && tbVisible && !g_FadeActive) {
+                g_FadeAlpha = 1.f;
+                SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             }
             InvalidateRect(hwnd, NULL, FALSE);
         } else if(wp==IDT_ANIM){
@@ -975,8 +1035,19 @@ case WM_TIMER:
                     needsAnim = true;
                 }
             }
-            if (needsAnim) InvalidateRect(hwnd, NULL, FALSE);
+        if (needsAnim) InvalidateRect(hwnd, NULL, FALSE);
             else { KillTimer(hwnd, IDT_HOVER_ANIM); g_HoverAnimRunning = false; }
+        } else if (wp == IDT_FADE) {
+            float speed = 0.08f;
+            if (g_FadeIn) {
+                g_FadeAlpha = min(1.f, g_FadeAlpha + speed);
+                SetLayeredWindowAttributes(hwnd, 0, (BYTE)(g_FadeAlpha * 255), LWA_ALPHA);
+                if (g_FadeAlpha >= 1.f) { KillTimer(hwnd, IDT_FADE); g_FadeActive = false; }
+            } else {
+                g_FadeAlpha = max(0.f, g_FadeAlpha - speed);
+                SetLayeredWindowAttributes(hwnd, 0, (BYTE)(g_FadeAlpha * 255), LWA_ALPHA);
+                if (g_FadeAlpha <= 0.f) { KillTimer(hwnd, IDT_FADE); g_FadeActive = false; ShowWindow(hwnd, SW_HIDE); }
+            }
         }
         return 0;
 
@@ -995,7 +1066,8 @@ case WM_TIMER:
         int mx=LOWORD(lp),my=HIWORD(lp);
         
         auto [nX, ppX, pX, vX, cY] = CalcLayout(g_S.width, g_S.height, g_S.padRight);
-        const float ppBigR = 14.f, pnSmallR = 9.f;
+        float _scale = g_S.height / 52.f;
+        const float ppBigR = 14.f * _scale, pnSmallR = 9.f * _scale;
         int ns=0; bool newVolumeHover = g_VolumeHover;
 
         float hitTop = cY - 14.f, hitBot = cY + 14.f;
@@ -1038,7 +1110,24 @@ case WM_TIMER:
 
     case WM_LBUTTONUP:
         if (GetCapture() == hwnd) ReleaseCapture();
-        if (g_Hover > 0 && g_Hover < 4) Cmd(g_Hover);
+        if (g_Hover > 0 && g_Hover < 4) {
+            Cmd(g_Hover);
+        } else if (g_Hover == 0) {
+            int mx = LOWORD(lp);
+            auto [nX, ppX, pX, vX, cY] = CalcLayout(g_S.width, g_S.height, g_S.padRight);
+            float leftControlX = g_S.showSpeakerIcon ? vX : pX;
+
+            // If user clicks the left side (art/title), try to focus the app
+            if (mx < (int)(leftControlX - 12) && !g_currentMediaAppAumid.empty()) {
+                FocusData fd { &g_currentMediaAppAumid, nullptr };
+                EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&fd));
+
+                if (fd.found) {
+                    if (IsIconic(fd.found)) ShowWindow(fd.found, SW_RESTORE);
+                    SetForegroundWindow(fd.found);
+                }
+            }
+        }
         return 0;
 
     case WM_MOUSEWHEEL:{
