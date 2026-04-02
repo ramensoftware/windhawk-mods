@@ -13,7 +13,7 @@
 // ==WindhawkModReadme==
 /*
 ## 💎 Taskbar Music Player
-Clean floating music player that sits on your windows taskbar. shows what’s playing and lets you pause skip and change volume without opening anything. works with spotify youtube chrome edge etc.
+Got a great idea or a feature you'd love to see? Add me on Discord at **@fkwr** I'm always looking for suggestions and will do my best to implement your ideas.
 
 ## ⚠️ Requirements
 - widgets turned off
