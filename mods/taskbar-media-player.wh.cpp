@@ -902,20 +902,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp){
     case WM_SETTINGCHANGE:
         ApplyAppearance(hwnd); UpdateBoundsAndRegion(hwnd); InvalidateRect(hwnd,NULL,TRUE); return 0;
 
-    case WM_TIMER:
+case WM_TIMER:
         if(wp==IDT_POLL){
             FetchMedia(); 
             bool hi = false; 
             
-            // Still hide if a game/app is in FULLSCREEN, but NOT when paused
+            // Hide if a game/app is in FULLSCREEN
             if(g_S.hideFullscreen){
                 QUERY_USER_NOTIFICATION_STATE qs; 
                 if(SUCCEEDED(SHQueryUserNotificationState(&qs))) 
                     if(qs==QUNS_BUSY || qs==QUNS_RUNNING_D3D_FULL_SCREEN) hi = true;
             }
 
-            // We removed the 'g_IdleHide' check here so it never disappears on pause
-            if(hi) {
+            // Idle timeout: hide after N seconds of not playing (0 = never)
+            if(g_S.idleTimeout > 0) {
+                bool isPlaying = false;
+                { scoped_lock lk(g_M.mtx); isPlaying = g_M.playing; }
+                if(!isPlaying) {
+                    g_IdleSecs++;
+                    if(g_IdleSecs >= g_S.idleTimeout) g_IdleHide = true;
+                } else {
+                    g_IdleSecs = 0;
+                    g_IdleHide = false;
+                }
+            } else {
+                g_IdleSecs = 0;
+                g_IdleHide = false;
+            }
+
+            if(hi || g_IdleHide) {
                 ShowWindow(hwnd, SW_HIDE);
             } else {
                 HWND tb = FindWindow(L"Shell_TrayWnd", NULL); 
