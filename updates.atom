@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-02T10:18:11.000Z</updated>
+    <updated>2026-04-02T22:42:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 3.2]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#986dba20bfaf6c9b4fe1acf7c4c82b1aad598403</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-04-02T22:42:45.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="improved">Improved</h3>
+<ul>
+<li>Reworked active document inspection into a shared snapshot path, removing duplicated COM/Automation logic.</li>
+<li>Added safer RAII-style wrappers for <code>IDispatch</code>, <code>BSTR</code>, and <code>VARIANT</code> to reduce cleanup mistakes and make the code easier to maintain.</li>
+<li>Switched document-state monitoring to adaptive polling: faster while edits/saves are active, slower while idle.</li>
+<li>Added retry backoff for temporary COM/Automation failures instead of retrying at a fixed interval.</li>
+<li>Throttled repeated failure logs to reduce noise in Windhawk logs.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Fixed manual save handling so <code>Ctrl+S</code> no longer marks the document as clean before Word actually finishes saving.</li>
+<li>Fixed internal dirty-state tracking so it is tied to the current document path, avoiding stale state when switching between documents.</li>
+<li>Improved owner UI thread handling so the mod can re-adopt the active Word UI thread more reliably.</li>
+<li>Fixed timer behavior so save/state timers are treated as proper one-shot timers and cleaned up correctly after firing.</li>
+<li>Improved runtime state reset on init, unload, and settings reload to avoid leftover internal state.</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word MathType Dark Mode Fix 1.0.1]]></title>
         <id>https://windhawk.net/mods/word-mathtype-dark-fix#625efd049990e7576b84ce9802cd97b8573f43e7</id>
@@ -353,17 +379,6 @@ remainder; built-in aliases: gpt, yt, google, copilot, x, reddit, translate</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Helper 2.4.1]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-helper#d31cc9caa1d942878e751a16924b51ab1a8a4a90</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
-        <updated>2026-03-29T09:48:21.000Z</updated>
-        <content type="html"><![CDATA[<p>Update last desktop tracking when the foreground window changes, so desktop switches triggered by taskbar window activation are recorded correctly.</p>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>

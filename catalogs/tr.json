@@ -11434,7 +11434,7 @@
                     5
                 ],
                 "ratingUsers": 5,
-                "updated": 1774516062000,
+                "updated": 1775169765000,
                 "users": 120
             },
             "metadata": {
@@ -11449,7 +11449,7 @@
                     "WINWORD.EXE"
                 ],
                 "name": "Word Local AutoSave",
-                "version": "3.1"
+                "version": "3.2"
             }
         },
         "word-mathtype-dark-fix": {

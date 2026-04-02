@@ -1,3 +1,19 @@
+## 3.2 ([Apr 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/986dba20bfaf6c9b4fe1acf7c4c82b1aad598403/mods/word-local-autosave.wh.cpp))
+
+### Improved
+- Reworked active document inspection into a shared snapshot path, removing duplicated COM/Automation logic.
+- Added safer RAII-style wrappers for `IDispatch`, `BSTR`, and `VARIANT` to reduce cleanup mistakes and make the code easier to maintain.
+- Switched document-state monitoring to adaptive polling: faster while edits/saves are active, slower while idle.
+- Added retry backoff for temporary COM/Automation failures instead of retrying at a fixed interval.
+- Throttled repeated failure logs to reduce noise in Windhawk logs.
+
+### Fixed
+- Fixed manual save handling so `Ctrl+S` no longer marks the document as clean before Word actually finishes saving.
+- Fixed internal dirty-state tracking so it is tied to the current document path, avoiding stale state when switching between documents.
+- Improved owner UI thread handling so the mod can re-adopt the active Word UI thread more reliably.
+- Fixed timer behavior so save/state timers are treated as proper one-shot timers and cleaned up correctly after firing.
+- Improved runtime state reset on init, unload, and settings reload to avoid leftover internal state.
+
 ## 3.1 ([Mar 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1bc0e23eb43c7bad97ad22df81f2a3da9231a605/mods/word-local-autosave.wh.cpp))
 
 - Added detection for paste via the context menu so it also triggers auto-save.
