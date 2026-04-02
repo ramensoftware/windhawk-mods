@@ -4,7 +4,7 @@
 // @name:zh-CN    Word MathType 公式深色模式修复
 // @description   Fix the readability issue of MathType Equations in Word dark mode.
 // @description:zh-CN 解决 Word 深色模式下 MathType 公式的可读性问题
-// @version       1.0.0
+// @version       1.0.1
 // @author        Joe Ye
 // @github        https://github.com/JoeYe-233
 // @include       winword.exe
@@ -46,16 +46,20 @@ std::atomic<bool> g_wwlibHooked{false};
 bool IsPureBlack(COLORREF color) {
     return (color == RGB(0, 0, 0));
 }
-
+bool g_isInPrintPreview = false;
 // =============================================================
 // DarkModeState::SetDarkMode Hook
 // =============================================================
 #ifdef _WIN64
     #define WH_CALLCONV
     #define SYM_SetDarkMode L"?SetDarkMode@DarkModeState@@QEAAX_N0K@Z"
+    #define SYM_CreatePrintPreviewHWND L"?CreatePrintPreviewHWND@PPU@@UEAAPEAUHWND__@@PEAU2@@Z"
+    #define SYM_ClearPrintPreviewWwd L"?ClearPrintPreviewWwd@PPU@@UEAAXXZ"
 #else
     #define WH_CALLCONV __thiscall
     #define SYM_SetDarkMode L"?SetDarkMode@DarkModeState@@QAEX_N0K@Z"
+    #define SYM_CreatePrintPreviewHWND L"?CreatePrintPreviewHWND@PPU@@UAEPAUHWND__@@PAU2@@Z"
+    #define SYM_ClearPrintPreviewWwd L"?ClearPrintPreviewWwd@OSU@@SGXPBUMWD@@@Z"
 #endif
 
 typedef void (WH_CALLCONV *SetDarkMode_t)(void* pThis, bool isDark, bool a2, unsigned long a3);
@@ -67,16 +71,47 @@ void WH_CALLCONV Hook_SetDarkMode(void* pThis, bool isDark, bool a2, unsigned lo
     pOrig_SetDarkMode(pThis, isDark, a2, a3);
 }
 
+// -------------------------------------------------------------------------
+// Print Preview State Hooks (To avoid applying dark mode colors in print preview mode, which will cause the previewed document to look messed up and unreadable)
+// -------------------------------------------------------------------------
+typedef HWND (WH_CALLCONV *CreatePrintPreviewHWND_t)(void* pThis, HWND hwnd);
+CreatePrintPreviewHWND_t pOrig_CreatePrintPreviewHWND = nullptr;
+
+HWND WH_CALLCONV Hook_CreatePrintPreviewHWND(void* pThis, HWND hwnd) {
+    g_isInPrintPreview = true;
+    return pOrig_CreatePrintPreviewHWND(pThis, hwnd);
+}
+
+typedef void (WINAPI *ClearPrintPreviewWwd_t)(void* pMwd);
+ClearPrintPreviewWwd_t pOrig_ClearPrintPreviewWwd = nullptr;
+
+void WINAPI Hook_ClearPrintPreviewWwd(void* pMwd) {
+    g_isInPrintPreview = false;
+    pOrig_ClearPrintPreviewWwd(pMwd);
+}
+
 void ScanAndHookWwlib() {
     HMODULE hWwlib = GetModuleHandleW(L"wwlib.dll");
     if (!hWwlib || g_wwlibHooked.exchange(true)) return;
-    
+
     // wwlib.dll
     WindhawkUtils::SYMBOL_HOOK wwlibHook[] = {
         {
             { SYM_SetDarkMode },
             (void**)&pOrig_SetDarkMode,
             (void*)Hook_SetDarkMode,
+            false
+        },
+        {
+            { SYM_CreatePrintPreviewHWND },
+            (void**)&pOrig_CreatePrintPreviewHWND,
+            (void*)Hook_CreatePrintPreviewHWND,
+            false
+        },
+        {
+            { SYM_ClearPrintPreviewWwd },
+            (void**)&pOrig_ClearPrintPreviewWwd,
+            (void*)Hook_ClearPrintPreviewWwd,
             false
         }
     };
@@ -96,24 +131,28 @@ void ScanAndHookWwlib() {
     }
 }
 
-// Make sure the HDC is from Word document canvas, not UI components like Ribbon or backstage
 bool IsDocumentDC(HDC hdc) {
-    // Feature 1: UI components (splash screen, Ribbon) are all in MM_TEXT mode, so we can directly rule them out.
+
+    // If it's in print preview mode, we should not apply dark mode colors.
+    if (g_isInPrintPreview) return false;
+
+    // If it's a metafile DC, we should not apply dark mode colors, otherwise the exported PDF or the formula copied to clipboard will be messed up.
+    DWORD dcType = GetObjectType(hdc);
+    if (dcType == OBJ_ENHMETADC || dcType == OBJ_METADC) {
+        return false;
+    }
+
+    // If the device is a printer, we should not apply dark mode colors, otherwise the printed document will be messed up.
+    int tech = GetDeviceCaps(hdc, TECHNOLOGY);
+    if (tech == DT_RASPRINTER) {
+        return false;
+    }
+
+    // If the mapping mode is MM_TEXT, it's usually used for UI drawing with pure pixel coordinate, we should not apply dark mode colors to avoid messing up the UI, otherwise some UI elements will become invisible in dark mode (e.g. the text cursor in formula editor will become invisible if we apply dark mode color to it). Only when it's not MM_TEXT, it's usually used for canvas drawing with scaled coordinate system, we should apply dark mode colors to it.
     if (GetMapMode(hdc) == MM_TEXT) {
         return false;
     }
-    
-    // Feature 2: Get the window handle corresponding to the current drawing
-    HWND hwnd = WindowFromDC(hdc);
-    if (hwnd) {
-        wchar_t className[64];
-        if (GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
-            // If specific window can be obtained, only allow Word document canvas (_WwG) to pass through!
-            if (wcscmp(className, L"_WwG") != 0) {
-                return false;
-            }
-        }
-    }
+
     return true;
 }
 
@@ -285,13 +324,11 @@ typedef HGDIOBJ (WINAPI *SelectObject_t)(HDC, HGDIOBJ);
 typedef COLORREF (WINAPI *SetDCBrushColor_t)(HDC, COLORREF);
 typedef COLORREF (WINAPI *SetDCPenColor_t)(HDC, COLORREF);
 typedef COLORREF (WINAPI *SetTextColor_t)(HDC, COLORREF);
-typedef COLORREF (WINAPI *SetBkColor_t)(HDC, COLORREF);
 
 SelectObject_t pOrig_SelectObject = nullptr;
 SetDCBrushColor_t pOrig_SetDCBrushColor = nullptr;
 SetDCPenColor_t pOrig_SetDCPenColor = nullptr;
 SetTextColor_t pOrig_SetTextColor = nullptr;
-SetBkColor_t pOrig_SetBkColor = nullptr;
 
 HBRUSH g_hWhiteBrush = nullptr;
 HPEN g_hWhitePen = nullptr;
@@ -320,7 +357,6 @@ HGDIOBJ WINAPI Hook_SelectObject(HDC hdc, HGDIOBJ h) {
             return pOrig_SelectObject(hdc, GetDarkPen(elp.elpPenStyle, elp.elpWidth, elp.elpColor));
         }
     }
-
     return pOrig_SelectObject(hdc, h);
 }
 
@@ -377,9 +413,9 @@ HMODULE WINAPI Hook_LoadLibraryW(LPCWSTR lpLibFileName) {
 // =============================================================
 BOOL Wh_ModInit() {
     Wh_Log(L"MathType Fix Loaded. Initializing...");
-    
+
     g_isDarkTheme = false;
-    
+
     HMODULE hGdi = LoadLibrary(L"gdi32.dll");
     if (!hGdi) return FALSE;
 
