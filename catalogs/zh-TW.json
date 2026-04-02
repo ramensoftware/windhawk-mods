@@ -7589,7 +7589,7 @@
                     7
                 ],
                 "ratingUsers": 7,
-                "updated": 1774944629000,
+                "updated": 1775124994000,
                 "users": 83
             },
             "metadata": {
@@ -7605,7 +7605,7 @@
                     "wordpad.exe"
                 ],
                 "name": "Smooth Scroll for Win32",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "spoof-light-dark-theme": {
@@ -11465,7 +11465,7 @@
                     2
                 ],
                 "ratingUsers": 2,
-                "updated": 1774906294000,
+                "updated": 1775125091000,
                 "users": 14
             },
             "metadata": {
@@ -11477,7 +11477,7 @@
                     "winword.exe"
                 ],
                 "name": "Word MathType 公式深色模式修复",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "word-pdf-lossless-export": {
