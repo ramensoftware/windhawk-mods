@@ -1,11 +1,3 @@
-/*
- * Lock Program to Specific Monitor
- * Copyright (c) 2026 www.EveryVerse.ca
- * CC BY-NC-SA 
- * 
- * Version .2 - Added saved setting column
- */
-
 // ==WindhawkMod==
 // @id             lock-program-to-monitor
 // @name            Lock Program to Specific Monitor
@@ -17,8 +9,7 @@
 // @include         *
 // @github          https://github.com/EveryVerseDOTca
 // @compilerOptions -ladvapi32 -lcomctl32
-// @license         CC BY-NC-SA 
-// @twitter         EveryVerseCA       
+// @license         CC-BY-NC-SA-4.0 
 // ==/WindhawkMod==
 //
 // Notes:
