@@ -20,7 +20,7 @@ Converts Discord's modern Windows toast notifications into balloon tips that app
 # WARNING!
 The use of third party Discord clients with this mod is **NOT** supported! This mod is designed for the official Discord app. It may or may not function properly with unofficial Discord clients. Try on your own risk.
 
-Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually. Otherwise, Discord may **crash** if not restarted on next notification.
+Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually for the mod to function.
 
 ## Requirement:
 Ensure **EnableLegacyBalloonNotifications** is set to **1** in ``HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications``
