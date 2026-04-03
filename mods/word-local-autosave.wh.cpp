@@ -1,12 +1,13 @@
 // ==WindhawkMod==
 // @id              word-local-autosave
 // @name            Word Local AutoSave
-// @description     Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S
-// @version         2.0
+// @description     Enables AutoSave functionality for local documents in Microsoft Word via direct Word saves
+// @version         3.2
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
 // @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -loleacc
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,67 +19,37 @@ how AutoSave works with OneDrive files.
 
 ## How it works
 
-The mod monitors keyboard input in Microsoft Word. When you type, delete, paste,
-or make any changes to your document, it automatically triggers a save after a
-short delay.
+The mod monitors keyboard input and document dirty-state changes in Microsoft
+Word. When you type, paste, format text, or make other editing changes, it
+schedules a save after a short delay.
+
+This build does **not** send `Ctrl+S`. It talks to Word directly through
+automation and calls document save APIs, which removes the root cause of false
+shortcut activations.
 
 ## Features
 
 - Detects typing, backspace, delete, enter, punctuation, numpad, and clipboard operations
-- Detects Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+Y, Ctrl+Enter (page break), Ctrl+Shift+Enter (column break)
+- Detects Ctrl+V, Ctrl+X, Ctrl+Y, Ctrl+Z, Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+Enter
+- Detects context-menu paste and non-keyboard formatting changes after Word marks the document dirty
 - Configurable delay before saving
 - Optional minimum interval between saves to prevent excessive disk writes
-- Works with any locally saved Word document
-- Only saves when Word is the active window
-- Requires a quiet period (500ms no key presses) before saving to prevent shortcut conflicts
-- **Comprehensive protection against ALL Word keyboard shortcuts** (100+ shortcuts checked)
+- Direct Word save calls with zero synthetic keyboard input
+- Only saves when the active Word document window is focused
 
-## Safety Features (v2.0)
+## Shortcut Safety (v3.2)
 
-The mod uses **8-stage verification** to guarantee zero false shortcut triggers:
-
-1. **Triple pre-check** with delays to catch fast typing
-2. **Quiet period validation** before and after each stage
-3. **Post-Ctrl verification** to detect keys pressed during Ctrl send
-4. **Post-S verification** to detect concurrent key presses
-5. **Inter-key delays** to allow system to process inputs
-6. **Foreground re-validation** to ensure Word is still active
-7. **Key release retry** with multiple attempts
-8. **Comprehensive 100+ shortcut protection**
-
-This ensures **zero false triggers** even with minimum 100ms save delay.
-
-## Protected Shortcuts
-
-The mod protects against accidental triggering of ANY Word shortcut, including:
-- **Font Size**: Ctrl+[ and Ctrl+] (Decrease/Increase font)
-- **Document**: Ctrl+N/O/W/P (New/Open/Close/Print)
-- **Editing**: Ctrl+A/C/V/X/Z/Y (Select/Copy/Paste/Cut/Undo/Redo)
-- **Navigation**: Ctrl+Home/End/Arrows/PageUp/PageDown
-- **Special**: Ctrl+Space (Clear format), Ctrl+Enter (Page break), Ctrl+Tab (Switch docs)
-- **Function keys**: Ctrl+F1-F12 (Ribbon, Print Preview, Close, etc.)
-- **And many more**: All Ctrl+Shift, Ctrl+Alt combinations
-
-## Settings
-
-- **Save Delay (ms)**: How long to wait after the last keystroke before saving.
-  Default is 1000ms (1 second).
-- **Minimum Time Between Saves (ms)**: Minimum interval between consecutive saves.
-  Set to 0 to disable this limit and allow saving as frequently as possible.
+- No `SendInput`
+- No synthetic `Ctrl` state
+- No partial `Ctrl+...` races
+- Save execution stays on one owner UI thread
+- Pending input and held modifiers postpone auto-save instead of racing it
 
 ## Limitations
 
-- Mouse operations (click, drag & drop, context menu paste) are not detected
 - Only works with documents that have already been saved at least once
-- New unsaved documents will trigger the "Save As" dialog
-- IME input (Asian languages) may not trigger auto-save reliably
-
-## Notes
-
-- The mod simulates pressing Ctrl+S, so it behaves exactly like manual saving.
-- Manual Ctrl+S presses are detected and reset the auto-save timer.
-- Auto-save only triggers when Microsoft Word is the foreground window.
-- Auto-save requires 500ms of keyboard inactivity to prevent triggering wrong shortcuts.
+- New unsaved documents are skipped to avoid opening "Save As"
+- Operations that don't make Word mark the document as modified are ignored
 */
 // ==/WindhawkModReadme==
 
@@ -94,33 +65,43 @@ The mod protects against accidental triggering of ANY Word shortcut, including:
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <oleauto.h>
+#include <oleacc.h>
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-#define IS_KEY_PRESSED(vk) (GetAsyncKeyState(vk) < 0)
-
-// Timing - CRITICAL for preventing false triggers
-// Even with 100ms save delay, we MUST have enough quiet time
-const DWORD QUIET_PERIOD_MS = 500;              // Minimum quiet time before saving
-const DWORD RETRY_INTERVAL_MS = 100;            // Interval between retry attempts
-const DWORD DEFERRED_SAVE_BUFFER_MS = 50;       // Buffer for deferred saves
-const DWORD PRE_SEND_VERIFY_DELAY_MS = 10;      // Delay between verification checks
-const DWORD POST_CTRL_VERIFY_DELAY_MS = 5;      // Delay after Ctrl press before check
-const DWORD INTER_KEY_DELAY_MS = 2;             // Delay between key operations
-const int MAX_RETRY_COUNT = 50;                 // Max retry attempts (5 seconds)
-const int MAX_KEY_RELEASE_RETRIES = 3;          // Retries for releasing stuck keys
-const int PRE_SEND_CHECK_COUNT = 3;             // Number of pre-send verifications
 const int MIN_SAVE_DELAY_MS = 100;
 const int MAX_SAVE_DELAY_MS = 60000;
 const int MAX_MIN_TIME_BETWEEN_SAVES = 300000;
+const DWORD MIN_RETRY_INTERVAL_MS = 50;
+const DWORD INPUT_SETTLE_DELAY_MS = 25;
+const DWORD DOCUMENT_STATE_ACTIVE_POLL_INTERVAL_MS = 350;
+const DWORD DOCUMENT_STATE_IDLE_POLL_INTERVAL_MS = 1500;
+const DWORD MAX_SAVE_RETRY_INTERVAL_MS = 1000;
+const DWORD MAX_DOCUMENT_STATE_RETRY_INTERVAL_MS = 2000;
+const DWORD FAILURE_LOG_INTERVAL_MS = 2000;
+const DWORD OBJID_NATIVEOM_VALUE = 0xFFFFFFF0u;
 
-// Virtual key ranges
 const int VK_KEY_0 = 0x30;
 const int VK_KEY_9 = 0x39;
 const int VK_KEY_A = 0x41;
 const int VK_KEY_Z = 0x5A;
+
+const IID kIIDNull = {};
+const IID kIIDIDispatch = {
+    0x00020400,
+    0x0000,
+    0x0000,
+    {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}
+};
+
+// ============================================================================
+// Function Types
+// ============================================================================
+
+typedef BOOL (WINAPI* TranslateMessage_t)(const MSG*);
 
 // ============================================================================
 // Global State
@@ -131,655 +112,1166 @@ struct {
     int minTimeBetweenSaves;
 } g_settings;
 
-UINT_PTR g_saveTimerId = 0;
-UINT_PTR g_retryTimerId = 0;
-DWORD g_lastSaveTime = 0;
-DWORD g_lastInputTime = 0;
-DWORD g_lastKeyPressTime = 0;
-volatile bool g_isSendingCtrlS = false;
-DWORD g_wordProcessId = 0;
-int g_retryCount = 0;
-
-typedef BOOL (WINAPI *TranslateMessage_t)(const MSG*);
 TranslateMessage_t g_originalTranslateMessage = nullptr;
+DWORD g_wordProcessId = 0;
+DWORD g_ownerThreadId = 0;
+UINT_PTR g_saveTimerId = 0;
+UINT_PTR g_documentStateTimerId = 0;
+ULONGLONG g_lastEditTime = 0;
+ULONGLONG g_lastSaveTime = 0;
+BSTR g_observedDocumentPath = nullptr;
+DWORD g_saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+DWORD g_documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+ULONGLONG g_lastSaveFailureLogTime = 0;
+ULONGLONG g_lastDocumentStateFailureLogTime = 0;
+volatile LONG g_pendingSave = FALSE;
+volatile LONG g_documentDirtyKnown = FALSE;
+volatile LONG g_documentDirty = FALSE;
+volatile LONG g_manualSavePending = FALSE;
+volatile LONG g_moduleActive = FALSE;
 
 // ============================================================================
-// Forward Declarations
+// Utility Helpers
 // ============================================================================
 
-void ScheduleSave();
-void ScheduleRetry();
-void SendCtrlS();
-void TrySave();
-void CALLBACK RetryTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
-void CALLBACK SaveTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-inline DWORD SafeTimeDiff(DWORD now, DWORD past) {
-    return now - past;
+bool IsQueueKeyDown(int vk) {
+    return (GetKeyState(vk) & 0x8000) != 0;
 }
 
-void KillRetryTimer() {
-    if (g_retryTimerId != 0) {
-        KillTimer(nullptr, g_retryTimerId);
-        g_retryTimerId = 0;
+bool IsAsyncKeyDown(int vk) {
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+bool IsOwnerThread() {
+    return g_ownerThreadId != 0 && GetCurrentThreadId() == g_ownerThreadId;
+}
+
+bool HasClassName(HWND hwnd, const wchar_t* className) {
+    if (!hwnd || !className) {
+        return false;
+    }
+
+    wchar_t actualClass[64] = {};
+    if (!GetClassNameW(hwnd, actualClass, ARRAYSIZE(actualClass))) {
+        return false;
+    }
+
+    return lstrcmpW(actualClass, className) == 0;
+}
+
+bool IsOwnerCandidateMessage(UINT message) {
+    switch (message) {
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        case WM_CHAR:
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
+        case WM_XBUTTONUP:
+        case WM_COMMAND:
+        case WM_PASTE:
+        case WM_CUT:
+        case WM_UNDO:
+        case WM_CONTEXTMENU:
+            return true;
+    }
+
+    return false;
+}
+
+bool IsDocumentStateRefreshMessage(UINT message) {
+    switch (message) {
+        case WM_COMMAND:
+        case WM_PASTE:
+        case WM_CUT:
+        case WM_UNDO:
+            return true;
+    }
+
+    return false;
+}
+
+bool IsRetryableAutomationFailure(HRESULT hr) {
+    return hr == RPC_E_CALL_REJECTED || hr == RPC_E_SERVERCALL_RETRYLATER;
+}
+
+bool ShouldLogFailureNow(ULONGLONG* lastLogTime) {
+    if (!lastLogTime) {
+        return true;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG previous = *lastLogTime;
+    if (previous != 0 && now - previous < FAILURE_LOG_INTERVAL_MS) {
+        return false;
+    }
+
+    *lastLogTime = now;
+    return true;
+}
+
+DWORD AdvanceRetryDelay(DWORD* retryDelayMs, DWORD maxRetryDelayMs) {
+    if (!retryDelayMs) {
+        return MIN_RETRY_INTERVAL_MS;
+    }
+
+    DWORD delayMs = *retryDelayMs;
+    if (delayMs < MIN_RETRY_INTERVAL_MS) {
+        delayMs = MIN_RETRY_INTERVAL_MS;
+    }
+
+    DWORD nextDelayMs = delayMs;
+    if (nextDelayMs < maxRetryDelayMs) {
+        if (nextDelayMs > maxRetryDelayMs / 2) {
+            nextDelayMs = maxRetryDelayMs;
+        } else {
+            nextDelayMs *= 2;
+        }
+    }
+
+    *retryDelayMs = nextDelayMs;
+    return delayMs;
+}
+
+bool AreSameDocumentPath(const wchar_t* left, const wchar_t* right) {
+    const bool leftEmpty = !left || !*left;
+    const bool rightEmpty = !right || !*right;
+    if (leftEmpty || rightEmpty) {
+        return leftEmpty == rightEmpty;
+    }
+
+    return lstrcmpiW(left, right) == 0;
+}
+
+bool SetObservedDocumentPath(const wchar_t* path) {
+    if (AreSameDocumentPath(g_observedDocumentPath, path)) {
+        return true;
+    }
+
+    BSTR newPath = nullptr;
+    if (path && *path) {
+        newPath = SysAllocString(path);
+        if (!newPath) {
+            return false;
+        }
+    }
+
+    if (g_observedDocumentPath) {
+        SysFreeString(g_observedDocumentPath);
+    }
+
+    g_observedDocumentPath = newPath;
+    return true;
+}
+
+void ClearManualSavePending() {
+    InterlockedExchange(&g_manualSavePending, FALSE);
+}
+
+void ResetObservedDocumentState();
+
+void MarkObservedDocumentClean(const wchar_t* path) {
+    if (!path || !*path) {
+        ResetObservedDocumentState();
+        return;
+    }
+
+    if (!SetObservedDocumentPath(path)) {
+        ResetObservedDocumentState();
+        return;
+    }
+
+    InterlockedExchange(&g_documentDirtyKnown, TRUE);
+    InterlockedExchange(&g_documentDirty, FALSE);
+}
+
+void ResetObservedDocumentState() {
+    if (g_observedDocumentPath) {
+        SysFreeString(g_observedDocumentPath);
+        g_observedDocumentPath = nullptr;
+    }
+
+    InterlockedExchange(&g_documentDirtyKnown, FALSE);
+    InterlockedExchange(&g_documentDirty, FALSE);
+}
+
+bool NoteObservedDocumentDirty(const wchar_t* path) {
+    if (!path || !*path) {
+        ResetObservedDocumentState();
+        return false;
+    }
+
+    const bool pathChanged = !AreSameDocumentPath(g_observedDocumentPath, path);
+    if (!SetObservedDocumentPath(path)) {
+        ResetObservedDocumentState();
+        return true;
+    }
+
+    const LONG wasKnown = InterlockedCompareExchange(&g_documentDirtyKnown, TRUE, TRUE);
+    const LONG wasDirty = InterlockedExchange(&g_documentDirty, TRUE);
+    InterlockedExchange(&g_documentDirtyKnown, TRUE);
+    return wasKnown == FALSE || wasDirty == FALSE || pathChanged;
+}
+
+DWORD GetActiveWordUiThreadId() {
+    HWND foregroundWindow = GetForegroundWindow();
+    if (!foregroundWindow) {
+        return 0;
+    }
+
+    DWORD foregroundProcessId = 0;
+    GetWindowThreadProcessId(foregroundWindow, &foregroundProcessId);
+    if (foregroundProcessId != g_wordProcessId) {
+        return 0;
+    }
+
+    HWND rootWindow = GetAncestor(foregroundWindow, GA_ROOT);
+    if (!rootWindow) {
+        rootWindow = foregroundWindow;
+    }
+
+    if (!HasClassName(rootWindow, L"OpusApp")) {
+        return 0;
+    }
+
+    return GetWindowThreadProcessId(rootWindow, nullptr);
+}
+
+bool IsActiveWordDocumentWindow() {
+    return GetActiveWordUiThreadId() != 0;
+}
+
+bool IsCurrentThreadActiveWordUiThread() {
+    const DWORD activeWordUiThreadId = GetActiveWordUiThreadId();
+    return activeWordUiThreadId != 0 && activeWordUiThreadId == GetCurrentThreadId();
+}
+
+bool IsCurrentThreadActiveOwner() {
+    const DWORD activeWordUiThreadId = GetActiveWordUiThreadId();
+    return activeWordUiThreadId != 0 &&
+           g_ownerThreadId == activeWordUiThreadId &&
+           GetCurrentThreadId() == activeWordUiThreadId;
+}
+
+bool AreModifiersOrMouseButtonsHeld() {
+    return IsAsyncKeyDown(VK_SHIFT) ||
+           IsAsyncKeyDown(VK_CONTROL) ||
+           IsAsyncKeyDown(VK_MENU) ||
+           IsAsyncKeyDown(VK_LWIN) ||
+           IsAsyncKeyDown(VK_RWIN) ||
+           IsAsyncKeyDown(VK_LBUTTON) ||
+           IsAsyncKeyDown(VK_RBUTTON) ||
+           IsAsyncKeyDown(VK_MBUTTON) ||
+           IsAsyncKeyDown(VK_XBUTTON1) ||
+           IsAsyncKeyDown(VK_XBUTTON2);
+}
+
+BOOL CALLBACK FindWordViewWindowProc(HWND hwnd, LPARAM lParam) {
+    HWND* result = reinterpret_cast<HWND*>(lParam);
+    if (!result || *result) {
+        return FALSE;
+    }
+
+    if (HasClassName(hwnd, L"_WwG")) {
+        *result = hwnd;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+HWND FindNativeWordViewWindow() {
+    HWND foregroundWindow = GetForegroundWindow();
+    if (!foregroundWindow) {
+        return nullptr;
+    }
+
+    HWND rootWindow = GetAncestor(foregroundWindow, GA_ROOT);
+    if (!rootWindow) {
+        rootWindow = foregroundWindow;
+    }
+
+    DWORD threadId = GetWindowThreadProcessId(rootWindow, nullptr);
+    GUITHREADINFO guiThreadInfo = {};
+    guiThreadInfo.cbSize = sizeof(guiThreadInfo);
+
+    if (threadId && GetGUIThreadInfo(threadId, &guiThreadInfo)) {
+        HWND candidates[] = {
+            guiThreadInfo.hwndFocus,
+            guiThreadInfo.hwndCaret,
+            foregroundWindow,
+            rootWindow,
+        };
+
+        for (HWND candidate : candidates) {
+            while (candidate) {
+                if (HasClassName(candidate, L"_WwG")) {
+                    return candidate;
+                }
+
+                if (candidate == rootWindow) {
+                    break;
+                }
+
+                candidate = GetParent(candidate);
+            }
+        }
+    }
+
+    HWND result = nullptr;
+    EnumChildWindows(rootWindow, FindWordViewWindowProc, reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+bool ArmDocumentStateTimer(DWORD delayMs);
+bool ArmSaveTimer(DWORD delayMs);
+
+void AdoptOwnerThreadIfNeeded(const MSG* lpMsg) {
+    if (!lpMsg || !IsOwnerCandidateMessage(lpMsg->message)) {
+        return;
+    }
+
+    if (!IsCurrentThreadActiveWordUiThread()) {
+        return;
+    }
+
+    const DWORD currentThreadId = GetCurrentThreadId();
+    const DWORD previousOwnerThreadId = InterlockedExchange(
+        reinterpret_cast<volatile LONG*>(&g_ownerThreadId),
+        static_cast<LONG>(currentThreadId));
+    if (previousOwnerThreadId != currentThreadId) {
+        g_saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+        g_documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+        ResetObservedDocumentState();
+        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+        if (InterlockedCompareExchange(&g_pendingSave, TRUE, TRUE) == TRUE) {
+            ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
+        }
     }
 }
 
-void KillSaveTimer() {
+void CancelSaveTimer() {
     if (g_saveTimerId != 0) {
         KillTimer(nullptr, g_saveTimerId);
         g_saveTimerId = 0;
     }
 }
 
-void ResetAllTimers() {
-    KillSaveTimer();
-    KillRetryTimer();
-    g_retryCount = 0;
+void CancelDocumentStateTimer() {
+    if (g_documentStateTimerId != 0) {
+        KillTimer(nullptr, g_documentStateTimerId);
+        g_documentStateTimerId = 0;
+    }
 }
 
-void ScheduleRetry() {
-    g_retryCount++;
-    if (g_retryCount >= MAX_RETRY_COUNT) {
-        Wh_Log(L"Too many retries (%d), giving up", g_retryCount);
-        g_retryCount = 0;
+void HandleAutosaveTick();
+void HandleDocumentStateTick();
+void CALLBACK DocumentStateTimerProc(HWND, UINT, UINT_PTR, DWORD);
+
+DWORD GetSteadyDocumentStatePollDelay() {
+    if (InterlockedCompareExchange(&g_pendingSave, TRUE, TRUE) == TRUE ||
+        InterlockedCompareExchange(&g_documentDirty, TRUE, TRUE) == TRUE ||
+        InterlockedCompareExchange(&g_manualSavePending, TRUE, TRUE) == TRUE) {
+        return DOCUMENT_STATE_ACTIVE_POLL_INTERVAL_MS;
+    }
+
+    return DOCUMENT_STATE_IDLE_POLL_INTERVAL_MS;
+}
+
+bool ArmDocumentStateTimer(DWORD delayMs) {
+    if (!IsOwnerThread()) {
+        return false;
+    }
+
+    CancelDocumentStateTimer();
+    g_documentStateTimerId =
+        SetTimer(nullptr, 0, delayMs ? delayMs : 1, DocumentStateTimerProc);
+    if (g_documentStateTimerId == 0) {
+        Wh_Log(L"Document state monitor: SetTimer failed, error=%lu", GetLastError());
+        return false;
+    }
+
+    return true;
+}
+
+void ScheduleSaveFromEdit() {
+    g_lastEditTime = GetTickCount64();
+    InterlockedExchange(&g_pendingSave, TRUE);
+    ArmSaveTimer(static_cast<DWORD>(g_settings.saveDelay));
+}
+
+void ClearPendingSave() {
+    InterlockedExchange(&g_pendingSave, FALSE);
+}
+
+void HandleManualSave() {
+    InterlockedExchange(&g_manualSavePending, TRUE);
+    CancelSaveTimer();
+    ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+}
+
+// ============================================================================
+// COM Helpers
+// ============================================================================
+
+class ScopedComInit {
+public:
+    ScopedComInit() {
+        m_hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (m_hr == RPC_E_CHANGED_MODE) {
+            m_hr = S_OK;
+            m_shouldUninitialize = false;
+            return;
+        }
+
+        m_shouldUninitialize = SUCCEEDED(m_hr);
+    }
+
+    ~ScopedComInit() {
+        if (m_shouldUninitialize) {
+            CoUninitialize();
+        }
+    }
+
+    HRESULT GetResult() const {
+        return m_hr;
+    }
+
+private:
+    HRESULT m_hr = E_FAIL;
+    bool m_shouldUninitialize = false;
+};
+
+template <typename T>
+class ScopedComPtr {
+public:
+    ScopedComPtr() = default;
+
+    ScopedComPtr(const ScopedComPtr&) = delete;
+    ScopedComPtr& operator=(const ScopedComPtr&) = delete;
+
+    ScopedComPtr(ScopedComPtr&& other) noexcept : m_ptr(other.Detach()) {
+    }
+
+    ScopedComPtr& operator=(ScopedComPtr&& other) noexcept {
+        if (this != &other) {
+            Reset(other.Detach());
+        }
+
+        return *this;
+    }
+
+    ~ScopedComPtr() {
+        Reset();
+    }
+
+    T* Get() const {
+        return m_ptr;
+    }
+
+    T** Put() {
+        Reset();
+        return &m_ptr;
+    }
+
+    void Reset(T* ptr = nullptr) {
+        if (m_ptr) {
+            m_ptr->Release();
+        }
+
+        m_ptr = ptr;
+    }
+
+    T* Detach() {
+        T* ptr = m_ptr;
+        m_ptr = nullptr;
+        return ptr;
+    }
+
+    explicit operator bool() const {
+        return m_ptr != nullptr;
+    }
+
+    T* operator->() const {
+        return m_ptr;
+    }
+
+private:
+    T* m_ptr = nullptr;
+};
+
+class ScopedBstr {
+public:
+    ScopedBstr() = default;
+
+    ScopedBstr(const ScopedBstr&) = delete;
+    ScopedBstr& operator=(const ScopedBstr&) = delete;
+
+    ScopedBstr(ScopedBstr&& other) noexcept : m_value(other.Detach()) {
+    }
+
+    ScopedBstr& operator=(ScopedBstr&& other) noexcept {
+        if (this != &other) {
+            Reset(other.Detach());
+        }
+
+        return *this;
+    }
+
+    ~ScopedBstr() {
+        Reset();
+    }
+
+    BSTR Get() const {
+        return m_value;
+    }
+
+    BSTR* Put() {
+        Reset();
+        return &m_value;
+    }
+
+    void Reset(BSTR value = nullptr) {
+        if (m_value) {
+            SysFreeString(m_value);
+        }
+
+        m_value = value;
+    }
+
+    BSTR Detach() {
+        BSTR value = m_value;
+        m_value = nullptr;
+        return value;
+    }
+
+    UINT Length() const {
+        return m_value ? SysStringLen(m_value) : 0;
+    }
+
+    const wchar_t* CStr() const {
+        return m_value ? m_value : L"";
+    }
+
+private:
+    BSTR m_value = nullptr;
+};
+
+class ScopedVariant {
+public:
+    ScopedVariant() {
+        VariantInit(&m_value);
+    }
+
+    ScopedVariant(const ScopedVariant&) = delete;
+    ScopedVariant& operator=(const ScopedVariant&) = delete;
+
+    ~ScopedVariant() {
+        VariantClear(&m_value);
+    }
+
+    VARIANT* Get() {
+        return &m_value;
+    }
+
+    const VARIANT* Get() const {
+        return &m_value;
+    }
+
+private:
+    VARIANT m_value = {};
+};
+
+HRESULT InvokeDispatch(IDispatch* dispatch,
+                       WORD flags,
+                       LPOLESTR name,
+                       VARIANT* result = nullptr,
+                       int argCount = 0,
+                       VARIANT* args = nullptr) {
+    if (!dispatch) {
+        return E_POINTER;
+    }
+
+    DISPID dispatchId = DISPID_UNKNOWN;
+    HRESULT hr = dispatch->GetIDsOfNames(kIIDNull, &name, 1, LOCALE_USER_DEFAULT, &dispatchId);
+    if (FAILED(hr)) {
+        return hr;
+    }
+
+    DISPPARAMS params = {};
+    params.cArgs = argCount;
+    params.rgvarg = args;
+
+    DISPID namedArg = DISPID_PROPERTYPUT;
+    if (flags & DISPATCH_PROPERTYPUT) {
+        params.cNamedArgs = 1;
+        params.rgdispidNamedArgs = &namedArg;
+    }
+
+    return dispatch->Invoke(dispatchId,
+                            kIIDNull,
+                            LOCALE_USER_DEFAULT,
+                            flags,
+                            &params,
+                            result,
+                            nullptr,
+                            nullptr);
+}
+
+HRESULT GetDispatchProperty(IDispatch* dispatch, const wchar_t* name, IDispatch** result) {
+    if (!result) {
+        return E_POINTER;
+    }
+
+    *result = nullptr;
+
+    ScopedVariant value;
+    HRESULT hr = InvokeDispatch(dispatch,
+                                DISPATCH_PROPERTYGET,
+                                const_cast<LPOLESTR>(name),
+                                value.Get());
+    if (FAILED(hr)) {
+        return hr;
+    }
+
+    if (value.Get()->vt == VT_DISPATCH && value.Get()->pdispVal) {
+        *result = value.Get()->pdispVal;
+        value.Get()->pdispVal = nullptr;
+        return S_OK;
+    }
+
+    if (value.Get()->vt == VT_UNKNOWN && value.Get()->punkVal) {
+        hr = value.Get()->punkVal->QueryInterface(IID_PPV_ARGS(result));
+        return hr;
+    }
+
+    return DISP_E_TYPEMISMATCH;
+}
+
+HRESULT GetBoolProperty(IDispatch* dispatch, const wchar_t* name, bool* result) {
+    if (!result) {
+        return E_POINTER;
+    }
+
+    *result = false;
+
+    ScopedVariant value;
+    ScopedVariant converted;
+    HRESULT hr = InvokeDispatch(dispatch,
+                                DISPATCH_PROPERTYGET,
+                                const_cast<LPOLESTR>(name),
+                                value.Get());
+    if (SUCCEEDED(hr)) {
+        hr = VariantChangeType(converted.Get(), value.Get(), 0, VT_BOOL);
+        if (SUCCEEDED(hr)) {
+            *result = converted.Get()->boolVal != VARIANT_FALSE;
+        }
+    }
+
+    return hr;
+}
+
+HRESULT GetBstrProperty(IDispatch* dispatch, const wchar_t* name, BSTR* result) {
+    if (!result) {
+        return E_POINTER;
+    }
+
+    *result = nullptr;
+
+    ScopedVariant value;
+    ScopedVariant converted;
+    HRESULT hr = InvokeDispatch(dispatch,
+                                DISPATCH_PROPERTYGET,
+                                const_cast<LPOLESTR>(name),
+                                value.Get());
+    if (SUCCEEDED(hr)) {
+        hr = VariantChangeType(converted.Get(), value.Get(), 0, VT_BSTR);
+        if (SUCCEEDED(hr) && converted.Get()->bstrVal) {
+            *result = SysAllocString(converted.Get()->bstrVal);
+            hr = *result ? S_OK : E_OUTOFMEMORY;
+        }
+    }
+
+    return hr;
+}
+
+HRESULT GetWordApplicationFromRot(IDispatch** application) {
+    if (!application) {
+        return E_POINTER;
+    }
+
+    *application = nullptr;
+
+    CLSID wordClsid;
+    HRESULT hr = CLSIDFromProgID(L"Word.Application", &wordClsid);
+    if (FAILED(hr)) {
+        return hr;
+    }
+
+    ScopedComPtr<IUnknown> unknown;
+    hr = GetActiveObject(wordClsid, nullptr, unknown.Put());
+    if (FAILED(hr) || !unknown) {
+        return hr;
+    }
+
+    return unknown->QueryInterface(IID_PPV_ARGS(application));
+}
+
+HRESULT GetWordApplicationFromActiveWindow(IDispatch** application) {
+    if (!application) {
+        return E_POINTER;
+    }
+
+    *application = nullptr;
+
+    HWND viewWindow = FindNativeWordViewWindow();
+    if (!viewWindow) {
+        return E_FAIL;
+    }
+
+    ScopedComPtr<IDispatch> nativeObject;
+    HRESULT hr = AccessibleObjectFromWindow(
+        viewWindow,
+        OBJID_NATIVEOM_VALUE,
+        kIIDIDispatch,
+        reinterpret_cast<void**>(nativeObject.Put()));
+    if (FAILED(hr) || !nativeObject) {
+        return hr;
+    }
+
+    hr = GetDispatchProperty(nativeObject.Get(), L"Application", application);
+    if (FAILED(hr) || !*application) {
+        ScopedComPtr<IDispatch> activeDocument;
+        if (SUCCEEDED(GetDispatchProperty(nativeObject.Get(),
+                                          L"ActiveDocument",
+                                          activeDocument.Put()))) {
+            nativeObject.Get()->AddRef();
+            *application = nativeObject.Get();
+            hr = S_OK;
+        }
+    }
+
+    return hr;
+}
+
+HRESULT GetWordApplication(IDispatch** application) {
+    HRESULT hr = GetWordApplicationFromActiveWindow(application);
+    if (SUCCEEDED(hr) && application && *application) {
+        return hr;
+    }
+
+    return GetWordApplicationFromRot(application);
+}
+
+// ============================================================================
+// Save Logic
+// ============================================================================
+
+enum class SaveAttemptResult {
+    Saved,
+    AlreadyClean,
+    Cleared,
+    RetryLater,
+};
+
+enum class DocumentDirtyState {
+    Clean,
+    Dirty,
+    RetryLater,
+};
+
+enum class SnapshotLogContext {
+    Save,
+    DocumentState,
+};
+
+enum class SnapshotQueryResult {
+    Ready,
+    Cleared,
+    RetryLater,
+};
+
+struct ActiveDocumentSnapshot {
+    ScopedComPtr<IDispatch> document;
+    ScopedBstr path;
+    bool readOnly = false;
+    bool saved = true;
+    bool hasPath = false;
+
+    void Reset() {
+        document.Reset();
+        path.Reset();
+        readOnly = false;
+        saved = true;
+        hasPath = false;
+    }
+};
+
+void LogSnapshotFailure(SnapshotLogContext context, const wchar_t* message, HRESULT hr) {
+    ULONGLONG* lastLogTime = context == SnapshotLogContext::Save
+                                 ? &g_lastSaveFailureLogTime
+                                 : &g_lastDocumentStateFailureLogTime;
+    if (!ShouldLogFailureNow(lastLogTime)) {
         return;
     }
-    
-    KillRetryTimer();
-    UINT_PTR timerId = SetTimer(nullptr, 0, RETRY_INTERVAL_MS, RetryTimerProc);
-    if (timerId == 0) {
-        Wh_Log(L"Failed to set retry timer: %lu", GetLastError());
-        g_retryCount = 0;
+
+    if (context == SnapshotLogContext::Save) {
+        Wh_Log(L"Auto-save: %ls, hr=0x%08X", message, hr);
     } else {
-        g_retryTimerId = timerId;
+        Wh_Log(L"Document state monitor: %ls, hr=0x%08X", message, hr);
     }
 }
 
-bool IsWordForeground() {
-    HWND foregroundWindow = GetForegroundWindow();
-    if (!foregroundWindow) return false;
-    
-    DWORD foregroundProcessId = 0;
-    GetWindowThreadProcessId(foregroundWindow, &foregroundProcessId);
-    return (foregroundProcessId == g_wordProcessId);
-}
-
-bool HasQuietPeriodPassed() {
-    if (g_lastKeyPressTime == 0) return true;
-    
-    DWORD currentTime = GetTickCount();
-    DWORD timeSinceLastKey = SafeTimeDiff(currentTime, g_lastKeyPressTime);
-    return timeSinceLastKey >= QUIET_PERIOD_MS;
-}
-
-// Comprehensive key check - ALL keys and mouse buttons
-bool AreAnyKeysPressed() {
-    // Letters A-Z
-    for (int i = VK_KEY_A; i <= VK_KEY_Z; i++) {
-        if (IS_KEY_PRESSED(i)) return true;
+SnapshotQueryResult LoadActiveDocumentSnapshot(ActiveDocumentSnapshot* snapshot,
+                                               SnapshotLogContext context) {
+    if (!snapshot) {
+        return SnapshotQueryResult::Cleared;
     }
-    
-    // Numbers 0-9
-    for (int i = VK_KEY_0; i <= VK_KEY_9; i++) {
-        if (IS_KEY_PRESSED(i)) return true;
-    }
-    
-    // All modifiers
-    if (IS_KEY_PRESSED(VK_SHIFT)) return true;
-    if (IS_KEY_PRESSED(VK_CONTROL)) return true;
-    if (IS_KEY_PRESSED(VK_MENU)) return true;
-    if (IS_KEY_PRESSED(VK_LSHIFT)) return true;
-    if (IS_KEY_PRESSED(VK_RSHIFT)) return true;
-    if (IS_KEY_PRESSED(VK_LCONTROL)) return true;
-    if (IS_KEY_PRESSED(VK_RCONTROL)) return true;
-    if (IS_KEY_PRESSED(VK_LMENU)) return true;
-    if (IS_KEY_PRESSED(VK_RMENU)) return true;
-    if (IS_KEY_PRESSED(VK_LWIN)) return true;
-    if (IS_KEY_PRESSED(VK_RWIN)) return true;
-    
-    // All mouse buttons
-    if (IS_KEY_PRESSED(VK_LBUTTON)) return true;
-    if (IS_KEY_PRESSED(VK_RBUTTON)) return true;
-    if (IS_KEY_PRESSED(VK_MBUTTON)) return true;
-    if (IS_KEY_PRESSED(VK_XBUTTON1)) return true;
-    if (IS_KEY_PRESSED(VK_XBUTTON2)) return true;
-    
-    // Editing keys
-    if (IS_KEY_PRESSED(VK_SPACE)) return true;
-    if (IS_KEY_PRESSED(VK_RETURN)) return true;
-    if (IS_KEY_PRESSED(VK_TAB)) return true;
-    if (IS_KEY_PRESSED(VK_BACK)) return true;
-    if (IS_KEY_PRESSED(VK_DELETE)) return true;
-    if (IS_KEY_PRESSED(VK_INSERT)) return true;
-    if (IS_KEY_PRESSED(VK_ESCAPE)) return true;
-    if (IS_KEY_PRESSED(VK_CLEAR)) return true;  // Numpad 5 without NumLock
-    
-    // Navigation keys
-    if (IS_KEY_PRESSED(VK_HOME)) return true;
-    if (IS_KEY_PRESSED(VK_END)) return true;
-    if (IS_KEY_PRESSED(VK_PRIOR)) return true;
-    if (IS_KEY_PRESSED(VK_NEXT)) return true;
-    if (IS_KEY_PRESSED(VK_LEFT)) return true;
-    if (IS_KEY_PRESSED(VK_RIGHT)) return true;
-    if (IS_KEY_PRESSED(VK_UP)) return true;
-    if (IS_KEY_PRESSED(VK_DOWN)) return true;
-    
-    // Function keys
-    for (int i = VK_F1; i <= VK_F24; i++) {
-        if (IS_KEY_PRESSED(i)) return true;
-    }
-    
-    // Numpad (all keys including separator)
-    for (int i = VK_NUMPAD0; i <= VK_DIVIDE; i++) {
-        if (IS_KEY_PRESSED(i)) return true;
-    }
-    if (IS_KEY_PRESSED(VK_NUMLOCK)) return true;
-    if (IS_KEY_PRESSED(VK_SEPARATOR)) return true;  // Numpad Enter on some keyboards
-    
-    // OEM/Punctuation
-    if (IS_KEY_PRESSED(VK_OEM_1)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_2)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_3)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_4)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_5)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_6)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_7)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_8)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_PLUS)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_COMMA)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_MINUS)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_PERIOD)) return true;
-    if (IS_KEY_PRESSED(VK_OEM_102)) return true;
-    
-    // System/Toggle keys
-    if (IS_KEY_PRESSED(VK_CAPITAL)) return true;
-    if (IS_KEY_PRESSED(VK_SCROLL)) return true;
-    if (IS_KEY_PRESSED(VK_SNAPSHOT)) return true;
-    if (IS_KEY_PRESSED(VK_PAUSE)) return true;
-    if (IS_KEY_PRESSED(VK_APPS)) return true;
-    
-    // Media keys
-    if (IS_KEY_PRESSED(VK_BROWSER_BACK)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_FORWARD)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_REFRESH)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_STOP)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_SEARCH)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_FAVORITES)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_HOME)) return true;
-    if (IS_KEY_PRESSED(VK_VOLUME_MUTE)) return true;
-    if (IS_KEY_PRESSED(VK_VOLUME_DOWN)) return true;
-    if (IS_KEY_PRESSED(VK_VOLUME_UP)) return true;
-    if (IS_KEY_PRESSED(VK_MEDIA_NEXT_TRACK)) return true;
-    if (IS_KEY_PRESSED(VK_MEDIA_PREV_TRACK)) return true;
-    if (IS_KEY_PRESSED(VK_MEDIA_STOP)) return true;
-    if (IS_KEY_PRESSED(VK_MEDIA_PLAY_PAUSE)) return true;
-    if (IS_KEY_PRESSED(VK_LAUNCH_MAIL)) return true;
-    if (IS_KEY_PRESSED(VK_LAUNCH_MEDIA_SELECT)) return true;
-    if (IS_KEY_PRESSED(VK_LAUNCH_APP1)) return true;
-    if (IS_KEY_PRESSED(VK_LAUNCH_APP2)) return true;
-    
-    return false;
-}
 
-// ============================================================================
-// Core Logic
-// ============================================================================
+    snapshot->Reset();
 
-bool SendSingleKey(WORD vk, bool keyUp) {
-    INPUT input;
-    ZeroMemory(&input, sizeof(input));
-    input.type = INPUT_KEYBOARD;
-    input.ki.wVk = vk;
-    input.ki.dwFlags = keyUp ? KEYEVENTF_KEYUP : 0;
-    return SendInput(1, &input, sizeof(INPUT)) == 1;
-}
-
-// Release a key with multiple retries
-bool ReleaseKeyWithRetry(WORD vk) {
-    for (int i = 0; i < MAX_KEY_RELEASE_RETRIES; i++) {
-        if (SendSingleKey(vk, true)) {
-            return true;
+    ScopedComPtr<IDispatch> application;
+    HRESULT hr = GetWordApplication(application.Put());
+    if (FAILED(hr) || !application) {
+        if (IsRetryableAutomationFailure(hr)) {
+            return SnapshotQueryResult::RetryLater;
         }
-        Wh_Log(L"Retry releasing key 0x%02X (attempt %d)", vk, i + 1);
-    }
-    Wh_Log(L"ERROR: Failed to release key 0x%02X after %d attempts", vk, MAX_KEY_RELEASE_RETRIES);
-    return false;
-}
 
-// ==========================================================================
-// COMPREHENSIVE critical key check after Ctrl is pressed
-// This prevents ALL possible accidental Word shortcuts
-// Based on complete Microsoft Word keyboard shortcuts documentation
-// ==========================================================================
-bool IsAnyCriticalKeyPressed() {
-    // ======================================================================
-    // LETTERS A-Z (except S which we send)
-    // Ctrl+A=SelectAll, Ctrl+B=Bold, Ctrl+C=Copy, Ctrl+D=FontDialog,
-    // Ctrl+E=Center, Ctrl+F=Find, Ctrl+G=GoTo, Ctrl+H=Replace,
-    // Ctrl+I=Italic, Ctrl+J=Justify, Ctrl+K=Hyperlink, Ctrl+L=Left,
-    // Ctrl+M=Indent, Ctrl+N=New, Ctrl+O=Open, Ctrl+P=Print,
-    // Ctrl+Q=RemoveFormat, Ctrl+R=Right, Ctrl+T=HangingIndent,
-    // Ctrl+U=Underline, Ctrl+V=Paste, Ctrl+W=Close, Ctrl+X=Cut,
-    // Ctrl+Y=Redo, Ctrl+Z=Undo
-    // ======================================================================
-    for (int i = VK_KEY_A; i <= VK_KEY_Z; i++) {
-        if (i == 'S') continue;  // We're sending S
-        if (IS_KEY_PRESSED(i)) return true;
+        LogSnapshotFailure(context, L"failed to get Word application", hr);
+        return SnapshotQueryResult::RetryLater;
     }
-    
-    // ======================================================================
-    // NUMBERS 0-9
-    // Ctrl+0=SpaceBefore, Ctrl+1=SingleSpace, Ctrl+2=DoubleSpace,
-    // Ctrl+5=1.5Space, Ctrl+6=Subscript, etc.
-    // ======================================================================
-    for (int i = VK_KEY_0; i <= VK_KEY_9; i++) {
-        if (IS_KEY_PRESSED(i)) return true;
-    }
-    
-    // ======================================================================
-    // ALL MODIFIER KEYS
-    // Shift: Ctrl+Shift+S=Styles, Ctrl+Shift+E=TrackChanges,
-    //        Ctrl+Shift+>=IncreaseFontMore, Ctrl+Shift+Enter=ColumnBreak
-    // Alt: Ctrl+Alt combinations for special characters
-    // Win: System shortcuts
-    // ======================================================================
-    if (IS_KEY_PRESSED(VK_SHIFT)) return true;
-    if (IS_KEY_PRESSED(VK_LSHIFT)) return true;
-    if (IS_KEY_PRESSED(VK_RSHIFT)) return true;
-    if (IS_KEY_PRESSED(VK_MENU)) return true;      // Alt
-    if (IS_KEY_PRESSED(VK_LMENU)) return true;
-    if (IS_KEY_PRESSED(VK_RMENU)) return true;     // AltGr
-    if (IS_KEY_PRESSED(VK_LWIN)) return true;
-    if (IS_KEY_PRESSED(VK_RWIN)) return true;
-    
-    // ======================================================================
-    // FUNCTION KEYS F1-F24
-    // Ctrl+F1=Ribbon, Ctrl+F2=PrintPreview, Ctrl+F4=CloseWindow,
-    // Ctrl+F6=SwitchWindows, Ctrl+F9=InsertField, Ctrl+F10=Maximize,
-    // Ctrl+F12=Open
-    // ======================================================================
-    for (int i = VK_F1; i <= VK_F24; i++) {
-        if (IS_KEY_PRESSED(i)) return true;
-    }
-    
-    // ======================================================================
-    // OEM KEYS (Punctuation/Symbols)
-    // Ctrl+[=DecreaseFontSize, Ctrl+]=IncreaseFontSize,
-    // Ctrl+=Subscript, Ctrl+-=NonBreakingHyphen,
-    // Ctrl+;=Date, Ctrl+'=Accents, Ctrl+`=Accents,
-    // Ctrl+\=Various, Ctrl+/=Various
-    // ======================================================================
-    if (IS_KEY_PRESSED(VK_OEM_1)) return true;      // ;: - Ctrl+;=Date
-    if (IS_KEY_PRESSED(VK_OEM_2)) return true;      // /? 
-    if (IS_KEY_PRESSED(VK_OEM_3)) return true;      // `~ - Ctrl+`=Accent
-    if (IS_KEY_PRESSED(VK_OEM_4)) return true;      // [{ - Ctrl+[=DecreaseFont!
-    if (IS_KEY_PRESSED(VK_OEM_5)) return true;      // \|
-    if (IS_KEY_PRESSED(VK_OEM_6)) return true;      // ]} - Ctrl+]=IncreaseFont!
-    if (IS_KEY_PRESSED(VK_OEM_7)) return true;      // '" - Ctrl+'=Accent
-    if (IS_KEY_PRESSED(VK_OEM_8)) return true;      // misc
-    if (IS_KEY_PRESSED(VK_OEM_PLUS)) return true;   // =+ - Ctrl+=Subscript!
-    if (IS_KEY_PRESSED(VK_OEM_COMMA)) return true;  // ,<
-    if (IS_KEY_PRESSED(VK_OEM_MINUS)) return true;  // -_ - Ctrl+-=NonBreakingHyphen
-    if (IS_KEY_PRESSED(VK_OEM_PERIOD)) return true; // .>
-    if (IS_KEY_PRESSED(VK_OEM_102)) return true;    // non-US \|
-    
-    // ======================================================================
-    // NAVIGATION KEYS
-    // Ctrl+Home=DocumentStart, Ctrl+End=DocumentEnd,
-    // Ctrl+PageUp=PreviousPage, Ctrl+PageDown=NextPage,
-    // Ctrl+Arrow=MoveByWord/Paragraph
-    // ======================================================================
-    if (IS_KEY_PRESSED(VK_HOME)) return true;
-    if (IS_KEY_PRESSED(VK_END)) return true;
-    if (IS_KEY_PRESSED(VK_PRIOR)) return true;      // Page Up
-    if (IS_KEY_PRESSED(VK_NEXT)) return true;       // Page Down
-    if (IS_KEY_PRESSED(VK_LEFT)) return true;
-    if (IS_KEY_PRESSED(VK_RIGHT)) return true;
-    if (IS_KEY_PRESSED(VK_UP)) return true;
-    if (IS_KEY_PRESSED(VK_DOWN)) return true;
-    
-    // ======================================================================
-    // SPECIAL EDITING KEYS
-    // Ctrl+Enter=PageBreak, Ctrl+Tab=SwitchDocuments,
-    // Ctrl+Space=ClearFormatting, Ctrl+Backspace=DeleteWord,
-    // Ctrl+Delete=DeleteWordForward, Ctrl+Insert=Copy
-    // ======================================================================
-    if (IS_KEY_PRESSED(VK_RETURN)) return true;     // Ctrl+Enter=PageBreak!
-    if (IS_KEY_PRESSED(VK_TAB)) return true;        // Ctrl+Tab=SwitchDocs!
-    if (IS_KEY_PRESSED(VK_SPACE)) return true;      // Ctrl+Space=ClearFormat!
-    if (IS_KEY_PRESSED(VK_BACK)) return true;       // Ctrl+Back=DeleteWord!
-    if (IS_KEY_PRESSED(VK_DELETE)) return true;     // Ctrl+Del=DeleteWordFwd!
-    if (IS_KEY_PRESSED(VK_INSERT)) return true;     // Ctrl+Ins=Copy!
-    if (IS_KEY_PRESSED(VK_ESCAPE)) return true;
-    if (IS_KEY_PRESSED(VK_CLEAR)) return true;      // Numpad 5 without NumLock
-    
-    // ======================================================================
-    // NUMPAD KEYS
-    // Various Ctrl+Numpad combinations
-    // ======================================================================
-    for (int i = VK_NUMPAD0; i <= VK_NUMPAD9; i++) {
-        if (IS_KEY_PRESSED(i)) return true;
-    }
-    if (IS_KEY_PRESSED(VK_MULTIPLY)) return true;
-    if (IS_KEY_PRESSED(VK_ADD)) return true;
-    if (IS_KEY_PRESSED(VK_SEPARATOR)) return true;
-    if (IS_KEY_PRESSED(VK_SUBTRACT)) return true;
-    if (IS_KEY_PRESSED(VK_DECIMAL)) return true;
-    if (IS_KEY_PRESSED(VK_DIVIDE)) return true;
-    if (IS_KEY_PRESSED(VK_NUMLOCK)) return true;
-    
-    // ======================================================================
-    // MOUSE BUTTONS
-    // User might be selecting text with mouse
-    // ======================================================================
-    if (IS_KEY_PRESSED(VK_LBUTTON)) return true;
-    if (IS_KEY_PRESSED(VK_RBUTTON)) return true;
-    if (IS_KEY_PRESSED(VK_MBUTTON)) return true;
-    if (IS_KEY_PRESSED(VK_XBUTTON1)) return true;
-    if (IS_KEY_PRESSED(VK_XBUTTON2)) return true;
-    
-    // ======================================================================
-    // SYSTEM KEYS
-    // Prevent any system key combinations
-    // ======================================================================
-    if (IS_KEY_PRESSED(VK_SNAPSHOT)) return true;   // Print Screen
-    if (IS_KEY_PRESSED(VK_SCROLL)) return true;     // Scroll Lock
-    if (IS_KEY_PRESSED(VK_PAUSE)) return true;      // Pause/Break - Ctrl+Break
-    if (IS_KEY_PRESSED(VK_CAPITAL)) return true;    // Caps Lock
-    if (IS_KEY_PRESSED(VK_APPS)) return true;       // Context Menu
-    
-    // ======================================================================
-    // BROWSER/MEDIA KEYS (some keyboards)
-    // ======================================================================
-    if (IS_KEY_PRESSED(VK_BROWSER_BACK)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_FORWARD)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_REFRESH)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_STOP)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_SEARCH)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_FAVORITES)) return true;
-    if (IS_KEY_PRESSED(VK_BROWSER_HOME)) return true;
-    if (IS_KEY_PRESSED(VK_VOLUME_MUTE)) return true;
-    if (IS_KEY_PRESSED(VK_VOLUME_DOWN)) return true;
-    if (IS_KEY_PRESSED(VK_VOLUME_UP)) return true;
-    if (IS_KEY_PRESSED(VK_MEDIA_NEXT_TRACK)) return true;
-    if (IS_KEY_PRESSED(VK_MEDIA_PREV_TRACK)) return true;
-    if (IS_KEY_PRESSED(VK_MEDIA_STOP)) return true;
-    if (IS_KEY_PRESSED(VK_MEDIA_PLAY_PAUSE)) return true;
-    if (IS_KEY_PRESSED(VK_LAUNCH_MAIL)) return true;
-    if (IS_KEY_PRESSED(VK_LAUNCH_MEDIA_SELECT)) return true;
-    if (IS_KEY_PRESSED(VK_LAUNCH_APP1)) return true;
-    if (IS_KEY_PRESSED(VK_LAUNCH_APP2)) return true;
-    
-    return false;
-}
 
-void AbortSendCtrlS(const wchar_t* reason, bool releaseCtrl, bool releaseS) {
-    Wh_Log(L"Abort: %s", reason);
-    if (releaseS) {
-        ReleaseKeyWithRetry('S');
-    }
-    if (releaseCtrl) {
-        ReleaseKeyWithRetry(VK_CONTROL);
-    }
-    g_isSendingCtrlS = false;
-    ScheduleRetry();
-}
-
-void SendCtrlS() {
-    g_isSendingCtrlS = true;
-    
-    // =========================================================================
-    // STAGE 1: TRIPLE PRE-CHECK
-    // Verify NO keys are pressed, with delays to catch fast typing
-    // This catches keys that are being pressed RIGHT NOW
-    // =========================================================================
-    for (int check = 0; check < PRE_SEND_CHECK_COUNT; check++) {
-        if (AreAnyKeysPressed()) {
-            AbortSendCtrlS(L"Pre-check failed: key pressed", false, false);
-            return;
+    hr = GetDispatchProperty(application.Get(), L"ActiveDocument", snapshot->document.Put());
+    if (FAILED(hr) || !snapshot->document) {
+        if (IsRetryableAutomationFailure(hr)) {
+            return SnapshotQueryResult::RetryLater;
         }
-        if (!HasQuietPeriodPassed()) {
-            AbortSendCtrlS(L"Pre-check failed: quiet period not passed", false, false);
-            return;
-        }
-        // Small delay between checks to catch keys being pressed
-        if (check < PRE_SEND_CHECK_COUNT - 1) {
-            Sleep(PRE_SEND_VERIFY_DELAY_MS);
-        }
+
+        return SnapshotQueryResult::Cleared;
     }
-    
-    // =========================================================================
-    // STAGE 2: FINAL QUIET PERIOD CHECK
-    // Verify quiet period STILL valid after pre-checks
-    // =========================================================================
-    if (!HasQuietPeriodPassed()) {
-        AbortSendCtrlS(L"Quiet period invalidated during pre-check", false, false);
-        return;
+
+    hr = GetBoolProperty(snapshot->document.Get(), L"ReadOnly", &snapshot->readOnly);
+    if (FAILED(hr)) {
+        LogSnapshotFailure(context, L"failed to query ReadOnly", hr);
+        return SnapshotQueryResult::RetryLater;
     }
-    
-    // =========================================================================
-    // STAGE 3: PRESS CTRL
-    // =========================================================================
-    if (!SendSingleKey(VK_CONTROL, false)) {
-        AbortSendCtrlS(L"Failed to send Ctrl press", false, false);
-        return;
+
+    if (snapshot->readOnly) {
+        return SnapshotQueryResult::Cleared;
     }
-    
-    // Small delay to let the system process the Ctrl press
-    Sleep(POST_CTRL_VERIFY_DELAY_MS);
-    
-    // =========================================================================
-    // STAGE 4: CRITICAL CHECK AFTER CTRL
-    // This is THE MOST IMPORTANT check - detects if user pressed
-    // any key while we were sending Ctrl
-    // =========================================================================
-    if (IsAnyCriticalKeyPressed()) {
-        AbortSendCtrlS(L"Critical key detected after Ctrl press", true, false);
-        return;
+
+    hr = GetBstrProperty(snapshot->document.Get(), L"Path", snapshot->path.Put());
+    if (FAILED(hr)) {
+        LogSnapshotFailure(context, L"failed to query Path", hr);
+        return SnapshotQueryResult::RetryLater;
     }
-    
-    // Double-check quiet period is still valid
-    if (!HasQuietPeriodPassed()) {
-        AbortSendCtrlS(L"Quiet period invalidated after Ctrl press", true, false);
-        return;
+
+    snapshot->hasPath = snapshot->path.Length() > 0;
+    if (!snapshot->hasPath) {
+        return SnapshotQueryResult::Cleared;
     }
-    
-    // =========================================================================
-    // STAGE 5: PRESS S
-    // =========================================================================
-    Sleep(INTER_KEY_DELAY_MS);
-    
-    if (!SendSingleKey('S', false)) {
-        AbortSendCtrlS(L"Failed to send S press", true, false);
-        return;
+
+    hr = GetBoolProperty(snapshot->document.Get(), L"Saved", &snapshot->saved);
+    if (FAILED(hr)) {
+        LogSnapshotFailure(context, L"failed to query Saved state", hr);
+        return SnapshotQueryResult::RetryLater;
     }
-    
-    // =========================================================================
-    // STAGE 6: POST-S VERIFICATION
-    // Check if any OTHER key was pressed during S send
-    // If so, we might have created Ctrl+[other key]+S which is dangerous
-    // =========================================================================
-    Sleep(INTER_KEY_DELAY_MS);
-    
-    // Check all critical keys EXCEPT S (which we just pressed)
-    // If any other key is now pressed, something went wrong
-    for (int i = VK_KEY_A; i <= VK_KEY_Z; i++) {
-        if (i == 'S') continue;
-        if (IS_KEY_PRESSED(i)) {
-            Wh_Log(L"WARNING: Key 0x%02X pressed during S send - aborting", i);
-            AbortSendCtrlS(L"Key pressed during S send", true, true);
-            return;
-        }
-    }
-    
-    // =========================================================================
-    // STAGE 7: RELEASE S
-    // =========================================================================
-    Sleep(INTER_KEY_DELAY_MS);
-    
-    if (!ReleaseKeyWithRetry('S')) {
-        Wh_Log(L"Warning: S may be stuck");
-    }
-    
-    // =========================================================================
-    // STAGE 8: RELEASE CTRL
-    // =========================================================================
-    Sleep(INTER_KEY_DELAY_MS);
-    
-    if (!ReleaseKeyWithRetry(VK_CONTROL)) {
-        Wh_Log(L"Warning: Ctrl may be stuck");
-    }
-    
-    // =========================================================================
-    // SUCCESS
-    // =========================================================================
-    g_isSendingCtrlS = false;
-    
-    Wh_Log(L"Auto-save: Ctrl+S sent successfully");
-    g_lastSaveTime = GetTickCount();
-    g_lastInputTime = 0;
-    g_retryCount = 0;
+
+    return SnapshotQueryResult::Ready;
 }
 
-void CALLBACK RetryTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-    KillRetryTimer();
-    TrySave();
+DocumentDirtyState QueryActiveDocumentDirtyState(ActiveDocumentSnapshot* snapshot) {
+    ScopedComInit comInit;
+    if (FAILED(comInit.GetResult())) {
+        LogSnapshotFailure(SnapshotLogContext::DocumentState,
+                           L"CoInitializeEx failed",
+                           comInit.GetResult());
+        return DocumentDirtyState::RetryLater;
+    }
+
+    ActiveDocumentSnapshot localSnapshot;
+    if (!snapshot) {
+        snapshot = &localSnapshot;
+    }
+
+    switch (LoadActiveDocumentSnapshot(snapshot, SnapshotLogContext::DocumentState)) {
+        case SnapshotQueryResult::Ready:
+            return snapshot->saved ? DocumentDirtyState::Clean : DocumentDirtyState::Dirty;
+
+        case SnapshotQueryResult::Cleared:
+            return DocumentDirtyState::Clean;
+
+        case SnapshotQueryResult::RetryLater:
+            return DocumentDirtyState::RetryLater;
+    }
+
+    return DocumentDirtyState::RetryLater;
 }
 
-void TrySave() {
-    // =========================================================================
-    // SAFETY CHECK 1: Word must be foreground
-    // =========================================================================
-    if (!IsWordForeground()) {
-        Wh_Log(L"Word not in foreground, skipping");
-        g_retryCount = 0;
-        return;
+SaveAttemptResult TrySaveActiveDocument(ActiveDocumentSnapshot* snapshot) {
+    ScopedComInit comInit;
+    if (FAILED(comInit.GetResult())) {
+        LogSnapshotFailure(SnapshotLogContext::Save, L"CoInitializeEx failed", comInit.GetResult());
+        return SaveAttemptResult::RetryLater;
     }
 
-    // =========================================================================
-    // SAFETY CHECK 2: No keys pressed
-    // =========================================================================
-    if (AreAnyKeysPressed()) {
-        ScheduleRetry();
-        return;
-    }
-    
-    // =========================================================================
-    // SAFETY CHECK 3: Quiet period passed
-    // =========================================================================
-    if (!HasQuietPeriodPassed()) {
-        ScheduleRetry();
-        return;
-    }
-    
-    // =========================================================================
-    // SAFETY CHECK 4: Double-check after small delay
-    // This catches very fast typing that might have started
-    // =========================================================================
-    Sleep(PRE_SEND_VERIFY_DELAY_MS);
-    
-    if (AreAnyKeysPressed()) {
-        ScheduleRetry();
-        return;
-    }
-    
-    if (!HasQuietPeriodPassed()) {
-        ScheduleRetry();
-        return;
-    }
-    
-    // =========================================================================
-    // SAFETY CHECK 5: Verify Word is STILL foreground
-    // User might have switched windows during our checks
-    // =========================================================================
-    if (!IsWordForeground()) {
-        Wh_Log(L"Word lost focus during checks, skipping");
-        g_retryCount = 0;
-        return;
+    ActiveDocumentSnapshot localSnapshot;
+    if (!snapshot) {
+        snapshot = &localSnapshot;
     }
 
-    Wh_Log(L"All conditions met, sending Ctrl+S...");
-    SendCtrlS();
+    switch (LoadActiveDocumentSnapshot(snapshot, SnapshotLogContext::Save)) {
+        case SnapshotQueryResult::Cleared:
+            return SaveAttemptResult::Cleared;
+
+        case SnapshotQueryResult::RetryLater:
+            return SaveAttemptResult::RetryLater;
+
+        case SnapshotQueryResult::Ready:
+            break;
+    }
+
+    if (snapshot->saved) {
+        return SaveAttemptResult::AlreadyClean;
+    }
+
+    const HRESULT hr = InvokeDispatch(snapshot->document.Get(),
+                                      DISPATCH_METHOD,
+                                      const_cast<LPOLESTR>(L"Save"));
+    if (SUCCEEDED(hr)) {
+        return SaveAttemptResult::Saved;
+    }
+
+    if (IsRetryableAutomationFailure(hr)) {
+        return SaveAttemptResult::RetryLater;
+    }
+
+    LogSnapshotFailure(SnapshotLogContext::Save, L"document save failed", hr);
+    return SaveAttemptResult::Cleared;
 }
 
-void CALLBACK SaveTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-    KillSaveTimer();
+void CALLBACK SaveTimerProc(HWND, UINT, UINT_PTR idEvent, DWORD) {
+    KillTimer(nullptr, idEvent);
 
-    if (g_lastInputTime == 0) {
+    if (InterlockedCompareExchange(&g_moduleActive, TRUE, TRUE) == FALSE) {
         return;
     }
 
-    DWORD currentTime = GetTickCount();
+    if (idEvent != g_saveTimerId) {
+        return;
+    }
 
-    // Check minimum time between saves
-    if (g_settings.minTimeBetweenSaves > 0 && g_lastSaveTime > 0) {
-        DWORD timeSinceLastSave = SafeTimeDiff(currentTime, g_lastSaveTime);
-        DWORD minTime = static_cast<DWORD>(g_settings.minTimeBetweenSaves);
-        
-        if (timeSinceLastSave < minTime) {
-            DWORD remainingTime = minTime - timeSinceLastSave;
-            Wh_Log(L"Deferring save - %lu ms remaining", remainingTime);
-            
-            UINT_PTR timerId = SetTimer(nullptr, 0, remainingTime + DEFERRED_SAVE_BUFFER_MS, SaveTimerProc);
-            if (timerId == 0) {
-                Wh_Log(L"Failed to set deferred timer: %lu", GetLastError());
-            } else {
-                g_saveTimerId = timerId;
+    g_saveTimerId = 0;
+    if (!IsOwnerThread()) {
+        return;
+    }
+
+    HandleAutosaveTick();
+}
+
+void CALLBACK DocumentStateTimerProc(HWND, UINT, UINT_PTR idEvent, DWORD) {
+    KillTimer(nullptr, idEvent);
+
+    if (InterlockedCompareExchange(&g_moduleActive, TRUE, TRUE) == FALSE) {
+        return;
+    }
+
+    if (idEvent != g_documentStateTimerId) {
+        return;
+    }
+
+    g_documentStateTimerId = 0;
+    if (!IsOwnerThread()) {
+        return;
+    }
+
+    HandleDocumentStateTick();
+}
+
+bool ArmSaveTimer(DWORD delayMs) {
+    if (!IsOwnerThread()) {
+        return false;
+    }
+
+    CancelSaveTimer();
+    g_saveTimerId = SetTimer(nullptr, 0, delayMs ? delayMs : 1, SaveTimerProc);
+    if (g_saveTimerId == 0) {
+        Wh_Log(L"Auto-save: SetTimer failed, error=%lu", GetLastError());
+        return false;
+    }
+
+    return true;
+}
+
+void HandleDocumentStateTick() {
+    if (!IsOwnerThread()) {
+        return;
+    }
+
+    const DWORD activeWordUiThreadId = GetActiveWordUiThreadId();
+    if (activeWordUiThreadId != 0 && activeWordUiThreadId != g_ownerThreadId) {
+        return;
+    }
+
+    if (!IsActiveWordDocumentWindow()) {
+        ArmDocumentStateTimer(GetSteadyDocumentStatePollDelay());
+        return;
+    }
+
+    if (InterlockedCompareExchange(&g_pendingSave, TRUE, TRUE) == TRUE) {
+        ArmDocumentStateTimer(DOCUMENT_STATE_ACTIVE_POLL_INTERVAL_MS);
+        return;
+    }
+
+    if (GetInputState() || AreModifiersOrMouseButtonsHeld()) {
+        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+        return;
+    }
+
+    ActiveDocumentSnapshot snapshot;
+    switch (QueryActiveDocumentDirtyState(&snapshot)) {
+        case DocumentDirtyState::Dirty:
+            g_documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+            if (snapshot.hasPath && NoteObservedDocumentDirty(snapshot.path.CStr())) {
+                Wh_Log(L"Document state monitor: detected non-keyboard document change");
+                ScheduleSaveFromEdit();
             }
+            break;
+
+        case DocumentDirtyState::Clean:
+            g_documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+            if (snapshot.hasPath) {
+                if (InterlockedExchange(&g_manualSavePending, FALSE) == TRUE) {
+                    g_lastSaveTime = GetTickCount64();
+                }
+
+                MarkObservedDocumentClean(snapshot.path.CStr());
+            } else {
+                ClearManualSavePending();
+                ResetObservedDocumentState();
+            }
+            break;
+
+        case DocumentDirtyState::RetryLater:
+            ArmDocumentStateTimer(
+                AdvanceRetryDelay(&g_documentStateRetryDelayMs,
+                                  MAX_DOCUMENT_STATE_RETRY_INTERVAL_MS));
+            return;
+    }
+
+    ArmDocumentStateTimer(GetSteadyDocumentStatePollDelay());
+}
+
+void HandleAutosaveTick() {
+    if (InterlockedCompareExchange(&g_pendingSave, TRUE, TRUE) == FALSE) {
+        return;
+    }
+
+    if (!IsOwnerThread()) {
+        return;
+    }
+
+    const DWORD activeWordUiThreadId = GetActiveWordUiThreadId();
+    if (activeWordUiThreadId != 0 && activeWordUiThreadId != g_ownerThreadId) {
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+
+    if (!IsActiveWordDocumentWindow()) {
+        ArmSaveTimer(DOCUMENT_STATE_ACTIVE_POLL_INTERVAL_MS);
+        return;
+    }
+
+    const ULONGLONG earliestEditSaveTime =
+        g_lastEditTime + static_cast<ULONGLONG>(g_settings.saveDelay);
+    if (now < earliestEditSaveTime) {
+        ArmSaveTimer(static_cast<DWORD>(earliestEditSaveTime - now));
+        return;
+    }
+
+    if (g_settings.minTimeBetweenSaves > 0 && g_lastSaveTime > 0) {
+        const ULONGLONG earliestAllowedSave =
+            g_lastSaveTime + static_cast<ULONGLONG>(g_settings.minTimeBetweenSaves);
+        if (now < earliestAllowedSave) {
+            ArmSaveTimer(static_cast<DWORD>(earliestAllowedSave - now));
             return;
         }
     }
 
-    TrySave();
-}
+    if (GetInputState() || AreModifiersOrMouseButtonsHeld()) {
+        ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
+        return;
+    }
 
-void ScheduleSave() {
-    g_lastInputTime = GetTickCount();
-    
-    // Only kill save timer, preserve retry state
-    KillSaveTimer();
+    ActiveDocumentSnapshot snapshot;
+    switch (TrySaveActiveDocument(&snapshot)) {
+        case SaveAttemptResult::Saved:
+            g_saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+            g_lastSaveTime = GetTickCount64();
+            ClearManualSavePending();
+            if (snapshot.hasPath) {
+                MarkObservedDocumentClean(snapshot.path.CStr());
+            } else {
+                ResetObservedDocumentState();
+            }
+            ClearPendingSave();
+            Wh_Log(L"Auto-save: document saved directly");
+            break;
 
-    UINT_PTR timerId = SetTimer(nullptr, 0, g_settings.saveDelay, SaveTimerProc);
-    if (timerId == 0) {
-        Wh_Log(L"Failed to set save timer: %lu", GetLastError());
-    } else {
-        g_saveTimerId = timerId;
+        case SaveAttemptResult::AlreadyClean:
+            g_saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+            g_lastSaveTime = GetTickCount64();
+            ClearManualSavePending();
+            if (snapshot.hasPath) {
+                MarkObservedDocumentClean(snapshot.path.CStr());
+            } else {
+                ResetObservedDocumentState();
+            }
+            ClearPendingSave();
+            break;
+
+        case SaveAttemptResult::Cleared:
+            g_saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+            ClearManualSavePending();
+            if (snapshot.hasPath) {
+                MarkObservedDocumentClean(snapshot.path.CStr());
+            } else {
+                ResetObservedDocumentState();
+            }
+            ClearPendingSave();
+            break;
+
+        case SaveAttemptResult::RetryLater:
+            ArmSaveTimer(AdvanceRetryDelay(&g_saveRetryDelayMs, MAX_SAVE_RETRY_INTERVAL_MS));
+            break;
     }
 }
+
+// ============================================================================
+// Input Detection
+// ============================================================================
 
 bool IsEditingKey(WPARAM wParam) {
-    if (g_isSendingCtrlS) {
-        return false;
-    }
+    const bool ctrlPressed = IsQueueKeyDown(VK_CONTROL);
+    const bool shiftPressed = IsQueueKeyDown(VK_SHIFT);
+    const bool altPressed = IsQueueKeyDown(VK_MENU);
 
-    bool ctrlPressed = IS_KEY_PRESSED(VK_CONTROL);
-    bool shiftPressed = IS_KEY_PRESSED(VK_SHIFT);
-    bool altPressed = IS_KEY_PRESSED(VK_MENU);
-
-    // Manual Ctrl+S - reset timers
     if (ctrlPressed && !shiftPressed && !altPressed && wParam == 'S') {
-        g_lastSaveTime = GetTickCount();
-        g_lastInputTime = 0;
-        ResetAllTimers();
-        Wh_Log(L"Manual save detected");
+        HandleManualSave();
         return false;
     }
 
-    // Ctrl combinations that modify document
     if (ctrlPressed && !altPressed) {
-        // Paste, cut, redo, undo
-        if (wParam == 'V' || wParam == 'X' || wParam == 'Y' || wParam == 'Z') {
+        if (wParam == 'B' || wParam == 'I' || wParam == 'U' ||
+            wParam == 'V' || wParam == 'X' || wParam == 'Y' || wParam == 'Z') {
             return true;
         }
-        // Ctrl+Enter = page break, Ctrl+Shift+Enter = column break
+
         if (wParam == VK_RETURN) {
             return true;
         }
+
         return false;
     }
 
@@ -787,16 +1279,10 @@ bool IsEditingKey(WPARAM wParam) {
         return false;
     }
 
-    // Letters
     if (wParam >= VK_KEY_A && wParam <= VK_KEY_Z) return true;
-    
-    // Numbers
     if (wParam >= VK_KEY_0 && wParam <= VK_KEY_9) return true;
-    
-    // Space
     if (wParam == VK_SPACE) return true;
 
-    // Special editing keys
     switch (wParam) {
         case VK_BACK:
         case VK_DELETE:
@@ -804,16 +1290,13 @@ bool IsEditingKey(WPARAM wParam) {
         case VK_TAB:
             return true;
     }
-    
-    // Numpad
+
     if (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9) return true;
-    if (wParam == VK_MULTIPLY || wParam == VK_ADD || 
+    if (wParam == VK_MULTIPLY || wParam == VK_ADD ||
         wParam == VK_SUBTRACT || wParam == VK_DECIMAL || wParam == VK_DIVIDE) {
         return true;
     }
-    if (wParam == VK_SEPARATOR) return true;
-    
-    // OEM keys
+
     switch (wParam) {
         case VK_OEM_1:
         case VK_OEM_2:
@@ -822,7 +1305,6 @@ bool IsEditingKey(WPARAM wParam) {
         case VK_OEM_5:
         case VK_OEM_6:
         case VK_OEM_7:
-        case VK_OEM_8:
         case VK_OEM_PLUS:
         case VK_OEM_COMMA:
         case VK_OEM_MINUS:
@@ -842,22 +1324,21 @@ BOOL WINAPI TranslateMessage_Hook(const MSG* lpMsg) {
     if (!g_originalTranslateMessage) {
         return TRUE;
     }
-    
+
     if (lpMsg) {
-        // Track key presses for quiet period
-        if (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_SYSKEYDOWN) {
-            g_lastKeyPressTime = GetTickCount();
-        }
-        
-        // Also track WM_CHAR for IME input support
-        if (lpMsg->message == WM_CHAR && lpMsg->wParam >= 0x20) {
-            g_lastKeyPressTime = GetTickCount();
-            g_lastInputTime = GetTickCount();
-        }
-        
-        if (lpMsg->message == WM_KEYDOWN) {
-            if (IsEditingKey(lpMsg->wParam)) {
-                ScheduleSave();
+        AdoptOwnerThreadIfNeeded(lpMsg);
+
+        if (IsCurrentThreadActiveOwner()) {
+            if (g_documentStateTimerId == 0) {
+                ArmDocumentStateTimer(GetSteadyDocumentStatePollDelay());
+            }
+
+            if (lpMsg->message == WM_KEYDOWN && IsEditingKey(lpMsg->wParam)) {
+                ScheduleSaveFromEdit();
+            } else if (lpMsg->message == WM_CHAR && lpMsg->wParam >= 0x20) {
+                ScheduleSaveFromEdit();
+            } else if (IsDocumentStateRefreshMessage(lpMsg->message)) {
+                ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
             }
         }
     }
@@ -891,9 +1372,16 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave v2.0 initializing...");
+    Wh_Log(L"Word Local AutoSave v3.2 initializing...");
 
     g_wordProcessId = GetCurrentProcessId();
+    g_saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+    g_documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+    g_lastSaveFailureLogTime = 0;
+    g_lastDocumentStateFailureLogTime = 0;
+    g_ownerThreadId = 0;
+    ClearManualSavePending();
+    ResetObservedDocumentState();
     LoadSettings();
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
@@ -902,8 +1390,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    void* translateMessageAddr = reinterpret_cast<void*>(
-        GetProcAddress(user32, "TranslateMessage"));
+    void* translateMessageAddr = reinterpret_cast<void*>(GetProcAddress(user32, "TranslateMessage"));
     if (!translateMessageAddr) {
         Wh_Log(L"ERROR: Failed to get TranslateMessage address");
         return FALSE;
@@ -915,24 +1402,43 @@ BOOL Wh_ModInit() {
         Wh_Log(L"ERROR: Failed to hook TranslateMessage");
         return FALSE;
     }
-    
+
     if (!g_originalTranslateMessage) {
         Wh_Log(L"ERROR: Original TranslateMessage pointer is null");
         return FALSE;
     }
 
-    Wh_Log(L"Word Local AutoSave initialized successfully");
+    InterlockedExchange(&g_moduleActive, TRUE);
+
+    Wh_Log(L"Word Local AutoSave initialized");
     return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Word Local AutoSave uninitializing...");
-    ResetAllTimers();
+
+    InterlockedExchange(&g_moduleActive, FALSE);
+    ClearManualSavePending();
+    ResetObservedDocumentState();
+    ClearPendingSave();
+    CancelSaveTimer();
+    CancelDocumentStateTimer();
+    g_ownerThreadId = 0;
+
     Wh_Log(L"Word Local AutoSave uninitialized");
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading...");
-    ResetAllTimers();
+    g_saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+    g_documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+    g_lastSaveFailureLogTime = 0;
+    g_lastDocumentStateFailureLogTime = 0;
+    ClearManualSavePending();
+    ResetObservedDocumentState();
+    ClearPendingSave();
+    CancelSaveTimer();
+    CancelDocumentStateTimer();
+    g_ownerThreadId = 0;
     LoadSettings();
 }

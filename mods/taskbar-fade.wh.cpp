@@ -2,7 +2,7 @@
 // @id              taskbar-fade
 // @name            Taskbar Fade
 // @description     Reduces visual clutter by automatically dimming or hiding the taskbar when idle. Ideal for focused workflows and preventing OLED burn-in.
-// @version         2.1
+// @version         2.1.1
 // @author          Lukvbp
 // @github          https://github.com/lukvbp
 // @include         windhawk.exe
@@ -76,6 +76,7 @@ This mod is designed to prevent OLED burn-in and reduce visual distractions by l
 std::atomic<bool> g_stopThread(false);
 std::thread g_workerThread;
 std::mutex g_settingsMutex;
+std::atomic<bool> g_weHidIcons(false); // Tracks if we were the ones who hid the icons
 
 // State Machine
 enum class FadeState {
@@ -151,7 +152,7 @@ void LoadSettings() {
     g_cache.smartIdle = smartIdle;
     g_cache.hideDesktopIcons = hideIcons;
 
-    // Safety: (DWORD) cast prevents signed integer overflow during multiplication
+    // (DWORD) cast prevents signed integer overflow during multiplication
     // if user enters a large duration (e.g. > 24 days)
     g_cache.idleTimeoutMs = (DWORD)rawTimeout * 1000;
 
@@ -417,9 +418,19 @@ void WorkerLoop() {
                 HWND hIcons = GetDesktopListView();
                 if (hIcons) {
                     if (targetState == FadeState::Idle) {
-                        ShowWindow(hIcons, SW_HIDE);
+                        // Only hide them (and set the flag) if they are currently visible natively
+                        if (IsWindowVisible(hIcons)) {
+                            ShowWindow(hIcons, SW_HIDE);
+                            g_weHidIcons = true;
+                        } else {
+                            g_weHidIcons = false;
+                        }
                     } else if (lastState == FadeState::Idle) {
-                        ShowWindow(hIcons, SW_SHOW);
+                        // Waking up: Only show them if we were the ones who hid them
+                        if (g_weHidIcons) {
+                            ShowWindow(hIcons, SW_SHOW);
+                            g_weHidIcons = false;
+                        }
                     }
                 }
             }
@@ -543,10 +554,13 @@ void WhTool_ModUninit() {
         RestoreTaskbarStyle(hSec);
     }
 
-    // Safety: Ensure desktop icons are visible when mod unloads
-    HWND hIcons = GetDesktopListView();
-    if (hIcons && !IsWindowVisible(hIcons)) {
-        ShowWindow(hIcons, SW_SHOW);
+    // Ensure desktop icons are visible when mod unloads,
+    // but only if we were the ones who hid them!
+    if (g_weHidIcons) {
+        HWND hIcons = GetDesktopListView();
+        if (hIcons && !IsWindowVisible(hIcons)) {
+            ShowWindow(hIcons, SW_SHOW);
+        }
     }
 }
 

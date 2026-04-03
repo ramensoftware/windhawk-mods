@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 import urllib.error
 import urllib.request
 from functools import cache
@@ -350,21 +351,28 @@ class ModMetadataValidator:
             if prop.value != self.existing_metadata['github']:
                 prop.warn(
                     '@@ cannot be changed for existing mods. Expected'
-                    f' "{self.existing_metadata["github"]}", got "{prop.value}"'
+                    f' "{self.existing_metadata["github"]}", got "{prop.value}"\n'
+                    'Note that only the original author of the mod is allowed to'
+                    ' submit updates.\n'
+                    'If you are not the original author, you might want to contact'
+                    ' them to submit the update instead.\n'
+                    'For more information about submitting a mod update, refer to the'
+                    ' "Submitting a Mod Update" section in the repository\'s README.md.'
                 )
 
         expected = f'https://github.com/{self.expected_author}'
         if not prop.value.startswith('https://github.com/'):
-            prop.warn('@@ must start with "https://github.com/"')
+            prop.warn('@@ must start with https://github.com/')
         elif prop.value != expected and prop.value.lower() == expected.lower():
-            prop.warn(f'Expected @@ to be "{expected}" (case-sensitive)')
+            prop.warn(f'Expected @@ to be {expected} (case-sensitive)')
         elif prop.value == expected + '/':
-            prop.warn(f'Expected @@ to be "{expected}" (no trailing slash)')
+            prop.warn(f'Expected @@ to be {expected} (no trailing slash)')
         elif prop.value.startswith(expected + '/'):
-            prop.warn(f'Expected @@ to be "{expected}" (user profile URL only)')
+            prop.warn(f'Expected @@ to be {expected} (user profile URL only)')
         elif prop.value != expected:
             prop.warn(
-                f'Expected @@ to be "{expected}".\n'
+                f'Expected @@ ({prop.value}) to match the pull request author'
+                f' ({expected}).\n'
                 'Note that only the original author of the mod is allowed to submit'
                 ' updates.\n'
                 'If you are not the original author, you might want to contact them to'
@@ -485,7 +493,20 @@ class ModMetadataValidator:
                     break
             else:
                 # Not used by anyone else, still requires manual verification
-                prop.warn('@@ requires manual verification')
+                prop.warn(
+                    '@@ requires manual verification\n\n'
+                    'To verify your X (Twitter) account, please send me'
+                    ' (https://x.com/m417z) a direct message with the following'
+                    ' content:\n\n'
+                    'I attest that I\'m the sole owner of both this Twitter account'
+                    f' ({prop.value}) and the following GitHub account:'
+                    f' {self.github_url}'
+                )
+
+        if not re.match(r'https://(x|twitter)\.com/', prop.value):
+            prop.warn('@@ must start with https://x.com/ or https://twitter.com/')
+        elif not re.match(r'https://(x|twitter)\.com/[^/]+$', prop.value):
+            prop.warn('@@ must be an X (Twitter) profile URL with no extra slashes')
 
     def validate_homepage(self):
         """Validate homepage URL."""
@@ -762,8 +783,8 @@ def validate_specific_keywords(path: Path):
         (r'InternalWh', 'InternalWh'),
         (r'WH_EDITING', 'WH_EDITING'),
         (r'\bWH_MOD\b', 'WH_MOD'),
-        (r'GWL_WNDPROC', 'GWL_WNDPROC'),
-        (r'GWLP_WNDPROC', 'GWLP_WNDPROC'),
+        (r'(^|,)\s*GWL_WNDPROC', 'GWL_WNDPROC'),
+        (r'(^|,)\s*GWLP_WNDPROC', 'GWLP_WNDPROC'),
         (r'Wh_FindFirstSymbol', 'Wh_FindFirstSymbol'),
         (r'Wh_FindNextSymbol', 'Wh_FindNextSymbol'),
         (r'Wh_FindCloseSymbol', 'Wh_FindCloseSymbol'),
@@ -781,6 +802,21 @@ def validate_specific_keywords(path: Path):
                 warnings += add_warning(
                     path, line_num, f'Line requires manual inspection for "{word}"'
                 )
+
+        hidden_ws = [
+            c
+            for c in line
+            if unicodedata.category(c) == 'Cf'
+            or (unicodedata.category(c) == 'Zs' and c != ' ')
+        ]
+        if hidden_ws:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in set(hidden_ws))
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line contains {len(hidden_ws)} non-standard whitespace characters'
+                f' ({chars}), requires manual inspection',
+            )
 
     return warnings
 
