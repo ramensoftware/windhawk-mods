@@ -357,6 +357,7 @@ enum TaskBarButtonsState {
 };
 
 // Enum for hotkey actions
+
 enum class HotkeyActionType {
     Nothing,
     ShowDesktop,
@@ -372,14 +373,14 @@ enum class HotkeyActionType {
     SendKeypress,
     StartProcess,
     CopyRun,
-    MediaPlayPause,
-    MediaNext,
-    MediaPrev,
+    SelectActiveInExplorer,
     OpacityUp,
     OpacityDown,
     ToggleAlwaysOnTop,
     ForceKillActive,
-    SelectActiveInExplorer,
+    MediaPlayPause,
+    MediaNext,
+    MediaPrev,
     Invalid,
 };
 
