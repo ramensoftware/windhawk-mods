@@ -1,3 +1,7 @@
+## 3.5 ([Apr 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e22c08bcf35cf5638953f829e0cd7f3e3f368e69/mods/hotcorner-hotkeys.wh.cpp))
+
+Removed Action 12 additional args clip into an action of its own (Action 13). reorder.
+
 ## 3.3 ([Mar 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7a9ea32a9cd28fd914ba4c31ab7895a5270f8a67/mods/hotcorner-hotkeys.wh.cpp))
 
 added . **Force Kill Active Window** — Terminates the foreground window's process, except for the current `explorer.exe` host process.
