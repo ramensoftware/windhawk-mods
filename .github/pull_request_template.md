@@ -1,4 +1,13 @@
+## Changelog
+
+If the submission is an update to an existing mod, include the changelog below:
+
+* Changelog item 1...
+* Changelog item 2...
+
 ## Mod authorship
+
+If the submission is a new mod, please fill the form below.
 
 This mod was created by:
 
