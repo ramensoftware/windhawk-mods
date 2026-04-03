@@ -2,7 +2,7 @@
 // @id                   hotcorner-hotkeys
 // @name                 HotCorner Hotkeys
 // @description          Assign up to 9 distinct actions per hotkey, dispatched based on which screen zone the cursor is in when pressed (4 corners, 4 edges, or elsewhere).
-// @version              3.5
+// @version              3.51
 // @author               webberlv
 // @github               https://github.com/webberLV
 // @license              GPL-3.0-only
@@ -36,7 +36,6 @@ When a hotkey fires, the mod determines which action to run using a
 | Right        | Right → Elsewhere                         |
 | Elsewhere    | Elsewhere                                 |
 
-Here’s your updated and renumbered list with the requested changes applied:
 
 ---
 
