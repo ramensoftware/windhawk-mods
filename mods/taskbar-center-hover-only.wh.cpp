@@ -12,12 +12,12 @@
 
 // ==WindhawkModSettings==
 /*
-- centerZonePercent: 60
+- centerZonePercent: 20
   $name: Center zone width (%)
   $description: >-
     Width of the hover-active zone as a percentage of the monitor width,
-    centered on screen. E.g. 60 means the middle 60% triggers the taskbar;
-    the outer 20% on each side is a dead zone. Range: 10-100.
+    centered on screen. E.g. 20 means the middle 20% triggers the taskbar;
+    the outer 40% on each side is a dead zone. Range: 10-100.
 - winKeyMode: doublePress
   $name: Win key behavior
   $options:
