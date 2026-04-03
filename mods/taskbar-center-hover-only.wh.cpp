@@ -4,7 +4,6 @@
 // @description     Taskbar auto-hide only triggers in the center zone of the screen. The Win key is suppressed. Requires taskbar auto-hide to be enabled in Windows settings.
 // @version         1.0
 // @author          Greyxp1
-// @github          https://github.com/greyxp1
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lversion
@@ -16,8 +15,8 @@
   $name: Center zone width (%)
   $description: >-
     Width of the hover-active zone as a percentage of the monitor width,
-    centered on screen. E.g. 20 means the middle 20% triggers the taskbar;
-    the outer 40% on each side is a dead zone. Range: 10-100.
+    centered on screen. E.g. 60 means the middle 60% triggers the taskbar;
+    the outer 20% on each side is a dead zone. Range: 10-100.
 - winKeyMode: doublePress
   $name: Win key behavior
   $options:
@@ -175,6 +174,7 @@ HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis, int method, int flag
 // ─── Symbol hooking ───────────────────────────────────────────────────────────
 
 bool HookTaskbarViewDll(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::HandleIsPointerOverTaskbarFrameChanged(unsigned __int64,bool,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
@@ -206,6 +206,7 @@ bool HookTwinuiPcshell() {
                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) { Wh_Log(L"Couldn't load twinui.pcshell.dll"); return false; }
 
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
