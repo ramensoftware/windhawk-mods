@@ -1,3 +1,7 @@
+## 3.51 ([Apr 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f2850a35c116304bc2eca1ad292e071967f13338/mods/hotcorner-hotkeys.wh.cpp))
+
+Readme fix
+
 ## 3.5 ([Apr 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e22c08bcf35cf5638953f829e0cd7f3e3f368e69/mods/hotcorner-hotkeys.wh.cpp))
 
 Removed Action 12 additional args clip into an action of its own (Action 13). reorder.
