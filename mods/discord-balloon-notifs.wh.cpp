@@ -20,7 +20,7 @@ Converts Discord's modern Windows toast notifications into balloon tips that app
 # WARNING!
 The use of third party Discord clients with this mod is **NOT** supported! This mod is designed for the official Discord app. It may or may not function properly with unofficial Discord clients. Try on your own risk.
 
-Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually for the mod to function.
+Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually. Otherwise, Discord may **crash** if not restarted on next notification.
 
 ## Requirement:
 Ensure **EnableLegacyBalloonNotifications** is set to **1** in ``HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications``
@@ -180,6 +180,7 @@ static void FocusDiscordWindow() {
         Wh_Log(L"Launching Discord: %s", discordPath);
         ShellExecuteW(nullptr, nullptr, discordPath, nullptr, nullptr, SW_SHOWNORMAL);
     } else {
+        // Fallback: try common paths or just "Discord"
         Wh_Log(L"Discord path not found, trying shell launch");
         ShellExecuteW(nullptr, nullptr, L"Discord", nullptr, nullptr, SW_SHOWNORMAL);
     }
@@ -212,9 +213,10 @@ static const WCHAR* TRAY_MUTEX_NAME = L"Local\\WindhawkDiscordBalloonTrayMutex";
 static void EnsureTrayIcon() {
     if (!g_hBalloonWnd) return;
     if (g_iconAdded) return;
-    if (g_modUnloading) return;
+    if (g_modUnloading) return;  // Don't create icon if mod is unloading
     if (!IsAnyDiscordRunning()) return;
     
+    // Only one process creates the tray icon
     if (!g_ownsTray) {
         if (!g_hTrayMutex) {
             g_hTrayMutex = CreateMutexW(nullptr, FALSE, TRAY_MUTEX_NAME);
@@ -226,10 +228,12 @@ static void EnsureTrayIcon() {
             g_ownsTray = true;
             Wh_Log(L"Acquired tray mutex (PID %lu)", GetCurrentProcessId());
         } else {
+            // Another process owns it, don't create icon
             return;
         }
     }
     
+    // Don't proceed if unloading
     if (g_modUnloading) {
         if (g_ownsTray && g_hTrayMutex) {
             ReleaseMutex(g_hTrayMutex);
@@ -238,6 +242,7 @@ static void EnsureTrayIcon() {
         return;
     }
     
+    // Small delay to prevent race condition on first notification
     static bool s_firstTime = true;
     if (s_firstTime) {
         s_firstTime = false;
@@ -449,6 +454,7 @@ static void RemoveTrayIcon() {
         Wh_Log(L"Tray icon removed");
     }
     
+    // Release mutex ownership so no other process tries to recreate
     if (g_hTrayMutex) {
         if (g_ownsTray) {
             ReleaseMutex(g_hTrayMutex);
@@ -468,6 +474,7 @@ static void ShowTrayContextMenu(HWND hWnd) {
     
     AppendMenuW(hMenu, MF_STRING, IDM_EXIT_DISCORD, L"Exit Discord");
     
+    // Required for the menu to work properly with tray icons
     SetForegroundWindow(hWnd);
     
     UINT cmd = TrackPopupMenu(hMenu, 
@@ -479,6 +486,7 @@ static void ShowTrayContextMenu(HWND hWnd) {
     if (cmd == IDM_EXIT_DISCORD) {
         DWORD currentPid = GetCurrentProcessId();
         
+        // Find and terminate all other Discord processes first
         HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if (hSnap != INVALID_HANDLE_VALUE) {
             PROCESSENTRY32W pe = {};
@@ -499,10 +507,12 @@ static void ShowTrayContextMenu(HWND hWnd) {
             CloseHandle(hSnap);
         }
         
+        // Terminate current process last - this call does not return
         Wh_Log(L"Terminating current Discord process (PID %lu)", currentPid);
         TerminateProcess(GetCurrentProcess(), 0);
     }
     
+    // Required to dismiss the menu if user clicks elsewhere
     PostMessageW(hWnd, WM_NULL, 0, 0);
 }
 
@@ -511,6 +521,7 @@ static LRESULT CALLBACK BalloonWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
         Wh_Log(L">>> TaskbarCreated received! Explorer restarted. g_ownsTray=%d g_iconAdded=%d", 
                g_ownsTray, g_iconAdded);
         g_iconAdded = false;
+        // Delay to let explorer fully initialize
         SetTimer(hWnd, 1, 2000, nullptr);
         return 0;
     }
@@ -568,6 +579,7 @@ static LRESULT CALLBACK BalloonWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
     }
     
     if (msg == WM_CHECK_DISCORD) {
+        // Tray icon will be created when first notification arrives or by monitor thread
         Wh_Log(L"Balloon thread started (PID %lu)", GetCurrentProcessId());
         return 0;
     }
@@ -585,18 +597,20 @@ static LRESULT CALLBACK BalloonWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 static DWORD WINAPI DiscordMonitorThread(LPVOID) {
     DWORD lastExplorerPid = 0;
     
+    // Get initial explorer PID
     HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (hTray) {
         GetWindowThreadProcessId(hTray, &lastExplorerPid);
     }
     
     while (!g_stopMonitor) {
-        Sleep(1000);
+        Sleep(1000);  // Check every second
         if (g_stopMonitor) break;
         
         if (g_hBalloonWnd) {
             bool discordRunning = IsAnyDiscordRunning();
             
+            // Check if explorer restarted by comparing Shell_TrayWnd PID
             HWND hTrayNow = FindWindowW(L"Shell_TrayWnd", nullptr);
             DWORD currentExplorerPid = 0;
             if (hTrayNow) {
@@ -605,10 +619,13 @@ static DWORD WINAPI DiscordMonitorThread(LPVOID) {
             
             if (currentExplorerPid != 0 && lastExplorerPid != 0 && 
                 currentExplorerPid != lastExplorerPid) {
+                // Explorer restarted!
                 Wh_Log(L"Detected explorer restart (PID %lu -> %lu)", 
                        lastExplorerPid, currentExplorerPid);
                 g_iconAdded = false;
                 lastExplorerPid = currentExplorerPid;
+
+                // Wait a bit for explorer to fully initialize
                 Sleep(2000);
             }
             
@@ -644,12 +661,12 @@ static DWORD WINAPI BalloonThread(LPVOID) {
     RegisterClassW(&wc);
 
     g_hBalloonWnd = CreateWindowExW(
-        WS_EX_TOOLWINDOW,
+        WS_EX_TOOLWINDOW,  // Don't show in taskbar
         wc.lpszClassName, 
         L"", 
-        WS_POPUP,
-        0, 0, 0, 0,
-        nullptr,
+        WS_POPUP,  // No frame
+        0, 0, 0, 0,  // Zero size = invisible
+        nullptr,  // No parent (NOT HWND_MESSAGE)
         nullptr, 
         wc.hInstance, 
         nullptr);
@@ -662,26 +679,30 @@ static DWORD WINAPI BalloonThread(LPVOID) {
 
     Wh_Log(L"Balloon window created: %p", g_hBalloonWnd);
 
+    // Signal that we're ready
     if (g_hBalloonReady) SetEvent(g_hBalloonReady);
     
+    // Allow TaskbarCreated message through UIPI
     if (g_wmTaskbarCreated) {
         typedef BOOL (WINAPI *ChangeWindowMessageFilter_t)(UINT, DWORD);
         typedef BOOL (WINAPI *ChangeWindowMessageFilterEx_t)(HWND, UINT, DWORD, void*);
         
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
+            // Try ChangeWindowMessageFilterEx first
             auto pChangeFilterEx = (ChangeWindowMessageFilterEx_t)GetProcAddress(hUser32, "ChangeWindowMessageFilterEx");
             if (pChangeFilterEx) {
-                if (pChangeFilterEx(g_hBalloonWnd, g_wmTaskbarCreated, 1, nullptr)) {
+                if (pChangeFilterEx(g_hBalloonWnd, g_wmTaskbarCreated, 1 /*MSGFLT_ALLOW*/, nullptr)) {
                     Wh_Log(L"ChangeWindowMessageFilterEx succeeded");
                 } else {
                     Wh_Log(L"ChangeWindowMessageFilterEx failed: %lu", GetLastError());
                 }
             }
             
+            // Also try the process-wide filter
             auto pChangeFilter = (ChangeWindowMessageFilter_t)GetProcAddress(hUser32, "ChangeWindowMessageFilter");
             if (pChangeFilter) {
-                if (pChangeFilter(g_wmTaskbarCreated, 1)) {
+                if (pChangeFilter(g_wmTaskbarCreated, 1 /*MSGFLT_ADD*/)) {
                     Wh_Log(L"ChangeWindowMessageFilter succeeded");
                 } else {
                     Wh_Log(L"ChangeWindowMessageFilter failed: %lu", GetLastError());
@@ -690,6 +711,7 @@ static DWORD WINAPI BalloonThread(LPVOID) {
         }
     }
 
+    // Tray icon will be created when first notification arrives or by monitor thread
     Wh_Log(L"Balloon thread started (PID %lu)", GetCurrentProcessId());
 
     MSG msg;
@@ -753,8 +775,8 @@ static void DecodeXmlEntities(WCHAR* str) {
 // Emoji to Discord name mapping
 
 struct DynamicEmojiEntry {
-    WCHAR surrogates[16];
-    WCHAR name[64];
+    WCHAR surrogates[16];  // The actual emoji Unicode string
+    WCHAR name[64];        // Discord shortcode like ":smile:"
 };
 
 #define MAX_EMOJI_ENTRIES 8192
@@ -821,15 +843,18 @@ static void GetEmojiCachePath() {
     WCHAR storagePath[MAX_PATH] = {};
     size_t len = Wh_GetModStoragePath(storagePath, MAX_PATH);
     if (len > 0) {
+        // Ensure directory exists
         CreateDirectoryW(storagePath, nullptr);
         swprintf_s(g_emojiCachePath, L"%s\\windhawk_discord_emojis.json", storagePath);
     } else {
+        // Fallback
         WCHAR winDir[MAX_PATH];
         GetWindowsDirectoryW(winDir, MAX_PATH);
         swprintf_s(g_emojiCachePath, L"%s\\Temp\\windhawk_discord_emojis.json", winDir);
     }
 }
 
+// Download the JSON file from GitHub
 static char* DownloadEmojiJson(DWORD* outSize) {
     *outSize = 0;
     
@@ -838,7 +863,7 @@ static char* DownloadEmojiJson(DWORD* outSize) {
     if (!hInternet) return nullptr;
     
     HINTERNET hUrl = InternetOpenUrlW(hInternet,
-        L"https://raw.githubusercontent.com/repensky/local-wh-mods/ac919c0ffe39ea171086c80a589c83bcabf432b5/discord-emojis.json",
+        L"https://raw.githubusercontent.com/repensky/local-wh-mods/ac919c0ffe39ea171086c80a589c83bcabf432b5/discord-emojis.json", //Downloads Discord emoji database
         nullptr, 0,
         INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE,
         0);
@@ -925,6 +950,7 @@ static bool IsEmojiCachePresent() {
     return (attrs != INVALID_FILE_ATTRIBUTES);
 }
 
+// UTF-8 decode helper: decode one codepoint from UTF-8, advance pointer
 static unsigned int DecodeUtf8Char(const char*& p) {
     unsigned char c = (unsigned char)*p;
     unsigned int cp = 0;
@@ -951,6 +977,7 @@ static unsigned int DecodeUtf8Char(const char*& p) {
     return cp;
 }
 
+// Write a Unicode codepoint as UTF-16 into a WCHAR buffer, return chars written
 static int CodepointToUtf16(unsigned int cp, WCHAR* out) {
     if (cp <= 0xFFFF) {
         out[0] = (WCHAR)cp;
@@ -964,8 +991,11 @@ static int CodepointToUtf16(unsigned int cp, WCHAR* out) {
     return 0;
 }
 
+// Convert a UTF-8 JSON string value to UTF-16, handling \uXXXX escapes
+// src points AFTER the opening quote, we read until closing quote
 static bool JsonStringToWide(const char*& p, WCHAR* out, int outMax) {
     int pos = 0;
+    // p should be right after opening "
     while (*p && *p != '"' && pos < outMax - 2) {
         if (*p == '\\') {
             p++;
@@ -977,13 +1007,14 @@ static bool JsonStringToWide(const char*& p, WCHAR* out, int outMax) {
                 case 'r': out[pos++] = L'\r'; p++; break;
                 case 't': out[pos++] = L'\t'; p++; break;
                 case 'u': {
-                    p++;
+                    p++;  // skip 'u'
                     char hex[5] = {};
                     for (int i = 0; i < 4 && *p; i++) hex[i] = *p++;
                     unsigned long val = strtoul(hex, nullptr, 16);
                     
+                    // Check for surrogate pair
                     if (val >= 0xD800 && val <= 0xDBFF && p[0] == '\\' && p[1] == 'u') {
-                        p += 2;
+                        p += 2;  // skip \u
                         char hex2[5] = {};
                         for (int i = 0; i < 4 && *p; i++) hex2[i] = *p++;
                         unsigned long val2 = strtoul(hex2, nullptr, 16);
@@ -991,6 +1022,7 @@ static bool JsonStringToWide(const char*& p, WCHAR* out, int outMax) {
                             out[pos++] = (WCHAR)val;
                             if (pos < outMax - 1) out[pos++] = (WCHAR)val2;
                         } else {
+                            // Not a valid pair, emit first and rewind
                             int w = CodepointToUtf16((unsigned int)val, out + pos);
                             pos += w;
                         }
@@ -1003,20 +1035,22 @@ static bool JsonStringToWide(const char*& p, WCHAR* out, int outMax) {
                 default: out[pos++] = (WCHAR)*p; p++; break;
             }
         } else {
+            // Raw UTF-8 byte(s) -> decode to codepoint -> encode as UTF-16
             unsigned int cp = DecodeUtf8Char(p);
             int w = CodepointToUtf16(cp, out + pos);
             pos += w;
         }
     }
-    if (*p == '"') p++;
+    if (*p == '"') p++;  // skip closing quote
     out[pos] = L'\0';
     return pos > 0;
 }
 
+// Skip a JSON value (string, number, object, array, bool, null)
 static void SkipJsonValue(const char*& p) {
     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
     if (*p == '"') {
-        p++;
+        p++;  // skip opening quote
         while (*p && *p != '"') {
             if (*p == '\\') { p++; if (*p) p++; }
             else p++;
@@ -1046,13 +1080,14 @@ static void SkipJsonValue(const char*& p) {
 static void ParseEmojiJson(const char* json, DWORD jsonSize) {
     if (!json || !g_dynamicEmojiTable) return;
     
+    // Find "emojis" key
     const char* p = strstr(json, "\"emojis\"");
     if (!p) { Wh_Log(L"No 'emojis' key in JSON"); return; }
     
-    p += 8;
+    p += 8;  // skip "emojis"
     while (*p == ' ' || *p == ':' || *p == '\t' || *p == '\n' || *p == '\r') p++;
     if (*p != '[') { Wh_Log(L"Expected '[' after emojis"); return; }
-    p++;
+    p++;  // skip '['
     
     LONG count = 0;
     
@@ -1060,7 +1095,7 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == ',') p++;
         if (*p == ']') break;
         if (*p != '{') { p++; continue; }
-        p++;
+        p++;  // skip '{'
         
         WCHAR firstName[64] = {};
         WCHAR surrogates[16] = {};
@@ -1071,9 +1106,11 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
             while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == ',') p++;
             if (*p == '}') break;
             
+            // Parse key
             if (*p != '"') { p++; continue; }
-            p++;
+            p++;  // skip opening quote
             
+            // Read key name inline
             char key[32] = {};
             int ki = 0;
             while (*p && *p != '"' && ki < 30) {
@@ -1086,11 +1123,13 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
             while (*p == ' ' || *p == ':' || *p == '\t' || *p == '\n' || *p == '\r') p++;
             
             if (strcmp(key, "names") == 0) {
+                // Parse array, grab first name only
                 if (*p == '[') {
                     p++;
                     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
                     if (*p == '"') {
-                        p++;
+                        p++;  // skip opening quote
+                        // Read name chars as ASCII into firstName
                         int ni = 0;
                         while (*p && *p != '"' && ni < 62) {
                             if (*p == '\\') { p++; if (*p) firstName[ni++] = (WCHAR)*p++; }
@@ -1100,6 +1139,7 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
                         if (*p == '"') p++;
                         gotName = (ni > 0);
                     }
+                    // Skip rest of array
                     int depth = 1;
                     while (*p && depth > 0) {
                         if (*p == '[') depth++;
@@ -1112,7 +1152,7 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
                 }
             } else if (strcmp(key, "surrogates") == 0) {
                 if (*p == '"') {
-                    p++;
+                    p++;  // skip opening quote
                     gotSurrogates = JsonStringToWide(p, surrogates, ARRAYSIZE(surrogates));
                 } else {
                     SkipJsonValue(p);
@@ -1126,11 +1166,13 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
         if (gotName && gotSurrogates && surrogates[0] && firstName[0]) {
             DynamicEmojiEntry& e = g_dynamicEmojiTable[count];
             wcscpy_s(e.surrogates, surrogates);
+            // Format as :name:
             swprintf_s(e.name, L":%s:", firstName);
             count++;
         }
     }
     
+    // Sort by surrogate length descending (simple bubble sort, runs once)
     for (LONG i = 0; i < count - 1; i++) {
         for (LONG j = 0; j < count - 1 - i; j++) {
             if (wcslen(g_dynamicEmojiTable[j].surrogates) < wcslen(g_dynamicEmojiTable[j+1].surrogates)) {
@@ -1141,6 +1183,7 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
         }
     }
     
+    // Use InterlockedExchange to ensure visibility
     InterlockedExchange(&g_emojiCount, count);
     InterlockedExchange(&g_emojiTableReady, 1);
     Wh_Log(L"Loaded %ld emoji entries from JSON", count);
@@ -1149,6 +1192,7 @@ static void ParseEmojiJson(const char* json, DWORD jsonSize) {
 static const WCHAR* EMOJI_DOWNLOAD_MUTEX_NAME = L"Global\\WindhawkDiscordEmojiDownload";
 
 static DWORD WINAPI EmojiLoadThread(LPVOID) {
+    // If shortcodes are disabled, don't bother loading or downloading
     if (!g_settings.showEmojiShortcodes) {
         Wh_Log(L"Emoji shortcodes disabled, skipping emoji database load");
         return 0;
@@ -1159,6 +1203,7 @@ static DWORD WINAPI EmojiLoadThread(LPVOID) {
     char* json = nullptr;
     DWORD jsonSize = 0;
     
+    // Try loading existing cache first - if present, use it and skip download
     if (IsEmojiCachePresent()) {
         json = LoadEmojiCache(&jsonSize);
         if (json && jsonSize > 0) {
@@ -1170,6 +1215,7 @@ static DWORD WINAPI EmojiLoadThread(LPVOID) {
         if (json) HeapFree(GetProcessHeap(), 0, json);
     }
     
+    // No cache exists - need to download
     HANDLE hDownloadMutex = CreateMutexW(nullptr, FALSE, EMOJI_DOWNLOAD_MUTEX_NAME);
     if (!hDownloadMutex) {
         Wh_Log(L"Failed to create download mutex, emoji conversion disabled");
@@ -1179,6 +1225,7 @@ static DWORD WINAPI EmojiLoadThread(LPVOID) {
     DWORD waitResult = WaitForSingleObject(hDownloadMutex, 30000);
     
     if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_ABANDONED) {
+        // Check again if another process downloaded while we waited
         if (IsEmojiCachePresent()) {
             json = LoadEmojiCache(&jsonSize);
             if (json && jsonSize > 0) {
@@ -1206,6 +1253,7 @@ static DWORD WINAPI EmojiLoadThread(LPVOID) {
         
         ReleaseMutex(hDownloadMutex);
     } else {
+        // Timeout - another process might be downloading, wait and check
         Wh_Log(L"Emoji download mutex timeout, waiting for cache...");
         Sleep(5000);
         if (IsEmojiCachePresent()) {
@@ -1223,13 +1271,17 @@ static DWORD WINAPI EmojiLoadThread(LPVOID) {
     return 0;
 }
 
+// Convert a single Unicode codepoint (U+10000+) to surrogate pair length
 static int GetEmojiLength(const WCHAR* str) {
     if (!str || !*str) return 0;
     WCHAR c = *str;
     
+    // Surrogate pair (emoji above U+FFFF)
     if (c >= 0xD800 && c <= 0xDBFF && *(str+1) >= 0xDC00 && *(str+1) <= 0xDFFF) {
         int len = 2;
+        // Skip variation selectors (U+FE00-U+FE0F)
         while (str[len] >= 0xFE00 && str[len] <= 0xFE0F) len++;
+        // Skip ZWJ (U+200D) and following emoji
         if (str[len] == 0x200D) {
             int next = GetEmojiLength(str + len + 1);
             if (next > 0) len += 1 + next;
@@ -1237,6 +1289,7 @@ static int GetEmojiLength(const WCHAR* str) {
         return len;
     }
     
+    // Check if it's a basic glyph from our table
     if (IsBasicEmojiGlyph(c)) {
         int len = 1;
         while (str[len] >= 0xFE00 && str[len] <= 0xFE0F) len++;
@@ -1247,17 +1300,18 @@ static int GetEmojiLength(const WCHAR* str) {
         return len;
     }
     
-    if ((c >= 0x2600 && c <= 0x27BF) ||
+    // Other known emoji ranges in BMP
+    if ((c >= 0x2600 && c <= 0x27BF) ||  // Misc symbols, dingbats
         (c >= 0x2700 && c <= 0x27BF) ||
         (c >= 0x2B00 && c <= 0x2BFF) ||
-        (c >= 0x2000 && c <= 0x206F) ||
-        (c >= 0x2100 && c <= 0x21FF) ||
-        (c >= 0x2300 && c <= 0x23FF) ||
-        (c >= 0x25A0 && c <= 0x25FF) ||
-        (c >= 0x2900 && c <= 0x297F) ||
-        (c == 0x200D) ||
-        (c == 0x20E3) ||
-        (c >= 0xFE00 && c <= 0xFE0F))
+        (c >= 0x2000 && c <= 0x206F) ||  // General punctuation
+        (c >= 0x2100 && c <= 0x21FF) ||  // Letterlike, arrows
+        (c >= 0x2300 && c <= 0x23FF) ||  // Misc technical
+        (c >= 0x25A0 && c <= 0x25FF) ||  // Geometric shapes
+        (c >= 0x2900 && c <= 0x297F) ||  // Supplemental arrows
+        (c == 0x200D) ||                  // ZWJ
+        (c == 0x20E3) ||                  // Combining enclosing keycap
+        (c >= 0xFE00 && c <= 0xFE0F))    // Variation selectors
     {
         int len = 1;
         while (str[len] >= 0xFE00 && str[len] <= 0xFE0F) len++;
@@ -1292,136 +1346,138 @@ static const WCHAR* LookupEmoji(const WCHAR* str, int* matchLen) {
 }
 
 static const WCHAR* LookupBasicGlyphName(WCHAR c) {
+    // Hardcoded mappings for basic glyphs that may not be in Discord's database
+    // or are stored with variation selectors
     switch (c) {
-        case 0x263A: return L":relaxed:";
-        case 0x2639: return L":frowning2:";
-        case 0x263B: return L":smile:";
-        case 0x2764: return L":heart:";
-        case 0x2763: return L":heart_exclamation:";
-        case 0x2765: return L":heart_decoration:";
-        case 0x2661: return L":heart_outline:";
-        case 0x2665: return L":hearts:";
-        case 0x2B50: return L":star:";
-        case 0x2728: return L":sparkles:";
-        case 0x2606: return L":star_outline:";
-        case 0x2605: return L":star:";
-        case 0x269D: return L":star_outlined:";
-        case 0x2600: return L":sunny:";
-        case 0x2601: return L":cloud:";
-        case 0x2602: return L":umbrella2:";
-        case 0x2603: return L":snowman2:";
-        case 0x2604: return L":comet:";
-        case 0x26C5: return L":partly_sunny:";
-        case 0x26C8: return L":thunder_cloud_rain:";
-        case 0x2744: return L":snowflake:";
-        case 0x26A1: return L":zap:";
-        case 0x270C: return L":v:";
-        case 0x270B: return L":raised_hand:";
-        case 0x270A: return L":fist:";
-        case 0x261D: return L":point_up:";
-        case 0x270D: return L":writing_hand:";
-        case 0x2714: return L":heavy_check_mark:";
-        case 0x2716: return L":heavy_multiplication_x:";
-        case 0x2718: return L":x:";
-        case 0x271D: return L":cross:";
-        case 0x2721: return L":star_of_david:";
-        case 0x262E: return L":peace:";
-        case 0x262F: return L":yin_yang:";
-        case 0x2622: return L":radioactive:";
-        case 0x2623: return L":biohazard:";
-        case 0x267B: return L":recycle:";
-        case 0x269B: return L":atom:";
-        case 0x2699: return L":gear:";
-        case 0x2696: return L":scales:";
-        case 0x2694: return L":crossed_swords:";
-        case 0x2695: return L":medical_symbol:";
-        case 0x266A: return L":eighth_note:";
-        case 0x266B: return L":beamed_eighth_notes:";
-        case 0x266C: return L":beamed_sixteenth_notes:";
-        case 0x266D: return L":flat:";
-        case 0x266E: return L":natural:";
-        case 0x266F: return L":sharp:";
-        case 0x2B05: return L":arrow_left:";
-        case 0x2B06: return L":arrow_up:";
-        case 0x2B07: return L":arrow_down:";
-        case 0x27A1: return L":arrow_right:";
-        case 0x2194: return L":left_right_arrow:";
-        case 0x2195: return L":arrow_up_down:";
-        case 0x21A9: return L":leftwards_arrow_with_hook:";
-        case 0x21AA: return L":arrow_right_hook:";
-        case 0x2934: return L":arrow_heading_up:";
-        case 0x2935: return L":arrow_heading_down:";
-        case 0x2660: return L":spades:";
-        case 0x2663: return L":clubs:";
-        case 0x2666: return L":diamonds:";
-        case 0x00A9: return L":copyright:";
-        case 0x00AE: return L":registered:";
-        case 0x2122: return L":tm:";
-        case 0x203C: return L":bangbang:";
-        case 0x2049: return L":interrobang:";
-        case 0x2757: return L":exclamation:";
-        case 0x2753: return L":question:";
-        case 0x2754: return L":grey_question:";
-        case 0x2755: return L":grey_exclamation:";
-        case 0x2733: return L":eight_spoked_asterisk:";
-        case 0x2734: return L":eight_pointed_star:";
-        case 0x2747: return L":sparkle:";
-        case 0x273F: return L":flower:";
-        case 0x2740: return L":flower2:";
-        case 0x2742: return L":flower3:";
-        case 0x26AA: return L":white_circle:";
-        case 0x26AB: return L":black_circle:";
-        case 0x2B1B: return L":black_large_square:";
-        case 0x2B1C: return L":white_large_square:";
-        case 0x25AA: return L":black_small_square:";
-        case 0x25AB: return L":white_small_square:";
-        case 0x25FE: return L":black_medium_small_square:";
-        case 0x25FD: return L":white_medium_small_square:";
-        case 0x25FC: return L":black_medium_square:";
-        case 0x25FB: return L":white_medium_square:";
-        case 0x2B55: return L":o:";
-        case 0x274C: return L":x:";
-        case 0x274E: return L":negative_squared_cross_mark:";
-        case 0x26A0: return L":warning:";
-        case 0x2139: return L":information_source:";
-        case 0x26D4: return L":no_entry:";
-        case 0x267F: return L":wheelchair:";
-        case 0x2648: return L":aries:";
-        case 0x2649: return L":taurus:";
-        case 0x264A: return L":gemini:";
-        case 0x264B: return L":cancer:";
-        case 0x264C: return L":leo:";
-        case 0x264D: return L":virgo:";
-        case 0x264E: return L":libra:";
-        case 0x264F: return L":scorpius:";
-        case 0x2650: return L":sagittarius:";
-        case 0x2651: return L":capricorn:";
-        case 0x2652: return L":aquarius:";
-        case 0x2653: return L":pisces:";
-        case 0x260E: return L":telephone:";
-        case 0x2709: return L":envelope:";
-        case 0x270F: return L":pencil2:";
-        case 0x2712: return L":black_nib:";
-        case 0x26BD: return L":soccer:";
-        case 0x26BE: return L":baseball:";
-        case 0x26F3: return L":golf:";
-        case 0x26F5: return L":sailboat:";
-        case 0x26FA: return L":tent:";
-        case 0x26FD: return L":fuelpump:";
-        case 0x26EA: return L":church:";
-        case 0x26F2: return L":fountain:";
-        case 0x2702: return L":scissors:";
-        case 0x2615: return L":coffee:";
-        case 0x231A: return L":watch:";
-        case 0x231B: return L":hourglass:";
-        case 0x23F0: return L":alarm_clock:";
-        case 0x23F3: return L":hourglass_flowing_sand:";
-        case 0x23E9: return L":fast_forward:";
-        case 0x23EA: return L":rewind:";
-        case 0x23EB: return L":arrow_double_up:";
-        case 0x23EC: return L":arrow_double_down:";
-        case 0x25B6: return L":arrow_forward:";
-        case 0x25C0: return L":arrow_backward:";
+        case 0x263A: return L":relaxed:";       // ☺
+        case 0x2639: return L":frowning2:";     // ☹
+        case 0x263B: return L":smile:";         // ☻
+        case 0x2764: return L":heart:";         // ❤
+        case 0x2763: return L":heart_exclamation:"; // ❣
+        case 0x2765: return L":heart_decoration:";  // ❥
+        case 0x2661: return L":heart_outline:"; // ♡
+        case 0x2665: return L":hearts:";        // ♥
+        case 0x2B50: return L":star:";          // ⭐
+        case 0x2728: return L":sparkles:";      // ✨
+        case 0x2606: return L":star_outline:";  // ☆
+        case 0x2605: return L":star:";         // ★
+        case 0x269D: return L":star_outlined:"; // ⚝
+        case 0x2600: return L":sunny:";         // ☀
+        case 0x2601: return L":cloud:";         // ☁
+        case 0x2602: return L":umbrella2:";     // ☂
+        case 0x2603: return L":snowman2:";      // ☃
+        case 0x2604: return L":comet:";         // ☄
+        case 0x26C5: return L":partly_sunny:";  // ⛅
+        case 0x26C8: return L":thunder_cloud_rain:"; // ⛈
+        case 0x2744: return L":snowflake:";     // ❄
+        case 0x26A1: return L":zap:";           // ⚡
+        case 0x270C: return L":v:";             // ✌
+        case 0x270B: return L":raised_hand:";   // ✋
+        case 0x270A: return L":fist:";          // ✊
+        case 0x261D: return L":point_up:";      // ☝
+        case 0x270D: return L":writing_hand:";  // ✍
+        case 0x2714: return L":heavy_check_mark:"; // ✔
+        case 0x2716: return L":heavy_multiplication_x:"; // ✖
+        case 0x2718: return L":x:";             // ✘
+        case 0x271D: return L":cross:";         // ✝
+        case 0x2721: return L":star_of_david:"; // ✡
+        case 0x262E: return L":peace:";         // ☮
+        case 0x262F: return L":yin_yang:";      // ☯
+        case 0x2622: return L":radioactive:";   // ☢
+        case 0x2623: return L":biohazard:";     // ☣
+        case 0x267B: return L":recycle:";       // ♻
+        case 0x269B: return L":atom:";          // ⚛
+        case 0x2699: return L":gear:";          // ⚙
+        case 0x2696: return L":scales:";        // ⚖
+        case 0x2694: return L":crossed_swords:"; // ⚔
+        case 0x2695: return L":medical_symbol:"; // ⚕
+        case 0x266A: return L":eighth_note:";   // ♪
+        case 0x266B: return L":beamed_eighth_notes:"; // ♫
+        case 0x266C: return L":beamed_sixteenth_notes:"; // ♬
+        case 0x266D: return L":flat:";          // ♭
+        case 0x266E: return L":natural:";       // ♮
+        case 0x266F: return L":sharp:";         // ♯
+        case 0x2B05: return L":arrow_left:";    // ⬅
+        case 0x2B06: return L":arrow_up:";      // ⬆
+        case 0x2B07: return L":arrow_down:";    // ⬇
+        case 0x27A1: return L":arrow_right:";   // ➡
+        case 0x2194: return L":left_right_arrow:"; // ↔
+        case 0x2195: return L":arrow_up_down:"; // ↕
+        case 0x21A9: return L":leftwards_arrow_with_hook:"; // ↩
+        case 0x21AA: return L":arrow_right_hook:"; // ↪
+        case 0x2934: return L":arrow_heading_up:"; // ⤴
+        case 0x2935: return L":arrow_heading_down:"; // ⤵
+        case 0x2660: return L":spades:";        // ♠
+        case 0x2663: return L":clubs:";         // ♣
+        case 0x2666: return L":diamonds:";      // ♦
+        case 0x00A9: return L":copyright:";     // ©
+        case 0x00AE: return L":registered:";    // ®
+        case 0x2122: return L":tm:";            // ™
+        case 0x203C: return L":bangbang:";      // ‼
+        case 0x2049: return L":interrobang:";   // ⁉
+        case 0x2757: return L":exclamation:";   // ❗
+        case 0x2753: return L":question:";      // ❓
+        case 0x2754: return L":grey_question:"; // ❔
+        case 0x2755: return L":grey_exclamation:"; // ❕
+        case 0x2733: return L":eight_spoked_asterisk:"; // ✳
+        case 0x2734: return L":eight_pointed_star:"; // ✴
+        case 0x2747: return L":sparkle:";       // ❇
+        case 0x273F: return L":flower:";        // ✿
+        case 0x2740: return L":flower2:";       // ❀
+        case 0x2742: return L":flower3:";       // ❂
+        case 0x26AA: return L":white_circle:";  // ⚪
+        case 0x26AB: return L":black_circle:";  // ⚫
+        case 0x2B1B: return L":black_large_square:"; // ⬛
+        case 0x2B1C: return L":white_large_square:"; // ⬜
+        case 0x25AA: return L":black_small_square:"; // ▪
+        case 0x25AB: return L":white_small_square:"; // ▫
+        case 0x25FE: return L":black_medium_small_square:"; // ◾
+        case 0x25FD: return L":white_medium_small_square:"; // ◽
+        case 0x25FC: return L":black_medium_square:"; // ◼
+        case 0x25FB: return L":white_medium_square:"; // ◻
+        case 0x2B55: return L":o:";             // ⭕
+        case 0x274C: return L":x:";             // ❌
+        case 0x274E: return L":negative_squared_cross_mark:"; // ❎
+        case 0x26A0: return L":warning:";       // ⚠
+        case 0x2139: return L":information_source:"; // ℹ
+        case 0x26D4: return L":no_entry:";      // ⛔
+        case 0x267F: return L":wheelchair:";    // ♿
+        case 0x2648: return L":aries:";         // ♈
+        case 0x2649: return L":taurus:";        // ♉
+        case 0x264A: return L":gemini:";        // ♊
+        case 0x264B: return L":cancer:";        // ♋
+        case 0x264C: return L":leo:";           // ♌
+        case 0x264D: return L":virgo:";         // ♍
+        case 0x264E: return L":libra:";         // ♎
+        case 0x264F: return L":scorpius:";      // ♏
+        case 0x2650: return L":sagittarius:";   // ♐
+        case 0x2651: return L":capricorn:";     // ♑
+        case 0x2652: return L":aquarius:";      // ♒
+        case 0x2653: return L":pisces:";        // ♓
+        case 0x260E: return L":telephone:";     // ☎
+        case 0x2709: return L":envelope:";      // ✉
+        case 0x270F: return L":pencil2:";       // ✏
+        case 0x2712: return L":black_nib:";     // ✒
+        case 0x26BD: return L":soccer:";        // ⚽
+        case 0x26BE: return L":baseball:";      // ⚾
+        case 0x26F3: return L":golf:";          // ⛳
+        case 0x26F5: return L":sailboat:";      // ⛵
+        case 0x26FA: return L":tent:";          // ⛺
+        case 0x26FD: return L":fuelpump:";      // ⛽
+        case 0x26EA: return L":church:";        // ⛪
+        case 0x26F2: return L":fountain:";      // ⛲
+        case 0x2702: return L":scissors:";      // ✂
+        case 0x2615: return L":coffee:";        // ☕
+        case 0x231A: return L":watch:";         // ⌚
+        case 0x231B: return L":hourglass:";     // ⌛
+        case 0x23F0: return L":alarm_clock:";   // ⏰
+        case 0x23F3: return L":hourglass_flowing_sand:"; // ⏳
+        case 0x23E9: return L":fast_forward:";  // ⏩
+        case 0x23EA: return L":rewind:";        // ⏪
+        case 0x23EB: return L":arrow_double_up:"; // ⏫
+        case 0x23EC: return L":arrow_double_down:"; // ⏬
+        case 0x25B6: return L":arrow_forward:"; // ▶
+        case 0x25C0: return L":arrow_backward:"; // ◀
         default: return nullptr;
     }
 }
@@ -1435,9 +1491,11 @@ static void ConvertEmojisToNames(WCHAR* str, int bufSize) {
     int srcLen = (int)wcslen(str);
     
     while (srcPos < srcLen && tempPos < (int)ARRAYSIZE(temp) - 32) {
+        // If keepBasicEmoji is enabled, check if this is a basic BMP emoji to preserve as unicode
         if (g_settings.keepBasicEmoji) {
             int basicLen = IsBasicEmojiSequence(str + srcPos);
             if (basicLen > 0) {
+                // Copy the basic emoji glyph as-is (skip shortcode conversion)
                 for (int k = 0; k < basicLen && tempPos < (int)ARRAYSIZE(temp) - 1; k++) {
                     temp[tempPos++] = str[srcPos++];
                 }
@@ -1445,7 +1503,9 @@ static void ConvertEmojisToNames(WCHAR* str, int bufSize) {
             }
         }
         
+        // Try shortcode lookup if enabled
         if (g_settings.showEmojiShortcodes) {
+            // First check hardcoded basic glyph names
             const WCHAR* basicName = LookupBasicGlyphName(str[srcPos]);
             if (basicName) {
                 int nameLen = (int)wcslen(basicName);
@@ -1453,11 +1513,13 @@ static void ConvertEmojisToNames(WCHAR* str, int bufSize) {
                     wcscpy(temp + tempPos, basicName);
                     tempPos += nameLen;
                     srcPos++;
+                    // Skip variation selectors
                     while (srcPos < srcLen && str[srcPos] >= 0xFE00 && str[srcPos] <= 0xFE0F) srcPos++;
                     continue;
                 }
             }
             
+            // Then try database lookup
             int matchLen = 0;
             const WCHAR* name = LookupEmoji(str + srcPos, &matchLen);
             
@@ -1472,12 +1534,15 @@ static void ConvertEmojisToNames(WCHAR* str, int bufSize) {
             }
         }
         
+        // Check if it's an emoji (surrogate pair or known emoji codepoint)
         int emojiLen = GetEmojiLength(str + srcPos);
         if (emojiLen > 0) {
+            // Emoji not in database or shortcodes disabled - skip it entirely
             srcPos += emojiLen;
             continue;
         }
         
+        // Regular character
         temp[tempPos++] = str[srcPos++];
     }
     
@@ -1490,24 +1555,25 @@ static void ConvertShortcodesToBasicGlyphs(WCHAR* str, int bufSize) {
     if (!str || !str[0]) return;
     if (!g_settings.keepBasicEmoji) return;
     
+    // Hardcoded mappings: shortcode -> basic glyph
     struct ShortcodeMapping {
         const WCHAR* shortcode;
         WCHAR glyph;
     };
     
     static const ShortcodeMapping mappings[] = {
-        { L":smile:", 0x263A },
-        { L":slight_smile:", 0x263A },
-        { L":frowning:", 0x2639 },
-        { L":slight_frown:", 0x2639 },
-        { L":frowning2:", 0x2639 },
-        { L":heavy_check_mark:", 0x2714 },
-        { L":white_check_mark:", 0x2714 },
-        { L":ballot_box_with_check:", 0x2714 },
-        { L":musical_note:", 0x266B },
-        { L":notes:", 0x266A },
-        { L":umbrella:", 0x2602 },
-        { L":snowman:", 0x2603 },
+        { L":smile:", 0x263A },           // ☺
+        { L":slight_smile:", 0x263A },    // ☺
+        { L":frowning:", 0x2639 },        // ☹
+        { L":slight_frown:", 0x2639 },    // ☹
+        { L":frowning2:", 0x2639 },       // ☹
+        { L":heavy_check_mark:", 0x2714 },// ✔
+        { L":white_check_mark:", 0x2714 },// ✔
+        { L":ballot_box_with_check:", 0x2714 },// ✔
+        { L":musical_note:", 0x266B },    // ♪
+        { L":notes:", 0x266A },           // ♫
+        { L":umbrella:", 0x2602 },        // ☂
+        { L":snowman:", 0x2603 },         // ☃
         { nullptr, 0 }
     };
     
@@ -1550,7 +1616,8 @@ static void StripInvisibleChars(WCHAR* str) {
     while (*read) {
         WCHAR c = *read;
 
-        if (c >= 0x200B && c <= 0x200D) { read++; continue; }
+        // Skip invisible formatting characters (but NOT emoji-related ones)
+        if (c >= 0x200B && c <= 0x200D) { read++; continue; }  // ZWJ kept by emoji converter
         if (c >= 0x200E && c <= 0x200F) { read++; continue; }
         if (c >= 0x2028 && c <= 0x202F) { read++; continue; }
         if (c >= 0x2060 && c <= 0x2069) { read++; continue; }
@@ -1561,6 +1628,7 @@ static void StripInvisibleChars(WCHAR* str) {
     }
     *write = L'\0';
 
+    // Trim leading spaces
     WCHAR* start = str;
     while (*start == L' ') start++;
     if (start != str) {
@@ -1569,11 +1637,13 @@ static void StripInvisibleChars(WCHAR* str) {
         *dst = L'\0';
     }
 
+    // Trim trailing spaces
     int len = (int)wcslen(str);
     while (len > 0 && str[len - 1] == L' ') {
         str[--len] = L'\0';
     }
 
+    // Collapse multiple spaces
     read = str;
     write = str;
     bool lastWasSpace = false;
@@ -1792,6 +1862,8 @@ HRESULT WINAPI RoActivateInstance_Hook(HSTRING classId, void** instance) {
     return hr;
 }
 
+// RoGetActivationFactory hooking
+
 typedef HRESULT (WINAPI *RoGetActivationFactory_t)(HSTRING classId, REFIID iid, void** factory);
 static RoGetActivationFactory_t RoGetActivationFactory_Orig = nullptr;
 
@@ -1823,7 +1895,7 @@ HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING classId, REFIID iid, void** f
     return hr;
 }
 
-// Vtable restore
+// Vtable restore hooks
 
 static void RestoreVtableHooks() {
     if (g_loadXmlHooked && g_pDocIOVtbl && LoadXml_Orig) {
@@ -1880,15 +1952,17 @@ BOOL Wh_ModInit(void) {
 
     InitializeCriticalSection(&g_cs);
 
+    // Allocate emoji table
     g_dynamicEmojiTable = (DynamicEmojiEntry*)HeapAlloc(GetProcessHeap(), 
         HEAP_ZERO_MEMORY, sizeof(DynamicEmojiEntry) * MAX_EMOJI_ENTRIES);
     
+    // Start emoji loading in background
     g_hEmojiThread = CreateThread(nullptr, 0, EmojiLoadThread, nullptr, 0, nullptr);
 
     g_hBalloonReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hThread = CreateThread(nullptr, 0, BalloonThread, nullptr, 0, nullptr);
     if (g_hBalloonReady) {
-        WaitForSingleObject(g_hBalloonReady, 5000);
+        WaitForSingleObject(g_hBalloonReady, 5000);  // Wait up to 5 seconds
         CloseHandle(g_hBalloonReady);
         g_hBalloonReady = nullptr;
     }
