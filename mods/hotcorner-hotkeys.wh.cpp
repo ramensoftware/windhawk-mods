@@ -2,7 +2,7 @@
 // @id                   hotcorner-hotkeys
 // @name                 HotCorner Hotkeys
 // @description          Assign up to 9 distinct actions per hotkey, dispatched based on which screen zone the cursor is in when pressed (4 corners, 4 edges, or elsewhere).
-// @version              3.3
+// @version              3.5
 // @author               webberlv
 // @github               https://github.com/webberLV
 // @license              GPL-3.0-only
@@ -36,6 +36,10 @@ When a hotkey fires, the mod determines which action to run using a
 | Right        | Right → Elsewhere                         |
 | Elsewhere    | Elsewhere                                 |
 
+Here’s your updated and renumbered list with the requested changes applied:
+
+---
+
 ## Supported actions
 
 1. **Show desktop** — Toggles the desktop view using the taskbar Show Desktop command.
@@ -50,14 +54,15 @@ When a hotkey fires, the mod determines which action to run using a
 10. **Open Start menu** — Simulates the Windows key to open Start.
 11. **Virtual key press** — Sends one or more virtual key presses or shortcuts using `SendInput`.
 12. **Open application, path or URL** — Launches an executable, opens a file/folder path, or opens a URL.
-13. **Media Play/Pause**
-14. **Media Next Track**
-15. **Media Previous Track**
-16. **Open parsed title path in explorer, with fallback to exe** — Selects the active file in an Explorer window, falling back to the foreground executable if no file path could be parsed from the title.
-17. **Opacity Up (active window)** — Increases the foreground window's opacity toward a configurable maximum.
-18. **Opacity Down (active window)** — Decreases the foreground window's opacity toward a configurable minimum.
-19. **Toggle Always On Top (active window)** — Toggles the foreground window's always-on-top state.
-20. **Force Kill Active Window** — Terminates the foreground window's process, except for the current `explorer.exe` host process.
+13. **Clipboard Run** — URL-encodes the clipboard contents and opens the result using a built-in alias or custom URL prefix provided as the additional argument.
+14. **Open parsed title path in explorer, with fallback to exe** — Selects the active file in an Explorer window, falling back to the foreground executable if no file path could be parsed from the title.
+15. **Opacity Up (active window)** — Increases the foreground window's opacity toward a configurable maximum.
+16. **Opacity Down (active window)** — Decreases the foreground window's opacity toward a configurable minimum.
+17. **Toggle Always On Top (active window)** — Toggles the foreground window's always-on-top state.
+18. **Force Kill Active Window** — Terminates the foreground window's process, except for the current `explorer.exe` host process.
+19. **Media Play/Pause**
+20. **Media Next Track**
+21. **Media Previous Track**
 
 ## Hotkey format
 
@@ -125,23 +130,30 @@ Prefix with `uac;` to request elevation:
 
 ```
 uac;cmd.exe
-uac;"C:\Tools\app.exe" --example
+uac;"C:\Tools\app.exe" args
 ```
 
-Prefix with `clip;` to URL-encode the clipboard contents and append them to the remainder of the argument. Built-in aliases are supported:
+---
+
+### Clipboard Run
+
+One or more semicolon-separated aliases or URL prefixes. The clipboard contents are URL-encoded once and appended to every token, opening each result as a separate target. Clipboard is read a single time per invocation regardless of how many targets are listed.
+
+**Single target:**
 
 ```
-clip;gpt
-clip;yt
-clip;google
-clip;copilot
-clip;x
-clip;reddit
-clip;translate
-clip;https://www.bing.com/search?q=
+yt
+google
+https://www.bing.com/search?q=
 ```
 
-The `uac;` and `clip;` prefixes can be combined (`uac;` must come first).
+**Multiple targets (opens all simultaneously):**
+
+```
+yt;google
+yt;google;reddit
+gpt;copilot
+```
 
 | Alias       | Expands to                                    |
 |-------------|-----------------------------------------------|
@@ -189,6 +201,7 @@ Format: `max;step`
 Omitting both values uses all defaults.
 Providing only the first value sets min while keeping the default step.
 To modifiy step you must include max first. 
+Some windows may not respond to layered window attributes.
 
 **Example:**
 
@@ -210,19 +223,17 @@ Format: `min;step`
 Omitting both values uses all defaults.
 Providing only the first value sets min while keeping the default step.
 To modifiy step you must include min first. 
-
+Some windows may not respond to layered window attributes.
 **Example:**
 
 ```
 5;25
 ```
 
-## Notes
+---
 
-- The mod runs inside `explorer.exe` and uses global hotkey registration.
-- Each unique key combination is registered with Windows exactly once.
-- Some windows may not respond to layered window attributes.
-- Force-killing elevated or protected processes may fail if `explorer.exe` lacks the required rights.
+
+
 
 ## Credits
 
@@ -276,17 +287,18 @@ by [m417z](https://github.com/m417z).
           - ACTION_OPEN_START_MENU: Open Start menu
           - ACTION_SEND_KEYPRESS: Virtual key press
           - ACTION_START_PROCESS: Open application, path or URL
-          - ACTION_MEDIA_PLAY_PAUSE: Media Play/Pause
-          - ACTION_MEDIA_NEXT: Media Next Track
-          - ACTION_MEDIA_PREV: Media Previous Track
+          - ACTION_COPYRUN: Clipboard Run
           - ACTION_SELECT_ACTIVE_IN_EXPLORER: Open parsed title path in explorer, with fallback to exe.
           - ACTION_OPACITY_UP_ACTIVE: Opacity Up (active window)
           - ACTION_OPACITY_DOWN_ACTIVE: Opacity Down (active window)
           - ACTION_TOGGLE_ALWAYSONTOP_ACTIVE: Toggle Always On Top (active window)
           - ACTION_FORCE_KILL_ACTIVE: Force Kill Active Window
+          - ACTION_MEDIA_PLAY_PAUSE: Media Play/Pause
+          - ACTION_MEDIA_NEXT: Media Next Track
+          - ACTION_MEDIA_PREV: Media Previous Track
         - AdditionalArgs: ""
           $name: Additional Args
-          $description: Optional arguments for this action (e.g., Ctrl+C, uac;cmd.exe, clip;google, 200;15). See Details tab.
+          $description: Optional arguments for this action (e.g., Ctrl+C, uac;cmd.exe, google, 200;15). See Details tab.
   $name: Keyboard Shortcut Actions
 */
 // ==/WindhawkModSettings==
@@ -345,6 +357,7 @@ enum TaskBarButtonsState {
 };
 
 // Enum for hotkey actions
+
 enum class HotkeyActionType {
     Nothing,
     ShowDesktop,
@@ -359,14 +372,15 @@ enum class HotkeyActionType {
     OpenStartMenu,
     SendKeypress,
     StartProcess,
-    MediaPlayPause,
-    MediaNext,
-    MediaPrev,
+    CopyRun,
     SelectActiveInExplorer,
     OpacityUp,
     OpacityDown,
     ToggleAlwaysOnTop,
     ForceKillActive,
+    MediaPlayPause,
+    MediaNext,
+    MediaPrev,
     Invalid,
 };
 
@@ -1401,8 +1415,43 @@ std::tuple<std::wstring, std::wstring> ParseExecutableAndParameters(
 }
 
 void StartProcess(std::wstring command) {
-    if (command.empty())
+    if (command.empty()) {
         return;
+    }
+
+    std::vector<std::wstring> uac_args = SplitArgs(command, L';');
+    std::wstring verb = L"open";
+    if (stringtools::toLower(uac_args[0]) == L"uac") {
+        verb = L"runas";
+        command = stringtools::ltrim(command.substr(uac_args[0].length() + 1));
+    }
+
+    const auto [executable, parameters] = ParseExecutableAndParameters(command);
+    Wh_Log(L"Starting: %s %s", executable.c_str(), parameters.c_str());
+
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+    HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+
+    SHELLEXECUTEINFO sei = {sizeof(sei)};
+    sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = verb.c_str();
+    sei.lpFile = executable.c_str();
+    sei.lpParameters = parameters.empty() ? NULL : parameters.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    sei.hMonitor = hMonitor;
+
+    if (!ShellExecuteEx(&sei)) {
+        DWORD error = GetLastError();
+        if (error != ERROR_CANCELLED) {
+            Wh_Log(L"ShellExecuteEx failed, error: %d", error);
+        }
+    }
+}
+
+
+std::wstring ParseCopyRunTarget(const std::wstring& token,
+                                const std::wstring& encodedClip) {
     static const std::unordered_map<std::wstring, std::wstring> kUrlAliases = {
         {L"gpt",       L"https://chatgpt.com/?q="},
         {L"yt",        L"https://www.youtube.com/results?search_query="},
@@ -1412,92 +1461,98 @@ void StartProcess(std::wstring command) {
         {L"reddit",    L"https://www.reddit.com/search/?q="},
         {L"translate", L"https://translate.google.com/?text="},
     };
-    auto toLowerCopy = [&](std::wstring s) {
-        return stringtools::toLower(std::move(s));
-    };
-    auto getClipboardText = [&]() -> std::wstring {
-        std::wstring result;
-        if (OpenClipboard(nullptr)) {
-            if (HANDLE hData = GetClipboardData(CF_UNICODETEXT)) {
-                if (const wchar_t* p = (const wchar_t*)GlobalLock(hData)) {
-                    result = p;
-                    GlobalUnlock(hData);
-                }
-            }
-            CloseClipboard();
-        }
-        return result;
-    };
-    auto percentEncode = [&](const std::wstring& input) {
-        std::wstring encoded;
-        encoded.reserve(input.size() * 3);
-        for (wchar_t wc : input) {
-            if ((wc >= L'A' && wc <= L'Z') ||
-                (wc >= L'a' && wc <= L'z') ||
-                (wc >= L'0' && wc <= L'9') ||
-                wc == L'-' || wc == L'_' || wc == L'.' || wc == L'~') {
-                encoded += wc;
-            } else if (wc <= 0x7F) {
-                wchar_t buf[4];
-                swprintf(buf, 4, L"%%%02X", (unsigned)wc);
-                encoded += buf;
-            } else {
-                char utf8[4];
-                int n = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, utf8, 4, nullptr, nullptr);
-                for (int i = 0; i < n; i++) {
-                    wchar_t buf[4];
-                    swprintf(buf, 4, L"%%%02X", (unsigned char)utf8[i]);
-                    encoded += buf;
-                }
-            }
-        }
-        return encoded;
-    };
-    std::vector<std::wstring> args = SplitArgs(command);
-    std::wstring verb = L"open";
-    if (!args.empty() && toLowerCopy(args[0]) == L"uac") 
-        {
-            verb = L"runas";
-            command = stringtools::ltrim(command.substr(args[0].length() + 1));
-            args = SplitArgs(command);    
-        }
-    bool isClip = !args.empty() && toLowerCopy(args[0]) == L"clip";
-    std::wstring finalTarget;
-    if (isClip) {
-        command = stringtools::trim(
-            stringtools::ltrim(command.substr(args[0].length() + 1))
-        );
-        std::wstring key = command;
-        std::wstring urlPrefix;
-        auto it = kUrlAliases.find(toLowerCopy(key));
-        urlPrefix = (it != kUrlAliases.end()) ? it->second : key;
-        std::wstring clip = getClipboardText();
-        std::wstring encoded = percentEncode(clip);
-        finalTarget = urlPrefix + encoded;
-        Wh_Log(L"clip; resolved to: %s", finalTarget.c_str());
-    } else {
-        finalTarget = command;
+
+    std::wstring key = stringtools::trim(token);
+    if (key.empty()) {
+        return L"";
     }
-    const auto [exe, params] = ParseExecutableAndParameters(finalTarget);
-    POINT pt;
-    GetCursorPos(&pt);
-    HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    SHELLEXECUTEINFO sei = { sizeof(sei) };
-    sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-    sei.lpVerb = verb.c_str();
-    sei.lpFile = exe.c_str();
-    sei.lpParameters = params.empty() ? nullptr : params.c_str();
-    sei.nShow = SW_SHOWNORMAL;
-    sei.hMonitor = mon;
-    if (!ShellExecuteEx(&sei)) {
-        DWORD err = GetLastError();
-        if (err != ERROR_CANCELLED) {
-            Wh_Log(L"ShellExecuteEx failed, error: %d", err);
+
+    std::wstring prefix;
+    auto it = kUrlAliases.find(stringtools::toLower(key));
+    if (it != kUrlAliases.end()) {
+        prefix = it->second;
+    } else if (stringtools::startsWith(key, L"http://") ||
+               stringtools::startsWith(key, L"https://")) {
+        prefix = key;
+    } else {
+        prefix = L"https://" + key;
+    }
+
+    return prefix + encodedClip;
+}
+
+
+void CopyRun(const std::wstring& args) {
+    if (args.empty()) {
+        return;
+    }
+    std::wstring clip;
+    if (OpenClipboard(nullptr)) {
+        if (HANDLE hData = GetClipboardData(CF_UNICODETEXT)) {
+            if (const wchar_t* p =
+                    static_cast<const wchar_t*>(GlobalLock(hData))) {
+                clip = p;
+                GlobalUnlock(hData);
+            }
+        }
+        CloseClipboard();
+    }
+
+    std::wstring encodedClip;
+    if (!clip.empty()) {
+        int size = WideCharToMultiByte(CP_UTF8, 0, clip.c_str(), -1,
+                                       nullptr, 0, nullptr, nullptr);
+        std::string utf8;
+        if (size > 1) {
+            utf8.resize(size);
+            WideCharToMultiByte(CP_UTF8, 0, clip.c_str(), -1,
+                                utf8.data(), size, nullptr, nullptr);
+            utf8.pop_back();  // drop null terminator
+        }
+        for (unsigned char c : utf8) {
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9') ||
+                c == '-' || c == '_' || c == '.' || c == '~') {
+                encodedClip += static_cast<wchar_t>(c);
+            } else {
+                wchar_t buf[4];
+                swprintf(buf, 4, L"%%%02X", c);
+                encodedClip += buf;
+            }
+        }
+    }
+
+    // --- Split args on ';' and launch one URL per token ---
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+    HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+
+    const std::vector<std::wstring> tokens = SplitArgs(args);
+    for (const std::wstring& token : tokens) {
+        std::wstring target = ParseCopyRunTarget(token, encodedClip);
+        if (target.empty()) {
+            continue;
+        }
+
+        Wh_Log(L"CopyRun: %s", target.c_str());
+
+        SHELLEXECUTEINFO sei = {sizeof(sei)};
+        sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+        sei.lpVerb = L"open";
+        sei.lpFile = target.c_str();
+        sei.lpParameters = nullptr;
+        sei.nShow = SW_SHOWNORMAL;
+        sei.hMonitor = hMonitor;
+
+        if (!ShellExecuteEx(&sei)) {
+            DWORD err = GetLastError();
+            if (err != ERROR_CANCELLED) {
+                Wh_Log(L"CopyRun failed for '%s': %d", token.c_str(), err);
+            }
         }
     }
 }
 
-// Parses virtual key codes from settings string using FromStringHotKey
 std::vector<int> ParseVirtualKeypressSetting(const std::wstring& args) {
     std::vector<int> keys;
 
@@ -1765,6 +1820,7 @@ HotkeyActionType TryParseActionType(const std::wstring& raw) {
             {L"action_toggle_alwaysontop_active",
              HotkeyActionType::ToggleAlwaysOnTop},
             {L"action_force_kill_active", HotkeyActionType::ForceKillActive},
+            {L"action_copyrun", HotkeyActionType::CopyRun},
         };
 
     auto normalized = stringtools::toLower(stringtools::trim(raw));
@@ -1832,12 +1888,8 @@ const wchar_t* ActionTypeToString(HotkeyActionType actionType) {
             return L"SendKeypress";
         case HotkeyActionType::StartProcess:
             return L"StartProcess";
-        case HotkeyActionType::MediaPlayPause:
-            return L"MediaPlayPause";
-        case HotkeyActionType::MediaNext:
-            return L"MediaNext";
-        case HotkeyActionType::MediaPrev:
-            return L"MediaPrev";
+        case HotkeyActionType::CopyRun:
+            return L"CopyRun";
         case HotkeyActionType::SelectActiveInExplorer:
             return L"SelectActiveInExplorer";
         case HotkeyActionType::OpacityUp:
@@ -1848,6 +1900,12 @@ const wchar_t* ActionTypeToString(HotkeyActionType actionType) {
             return L"ToggleAlwaysOnTop";
         case HotkeyActionType::ForceKillActive:
             return L"ForceKillActive";
+        case HotkeyActionType::MediaPlayPause:
+            return L"MediaPlayPause";
+        case HotkeyActionType::MediaNext:
+            return L"MediaNext";
+        case HotkeyActionType::MediaPrev:
+            return L"MediaPrev";
         case HotkeyActionType::Invalid:
             return L"Invalid";
     }
@@ -1893,6 +1951,10 @@ std::function<void()> ParseActionSetting(HotkeyActionType actionType,
         case HotkeyActionType::StartProcess: {
             std::wstring cmd = stringtools::trim(args);
             return [cmd]() { StartProcess(cmd); };
+        }
+        case HotkeyActionType::CopyRun: {
+            std::wstring copyRunArgs = stringtools::trim(args);
+            return [copyRunArgs]() { CopyRun(copyRunArgs); };
         }
         case HotkeyActionType::SelectActiveInExplorer:
             return []() { SelectActiveInExplorer(); };
