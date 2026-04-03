@@ -135,6 +135,38 @@ uac;"C:\Tools\app.exe" args
 
 ---
 
+### Clipboard Run
+
+One or more semicolon-separated aliases or URL prefixes. The clipboard contents are URL-encoded once and appended to every token, opening each result as a separate target. Clipboard is read a single time per invocation regardless of how many targets are listed.
+
+**Single target:**
+
+```
+yt
+google
+https://www.bing.com/search?q=
+```
+
+**Multiple targets (opens all simultaneously):**
+
+```
+yt;google
+yt;google;reddit
+gpt;copilot
+```
+
+| Alias       | Expands to                                    |
+|-------------|-----------------------------------------------|
+| `gpt`       | https://chatgpt.com/?q=                       |
+| `yt`        | https://www.youtube.com/results?search_query= |
+| `google`    | https://www.google.com/search?q=              |
+| `copilot`   | https://copilot.microsoft.com/?sendquery=1&q= |
+| `x`         | https://twitter.com/search?q=                 |
+| `reddit`    | https://www.reddit.com/search/?q=             |
+| `translate` | https://translate.google.com/?text=           |
+
+---
+
 ### Combine taskbar buttons
 
 Up to 4 semicolon-separated state values: `primaryState1; primaryState2; secondaryState1; secondaryState2`
@@ -200,37 +232,6 @@ Some windows may not respond to layered window attributes.
 
 ---
 
-### Clipboard Run
-
-One or more semicolon-separated aliases or URL prefixes. The clipboard contents are URL-encoded once and appended to every token, opening each result as a separate target. Clipboard is read a single time per invocation regardless of how many targets are listed.
-
-**Single target:**
-
-```
-yt
-google
-https://www.bing.com/search?q=
-```
-
-**Multiple targets (opens all simultaneously):**
-
-```
-yt;google
-yt;google;reddit
-gpt;copilot
-```
-
-| Alias       | Expands to                                    |
-|-------------|-----------------------------------------------|
-| `gpt`       | https://chatgpt.com/?q=                       |
-| `yt`        | https://www.youtube.com/results?search_query= |
-| `google`    | https://www.google.com/search?q=              |
-| `copilot`   | https://copilot.microsoft.com/?sendquery=1&q= |
-| `x`         | https://twitter.com/search?q=                 |
-| `reddit`    | https://www.reddit.com/search/?q=             |
-| `translate` | https://translate.google.com/?text=           |
-
----
 
 
 
