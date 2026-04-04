@@ -42,6 +42,13 @@ Go to the mod's **Advanced** tab in Windhawk and add custom
 scrollable controls in any Win32 application. Modern WinUI windows
 inside any included process are automatically skipped.
 
+### Known limitations
+
+- File open/save dialogs use Direct Manipulation for scroll input,
+  which bypasses the Win32 message queue. These cannot be smoothed.
+- WinUI/XAML tabs in apps like Task Manager (Processes, Performance)
+  are not affected. Classic tabs (Details, Services) work normally.
+
 ---
 
 ## Português
@@ -55,6 +62,14 @@ Vá na aba **Avançado** do mod no Windhawk e adicione entradas
 `@include` (ex: `totalcmd.exe`). O mod detecta automaticamente
 controles roláveis em qualquer aplicativo Win32.
 
+### Limitações conhecidas
+
+- Diálogos de abrir/salvar arquivo usam Direct Manipulation para
+  input de scroll, que não passa pela fila de mensagens Win32.
+- Abas WinUI/XAML em apps como o Gerenciador de Tarefas (Processos,
+  Desempenho) não são afetadas. Abas clássicas (Detalhes, Serviços)
+  funcionam normalmente.
+
 ---
 
 ## Español
@@ -67,6 +82,14 @@ Solo modifica los controles antiguos. Las ventanas de WinUI no se ven afectadas.
 Ve a la pestaña **Avanzado** del mod en Windhawk y añade entradas:
 `@include` (p. ej., `totalcmd.exe`). El mod detecta automáticamente
 los controles desplazables en cualquier aplicación Win32.
+
+### Limitaciones conocidas
+
+- Los dialogos de abrir/guardar archivo usan Direct Manipulation para
+  la entrada de desplazamiento, que no pasa por la cola de mensajes Win32.
+- Las pestañas WinUI/XAML en apps como el Administrador de Tareas
+  (Procesos, Rendimiento) no se ven afectadas. Las pestañas clasicas
+  (Detalles, Servicios) funcionan normalmente.
 */
 // ==/WindhawkModReadme==
 
@@ -202,7 +225,18 @@ static Method Detect(HWND h) {
         return Method::Pass;
 
     if (_wcsicmp(c, L"SysListView32") == 0)  return Method::PixelLV;
-    if (_wcsicmp(c, L"DirectUIHWND") == 0)   return Method::UIAPercent;
+
+    if (_wcsicmp(c, L"DirectUIHWND") == 0) {
+        // DirectUIHWND inside NativeHWNDHost is a WinUI-hosted container
+        // (e.g. Task Manager) that doesn't respond to UIA scroll.
+        // Pass through so native scrolling works.
+        WCHAR pc[64] = {};
+        HWND parent = GetParent(h);
+        if (parent) GetClassNameW(parent, pc, ARRAYSIZE(pc));
+        if (_wcsicmp(pc, L"NativeHWNDHost") == 0)
+            return Method::Pass;
+        return Method::UIAPercent;
+    }
 
     // Known scrollable Win32 classes.
     if (_wcsicmp(c, L"SysTreeView32") == 0 ||
@@ -698,9 +732,8 @@ static bool Handle(const MSG* m) {
         }
     }
 
-    // Refresh scroll axis availability and percent-per-line on every
-    // event — the user may switch between Details (vertical) and List
-    // (horizontal) views while the same DirectUIHWND is reused.
+    // Refresh scroll axis availability on every event — the user may
+    // switch views while the same DirectUIHWND is reused.
     if (mt == Method::UIAPercent && s.pat) {
         double pctV = -1, pctH = -1;
         s.pat->get_CurrentVerticalScrollPercent(&pctV);
@@ -729,24 +762,17 @@ static bool Handle(const MSG* m) {
     if (mt == Method::UIAPercent) {
         if (vert) {
             if (s.hasVScroll) {
-                // Vertical wheel -> vertical scroll.
-                // add = -lines: positive lines = scroll up = decrease %.
                 pushValue = add;
                 s.sV.Push(pushValue, g_cfg.springK);
                 pushedSpring = &s.sV;
             } else if (s.hasHScroll) {
                 // Vertical wheel -> reroute to horizontal scroll.
-                // Wheel forward (lines>0) should scroll toward start (left).
-                // Decrease % = negative push = add = -lines.
                 pushValue = add;
                 s.sH.Push(pushValue, g_cfg.springK);
                 pushedSpring = &s.sH;
             }
         } else {
             if (s.hasHScroll) {
-                // Horizontal wheel (WM_MOUSEHWHEEL) -> horizontal scroll.
-                // Tilt right (lines>0) should scroll right = increase %.
-                // Positive push = -add.
                 pushValue = -add;
                 s.sH.Push(pushValue, g_cfg.springK);
                 pushedSpring = &s.sH;
