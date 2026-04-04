@@ -7,6 +7,8 @@
 // @github			https://github.com/Louis047
 // @include         *
 // @exclude         devenv.exe
+// @exclude         systemsettings.exe
+// @exclude         applicationframehost.exe
 // @compilerOptions -ldwmapi -luxtheme -luser32
 // ==/WindhawkMod==
 
@@ -156,43 +158,6 @@ BOOL IsSystemDarkMode()
 }
 
 // -----------------------------------------------------------------------------
-// Process exclusion (cached after first call)
-// -----------------------------------------------------------------------------
-
-BOOL IsProcessExcluded()
-{
-    static int cached = -1;
-    if (cached != -1) return cached == 1;
-
-    WCHAR exePath[MAX_PATH];
-    if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) == 0) {
-        cached = 0;
-        return FALSE;
-    }
-
-    WCHAR* fileName = wcsrchr(exePath, L'\\');
-    fileName = fileName ? fileName + 1 : exePath;
-    for (WCHAR* p = fileName; *p; p++) *p = towlower(*p);
-
-    static const WCHAR* excluded[] = {
-        L"systemsettings.exe",
-        L"applicationframehost.exe",
-        nullptr
-    };
-
-    for (int i = 0; excluded[i]; i++) {
-        if (wcscmp(fileName, excluded[i]) == 0) {
-            Wh_Log(L"Process excluded: %s", fileName);
-            cached = 1;
-            return TRUE;
-        }
-    }
-
-    cached = 0;
-    return FALSE;
-}
-
-// -----------------------------------------------------------------------------
 // Window eligibility
 // -----------------------------------------------------------------------------
 
@@ -219,7 +184,6 @@ static BOOL HexToColorref(PCWSTR hex, COLORREF* out)
 {
     if (!hex || !out) return FALSE;
 
-    // Must be exactly 6 characters, all valid hex digits
     int len = 0;
     while (hex[len]) len++;
     if (len != 6) return FALSE;
@@ -235,7 +199,6 @@ static BOOL HexToColorref(PCWSTR hex, COLORREF* out)
         result = (result << 4) | nibble;
     }
 
-    // result is 0xRRGGBB, COLORREF is 0x00BBGGRR
     BYTE r = (BYTE)((result >> 16) & 0xFF);
     BYTE g = (BYTE)((result >>  8) & 0xFF);
     BYTE b = (BYTE)((result >>  0) & 0xFF);
@@ -269,7 +232,6 @@ static COLORREF GetTitleBarColour(BOOL isDarkMode, BOOL isActive)
     BOOL useHex = (BOOL)Wh_GetIntSetting(useHexKey);
 
     if (useHex) {
-        // Correct API: returns PCWSTR, must be freed with Wh_FreeStringSetting
         PCWSTR hexVal = Wh_GetStringSetting(hexKey);
         COLORREF colour = 0;
         BOOL ok = HexToColorref(hexVal, &colour);
@@ -277,7 +239,6 @@ static COLORREF GetTitleBarColour(BOOL isDarkMode, BOOL isActive)
 
         if (ok) return colour;
 
-        // Bad hex input: log and fall through to RGB
         Wh_Log(L"GetTitleBarColour: invalid hex for key '%s', falling back to RGB", hexKey);
     }
 
@@ -395,8 +356,7 @@ static DefWindowProcW_t DefWindowProcW_orig;
 LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefWindowProcW_orig(hWnd, Msg, wParam, lParam);
-    if (!IsProcessExcluded())
-        HandleWindowMessage(hWnd, Msg, wParam, lParam);
+    HandleWindowMessage(hWnd, Msg, wParam, lParam);
     return result;
 }
 
@@ -406,8 +366,7 @@ static DefWindowProcA_t DefWindowProcA_orig;
 LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefWindowProcA_orig(hWnd, Msg, wParam, lParam);
-    if (!IsProcessExcluded())
-        HandleWindowMessage(hWnd, Msg, wParam, lParam);
+    HandleWindowMessage(hWnd, Msg, wParam, lParam);
     return result;
 }
 
@@ -421,7 +380,7 @@ static DefDlgProcW_t DefDlgProcW_orig;
 LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefDlgProcW_orig(hWnd, Msg, wParam, lParam);
-    if (!IsProcessExcluded() && Msg == WM_NCACTIVATE)
+    if (Msg == WM_NCACTIVATE)
         ApplyTitleBar(hWnd, (BOOL)wParam, TRUE);
     return result;
 }
@@ -432,7 +391,7 @@ static DefDlgProcA_t DefDlgProcA_orig;
 LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefDlgProcA_orig(hWnd, Msg, wParam, lParam);
-    if (!IsProcessExcluded() && Msg == WM_NCACTIVATE)
+    if (Msg == WM_NCACTIVATE)
         ApplyTitleBar(hWnd, (BOOL)wParam, TRUE);
     return result;
 }
@@ -453,9 +412,7 @@ HWND WINAPI CreateWindowExW_hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hWnd && !IsProcessExcluded())
-        ApplyTitleBar(hWnd, FALSE, FALSE);
-
+    if (hWnd) ApplyTitleBar(hWnd, FALSE, FALSE);
     return hWnd;
 }
 
@@ -471,9 +428,7 @@ HWND WINAPI CreateWindowExA_hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hWnd && !IsProcessExcluded())
-        ApplyTitleBar(hWnd, FALSE, FALSE);
-
+    if (hWnd) ApplyTitleBar(hWnd, FALSE, FALSE);
     return hWnd;
 }
 
@@ -485,11 +440,6 @@ BOOL Wh_ModInit()
 {
     Wh_Log(L"=== Auto Dark Titlebar with Custom Colours - Init [PID %d] ===",
         GetCurrentProcessId());
-
-    if (IsProcessExcluded()) {
-        Wh_Log(L"Process excluded - skipping hooks");
-        return TRUE;
-    }
 
     g_isDarkMode = IsSystemDarkMode();
     Wh_Log(L"Initial theme: %s", g_isDarkMode ? L"DARK" : L"LIGHT");
@@ -514,8 +464,6 @@ BOOL Wh_ModInit()
 
 VOID Wh_ModAfterInit()
 {
-    if (IsProcessExcluded()) return;
-
     Wh_Log(L"[PID %d] Applying to existing windows...", GetCurrentProcessId());
     ApplyToAllWindows();
     Wh_Log(L"[PID %d] Done", GetCurrentProcessId());
@@ -543,8 +491,6 @@ static BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM)
 
 VOID Wh_ModUninit()
 {
-    if (IsProcessExcluded()) return;
-
     Wh_Log(L"[PID %d] Uninit - restoring system defaults", GetCurrentProcessId());
     EnumWindows(UninitEnumWindowsProc, 0);
     Wh_Log(L"[PID %d] Cleanup complete", GetCurrentProcessId());
