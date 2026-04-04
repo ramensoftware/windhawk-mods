@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-04T10:59:58.000Z</updated>
+    <updated>2026-04-04T15:23:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Text Replace 1.1]]></title>
+        <id>https://windhawk.net/mods/text-replace#2dfdb2b7adaa857aec9b1aadfa490bc8b82e6f39</id>
+        <link href="https://windhawk.net/mods/text-replace"/>
+        <updated>2026-04-04T15:23:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added Direct2D, DirectWrite, and GDI+ text hooking for broader text replacement coverage.</li>
+<li>Added PolyTextOut hooking.</li>
+<li>Added wildcard support (* and ?) for program name matching.</li>
+<li>The mod is no longer loaded into programs with no matching replacement rules configured.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Block Start Menu and Hosts 1.2]]></title>
         <id>https://windhawk.net/mods/block-windows-startmenu-and-hosts#f6b25143ed7014d3e699714c4d4d86039c35947a</id>
@@ -373,20 +389,6 @@ remainder; built-in aliases: gpt, yt, google, copilot, x, reddit, translate</li>
         <updated>2026-03-30T07:23:00.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed Alt+Tab always showing the taskbar. Now it no longer affects the taskbar visibility state.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Live Overlay 1.1]]></title>
-        <id>https://windhawk.net/mods/desktop-live-overlay#594e5a7b6716156f9d49857aafbb3880e1f442df</id>
-        <link href="https://windhawk.net/mods/desktop-live-overlay"/>
-        <updated>2026-03-29T23:37:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed weather being stuck on "Loading…".</li>
-<li>Added background blur and border options.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

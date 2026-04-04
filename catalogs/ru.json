@@ -9661,7 +9661,7 @@
                     10
                 ],
                 "ratingUsers": 11,
-                "updated": 1646604429000,
+                "updated": 1775316216000,
                 "users": 819
             },
             "metadata": {
@@ -9675,7 +9675,7 @@
                 ],
                 "name": "Text Replace",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "themed-regedit-listview": {
