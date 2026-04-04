@@ -310,6 +310,39 @@
                 "version": "1.0.0"
             }
         },
+        "auto-custom-titlebar-colors": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1775327847000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1775327847000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lone",
+                "compilerOptions": "-ldwmapi -luxtheme -luser32",
+                "description": "Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes",
+                "exclude": [
+                    "devenv.exe",
+                    "systemsettings.exe",
+                    "applicationframehost.exe"
+                ],
+                "github": "https://github.com/Louis047",
+                "include": [
+                    "*"
+                ],
+                "name": "Auto Custom Titlebar Colors",
+                "version": "1.0.0"
+            }
+        },
         "auto-theme-switcher": {
             "details": {
                 "defaultSorting": 4329,
