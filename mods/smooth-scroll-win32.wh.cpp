@@ -6,7 +6,7 @@
 // @description     Adds smooth scrolling with spring physics to legacy Win32 apps
 // @description:pt  Adiciona rolagem suave com fisica de mola a aplicativos Win32 antigos
 // @description:es  Anade desplazamiento suave con fisica de resorte a aplicaciones Win32
-// @version         1.0.1
+// @version         1.0.2
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
@@ -103,6 +103,15 @@ los controles desplazables en cualquier aplicación Win32.
   $description: Timer in ms. 8 for 120hz+, 16 for 60hz
   $description:pt: Intervalo em ms. 8 para 120 Hz ou mais, 16 para 60 Hz
   $description:es: Intervalo en ms. 8 para 120 Hz o más, 16 para 60 Hz
+
+- vsync: false
+  $name: V-Sync
+  $name:pt: V-Sync
+  $name:es: V-Sync
+  $description: Match animation interval to display refresh rate. Overrides Animation Interval
+  $description:pt: Ajustar intervalo ao refresh do monitor. Substitui o Intervalo de Animacao
+  $description:es: Ajustar intervalo al refresco del monitor. Reemplaza el Intervalo de Animacion
+
 */
 // ==/WindhawkModSettings==
 
@@ -127,6 +136,7 @@ struct {
     double damping;
     double multiplier;
     int intervalMs;
+    bool vsync;
 } g_cfg;
 
 // ---------------------------------------------------------------------------
@@ -143,8 +153,21 @@ struct Spring {
 
     // Advance one step, return position delta.
     double Step(double dt, double k, double dr) {
-        double c = dr * 2.0 * std::sqrt(k);
-        double f = -k * (pos - target) - c * vel;
+        double disp = pos - target;
+
+        // Progressive damping: as the spring approaches the target,
+        // increase damping to kill trailing drift smoothly.
+        // Far from target (|disp| > 3): no effect (normal scrolling).
+        // Close to target (|disp| -> 0): extra damping ramps up,
+        // making the final approach quick without a visible snap.
+        double absDisp = std::abs(disp);
+        double extraDamp = 0;
+        if (absDisp < 3.0) {
+            extraDamp = (3.0 - absDisp) / 3.0 * 12.0;
+        }
+
+        double c = dr * 2.0 * std::sqrt(k) + extraDamp;
+        double f = -k * disp - c * vel;
         vel += f * dt;
         double old = pos;
         pos += vel * dt;
@@ -154,10 +177,9 @@ struct Spring {
     // Add scroll target with velocity boost for instant response.
     void Push(double delta, double k) {
         target += delta;
-        // Kick velocity proportional to delta and spring stiffness.
-        // This eliminates the sluggish start where the spring builds
-        // speed from zero over several frames.
-        vel += delta * std::sqrt(k) * 0.35;
+        // Gentle kick to avoid sluggish start.  Lower values = smoother
+        // onset, higher = more immediate but more "springy".
+        vel += delta * std::sqrt(k) * 0.20;
     }
 
     void Snap() { pos = target; vel = 0; }
@@ -293,14 +315,31 @@ static bool UIAScroll(IUIAutomationScrollPattern* p, double dV, double dH) {
     return SUCCEEDED(p->SetScrollPercent(nH, nV));
 }
 
-static double EstimatePPL(IUIAutomationScrollPattern* p) {
+// Estimate percent-per-line using the window height to approximate
+// how many rows are visible.  This scales correctly regardless of
+// total item count — a folder with 30 or 3000 items scrolls the
+// same visual distance per wheel notch.
+static double EstimatePPL(IUIAutomationScrollPattern* p, HWND hwnd) {
     double vs = 0;
     p->get_CurrentVerticalViewSize(&vs);
-    if (vs > 0 && vs < 100) {
-        double r = vs / 17.0;
-        return (r < 0.1) ? 0.1 : (r > 5.0) ? 5.0 : r;
-    }
-    return 2.0;
+    if (vs <= 0 || vs >= 100) return 1.0;
+
+    RECT rc = {};
+    GetClientRect(hwnd, &rc);
+    int wh = rc.bottom - rc.top;
+    if (wh < 1) wh = 400;
+
+    // Approximate visible rows.  24px is a middle-ground row height
+    // that works reasonably for both Details (~20px) and Icon views
+    // (~80-120px per row).  The key insight: this only affects the
+    // *visual distance* per notch, and users can tune with multiplier.
+    double approxRows = wh / 24.0;
+    if (approxRows < 3) approxRows = 3;
+
+    double ppl = vs / approxRows;
+    if (ppl < 0.05) ppl = 0.05;
+    if (ppl > 5.0) ppl = 5.0;
+    return ppl;
 }
 
 // ---------------------------------------------------------------------------
@@ -316,8 +355,8 @@ struct State {
     double accV = 0, accH = 0;
     IUIAutomationScrollPattern* pat = nullptr;
     bool uiaOk = true;
-    bool hasVScroll = true;   // UIA: vertical scroll available
-    bool hasHScroll = false;  // UIA: horizontal scroll available
+    bool hasVScroll = true;
+    bool hasHScroll = false;
 };
 
 static CRITICAL_SECTION g_cs;
@@ -334,10 +373,10 @@ static void Release(State& s) {
 static bool Settled(const State& s) {
     double tV, tH, tVel;
     switch (s.method) {
-    case Method::LineScroll: tV = tH = 0.8; tVel = 3.0; break;
-    case Method::PixelLV:   tV = tH = 1.5; tVel = 5.0; break;
-    case Method::UIAPercent: tV = tH = 0.3; tVel = 3.0; break;
-    default:                tV = tH = 0.5; tVel = 2.0; break;
+    case Method::LineScroll: tV = tH = 0.4; tVel = 2.0; break;
+    case Method::PixelLV:   tV = tH = 0.8; tVel = 3.0; break;
+    case Method::UIAPercent: tV = tH = 0.15; tVel = 1.5; break;
+    default:                tV = tH = 0.3; tVel = 1.5; break;
     }
     return s.sV.pos - s.sV.target < tV &&
            s.sV.target - s.sV.pos < tV &&
@@ -364,15 +403,30 @@ static void LoadSettings() {
     int i = Wh_GetIntSetting(L"animationIntervalMs");
     g_cfg.intervalMs = (i >= 4 && i <= 100) ? i : 8;
 
+    g_cfg.vsync = Wh_GetIntSetting(L"vsync");
+
+    // V-Sync: override timer interval to match display refresh rate.
+    // Non-blocking — just sets the right interval so we produce one
+    // scroll update per display frame instead of blocking with DwmFlush.
+    if (g_cfg.vsync) {
+        DEVMODEW dm = {};
+        dm.dmSize = sizeof(dm);
+        if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm) &&
+            dm.dmDisplayFrequency > 0) {
+            g_cfg.intervalMs = 1000 / dm.dmDisplayFrequency;
+            if (g_cfg.intervalMs < 4) g_cfg.intervalMs = 4;
+        }
+    }
+
     UINT ln = 3;
     SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &ln, 0);
     if (ln == 0) ln = 3;
     if (ln == WHEEL_PAGESCROLL) ln = 20;
     g_sysLines = ln;
 
-    Wh_Log(L"Cfg: k=%.0f d=%.2f m=%.1f i=%d sl=%u",
+    Wh_Log(L"Cfg: k=%.0f d=%.2f m=%.1f i=%d vs=%d sl=%u",
             g_cfg.springK, g_cfg.damping, g_cfg.multiplier,
-            g_cfg.intervalMs, g_sysLines);
+            g_cfg.intervalMs, g_cfg.vsync, g_sysLines);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,8 +470,23 @@ static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
             int px = (int)s.accV;
             if (px) {
                 s.accV -= px;
+                int dy = -px;
+
+                // Prevent overscroll: if already at top/bottom, snap the
+                // spring to stop the animation instead of scrolling further.
+                SCROLLINFO si = { sizeof(si), SIF_ALL };
+                if (GetScrollInfo(hw, SB_VERT, &si)) {
+                    int maxPos = si.nMax - (int)si.nPage + 1;
+                    if ((dy < 0 && si.nPos <= si.nMin) ||
+                        (dy > 0 && si.nPos >= maxPos)) {
+                        s.sV.Snap();
+                        s.accV = 0;
+                        break;
+                    }
+                }
+
                 LeaveCriticalSection(&g_cs);
-                SendMessageW(hw, LVM_SCROLL, 0, (LPARAM)(-px));
+                SendMessageW(hw, LVM_SCROLL, 0, (LPARAM)dy);
                 EnterCriticalSection(&g_cs);
             }
             break;
@@ -442,6 +511,18 @@ static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
         case Method::UIAPercent: {
             if (s.uiaOk && s.pat) {
                 double pct = dV * s.ppl;
+
+                // Boundary: snap if at top scrolling up or bottom down.
+                double curPct = -1;
+                s.pat->get_CurrentVerticalScrollPercent(&curPct);
+                if (curPct >= 0 &&
+                    ((pct < 0 && curPct <= 0.01) ||
+                     (pct > 0 && curPct >= 99.99))) {
+                    s.sV.Snap();
+                    s.accV = 0;
+                    break;
+                }
+
                 auto* p = s.pat;
                 LeaveCriticalSection(&g_cs);
                 if (!UIAScroll(p, pct, 0)) {
@@ -476,8 +557,21 @@ static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
             int px = (int)sh.accH;
             if (px) {
                 sh.accH -= px;
+                int dx = -px;
+
+                SCROLLINFO si = { sizeof(si), SIF_ALL };
+                if (GetScrollInfo(hw, SB_HORZ, &si)) {
+                    int maxPos = si.nMax - (int)si.nPage + 1;
+                    if ((dx < 0 && si.nPos <= si.nMin) ||
+                        (dx > 0 && si.nPos >= maxPos)) {
+                        sh.sH.Snap();
+                        sh.accH = 0;
+                        break;
+                    }
+                }
+
                 LeaveCriticalSection(&g_cs);
-                SendMessageW(hw, LVM_SCROLL, (WPARAM)(-px), 0);
+                SendMessageW(hw, LVM_SCROLL, (WPARAM)dx, 0);
                 EnterCriticalSection(&g_cs);
             }
             break;
@@ -502,6 +596,17 @@ static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
         case Method::UIAPercent: {
             if (sh.uiaOk && sh.pat) {
                 double pct = dH * sh.ppl;
+
+                double curPct = -1;
+                sh.pat->get_CurrentHorizontalScrollPercent(&curPct);
+                if (curPct >= 0 &&
+                    ((pct < 0 && curPct <= 0.01) ||
+                     (pct > 0 && curPct >= 99.99))) {
+                    sh.sH.Snap();
+                    sh.accH = 0;
+                    break;
+                }
+
                 auto* p = sh.pat;
                 LeaveCriticalSection(&g_cs);
                 UIAScroll(p, 0, pct);
@@ -534,6 +639,10 @@ static bool Handle(const MSG* m) {
     short delta = GET_WHEEL_DELTA_WPARAM(m->wParam);
     if (!delta) return false;
 
+    // Ctrl+wheel is zoom (icon size, font size, etc.) — let it through.
+    if (GET_KEYSTATE_WPARAM(m->wParam) & MK_CONTROL)
+        return false;
+
     bool vert = (m->message == WM_MOUSEWHEEL);
     HWND tgt = m->hwnd;
     Method mt = Detect(tgt);
@@ -550,6 +659,16 @@ static bool Handle(const MSG* m) {
     DWORD pid = 0;
     GetWindowThreadProcessId(tgt, &pid);
     if (pid != GetCurrentProcessId()) return false;
+
+    // SysListView32 in horizontal-only modes (Icon, Table, Tile, etc.):
+    // the default WM_MOUSEWHEEL handler already scrolls correctly in these
+    // modes, so we pass through to avoid breaking it.  Only intercept when
+    // the ListView has a vertical scrollbar (Details view, etc.).
+    if (mt == Method::PixelLV && vert) {
+        SCROLLINFO si = { sizeof(si), SIF_RANGE };
+        if (!GetScrollInfo(tgt, SB_VERT, &si) || si.nMax <= si.nMin)
+            return false;
+    }
 
     double lines = ((double)delta / WHEEL_DELTA) * g_sysLines * g_cfg.multiplier;
     int lh = (mt == Method::PixelLV) ? LVLineH(tgt) : 20;
@@ -572,24 +691,23 @@ static bool Handle(const MSG* m) {
             return false;
         }
         i2->second.pat = p;
-        if (p) {
-            if (i2->second.ppl < 0.01) i2->second.ppl = EstimatePPL(p);
-        } else {
+        if (!p) {
             i2->second.uiaOk = false;
             LeaveCriticalSection(&g_cs);
             return false;
         }
     }
 
-    // Refresh scroll axis availability on every event — the user may
-    // switch between Details (vertical) and List (horizontal) views
-    // while the same DirectUIHWND is reused.
+    // Refresh scroll axis availability and percent-per-line on every
+    // event — the user may switch between Details (vertical) and List
+    // (horizontal) views while the same DirectUIHWND is reused.
     if (mt == Method::UIAPercent && s.pat) {
         double pctV = -1, pctH = -1;
         s.pat->get_CurrentVerticalScrollPercent(&pctV);
         s.pat->get_CurrentHorizontalScrollPercent(&pctH);
         s.hasVScroll = (pctV >= 0);
         s.hasHScroll = (pctH >= 0);
+        s.ppl = EstimatePPL(s.pat, tgt);
     }
 
     // Spring delta.
