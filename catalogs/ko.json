@@ -522,6 +522,36 @@
                 "version": "1.0.1"
             }
         },
+        "block-windows-startmenu-and-hosts": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1775300398000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1775300398000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Exiled Eye",
+                "description": "Kills existing selected UI components on mod init and blocks any future launches.",
+                "github": "https://github.com/ExiledEye",
+                "homepage": "https://exiledeye.github.io/",
+                "include": [
+                    "explorer.exe",
+                    "svchost.exe"
+                ],
+                "license": "MIT",
+                "name": "Block Start Menu and Hosts",
+                "version": "1.2"
+            }
+        },
         "caffeine": {
             "details": {
                 "defaultSorting": 2745,
