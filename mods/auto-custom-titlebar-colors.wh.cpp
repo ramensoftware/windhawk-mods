@@ -4,7 +4,7 @@
 // @description     Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes
 // @version         1.0.0
 // @author          Lone
-// @github			https://github.com/Louis047
+// @github          https://github.com/Louis047
 // @include         *
 // @exclude         devenv.exe
 // @exclude         systemsettings.exe
@@ -32,6 +32,7 @@ Combines automatic dark/light titlebar switching with per-mode, per-state custom
 - Real-time theme change detection (responds to `WM_SETTINGCHANGE` / `WM_DWMCOLORIZATIONCOLORCHANGED`)
 - New windows receive the correct style immediately via `CreateWindowEx` hooks
 - Dialog windows handled via `DefDlgProc` hooks
+- Live settings reload: colour changes apply instantly without restarting the process
 
 ## Colour Format
 - **Hex mode**: enter a 6-character hex string, e.g. `FF0000` for red (no `#` prefix)
@@ -40,7 +41,7 @@ Combines automatic dark/light titlebar switching with per-mode, per-state custom
 Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.
 
 ## Notes
-- `systemsettings.exe` and `applicationframehost.exe` are excluded to avoid conflicts
+- `systemsettings.exe` and `applicationframehost.exe` are excluded via `@exclude` to avoid conflicts
 - No forced repaint is issued while a mouse button is held (prevents drag-state corruption)
 */
 // ==/WindhawkModReadme==
@@ -199,6 +200,7 @@ static BOOL HexToColorref(PCWSTR hex, COLORREF* out)
         result = (result << 4) | nibble;
     }
 
+    // RRGGBB -> COLORREF (0x00BBGGRR)
     BYTE r = (BYTE)((result >> 16) & 0xFF);
     BYTE g = (BYTE)((result >>  8) & 0xFF);
     BYTE b = (BYTE)((result >>  0) & 0xFF);
@@ -219,15 +221,15 @@ static BOOL UseCustomColourForMode(BOOL isDarkMode)
 
 static COLORREF GetTitleBarColour(BOOL isDarkMode, BOOL isActive)
 {
-    const WCHAR* modePrefix  = isDarkMode ? L"darkMode"      : L"lightMode";
-    const WCHAR* statePrefix = isActive   ? L"activeColour"  : L"inactiveColour";
+    const WCHAR* modePrefix  = isDarkMode ? L"darkMode"     : L"lightMode";
+    const WCHAR* statePrefix = isActive   ? L"activeColour" : L"inactiveColour";
 
     WCHAR useHexKey[64], hexKey[64], rKey[64], gKey[64], bKey[64];
-    wsprintfW(useHexKey, L"%s.useHex",    modePrefix);
-    wsprintfW(hexKey,    L"%s.%s.hex",    modePrefix, statePrefix);
-    wsprintfW(rKey,      L"%s.%s.r",      modePrefix, statePrefix);
-    wsprintfW(gKey,      L"%s.%s.g",      modePrefix, statePrefix);
-    wsprintfW(bKey,      L"%s.%s.b",      modePrefix, statePrefix);
+    wsprintfW(useHexKey, L"%s.useHex",  modePrefix);
+    wsprintfW(hexKey,    L"%s.%s.hex",  modePrefix, statePrefix);
+    wsprintfW(rKey,      L"%s.%s.r",    modePrefix, statePrefix);
+    wsprintfW(gKey,      L"%s.%s.g",    modePrefix, statePrefix);
+    wsprintfW(bKey,      L"%s.%s.b",    modePrefix, statePrefix);
 
     BOOL useHex = (BOOL)Wh_GetIntSetting(useHexKey);
 
@@ -239,6 +241,7 @@ static COLORREF GetTitleBarColour(BOOL isDarkMode, BOOL isActive)
 
         if (ok) return colour;
 
+        // Invalid hex: log and fall through to RGB
         Wh_Log(L"GetTitleBarColour: invalid hex for key '%s', falling back to RGB", hexKey);
     }
 
@@ -438,7 +441,7 @@ HWND WINAPI CreateWindowExA_hook(
 
 BOOL Wh_ModInit()
 {
-    Wh_Log(L"=== Auto Dark Titlebar with Custom Colours - Init [PID %d] ===",
+    Wh_Log(L"=== Auto Custom Titlebar Colors - Init [PID %d] ===",
         GetCurrentProcessId());
 
     g_isDarkMode = IsSystemDarkMode();
@@ -467,6 +470,16 @@ VOID Wh_ModAfterInit()
     Wh_Log(L"[PID %d] Applying to existing windows...", GetCurrentProcessId());
     ApplyToAllWindows();
     Wh_Log(L"[PID %d] Done", GetCurrentProcessId());
+}
+
+// Called by Windhawk when the user saves new settings in the UI.
+// Re-reads the current theme and repaints all windows immediately.
+VOID Wh_ModSettingsChanged()
+{
+    Wh_Log(L"[PID %d] Settings changed - reapplying...", GetCurrentProcessId());
+    g_isDarkMode = IsSystemDarkMode();
+    ApplyToAllWindows();
+    Wh_Log(L"[PID %d] Reapply done", GetCurrentProcessId());
 }
 
 static BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM)
