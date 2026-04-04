@@ -2,9 +2,11 @@
 // @id              win11-power-buttons
 // @name            Windows 11 Start Menu Power Buttons
 // @name:zh-CN      Windows 11 开始菜单一键电源按钮
+// @name:pl-PL      Przyciski zasilania w menu Start Windows 11
 // @description     Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 // @description:zh-CN 添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
-// @version         1.0.2
+// @description:pl-PL Dodaje konfigurowalne przyciski zasilania do menu Start Windows 11, z możliwością zachowania oryginalnego przycisku zasilania.
+// @version         1.0.3
 // @author          Hakuuyosei
 // @author:zh-CN    灵弦
 // @github          https://github.com/ahzvenol
@@ -33,8 +35,10 @@ Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and 
 - alignment: right
   $name: Alignment
   $name:zh-CN: 对齐方式
+  $name:pl-PL: Wyrównanie
   $description: Aligns the buttons within the NavigationPane.
   $description:zh-CN: 设置按钮组在导航窗格中的对齐方式。
+  $description:pl-PL: Wyrównuje przyciski w panelu nawigacji.
   $options:
     - left: Left
     - center: Center
@@ -43,18 +47,26 @@ Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and 
     - left: 左对齐
     - center: 居中
     - right: 右对齐
+  $options:pl-PL:
+    - left: Do lewej
+    - center: Do środka
+    - right: Do prawej
 
 - confirm_before_action: false
   $name: Confirm before power actions
   $name:zh-CN: 执行前确认
+  $name:pl-PL: Potwierdź przed wykonaniem akcji
   $description: Show a confirmation dialog before executing power actions.
   $description:zh-CN: 在执行电源操作前显示确认对话框。
+  $description:pl-PL: Pokaż okno dialogowe z potwierdzeniem przed wykonaniem akcji zasilania.
 
 - buttons: [sleep, signout, restart, shutdown]
-  $name:zh-CN: 按钮与排序
   $name: Buttons & Order
+  $name:zh-CN: 按钮与排序
+  $name:pl-PL: Przyciski i kolejność
   $description: Select which buttons to display and their order. Duplicates are ignored.
   $description:zh-CN: 选择要显示的按钮以及它们的顺序，重复项会被忽略。
+  $description:pl-PL: Wybierz, które przyciski wyświetlać i w jakiej kolejności. Duplikaty są ignorowane.
   $options:
     - shutdown: Shut down
     - restart: Restart
@@ -69,6 +81,19 @@ Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and 
     - sleep: 睡眠
     - hibernate: 休眠
     - lock: 锁定
+  $options:pl-PL:
+    - shutdown: Zamknij
+    - restart: Uruchom ponownie
+    - signout: Wyloguj
+    - sleep: Uśpij
+    - hibernate: Hibernuj
+    - lock: Zablokuj
+
+- keep_original_button: false
+  $name: Keep original power button
+  $name:pl-PL: Zachowaj oryginalny przycisk zasilania
+  $description: Leaves the original power button visible in the Start menu
+  $description:pl-PL: Zostawia oryginalny przycisk zasilania widoczny w menu Start
 */
 // ==/WindhawkModSettings==
 
@@ -117,6 +142,7 @@ static std::mutex g_settingsMutex;
 struct Settings {
     wux::HorizontalAlignment alignment = wux::HorizontalAlignment::Right;
     std::vector<std::wstring> buttonKeywords;
+    bool keepOriginalButton = false;
 };
 
 static Settings g_settings;
@@ -133,7 +159,7 @@ static std::wstring JoinStrings(const std::vector<std::wstring>& v) {
 // Parses Windhawk settings into internal structures
 static void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-
+    g_settings.keepOriginalButton = Wh_GetIntSetting(L"keep_original_button") != 0;
     g_settings.alignment = wux::HorizontalAlignment::Right;
     PCWSTR alignmentStr = Wh_GetStringSetting(L"alignment");
 
@@ -232,31 +258,37 @@ static std::wstring GetActionDisplayName(PowerAction action) {
         case PowerAction::Shutdown:
             switch (lang) {
                 case LANG_CHINESE: return L"关机";
+                case LANG_POLISH: return L"Zamknij";
                 default: return L"Shut down";
             }
         case PowerAction::Restart:
             switch (lang) {
                 case LANG_CHINESE: return L"重启";
+                case LANG_POLISH: return L"Uruchom ponownie";
                 default: return L"Restart";
             }
         case PowerAction::SignOut:
             switch (lang) {
                 case LANG_CHINESE: return L"注销";
+                case LANG_POLISH: return L"Wyloguj";
                 default: return L"Sign out";
             }
         case PowerAction::Sleep:
             switch (lang) {
                 case LANG_CHINESE: return L"睡眠";
+                case LANG_POLISH: return L"Uśpij";
                 default: return L"Sleep";
             }
         case PowerAction::Hibernate:
             switch (lang) {
                 case LANG_CHINESE: return L"休眠";
+                case LANG_POLISH: return L"Hibernacja";
                 default: return L"Hibernate";
             }
         case PowerAction::Lock:
             switch (lang) {
                 case LANG_CHINESE: return L"锁定";
+                case LANG_POLISH: return L"Zablokuj";
                 default: return L"Lock";
             }
     }
@@ -267,19 +299,25 @@ static std::wstring GetConfirmTitle() {
     switch (PRIMARYLANGID(GetThreadUILanguage())) {
         case LANG_CHINESE:
             return L"确认电源操作";
+        case LANG_POLISH:
+            return L"Potwierdzenie zasilania";
         default:
-            return  L"Confirm Power Action";
+            return L"Confirm Power Action";
     }
 }
 
 static std::wstring GetConfirmMessage(PowerAction action) {
     std::wstring actionName = GetActionDisplayName(action);
+    
     switch (PRIMARYLANGID(GetThreadUILanguage())) {
         case LANG_CHINESE:
             return L"您确定要执行" + actionName + L"吗？";
+        case LANG_POLISH:
+            for (auto& c : actionName) c = towlower(c);
+            return L"Czy na pewno chcesz wykonać akcję: " + actionName + L"?";
         default:
             for (auto& c : actionName) c = towlower(c);
-            return  L"Are you sure you want to " + actionName + L"?";
+            return L"Are you sure you want to " + actionName + L"?";
     }
 }
 
@@ -375,7 +413,7 @@ static DWORD WINAPI ProxyWindowThread(LPVOID) {
     wcex.lpfnWndProc = ProxyWndProc;
     wcex.hInstance = GetModuleHandle(NULL);
     wcex.lpszClassName = PROXY_WINDOW_CLASS;
-
+    
     if (!RegisterClassExW(&wcex)) {
         Wh_Log(L"Proxy: RegisterClassEx failed, error %lu", GetLastError());
         return 1;
@@ -460,12 +498,18 @@ static void InjectButtons(wuxc::Panel parentPanel, wux::FrameworkElement origina
             currentSettings = g_settings;
             currentButtons = g_buttons;
         }
-
-        // Ensure the native power button remains hidden
-        if (originalPowerButton && originalPowerButton.Visibility() != wux::Visibility::Collapsed) {
-            originalPowerButton.Visibility(wux::Visibility::Collapsed);
+        // Handle flag to keep the original button
+        if (originalPowerButton) {
+            if (currentSettings.keepOriginalButton) {
+                if (originalPowerButton.Visibility() != wux::Visibility::Visible) {
+                    originalPowerButton.Visibility(wux::Visibility::Visible);
+                }
+            } else {
+                if (originalPowerButton.Visibility() != wux::Visibility::Collapsed) {
+                    originalPowerButton.Visibility(wux::Visibility::Collapsed);
+                }
+            }
         }
-
         wuxc::StackPanel container = nullptr;
 
         // Attempt to retrieve the container from cache
