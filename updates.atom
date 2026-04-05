@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-05T09:56:24.000Z</updated>
+    <updated>2026-04-05T10:42:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Breadcrumb Middle-Click New Tab 1.2.0]]></title>
+        <id>https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab#33e8963bbd0dd420be7812ec2e6a22f68c75db8d</id>
+        <link href="https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab"/>
+        <updated>2026-04-05T10:42:07.000Z</updated>
+        <content type="html"><![CDATA[<p>[Added] Dropdown Menu Support: Middle-clicking subfolders within the &gt; (chevron) dropdown menus in the address bar now directly opens the selected folder in a new background tab.</p>
+<p>[Improved] Smart Menu Detection: Expanded the AnalyzeElement function to dynamically distinguish between a standard breadcrumb click and a dropdown menu item click (UIA List, Text, or Menu items).</p>
+<p>[Improved] Expanded State Detection: Introduced the FindExpandedBreadcrumbElement function to accurately identify which breadcrumb menu is currently open in the background. The system flawlessly combines the clicked subfolder's name with the expanded parent path.</p>
+<p>[Stability] The 100% clipboard-free architecture—which preserves your copied data and prevents Explorer crashes—has been maintained and fully integrated with the new dropdown feature.</p>]]></content>
+        <author>
+            <name>osmanonurkoc</name>
+            <uri>https://github.com/osmanonurkoc</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.2]]></title>
         <id>https://windhawk.net/mods/smooth-scroll-win32#466acb75de958bc766e59c85b639c56a759a99a4</id>
@@ -382,54 +396,6 @@ los controles desplazables en cualquier aplicación Win32.</p>]]></content>
         <author>
             <name>easyatm</name>
             <uri>https://github.com/easyatm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[HotCorner Hotkeys 3.1]]></title>
-        <id>https://windhawk.net/mods/hotcorner-hotkeys#1987aab8bd5af5b68db23a159698ef6641c072cb</id>
-        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
-        <updated>2026-03-30T08:19:28.000Z</updated>
-        <content type="html"><![CDATA[<p>v2.4 → v3 — region fallback chain, duplicate-combo guard, dispatch cleanup
-Settings schema:</p>
-<ul>
-<li>Replace flat (hotkey, zone) row model with grouped HotkeyActions where each hotkey entry holds a nested Regions list of region→action mappings with  intent to allow users to easily add action under a hotkey. </li>
-<li>Add Elsewhere region replacing NONE; 9 zones total (4 corners, 4 edges, Elsewhere)</li>
-<li>Duplicate hotkey group (same key combo appearing twice) rejected at LoadSettings time before any regions are read; first group wins</li>
-<li>Duplicate region rows within the same group: last row wins</li>
-<li>modifiers and vk parsed once in LoadSettings and stored on HotkeyBinding, eliminating redundant re-parsing in RegisterHotkeys.</li>
-</ul>
-<p>Dispatch:</p>
-<ul>
-<li>Delete GetCursorRegionChain() (returned heap-allocated std::vector on
-every WM_HOTKEY)</li>
-<li>Replace with inline tryFire lambda + || short-circuit fallback chains.</li>
-<li>Fallback chains: TOP<em>LEFT→TOP→LEFT→Elsewhere, TOP</em>RIGHT→TOP→RIGHT→
-Elsewhere, BOTTOM<em>LEFT→BOTTOM→LEFT→Elsewhere, BOTTOM</em>RIGHT→BOTTOM→
-RIGHT→Elsewhere; edges fall back to Elsewhere; Elsewhere is final catch-all</li>
-</ul>
-<p>Struct / registration cleanup:</p>
-<ul>
-<li>RegisterHotkeys uses stored modifiers/vk directly, no re-parse</li>
-<li>Remove affectedMappings/sample-pointer diagnostic block from RegisterHotkeys</li>
-<li>Invalid case removed from RegionNameToString and ActionTypeToString
-(unreachable at dispatch time); Invalid enumerator kept as parse sentinel</li>
-<li>ParseActionSetting: replace named Invalid case with default to silence
--Wswitch; extract ParseOpacityUpArgs/ParseOpacityDownArgs helpers so
-OpacityUp and OpacityDown cases are single-line like all other actions</li>
-</ul>
-<p>Actions added vs v2.4:</p>
-<ul>
-<li>SelectActiveInExplorer: opens Explorer selecting active window's file,
-falls back to process executable path</li>
-<li>clip; prefix for StartProcess: URL-encodes clipboard and appends to
-remainder; built-in aliases: gpt, yt, google, copilot, x, reddit, translate</li>
-<li>uac; and clip; prefixes combinable (uac; must come first)</li>
-<li>OpacityUp/Down simplified to int alpha model (max;step / min;step)</li>
-<li>ToggleAlwaysOnTop added</li>
-</ul>]]></content>
-        <author>
-            <name>webberlv</name>
-            <uri>https://github.com/webberLV</uri>
         </author>
     </entry>
 </feed>

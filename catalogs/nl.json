@@ -3225,19 +3225,19 @@
                     10
                 ],
                 "ratingUsers": 16,
-                "updated": 1774291255000,
+                "updated": 1775385727000,
                 "users": 235
             },
             "metadata": {
                 "author": "osmanonurkoc",
                 "compilerOptions": "-luiautomationcore -lole32 -loleaut32 -luser32 -lshlwapi",
-                "description": "Opens folders in a new tab by middle-clicking breadcrumb items (Linux style).",
+                "description": "Opens folders in a new tab by middle-clicking breadcrumb items and their dropdown menus (Linux style).",
                 "github": "https://github.com/osmanonurkoc",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Explorer Breadcrumb Middle-Click New Tab",
-                "version": "1.1.0"
+                "version": "1.2.0"
             }
         },
         "explorer-context-menu-classic": {

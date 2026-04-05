@@ -1,3 +1,13 @@
+## 1.2.0 ([Apr 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/33e8963bbd0dd420be7812ec2e6a22f68c75db8d/mods/explorer-breadcrumb-mclick-newtab.wh.cpp))
+
+[Added] Dropdown Menu Support: Middle-clicking subfolders within the > (chevron) dropdown menus in the address bar now directly opens the selected folder in a new background tab.
+
+[Improved] Smart Menu Detection: Expanded the AnalyzeElement function to dynamically distinguish between a standard breadcrumb click and a dropdown menu item click (UIA List, Text, or Menu items).
+
+[Improved] Expanded State Detection: Introduced the FindExpandedBreadcrumbElement function to accurately identify which breadcrumb menu is currently open in the background. The system flawlessly combines the clicked subfolder's name with the expanded parent path.
+
+[Stability] The 100% clipboard-free architecture—which preserves your copied data and prevents Explorer crashes—has been maintained and fully integrated with the new dropdown feature.
+
 ## 1.1.0 ([Mar 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3b18c32d213fdf0e1047f5e9615ba1e334fbbdcd/mods/explorer-breadcrumb-mclick-newtab.wh.cpp))
 
 🚀 Release v1.1.0: The Clipboard-Free Update
