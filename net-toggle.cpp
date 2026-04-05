@@ -4,7 +4,7 @@
 // @description     Adds a network toggle to the system tray - click the icon to enable/disable network adapters
 // @version         1.0
 // @author          BlackPaw
-// @github          https://github.com/blackpaw21
+// @github          https://github.com/BlackPaw21
 // @include         explorer.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
