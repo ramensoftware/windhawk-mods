@@ -7683,7 +7683,7 @@
                     14
                 ],
                 "ratingUsers": 16,
-                "updated": 1775124994000,
+                "updated": 1775382984000,
                 "users": 198
             },
             "metadata": {
@@ -7699,7 +7699,7 @@
                     "wordpad.exe"
                 ],
                 "name": "Rolagem Suave para Win32",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "spoof-light-dark-theme": {

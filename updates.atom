@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-04T18:37:27.000Z</updated>
+    <updated>2026-04-05T09:56:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.2]]></title>
+        <id>https://windhawk.net/mods/smooth-scroll-win32#466acb75de958bc766e59c85b639c56a759a99a4</id>
+        <link href="https://windhawk.net/mods/smooth-scroll-win32"/>
+        <updated>2026-04-05T09:56:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed scrolling on SysListView32 horizontal-only views (Icon, Table, Tile)</li>
+<li>Fixed scrolling not working on Task Manager WinUI tabs</li>
+<li>Fixed possible overscroll past top/bottom boundaries</li>
+<li>Fixed inconsistent item scrolling in folders with different item counts</li>
+<li>Added V-Sync option to match animation interval to display refresh rate</li>
+<li>Fixed Ctrl+scroll not working when changing view modes</li>
+<li>Smoother spring effect for a more natural scrolling experience</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.0.0]]></title>
         <id>https://windhawk.net/mods/auto-custom-titlebar-colors#03eb122ec8fd09c77818492144ff779102f0aec7</id>
@@ -411,17 +430,6 @@ remainder; built-in aliases: gpt, yt, google, copilot, x, reddit, translate</li>
         <author>
             <name>webberlv</name>
             <uri>https://github.com/webberLV</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Flyouts Controller 1.0.1]]></title>
-        <id>https://windhawk.net/mods/translucent-flyouts-controller#f3fe1074970431befb963fe69cc1ca2fa7e22cdd</id>
-        <link href="https://windhawk.net/mods/translucent-flyouts-controller"/>
-        <updated>2026-03-30T08:10:36.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix loading hang by running tool mod only for the active user session</p>]]></content>
-        <author>
-            <name>GID0317</name>
-            <uri>https://github.com/GID0317</uri>
         </author>
     </entry>
 </feed>
