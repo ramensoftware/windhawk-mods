@@ -1,3 +1,5 @@
+<!-- ⚠️ Please don't remove the template below. Add your content above the template. -->
+
 ## Changelog
 
 If the submission is an update to an existing mod, include the changelog below:
