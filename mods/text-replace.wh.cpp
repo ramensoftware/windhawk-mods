@@ -2,7 +2,7 @@
 // @id              text-replace
 // @name            Text Replace
 // @description     Replace any text with any other text in any program
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,6 +10,14 @@
 // @include         *
 // @compilerOptions -lgdi32
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
 
 // ==WindhawkModReadme==
 /*
@@ -26,7 +34,10 @@ and usually doesn't work in custom ones.
 /*
 - PerProgramConfig:
   - - Name: notepad.exe
-      $name: Program name or path
+      $name: Program name
+      $description: >-
+        Can be the full path or just the file name. Can be a pattern where '*'
+        matches any number of characters and '?' matches any single character.
     - Search: Notepad
       $name: The text to be replaced
     - Replace: WindPad
@@ -40,6 +51,52 @@ and usually doesn't work in custom ones.
 
 #include <string>
 #include <vector>
+
+#include <d2d1.h>
+#include <dwrite.h>
+
+// https://github.com/tidwall/match.c
+//
+// match returns true if str matches pattern. This is a very
+// simple wildcard match where '*' matches on any number characters
+// and '?' matches on any one character.
+//
+// pattern:
+//   { term }
+// term:
+// 	 '*'         matches any sequence of non-Separator characters
+// 	 '?'         matches any single non-Separator character
+// 	 c           matches character c (c != '*', '?')
+template <typename T>
+bool strmatch(const T* pat, size_t plen, const T* str, size_t slen) {
+    while (plen > 0) {
+        if (pat[0] == '*') {
+            if (plen == 1)
+                return true;
+            if (pat[1] == '*') {
+                pat++;
+                plen--;
+                continue;
+            }
+            if (strmatch(pat + 1, plen - 1, str, slen))
+                return true;
+            if (slen == 0)
+                return false;
+            str++;
+            slen--;
+            continue;
+        }
+        if (slen == 0)
+            return false;
+        if (pat[0] != '?' && str[0] != pat[0])
+            return false;
+        pat++;
+        plen--;
+        str++;
+        slen--;
+    }
+    return slen == 0 && plen == 0;
+}
 
 struct ReplacementItem {
     std::string searchA;
@@ -63,7 +120,7 @@ T ReplaceAll(T str, const T& from, const T& to)
 
 std::string ReplaceStringA(PCSTR string, size_t len = -1)
 {
-    if (len == -1) {
+    if (len == (size_t)-1) {
         len = strlen(string);
     }
 
@@ -78,7 +135,7 @@ std::string ReplaceStringA(PCSTR string, size_t len = -1)
 
 std::wstring ReplaceStringW(PCWSTR string, size_t len = -1)
 {
-    if (len == -1) {
+    if (len == (size_t)-1) {
         len = wcslen(string);
     }
 
@@ -189,7 +246,7 @@ BOOL WINAPI ModifyMenuWHook(HMENU hMenu,UINT uPosition,UINT uFlags,UINT_PTR uIDN
 
 using InsertMenuItemA_t = decltype(&InsertMenuItemA);
 InsertMenuItemA_t pOriginalInsertMenuItemA;
-BOOL WINAPI InsertMenuItemAHook(HMENU hmenu,UINT item,WINBOOL fByPosition,LPCMENUITEMINFOA lpmi)
+BOOL WINAPI InsertMenuItemAHook(HMENU hmenu,UINT item,BOOL fByPosition,LPCMENUITEMINFOA lpmi)
 {
     if ((
         (lpmi->fMask & MIIM_STRING) ||
@@ -206,7 +263,7 @@ BOOL WINAPI InsertMenuItemAHook(HMENU hmenu,UINT item,WINBOOL fByPosition,LPCMEN
 
 using InsertMenuItemW_t = decltype(&InsertMenuItemW);
 InsertMenuItemW_t pOriginalInsertMenuItemW;
-BOOL WINAPI InsertMenuItemWHook(HMENU hmenu,UINT item,WINBOOL fByPosition,LPCMENUITEMINFOW lpmi)
+BOOL WINAPI InsertMenuItemWHook(HMENU hmenu,UINT item,BOOL fByPosition,LPCMENUITEMINFOW lpmi)
 {
     if ((
         (lpmi->fMask & MIIM_STRING) ||
@@ -223,7 +280,7 @@ BOOL WINAPI InsertMenuItemWHook(HMENU hmenu,UINT item,WINBOOL fByPosition,LPCMEN
 
 using SetMenuItemInfoA_t = decltype(&SetMenuItemInfoA);
 SetMenuItemInfoA_t pOriginalSetMenuItemInfoA;
-BOOL WINAPI SetMenuItemInfoAHook(HMENU hmenu,UINT item,WINBOOL fByPosition,LPCMENUITEMINFOA lpmi)
+BOOL WINAPI SetMenuItemInfoAHook(HMENU hmenu,UINT item,BOOL fByPosition,LPCMENUITEMINFOA lpmi)
 {
     if ((
         (lpmi->fMask & MIIM_STRING) ||
@@ -240,7 +297,7 @@ BOOL WINAPI SetMenuItemInfoAHook(HMENU hmenu,UINT item,WINBOOL fByPosition,LPCME
 
 using SetMenuItemInfoW_t = decltype(&SetMenuItemInfoW);
 SetMenuItemInfoW_t pOriginalSetMenuItemInfoW;
-BOOL WINAPI SetMenuItemInfoWHook(HMENU hmenu,UINT item,WINBOOL fByPosition,LPCMENUITEMINFOW lpmi)
+BOOL WINAPI SetMenuItemInfoWHook(HMENU hmenu,UINT item,BOOL fByPosition,LPCMENUITEMINFOW lpmi)
 {
     if ((
         (lpmi->fMask & MIIM_STRING) ||
@@ -285,7 +342,7 @@ BOOL WINAPI ExtTextOutAHook(HDC hdc,int x,int y,UINT options,CONST RECT *lprect,
 {
     if (!(options & ETO_GLYPH_INDEX) && lpString) {
         std::string str = ReplaceStringA(lpString, c);
-        return pOriginalExtTextOutA(hdc,x,y,options,lprect,str.c_str(),str.length(),lpDx);
+        return pOriginalExtTextOutA(hdc,x,y,options,lprect,str.c_str(),str.length(),str.length() != c ? nullptr : lpDx);
     }
 
     return pOriginalExtTextOutA(hdc,x,y,options,lprect,lpString,c,lpDx);
@@ -297,10 +354,52 @@ BOOL WINAPI ExtTextOutWHook(HDC hdc,int x,int y,UINT options,CONST RECT *lprect,
 {
     if (!(options & ETO_GLYPH_INDEX) && lpString) {
         std::wstring str = ReplaceStringW(lpString, c);
-        return pOriginalExtTextOutW(hdc,x,y,options,lprect,str.c_str(),str.length(),lpDx);
+        return pOriginalExtTextOutW(hdc,x,y,options,lprect,str.c_str(),str.length(),str.length() != c ? nullptr : lpDx);
     }
 
     return pOriginalExtTextOutW(hdc,x,y,options,lprect,lpString,c,lpDx);
+}
+
+using PolyTextOutA_t = decltype(&PolyTextOutA);
+PolyTextOutA_t pOriginalPolyTextOutA;
+BOOL WINAPI PolyTextOutAHook(HDC hdc,CONST POLYTEXTA *pptxt,int cStrings)
+{
+    std::vector<POLYTEXTA> items(pptxt, pptxt + cStrings);
+    std::vector<std::string> strs(cStrings);
+
+    for (int i = 0; i < cStrings; i++) {
+        if (!(items[i].uiFlags & ETO_GLYPH_INDEX) && items[i].lpstr) {
+            strs[i] = ReplaceStringA(items[i].lpstr, items[i].n);
+            if (strs[i].length() != items[i].n) {
+                items[i].pdx = nullptr;
+            }
+            items[i].lpstr = strs[i].c_str();
+            items[i].n = strs[i].length();
+        }
+    }
+
+    return pOriginalPolyTextOutA(hdc,items.data(),cStrings);
+}
+
+using PolyTextOutW_t = decltype(&PolyTextOutW);
+PolyTextOutW_t pOriginalPolyTextOutW;
+BOOL WINAPI PolyTextOutWHook(HDC hdc,CONST POLYTEXTW *pptxt,int cStrings)
+{
+    std::vector<POLYTEXTW> items(pptxt, pptxt + cStrings);
+    std::vector<std::wstring> strs(cStrings);
+
+    for (int i = 0; i < cStrings; i++) {
+        if (!(items[i].uiFlags & ETO_GLYPH_INDEX) && items[i].lpstr) {
+            strs[i] = ReplaceStringW(items[i].lpstr, items[i].n);
+            if (strs[i].length() != items[i].n) {
+                items[i].pdx = nullptr;
+            }
+            items[i].lpstr = strs[i].c_str();
+            items[i].n = strs[i].length();
+        }
+    }
+
+    return pOriginalPolyTextOutW(hdc,items.data(),cStrings);
 }
 
 using DrawTextA_t = decltype(&DrawTextA);
@@ -415,6 +514,181 @@ LRESULT WINAPI SendMessageWHook(HWND hWnd,UINT Msg,WPARAM wParam,LPARAM lParam)
     return pOriginalSendMessageW(hWnd,Msg,wParam,lParam);
 }
 
+// ID2D1RenderTarget::DrawText hook (vtable index 27).
+using ID2D1RenderTarget_DrawText_t = void (STDMETHODCALLTYPE *)(
+    ID2D1RenderTarget *pThis,
+    const WCHAR *string,
+    UINT32 stringLength,
+    IDWriteTextFormat *textFormat,
+    const D2D1_RECT_F *layoutRect,
+    ID2D1Brush *defaultFillBrush,
+    D2D1_DRAW_TEXT_OPTIONS options,
+    DWRITE_MEASURING_MODE measuringMode);
+ID2D1RenderTarget_DrawText_t pOriginalID2D1RenderTarget_DrawText;
+void STDMETHODCALLTYPE ID2D1RenderTarget_DrawTextHook(
+    ID2D1RenderTarget *pThis,
+    const WCHAR *string,
+    UINT32 stringLength,
+    IDWriteTextFormat *textFormat,
+    const D2D1_RECT_F *layoutRect,
+    ID2D1Brush *defaultFillBrush,
+    D2D1_DRAW_TEXT_OPTIONS options,
+    DWRITE_MEASURING_MODE measuringMode)
+{
+    if (string) {
+        std::wstring str = ReplaceStringW(string, stringLength);
+        pOriginalID2D1RenderTarget_DrawText(pThis,str.c_str(),str.length(),textFormat,layoutRect,defaultFillBrush,options,measuringMode);
+        return;
+    }
+
+    pOriginalID2D1RenderTarget_DrawText(pThis,string,stringLength,textFormat,layoutRect,defaultFillBrush,options,measuringMode);
+}
+
+// IDWriteFactory::CreateTextLayout hook (vtable index 18).
+using IDWriteFactory_CreateTextLayout_t = HRESULT (STDMETHODCALLTYPE *)(
+    IDWriteFactory *pThis,
+    const WCHAR *string,
+    UINT32 stringLength,
+    IDWriteTextFormat *textFormat,
+    FLOAT maxWidth,
+    FLOAT maxHeight,
+    IDWriteTextLayout **textLayout);
+IDWriteFactory_CreateTextLayout_t pOriginalIDWriteFactory_CreateTextLayout;
+HRESULT STDMETHODCALLTYPE IDWriteFactory_CreateTextLayoutHook(
+    IDWriteFactory *pThis,
+    const WCHAR *string,
+    UINT32 stringLength,
+    IDWriteTextFormat *textFormat,
+    FLOAT maxWidth,
+    FLOAT maxHeight,
+    IDWriteTextLayout **textLayout)
+{
+    if (string) {
+        std::wstring str = ReplaceStringW(string, stringLength);
+        return pOriginalIDWriteFactory_CreateTextLayout(pThis,str.c_str(),str.length(),textFormat,maxWidth,maxHeight,textLayout);
+    }
+
+    return pOriginalIDWriteFactory_CreateTextLayout(pThis,string,stringLength,textFormat,maxWidth,maxHeight,textLayout);
+}
+
+// IDWriteFactory::CreateGdiCompatibleTextLayout hook (vtable index 19).
+using IDWriteFactory_CreateGdiCompatibleTextLayout_t = HRESULT (STDMETHODCALLTYPE *)(
+    IDWriteFactory *pThis,
+    const WCHAR *string,
+    UINT32 stringLength,
+    IDWriteTextFormat *textFormat,
+    FLOAT layoutWidth,
+    FLOAT layoutHeight,
+    FLOAT pixelsPerDip,
+    const DWRITE_MATRIX *transform,
+    BOOL useGdiNatural,
+    IDWriteTextLayout **textLayout);
+IDWriteFactory_CreateGdiCompatibleTextLayout_t pOriginalIDWriteFactory_CreateGdiCompatibleTextLayout;
+HRESULT STDMETHODCALLTYPE IDWriteFactory_CreateGdiCompatibleTextLayoutHook(
+    IDWriteFactory *pThis,
+    const WCHAR *string,
+    UINT32 stringLength,
+    IDWriteTextFormat *textFormat,
+    FLOAT layoutWidth,
+    FLOAT layoutHeight,
+    FLOAT pixelsPerDip,
+    const DWRITE_MATRIX *transform,
+    BOOL useGdiNatural,
+    IDWriteTextLayout **textLayout)
+{
+    if (string) {
+        std::wstring str = ReplaceStringW(string, stringLength);
+        return pOriginalIDWriteFactory_CreateGdiCompatibleTextLayout(pThis,str.c_str(),str.length(),textFormat,layoutWidth,layoutHeight,pixelsPerDip,transform,useGdiNatural,textLayout);
+    }
+
+    return pOriginalIDWriteFactory_CreateGdiCompatibleTextLayout(pThis,string,stringLength,textFormat,layoutWidth,layoutHeight,pixelsPerDip,transform,useGdiNatural,textLayout);
+}
+
+void HookD2DAndDWrite()
+{
+    HMODULE hD2D1 = LoadLibraryEx(L"d2d1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hD2D1) {
+        using D2D1CreateFactory_t = HRESULT (WINAPI *)(D2D1_FACTORY_TYPE, REFIID, const D2D1_FACTORY_OPTIONS *, void **);
+        auto pD2D1CreateFactory = (D2D1CreateFactory_t)GetProcAddress(hD2D1, "D2D1CreateFactory");
+        if (pD2D1CreateFactory) {
+            ID2D1Factory *pFactory = nullptr;
+            if (SUCCEEDED(pD2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                    __uuidof(ID2D1Factory), nullptr, (void **)&pFactory))) {
+                D2D1_RENDER_TARGET_PROPERTIES rtProps = {};
+                rtProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+                rtProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+
+                ID2D1DCRenderTarget *pDCRT = nullptr;
+                if (SUCCEEDED(pFactory->CreateDCRenderTarget(&rtProps, &pDCRT))) {
+                    void **vtable = *(void ***)pDCRT;
+                    Wh_SetFunctionHook(vtable[27], (void *)ID2D1RenderTarget_DrawTextHook,
+                        (void **)&pOriginalID2D1RenderTarget_DrawText);
+                    pDCRT->Release();
+                }
+
+                pFactory->Release();
+            }
+        }
+    }
+
+    HMODULE hDWrite = LoadLibraryEx(L"dwrite.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hDWrite) {
+        using DWriteCreateFactory_t = HRESULT (WINAPI *)(DWRITE_FACTORY_TYPE, REFIID, IUnknown **);
+        auto pDWriteCreateFactory = (DWriteCreateFactory_t)GetProcAddress(hDWrite, "DWriteCreateFactory");
+        if (pDWriteCreateFactory) {
+            IDWriteFactory *pFactory = nullptr;
+            if (SUCCEEDED(pDWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                    __uuidof(IDWriteFactory), (IUnknown **)&pFactory))) {
+                void **vtable = *(void ***)pFactory;
+                Wh_SetFunctionHook(vtable[18], (void *)IDWriteFactory_CreateTextLayoutHook,
+                    (void **)&pOriginalIDWriteFactory_CreateTextLayout);
+                Wh_SetFunctionHook(vtable[19], (void *)IDWriteFactory_CreateGdiCompatibleTextLayoutHook,
+                    (void **)&pOriginalIDWriteFactory_CreateGdiCompatibleTextLayout);
+                pFactory->Release();
+            }
+        }
+    }
+}
+
+// GDI+ flat API: GdipDrawString.
+using GdipDrawString_t = int (WINAPI *)(
+    void *graphics,
+    const WCHAR *string,
+    INT length,
+    const void *font,
+    const void *layoutRect,
+    const void *stringFormat,
+    const void *brush);
+GdipDrawString_t pOriginalGdipDrawString;
+int WINAPI GdipDrawStringHook(
+    void *graphics,
+    const WCHAR *string,
+    INT length,
+    const void *font,
+    const void *layoutRect,
+    const void *stringFormat,
+    const void *brush)
+{
+    if (string) {
+        std::wstring str = ReplaceStringW(string, length);
+        return pOriginalGdipDrawString(graphics,str.c_str(),str.length(),font,layoutRect,stringFormat,brush);
+    }
+
+    return pOriginalGdipDrawString(graphics,string,length,font,layoutRect,stringFormat,brush);
+}
+
+void HookGdiplus()
+{
+    HMODULE hGdiplus = LoadLibraryEx(L"gdiplus.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hGdiplus) {
+        void *pGdipDrawString = (void *)GetProcAddress(hGdiplus, "GdipDrawString");
+        if (pGdipDrawString) {
+            Wh_SetFunctionHook(pGdipDrawString, (void *)GdipDrawStringHook,
+                (void **)&pOriginalGdipDrawString);
+        }
+    }
+}
+
 void LoadSettings()
 {
     g_replacementItems.clear();
@@ -423,12 +697,22 @@ void LoadSettings()
     DWORD dwSize = ARRAYSIZE(programPath);
     if (!QueryFullProcessImageName(GetCurrentProcess(), 0, programPath, &dwSize)) {
         *programPath = L'\0';
+        dwSize = 0;
     }
 
+    if (dwSize > 0) {
+        LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, programPath,
+                      dwSize, programPath, dwSize, nullptr, nullptr, 0);
+    }
+
+    size_t programPathLen = dwSize;
+
     PCWSTR programFileName = wcsrchr(programPath, L'\\');
+    size_t programFileNameLen = 0;
     if (programFileName) {
         programFileName++;
-        if (!*programFileName) {
+        programFileNameLen = programPath + programPathLen - programFileName;
+        if (!programFileNameLen) {
             programFileName = nullptr;
         }
     }
@@ -439,10 +723,19 @@ void LoadSettings()
         PCWSTR name = Wh_GetStringSetting(L"PerProgramConfig[%d].Name", i);
         bool hasName = *name;
         if (hasName) {
-            if (programFileName && wcsicmp(programFileName, name) == 0) {
+            std::wstring pattern(name);
+            LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                          pattern.data(), static_cast<int>(pattern.length()),
+                          pattern.data(), static_cast<int>(pattern.length()),
+                          nullptr, nullptr, 0);
+
+            if (programFileName &&
+                strmatch(pattern.c_str(), pattern.length(),
+                         programFileName, programFileNameLen)) {
                 matched = true;
             }
-            else if (wcsicmp(programPath, name) == 0) {
+            else if (strmatch(pattern.c_str(), pattern.length(),
+                              programPath, programPathLen)) {
                 matched = true;
             }
         }
@@ -471,11 +764,16 @@ void LoadSettings()
     }
 }
 
-BOOL Wh_ModInit(void)
+BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
 
     LoadSettings();
+
+    if (g_replacementItems.empty()) {
+        Wh_Log(L"No replacements configured");
+        return FALSE;
+    }
 
     // Covers SetDlgItemText and SetDlgItemInt.
     Wh_SetFunctionHook((void*)SetWindowTextA, (void*)SetWindowTextAHook, (void**)&pOriginalSetWindowTextA);
@@ -502,6 +800,9 @@ BOOL Wh_ModInit(void)
     Wh_SetFunctionHook((void*)ExtTextOutA, (void*)ExtTextOutAHook, (void**)&pOriginalExtTextOutA);
     Wh_SetFunctionHook((void*)ExtTextOutW, (void*)ExtTextOutWHook, (void**)&pOriginalExtTextOutW);
 
+    Wh_SetFunctionHook((void*)PolyTextOutA, (void*)PolyTextOutAHook, (void**)&pOriginalPolyTextOutA);
+    Wh_SetFunctionHook((void*)PolyTextOutW, (void*)PolyTextOutWHook, (void**)&pOriginalPolyTextOutW);
+
     Wh_SetFunctionHook((void*)DrawTextA, (void*)DrawTextAHook, (void**)&pOriginalDrawTextA);
     Wh_SetFunctionHook((void*)DrawTextW, (void*)DrawTextWHook, (void**)&pOriginalDrawTextW);
 
@@ -514,17 +815,27 @@ BOOL Wh_ModInit(void)
     Wh_SetFunctionHook((void*)SendMessageA, (void*)SendMessageAHook, (void**)&pOriginalSendMessageA);
     Wh_SetFunctionHook((void*)SendMessageW, (void*)SendMessageWHook, (void**)&pOriginalSendMessageW);
 
+    HookD2DAndDWrite();
+    HookGdiplus();
+
     return TRUE;
 }
 
-void Wh_ModUninit(void)
+void Wh_ModUninit()
 {
     Wh_Log(L"Uninit");
 }
 
-void Wh_ModSettingsChanged(void)
+BOOL Wh_ModSettingsChanged(BOOL* bReload)
 {
     Wh_Log(L"SettingsChanged");
 
     LoadSettings();
+
+    if (g_replacementItems.empty()) {
+        Wh_Log(L"No replacements configured");
+        return FALSE;
+    }
+
+    return TRUE;
 }

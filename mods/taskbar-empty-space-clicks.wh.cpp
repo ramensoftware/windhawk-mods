@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is clicked. Various mouse clicks and keyboard modifiers are supported.
-// @version         2.5
+// @version         2.6
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -3646,6 +3646,23 @@ std::tuple<std::wstring, std::wstring> ParseExecutableAndParameters(const std::w
     return std::make_tuple(stringtools::trim(executable), stringtools::trim(parameters));
 }
 
+std::wstring ExpandEnvironmentVariables(const std::wstring &input)
+{
+    LOG_TRACE();
+
+    std::wstring expanded = input;
+    DWORD size = ExpandEnvironmentStringsW(input.c_str(), nullptr, 0);
+    if (size > 0)
+    {
+        std::unique_ptr<wchar_t[]> buffer(new wchar_t[size]);
+        if (ExpandEnvironmentStringsW(input.c_str(), buffer.get(), size) > 0)
+        {
+            expanded = buffer.get();
+        }
+    }
+    return expanded;
+}
+
 // Starts a process with command line arguments
 void StartProcess(std::wstring command)
 {
@@ -3667,7 +3684,12 @@ void StartProcess(std::wstring command)
     }
 
     const auto [executable, parameters] = ParseExecutableAndParameters(command);
-    LOG_INFO(L"Starting process with %s: '%s' '%s'", shellExVerb.c_str(), executable.c_str(), parameters.c_str());
+    LOG_INFO(L"Parsed executable: '%s', parameters: '%s'", executable.c_str(), parameters.c_str());
+
+    // environment variables usually bring spaces in paths, so expand them after parsing the command line
+    const auto expandedExecutable = ExpandEnvironmentVariables(executable);
+    const auto expandedParameters = ExpandEnvironmentVariables(parameters);
+    LOG_INFO(L"Starting process with %s: '%s' '%s'", shellExVerb.c_str(), expandedExecutable.c_str(), expandedParameters.c_str());
 
     // Get current cursor position and monitor handle
     POINT cursorPos;
@@ -3679,8 +3701,8 @@ void StartProcess(std::wstring command)
     SHELLEXECUTEINFO sei = {sizeof(sei)};
     sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
     sei.lpVerb = shellExVerb.c_str();
-    sei.lpFile = executable.c_str();
-    sei.lpParameters = parameters.empty() ? NULL : parameters.c_str();
+    sei.lpFile = expandedExecutable.c_str();
+    sei.lpParameters = expandedParameters.empty() ? NULL : expandedParameters.c_str();
     sei.nShow = SW_SHOWNORMAL;
     sei.hMonitor = hMonitor; // Specify the target monitor, but most apps ignore this anyway
 
