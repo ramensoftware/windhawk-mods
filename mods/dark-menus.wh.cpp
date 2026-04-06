@@ -58,6 +58,13 @@ Enables dark mode for all win32 menus to create a consistent UI. Requires Window
 
   $description:de-DE: Behebt Menü Farben wenn sie TranslucentFlyouts verwenden. 
 
+- ThemeClassicMenus: false
+  $name: Dark mode for classic themed menus
+  $description: This applies to all programs, not just the included programs.
+
+  $name:de-DE: Dunkler Modus für Klassische Menüs
+  $description:de-DE: Dies ist für alle Programe, nicht nur die eingeschlossenen programe.
+
 */
 // ==/WindhawkModSettings==
 
@@ -494,11 +501,35 @@ void ApplyTheme(const AppMode inputTheme = AppMode::Max)
     g_currentAppMode = theme;
 }
 
+void EnableDarkClassicTheme()
+{
+    INT ids[] = { COLOR_MENU, COLOR_MENUBAR, COLOR_MENUTEXT, COLOR_MENUHILIGHT };
+    COLORREF values[] = { DARK_MENU_COLOR, DARK_MENU_COLOR, DARK_MENU_ITEM_FOREGROUND, DARK_MENU_ITEM_BACKGROUND_HOVER_COLOR };
+    if(!SetSysColors(4, ids, values))
+        Wh_Log(L"Failed to set the system colors!");
+}
+
+void DisableDarkClassicTheme()
+{
+    INT ids[] = { COLOR_MENU, COLOR_MENUBAR, COLOR_MENUTEXT, COLOR_MENUHILIGHT };
+    COLORREF values[] = { DEFAULT_CLASSIC_MENU_BACKGROUND, DEFAULT_CLASSIC_MENU_BACKGROUND, DEFAULT_CLASSIC_MENU_FOREGROUND, DEFAULT_CLASSIC_MENU_BACKGROUND_HOVER };
+    if(!SetSysColors(4, ids, values))
+        Wh_Log(L"Failed to set the system colors!");
+}
+
 //Updates the theme of the window when the settings change.
 void Wh_ModSettingsChanged()
 {
     Wh_Log(L"Settings changed");
     ApplyTheme();
+
+    if(g_isWindhawk)
+    {
+        if(Wh_GetIntSetting(L"ThemeClassicMenus"))
+            EnableDarkClassicTheme();
+        else
+            DisableDarkClassicTheme();
+    }
 }
 
 std::wstring GetCurrentProcessName()
@@ -528,13 +559,8 @@ BOOL Wh_ModInit()
     {
         g_isWindhawk = true;
 
-        INT ids[] = { COLOR_MENU, COLOR_MENUBAR, COLOR_MENUTEXT, COLOR_MENUHILIGHT };
-        COLORREF values[] = { DARK_MENU_COLOR, DARK_MENU_COLOR, DARK_MENU_ITEM_FOREGROUND, DARK_MENU_ITEM_BACKGROUND_HOVER_COLOR };
-        if(!SetSysColors(4, ids, values))
-        {
-            Wh_Log(L"Failed to set the system colors!");
-            return FALSE;
-        }
+        if(Wh_GetIntSetting(L"ThemeClassicMenus"))
+            EnableDarkClassicTheme();
     }
 
     if(!WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original) ||
@@ -588,12 +614,8 @@ void Wh_ModUninit()
     Wh_Log(L"Restoring the default theme.");
     ApplyTheme(AppMode::Default);
 
-    if(g_isWindhawk)
-    {
-        INT ids[] = { COLOR_MENU, COLOR_MENUBAR, COLOR_MENUTEXT, COLOR_MENUHILIGHT };
-        COLORREF values[] = { DEFAULT_CLASSIC_MENU_BACKGROUND, DEFAULT_CLASSIC_MENU_BACKGROUND, DEFAULT_CLASSIC_MENU_FOREGROUND, DEFAULT_CLASSIC_MENU_BACKGROUND_HOVER };
-        SetSysColors(3, ids, values);
-    }
+    if(g_isWindhawk && Wh_GetIntSetting(L"ThemeClassicMenus"))
+        DisableDarkClassicTheme();
 
     if(!IsSystemCallDisableMitigationEnabled())
     {
