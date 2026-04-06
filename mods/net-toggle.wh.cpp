@@ -5,40 +5,31 @@
 // @version         1.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lwtsapi32 -lwininet
 // ==/WindhawkMod==
-
-// ==WindhawkModReadme==
-/*
-# Network Toggle
-
-Adds a native-looking network toggle to the system tray for quick enable/disable of network adapters.
-
-## Features
-
-- **Hardware-Level Kill Switch:** Instantly disable or enable all physical network interface cards (NICs) with a single click.
-- **Virtual-Environment Aware:** Automatically ignores software adapters like Hyper-V, WSL, and VM switches. It only targets actual hardware.
-- **Native OS Integration:** Extracts official Windows network status icons directly from system DLLs for a seamless, built-in look.
-
-*/
-// ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <wininet.h>
+#include <wtsapi32.h>
 
+#ifdef _MSC_VER
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "wtsapi32.lib")
+#endif
 
 #define TRAY_ICON_ID 1
 #define WM_TRAY_CALLBACK (WM_USER + 1)
 #define WM_UPDATE_TRAY_STATE (WM_USER + 2)
+#define WM_RUN_ELEVATED (WM_USER + 3)
 
 const DWORD CLICK_DEBOUNCE_MS = 2000;
 
 static volatile LONG g_isProcessingClick = 0;
 static volatile LONG g_trayIconInstalled = 0;
-static volatile LONG g_networkIsUp = 1; // 1 = ON, 0 = OFF
+static volatile LONG g_networkIsUp = 1;
 static HANDLE g_trayThread = nullptr;
 static HWND g_trayHwnd = nullptr;
 static HINSTANCE g_hInstance = nullptr;
@@ -64,7 +55,7 @@ void LogLastError(LPCWSTR context) {
 BOOL CheckActualNetworkState() {
     SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
     HANDLE stdoutRead, stdoutWrite;
-    if (!CreatePipe(&stdoutRead, &stdoutWrite, &sa, 0)) return TRUE; // Default to TRUE on fail
+    if (!CreatePipe(&stdoutRead, &stdoutWrite, &sa, 0)) return TRUE;
     SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0);
 
     PROCESS_INFORMATION pi = {};
@@ -76,7 +67,6 @@ BOOL CheckActualNetworkState() {
 
     BOOL isUp = TRUE;
 
-    // Check if adapters are NOT disabled, rather than fully 'Up', to account for connection delays
     if (CreateProcessW(L"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", 
                        (LPWSTR)L"powershell.exe -NoProfile -NonInteractive -Command \"(Get-NetAdapter -Physical | Where-Object Status -ne 'Disabled').Count\"",
                        nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
@@ -99,13 +89,132 @@ BOOL CheckActualNetworkState() {
     return isUp;
 }
 
-BOOL RunPowerShellCommand(LPCWSTR psCommand, BOOL targetState) {
-    Wh_Log(L"Executing PowerShell command");
+BOOL RunPowerShellCommandAsSystem(LPCWSTR psCommand, BOOL targetState) {
+    Wh_Log(L"Executing PowerShell command with Windhawk privileges");
 
-    WCHAR cmdArgs[2048];
-    if (wsprintfW(cmdArgs, L"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"%s\"", psCommand) <= 0) {
+    WCHAR cmdLine[2048];
+    if (wsprintfW(cmdLine, L"\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile -NonInteractive -Command \"%s 2>&1\"", psCommand) <= 0) {
         Wh_Log(L"Failed to format command");
         return FALSE;
+    }
+
+    HMODULE kernel32 = GetModuleHandle(L"kernel32");
+    if (!kernel32) {
+        Wh_Log(L"Failed to get kernel32 handle");
+        return FALSE;
+    }
+
+    typedef BOOL(WINAPI* CreateProcessAsUserW_t)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, 
+        LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
+    CreateProcessAsUserW_t pCreateProcessAsUserW = 
+        (CreateProcessAsUserW_t)GetProcAddress(kernel32, "CreateProcessAsUserW");
+
+    HANDLE hProcessToken = NULL;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ALL_ACCESS, &hProcessToken)) {
+        Wh_Log(L"OpenProcessToken failed: %d", GetLastError());
+        return FALSE;
+    }
+
+    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
+    HANDLE stdoutRead, stdoutWrite;
+    if (!CreatePipe(&stdoutRead, &stdoutWrite, &sa, 0)) {
+        Wh_Log(L"CreatePipe failed");
+        CloseHandle(hProcessToken);
+        return FALSE;
+    }
+    SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOW si{sizeof(si)};
+    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput = stdoutWrite;
+    si.hStdError = stdoutWrite;
+    
+    PROCESS_INFORMATION pi{};
+    
+    BOOL success = FALSE;
+    if (pCreateProcessAsUserW) {
+        success = pCreateProcessAsUserW(hProcessToken, nullptr, cmdLine,
+            nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+            nullptr, L"C:\\Windows\\System32", &si, &pi);
+    }
+    
+    CloseHandle(hProcessToken);
+    
+    if (!success) {
+        Wh_Log(L"CreateProcessAsUserW failed, trying direct: %d", GetLastError());
+        CloseHandle(stdoutWrite);
+        CloseHandle(stdoutRead);
+        
+        if (!CreateProcessW(nullptr, cmdLine, nullptr, nullptr, TRUE, 
+            CREATE_NO_WINDOW, nullptr, L"C:\\Windows\\System32", &si, &pi)) {
+            Wh_Log(L"CreateProcess failed: %d", GetLastError());
+            return FALSE;
+        }
+        success = TRUE;
+    }
+
+    CloseHandle(stdoutWrite);
+
+    Wh_Log(L"Process started with PID: %d", pi.dwProcessId);
+
+    InterlockedExchange(&g_networkIsUp, targetState ? 1 : 0);
+    if (g_trayHwnd) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)targetState, 0);
+    }
+
+    if (!pi.hProcess) {
+        Wh_Log(L"No process handle returned");
+        CloseHandle(stdoutRead);
+        return FALSE;
+    }
+
+    DWORD waitResult = WaitForSingleObject(pi.hProcess, 20000);
+    
+    char output[4096] = {0};
+    DWORD bytesRead;
+    if (ReadFile(stdoutRead, output, sizeof(output) - 1, &bytesRead, nullptr) && bytesRead > 0) {
+        output[bytesRead] = '\0';
+        Wh_Log(L"PowerShell output: %S", output);
+    }
+    CloseHandle(stdoutRead);
+
+    if (waitResult == WAIT_TIMEOUT) {
+        Wh_Log(L"Process timed out, terminating");
+        TerminateProcess(pi.hProcess, 1);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return FALSE;
+    }
+
+    DWORD exitCode = 1;
+    if (!GetExitCodeProcess(pi.hProcess, &exitCode)) {
+        LogLastError(L"GetExitCodeProcess");
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return FALSE;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    Wh_Log(L"Process exited with code: %d", exitCode);
+    return exitCode == 0;
+}
+
+DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
+    BOOL enable = (BOOL)(UINT_PTR)lpParam;
+    
+    Wh_Log(L"Toggling network adapters: %s", enable ? L"ENABLE" : L"DISABLE");
+    
+    WCHAR cmdArgs[2048];
+    LPCWSTR psCommand = enable 
+        ? L"Get-NetAdapter -Physical | Enable-NetAdapter -Confirm:$false"
+        : L"Get-NetAdapter -Physical | Disable-NetAdapter -Confirm:$false";
+    
+    if (wsprintfW(cmdArgs, L"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"%s\"", psCommand) <= 0) {
+        Wh_Log(L"Failed to format command");
+        InterlockedExchange(&g_isProcessingClick, 0);
+        return 0;
     }
 
     SHELLEXECUTEINFOW sei = {sizeof(sei)};
@@ -123,56 +232,43 @@ BOOL RunPowerShellCommand(LPCWSTR psCommand, BOOL targetState) {
         } else {
             Wh_Log(L"ShellExecuteEx failed: %d", error);
         }
-        return FALSE;
+        InterlockedExchange(&g_isProcessingClick, 0);
+        return 0;
     }
 
-    // --- INSTANT UI UPDATE ---
-    // At this exact line of code, the user just clicked "Yes" on the UAC prompt.
-    // The PowerShell script is starting up, but the adapters haven't turned off yet.
-    // We update the tray icon immediately so it feels perfectly responsive.
-    Wh_Log(L"UAC cleared. Updating UI to target state: %d", targetState);
-    InterlockedExchange(&g_networkIsUp, targetState ? 1 : 0);
+    Wh_Log(L"UAC cleared. Updating UI to target state: %d", enable);
+    InterlockedExchange(&g_networkIsUp, enable ? 1 : 0);
     if (g_trayHwnd) {
-        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)targetState, 0);
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)enable, 0);
     }
 
     if (!sei.hProcess) {
         Wh_Log(L"No process handle returned");
-        return FALSE;
+        InterlockedExchange(&g_isProcessingClick, 0);
+        return 0;
     }
 
-    // Now we wait for the script to finish doing the actual heavy lifting
     DWORD waitResult = WaitForSingleObject(sei.hProcess, 20000);
+    BOOL success = FALSE;
     if (waitResult == WAIT_TIMEOUT) {
         Wh_Log(L"Process timed out, terminating");
         TerminateProcess(sei.hProcess, 1);
-        CloseHandle(sei.hProcess);
-        return FALSE;
-    }
-
-    DWORD exitCode = 1;
-    if (!GetExitCodeProcess(sei.hProcess, &exitCode)) {
-        LogLastError(L"GetExitCodeProcess");
-        CloseHandle(sei.hProcess);
-        return FALSE;
+    } else {
+        DWORD exitCode = 1;
+        if (GetExitCodeProcess(sei.hProcess, &exitCode)) {
+            success = (exitCode == 0);
+            Wh_Log(L"Process exited with code: %d", exitCode);
+        }
     }
 
     CloseHandle(sei.hProcess);
-    Wh_Log(L"Process exited with code: %d", exitCode);
-    return exitCode == 0;
-}
 
-// Background thread so the Tray UI doesn't freeze during UAC prompt
-DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
-    BOOL enable = (BOOL)(UINT_PTR)lpParam;
-    
-    Wh_Log(L"Toggling network adapters: %s", enable ? L"ENABLE" : L"DISABLE");
-    LPCWSTR command = enable 
-        ? L"Get-NetAdapter -Physical | Enable-NetAdapter -Confirm:$false"
-        : L"Get-NetAdapter -Physical | Disable-NetAdapter -Confirm:$false";
+    if (success) {
+        Wh_Log(L"Network %s operation completed successfully", enable ? L"enable" : L"disable");
+    } else {
+        Wh_Log(L"Network toggle operation failed");
+    }
 
-    BOOL success = RunPowerShellCommand(command, enable);
-    
     if (success) {
         Wh_Log(L"Network %s operation completed successfully", enable ? L"enable" : L"disable");
     } else {
@@ -212,11 +308,9 @@ void ProcessTrayClick() {
     }
     g_lastClickTime = now;
 
-    // Calculate our desired state based on current knowledge
     BOOL targetState = (g_networkIsUp == 0); 
     Wh_Log(L"Processing network toggle click. Target state: %s", targetState ? L"ON" : L"OFF");
 
-    // Spawn worker thread to handle the heavy lifting (UAC & Execution)
     DWORD threadId;
     HANDLE hWorker = CreateThread(nullptr, 0, WorkerThreadProc, (LPVOID)(UINT_PTR)targetState, 0, &threadId);
     if (hWorker) {
@@ -315,8 +409,25 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Network Toggle Mod Init");
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L"Tool mod process started. Entering message loop.");
+
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    Wh_Log(L"Tool mod message loop exited.");
+}
+
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Network Toggle Tool Mod Init");
 
     g_hInstance = GetModuleHandle(nullptr);
     if (!g_hInstance) {
@@ -324,18 +435,13 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Extract the official Windows Network Connected/Disconnected icons
-    // pnidui.dll (Personal Network Indicator UI) contains the actual system tray network icons
-    // Index 4: Ethernet Connected (Computer monitor with cable)
-    // Index 5: Ethernet Disconnected (Computer monitor with red X)
     ExtractIconExW(L"pnidui.dll", 4, nullptr, &g_iconEnabled, 1);  
     ExtractIconExW(L"pnidui.dll", 5, nullptr, &g_iconDisabled, 1); 
 
-    // Safe fallbacks just in case the system is missing pnidui
     if (!g_iconEnabled) ExtractIconExW(L"shell32.dll", 9, nullptr, &g_iconEnabled, 1);
     if (!g_iconDisabled) ExtractIconExW(L"shell32.dll", 131, nullptr, &g_iconDisabled, 1);
 
-    Wh_Log(L"Icons loaded successfully.");
+    Wh_Log(L"Icons loaded. Enabled: %p, Disabled: %p", g_iconEnabled, g_iconDisabled);
 
     DWORD threadId = 0;
     g_trayThread = CreateThread(nullptr, 0, TrayThreadProc, nullptr, CREATE_SUSPENDED, &threadId);
@@ -354,10 +460,11 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    Wh_Log(L"Tray thread started successfully");
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Network Toggle Mod Uninit");
 
     if (g_trayHwnd) {
@@ -386,5 +493,148 @@ void Wh_ModUninit() {
         g_iconDisabled = nullptr;
     }
 
+    PostQuitMessage(0);
     Wh_Log(L"Network Toggle Mod Uninit complete");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod bootstrap - runs in windhawk.exe process
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes,
+        WINBOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation, PHANDLE hRestrictedUserToken);
+    
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{ .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed, error: %d", GetLastError());
+        return;
+    }
+
+    Wh_Log(L"Launched tool mod process, PID: %d", pi.dwProcessId);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"Settings changed");
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
