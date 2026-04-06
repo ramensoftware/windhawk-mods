@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.4.2
+// @version           1.5
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
@@ -69,19 +69,27 @@ Enables dark mode for all win32 menus to create a consistent UI. Requires Window
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
+#include <string>
+
 constexpr COLORREF DARK_MENU_COLOR = 0x2C2C2C;
 constexpr COLORREF DARK_MENU_ITEM_FOREGROUND = 0xFFFFFF;
 constexpr COLORREF DARK_MENU_ITEM_FOREGROUND_DISABLED = 0xAAAAAA;
+constexpr COLORREF DARK_MENU_ITEM_BACKGROUND_HOVER_COLOR = 0x353535;
+
+constexpr COLORREF DEFAULT_CLASSIC_MENU_BACKGROUND = RGB(240, 240, 240);
+constexpr COLORREF DEFAULT_CLASSIC_MENU_BACKGROUND_HOVER = 0x0078d4;
+constexpr COLORREF DEFAULT_CLASSIC_MENU_FOREGROUND = 0x000000;
 
 const HBRUSH DARK_CONTROL_BRUSH = CreateSolidBrush(0x262626);
 const HBRUSH DARK_MENU_BRUSH = CreateSolidBrush(DARK_MENU_COLOR);
 const HBRUSH DARK_MENUBAR_SEPARATOR_BRUSH = CreateSolidBrush(0x222222);
-const HBRUSH DARK_MENU_ITEM_BACKGROUND_HOVER = CreateSolidBrush(0x353535);
+const HBRUSH DARK_MENU_ITEM_BACKGROUND_HOVER = CreateSolidBrush(DARK_MENU_ITEM_BACKGROUND_HOVER_COLOR);
 const HBRUSH DARK_MENU_ITEM_BACKGROUND_SELECTED = CreateSolidBrush(0x454545);
 
 thread_local HTHEME g_menuBarTheme = nullptr;
 HFONT g_iconFont = nullptr;
 HMODULE g_hUxtheme = nullptr;
+bool g_isWindhawk = false;
 
 #define WM_UAHDRAWMENU         0x91
 #define WM_UAHDRAWMENUITEM     0x92
@@ -413,6 +421,32 @@ LRESULT CALLBACK DefWindowProcA_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     return DefWindowProcA_Original(hWnd, uMsg, wParam, lParam);
 }
 
+decltype(&CreateMenu) CreateMenu_Original;
+HMENU WINAPI CreateMenu_Hook()
+{
+    HMENU hMenu = CreateMenu_Original();
+    
+    MENUINFO menuInfo{sizeof(menuInfo), MIM_BACKGROUND};
+    menuInfo.hbrBack = DARK_MENU_BRUSH;
+    if(!SetMenuInfo(hMenu, &menuInfo))
+        Wh_Log(L"SetMenuInfo failed!"); 
+        
+    return hMenu;
+}
+
+decltype(&CreatePopupMenu) CreatePopupMenu_Original;
+HMENU WINAPI CreatePopupMenu_Hook()
+{
+    HMENU hMenu = CreatePopupMenu_Original();
+    
+    MENUINFO menuInfo{sizeof(menuInfo), MIM_BACKGROUND};
+    menuInfo.hbrBack = DARK_MENU_BRUSH;
+    if(!SetMenuInfo(hMenu, &menuInfo))
+        Wh_Log(L"SetMenuInfo failed!"); 
+
+    return hMenu;
+}
+
 decltype(&SetMenuInfo) SetMenuInfo_Original;
 WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
 {
@@ -467,6 +501,18 @@ void Wh_ModSettingsChanged()
     ApplyTheme();
 }
 
+std::wstring GetCurrentProcessName()
+{
+    wchar_t buffer[32768];
+    DWORD size = 32768;
+    if(!QueryFullProcessImageNameW(GetCurrentProcess(), 0, buffer, &size))
+        Wh_Log(L"Failed to get the process name!");
+
+    std::wstring fullPath(buffer, size);
+    size_t pos = fullPath.find_last_of(L"\\/");
+    return (pos == std::wstring::npos) ? fullPath : fullPath.substr(pos + 1);
+}
+
 //Import functions
 BOOL Wh_ModInit()
 {
@@ -477,6 +523,19 @@ BOOL Wh_ModInit()
     }
 
     Wh_Log(L"Init");
+
+    if(GetCurrentProcessName() == L"windhawk.exe")
+    {
+        g_isWindhawk = true;
+
+        INT ids[] = { COLOR_MENU, COLOR_MENUBAR, COLOR_MENUTEXT, COLOR_MENUHILIGHT };
+        COLORREF values[] = { DARK_MENU_COLOR, DARK_MENU_COLOR, DARK_MENU_ITEM_FOREGROUND, DARK_MENU_ITEM_BACKGROUND_HOVER_COLOR };
+        if(!SetSysColors(4, ids, values))
+        {
+            Wh_Log(L"Failed to set the system colors!");
+            return FALSE;
+        }
+    }
 
     if(!WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original) ||
         !WindhawkUtils::SetFunctionHook(DefWindowProcA, DefWindowProcA_Hook, &DefWindowProcA_Original))
@@ -489,6 +548,13 @@ BOOL Wh_ModInit()
         !WindhawkUtils::SetFunctionHook(DefFrameProcA, DefFrameProcA_Hook, &DefFrameProcA_Original))
     {
         Wh_Log(L"Failed to hook DefFrameProc!");
+        return FALSE;
+    }
+
+    if(!WindhawkUtils::SetFunctionHook(CreateMenu, CreateMenu_Hook, &CreateMenu_Original) ||
+        !WindhawkUtils::SetFunctionHook(CreatePopupMenu, CreatePopupMenu_Hook, &CreatePopupMenu_Original))
+    {
+        Wh_Log(L"Failed to hook CreateMenu!");
         return FALSE;
     }
 
@@ -521,6 +587,13 @@ void Wh_ModUninit()
 {
     Wh_Log(L"Restoring the default theme.");
     ApplyTheme(AppMode::Default);
+
+    if(g_isWindhawk)
+    {
+        INT ids[] = { COLOR_MENU, COLOR_MENUBAR, COLOR_MENUTEXT, COLOR_MENUHILIGHT };
+        COLORREF values[] = { DEFAULT_CLASSIC_MENU_BACKGROUND, DEFAULT_CLASSIC_MENU_BACKGROUND, DEFAULT_CLASSIC_MENU_FOREGROUND, DEFAULT_CLASSIC_MENU_BACKGROUND_HOVER };
+        SetSysColors(3, ids, values);
+    }
 
     if(!IsSystemCallDisableMitigationEnabled())
     {
