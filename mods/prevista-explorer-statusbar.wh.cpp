@@ -14,8 +14,10 @@
 # Pre-Vista Explorer Status Bar
 
 Adds a classic status bar to Windows Explorer with selectable pane styles
-matching different Windows versions. Based on the original mod by Anixx,
+matching different Windows versions. Based on the other status bar mod by Anixx,
 rewritten from XP SP1 / Win2K / 98 source code and decompilations.
+
+Note: Windows already has a built-in status bar, Hide it in folder options for this mod to look proper.
 
 ## Pane Styles
 
@@ -26,6 +28,17 @@ rewritten from XP SP1 / Win2K / 98 source code and decompilations.
 - **Windows 98** — Fixed-width left/right panes, always shows object count in pane 0,
   file size or drive capacity in pane 1
 - **Windows 95/NT4** — Two panes only (count + size), no zone pane, no infotip
+
+## Screenshots
+
+**XP/2000 style:**
+![XP/2000 style](https://i.imgur.com/5ZmPXuc.png)
+
+**98 style:**
+![98 style](https://i.imgur.com/lpHSWgY.png)
+
+**95/NT4 style:**
+![95/NT4 style](https://i.imgur.com/dmcjYwW.png)
 
 ## Features
 
@@ -46,6 +59,9 @@ rewritten from XP SP1 / Win2K / 98 source code and decompilations.
     - 2000: Windows 2000 (basic infotip, dynamic pane widths, zone)
     - 98: Windows 98 (fixed L/R panes, selection count + file size, zone)
     - 95: Windows 95/NT4 (two panes, count + size, no zone)
+- ShowHiddenCount: true
+  $name: Show hidden file count
+  $description: Show "plus N hidden" in the status bar when hidden files are present
 - ObjectWord: objects
   $name: Object word
   $description: The word used for items in the status bar (e.g. "objects" for XP, "object(s)" for 2000/9x)
@@ -99,6 +115,7 @@ const PROPERTYKEY PKEY_Size = {
 // Pane style enum
 enum PaneStyle { PANESTYLE_XP = 0, PANESTYLE_2000, PANESTYLE_98, PANESTYLE_95 };
 static PaneStyle g_ePaneStyle = PANESTYLE_XP;
+static bool g_bShowHiddenCount = true;
 
 // Format strings built from settings — "objects" for XP, "object(s)" for 2000/9x
 static wchar_t FMT_OBJECTS[128];
@@ -705,7 +722,7 @@ void GetStatusInfo(IShellBrowser* pBrowser, wchar_t* pane0Buf, int pane0Size,
         // Check for hidden files — skip for large folders (>2000 items) to avoid
         // blocking the UI thread with a full re-enumeration via EnumObjects
         int cHidden = 0;
-        if (totalCount <= 2000 && haveFolder && haveSF) {
+        if (g_bShowHiddenCount && totalCount <= 2000 && haveFolder && haveSF) {
             PIDLIST_ABSOLUTE pidlFolder = nullptr;
             if (SUCCEEDED(pFolder->GetCurFolder(&pidlFolder)) && pidlFolder) {
                 IShellFolder* psfFolder = nullptr;
@@ -1253,6 +1270,7 @@ BOOL Wh_ModInit() {
     } else {
         g_ePaneStyle = PANESTYLE_XP;
     }
+    g_bShowHiddenCount = Wh_GetIntSetting(L"ShowHiddenCount");
     BuildFormatStrings();
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
     return TRUE;
@@ -1272,5 +1290,6 @@ void Wh_ModSettingsChanged() {
     } else {
         g_ePaneStyle = PANESTYLE_XP;
     }
+    g_bShowHiddenCount = Wh_GetIntSetting(L"ShowHiddenCount");
     BuildFormatStrings();
 }
