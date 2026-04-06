@@ -524,7 +524,7 @@ BOOL Wh_ModInit()
 
     Wh_Log(L"Init");
 
-    if(GetCurrentProcessName() == L"windhawk.exe")
+    if(GetCurrentProcessName() == L"windhawk.exe") //Only set the sys colors once
     {
         g_isWindhawk = true;
 
