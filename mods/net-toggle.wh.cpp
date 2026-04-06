@@ -21,13 +21,16 @@ One click drops your connection. Click it again, and you're back online.
 
 ## 📖 How to Use It
 Using the toggle is incredibly simple:
-1. 🔍 **Find the Icon:** Look in your system tray (bottom right of your screen, next to the clock) for the little `^` arrow. hit it and look for the network icon.
-2. 🎯 **Click to Toggle:** Give the icon a single click.
-3. ✅ **Approve the Prompt:** Windows will pop up a quick UAC screen asking for permission. Click **Yes**. 
-4. 🕒 **Wait a Sec:** The tray icon will update instantly, but give Windows just a few seconds to actually power your network adapters down or back up in the background. 
+1. 🔍 **Find the Icon:** 
+    > **Look in your system tray (bottom right of your screen, next to the clock) for the little `^` arrow. hit it and look for the network icon.**
+2. 🎯 **Click to Toggle:**
+    > **Give the icon a single click.**
+3. ✅ **Approve the Prompt:**
+    > **Windows will pop up a quick UAC screen asking for permission. Click **Yes**.**
+4. 🕒 **Wait a Sec:** 
+    > **The tray icon will update instantly, but give Windows just a few seconds to actually power your network adapters down or back up in the background.** 
 
-   > **Why do I need to accept the UAC?** 
-   > 
+**Why do I need to accept the UAC?** 
    > Windows requires admin permission to physically turn off your network hardware. 
    >
    > This is a built-in security feature to stop rogue background apps from disconnecting you secretly.
@@ -36,6 +39,10 @@ Using the toggle is incredibly simple:
 - **Instant Access:** Your network power switch is always exactly one click away.
 - **Native Look & Feel:** Uses official Windows system icons, so it blends perfectly into your taskbar.
 - **Smart & Safe:** Only toggles your actual, physical hardware. It completely ignores virtual networks (like WSL or VMs), so your local environments stay perfectly intact!
+
+## ⚠️ Known Issues
+- **The UAC Popup:** You will get a User Account Control prompt *every time* you use the toggle. While it adds an extra click, it's an unavoidable Windows security rule for turning physical hardware on and off.
+- **Icon Grouping on the Taskbar:** If you try to manually drag the icon out of the hidden `^` menu to drop it onto your main taskbar, Windows might get confused and group it with the main Windhawk app icon. this is still fully functional but showing 2 icons instead of 1.
 */
 // ==/WindhawkModReadme==
 
