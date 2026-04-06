@@ -5768,6 +5768,34 @@
                 "version": "1.0.0"
             }
         },
+        "net-toggle": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1775492864000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1775492864000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "BlackPaw",
+                "compilerOptions": "-lshell32 -lgdi32 -luser32",
+                "description": "Adds a network toggle to the system tray - click the icon to enable/disable network adapters",
+                "github": "https://github.com/BlackPaw21",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Network Toggle",
+                "version": "1.0"
+            }
+        },
         "nilesoft-shell-animator": {
             "details": {
                 "defaultSorting": 2600,
