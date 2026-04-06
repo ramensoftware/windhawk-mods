@@ -2,7 +2,7 @@
 // @id              better-dialogs
 // @name            Better Dialogs
 // @description     Improves Windows dialog boxes.
-// @version         1.0.1
+// @version         1.0
 // @author          FireBlade
 // @github          https://github.com/FireBlade211
 // @include         *
