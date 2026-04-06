@@ -4131,6 +4131,36 @@
                 "version": "1.2"
             }
         },
+        "fix-file-explorer-toolbar-position": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1775517551000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1775517551000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "xalejandro",
+                "description": "Fixes issue with explorer toolbars not setting the position correctly",
+                "github": "https://github.com/tetawaves",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "File Explorer Toolbar Position Fix",
+                "version": "1.0"
+            }
+        },
         "fix-legacy-taskbar-tray-input-indicator": {
             "details": {
                 "defaultSorting": 135,

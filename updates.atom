@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-06T18:06:36.000Z</updated>
+    <updated>2026-04-06T23:19:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Toolbar Position Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/fix-file-explorer-toolbar-position#716e9dc4d3c64b227586c985e4aa6968b47b9cb9</id>
+        <link href="https://windhawk.net/mods/fix-file-explorer-toolbar-position"/>
+        <updated>2026-04-06T23:19:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fileexplorertoolbarpositionfix">File Explorer Toolbar Position Fix</h1>
+<p>This mod fixes an issue with file explorer toolbars not setting the position correctly when opening explorer.</p>
+<p><strong>Before</strong><br />
+After opening explorer, all of the toolbars will be forced to be on a new line, ignoring the previous position and style.
+<img src="https://i.imgur.com/v8bj787.png" alt="Before" /></p>
+<p><strong>After</strong><br />
+Now the toolbars will respect the previous position and style when opening explorer.
+<img src="https://i.imgur.com/zGqzAfz.png" alt="After" /></p>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Pre-Vista Explorer Status Bar 2.0.0]]></title>
         <id>https://windhawk.net/mods/prevista-explorer-statusbar#04e0523bdf54399ff52631138d50dba606d9a5eb</id>
@@ -428,27 +446,6 @@ los controles desplazables en cualquier aplicación Win32.</p>]]></content>
         <author>
             <name>GID0317</name>
             <uri>https://github.com/GID0317</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word MathType Dark Mode Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/word-mathtype-dark-fix#922e3390d9cd03912080fbc81903590021ed5377</id>
-        <link href="https://windhawk.net/mods/word-mathtype-dark-fix"/>
-        <updated>2026-03-30T21:31:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="wordmathtypedarkmodefix">Word MathType Dark Mode Fix</h1>
-<p>This mod fixes the broken dark mode rendering of MathType Equations in Word and solves the unreadable black-on-black issue by intercepting the dark mode state change and dynamically adjusting GDI colors for dark mode formula rendering.</p>
-<p><em>Note: this mod needs pdb symbol of <code>wwlib.dll</code> to work. The symbol file is expected to be a bit large (~90MB in size). Windhawk will download it automatically when you launch Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (wwlib.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and <strong>relaunch Word AS ADMINISTRATOR at least once</strong> after it finishes, this is to write symbols being used to SymbolCache, which speeds up launching later on.</em></p>
-<h2 id="note">⚠️ Note:</h2>
-<ul>
-<li>It is advised to <strong>turn off automatic updates</strong> for Office applications, as PDB may need to be downloaded every time after updates.</li>
-<li>Please relaunch Word as administrator <em>at least once</em> after installing the mod and wait for symbol download to complete, this is to write symbols being used to SymbolCache, which speeds up launching later on.</li>
-</ul>
-<p><em>This mod is part of <strong>The Ultimate Office Dark Mode Project</strong></em></p>
-<h1 id="beforeoriginalaftercomparison">Before-Original-After Comparison</h1>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-mathtype-dark-fix-before-original-after.png" alt="Before-Original-After" /></p>]]></content>
-        <author>
-            <name>Joe Ye</name>
-            <uri>https://github.com/JoeYe-233</uri>
         </author>
     </entry>
 </feed>
