@@ -6810,6 +6810,34 @@
                 "version": "1.0.1"
             }
         },
+        "prevista-explorer-statusbar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1775498796000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1775498796000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "arceus413",
+                "compilerOptions": "-lcomctl32 -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -lurlmon",
+                "description": "Classic status bar for Explorer with XP/2000/98/95 pane styles, zone display",
+                "github": "https://github.com/arceuss",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Pre-Vista Explorer Status Bar",
+                "version": "2.0.0"
+            }
+        },
         "prevista-file-copy": {
             "details": {
                 "defaultSorting": 280,

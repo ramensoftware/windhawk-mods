@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-06T16:27:44.000Z</updated>
+    <updated>2026-04-06T18:06:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Pre-Vista Explorer Status Bar 2.0.0]]></title>
+        <id>https://windhawk.net/mods/prevista-explorer-statusbar#04e0523bdf54399ff52631138d50dba606d9a5eb</id>
+        <link href="https://windhawk.net/mods/prevista-explorer-statusbar"/>
+        <updated>2026-04-06T18:06:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="previstaexplorerstatusbar">Pre-Vista Explorer Status Bar</h1>
+<p>Adds a classic status bar to Windows Explorer with selectable pane styles
+matching different Windows versions. Based on the other status bar mod by Anixx,
+rewritten from XP SP1 / Win2K / 98 source code and decompilations.</p>
+<p>Note: Windows already has a built-in status bar, Hide it in folder options for this mod to look proper.</p>
+<h2 id="panestyles">Pane Styles</h2>
+<ul>
+<li><strong>Windows XP</strong> — Per-filetype infotip on single select (reads <code>HKCR\{ext}\InfoTip</code>),
+dynamic pane widths, security zone icon + name</li>
+<li><strong>Windows 2000</strong> — Simpler infotip (<code>Type;Author;Title;Subject;Comment;Size</code>),
+same layout as XP</li>
+<li><strong>Windows 98</strong> — Fixed-width left/right panes, always shows object count in pane 0,
+file size or drive capacity in pane 1</li>
+<li><strong>Windows 95/NT4</strong> — Two panes only (count + size), no zone pane, no infotip</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p><strong>XP/2000 style:</strong>
+<img src="https://i.imgur.com/5ZmPXuc.png" alt="XP/2000 style" /></p>
+<p><strong>98 style:</strong>
+<img src="https://i.imgur.com/lpHSWgY.png" alt="98 style" /></p>
+<p><strong>95/NT4 style:</strong>
+<img src="https://i.imgur.com/dmcjYwW.png" alt="95/NT4 style" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Three-pane layout: object count / file size / security zone</li>
+<li>Locale-aware number formatting with thousands separators</li>
+<li>Hidden file count display (XP/2000 no-selection state)</li>
+<li>Disk free space in explorer mode (tree pane visible)</li>
+</ul>]]></content>
+        <author>
+            <name>arceus413</name>
+            <uri>https://github.com/arceuss</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Network Toggle 1.0]]></title>
         <id>https://windhawk.net/mods/net-toggle#0874a2e6656b36f8a8834879ee568d80f39d0ed7</id>
@@ -410,17 +449,6 @@ los controles desplazables en cualquier aplicación Win32.</p>]]></content>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[HotCorner Hotkeys 3.3]]></title>
-        <id>https://windhawk.net/mods/hotcorner-hotkeys#7a9ea32a9cd28fd914ba4c31ab7895a5270f8a67</id>
-        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
-        <updated>2026-03-30T20:02:36.000Z</updated>
-        <content type="html"><![CDATA[<p>added . <strong>Force Kill Active Window</strong> — Terminates the foreground window's process, except for the current <code>explorer.exe</code> host process.</p>]]></content>
-        <author>
-            <name>webberlv</name>
-            <uri>https://github.com/webberLV</uri>
         </author>
     </entry>
 </feed>
