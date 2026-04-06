@@ -2,7 +2,7 @@
 // @id              taskbar-media-bar
 // @name            Taskbar Media Bar
 // @description     A native-style media bar for the taskbar with lyrics, mini mode, and acrylic styling.
-// @version         1.0
+// @version         1.2
 // @author          HibritTofas
 // @github          https://github.com/HibritTofas
 // @include         explorer.exe
@@ -20,7 +20,7 @@ A compact media bar that sits on your taskbar, showing what's playing with synch
 ---
 
 ## Requirements
-- **Windows 11** — required for rounded corners and acrylic blur
+- **Windows 11** — required for rounded corners, acrylic blur, and native taskbar integration
 - **Disable Taskbar Widgets** — Taskbar Settings → Widgets → Off (frees up space)
 
 ---
@@ -48,16 +48,18 @@ Right-click → **Mini Mode** to switch to a compact square widget that shows on
 
 ## Media Source Priority
 
-Windows allows multiple apps to report media at the same time (e.g. Spotify and a browser video playing simultaneously). The bar uses the following priority rules to decide what to show:
+Windows allows multiple apps to report media at the same time (e.g. Spotify and a browser video playing simultaneously). The bar decides what to show based on the **Spotify Priority** setting.
 
-1. **Spotify actively playing** — Spotify always takes priority when it's playing, regardless of what else is running
+**Spotify Priority ON (default):**
+1. **Spotify actively playing** — Spotify always takes priority when it's playing
 2. **Any other app actively playing** — if Spotify is paused or not open, the bar shows whatever is currently playing
 3. **Spotify paused** — if nothing else is playing, the bar falls back to Spotify even if it's paused
-4. **Current session** — as a last resort, whatever Windows considers the "current" media session
+4. **Current session** — last resort fallback
 
-You can also **lock the bar to a specific source** via Right-click → Media Source. The lock is released automatically if that source stops playing.
+**Spotify Priority OFF:**
+The bar follows standard Windows session order — whichever app Windows considers active is shown, with no special treatment for Spotify.
 
-This priority system is why the lyrics panel behaves the way it does — lyrics are only fetched and shown when Spotify is the active source. If a browser video temporarily takes over, the lyrics panel hides and the cached lyrics are kept in memory. As soon as Spotify resumes playback, the panel reappears and the lyrics continue from where they left off — no refetch needed.
+You can also **lock the bar to a specific source** via Right-click → Media Source regardless of which priority mode is active. The lock is released automatically if that source stops playing.
 
 ---
 
@@ -72,7 +74,7 @@ Right-click → **Show Lyrics** to open the lyrics panel above the bar.
 - Long lines wrap to a second line instead of being cut off
 - **Hover** over the lyrics panel to make it transparent and click-through, so it doesn't block anything underneath
 - The lyrics panel **fades out** automatically after ~3.7 seconds of Spotify being paused, and **fades back in** as soon as playback resumes
-- The lyrics panel only shows when **Spotify** is the active media source. If another app takes over (e.g. a browser video), the panel hides and returns automatically when Spotify resumes — without needing to reopen it from the menu.
+- The lyrics panel only shows when **Spotify** is the active media source. If another app temporarily takes over (e.g. a browser video), the panel hides and returns automatically when Spotify resumes — without needing to reopen it from the menu. This behavior is independent of the Spotify Priority setting.
 - Use the **Lyrics Offset** setting to fine-tune sync. Positive values delay the lyrics, negative values advance them. The typical range is 0–1500ms for Spotify depending on your system, but if lyrics feel off it may also be a sign of incorrect lyrics from the source rather than a sync issue.
 
 > **Note:** Lyrics are only supported for **Spotify**. Other media players (browsers, Windows Media Player, etc.) are not supported for lyrics.
@@ -94,6 +96,16 @@ The menu closes automatically after 2 seconds if the mouse leaves it, or immedia
 
 ---
 
+## Display Mode
+
+Choose how the bar is positioned relative to the taskbar via **Windhawk Settings → Display Mode**.
+
+**Floating (default):** The bar hovers above the taskbar with rounded corners, a drop shadow, and configurable X/Y offsets. Looks like a separate widget.
+
+**Native:** The bar docks flush against the taskbar — no rounded corners, no gap. Height is locked to the taskbar height and the bar starts from the exact left or right edge. X Offset and Y Offset are ignored in this mode. The bar slides in and out together with the taskbar during auto-hide.
+
+---
+
 ## Fullscreen Behavior
 
 The bar and lyrics panel hide automatically when a fullscreen window is detected, and reappear when you return to the desktop or taskbar.
@@ -104,16 +116,26 @@ The bar and lyrics panel hide automatically when a fullscreen window is detected
 
 | Setting | Default | Description |
 | :--- | :--- | :--- |
+| Display Mode | floating | `floating` hovers above the taskbar with rounded corners. `native` docks flush inside the taskbar bounds — no gap, no rounded corners, offsets ignored. |
 | Panel Width | 300 | Width of the bar in pixels |
 | Panel Height | 48 | Height of the bar in pixels |
 | Font Size | 11 | Size of the track title/artist text |
 | Button Scale | 1.0 | Scale factor for playback buttons. Use 2.0 for 4K displays. |
-| X Offset | 12 | Horizontal offset from the left edge of the taskbar |
-| Y Offset | 0 | Vertical offset from the center of the taskbar |
-| Auto Theme | true | Automatically uses black text on light theme, white on dark |
-| Manual Text Color | 0xFFFFFF | Text color when Auto Theme is off (hex RGB) |
+| X Offset | 12 | Horizontal offset from the edge of the taskbar. Ignored in Native mode. |
+| Y Offset | 0 | Vertical offset from the center of the taskbar. Ignored in Native mode. |
+| Manual Text Color | 0xFFFFFF | Widget text color (hex RGB) |
 | Acrylic Tint Opacity | 0 | Background tint strength. Keep at 0 for pure glass. |
 | Lyrics Offset (ms) | 500 | Lyrics sync offset in milliseconds |
+| Show Album Art | true | Show or hide the album artwork thumbnail |
+| Show Playback Buttons | true | Show or hide the previous / play-pause / next buttons |
+| Show Progress Bar | true | Show or hide the track progress bar |
+| Progress Bar Position | bottom | Draw the progress bar at the top or bottom edge of the widget |
+| Artwork Shape | rounded | Rounded or square corners on the album art thumbnail |
+| Widget Side | left | Dock the widget to the left or right side of the taskbar |
+| Spotify Priority | true | Give Spotify priority over other media sources while playing |
+| Auto-hide When No Media | false | Hide the widget automatically when no media is active |
+| Auto-hide Delay (ms) | 5000 | How many milliseconds to wait before hiding after media stops |
+| Hide Lyrics When Taskbar Hides | true | Also hide the lyrics panel when the taskbar slides away (auto-hide) |
 
 > **Note:** The default values listed above are what the mod is tested and optimized for. Using significantly different values — especially Panel Width, Height, or Button Scale — may cause layout issues or clipped elements. Adjust at your own risk.
 */
@@ -121,6 +143,12 @@ The bar and lyrics panel hide automatically when a fullscreen window is detected
 
 // ==WindhawkModSettings==
 /*
+- DisplayMode: floating
+  $name: Display Mode
+  $description: Choose 'Floating' for a traditional widget hovering above the taskbar, or 'Native' to dock seamlessly flush inside the taskbar bounds.
+  $options:
+  - floating: Floating
+  - native: Native
 - PanelWidth: 300
   $name: Panel Width
 - PanelHeight: 48
@@ -131,8 +159,6 @@ The bar and lyrics panel hide automatically when a fullscreen window is detected
   $name: X Offset
 - OffsetY: 0
   $name: Y Offset
-- AutoTheme: true
-  $name: Auto Theme
 - TextColor: 0xFFFFFF
   $name: Manual Text Color (Hex)
 - BgOpacity: 0
@@ -143,6 +169,45 @@ The bar and lyrics panel hide automatically when a fullscreen window is detected
 - LyricsOffset: 500
   $name: Lyrics Offset (ms)
   $description: Lyrics sync offset in milliseconds. Typical range is 0-1500 for Spotify depending on your system. Increase if lyrics are late, decrease if early. Note that sync issues can also be caused by incorrect or poorly timed lyrics from the source, not just system latency. Setting to 0 defaults to 500ms.
+- ShowArtwork: true
+  $name: Show Album Art
+  $description: Show the album artwork on the left side of the bar.
+- ShowButtons: true
+  $name: Show Playback Buttons
+  $description: Show the previous, play/pause, and next buttons.
+- ShowProgressBar: true
+  $name: Show Progress Bar
+  $description: Show the track progress bar.
+- ProgressBarPosition: bottom
+  $name: Progress Bar Position
+  $description: Where to draw the progress bar (top or bottom of the widget).
+  $options:
+  - bottom: Bottom
+  - top: Top
+- ArtworkShape: rounded
+  $name: Artwork Shape
+  $description: Corner style for the album art thumbnail.
+  $options:
+  - rounded: Rounded
+  - square: Square
+- WidgetSide: left
+  $name: Widget Side
+  $description: Which side of the taskbar the widget appears on.
+  $options:
+  - left: Left
+  - right: Right
+- SpotifyPriority: true
+  $name: Spotify Priority
+  $description: When enabled, Spotify always takes priority over other media sources while playing. Disable this to use standard Windows session order instead.
+- AutoHideNoMedia: false
+  $name: Auto-hide When No Media
+  $description: Automatically hide the widget when no media is playing or detected.
+- AutoHideDelay: 5000
+  $name: Auto-hide Delay (ms)
+  $description: How long to wait before hiding the widget after media stops. In milliseconds. Default is 5000 (5 seconds).
+- HideLyricsWithTaskbar: true
+  $name: Hide Lyrics When Taskbar Hides
+  $description: When the taskbar is set to auto-hide, also hide the lyrics panel when the taskbar slides away.
 */
 // ==/WindhawkModSettings==
 
@@ -161,6 +226,7 @@ static const PROPERTYKEY MY_PKEY_AppUserModel_ID = {
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -205,17 +271,30 @@ typedef HWND(WINAPI* pCreateWindowInBand)(DWORD,LPCWSTR,LPCWSTR,DWORD,int,int,in
 
 struct ModSettings {
     int width = 300, height = 48, fontSize = 11, offsetX = 12, offsetY = 0;
-    bool autoTheme = true;
     DWORD manualTextColor = 0xFFFFFFFF;
     int bgOpacity = 0;
     double buttonScale = 1.0;
     int lyricsOffsetMs = 1000;
+    // Customization
+    bool showArtwork = true;
+    bool showButtons = true;
+    bool showProgressBar = true;
+    bool progressBarOnTop = false;  // false=bottom, true=top
+    bool artworkRounded = true;     // false=square
+    bool widgetOnRight = false;     // false=left, true=right
+    bool spotifyPriority = true;    // Give Spotify priority over other sources
+    bool autoHideNoMedia = false;   // Hide widget when no media is active
+    int  autoHideDelayMs = 5000;    // Milliseconds before hiding
+    bool hideLyricsWithTaskbar = true; // Hide lyrics panel when taskbar slides away
+    bool displayNative = false;    // false=floating, true=native
 } g_Settings;
 
 HWND g_hMediaWindow = NULL;
-bool g_Running = true;
+std::atomic<bool> g_Running{true};
 int g_HoverState = 0;
-bool g_IsHidden = false;
+bool g_IsHidden = false;           // hidden due to fullscreen
+int  g_AutoHideAlpha  = 255;       // auto-hide fade alpha (0-255)
+int  g_AutoHideTarget = 255;       // target alpha (0=hide, 255=show)
 
 struct MediaState {
     wstring title = L"Waiting for media...";
@@ -240,7 +319,12 @@ bool g_IsHoveringArt = false;
 bool g_UserHidden = false;
 bool g_ManualSource = false;
 wstring g_ManualSourceId = L"";
+DWORD g_NoMediaSinceTick = 0;  // tick when media stopped (for auto-hide delay)
 bool g_MiniMode = false;
+
+// Lyrics slide animation (taskbar auto-hide)
+int g_LyricsSlideX = 0;       // pixel offset (0 = normal position)
+int g_LyricsSlideTarget = 0;  // target offset
 HWND g_hContextMenu = NULL;
 struct LyricLine { int ms; wstring text; };
 vector<LyricLine> g_Lyrics;
@@ -248,10 +332,10 @@ wstring g_LyricsTitle = L"";
 wstring g_LyricsArtist = L"";
 bool g_LyricsLoading = false;
 bool g_LyricsNotFound = false;
-bool g_LyricsFetchDone = false; // ilk fetch tamamlandı mı
+bool g_LyricsFetchDone = false; // whether first fetch has completed
 // 0=auto(Mxm→LRCLIB), 1=Musixmatch only, 2=LRCLIB only
 int  g_LyricsSourcePref = 0;
-// Hangi kaynakta bulundu
+// Which sources returned results
 bool g_LyricsMxmAvail   = false;
 bool g_LyricsLrclibAvail = false;
 mutex g_LyricsMutex;
@@ -269,26 +353,28 @@ float   g_LyricFadeT = 1.0f;
 DWORD g_DotStartTick[3] = {0, 0, 0};
 DWORD g_DotDurationMs[3] = {0, 0, 0};
 float g_DotGlow[3] = {0, 0, 0};
-float g_DotAnimT[3] = {0, 0, 0}; // 0..1 animasyon ilerlemesi
+float g_DotAnimT[3] = {0, 0, 0}; // 0..1 animation progress
 
 
 DWORD g_LyricsPosUpdateTick = 0;
 int   g_LyricsLastPosMs = 0;
 bool  g_LyricsIsPlaying = false;
 int   g_LyricsLastIdx = -1;
-int   g_LyricsDisplayIdx = -1; // animasyon için — index değişince tetikle
+int   g_LyricsDisplayIdx = -1; // for animation — triggers when index changes
 
 // Lyrics fade variables
 int   g_LyricsFadeAlpha = 255;
 int   g_LyricsTargetAlpha = 255;
 DWORD g_SpotifyLastPlayingTick = 0;
-DWORD g_LyricsNotFoundTick = 0; // not found anı
+DWORD g_LyricsNotFoundTick = 0; // tick when 'not found' state was set
 
 void FetchLyricsAsync(wstring artist, wstring title);
+void UpdateLyricsWindowPos();
 DWORD GetCurrentTextColor();
 
 HWINEVENTHOOK g_hForegroundHook = NULL;
 HWINEVENTHOOK g_hMoveSizeHook = NULL;
+HWINEVENTHOOK g_hTaskbarMoveHook = NULL;
 
 void LoadSettings() {
     g_Settings.width = Wh_GetIntSetting(L"PanelWidth");
@@ -296,7 +382,6 @@ void LoadSettings() {
     g_Settings.fontSize = Wh_GetIntSetting(L"FontSize");
     g_Settings.offsetX = Wh_GetIntSetting(L"OffsetX");
     g_Settings.offsetY = Wh_GetIntSetting(L"OffsetY");
-    g_Settings.autoTheme = Wh_GetIntSetting(L"AutoTheme") != 0;
     PCWSTR textHex = Wh_GetStringSetting(L"TextColor");
     DWORD textRGB = 0xFFFFFF;
     if (textHex) { if (wcslen(textHex) > 0) textRGB = wcstoul(textHex, nullptr, 16); Wh_FreeStringSetting(textHex); }
@@ -312,9 +397,38 @@ void LoadSettings() {
     if (g_Settings.buttonScale > 4.0) g_Settings.buttonScale = 4.0;
     if (g_Settings.width < 100) g_Settings.width = 300;
     if (g_Settings.height < 24) g_Settings.height = 48;
+
+    // Customization settings
+    g_Settings.showArtwork     = Wh_GetIntSetting(L"ShowArtwork")     != 0;
+    g_Settings.showButtons     = Wh_GetIntSetting(L"ShowButtons")     != 0;
+    g_Settings.showProgressBar = Wh_GetIntSetting(L"ShowProgressBar") != 0;
+
+    PCWSTR barPos = Wh_GetStringSetting(L"ProgressBarPosition");
+    g_Settings.progressBarOnTop = barPos && wcscmp(barPos, L"top") == 0;
+    if (barPos) Wh_FreeStringSetting(barPos);
+
+    PCWSTR artShape = Wh_GetStringSetting(L"ArtworkShape");
+    g_Settings.artworkRounded = !artShape || wcscmp(artShape, L"square") != 0;
+    if (artShape) Wh_FreeStringSetting(artShape);
+
+    PCWSTR widgetSide = Wh_GetStringSetting(L"WidgetSide");
+    g_Settings.widgetOnRight = widgetSide && wcscmp(widgetSide, L"right") == 0;
+    if (widgetSide) Wh_FreeStringSetting(widgetSide);
+
+    g_Settings.spotifyPriority = Wh_GetIntSetting(L"SpotifyPriority") != 0;
+
+    g_Settings.autoHideNoMedia  = Wh_GetIntSetting(L"AutoHideNoMedia") != 0;
+    g_Settings.autoHideDelayMs  = Wh_GetIntSetting(L"AutoHideDelay");
+    if (g_Settings.autoHideDelayMs < 0)    g_Settings.autoHideDelayMs = 0;
+    if (g_Settings.autoHideDelayMs > 60000) g_Settings.autoHideDelayMs = 60000;
+    g_Settings.hideLyricsWithTaskbar = Wh_GetIntSetting(L"HideLyricsWithTaskbar") != 0;
+
+    PCWSTR dispModeStr = Wh_GetStringSetting(L"DisplayMode");
+    g_Settings.displayNative = dispModeStr && wcscmp(dispModeStr, L"native") == 0;
+    if (dispModeStr) Wh_FreeStringSetting(dispModeStr);
 }
 
-// UI state (mini mod, lyrics, kaynak, offset) registry'de saklanır
+// UI state (mini mode, lyrics, source, offset) saved in registry
 static const wchar_t* REG_KEY = L"Software\\taskbar-media-bar";
 
 void SaveUIState() {
@@ -324,7 +438,7 @@ void SaveUIState() {
     v = g_MiniMode ? 1 : 0;        RegSetValueExW(hk, L"MiniMode",     0, REG_DWORD, (BYTE*)&v, sizeof(v));
     v = g_LyricsVisible ? 1 : 0;   RegSetValueExW(hk, L"LyricsVisible",0, REG_DWORD, (BYTE*)&v, sizeof(v));
     v = (DWORD)g_LyricsSourcePref; RegSetValueExW(hk, L"LyricsSrc",    0, REG_DWORD, (BYTE*)&v, sizeof(v));
-    // Offset kaydedilmiyor — Windhawk settings'ten yüklenir
+    // Offset is not saved here — loaded from Windhawk settings
     RegDeleteValueW(hk, L"LyricsOffset2");
     RegDeleteValueW(hk, L"LyricsOffsetSet");
     RegDeleteValueW(hk, L"LyricsOffsetVal");
@@ -368,19 +482,38 @@ bool IsForegroundFullscreen() {
     GetClassName(hWnd, cls, 64);
     if (wcscmp(cls, L"Shell_TrayWnd") == 0) return false;
     if (wcscmp(cls, L"WindhawkMusicLounge_GSMTC") == 0) return false;
+    if (wcscmp(cls, L"WML_Lyrics") == 0) return false;
+    if (wcscmp(cls, L"WML_ContextMenu") == 0) return false;
+    if (wcscmp(cls, L"WML_SubMenu") == 0) return false;
+    if (wcscmp(cls, L"WML_ArtPopup") == 0) return false;
     if (wcscmp(cls, L"Progman") == 0) return false;
     if (wcscmp(cls, L"WorkerW") == 0) return false;
     if (wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0) return false;
-    // Windhawk UI pencereleri — tam ekran olarak algılanmasın
-    if (wcsncmp(cls, L"HwndWrapper", 11) == 0) return false; // WPF/Windhawk
+    if (wcsncmp(cls, L"HwndWrapper", 11) == 0) return false;
     if (wcscmp(cls, L"WindhawkUI") == 0) return false;
+
     RECT appRect; GetWindowRect(hWnd, &appRect);
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTOPRIMARY);
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfo(hMon, &mi);
-    return (appRect.left  <= mi.rcMonitor.left   + 1 &&
-            appRect.top   <= mi.rcMonitor.top    + 1 &&
-            appRect.right  >= mi.rcMonitor.right  - 1 &&
-            appRect.bottom >= mi.rcMonitor.bottom - 1);
+
+    bool coversMonitor = (appRect.left  <= mi.rcMonitor.left   + 1 &&
+                          appRect.top   <= mi.rcMonitor.top    + 1 &&
+                          appRect.right  >= mi.rcMonitor.right  - 1 &&
+                          appRect.bottom >= mi.rcMonitor.bottom - 1);
+    if (!coversMonitor) return false;
+
+    APPBARDATA abd = { sizeof(abd) };
+    bool autoHideOn = (SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE) != 0;
+    if (autoHideOn) {
+        HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+        if (hTaskbar) {
+            RECT trc; GetWindowRect(hTaskbar, &trc);
+            int smallDim = min(abs(trc.bottom - trc.top), abs(trc.right - trc.left));
+            if (smallDim > 4) return false;
+        }
+    }
+
+    return true;
 }
 
 void SubscribeGSMTCEvents() {
@@ -406,22 +539,50 @@ void UnsubscribeGSMTCEvents() {
 }
 
 
+// Applies window alpha combining fullscreen-hide and auto-hide states
+void ApplyWindowAlpha() {
+    if (!g_hMediaWindow) return;
+    BYTE alpha = g_IsHidden ? 0 : (BYTE)g_AutoHideAlpha;
+    SetLayeredWindowAttributes(g_hMediaWindow, 0, alpha, LWA_ALPHA);
+}
+
+// Returns the height to use for SetWindowPos — taskbar height in Native mode, settings height otherwise
+int GetWidgetDrawHeight() {
+    if (g_Settings.displayNative) {
+        HWND hTb = FindWindow(TEXT("Shell_TrayWnd"), NULL);
+        if (hTb) {
+            RECT rc; GetWindowRect(hTb, &rc);
+            int tbH = abs(rc.bottom - rc.top);
+            if (tbH > 20 && tbH < 200) return tbH;
+        }
+    }
+    return g_Settings.height;
+}
+
 void CheckAndApplyFullscreen() {
     if (!g_hMediaWindow) return;
     if (g_UserHidden) return;
     bool isFs = IsForegroundFullscreen();
     if (isFs && !g_IsHidden) {
-        SetLayeredWindowAttributes(g_hMediaWindow, 0, 0, LWA_ALPHA);
-        if (g_hLyricsWindow) ShowWindow(g_hLyricsWindow, SW_HIDE);
         g_IsHidden = true;
+        ApplyWindowAlpha();
+        if (g_hLyricsWindow) ShowWindow(g_hLyricsWindow, SW_HIDE);
     } else if (!isFs && g_IsHidden) {
-        SetLayeredWindowAttributes(g_hMediaWindow, 0, 255, LWA_ALPHA);
-        if (g_hLyricsWindow && g_LyricsVisible && g_LyricsFadeAlpha > 0) ShowWindow(g_hLyricsWindow, SW_SHOWNOACTIVATE);
         g_IsHidden = false;
+        ApplyWindowAlpha();
+        if (g_hLyricsWindow && g_LyricsVisible && g_LyricsFadeAlpha > 0) ShowWindow(g_hLyricsWindow, SW_SHOWNOACTIVATE);
     }
 }
 
 void CALLBACK FullscreenEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) { CheckAndApplyFullscreen(); }
+
+void CALLBACK TaskbarMoveProc(HWINEVENTHOOK, DWORD, HWND hWnd, LONG idObj, LONG, DWORD, DWORD) {
+    if (idObj != OBJID_WINDOW) return;
+    WCHAR cls[32] = {};
+    GetClassName(hWnd, cls, 32);
+    if (wcscmp(cls, L"Shell_TrayWnd") != 0) return;
+    CheckAndApplyFullscreen();
+}
 
 void UpdateMediaInfo() {
     try {
@@ -440,23 +601,50 @@ void UpdateMediaInfo() {
         GlobalSystemMediaTransportControlsSession anyPlayingSession = nullptr;
         bool spotifyPlaying = false, manualPlaying = false;
 
+        // Track the most recently started source
+        static vector<wstring> s_prevPlayingIds;
+        static wstring s_lastStartedId;
+        vector<wstring> curPlayingIds;
+
         for (auto const& s : sessions) {
             auto appId  = wstring(s.SourceAppUserModelId().c_str());
             auto status = s.GetPlaybackInfo().PlaybackStatus();
             bool playing = (status == S::Playing);
             if (appId.find(L"Spotify") != wstring::npos) { spotifySession = s; if (playing) spotifyPlaying = true; }
             if (g_ManualSource && appId == g_ManualSourceId) { manualSession = s; manualPlaying = playing; }
-            if (playing && !anyPlayingSession) anyPlayingSession = s;
+            if (playing) {
+                curPlayingIds.push_back(appId);
+                bool wasPlaying = false;
+                for (auto& p : s_prevPlayingIds) if (p == appId) { wasPlaying = true; break; }
+                if (!wasPlaying) s_lastStartedId = appId;
+                if (!anyPlayingSession) anyPlayingSession = s;
+            }
         }
+        s_prevPlayingIds = curPlayingIds;
 
         if (g_ManualSource && manualPlaying) session = manualSession;
         else if (g_ManualSource && !manualPlaying) { g_ManualSource = false; g_ManualSourceId = L""; }
 
         if (!session) {
-            if (spotifyPlaying)         session = spotifySession;
-            else if (anyPlayingSession) session = anyPlayingSession;
-            else if (spotifySession)    session = spotifySession;
-            else                        session = g_SessionManager.GetCurrentSession();
+            if (g_Settings.spotifyPriority) {
+                // Spotify priority mode
+                if (spotifyPlaying)         session = spotifySession;
+                else if (anyPlayingSession) session = anyPlayingSession;
+                else if (spotifySession)    session = spotifySession;
+                else                        session = g_SessionManager.GetCurrentSession();
+            } else {
+                // Standard mode: show the most recently started source
+                if (!s_lastStartedId.empty()) {
+                    for (auto const& s : sessions) {
+                        if (wstring(s.SourceAppUserModelId().c_str()) == s_lastStartedId) {
+                            if (s.GetPlaybackInfo().PlaybackStatus() == S::Playing)
+                                { session = s; break; }
+                        }
+                    }
+                }
+                if (!session && anyPlayingSession) session = anyPlayingSession;
+                if (!session) session = g_SessionManager.GetCurrentSession();
+            }
         }
 
         if (session) {
@@ -484,6 +672,7 @@ void UpdateMediaInfo() {
             g_MediaState.artist      = props.Artist().c_str();
             g_MediaState.isPlaying   = (info.PlaybackStatus() == S::Playing);
             g_MediaState.hasMedia    = true;
+            g_NoMediaSinceTick = 0;  // media present — reset the no-media timer
             g_MediaState.progressRatio = ratio;
             g_MediaState.hasProgress = hasProgress;
             g_MediaState.positionMs  = posMs;
@@ -525,8 +714,10 @@ void UpdateMediaInfo() {
             g_MediaState.hasMedia = false; g_MediaState.title = L"No Media"; g_MediaState.artist = L"";
             g_MediaState.hasProgress = false;
             if (g_MediaState.albumArt) { delete g_MediaState.albumArt; g_MediaState.albumArt = nullptr; }
+            // First time media goes absent — record the tick
+            if (g_NoMediaSinceTick == 0) g_NoMediaSinceTick = GetTickCount();
         }
-    } catch (...) { lock_guard<mutex> guard(g_MediaState.lock); g_MediaState.hasMedia = false; }
+    } catch (...) { lock_guard<mutex> guard(g_MediaState.lock); g_MediaState.hasMedia = false; if(g_NoMediaSinceTick==0) g_NoMediaSinceTick=GetTickCount(); }
 }
 
 void SendMediaCommand(int cmd) {
@@ -796,21 +987,24 @@ void FetchLyricsAsync(wstring artist, wstring title) {
     Wh_Log(L"[Lyrics] Fetching: %s - %s", artist.c_str(), title.c_str());
     int pref = g_LyricsSourcePref;
     { lock_guard<mutex> guard(g_LyricsMutex); g_LyricsLoading = true; g_LyricsNotFound = false;
-      g_LyricsFetchDone = false; } // availability şarkı değişiminde sıfırlanır, kaynak değişiminde değil
+      g_LyricsFetchDone = false; } // availability is reset on track change, not on source pref change
     if (g_hLyricsWindow) InvalidateRect(g_hLyricsWindow, NULL, FALSE);
     thread([artist, title, pref]() {
-        // Availability için her zaman iki kaynağı da dene
+        // Always try both sources to determine availability
         string mxm    = FetchMxmLyrics(artist, title);
         string lrclib = HttpGetLRCLIB(artist, title);
 
         bool mxmOk    = !mxm.empty();
         bool lrclibOk = !lrclib.empty();
 
-        // Hangi kaynağı kullanacağız
+        // Choose which source to use based on user preference
         string lrc;
         if      (pref == 1) lrc = mxm;
         else if (pref == 2) lrc = lrclib;
-        else                lrc = mxmOk ? mxm : lrclib; // auto: Mxm önce
+        else                lrc = mxmOk ? mxm : lrclib; // auto: Mxm first
+
+        // If the mod was unloaded while fetching, do not touch the UI
+        if (!g_Running) return;
 
         lock_guard<mutex> guard(g_LyricsMutex);
         g_LyricsLoading = false;
@@ -820,8 +1014,8 @@ void FetchLyricsAsync(wstring artist, wstring title) {
         if (lrc.empty()) { Wh_Log(L"[Lyrics] Not found in any source"); g_Lyrics.clear(); g_LyricsNotFound = true; g_LyricsNotFoundTick = GetTickCount(); }
         else { auto parsed = ParseLRC(lrc); Wh_Log(L"[Lyrics] %d lines (src=%s)", (int)parsed.size(), mxmOk&&lrc==mxm?L"MXM":L"LRCLIB"); g_Lyrics = parsed; g_LyricsNotFound = false; }
         g_LyricsTitle = title; g_LyricsArtist = artist;
-        if (g_hMediaWindow) InvalidateRect(g_hMediaWindow, NULL, FALSE);
-        if (g_hLyricsWindow) InvalidateRect(g_hLyricsWindow, NULL, FALSE);
+        if (g_Running && g_hMediaWindow) InvalidateRect(g_hMediaWindow, NULL, FALSE);
+        if (g_Running && g_hLyricsWindow) InvalidateRect(g_hLyricsWindow, NULL, FALSE);
     }).detach();
 }
 
@@ -836,7 +1030,7 @@ void GetLyricLines(int posMs, wstring& current, wstring& next) {
         else break;
     }
 
-    // posMs henüz ilk satırın zamanına gelmedi — current boş, next = ilk satır
+    // posMs has not yet reached the first line's timestamp — current is empty, next = first line
     if (newIdx < 0) {
         g_LyricsLastIdx = -1;
         next = g_Lyrics[0].text;
@@ -844,11 +1038,10 @@ void GetLyricLines(int posMs, wstring& current, wstring& next) {
     }
 
     // Hysteresis: only go backward if clearly a real seek (>5s back)
-    // GSMTC can lag up to ~5s behind interpolation — don't rollback for that
     if (newIdx < g_LyricsLastIdx && g_LyricsLastIdx < (int)g_Lyrics.size()) {
         int curLineMs = g_Lyrics[g_LyricsLastIdx].ms;
         if (posMs >= curLineMs - 5000)
-            newIdx = g_LyricsLastIdx; // GSMTC lag, stay on current line
+            newIdx = g_LyricsLastIdx;
     }
 
     if (newIdx != g_LyricsLastIdx)
@@ -881,16 +1074,14 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             int startDotX = (w - totalW) / 2;
             int dotY = h / 2 - dotR;
             for (int i = 0; i < 3; i++) {
-                // Phase difference per dot: 0, 1, 2 — mapped to 0..1 via sin
                 float diff = fmodf(fabsf(phase - (float)i), 3.0f);
                 if (diff > 1.5f) diff = 3.0f - diff;
-                // diff: 0=fully active, 1.5=fully passive — smooth sin curve
-                float t = 1.0f - (diff / 1.5f); // 0..1
-                float smooth = (sinf(t * 3.14159f - 1.5708f) + 1.0f) * 0.5f; // 0..1
+                float t = 1.0f - (diff / 1.5f);
+                float smooth = (sinf(t * 3.14159f - 1.5708f) + 1.0f) * 0.5f;
                 int cx = startDotX + i * spacing;
-                BYTE alpha     = (BYTE)(40  + smooth * 200);  // 40..240
-                BYTE glowAlpha = (BYTE)(10  + smooth * 65);   // 10..75
-                int  glowExtra = (int)(2    + smooth * 5.0f); // 2..7
+                BYTE alpha     = (BYTE)(40  + smooth * 200);
+                BYTE glowAlpha = (BYTE)(10  + smooth * 65);
+                int  glowExtra = (int)(2    + smooth * 5.0f);
                 SolidBrush glowBrush{Color(glowAlpha, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue())};
                 g.FillEllipse(&glowBrush, cx - glowExtra, dotY - glowExtra, (dotR + glowExtra) * 2, (dotR + glowExtra) * 2);
                 SolidBrush dotBrush{Color(alpha, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue())};
@@ -902,12 +1093,10 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
             g.DrawString(L"♪  No lyrics found", -1, &fi, RectF(0,0,(float)w,(float)h), &sf, &db);
         } else if (g_LyricCurLine.empty()) {
-            // Sözler var ama henüz başlamadı — üstte animasyonlu nokta, altta gelecek satır
             float curAreaH = (float)(h * 0.58f);
             float nxtAreaY = curAreaH;
             float nxtAreaH = (float)(h * 0.40f);
 
-            // İlk sözün zamanını al
             const int dotR = 3, spacing = 14;
             int dotX = 8 + dotR;
             int dotBaseY = (int)curAreaH - dotR * 2 - 6;
@@ -932,7 +1121,6 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 g.FillEllipse(&dotBrush, cx, cy, dotR * 2, dotR * 2);
             }
 
-            // Altta gelecek satır
             if (!g_LyricNxtLine.empty()) {
                 Font fontNxt(&ff, (REAL)g_Settings.fontSize, FontStyleRegular, UnitPixel);
                 SolidBrush nxtBrush{Color(110, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue())};
@@ -950,7 +1138,6 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             float nxtAreaH = (float)(h * 0.40f);
             float slideAmt = 14.0f;
 
-            // Current line bölgesi — clip ile izole et
             g.SetClip(RectF(0, 0, (float)w, curAreaH));
             sf.SetLineAlignment(StringAlignmentFar);
             if (!g_LyricPrevLine.empty() && ease < 1.0f) {
@@ -966,7 +1153,6 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                     RectF(8, slideAmt * (1.0f - ease), (float)(w-16), curAreaH), &sf, &curBrush);
             }
 
-            // Next line bölgesi — clip ile izole et
             g.SetClip(RectF(0, nxtAreaY, (float)w, nxtAreaH));
             sf.SetLineAlignment(StringAlignmentNear);
             if (!g_LyricPrevNxtLine.empty() && ease < 1.0f) {
@@ -990,6 +1176,10 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
     }
     if (msg == WM_ERASEBKGND) return 1;
     if (msg == WM_TIMER) {
+        // ★ SLIDE BLOCK REMOVED ★
+        // Slide animation is now managed exclusively by IDT_TASKBAR (MediaWndProc).
+        // The duplicate code here conflicted with g_LyricsSlideX — removed.
+
         // fade in quick, fade out slow
         if(g_LyricsFadeAlpha < g_LyricsTargetAlpha)      g_LyricsFadeAlpha = min(255, g_LyricsFadeAlpha + 25);
         else if(g_LyricsFadeAlpha > g_LyricsTargetAlpha) g_LyricsFadeAlpha = max(0,   g_LyricsFadeAlpha - 8);
@@ -1002,7 +1192,7 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         BYTE finalAlpha = (BYTE)((int)baseAlpha * g_LyricsFadeAlpha / 255);
         SetLayeredWindowAttributes(hwnd, 0, finalAlpha, LWA_ALPHA);
 
-        // Satır değişimini burada tespit et — paint'e bırakma
+        // Detect line changes here — do not leave it to the paint handler
         {
             int posMs = 0;
             DWORD now = GetTickCount();
@@ -1023,9 +1213,7 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 g_LyricNxtLine     = newNxt;
                 g_LyricFadeT       = 0.0f;
                 g_LyricsDisplayIdx = g_LyricsLastIdx;
-                // Geriye sarılıp pre-lyric bölgesine dönüldü — dot state sıfırla
                 if (newCur.empty()) {
-                    // Mevcut phase hesapla — her dot doğru konumdan başlasın
                     float fLyricMs = 1.0f;
                     { lock_guard<mutex> lg(g_LyricsMutex); if (!g_Lyrics.empty()) fLyricMs = (float)g_Lyrics[0].ms; }
                     if (fLyricMs < 1.0f) fLyricMs = 1.0f;
@@ -1042,10 +1230,8 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             } else {
                 g_LyricNxtLine = newNxt;
             }
-            // Animasyon adımı — 16ms × 0.12 ≈ ~135ms (rap için yeterince hızlı)
             g_LyricFadeT = min(1.0f, g_LyricFadeT + 0.12f);
 
-            // Pre-lyric dot animT güncelle (sadece cur boşken)
             if (g_LyricCurLine.empty()) {
                 float fLyricMs = 1.0f;
                 { lock_guard<mutex> lg(g_LyricsMutex); if (!g_Lyrics.empty()) fLyricMs = (float)g_Lyrics[0].ms; }
@@ -1054,12 +1240,9 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 ph2 = max(0.0f, min(2.999f, ph2));
                 float dotDurMs2 = fLyricMs / 3.0f;
 
-                // Pre-lyric zone içinde seek tespiti:
-                // Beklenen animT her dot için loc değeri — gerçek animT bundan çok ilerideyse seek var
                 for (int i = 0; i < 3; i++) {
                     float loc = ph2 - (float)i;
                     float expected = (loc >= 1.0f) ? 1.0f : max(0.0f, loc);
-                    // animT expected'tan >0.15 ilerideyse geriye seek yapılmış
                     if (g_DotAnimT[i] > expected + 0.15f) {
                         g_DotAnimT[i] = expected;
                         g_DotGlow[i]  = min(1.0f, expected * 3.0f);
@@ -1084,8 +1267,6 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             }
         }
 
-        // Timer hızını animasyon durumuna göre ayarla
-        // Animasyon aktifse 16ms (60fps), aksi halde 50ms yeterli
         bool needsFastTimer = (g_LyricFadeT < 1.0f) || !g_LyricCurLine.empty() || g_LyricsLoading;
         UINT newInterval = needsFastTimer ? 16 : 50;
         static UINT s_curInterval = 16;
@@ -1103,7 +1284,8 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 void UpdateLyricsWindowPos() {
     if (!g_hLyricsWindow || !g_hMediaWindow) return;
     RECT mrc; GetWindowRect(g_hMediaWindow, &mrc);
-    SetWindowPos(g_hLyricsWindow, HWND_TOPMOST, mrc.left, mrc.top - g_Settings.height*2 - 2, g_Settings.width, g_Settings.height*2, SWP_NOACTIVATE);
+    int lx = mrc.left + g_LyricsSlideX;
+    SetWindowPos(g_hLyricsWindow, HWND_TOPMOST, lx, mrc.top - g_Settings.height*2 - 2, g_Settings.width, g_Settings.height*2, SWP_NOACTIVATE);
 }
 
 void ShowLyricsWindow() {
@@ -1117,7 +1299,7 @@ void ShowLyricsWindow() {
         if (SetComp) { struct { int a; void* d; size_t s; } d; struct { int st; DWORD f; DWORD c; DWORD an; } p = {4,0,0x40000000,0}; d = {19,&p,sizeof(p)}; SetComp(g_hLyricsWindow, &d); }
         DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND; DwmSetWindowAttribute(g_hLyricsWindow, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
         BOOL bNoAnim = TRUE; DwmSetWindowAttribute(g_hLyricsWindow, DWMWA_TRANSITIONS_FORCEDISABLED, &bNoAnim, sizeof(bNoAnim));
-        SetTimer(g_hLyricsWindow, 302, 16, NULL); // hover + repaint timer (~60fps)
+        SetTimer(g_hLyricsWindow, 302, 16, NULL);
         UpdateLyricsWindowPos();
     }
     g_LyricsVisible = true;
@@ -1131,18 +1313,21 @@ bool IsSystemLightMode() {
 }
 
 DWORD GetCurrentTextColor() {
-    if (g_Settings.autoTheme) return IsSystemLightMode() ? 0xFF000000 : 0xFFFFFFFF;
-    return g_Settings.manualTextColor;
+    return IsSystemLightMode() ? 0xFF000000 : 0xFFFFFFFF;
 }
 
 void UpdateAppearance(HWND hwnd) {
-    DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND; DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
+    DWM_WINDOW_CORNER_PREFERENCE pref = g_Settings.displayNative ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
     BOOL bNoAnim = TRUE; DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &bNoAnim, sizeof(bNoAnim));
     HMODULE hUser = GetModuleHandle(L"user32.dll");
     if (hUser) {
         auto SetComp = (pSetWindowCompositionAttribute)GetProcAddress(hUser, "SetWindowCompositionAttribute");
         if (SetComp) {
-            DWORD tint = g_Settings.autoTheme ? (IsSystemLightMode() ? 0x40FFFFFF : 0x40000000) : ((g_Settings.bgOpacity << 24) | 0xFFFFFF);
+            bool light = IsSystemLightMode();
+            DWORD tint = (g_Settings.bgOpacity > 0)
+                ? ((g_Settings.bgOpacity << 24) | (light ? 0xFFFFFF : 0x000000))
+                : (light ? 0x18FFFFFF : 0x18000000);
             ACCENT_POLICY policy = { ACCENT_ENABLE_ACRYLICBLURBEHIND, 0, tint, 0 };
             WINDOWCOMPOSITIONATTRIBDATA data = { WCA_ACCENT_POLICY, &policy, sizeof(policy) };
             SetComp(hwnd, &data);
@@ -1182,7 +1367,6 @@ void ShowLyricsSubMenu(HWND parent) {
       mxmOk      = g_LyricsMxmAvail;
       lrclibOk   = g_LyricsLrclibAvail; }
 
-    // Fetch yapılmadıysa disable etme
     bool disableMxm    = fetchDone && !mxmOk;
     bool disableLrclib = fetchDone && !lrclibOk;
 
@@ -1194,16 +1378,13 @@ void ShowLyricsSubMenu(HWND parent) {
     g_SubMenuItems.push_back({207, L"Auto",     g_LyricsSourcePref==0});
     g_SubMenuItems.push_back({208, lrclibLabel, g_LyricsSourcePref==2, L"", disableLrclib});
 
-    // Boyut
     int sh = CM_VPAD * 2;
     for (auto& it : g_SubMenuItems) sh += (it.id==0)?CM_SEP_H:(it.id==-1)?CM_LBL_H:CM_ITEM_H;
 
-    // Ana menünün sağına hizala
     RECT prc; GetWindowRect(parent, &prc);
     int sx = prc.right + 2;
     int sy = prc.bottom - sh;
 
-    // Ekran dışına taşarsa sola aç
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     if (sx + CM_W > screenW) sx = prc.left - CM_W - 2;
 
@@ -1231,7 +1412,7 @@ void ExecuteMenuCmd(int cmd, const wstring& appId) {
     else if (cmd == 201) { try { auto ss=g_SessionManager.GetSessions(); for(auto const& s:ss){ wstring id; {lock_guard<mutex> gd(g_MediaState.lock);id=g_MediaState.sourceAppId;} if(wstring(s.SourceAppUserModelId().c_str())==id){s.TryChangeAutoRepeatModeAsync(R::None);break;} } } catch(...){} }
     else if (cmd == 202) { try { auto ss=g_SessionManager.GetSessions(); for(auto const& s:ss){ wstring id; {lock_guard<mutex> gd(g_MediaState.lock);id=g_MediaState.sourceAppId;} if(wstring(s.SourceAppUserModelId().c_str())==id){s.TryChangeAutoRepeatModeAsync(R::List);break;} } } catch(...){} }
     else if (cmd == 203) { try { auto ss=g_SessionManager.GetSessions(); for(auto const& s:ss){ wstring id; {lock_guard<mutex> gd(g_MediaState.lock);id=g_MediaState.sourceAppId;} if(wstring(s.SourceAppUserModelId().c_str())==id){s.TryChangeAutoRepeatModeAsync(R::Track);break;} } } catch(...){} }
-    else if (cmd == 204) { g_MiniMode=!g_MiniMode; int nw=g_MiniMode?g_Settings.height:g_Settings.width; SetWindowPos(g_hMediaWindow,HWND_TOPMOST,0,0,nw,g_Settings.height,SWP_NOMOVE|SWP_NOACTIVATE); InvalidateRect(g_hMediaWindow,NULL,TRUE); SaveUIState(); }
+    else if (cmd == 204) { g_MiniMode=!g_MiniMode; int nw=g_MiniMode?g_Settings.height:g_Settings.width; SetWindowPos(g_hMediaWindow,HWND_TOPMOST,0,0,nw,GetWidgetDrawHeight(),SWP_NOMOVE|SWP_NOACTIVATE); InvalidateRect(g_hMediaWindow,NULL,TRUE); SaveUIState(); }
     else if (cmd == 205) { if(g_LyricsVisible) HideLyricsWindow(); else ShowLyricsWindow(); SaveUIState(); }
     else if (cmd == 211) { ShowLyricsSubMenu(g_hContextMenu); }
     else if (cmd == 206) {
@@ -1316,11 +1497,9 @@ LRESULT CALLBACK CustomMenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
     case WM_MOUSELEAVE: {
         auto* s = GetS();
         if (s) {
-            // Submenu'dayken mouse ayrıldı — ana menüye geçmiş olabilir, ana menü canlı kalmalı
             if (hwnd == g_hSubMenu) {
                 s->hover=-1; s->leaveAt=GetTickCount();
             } else {
-                // Ana menüden ayrıldı — submenu açıksa leaveAt başlatma
                 s->hover=-1;
                 if (!g_hSubMenu) s->leaveAt=GetTickCount();
             }
@@ -1336,14 +1515,12 @@ LRESULT CALLBACK CustomMenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         }
         if (cmd > 0) {
             if (cmd == 211) {
-                ExecuteMenuCmd(cmd, aid); // submenu'yu aç
+                ExecuteMenuCmd(cmd, aid);
                 InvalidateRect(hwnd, NULL, FALSE);
                 return 0;
             }
             ExecuteMenuCmd(cmd, aid);
-            // Kaynak seçiminde öncelik mantığını hemen uygula
             if (cmd >= 100 && cmd < 200) UpdateMediaInfo();
-            // Checkmark güncelle — her iki listede de
             wstring actualSrc; { lock_guard<mutex> gd(g_MediaState.lock); actualSrc = g_MediaState.sourceAppId; }
             for (auto* list : {&g_MenuItems, &g_SubMenuItems}) {
                 for (auto& it2 : *list) {
@@ -1362,15 +1539,12 @@ LRESULT CALLBACK CustomMenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
     }
     case WM_TIMER: {
         auto* s = GetS(); if (!s) return 0;
-        // Fade in — 16ms * 12 steps ≈ ~190ms fast
         if (!s->fadingOut && s->alpha < 255) {
             s->alpha = min(255, s->alpha + 22);
             SetLayeredWindowAttributes(hwnd, 0, (BYTE)s->alpha, LWA_ALPHA);
             return 0;
         }
-        // Fade out triggers
         if (!s->fadingOut) {
-            // Submenu açıksa ve mouse onun üstündeyse bu pencereyi canlı tut
             bool mouseOnSubOrSelf = false;
             POINT pt2; GetCursorPos(&pt2);
             RECT rc2; GetWindowRect(hwnd, &rc2);
@@ -1380,7 +1554,7 @@ LRESULT CALLBACK CustomMenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
                 RECT sr; GetWindowRect(g_hSubMenu, &sr);
                 if (pt2.x>=sr.left&&pt2.x<sr.right&&pt2.y>=sr.top&&pt2.y<sr.bottom) {
                     mouseOnSubOrSelf = true;
-                    s->leaveAt = 0; // canlı tut
+                    s->leaveAt = 0;
                 }
             }
             bool outsideClick = (GetAsyncKeyState(VK_LBUTTON)&0x8000) != 0;
@@ -1390,7 +1564,6 @@ LRESULT CALLBACK CustomMenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             }
             if (s->leaveAt>0 && GetTickCount()-s->leaveAt>=2000 && !mouseOnSubOrSelf) s->fadingOut = true;
         }
-        // Fade out — 16ms * 18 steps ≈ ~230ms smooth
         if (s->fadingOut) {
             s->alpha = max(0, s->alpha - 18);
             SetLayeredWindowAttributes(hwnd, 0, (BYTE)s->alpha, LWA_ALPHA);
@@ -1414,7 +1587,6 @@ void ShowCustomContextMenu(HWND parent) {
     g_MenuItems.push_back({-1, L"Media Source"});
     if (g_SessionManager) {
         try {
-            // checked = gerçekte gösterilen kaynak (öncelik mantığı göz önünde)
             wstring cid; { lock_guard<mutex> gd(g_MediaState.lock); cid = g_MediaState.sourceAppId; }
             auto sessions = g_SessionManager.GetSessions(); int idx=100;
             for (auto const& s:sessions) {
@@ -1551,10 +1723,14 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
         return;
     }
 
-    int artSize=height-12,artX=6,artY=6;
-    {
+    int artSize = g_Settings.showArtwork ? height-12 : 0;
+    int artX=6, artY=6;
+    if (g_Settings.showArtwork) {
         GraphicsPath artPath;
-        AddRoundedRect(artPath, artX, artY, artSize, artSize, 6);
+        if (g_Settings.artworkRounded)
+            AddRoundedRect(artPath, artX, artY, artSize, artSize, 6);
+        else
+            artPath.AddRectangle(RectF((REAL)artX,(REAL)artY,(REAL)artSize,(REAL)artSize));
         if(state.albumArt){
             g.SetClip(&artPath);
             g.DrawImage(state.albumArt,artX,artY,artSize,artSize);
@@ -1564,45 +1740,48 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
             SolidBrush pb{Color(40,128,128,128)};
             g.FillPath(&pb,&artPath);
         }
+    } else {
+        if(state.albumArt){ delete state.albumArt; state.albumArt=nullptr; }
     }
 
     float sc=(float)g_Settings.buttonScale;
-    int startX=artX+artSize+(int)(12*sc),cy=height/2;
+    int contentStart = g_Settings.showArtwork ? artX+artSize+(int)(8*sc) : 6;
+    int cy=height/2;
     float circR=12.0f*sc, iconW=8.0f*sc, iconH=12.0f*sc, gap=28.0f*sc;
     SolidBrush iconBrush{mainColor},hoverBrush{Color(255,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())},activeBg{Color(40,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};
 
-    float pX=(float)startX;
-    if(g_HoverState==1)g.FillEllipse(&activeBg,pX-circR,(float)cy-circR,circR*2,circR*2);
-    // Prev: bar + triangle toplam genişlik = iconW + 2sc, merkezle
-    { float hw=(iconW+2*sc)/2;
-      PointF pp[3]={{pX-hw+iconW,(float)cy-iconH/2},{pX-hw+iconW,(float)cy+iconH/2},{pX-hw,(float)cy}};
-      g.FillPolygon(g_HoverState==1?&hoverBrush:&iconBrush,pp,3);
-      g.FillRectangle(g_HoverState==1?&hoverBrush:&iconBrush,pX+hw-2*sc,(float)cy-iconH/2,2.0f*sc,iconH); }
+    float nX = (float)contentStart;
+    if (g_Settings.showButtons) {
+        float pX=(float)(contentStart+(int)(gap/2));
+        if(g_HoverState==1)g.FillEllipse(&activeBg,pX-circR,(float)cy-circR,circR*2,circR*2);
+        { float hw=(iconW+2*sc)/2;
+          PointF pp[3]={{pX-hw+iconW,(float)cy-iconH/2},{pX-hw+iconW,(float)cy+iconH/2},{pX-hw,(float)cy}};
+          g.FillPolygon(g_HoverState==1?&hoverBrush:&iconBrush,pp,3);
+          g.FillRectangle(g_HoverState==1?&hoverBrush:&iconBrush,pX+hw-2*sc,(float)cy-iconH/2,2.0f*sc,iconH); }
 
-    float plX=pX+gap;
-    if(g_HoverState==2)g.FillEllipse(&activeBg,plX-circR,(float)cy-circR,circR*2,circR*2);
-    if(state.isPlaying){
-        float bw=3.0f*sc,bh=14.0f*sc,gap2=2.0f*sc;
-        // Pause: iki bar toplam = 2bw+gap2, merkezle
-        float startBar=plX-(2*bw+gap2)/2;
-        g.FillRectangle(g_HoverState==2?&hoverBrush:&iconBrush,startBar,(float)cy-bh/2,bw,bh);
-        g.FillRectangle(g_HoverState==2?&hoverBrush:&iconBrush,startBar+bw+gap2,(float)cy-bh/2,bw,bh);
-    } else {
-        float pw=10.0f*sc,ph=16.0f*sc;
-        // Play üçgeni zaten merkezli
-        PointF pp2[3]={{plX-pw/2,(float)cy-ph/2},{plX-pw/2,(float)cy+ph/2},{plX+pw/2,(float)cy}};
-        g.FillPolygon(g_HoverState==2?&hoverBrush:&iconBrush,pp2,3);
+        float plX=pX+gap;
+        if(g_HoverState==2)g.FillEllipse(&activeBg,plX-circR,(float)cy-circR,circR*2,circR*2);
+        if(state.isPlaying){
+            float bw=3.0f*sc,bh=14.0f*sc,gap2=2.0f*sc;
+            float startBar=plX-(2*bw+gap2)/2;
+            g.FillRectangle(g_HoverState==2?&hoverBrush:&iconBrush,startBar,(float)cy-bh/2,bw,bh);
+            g.FillRectangle(g_HoverState==2?&hoverBrush:&iconBrush,startBar+bw+gap2,(float)cy-bh/2,bw,bh);
+        } else {
+            float pw=10.0f*sc,ph=16.0f*sc;
+            PointF pp2[3]={{plX-pw/2,(float)cy-ph/2},{plX-pw/2,(float)cy+ph/2},{plX+pw/2,(float)cy}};
+            g.FillPolygon(g_HoverState==2?&hoverBrush:&iconBrush,pp2,3);
+        }
+
+        nX=plX+gap;
+        if(g_HoverState==3)g.FillEllipse(&activeBg,nX-circR,(float)cy-circR,circR*2,circR*2);
+        { float hw=(iconW+2*sc)/2;
+          PointF np[3]={{nX-hw,(float)cy-iconH/2},{nX-hw,(float)cy+iconH/2},{nX-hw+iconW,(float)cy}};
+          g.FillPolygon(g_HoverState==3?&hoverBrush:&iconBrush,np,3);
+          g.FillRectangle(g_HoverState==3?&hoverBrush:&iconBrush,nX+hw-2*sc,(float)cy-iconH/2,2.0f*sc,iconH); }
+        nX += gap/2;
     }
 
-    float nX=plX+gap;
-    if(g_HoverState==3)g.FillEllipse(&activeBg,nX-circR,(float)cy-circR,circR*2,circR*2);
-    // Next: triangle + bar toplam genişlik = iconW + 2sc, merkezle
-    { float hw=(iconW+2*sc)/2;
-      PointF np[3]={{nX-hw,(float)cy-iconH/2},{nX-hw,(float)cy+iconH/2},{nX-hw+iconW,(float)cy}};
-      g.FillPolygon(g_HoverState==3?&hoverBrush:&iconBrush,np,3);
-      g.FillRectangle(g_HoverState==3?&hoverBrush:&iconBrush,nX+hw-2*sc,(float)cy-iconH/2,2.0f*sc,iconH); }
-
-    int textX=(int)(nX+20*sc),textMaxW=width-textX-10;
+    int textX=(int)nX,textMaxW=width-textX-10;
     wstring fullText=state.title;if(!state.artist.empty())fullText+=L" \u2022 "+state.artist;
     FontFamily ff(FONT_NAME,nullptr);Font font(&ff,(REAL)g_Settings.fontSize,FontStyleBold,UnitPixel);SolidBrush textBrush{mainColor};
     RectF layout(0,0,2000,100),bound;g.MeasureString(fullText.c_str(),-1,&font,layout,&bound);g_TextWidth=(int)bound.Width;
@@ -1610,12 +1789,16 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
     if(g_TextWidth>textMaxW){g_IsScrolling=true;float drawX=(float)(textX-g_ScrollOffset);g.DrawString(fullText.c_str(),-1,&font,PointF(drawX,textY),&textBrush);if(drawX+g_TextWidth<width)g.DrawString(fullText.c_str(),-1,&font,PointF(drawX+g_TextWidth+40,textY),&textBrush);}
     else{g_IsScrolling=false;g_ScrollOffset=0;g.DrawString(fullText.c_str(),-1,&font,PointF((float)textX,textY),&textBrush);}
 
-    if(state.hasProgress){
-        g.ResetClip();const int barH=4,barY=height-barH;const int fillW=(int)(width*state.progressRatio);
+    if(g_Settings.showProgressBar && state.hasProgress){
+        g.ResetClip();
+        const int barH=4;
+        const int barY = g_Settings.progressBarOnTop ? 0 : height-barH;
+        const int glowDir = g_Settings.progressBarOnTop ? 1 : -1;
+        const int fillW=(int)(width*state.progressRatio);
         SolidBrush bgBar{Color(40,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};g.FillRectangle(&bgBar,0,barY,width,barH);
         if(fillW>0){
             SolidBrush g3{Color(25,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())},g2{Color(55,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())},g1{Color(90,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};
-            g.FillRectangle(&g3,0,barY-3,fillW,barH+6);g.FillRectangle(&g2,0,barY-2,fillW,barH+4);g.FillRectangle(&g1,0,barY-1,fillW,barH+2);
+            g.FillRectangle(&g3,0,barY+glowDir*(-3),fillW,barH+6);g.FillRectangle(&g2,0,barY+glowDir*(-2),fillW,barH+4);g.FillRectangle(&g1,0,barY+glowDir*(-1),fillW,barH+2);
             SolidBrush fgBar{Color(220,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};g.FillRectangle(&fgBar,0,barY,fillW,barH);
             const int dotR=5,dotX=fillW-dotR,dotY=barY+barH/2-dotR;
             SolidBrush dotGlow{Color(60,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};g.FillEllipse(&dotGlow,dotX-3,dotY-3,(dotR+3)*2,(dotR+3)*2);
@@ -1635,15 +1818,14 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_CREATE:
         { IPropertyStore* ps=nullptr;if(SUCCEEDED(SHGetPropertyStoreForWindow(hwnd,__uuidof(IPropertyStore),(void**)&ps))){PROPVARIANT pv={};pv.vt=VT_LPWSTR;pv.pwszVal=(LPWSTR)L"WindhawkMusicLounge.Widget";ps->SetValue(MY_PKEY_AppUserModel_ID,pv);ps->Commit();ps->Release();} }
         UpdateAppearance(hwnd);
-        // Kaydedilmiş state uygula
-        if (g_MiniMode) { int nw=g_Settings.height; SetWindowPos(hwnd,HWND_TOPMOST,0,0,nw,g_Settings.height,SWP_NOMOVE|SWP_NOACTIVATE); }
+        if (g_MiniMode) { int nw=g_Settings.height; SetWindowPos(hwnd,HWND_TOPMOST,0,0,nw,GetWidgetDrawHeight(),SWP_NOMOVE|SWP_NOACTIVATE); }
         SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL);
-        SetTimer(hwnd, IDT_TASKBAR, 100, NULL);
+        SetTimer(hwnd, IDT_TASKBAR, 16, NULL);
         SetTimer(hwnd, IDT_LYRICS, 50, NULL);
         g_hForegroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL, FullscreenEventProc, 0, 0, WINEVENT_OUTOFCONTEXT|WINEVENT_SKIPOWNPROCESS);
         g_hMoveSizeHook   = SetWinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, NULL, FullscreenEventProc, 0, 0, WINEVENT_OUTOFCONTEXT|WINEVENT_SKIPOWNPROCESS);
-        // Lyrics penceresi biraz sonra açılacak — IDT_TASKBAR ilk tick'te halleder
-        if (g_LyricsVisible) SetTimer(hwnd, 212, 500, NULL); // kısa gecikme ile aç
+        g_hTaskbarMoveHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, NULL, TaskbarMoveProc, 0, 0, WINEVENT_OUTOFCONTEXT|WINEVENT_SKIPOWNPROCESS);
+        if (g_LyricsVisible) SetTimer(hwnd, 212, 500, NULL);
         return 0;
     case WM_ERASEBKGND: return 1;
     case WM_CLOSE: return 0;
@@ -1651,12 +1833,13 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_DESTROY:
         if(g_hForegroundHook){UnhookWinEvent(g_hForegroundHook);g_hForegroundHook=NULL;}
         if(g_hMoveSizeHook){UnhookWinEvent(g_hMoveSizeHook);g_hMoveSizeHook=NULL;}
+        if(g_hTaskbarMoveHook){UnhookWinEvent(g_hTaskbarMoveHook);g_hTaskbarMoveHook=NULL;}
         HideLyricsWindow();UnsubscribeGSMTCEvents();g_SessionManager=nullptr;PostQuitMessage(0);return 0;
     case WM_SETTINGCHANGE: UpdateAppearance(hwnd);InvalidateRect(hwnd,NULL,TRUE);return 0;
     case WM_TIMER:
         if(wParam==IDT_POLL_MEDIA){UpdateMediaInfo();InvalidateRect(hwnd,NULL,FALSE);if(g_hLyricsWindow&&IsWindowVisible(g_hLyricsWindow))InvalidateRect(g_hLyricsWindow,NULL,FALSE);}
         else if(wParam==IDT_LYRICS){
-            if(!g_hLyricsWindow) return 0; // lyrics kapalı — boşa harcama
+            if(!g_hLyricsWindow) return 0;
             if(g_SessionManager){
                 try{
                     wstring targetId;{lock_guard<mutex> guard(g_MediaState.lock);targetId=g_MediaState.sourceAppId;}
@@ -1678,7 +1861,6 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                             int drift=posMs-expected;
                             static DWORD s_lastPollLog=0;
                             if(abs(drift)>6000){
-                                // Real user seek — reset lyric position
                                 Wh_Log(L"[LyricPoll] SEEK drift=%d",drift);
                                 g_LyricsLastIdx=-1;
                                 s_lastPollLog=now2;
@@ -1689,7 +1871,6 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                             g_LyricsLastPosMs=posMs;
                             g_LyricsPosUpdateTick=now2;
                         }
-                        // no change, let elapsed accumulate
                         g_LyricsIsPlaying=playing;
                         {lock_guard<mutex> guard(g_MediaState.lock);g_MediaState.positionMs=posMs;}
                     }
@@ -1699,6 +1880,44 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         else if(wParam==IDT_TASKBAR){
             CheckAndApplyFullscreen();
+
+            // Auto-hide fade animation
+            if (g_Settings.autoHideNoMedia && !g_UserHidden) {
+                bool hasMedia; { lock_guard<mutex> guard(g_MediaState.lock); hasMedia = g_MediaState.hasMedia; }
+                if (!hasMedia && g_NoMediaSinceTick > 0) {
+                    DWORD elapsed = GetTickCount() - g_NoMediaSinceTick;
+                    if (elapsed >= (DWORD)g_Settings.autoHideDelayMs)
+                        g_AutoHideTarget = 0;
+                } else if (hasMedia) {
+                    g_AutoHideTarget = 255;
+                }
+            } else {
+                g_AutoHideTarget = 255;
+            }
+
+            if (g_AutoHideAlpha != g_AutoHideTarget) {
+                if (g_AutoHideAlpha < g_AutoHideTarget)
+                    g_AutoHideAlpha = min(255, g_AutoHideAlpha + 5);
+                else
+                    g_AutoHideAlpha = max(0, g_AutoHideAlpha - 5);
+                ApplyWindowAlpha();
+            }
+
+            bool lyrTaskbarHidden = false;
+            { HWND hTb = FindWindow(TEXT("Shell_TrayWnd"), NULL);
+              if (hTb) {
+                  RECT trc2; GetWindowRect(hTb, &trc2);
+                  HMONITOR hMon = MonitorFromWindow(hTb, MONITOR_DEFAULTTOPRIMARY);
+                  MONITORINFO mi = { sizeof(mi) }; GetMonitorInfo(hMon, &mi);
+                  APPBARDATA abd3 = { sizeof(abd3) };
+                  bool ah = (SHAppBarMessage(ABM_GETSTATE, &abd3) & ABS_AUTOHIDE) != 0;
+                  
+                  bool win11SlidDown = (trc2.top > mi.rcMonitor.bottom - 40);
+                  
+                  lyrTaskbarHidden = ah && win11SlidDown;
+              }
+            }
+
             // Lyrics window Spotify + fade control
             if(g_LyricsVisible && g_hLyricsWindow) {
                 wstring srcId; bool isPlaying;
@@ -1707,14 +1926,12 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
                 if(isSpotify && isPlaying) g_SpotifyLastPlayingTick = GetTickCount();
 
-                
                 if(!isSpotify) {
                     g_LyricsTargetAlpha = 0;
                 } else {
                     DWORD silentMs = (g_SpotifyLastPlayingTick > 0) ? (GetTickCount() - g_SpotifyLastPlayingTick) : 0;
                     bool pausedTooLong = (silentMs >= 3700);
 
-                    // Lyrics bulunamadıysa 5 saniye sonra fade out
                     bool notFoundFade = false;
                     { lock_guard<mutex> lg(g_LyricsMutex);
                       if (g_LyricsNotFound && g_LyricsNotFoundTick > 0)
@@ -1723,21 +1940,119 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     g_LyricsTargetAlpha = (pausedTooLong || notFoundFade) ? 0 : 255;
                 }
 
-                
-                bool shouldBeVisible = !g_IsHidden && (g_LyricsFadeAlpha > 0 || g_LyricsTargetAlpha > 0);
+                bool wantLyricsHidden = g_Settings.hideLyricsWithTaskbar && lyrTaskbarHidden;
+
+                // Update slide target only when state changes
+                static bool s_lyrWasHidden = false;
+                if (wantLyricsHidden && !s_lyrWasHidden) {
+                    int slideDir = g_Settings.widgetOnRight ? 1 : -1;
+                    g_LyricsSlideTarget = slideDir * (g_Settings.width + 20);
+                    s_lyrWasHidden = true;
+                    Wh_Log(L"[LyricsSlide] Hiding → target=%d", g_LyricsSlideTarget);
+                } else if (!wantLyricsHidden && s_lyrWasHidden) {
+                    g_LyricsSlideTarget = 0;
+                    s_lyrWasHidden = false;
+                    Wh_Log(L"[LyricsSlide] Showing → target=0");
+                }
+
+                // Advance slide animation using smooth framerate-independent float LERP
+                if (g_hLyricsWindow && g_LyricsSlideX != g_LyricsSlideTarget) {
+                    static DWORD s_lastTickLx = 0;
+                    DWORD nowLx = GetTickCount();
+                    float dtLx = (s_lastTickLx == 0) ? 0.016f : (nowLx - s_lastTickLx) / 1000.0f;
+                    s_lastTickLx = nowLx;
+                    if (dtLx > 0.05f) dtLx = 0.016f;
+
+                    static float fX = 0;
+                    if (abs(fX - g_LyricsSlideX) > 20.0f) fX = (float)g_LyricsSlideX;
+                    
+                    fX += (g_LyricsSlideTarget - fX) * (1.0f - std::exp(-15.0f * dtLx));
+                    if (abs(fX - g_LyricsSlideTarget) < 1.0f) fX = (float)g_LyricsSlideTarget;
+                    
+                    g_LyricsSlideX = (int)fX;
+                    UpdateLyricsWindowPos();
+                }
+
+                bool slideFinishedHidden = wantLyricsHidden && (g_LyricsSlideX == g_LyricsSlideTarget) && g_LyricsSlideTarget != 0;
+                bool shouldBeVisible = !g_IsHidden && g_AutoHideAlpha > 0
+                    && !slideFinishedHidden
+                    && (g_LyricsSlideX != g_LyricsSlideTarget || g_LyricsFadeAlpha > 0 || g_LyricsTargetAlpha > 0);
+
                 bool curVisible = IsWindowVisible(g_hLyricsWindow) != FALSE;
                 if(shouldBeVisible && !curVisible) ShowWindow(g_hLyricsWindow, SW_SHOWNOACTIVATE);
                 if(!shouldBeVisible && curVisible) ShowWindow(g_hLyricsWindow, SW_HIDE);
             }
-            if(!g_IsHidden){
+
+            {
                 HWND hTaskbar=FindWindow(TEXT("Shell_TrayWnd"),NULL);
                 if(hTaskbar){
                     RECT rc;GetWindowRect(hTaskbar,&rc);
                     int curW=g_MiniMode?g_Settings.height:g_Settings.width;
-                    int x=rc.left+g_Settings.offsetX,y=rc.top+(rc.bottom-rc.top)/2-g_Settings.height/2+g_Settings.offsetY;
-                    RECT myRc;GetWindowRect(hwnd,&myRc);
-                    if(myRc.left!=x||myRc.top!=y)SetWindowPos(hwnd,HWND_TOPMOST,x,y,curW,g_Settings.height,SWP_NOACTIVATE);
-                    if(g_hLyricsWindow)UpdateLyricsWindowPos();
+                    APPBARDATA abd2={sizeof(abd2)};
+                    bool ahOn=(SHAppBarMessage(ABM_GETSTATE,&abd2)&ABS_AUTOHIDE)!=0;
+
+                    int targetX = 0, targetY = 0;
+                    RECT myRc; GetWindowRect(hwnd, &myRc);
+                    
+                    HMONITOR hMon = MonitorFromWindow(hTaskbar, MONITOR_DEFAULTTOPRIMARY);
+                    MONITORINFO mi = {sizeof(mi)}; GetMonitorInfo(hMon, &mi);
+
+                    if (g_IsHidden || lyrTaskbarHidden) {
+                        targetY = mi.rcMonitor.bottom + 10;
+                        targetX = g_Settings.widgetOnRight ? (mi.rcMonitor.right - g_Settings.offsetX - curW) : (mi.rcMonitor.left + g_Settings.offsetX);
+                    } else if (!g_IsHidden && g_AutoHideAlpha > 0) {
+                        int normalTop = rc.top;
+                        int tbActualH = abs(rc.bottom - rc.top);
+                        if (tbActualH < 20 || tbActualH > 200) tbActualH = 48;  // fallback for invalid rects
+                        if (normalTop > mi.rcMonitor.bottom - 30) normalTop = mi.rcMonitor.bottom - tbActualH; // Do not track the jumping hidden rect
+                        int normalBottom = normalTop + tbActualH;
+
+                        if (g_Settings.displayNative) {
+                            targetY = normalTop;
+                            targetX = g_Settings.widgetOnRight ? (mi.rcMonitor.right - curW) : mi.rcMonitor.left;
+                        } else {
+                            targetY = normalTop + (normalBottom - normalTop)/2 - g_Settings.height/2 + g_Settings.offsetY + 2;
+                            targetX = g_Settings.widgetOnRight ? (mi.rcMonitor.right - g_Settings.offsetX - curW) : (mi.rcMonitor.left + g_Settings.offsetX);
+                        }
+                    } else {
+                        targetY = myRc.top;
+                        targetX = myRc.left;
+                    }
+
+                    static DWORD s_lastTickMod = 0;
+                    DWORD nowMod = GetTickCount();
+                    float dtMod = (s_lastTickMod == 0) ? 0.016f : (nowMod - s_lastTickMod) / 1000.0f;
+                    s_lastTickMod = nowMod;
+                    if (dtMod > 0.05f) dtMod = 0.016f;
+
+                    static float fY = -1;
+                    static float fX = -1;
+                    if (fY == -1 || abs(fY - targetY) > 800) fY = (float)myRc.top;
+                    if (fX == -1 || abs(fX - targetX) > 800) fX = (float)myRc.left;
+                    
+                    fY += (targetY - fY) * (1.0f - std::exp(-15.0f * dtMod));
+                    fX += (targetX - fX) * (1.0f - std::exp(-15.0f * dtMod));
+                    
+                    if (abs(fY - targetY) < 1.0f) fY = (float)targetY;
+                    if (abs(fX - targetX) < 1.0f) fX = (float)targetX;
+
+                    int newY = (int)fY;
+                    int newX = (int)fX;
+
+                    // In Native mode, lock height to the actual taskbar height so the bar fills it perfectly
+                    int drawH = g_Settings.height;
+                    if (g_Settings.displayNative && !g_IsHidden) {
+                        int tbH = abs(rc.bottom - rc.top);
+                        if (tbH > 20 && tbH < 200) drawH = tbH;  // sanity-check: only use real taskbar heights
+                    }
+
+                    if (myRc.left != newX || myRc.top != newY || myRc.bottom - myRc.top != drawH) {
+                        SetWindowPos(hwnd, HWND_TOPMOST, newX, newY, curW, drawH, SWP_NOACTIVATE);
+                        if (g_hLyricsWindow && g_LyricsSlideX == 0) UpdateLyricsWindowPos();
+                    }
+                    if (g_hLyricsWindow && myRc.top != newY && g_LyricsSlideX != 0) {
+                        UpdateLyricsWindowPos();
+                    }
                 }
             }
         }
@@ -1755,12 +2070,13 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         return 0;
     case WM_MOUSEMOVE:{
-        int x=LOWORD(lParam),y=HIWORD(lParam);int artSize=g_Settings.height-12;
+        int x=LOWORD(lParam),y=HIWORD(lParam);
         float sc=(float)g_Settings.buttonScale;
-        int startX=6+artSize+(int)(12*sc);
-        float pX=(float)startX,plX=pX+28*sc,nX=plX+28*sc,circR=12*sc;
+        int artSize = g_Settings.showArtwork ? g_Settings.height-12 : 0;
+        int contentStart = g_Settings.showArtwork ? 6+artSize+(int)(8*sc) : 6;
+        float pX=(float)(contentStart+(int)(28*sc/2)),plX=pX+28*sc,nX=plX+28*sc,circR=12*sc;
         int newState=0;
-        if(y>10&&y<g_Settings.height-10){
+        if(g_Settings.showButtons && y>10&&y<g_Settings.height-10){
             if(x>=pX-circR&&x<=pX+circR)newState=1;
             else if(x>=plX-circR&&x<=plX+circR)newState=2;
             else if(x>=nX-circR&&x<=nX+circR)newState=3;
@@ -1801,7 +2117,7 @@ void MediaThread() {
     if(CreateWindowInBand)g_hMediaWindow=CreateWindowInBand(WS_EX_LAYERED|WS_EX_TOOLWINDOW|WS_EX_TOPMOST,wc.lpszClassName,TEXT("MusicLounge"),WS_POPUP|WS_VISIBLE,0,0,g_Settings.width,g_Settings.height,NULL,NULL,wc.hInstance,NULL,ZBID_IMMERSIVE_NOTIFICATION);
     if(!g_hMediaWindow)g_hMediaWindow=CreateWindowEx(WS_EX_LAYERED|WS_EX_TOOLWINDOW|WS_EX_TOPMOST,wc.lpszClassName,TEXT("MusicLounge"),WS_POPUP|WS_VISIBLE,0,0,g_Settings.width,g_Settings.height,NULL,NULL,wc.hInstance,NULL);
     Wh_Log(L"[Init] Window: %s", g_hMediaWindow ? L"OK" : L"FAILED");
-    SetLayeredWindowAttributes(g_hMediaWindow,0,255,LWA_ALPHA);
+    ApplyWindowAlpha();
     MSG msg;while(GetMessage(&msg,NULL,0,0)){TranslateMessage(&msg);DispatchMessage(&msg);}
     UnregisterClass(wc.lpszClassName,wc.hInstance);GdiplusShutdown(token);winrt::uninit_apartment();
 }
@@ -1812,7 +2128,7 @@ BOOL WhTool_ModInit(){
     Wh_Log(L"[Mod] Init — v1.0");
     LoadSettings();
     LoadUIState();
-    if (g_Settings.lyricsOffsetMs == 0) g_Settings.lyricsOffsetMs = 500; // default
+    if (g_Settings.lyricsOffsetMs == 0) g_Settings.lyricsOffsetMs = 500;
     g_Running=true;
     g_pMediaThread=new std::thread(MediaThread);
     return TRUE;
@@ -1828,7 +2144,14 @@ void WhTool_ModUninit(){
 
 void WhTool_ModSettingsChanged(){
     LoadSettings();
-    if(g_hMediaWindow){SendMessage(g_hMediaWindow,WM_TIMER,IDT_POLL_MEDIA,0);SendMessage(g_hMediaWindow,WM_SETTINGCHANGE,0,0);}
+    if(g_hMediaWindow){
+        UpdateAppearance(g_hMediaWindow);
+        if(!g_Settings.showButtons) g_HoverState = 0;
+        int curW = g_MiniMode ? g_Settings.height : g_Settings.width;
+        SetWindowPos(g_hMediaWindow, HWND_TOPMOST, 0, 0, curW, GetWidgetDrawHeight(), SWP_NOMOVE|SWP_NOACTIVATE);
+        InvalidateRect(g_hMediaWindow, NULL, TRUE);
+        SendMessage(g_hMediaWindow, WM_TIMER, IDT_POLL_MEDIA, 0);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
