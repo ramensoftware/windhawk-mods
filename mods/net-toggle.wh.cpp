@@ -9,6 +9,21 @@
 // @compilerOptions -lshell32 -lgdi32 -luser32 -lwtsapi32 -lwininet
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# Network Toggle
+
+Adds a native-looking network toggle to the system tray for quick enable/disable of network adapters.
+
+## Features
+
+- **Hardware-Level Kill Switch:** Instantly disable or enable all physical network interface cards (NICs) with a single click.
+- **Virtual-Environment Aware:** Automatically ignores software adapters like Hyper-V, WSL, and VM switches. It only targets actual hardware.
+- **Native OS Integration:** Extracts official Windows network status icons directly from system DLLs for a seamless, built-in look.
+
+*/
+// ==/WindhawkModReadme==
+
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
