@@ -6,7 +6,7 @@
 // @author          Disillusion
 // @github          https://github.com/TheDisillusion
 // @twitter         https://x.com/the_disillusion
-// @url             https://disillusionstudio.com/
+// @homepage        https://disillusionstudio.com/
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -lgdiplus -ladvapi32
