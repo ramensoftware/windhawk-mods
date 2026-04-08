@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-06T23:19:11.000Z</updated>
+    <updated>2026-04-08T18:02:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AudioSwap 1.0]]></title>
+        <id>https://windhawk.net/mods/audioswap#de26d434714384dc9cab67fa36a08a5399276e64</id>
+        <link href="https://windhawk.net/mods/audioswap"/>
+        <updated>2026-04-08T18:02:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="audiooutputswitcher">Audio Output Switcher</h1>
+<p>A lightning-fast audio toggle right in your taskbar! 🎧🔊</p>
+<h2 id="howtouseit">📖 How to Use It</h2>
+<ol>
+<li>⚙️ <strong>Configure Your Devices:</strong> Go to the <strong>Settings</strong> tab. </li>
+</ol>
+<ul>
+<li>Type the Name of your device names (e.g., "Headphones" and "Speakers").</li>
+<li>Select an icon for each device from the dropdown menus.</li>
+</ul>
+<ol>
+<li>🔍 <strong>Find the Icon:</strong> Look in your system tray. The icon will change based on which device is currently active!</li>
+<li>🎯 <strong>Click to Toggle:</strong> A single click swaps your audio and updates the icon instantly.</li>
+</ol>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer Toolbar Position Fix 1.0]]></title>
         <id>https://windhawk.net/mods/fix-file-explorer-toolbar-position#716e9dc4d3c64b227586c985e4aa6968b47b9cb9</id>
@@ -435,17 +459,6 @@ los controles desplazables en cualquier aplicación Win32.</p>]]></content>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Flyouts Controller 1.1.0]]></title>
-        <id>https://windhawk.net/mods/translucent-flyouts-controller#0b1c82f5251ea7dca29db56d92855ade37ca95bb</id>
-        <link href="https://windhawk.net/mods/translucent-flyouts-controller"/>
-        <updated>2026-03-31T06:47:14.000Z</updated>
-        <content type="html"><![CDATA[<p>Compatibility for the Translucent Flyouts Config app and support for block lists in Advanced Functions controls</p>]]></content>
-        <author>
-            <name>GID0317</name>
-            <uri>https://github.com/GID0317</uri>
         </author>
     </entry>
 </feed>

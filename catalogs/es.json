@@ -310,6 +310,34 @@
                 "version": "1.0.0"
             }
         },
+        "audioswap": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1775671359000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1775671359000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "BlackPaw",
+                "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lshlwapi",
+                "description": "Adds a tray icon to instantly toggle between two preferred audio outputs.",
+                "github": "https://github.com/BlackPaw21",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "AudioSwap",
+                "version": "1.0"
+            }
+        },
         "auto-custom-titlebar-colors": {
             "details": {
                 "defaultSorting": 440,
