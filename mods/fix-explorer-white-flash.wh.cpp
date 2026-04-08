@@ -2,7 +2,7 @@
 // @id              fix-explorer-white-flash
 // @name            Fix white flashes in explorer
 // @description     Fixes white flashes when creating new tabs in "This PC".
-// @version         1.2
+// @version         1.3
 // @author          Mgg Sk
 // @github          https://github.com/MGGSK
 // @include         explorer.exe
@@ -32,10 +32,22 @@ HMODULE g_hUxTheme = nullptr;
 using ShouldAppsUseDarkMode_T = bool(WINAPI*)();
 ShouldAppsUseDarkMode_T ShouldAppsUseDarkMode = nullptr;
 
+static bool IsDialogActive()
+{
+    HWND active = GetActiveWindow();
+    if (!active)
+        return false;
+
+    wchar_t cls[64] = {};
+    GetClassNameW(active, cls, _countof(cls));
+
+    return (wcscmp(cls, L"#32770") == 0);
+}
+
 decltype(&GetSysColorBrush) GetSysColorBrush_Original;
 HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex)
 {
-    if(nIndex == COLOR_WINDOW && ShouldAppsUseDarkMode())
+    if(nIndex == COLOR_WINDOW && ShouldAppsUseDarkMode() && !IsDialogActive())
         return g_windowBrush;
 
     return GetSysColorBrush_Original(nIndex);
