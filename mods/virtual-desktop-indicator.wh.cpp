@@ -4,9 +4,6 @@
 // @description     Displays a visual indicator and vignette effect when switching virtual desktops
 // @version         0.1
 // @author          Disillusion
-// @github          https://github.com/TheDisillusion
-// @twitter         https://x.com/the_disillusion
-// @homepage        https://disillusionstudio.com/
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -lgdiplus -ladvapi32
@@ -79,7 +76,7 @@ animation speeds are configurable.
 - indicatorBgOpacity: 180
   $name: Background Opacity (0-255)
   $description: Opacity of the indicator background pill.
-- indicatorAlwaysVisible: false
+- indicatorAlwaysVisible: true
   $name: Always Show Indicator
   $description: "When off, indicator only appears during a desktop switch and then fades away."
 - indicatorFadeDelay: 2000
@@ -93,19 +90,19 @@ animation speeds are configurable.
   $description: Flash a vignette overlay when switching desktops.
 - vignetteColor:
     - red: 0
-    - green: 220
-    - blue: 120
+    - green: 0
+    - blue: 0
   $name: Vignette Color
-- vignetteIntensity: 150
+- vignetteIntensity: 100
   $name: Vignette Intensity (0-255)
   $description: Maximum opacity of the vignette edges.
-- vignetteFeather: 80
+- vignetteFeather: 50
   $name: Vignette Feather (0-100)
   $description: "Controls gradient softness. 0 = hard edges (more screen covered), 100 = very soft (only corners)."
-- vignetteAnimationSpeed: 500
+- vignetteAnimationSpeed: 400
   $name: Vignette Animation Duration (ms)
   $description: Total time for vignette fade-in + fade-out.
-- allMonitors: true
+- allMonitors: false
   $name: Show on All Monitors
   $description: "When enabled, indicator and vignette appear on every monitor. Otherwise primary only."
 */
@@ -223,17 +220,17 @@ struct Settings {
     BYTE bgR = 0, bgG = 0, bgB = 0;
     BYTE bgOpacity = 180;
 
-    bool alwaysVisible = false;
+    bool alwaysVisible = true;
     int fadeDelay = 2000;
     int animationSpeed = 200;
 
     bool vignetteEnabled = true;
-    BYTE vigR = 0, vigG = 220, vigB = 120;
-    BYTE vignetteIntensity = 150;
-    int vignetteFeather = 80;
-    int vignetteAnimSpeed = 500;
+    BYTE vigR = 0, vigG = 0, vigB = 0;
+    BYTE vignetteIntensity = 100;
+    int vignetteFeather = 50;
+    int vignetteAnimSpeed = 400;
 
-    bool allMonitors = true;
+    bool allMonitors = false;
 };
 
 // ============================================================================
@@ -703,6 +700,7 @@ static void AnimationTick() {
         if (g_vignetteAlpha <= 0.0f) {
             g_vignetteAlpha = 0.0f;
             g_vignetteState = VignetteState::Idle;
+            UpdateAllVignettes();
         }
         needsUpdate = true;
     }
