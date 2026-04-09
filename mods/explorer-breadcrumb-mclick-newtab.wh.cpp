@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              explorer-breadcrumb-mclick-newtab
 // @name            Explorer Breadcrumb Middle-Click New Tab
-// @description     Opens folders in a new tab by middle-clicking breadcrumb items (Linux style).
-// @version         1.1.0
+// @description     Opens folders in a new tab by middle-clicking breadcrumb items and their dropdown menus (Linux style).
+// @version         1.2.0
 // @author          osmanonurkoc
 // @github          https://github.com/osmanonurkoc
 // @include         explorer.exe
@@ -21,7 +21,7 @@ in the breadcrumb bar to instantly open that location in a new background tab.
 
 ## ⚙️ How it Works (Technical Deep Dive)
 Windows 11 Explorer (specifically versions using XAML Islands) presents unique 
-challenges for automation. Version 1.1.0 completely abandons the Windows Clipboard 
+challenges for automation. Version 1.2.0 completely abandons the Windows Clipboard 
 to ensure absolute stability and preserve the user's copied files.
 
 1.  **Threaded Hook:** Installs a Low-Level Mouse Hook (WH_MOUSE_LL) on a 
@@ -37,12 +37,12 @@ to ensure absolute stability and preserve the user's copied files.
     * Simulates `Enter`.
 
 ## ✨ Key Features & Fixes
+* **Dropdown Menu Support (NEW in 1.2.0):** Middle-clicking items inside the breadcrumb dropdown menus (the `>` arrows) now opens them in a new tab!
 * **100% Clipboard-Free:** Will not interfere with your copied files, images, or formatting.
 * **Crash-Free:** Removes legacy clipboard polling that caused Explorer instability.
 * **Duplicate Folder Support:** Perfectly handles paths with repeating names.
 * **Zombie Tab Prevention:** Strict "Breadcrumb Whitelisting" ensures middle-clicking other areas doesn't trigger false positives.
 * **Drive Letter Support:** Detects `(C:)` style items and opens the drive root instantly.
-* **Hidden Address Bar Support:** Works even if "Display full path in title bar" is disabled.
 
 ## ✅ Compatibility
 - Works on Windows 11 (22H2, 23H2, 24H2, 25H2 and Insider builds).
@@ -310,6 +310,70 @@ void NavigateNewTab(const std::wstring& targetPath) {
     SendInput(idx, inputs, sizeof(INPUT));
 }
 
+// ----------------------------------------------------------------------------
+// LOGIC: DROPDOWN MENU SUPPORT
+// ----------------------------------------------------------------------------
+IUIAutomationElement* FindExpandedBreadcrumbElement(IUIAutomation* pAutomation, IUIAutomationElement* pMainWin) {
+    IUIAutomationCondition* pCondExpanded = NULL;
+    VARIANT varState;
+    VariantInit(&varState);
+    varState.vt = VT_I4;
+    varState.lVal = ExpandCollapseState_Expanded;
+    
+    IUIAutomationElement* pResult = NULL;
+    if (SUCCEEDED(pAutomation->CreatePropertyCondition(UIA_ExpandCollapseExpandCollapseStatePropertyId, varState, &pCondExpanded))) {
+        IUIAutomationElementArray* pFound = NULL;
+        if (SUCCEEDED(pMainWin->FindAll(TreeScope_Descendants, pCondExpanded, &pFound)) && pFound) {
+            int count = 0;
+            pFound->get_Length(&count);
+            
+            IUIAutomationTreeWalker* pWalker = NULL;
+            pAutomation->get_ControlViewWalker(&pWalker);
+
+            for (int i = 0; i < count; i++) {
+                IUIAutomationElement* pItem = NULL;
+                pFound->GetElement(i, &pItem);
+                if (pItem) {
+                    bool inBreadcrumb = false;
+                    IUIAutomationElement* pTemp = pItem;
+                    pTemp->AddRef();
+                    
+                    // Traverse up to verify it belongs to the BreadcrumbBar
+                    for (int j = 0; j < 10; j++) {
+                        BSTR clsName = NULL;
+                        pTemp->get_CurrentClassName(&clsName);
+                        if (clsName && wcsstr(clsName, L"BreadcrumbBar") != NULL) {
+                            inBreadcrumb = true;
+                            SysFreeString(clsName);
+                            break;
+                        }
+                        if (clsName) SysFreeString(clsName);
+                        
+                        IUIAutomationElement* pPar = NULL;
+                        if (pWalker) pWalker->GetParentElement(pTemp, &pPar);
+                        pTemp->Release();
+                        pTemp = pPar;
+                        if (!pTemp) break;
+                    }
+                    if (pTemp) pTemp->Release();
+
+                    if (inBreadcrumb) {
+                        pResult = pItem; // Found the expanded chevron/breadcrumb
+                        break;
+                    } else {
+                        pItem->Release();
+                    }
+                }
+            }
+            if (pWalker) pWalker->Release();
+            pFound->Release();
+        }
+        pCondExpanded->Release();
+    }
+    VariantClear(&varState);
+    return pResult;
+}
+
 // ============================================================================
 // CORE LOGIC
 // ============================================================================
@@ -328,7 +392,7 @@ void AnalyzeElement(POINT pt) {
             IUIAutomationElement* pTemp = pElement;
             pTemp->AddRef();
             
-            for (int i=0; i<6; i++) {
+            for (int i = 0; i < 6; i++) {
                 BSTR cls = NULL;
                 pTemp->get_CurrentClassName(&cls);
                 if (cls && wcsstr(cls, L"BreadcrumbBarItemControl") != NULL) {
@@ -347,21 +411,20 @@ void AnalyzeElement(POINT pt) {
             }
             if (pTemp) pTemp->Release();
             
-            if (isBreadcrumb && pBreadcrumbItem) {
-                 BSTR nameBstr = NULL;
-                 pElement->get_CurrentName(&nameBstr);
-                 std::wstring clickedName = nameBstr ? std::wstring(nameBstr) : L"";
-                 std::wstring drivePath = ParseDriveLetter(clickedName);
-                 if (nameBstr) SysFreeString(nameBstr);
+            BSTR nameBstr = NULL;
+            pElement->get_CurrentName(&nameBstr);
+            std::wstring clickedName = nameBstr ? std::wstring(nameBstr) : L"";
+            if (nameBstr) SysFreeString(nameBstr);
 
+            // PATH 1: Direct Breadcrumb Click
+            if (isBreadcrumb && pBreadcrumbItem) {
+                 std::wstring drivePath = ParseDriveLetter(clickedName);
                  if (!drivePath.empty()) {
                      NavigateNewTab(drivePath);
                  } 
                  else {
                      int levelsUp = CountVisuallyToRight(pAutomation, pBreadcrumbItem);
-                     
                      if (levelsUp >= 0) {
-                         // Uses the new clipboard-free UIA probe
                          std::wstring fullPath = ProbeAddressBarWithUIA(pAutomation);
                          if (!fullPath.empty()) {
                              std::wstring targetPath = AscendPath(fullPath, levelsUp);
@@ -372,6 +435,48 @@ void AnalyzeElement(POINT pt) {
                      }
                  }
                  pBreadcrumbItem->Release();
+            }
+            // PATH 2: Dropdown Menu Click
+            else if (!clickedName.empty()) {
+                CONTROLTYPEID tid = 0;
+                pElement->get_CurrentControlType(&tid);
+                
+                // Verify it's a menu/list item to prevent random text clicks
+                if (tid == UIA_TextControlTypeId || tid == UIA_ListItemControlTypeId || tid == UIA_MenuItemControlTypeId) {
+                    HWND hMainWnd = GetForegroundWindow();
+                    wchar_t cls[256] = {0};
+                    GetClassNameW(hMainWnd, cls, 256);
+                    
+                    // Ensure we are operating within Explorer
+                    if (wcscmp(cls, L"CabinetWClass") == 0) {
+                        IUIAutomationElement* pMainWin = NULL;
+                        if (SUCCEEDED(pAutomation->ElementFromHandle(hMainWnd, &pMainWin)) && pMainWin) {
+                            
+                            // Find which breadcrumb chevron is currently expanded
+                            IUIAutomationElement* pExpandedBreadcrumb = FindExpandedBreadcrumbElement(pAutomation, pMainWin);
+                            if (pExpandedBreadcrumb) {
+                                int levelsUp = CountVisuallyToRight(pAutomation, pExpandedBreadcrumb);
+                                if (levelsUp >= 0) {
+                                    std::wstring fullPath = ProbeAddressBarWithUIA(pAutomation);
+                                    // Note: ProbeAddressBarWithUIA triggers Alt+D, automatically closing the dropdown!
+                                    
+                                    if (!fullPath.empty()) {
+                                        std::wstring targetPath = AscendPath(fullPath, levelsUp);
+                                        if (!targetPath.empty()) {
+                                            // Combine with clicked subfolder
+                                            if (targetPath.back() != L'\\') targetPath += L"\\";
+                                            targetPath += clickedName;
+                                            
+                                            NavigateNewTab(targetPath);
+                                        }
+                                    }
+                                }
+                                pExpandedBreadcrumb->Release();
+                            }
+                            pMainWin->Release();
+                        }
+                    }
+                }
             }
             
             pWalker->Release();
