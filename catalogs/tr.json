@@ -7137,7 +7137,7 @@
                     36
                 ],
                 "ratingUsers": 43,
-                "updated": 1775054509000,
+                "updated": 1775759643000,
                 "users": 1085
             },
             "metadata": {
@@ -7153,7 +7153,7 @@
                 ],
                 "license": "MIT",
                 "name": "Remove Context Menu Items",
-                "version": "1.8.0"
+                "version": "1.9.0"
             }
         },
         "remove-fullscreen-popup-chrome": {

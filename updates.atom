@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-08T18:02:39.000Z</updated>
+    <updated>2026-04-09T18:34:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Context Menu Items 1.9.0]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#bf02dc77b1bc761cda1856e3e8f3c01efd8391a4</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-04-09T18:34:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added Spanish language support (thanks to <a href="https://github.com/frankh93">frankh93</a>)</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AudioSwap 1.0]]></title>
         <id>https://windhawk.net/mods/audioswap#de26d434714384dc9cab67fa36a08a5399276e64</id>
@@ -425,40 +438,6 @@ los controles desplazables en cualquier aplicación Win32.</p>]]></content>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Z-Order Override 0.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-z-order-override#0560f4ebd214840acc9fb6c1eaed7dd4cfbd839f</id>
-        <link href="https://windhawk.net/mods/taskbar-z-order-override"/>
-        <updated>2026-03-31T08:06:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarzorderoverride">Taskbar Z-Order Override</h1>
-<p>Control whether the Windows taskbar stays always on top, always at the bottom, or behaves like a normal window.</p>
-<h2 id="workingmodes">Working modes</h2>
-<h3 id="behaveslikeanormalwindow">Behaves like a normal window</h3>
-<p>Makes the taskbar behave like a regular window - like how it was possible pre-Vista. </p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/interactive.gif" alt="Behaves like a normal window" /></p>
-<h3 id="alwaysontop">Always on top</h3>
-<p>Keeps the taskbar above normal windows - no matter in games or browser fullscreen. </p>
-<p>This is mainly useful for people who use <strong>auto-hide</strong> and want the taskbar to stay accessible consistently.</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/always_on_top_low.gif" alt="Always on top" /></p>
-<h3 id="alwaysatbottom">Always at bottom</h3>
-<p>Keeps the taskbar at the bottom of the Z-order.</p>
-<p>If you are more of a window enjoyer than a taskbar enjoyer, this is for you. </p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/always_bottom_low.gif" alt="Always at bottom" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Supports the main taskbar and secondary taskbars on multi-monitor setups.</li>
-<li>Intended for Explorer's standard taskbar windows.</li>
-<li>Since Windows taskbar behavior differs across versions and builds, some edge cases may vary depending on your system configuration.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Normal window mode original concept from <strong>7+ Taskbar Tweaker</strong> by m417z</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>

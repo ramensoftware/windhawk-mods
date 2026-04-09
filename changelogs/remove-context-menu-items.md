@@ -1,3 +1,7 @@
+## 1.9.0 ([Apr 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bf02dc77b1bc761cda1856e3e8f3c01efd8391a4/mods/remove-context-menu-items.wh.cpp))
+
+- Added Spanish language support (thanks to [frankh93](https://github.com/frankh93))
+
 ## 1.8.0 ([Apr 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/52291cefbfc5af7de26d64e3e430a373e2352e78/mods/remove-context-menu-items.wh.cpp))
 
 - Added `Ask Microsoft 365 Copilot` to Bloatware Items with translations for `cs-CZ`, `de-DE`, `pt-BR`, and `pt-PT`
