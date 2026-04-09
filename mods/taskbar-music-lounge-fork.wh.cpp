@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id              taskbar-music-lounge-fork
 // @name            Taskbar Music Lounge - Fork (V4 Merged & Adaptive)
-// @description     A native-style music ticker with media controls, blurred background, adaptive colors, and Caps Lock notification.
-// @version         4.0.1-Fork
-// @author          Hashah2311
-// @github          https://github.com/Hashah2311
+// @description     A native-style music ticker with media controls, adaptive colors, and Caps Lock notify. (Original by Hashah2311)
+// @version         1.0.0
+// @author          Uiisland
+// @github          https://github.com/Uiisland
 // @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus -lshell32
 // ==/WindhawkMod==
