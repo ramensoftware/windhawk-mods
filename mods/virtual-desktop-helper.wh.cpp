@@ -2,7 +2,7 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, and pin windows with customizable hotkeys
-// @version         2.4.0
+// @version         2.4.1
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -313,6 +313,8 @@ static int g_maxDesktops = 9;
 
 static GUID g_previousDesktopId = {};
 static bool g_hasPreviousDesktop = false;
+static GUID g_currentDesktopId = {};
+static bool g_hasCurrentDesktop = false;
 
 // Hotkey ID ranges:
 // HK_MOVE_BASE (1-9): Move window to desktop 1-9
@@ -730,6 +732,25 @@ bool IsEligibleWindow(HWND hwnd) {
   return GetAncestor(hwnd, GA_ROOTOWNER) == hwnd;
 }
 
+bool TryGetWindowDesktopId(HWND hwnd, GUID* outDesktopId) {
+  if (!outDesktopId || !hwnd || !g_pDesktopManager) return false;
+  return SUCCEEDED(g_pDesktopManager->GetWindowDesktopId(hwnd, outDesktopId));
+}
+
+bool IsWindowPinned(HWND hwnd) {
+  if (!hwnd || !g_pViewCollection || !g_pPinnedApps) return false;
+
+  IApplicationView* view = nullptr;
+  if (FAILED(g_pViewCollection->GetViewForHwnd(hwnd, &view)) || !view) {
+    return false;
+  }
+
+  BOOL isPinned = FALSE;
+  HRESULT hr = g_pPinnedApps->IsViewPinned(view, &isPinned);
+  view->Release();
+  return SUCCEEDED(hr) && isPinned;
+}
+
 // Find the topmost window on a specific virtual desktop
 HWND FindWindowOnDesktop(const GUID& desktopId, HWND excludeWindow = nullptr) {
   struct EnumContext {
@@ -761,6 +782,72 @@ void FocusWindow(HWND hwnd) {
   if (!hwnd) return;
   if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
   SetForegroundWindow(hwnd);
+}
+
+void UpdateCurrentDesktopTracking(const GUID& desktopId, bool updatePreviousDesktop) {
+  if (g_hasCurrentDesktop && !IsEqualGUID(g_currentDesktopId, desktopId)) {
+    if (updatePreviousDesktop) {
+      g_previousDesktopId = g_currentDesktopId;
+      g_hasPreviousDesktop = true;
+    }
+  }
+
+  g_currentDesktopId = desktopId;
+  g_hasCurrentDesktop = true;
+}
+
+bool SyncCurrentDesktopTracking(bool updatePreviousDesktop) {
+  GUID currentDesktopId = {};
+  if (!GetCurrentDesktopId(&currentDesktopId)) return false;
+
+  UpdateCurrentDesktopTracking(currentDesktopId, updatePreviousDesktop);
+  return true;
+}
+
+void HandleForegroundWindowChanged(HWND hwnd) {
+  if (!InitializeVirtualDesktopAPI()) return;
+
+  bool eligibleWindow = hwnd && IsEligibleWindow(hwnd);
+  GUID currentDesktopId = {};
+  bool hasCurrentDesktopId = GetCurrentDesktopId(&currentDesktopId);
+  GUID windowDesktopId = {};
+  bool hasWindowDesktopId = eligibleWindow && TryGetWindowDesktopId(hwnd, &windowDesktopId);
+  bool windowPinned = eligibleWindow && IsWindowPinned(hwnd);
+
+  if (!hasCurrentDesktopId && !hasWindowDesktopId) return;
+
+  GUID effectiveDesktopId = {};
+  bool hasEffectiveDesktopId = false;
+  if (hasCurrentDesktopId) {
+    effectiveDesktopId = currentDesktopId;
+    hasEffectiveDesktopId = true;
+  }
+
+  if (hasWindowDesktopId && !windowPinned &&
+      (!hasCurrentDesktopId || !IsEqualGUID(currentDesktopId, windowDesktopId))) {
+    effectiveDesktopId = windowDesktopId;
+    hasEffectiveDesktopId = true;
+  }
+
+  if (!hasEffectiveDesktopId) return;
+
+  UpdateCurrentDesktopTracking(effectiveDesktopId, true);
+
+  if (eligibleWindow && hasWindowDesktopId && !windowPinned && IsEqualGUID(windowDesktopId, effectiveDesktopId)) {
+    g_desktopFocusMap[effectiveDesktopId] = hwnd;
+  }
+}
+
+void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK hWinEventHook,
+                                     DWORD event,
+                                     HWND hwnd,
+                                     LONG idObject,
+                                     LONG idChild,
+                                     DWORD dwEventThread,
+                                     DWORD dwmsEventTime) {
+  if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
+
+  HandleForegroundWindowChanged(hwnd);
 }
 
 bool GoToDesktopNum(int desktopNum, HWND preferredFocusHwnd = nullptr) {
@@ -834,6 +921,9 @@ bool GoToDesktopNum(int desktopNum, HWND preferredFocusHwnd = nullptr) {
       g_previousDesktopId = currentDesktopId;
       g_hasPreviousDesktop = true;
     }
+    if (hasTargetId) {
+      UpdateCurrentDesktopTracking(targetDesktopId, false);
+    }
     Wh_Log(L"Switched to desktop %d", desktopNum);
   }
   return success;
@@ -843,7 +933,7 @@ bool SwitchToLastDesktop() {
   if (!g_hasPreviousDesktop) return false;
   if (!InitializeVirtualDesktopAPI()) return false;
 
-  GUID currentId;
+  GUID currentId = {};
   if (!GetCurrentDesktopId(&currentId) || IsEqualGUID(currentId, g_previousDesktopId)) {
     return true;
   }
@@ -1019,6 +1109,15 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
 
   if (!InitializeVirtualDesktopAPI()) {
     Wh_Log(L"Virtual Desktop API failed to initialize on startup");
+  } else {
+    SyncCurrentDesktopTracking(false);
+  }
+
+  HWINEVENTHOOK foregroundHook =
+      SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundWinEventProc, 0, 0,
+                      WINEVENT_OUTOFCONTEXT);
+  if (!foregroundHook) {
+    Wh_Log(L"Failed to install foreground WinEvent hook");
   }
 
   if (g_enableMoveWindow) {
@@ -1118,6 +1217,10 @@ cleanup:
     UnregisterHotKey(nullptr, HK_PIN);
   }
 
+  if (foregroundHook) {
+    UnhookWinEvent(foregroundHook);
+  }
+
   CleanupVirtualDesktopAPI();
   CoUninitialize();
   return 0;
@@ -1168,6 +1271,8 @@ void StopHotkeyThread() {
 
   g_threadId = 0;
   g_stopHotkeyThread = false;
+  g_hasCurrentDesktop = false;
+  g_currentDesktopId = {};
 }
 
 //=============================================================================
