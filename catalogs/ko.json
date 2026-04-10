@@ -11642,7 +11642,7 @@
                     5
                 ],
                 "ratingUsers": 5,
-                "updated": 1775169765000,
+                "updated": 1775816647000,
                 "users": 121
             },
             "metadata": {
@@ -11650,14 +11650,14 @@
                     "x86-64"
                 ],
                 "author": "communism420",
-                "compilerOptions": "-lole32 -loleaut32 -loleacc",
+                "compilerOptions": "-lole32 -loleaut32 -loleacc -luuid",
                 "description": "Enables AutoSave functionality for local documents in Microsoft Word via direct Word saves",
                 "github": "https://github.com/communism420",
                 "include": [
                     "WINWORD.EXE"
                 ],
                 "name": "Word Local AutoSave",
-                "version": "3.2"
+                "version": "3.3"
             }
         },
         "word-mathtype-dark-fix": {
