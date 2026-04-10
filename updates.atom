@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-10T10:24:07.000Z</updated>
+    <updated>2026-04-10T10:28:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Image Resize Anti-Flip 1.0.0]]></title>
+        <id>https://windhawk.net/mods/word-image-resize-anti-flip#aa61501fa7e0eef8ee2ab6463635a0f9a45dea8d</id>
+        <link href="https://windhawk.net/mods/word-image-resize-anti-flip"/>
+        <updated>2026-04-10T10:28:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wordimageresizeantiflip">Word Image Resize Anti-Flip</h1>
+<p>This mod fixes the long-standing issue of images being flipped unexpectedly when resizing via dragging the image handles in Word. Before, once the user dragged the resize handles past the anchor point in any direction, the image would flip unexpectedly. The mod works by intercepting the drag update function and dynamically clamping the mouse position parameter to prevent crossing over the anchor point, which is the root cause of the flipping behavior. It also includes an "anti-flip" feature that detects the original drag direction and maintains it even if the user tries to cross over the anchor point, providing a more intuitive resizing experience.</p>
+<p><em>Note: this mod needs pdb symbol of <code>oart.dll</code> to work. The symbol file is expected to be ~35MB in size. Windhawk will download it automatically when you launch Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (oart.dll)", wait until it reaches 100% and the pop up disappear, otherwise please switch your network and try again) please wait patiently and <strong>relaunch Word AS ADMINISTRATOR at least once</strong> after it finishes, this is to write symbols being used to SymbolCache, which speeds up launching later on.</em></p>
+<h2 id="note">⚠️ Note:</h2>
+<ul>
+<li>It is advised to <strong>turn off automatic updates</strong> for Office applications, as PDB may need to be downloaded every time after updates.</li>
+<li>Please relaunch Word as administrator <em>at least once</em> after installing the mod and wait for symbol download to complete, this is to write symbols being used to SymbolCache, which speeds up launching later on.</li>
+</ul>
+<h1 id="before">Before</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-image-resize-anti-flip-before.gif" alt="Before" /></p>
+<h1 id="after">After</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-image-resize-anti-flip-after.gif" alt="After" /></p>
+<p>(Image courtesy of <a href="https://pixabay.com/photos/love-valentines-day-dice-game-9344644/">Ralf1403</a> from Pixabay)</p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 3.3]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#e524a209a6628714426fe8bec453199be01f3e41</id>
@@ -427,20 +450,6 @@ or the file doesn't exist, animations will be skipped gracefully.</li>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Theme Switcher 1.3.0]]></title>
-        <id>https://windhawk.net/mods/auto-theme-switcher#8af6954b1bbd43fae8577e287d460d19c9983500</id>
-        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
-        <updated>2026-03-31T13:35:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added Hotkey support</li>
-<li>Added Hotkey only scheduling mode</li>
-</ul>]]></content>
-        <author>
-            <name>tinodin</name>
-            <uri>https://github.com/tinodin</uri>
         </author>
     </entry>
 </feed>
