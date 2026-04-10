@@ -34,11 +34,9 @@ This mod fixes the long-standing issue of images being flipped unexpectedly when
 
 #include <windhawk_utils.h>
 #include <windows.h>
-#include <shlwapi.h>
 #include <atomic>
 #include <cstdint>
 #include <winternl.h>
-#include <string>
 
 std::atomic<bool> g_bMsoLoaded{false};
 
@@ -95,18 +93,20 @@ typedef void (WH_CALLCONV *GetOppositeHandle_t)(
     unsigned int elementIndex
 );
 GetOppositeHandle_t pOrig_GetOppositeHandle = nullptr;
-// Add global static variables to record the initial drag direction on first frame
-static void *g_lastDragInfo = nullptr;
-static unsigned int g_lastElementIndex = 0xFFFFFFFF;
-static Point64 g_lastAnchorPos = {-1, -1};
-static int g_expectedSignX = 0;
-static int g_expectedSignY = 0;
+
+// Use thread_local to prevent race conditions caused by state overwrites across multiple document windows/threads.
+thread_local void *g_lastDragInfo = nullptr;
+thread_local unsigned int g_lastElementIndex = 0xFFFFFFFF;
+thread_local Point64 g_lastAnchorPos = {-1, -1};
+thread_local int g_expectedSignX = 0;
+thread_local int g_expectedSignY = 0;
+thread_local void *g_lastTrackerThis = nullptr;
+thread_local bool g_isTrackerValid = false;
 
 // Offset definition: from reversing the CalculateDragElements function, there is
 // a switch condition (or a switch-like if/else chain) whose selector is trackerMode.
 /*Example on 32-bit:
     switch ( *(_DWORD *)(v19 + 640) ) <---- 640 is the offset in 32-bit Word,
-                                                                                     and 64-bit Word should use 712 = 178 * 4
   {
     case 0:
     case 0xC:
@@ -118,9 +118,9 @@ static int g_expectedSignY = 0;
       goto LABEL_13;
     case 2:
     case 3:
-    ===============================================
-    On 64-bit:
-  v15 = *((_DWORD *)this + 178);
+===============================================
+  On 64-bit:
+  v15 = *((_DWORD *)this + 178); <---- On 64-bit Word we should use 712 = 178 * 4
   if ( v15 > 6 )
   {
     v33 = v15 - 7;
@@ -141,7 +141,6 @@ static int g_expectedSignY = 0;
     if ( v37 != 1 )
       goto LABEL_28;
     */
-uint32_t trackerMode = 0;
 #ifdef _WIN64
     // Offset for 64-bit Word: 178 * sizeof(DWORD) = 712
     const int TRACKER_OFFSET = 712;
@@ -159,8 +158,26 @@ void WH_CALLCONV Hook_UpdateDragElement(
         return;
     }
 
-    if (!IsBadReadPtr((char*)pThis + TRACKER_OFFSET, 4)) {
-        trackerMode = *(uint32_t*)((char*)pThis + TRACKER_OFFSET);
+    uint32_t trackerMode = 0;
+    void *targetAddress = (char *)pThis + TRACKER_OFFSET;
+
+    // [Robust fix]: Cache memory validation results.
+    // Perform the expensive VirtualQuery system call only when encountering a new Tracker object.
+    // During the same drag operation (where rapid mouse movement may trigger hundreds or thousands of calls),
+    // the overhead is only a pointer comparison.
+    if (pThis != g_lastTrackerThis)
+    {
+        g_lastTrackerThis = pThis;
+        MEMORY_BASIC_INFORMATION mbi;
+        g_isTrackerValid = (VirtualQuery(targetAddress, &mbi, sizeof(mbi)) &&
+                            (mbi.State == MEM_COMMIT) &&
+                            !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)));
+    }
+
+    // If the memory was validated as safe previously, read directly via raw pointer for maximum speed and safety.
+    if (g_isTrackerValid)
+    {
+        trackerMode = *(uint32_t *)targetAddress;
     }
 
     if ((trackerMode == 2 || trackerMode == 3) && pOrig_GetOppositeHandle) {
@@ -190,9 +207,7 @@ void WH_CALLCONV Hook_UpdateDragElement(
         bool bSpoofed = false;
         Point64 fakeMousePos = *pNewMousePos;
 
-
         // ================= Dynamic clamping on X axis =================
-        // Change: include SAFE_MARGIN_EMU in trigger condition for earlier interception
         if (g_expectedSignX == 1 && pNewMousePos->x < (anchorPos.x + SAFE_MARGIN_EMU)) {
             fakeMousePos.x = anchorPos.x + SAFE_MARGIN_EMU;
             bSpoofed = true;
@@ -202,7 +217,6 @@ void WH_CALLCONV Hook_UpdateDragElement(
         }
 
         // ================= Dynamic clamping on Y axis =================
-        // Change: also intercept earlier
         if (g_expectedSignY == 1 && pNewMousePos->y < (anchorPos.y + SAFE_MARGIN_EMU)) {
             fakeMousePos.y = anchorPos.y + SAFE_MARGIN_EMU;
             bSpoofed = true;
@@ -223,12 +237,15 @@ void WH_CALLCONV Hook_UpdateDragElement(
 
     pOrig_UpdateDragElement(pThis THISCALL_DUMMY_CALL, pDragInfo, elementIndex, pNewMousePos, pBounds, pOutOffset);
 }
+
 // -------------------------------------------------------------------------
 // Module loading and hook injection
 // -------------------------------------------------------------------------
 void ScanAndHookOart() {
+    // Check state before getting the handle; lock g_bMsoLoaded only after hook succeeds.
+    if (g_bMsoLoaded.load()) return; 
     HMODULE hMso = GetModuleHandleW(L"oart.dll");
-    if (!hMso || g_bMsoLoaded.exchange(true)) return;
+    if (!hMso) return;
     
     //oart.dll
     WindhawkUtils::SYMBOL_HOOK oartHook[] = {
@@ -252,6 +269,7 @@ void ScanAndHookOart() {
     options.onlineCacheUrl = L"";
 
     if (WindhawkUtils::HookSymbols(hMso, oartHook, ARRAYSIZE(oartHook), &options)) {
+        g_bMsoLoaded.store(true); // Hook succeeded; lock the state in a closed loop.
         Wh_ApplyHookOperations();
         if (pOrig_GetOppositeHandle) {
             Wh_Log(L"[+] Successfully resolved GetOppositeHandle; anti-flip feature is ready.");
@@ -306,32 +324,41 @@ typedef NTSTATUS (NTAPI *LdrUnregisterDllNotification_t)(
 void* g_DllNotificationCookie = nullptr;
 LdrUnregisterDllNotification_t pLdrUnregisterDllNotification = nullptr;
 
+// Use an atomic flag to prevent concurrent creation of multiple threads.
+std::atomic<bool> g_bThreadSpawned{false};
+
 // =============================================================
 // LdrRegisterDllNotification Callback and Helper Thread
 // =============================================================
 
-// Added: standard thread function with WINAPI calling convention
 DWORD WINAPI DelayedHookThread(LPVOID lpParam) {
-    Sleep(500); // Delay 0.5s to avoid Windows Loader Lock deadlock
+    Sleep(500); // Minimal delay to escape Loader Lock.
     ScanAndHookOart();
+    g_bThreadSpawned.store(false); // Reset state after completion to allow subsequent retries.
     return 0;
 }
 
-// This is a system callback, invoked whenever a DLL is loaded into memory
 VOID NTAPI DllNotificationCallback(ULONG Reason, PLDR_DLL_NOTIFICATION_DATA Data, PVOID Context) {
     if (Reason == LDR_DLL_NOTIFICATION_REASON_LOADED) {
         if (Data->Loaded.BaseDllName && Data->Loaded.BaseDllName->Buffer) {
-            // With <string> included, this no longer causes a compile error
-            std::wstring baseName(Data->Loaded.BaseDllName->Buffer, Data->Loaded.BaseDllName->Length / sizeof(WCHAR));
-
-            // Ignore path and load mechanism; trigger as long as the name contains oart.dll
-            if (StrStrIW(baseName.c_str(), L"oart.dll")) {
+            
+            // Strict and safe exact string matching to avoid false positives (e.g., foart.dll or oart.dll.mui).
+            const WCHAR* target = L"oart.dll";
+            size_t targetLen = 8; // Hardcoded length.
+            size_t baseLen = Data->Loaded.BaseDllName->Length / sizeof(WCHAR);
+            
+            if (baseLen == targetLen && _wcsnicmp(Data->Loaded.BaseDllName->Buffer, target, targetLen) == 0) {
                 Wh_Log(L"[!] Ultimate subscription: OS-level capture detected oart.dll registered in the PEB.");
 
-                // [Critical] Create a thread and close the handle immediately to prevent leaks
-                HANDLE hThread = CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
-                if (hThread != NULL) {
-                    CloseHandle(hThread); // Only closes the handle; does not terminate the thread
+                // Use atomic compare-and-swap to prevent concurrent creation of multiple probe threads in multithreaded scenarios.
+                bool expected = false;
+                if (g_bThreadSpawned.compare_exchange_strong(expected, true)) {
+                    HANDLE hThread = CreateThread(nullptr, 0, DelayedHookThread, nullptr, 0, nullptr);
+                    if (hThread) {
+                        CloseHandle(hThread); // Preferred minimal strategy: fire-and-forget.
+                    } else {
+                        g_bThreadSpawned.store(false); // Roll back if thread creation fails.
+                    }
                 }
             }
         }
@@ -345,6 +372,9 @@ VOID NTAPI DllNotificationCallback(ULONG Reason, PLDR_DLL_NOTIFICATION_DATA Data
 BOOL Wh_ModInit() {
     Wh_Log(L"Word Drag Element Spoof Loaded. Initializing...");
 
+    // Reset state.
+    g_bMsoLoaded.store(false);
+    g_bThreadSpawned.store(false);
     // 1. If oart.dll is already in memory (e.g., when recompiling/reapplying the mod), hook immediately
     if (GetModuleHandleW(L"oart.dll")) {
         ScanAndHookOart();
