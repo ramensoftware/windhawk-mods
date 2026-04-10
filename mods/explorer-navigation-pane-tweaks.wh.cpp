@@ -4,7 +4,7 @@
 // @description     Adjusts the navigation pane tree indent and treeview visual styles in Windows Explorer
 // @version         1.0
 // @author          Languster
-// @github          https://github.com/Languster/
+// @github          https://github.com/Languster
 // @include         %SystemRoot%\explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32
