@@ -1,3 +1,7 @@
+## 1.3 ([Apr 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d222bac40a39c57549015fb3907fbddd8138f962/mods/fix-explorer-white-flash.wh.cpp))
+
+* Fixes bugs in the Properties dialog (Original implementation: [#3754](https://github.com/ramensoftware/windhawk-mods/pull/3754))
+
 ## 1.2 ([Aug 31, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d52cfd08d6535f2b921a39b202e23039744e912b/mods/fix-explorer-white-flash.wh.cpp))
 
 - The mod is now compatible with light mode (https://github.com/ramensoftware/windhawk-mods/issues/2378)

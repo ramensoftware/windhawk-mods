@@ -4144,7 +4144,7 @@
                     93
                 ],
                 "ratingUsers": 102,
-                "updated": 1756637937000,
+                "updated": 1775845157000,
                 "users": 4440
             },
             "metadata": {
@@ -4156,7 +4156,7 @@
                     "explorer.exe"
                 ],
                 "name": "Fix white flashes in explorer",
-                "version": "1.2"
+                "version": "1.3"
             }
         },
         "fix-file-explorer-toolbar-position": {
