@@ -4,7 +4,7 @@
 // @description     Adjusts the navigation pane tree indent and treeview visual styles in Windows Explorer
 // @version         1.0
 // @author          Languster
-// @github          https://github.com/Languster
+// @github          https://github.com/Languster/
 // @include         %SystemRoot%\explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32
@@ -41,34 +41,46 @@ Adjusts the indentation and visual tree style of the navigation pane in Windows 
 - **Remove TVS_LINESATROOT**: removes root lines
 - **Enable log**: writes debug messages to the Windhawk log
 
+## Compatibility
+
+- designed for Windows Explorer (`explorer.exe`)
+- tested with the original ExplorerNavHook behavior migrated to Windhawk
+- behavior may vary between different Windows builds and Explorer variants
+
 ## Notes
 
 - targets `explorer.exe`
 - based on the original ExplorerNavHook project
 - changes apply to the Explorer navigation tree
+
+## Limitations
+
+- this mod targets the navigation tree in Explorer, not every tree view in the system
+- some Explorer variants or future Windows updates may behave differently
+- visual results depend on the current Explorer implementation
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - TargetIndent: 25
-  $name: Target indent
-  $description: Tree indent value for the Explorer navigation pane
+  $name: Navigation tree indent
+  $description: Controls the horizontal indent of items in the Explorer navigation pane
 
 - RemoveHasButtons: true
-  $name: Remove TVS_HASBUTTONS
-  $description: Removes expand/collapse buttons from the tree style
+  $name: Remove expand/collapse buttons
+  $description: Removes the tree expand/collapse buttons in the navigation pane
 
 - RemoveHasLines: true
-  $name: Remove TVS_HASLINES
-  $description: Removes connector lines from the tree style
+  $name: Remove connector lines
+  $description: Removes the tree connector lines in the navigation pane
 
 - RemoveLinesAtRoot: true
-  $name: Remove TVS_LINESATROOT
-  $description: Removes root lines / the first root expand visual
+  $name: Remove root lines
+  $description: Removes root-level tree lines and the first root expand visual
 
 - EnableLog: false
-  $name: Enable log
+  $name: Enable debug logging
   $description: Writes debug messages to the Windhawk log
 */
 // ==/WindhawkModSettings==
@@ -220,7 +232,6 @@ static BOOL CALLBACK FindTreeEnumProc(HWND hwnd, LPARAM lParam)
         return FALSE;
     }
 
-    EnumChildWindows(hwnd, FindTreeEnumProc, lParam);
     return TRUE;
 }
 
@@ -471,7 +482,6 @@ static DWORD WINAPI WorkerThreadProc(LPVOID)
 {
     InitializeCriticalSection(&g_StateLock);
 
-    LoadSettings();
     Log(L"[ExplorerNavHook] worker started");
 
     InitialPatchAllExplorerWindows();
