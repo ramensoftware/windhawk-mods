@@ -2,12 +2,12 @@
 // @id              vlc-discord-rpc
 // @name            VLC Discord Rich Presence
 // @description     Shows your playing status, quality tags (4K/HDR), and interactive buttons on Discord.
-// @version         1.1.3
+// @version         1.1.4
 // @author          ciizerr
 // @github          https://github.com/ciizerr
 // @homepage        https://vlc-rpc.vercel.app/
 // @include         vlc.exe
-// @compilerOptions -lwinhttp
+// @compilerOptions -lwinhttp -lshell32 -lgdiplus -lole32
 // @architecture    x86
 // @architecture    x86-64
 // ==/WindhawkMod==
@@ -61,6 +61,8 @@ For this mod to retrieve data from VLC, the Web Interface must be enabled.
 ## Configuration
 **Show Cover Art:** Toggle to enable/disable the fetching and uploading of cover art. If disabled, the mod will use the standard VLC icon.
 
+**Show Chapter / Audio Language:** You can independently hide the current chapter number or audio language if you prefer a cleaner layout that only shows Season and Episode.
+
 **Custom Junk Filter:** Define your own list of annoying tags or site names to automatically remove from media titles.
 
 **Strict Local Filters (Transparency):** To keep the metadata cleaner accurate against new piracy tags, the mod fetches a tiny text file [`filters.txt`](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/assets/filters.txt) from the GitHub repository if the file is older than 6 hours. If you prefer **zero** external network requests, enable `Strict Local Filters Only`. This will restrict the metadata cleaner to only use the built-in hardcoded dictionary + your custom words.
@@ -87,6 +89,12 @@ For bug reports, feature suggestions, or general feedback, please reach out via:
 - ShowQualityTags: true
   $name: Show Quality Tags
   $description: "If enabled, displays resolution and format tags (4K, HDR, 1080p). Disable for a cleaner status layout."
+- ShowChapter: true
+  $name: Show Chapter
+  $description: "If enabled, displays the current chapter number."
+- ShowAudioLanguage: true
+  $name: Show Audio Language
+  $description: "If enabled, displays the audio language (e.g., EN, JP)."
 - EnableMetadataCleaner: true
   $name: Clean Media Titles
   $description: "Automatically removes common scene tags (e.g., WEB-DL, 1080p) and URLs from filenames so they look clean on Discord."
@@ -99,6 +107,9 @@ For bug reports, feature suggestions, or general feedback, please reach out via:
 - MinimalMode: false
   $name: Minimal Mode
   $description: "Hide the small play/pause/stop badges in the corner to let the cover art shine."
+- ShowNotifications: false
+  $name: Enable Toast Notifications
+  $description: "If enabled, shows a Windows toast notification when a new media file starts playing."
 - Theme: ""
   $name: Icon Theme
   $description: "Choose the visual style of the primary icons on your Discord status."
@@ -123,6 +134,9 @@ For bug reports, feature suggestions, or general feedback, please reach out via:
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shellapi.h>
+#include <objbase.h>
+#include <gdiplus.h>
 #include <winhttp.h>
 #include <string>
 #include <thread>
@@ -143,6 +157,7 @@ For bug reports, feature suggestions, or general feedback, please reach out via:
 // =============================================================
 // ⚙️ GLOBALS
 // =============================================================
+ULONG_PTR g_gdiplusToken = 0;
 std::atomic<bool> g_stopThread{false};
 std::thread g_workerThread;
 const std::wstring VLC_PASS_BASE64 = L"OjEyMzQ="; 
@@ -838,7 +853,136 @@ void FetchRemoteFilters(bool strictLocalMode) {
 }
 
 // =============================================================
-// 5. MAIN WORKER
+// 5. NOTIFICATIONS
+// =============================================================
+
+void ShowSystemToast(const std::wstring& title, const std::wstring& message, const std::string& cacheKey) {
+    std::thread([title, message, cacheKey]() {
+        HICON hDynamicIcon = NULL;
+
+        // Poll for up to 3 seconds for the HTTP URL to resolve
+        std::string resolvedUrl = "";
+        if (!cacheKey.empty()) {
+            for(int i=0; i<30; i++) {
+                {
+                    std::lock_guard<std::mutex> lock(g_cacheMutex);
+                    std::string cand = g_imageCache[cacheKey];
+                    if (!cand.empty() && cand.find("http") == 0) {
+                        resolvedUrl = cand;
+                        break;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
+
+        if (!resolvedUrl.empty()) {
+            std::wstring wideUrl = StrToWStr(resolvedUrl);
+            const WH_URL_CONTENT* content = Wh_GetUrlContent(wideUrl.c_str(), nullptr);
+            if (content && content->length > 0) {
+                IStream* pStream = nullptr;
+                HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, content->length);
+                if (hMem) {
+                    void* pData = GlobalLock(hMem);
+                    memcpy(pData, content->data, content->length);
+                    GlobalUnlock(hMem);
+                    CreateStreamOnHGlobal(hMem, TRUE, &pStream);
+                }
+                if (pStream) {
+                    Gdiplus::Bitmap* sourceBmp = Gdiplus::Bitmap::FromStream(pStream);
+                    if (sourceBmp && sourceBmp->GetLastStatus() == Gdiplus::Ok) {
+                        UINT w = sourceBmp->GetWidth();
+                        UINT h = sourceBmp->GetHeight();
+                        UINT size = (w < h) ? w : h;
+
+                        Gdiplus::Bitmap* squareBmp = new Gdiplus::Bitmap(size, size, PixelFormat32bppARGB);
+                        if (squareBmp && squareBmp->GetLastStatus() == Gdiplus::Ok) {
+                            Gdiplus::Graphics graphics(squareBmp);
+                            graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                            
+                            UINT x = (w > h) ? (w - h) / 2 : 0;
+                            UINT y = (h > w) ? (h - w) / 2 : 0;
+                            
+                            graphics.DrawImage(sourceBmp, 
+                                              Gdiplus::Rect(0, 0, size, size), 
+                                              x, y, size, size, 
+                                              Gdiplus::UnitPixel);
+                                              
+                            squareBmp->GetHICON(&hDynamicIcon);
+                        }
+                        delete squareBmp;
+                    }
+                    delete sourceBmp;
+                    pStream->Release();
+                }
+                Wh_FreeUrlContent(content);
+            }
+        }
+
+        WCHAR storagePath[MAX_PATH];
+        std::wstring defaultIconPath = L"";
+        if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+            defaultIconPath = std::wstring(storagePath) + L"\\vlc-rpc-toast.ico";
+            struct _stat result;
+            if (_wstat(defaultIconPath.c_str(), &result) != 0) {
+                const WH_URL_CONTENT* content = Wh_GetUrlContent(L"https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/refs/heads/main/assets/vlc-discord-icon.ico", nullptr);
+                if (content && content->length > 0) {
+                    std::ofstream out(defaultIconPath.c_str(), std::ios::binary | std::ios::trunc);
+                    if (out.is_open()) {
+                        out.write((const char*)content->data, content->length);
+                        out.close();
+                    }
+                }
+                if (content) Wh_FreeUrlContent(content);
+            }
+        }
+        
+        HWND hwnd = CreateWindowExW(0, L"STATIC", L"DummyTrayWnd", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
+        if (!hwnd) {
+            if (hDynamicIcon) DestroyIcon(hDynamicIcon);
+            return;
+        }
+
+        HICON hIcon = hDynamicIcon;
+        if (!hIcon && !defaultIconPath.empty()) {
+            hIcon = (HICON)LoadImageW(NULL, defaultIconPath.c_str(), IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+        }
+        if (!hIcon) hIcon = LoadIcon(NULL, IDI_INFORMATION);
+
+        NOTIFYICONDATAW nid = {0};
+        nid.cbSize = sizeof(NOTIFYICONDATAW);
+        nid.hWnd = hwnd;
+        nid.uID = 1338;
+        nid.uFlags = NIF_ICON | NIF_TIP | NIF_INFO;
+        nid.hIcon = hIcon;
+        wcscpy_s(nid.szTip, L"VLC Discord RPC");
+        wcsncpy_s(nid.szInfoTitle, title.c_str(), 63);
+        wcsncpy_s(nid.szInfo, message.c_str(), 255);
+        nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON | NIIF_RESPECT_QUIET_TIME;
+        nid.hBalloonIcon = hIcon;
+        
+        Shell_NotifyIconW(NIM_ADD, &nid);
+        
+        DWORD start = GetTickCount();
+        MSG msg;
+        while (GetTickCount() - start < 5000) {
+            if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            } else {
+                Sleep(50);
+            }
+        }
+        
+        Shell_NotifyIconW(NIM_DELETE, &nid);
+        if (hIcon && hIcon != hDynamicIcon) DestroyIcon(hIcon); 
+        if (hDynamicIcon) DestroyIcon(hDynamicIcon);
+        DestroyWindow(hwnd);
+    }).detach();
+}
+
+// =============================================================
+// 6. MAIN WORKER
 // =============================================================
 
 void Worker() {
@@ -854,10 +998,13 @@ void Worker() {
 
     bool bShowCoverArt = Wh_GetIntSetting(L"ShowCoverArt");
     bool bShowQualityTags = Wh_GetIntSetting(L"ShowQualityTags");
+    bool bShowChapter = Wh_GetIntSetting(L"ShowChapter");
+    bool bShowAudioLanguage = Wh_GetIntSetting(L"ShowAudioLanguage");
     bool bEnableMetadataCleaner = Wh_GetIntSetting(L"EnableMetadataCleaner");
     
     // 🔥 NEW MINIMAL TOGGLE SETTING 🔥
     bool bMinimalMode = Wh_GetIntSetting(L"MinimalMode");
+    bool bShowNotifications = Wh_GetIntSetting(L"ShowNotifications");
 
     PCWSTR sJunk = Wh_GetStringSetting(L"CustomJunkWords");
     std::string customJunkStr = sJunk ? WStrToStr(sJunk) : "";
@@ -1047,8 +1194,8 @@ void Worker() {
                                 top = activityName;
                                 if (bShowQualityTags && !quality.empty()) top += SEP + quality;
                                 bot = "S" + season + " E" + episode;
-                                if (chapter >= 0) bot += SEP + "Ch " + NumToStr(chapter + 1);
-                                if (!audio.empty()) bot += SEP + audio;
+                                if (bShowChapter && chapter >= 0) bot += SEP + "Ch " + NumToStr(chapter + 1);
+                                if (bShowAudioLanguage && !audio.empty()) bot += SEP + audio;
                                 query = activityName + " S" + season + " E" + episode;
                                 largeText = "Watching TV Show";
                             } 
@@ -1056,8 +1203,12 @@ void Worker() {
                                 activityName = title;
                                 top = title;
                                 if (bShowQualityTags && !quality.empty()) top += SEP + quality;
-                                if (chapter >= 0) bot = "Ch " + NumToStr(chapter + 1); else bot = "Video";
-                                if (!audio.empty()) bot += SEP + audio;
+                                bot = "";
+                                if (bShowChapter && chapter >= 0) bot = "Ch " + NumToStr(chapter + 1);
+                                if (bShowAudioLanguage && !audio.empty()) {
+                                    if (!bot.empty()) bot += SEP;
+                                    bot += audio;
+                                }
                                 query = title;
                                 largeText = "Watching Movie";
                             }
@@ -1065,7 +1216,7 @@ void Worker() {
                                 activityName = filename;
                                 top = filename;
                                 if (bShowQualityTags && !quality.empty()) top += SEP + quality;
-                                bot = "Video";
+                                bot = "";
                                 query = filename;
                                 largeText = "Watching Video";
                             }
@@ -1074,9 +1225,9 @@ void Worker() {
                         if (activityName.empty()) activityName = "VLC Media Player";
 
                         std::string displayImage = assetLarge; 
+                        std::string targetCacheKey = "";
                         
                         if (bShowCoverArt) {
-                            std::string targetCacheKey = "";
                             bool isUpload = false;
 
                             if (!artworkUrl.empty() && artworkUrl.find("file://") == 0) {
@@ -1170,7 +1321,11 @@ void Worker() {
                                 
                                 std::string js = "{\"cmd\":\"SET_ACTIVITY\",\"args\":{\"pid\":" + NumToStr(GetCurrentProcessId()) + ",\"activity\":{";
                                 js += "\"details\":\"" + SanitizeString(top) + "\",";
-                                js += "\"state\":\"" + SanitizeString(bot) + " (" + state + ")\",";
+                                if (bot.empty()) {
+                                    js += "\"state\":\"" + state + "\",";
+                                } else {
+                                    js += "\"state\":\"" + SanitizeString(bot) + SEP + state + "\",";
+                                }
                                 js += "\"type\":" + NumToStr(activityType) + ",";
                                 js += "\"name\":\"" + SanitizeString(activityName) + "\","; 
                                 
@@ -1193,6 +1348,12 @@ void Worker() {
                                 bool s2 = WriteFile(hPipe,&l,4,&w,NULL);
                                 bool s3 = WriteFile(hPipe,js.c_str(),l,&w,NULL);
                                 if (!s1 || !s2 || !s3) { CloseHandle(hPipe); hPipe = INVALID_HANDLE_VALUE; isConnected = false; }
+                                
+                                if (isConnected && bShowNotifications) {
+                                    if (isPlaying && !top.empty() && top != lastTop) {
+                                        ShowSystemToast(StrToWStr(top), StrToWStr(bot), targetCacheKey);
+                                    }
+                                }
                             }
 
                             lastTop = top; lastBot = bot; lastPlaying = isPlaying; lastActivityType = activityType; 
@@ -1224,6 +1385,8 @@ void Worker() {
 }
 
 BOOL Wh_ModInit() {
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
     g_stopThread = false;
     g_workerThread = std::thread(Worker);
     return TRUE;
@@ -1232,6 +1395,7 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     g_stopThread = true;
     if (g_workerThread.joinable()) g_workerThread.join();
+    Gdiplus::GdiplusShutdown(g_gdiplusToken);
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
