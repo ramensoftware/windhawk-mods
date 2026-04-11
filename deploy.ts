@@ -183,7 +183,7 @@ function buildGitCache(): GitCache {
     // Bulk 2: All commits with their changed files (name-status).
     // Null byte before hash makes commit boundaries unambiguous.
     console.log('  Loading commit file changes...');
-    const fileOutput = gitExec(['log', '--format=%x00%H', '--name-status']);
+    const fileOutput = gitExec(['log', '--format=%x00%H', '--name-status', '--no-renames']);
     const modCommits = new Map<string, { commit: string; changeType: string }[]>();
     const commitFiles = new Map<string, FileChange[]>();
 
