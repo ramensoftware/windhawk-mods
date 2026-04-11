@@ -6,7 +6,6 @@
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
-// @architecture    x86-64
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
@@ -24,12 +23,6 @@
 - suppressMenuActivationPaths: true
   $name: Suppress menu activation paths
   $description: Block suspicious system/menu activation paths such as SC_KEYMENU when they follow an accidental trigger pattern.
-- debugLogging: false
-  $name: Debug logging
-  $description: Enable detailed logging for troubleshooting.
-- processOnlyWord: true
-  $name: Process only Word
-  $description: Keep the scope explicitly restricted to WINWORD.EXE.
 */
 // ==/WindhawkModSettings==
 
@@ -39,10 +32,8 @@
 
 #include <windows.h>
 #include <commctrl.h>
-#include <strsafe.h>
 #include <windhawk_utils.h>
 
-#include <cstdarg>
 #include <mutex>
 
 struct Settings
@@ -51,8 +42,6 @@ struct Settings
     bool suppressLayoutSwitchArtifacts = true;
     bool preserveIntentionalAltNavigation = false;
     bool suppressMenuActivationPaths = true;
-    bool debugLogging = false;
-    bool processOnlyWord = true;
 };
 
 struct InputState
@@ -73,13 +62,11 @@ struct InputState
     DWORD lastLayoutComboTick = 0;
     DWORD lastInputLangChangeTick = 0;
     DWORD lastWinSpaceTick = 0;
-    DWORD lastFocusActivationTick = 0;
     DWORD suppressUntilTick = 0;
 };
 
 namespace
 {
-constexpr UINT_PTR kWordSubclassId = 0x574F52444B455954ull;  // "WORDKEYT"
 constexpr DWORD kLayoutArtifactWindowMs = 450;
 constexpr DWORD kKeyTipFollowupWindowMs = 250;
 constexpr DWORD kFocusRecoveryWindowMs = 250;
@@ -90,21 +77,10 @@ InputState g_state;
 std::mutex g_stateMutex;
 bool g_initializedForWord = false;
 
-using DispatchMessageW_t = LRESULT(WINAPI*)(const MSG* lpMsg);
+using DispatchMessageW_t = decltype(&DispatchMessageW);
 DispatchMessageW_t DispatchMessageW_orig = nullptr;
 
-using CreateWindowExW_t = HWND(WINAPI*)(DWORD dwExStyle,
-                                        LPCWSTR lpClassName,
-                                        LPCWSTR lpWindowName,
-                                        DWORD dwStyle,
-                                        int X,
-                                        int Y,
-                                        int nWidth,
-                                        int nHeight,
-                                        HWND hWndParent,
-                                        HMENU hMenu,
-                                        HINSTANCE hInstance,
-                                        LPVOID lpParam);
+using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_orig = nullptr;
 
 bool AnyAltDownLocked()
@@ -147,25 +123,6 @@ bool IsSuppressionActiveLocked(DWORD now)
     return IsTickActive(now, g_state.suppressUntilTick);
 }
 
-void DebugLog(PCWSTR format, ...)
-{
-    if (!g_settings.debugLogging)
-    {
-        return;
-    }
-
-    WCHAR buffer[512];
-    va_list args;
-    va_start(args, format);
-    HRESULT hr = StringCchVPrintfW(buffer, ARRAYSIZE(buffer), format, args);
-    va_end(args);
-
-    if (SUCCEEDED(hr))
-    {
-        Wh_Log(L"[disable-office-keytips-word] %s", buffer);
-    }
-}
-
 void ExtendSuppressionLocked(DWORD now, DWORD durationMs, PCWSTR reason)
 {
     DWORD candidate = now + durationMs;
@@ -175,26 +132,10 @@ void ExtendSuppressionLocked(DWORD now, DWORD durationMs, PCWSTR reason)
         g_state.suppressUntilTick = candidate;
     }
 
-    DebugLog(L"Suppression window extended for %lu ms (%s), until=%lu",
-             durationMs,
-             reason ? reason : L"no-reason",
-             g_state.suppressUntilTick);
-}
-
-bool IsRunningInsideWord()
-{
-    WCHAR modulePath[MAX_PATH];
-    DWORD length =
-        GetModuleFileNameW(nullptr, modulePath, ARRAYSIZE(modulePath));
-    if (length == 0 || length >= ARRAYSIZE(modulePath))
-    {
-        return false;
-    }
-
-    const WCHAR* fileName = wcsrchr(modulePath, L'\\');
-    fileName = fileName ? fileName + 1 : modulePath;
-
-    return _wcsicmp(fileName, L"WINWORD.EXE") == 0;
+    Wh_Log(L"Suppression window extended for %lu ms (%s), until=%lu",
+           durationMs,
+           reason ? reason : L"no-reason",
+           g_state.suppressUntilTick);
 }
 
 void LoadSettings()
@@ -207,8 +148,6 @@ void LoadSettings()
         Wh_GetIntSetting(L"preserveIntentionalAltNavigation") != 0;
     g_settings.suppressMenuActivationPaths =
         Wh_GetIntSetting(L"suppressMenuActivationPaths") != 0;
-    g_settings.debugLogging = Wh_GetIntSetting(L"debugLogging") != 0;
-    g_settings.processOnlyWord = Wh_GetIntSetting(L"processOnlyWord") != 0;
 }
 
 bool IsWordFrameWindow(HWND hWnd)
@@ -321,9 +260,9 @@ void PostCancelMode(HWND root, PCWSTR reason)
         return;
     }
 
-    DebugLog(L"Posting WM_CANCELMODE to %p (%s)",
-             root,
-             reason ? reason : L"no-reason");
+    Wh_Log(L"Posting WM_CANCELMODE to %p (%s)",
+           root,
+           reason ? reason : L"no-reason");
     PostMessageW(root, WM_CANCELMODE, 0, 0);
 }
 
@@ -359,13 +298,13 @@ bool ProcessQueuedKeyboardMessage(HWND root, const MSG* msg, DWORD now)
             {
                 g_state.altWasUsedForLayoutSwitch = true;
                 g_state.lastLayoutComboTick = now;
-                DebugLog(L"Observed Alt+Shift pattern");
+                Wh_Log(L"Observed Alt+Shift pattern");
             }
 
             if (g_settings.suppressLayoutSwitchArtifacts && preCtrlDown)
             {
                 g_state.lastLayoutComboTick = now;
-                DebugLog(L"Observed Ctrl+Shift pattern");
+                Wh_Log(L"Observed Ctrl+Shift pattern");
             }
 
             SetModifierStateLocked(vk, true);
@@ -375,7 +314,7 @@ bool ProcessQueuedKeyboardMessage(HWND root, const MSG* msg, DWORD now)
             if (g_settings.suppressLayoutSwitchArtifacts && preShiftDown)
             {
                 g_state.lastLayoutComboTick = now;
-                DebugLog(L"Observed Ctrl+Shift pattern");
+                Wh_Log(L"Observed Ctrl+Shift pattern");
             }
 
             SetModifierStateLocked(vk, true);
@@ -396,7 +335,7 @@ bool ProcessQueuedKeyboardMessage(HWND root, const MSG* msg, DWORD now)
             {
                 g_state.altWasUsedForLayoutSwitch = true;
                 g_state.lastLayoutComboTick = now;
-                DebugLog(L"Observed Alt+Shift pattern");
+                Wh_Log(L"Observed Alt+Shift pattern");
             }
 
             SetModifierStateLocked(vk, true);
@@ -408,7 +347,7 @@ bool ProcessQueuedKeyboardMessage(HWND root, const MSG* msg, DWORD now)
                 !likelyAltGrPress)
             {
                 suppress = true;
-                DebugLog(L"Suppressing WM_SYSKEYDOWN for Alt inside artifact window");
+                Wh_Log(L"Suppressing WM_SYSKEYDOWN for Alt inside artifact window");
             }
         }
         else if (vk == VK_LWIN || vk == VK_RWIN)
@@ -424,7 +363,7 @@ bool ProcessQueuedKeyboardMessage(HWND root, const MSG* msg, DWORD now)
                 ExtendSuppressionLocked(now,
                                         kLayoutArtifactWindowMs,
                                         L"Win+Space sequence");
-                DebugLog(L"Observed Win+Space pattern");
+                Wh_Log(L"Observed Win+Space pattern");
             }
 
             // Once a real non-modifier key is used while Alt is down, treat it
@@ -464,7 +403,7 @@ bool ProcessQueuedKeyboardMessage(HWND root, const MSG* msg, DWORD now)
                     ExtendSuppressionLocked(now,
                                             kKeyTipFollowupWindowMs,
                                             L"Alt release after layout switch");
-                    DebugLog(L"Suppressing Alt release after layout/lang switch artifact");
+                    Wh_Log(L"Suppressing Alt release after layout/lang switch artifact");
                 }
                 else if (g_settings.suppressSingleAlt &&
                          !g_settings.preserveIntentionalAltNavigation &&
@@ -475,7 +414,7 @@ bool ProcessQueuedKeyboardMessage(HWND root, const MSG* msg, DWORD now)
                     ExtendSuppressionLocked(now,
                                             kKeyTipFollowupWindowMs,
                                             L"isolated Alt release");
-                    DebugLog(L"Suppressing isolated Alt release");
+                    Wh_Log(L"Suppressing isolated Alt release");
                 }
             }
 
@@ -492,7 +431,7 @@ bool ProcessQueuedKeyboardMessage(HWND root, const MSG* msg, DWORD now)
     {
         suppress = true;
         cancelMode = true;
-        DebugLog(L"Suppressing WM_SYSCHAR/WM_SYSDEADCHAR inside artifact window");
+        Wh_Log(L"Suppressing WM_SYSCHAR/WM_SYSDEADCHAR inside artifact window");
     }
 
     if (cancelMode)
@@ -528,15 +467,14 @@ bool ProcessRootWindowMessage(HWND root,
                 ExtendSuppressionLocked(
                     now, kLayoutArtifactWindowMs, L"input language change");
                 cancelMode = true;
-                DebugLog(L"Observed input language change message 0x%04X",
-                         message);
+                Wh_Log(L"Observed input language change message 0x%04X",
+                       message);
             }
             break;
 
         case WM_ACTIVATEAPP:
             if (wParam)
             {
-                g_state.lastFocusActivationTick = now;
                 if (g_settings.suppressLayoutSwitchArtifacts &&
                     (HasRecentEvent(now,
                                     g_state.lastWinSpaceTick,
@@ -549,7 +487,7 @@ bool ProcessRootWindowMessage(HWND root,
                                             kFocusRecoveryWindowMs,
                                             L"focus recovery after layout switch");
                     cancelMode = true;
-                    DebugLog(L"Observed focus recovery after layout switch");
+                    Wh_Log(L"Observed focus recovery after layout switch");
                 }
             }
             break;
@@ -574,7 +512,7 @@ bool ProcessRootWindowMessage(HWND root,
                     ExtendSuppressionLocked(now,
                                             kKeyTipFollowupWindowMs,
                                             L"SC_KEYMENU");
-                    DebugLog(L"Suppressing SC_KEYMENU");
+                    Wh_Log(L"Suppressing SC_KEYMENU");
                 }
             }
             break;
@@ -593,7 +531,7 @@ bool ProcessRootWindowMessage(HWND root,
             {
                 suppress = true;
                 cancelMode = true;
-                DebugLog(L"Suppressing WM_ENTERMENULOOP");
+                Wh_Log(L"Suppressing WM_ENTERMENULOOP");
             }
             break;
         }
@@ -611,7 +549,6 @@ LRESULT CALLBACK WordFrameSubclassProc(HWND hWnd,
                                        UINT uMsg,
                                        WPARAM wParam,
                                        LPARAM lParam,
-                                       UINT_PTR uIdSubclass,
                                        DWORD_PTR dwRefData)
 {
     UNREFERENCED_PARAMETER(dwRefData);
@@ -634,10 +571,6 @@ LRESULT CALLBACK WordFrameSubclassProc(HWND hWnd,
             }
             break;
         }
-
-        case WM_NCDESTROY:
-            RemoveWindowSubclass(hWnd, WordFrameSubclassProc, uIdSubclass);
-            break;
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -650,19 +583,15 @@ void MaybeSubclassWordWindow(HWND hWnd)
         return;
     }
 
-    DWORD_PTR refData = 0;
-    if (GetWindowSubclass(hWnd, WordFrameSubclassProc, kWordSubclassId, &refData))
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd,
+                                                      WordFrameSubclassProc,
+                                                      0))
     {
-        return;
-    }
-
-    if (SetWindowSubclass(hWnd, WordFrameSubclassProc, kWordSubclassId, 0))
-    {
-        DebugLog(L"Subclassed Word frame window %p", hWnd);
+        Wh_Log(L"Subclassed Word frame window %p", hWnd);
     }
     else
     {
-        DebugLog(L"Failed to subclass Word frame window %p", hWnd);
+        Wh_Log(L"Failed to subclass Word frame window %p", hWnd);
     }
 }
 
@@ -684,7 +613,8 @@ BOOL CALLBACK RemoveWordSubclassProc(HWND hWnd, LPARAM lParam)
 
     if (IsWordFrameWindow(hWnd))
     {
-        RemoveWindowSubclass(hWnd, WordFrameSubclassProc, kWordSubclassId);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
+                                                         WordFrameSubclassProc);
     }
 
     return TRUE;
@@ -775,45 +705,17 @@ BOOL Wh_ModInit()
 {
     LoadSettings();
 
-    if (g_settings.processOnlyWord && !IsRunningInsideWord())
-    {
-        Wh_Log(L"Refusing to initialize outside WINWORD.EXE");
-        return FALSE;
-    }
-
-    HMODULE user32Module = GetModuleHandleW(L"user32.dll");
-    if (!user32Module)
-    {
-        user32Module = LoadLibraryW(L"user32.dll");
-    }
-    if (!user32Module)
-    {
-        Wh_Log(L"Failed to load user32.dll");
-        return FALSE;
-    }
-
-    void* pDispatchMessageW =
-        reinterpret_cast<void*>(GetProcAddress(user32Module, "DispatchMessageW"));
-    void* pCreateWindowExW =
-        reinterpret_cast<void*>(GetProcAddress(user32Module, "CreateWindowExW"));
-
-    if (!pDispatchMessageW || !pCreateWindowExW)
-    {
-        Wh_Log(L"Failed to resolve one or more user32 exports");
-        return FALSE;
-    }
-
-    if (!Wh_SetFunctionHook(pDispatchMessageW,
-                            reinterpret_cast<void*>(DispatchMessageW_hook),
-                            reinterpret_cast<void**>(&DispatchMessageW_orig)))
+    if (!WindhawkUtils::SetFunctionHook(DispatchMessageW,
+                                        DispatchMessageW_hook,
+                                        &DispatchMessageW_orig))
     {
         Wh_Log(L"Failed to hook DispatchMessageW");
         return FALSE;
     }
 
-    if (!Wh_SetFunctionHook(pCreateWindowExW,
-                            reinterpret_cast<void*>(CreateWindowExW_hook),
-                            reinterpret_cast<void**>(&CreateWindowExW_orig)))
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW,
+                                        CreateWindowExW_hook,
+                                        &CreateWindowExW_orig))
     {
         Wh_Log(L"Failed to hook CreateWindowExW");
         return FALSE;
@@ -823,7 +725,7 @@ BOOL Wh_ModInit()
     ResetState();
     SubclassExistingWordWindows();
 
-    DebugLog(L"Mod initialized");
+    Wh_Log(L"Mod initialized");
     return TRUE;
 }
 
@@ -848,7 +750,7 @@ void Wh_ModSettingsChanged()
 
     ResetState();
     SubclassExistingWordWindows();
-    DebugLog(L"Settings reloaded");
+    Wh_Log(L"Settings reloaded");
 }
 
 void Wh_ModBeforeUninit()
