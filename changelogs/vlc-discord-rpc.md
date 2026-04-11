@@ -1,3 +1,8 @@
+## 1.1.4 ([Apr 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7620480f8843bd0499f3141edd9bb7eae8f8484d/mods/vlc-discord-rpc.wh.cpp))
+
+* **Cleaner TV/Movie Status:** Added toggles to show or hide the *Chapter* and *Audio Language*. You can now set your status to simply show `S01 E01` for a perfectly minimal look!
+* **Native Desktop Notifications:** You can now optionally enable sleek Windows Toasts that pop up when a new track plays, complete with automatically cropped, high-res web thumbnails of your movie or album posters!
+
 ## 1.1.3 ([Mar 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9f9bae05d7e71f4194161e0eafabfe182458ff1c/mods/vlc-discord-rpc.wh.cpp))
 
 **Fixed slow Discord status updates:**
