@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-11T18:51:33.000Z</updated>
+    <updated>2026-04-11T18:57:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Window Corner Radius 1.0]]></title>
+        <id>https://windhawk.net/mods/custom-corner-radius#cae0950522f4f4165a223da43bb1ad3936f6b1f2</id>
+        <link href="https://windhawk.net/mods/custom-corner-radius"/>
+        <updated>2026-04-11T18:57:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="customwindowcornerradius">Custom Window Corner Radius</h1>
+<p>Customizes Windows 11 app window corner radius. Make corners more rounded than
+the default 8px, or reduce the radius for less rounded or completely sharp
+corners.</p>
+<p>The mod was <a href="https://github.com/ramensoftware/windhawk-mods/pull/3587">originally
+submitted</a> by
+<a href="https://github.com/kanak-buet19">Kanak415</a>.</p>
+<p><img src="https://i.imgur.com/mMGkBwc.png" alt="Screenshot" /></p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>dwm.exe</code> is in the list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<h2 id="additionalnotes">Additional notes</h2>
+<ul>
+<li>Popups and flyouts (taskbar, wifi, volume, context menus) use a smaller radius
+(4px) and are unaffected by this mod. Some of them can be customized using
+other mods, such as Windows 11 Taskbar Styler.</li>
+<li>Disabling the mod instantly restores default behavior — no system files are
+modified.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.4]]></title>
         <id>https://windhawk.net/mods/vlc-discord-rpc#7620480f8843bd0499f3141edd9bb7eae8f8484d</id>
@@ -464,32 +495,6 @@ or the file doesn't exist, animations will be skipped gracefully.</li>
         <author>
             <name>arceus413</name>
             <uri>https://github.com/arceuss</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 3.2]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#986dba20bfaf6c9b4fe1acf7c4c82b1aad598403</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-04-02T22:42:45.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="improved">Improved</h3>
-<ul>
-<li>Reworked active document inspection into a shared snapshot path, removing duplicated COM/Automation logic.</li>
-<li>Added safer RAII-style wrappers for <code>IDispatch</code>, <code>BSTR</code>, and <code>VARIANT</code> to reduce cleanup mistakes and make the code easier to maintain.</li>
-<li>Switched document-state monitoring to adaptive polling: faster while edits/saves are active, slower while idle.</li>
-<li>Added retry backoff for temporary COM/Automation failures instead of retrying at a fixed interval.</li>
-<li>Throttled repeated failure logs to reduce noise in Windhawk logs.</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li>Fixed manual save handling so <code>Ctrl+S</code> no longer marks the document as clean before Word actually finishes saving.</li>
-<li>Fixed internal dirty-state tracking so it is tied to the current document path, avoiding stale state when switching between documents.</li>
-<li>Improved owner UI thread handling so the mod can re-adopt the active Word UI thread more reliably.</li>
-<li>Fixed timer behavior so save/state timers are treated as proper one-shot timers and cleaned up correctly after firing.</li>
-<li>Improved runtime state reset on init, unload, and settings reload to avoid leftover internal state.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

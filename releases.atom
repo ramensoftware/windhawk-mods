@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-11T14:39:24.000Z</updated>
+    <updated>2026-04-11T18:57:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Window Corner Radius 1.0]]></title>
+        <id>https://windhawk.net/mods/custom-corner-radius#cae0950522f4f4165a223da43bb1ad3936f6b1f2</id>
+        <link href="https://windhawk.net/mods/custom-corner-radius"/>
+        <updated>2026-04-11T18:57:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="customwindowcornerradius">Custom Window Corner Radius</h1>
+<p>Customizes Windows 11 app window corner radius. Make corners more rounded than
+the default 8px, or reduce the radius for less rounded or completely sharp
+corners.</p>
+<p>The mod was <a href="https://github.com/ramensoftware/windhawk-mods/pull/3587">originally
+submitted</a> by
+<a href="https://github.com/kanak-buet19">Kanak415</a>.</p>
+<p><img src="https://i.imgur.com/mMGkBwc.png" alt="Screenshot" /></p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>dwm.exe</code> is in the list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<h2 id="additionalnotes">Additional notes</h2>
+<ul>
+<li>Popups and flyouts (taskbar, wifi, volume, context menus) use a smaller radius
+(4px) and are unaffected by this mod. Some of them can be customized using
+other mods, such as Windows 11 Taskbar Styler.</li>
+<li>Disabling the mod instantly restores default behavior — no system files are
+modified.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Navigation Pane Tweaks 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-navigation-pane-tweaks#d208454541569598e6b5979b89ab1c22fea4fd1c</id>
@@ -551,32 +582,6 @@ Each button has three fields:</p>
         <author>
             <name>vfxturjo</name>
             <uri>https://github.com/zunaidFarouque</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide NVIDIA Control Panel Missing Dialog 1.1.0]]></title>
-        <id>https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider#b83161afe9e3090495743124c1192750a3f5920c</id>
-        <link href="https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider"/>
-        <updated>2026-03-27T12:29:33.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidenvidiacontrolpanelmissingdialog">Hide NVIDIA Control Panel Missing Dialog</h1>
-<p><img src="https://i.imgur.com/8vaxTpN.png" alt="Screenshot" /></p>
-<p>Silences the <strong>"NVIDIA Control Panel not found"</strong> notification that appears in the bottom-right corner every time Windows starts.</p>
-<h2 id="background">Background</h2>
-<p>Tools like <a href="https://www.techpowerup.com/nvcleanstall/">NVCleanstall</a> allow you to strip components from the NVIDIA driver package during installation. Certain options — such as disabling or not installing the NVIDIA Control Panel — break the Control Panel integration intentionally or as a side effect. Once broken, <code>nvcontainer.exe</code> detects that the Control Panel is missing or non-functional and displays a dialog on every startup prompting you to reinstall it from the Microsoft Store.</p>
-<p>Since the <strong>NVIDIA App</strong> now covers everything the classic Control Panel offered — display settings, GPU overclocking, driver management, and more — there is no practical reason to have the Control Panel installed. The dialog serves no purpose and becomes permanent noise.</p>
-<h2 id="whatitdoes">What it does</h2>
-<p>This mod suppresses the "NVIDIA Control Panel not found" dialog completely. It never appears on screen, neither at startup nor at any other time.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks into <code>nvcontainer.exe</code> and intercepts <code>ShowWindow</code> and <code>SetWindowPos</code> calls. Any top-level <code>#32770</code> dialog whose child windows contain the text "NVIDIA" is immediately blocked from becoming visible. A cache of confirmed dialog handles ensures the detection logic runs only once per window, keeping overhead minimal on subsequent calls.</p>
-<p>On mod initialization, any already-visible instance of the dialog is also hidden immediately.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 10 and Windows 11</li>
-<li>Targets <code>nvcontainer.exe</code> only</li>
-</ul>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>
