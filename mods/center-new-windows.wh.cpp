@@ -6,7 +6,7 @@
 // @description     Opens all new windows centered on the screen, including UWP and WinUI apps
 // @description:pt-BR Abre todas as novas janelas centralizadas na tela, incluindo apps UWP e WinUI
 // @description:es  Abre todas las ventanas nuevas centradas en la pantalla, incluyendo apps UWP y WinUI
-// @version         1.0.0
+// @version         1.0.1
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         *
@@ -148,6 +148,27 @@
     pantalla cuando aparecen por primera vez. Algunas apps como Microsoft
     Store pueden mostrar un breve salto de posición porque crean y
     reposicionan múltiples ventanas internas durante la inicialización.
+- centerOffsetY: 0
+  $name: Vertical offset (px)
+  $name:pt-BR: Deslocamento vertical (px)
+  $name:es: Desplazamiento vertical (px)
+  $description: >
+    Shifts the centered position up or down by this many pixels.
+    Use a negative value (e.g. -30) to move windows up, or a positive
+    value (e.g. 30) to move them down. Useful if you use a dock or
+    status bar that is not detected by the system work area.
+  $description:pt-BR: >
+    Desloca a posição centralizada para cima ou para baixo por esta
+    quantidade de pixels. Use um valor negativo (ex.: -30) para mover
+    as janelas para cima, ou positivo (ex.: 30) para mover para baixo.
+    Útil se você usa uma dock ou barra de status que não é detectada
+    pela área de trabalho do sistema.
+  $description:es: >
+    Desplaza la posición centrada hacia arriba o abajo por esta cantidad
+    de píxeles. Use un valor negativo (ej.: -30) para mover las ventanas
+    hacia arriba, o positivo (ej.: 30) para mover hacia abajo. Útil si
+    usa un dock o barra de estado que no es detectada por el área de
+    trabajo del sistema.
 - excludeClasses:
     - ""
   $name: Excluded window classes
@@ -191,19 +212,45 @@ monitor, similar to the default behavior in macOS. Also centers UWP and
 WinUI application windows such as Windows Settings, Microsoft Store,
 Calculator, and other modern apps.
 
+## What's new in 1.0.1
+
+- **`SetWindowPos` grace period** — after a window is first centred, a
+  2-second grace period blocks any `SetWindowPos` call that tries to move
+  it elsewhere. This fixes a known issue with Firefox-based browsers
+  (Firefox, Floorp, Zen, LibreWolf and others) that restore their saved
+  session position via `SetWindowPos` ~700 ms after `ShowWindow`,
+  overriding the centred position.
+- **Vertical offset setting** — shifts the centred position up or down by
+  a fixed number of pixels. Useful for third-party docks or status bars
+  that are not reflected in the system work area.
+- **DPI-unaware app fix** — windows and dialogs that belong to processes
+  using system scaling (e.g. Audacity, older Win32 apps) are now correctly
+  centred at all scale levels. The previous calculation mixed physical
+  monitor coordinates with virtual window coordinates, placing windows
+  above and to the left of true centre.
+
 ---
 
 ## How it works
 
 ### Regular windows
 
-The mod hooks `ShowWindow()` in every process. When a suitable window is
-shown for the first time, it is optionally resized and then centered on
-the monitor before becoming visible.
+The mod hooks `ShowWindow()` and `SetWindowPos()` in every process.
+
+When a suitable window is shown for the first time, it is optionally
+resized and then centered on the monitor before becoming visible.
+
+A 2-second grace period prevents apps from overriding the centered
+position. This is needed for apps like Firefox and Floorp that restore
+their saved session position via `SetWindowPos` after `ShowWindow`.
+During the grace period, any `SetWindowPos` call that tries to move
+a recently centered window is silently redirected back to the centered
+position. The user can still move windows manually after the grace
+period expires.
 
 Windows restored from the system tray (e.g. WhatsApp, Discord) are
-**always re-centered** but **never resized**, preserving any size the
-user may have set previously.
+**always re-centered** but the grace period is **not applied** on
+restore — only on first appearance.
 
 Owned windows — dialogs, settings panels, export windows, the Run
 dialog, and similar pop-ups — are intentionally ignored by default.
@@ -276,6 +323,15 @@ automatically excluded — only the first-level dialog is ever centered.
 When enabled, UWP and WinUI application windows (Settings, Store,
 Calculator, etc.) are centered on the screen when they first appear.
 
+### Vertical offset
+
+Shifts the centered position up or down by a fixed number of pixels.
+Useful if you use a third-party dock (e.g. MyDockFinder, Nexus) or a
+status bar that is not reflected in the system work area.
+
+Use a **negative** value to move windows **up**, or a **positive** value
+to move them **down**. Default is **0** (no offset).
+
 ### Exclusion lists
 
 The mod maintains an internal list of always-excluded processes and
@@ -331,6 +387,21 @@ apps or window classes you want to skip.
 
 ---
 
+### How DPI scaling is handled
+
+For DPI-unaware applications (older Win32 apps that rely on the OS to scale
+their windows), `GetWindowRect` returns coordinates in virtual pixels while
+`GetMonitorInfo` always returns physical pixels. Mixing the two without
+correction places windows above and to the left of true centre.
+
+The fix detects virtualisation by comparing `GetWindowRect` against
+`DWMWA_EXTENDED_FRAME_BOUNDS` (which always returns physical pixels). When a
+mismatch is found, `GetDpiForSystem()` supplies the exact system scale factor,
+which is used to convert the monitor work area to virtual pixels before the
+centred position is computed.
+
+---
+
 # Centralizar Novas Janelas Automaticamente
 
 Centraliza automaticamente novas janelas de aplicativos no monitor
@@ -338,15 +409,14 @@ ativo, de forma semelhante ao comportamento do macOS. Também centraliza
 janelas UWP e WinUI como Configurações, Microsoft Store, Calculadora
 e outros apps modernos.
 
-A opção **Sempre centralizar diálogos** centraliza diálogos Win32
-padrão de nível superior (classe `#32770`) toda vez que aparecem.
-Diálogos filhos dentro de property sheets e sub-diálogos são
-automaticamente excluídos. Diálogos nunca são redimensionados.
+Um grace period de 2 segundos impede que apps como Firefox e Floorp
+sobrescrevam a posição centralizada ao restaurar a posição salva da
+sessão anterior.
 
-A opção **Centralizar janelas UWP e WinUI** centraliza janelas de apps
-modernos. Alguns apps como a Microsoft Store podem apresentar um breve
-salto de posição ao abrir, pois criam e reposicionam múltiplas janelas
-internas durante a inicialização.
+A centralização lida corretamente com aplicativos que não suportam
+nativamente alta DPI: ao detectar que o OS está virtualizando
+coordenadas, o mod converte a área de trabalho do monitor para o espaço
+de pixels virtual antes de calcular a posição centralizada.
 
 **Sempre excluídos (fixos no código):**
 
@@ -362,15 +432,14 @@ monitor activo, similar al comportamiento de macOS. También centra
 ventanas UWP y WinUI como Configuración, Microsoft Store, Calculadora
 y otras apps modernas.
 
-La opción **Centrar siempre los diálogos** centra diálogos Win32
-estándar de nivel superior (clase `#32770`) cada vez que aparecen.
-Los diálogos hijo y sub-diálogos se excluyen automáticamente. Los
-diálogos nunca se redimensionan.
+Un grace period de 2 segundos impide que apps como Firefox y Floorp
+sobrescriban la posición centrada al restaurar la posición guardada
+de la sesión anterior.
 
-La opción **Centrar ventanas UWP y WinUI** centra ventanas de apps
-modernas. Algunas apps como Microsoft Store pueden mostrar un breve
-salto de posición al abrirse, ya que crean y reposicionan múltiples
-ventanas internas durante la inicialización.
+El centrado maneja correctamente las aplicaciones que no soportan
+nativamente DPI alto: al detectar que el SO está virtualizando
+coordenadas, el mod convierte el área de trabajo del monitor al
+espacio de píxeles virtual antes de calcular la posición centrada.
 
 **Siempre excluidos (fijos en el código):**
 
@@ -383,50 +452,25 @@ configuración.
 /**
  * Implementation notes
  * ────────────────────
- * Two complementary hook strategies cover all supported window types:
+ * Three hook strategies cover all supported window types:
  *
- * 1. Regular windows (Win32):
- *    · ShowWindow() is hooked in every process (@include *).
- *    · CenterWindow() uses DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)
- *      to measure the actual visible area (excluding DWM shadow) for
- *      pixel-perfect centering. Only done when the window is visible.
- *    · ShouldHandleWindow() filters out owned windows, child windows,
- *      tool windows, and windows below minimum size.
- *    · g_centeredAtom tracks whether a window has been centered before.
- *      First show: center + optional resize; tray restore: center only.
- *    · IsTopLevelDialogWindow() detects non-child #32770 windows. Child
- *      dialogs (WS_CHILD) are tab pages inside property sheets — centering
- *      them causes blank content. Sub-dialogs owned by another #32770 are
- *      also skipped.
- *    · The optional Fade Trick makes the window transparent, calls the
- *      original ShowWindow, repositions while invisible, then restores
- *      on a background thread after fadeDelayMs ms.
+ * 1. ShowWindow (all processes):
+ *    · Centers windows on first appearance.
+ *    · DWM shadow compensation via DWMWA_EXTENDED_FRAME_BOUNDS.
+ *    · g_centeredAtom tracks first-time vs tray-restore.
+ *    · Optional Fade Trick for apps that override position after show.
  *
- * 2. UWP / WinUI windows:
- *    · In explorer.exe, SetWindowPos() is also hooked.
- *      Path 1: CoreWindow positioned with real size → find parent
- *      ApplicationFrameWindow → center frame. CoreWindow position is
- *      left unchanged (relative to frame client area).
- *      Path 2: ApplicationFrameWindow repositioned during grace period →
- *      redirect back to centered position (the shell fights back).
- *    · In ApplicationFrameHost.exe, both ShowWindow and SetWindowPos
- *      are hooked. ShowWindow catches frame first appearance. If the
- *      frame is still small, timer-based polling retries centering at
- *      50/150/300/500 ms. SetWindowPos provides the grace period to
- *      prevent internal repositioning after centering.
- *    · g_uwpTracked[] is a fixed-size array (16 slots) with a 3-second
- *      grace period to prevent the shell from overriding the position.
- *    · UWP centering bypasses the regular path entirely and is never
- *      affected by resize, fade trick, or the centeredAtom.
+ * 2. SetWindowPos (all processes) — regular window grace period:
+ *    · After first-time centering, a 2-second grace period blocks any
+ *      SetWindowPos calls that try to move the window elsewhere.
+ *    · Catches Firefox/Floorp session-restore (~700ms after ShowWindow).
+ *    · g_regTracked[] is a fixed-size array (8 slots). For non-tracked
+ *      windows (99.9% of calls), overhead is one loop over 8 null ptrs.
  *
- * Process-specific behavior:
- *    · explorer.exe: hooks ShowWindow + SetWindowPos. Regular windows
- *      via ShowWindow, UWP frames via SetWindowPos.
- *    · ApplicationFrameHost.exe: hooks ShowWindow + SetWindowPos.
- *      ShowWindow catches frame first appearance; SetWindowPos provides
- *      grace period to prevent repositioning after centering.
- *    · All other processes: hooks ShowWindow only. Regular path only.
- *    · Internally excluded processes: hooks are not installed at all.
+ * 3. SetWindowPos (explorer.exe + ApplicationFrameHost.exe) — UWP:
+ *    · Path 1: CoreWindow positioned → center parent frame.
+ *    · Path 2: Frame repositioned during 3s grace → redirect to center.
+ *    · ShowWindow fallback with timer polling for late-sized frames.
  */
 
 #include <windhawk_api.h>
@@ -475,15 +519,52 @@ static UwpTrackedFrame* UwpAllocFrame(HWND frame) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Regular window tracking
+// Regular window grace period tracking
+// ════════════════════════════════════════════════════════════════════════════
+
+// After a window is first centered, a 2-second grace period blocks
+// SetWindowPos calls that try to move it. This catches apps like
+// Firefox and Floorp that restore saved session position ~700ms after
+// ShowWindow.
+
+struct RegTrackedWindow {
+    HWND      hwnd;
+    int       centeredX;
+    int       centeredY;
+    ULONGLONG tick;
+};
+
+#define REG_MAX_TRACKED 8
+static RegTrackedWindow g_regTracked[REG_MAX_TRACKED] = {};
+static constexpr ULONGLONG REG_GRACE_MS = 2000;
+
+static RegTrackedWindow* RegFindWindow(HWND hwnd) {
+    for (int i = 0; i < REG_MAX_TRACKED; i++)
+        if (g_regTracked[i].hwnd == hwnd) return &g_regTracked[i];
+    return nullptr;
+}
+
+static RegTrackedWindow* RegAllocWindow(HWND hwnd) {
+    ULONGLONG now = GetTickCount64();
+    for (int i = 0; i < REG_MAX_TRACKED; i++) {
+        if (g_regTracked[i].hwnd == nullptr ||
+            !IsWindow(g_regTracked[i].hwnd) ||
+            now - g_regTracked[i].tick > REG_GRACE_MS * 2)
+        {
+            g_regTracked[i] = {};
+            g_regTracked[i].hwnd = hwnd;
+            return &g_regTracked[i];
+        }
+    }
+    return nullptr;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Common state
 // ════════════════════════════════════════════════════════════════════════════
 
 static ATOM g_centeredAtom = 0;
 static thread_local bool g_inHook = false;
-
-// ════════════════════════════════════════════════════════════════════════════
-// Process identity
-// ════════════════════════════════════════════════════════════════════════════
 
 static std::wstring g_thisExeName;
 static bool g_isExplorer     = false;
@@ -496,14 +577,12 @@ static bool g_isAppFrameHost = false;
 struct Settings {
     bool fadeTrickEnabled = false;
     int  fadeDelayMs      = 25;
-
-    bool resizeEnabled = false;
-    int  resizeWidth   = 1024;
-    int  resizeHeight  = 768;
-
-    bool centerDialogs = false;
-    bool centerUWP     = true;
-
+    bool resizeEnabled    = false;
+    int  resizeWidth      = 1024;
+    int  resizeHeight     = 768;
+    bool centerDialogs    = false;
+    bool centerUWP        = true;
+    int  centerOffsetY    = 0;
     std::vector<std::wstring> excludeClasses;
     std::vector<std::wstring> excludeProcesses;
 };
@@ -519,19 +598,17 @@ static std::wstring ToLower(std::wstring s) {
 
 static void LoadSettings() {
     Settings fresh;
-
     fresh.fadeTrickEnabled = Wh_GetIntSetting(L"fadeTrickEnabled") != 0;
     int delay = Wh_GetIntSetting(L"fadeDelayMs");
     fresh.fadeDelayMs = (delay < 1) ? 1 : (delay > 500) ? 500 : delay;
-
     fresh.resizeEnabled = Wh_GetIntSetting(L"resizeEnabled") != 0;
     int rw = Wh_GetIntSetting(L"resizeWidth");
     int rh = Wh_GetIntSetting(L"resizeHeight");
     fresh.resizeWidth  = (rw > 0) ? rw : 1024;
     fresh.resizeHeight = (rh > 0) ? rh : 768;
-
     fresh.centerDialogs = Wh_GetIntSetting(L"centerDialogs") != 0;
     fresh.centerUWP     = Wh_GetIntSetting(L"centerUWP") != 0;
+    fresh.centerOffsetY = Wh_GetIntSetting(L"centerOffsetY");
 
     for (int i = 0; ; ++i) {
         PCWSTR val = Wh_GetStringSetting(L"excludeClasses[%d]", i);
@@ -539,7 +616,6 @@ static void LoadSettings() {
         fresh.excludeClasses.emplace_back(val);
         Wh_FreeStringSetting(val);
     }
-
     for (int i = 0; ; ++i) {
         PCWSTR val = Wh_GetStringSetting(L"excludeProcesses[%d]", i);
         if (!val || val[0] == L'\0') { Wh_FreeStringSetting(val); break; }
@@ -565,28 +641,17 @@ static Settings GetSettingsSnapshot() {
 
 static const wchar_t* const g_internalExcludeProcesses[] = {
     L"photoshop.exe",
-    L"shellexperiencehost.exe",
-    L"startmenuexperiencehost.exe",
-    L"searchhost.exe",
-    L"lockapp.exe",
-    L"systemsettings.exe",
-    L"textinputhost.exe",
-    L"widgets.exe",
-    L"phoneexperiencehost.exe",
-    L"gamebarpresencewriter.exe",
-    L"runtimebroker.exe",
-    L"dllhost.exe",
-    L"sihost.exe",
-    L"taskhostw.exe",
-    L"ctfmon.exe",
-    L"credentialuibroker.exe",
-    L"windowsterminal.exe",
-    L"backgroundtaskhost.exe",
-    L"securityhealthsystray.exe",
-    L"onedrive.exe",
-    L"mspcmanager.exe",
-    L"msedgewebview2.exe",
-    L"conhost.exe",
+    L"shellexperiencehost.exe",   L"startmenuexperiencehost.exe",
+    L"searchhost.exe",            L"lockapp.exe",
+    L"systemsettings.exe",        L"textinputhost.exe",
+    L"widgets.exe",               L"phoneexperiencehost.exe",
+    L"gamebarpresencewriter.exe", L"runtimebroker.exe",
+    L"dllhost.exe",               L"sihost.exe",
+    L"taskhostw.exe",             L"ctfmon.exe",
+    L"credentialuibroker.exe",    L"windowsterminal.exe",
+    L"backgroundtaskhost.exe",    L"securityhealthsystray.exe",
+    L"onedrive.exe",              L"mspcmanager.exe",
+    L"msedgewebview2.exe",        L"conhost.exe",
     L"svchost.exe",
 };
 
@@ -601,11 +666,9 @@ static const wchar_t* const g_internalExcludeClasses[] = {
     L"Microsoft.UI.Content.PopupWindowSiteBridge",
     L"DropdownWindow",
     L"Windows.UI.Core.CoreWindow",
-    L"Shell_TrayWnd",
-    L"Shell_SecondaryTrayWnd",
+    L"Shell_TrayWnd",              L"Shell_SecondaryTrayWnd",
     L"NotifyIconOverflowWindow",
-    L"Progman",
-    L"WorkerW",
+    L"Progman",                    L"WorkerW",
     L"Windows.UI.Input.InputSite.WindowClass",
     L"XamlExplorerHostIslandWindow",
 };
@@ -648,7 +711,6 @@ static bool IsBlocklisted(HWND hwnd, const Settings& s,
 
     for (const auto* cls : g_internalExcludeClasses)
         if (wcscmp(cn, cls) == 0) return true;
-
     for (const auto& c : s.excludeClasses)
         if (c == cn) return true;
 
@@ -669,7 +731,6 @@ static bool ShouldHandleWindow(HWND hwnd, const Settings& s,
     if (style & WS_CHILD)      return false;
     if (!(style & WS_CAPTION)) return false;
     if (style & WS_MAXIMIZE)   return false;
-
     if (wcscmp(dlgClass, L"#32770") == 0) return false;
 
     DWORD exStyle = static_cast<DWORD>(GetWindowLong(hwnd, GWL_EXSTYLE));
@@ -678,11 +739,10 @@ static bool ShouldHandleWindow(HWND hwnd, const Settings& s,
 
     RECT rect;
     if (!GetWindowRect(hwnd, &rect)) return false;
-    if ((rect.right  - rect.left) < 100) return false;
-    if ((rect.bottom - rect.top)  <  50) return false;
+    if ((rect.right - rect.left) < 100) return false;
+    if ((rect.bottom - rect.top) <  50) return false;
 
     if (IsBlocklisted(hwnd, s)) return false;
-
     return true;
 }
 
@@ -699,7 +759,6 @@ static bool CanResizeWindow(HWND hwnd) {
     if (!GetWindowRect(hwnd, &rect)) return false;
     if ((rect.right - rect.left) < 150) return false;
     if ((rect.bottom - rect.top) < 100) return false;
-
     return true;
 }
 
@@ -720,7 +779,6 @@ static BOOL CallRealSetWindowPos(HWND hWnd, HWND hAfter,
 static void ResizeWindow(HWND hwnd, const Settings& s) {
     if (!s.resizeEnabled)       return;
     if (!CanResizeWindow(hwnd)) return;
-
     CallRealSetWindowPos(hwnd, nullptr, 0, 0, s.resizeWidth, s.resizeHeight,
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
@@ -729,20 +787,55 @@ static void CenterWindow(HWND hwnd) {
     RECT rect;
     if (!GetWindowRect(hwnd, &rect)) return;
 
-    const int w = rect.right  - rect.left;
+    const int w = rect.right - rect.left;
     const int h = rect.bottom - rect.top;
     if (w <= 0 || h <= 0) return;
 
+    // ── DWM frame bounds ─────────────────────────────────────────────────────
+    // DWMWA_EXTENDED_FRAME_BOUNDS always returns physical pixels. GetWindowRect
+    // returns virtual pixels for DPI-unaware processes. Comparing the two lets
+    // us detect whether the OS is virtualising coordinates for this window
+    // without relying on GetDpiForWindow, which returns the DPI as seen by the
+    // calling process (always 96 when injected into a DPI-unaware app).
+    bool  dwmAvailable = false;
+    RECT  frame        = rect;
+    float dwmScaleX    = 1.0f;
+
+    if (IsWindowVisible(hwnd) &&
+        SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                         &frame, sizeof(frame))))
+    {
+        dwmAvailable = true;
+        const int fw = frame.right  - frame.left;
+        if (fw > 0 && w > 0) dwmScaleX = static_cast<float>(fw) / static_cast<float>(w);
+    }
+
+    // hasScaling: true when the OS is applying coordinate virtualisation.
+    // The DWM ratio is used only as a detection signal — it is slightly
+    // imprecise because the OS rounds virtual→physical per-pixel.
+    //
+    // For the actual conversion we use GetDpiForSystem(), which returns the
+    // system-wide DPI setting (e.g. 120 for 125%, 144 for 150%) regardless
+    // of the calling process's DPI awareness. This gives an exact ratio.
+    const bool hasScaling = (dwmScaleX > 1.01f);
+
+    // Exact scale: GetDpiForSystem() / 96. Only used when hasScaling is true.
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+    if (hasScaling) {
+        const float sysDpi = static_cast<float>(GetDpiForSystem());
+        scaleX = scaleY = (sysDpi > 0.f) ? sysDpi / 96.f : dwmScaleX;
+    }
+
+    // DWM shadow offsets: only meaningful without coordinate scaling.
+    // When hasScaling, frame > rect due to virtualisation — shadow cannot be
+    // isolated from the scale difference, so offsets are left as zero.
     int offsetL = 0, offsetT = 0, offsetR = 0, offsetB = 0;
-    if (IsWindowVisible(hwnd)) {
-        RECT frame = rect;
-        if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                             &frame, sizeof(frame)))) {
-            offsetL = frame.left   - rect.left;
-            offsetT = frame.top    - rect.top;
-            offsetR = rect.right   - frame.right;
-            offsetB = rect.bottom  - frame.bottom;
-        }
+    if (dwmAvailable && !hasScaling) {
+        offsetL = std::max(0, (int)(frame.left   - rect.left));
+        offsetT = std::max(0, (int)(frame.top    - rect.top));
+        offsetR = std::max(0, (int)(rect.right   - frame.right));
+        offsetB = std::max(0, (int)(rect.bottom  - frame.bottom));
     }
 
     const int visW = w - offsetL - offsetR;
@@ -752,12 +845,44 @@ static void CenterWindow(HWND hwnd) {
     MONITORINFO mi   = { sizeof(MONITORINFO) };
     if (!GetMonitorInfo(hMon, &mi)) return;
 
-    const RECT& wa = mi.rcWork;
-    const int x = wa.left + (wa.right  - wa.left - visW) / 2 - offsetL;
-    const int y = wa.top  + (wa.bottom - wa.top  - visH) / 2 - offsetT;
+    // rcWork is always in physical pixels. When hasScaling, divide by the
+    // exact system scale to convert to virtual pixels (same space as
+    // GetWindowRect and SetWindowPos for DPI-unaware windows).
+    const LONG originX = mi.rcMonitor.left;
+    const LONG originY = mi.rcMonitor.top;
 
-    CallRealSetWindowPos(hwnd, nullptr, x, y, 0, 0,
+    const int waLeft   = static_cast<int>(originX + (mi.rcWork.left   - originX) / scaleX);
+    const int waTop    = static_cast<int>(originY + (mi.rcWork.top    - originY) / scaleY);
+    const int waRight  = static_cast<int>(originX + (mi.rcWork.right  - originX) / scaleX);
+    const int waBottom = static_cast<int>(originY + (mi.rcWork.bottom - originY) / scaleY);
+
+    int userOffsetY;
+    {
+        AcquireSRWLockShared(&g_srw);
+        userOffsetY = g_settings.centerOffsetY;
+        ReleaseSRWLockShared(&g_srw);
+    }
+
+    const int x = waLeft + (waRight  - waLeft - visW) / 2 - offsetL;
+    const int y = waTop  + (waBottom - waTop  - visH) / 2 - offsetT;
+
+    CallRealSetWindowPos(hwnd, nullptr, x, y + userOffsetY, 0, 0,
         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+// Center + register for grace period protection.
+static void CenterWindowWithGrace(HWND hwnd) {
+    CenterWindow(hwnd);
+
+    RECT rc = {};
+    if (!GetWindowRect(hwnd, &rc)) return;
+
+    RegTrackedWindow* rt = RegAllocWindow(hwnd);
+    if (rt) {
+        rt->centeredX = rc.left;
+        rt->centeredY = rc.top;
+        rt->tick = GetTickCount64();
+    }
 }
 
 static void CenterFrameUWP(HWND frame, UwpTrackedFrame* tf) {
@@ -770,10 +895,20 @@ static void CenterFrameUWP(HWND frame, UwpTrackedFrame* tf) {
     MONITORINFO mi = { sizeof(mi) };
     if (!GetMonitorInfo(hMon, &mi)) return;
 
+    // UWP frames are always Per-Monitor-aware, so GetWindowRect and
+    // SetWindowPos use physical pixels. No DPI virtualisation fix needed here.
     const RECT& wa = mi.rcWork;
-    tf->centeredX = wa.left + (wa.right  - wa.left - w) / 2;
-    tf->centeredY = wa.top  + (wa.bottom - wa.top  - h) / 2;
+    tf->centeredX = wa.left + (wa.right - wa.left - w) / 2;
+    tf->centeredY = wa.top + (wa.bottom - wa.top - h) / 2;
     tf->tick = GetTickCount64();
+
+    int userOffsetY;
+    {
+        AcquireSRWLockShared(&g_srw);
+        userOffsetY = g_settings.centerOffsetY;
+        ReleaseSRWLockShared(&g_srw);
+    }
+    tf->centeredY += userOffsetY;
 
     CallRealSetWindowPos(frame, nullptr, tf->centeredX, tf->centeredY, 0, 0,
         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -785,105 +920,108 @@ static bool IsFrameMaximized(HWND frame) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Fade trick (regular windows only)
+// Fade trick
 // ════════════════════════════════════════════════════════════════════════════
 
 struct FadeRestoreData {
-    HWND  hwnd;
-    DWORD originalExStyle;
-    BYTE  originalAlpha;
-    DWORD delayMs;
+    HWND hwnd; DWORD originalExStyle; BYTE originalAlpha; DWORD delayMs;
 };
 
 static DWORD WINAPI FadeRestoreThread(LPVOID param) {
     auto* d = reinterpret_cast<FadeRestoreData*>(param);
-
     Sleep(d->delayMs);
-
     if (IsWindow(d->hwnd)) {
-        if (d->originalExStyle & WS_EX_LAYERED) {
+        if (d->originalExStyle & WS_EX_LAYERED)
             SetLayeredWindowAttributes(d->hwnd, 0, d->originalAlpha, LWA_ALPHA);
-        } else {
+        else {
             LONG cur = GetWindowLong(d->hwnd, GWL_EXSTYLE);
             SetWindowLong(d->hwnd, GWL_EXSTYLE, cur & ~WS_EX_LAYERED);
         }
     }
-
     delete d;
     return 0;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Hook: SetWindowPos — explorer.exe + ApplicationFrameHost.exe
+// Hook: SetWindowPos — all processes
 // ════════════════════════════════════════════════════════════════════════════
 
 BOOL WINAPI HookedSetWindowPos(HWND hWnd, HWND hWndInsertAfter,
                                 int X, int Y, int cx, int cy, UINT uFlags) {
-    bool uwpEnabled;
-    {
-        AcquireSRWLockShared(&g_srw);
-        uwpEnabled = g_settings.centerUWP;
-        ReleaseSRWLockShared(&g_srw);
-    }
-
-    if (!uwpEnabled)
-        return pOrigSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
-
-    // ── Path 1: CoreWindow trigger ──
-    if (IsCoreWindow(hWnd) && !(uFlags & SWP_NOMOVE)) {
-        RECT rc = {};
-        GetWindowRect(hWnd, &rc);
-        int w = (uFlags & SWP_NOSIZE) ? (rc.right - rc.left) : cx;
-        int h = (uFlags & SWP_NOSIZE) ? (rc.bottom - rc.top) : cy;
-
-        if (w >= 200 && h >= 200) {
-            HWND frame = FindParentFrame(hWnd);
-            if (frame && !UwpFindFrame(frame)) {
-                if (!IsFrameMaximized(frame)) {
-                    UwpTrackedFrame* tf = UwpAllocFrame(frame);
-                    if (tf) CenterFrameUWP(frame, tf);
-                }
-            }
+    // ── UWP paths (explorer.exe + ApplicationFrameHost.exe only) ─────
+    if (g_isExplorer || g_isAppFrameHost) {
+        bool uwpEnabled;
+        {
+            AcquireSRWLockShared(&g_srw);
+            uwpEnabled = g_settings.centerUWP;
+            ReleaseSRWLockShared(&g_srw);
         }
 
-        return pOrigSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
-    }
+        if (uwpEnabled) {
+            if (IsCoreWindow(hWnd) && !(uFlags & SWP_NOMOVE)) {
+                RECT rc = {};
+                GetWindowRect(hWnd, &rc);
+                int w = (uFlags & SWP_NOSIZE) ? (rc.right - rc.left) : cx;
+                int h = (uFlags & SWP_NOSIZE) ? (rc.bottom - rc.top) : cy;
 
-    // ── Path 2: Frame centering + grace period ──
-    if (IsAppFrame(hWnd)) {
-        UwpTrackedFrame* tf = UwpFindFrame(hWnd);
+                if (w >= 200 && h >= 200) {
+                    HWND frame = FindParentFrame(hWnd);
+                    if (frame && !UwpFindFrame(frame) && !IsFrameMaximized(frame)) {
+                        UwpTrackedFrame* tf = UwpAllocFrame(frame);
+                        if (tf) CenterFrameUWP(frame, tf);
+                    }
+                }
+                return pOrigSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+            }
 
-        if (!tf) {
-            RECT rc = {};
-            GetWindowRect(hWnd, &rc);
-            int curW = rc.right - rc.left;
-            int curH = rc.bottom - rc.top;
+            if (IsAppFrame(hWnd)) {
+                UwpTrackedFrame* tf = UwpFindFrame(hWnd);
+                if (!tf) {
+                    RECT rc = {};
+                    GetWindowRect(hWnd, &rc);
+                    int w = (uFlags & SWP_NOSIZE) ? (rc.right - rc.left) : cx;
+                    int h = (uFlags & SWP_NOSIZE) ? (rc.bottom - rc.top) : cy;
 
-            int w = (uFlags & SWP_NOSIZE) ? curW : cx;
-            int h = (uFlags & SWP_NOSIZE) ? curH : cy;
-
-            if (w >= 200 && h >= 200 && !IsFrameMaximized(hWnd)) {
-                UwpTrackedFrame* newTf = UwpAllocFrame(hWnd);
-                if (newTf) {
-                    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-                    MONITORINFO mi = { sizeof(mi) };
-                    if (GetMonitorInfo(hMon, &mi)) {
-                        const RECT& wa = mi.rcWork;
-                        newTf->centeredX = wa.left + (wa.right - wa.left - w) / 2;
-                        newTf->centeredY = wa.top  + (wa.bottom - wa.top - h) / 2;
-                        newTf->tick = GetTickCount64();
-
-                        uFlags &= ~SWP_NOMOVE;
+                    if (w >= 200 && h >= 200 && !IsFrameMaximized(hWnd)) {
+                        UwpTrackedFrame* newTf = UwpAllocFrame(hWnd);
+                        if (newTf) {
+                            HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                            MONITORINFO mi = { sizeof(mi) };
+                            if (GetMonitorInfo(hMon, &mi)) {
+                                const RECT& wa = mi.rcWork;
+                                newTf->centeredX = wa.left + (wa.right - wa.left - w) / 2;
+                                newTf->centeredY = wa.top + (wa.bottom - wa.top - h) / 2;
+                                {
+                                    AcquireSRWLockShared(&g_srw);
+                                    newTf->centeredY += g_settings.centerOffsetY;
+                                    ReleaseSRWLockShared(&g_srw);
+                                }
+                                newTf->tick = GetTickCount64();
+                                uFlags &= ~SWP_NOMOVE;
+                                return pOrigSetWindowPos(hWnd, hWndInsertAfter,
+                                    newTf->centeredX, newTf->centeredY, cx, cy, uFlags);
+                            }
+                        }
+                    }
+                } else if (!(uFlags & SWP_NOMOVE)) {
+                    ULONGLONG now = GetTickCount64();
+                    if (now - tf->tick < UWP_GRACE_MS) {
                         return pOrigSetWindowPos(hWnd, hWndInsertAfter,
-                            newTf->centeredX, newTf->centeredY, cx, cy, uFlags);
+                            tf->centeredX, tf->centeredY, cx, cy, uFlags);
                     }
                 }
             }
-        } else if (!(uFlags & SWP_NOMOVE)) {
+        }
+    }
+
+    // ── Regular window grace period (all processes) ──────────────────
+    if (!(uFlags & SWP_NOMOVE)) {
+        RegTrackedWindow* rt = RegFindWindow(hWnd);
+        if (rt) {
             ULONGLONG now = GetTickCount64();
-            if (now - tf->tick < UWP_GRACE_MS) {
+            if (now - rt->tick < REG_GRACE_MS) {
                 return pOrigSetWindowPos(hWnd, hWndInsertAfter,
-                    tf->centeredX, tf->centeredY, cx, cy, uFlags);
+                    rt->centeredX, rt->centeredY, cx, cy, uFlags);
             }
         }
     }
@@ -897,7 +1035,6 @@ BOOL WINAPI HookedSetWindowPos(HWND hWnd, HWND hWndInsertAfter,
 
 static VOID CALLBACK UwpCenterTimerProc(HWND hwnd, UINT, UINT_PTR id, DWORD) {
     KillTimer(hwnd, id);
-
     if (!IsWindow(hwnd) || !IsAppFrame(hwnd)) return;
     if (UwpFindFrame(hwnd)) return;
 
@@ -908,10 +1045,8 @@ static VOID CALLBACK UwpCenterTimerProc(HWND hwnd, UINT, UINT_PTR id, DWORD) {
 
     if (w >= 200 && h >= 200) {
         if (IsFrameMaximized(hwnd)) return;
-
         UwpTrackedFrame* tf = UwpAllocFrame(hwnd);
         if (!tf) return;
-
         CenterFrameUWP(hwnd, tf);
     }
 }
@@ -938,8 +1073,7 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
             ReleaseSRWLockShared(&g_srw);
         }
 
-        if (uwpEnabled && !UwpFindFrame(hwnd))
-        {
+        if (uwpEnabled && !UwpFindFrame(hwnd)) {
             g_inHook = true;
             BOOL ret = pOrigShowWindow(hwnd, nCmdShow);
 
@@ -969,11 +1103,8 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
 
     // ── Regular path: nCmdShow filter ─────────────────────────────────
     switch (nCmdShow) {
-        case SW_SHOW:
-        case SW_SHOWNORMAL:
-        case SW_SHOWDEFAULT:
-        case SW_SHOWNA:
-        case SW_RESTORE:
+        case SW_SHOW: case SW_SHOWNORMAL: case SW_SHOWDEFAULT:
+        case SW_SHOWNA: case SW_RESTORE:
             break;
         default:
             goto call_original;
@@ -984,7 +1115,6 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
     // ── Slow path ─────────────────────────────────────────────────────
     {
         Settings s = GetSettingsSnapshot();
-
         wchar_t dlgClass[256] = {};
         GetClassNameW(hwnd, dlgClass, 256);
 
@@ -994,7 +1124,7 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
             !IsBlocklisted(hwnd, s, dlgClass))
         {
             HWND dlgOwner = GetWindow(hwnd, GW_OWNER);
-            if (dlgOwner != nullptr) {
+            if (dlgOwner) {
                 wchar_t ownerClass[16] = {};
                 GetClassNameW(dlgOwner, ownerClass, 16);
                 if (wcscmp(ownerClass, L"#32770") == 0) goto call_original;
@@ -1002,7 +1132,7 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
 
             g_inHook = true;
             BOOL result = pOrigShowWindow(hwnd, nCmdShow);
-            CenterWindow(hwnd);
+            CenterWindowWithGrace(hwnd);
             g_inHook = false;
             return result;
         }
@@ -1012,26 +1142,24 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
             const bool alreadyCentered =
                 GetProp(hwnd, reinterpret_cast<LPCWSTR>(g_centeredAtom)) != nullptr;
 
-            if (!alreadyCentered) {
+            if (!alreadyCentered)
                 SetProp(hwnd, reinterpret_cast<LPCWSTR>(g_centeredAtom),
                         reinterpret_cast<HANDLE>(1));
-            }
 
             g_inHook = true;
 
             if (s.fadeTrickEnabled) {
                 DWORD origExStyle = static_cast<DWORD>(GetWindowLong(hwnd, GWL_EXSTYLE));
-                bool  wasLayered  = (origExStyle & WS_EX_LAYERED) != 0;
-                BYTE  origAlpha   = 255;
-                bool  fadeApplied = false;
+                bool wasLayered = (origExStyle & WS_EX_LAYERED) != 0;
+                BYTE origAlpha  = 255;
+                bool fadeApplied = false;
 
                 if (!wasLayered) {
                     SetWindowLong(hwnd, GWL_EXSTYLE, origExStyle | WS_EX_LAYERED);
                     SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
                     fadeApplied = true;
                 } else {
-                    COLORREF key  = 0;
-                    DWORD    flags = 0;
+                    COLORREF key = 0; DWORD flags = 0;
                     if (GetLayeredWindowAttributes(hwnd, &key, &origAlpha, &flags)) {
                         SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
                         fadeApplied = true;
@@ -1039,9 +1167,12 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
                 }
 
                 BOOL result = pOrigShowWindow(hwnd, nCmdShow);
-
                 if (!alreadyCentered) ResizeWindow(hwnd, s);
-                CenterWindow(hwnd);
+
+                if (!alreadyCentered)
+                    CenterWindowWithGrace(hwnd);
+                else
+                    CenterWindow(hwnd);
 
                 if (fadeApplied) {
                     auto* d = new (std::nothrow) FadeRestoreData{
@@ -1051,20 +1182,15 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
                     if (d) {
                         HANDLE thread = CreateThread(nullptr, 0,
                             FadeRestoreThread, d, 0, nullptr);
-                        if (thread) {
-                            CloseHandle(thread);
-                        } else {
-                            if (wasLayered)
-                                SetLayeredWindowAttributes(hwnd, 0, origAlpha, LWA_ALPHA);
-                            else
-                                SetWindowLong(hwnd, GWL_EXSTYLE, origExStyle);
+                        if (thread) CloseHandle(thread);
+                        else {
+                            if (wasLayered) SetLayeredWindowAttributes(hwnd, 0, origAlpha, LWA_ALPHA);
+                            else SetWindowLong(hwnd, GWL_EXSTYLE, origExStyle);
                             delete d;
                         }
                     } else {
-                        if (wasLayered)
-                            SetLayeredWindowAttributes(hwnd, 0, origAlpha, LWA_ALPHA);
-                        else
-                            SetWindowLong(hwnd, GWL_EXSTYLE, origExStyle);
+                        if (wasLayered) SetLayeredWindowAttributes(hwnd, 0, origAlpha, LWA_ALPHA);
+                        else SetWindowLong(hwnd, GWL_EXSTYLE, origExStyle);
                     }
                 }
 
@@ -1072,7 +1198,12 @@ BOOL WINAPI HookedShowWindow(HWND hwnd, int nCmdShow) {
                 return result;
             } else {
                 if (!alreadyCentered) ResizeWindow(hwnd, s);
-                CenterWindow(hwnd);
+
+                if (!alreadyCentered)
+                    CenterWindowWithGrace(hwnd);
+                else
+                    CenterWindow(hwnd);
+
                 g_inHook = false;
             }
         }
@@ -1089,17 +1220,14 @@ call_original:
 static void CacheExeName() {
     wchar_t path[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, path, MAX_PATH);
-
     std::wstring full(path);
     const auto slash = full.find_last_of(L"\\/");
     g_thisExeName = ToLower(
-        slash != std::wstring::npos ? full.substr(slash + 1) : full
-    );
+        slash != std::wstring::npos ? full.substr(slash + 1) : full);
 }
 
 BOOL Wh_ModInit() {
     CacheExeName();
-
     g_isExplorer     = (g_thisExeName == L"explorer.exe");
     g_isAppFrameHost = (g_thisExeName == L"applicationframehost.exe");
 
@@ -1123,17 +1251,14 @@ BOOL Wh_ModInit() {
         reinterpret_cast<void**>(&pOrigShowWindow)
     );
 
-    if (g_isExplorer || g_isAppFrameHost) {
-        Wh_SetFunctionHook(
-            reinterpret_cast<void*>(::SetWindowPos),
-            reinterpret_cast<void*>(HookedSetWindowPos),
-            reinterpret_cast<void**>(&pOrigSetWindowPos)
-        );
-    }
+    Wh_SetFunctionHook(
+        reinterpret_cast<void*>(::SetWindowPos),
+        reinterpret_cast<void*>(HookedSetWindowPos),
+        reinterpret_cast<void**>(&pOrigSetWindowPos)
+    );
 
-    Wh_Log(L"Center New Windows v1.0.0: ready (process: %s%s)",
-           g_thisExeName.c_str(),
-           (g_isExplorer || g_isAppFrameHost) ? L", +SetWindowPos hook" : L"");
+    Wh_Log(L"Center New Windows v1.0.0: ready (process: %s)",
+           g_thisExeName.c_str());
     return TRUE;
 }
 
@@ -1144,11 +1269,11 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     memset(g_uwpTracked, 0, sizeof(g_uwpTracked));
+    memset(g_regTracked, 0, sizeof(g_regTracked));
 
     if (g_centeredAtom) {
         GlobalDeleteAtom(g_centeredAtom);
         g_centeredAtom = 0;
     }
-
     Wh_Log(L"Center New Windows: unloaded");
 }
