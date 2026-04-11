@@ -2,7 +2,7 @@
 // @id              better-dialogs
 // @name            Better Dialogs
 // @description     Improves Windows dialog boxes.
-// @version         1.0
+// @version         1.1
 // @author          FireBlade
 // @github          https://github.com/FireBlade211
 // @include         *
@@ -14,8 +14,7 @@
 # Better Dialogs
 This mod improves certain Windows dialogs. It also re-translates messages for those dialogs to make sure that apps that expect the original dialogs still work properly.
 
-
-More dialogs coming soon! (or maybe not so soon, just in the future)
+More dialogs coming soon!
 
 ## Dialogs changed
 - Message boxes (W and A) changed to Task Dialogs
@@ -23,9 +22,22 @@ More dialogs coming soon! (or maybe not so soon, just in the future)
 - Legacy Open/Save file dialogs (Windows XP-style) replaced with modern IFileDialog
   - Custom controls from legacy dialog templates are preserved via IFileDialogCustomize
   - OFN_READONLY checkbox is carried over to the modern dialog
+<<<<<<< HEAD
+- Legacy ChooseColor replaced with modern HSV color picker with spectrum, hue bar, RGB/Hex inputs, and custom color support
+- Legacy ChooseFont replaced with modern WinUI-style font picker with DirectWrite preview
+
+## Screenshots
+![Improved Color Dialog](https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/BetterDialogs/colordlg.png)  
+  
+![Improved Font Dialog](https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/BetterDialogs/fontdlg.png)  
+  
+![A Message Box that was converted to a Task Dialog](https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/BetterDialogs/taskmsgbox.png)
+
+=======
   - Both ANSI and Unicode variants are intercepted
 - Legacy ChooseColor replaced with modern HSV color picker with spectrum, hue bar, RGB/Hex inputs, and custom color support
 - Legacy ChooseFont replaced with modern WinUI-style font picker with DirectWrite preview
+>>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
 */
 // ==/WindhawkModReadme==
 
@@ -76,7 +88,10 @@ struct {
     bool modernFileDialog;
     bool betterColorPicker;
     bool modernFontPicker;
+<<<<<<< HEAD
+=======
     //bool betterColorPicker;
+>>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
     //bool betterPickIconDlg;
 } settings;
 
@@ -163,18 +178,18 @@ int WINAPI MessageBoxW_Hook(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT u
         // }
 
         PCWSTR pszIcon = NULL;
+        UINT icon = uType & MB_ICONMASK;
 
-        if (FLAG(uType, MB_ICONERROR) || FLAG(uType, MB_ICONSTOP)
-        || FLAG(uType, MB_ICONHAND)) pszIcon = TD_ERROR_ICON;
+        if (icon == MB_ICONERROR || icon == MB_ICONSTOP || icon == MB_ICONHAND)
+            pszIcon = TD_ERROR_ICON;
 
-        else if (FLAG(uType, MB_ICONINFORMATION) || FLAG(uType, MB_ICONASTERISK))
+        else if (icon == MB_ICONINFORMATION || icon == MB_ICONASTERISK)
             pszIcon = TD_INFORMATION_ICON;
 
-        else if (FLAG(uType, MB_ICONQUESTION)) // task dialogs do not have a question icon
-                                               // we could fix this with SHGetStockIconInfo but we'd have to rewrite
+        else if (icon == MB_ICONQUESTION)
             pszIcon = NULL;
 
-        else if (FLAG(uType, MB_ICONEXCLAMATION) || FLAG(uType, MB_ICONWARNING))
+        else if (icon == MB_ICONEXCLAMATION || icon == MB_ICONWARNING)
             pszIcon = TD_WARNING_ICON;
 
         
@@ -413,17 +428,18 @@ int WINAPI MessageBoxIndirectW_Hook(const MSGBOXPARAMSW *lpmbp) {
         // }
 
         PCWSTR pszIcon = NULL;
+        UINT icon = lpmbp->dwStyle & MB_ICONMASK;
 
-        if (FLAG(lpmbp->dwStyle, MB_ICONERROR) || FLAG(lpmbp->dwStyle, MB_ICONSTOP)
-        || FLAG(lpmbp->dwStyle, MB_ICONHAND)) pszIcon = TD_ERROR_ICON;
+        if (icon == MB_ICONERROR || icon == MB_ICONSTOP || icon == MB_ICONHAND)
+            pszIcon = TD_ERROR_ICON;
 
-        else if (FLAG(lpmbp->dwStyle, MB_ICONINFORMATION) || FLAG(lpmbp->dwStyle, MB_ICONASTERISK))
+        else if (icon == MB_ICONINFORMATION || icon == MB_ICONASTERISK)
             pszIcon = TD_INFORMATION_ICON;
 
-        else if (FLAG(lpmbp->dwStyle, MB_ICONQUESTION))
+        else if (icon == MB_ICONQUESTION)
             pszIcon = NULL;
 
-        else if (FLAG(lpmbp->dwStyle, MB_ICONEXCLAMATION) || FLAG(lpmbp->dwStyle, MB_ICONWARNING))
+        else if (icon == MB_ICONEXCLAMATION || icon == MB_ICONWARNING)
             pszIcon = TD_WARNING_ICON;
         
         if (FLAG(lpmbp->dwStyle, MB_DEFBUTTON1)) button = 0;
@@ -806,7 +822,10 @@ LPITEMIDLIST WINAPI SHBrowseForFolderW_Hook(LPBROWSEINFOW lpbi) {
                     if (lpbi->lpszTitle) {
                         // Always set the window title from the app-provided instructions (safe)
                         pfd->SetTitle(lpbi->lpszTitle);
+<<<<<<< HEAD
+=======
 
+>>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
                         // Optionally also show as body label for apps that rely on inline instructions
                         if (settings.modernFbShowLpszTitle)
                             pCustomize->AddText(1001, lpbi->lpszTitle);
@@ -905,7 +924,11 @@ static const COLORREF g_basicColors[48] = {
 
 static int CP_GridY()    { return CP_SPEC_Y + CP_SPEC_H + 48; }
 static int CP_CustGridY(){ return CP_GridY() + CP_BROWS * CP_CIRC_STEP + 38; }
+<<<<<<< HEAD
+static int CP_BtnY()     { return (CP_CustGridY() + CP_CIRC_STEP) - 24; }
+=======
 static int CP_BtnY()     { return CP_CustGridY() + 2 * CP_CIRC_STEP + 28; }
+>>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
 static int CP_ClientW()  { return CP_INFO_X + 160; }
 static int CP_ClientH()  { return CP_BtnY() + 40 + CP_PAD; }
 
@@ -1207,10 +1230,17 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         HDC hTmpDC = GetDC(hwnd); HFONT hOldF = (HFONT)SelectObject(hTmpDC, hFont);
         SIZE szCust; GetTextExtentPoint32W(hTmpDC, g_cpCustom, (int)wcslen(g_cpCustom), &szCust);
         SelectObject(hTmpDC, hOldF); ReleaseDC(hwnd, hTmpDC);
+<<<<<<< HEAD
+        mk(L"BUTTON", L"+", BS_PUSHBUTTON, 0, CP_SPEC_X+212, CP_CustGridY()-28, 24, 22, 4010);
+        int btnX = CP_PAD + ix + 48, btnY = CP_BtnY() - 8;//, halfW = (CP_ClientW()-CP_PAD*2-10)/2;
+        mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, btnX, btnY, 80, 24, IDOK);
+        mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, btnX, btnY + 32, 80, 24, IDCANCEL);
+=======
         mk(L"BUTTON", L"+", BS_PUSHBUTTON, 0, CP_SPEC_X+szCust.cx+10, CP_CustGridY()-28, 24, 22, 4010);
         int btnY = CP_BtnY(), halfW = (CP_ClientW()-CP_PAD*2-10)/2;
         mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, CP_PAD, btnY, halfW, 34, IDOK);
         mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, CP_PAD+halfW+10, btnY, halfW, 34, IDCANCEL);
+>>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
         d->specPixels = (DWORD*)calloc(CP_SPEC_W * CP_SPEC_H, 4);
         d->vbarPixels = (DWORD*)calloc(CP_VBAR_W * CP_SPEC_H, 4);
         CP_RenderSpectrum(d); CP_RenderVBar(d); CP_UpdateControls(hwnd, d);
@@ -1335,7 +1365,11 @@ BOOL WINAPI ChooseColorW_Hook(LPCHOOSECOLORW lpcc) {
 #define FP_PREV_Y   (FP_LIST_Y + FP_LIST_H + 20)
 #define FP_PREV_H   64
 #define FP_EFF_Y    (FP_PREV_Y + FP_PREV_H + 16)
+<<<<<<< HEAD
+#define FP_BTN_Y    (FP_EFF_Y)
+=======
 #define FP_BTN_Y    (FP_EFF_Y + 34)
+>>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
 #define FP_CLIENTW  (FP_SIZ_X + FP_SIZ_W + FP_PAD)
 #define FP_CLIENTH  (FP_BTN_Y + 42 + FP_PAD)
 
@@ -1484,6 +1518,10 @@ static void FP_PaintPreview(HWND hwnd, HDC hdc, FontPickerData* d) {
         GetGValue(GetSysColor(COLOR_WINDOWTEXT))/255.f, GetBValue(GetSysColor(COLOR_WINDOWTEXT))/255.f), &br);
     if (br && d->pLabelFmt) {
         d->pRT->DrawTextW(g_fpFont, (UINT32)wcslen(g_fpFont), d->pLabelFmt, D2D1::RectF((float)FP_FAM_X, (float)FP_LABEL_Y, (float)(FP_FAM_X+FP_FAM_W), (float)(FP_LABEL_Y+20)), br);
+<<<<<<< HEAD
+        //d->pRT->DrawTextW(g_fpStyle, (UINT32)wcslen(g_fpStyle), d->pLabelFmt, D2D1::RectF((float)FP_STY_X, ((float)FP_LABEL_Y) + 48, (float)(FP_STY_X+FP_STY_W), (float)(FP_LABEL_Y+32)), br);
+=======
+>>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
         d->pRT->DrawTextW(g_fpStyle, (UINT32)wcslen(g_fpStyle), d->pLabelFmt, D2D1::RectF((float)FP_STY_X, (float)FP_LABEL_Y, (float)(FP_STY_X+FP_STY_W), (float)(FP_LABEL_Y+20)), br);
         d->pRT->DrawTextW(g_fpSize, (UINT32)wcslen(g_fpSize), d->pLabelFmt, D2D1::RectF((float)FP_SIZ_X, (float)FP_LABEL_Y, (float)(FP_SIZ_X+FP_SIZ_W), (float)(FP_LABEL_Y+20)), br);
     }
@@ -1582,9 +1620,17 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         }
 
         // Buttons
+<<<<<<< HEAD
+        //int halfW = (FP_CLIENTW-FP_PAD*2-FP_GAP)/2;
+        // mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, FP_PAD + halfW, FP_BTN_Y, 80, 24, IDOK);
+        // mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, FP_PAD+halfW+FP_GAP, FP_BTN_Y, 80, 24, IDCANCEL);
+        mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, FP_SIZ_X + 16, FP_BTN_Y, 80, 24, IDOK);
+        mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, FP_SIZ_X + 16, FP_BTN_Y+32, 80, 24, IDCANCEL);
+=======
         int halfW = (FP_CLIENTW-FP_PAD*2-FP_GAP)/2;
         mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, FP_PAD, FP_BTN_Y, halfW, 38, IDOK);
         mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, FP_PAD+halfW+FP_GAP, FP_BTN_Y, halfW, 38, IDCANCEL);
+>>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
         return 0; }
 
     case WM_ERASEBKGND: return TRUE;
