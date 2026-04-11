@@ -2,7 +2,7 @@
 // @id              disable-office-keytips-word
 // @name            Disable accidental Office KeyTips in Word
 // @description     Prevent accidental yellow Office KeyTips activation in Microsoft Word during layout/language switching and stray Alt-like transitions
-// @version         1.0.0
+// @version         1.0
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
