@@ -551,3 +551,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
 
     return TRUE;
 }
+
