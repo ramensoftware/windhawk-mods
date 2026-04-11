@@ -15,10 +15,10 @@
 Makes the highlight color use your system accent color in Win32 apps instead of the
 default blue.
 
-**Before**:
+**Before**:  
 ![Notepad with the text "test" selected in blue](https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/AccentHighlightColor/before.png)
 
-**After**:
+**After**:  
 ![Notepad with the text "test" selected in the current accent color](https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/AccentHighlightColor/after.png)
 */
 // ==/WindhawkModReadme==
