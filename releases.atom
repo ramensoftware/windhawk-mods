@@ -1,0 +1,592 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://windhawk.net/</id>
+    <title>Windhawk New Mod Releases</title>
+    <updated>2026-04-10T10:28:17.000Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://windhawk.net/"/>
+    <subtitle>New mods in the official collection of Windhawk mods</subtitle>
+    <icon>https://windhawk.net/favicon.ico</icon>
+    <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Image Resize Anti-Flip 1.0.0]]></title>
+        <id>https://windhawk.net/mods/word-image-resize-anti-flip#aa61501fa7e0eef8ee2ab6463635a0f9a45dea8d</id>
+        <link href="https://windhawk.net/mods/word-image-resize-anti-flip"/>
+        <updated>2026-04-10T10:28:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wordimageresizeantiflip">Word Image Resize Anti-Flip</h1>
+<p>This mod fixes the long-standing issue of images being flipped unexpectedly when resizing via dragging the image handles in Word. Before, once the user dragged the resize handles past the anchor point in any direction, the image would flip unexpectedly. The mod works by intercepting the drag update function and dynamically clamping the mouse position parameter to prevent crossing over the anchor point, which is the root cause of the flipping behavior. It also includes an "anti-flip" feature that detects the original drag direction and maintains it even if the user tries to cross over the anchor point, providing a more intuitive resizing experience.</p>
+<p><em>Note: this mod needs pdb symbol of <code>oart.dll</code> to work. The symbol file is expected to be ~35MB in size. Windhawk will download it automatically when you launch Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (oart.dll)", wait until it reaches 100% and the pop up disappear, otherwise please switch your network and try again) please wait patiently and <strong>relaunch Word AS ADMINISTRATOR at least once</strong> after it finishes, this is to write symbols being used to SymbolCache, which speeds up launching later on.</em></p>
+<h2 id="note">⚠️ Note:</h2>
+<ul>
+<li>It is advised to <strong>turn off automatic updates</strong> for Office applications, as PDB may need to be downloaded every time after updates.</li>
+<li>Please relaunch Word as administrator <em>at least once</em> after installing the mod and wait for symbol download to complete, this is to write symbols being used to SymbolCache, which speeds up launching later on.</li>
+</ul>
+<h1 id="before">Before</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-image-resize-anti-flip-before.gif" alt="Before" /></p>
+<h1 id="after">After</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-image-resize-anti-flip-after.gif" alt="After" /></p>
+<p>(Image courtesy of <a href="https://pixabay.com/photos/love-valentines-day-dice-game-9344644/">Ralf1403</a> from Pixabay)</p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[AudioSwap 1.0]]></title>
+        <id>https://windhawk.net/mods/audioswap#de26d434714384dc9cab67fa36a08a5399276e64</id>
+        <link href="https://windhawk.net/mods/audioswap"/>
+        <updated>2026-04-08T18:02:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="audiooutputswitcher">Audio Output Switcher</h1>
+<p>A lightning-fast audio toggle right in your taskbar! 🎧🔊</p>
+<h2 id="howtouseit">📖 How to Use It</h2>
+<ol>
+<li>⚙️ <strong>Configure Your Devices:</strong> Go to the <strong>Settings</strong> tab. </li>
+</ol>
+<ul>
+<li>Type the Name of your device names (e.g., "Headphones" and "Speakers").</li>
+<li>Select an icon for each device from the dropdown menus.</li>
+</ul>
+<ol>
+<li>🔍 <strong>Find the Icon:</strong> Look in your system tray. The icon will change based on which device is currently active!</li>
+<li>🎯 <strong>Click to Toggle:</strong> A single click swaps your audio and updates the icon instantly.</li>
+</ol>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Toolbar Position Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/fix-file-explorer-toolbar-position#716e9dc4d3c64b227586c985e4aa6968b47b9cb9</id>
+        <link href="https://windhawk.net/mods/fix-file-explorer-toolbar-position"/>
+        <updated>2026-04-06T23:19:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fileexplorertoolbarpositionfix">File Explorer Toolbar Position Fix</h1>
+<p>This mod fixes an issue with file explorer toolbars not setting the position correctly when opening explorer.</p>
+<p><strong>Before</strong><br />
+After opening explorer, all of the toolbars will be forced to be on a new line, ignoring the previous position and style.
+<img src="https://i.imgur.com/v8bj787.png" alt="Before" /></p>
+<p><strong>After</strong><br />
+Now the toolbars will respect the previous position and style when opening explorer.
+<img src="https://i.imgur.com/zGqzAfz.png" alt="After" /></p>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Pre-Vista Explorer Status Bar 2.0.0]]></title>
+        <id>https://windhawk.net/mods/prevista-explorer-statusbar#04e0523bdf54399ff52631138d50dba606d9a5eb</id>
+        <link href="https://windhawk.net/mods/prevista-explorer-statusbar"/>
+        <updated>2026-04-06T18:06:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="previstaexplorerstatusbar">Pre-Vista Explorer Status Bar</h1>
+<p>Adds a classic status bar to Windows Explorer with selectable pane styles
+matching different Windows versions. Based on the other status bar mod by Anixx,
+rewritten from XP SP1 / Win2K / 98 source code and decompilations.</p>
+<p>Note: Windows already has a built-in status bar, Hide it in folder options for this mod to look proper.</p>
+<h2 id="panestyles">Pane Styles</h2>
+<ul>
+<li><strong>Windows XP</strong> — Per-filetype infotip on single select (reads <code>HKCR\{ext}\InfoTip</code>),
+dynamic pane widths, security zone icon + name</li>
+<li><strong>Windows 2000</strong> — Simpler infotip (<code>Type;Author;Title;Subject;Comment;Size</code>),
+same layout as XP</li>
+<li><strong>Windows 98</strong> — Fixed-width left/right panes, always shows object count in pane 0,
+file size or drive capacity in pane 1</li>
+<li><strong>Windows 95/NT4</strong> — Two panes only (count + size), no zone pane, no infotip</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p><strong>XP/2000 style:</strong>
+<img src="https://i.imgur.com/5ZmPXuc.png" alt="XP/2000 style" /></p>
+<p><strong>98 style:</strong>
+<img src="https://i.imgur.com/lpHSWgY.png" alt="98 style" /></p>
+<p><strong>95/NT4 style:</strong>
+<img src="https://i.imgur.com/dmcjYwW.png" alt="95/NT4 style" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Three-pane layout: object count / file size / security zone</li>
+<li>Locale-aware number formatting with thousands separators</li>
+<li>Hidden file count display (XP/2000 no-selection state)</li>
+<li>Disk free space in explorer mode (tree pane visible)</li>
+</ul>]]></content>
+        <author>
+            <name>arceus413</name>
+            <uri>https://github.com/arceuss</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Network Toggle 1.0]]></title>
+        <id>https://windhawk.net/mods/net-toggle#0874a2e6656b36f8a8834879ee568d80f39d0ed7</id>
+        <link href="https://windhawk.net/mods/net-toggle"/>
+        <updated>2026-04-06T16:27:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="networktoggle">Network Toggle</h1>
+<p>A lightning-fast internet kill switch right in your taskbar! ⚡</p>
+<p>Ever needed to quickly disconnect from the web without digging through Windows settings or ripping the ethernet cable out of the wall? Network Toggle adds a clean, native-looking button directly to your system tray. </p>
+<p>One click drops your connection. Click it again, and you're back online.</p>
+<h2 id="howtouseit">📖 How to Use It</h2>
+<p>Using the toggle is incredibly simple:</p>
+<ol>
+<li>🔍 <strong>Find the Icon:</strong> 
+&gt; <strong>Look in your system tray (bottom right of your screen, next to the clock) for the little <code>^</code> arrow. hit it and look for the network icon.</strong></li>
+<li>🎯 <strong>Click to Toggle:</strong>
+&gt; <strong>Give the icon a single click.</strong></li>
+<li>✅ <strong>Approve the Prompt:</strong>
+&gt; **Windows will pop up a quick UAC screen asking for permission. Click **Yes<strong>.</strong></li>
+<li>🕒 <strong>Wait a Sec:</strong> 
+&gt; <strong>The tray icon will update instantly, but give Windows just a few seconds to actually power your network adapters down or back up in the background.</strong> </li>
+</ol>
+<p><strong>Why do I need to accept the UAC?</strong> </p>
+<blockquote>
+  <p>Windows requires admin permission to physically turn off your network hardware. </p>
+  <p>This is a built-in security feature to stop rogue background apps from disconnecting you secretly.</p>
+</blockquote>
+<h2 id="whyyoullloveit">✨ Why You'll Love It</h2>
+<ul>
+<li><strong>Instant Access:</strong> Your network power switch is always exactly one click away.</li>
+<li><strong>Native Look & Feel:</strong> Uses official Windows system icons, so it blends perfectly into your taskbar.</li>
+<li><strong>Smart & Safe:</strong> Only toggles your actual, physical hardware. It completely ignores virtual networks (like WSL or VMs), so your local environments stay perfectly intact!</li>
+</ul>
+<h2 id="knownissues">⚠️ Known Issues</h2>
+<ul>
+<li><strong>The UAC Popup:</strong> You will get a User Account Control prompt <em>every time</em> you use the toggle. While it adds an extra click, it's an unavoidable Windows security rule for turning physical hardware on and off.</li>
+<li><strong>Icon Grouping on the Taskbar:</strong> If you try to manually drag the icon out of the hidden <code>^</code> menu to drop it onto your main taskbar, Windows might get confused and group it with the main Windhawk app icon. this is still fully functional but showing 2 icons instead of 1.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.0.0]]></title>
+        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#03eb122ec8fd09c77818492144ff779102f0aec7</id>
+        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
+        <updated>2026-04-04T18:37:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="autodarktitlebarwithcustomcolours">Auto Dark Titlebar with Custom Colours</h1>
+<p>Combines automatic dark/light titlebar switching with per-mode, per-state custom colours. Inspired from the following mods:</p>
+<ul>
+<li><code>Auto Dark Titlebar</code> by Asteski</li>
+<li><code>Windows 11 Custom Titlebar Colors</code> by Th3Fanbus</li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li>Auto-detects Windows dark/light theme via registry and applies <code>DWMWA_USE_IMMERSIVE_DARK_MODE</code></li>
+<li>Custom titlebar colours for four independent states:</li>
+<li><strong>Light Mode</strong> - Active window</li>
+<li><strong>Light Mode</strong> - Inactive window</li>
+<li><strong>Dark Mode</strong>  - Active window</li>
+<li><strong>Dark Mode</strong>  - Inactive window</li>
+<li>Per-mode "Use Custom Colours" toggle -- leave off to keep system defaults for that mode</li>
+<li>Per-mode colour input format toggle -- choose between Hex (<code>RRGGBB</code>) or separate R/G/B fields</li>
+<li>Real-time theme change detection (responds to <code>WM_SETTINGCHANGE</code> / <code>WM_DWMCOLORIZATIONCOLORCHANGED</code>)</li>
+<li>New windows receive the correct style immediately via <code>CreateWindowEx</code> hooks</li>
+<li>Dialog windows handled via <code>DefDlgProc</code> hooks</li>
+<li>Live settings reload: colour changes apply instantly without restarting the process</li>
+</ul>
+<h2 id="colourformat">Colour Format</h2>
+<ul>
+<li><strong>Hex mode</strong>: enter a 6-character hex string, e.g. <code>FF0000</code> for red (no <code>#</code> prefix)</li>
+<li><strong>RGB mode</strong>: enter R, G, B as integers 0-255 in separate fields</li>
+</ul>
+<p>Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><code>systemsettings.exe</code> and <code>applicationframehost.exe</code> are excluded via <code>@exclude</code> to avoid conflicts</li>
+<li>No forced repaint is issued while a mouse button is held (prevents drag-state corruption)</li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Block Start Menu and Hosts 1.2]]></title>
+        <id>https://windhawk.net/mods/block-windows-startmenu-and-hosts#f6b25143ed7014d3e699714c4d4d86039c35947a</id>
+        <link href="https://windhawk.net/mods/block-windows-startmenu-and-hosts"/>
+        <updated>2026-04-04T10:59:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="blockstartmenuandhosts">Block Start Menu and Hosts</h1>
+<p>This Windhawk mod actively terminates existing instances of specific Windows host processes upon loading and intercepts process creation to prevent them from launching again in the future. 
+This way the mod ensures that unused selected UI components and their process are actually not running instead of simply hiding them.</p>
+<h2 id="features">Features</h2>
+<p>You can individually toggle the blocking of the following processes dynamically in the mod settings:</p>
+<ul>
+<li><strong>StartMenuExperienceHost.exe</strong> -&gt; The main Start Menu UI and process ("WIN" key)</li>
+<li><strong>SearchHost.exe</strong>              -&gt; The Search Menu UI and process ("WIN + S" shortcut) <strong>Note</strong>: <em>may</em> cause issues within folder search.</li>
+<li><strong>TextInputHost.exe</strong>           -&gt; The emoji and clipboard UI and process ("WIN + ." shortcut)</li>
+</ul>
+<h2 id="howitworks">How it Works</h2>
+<p>The mod injects into <code>explorer.exe</code> and <code>svchost.exe</code>.<br />
+Upon init, it kills any active instances of the selected hosts.<br />
+It then places a hook on the <code>CreateProcessInternalW</code> function: If the system attempts to launch any of the blocked .exe (example: user press WIN key), the hook intercepts the request and returns an <code>ERROR_ACCESS_DENIED</code> flag, preventing the launch.</p>]]></content>
+        <author>
+            <name>Exiled Eye</name>
+            <uri>https://github.com/ExiledEye</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Pre-Vista File Copy Dialog 2.1.0]]></title>
+        <id>https://windhawk.net/mods/prevista-file-copy#a44a7e403dbeb79f3dd8e0934b6f3af779c779ba</id>
+        <link href="https://windhawk.net/mods/prevista-file-copy"/>
+        <updated>2026-04-02T23:50:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="previstafilecopydialog">Pre-Vista File Copy Dialog</h1>
+<p>This mod replaces the modern file copy/move/delete progress dialog with a
+pre-Vista style classic progress dialog.</p>
+<p>Based on the original Windows XP CProgressDialog implementation from browseui.
+Hooks CoCreateInstance to intercept CLSID_ProgressDialog and provide a custom
+implementation that reproduces XP's behavior for copy, move, delete,
+recycle, and empty recycle bin operations, including animations, per-file
+progress text, and time estimates.</p>
+<p>Works with shell32.dll from Windows 95 up to XP for loading the original AVI
+animations and strings.</p>
+<p><img src="https://i.imgur.com/wWq5rhx.png" alt="Copying" />
+<img src="https://i.imgur.com/Tiey5JK.png" alt="Moving" />
+<img src="https://i.imgur.com/5uFWHay.png" alt="Deleting" />
+<img src="https://i.imgur.com/nBMB7wB.png" alt="Emptying the Recycle Bin" /></p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Shell32 Path</strong>: Point this to a pre-Vista shell32.dll to load the original
+AVI animations (filecopy, filemove, filedel, filenuke, filedelreal). If not set
+or the file doesn't exist, animations will be skipped gracefully.</li>
+</ul>]]></content>
+        <author>
+            <name>arceus413</name>
+            <uri>https://github.com/arceuss</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.0]]></title>
+        <id>https://windhawk.net/mods/smooth-scroll-win32#6d6c2dd24ba263b22d599c4890233c2ae2f6a262</id>
+        <link href="https://windhawk.net/mods/smooth-scroll-win32"/>
+        <updated>2026-03-31T08:10:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="smoothscrollforwin32">Smooth Scroll for Win32</h1>
+<h2 id="english">English</h2>
+<p>Adds smooth scrolling with spring physics to legacy Win32 applications.
+Only modifies legacy controls — modern WinUI windows are not affected.</p>
+<h3 id="scrollmodesautodetectedperwindow">Scroll modes (auto-detected per window)</h3>
+<p>| Control | Method | Granularity |
+|---|---|---|
+| SysListView32 | LVM<em>SCROLL | Pixel |
+| DirectUIHWND | UIA SetScrollPercent | Continuous |
+| SysTreeView32, Edit, etc | WM</em>VSCROLL | Line |
+| Unknown / modern | Passthrough | Not modified |</p>
+<h3 id="addingmoreprograms">Adding more programs</h3>
+<p>Go to the mod's <strong>Advanced</strong> tab in Windhawk and add custom
+<code>@include</code> entries (e.g. <code>totalcmd.exe</code>). The mod auto-detects
+scrollable controls in any Win32 application. Modern WinUI windows
+inside any included process are automatically skipped.</p>
+<hr />
+<h2 id="portugus">Português</h2>
+<p>Adiciona rolagem suave com física de mola a aplicativos Win32 antigos.
+Só modifica controles legados. Janelas WinUI não são afetadas.</p>
+<h3 id="adicionandomaisprogramas">Adicionando mais programas</h3>
+<p>Vá na aba <strong>Avançado</strong> do mod no Windhawk e adicione entradas
+<code>@include</code> (ex: <code>totalcmd.exe</code>). O mod detecta automaticamente
+controles roláveis em qualquer aplicativo Win32.</p>
+<hr />
+<h2 id="espaol">Español</h2>
+<p>Añade desplazamiento suave con física de resorte a las aplicaciones Win32 antiguas.
+Solo modifica los controles antiguos. Las ventanas de WinUI no se ven afectadas.</p>
+<h3 id="agregarmasprogramas">Agregar mas programas</h3>
+<p>Ve a la pestaña <strong>Avanzado</strong> del mod en Windhawk y añade entradas:
+<code>@include</code> (p. ej., <code>totalcmd.exe</code>). El mod detecta automáticamente
+los controles desplazables en cualquier aplicación Win32.</p>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Z-Order Override 0.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-z-order-override#0560f4ebd214840acc9fb6c1eaed7dd4cfbd839f</id>
+        <link href="https://windhawk.net/mods/taskbar-z-order-override"/>
+        <updated>2026-03-31T08:06:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarzorderoverride">Taskbar Z-Order Override</h1>
+<p>Control whether the Windows taskbar stays always on top, always at the bottom, or behaves like a normal window.</p>
+<h2 id="workingmodes">Working modes</h2>
+<h3 id="behaveslikeanormalwindow">Behaves like a normal window</h3>
+<p>Makes the taskbar behave like a regular window - like how it was possible pre-Vista. </p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/interactive.gif" alt="Behaves like a normal window" /></p>
+<h3 id="alwaysontop">Always on top</h3>
+<p>Keeps the taskbar above normal windows - no matter in games or browser fullscreen. </p>
+<p>This is mainly useful for people who use <strong>auto-hide</strong> and want the taskbar to stay accessible consistently.</p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/always_on_top_low.gif" alt="Always on top" /></p>
+<h3 id="alwaysatbottom">Always at bottom</h3>
+<p>Keeps the taskbar at the bottom of the Z-order.</p>
+<p>If you are more of a window enjoyer than a taskbar enjoyer, this is for you. </p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/always_bottom_low.gif" alt="Always at bottom" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Supports the main taskbar and secondary taskbars on multi-monitor setups.</li>
+<li>Intended for Explorer's standard taskbar windows.</li>
+<li>Since Windows taskbar behavior differs across versions and builds, some edge cases may vary depending on your system configuration.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Normal window mode original concept from <strong>7+ Taskbar Tweaker</strong> by m417z</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Word MathType Dark Mode Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/word-mathtype-dark-fix#922e3390d9cd03912080fbc81903590021ed5377</id>
+        <link href="https://windhawk.net/mods/word-mathtype-dark-fix"/>
+        <updated>2026-03-30T21:31:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wordmathtypedarkmodefix">Word MathType Dark Mode Fix</h1>
+<p>This mod fixes the broken dark mode rendering of MathType Equations in Word and solves the unreadable black-on-black issue by intercepting the dark mode state change and dynamically adjusting GDI colors for dark mode formula rendering.</p>
+<p><em>Note: this mod needs pdb symbol of <code>wwlib.dll</code> to work. The symbol file is expected to be a bit large (~90MB in size). Windhawk will download it automatically when you launch Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (wwlib.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and <strong>relaunch Word AS ADMINISTRATOR at least once</strong> after it finishes, this is to write symbols being used to SymbolCache, which speeds up launching later on.</em></p>
+<h2 id="note">⚠️ Note:</h2>
+<ul>
+<li>It is advised to <strong>turn off automatic updates</strong> for Office applications, as PDB may need to be downloaded every time after updates.</li>
+<li>Please relaunch Word as administrator <em>at least once</em> after installing the mod and wait for symbol download to complete, this is to write symbols being used to SymbolCache, which speeds up launching later on.</li>
+</ul>
+<p><em>This mod is part of <strong>The Ultimate Office Dark Mode Project</strong></em></p>
+<h1 id="beforeoriginalaftercomparison">Before-Original-After Comparison</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-mathtype-dark-fix-before-original-after.png" alt="Before-Original-After" /></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Shell Animation Disabler 1.0]]></title>
+        <id>https://windhawk.net/mods/shell-animation-disabler#0df13a9a16e18c36e1b09a6fd7d11ec2c68de08c</id>
+        <link href="https://windhawk.net/mods/shell-animation-disabler"/>
+        <updated>2026-03-28T20:31:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="shellanimationdisabler">Shell Animation Disabler</h1>
+<p>This mod allows you to selectively disable the animations for the start menu, the search menu, the quick settings panel and the notification center.</p>
+<p><img src="https://i.imgur.com/YeEeM4M.gif" alt="" /></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Change Tray Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/change-tray-icons#ef2b66ea7d81e120629daaf0d285dd5a8d41bf42</id>
+        <link href="https://windhawk.net/mods/change-tray-icons"/>
+        <updated>2026-03-28T20:30:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="forcetrayicons">Force Tray Icons</h1>
+<p>This mod will change all tray icons for an application to a specific other icon.</p>
+<p><strong>Example</strong>: Steam with its pre-2011 icon</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/change-tray-icons-example.png" alt="Example: *Steam with its pre-2011 icon" /></p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Go to the "Advanced" tab of this mod</li>
+<li>Find the "Custom process inclusion list"</li>
+<li>Add the name of the EXE you want to disable tray icons for.</li>
+</ol>
+<ul>
+<li>If you don't know the name of the EXE, you can find it using 
+ Task Manager.</li>
+</ul>
+<ol>
+<li>Click Save.</li>
+<li>Configure the mod as you want it to be.</li>
+<li>If the program is open already, restart it.</li>
+</ol>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[One Hair 1.0]]></title>
+        <id>https://windhawk.net/mods/one-hair#74f45c84c96abe191f6aaaf5d72b4a965519338f</id>
+        <link href="https://windhawk.net/mods/one-hair"/>
+        <updated>2026-03-28T19:13:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="onehair">One Hair</h1>
+<p><strong>The first mod designed to make your Windows experience slightly worse.</strong></p>
+<p>One Hair places a single, slightly annoying hair on your screen. It’s always on top, and moves randomly.</p>
+<h2 id="why">Why?</h2>
+<p>Why not?</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>One persistent hair</strong> always on top, always there.</li>
+<li><strong>Configurable movement interval</strong> – default: 5 minutes (or whatever you set).</li>
+<li><strong>Random positions</strong> because a hair that stays still is boring.</li>
+<li><strong>Runs in its own process</strong> won't crash your Explorer. (But it might annoy you.)</li>
+</ul>]]></content>
+        <author>
+            <name>Acercandr0</name>
+            <uri>https://github.com/Acercandr0</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[DirectWrite Font Fallback Override 1.0]]></title>
+        <id>https://windhawk.net/mods/dwrite-font-fallback-override#9a65e3674e7c1c8f8265f346bd561a76bce6667c</id>
+        <link href="https://windhawk.net/mods/dwrite-font-fallback-override"/>
+        <updated>2026-03-28T17:25:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="directwritefontfallbackoverride">DirectWrite Font Fallback Override</h1>
+<p>Hooks DirectWrite's font fallback system to override font selection for specific
+Unicode character ranges across all applications.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Global font fallback override</li>
+<li>Per-character-range customization</li>
+<li>Real-time configuration updates</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<p>Configure fallback rules in settings to map character ranges to specific fonts.
+For example, force all CJK characters (U+4E00-U+9FFF) to use "Microsoft YaHei".</p>]]></content>
+        <author>
+            <name>Muhammad Ragib Hasin</name>
+            <uri>https://github.com/RagibHasin</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Buttons 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-buttons#9b7c94904e9d65cd9c1c24efe672f5cb5f2a6ee2</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-buttons"/>
+        <updated>2026-03-28T16:11:55.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11startmenubuttons">Windows 11 Start Menu Buttons</h1>
+<p>This mod replaces the default bottom row of the Windows 11 Start menu with custom buttons.
+Each button has three fields:</p>
+<ol>
+<li><p><strong>Name</strong> — tooltip text.</p></li>
+<li><p><strong>Icon</strong> — a <a href="https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font">Segoe Fluent Icons / Segoe UI Symbol</a> glyph, for example <code>\uE7E8</code>. </p></li>
+<li><p><strong>Action</strong> — what the button does.</p></li>
+</ol>
+<p><img src="https://i.imgur.com/FpVm6OR.png" alt="img" /></p>
+<h3 id="actionformats">Action formats</h3>
+<ul>
+<li><code>cmd:explorer.exe</code> — runs through <code>cmd.exe</code>.</li>
+<li><code>shell:shutdown /r</code> — runs console window. </li>
+<li><code>"C:\Program Files"</code> — opens a folder.</li>
+<li><code>"C:\Program Files\Google\Chrome\Application\chrome.exe"</code> — opens a file or app.</li>
+<li><code>~Downloads</code> — searches for a folder by name in common system locations.</li>
+<li><code>~chrome.exe</code> — searches for a file by name in common system locations.</li>
+<li><code>https://www.youtube.com/</code> — opens a website.</li>
+<li><code>{ "Restart", "\uE777", "shell:shutdown /r /f /t 0" }, { "Shut down", "\uE7E8", "shell:shutdown /s /f /t 0" }</code> — a submenu with multiple items.</li>
+</ul>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Visio Thumbnail HD Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/visio-hd-thumbnail#70d408f846c9f3f3d62b769e877f4a3c80ef4ddb</id>
+        <link href="https://windhawk.net/mods/visio-hd-thumbnail"/>
+        <updated>2026-03-28T15:02:41.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="visiothumbnailhdfix">Visio Thumbnail HD Fix</h1>
+<p>This mod addresses the issue of low-resolution thumbnails for Visio documents in File Explorer. Visio generates thumbnails according to fixed area sizes (i.e., a max total pixel count), which can lead to blurry thumbnails for larger documents. This mod intercepts the thumbnail generation function in <code>vislib.dll</code> and scales up the area parameter, enabling Visio to produce higher-resolution thumbnails, resulting in clearer previews in File Explorer.</p>
+<h1 id="notes">Notes</h1>
+<ul>
+<li><p>This will only take effect on newly saved or modified Visio files, as thumbnails for existing files were generated and saved at the time of their creation or last modification. To update thumbnails for existing files, simply open, do some modifications, and resave them in Visio. (Direct resave without modification may not trigger thumbnail regeneration, as Visio is kind of smart in that regard. Changing text color or adding and then removing a shape should be enough to force thumbnail update.)</p></li>
+<li><p>Each file with HD thumbnails might take up extra 10KB of storage space (as of <code>Scale Multiplier</code> being set to 4). We consider this a reasonable trade-off for the improved thumbnail quality, especially for complex Visio documents where only clear thumbnails make sense.</p></li>
+</ul>
+<h1 id="before">Before</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/visio-hd-thumbnail-before.png" alt="Before" /></p>
+<h1 id="after">After</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/visio-hd-thumbnail-after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Force Kill Active Window 1.0]]></title>
+        <id>https://windhawk.net/mods/force-kill-active-window#e3d4505be854f2fee52fadd2bf1d05b7aff4712e</id>
+        <link href="https://windhawk.net/mods/force-kill-active-window"/>
+        <updated>2026-03-28T13:37:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="forcekillactivewindow">Force Kill Active Window</h1>
+<p>Instantly terminate any frozen or unresponsive application with a keyboard shortcut.</p>
+<p>By default, pressing <strong>Ctrl+Alt+F4</strong> will execute a hard system kill on the currently active foreground window, bypassing the standard Windows polite closure request.</p>
+<h3 id="warning">⚠️ Warning</h3>
+<p>This performs a hard system termination (<code>TerminateProcess</code>). The target application will <strong>not</strong> be given a chance to save your work. Use strictly as a last resort.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Customizable Hotkey:</strong> Change the trigger shortcut in the settings. Updates apply instantly.</li>
+<li><strong>Process Blacklist:</strong> Define apps (like <code>winword.exe</code> or <code>chrome.exe</code>) that the mod is forbidden from killing to protect your most critical work.</li>
+</ul>]]></content>
+        <author>
+            <name>vfxturjo</name>
+            <uri>https://github.com/zunaidFarouque</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Hide NVIDIA Control Panel Missing Dialog 1.1.0]]></title>
+        <id>https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider#b83161afe9e3090495743124c1192750a3f5920c</id>
+        <link href="https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider"/>
+        <updated>2026-03-27T12:29:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hidenvidiacontrolpanelmissingdialog">Hide NVIDIA Control Panel Missing Dialog</h1>
+<p><img src="https://i.imgur.com/8vaxTpN.png" alt="Screenshot" /></p>
+<p>Silences the <strong>"NVIDIA Control Panel not found"</strong> notification that appears in the bottom-right corner every time Windows starts.</p>
+<h2 id="background">Background</h2>
+<p>Tools like <a href="https://www.techpowerup.com/nvcleanstall/">NVCleanstall</a> allow you to strip components from the NVIDIA driver package during installation. Certain options — such as disabling or not installing the NVIDIA Control Panel — break the Control Panel integration intentionally or as a side effect. Once broken, <code>nvcontainer.exe</code> detects that the Control Panel is missing or non-functional and displays a dialog on every startup prompting you to reinstall it from the Microsoft Store.</p>
+<p>Since the <strong>NVIDIA App</strong> now covers everything the classic Control Panel offered — display settings, GPU overclocking, driver management, and more — there is no practical reason to have the Control Panel installed. The dialog serves no purpose and becomes permanent noise.</p>
+<h2 id="whatitdoes">What it does</h2>
+<p>This mod suppresses the "NVIDIA Control Panel not found" dialog completely. It never appears on screen, neither at startup nor at any other time.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks into <code>nvcontainer.exe</code> and intercepts <code>ShowWindow</code> and <code>SetWindowPos</code> calls. Any top-level <code>#32770</code> dialog whose child windows contain the text "NVIDIA" is immediately blocked from becoming visible. A cache of confirmed dialog handles ensures the detection logic runs only once per window, keeping overhead minimal on subsequent calls.</p>
+<p>On mod initialization, any already-visible instance of the dialog is also hidden immediately.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 10 and Windows 11</li>
+<li>Targets <code>nvcontainer.exe</code> only</li>
+</ul>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Translucent Flyouts Controller 1.0.0]]></title>
+        <id>https://windhawk.net/mods/translucent-flyouts-controller#5ce1d85477d2d642a676c043d6b045dc89c9030e</id>
+        <link href="https://windhawk.net/mods/translucent-flyouts-controller"/>
+        <updated>2026-03-27T12:13:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="translucentflyoutscontrollerforwindhawk">Translucent Flyouts Controller for Windhawk</h1>
+<p><img src="https://i.imgur.com/F64iYmG.gif" alt="Preview" /></p>
+<p>This mod provides a Windhawk settings interface for <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a>, a Windows utility that applies visual effects to system menus and tooltips. The controller bridges Windhawk's GUI to the registry keys that TranslucentFlyouts monitors.</p>
+<p>TranslucentFlyouts handles the actual rendering of transparency and effects. This controller simply lets you configure those effects without manual registry editing.</p>
+<h2 id="requirements">Requirements</h2>
+<p>You must have <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> already installed and running. If you don't have it, install it first. This controller won't work standalone.</p>
+<p>Minimum OS: Windows 10/11 (depends on selected effect)
+Recommended: Windows 11 22H2 or newer</p>
+<h2 id="howsettingsareapplied">How Settings Are Applied</h2>
+<p>When you adjust a setting and click Apply:</p>
+<ol>
+<li>The mod reads your Windhawk configuration</li>
+<li>Writes the corresponding values to TranslucentFlyouts registry keys (under HKCU\Software\TranslucentFlyouts)</li>
+<li>Sends a refresh signal so changes take effect immediately</li>
+</ol>
+<p>By default, this refresh is fast. It pokes the running TranslucentFlyouts process. If you enable "Hard Reload On Apply", it fully restarts the process instead, which is slower but sometimes necessary if visuals appear corrupted or stale.</p>
+<h2 id="thecategorysystem">The Category System</h2>
+<p>Settings are organized into four main categories:</p>
+<ul>
+<li><strong>Global</strong>: Default settings that apply across all menu types</li>
+<li><strong>DropDown</strong>: Behavior for standard dropdown menus</li>
+<li><strong>Menu</strong>: Styling for context menus and application menus</li>
+<li><strong>Tooltip</strong>: Appearance of system tooltips</li>
+</ul>
+<p>Each category can either use its own settings or inherit from Global via the "use global" option. This lets you have one consistent style throughout Windows, or customize specific menu types.</p>
+<h2 id="resettingtodefaults">Resetting to Defaults</h2>
+<p>Use the "Controller / Reset To Defaults" dropdown to restore a category to its built-in defaults:</p>
+<ol>
+<li>Select which category to reset: Global, DropDown, Menu, Tooltip, or All</li>
+<li>Click Apply</li>
+<li>The dropdown automatically returns to None</li>
+</ol>
+<p>You can trigger another reset anytime by picking a category again. This pattern exists because Windhawk doesn't support custom buttons in settings. Only dropdowns and toggles are available.</p>
+<h2 id="keydetails">Key Details</h2>
+<ul>
+<li>The "use global" setting (when available) makes a category inherit the corresponding Global setting value</li>
+<li>Color values use ARGB hex format: <code>0xAARRGGBB</code></li>
+<li>Example: <code>0xFF0000FF</code> is fully opaque blue</li>
+<li>Example: <code>0x801F75FF</code> is semi-transparent blue</li>
+<li>Some settings interact with each other. For example, "Enable Immersive Style" on menu applies Windows 11's modern visual language</li>
+<li>Effect types include options like Acrylic, Mica, Blur, and Transparent, each with different visual characteristics</li>
+</ul>
+<h2 id="references">References</h2>
+<p>This controller is built on top of two excellent projects:</p>
+<ul>
+<li><p><a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> by ALTaleX531 provides the original runtime and handles all the actual menu rendering that makes Windows menus truly customizable.</p></li>
+<li><p><a href="https://github.com/Satanarious/TranslucentFlyoutsConfig">TranslucentFlyoutsConfig</a> by Satanarious created a polished configuration application that became the standard way to manage these settings. The setting names, organization, and defaults used in this controller are based on that work.</p></li>
+</ul>
+<p>Both projects are well maintained and worth exploring if you want to understand how it all works together.</p>]]></content>
+        <author>
+            <name>GID0317</name>
+            <uri>https://github.com/GID0317</uri>
+        </author>
+    </entry>
+</feed>
