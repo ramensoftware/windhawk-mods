@@ -508,7 +508,7 @@ function getModChangelogTextForVersion(modId: string, modVersion: string, commit
     }
 }
 
-function generateRssFeed() {
+function generateRssFeed(feedType: 'updates' | 'releases') {
     type FeedItem = {
         commit: string;
         title: string;
@@ -542,7 +542,8 @@ function generateRssFeed() {
         }
 
         const [changeType, filePath] = changedFiles[0].split('\t');
-        if (changeType !== 'A' && changeType !== 'M') {
+        const allowedChangeTypes = feedType === 'releases' ? ['A'] : ['A', 'M'];
+        if (!allowedChangeTypes.includes(changeType)) {
             continue;
         }
 
@@ -602,8 +603,12 @@ function generateRssFeed() {
     }
 
     const feed = new Feed({
-        title: 'Windhawk Mod Updates',
-        description: 'Updates in the official collection of Windhawk mods',
+        title: feedType === 'releases'
+            ? 'Windhawk New Mod Releases'
+            : 'Windhawk Mod Updates',
+        description: feedType === 'releases'
+            ? 'New mods in the official collection of Windhawk mods'
+            : 'Updates in the official collection of Windhawk mods',
         id: 'https://windhawk.net/',
         link: 'https://windhawk.net/',
         favicon: 'https://windhawk.net/favicon.ico',
@@ -640,7 +645,8 @@ async function main() {
 
     await generateModCatalogs();
 
-    fs.writeFileSync('updates.atom', generateRssFeed());
+    fs.writeFileSync('updates.atom', generateRssFeed('updates'));
+    fs.writeFileSync('releases.atom', generateRssFeed('releases'));
 
     const srcPath = 'public';
     for (const file of fs.readdirSync(srcPath, { withFileTypes: true })) {
