@@ -1,27 +1,34 @@
 // ==WindhawkMod==
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
-// @description     Automatically switch between light and dark appearance/wallpapers/themes based on a custom hours/sunset to sunrise with custom script support
-// @version         1.2.0
+// @description     Automatically switch between light and dark appearance/wallpapers/themes based on a schedule with hotkey and custom script support
+// @version         1.3.0
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         explorer.exe
+// @license         GPL-3.0
 // @compilerOptions -lole32 -loleaut32 -lwindowsapp -lruntimeobject -lkernel32 -luser32 -lshell32
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For pull requests, development takes place here:
+// https://github.com/tinodin/windhawk-mods/tree/main
 
 // ==WindhawkModReadme==
 /*
 # Auto Theme Switcher
 
 ### Scheduling Modes  
-*(default: Set custom hours)*
+*(default: Custom)*
 
-- Set custom hours for light and dark  
+- Custom
     - *(default: `07:00:00` for light, `19:00:00` for dark)*  
 - Sunset to sunrise (location service)
 - Sunset to sunrise (custom geographic coordinates)
   - *(default: `0` for Latitude, `0` for Longitude)*  
   - Coordinates can be found at [latlong.net](https://www.latlong.net/)
+- Hotkey only
 
 ### Switching Modes  
 *(default: Switch between light and dark appearance)*
@@ -38,6 +45,37 @@
     - Saved/imported themes: `%LOCALAPPDATA%\Microsoft\Windows\Themes`  
     - To create custom `.theme` files, use Windows Personalization settings ([video guide](https://www.youtube.com/watch?v=-QWR6NQZAUg))
 
+### Hotkey (Toggle Theme)
+*(default: None)*
+
+- Provide a hotkey to manually toggle the current theme
+
+Hotkeys are specified in the format: `Modifier+Modifier+Key`
+
+**Modifiers:** Alt, Ctrl, Shift, Win
+
+**Keys:**
+- Letters: A-Z
+- Numbers: 0-9
+- Function keys: F1-F24
+- Navigation: Home, End, PageUp, PageDown, Insert, Delete, Left, Right, Up, Down
+- Common: Enter, Tab, Space, Backspace, Escape (or Esc), CapsLock, PrintScreen,
+  Pause
+- Numpad: Numpad0-Numpad9 (or Num0-Num9), NumLock, Add, Subtract, Multiply,
+  Divide, Decimal
+- Media: VolumeMute, VolumeUp, VolumeDown, MediaPlayPause, MediaNext, MediaPrev,
+  MediaStop
+- Modifier keys (for Virtual key press): LWin, RWin, LShift, RShift, LCtrl,
+  RCtrl, LAlt, RAlt
+- Some of the VK_* codes from [Virtual-Key
+  Codes](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes)
+
+**Examples:**
+- `Ctrl+Alt+D` - Ctrl + Alt + D
+- `Ctrl+Shift+F1` - Ctrl + Shift + F1
+- `Alt+Home` - Alt + Home
+- `Win+Numpad1` - Windows key + Numpad 1
+
 ### Custom Script
 *(default: None)*
 
@@ -52,18 +90,19 @@
 
 // ==WindhawkModSettings==
 /*
-- ScheduleMode: CustomHours
+- ScheduleMode: Custom
   $name: Scheduling Mode
   $options:
-  - CustomHours: Set custom hours
+  - Custom: Custom
   - LocationService: Sunset to sunrise (location service)
   - CustomCoordinates: Sunset to sunrise (custom geographic coordinates)
+  - Hotkey: Hotkey only
 - CustomLight: 07:00:00
   $name: Light Mode Time
-  $description: Set custom hours (HH:mm:ss or HH:mm)
+  $description: Custom (HH:mm:ss or HH:mm)
 - CustomDark: 19:00:00
   $name: Dark Mode Time
-  $description: Set custom hours (HH:mm:ss or HH:mm)
+  $description: Custom (HH:mm:ss or HH:mm)
 - Latitude: "0"
   $name: Latitude
   $description: Sunset to sunrise (custom geographic coordinates)
@@ -88,6 +127,12 @@
 - DarkThemePath: "C:\\Windows\\Resources\\Themes\\dark.theme"
   $name: Dark Mode Theme Path
   $description: Switch between light and dark themes
+- Hotkey: ""
+  $name: Hotkey (Toggle Theme)
+  $description: >-
+    Hotkey in format: Modifier+Key (e.g., Ctrl+Alt+D).
+    Modifiers: Alt, Ctrl, Shift, Win.
+    Keys: A-Z, 0-9, F1-F24, Enter, Space, Home, End, Insert, Delete, etc.
 - ScriptPath: ""
   $name: Custom Script Path
 - LockScreen: true
@@ -115,9 +160,10 @@ using namespace winrt::Windows::System::UserProfile;
 using namespace winrt::Windows::Foundation;
 
 enum class ScheduleMode {
-    CustomHours,
+    Custom,
     LocationService,
     CustomCoordinates,
+    Hotkey,
 };
 
 enum class SwitchMode {
@@ -137,6 +183,7 @@ struct {
     std::wstring darkWallpaperPath;
     std::wstring lightThemePath;
     std::wstring darkThemePath;
+    std::wstring hotkeyString;
     std::wstring scriptPath;
     bool lockScreen;
 } g_settings;
@@ -147,20 +194,13 @@ HANDLE g_wakeEvent = nullptr;
 bool g_exitFlag = false;
 HPOWERNOTIFY g_hPowerNotify = nullptr;
 
+static const int kToggleHotkeyId = 1774952533;
+static bool g_hotkeyRegistered = false;
+
 enum Appearance {
     light,
     dark
 };
-
-SYSTEMTIME ParseScheduleTime(PCWSTR timeStr) {
-    SYSTEMTIME st = {};
-    if (timeStr) {
-        if (swscanf_s(timeStr, L"%hu:%hu:%hu", &st.wHour, &st.wMinute, &st.wSecond) < 3) {
-            st.wSecond = 0;
-        }
-    }
-    return st;
-}
 
 bool GetLocation(double& lat, double& lng)
 {
@@ -481,17 +521,20 @@ void Apply(bool useLightTheme, SwitchMode switchMode, const std::wstring& lightW
     }
 }
 
-time_t UpdateThemeState() {
+time_t UpdateThemeState(bool applyNow) {
     time_t now = time(nullptr);
     struct tm now_tm;
     localtime_s(&now_tm, &now);
 
+    if (g_settings.scheduleMode == ScheduleMode::Hotkey) {
+        return 0;
+    }
+
     SYSTEMTIME lightST = g_settings.lightTime;
     SYSTEMTIME darkST = g_settings.darkTime;
 
-    if (g_settings.scheduleMode == ScheduleMode::LocationService || 
+    if (g_settings.scheduleMode == ScheduleMode::LocationService ||
         g_settings.scheduleMode == ScheduleMode::CustomCoordinates) {
-        
         double lat = g_settings.latitude;
         double lng = g_settings.longitude;
 
@@ -503,64 +546,65 @@ time_t UpdateThemeState() {
                 g_settings.longitude = lng;
             } else {
                 wchar_t latBuf[32] = {0}, lngBuf[32] = {0};
-                if (Wh_GetStringValue(L"CachedLat", latBuf, 32) > 0 && 
+                if (Wh_GetStringValue(L"CachedLat", latBuf, 32) > 0 &&
                     Wh_GetStringValue(L"CachedLng", lngBuf, 32) > 0) {
                     lat = _wtof(latBuf);
                     lng = _wtof(lngBuf);
-                    Wh_Log(L"Location fetch failed, using coordinates from local storage: %f, %f", lat, lng);
+                    if (applyNow) {
+                        Wh_Log(L"Location fetch failed, using coordinates from local storage: %f, %f", lat, lng);
+                    }
                 } else {
-                    Wh_Log(L"Location fetch failed and no cache found, using settings coordinates.");
+                    if (applyNow) {
+                        Wh_Log(L"Location fetch failed and no cache found, using settings coordinates.");
+                    }
                     lat = g_settings.latitude;
                     lng = g_settings.longitude;
                 }
             }
         }
-        
+
         GetSunriseSunsetTimes(lat, lng, lightST, darkST);
 
         if (locSuccess || g_settings.scheduleMode == ScheduleMode::CustomCoordinates) {
             PCWSTR sourceStr = (g_settings.scheduleMode == ScheduleMode::CustomCoordinates) ? L"CustomCoordinates" : (locSuccess ? L"LocationService (Fresh)" : L"LocationService (Cached)");
             Wh_Log(L"Active Schedule (%s): %f, %f", sourceStr, lat, lng);
-            Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d",
-                sourceStr,
-                lightST.wHour, lightST.wMinute, lightST.wSecond,
-                darkST.wHour, darkST.wMinute, darkST.wSecond);
+            Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d", sourceStr, lightST.wHour, lightST.wMinute, lightST.wSecond, darkST.wHour, darkST.wMinute, darkST.wSecond);
         }
 
-
         if (g_settings.scheduleMode == ScheduleMode::LocationService && !locSuccess) {
+            if (applyNow) {
+                auto getAbsInternal = [&](const SYSTEMTIME& st, int dayOffset) {
+                    struct tm t = now_tm;
+                    t.tm_hour = st.wHour; t.tm_min = st.wMinute; t.tm_sec = st.wSecond;
+                    t.tm_mday += dayOffset; t.tm_isdst = -1;
+                    return mktime(&t);
+                };
 
-            auto getAbsInternal = [&](const SYSTEMTIME& st, int dayOffset) {
-                struct tm t = now_tm;
-                t.tm_hour = st.wHour; t.tm_min = st.wMinute; t.tm_sec = st.wSecond;
-                t.tm_mday += dayOffset; t.tm_isdst = -1;
-                return mktime(&t);
-            };
-            time_t lT = getAbsInternal(lightST, 0);
-            time_t dT = getAbsInternal(darkST, 0);
-            bool isLight = (lT < dT) ? (now >= lT && now < dT) : (now >= lT || now < dT);
-            Apply(isLight, g_settings.switchMode, g_settings.lightWallpaperPath, g_settings.darkWallpaperPath, g_settings.lightThemePath, g_settings.darkThemePath, g_settings.scriptPath, g_settings.lockScreen);
+                time_t lT = getAbsInternal(lightST, 0);
+                time_t dT = getAbsInternal(darkST, 0);
+                bool isLight = (lT < dT) ? (now >= lT && now < dT) : (now >= lT || now < dT);
+                Apply(isLight, g_settings.switchMode, g_settings.lightWallpaperPath, g_settings.darkWallpaperPath, g_settings.lightThemePath, g_settings.darkThemePath, g_settings.scriptPath, g_settings.lockScreen);
 
+                while (true) {
+                    if (g_exitFlag) return 0;
+                    HWND shellWnd = GetShellWindow();
+                    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                    if (shellWnd && tray && IsWindowVisible(tray)) break;
+                    Sleep(100);
+                }
 
-            while (true) {
-                if (g_exitFlag) return 0;
-                HWND shellWnd = GetShellWindow();
-                HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-                if (shellWnd && tray && IsWindowVisible(tray)) break;
-                Sleep(100);
-            }
+                if (GetLocation(lat, lng)) {
+                    g_settings.latitude = lat;
+                    g_settings.longitude = lng;
+                    GetSunriseSunsetTimes(lat, lng, lightST, darkST);
 
-            if (GetLocation(lat, lng)) {
-                g_settings.latitude = lat;
-                g_settings.longitude = lng;
-                GetSunriseSunsetTimes(lat, lng, lightST, darkST);
-                
-                PCWSTR sourceStr = L"LocationService (Fresh)";
-                Wh_Log(L"Active Schedule (%s): %f, %f", sourceStr, lat, lng);
-                Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d",
-                    sourceStr,
-                    lightST.wHour, lightST.wMinute, lightST.wSecond,
-                    darkST.wHour, darkST.wMinute, darkST.wSecond);
+                    PCWSTR sourceStr = L"LocationService (Fresh)";
+                    Wh_Log(L"Active Schedule (%s): %f, %f", sourceStr, lat, lng);
+                    Wh_Log(L"Active Schedule (%s): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d",
+                           sourceStr,
+                           lightST.wHour, lightST.wMinute, lightST.wSecond,
+                           darkST.wHour, darkST.wMinute, darkST.wSecond);
+                }
             }
         }
     }
@@ -576,7 +620,9 @@ time_t UpdateThemeState() {
     time_t darkT = getAbs(darkST, 0);
     bool isLightNow = (lightT < darkT) ? (now >= lightT && now < darkT) : (now >= lightT || now < darkT);
 
-    Apply(isLightNow, g_settings.switchMode, g_settings.lightWallpaperPath, g_settings.darkWallpaperPath, g_settings.lightThemePath, g_settings.darkThemePath, g_settings.scriptPath, g_settings.lockScreen);
+    if (applyNow) {
+        Apply(isLightNow, g_settings.switchMode, g_settings.lightWallpaperPath, g_settings.darkWallpaperPath, g_settings.lightThemePath, g_settings.darkThemePath, g_settings.scriptPath, g_settings.lockScreen);
+    }
 
     time_t candidates[] = { lightT, darkT, getAbs(lightST, 1), getAbs(darkST, 1) };
     time_t next = 0;
@@ -606,12 +652,323 @@ static ULONG WINAPI PowerResumeCallback(PVOID Context, ULONG Type, PVOID Setting
     return 0;
 }
 
+// Based on:
+// https://windhawk.net/mods/keyboard-shortcut-actions
+// Licensed under GNU General Public License v3.0
+bool FromStringHotKey(std::wstring_view hotkeyString,
+                      UINT* modifiersOut,
+                      UINT* vkOut) {
+    static const std::unordered_map<std::wstring_view, UINT> modifiersMap = {
+        {L"ALT", MOD_ALT},           {L"CTRL", MOD_CONTROL},
+        {L"NOREPEAT", MOD_NOREPEAT}, {L"SHIFT", MOD_SHIFT},
+        {L"WIN", MOD_WIN},
+    };
+
+    static const std::unordered_map<std::wstring_view, UINT> vkMap = {
+        // Letters A-Z
+        {L"A", 0x41},
+        {L"B", 0x42},
+        {L"C", 0x43},
+        {L"D", 0x44},
+        {L"E", 0x45},
+        {L"F", 0x46},
+        {L"G", 0x47},
+        {L"H", 0x48},
+        {L"I", 0x49},
+        {L"J", 0x4A},
+        {L"K", 0x4B},
+        {L"L", 0x4C},
+        {L"M", 0x4D},
+        {L"N", 0x4E},
+        {L"O", 0x4F},
+        {L"P", 0x50},
+        {L"Q", 0x51},
+        {L"R", 0x52},
+        {L"S", 0x53},
+        {L"T", 0x54},
+        {L"U", 0x55},
+        {L"V", 0x56},
+        {L"W", 0x57},
+        {L"X", 0x58},
+        {L"Y", 0x59},
+        {L"Z", 0x5A},
+        // Numbers 0-9
+        {L"0", 0x30},
+        {L"1", 0x31},
+        {L"2", 0x32},
+        {L"3", 0x33},
+        {L"4", 0x34},
+        {L"5", 0x35},
+        {L"6", 0x36},
+        {L"7", 0x37},
+        {L"8", 0x38},
+        {L"9", 0x39},
+        // Function keys F1-F24
+        {L"F1", 0x70},
+        {L"F2", 0x71},
+        {L"F3", 0x72},
+        {L"F4", 0x73},
+        {L"F5", 0x74},
+        {L"F6", 0x75},
+        {L"F7", 0x76},
+        {L"F8", 0x77},
+        {L"F9", 0x78},
+        {L"F10", 0x79},
+        {L"F11", 0x7A},
+        {L"F12", 0x7B},
+        {L"F13", 0x7C},
+        {L"F14", 0x7D},
+        {L"F15", 0x7E},
+        {L"F16", 0x7F},
+        {L"F17", 0x80},
+        {L"F18", 0x81},
+        {L"F19", 0x82},
+        {L"F20", 0x83},
+        {L"F21", 0x84},
+        {L"F22", 0x85},
+        {L"F23", 0x86},
+        {L"F24", 0x87},
+        // Common keys (friendly names)
+        {L"BACKSPACE", 0x08},
+        {L"TAB", 0x09},
+        {L"ENTER", 0x0D},
+        {L"RETURN", 0x0D},
+        {L"PAUSE", 0x13},
+        {L"CAPSLOCK", 0x14},
+        {L"ESCAPE", 0x1B},
+        {L"ESC", 0x1B},
+        {L"SPACE", 0x20},
+        {L"SPACEBAR", 0x20},
+        {L"PAGEUP", 0x21},
+        {L"PAGEDOWN", 0x22},
+        {L"END", 0x23},
+        {L"HOME", 0x24},
+        {L"LEFT", 0x25},
+        {L"UP", 0x26},
+        {L"RIGHT", 0x27},
+        {L"DOWN", 0x28},
+        {L"PRINTSCREEN", 0x2C},
+        {L"PRTSC", 0x2C},
+        {L"INSERT", 0x2D},
+        {L"INS", 0x2D},
+        {L"DELETE", 0x2E},
+        {L"DEL", 0x2E},
+        {L"HELP", 0x2F},
+        {L"SLEEP", 0x5F},
+        {L"APPS", 0x5D},
+        {L"MENU", 0x5D},
+        // Numpad keys
+        {L"NUMPAD0", 0x60},
+        {L"NUMPAD1", 0x61},
+        {L"NUMPAD2", 0x62},
+        {L"NUMPAD3", 0x63},
+        {L"NUMPAD4", 0x64},
+        {L"NUMPAD5", 0x65},
+        {L"NUMPAD6", 0x66},
+        {L"NUMPAD7", 0x67},
+        {L"NUMPAD8", 0x68},
+        {L"NUMPAD9", 0x69},
+        {L"NUM0", 0x60},
+        {L"NUM1", 0x61},
+        {L"NUM2", 0x62},
+        {L"NUM3", 0x63},
+        {L"NUM4", 0x64},
+        {L"NUM5", 0x65},
+        {L"NUM6", 0x66},
+        {L"NUM7", 0x67},
+        {L"NUM8", 0x68},
+        {L"NUM9", 0x69},
+        {L"MULTIPLY", 0x6A},
+        {L"ADD", 0x6B},
+        {L"SUBTRACT", 0x6D},
+        {L"DECIMAL", 0x6E},
+        {L"DIVIDE", 0x6F},
+        {L"NUMLOCK", 0x90},
+        {L"SCROLLLOCK", 0x91},
+        // Media keys
+        {L"VOLUMEMUTE", 0xAD},
+        {L"VOLUMEDOWN", 0xAE},
+        {L"VOLUMEUP", 0xAF},
+        {L"MEDIANEXT", 0xB0},
+        {L"MEDIAPREV", 0xB1},
+        {L"MEDIASTOP", 0xB2},
+        {L"MEDIAPLAYPAUSE", 0xB3},
+        // Browser keys
+        {L"BROWSERBACK", 0xA6},
+        {L"BROWSERFORWARD", 0xA7},
+        {L"BROWSERREFRESH", 0xA8},
+        {L"BROWSERSTOP", 0xA9},
+        {L"BROWSERSEARCH", 0xAA},
+        {L"BROWSERFAVORITES", 0xAB},
+        {L"BROWSERHOME", 0xAC},
+        // Modifier keys (for use in Virtual key press action)
+        {L"LWIN", 0x5B},
+        {L"RWIN", 0x5C},
+        {L"LSHIFT", 0xA0},
+        {L"RSHIFT", 0xA1},
+        {L"LCTRL", 0xA2},
+        {L"RCTRL", 0xA3},
+        {L"LALT", 0xA4},
+        {L"RALT", 0xA5},
+        // VK_ prefixed versions (only keys without friendly aliases)
+        {L"VK_LBUTTON", 0x01},
+        {L"VK_RBUTTON", 0x02},
+        {L"VK_CANCEL", 0x03},
+        {L"VK_MBUTTON", 0x04},
+        {L"VK_XBUTTON1", 0x05},
+        {L"VK_XBUTTON2", 0x06},
+        {L"VK_CLEAR", 0x0C},
+        {L"VK_SHIFT", 0x10},
+        {L"VK_CONTROL", 0x11},
+        {L"VK_MENU", 0x12},
+        {L"VK_KANA", 0x15},
+        {L"VK_HANGUL", 0x15},
+        {L"VK_IME_ON", 0x16},
+        {L"VK_JUNJA", 0x17},
+        {L"VK_FINAL", 0x18},
+        {L"VK_HANJA", 0x19},
+        {L"VK_KANJI", 0x19},
+        {L"VK_IME_OFF", 0x1A},
+        {L"VK_CONVERT", 0x1C},
+        {L"VK_NONCONVERT", 0x1D},
+        {L"VK_ACCEPT", 0x1E},
+        {L"VK_MODECHANGE", 0x1F},
+        {L"VK_SELECT", 0x29},
+        {L"VK_PRINT", 0x2A},
+        {L"VK_EXECUTE", 0x2B},
+        {L"VK_SEPARATOR", 0x6C},
+        {L"VK_LAUNCH_MAIL", 0xB4},
+        {L"VK_LAUNCH_MEDIA_SELECT", 0xB5},
+        {L"VK_LAUNCH_APP1", 0xB6},
+        {L"VK_LAUNCH_APP2", 0xB7},
+        {L"VK_OEM_1", 0xBA},
+        {L"VK_OEM_PLUS", 0xBB},
+        {L"VK_OEM_COMMA", 0xBC},
+        {L"VK_OEM_MINUS", 0xBD},
+        {L"VK_OEM_PERIOD", 0xBE},
+        {L"VK_OEM_2", 0xBF},
+        {L"VK_OEM_3", 0xC0},
+        {L"VK_OEM_4", 0xDB},
+        {L"VK_OEM_5", 0xDC},
+        {L"VK_OEM_6", 0xDD},
+        {L"VK_OEM_7", 0xDE},
+        {L"VK_OEM_8", 0xDF},
+        {L"VK_OEM_102", 0xE2},
+        {L"VK_PROCESSKEY", 0xE5},
+        {L"VK_PACKET", 0xE7},
+        {L"VK_ATTN", 0xF6},
+        {L"VK_CRSEL", 0xF7},
+        {L"VK_EXSEL", 0xF8},
+        {L"VK_EREOF", 0xF9},
+        {L"VK_PLAY", 0xFA},
+        {L"VK_ZOOM", 0xFB},
+        {L"VK_NONAME", 0xFC},
+        {L"VK_PA1", 0xFD},
+        {L"VK_OEM_CLEAR", 0xFE},
+    };
+
+    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
+        size_t pos_start = 0, pos_end;
+        std::wstring_view token;
+        std::vector<std::wstring_view> res;
+
+        while ((pos_end = s.find(delimiter, pos_start)) !=
+               std::wstring_view::npos) {
+            token = s.substr(pos_start, pos_end - pos_start);
+            pos_start = pos_end + 1;
+            res.push_back(token);
+        }
+
+        res.push_back(s.substr(pos_start));
+        return res;
+    };
+
+    auto trimStringView = [](std::wstring_view s) {
+        s.remove_prefix(std::min(s.find_first_not_of(L" \t\r\v\n"), s.size()));
+        s.remove_suffix(std::min(
+            s.size() - s.find_last_not_of(L" \t\r\v\n") - 1, s.size()));
+        return s;
+    };
+
+    UINT modifiers = 0;
+    UINT vk = 0;
+
+    auto hotkeyParts = splitStringView(hotkeyString, '+');
+    for (auto hotkeyPart : hotkeyParts) {
+        hotkeyPart = trimStringView(hotkeyPart);
+        std::wstring hotkeyPartUpper{hotkeyPart};
+        std::transform(hotkeyPartUpper.begin(), hotkeyPartUpper.end(),
+                       hotkeyPartUpper.begin(), ::toupper);
+
+        if (auto it = modifiersMap.find(hotkeyPartUpper);
+            it != modifiersMap.end()) {
+            modifiers |= it->second;
+            continue;
+        }
+
+        if (vk) {
+            // Only one key is allowed.
+            return false;
+        }
+
+        if (auto it = vkMap.find(hotkeyPartUpper); it != vkMap.end()) {
+            vk = it->second;
+            continue;
+        }
+
+        size_t pos;
+        try {
+            vk = std::stoi(hotkeyPartUpper, &pos, 0);
+            if (hotkeyPartUpper[pos] != L'\0' || !vk) {
+                return false;
+            }
+        } catch (const std::exception&) {
+            return false;
+        }
+    }
+
+    if (!vk) {
+        return false;
+    }
+
+    *modifiersOut = modifiers;
+    *vkOut = vk;
+    return true;
+}
+
+static void RegisterHotkey(HWND hWnd) {
+    if (g_hotkeyRegistered) {
+        UnregisterHotKey(hWnd, kToggleHotkeyId);
+        g_hotkeyRegistered = false;
+        Wh_Log(L"Hotkey unregistered.");
+    }
+
+    if (g_settings.hotkeyString.empty()) {
+        return;
+    }
+
+    UINT modifiers = 0;
+    UINT vk = 0;
+    if (!FromStringHotKey(g_settings.hotkeyString, &modifiers, &vk)) {
+        Wh_Log(L"Failed to parse hotkey: %s", g_settings.hotkeyString.c_str());
+        return;
+    }
+
+    if (!RegisterHotKey(hWnd, kToggleHotkeyId, modifiers, vk)) {
+        Wh_Log(L"Failed to register hotkey: %s (error=%d)", g_settings.hotkeyString.c_str(), GetLastError());
+        return;
+    }
+
+    g_hotkeyRegistered = true;
+    Wh_Log(L"Registered hotkey: %s", g_settings.hotkeyString.c_str());
+}
+
 DWORD WINAPI ThemeScheduler(LPVOID) {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     Wh_Log(L"Theme scheduler started.");
 
     HANDLE handles[] = { g_wakeEvent, g_timer };
-    
+
     HMODULE hPowrProf = GetModuleHandle(L"powrprof.dll");
     if (hPowrProf) {
         typedef HPOWERNOTIFY (WINAPI *RegisterEx_t)(DWORD, PVOID, PHPOWERNOTIFY);
@@ -624,19 +981,97 @@ DWORD WINAPI ThemeScheduler(LPVOID) {
         }
     }
 
+    RegisterHotkey(nullptr);
+
+    time_t next = UpdateThemeState(true);
+    if (g_exitFlag) {
+        if (g_hotkeyRegistered) {
+            UnregisterHotKey(nullptr, kToggleHotkeyId);
+            g_hotkeyRegistered = false;
+            Wh_Log(L"Hotkey unregistered.");
+        }
+        Wh_Log(L"Theme scheduler stopped.");
+        return 0;
+    }
+
+    if (next > 0 && g_settings.scheduleMode != ScheduleMode::Hotkey) {
+        LARGE_INTEGER due;
+        due.QuadPart = (LONGLONG)next * 10000000LL + 116444736000000000LL;
+        SetWaitableTimer(g_timer, &due, 0, nullptr, nullptr, FALSE);
+        struct tm n_tm;
+        localtime_s(&n_tm, &next);
+        Wh_Log(L"Waiting until %02d:%02d:%02d for next switch.", n_tm.tm_hour, n_tm.tm_min, n_tm.tm_sec);
+    } else {
+        if (g_timer) CancelWaitableTimer(g_timer);
+    }
+
     while (!g_exitFlag) {
-        time_t next = UpdateThemeState();
+        const DWORD waitRes = MsgWaitForMultipleObjects(2, handles, FALSE, INFINITE, QS_ALLEVENTS);
         if (g_exitFlag) break;
 
-        if (next > 0) {
-            LARGE_INTEGER due;
-            due.QuadPart = (LONGLONG)next * 10000000LL + 116444736000000000LL; 
-            SetWaitableTimer(g_timer, &due, 0, nullptr, nullptr, FALSE);
-            struct tm n_tm; localtime_s(&n_tm, &next);
-            Wh_Log(L"Waiting until %02d:%02d:%02d for next switch.", n_tm.tm_hour, n_tm.tm_min, n_tm.tm_sec);
-        }
+        if (waitRes == WAIT_OBJECT_0) {
+            RegisterHotkey(nullptr);
+            next = UpdateThemeState(true);
+            if (g_exitFlag) break;
+            if (next > 0 && g_settings.scheduleMode != ScheduleMode::Hotkey) {
+                LARGE_INTEGER due;
+                due.QuadPart =
+                    (LONGLONG)next * 10000000LL + 116444736000000000LL;
+                SetWaitableTimer(g_timer, &due, 0, nullptr, nullptr, FALSE);
+                struct tm n_tm;
+                localtime_s(&n_tm, &next);
+                Wh_Log(L"Waiting until %02d:%02d:%02d for next switch.", n_tm.tm_hour, n_tm.tm_min, n_tm.tm_sec);
+            } else {
+                if (g_timer) CancelWaitableTimer(g_timer);
+            }
+        } else if (waitRes == WAIT_OBJECT_0 + 1) {
+            next = UpdateThemeState(true);
+            if (g_exitFlag) break;
+            if (next > 0 && g_settings.scheduleMode != ScheduleMode::Hotkey) {
+                LARGE_INTEGER due;
+                due.QuadPart = (LONGLONG)next * 10000000LL + 116444736000000000LL;
+                SetWaitableTimer(g_timer, &due, 0, nullptr, nullptr, FALSE);
+                struct tm n_tm;
+                localtime_s(&n_tm, &next);
+                Wh_Log(L"Waiting until %02d:%02d:%02d for next switch.", n_tm.tm_hour, n_tm.tm_min, n_tm.tm_sec);
+            } else {
+                if (g_timer) CancelWaitableTimer(g_timer);
+            }
+        } else if (waitRes == WAIT_OBJECT_0 + 2) {
+            bool hotkeyPressed = false;
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_HOTKEY &&
+                    static_cast<int>(msg.wParam) == kToggleHotkeyId) {
+                    Wh_Log(L"Hotkey pressed: %s", g_settings.hotkeyString.c_str());
+                    Apply(!IsAppearanceApplied(light), g_settings.switchMode, g_settings.lightWallpaperPath, g_settings.darkWallpaperPath, g_settings.lightThemePath, g_settings.darkThemePath, g_settings.scriptPath, g_settings.lockScreen);
+                    hotkeyPressed = true;
+                }
+            }
 
-        WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+            if (hotkeyPressed) {
+                next = UpdateThemeState(false);
+                if (next > 0 && g_settings.scheduleMode != ScheduleMode::Hotkey) {
+                    LARGE_INTEGER due;
+                    due.QuadPart = (LONGLONG)next * 10000000LL + 116444736000000000LL;
+                    SetWaitableTimer(g_timer, &due, 0, nullptr, nullptr, FALSE);
+                    struct tm n_tm;
+                    localtime_s(&n_tm, &next);
+                    Wh_Log(L"Waiting until %02d:%02d:%02d for next switch.", n_tm.tm_hour, n_tm.tm_min, n_tm.tm_sec);
+                } else {
+                    if (g_timer) CancelWaitableTimer(g_timer);
+                }
+            }
+        } else if (waitRes == WAIT_FAILED) {
+            Wh_Log(L"MsgWaitForMultipleObjects failed (error=%d)", GetLastError());
+            break;
+        }
+    }
+
+    if (g_hotkeyRegistered) {
+        UnregisterHotKey(nullptr, kToggleHotkeyId);
+        g_hotkeyRegistered = false;
+        Wh_Log(L"Hotkey unregistered.");
     }
 
     Wh_Log(L"Theme scheduler stopped.");
@@ -655,6 +1090,16 @@ void StartScheduler() {
     g_timerThread = CreateThread(nullptr, 0, ThemeScheduler, nullptr, 0, nullptr);
 }
 
+SYSTEMTIME ParseScheduleTime(PCWSTR timeStr) {
+    SYSTEMTIME st = {};
+    if (timeStr) {
+        if (swscanf_s(timeStr, L"%hu:%hu:%hu", &st.wHour, &st.wMinute, &st.wSecond) < 3) {
+            st.wSecond = 0;
+        }
+    }
+    return st;
+}
+
 void LoadSettings() {
     auto getString = [](PCWSTR name, PCWSTR defaultValue = L"") {
         PCWSTR value = Wh_GetStringSetting(name);
@@ -671,12 +1116,15 @@ void LoadSettings() {
     g_settings.lightThemePath = getString(L"LightThemePath", L"C:\\Windows\\Resources\\Themes\\aero.theme");
     g_settings.darkThemePath = getString(L"DarkThemePath", L"C:\\Windows\\Resources\\Themes\\dark.theme");
     g_settings.scriptPath = getString(L"ScriptPath");
+    g_settings.hotkeyString = getString(L"Hotkey");
+    g_settings.lockScreen = Wh_GetIntSetting(L"LockScreen", 1) != 0;
 
     PCWSTR scheduleMode = Wh_GetStringSetting(L"ScheduleMode");
-    g_settings.scheduleMode = ScheduleMode::CustomHours;
+    g_settings.scheduleMode = ScheduleMode::Custom;
     if (scheduleMode) {
         if (wcscmp(scheduleMode, L"LocationService") == 0) g_settings.scheduleMode = ScheduleMode::LocationService;
         else if (wcscmp(scheduleMode, L"CustomCoordinates") == 0) g_settings.scheduleMode = ScheduleMode::CustomCoordinates;
+        else if (wcscmp(scheduleMode, L"Hotkey") == 0) g_settings.scheduleMode = ScheduleMode::Hotkey;
         Wh_FreeStringSetting(scheduleMode);
     }
 
@@ -704,12 +1152,8 @@ void LoadSettings() {
     g_settings.darkTime = ParseScheduleTime(customDark ? customDark : L"19:00:00");
     Wh_FreeStringSetting(customDark);
 
-    g_settings.lockScreen = Wh_GetIntSetting(L"LockScreen", 1) != 0;
-
-    if (g_settings.scheduleMode == ScheduleMode::CustomHours) {
-        Wh_Log(L"Active Schedule (CustomHours): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d",
-            g_settings.lightTime.wHour, g_settings.lightTime.wMinute, g_settings.lightTime.wSecond,
-            g_settings.darkTime.wHour, g_settings.darkTime.wMinute, g_settings.darkTime.wSecond);
+    if (g_settings.scheduleMode == ScheduleMode::Custom) {
+        Wh_Log(L"Active Schedule (Custom): Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d", g_settings.lightTime.wHour, g_settings.lightTime.wMinute, g_settings.lightTime.wSecond, g_settings.darkTime.wHour, g_settings.darkTime.wMinute, g_settings.darkTime.wSecond);
     }
 }
 
