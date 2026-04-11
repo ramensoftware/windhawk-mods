@@ -996,18 +996,17 @@ BOOL WINAPI HookedSetWindowPos(HWND hWnd, HWND hWndInsertAfter,
             DWORD storedTick = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(prop));
             DWORD now        = static_cast<DWORD>(GetTickCount64());
             if (now - storedTick < static_cast<DWORD>(REG_GRACE_MS)) {
-                // Grace period still active — call CenterWindow which already
-                // handles DPI scaling, shadow offsets, and monitor detection
-                // correctly. We suppress our own hook during this call so it
-                // doesn't recurse, then immediately return the original call
-                // with SWP_NOMOVE to lock the position.
+                // Grace period still active. Per m417z's review: apply the
+                // original call first (with SWP_NOMOVE) so any resize the app
+                // requests takes effect, then centre using the final size.
+                // Without this order, CenterWindow would use the pre-resize
+                // size and the position would be off when cx/cy change.
+                pOrigSetWindowPos(hWnd, hWndInsertAfter,
+                    X, Y, cx, cy, uFlags | SWP_NOMOVE);
                 g_inHook = true;
                 CenterWindow(hWnd);
                 g_inHook = false;
-                // Pass the call through with SWP_NOMOVE so the app's size/z
-                // changes (if any) are still applied, but position is ignored.
-                return pOrigSetWindowPos(hWnd, hWndInsertAfter,
-                    X, Y, cx, cy, uFlags | SWP_NOMOVE);
+                return TRUE;
             } else {
                 // Grace period expired — remove the prop so future calls pass through.
                 RemoveProp(hWnd, reinterpret_cast<LPCWSTR>(g_graceAtom));
