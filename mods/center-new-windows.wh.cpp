@@ -231,8 +231,6 @@ Calculator, and other modern apps.
 
 ---
 
-## How it works
-
 ### Regular windows
 
 The mod hooks `ShowWindow()` and `SetWindowPos()` in every process.
@@ -464,8 +462,9 @@ configuración.
  *    · After first-time centering, a 2-second grace period blocks any
  *      SetWindowPos calls that try to move the window elsewhere.
  *    · Catches Firefox/Floorp session-restore (~700ms after ShowWindow).
- *    · g_regTracked[] is a fixed-size array (8 slots). For non-tracked
- *      windows (99.9% of calls), overhead is one loop over 8 null ptrs.
+ *    · Timestamp stored via SetProp(hwnd, g_graceAtom, tick) — thread-safe,
+ *      no shared array needed. Position is recomputed from current size on
+ *      each blocked call so resizes during the grace period are handled.
  *
  * 3. SetWindowPos (explorer.exe + ApplicationFrameHost.exe) — UWP:
  *    · Path 1: CoreWindow positioned → center parent frame.
@@ -477,6 +476,7 @@ configuración.
 #include <windows.h>
 #include <dwmapi.h>
 #include <algorithm>
+#include <atomic>
 #include <cwctype>
 #include <new>
 #include <string>
@@ -521,43 +521,22 @@ static UwpTrackedFrame* UwpAllocFrame(HWND frame) {
 // ════════════════════════════════════════════════════════════════════════════
 // Regular window grace period tracking
 // ════════════════════════════════════════════════════════════════════════════
-
+//
 // After a window is first centered, a 2-second grace period blocks
 // SetWindowPos calls that try to move it. This catches apps like
 // Firefox and Floorp that restore saved session position ~700ms after
 // ShowWindow.
+//
+// Thread-safety: per m417z's review, the previous fixed array was not
+// thread-safe. We now store only a timestamp on the HWND via SetProp so
+// that state is owned by the HWND itself — no shared array needed.
+// In HookedSetWindowPos we retrieve the timestamp, check the grace period,
+// and recompute the centered position from the current window size so the
+// position stays correct even if the app resized the window after centering.
+// SetProp/GetProp are thread-safe for the same HWND.
 
-struct RegTrackedWindow {
-    HWND      hwnd;
-    int       centeredX;
-    int       centeredY;
-    ULONGLONG tick;
-};
-
-#define REG_MAX_TRACKED 8
-static RegTrackedWindow g_regTracked[REG_MAX_TRACKED] = {};
+static ATOM g_graceAtom = 0; // stores GetTickCount64() low 32 bits on the HWND
 static constexpr ULONGLONG REG_GRACE_MS = 2000;
-
-static RegTrackedWindow* RegFindWindow(HWND hwnd) {
-    for (int i = 0; i < REG_MAX_TRACKED; i++)
-        if (g_regTracked[i].hwnd == hwnd) return &g_regTracked[i];
-    return nullptr;
-}
-
-static RegTrackedWindow* RegAllocWindow(HWND hwnd) {
-    ULONGLONG now = GetTickCount64();
-    for (int i = 0; i < REG_MAX_TRACKED; i++) {
-        if (g_regTracked[i].hwnd == nullptr ||
-            !IsWindow(g_regTracked[i].hwnd) ||
-            now - g_regTracked[i].tick > REG_GRACE_MS * 2)
-        {
-            g_regTracked[i] = {};
-            g_regTracked[i].hwnd = hwnd;
-            return &g_regTracked[i];
-        }
-    }
-    return nullptr;
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // Common state
@@ -574,6 +553,11 @@ static bool g_isAppFrameHost = false;
 // Settings
 // ════════════════════════════════════════════════════════════════════════════
 
+// Per m417z's review: centerOffsetY is read from multiple threads (hook
+// callbacks) and written by LoadSettings. A single std::atomic<int> is both
+// more efficient and more correct than protecting one int with a full SRWLOCK.
+static std::atomic<int> g_centerOffsetY{0};
+
 struct Settings {
     bool fadeTrickEnabled = false;
     int  fadeDelayMs      = 25;
@@ -582,7 +566,6 @@ struct Settings {
     int  resizeHeight     = 768;
     bool centerDialogs    = false;
     bool centerUWP        = true;
-    int  centerOffsetY    = 0;
     std::vector<std::wstring> excludeClasses;
     std::vector<std::wstring> excludeProcesses;
 };
@@ -608,7 +591,7 @@ static void LoadSettings() {
     fresh.resizeHeight = (rh > 0) ? rh : 768;
     fresh.centerDialogs = Wh_GetIntSetting(L"centerDialogs") != 0;
     fresh.centerUWP     = Wh_GetIntSetting(L"centerUWP") != 0;
-    fresh.centerOffsetY = Wh_GetIntSetting(L"centerOffsetY");
+    g_centerOffsetY.store(Wh_GetIntSetting(L"centerOffsetY"), std::memory_order_relaxed);
 
     for (int i = 0; ; ++i) {
         PCWSTR val = Wh_GetStringSetting(L"excludeClasses[%d]", i);
@@ -856,12 +839,7 @@ static void CenterWindow(HWND hwnd) {
     const int waRight  = static_cast<int>(originX + (mi.rcWork.right  - originX) / scaleX);
     const int waBottom = static_cast<int>(originY + (mi.rcWork.bottom - originY) / scaleY);
 
-    int userOffsetY;
-    {
-        AcquireSRWLockShared(&g_srw);
-        userOffsetY = g_settings.centerOffsetY;
-        ReleaseSRWLockShared(&g_srw);
-    }
+    const int userOffsetY = g_centerOffsetY.load(std::memory_order_relaxed);
 
     const int x = waLeft + (waRight  - waLeft - visW) / 2 - offsetL;
     const int y = waTop  + (waBottom - waTop  - visH) / 2 - offsetT;
@@ -871,17 +849,18 @@ static void CenterWindow(HWND hwnd) {
 }
 
 // Center + register for grace period protection.
+// Stores a timestamp on the HWND via SetProp so HookedSetWindowPos can detect
+// whether the grace period is still active — thread-safe per m417z's review.
 static void CenterWindowWithGrace(HWND hwnd) {
     CenterWindow(hwnd);
 
-    RECT rc = {};
-    if (!GetWindowRect(hwnd, &rc)) return;
-
-    RegTrackedWindow* rt = RegAllocWindow(hwnd);
-    if (rt) {
-        rt->centeredX = rc.left;
-        rt->centeredY = rc.top;
-        rt->tick = GetTickCount64();
+    if (g_graceAtom) {
+        // Store the low 32 bits of GetTickCount64() as the grace start time.
+        // Overflow after ~49 days is benign: the grace period check uses
+        // subtraction, which wraps correctly in unsigned arithmetic.
+        DWORD tick = static_cast<DWORD>(GetTickCount64());
+        SetProp(hwnd, reinterpret_cast<LPCWSTR>(g_graceAtom),
+                reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(tick)));
     }
 }
 
@@ -902,13 +881,7 @@ static void CenterFrameUWP(HWND frame, UwpTrackedFrame* tf) {
     tf->centeredY = wa.top + (wa.bottom - wa.top - h) / 2;
     tf->tick = GetTickCount64();
 
-    int userOffsetY;
-    {
-        AcquireSRWLockShared(&g_srw);
-        userOffsetY = g_settings.centerOffsetY;
-        ReleaseSRWLockShared(&g_srw);
-    }
-    tf->centeredY += userOffsetY;
+    tf->centeredY += g_centerOffsetY.load(std::memory_order_relaxed);
 
     CallRealSetWindowPos(frame, nullptr, tf->centeredX, tf->centeredY, 0, 0,
         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -991,11 +964,7 @@ BOOL WINAPI HookedSetWindowPos(HWND hWnd, HWND hWndInsertAfter,
                                 const RECT& wa = mi.rcWork;
                                 newTf->centeredX = wa.left + (wa.right - wa.left - w) / 2;
                                 newTf->centeredY = wa.top + (wa.bottom - wa.top - h) / 2;
-                                {
-                                    AcquireSRWLockShared(&g_srw);
-                                    newTf->centeredY += g_settings.centerOffsetY;
-                                    ReleaseSRWLockShared(&g_srw);
-                                }
+                                newTf->centeredY += g_centerOffsetY.load(std::memory_order_relaxed);
                                 newTf->tick = GetTickCount64();
                                 uFlags &= ~SWP_NOMOVE;
                                 return pOrigSetWindowPos(hWnd, hWndInsertAfter,
@@ -1015,13 +984,33 @@ BOOL WINAPI HookedSetWindowPos(HWND hWnd, HWND hWndInsertAfter,
     }
 
     // ── Regular window grace period (all processes) ──────────────────
-    if (!(uFlags & SWP_NOMOVE)) {
-        RegTrackedWindow* rt = RegFindWindow(hWnd);
-        if (rt) {
-            ULONGLONG now = GetTickCount64();
-            if (now - rt->tick < REG_GRACE_MS) {
+    // Per m417z's review: instead of a shared array (not thread-safe), we
+    // store only a timestamp on the HWND via SetProp and recompute the
+    // centered position from the current window size here. This is
+    // thread-safe because SetProp/GetProp are per-HWND, and recalculating
+    // from the current size handles the case where the app resized the
+    // window after ShowWindow but before the grace period expires.
+    if (!(uFlags & SWP_NOMOVE) && g_graceAtom) {
+        HANDLE prop = GetProp(hWnd, reinterpret_cast<LPCWSTR>(g_graceAtom));
+        if (prop) {
+            DWORD storedTick = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(prop));
+            DWORD now        = static_cast<DWORD>(GetTickCount64());
+            if (now - storedTick < static_cast<DWORD>(REG_GRACE_MS)) {
+                // Grace period still active — call CenterWindow which already
+                // handles DPI scaling, shadow offsets, and monitor detection
+                // correctly. We suppress our own hook during this call so it
+                // doesn't recurse, then immediately return the original call
+                // with SWP_NOMOVE to lock the position.
+                g_inHook = true;
+                CenterWindow(hWnd);
+                g_inHook = false;
+                // Pass the call through with SWP_NOMOVE so the app's size/z
+                // changes (if any) are still applied, but position is ignored.
                 return pOrigSetWindowPos(hWnd, hWndInsertAfter,
-                    rt->centeredX, rt->centeredY, cx, cy, uFlags);
+                    X, Y, cx, cy, uFlags | SWP_NOMOVE);
+            } else {
+                // Grace period expired — remove the prop so future calls pass through.
+                RemoveProp(hWnd, reinterpret_cast<LPCWSTR>(g_graceAtom));
             }
         }
     }
@@ -1239,23 +1228,41 @@ BOOL Wh_ModInit() {
 
     g_centeredAtom = GlobalAddAtomW(L"Wh_CenterNewWindows_v1");
     if (!g_centeredAtom) {
-        Wh_Log(L"Center New Windows: failed to register atom");
+        Wh_Log(L"Center New Windows: failed to register centered atom");
+        return FALSE;
+    }
+
+    g_graceAtom = GlobalAddAtomW(L"Wh_CenterNewWindows_Grace_v1");
+    if (!g_graceAtom) {
+        Wh_Log(L"Center New Windows: failed to register grace atom");
+        GlobalDeleteAtom(g_centeredAtom);
+        g_centeredAtom = 0;
         return FALSE;
     }
 
     LoadSettings();
 
-    Wh_SetFunctionHook(
-        reinterpret_cast<void*>(ShowWindow),
-        reinterpret_cast<void*>(HookedShowWindow),
-        reinterpret_cast<void**>(&pOrigShowWindow)
-    );
+    if (!Wh_SetFunctionHook(
+            reinterpret_cast<void*>(ShowWindow),
+            reinterpret_cast<void*>(HookedShowWindow),
+            reinterpret_cast<void**>(&pOrigShowWindow)))
+    {
+        Wh_Log(L"Center New Windows: failed to hook ShowWindow");
+        GlobalDeleteAtom(g_graceAtom);   g_graceAtom = 0;
+        GlobalDeleteAtom(g_centeredAtom); g_centeredAtom = 0;
+        return FALSE;
+    }
 
-    Wh_SetFunctionHook(
-        reinterpret_cast<void*>(::SetWindowPos),
-        reinterpret_cast<void*>(HookedSetWindowPos),
-        reinterpret_cast<void**>(&pOrigSetWindowPos)
-    );
+    if (!Wh_SetFunctionHook(
+            reinterpret_cast<void*>(::SetWindowPos),
+            reinterpret_cast<void*>(HookedSetWindowPos),
+            reinterpret_cast<void**>(&pOrigSetWindowPos)))
+    {
+        Wh_Log(L"Center New Windows: failed to hook SetWindowPos");
+        GlobalDeleteAtom(g_graceAtom);   g_graceAtom = 0;
+        GlobalDeleteAtom(g_centeredAtom); g_centeredAtom = 0;
+        return FALSE;
+    }
 
     Wh_Log(L"Center New Windows v1.0.0: ready (process: %s)",
            g_thisExeName.c_str());
@@ -1269,8 +1276,11 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     memset(g_uwpTracked, 0, sizeof(g_uwpTracked));
-    memset(g_regTracked, 0, sizeof(g_regTracked));
 
+    if (g_graceAtom) {
+        GlobalDeleteAtom(g_graceAtom);
+        g_graceAtom = 0;
+    }
     if (g_centeredAtom) {
         GlobalDeleteAtom(g_centeredAtom);
         g_centeredAtom = 0;
