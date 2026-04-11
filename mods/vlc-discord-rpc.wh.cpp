@@ -1203,8 +1203,12 @@ void Worker() {
                                 activityName = title;
                                 top = title;
                                 if (bShowQualityTags && !quality.empty()) top += SEP + quality;
-                                if (bShowChapter && chapter >= 0) bot = "Ch " + NumToStr(chapter + 1); else bot = "Video";
-                                if (bShowAudioLanguage && !audio.empty()) bot += SEP + audio;
+                                bot = "";
+                                if (bShowChapter && chapter >= 0) bot = "Ch " + NumToStr(chapter + 1);
+                                if (bShowAudioLanguage && !audio.empty()) {
+                                    if (!bot.empty()) bot += SEP;
+                                    bot += audio;
+                                }
                                 query = title;
                                 largeText = "Watching Movie";
                             }
@@ -1212,7 +1216,7 @@ void Worker() {
                                 activityName = filename;
                                 top = filename;
                                 if (bShowQualityTags && !quality.empty()) top += SEP + quality;
-                                bot = "Video";
+                                bot = "";
                                 query = filename;
                                 largeText = "Watching Video";
                             }
@@ -1317,7 +1321,11 @@ void Worker() {
                                 
                                 std::string js = "{\"cmd\":\"SET_ACTIVITY\",\"args\":{\"pid\":" + NumToStr(GetCurrentProcessId()) + ",\"activity\":{";
                                 js += "\"details\":\"" + SanitizeString(top) + "\",";
-                                js += "\"state\":\"" + SanitizeString(bot) + " (" + state + ")\",";
+                                if (bot.empty()) {
+                                    js += "\"state\":\"" + state + "\",";
+                                } else {
+                                    js += "\"state\":\"" + SanitizeString(bot) + SEP + state + "\",";
+                                }
                                 js += "\"type\":" + NumToStr(activityType) + ",";
                                 js += "\"name\":\"" + SanitizeString(activityName) + "\","; 
                                 
