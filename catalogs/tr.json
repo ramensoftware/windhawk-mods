@@ -3546,6 +3546,38 @@
                 "version": "1.0"
             }
         },
+        "explorer-navigation-pane-tweaks": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1775918364000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1775918364000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Languster",
+                "compilerOptions": "-lcomctl32",
+                "description": "Adjusts the navigation pane tree indent and treeview visual styles in Windows Explorer",
+                "github": "https://github.com/Languster",
+                "include": [
+                    "%SystemRoot%\\explorer.exe"
+                ],
+                "license": "MIT",
+                "name": "Explorer Navigation Pane Tweaks",
+                "version": "1.0"
+            }
+        },
         "explorer-no-toolbars-bottom-gripper": {
             "details": {
                 "defaultSorting": 900,

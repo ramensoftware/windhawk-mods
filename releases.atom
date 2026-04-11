@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-10T10:28:17.000Z</updated>
+    <updated>2026-04-11T14:39:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Navigation Pane Tweaks 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-navigation-pane-tweaks#d208454541569598e6b5979b89ab1c22fea4fd1c</id>
+        <link href="https://windhawk.net/mods/explorer-navigation-pane-tweaks"/>
+        <updated>2026-04-11T14:39:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorernavigationpanetweaks">Explorer Navigation Pane Tweaks</h1>
+<p>Adjusts the indentation and visual tree style of the navigation pane in Windows Explorer.</p>
+<h2 id="beforeafter">Before / After</h2>
+<h3 id="defaultexplorer">Default Explorer</h3>
+<p><img src="https://raw.githubusercontent.com/Languster/ExplorerNavHook/main/screenshots/before.jpg" alt="Before" /></p>
+<h3 id="withexplorernavigationpanetweaks">With Explorer Navigation Pane Tweaks</h3>
+<p><img src="https://raw.githubusercontent.com/Languster/ExplorerNavHook/main/screenshots/after.jpg" alt="After" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>changes the navigation tree indent</li>
+<li>can remove expand/collapse buttons</li>
+<li>can remove connector lines</li>
+<li>can remove root lines</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Target indent</strong>: controls how far the tree items are shifted</li>
+<li><strong>Remove TVS_HASBUTTONS</strong>: removes tree buttons</li>
+<li><strong>Remove TVS_HASLINES</strong>: removes connector lines</li>
+<li><strong>Remove TVS_LINESATROOT</strong>: removes root lines</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>designed for Windows Explorer (<code>explorer.exe</code>)</li>
+<li>tested with the original ExplorerNavHook behavior migrated to Windhawk</li>
+<li>behavior may vary between different Windows builds and Explorer variants</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>targets <code>explorer.exe</code></li>
+<li>based on the original ExplorerNavHook project</li>
+<li>changes apply to the Explorer navigation tree</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>this mod targets the navigation tree in Explorer, not every tree view in the system</li>
+<li>some Explorer variants or future Windows updates may behave differently</li>
+<li>visual results depend on the current Explorer implementation</li>
+</ul>]]></content>
+        <author>
+            <name>Languster</name>
+            <uri>https://github.com/Languster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Image Resize Anti-Flip 1.0.0]]></title>
         <id>https://windhawk.net/mods/word-image-resize-anti-flip#aa61501fa7e0eef8ee2ab6463635a0f9a45dea8d</id>
@@ -528,65 +577,6 @@ Each button has three fields:</p>
         <author>
             <name>BCRTVKCS</name>
             <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Flyouts Controller 1.0.0]]></title>
-        <id>https://windhawk.net/mods/translucent-flyouts-controller#5ce1d85477d2d642a676c043d6b045dc89c9030e</id>
-        <link href="https://windhawk.net/mods/translucent-flyouts-controller"/>
-        <updated>2026-03-27T12:13:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="translucentflyoutscontrollerforwindhawk">Translucent Flyouts Controller for Windhawk</h1>
-<p><img src="https://i.imgur.com/F64iYmG.gif" alt="Preview" /></p>
-<p>This mod provides a Windhawk settings interface for <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a>, a Windows utility that applies visual effects to system menus and tooltips. The controller bridges Windhawk's GUI to the registry keys that TranslucentFlyouts monitors.</p>
-<p>TranslucentFlyouts handles the actual rendering of transparency and effects. This controller simply lets you configure those effects without manual registry editing.</p>
-<h2 id="requirements">Requirements</h2>
-<p>You must have <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> already installed and running. If you don't have it, install it first. This controller won't work standalone.</p>
-<p>Minimum OS: Windows 10/11 (depends on selected effect)
-Recommended: Windows 11 22H2 or newer</p>
-<h2 id="howsettingsareapplied">How Settings Are Applied</h2>
-<p>When you adjust a setting and click Apply:</p>
-<ol>
-<li>The mod reads your Windhawk configuration</li>
-<li>Writes the corresponding values to TranslucentFlyouts registry keys (under HKCU\Software\TranslucentFlyouts)</li>
-<li>Sends a refresh signal so changes take effect immediately</li>
-</ol>
-<p>By default, this refresh is fast. It pokes the running TranslucentFlyouts process. If you enable "Hard Reload On Apply", it fully restarts the process instead, which is slower but sometimes necessary if visuals appear corrupted or stale.</p>
-<h2 id="thecategorysystem">The Category System</h2>
-<p>Settings are organized into four main categories:</p>
-<ul>
-<li><strong>Global</strong>: Default settings that apply across all menu types</li>
-<li><strong>DropDown</strong>: Behavior for standard dropdown menus</li>
-<li><strong>Menu</strong>: Styling for context menus and application menus</li>
-<li><strong>Tooltip</strong>: Appearance of system tooltips</li>
-</ul>
-<p>Each category can either use its own settings or inherit from Global via the "use global" option. This lets you have one consistent style throughout Windows, or customize specific menu types.</p>
-<h2 id="resettingtodefaults">Resetting to Defaults</h2>
-<p>Use the "Controller / Reset To Defaults" dropdown to restore a category to its built-in defaults:</p>
-<ol>
-<li>Select which category to reset: Global, DropDown, Menu, Tooltip, or All</li>
-<li>Click Apply</li>
-<li>The dropdown automatically returns to None</li>
-</ol>
-<p>You can trigger another reset anytime by picking a category again. This pattern exists because Windhawk doesn't support custom buttons in settings. Only dropdowns and toggles are available.</p>
-<h2 id="keydetails">Key Details</h2>
-<ul>
-<li>The "use global" setting (when available) makes a category inherit the corresponding Global setting value</li>
-<li>Color values use ARGB hex format: <code>0xAARRGGBB</code></li>
-<li>Example: <code>0xFF0000FF</code> is fully opaque blue</li>
-<li>Example: <code>0x801F75FF</code> is semi-transparent blue</li>
-<li>Some settings interact with each other. For example, "Enable Immersive Style" on menu applies Windows 11's modern visual language</li>
-<li>Effect types include options like Acrylic, Mica, Blur, and Transparent, each with different visual characteristics</li>
-</ul>
-<h2 id="references">References</h2>
-<p>This controller is built on top of two excellent projects:</p>
-<ul>
-<li><p><a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> by ALTaleX531 provides the original runtime and handles all the actual menu rendering that makes Windows menus truly customizable.</p></li>
-<li><p><a href="https://github.com/Satanarious/TranslucentFlyoutsConfig">TranslucentFlyoutsConfig</a> by Satanarious created a polished configuration application that became the standard way to manage these settings. The setting names, organization, and defaults used in this controller are based on that work.</p></li>
-</ul>
-<p>Both projects are well maintained and worth exploring if you want to understand how it all works together.</p>]]></content>
-        <author>
-            <name>GID0317</name>
-            <uri>https://github.com/GID0317</uri>
         </author>
     </entry>
 </feed>
