@@ -10,6 +10,7 @@
 // @compilerOptions -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 # Explorer Navigation Pane Tweaks
@@ -39,7 +40,6 @@ Adjusts the indentation and visual tree style of the navigation pane in Windows 
 - **Remove TVS_HASBUTTONS**: removes tree buttons
 - **Remove TVS_HASLINES**: removes connector lines
 - **Remove TVS_LINESATROOT**: removes root lines
-- **Enable log**: writes debug messages to the Windhawk log
 
 ## Compatibility
 
@@ -78,12 +78,9 @@ Adjusts the indentation and visual tree style of the navigation pane in Windows 
 - RemoveLinesAtRoot: true
   $name: Remove root lines
   $description: Removes root-level tree lines and the first root expand visual
-
-- EnableLog: false
-  $name: Enable debug logging
-  $description: Writes debug messages to the Windhawk log
 */
 // ==/WindhawkModSettings==
+
 #include <windows.h>
 #include <commctrl.h>
 #include <vector>
@@ -100,11 +97,10 @@ static DWORD g_WorkerThreadId = 0;
 static HWINEVENTHOOK g_hEventHookShow = nullptr;
 static HWINEVENTHOOK g_hEventHookCreate = nullptr;
 
-static int  g_TargetIndent = 25;
+static int g_TargetIndent = 25;
 static BOOL g_RemoveHasButtons = TRUE;
 static BOOL g_RemoveHasLines = TRUE;
 static BOOL g_RemoveLinesAtRoot = TRUE;
-static BOOL g_EnableLog = FALSE;
 
 static CRITICAL_SECTION g_StateLock;
 static std::vector<ExplorerState> g_States;
@@ -112,52 +108,33 @@ static std::vector<ExplorerState> g_States;
 #define TABMODE_REPATCH_DELAY1_MS 120
 #define TABMODE_REPATCH_DELAY2_MS 320
 
-static void Log(const wchar_t* text)
-{
-    if (g_EnableLog)
-        Wh_Log(L"%s", text);
-}
-
-static void LogFmt(const wchar_t* fmt, UINT_PTR a = 0, UINT_PTR b = 0)
-{
-    wchar_t buf[512] = {};
-    wsprintfW(buf, fmt, a, b);
-    Log(buf);
-}
-
 static void LoadSettings()
 {
     g_TargetIndent = Wh_GetIntSetting(L"TargetIndent");
     g_RemoveHasButtons = Wh_GetIntSetting(L"RemoveHasButtons");
     g_RemoveHasLines = Wh_GetIntSetting(L"RemoveHasLines");
     g_RemoveLinesAtRoot = Wh_GetIntSetting(L"RemoveLinesAtRoot");
-    g_EnableLog = Wh_GetIntSetting(L"EnableLog");
 
-    LogFmt(L"[ExplorerNavHook] settings loaded, indent=%u", (UINT_PTR)g_TargetIndent);
+    Wh_Log(L"Settings loaded, indent=%d", g_TargetIndent);
 }
+
 static bool IsExplorerTopWindow(HWND hwnd)
 {
     if (!IsWindow(hwnd))
         return false;
 
     wchar_t cls[128] = {};
-    GetClassNameW(hwnd, cls, 128);
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
 
-    return (lstrcmpiW(cls, L"CabinetWClass") == 0 ||
-            lstrcmpiW(cls, L"ExploreWClass") == 0);
+    return lstrcmpiW(cls, L"CabinetWClass") == 0 ||
+           lstrcmpiW(cls, L"ExploreWClass") == 0;
 }
 
 static HWND FindExplorerTopWindowFromChild(HWND hwnd)
 {
-    HWND cur = hwnd;
-
-    for (int i = 0; i < 20 && cur; ++i)
-    {
-        if (IsExplorerTopWindow(cur))
-            return cur;
-
-        cur = GetParent(cur);
-    }
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (root && IsExplorerTopWindow(root))
+        return root;
 
     return nullptr;
 }
@@ -168,7 +145,7 @@ static bool IsLikelyNavTree(HWND hwnd)
         return false;
 
     wchar_t cls[128] = {};
-    GetClassNameW(hwnd, cls, 128);
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
 
     if (lstrcmpiW(cls, WC_TREEVIEWW) != 0 &&
         lstrcmpiW(cls, L"SysTreeView32") != 0)
@@ -211,13 +188,12 @@ static void PatchTree(HWND hTree)
         hTree,
         nullptr,
         0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED
-    );
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
     InvalidateRect(hTree, nullptr, TRUE);
     UpdateWindow(hTree);
 
-    LogFmt(L"[ExplorerNavHook] patched tree hwnd=%p", (UINT_PTR)hTree);
+    Wh_Log(L"Patched tree hwnd=%p", hTree);
 }
 
 static BOOL CALLBACK FindTreeEnumProc(HWND hwnd, LPARAM lParam)
@@ -272,7 +248,7 @@ static void CleanupDeadStates()
 {
     EnterCriticalSection(&g_StateLock);
 
-    for (size_t i = 0; i < g_States.size(); )
+    for (size_t i = 0; i < g_States.size();)
     {
         if (!IsWindow(g_States[i].hExplorer))
             g_States.erase(g_States.begin() + i);
@@ -301,14 +277,14 @@ static DWORD WINAPI RepatchThreadProc(LPVOID param)
     if (IsWindow(hExplorer))
     {
         PatchExplorerWindow(hExplorer);
-        Log(L"[ExplorerNavHook] tabmode repatch #1 done");
+        Wh_Log(L"Tabmode repatch #1 done");
     }
 
     Sleep(TABMODE_REPATCH_DELAY2_MS - TABMODE_REPATCH_DELAY1_MS);
     if (IsWindow(hExplorer))
     {
         PatchExplorerWindow(hExplorer);
-        Log(L"[ExplorerNavHook] tabmode repatch #2 done");
+        Wh_Log(L"Tabmode repatch #2 done");
     }
 
     EnterCriticalSection(&g_StateLock);
@@ -351,7 +327,7 @@ static void ScheduleTabModeRepatch(HWND hExplorer)
     if (hThread)
     {
         CloseHandle(hThread);
-        Log(L"[ExplorerNavHook] tabmode repatch scheduled");
+        Wh_Log(L"Tabmode repatch scheduled");
     }
     else
     {
@@ -406,8 +382,7 @@ static void UpdateExplorerStateAndMaybeRepatch(HWND hExplorer)
 
     if (needRepatch)
     {
-        LogFmt(L"[ExplorerNavHook] tree hwnd changed old=%p new=%p",
-               (UINT_PTR)oldTree, (UINT_PTR)currentTree);
+        Wh_Log(L"Tree hwnd changed old=%p new=%p", oldTree, currentTree);
         ScheduleTabModeRepatch(hExplorer);
     }
 }
@@ -418,9 +393,7 @@ static BOOL CALLBACK EnumTopWindowsProc(HWND hwnd, LPARAM)
     GetWindowThreadProcessId(hwnd, &pid);
 
     if (pid == GetCurrentProcessId() && IsExplorerTopWindow(hwnd))
-    {
         UpdateExplorerStateAndMaybeRepatch(hwnd);
-    }
 
     return TRUE;
 }
@@ -449,8 +422,7 @@ static void CALLBACK WinEventProc(
 
     if (IsExplorerTopWindow(hwnd))
     {
-        LogFmt(L"[ExplorerNavHook] top explorer event=%u hwnd=%p",
-               (UINT_PTR)event, (UINT_PTR)hwnd);
+        Wh_Log(L"Top explorer event=%u hwnd=%p", event, hwnd);
         UpdateExplorerStateAndMaybeRepatch(hwnd);
         return;
     }
@@ -460,8 +432,7 @@ static void CALLBACK WinEventProc(
         HWND hExplorer = FindExplorerTopWindowFromChild(hwnd);
         if (hExplorer)
         {
-            LogFmt(L"[ExplorerNavHook] nav tree event=%u hwnd=%p",
-                   (UINT_PTR)event, (UINT_PTR)hwnd);
+            Wh_Log(L"Nav tree event=%u hwnd=%p", event, hwnd);
             UpdateExplorerStateAndMaybeRepatch(hExplorer);
         }
         else
@@ -473,16 +444,14 @@ static void CALLBACK WinEventProc(
 
     HWND hExplorer = FindExplorerTopWindowFromChild(hwnd);
     if (hExplorer)
-    {
         UpdateExplorerStateAndMaybeRepatch(hExplorer);
-    }
 }
 
 static DWORD WINAPI WorkerThreadProc(LPVOID)
 {
     InitializeCriticalSection(&g_StateLock);
 
-    Log(L"[ExplorerNavHook] worker started");
+    Wh_Log(L"Worker started");
 
     InitialPatchAllExplorerWindows();
 
@@ -495,8 +464,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID)
         WinEventProc,
         pid,
         0,
-        WINEVENT_OUTOFCONTEXT
-    );
+        WINEVENT_OUTOFCONTEXT);
 
     g_hEventHookCreate = SetWinEventHook(
         EVENT_OBJECT_CREATE,
@@ -505,13 +473,12 @@ static DWORD WINAPI WorkerThreadProc(LPVOID)
         WinEventProc,
         pid,
         0,
-        WINEVENT_OUTOFCONTEXT
-    );
+        WINEVENT_OUTOFCONTEXT);
 
     if (!g_hEventHookShow || !g_hEventHookCreate)
-        Log(L"[ExplorerNavHook] failed to install WinEvent hook");
+        Wh_Log(L"Failed to install WinEvent hook");
     else
-        Log(L"[ExplorerNavHook] WinEvent hooks installed");
+        Wh_Log(L"WinEvent hooks installed");
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0)
@@ -534,9 +501,10 @@ static DWORD WINAPI WorkerThreadProc(LPVOID)
 
     DeleteCriticalSection(&g_StateLock);
 
-    Log(L"[ExplorerNavHook] worker stopped");
+    Wh_Log(L"Worker stopped");
     return 0;
 }
+
 BOOL Wh_ModInit()
 {
     LoadSettings();
@@ -547,27 +515,24 @@ BOOL Wh_ModInit()
         WorkerThreadProc,
         nullptr,
         0,
-        &g_WorkerThreadId
-    );
+        &g_WorkerThreadId);
 
     if (!g_hWorkerThread)
     {
-        Wh_Log(L"[ExplorerNavHook] failed to create worker thread");
+        Wh_Log(L"Failed to create worker thread");
         return FALSE;
     }
 
-    Wh_Log(L"[ExplorerNavHook] mod initialized");
+    Wh_Log(L"Mod initialized");
     return TRUE;
 }
 
 void Wh_ModUninit()
 {
-    Wh_Log(L"[ExplorerNavHook] uninitializing");
+    Wh_Log(L"Uninitializing");
 
     if (g_WorkerThreadId)
-    {
         PostThreadMessageW(g_WorkerThreadId, WM_QUIT, 0, 0);
-    }
 
     if (g_hWorkerThread)
     {
