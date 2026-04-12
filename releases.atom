@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-11T18:57:31.000Z</updated>
+    <updated>2026-04-12T22:16:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable accidental Office KeyTips in Word 1.0]]></title>
+        <id>https://windhawk.net/mods/disable-office-keytips-word#f5efc1b4c2f922c64dd67dcdf5e469b896dbd261</id>
+        <link href="https://windhawk.net/mods/disable-office-keytips-word"/>
+        <updated>2026-04-12T22:16:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disableaccidentalofficekeytipsinword">Disable accidental Office KeyTips in Word</h1>
+<p>Prevent Microsoft Word from entering the yellow Office KeyTips overlay
+accidentally during keyboard layout or language switching, or due to stray
+Alt-related state transitions.</p>
+<h2 id="whatitdoes">What it does</h2>
+<p>This mod is intended for cases where Word unexpectedly enters ribbon keyboard
+navigation mode and shows the yellow KeyTips boxes while you're editing text.</p>
+<p>The implementation uses a conservative prevention-based approach:</p>
+<ul>
+<li>Tracks modifier-key transitions that commonly lead to accidental KeyTips
+activation.</li>
+<li>Suppresses isolated Alt activation when configured.</li>
+<li>Suppresses layout-switch artifacts after <code>Ctrl+Shift</code>, <code>Alt+Shift</code>, and
+<code>Win+Space</code>.</li>
+<li>Blocks suspicious menu activation paths such as <code>SC_KEYMENU</code> when they match
+an accidental pattern.</li>
+</ul>
+<p>The mod is scoped to <code>WINWORD.EXE</code> and does <strong>not</strong> disable Alt globally or
+blindly swallow all <code>WM_SYS*</code> messages.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Suppress single Alt activation</strong>: Blocks obvious isolated Alt-triggered
+KeyTips activation.</li>
+<li><strong>Suppress layout switch artifacts</strong>: Suppresses KeyTips activation patterns
+caused by layout/language switching side effects.</li>
+<li><strong>Preserve intentional Alt navigation</strong>: Allows plain Alt ribbon navigation
+when possible. Disabled by default to prioritize suppression of accidental
+KeyTips.</li>
+<li><strong>Suppress menu activation paths</strong>: Blocks suspicious menu/system activation
+paths such as <code>SC_KEYMENU</code>.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<p>With the default settings, deliberate plain-Alt ribbon navigation may be
+reduced. This is intentional: the primary goal is to stop unwanted KeyTips
+activation while keeping normal typing and common Ctrl shortcuts stable.</p>
+<h2 id="screenshotoftheproblem">Screenshot of the problem</h2>
+<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/disable%20office%20keytips.png" alt="Word KeyTips" /></p>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Window Corner Radius 1.0]]></title>
         <id>https://windhawk.net/mods/custom-corner-radius#cae0950522f4f4165a223da43bb1ad3936f6b1f2</id>
@@ -562,26 +609,6 @@ Each button has three fields:</p>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force Kill Active Window 1.0]]></title>
-        <id>https://windhawk.net/mods/force-kill-active-window#e3d4505be854f2fee52fadd2bf1d05b7aff4712e</id>
-        <link href="https://windhawk.net/mods/force-kill-active-window"/>
-        <updated>2026-03-28T13:37:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="forcekillactivewindow">Force Kill Active Window</h1>
-<p>Instantly terminate any frozen or unresponsive application with a keyboard shortcut.</p>
-<p>By default, pressing <strong>Ctrl+Alt+F4</strong> will execute a hard system kill on the currently active foreground window, bypassing the standard Windows polite closure request.</p>
-<h3 id="warning">⚠️ Warning</h3>
-<p>This performs a hard system termination (<code>TerminateProcess</code>). The target application will <strong>not</strong> be given a chance to save your work. Use strictly as a last resort.</p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Customizable Hotkey:</strong> Change the trigger shortcut in the settings. Updates apply instantly.</li>
-<li><strong>Process Blacklist:</strong> Define apps (like <code>winword.exe</code> or <code>chrome.exe</code>) that the mod is forbidden from killing to protect your most critical work.</li>
-</ul>]]></content>
-        <author>
-            <name>vfxturjo</name>
-            <uri>https://github.com/zunaidFarouque</uri>
         </author>
     </entry>
 </feed>

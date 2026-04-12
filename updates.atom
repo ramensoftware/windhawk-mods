@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-12T18:48:04.000Z</updated>
+    <updated>2026-04-12T22:16:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable accidental Office KeyTips in Word 1.0]]></title>
+        <id>https://windhawk.net/mods/disable-office-keytips-word#f5efc1b4c2f922c64dd67dcdf5e469b896dbd261</id>
+        <link href="https://windhawk.net/mods/disable-office-keytips-word"/>
+        <updated>2026-04-12T22:16:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disableaccidentalofficekeytipsinword">Disable accidental Office KeyTips in Word</h1>
+<p>Prevent Microsoft Word from entering the yellow Office KeyTips overlay
+accidentally during keyboard layout or language switching, or due to stray
+Alt-related state transitions.</p>
+<h2 id="whatitdoes">What it does</h2>
+<p>This mod is intended for cases where Word unexpectedly enters ribbon keyboard
+navigation mode and shows the yellow KeyTips boxes while you're editing text.</p>
+<p>The implementation uses a conservative prevention-based approach:</p>
+<ul>
+<li>Tracks modifier-key transitions that commonly lead to accidental KeyTips
+activation.</li>
+<li>Suppresses isolated Alt activation when configured.</li>
+<li>Suppresses layout-switch artifacts after <code>Ctrl+Shift</code>, <code>Alt+Shift</code>, and
+<code>Win+Space</code>.</li>
+<li>Blocks suspicious menu activation paths such as <code>SC_KEYMENU</code> when they match
+an accidental pattern.</li>
+</ul>
+<p>The mod is scoped to <code>WINWORD.EXE</code> and does <strong>not</strong> disable Alt globally or
+blindly swallow all <code>WM_SYS*</code> messages.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Suppress single Alt activation</strong>: Blocks obvious isolated Alt-triggered
+KeyTips activation.</li>
+<li><strong>Suppress layout switch artifacts</strong>: Suppresses KeyTips activation patterns
+caused by layout/language switching side effects.</li>
+<li><strong>Preserve intentional Alt navigation</strong>: Allows plain Alt ribbon navigation
+when possible. Disabled by default to prioritize suppression of accidental
+KeyTips.</li>
+<li><strong>Suppress menu activation paths</strong>: Blocks suspicious menu/system activation
+paths such as <code>SC_KEYMENU</code>.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<p>With the default settings, deliberate plain-Alt ribbon navigation may be
+reduced. This is intentional: the primary goal is to stop unwanted KeyTips
+activation while keeping normal typing and common Ctrl shortcuts stable.</p>
+<h2 id="screenshotoftheproblem">Screenshot of the problem</h2>
+<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/disable%20office%20keytips.png" alt="Word KeyTips" /></p>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Window Corner Radius 1.1]]></title>
         <id>https://windhawk.net/mods/custom-corner-radius#30d57e5ca52a25eb7ad419b031b26ca3ef7bf1e1</id>
@@ -479,17 +526,6 @@ It then places a hook on the <code>CreateProcessInternalW</code> function: If th
         <author>
             <name>Exiled Eye</name>
             <uri>https://github.com/ExiledEye</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[HotCorner Hotkeys 3.51]]></title>
-        <id>https://windhawk.net/mods/hotcorner-hotkeys#f2850a35c116304bc2eca1ad292e071967f13338</id>
-        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
-        <updated>2026-04-03T19:35:52.000Z</updated>
-        <content type="html"><![CDATA[<p>Readme fix</p>]]></content>
-        <author>
-            <name>webberlv</name>
-            <uri>https://github.com/webberLV</uri>
         </author>
     </entry>
 </feed>
