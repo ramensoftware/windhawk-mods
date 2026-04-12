@@ -4749,7 +4749,7 @@
                     1
                 ],
                 "ratingUsers": 3,
-                "updated": 1775244952000,
+                "updated": 1775983176000,
                 "users": 16
             },
             "metadata": {
@@ -4762,7 +4762,7 @@
                 ],
                 "license": "GPL-3.0-only",
                 "name": "HotCorner Hotkeys",
-                "version": "3.51"
+                "version": "3.56"
             }
         },
         "hover-text-magnifier": {

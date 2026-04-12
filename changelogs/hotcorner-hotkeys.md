@@ -1,3 +1,12 @@
+## 3.56 ([Apr 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0b52f7a659ffd2d00bbc14f2e69aa925616d6486/mods/hotcorner-hotkeys.wh.cpp))
+
+- Improved hotkey registration handling for shared hotkeys
+- Replaced `registered` flag with `ownsRegistration` for correct ownership tracking
+- Prevented duplicate region entries per hotkey during settings load
+- Updated readme with clearer documentation and examples
+- Improved foreground window title parsing and Explorer selection behavior
+- Cleaned up internal helpers, logging, and function ordering
+
 ## 3.51 ([Apr 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f2850a35c116304bc2eca1ad292e071967f13338/mods/hotcorner-hotkeys.wh.cpp))
 
 Readme fix
