@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-12T08:41:33.000Z</updated>
+    <updated>2026-04-12T18:48:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Window Corner Radius 1.1]]></title>
+        <id>https://windhawk.net/mods/custom-corner-radius#30d57e5ca52a25eb7ad419b031b26ca3ef7bf1e1</id>
+        <link href="https://windhawk.net/mods/custom-corner-radius"/>
+        <updated>2026-04-12T18:48:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to customize elements that use a smaller radius, such as context menus, separately.</li>
+<li>Made the mod compatible with older Windows 11 versions such as 23H2.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Center New Windows 1.0.1]]></title>
         <id>https://windhawk.net/mods/center-new-windows#a8b6141258658b1fbae949d1902f4ae76e55c0fc</id>
@@ -476,17 +490,6 @@ It then places a hook on the <code>CreateProcessInternalW</code> function: If th
         <author>
             <name>webberlv</name>
             <uri>https://github.com/webberLV</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Discord Balloon Notifications 1.0.1]]></title>
-        <id>https://windhawk.net/mods/discord-balloon-notifs#3944b06ee2845d98143f9ef2e81f2514880a09e5</id>
-        <link href="https://windhawk.net/mods/discord-balloon-notifs"/>
-        <updated>2026-04-03T19:35:22.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixed Discord crashing at startup after latest Discord update and cleaned up code.</p>]]></content>
-        <author>
-            <name>repensky</name>
-            <uri>https://github.com/repensky</uri>
         </author>
     </entry>
 </feed>
