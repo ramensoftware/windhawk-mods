@@ -53,7 +53,7 @@ With the default settings, deliberate plain-Alt ribbon navigation may be
 reduced. This is intentional: the primary goal is to stop unwanted KeyTips
 activation while keeping normal typing and common Ctrl shortcuts stable.
 
-## Screenshot
+## Screenshot of the problem
 
 ![Word KeyTips](https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/disable%20office%20keytips.png)
 */
