@@ -716,7 +716,7 @@
                     11
                 ],
                 "ratingUsers": 13,
-                "updated": 1774352909000,
+                "updated": 1775983293000,
                 "users": 372
             },
             "metadata": {
@@ -729,7 +729,7 @@
                 ],
                 "license": "MIT",
                 "name": "Centrar Nuevas Ventanas Automáticamente",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "center-titlebar": {
