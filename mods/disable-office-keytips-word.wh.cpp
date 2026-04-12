@@ -55,7 +55,7 @@ activation while keeping normal typing and common Ctrl shortcuts stable.
 
 ## Screenshot
 
-![Word KeyTips](https://raw.githubusercontent.com/communism420/Images-Host-For-My-Windhawk-Mods/main/disable%20office%20keytips.png)
+![Word KeyTips](https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/disable%20office%20keytips.png)
 */
 // ==/WindhawkModReadme==
 
