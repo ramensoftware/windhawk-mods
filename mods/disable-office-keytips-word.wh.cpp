@@ -9,6 +9,56 @@
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# Disable accidental Office KeyTips in Word
+
+Prevent Microsoft Word from entering the yellow Office KeyTips overlay
+accidentally during keyboard layout or language switching, or due to stray
+Alt-related state transitions.
+
+## What it does
+
+This mod is intended for cases where Word unexpectedly enters ribbon keyboard
+navigation mode and shows the yellow KeyTips boxes while you're editing text.
+
+The implementation uses a conservative prevention-based approach:
+
+* Tracks modifier-key transitions that commonly lead to accidental KeyTips
+  activation.
+* Suppresses isolated Alt activation when configured.
+* Suppresses layout-switch artifacts after `Ctrl+Shift`, `Alt+Shift`, and
+  `Win+Space`.
+* Blocks suspicious menu activation paths such as `SC_KEYMENU` when they match
+  an accidental pattern.
+
+The mod is scoped to `WINWORD.EXE` and does **not** disable Alt globally or
+blindly swallow all `WM_SYS*` messages.
+
+## Settings
+
+* **Suppress single Alt activation**: Blocks obvious isolated Alt-triggered
+  KeyTips activation.
+* **Suppress layout switch artifacts**: Suppresses KeyTips activation patterns
+  caused by layout/language switching side effects.
+* **Preserve intentional Alt navigation**: Allows plain Alt ribbon navigation
+  when possible. Disabled by default to prioritize suppression of accidental
+  KeyTips.
+* **Suppress menu activation paths**: Blocks suspicious menu/system activation
+  paths such as `SC_KEYMENU`.
+
+## Notes
+
+With the default settings, deliberate plain-Alt ribbon navigation may be
+reduced. This is intentional: the primary goal is to stop unwanted KeyTips
+activation while keeping normal typing and common Ctrl shortcuts stable.
+
+## Screenshot
+
+![Word KeyTips](https://raw.githubusercontent.com/communism420/Images-Host-For-My-Windhawk-Mods/main/disable%20office%20keytips.png)
+*/
+// ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - suppressSingleAlt: true
