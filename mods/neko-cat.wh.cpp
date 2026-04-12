@@ -35,6 +35,15 @@ Bring the classic 90s desktop pet back to life! Neko is a playful cat that lives
 ## ⚙️ Customization
 Adjust the **Scale** to make him tiny or giant, change his **Speed**, or set the **Sleep Sound Interval** to your liking in the mod settings.
 
+## 🔒 Assets & Security
+To keep the mod lightweight and easy to install, Neko's graphics and sounds are automatically acquired from GitHub on the first run. 
+
+**How to verify:**
+*   **Transparency:** All download URLs point exclusively to the official GitHub repository for this mod: `https://github.com/ciizerr/wh-mods/tree/main/assets/neko-cat`.
+*   **Standard API:** The mod uses the trusted Windhawk `Wh_GetUrlContent` API for all downloads.
+*   **Local Storage:** Once acquired, files are stored locally in the modstorage folder (usually `%ProgramData%\Windhawk\modstorage\neko-cat\...`).
+*   **Inspection:** You can view the full source code in the Windhawk editor to inspect the `DownloadMissingAssets` function and verify every URL for yourself.
+
 Enjoy your new feline friend!
 
 ## 💬 Feedback & Support
