@@ -915,7 +915,6 @@ static const COLORREF g_basicColors[48] = {
 
 static int CP_GridY()    { return CP_SPEC_Y + CP_SPEC_H + 48; }
 static int CP_CustGridY(){ return CP_GridY() + CP_BROWS * CP_CIRC_STEP + 38; }
-static int CP_BtnY()     { return (CP_CustGridY() + CP_CIRC_STEP) - 24; }
 static int CP_BtnY()     { return CP_CustGridY() + 2 * CP_CIRC_STEP + 28; }
 static int CP_ClientW()  { return CP_INFO_X + 160; }
 static int CP_ClientH()  { return CP_BtnY() + 40 + CP_PAD; }
@@ -1223,7 +1222,7 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, btnX, btnY, 80, 24, IDOK);
         mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, btnX, btnY + 32, 80, 24, IDCANCEL);
         mk(L"BUTTON", L"+", BS_PUSHBUTTON, 0, CP_SPEC_X+szCust.cx+10, CP_CustGridY()-28, 24, 22, 4010);
-        int btnY = CP_BtnY(), halfW = (CP_ClientW()-CP_PAD*2-10)/2;
+        btnY = CP_BtnY(), halfW = (CP_ClientW()-CP_PAD*2-10)/2;
         mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, CP_PAD, btnY, halfW, 34, IDOK);
         mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, CP_PAD+halfW+10, btnY, halfW, 34, IDCANCEL);
         d->specPixels = (DWORD*)calloc(CP_SPEC_W * CP_SPEC_H, 4);
@@ -1350,7 +1349,6 @@ BOOL WINAPI ChooseColorW_Hook(LPCHOOSECOLORW lpcc) {
 #define FP_PREV_Y   (FP_LIST_Y + FP_LIST_H + 20)
 #define FP_PREV_H   64
 #define FP_EFF_Y    (FP_PREV_Y + FP_PREV_H + 16)
-#define FP_BTN_Y    (FP_EFF_Y)
 #define FP_BTN_Y    (FP_EFF_Y + 34)
 #define FP_CLIENTW  (FP_SIZ_X + FP_SIZ_W + FP_PAD)
 #define FP_CLIENTH  (FP_BTN_Y + 42 + FP_PAD)
