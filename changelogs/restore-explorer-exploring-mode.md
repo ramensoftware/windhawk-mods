@@ -1,3 +1,7 @@
+## 1.3.0 ([Apr 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e5a21258b21c70350de0683d01a375ce1c07914f/mods/restore-explorer-exploring-mode.wh.cpp))
+
+- Add Explorer icon behavior from IE 4.0-5.0
+
 ## 1.2.0 ([Feb 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5bbc958c7b7eecab54f74848a2e771922773376a/mods/restore-explorer-exploring-mode.wh.cpp))
 
 - Introduce accurate tree view open state behavior
