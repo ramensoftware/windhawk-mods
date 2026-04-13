@@ -7,6 +7,7 @@
 // @github          https://github.com/Louis047
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -15,12 +16,7 @@ Selectively disable Windows keyboard shortcuts with individual toggles for each 
 ## Features
 - Disable any Windows key combination
 - Individual toggle for each shortcut
-- Changes apply immediately (auto-restarts explorer)
-- Uses multiple hooking strategies for comprehensive coverage
-## How It Works
-This mod uses a 2-layer approach to block Windows shortcuts:
-1. **CreateProcessInternalW hook** - Blocks shortcuts that launch host processes (Win+S, Win+.)
-2. **RegisterHotKey hook** - Blocks API-registered hotkeys at registration time (Win+V, Win+F, Win+E, Win+R, etc.)
+- Hooks RegisterHotKey to block hotkey registration
 ## Supported Shortcuts
 ### General
 - Win+B through Win+Z (excluding Win, Win+L, Win+Q)
@@ -36,7 +32,8 @@ This mod uses a 2-layer approach to block Windows shortcuts:
 - Win+Period/Semicolon for Emoji picker
 - Office hotkeys (Ctrl+Shift+Alt+Win)
 ## Notes
-- Explorer auto-restarts when settings change or mod uninstalls
+- **Explorer restart is required** to apply setting changes or after
+  uninstalling the mod. You will be prompted to restart Explorer.
 - Win key (Start Menu) is handled by the "Block Start Menu and Hosts" mod
 - Win+L (Lock PC) cannot be blocked through standard hooks
 - Win+Q is redundant with Win+S (both open Search)
@@ -251,7 +248,8 @@ This mod uses a 2-layer approach to block Windows shortcuts:
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
-#include <tlhelp32.h>
+#include <commctrl.h>
+#include <atomic>
 // Settings structure
 struct
 {
@@ -398,134 +396,13 @@ void LoadSettings()
   g_settings.DisableWinCtrlShiftB = Wh_GetIntSetting(L"DisableWinCtrlShiftB");
   g_settings.DisableWinCtrlQ = Wh_GetIntSetting(L"DisableWinCtrlQ");
 }
-// Case-insensitive substring search
-const wchar_t *wcsistr(const wchar_t *str, const wchar_t *substr)
-{
-  if (!str || !substr)
-    return nullptr;
-  size_t len = wcslen(substr);
-  if (len == 0)
-    return str;
-  while (*str)
-  {
-    if (_wcsnicmp(str, substr, len) == 0)
-      return str;
-    str++;
-  }
-  return nullptr;
-}
 // Check if vk is a number key (0-9)
 bool IsNumberKey(UINT vk)
 {
   return (vk >= '0' && vk <= '9');
 }
-// Terminate a process by name
-void TerminateProcessByName(const wchar_t *filename)
-{
-  HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (hSnap == INVALID_HANDLE_VALUE)
-    return;
-  PROCESSENTRY32W pe;
-  pe.dwSize = sizeof(pe);
-  if (Process32FirstW(hSnap, &pe))
-  {
-    do
-    {
-      if (_wcsicmp(pe.szExeFile, filename) == 0)
-      {
-        HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
-        if (hProcess)
-        {
-          TerminateProcess(hProcess, 0);
-          CloseHandle(hProcess);
-          Wh_Log(L"Terminated process: %ls", filename);
-        }
-      }
-    } while (Process32NextW(hSnap, &pe));
-  }
-  CloseHandle(hSnap);
-}
-// Terminate configured host processes
-void TerminateConfiguredProcesses()
-{
-  if (g_settings.DisableWinS)
-  {
-    TerminateProcessByName(L"SearchHost.exe");
-  }
-  if (g_settings.DisableWinPeriod || g_settings.DisableWinSemicolon)
-  {
-    TerminateProcessByName(L"TextInputHost.exe");
-  }
-}
 // ============================================================================
-// LAYER 1: CreateProcessInternalW hook (for process-spawn shortcuts)
-// Blocks: Win+S (Search), Win+. (Emoji)
-// ============================================================================
-typedef BOOL(WINAPI *CreateProcessInternalW_t)(
-    HANDLE hToken,
-    LPCWSTR lpApplicationName,
-    LPWSTR lpCommandLine,
-    LPSECURITY_ATTRIBUTES lpProcessAttributes,
-    LPSECURITY_ATTRIBUTES lpThreadAttributes,
-    BOOL bInheritHandles,
-    DWORD dwCreationFlags,
-    LPVOID lpEnvironment,
-    LPCWSTR lpCurrentDirectory,
-    LPSTARTUPINFOW lpStartupInfo,
-    LPPROCESS_INFORMATION lpProcessInformation,
-    PHANDLE hNewToken);
-CreateProcessInternalW_t CreateProcessInternalW_Original;
-BOOL WINAPI CreateProcessInternalW_Hook(
-    HANDLE hToken,
-    LPCWSTR lpApplicationName,
-    LPWSTR lpCommandLine,
-    LPSECURITY_ATTRIBUTES lpProcessAttributes,
-    LPSECURITY_ATTRIBUTES lpThreadAttributes,
-    BOOL bInheritHandles,
-    DWORD dwCreationFlags,
-    LPVOID lpEnvironment,
-    LPCWSTR lpCurrentDirectory,
-    LPSTARTUPINFOW lpStartupInfo,
-    LPPROCESS_INFORMATION lpProcessInformation,
-    PHANDLE hNewToken)
-{
-  bool block = false;
-  const wchar_t *blockedProcess = nullptr;
-  // Check for SearchHost.exe (Win+S)
-  if (g_settings.DisableWinS)
-  {
-    if ((lpCommandLine && wcsistr(lpCommandLine, L"SearchHost.exe")) ||
-        (lpApplicationName && wcsistr(lpApplicationName, L"SearchHost.exe")))
-    {
-      block = true;
-      blockedProcess = L"SearchHost.exe";
-    }
-  }
-  // Check for TextInputHost.exe (Win+., Win+;)
-  if (!block && (g_settings.DisableWinPeriod || g_settings.DisableWinSemicolon))
-  {
-    if ((lpCommandLine && wcsistr(lpCommandLine, L"TextInputHost.exe")) ||
-        (lpApplicationName && wcsistr(lpApplicationName, L"TextInputHost.exe")))
-    {
-      block = true;
-      blockedProcess = L"TextInputHost.exe";
-    }
-  }
-  if (block)
-  {
-    Wh_Log(L"[CreateProcess] Blocked: %ls", blockedProcess);
-    SetLastError(ERROR_ACCESS_DENIED);
-    return FALSE;
-  }
-  return CreateProcessInternalW_Original(
-      hToken, lpApplicationName, lpCommandLine,
-      lpProcessAttributes, lpThreadAttributes,
-      bInheritHandles, dwCreationFlags, lpEnvironment,
-      lpCurrentDirectory, lpStartupInfo, lpProcessInformation, hNewToken);
-}
-// ============================================================================
-// LAYER 2: RegisterHotKey hook (for API-registered hotkeys)
-// Blocks: Win+V, Win+F, Office hotkeys, etc.
+// RegisterHotKey hook
 // ============================================================================
 typedef BOOL(WINAPI *RegisterHotKey_t)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
 RegisterHotKey_t RegisterHotKey_Original;
@@ -853,56 +730,85 @@ BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
   return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
 }
 // ============================================================================
-// Explorer restart helper
+// Explorer restart prompt
+// Taken from Taskbar height and icon size mod by Ramen Software (m417z)
+// https://github.com/ramensoftware/windhawk-mods/blob/7e0bd27ae1d12ae639497fbc9b48bb791f98b078/mods/taskbar-icon-size.wh.cpp#L723
 // ============================================================================
-void RestartExplorer()
+HANDLE g_restartExplorerPromptThread;
+std::atomic<HWND> g_restartExplorerPromptWindow;
+
+constexpr WCHAR kRestartExplorerPromptTitle[] =
+    L"Disable Windows Shortcuts - Windhawk";
+constexpr WCHAR kRestartExplorerPromptText[] =
+    L"Explorer needs to be restarted to apply the new changes. "
+    L"Restart now?";
+
+void PromptForExplorerRestart()
 {
-  Wh_Log(L"Restarting explorer.exe...");
-
-  // Find and terminate explorer.exe
-  HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (hSnap == INVALID_HANDLE_VALUE)
-    return;
-
-  PROCESSENTRY32W pe;
-  pe.dwSize = sizeof(pe);
-  DWORD explorerPid = 0;
-
-  if (Process32FirstW(hSnap, &pe))
+  if (g_restartExplorerPromptThread)
   {
-    do
+    if (WaitForSingleObject(g_restartExplorerPromptThread, 0) !=
+        WAIT_OBJECT_0)
     {
-      if (_wcsicmp(pe.szExeFile, L"explorer.exe") == 0)
-      {
-        explorerPid = pe.th32ProcessID;
-        break;
-      }
-    } while (Process32NextW(hSnap, &pe));
-  }
-  CloseHandle(hSnap);
-
-  if (explorerPid)
-  {
-    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, explorerPid);
-    if (hProcess)
-    {
-      TerminateProcess(hProcess, 0);
-      CloseHandle(hProcess);
-
-      // Wait a moment for explorer to fully terminate
-      Sleep(500);
-
-      // Restart explorer
-      STARTUPINFOW si = {sizeof(si)};
-      PROCESS_INFORMATION pi;
-      if (CreateProcessW(L"C:\\Windows\\explorer.exe", NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
-      {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        Wh_Log(L"Explorer restarted successfully");
-      }
+      return;
     }
+
+    CloseHandle(g_restartExplorerPromptThread);
   }
+
+  g_restartExplorerPromptThread = CreateThread(
+      nullptr, 0,
+      [](LPVOID lpParameter) WINAPI -> DWORD {
+        TASKDIALOGCONFIG taskDialogConfig{
+            .cbSize = sizeof(taskDialogConfig),
+            .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
+            .dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON,
+            .pszWindowTitle = kRestartExplorerPromptTitle,
+            .pszMainIcon = TD_INFORMATION_ICON,
+            .pszContent = kRestartExplorerPromptText,
+            .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam,
+                             LPARAM lParam, LONG_PTR lpRefData)
+                              WINAPI -> HRESULT {
+              switch (msg)
+              {
+              case TDN_CREATED:
+                g_restartExplorerPromptWindow = hwnd;
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE);
+                break;
+
+              case TDN_DESTROYED:
+                g_restartExplorerPromptWindow = nullptr;
+                break;
+              }
+
+              return S_OK;
+            },
+        };
+
+        int button;
+        if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button,
+                                         nullptr, nullptr)) &&
+            button == IDYES)
+        {
+          WCHAR commandLine[] =
+              L"cmd.exe /c "
+              L"\"taskkill /F /IM explorer.exe & start explorer\"";
+          STARTUPINFO si = {
+              .cb = sizeof(si),
+          };
+          PROCESS_INFORMATION pi{};
+          if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE,
+                            0, nullptr, nullptr, &si, &pi))
+          {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+          }
+        }
+
+        return 0;
+      },
+      nullptr, 0, nullptr);
 }
 
 // ============================================================================
@@ -912,25 +818,8 @@ BOOL Wh_ModInit()
 {
   Wh_Log(L"Initializing Disable Windows Shortcuts mod v1.0");
   LoadSettings();
-  // Terminate any existing host processes based on settings
-  TerminateConfiguredProcesses();
 
-  // LAYER 1: Hook CreateProcessInternalW for process-spawn shortcuts
-  HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-  if (hKernelBase)
-  {
-    void *pCreateProcessInternalW = (void *)GetProcAddress(hKernelBase, "CreateProcessInternalW");
-    if (pCreateProcessInternalW)
-    {
-      Wh_SetFunctionHook(pCreateProcessInternalW, (void *)CreateProcessInternalW_Hook, (void **)&CreateProcessInternalW_Original);
-      Wh_Log(L"Hooked CreateProcessInternalW");
-    }
-    else
-    {
-      Wh_Log(L"Failed to find CreateProcessInternalW");
-    }
-  }
-  // LAYER 2: Hook RegisterHotKey to block hotkey registration
+  // Hook RegisterHotKey to block hotkey registration
   HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
   if (hUser32)
   {
@@ -947,14 +836,23 @@ BOOL Wh_ModInit()
 void Wh_ModUninit()
 {
   Wh_Log(L"Uninitializing Disable Windows Shortcuts mod");
-  // Restart explorer to restore all hotkeys that were blocked
-  RestartExplorer();
+
+  HWND restartExplorerPromptWindow = g_restartExplorerPromptWindow;
+  if (restartExplorerPromptWindow)
+  {
+    PostMessage(restartExplorerPromptWindow, WM_CLOSE, 0, 0);
+  }
+
+  if (g_restartExplorerPromptThread)
+  {
+    WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+    CloseHandle(g_restartExplorerPromptThread);
+    g_restartExplorerPromptThread = nullptr;
+  }
 }
 void Wh_ModSettingsChanged()
 {
-  Wh_Log(L"Settings changed, restarting explorer to apply...");
+  Wh_Log(L"Settings changed, prompting for explorer restart...");
   LoadSettings();
-  TerminateConfiguredProcesses();
-  // Restart explorer to re-register hotkeys with new settings
-  RestartExplorer();
+  PromptForExplorerRestart();
 }
