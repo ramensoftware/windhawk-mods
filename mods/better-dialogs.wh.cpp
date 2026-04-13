@@ -1607,7 +1607,6 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         int halfW = (FP_CLIENTW-FP_PAD*2-FP_GAP)/2;
         mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, FP_PAD, FP_BTN_Y, halfW, 38, IDOK);
         mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, FP_PAD+halfW+FP_GAP, FP_BTN_Y, halfW, 38, IDCANCEL);
->>>>>>> 44ce70ca10503b6ae3ce4bb9f31df628aa70f437
         return 0; }
 
     case WM_ERASEBKGND: return TRUE;
