@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-12T22:16:04.000Z</updated>
+    <updated>2026-04-13T16:36:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent Highlight Color 1.0]]></title>
+        <id>https://windhawk.net/mods/accent-hl-color#4ba4478d760f894ae99ddd967f0036a26bc08d77</id>
+        <link href="https://windhawk.net/mods/accent-hl-color"/>
+        <updated>2026-04-13T16:36:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="accenthighlightcolor">Accent Highlight Color</h1>
+<p>Makes the highlight color use your system accent color in Win32 apps instead of the
+default blue.</p>
+<p><strong>Before</strong>:<br />
+<img src="https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/AccentHighlightColor/before.png" alt="Notepad with the text &quot;test&quot; selected in blue" /></p>
+<p><strong>After</strong>:<br />
+<img src="https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/AccentHighlightColor/after.png" alt="Notepad with the text &quot;test&quot; selected in the current accent color" /></p>]]></content>
+        <author>
+            <name>FireBlade</name>
+            <uri>https://github.com/FireBlade211</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable accidental Office KeyTips in Word 1.0]]></title>
         <id>https://windhawk.net/mods/disable-office-keytips-word#f5efc1b4c2f922c64dd67dcdf5e469b896dbd261</id>
@@ -588,27 +605,6 @@ Each button has three fields:</p>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Visio Thumbnail HD Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/visio-hd-thumbnail#70d408f846c9f3f3d62b769e877f4a3c80ef4ddb</id>
-        <link href="https://windhawk.net/mods/visio-hd-thumbnail"/>
-        <updated>2026-03-28T15:02:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="visiothumbnailhdfix">Visio Thumbnail HD Fix</h1>
-<p>This mod addresses the issue of low-resolution thumbnails for Visio documents in File Explorer. Visio generates thumbnails according to fixed area sizes (i.e., a max total pixel count), which can lead to blurry thumbnails for larger documents. This mod intercepts the thumbnail generation function in <code>vislib.dll</code> and scales up the area parameter, enabling Visio to produce higher-resolution thumbnails, resulting in clearer previews in File Explorer.</p>
-<h1 id="notes">Notes</h1>
-<ul>
-<li><p>This will only take effect on newly saved or modified Visio files, as thumbnails for existing files were generated and saved at the time of their creation or last modification. To update thumbnails for existing files, simply open, do some modifications, and resave them in Visio. (Direct resave without modification may not trigger thumbnail regeneration, as Visio is kind of smart in that regard. Changing text color or adding and then removing a shape should be enough to force thumbnail update.)</p></li>
-<li><p>Each file with HD thumbnails might take up extra 10KB of storage space (as of <code>Scale Multiplier</code> being set to 4). We consider this a reasonable trade-off for the improved thumbnail quality, especially for complex Visio documents where only clear thumbnails make sense.</p></li>
-</ul>
-<h1 id="before">Before</h1>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/visio-hd-thumbnail-before.png" alt="Before" /></p>
-<h1 id="after">After</h1>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/visio-hd-thumbnail-after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>Joe Ye</name>
-            <uri>https://github.com/JoeYe-233</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-12T22:16:04.000Z</updated>
+    <updated>2026-04-13T16:36:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent Highlight Color 1.0]]></title>
+        <id>https://windhawk.net/mods/accent-hl-color#4ba4478d760f894ae99ddd967f0036a26bc08d77</id>
+        <link href="https://windhawk.net/mods/accent-hl-color"/>
+        <updated>2026-04-13T16:36:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="accenthighlightcolor">Accent Highlight Color</h1>
+<p>Makes the highlight color use your system accent color in Win32 apps instead of the
+default blue.</p>
+<p><strong>Before</strong>:<br />
+<img src="https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/AccentHighlightColor/before.png" alt="Notepad with the text &quot;test&quot; selected in blue" /></p>
+<p><strong>After</strong>:<br />
+<img src="https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/AccentHighlightColor/after.png" alt="Notepad with the text &quot;test&quot; selected in the current accent color" /></p>]]></content>
+        <author>
+            <name>FireBlade</name>
+            <uri>https://github.com/FireBlade211</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable accidental Office KeyTips in Word 1.0]]></title>
         <id>https://windhawk.net/mods/disable-office-keytips-word#f5efc1b4c2f922c64dd67dcdf5e469b896dbd261</id>
@@ -502,30 +519,6 @@ file size or drive capacity in pane 1</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Block Start Menu and Hosts 1.2]]></title>
-        <id>https://windhawk.net/mods/block-windows-startmenu-and-hosts#f6b25143ed7014d3e699714c4d4d86039c35947a</id>
-        <link href="https://windhawk.net/mods/block-windows-startmenu-and-hosts"/>
-        <updated>2026-04-04T10:59:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="blockstartmenuandhosts">Block Start Menu and Hosts</h1>
-<p>This Windhawk mod actively terminates existing instances of specific Windows host processes upon loading and intercepts process creation to prevent them from launching again in the future. 
-This way the mod ensures that unused selected UI components and their process are actually not running instead of simply hiding them.</p>
-<h2 id="features">Features</h2>
-<p>You can individually toggle the blocking of the following processes dynamically in the mod settings:</p>
-<ul>
-<li><strong>StartMenuExperienceHost.exe</strong> -&gt; The main Start Menu UI and process ("WIN" key)</li>
-<li><strong>SearchHost.exe</strong>              -&gt; The Search Menu UI and process ("WIN + S" shortcut) <strong>Note</strong>: <em>may</em> cause issues within folder search.</li>
-<li><strong>TextInputHost.exe</strong>           -&gt; The emoji and clipboard UI and process ("WIN + ." shortcut)</li>
-</ul>
-<h2 id="howitworks">How it Works</h2>
-<p>The mod injects into <code>explorer.exe</code> and <code>svchost.exe</code>.<br />
-Upon init, it kills any active instances of the selected hosts.<br />
-It then places a hook on the <code>CreateProcessInternalW</code> function: If the system attempts to launch any of the blocked .exe (example: user press WIN key), the hook intercepts the request and returns an <code>ERROR_ACCESS_DENIED</code> flag, preventing the launch.</p>]]></content>
-        <author>
-            <name>Exiled Eye</name>
-            <uri>https://github.com/ExiledEye</uri>
         </author>
     </entry>
 </feed>

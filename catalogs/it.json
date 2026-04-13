@@ -36,6 +36,34 @@
                 "version": "1.6"
             }
         },
+        "accent-hl-color": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1776098177000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1776098177000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "FireBlade",
+                "compilerOptions": "-luser32 -ldwmapi -lgdi32",
+                "description": "Makes the highlight color use your system accent color in Win32 apps.",
+                "github": "https://github.com/FireBlade211",
+                "include": [
+                    "*"
+                ],
+                "name": "Accent Highlight Color",
+                "version": "1.0"
+            }
+        },
         "acrylic-effect-radius-changer": {
             "details": {
                 "defaultSorting": 3032,
