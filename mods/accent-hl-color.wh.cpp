@@ -198,7 +198,8 @@ void UpdateAccentCache()
 HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex)
 {
     Wh_Log(L"System brush hook triggered");
-    UpdateAccentCache();
+    if (nIndex == COLOR_HIGHLIGHT || nIndex == COLOR_HIGHLIGHTTEXT)
+        UpdateAccentCache();
 
     if (nIndex == COLOR_HIGHLIGHT)
     {
