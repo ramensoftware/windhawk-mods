@@ -1289,12 +1289,34 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
                     wsprintfW(b,L"%d",GetGValue(d->result));SetDlgItemTextW(hwnd,IDC_CP_G,b);
                     wsprintfW(b,L"%d",GetBValue(d->result));SetDlgItemTextW(hwnd,IDC_CP_B,b);
                     d->updating=FALSE;CP_RenderSpectrum(d);CP_RenderVBar(d);CP_UploadBitmaps(d);InvalidateRect(hwnd,NULL,FALSE);}}
-            else if(id>=IDC_CP_R&&id<=IDC_CP_B){int r=GetDlgItemInt(hwnd,IDC_CP_R,NULL,FALSE),g=GetDlgItemInt(hwnd,IDC_CP_G,NULL,FALSE),b=GetDlgItemInt(hwnd,IDC_CP_B,NULL,FALSE);
-                r=r>255?255:r;g=g>255?255:g;b=b>255?255:b;CP_RGBtoHSV(RGB(r,g,b),d->hue,d->sat,d->val);
-                d->result=CP_HSVtoRGB(d->hue,d->sat,d->val);d->updating=TRUE;WCHAR buf[16];
-                wsprintfW(buf,L"#%02X%02X%02X",GetRValue(d->result),GetGValue(d->result),GetBValue(d->result));
-                SetDlgItemTextW(hwnd,IDC_CP_HEX,buf);d->updating=FALSE;CP_RenderSpectrum(d);CP_RenderVBar(d);CP_UploadBitmaps(d);InvalidateRect(hwnd,NULL,FALSE);}}
-        return 0; }
+            else if (id>=IDC_CP_R&&id<=IDC_CP_B)
+            {
+                int r = GetDlgItemInt(hwnd, IDC_CP_R, NULL, FALSE);
+                int g = GetDlgItemInt(hwnd, IDC_CP_G, NULL, FALSE);
+                int b = GetDlgItemInt(hwnd,IDC_CP_B,NULL,FALSE);
+                r = r > 255 ? 255 : r;
+                g = g > 255 ? 255 : g;
+                b = b > 255 ? 255 : b;
+
+                CP_RGBtoHSV(RGB(r,g,b),d->hue,d->sat,d->val);
+
+                d->result=CP_HSVtoRGB(d->hue,d->sat,d->val);
+                d->updating=TRUE;
+
+                WCHAR buf[16] = L"";
+
+                wsprintfW(buf, L"#%02X%02X%02X", GetRValue(d->result), GetGValue(d->result), GetBValue(d->result));
+                SetDlgItemTextW(hwnd,IDC_CP_HEX,buf);
+
+                d->updating=FALSE;
+                CP_RenderSpectrum(d);
+                CP_RenderVBar(d);
+                CP_UploadBitmaps(d);
+                InvalidateRect(hwnd,NULL,FALSE);
+            }
+        }
+        return 0;
+    }
     case WM_DESTROY: CP_DestroyD2D(d); if(d->specPixels){free(d->specPixels);d->specPixels=nullptr;} if(d->vbarPixels){free(d->vbarPixels);d->vbarPixels=nullptr;} PostQuitMessage(0); return 0;
     case WM_CLOSE: d->accepted=FALSE; DestroyWindow(hwnd); return 0;
     }
