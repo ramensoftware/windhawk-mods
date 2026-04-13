@@ -25,6 +25,7 @@ default blue.
 
 #include <dwmapi.h>
 #include <cmath>
+#include <atomic>
 
 using GetSysColor_t = decltype(&GetSysColor);
 using GetSysColorBrush_t = decltype(&GetSysColorBrush);
@@ -63,18 +64,19 @@ BOOL Wh_ModInit() {
 }
 
 DWORD g_lastArgb = 0;
-HBRUSH g_highlightBrush = NULL;
-HBRUSH g_highlightTextBrush = NULL;
+std::atomic<HBRUSH> g_highlightBrush = NULL;
+std::atomic<HBRUSH> g_highlightTextBrush = NULL;
+ULONGLONG g_lastUpdateTick = 0;
 
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 
-    if (g_highlightBrush)
-        DeleteObject(g_highlightBrush);
+    HBRUSH b1 = g_highlightBrush.load();
+    HBRUSH b2 = g_highlightTextBrush.load();
 
-    if (g_highlightTextBrush)
-        DeleteObject(g_highlightTextBrush);
+    if (b1) DeleteObject(b1);
+    if (b2) DeleteObject(b2);
 }
 
 // helpers to get text color from accent color
@@ -124,39 +126,23 @@ COLORREF GetTextColorForAccent(DWORD argb)
         : RGB(0, 0, 0);
 }
 
+std::atomic<COLORREF> g_cachedHighlight;
+std::atomic<COLORREF> g_cachedText;
+
+void UpdateAccentCache();
+
 DWORD WINAPI GetSysColor_Hook(int nIndex)
 {
-    Wh_Log(L"System color hook triggered");
+    if (nIndex == COLOR_HIGHLIGHT || nIndex == COLOR_HIGHLIGHTTEXT)
+        UpdateAccentCache();
 
-    if (nIndex == COLOR_HIGHLIGHT) {
-        Wh_Log(L"Background color is queried");
-
-        DWORD dwColorization = 0;
-        BOOL bOpaque = FALSE;
-
-        HRESULT hr = DwmGetColorizationColor(&dwColorization, &bOpaque);
-        if (SUCCEEDED(hr))
-        {
-            COLORREF c = RGB(
-                (dwColorization >> 16) & 0xFF, // R
-                (dwColorization >> 8)  & 0xFF, // G
-                dwColorization & 0xFF          // B
-                );
-
-            return c;
-        }
+    if (nIndex == COLOR_HIGHLIGHT)
+    {
+        return g_cachedHighlight.load(std::memory_order_acquire);
     }
-    else if (nIndex == COLOR_HIGHLIGHTTEXT) {
-        Wh_Log(L"Foreground color is queried");
-
-        DWORD dwColorization = 0;
-        BOOL bOpaque = FALSE;
-
-        HRESULT hr = DwmGetColorizationColor(&dwColorization, &bOpaque);
-        if (SUCCEEDED(hr))
-        {
-            return GetTextColorForAccent(dwColorization);
-        }
+    else if (nIndex == COLOR_HIGHLIGHTTEXT)
+    {
+        return g_cachedText.load(std::memory_order_acquire);
     }
 
     return GetSysColor_Original(nIndex);
@@ -169,27 +155,44 @@ DWORD WINAPI GetSysColor_Hook(int nIndex)
 
 void UpdateAccentCache()
 {
+    ULONGLONG now = GetTickCount64();
+
+    if (now - g_lastUpdateTick < 1000) // 1 second cache
+        return;
+
+    g_lastUpdateTick = now;
+
     DWORD argb;
     BOOL opaque;
 
-    DwmGetColorizationColor(&argb, &opaque);
+    if (FAILED(DwmGetColorizationColor(&argb, &opaque)))
+        return;
 
     if (argb == g_lastArgb)
         return;
 
     g_lastArgb = argb;
 
-    if (g_highlightBrush)
-    {
-        DeleteObject(g_highlightBrush);
-        g_highlightBrush = NULL;
-    }
+    HBRUSH newBg = CreateSolidBrush(RGB(
+        (argb >> 16) & 0xFF,
+        (argb >> 8)  & 0xFF,
+        argb & 0xFF
+    ));
 
-    if (g_highlightTextBrush)
-    {
-        DeleteObject(g_highlightTextBrush);
-        g_highlightTextBrush = NULL;
-    }
+    HBRUSH newText = CreateSolidBrush(GetTextColorForAccent(argb));
+
+    g_highlightBrush.store(newBg, std::memory_order_release);
+    g_highlightTextBrush.store(newText, std::memory_order_release);
+    g_cachedHighlight.store(RGB(
+        (argb >> 16) & 0xFF,
+        (argb >> 8)  & 0xFF,
+        argb & 0xFF
+    ), std::memory_order_release);
+
+    g_cachedText.store(
+        GetTextColorForAccent(argb),
+        std::memory_order_release
+    );
 }
 
 HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex)
@@ -201,19 +204,20 @@ HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex)
     {
         Wh_Log(L"Background color is queried");
         
-        if (!g_highlightBrush)
-            g_highlightBrush = CreateSolidBrush(GetSysColor_Hook(nIndex));
+        HBRUSH brush = g_highlightBrush.load(std::memory_order_acquire);
 
-        return g_highlightBrush;
+        if (brush)
+            return brush;
     }
 
     if (nIndex == COLOR_HIGHLIGHTTEXT)
     {
         Wh_Log(L"Foreground color is queried");
 
-        if (!g_highlightTextBrush)
-            g_highlightTextBrush = CreateSolidBrush(GetSysColor_Hook(nIndex));
-        return g_highlightTextBrush;
+        HBRUSH brush = g_highlightTextBrush.load(std::memory_order_acquire);
+        
+        if (brush)
+            return brush;
     }
 
     return GetSysColorBrush_Original(nIndex);
