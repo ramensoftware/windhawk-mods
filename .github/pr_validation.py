@@ -164,6 +164,18 @@ def get_mod_file_metadata(
     return properties, warnings
 
 
+def get_mod_file_readme(source: str) -> Optional[str]:
+    """Extract the README block body from mod source, or None if absent."""
+    readme_block_re = re.compile(
+        r'^//[ \t]+==WindhawkModReadme==[ \t]*$'
+        r'\s*/\*\s*([\s\S]+?)\s*\*/\s*'
+        r'^//[ \t]+==/WindhawkModReadme==[ \t]*$',
+        re.MULTILINE,
+    )
+    match = readme_block_re.search(source)
+    return match.group(1) if match else None
+
+
 @cache
 def get_mod_author_data():
     url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
@@ -624,14 +636,23 @@ class ModMetadataValidator:
 
 
 def validate_metadata(path: Path, expected_author: str) -> int:
-    with path.open(encoding='utf-8', errors='ignore') as file:
-        properties, initial_warnings = get_mod_file_metadata(
-            file, warn_callback=lambda line, msg: add_warning(path, line, msg)
-        )
+    source = path.read_text(encoding='utf-8', errors='ignore')
+
+    properties, initial_warnings = get_mod_file_metadata(
+        StringIO(source),
+        warn_callback=lambda line, msg: add_warning(path, line, msg),
+    )
 
     # Validate metadata properties
     validator = ModMetadataValidator(path, properties, expected_author)
     metadata_warnings = validator.validate_all()
+
+    # Validate README presence
+    readme_warnings = 0
+    if get_mod_file_readme(source) is None:
+        readme_warnings += add_warning(
+            path, 1, 'Mod source must contain a README block (==WindhawkModReadme==)'
+        )
 
     # Validate file path
     file_warnings = 0
@@ -640,7 +661,7 @@ def validate_metadata(path: Path, expected_author: str) -> int:
     if path.parent != Path('mods'):
         file_warnings += add_warning(path, 1, 'File is not placed in the mods folder')
 
-    return initial_warnings + metadata_warnings + file_warnings
+    return initial_warnings + metadata_warnings + readme_warnings + file_warnings
 
 
 @cache
