@@ -15,8 +15,6 @@
 
 // ==WindhawkModReadme==
 /*
-# Auto Dark Titlebar with Custom Colours
-
 Combines automatic dark/light titlebar switching with per-mode, per-state custom colours. Inspired from the following mods:
 - `Auto Dark Titlebar` by Asteski
 - `Windows 11 Custom Titlebar Colors` by Th3Fanbus
