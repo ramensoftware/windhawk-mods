@@ -5,8 +5,8 @@
 // @version         1.0.0
 // @author          ciizerr
 // @github          https://github.com/ciizerr
-// @include         explorer.exe
-// @compilerOptions -lgdiplus -lwinmm -lgdi32
+// @include         windhawk.exe
+// @compilerOptions -lgdiplus -lwinmm -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -121,7 +121,12 @@ bool g_soundEnabled = true;
 int g_sleepSoundInterval = 30;
 bool g_sleepSoundRepeat = true;
 int g_fps = 60;
-bool g_modExit = false;
+static bool g_modExit = false;
+
+// Tool mod handles
+static HWND   g_hwndOverlay = nullptr;
+static HANDLE g_hThread = nullptr;
+static HANDLE g_hWindowReady = nullptr;
 
 struct SpriteConfig {
     const wchar_t* files[2];
@@ -701,13 +706,7 @@ public:
 
 Neko* g_pNeko = nullptr;
 
-DWORD WINAPI NekoThread(LPVOID param) {
-    HANDLE hMutex = CreateMutexW(NULL, TRUE, L"WindhawkNekoCatMutex");
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(hMutex);
-        return 0; // Already running in another explorer
-    }
-
+DWORD WINAPI NekoProcessThread(LPVOID param) {
     GdiplusStartupInput gdiplusStartupInput;
     ULONG_PTR gdiplusToken;
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
@@ -716,23 +715,30 @@ DWORD WINAPI NekoThread(LPVOID param) {
 
     g_pNeko = new Neko();
     g_pNeko->Init();
+    
+    // Track the overlay HWND for the tool mod
+    g_hwndOverlay = g_pNeko->hwnd;
+    
+    // Signal that the window is ready
+    if (g_hWindowReady) {
+        SetEvent(g_hWindowReady);
+    }
 
     int intervalMs = 1000 / g_fps;
 
     MSG msg;
     while (!g_modExit) {
-        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
                 g_modExit = true;
                 break;
             }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
+        } else {
+            g_pNeko->Update();
+            Sleep(intervalMs);
         }
-        if (g_modExit) break;
-        
-        g_pNeko->Update();
-        Sleep(intervalMs);
     }
 
     g_pNeko->StopAudio();
@@ -740,10 +746,78 @@ DWORD WINAPI NekoThread(LPVOID param) {
     g_pNeko = nullptr;
 
     GdiplusShutdown(gdiplusToken);
-
-    ReleaseMutex(hMutex);
-    CloseHandle(hMutex);
     return 0;
+}
+
+// ─────────────────────────────────────────────
+//  Tool mod implementation
+// ─────────────────────────────────────────────
+void LoadSettings();
+
+BOOL WhTool_ModInit()
+{
+    Wh_Log(L"WhTool_ModInit called");
+
+    LoadSettings();
+
+    g_hWindowReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hWindowReady) {
+        Wh_Log(L"CreateEvent failed");
+        return FALSE;
+    }
+
+    g_hThread = CreateThread(nullptr, 0, NekoProcessThread, nullptr, 0, nullptr);
+    if (!g_hThread) {
+        Wh_Log(L"CreateThread failed");
+        CloseHandle(g_hWindowReady);
+        return FALSE;
+    }
+
+    // Wait for the window to be created
+    WaitForSingleObject(g_hWindowReady, 5000);
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged()
+{
+    LoadSettings();
+    if (g_pNeko) {
+        // Force bounds recalculation
+        g_pNeko->boundsWidth = GetSystemMetrics(SM_CXSCREEN) - SPRITE_SIZE * g_scale;
+        g_pNeko->boundsHeight = GetSystemMetrics(SM_CYSCREEN) - SPRITE_SIZE * g_scale;
+    }
+}
+
+void WhTool_ModUninit()
+{
+    Wh_Log(L"WhTool_ModUninit called");
+
+    g_modExit = true;
+    if (g_hwndOverlay) {
+        PostMessage(g_hwndOverlay, WM_QUIT, 0, 0);
+    }
+
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, 5000);
+        CloseHandle(g_hThread);
+        g_hThread = nullptr;
+    }
+
+    if (g_hWindowReady) {
+        CloseHandle(g_hWindowReady);
+        g_hWindowReady = nullptr;
+    }
+}
+
+// ============================================================================
+//  Tool mod launcher code (using Windhawk injection & hooking)
+// ============================================================================
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L"Neko Cat: entry point hook triggered, exiting main thread.");
+    ExitThread(0);
 }
 
 HANDLE hThread = NULL;
@@ -767,29 +841,152 @@ void LoadSettings() {
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-    if (g_pNeko) {
-        // Force bounds recalculation
-        g_pNeko->boundsWidth = GetSystemMetrics(SM_CXSCREEN) - SPRITE_SIZE * g_scale;
-        g_pNeko->boundsHeight = GetSystemMetrics(SM_CYSCREEN) - SPRITE_SIZE * g_scale;
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModSettingsChanged();
 }
 
 BOOL Wh_ModInit() {
-    LoadSettings();
-    
-    // Create Neko thread to not block explorer
-    g_modExit = false;
-    hThread = CreateThread(NULL, 0, NekoThread, NULL, 0, NULL);
-    
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Neko Cat mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    g_modExit = true;
-    if (hThread) {
-        WaitForSingleObject(hThread, 3000); // 3 seconds timeout
-        CloseHandle(hThread);
-        hThread = NULL;
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
     }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
