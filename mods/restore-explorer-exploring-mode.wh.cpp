@@ -2,7 +2,7 @@
 // @id              restore-explorer-exploring-mode
 // @name            Restore Explorer "Exploring" Mode
 // @description     Reintroduces File Explorer's "Exploring" mode from Windows XP and before
-// @version         1.2.0
+// @version         1.3.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -51,11 +51,14 @@ Windows Registry Editor Version 5.00
   - unchanged: Unchanged
   - documents: Documents (Windows 2000, Me, XP, Vista)
   - sys_drive_root: Windows drive root (C:\) (Windows 95, 98, NT 4.0)
-- explorer_icon: true
-  $name: Explorer icon
+- explorer_icon: "1"
+  $name: Explorer icon mode
   $description:
-    Changes Explorer windows to have a generic Windows Explorer icon when the folder tree is open. 
-    (Windows XP and before)
+    When the window should have the Explorer icon instead of the folder's icon.
+  $options:
+  - 0: Never (Windows Vista+)
+  - 1: When folder tree open (Windows 98 (IE 5.5) - XP)
+  - ie40: In Explore mode (Windows 95 - 98 (IE 5.0))
 - exploring_text: Exploring
   $name: "\"Exploring\" text"
   $description:
@@ -112,7 +115,12 @@ enum EXE_INVOKE_LOCATION
     EIL_DOCUMENTS,
     EIL_SYSDRIVEROOT,
 } g_exeInvokeLocation = EIL_UNCHANGED;
-bool g_fExplorerIcon = false;
+enum EXPLORER_ICON_MODE
+{
+    EIM_VISTA = 0,
+    EIM_IE55,
+    EIM_IE40,
+} g_explorerIconMode = EIM_VISTA;
 WindhawkUtils::StringSetting g_spszExploringText;
 bool g_fOpenInNewWindow = false;
 bool g_fDontStoreTreeState = false;
@@ -265,7 +273,34 @@ void CShellBrowser__SetTitle_hook(void *pThis)
 void (*CShellBrowser__SetIcon_orig)(void *);
 void CShellBrowser__SetIcon_hook(void *pThis)
 {
-    if (g_fExplorerIcon && CShellBrowser__IsExplorerBandVisible(pThis))
+    bool fExplorerIcon;
+    switch (g_explorerIconMode)
+    {
+        case EIM_VISTA:
+            fExplorerIcon = false;
+            break;
+        case EIM_IE55:
+            fExplorerIcon = CShellBrowser__IsExplorerBandVisible(pThis);
+            break; 
+        case EIM_IE40:
+        {
+            fExplorerIcon = false;
+            IPropertyBag *pbp = nullptr;
+            IServiceProvider *psp = (IServiceProvider *)((char *)pThis + 40);
+            if (SUCCEEDED(psp->QueryService(SID_ShellBrowserPropStore, &pbp)))
+            {
+                BOOL fInExploreMode;
+                if (SUCCEEDED(PSPropertyBag_ReadBOOL(pbp, L"ExpandInitialNav", &fInExploreMode)))
+                {
+                    fExplorerIcon = fInExploreMode;
+                }
+                pbp->Release();
+            }
+            break;
+        }
+    }
+
+    if (fExplorerIcon)
     {
         IBrowserEvents *pbe = *((IBrowserEvents **)pThis + 78);
         static HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
@@ -662,7 +697,16 @@ void Wh_ModSettingsChanged(void)
 {
 #ifdef _WIN64
     g_spszExploringText = WindhawkUtils::StringSetting::make(L"exploring_text");
-    g_fExplorerIcon = Wh_GetIntSetting(L"explorer_icon");
+    LPCWSTR pszIconMode = Wh_GetStringSetting(L"explorer_icon");
+    if (!wcscmp(pszIconMode, L"1"))
+    {
+        g_explorerIconMode = EIM_IE55;
+    }
+    else if (!wcscmp(pszIconMode, L"ie40"))
+    {
+        g_explorerIconMode = EIM_IE40;
+    }
+    Wh_FreeStringSetting(pszIconMode);
     g_fDontStoreTreeState = Wh_GetIntSetting(L"dont_store_tree_state");
 #endif
     g_fOpenInNewWindow = Wh_GetIntSetting(L"open_in_new_window");
