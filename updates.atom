@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-13T18:01:56.000Z</updated>
+    <updated>2026-04-14T20:11:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.1.0]]></title>
+        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#849442c1f7f0e050615851eedfe35ffbfac0a4b0</id>
+        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
+        <updated>2026-04-14T20:11:27.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixed a major issue with third-party apps like GlazeWM, Flow Launcher etc</p>
+<p>Issues fixed:</p>
+<ul>
+<li><p>GlazeWM - Chromium-based browsers and apps simply don't play well with running glazewm and having this mod enabled as they aggressively grab the focus and not giving the room to shift workspaces. Also, this mod seems to have caused a regression with it where when toggling so theme from dark to light and vice versa, the workspaces acts weird everytime i.e it randomly shifts workspace focus. </p></li>
+<li><p>Flow Launcher - Closes instantly on an input event. Simple fix by adding <code>Flow.Launcher.exe</code> to <code>@exclude</code></p></li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.3.0]]></title>
         <id>https://windhawk.net/mods/restore-explorer-exploring-mode#e5a21258b21c70350de0683d01a375ce1c07914f</id>
@@ -474,48 +490,6 @@ file size or drive capacity in pane 1</li>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.0.0]]></title>
-        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#03eb122ec8fd09c77818492144ff779102f0aec7</id>
-        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
-        <updated>2026-04-04T18:37:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="autodarktitlebarwithcustomcolours">Auto Dark Titlebar with Custom Colours</h1>
-<p>Combines automatic dark/light titlebar switching with per-mode, per-state custom colours. Inspired from the following mods:</p>
-<ul>
-<li><code>Auto Dark Titlebar</code> by Asteski</li>
-<li><code>Windows 11 Custom Titlebar Colors</code> by Th3Fanbus</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li>Auto-detects Windows dark/light theme via registry and applies <code>DWMWA_USE_IMMERSIVE_DARK_MODE</code></li>
-<li>Custom titlebar colours for four independent states:</li>
-<li><strong>Light Mode</strong> - Active window</li>
-<li><strong>Light Mode</strong> - Inactive window</li>
-<li><strong>Dark Mode</strong>  - Active window</li>
-<li><strong>Dark Mode</strong>  - Inactive window</li>
-<li>Per-mode "Use Custom Colours" toggle -- leave off to keep system defaults for that mode</li>
-<li>Per-mode colour input format toggle -- choose between Hex (<code>RRGGBB</code>) or separate R/G/B fields</li>
-<li>Real-time theme change detection (responds to <code>WM_SETTINGCHANGE</code> / <code>WM_DWMCOLORIZATIONCOLORCHANGED</code>)</li>
-<li>New windows receive the correct style immediately via <code>CreateWindowEx</code> hooks</li>
-<li>Dialog windows handled via <code>DefDlgProc</code> hooks</li>
-<li>Live settings reload: colour changes apply instantly without restarting the process</li>
-</ul>
-<h2 id="colourformat">Colour Format</h2>
-<ul>
-<li><strong>Hex mode</strong>: enter a 6-character hex string, e.g. <code>FF0000</code> for red (no <code>#</code> prefix)</li>
-<li><strong>RGB mode</strong>: enter R, G, B as integers 0-255 in separate fields</li>
-</ul>
-<p>Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li><code>systemsettings.exe</code> and <code>applicationframehost.exe</code> are excluded via <code>@exclude</code> to avoid conflicts</li>
-<li>No forced repaint is issued while a mouse button is held (prevents drag-state corruption)</li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
