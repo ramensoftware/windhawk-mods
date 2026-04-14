@@ -54,11 +54,61 @@ Works for both Windows 10 and Windows 11 version of Task Manager, also supports 
 #include <stdint.h>
 
 #include <wchar.h>
+#include <string_view>
+#include <regex>
 #include <windhawk_utils.h>
 
+// ------------------------------------------------
+// Global variables and function pointers
+// ------------------------------------------------
 typedef __int64 (__fastcall *CAdapter_Update_t)(void* pThis, bool* pbRefresh, unsigned long historyIndex);
-CAdapter_Update_t Original_CAdapter_Update;
+CAdapter_Update_t Original_CAdapter_Update = nullptr;
 
+// Official GetAdapterStat function
+typedef unsigned __int64 (__fastcall *GetAdapterStat_t)(void* pThis, unsigned int index, int cmd);
+GetAdapterStat_t pGetAdapterStat = nullptr;
+
+// UpdateDNSName (used to obtain address for assembly analysis)
+typedef void (__fastcall *UpdateDNSName_t)(void* pThis, const unsigned __int16* a2, void* a3);
+UpdateDNSName_t Original_CAdapter_UpdateDNSName = nullptr;
+
+// UIProps offset (default 0x1F90)
+size_t g_UIPropsOffset = 0x1F90; 
+
+// ------------------------------------------------
+// Utility function: use Windhawk Wh_Disasm regex to extract offset
+// ------------------------------------------------
+size_t OffsetFromAssemblyRegex(void* func, size_t defValue, std::regex regex, int limit = 100) {
+    if (!func) return defValue;
+    
+    BYTE* p = (BYTE*)func;
+    for (int i = 0; i < limit; i++) {
+        WH_DISASM_RESULT result;
+        if (!Wh_Disasm(p, &result)) {
+            break;
+        }
+
+        p += result.length;
+
+        std::string_view s = result.text;
+        if (s == "ret" || s == "retn") {
+            break; // Function ends, exit early
+        }
+
+        std::match_results<std::string_view::const_iterator> match;
+        if (std::regex_search(s.begin(), s.end(), match, regex)) {
+            // Parse the first captured group (hex string)
+            return std::stoull(match[1], nullptr, 16);
+        }
+    }
+
+    Wh_Log(L"Regex offset extraction failed for %p. Using default.", func);
+    return defValue;
+}
+
+// ------------------------------------------------
+// Memory safety check helper functions
+// ------------------------------------------------
 bool IsMemoryAccessible(const void* ptr, size_t size, bool requireWritable) {
     if (!ptr || size == 0) return false;
 
@@ -218,7 +268,7 @@ int ProcessLoadStringHook(HINSTANCE hInstance, UINT uID, LPWSTR lpBuffer, int cc
     return OriginalFunc(hInstance, uID, lpBuffer, cchBufferMax);
 }
 
-// User32 钩子
+// User32 hook
 int WINAPI Hooked_LoadStringW_User32(HINSTANCE hInstance, UINT uID, LPWSTR lpBuffer, int cchBufferMax) {
     return ProcessLoadStringHook(hInstance, uID, lpBuffer, cchBufferMax, Original_LoadStringW_User32);
 }
@@ -228,6 +278,21 @@ int WINAPI Hooked_LoadStringW_KernelBase(HINSTANCE hInstance, UINT uID, LPWSTR l
     return ProcessLoadStringHook(hInstance, uID, lpBuffer, cchBufferMax, Original_LoadStringW_KernelBase);
 }
 
+// ------------------------------------------------
+// Dummy Hooks 
+// ------------------------------------------------
+unsigned __int64 __fastcall Dummy_GetAdapterStat(void* pThis, unsigned int index, int cmd) {
+    return pGetAdapterStat(pThis, index, cmd);
+}
+
+// Only used to let Windhawk resolve the symbol address; no logic interception
+void __fastcall Dummy_CAdapter_UpdateDNSName(void* pThis, const unsigned __int16* a2, void* a3) {
+    Original_CAdapter_UpdateDNSName(pThis, a2, a3);
+}
+
+// ------------------------------------------------
+// Core logic: Update hook and speed retrieval
+// ------------------------------------------------
 __int64 __fastcall Hooked_CAdapter_Update(void* pThis, bool* pbRefresh, unsigned long historyIndex) {
     __int64 result = Original_CAdapter_Update(pThis, pbRefresh, historyIndex);
     if (!pThis) return result;
@@ -235,24 +300,17 @@ __int64 __fastcall Hooked_CAdapter_Update(void* pThis, bool* pbRefresh, unsigned
     unsigned int adapterCount = *(unsigned int*)((char*)pThis + 0x10);
     void** pAdapterArray = *(void***)((char*)pThis + 0x8); 
 
-    if (!pAdapterArray || adapterCount == 0 || adapterCount > 100) return result;
+    if (!pAdapterArray || adapterCount == 0 || adapterCount > 100 || !pGetAdapterStat) return result;
 
     for (unsigned int i = 0; i < adapterCount; i++) {
         char* pAdapterInfoEx = (char*)pAdapterArray[i];
         if (!pAdapterInfoEx) continue;
 
-        // 1. Read actual link speed (from embedded MIB_IF_ROW2 structure)
-        PMIB_IF_ROW2 pMibRow = (PMIB_IF_ROW2)(pAdapterInfoEx + 1352);
+        // 1. Call the official getter to obtain LinkSpeedBps (cmd = 4)
+        ULONG64 linkSpeedBps = pGetAdapterStat(pThis, i, 4);
         
-        // Ensure the MIB_IF_ROW2 memory region is readable
-        if (!IsMemoryReadable(pMibRow, sizeof(MIB_IF_ROW2))) continue;
-        
-        ULONG64 linkSpeedBps = pMibRow->TransmitLinkSpeed; 
-        
-        // Skip disconnected adapters or invalid speed values
         if (linkSpeedBps == 0 || linkSpeedBps == (ULONG64)-1) continue;
 
-        // Dynamic unit conversion (bps -> Mbps / Gbps)
         wchar_t speedStr[261] = {0};
         double speedGbps = (double)linkSpeedBps / 1000000000.0;
         double speedMbps = (double)linkSpeedBps / 1000000.0;
@@ -263,14 +321,14 @@ __int64 __fastcall Hooked_CAdapter_Update(void* pThis, bool* pbRefresh, unsigned
             swprintf(speedStr, 261, L"%.0f Mbps", speedMbps);
         }
 
-        // 2. Overwrite the UI text buffer
-        char** ppUIProps = (char**)(pAdapterInfoEx + 0x1F90);
+        // 2. Write into the UIProps buffer using the dynamic offset
+        char** ppUIProps = (char**)(pAdapterInfoEx + g_UIPropsOffset);
         if (!IsMemoryReadable(ppUIProps, sizeof(void*))) continue;
         
         char* pUIProps = *ppUIProps;
         if (!pUIProps) continue;
 
-        wchar_t* pDnsBuffer = (wchar_t*)(pUIProps + 0x30);
+        wchar_t* pDnsBuffer = (wchar_t*)(pUIProps + 0x30); // Internal string offset 0x30 is highly stable
 
         if (IsMemoryWritable(pDnsBuffer, 261 * sizeof(wchar_t))) {
             wcscpy_s(pDnsBuffer, 261, speedStr);
@@ -286,22 +344,54 @@ BOOL Wh_ModInit(void) {
     HMODULE hTaskmgr = GetModuleHandleW(NULL);
     if (!hTaskmgr) return FALSE;
 
-    WindhawkUtils::SYMBOL_HOOK taskmgrExeHook = {
+    // Register core hooks and resolve target function symbols
+    WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
         {
-            L"public: long __cdecl CAdapter::Update(bool *,unsigned long)"
+            { L"public: long __cdecl CAdapter::Update(bool *,unsigned long)" },
+            (void**)&Original_CAdapter_Update,
+            (void*)Hooked_CAdapter_Update,
+            false
         },
-        (void**)&Original_CAdapter_Update,
-        (void*)Hooked_CAdapter_Update,
-        false
+        {
+            { L"public: unsigned __int64 __cdecl CAdapter::GetAdapterStat(unsigned long,enum NETCOLUMNID,int)" },
+            (void**)&pGetAdapterStat,
+            (void*)Dummy_GetAdapterStat,
+            false
+        },
+        {
+            // Use a dummy hook to obtain the exact UpdateDNSName pointer
+            { L"private: void __cdecl CAdapter::UpdateDNSName(unsigned short const *,struct ADAPTER_INFOEX *)" },
+            (void**)&Original_CAdapter_UpdateDNSName,
+            (void*)Dummy_CAdapter_UpdateDNSName,
+            true // Optional; base loading is not affected even if not found
+        }
     };
 
-    if (!WindhawkUtils::HookSymbols(hTaskmgr, &taskmgrExeHook, 1))
-    {
-        Wh_Log(L"ERROR: Failed to hook CAdapter::Update.");
+    if (!WindhawkUtils::HookSymbols(hTaskmgr, taskmgrExeHooks, ARRAYSIZE(taskmgrExeHooks))) {
+        Wh_Log(L"ERROR: Failed to hook main CAdapter symbols.");
         return FALSE;
     }
+
     // ------------------------------------------------
-    // Register global API hooks
+    // [ASM pattern extraction] extract 0x1F90
+    // ------------------------------------------------
+    if (Original_CAdapter_UpdateDNSName) {
+        // Match pattern: mov rcx, [rdi + 0x1f90] or similar instructions
+        // Require at least 3 hex digits to avoid matching short local offsets like +0x30
+        std::regex rx(R"(mov\s+r\w+,\s*(?:qword ptr\s*)?\[r\w+\s*\+\s*0x([1-9a-fA-F][0-9a-fA-F]{2,})\])", std::regex_constants::icase);
+        
+        // Scan the first 100 instructions (Limit = 100)
+        size_t extracted = OffsetFromAssemblyRegex((void*)Original_CAdapter_UpdateDNSName, 0x1F90, rx, 100);
+        if (extracted != 0x1F90) {
+            g_UIPropsOffset = extracted;
+            Wh_Log(L"Dynamically extracted UIProps offset from ASM: 0x%zX", g_UIPropsOffset);
+        } else {
+            Wh_Log(L"Regex extraction resulted in default: 0x%zX", g_UIPropsOffset);
+        }
+    }
+
+    // ------------------------------------------------
+    // LoadStringW internationalization hook
     // ------------------------------------------------
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
