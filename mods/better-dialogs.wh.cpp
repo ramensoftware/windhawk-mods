@@ -1591,7 +1591,7 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		}
 
 		nColorDlgCount--;
-		vDlgs.erase(hwnd);
+		std::erase(vDlgs, hwnd);
 		//PostQuitMessage(0);
 		return 0;
 	case WM_CLOSE:
@@ -1816,12 +1816,12 @@ static void FP_LoadStrings() {
 		strip(g_fpStrike); strip(g_fpUnder); strip(g_fpEffects);
 	}
 	else {
-		g_fpFont = L"Font";
-		g_fpStyle = L"Font style";
-		g_fpSize = L"Size";
-		g_fpStrike = L"Strikethrough";
-		g_fpUnder = L"Underline";
-		g_fpEffects = L"Effects";
+		wcscpy_s(g_fpFont, L"Font");
+		wcscpy_s(g_fpStyle, L"Font style");
+		wcscpy_s(g_fpSize, L"Size");
+		wcscpy_s(g_fpStrike, L"Strikethrough");
+		wcscpy_s(g_fpUnder, L"Underline");
+		wcscpy_s(g_fpEffects, L"Effects");
 	}
 }
 
@@ -2151,7 +2151,7 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		if (d->pD2D) { d->pD2D->Release(); d->pD2D = nullptr; }
 
 		nFontDlgCount--;
-		vDlgs.erase(hwnd);
+		std::erase(vDlgs, hwnd);
 		return 0;
 	case WM_CLOSE:
 		d->accepted = FALSE;
@@ -2472,7 +2472,7 @@ static void ParseTemplateControls(const BYTE* pData, IFileDialogCustomize* pCust
 static BOOL ModernFileDialog_Impl(LPOPENFILENAMEW lpofn, BOOL bOpen) {
 	HRESULT hrCo = CoInitialize(0);
 	if (FAILED(hrCo))
-		return ModernFileDialog_Original(lpofn, bOpen);
+		return bOpen ? GetOpenFileNameW_Original(lpofn) : GetSaveFileNameW_Original(lpofn);
 
 	BOOL weInitCom = (hrCo == S_OK); // S_FALSE = already initialized by caller
 
@@ -2571,15 +2571,15 @@ static BOOL ModernFileDialog_Impl(LPOPENFILENAMEW lpofn, BOOL bOpen) {
 		// OFN_READONLY checkbox
 		if (!FLAG(lpofn->Flags, OFN_HIDEREADONLY))
 		{
-			hr = pfdc->EnableOpenDropDown(OPENCHOICES);
+			hr = pCustomize->EnableOpenDropDown(OPENCHOICES);
 			if (SUCCEEDED(hr))
 			{
-				hr = pfdc->AddControlItem(OPENCHOICES, OPEN, L"&Open");
+				hr = pCustomize->AddControlItem(OPENCHOICES, OPEN, L"&Open");
 			}
 
 			if (SUCCEEDED(hr))
 			{
-				hr = pfdc->AddControlItem(OPENCHOICES,
+				hr = pCustomize->AddControlItem(OPENCHOICES,
 					OPEN_AS_READONLY,
 					L"Open as &read-only");
 			}
@@ -2753,7 +2753,7 @@ static BOOL ModernFileDialog_Impl(LPOPENFILENAMEW lpofn, BOOL bOpen) {
 			if (SUCCEEDED(pfd->QueryInterface(IID_PPV_ARGS(&pCust)))) {
 				DWORD dwItem = FALSE;
 
-				if (SUCCEEDED(pCust->GetSelectedControlItem(OPENCHOICES, &checked))) {
+				if (SUCCEEDED(pCust->GetSelectedControlItem(OPENCHOICES, &dwItem))) {
 					if (dwItem == OPEN_AS_READONLY)
 						lpofn->Flags |= OFN_READONLY;
 					else
