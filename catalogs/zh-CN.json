@@ -9889,6 +9889,38 @@
                 "version": "1.0"
             }
         },
+        "taskmgr-link-speed": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1776237360000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1776237360000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Joe Ye",
+                "compilerOptions": "-luser32",
+                "description": "在任务管理器网卡页面中显示实际链路速度",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "Taskmgr.exe",
+                    "Taskmgr10.exe"
+                ],
+                "name": "任务管理器显示链路速度",
+                "version": "1.0.0"
+            }
+        },
         "taskmgr-taller-tab": {
             "details": {
                 "defaultSorting": 1000,

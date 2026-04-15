@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-14T20:11:27.000Z</updated>
+    <updated>2026-04-15T07:16:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Show Link Speed 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskmgr-link-speed#2bf7cc399aa935bc14d9c0a5f12d86886f79485b</id>
+        <link href="https://windhawk.net/mods/taskmgr-link-speed"/>
+        <updated>2026-04-15T07:16:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskmanagershowlinkspeed">Task Manager Show Link Speed</h1>
+<p>This mod introduces a simple yet powerful enhancement to the Task Manager's Network tab by replacing the DNS names of network adapters with their real-time link speeds. This allows users to quickly assess the performance of their network connections without needing to open network details and cross-reference adapter names.</p>
+<p>Works for both Windows 10 and Windows 11 version of Task Manager, also supports <code>Windows 10 classic task manager for Windows 11</code> by Winaero. Supports all types of network adapters (Ethernet, Wi-Fi, etc.) by directly reading the link speed from the system's network interface data structures. By default this mod will use the system's built-in multilingual "Link speed" as the label text in Task Manager. You can also customize the label text through the mod settings.</p>
+<p><em>Note: this mod needs pdb symbol of <code>taskmgr.exe</code> to work. Windhawk will download it automatically when you launch Task Manager first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (taskmgr.exe)", wait until it reaches 100% and the pop up disappear, otherwise please switch your network and try again) please wait patiently and let Windhawk do the rest</em></p>
+<h1 id="beforevsafter">Before vs After</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/taskmgr-link-speed-before-vs-after.png" alt="" /></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.1.0]]></title>
         <id>https://windhawk.net/mods/auto-custom-titlebar-colors#849442c1f7f0e050615851eedfe35ffbfac0a4b0</id>
@@ -471,25 +487,6 @@ file size or drive capacity in pane 1</li>
         <author>
             <name>osmanonurkoc</name>
             <uri>https://github.com/osmanonurkoc</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.2]]></title>
-        <id>https://windhawk.net/mods/smooth-scroll-win32#466acb75de958bc766e59c85b639c56a759a99a4</id>
-        <link href="https://windhawk.net/mods/smooth-scroll-win32"/>
-        <updated>2026-04-05T09:56:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed scrolling on SysListView32 horizontal-only views (Icon, Table, Tile)</li>
-<li>Fixed scrolling not working on Task Manager WinUI tabs</li>
-<li>Fixed possible overscroll past top/bottom boundaries</li>
-<li>Fixed inconsistent item scrolling in folders with different item counts</li>
-<li>Added V-Sync option to match animation interval to display refresh rate</li>
-<li>Fixed Ctrl+scroll not working when changing view modes</li>
-<li>Smoother spring effect for a more natural scrolling experience</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

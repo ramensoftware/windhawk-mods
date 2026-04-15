@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-13T16:36:17.000Z</updated>
+    <updated>2026-04-15T07:16:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Show Link Speed 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskmgr-link-speed#2bf7cc399aa935bc14d9c0a5f12d86886f79485b</id>
+        <link href="https://windhawk.net/mods/taskmgr-link-speed"/>
+        <updated>2026-04-15T07:16:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskmanagershowlinkspeed">Task Manager Show Link Speed</h1>
+<p>This mod introduces a simple yet powerful enhancement to the Task Manager's Network tab by replacing the DNS names of network adapters with their real-time link speeds. This allows users to quickly assess the performance of their network connections without needing to open network details and cross-reference adapter names.</p>
+<p>Works for both Windows 10 and Windows 11 version of Task Manager, also supports <code>Windows 10 classic task manager for Windows 11</code> by Winaero. Supports all types of network adapters (Ethernet, Wi-Fi, etc.) by directly reading the link speed from the system's network interface data structures. By default this mod will use the system's built-in multilingual "Link speed" as the label text in Task Manager. You can also customize the label text through the mod settings.</p>
+<p><em>Note: this mod needs pdb symbol of <code>taskmgr.exe</code> to work. Windhawk will download it automatically when you launch Task Manager first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (taskmgr.exe)", wait until it reaches 100% and the pop up disappear, otherwise please switch your network and try again) please wait patiently and let Windhawk do the rest</em></p>
+<h1 id="beforevsafter">Before vs After</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/taskmgr-link-speed-before-vs-after.png" alt="" /></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Accent Highlight Color 1.0]]></title>
         <id>https://windhawk.net/mods/accent-hl-color#4ba4478d760f894ae99ddd967f0036a26bc08d77</id>
@@ -575,36 +591,6 @@ For example, force all CJK characters (U+4E00-U+9FFF) to use "Microsoft YaHei".<
         <author>
             <name>Muhammad Ragib Hasin</name>
             <uri>https://github.com/RagibHasin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Buttons 1.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-buttons#9b7c94904e9d65cd9c1c24efe672f5cb5f2a6ee2</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-buttons"/>
-        <updated>2026-03-28T16:11:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11startmenubuttons">Windows 11 Start Menu Buttons</h1>
-<p>This mod replaces the default bottom row of the Windows 11 Start menu with custom buttons.
-Each button has three fields:</p>
-<ol>
-<li><p><strong>Name</strong> — tooltip text.</p></li>
-<li><p><strong>Icon</strong> — a <a href="https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font">Segoe Fluent Icons / Segoe UI Symbol</a> glyph, for example <code>\uE7E8</code>. </p></li>
-<li><p><strong>Action</strong> — what the button does.</p></li>
-</ol>
-<p><img src="https://i.imgur.com/FpVm6OR.png" alt="img" /></p>
-<h3 id="actionformats">Action formats</h3>
-<ul>
-<li><code>cmd:explorer.exe</code> — runs through <code>cmd.exe</code>.</li>
-<li><code>shell:shutdown /r</code> — runs console window. </li>
-<li><code>"C:\Program Files"</code> — opens a folder.</li>
-<li><code>"C:\Program Files\Google\Chrome\Application\chrome.exe"</code> — opens a file or app.</li>
-<li><code>~Downloads</code> — searches for a folder by name in common system locations.</li>
-<li><code>~chrome.exe</code> — searches for a file by name in common system locations.</li>
-<li><code>https://www.youtube.com/</code> — opens a website.</li>
-<li><code>{ "Restart", "\uE777", "shell:shutdown /r /f /t 0" }, { "Shut down", "\uE7E8", "shell:shutdown /s /f /t 0" }</code> — a submenu with multiple items.</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>
