@@ -472,7 +472,7 @@ HWND WINAPI CreateWindowExW_hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hWnd) ApplyTitleBar(hWnd, FALSE, TRUE);
+    if (hWnd) ApplyTitleBar(hWnd, FALSE, FALSE);
     return hWnd;
 }
 
@@ -488,7 +488,7 @@ HWND WINAPI CreateWindowExA_hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hWnd) ApplyTitleBar(hWnd, FALSE, TRUE);
+    if (hWnd) ApplyTitleBar(hWnd, FALSE, FALSE);
     return hWnd;
 }
 
