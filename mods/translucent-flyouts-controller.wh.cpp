@@ -2,10 +2,11 @@
 // @id              translucent-flyouts-controller
 // @name            Translucent Flyouts Controller
 // @description     Controls TranslucentFlyouts settings through Windhawk (registry bridge)
-// @version         1.0.0
+// @version         1.1.0
 // @author          GID0317
 // @github          https://github.com/GID0317
 // @include         windhawk.exe
+// @compilerOptions -lwtsapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -650,7 +651,28 @@
   - hardReloadOnApply: false
     $name: Hard Reload On Apply
     $description: Also send TranslucentFlyouts detach and attach messages after apply. Slower, but can fix stale visuals
+  - configAppCompatibilityMode: false
+    $name: Translucent Flyouts Config Compatibility Mode
+    $description: Delete known zero-color values instead of writing 0. Keeps Translucent Flyouts Config from crashing on those values
   $name: Controller
+
+- advancedFunctions:
+  - processBlockList: ""
+    $name: Process Block List
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to block TranslucentFlyouts loading (for example explorer.exe). This can require restarting Translucent Flyouts or Windows and may cause high CPU usage if misconfigured
+  - processDisabledList: ""
+    $name: Process Disabled List (Global)
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to disable all effects globally (for example app.exe)
+  - menuProcessDisabledList: ""
+    $name: Process Disabled List (Menu)
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to disable only Menu effects
+  - tooltipProcessDisabledList: ""
+    $name: Process Disabled List (Tooltip)
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to disable only Tooltip effects
+  - dropDownProcessDisabledList: ""
+    $name: Process Disabled List (DropDown)
+    $description: Advanced users only. Comma, semicolon, or newline separated process names to disable only DropDown effects
+  $name: Advanced Functions
 */
 // ==/WindhawkModSettings==
 
@@ -711,13 +733,21 @@ You can trigger another reset anytime by picking a category again. This pattern 
 - Some settings interact with each other. For example, "Enable Immersive Style" on menu applies Windows 11's modern visual language
 - Effect types include options like Acrylic, Mica, Blur, and Transparent, each with different visual characteristics
 
+## Advanced Functions Warning
+
+This section is only meant for advanced users.
+
+Configuring the Block List can require restarting Translucent Flyouts or Windows and may prevent TranslucentFlyouts from loading for those applications.
+
+If used incorrectly, these options can cause serious problems, including high CPU usage.
+
 ## References
 
 This controller is built on top of two excellent projects:
 
 - [TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyouts) by ALTaleX531 provides the original runtime and handles all the actual menu rendering that makes Windows menus truly customizable.
 
-- [TranslucentFlyoutsConfig](https://github.com/Satanarious/TranslucentFlyoutsConfig) by Satanarious created a polished configuration application that became the standard way to manage these settings. The setting names, organization, and defaults used in this controller are based on that work.
+- [Translucent Flyouts Config](https://github.com/Satanarious/TranslucentFlyoutsConfig) by Satanarious created a polished configuration application that became the standard way to manage these settings. The setting names, organization, and defaults used in this controller are based on that work.
 
 Both projects are well maintained and worth exploring if you want to understand how it all works together.
 */
@@ -726,9 +756,12 @@ Both projects are well maintained and worth exploring if you want to understand 
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <CommCtrl.h>
+#include <wtsapi32.h>
 #include <cstdint>
 #include <cstdlib>
 #include <cwctype>
+#include <string>
+#include <vector>
 
 struct Settings {
     int globalEffectType = 5;
@@ -846,11 +879,18 @@ struct Settings {
     int tooltipMarginTop = 6;
     int tooltipMarginBottom = 6;
     int tooltipDisabled = 2;
+    std::vector<std::wstring> processBlockList;
+    std::vector<std::wstring> processDisabledList;
+    std::vector<std::wstring> menuProcessDisabledList;
+    std::vector<std::wstring> tooltipProcessDisabledList;
+    std::vector<std::wstring> dropDownProcessDisabledList;
     int resetAction = 0;
 
     bool confirmReset = true;
 
     bool hardReloadOnApply = false;
+
+    bool configAppCompatibilityMode = false;
 };
 
 static Settings g_settings;
@@ -943,6 +983,93 @@ static bool WriteStringHKCU(const wchar_t* subKey, const wchar_t* valueName, con
     return rc == ERROR_SUCCESS;
 }
 
+  static bool SyncProcessListHKCU(const wchar_t* subKey, const std::vector<std::wstring>& processNames)
+  {
+    HKEY hKey = nullptr;
+    LONG rc = RegCreateKeyExW(
+      HKEY_CURRENT_USER,
+      subKey,
+      0,
+      nullptr,
+      REG_OPTION_NON_VOLATILE,
+      KEY_QUERY_VALUE | KEY_SET_VALUE,
+      nullptr,
+      &hKey,
+      nullptr);
+
+    if (rc != ERROR_SUCCESS) {
+      Wh_Log(L"RegCreateKeyExW failed for %s (rc=%ld)", subKey, rc);
+      return false;
+    }
+
+    bool success = true;
+    std::vector<std::wstring> existingValueNames;
+    DWORD index = 0;
+    while (true) {
+      wchar_t valueName[512] = {};
+      DWORD valueNameLen = _countof(valueName);
+      const LONG enumRc = RegEnumValueW(
+        hKey,
+        index,
+        valueName,
+        &valueNameLen,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr);
+
+      if (enumRc == ERROR_NO_MORE_ITEMS) {
+        break;
+      }
+
+      if (enumRc == ERROR_MORE_DATA) {
+        Wh_Log(L"RegEnumValueW value name too long under %s (index=%lu)", subKey, index);
+        success = false;
+        ++index;
+        continue;
+      }
+
+      if (enumRc != ERROR_SUCCESS) {
+        Wh_Log(L"RegEnumValueW failed under %s (index=%lu, rc=%ld)", subKey, index, enumRc);
+        success = false;
+        break;
+      }
+
+      // Keep default value untouched (empty value name).
+      if (valueNameLen > 0) {
+        existingValueNames.emplace_back(valueName, valueNameLen);
+      }
+
+      ++index;
+    }
+
+    for (const auto& valueName : existingValueNames) {
+      const LONG deleteRc = RegDeleteValueW(hKey, valueName.c_str());
+      if (deleteRc != ERROR_SUCCESS && deleteRc != ERROR_FILE_NOT_FOUND) {
+        Wh_Log(L"RegDeleteValueW failed for %s\\%s (rc=%ld)", subKey, valueName.c_str(), deleteRc);
+        success = false;
+      }
+    }
+
+    const DWORD enabled = 1;
+    for (const auto& processName : processNames) {
+      const LONG setRc = RegSetValueExW(
+        hKey,
+        processName.c_str(),
+        0,
+        REG_DWORD,
+        reinterpret_cast<const BYTE*>(&enabled),
+        sizeof(enabled));
+      if (setRc != ERROR_SUCCESS) {
+        Wh_Log(L"RegSetValueExW failed for %s\\%s (rc=%ld)", subKey, processName.c_str(), setRc);
+        success = false;
+      }
+    }
+
+    RegCloseKey(hKey);
+    return success;
+  }
+
 static const wchar_t* ThemeColorizationTypeToName(int index)
 {
     static const wchar_t* kTypes[] = {
@@ -979,6 +1106,17 @@ static void SetOrDeleteColorDword(const wchar_t* subKey, const wchar_t* valueNam
     } else {
         WriteDwordHKCU(subKey, valueName, value);
     }
+}
+
+static void SetOrDeleteZeroColorDword(const wchar_t* subKey, const wchar_t* valueName, DWORD value)
+{
+  // Translucent Flyouts Config stores colors as unpadded hex strings.
+  // A DWORD value of 0 becomes "0", which that parser can't safely handle.
+  if (value == 0) {
+    DeleteValueHKCU(subKey, valueName);
+  } else {
+    WriteDwordHKCU(subKey, valueName, value);
+  }
 }
 
 static void SetOrDeleteThemeTypes(const wchar_t* subKey, int enableThemeColorizationMode, int useGlobalSentinel, int darkType, int lightType)
@@ -1300,6 +1438,93 @@ static int GetMappedIntSetting(const wchar_t* name, const SettingChoice* choices
     return fallback;
   }
 
+static void TrimWhitespaceInPlace(std::wstring* text)
+{
+  if (!text) {
+    return;
+  }
+
+  size_t first = 0;
+  while (first < text->size() && iswspace((*text)[first])) {
+    ++first;
+  }
+
+  size_t last = text->size();
+  while (last > first && iswspace((*text)[last - 1])) {
+    --last;
+  }
+
+  if (first == 0 && last == text->size()) {
+    return;
+  }
+
+  *text = text->substr(first, last - first);
+}
+
+static void AddProcessListEntry(std::vector<std::wstring>* list, std::wstring token)
+{
+  if (!list) {
+    return;
+  }
+
+  TrimWhitespaceInPlace(&token);
+  if (token.empty()) {
+    return;
+  }
+
+  for (wchar_t& ch : token) {
+    ch = static_cast<wchar_t>(towlower(ch));
+  }
+
+  if (token.find(L'.') == std::wstring::npos) {
+    token += L".exe";
+  }
+
+  for (const auto& existing : *list) {
+    if (_wcsicmp(existing.c_str(), token.c_str()) == 0) {
+      return;
+    }
+  }
+
+  list->push_back(std::move(token));
+}
+
+static std::vector<std::wstring> ParseProcessListSetting(const wchar_t* name)
+{
+  std::vector<std::wstring> processList;
+
+  PCWSTR value = Wh_GetStringSetting(name);
+  if (!value) {
+    return processList;
+  }
+
+  std::wstring token;
+  for (const wchar_t* p = value; *p; ++p) {
+    const wchar_t ch = *p;
+    if (ch == L',' || ch == L';' || ch == L'\n' || ch == L'\r' || ch == L'\t' || ch == L'|') {
+      AddProcessListEntry(&processList, token);
+      token.clear();
+      continue;
+    }
+
+    token.push_back(ch);
+  }
+
+  AddProcessListEntry(&processList, token);
+  Wh_FreeStringSetting(value);
+  return processList;
+}
+
+static std::vector<std::wstring> ParseProcessListSettingWithLegacy(const wchar_t* primaryName, const wchar_t* legacyName)
+{
+  std::vector<std::wstring> processList = ParseProcessListSetting(primaryName);
+  if (processList.empty() && legacyName) {
+    processList = ParseProcessListSetting(legacyName);
+  }
+
+  return processList;
+}
+
 static bool TryParseColorValue(const wchar_t* value, DWORD* out)
 {
     if (!value || !out) {
@@ -1546,11 +1771,18 @@ static void LoadSettings()
     g_settings.tooltipMarginTop = Wh_GetIntSetting(L"tooltip.marginTop");
     g_settings.tooltipMarginBottom = Wh_GetIntSetting(L"tooltip.marginBottom");
     g_settings.tooltipDisabled = GetMappedIntSetting(L"tooltip.disabled", kTriState, _countof(kTriState), 2);
+    g_settings.processBlockList = ParseProcessListSettingWithLegacy(L"advancedFunctions.processBlockList", L"controller.processBlockList");
+    g_settings.processDisabledList = ParseProcessListSettingWithLegacy(L"advancedFunctions.processDisabledList", L"controller.processDisabledList");
+    g_settings.menuProcessDisabledList = ParseProcessListSettingWithLegacy(L"advancedFunctions.menuProcessDisabledList", L"controller.menuProcessDisabledList");
+    g_settings.tooltipProcessDisabledList = ParseProcessListSettingWithLegacy(L"advancedFunctions.tooltipProcessDisabledList", L"controller.tooltipProcessDisabledList");
+    g_settings.dropDownProcessDisabledList = ParseProcessListSettingWithLegacy(L"advancedFunctions.dropDownProcessDisabledList", L"controller.dropDownProcessDisabledList");
     g_settings.resetAction = GetMappedIntSetting(L"controller.resetAction", kResetAction, _countof(kResetAction), 0);
 
     g_settings.confirmReset = (Wh_GetIntSetting(L"controller.confirmReset") != 0);
 
     g_settings.hardReloadOnApply = (Wh_GetIntSetting(L"controller.hardReloadOnApply") != 0);
+
+    g_settings.configAppCompatibilityMode = (Wh_GetIntSetting(L"controller.configAppCompatibilityMode") != 0);
 
     g_settings.globalEffectType = static_cast<int>(ClampDword(g_settings.globalEffectType, 0, 8));
     g_settings.globalCornerType = static_cast<int>(ClampDword(g_settings.globalCornerType, 0, 3));
@@ -1695,6 +1927,11 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
     const wchar_t* kMenuDisabledHot = L"Software\\TranslucentFlyouts\\Menu\\DisabledHot";
     const wchar_t* kMenuHot = L"Software\\TranslucentFlyouts\\Menu\\Hot";
     const wchar_t* kTooltip = L"Software\\TranslucentFlyouts\\Tooltip";
+    const wchar_t* kBlockList = L"Software\\TranslucentFlyouts\\BlockList";
+    const wchar_t* kDisabledList = L"Software\\TranslucentFlyouts\\DisabledList";
+    const wchar_t* kMenuDisabledList = L"Software\\TranslucentFlyouts\\Menu\\DisabledList";
+    const wchar_t* kTooltipDisabledList = L"Software\\TranslucentFlyouts\\Tooltip\\DisabledList";
+    const wchar_t* kDropDownDisabledList = L"Software\\TranslucentFlyouts\\DropDown\\DisabledList";
 
     // 1) Global
     WriteDwordHKCU(kRoot, L"EffectType", static_cast<DWORD>(g_settings.globalEffectType));
@@ -1744,9 +1981,13 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
     WriteDwordHKCU(kMenu, L"EnableCompatibilityMode", static_cast<DWORD>(g_settings.menuEnableCompatibilityMode));
     WriteDwordHKCU(kMenu, L"NoModernAppBackgroundColor", static_cast<DWORD>(g_settings.menuNoModernAppBackgroundColor));
     if (g_settings.menuColorTreatAsTransparentEnabled) {
-        WriteDwordHKCU(kMenu, L"ColorTreatAsTransparent", g_settings.menuColorTreatAsTransparent);
-    } else {
+      if (g_settings.configAppCompatibilityMode && g_settings.menuColorTreatAsTransparent == 0) {
         DeleteValueHKCU(kMenu, L"ColorTreatAsTransparent");
+      } else {
+        WriteDwordHKCU(kMenu, L"ColorTreatAsTransparent", g_settings.menuColorTreatAsTransparent);
+      }
+    } else {
+      DeleteValueHKCU(kMenu, L"ColorTreatAsTransparent");
     }
     WriteDwordHKCU(kMenu, L"ColorTreatAsTransparentThreshold", static_cast<DWORD>(g_settings.menuColorTreatAsTransparentThreshold));
 
@@ -1788,8 +2029,13 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
 
     WriteDwordHKCU(kMenuDisabledHot, L"Disabled", static_cast<DWORD>(g_settings.menuDisabledHotDisabled));
     WriteDwordHKCU(kMenuDisabledHot, L"CornerRadius", static_cast<DWORD>(g_settings.menuDisabledHotCornerRadius));
-    WriteDwordHKCU(kMenuDisabledHot, L"DarkMode_Color", g_settings.menuDisabledHotDarkModeColor);
-    WriteDwordHKCU(kMenuDisabledHot, L"LightMode_Color", g_settings.menuDisabledHotLightModeColor);
+    if (g_settings.configAppCompatibilityMode) {
+      SetOrDeleteZeroColorDword(kMenuDisabledHot, L"DarkMode_Color", g_settings.menuDisabledHotDarkModeColor);
+      SetOrDeleteZeroColorDword(kMenuDisabledHot, L"LightMode_Color", g_settings.menuDisabledHotLightModeColor);
+    } else {
+      WriteDwordHKCU(kMenuDisabledHot, L"DarkMode_Color", g_settings.menuDisabledHotDarkModeColor);
+      WriteDwordHKCU(kMenuDisabledHot, L"LightMode_Color", g_settings.menuDisabledHotLightModeColor);
+    }
     WriteDwordHKCU(kMenuDisabledHot, L"EnableThemeColorization", static_cast<DWORD>(g_settings.menuDisabledHotEnableThemeColorization));
     WriteStringHKCU(kMenuDisabledHot, L"DarkMode_ThemeColorizationType", ThemeColorizationTypeToName(g_settings.menuDisabledHotDarkThemeColorizationType));
     WriteStringHKCU(kMenuDisabledHot, L"LightMode_ThemeColorizationType", ThemeColorizationTypeToName(g_settings.menuDisabledHotLightThemeColorizationType));
@@ -1823,6 +2069,12 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
     WriteDwordHKCU(kTooltip, L"Margins_cyBottomHeight", static_cast<DWORD>(g_settings.tooltipMarginBottom));
     SetOrDeleteDword(kTooltip, L"Disabled", g_settings.tooltipDisabled, 2);
 
+    SyncProcessListHKCU(kBlockList, g_settings.processBlockList);
+    SyncProcessListHKCU(kDisabledList, g_settings.processDisabledList);
+    SyncProcessListHKCU(kMenuDisabledList, g_settings.menuProcessDisabledList);
+    SyncProcessListHKCU(kTooltipDisabledList, g_settings.tooltipProcessDisabledList);
+    SyncProcessListHKCU(kDropDownDisabledList, g_settings.dropDownProcessDisabledList);
+
     Wh_Log(L"Controller applied ordered full-option profile (Global/DropDown/Menu/Tooltip), hardReload=%d", g_settings.hardReloadOnApply);
 
     NotifyTranslucentFlyoutsReload();
@@ -1844,6 +2096,21 @@ static void ApplySettingsToOriginalTranslucentFlyouts()
 
 BOOL WhTool_ModInit()
 {
+    WTS_CONNECTSTATE_CLASS* pConnectState = nullptr;
+    DWORD bytesReturned;
+    bool isActive = false;
+    if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE,
+                                    WTS_CURRENT_SESSION, WTSConnectState,
+                                    (LPWSTR*)&pConnectState, &bytesReturned) &&
+        pConnectState) {
+        isActive = (*pConnectState == WTSActive);
+        WTSFreeMemory(pConnectState);
+    }
+    if (!isActive) {
+        Wh_Log(L"Tool process: session is not active, skipping");
+        return FALSE;
+    }
+
     Wh_Log(L"Tool process: applying TranslucentFlyouts settings");
     ApplySettingsOnceInToolProcess(true);
 
@@ -1866,6 +2133,12 @@ void WINAPI EntryPoint_Hook()
 
 BOOL Wh_ModInit()
 {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
