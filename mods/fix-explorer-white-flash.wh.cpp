@@ -1,17 +1,17 @@
 // ==WindhawkMod==
-// @id              explorer-tab-white-flash-killer
-// @name            Explorer Tab White Flash Killer
+// @id              fix-explorer-white-flash
+// @name            Fix white flashes in explorer
 // @description     Kills the annoying white flash when opening Explorer tabs.
-// @version         1.7
-// @author          Languster
-// @github          https://github.com/Languster
+// @version         1.4
+// @author          Mgg Sk
+// @github          https://github.com/MGGSK
 // @include         explorer.exe
 // @compilerOptions -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Explorer Tab White Flash Killer
+# Fix white flashes in explorer
 
 Kills the annoying white flash when opening new tabs in File Explorer.
 
@@ -29,7 +29,6 @@ This mod blocks suspicious intermediate white frames that appear during Explorer
 This mod is focused specifically on the white flash problem.  
 It can also slightly reduce some of the visual jumping during tab creation, but its main purpose is killing the white flash itself.
 
-A before/after GIF is strongly recommended for the release page and GitHub README.
 */
 // ==/WindhawkModReadme==
 
