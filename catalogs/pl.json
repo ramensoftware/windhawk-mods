@@ -9871,7 +9871,7 @@
                     6
                 ],
                 "ratingUsers": 6,
-                "updated": 1774944387000,
+                "updated": 1776269854000,
                 "users": 99
             },
             "metadata": {
@@ -9886,7 +9886,7 @@
                     "explorer.exe"
                 ],
                 "name": "Taskbar Z-Order Override",
-                "version": "0.7"
+                "version": "0.8"
             }
         },
         "taskmgr-esc": {

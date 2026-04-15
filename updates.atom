@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-15T09:44:14.000Z</updated>
+    <updated>2026-04-15T16:17:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Z-Order Override 0.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-z-order-override#19da50b515da4b298e6df4815c25a0f42d3b20ed</id>
+        <link href="https://windhawk.net/mods/taskbar-z-order-override"/>
+        <updated>2026-04-15T16:17:34.000Z</updated>
+        <content type="html"><![CDATA[<p>Add UWP fullscreen workaround for always on top mode.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.0]]></title>
         <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#53c403569e9f3776cee0f52ec775f464543c3a24</id>
@@ -426,24 +437,6 @@ modified.</li>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Toolbar Position Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/fix-file-explorer-toolbar-position#716e9dc4d3c64b227586c985e4aa6968b47b9cb9</id>
-        <link href="https://windhawk.net/mods/fix-file-explorer-toolbar-position"/>
-        <updated>2026-04-06T23:19:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileexplorertoolbarpositionfix">File Explorer Toolbar Position Fix</h1>
-<p>This mod fixes an issue with file explorer toolbars not setting the position correctly when opening explorer.</p>
-<p><strong>Before</strong><br />
-After opening explorer, all of the toolbars will be forced to be on a new line, ignoring the previous position and style.
-<img src="https://i.imgur.com/v8bj787.png" alt="Before" /></p>
-<p><strong>After</strong><br />
-Now the toolbars will respect the previous position and style when opening explorer.
-<img src="https://i.imgur.com/zGqzAfz.png" alt="After" /></p>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>
