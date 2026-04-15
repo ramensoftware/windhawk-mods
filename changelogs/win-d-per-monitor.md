@@ -1,3 +1,9 @@
+## 1.4.260415 ([Apr 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/100d1ccbed6a49342e5f3d9c1f025a577525c223/mods/win-d-per-monitor.wh.cpp))
+
+* Switched hook target from `_HandleGlobalHotkey` to `_RaiseDesktop`, enabling per-monitor show desktop for both Win+D hotkey and touchpad gestures
+* 将 Hook 目标从 `_HandleGlobalHotkey` 改为 `_RaiseDesktop`，同时支持 Win+D 快捷键和触摸板手势的按显示器显示桌面功能
+* Fixes: [#3794: Can we add this feature for the touchpad gesture?](https://github.com/ramensoftware/windhawk-mods/issues/3794)
+
 ## 1.3.260330 ([Mar 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/df4fa4ff702cbeb34e8ec0eb2e1ae65dd3e26767/mods/win-d-per-monitor.wh.cpp))
 
 ### 2026-03-30 (v1.3.260330)
