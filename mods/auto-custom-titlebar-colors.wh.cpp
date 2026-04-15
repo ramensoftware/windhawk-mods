@@ -2,20 +2,19 @@
 // @id              auto-custom-titlebar-colors
 // @name            Auto Custom Titlebar Colors
 // @description     Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes
-// @version         1.0.0
+// @version         1.1.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         *
 // @exclude         devenv.exe
 // @exclude         systemsettings.exe
 // @exclude         applicationframehost.exe
+// @exclude         Flow.Launcher.exe
 // @compilerOptions -ldwmapi -luxtheme -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Auto Dark Titlebar with Custom Colours
-
 Combines automatic dark/light titlebar switching with per-mode, per-state custom colours. Inspired from the following mods:
 - `Auto Dark Titlebar` by Asteski
 - `Windows 11 Custom Titlebar Colors` by Th3Fanbus
@@ -41,8 +40,10 @@ Combines automatic dark/light titlebar switching with per-mode, per-state custom
 Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.
 
 ## Notes
-- `systemsettings.exe` and `applicationframehost.exe` are excluded via `@exclude` to avoid conflicts
+- `systemsettings.exe`, `applicationframehost.exe`, and `Flow.Launcher.exe` are excluded to avoid conflicts
 - No forced repaint is issued while a mouse button is held (prevents drag-state corruption)
+- Window redraws are debounced (50ms minimum) to prevent interference with window managers
+- Visual redraws (SetWindowPos) only occur during window activation, not deactivation, to avoid focus-grabbing issues with tiling window managers
 */
 // ==/WindhawkModReadme==
 
@@ -123,6 +124,11 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
 typedef HRESULT(WINAPI* pShouldSystemUseDarkMode)();
 static pShouldSystemUseDarkMode g_ShouldSystemUseDarkMode = nullptr;
 static BOOL g_isDarkMode = FALSE;
+
+// Debounce mechanism: track last SetWindowPos time per window to prevent
+// rapid successive redraws that can interfere with window managers
+static DWORD g_lastSetWindowPosTime = 0;
+const DWORD SETWINDOWPOS_DEBOUNCE_MS = 50;  // 50ms minimum between redraws
 
 // -----------------------------------------------------------------------------
 // Dark mode detection
@@ -276,18 +282,25 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL forceRedraw)
             hWnd, g_isDarkMode, isActive);
     }
 
+    // Debounce SetWindowPos calls to prevent interference with window managers.
+    // Only allow redraws if enough time has passed since the last redraw.
     if (forceRedraw && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-        SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
-            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
-            SWP_NOZORDER | SWP_NOOWNERZORDER);
+        DWORD currentTime = GetTickCount();
+        DWORD timeSinceLastRedraw = currentTime - g_lastSetWindowPosTime;
+        
+        if (timeSinceLastRedraw >= SETWINDOWPOS_DEBOUNCE_MS) {
+            SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
+                SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                SWP_NOZORDER | SWP_NOOWNERZORDER);
+            g_lastSetWindowPosTime = currentTime;
+        }
     }
 }
 
 // -----------------------------------------------------------------------------
 // Enumerate all eligible windows in the current process
-// -----------------------------------------------------------------------------
 
-static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM)
+static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
 {
     HWND parent = GetAncestor(hWnd, GA_PARENT);
     if (parent && parent != GetDesktopWindow()) return TRUE;
@@ -297,13 +310,33 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM)
         return TRUE;
 
     BOOL isActive = (GetForegroundWindow() == hWnd);
-    ApplyTitleBar(hWnd, isActive, TRUE);
+    
+    // Only refresh with SetWindowPos if it's the active window to minimize
+    // interference with tiling window managers
+    BOOL forceRedraw = (BOOL)lParam;
+    if (forceRedraw && !isActive) {
+        ApplyTitleBar(hWnd, isActive, FALSE);
+    } else {
+        ApplyTitleBar(hWnd, isActive, forceRedraw);
+    }
     return TRUE;
 }
 
-static VOID ApplyToAllWindows()
+static VOID ApplyToAllWindows(BOOL forceRedraw)
 {
-    EnumWindows(EnumWindowsProc, 0);
+    EnumWindows(EnumWindowsProc, forceRedraw);
+}
+
+static VOID ApplyToForegroundWindow()
+{
+    HWND hWnd = GetForegroundWindow();
+    if (hWnd) {
+        DWORD pid = 0;
+        if (GetWindowThreadProcessId(hWnd, &pid) && pid == GetCurrentProcessId()) {
+            BOOL isActive = TRUE;
+            ApplyTitleBar(hWnd, isActive, TRUE);
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -317,12 +350,21 @@ static VOID HandleWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
         case WM_ACTIVATE:
         {
             BOOL isActive = (LOWORD(wParam) != WA_INACTIVE);
-            ApplyTitleBar(hWnd, isActive, TRUE);
+            // Only force visual redraw when a window becomes active.
+            // During deactivation, apply attributes without SetWindowPos
+            // to prevent interfering with window manager focus changes.
+            BOOL forceRedraw = isActive;  // Only redraw on activation
+            ApplyTitleBar(hWnd, isActive, forceRedraw);
             break;
         }
         case WM_NCACTIVATE:
         {
-            ApplyTitleBar(hWnd, (BOOL)wParam, TRUE);
+            // Only force visual redraw when a window becomes active.
+            // When deactivating (wParam == FALSE), apply attributes without
+            // SetWindowPos to avoid interfering with window manager focus handling.
+            BOOL isActive = (BOOL)wParam;
+            BOOL forceRedraw = isActive;  // Only redraw on activation
+            ApplyTitleBar(hWnd, isActive, forceRedraw);
             break;
         }
         case WM_DWMCOLORIZATIONCOLORCHANGED:
@@ -342,7 +384,16 @@ static VOID HandleWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
                 g_isDarkMode = newDarkMode;
                 Wh_Log(L"[PID %d] Theme changed to %s",
                     GetCurrentProcessId(), newDarkMode ? L"DARK" : L"LIGHT");
-                ApplyToAllWindows();
+                
+                // Only update the foreground window to minimize interference
+                // with tiling window managers. Other windows will be updated
+                // when they receive activation messages.
+                ApplyToForegroundWindow();
+                
+                // Still update all windows, but without forced redraw
+                // to apply the dark mode attribute. SetWindowPos is only
+                // called for the foreground window.
+                ApplyToAllWindows(FALSE);
             }
             break;
         }
@@ -383,8 +434,11 @@ static DefDlgProcW_t DefDlgProcW_orig;
 LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefDlgProcW_orig(hWnd, Msg, wParam, lParam);
-    if (Msg == WM_NCACTIVATE)
-        ApplyTitleBar(hWnd, (BOOL)wParam, TRUE);
+    if (Msg == WM_NCACTIVATE) {
+        BOOL isActive = (BOOL)wParam;
+        // Only force redraw on activation, not deactivation
+        ApplyTitleBar(hWnd, isActive, isActive);
+    }
     return result;
 }
 
@@ -394,8 +448,11 @@ static DefDlgProcA_t DefDlgProcA_orig;
 LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefDlgProcA_orig(hWnd, Msg, wParam, lParam);
-    if (Msg == WM_NCACTIVATE)
-        ApplyTitleBar(hWnd, (BOOL)wParam, TRUE);
+    if (Msg == WM_NCACTIVATE) {
+        BOOL isActive = (BOOL)wParam;
+        // Only force redraw on activation, not deactivation
+        ApplyTitleBar(hWnd, isActive, isActive);
+    }
     return result;
 }
 
@@ -468,17 +525,18 @@ BOOL Wh_ModInit()
 VOID Wh_ModAfterInit()
 {
     Wh_Log(L"[PID %d] Applying to existing windows...", GetCurrentProcessId());
-    ApplyToAllWindows();
+    ApplyToAllWindows(TRUE);
     Wh_Log(L"[PID %d] Done", GetCurrentProcessId());
 }
 
 // Called by Windhawk when the user saves new settings in the UI.
-// Re-reads the current theme and repaints all windows immediately.
+// Re-reads the current theme and repaints windows with foreground priority.
 VOID Wh_ModSettingsChanged()
 {
     Wh_Log(L"[PID %d] Settings changed - reapplying...", GetCurrentProcessId());
     g_isDarkMode = IsSystemDarkMode();
-    ApplyToAllWindows();
+    ApplyToForegroundWindow();
+    ApplyToAllWindows(FALSE);
     Wh_Log(L"[PID %d] Reapply done", GetCurrentProcessId());
 }
 
