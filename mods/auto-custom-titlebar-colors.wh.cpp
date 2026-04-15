@@ -2,7 +2,7 @@
 // @id              auto-custom-titlebar-colors
 // @name            Auto Custom Titlebar Colors
 // @description     Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes
-// @version         1.1.0
+// @version         1.1.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         *
