@@ -2,7 +2,7 @@
 // @id              fix-explorer-white-flash
 // @name            Fix white flashes in explorer
 // @description     Fixes white flashes when creating new tabs in "This PC".
-// @version         1.2
+// @version         1.3
 // @author          Mgg Sk
 // @github          https://github.com/MGGSK
 // @include         explorer.exe
@@ -26,16 +26,47 @@ Fixes white flashes when creating new tabs in "This PC".
 #include <windhawk_utils.h>
 #include <Windows.h>
 
+#include <string>
+
 const HBRUSH g_windowBrush = CreateSolidBrush(0x191919);
 HMODULE g_hUxTheme = nullptr;
 
 using ShouldAppsUseDarkMode_T = bool(WINAPI*)();
 ShouldAppsUseDarkMode_T ShouldAppsUseDarkMode = nullptr;
 
+std::wstring GetThreadDescriptionAsString(HANDLE thread) 
+{ 
+    std::wstring result; 
+ 
+    PWSTR threadDescription; 
+    HRESULT hr = GetThreadDescription(thread, &threadDescription); 
+    if (SUCCEEDED(hr))
+    { 
+        result = threadDescription; 
+        LocalFree(threadDescription); 
+    } 
+ 
+    return result; 
+} 
+ 
+std::wstring GetThreadIdDescriptionAsString(DWORD threadId) 
+{ 
+    std::wstring result; 
+ 
+    HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, threadId); 
+    if (thread)
+    { 
+        result = GetThreadDescriptionAsString(thread); 
+        CloseHandle(thread); 
+    } 
+ 
+    return result; 
+} 
+
 decltype(&GetSysColorBrush) GetSysColorBrush_Original;
 HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex)
 {
-    if(nIndex == COLOR_WINDOW && ShouldAppsUseDarkMode())
+    if(nIndex == COLOR_WINDOW && ShouldAppsUseDarkMode() && GetThreadIdDescriptionAsString(GetCurrentThreadId()) == L"File Explorer Window")
         return g_windowBrush;
 
     return GetSysColorBrush_Original(nIndex);
@@ -58,9 +89,9 @@ BOOL Wh_ModInit()
     }
 
     return WindhawkUtils::SetFunctionHook(
-            GetSysColorBrush,
-            GetSysColorBrush_Hook, 
-            &GetSysColorBrush_Original);
+        GetSysColorBrush,
+        GetSysColorBrush_Hook, 
+        &GetSysColorBrush_Original);
 }
 
 void Wh_ModUninit()
