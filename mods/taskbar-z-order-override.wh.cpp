@@ -188,8 +188,8 @@ moves taskbar to band 6.
 Each call bumps the taskbar to the top of the specified band even 
 if the band number is identical. 
 
-In top mode, we allow band promotion & normalization so that UWP full
-screen behavior still works.
+In top mode, we allow band promotion so that UWP full screen
+behavior still works.
 
 In bottom & interactive modes: we block that change so Windows
 doesn't override our policy. 
@@ -201,14 +201,13 @@ static BOOL WINAPI SetWindowBand_Hook(HWND hWnd,
     //Wh_Log(L"Attempted Taskbar band change -> %lu", dwBand);
 
     if (g_state.mode == TaskbarZOrder::Top) {
-      /* Prevent demotion to band 0; otherwise allow Top mode to
-      cooperate with UWP fullscreen. Not so easy for other modes */
-      dwBand = (dwBand == 0) ? 1 : dwBand;
+      /* Allow Top mode to cooperate with UWP 
+      fullscreen. Not so easy for other modes */
       return SetWindowBand_Original(hWnd, hwndInsertAfter, dwBand);
     }
 
     return TRUE;
-}
+  }
 
   return SetWindowBand_Original(hWnd, hwndInsertAfter, dwBand);
 }
