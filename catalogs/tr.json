@@ -6772,6 +6772,34 @@
                 "version": "3.1.0"
             }
         },
+        "paste-clipboard-content-to-explorer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1776246254000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1776246254000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lole32 -loleaut32 -luuid -lgdiplus -lshlwapi -lshell32 -lcomctl32",
+                "description": "Paste text and images from clipboard as files in Explorer and in file dialogs",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "*"
+                ],
+                "name": "Paste Clipboard Content to Explorer",
+                "version": "1.0"
+            }
+        },
         "per-app-language-preferences": {
             "details": {
                 "defaultSorting": 810,

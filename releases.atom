@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-15T07:16:00.000Z</updated>
+    <updated>2026-04-15T09:44:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.0]]></title>
+        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#53c403569e9f3776cee0f52ec775f464543c3a24</id>
+        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
+        <updated>2026-04-15T09:44:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="pasteclipboardcontenttoexplorer">Paste Clipboard Content to Explorer</h1>
+<p>Allows pasting text and images from clipboard as files in Explorer,
+on the desktop and in open/save file dialogs.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Paste text as .txt (UTF-16 LE with BOM)</li>
+<li>Paste images as .png</li>
+<li>Auto-naming with incrementing number on conflict</li>
+<li>Works in Explorer folders, on the desktop, in file dialogs</li>
+<li>Works with network folders (UNC paths)</li>
+<li>Paste menu item is grayed out in virtual folders (This PC, Network, etc.)</li>
+<li>Ctrl+V and context menu Paste both work</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Show Link Speed 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskmgr-link-speed#2bf7cc399aa935bc14d9c0a5f12d86886f79485b</id>
@@ -569,28 +592,6 @@ los controles desplazables en cualquier aplicación Win32.</p>]]></content>
         <author>
             <name>Acercandr0</name>
             <uri>https://github.com/Acercandr0</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DirectWrite Font Fallback Override 1.0]]></title>
-        <id>https://windhawk.net/mods/dwrite-font-fallback-override#9a65e3674e7c1c8f8265f346bd561a76bce6667c</id>
-        <link href="https://windhawk.net/mods/dwrite-font-fallback-override"/>
-        <updated>2026-03-28T17:25:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="directwritefontfallbackoverride">DirectWrite Font Fallback Override</h1>
-<p>Hooks DirectWrite's font fallback system to override font selection for specific
-Unicode character ranges across all applications.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Global font fallback override</li>
-<li>Per-character-range customization</li>
-<li>Real-time configuration updates</li>
-</ul>
-<h2 id="usage">Usage</h2>
-<p>Configure fallback rules in settings to map character ranges to specific fonts.
-For example, force all CJK characters (U+4E00-U+9FFF) to use "Microsoft YaHei".</p>]]></content>
-        <author>
-            <name>Muhammad Ragib Hasin</name>
-            <uri>https://github.com/RagibHasin</uri>
         </author>
     </entry>
 </feed>
