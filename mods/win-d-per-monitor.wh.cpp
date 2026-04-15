@@ -466,19 +466,6 @@ public:
     }
 };
 
-// 全局热键处理函数Hook，支持Win+D快捷键显示桌面，并且在该函数中调用我们自己的实现
-void (*__cdecl HandleGlobalHotkey_Original)(unsigned __int64, __int64);
-void __cdecl HandleGlobalHotkey_Hook(unsigned __int64 param, __int64 hotkey_id)
-{
-    if (hotkey_id == HOTKEY_ID_WIN_D)
-    {
-        WindShowDesktop::showDesktop();
-        return;
-    }
-    log("hotkey id: {:x}", hotkey_id);
-    HandleGlobalHotkey_Original(param, hotkey_id);
-}
-
 // 替换为Hook深层的函数,支持触摸板显示桌面手势,并且在该函数中调用我们自己的实现
 void(__cdecl *RaiseDesktop_Original)(void *pThis, int flags);
 void RaiseDesktop_Hook(void *pThis, int flags)
@@ -531,17 +518,6 @@ BOOL Wh_ModInit()
     Wh_Log(L"init");
 
     LoadSettings();
-
-    /*
-         // explorer.exe
-        WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-            {
-                {LR"(protected: void __cdecl CTray::_HandleGlobalHotkey(unsigned __int64,__int64))"},
-                (void **)&HandleGlobalHotkey_Original,
-                (void *)HandleGlobalHotkey_Hook,
-            },
-        };
-    */
 
     // explorer.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
