@@ -2,7 +2,7 @@
 // @id              remove-context-menu-items
 // @name            Remove Context Menu Items
 // @description     Removes unwanted items from file context menus with configurable options and context-aware filtering
-// @version         1.9.0
+// @version         1.9.1
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -939,13 +939,13 @@ void InitializeMenuItems() {
         {L"Conceder acesso a", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // pt-BR, pt-PT
         {L"Dar acceso a", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // es-MX
         {L"Poskytnout přístup k", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // cs-CZ
-        {L"Freigeben für", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // de-DE
+        {L"Zugriff gewähren auf", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // de-DE
         
         {L"Restore previous versions", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // en-US, en-GB, en-AU
         {L"Restaurar versões anteriores", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // pt-BR, pt-PT
         {L"Restaurar versiones anteriores", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // es-MX
         {L"Obnovit předchozí verze", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // cs-CZ
-        {L"Vorgängerversionen wiederhestellen", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // de-DE
+        {L"Vorgängerversionen wiederherstellen", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // de-DE
         
         {L"Include in library", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false}, // en-US, en-GB, en-AU
         {L"Incluir na biblioteca", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false}, // pt-BR, pt-PT
