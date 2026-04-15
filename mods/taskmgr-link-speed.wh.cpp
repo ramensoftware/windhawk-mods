@@ -46,13 +46,8 @@ Works for both Windows 10 and Windows 11 version of Task Manager, also supports 
 
 // Following the exact order of includes is crucial to prevent conflicts with network data types
 #define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include <windows.h>
-#include <iphlpapi.h>
-#include <netioapi.h>
 #include <stdint.h>
-
 #include <wchar.h>
 #include <string_view>
 #include <regex>
@@ -65,7 +60,7 @@ typedef __int64 (__fastcall *CAdapter_Update_t)(void* pThis, bool* pbRefresh, un
 CAdapter_Update_t Original_CAdapter_Update = nullptr;
 
 // Official GetAdapterStat function
-typedef unsigned __int64 (__fastcall *GetAdapterStat_t)(void* pThis, unsigned int index, int cmd);
+typedef unsigned __int64 (__fastcall *GetAdapterStat_t)(void* pThis, unsigned long arg1, int arg2, int arg3);
 GetAdapterStat_t pGetAdapterStat = nullptr;
 
 // UpdateDNSName (used to obtain address for assembly analysis)
@@ -279,18 +274,6 @@ int WINAPI Hooked_LoadStringW_KernelBase(HINSTANCE hInstance, UINT uID, LPWSTR l
 }
 
 // ------------------------------------------------
-// Dummy Hooks 
-// ------------------------------------------------
-unsigned __int64 __fastcall Dummy_GetAdapterStat(void* pThis, unsigned int index, int cmd) {
-    return pGetAdapterStat(pThis, index, cmd);
-}
-
-// Only used to let Windhawk resolve the symbol address; no logic interception
-void __fastcall Dummy_CAdapter_UpdateDNSName(void* pThis, const unsigned __int16* a2, void* a3) {
-    Original_CAdapter_UpdateDNSName(pThis, a2, a3);
-}
-
-// ------------------------------------------------
 // Core logic: Update hook and speed retrieval
 // ------------------------------------------------
 __int64 __fastcall Hooked_CAdapter_Update(void* pThis, bool* pbRefresh, unsigned long historyIndex) {
@@ -307,8 +290,8 @@ __int64 __fastcall Hooked_CAdapter_Update(void* pThis, bool* pbRefresh, unsigned
         if (!pAdapterInfoEx) continue;
 
         // 1. Call the official getter to obtain LinkSpeedBps (cmd = 4)
-        ULONG64 linkSpeedBps = pGetAdapterStat(pThis, i, 4);
-        
+        ULONG64 linkSpeedBps = pGetAdapterStat(pThis, i, 4, 0);
+
         if (linkSpeedBps == 0 || linkSpeedBps == (ULONG64)-1) continue;
 
         wchar_t speedStr[261] = {0};
@@ -355,14 +338,14 @@ BOOL Wh_ModInit(void) {
         {
             { L"public: unsigned __int64 __cdecl CAdapter::GetAdapterStat(unsigned long,enum NETCOLUMNID,int)" },
             (void**)&pGetAdapterStat,
-            (void*)Dummy_GetAdapterStat,
+            nullptr,
             false
         },
         {
             // Use a dummy hook to obtain the exact UpdateDNSName pointer
             { L"private: void __cdecl CAdapter::UpdateDNSName(unsigned short const *,struct ADAPTER_INFOEX *)" },
             (void**)&Original_CAdapter_UpdateDNSName,
-            (void*)Dummy_CAdapter_UpdateDNSName,
+            nullptr,
             true // Optional; base loading is not affected even if not found
         }
     };
