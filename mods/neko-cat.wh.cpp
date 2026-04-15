@@ -2,7 +2,7 @@
 // @id              neko-cat
 // @name            Neko Cat
 // @description     Adds a desktop pet cat that runs around and follows your mouse
-// @version         1.0.0
+// @version         1.1.0
 // @author          ciizerr
 // @github          https://github.com/ciizerr
 // @include         windhawk.exe
@@ -11,46 +11,40 @@
 
 // ==WindhawkModReadme==
 /*
-# 🐱 Neko Cat - Your New Desktop Companion
-![Neko Cat Preview](https://raw.githubusercontent.com/ciizerr/wh-mods/main/screenshots/Neko-cat.gif)
-
-Bring the classic 90s desktop pet back to life! Neko is a playful cat that lives on your desktop, roams over your windows, and interacts with your mouse.
-
+# 🐱 Neko Cat
+A cute desktop pet that follows your mouse and runs around your screen.
+![Neko Cat Preview](https://raw.githubusercontent.com/ciizerr/wh-mods/main/previews/Neko-cat.gif)
 
 ## 🎮 How to Interact
-*   **Left-Click:** Cycles through Neko's **5 active behaviors** (see below). Each click changes his mood!
-*   **Right-Click:** Wakes Neko up instantly if he is sleeping.
-*   **Drag & Drop:** Use your mouse to move Neko anywhere. Dropping him forces him into a deep sleep.
+*   **Left-Click:** Cycles through 5 different behaviors.
+*   **Right-Click:** Wakes Neko up instantly.
+*   **Drag & Drop:** Use your mouse to move Neko. Dropping him makes him fall into a deep sleep.
 
 ## 🏃 Cat Behaviors
 1.  **Chase Mouse:** (Default) He follows you everywhere!
 2.  **Run Away:** Try to catch him if you can!
-3.  **Random:** He's got the zoomies!
+3.  **Random:** He has the zoomies!
 4.  **Pace:** He patrols the edges of your screen.
-5.  **Run Around:** He chases an invisible bouncing ball.
-*   **Forced Sleep:** Need him to stay put? Just **drag and drop** him anywhere. He'll yawn and fall into a deep sleep until you **Right-Click** him to wake him up.
-*   **Sound Themes:** Choose between different meow and sleep sound sets (Default, Memes, Cute).
-*   **Zero Configuration:** All assets (sprites and sounds) are automatically downloaded from GitHub on the first run.
+5.  **Run Around:** He chases an invisible ball.
+
+## 🖥️ Multi-Monitor Support
+Neko can now roam across **all your monitors**! He can jump from one screen to another to follow your mouse.
 
 ## ⚙️ Customization
-Adjust the **Scale** to make him tiny or giant, change his **Speed**, or set the **Sleep Sound Interval** to your liking in the mod settings.
+You can change Neko's **Size**, **Speed**, and **FPS** in the settings. You can also turn sounds on or off.
 
-## 🔒 Assets & Security
-To keep the mod lightweight and easy to install, Neko's graphics and sounds are automatically acquired from GitHub on the first run. 
-
-**How to verify:**
-*   **Transparency:** All download URLs point exclusively to the official GitHub repository for this mod: `https://github.com/ciizerr/wh-mods/tree/main/assets/neko-cat`.
-*   **Standard API:** The mod uses the trusted Windhawk `Wh_GetUrlContent` API for all downloads.
-*   **Local Storage:** Once acquired, files are stored locally in the modstorage folder (usually `%ProgramData%\Windhawk\modstorage\neko-cat\...`).
-*   **Inspection:** You can view the full source code in the Windhawk editor to inspect the `DownloadMissingAssets` function and verify every URL for yourself.
-
-Enjoy your new feline friend!
+## 🔒 Assets & Transparency
+Neko's graphics and sounds are downloaded automatically on the first run.
+*   **Source:** All files come from the GitHub repository: [assets/neko-cat](https://github.com/ciizerr/wh-mods/tree/main/assets/neko-cat)
+*   **Standard API:** The mod uses the trusted Windhawk `Wh_GetUrlContent` API.
+*   **Local Storage:** Files are saved in the Windhawk `modstorage` folder for safety.
 
 ## 💬 Feedback & Support
-Got ideas, found a bug, or just wanna share your thoughts? I’d love to hear from you!
+Got ideas or found a bug? I’d love to hear from you!
+*   **Discord:** `ciizerr`
+*   **GitHub:** [wh-mods](https://github.com/ciizerr/wh-mods)
 
-*   **Discord:** `ciizerr` (feel free to ping me anytime)
-*   **GitHub:** [wh-mods](https://github.com/ciizerr/wh-mods) — open an issue for bugs, suggestions, or anything you'd like to see improved
+Enjoy your new friend!
 */
 // ==/WindhawkModReadme==
 
@@ -58,30 +52,23 @@ Got ideas, found a bug, or just wanna share your thoughts? I’d love to hear fr
 // ==WindhawkModSettings==
 /*
 - scale: 2
-  $name: Cat Scale
-  $description: Adjust the overall size of the cat on your screen. 1 is original pixel-art size (32px), 2 is standard (64px). Large values are great for 4K monitors!
+  $name: Cat Size
+  $description: Changes how big Neko is on your screen.
 - speed: 24
   $name: Movement Speed
-  $description: Controls how fast Neko sprints across your desktop. A higher value makes him much more energetic and quick to follow your mouse.
+  $description: How fast Neko runs to follow your mouse.
 - sound: true
   $name: Enable Sound
-  $description: Toggle all audio. When enabled, Neko will meow when clicked, purr when idle, and snore while sleeping.
-- sound_theme: default
-  $name: Sound Theme
-  $description: Choose the 'personality' of your cat! This selects which set of audio files to use for meows and snores.
-  $options:
-  - default: Original Neko
-  - memes: Fun & Silly (coming soon..)
-  - cute: Kawaii Meows (coming soon..)
+  $description: Turn all meows and snoring sounds on or off.
 - sleep_sound_interval: 30
   $name: Sleep Snore Interval
-  $description: The amount of time (in seconds) Neko waits between his sleepy snoring sounds. Ignored if repetition is disabled.
+  $description: How many seconds to wait between each snore.
 - sleep_sound_repeat: true
   $name: Repeat Sleep Sound
-  $description: When enabled, Neko snores periodically while asleep. Disable to make him snore only once when he first falls asleep.
+  $description: If checked, Neko will keep snoring while he sleeps.
 - fps: 60
   $name: Fluidity (FPS)
-  $description: The smoothness of the cat's movement. 60 FPS is recommended for buttery-smooth animations, but can be lowered to 30 to save battery/CPU.
+  $description: Smoothness of movement. Use 30 to save battery.
 */
 // ==/WindhawkModSettings==
 
@@ -104,6 +91,18 @@ enum BehaviorMode {
     CHASE_MOUSE = 0, RUN_AWAY, RANDOM, PACE, RUN_AROUND, FORCED_SLEEP, MAX_BEHAVIOR
 };
 
+inline const wchar_t* GetBehaviorName(int mode) {
+    switch (mode) {
+        case CHASE_MOUSE: return L"Chase Mouse";
+        case RUN_AWAY:    return L"Run Away";
+        case RANDOM:      return L"Random";
+        case PACE:        return L"Pace";
+        case RUN_AROUND:  return L"Run Around";
+        case FORCED_SLEEP: return L"Forced Sleep";
+        default:          return L"Unknown";
+    }
+}
+
 const int STOP_TIME = 4;
 const int WASH_TIME = 10;
 const int SCRATCH_TIME = 4;
@@ -114,7 +113,6 @@ const int CLAW_TIME = 10;
 const int SPRITE_SIZE = 32;
 
 std::wstring g_assetPath = L"";
-std::wstring g_soundTheme = L"default";
 int g_scale = 2;
 int g_speed = 24;
 bool g_soundEnabled = true;
@@ -163,21 +161,41 @@ void CreatePath(std::wstring path) {
 }
 
 bool EnsureFileExists(const std::wstring& localPath, const std::wstring& remoteUrl) {
+    // Security: Only allow established asset formats
+    bool isPng = localPath.size() >= 4 && (_wcsicmp(localPath.c_str() + localPath.size() - 4, L".png") == 0);
+    bool isWav = localPath.size() >= 4 && (_wcsicmp(localPath.c_str() + localPath.size() - 4, L".wav") == 0);
+    
+    if (!isPng && !isWav) {
+        return false;
+    }
+
     if (GetFileAttributesW(localPath.c_str()) != INVALID_FILE_ATTRIBUTES) return true;
+    
+    Wh_Log(L"Downloading missing asset: %s", remoteUrl.c_str());
     
     WH_GET_URL_CONTENT_OPTIONS opt = { sizeof(WH_GET_URL_CONTENT_OPTIONS), localPath.c_str() };
     const WH_URL_CONTENT* content = Wh_GetUrlContent(remoteUrl.c_str(), &opt);
-    if (!content) return false;
+    if (!content) {
+        Wh_Log(L"Failed to fetch asset: %s", remoteUrl.c_str());
+        return false;
+    }
     
     bool ok = (content->statusCode == 200 || content->statusCode == 0);
+    if (!ok) {
+        Wh_Log(L"Download failed with status %d: %s", content->statusCode, remoteUrl.c_str());
+        DeleteFileW(localPath.c_str());
+    } else {
+        Wh_Log(L"Successfully downloaded: %s", localPath.c_str());
+    }
+    
     Wh_FreeUrlContent(content);
-    if (!ok) DeleteFileW(localPath.c_str());
     return ok;
 }
 
 void DownloadMissingAssets() {
+    Wh_Log(L"Checking for missing assets in: %s", g_assetPath.c_str());
     CreatePath(g_assetPath);
-    CreatePath(g_assetPath + L"\\sounds\\" + g_soundTheme);
+    CreatePath(g_assetPath + L"\\sounds");
 
     std::wstring baseUrl = L"https://raw.githubusercontent.com/ciizerr/wh-mods/main/assets/neko-cat/";
 
@@ -188,12 +206,10 @@ void DownloadMissingAssets() {
         }
     }
     
-    if (g_soundTheme == L"default") {
-        const wchar_t* audios[] = { L"awake.wav", L"sleep.wav", L"idle1.wav", L"idle2.wav", L"idle3.wav" };
-        for (const wchar_t* au : audios) {
-            std::wstring file(au);
-            EnsureFileExists(g_assetPath + L"\\sounds\\default\\" + file, baseUrl + L"sounds/default/" + file);
-        }
+    const wchar_t* audios[] = { L"awake.wav", L"sleep.wav", L"idle1.wav", L"idle2.wav", L"idle3.wav" };
+    for (const wchar_t* au : audios) {
+        std::wstring file(au);
+        EnsureFileExists(g_assetPath + L"\\sounds\\" + file, baseUrl + L"sounds/" + file);
     }
 }
 
@@ -217,6 +233,7 @@ public:
     int moveDX = 0, moveDY = 0;
     int lastMoveDX = 0, lastMoveDY = 0;
 
+    int virtualX = 0, virtualY = 0;
     int boundsWidth = 1920, boundsHeight = 1080;
     
     int mouseX = 0, mouseY = 0;
@@ -225,7 +242,7 @@ public:
     double tickAccumulator = 0;
     
     int cornerIndex = 0;
-    double ballX = 0, ballY = 0;
+    double ballX = -9999, ballY = -9999;
     double ballVX = 0, ballVY = 0;
     int actionCount = 0;
 
@@ -238,13 +255,17 @@ public:
             for (int f = 0; f < 2; f++) {
                 std::wstring path = g_assetPath + L"\\" + g_spriteConfigs[i].files[f];
                 sprites[i][f] = Bitmap::FromFile(path.c_str());
+                if (!sprites[i][f] || sprites[i][f]->GetLastStatus() != Ok) {
+                    Wh_Log(L"Error loading sprite: %s", path.c_str());
+                }
             }
         }
     }
 
     void PlayAudio(const wchar_t* file, bool loop) {
         if (!g_soundEnabled) return;
-        std::wstring path = g_assetPath + L"\\sounds\\" + g_soundTheme + L"\\" + file;
+        std::wstring path = g_assetPath + L"\\sounds\\" + file;
+        Wh_Log(L"Playing audio: %s", file);
         DWORD flags = SND_ASYNC | SND_FILENAME | SND_NODEFAULT;
         if (loop) flags |= SND_LOOP;
         PlaySoundW(path.c_str(), NULL, flags);
@@ -254,11 +275,13 @@ public:
     }
 
     void Init() {
-        boundsWidth = GetSystemMetrics(SM_CXSCREEN) - SPRITE_SIZE * g_scale;
-        boundsHeight = GetSystemMetrics(SM_CYSCREEN) - SPRITE_SIZE * g_scale;
+        virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        boundsWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
+        boundsHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
         
-        x = rand() % boundsWidth;
-        y = rand() % boundsHeight;
+        x = virtualX + (rand() % (boundsWidth > 0 ? boundsWidth : 1));
+        y = virtualY + (rand() % (boundsHeight > 0 ? boundsHeight : 1));
         logicX = x; logicY = y;
         prevLogicX = x; prevLogicY = y;
         targetX = x; targetY = y;
@@ -326,6 +349,8 @@ public:
             pThis->prevLogicY = pThis->y;
             
             pThis->behaviorMode = FORCED_SLEEP;
+            Wh_Log(L"Neko dropped at %d, %d. Behavior: %d (%s)", 
+                   (int)pThis->x, (int)pThis->y, pThis->behaviorMode, GetBehaviorName(pThis->behaviorMode));
             pThis->SetState(YAWN);
             pThis->oldTargetX = pThis->targetX = pThis->logicX + SPRITE_SIZE * g_scale / 2.0;
             pThis->oldTargetY = pThis->targetY = pThis->logicY + SPRITE_SIZE * g_scale;
@@ -348,6 +373,7 @@ public:
             }
         }
         behaviorMode = nextMode;
+        Wh_Log(L"Behavior changed to: %d (%s)", behaviorMode, GetBehaviorName(behaviorMode));
         if (state == SLEEP) SetState(AWAKE);
     }
 
@@ -359,8 +385,10 @@ public:
             hasMouseMoved = true;
         }
         
-        boundsWidth = GetSystemMetrics(SM_CXSCREEN) - SPRITE_SIZE * g_scale;
-        boundsHeight = GetSystemMetrics(SM_CYSCREEN) - SPRITE_SIZE * g_scale;
+        virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        boundsWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
+        boundsHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
 
         if (isDragging) {
             RECT rect;
@@ -469,8 +497,8 @@ public:
         if (state == SLEEP) actionCount++;
         if (actionCount > idleThreshold * 10) {
             actionCount = 0;
-            targetX = rand() % boundsWidth;
-            targetY = rand() % boundsHeight;
+            targetX = virtualX + rand() % boundsWidth;
+            targetY = virtualY + rand() % boundsHeight;
             RunTowards(targetX, targetY);
         } else {
             RunTowards(targetX, targetY);
@@ -483,33 +511,33 @@ public:
         }
         int sz = SPRITE_SIZE * g_scale;
         double corners[4][2] = {
-            { sz + sz/2.0, (double)(sz + sz) },
-            { sz + sz/2.0, (double)(boundsHeight - sz + sz) },
-            { boundsWidth - sz + sz/2.0, (double)(boundsHeight - sz + sz) },
-            { boundsWidth - sz + sz/2.0, (double)(sz + sz) }
+            { (double)virtualX + sz/2.0, (double)virtualY + sz },
+            { (double)virtualX + sz/2.0, (double)virtualY + boundsHeight + sz },
+            { (double)virtualX + boundsWidth + sz/2.0, (double)virtualY + boundsHeight + sz },
+            { (double)virtualX + boundsWidth + sz/2.0, (double)virtualY + sz }
         };
         RunTowards(corners[cornerIndex][0], corners[cornerIndex][1]);
     }
 
     void RunAround() {
         double bbox = g_speed * 8 * g_scale;
-        if (ballX == 0 && ballY == 0) {
-            ballX = rand() % (boundsWidth - (int)bbox);
-            ballY = rand() % (boundsHeight - (int)bbox);
+        if (ballX == -9999 && ballY == -9999) {
+            ballX = virtualX + rand() % (boundsWidth - (int)bbox);
+            ballY = virtualY + rand() % (boundsHeight - (int)bbox);
             ballVX = ((rand() % 2) ? 1 : -1) * (g_speed / 2.0) + 1;
             ballVY = ((rand() % 2) ? 1 : -1) * (g_speed / 2.0) + 1;
         }
         ballX += ballVX;
         ballY += ballVY;
-        if (ballX < bbox) {
-            if (ballX > 0) ballVX++; else ballVX = -ballVX;
-        } else if (ballX > boundsWidth - bbox) {
-            if (ballX < boundsWidth) ballVX--; else ballVX = -ballVX;
+        if (ballX < virtualX + bbox) {
+            if (ballX > virtualX) ballVX++; else ballVX = -ballVX;
+        } else if (ballX > virtualX + boundsWidth - bbox) {
+            if (ballX < virtualX + boundsWidth) ballVX--; else ballVX = -ballVX;
         }
-        if (ballY < bbox) {
-            if (ballY > 0) ballVY++; else ballVY = -ballVY;
-        } else if (ballY > boundsHeight - bbox) {
-            if (ballY < boundsHeight) ballVY--; else ballVY = -ballVY;
+        if (ballY < virtualY + bbox) {
+            if (ballY > virtualY) ballVY++; else ballVY = -ballVY;
+        } else if (ballY > virtualY + boundsHeight - bbox) {
+            if (ballY < virtualY + boundsHeight) ballVY--; else ballVY = -ballVY;
         }
         RunTowards(ballX, ballY);
     }
@@ -616,11 +644,11 @@ public:
             case UL_MOVE: case UR_MOVE: case DL_MOVE: case DR_MOVE: {
                 double nx = logicX + moveDX;
                 double ny = logicY + moveDY;
-                bool wasOutside = nx <= 0 || nx >= boundsWidth || ny <= 0 || ny >= boundsHeight;
+                bool wasOutside = nx <= virtualX || nx >= virtualX + boundsWidth || ny <= virtualY || ny >= virtualY + boundsHeight;
                 CalcDirection(moveDX, moveDY);
                 
-                nx = fmax(0.0, fmin((double)boundsWidth, nx));
-                ny = fmax(0.0, fmin((double)boundsHeight, ny));
+                nx = fmax((double)virtualX, fmin((double)virtualX + boundsWidth, nx));
+                ny = fmax((double)virtualY, fmin((double)virtualY + boundsHeight, ny));
                 bool notMoved = nx == logicX && ny == logicY;
                 if (wasOutside && notMoved) SetState(STOP);
                 else { logicX = nx; logicY = ny; }
@@ -687,6 +715,9 @@ public:
         BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
         UpdateLayeredWindow(hwnd, hdcScreen, &ptDest, &winSize, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
+        
+        // Re-enforce topmost status to prevent disappearing behind other "Topmost" windows
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
         SelectObject(hdcMem, hbmOld);
         DeleteObject(hbmMem);
@@ -783,8 +814,10 @@ void WhTool_ModSettingsChanged()
     LoadSettings();
     if (g_pNeko) {
         // Force bounds recalculation
-        g_pNeko->boundsWidth = GetSystemMetrics(SM_CXSCREEN) - SPRITE_SIZE * g_scale;
-        g_pNeko->boundsHeight = GetSystemMetrics(SM_CYSCREEN) - SPRITE_SIZE * g_scale;
+        g_pNeko->virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        g_pNeko->virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        g_pNeko->boundsWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
+        g_pNeko->boundsHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
     }
 }
 
@@ -827,10 +860,6 @@ void LoadSettings() {
     if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
         g_assetPath = storagePath;
     }
-
-    PCWSTR pszTheme = Wh_GetStringSetting(L"sound_theme");
-    g_soundTheme = pszTheme;
-    Wh_FreeStringSetting(pszTheme);
 
     g_scale = Wh_GetIntSetting(L"scale");
     g_speed = Wh_GetIntSetting(L"speed");
