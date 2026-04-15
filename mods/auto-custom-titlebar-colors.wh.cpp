@@ -2,7 +2,7 @@
 // @id              auto-custom-titlebar-colors
 // @name            Auto Custom Titlebar Colors
 // @description     Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes
-// @version         1.1.0
+// @version         1.1.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         *
@@ -472,7 +472,7 @@ HWND WINAPI CreateWindowExW_hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hWnd) ApplyTitleBar(hWnd, FALSE, TRUE);
+    if (hWnd) ApplyTitleBar(hWnd, FALSE, FALSE);
     return hWnd;
 }
 
@@ -488,7 +488,7 @@ HWND WINAPI CreateWindowExA_hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hWnd) ApplyTitleBar(hWnd, FALSE, TRUE);
+    if (hWnd) ApplyTitleBar(hWnd, FALSE, FALSE);
     return hWnd;
 }
 
