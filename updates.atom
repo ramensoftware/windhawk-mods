@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-15T07:16:00.000Z</updated>
+    <updated>2026-04-15T08:57:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.1.1]]></title>
+        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#61ba5925653bc3f666213d1aef8d12a5f811bcd8</id>
+        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
+        <updated>2026-04-15T08:57:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Issue Fixed:</p>
+<ul>
+<li>Input focus loss for every new window. Root cause was <code>SetWindowPos</code> with <code>SWP_FRAMECHANGED</code> flag in <code>CreateWindowEx</code> hooks was stealing focus from newly created windows.</li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Show Link Speed 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskmgr-link-speed#2bf7cc399aa935bc14d9c0a5f12d86886f79485b</id>
@@ -473,20 +487,6 @@ file size or drive capacity in pane 1</li>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Breadcrumb Middle-Click New Tab 1.2.0]]></title>
-        <id>https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab#33e8963bbd0dd420be7812ec2e6a22f68c75db8d</id>
-        <link href="https://windhawk.net/mods/explorer-breadcrumb-mclick-newtab"/>
-        <updated>2026-04-05T10:42:07.000Z</updated>
-        <content type="html"><![CDATA[<p>[Added] Dropdown Menu Support: Middle-clicking subfolders within the &gt; (chevron) dropdown menus in the address bar now directly opens the selected folder in a new background tab.</p>
-<p>[Improved] Smart Menu Detection: Expanded the AnalyzeElement function to dynamically distinguish between a standard breadcrumb click and a dropdown menu item click (UIA List, Text, or Menu items).</p>
-<p>[Improved] Expanded State Detection: Introduced the FindExpandedBreadcrumbElement function to accurately identify which breadcrumb menu is currently open in the background. The system flawlessly combines the clicked subfolder's name with the expanded parent path.</p>
-<p>[Stability] The 100% clipboard-free architecture—which preserves your copied data and prevents Explorer crashes—has been maintained and fully integrated with the new dropdown feature.</p>]]></content>
-        <author>
-            <name>osmanonurkoc</name>
-            <uri>https://github.com/osmanonurkoc</uri>
         </author>
     </entry>
 </feed>

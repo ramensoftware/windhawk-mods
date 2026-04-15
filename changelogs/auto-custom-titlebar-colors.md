@@ -1,3 +1,9 @@
+## 1.1.1 ([Apr 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/61ba5925653bc3f666213d1aef8d12a5f811bcd8/mods/auto-custom-titlebar-colors.wh.cpp))
+
+Issue Fixed:
+
+- Input focus loss for every new window. Root cause was `SetWindowPos` with `SWP_FRAMECHANGED` flag in `CreateWindowEx` hooks was stealing focus from newly created windows.
+
 ## 1.1.0 ([Apr 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/849442c1f7f0e050615851eedfe35ffbfac0a4b0/mods/auto-custom-titlebar-colors.wh.cpp))
 
 Fixed a major issue with third-party apps like GlazeWM, Flow Launcher etc

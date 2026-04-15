@@ -379,7 +379,7 @@
                     4
                 ],
                 "ratingUsers": 5,
-                "updated": 1776197487000,
+                "updated": 1776243445000,
                 "users": 84
             },
             "metadata": {
@@ -397,7 +397,7 @@
                     "*"
                 ],
                 "name": "Auto Custom Titlebar Colors",
-                "version": "1.1.0"
+                "version": "1.1.1"
             }
         },
         "auto-theme-switcher": {
