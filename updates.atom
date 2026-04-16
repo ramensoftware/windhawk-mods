@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-15T16:17:34.000Z</updated>
+    <updated>2026-04-16T10:07:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 3.4]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#c155764bd43a6b348c16015576dc85163f8cb5b9</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-04-16T10:07:08.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="improved">Improved</h3>
+<ul>
+<li>Reduced hot-path overhead in <code>TranslateMessage</code> by caching the active Word root window, native object window, and owner UI thread instead of rediscovering them repeatedly.</li>
+<li>Split the lightweight message path from the heavier timer/runtime path so expensive UI state checks and automation work run less often.</li>
+<li>Stopped reconnecting native Word events from the per-message path; event connection is now handled on owner-thread adoption and timer-driven recovery paths.</li>
+<li>Reduced idle document-state polling when native Word events are available, lowering background activity while Word is idle.</li>
+<li>Kept fast refresh for command-driven changes such as ribbon formatting and similar non-keyboard actions without relying on dense idle polling.</li>
+<li>Optimized document dirty-state checks so the mod queries <code>Saved</code> first and only resolves full metadata when it is actually needed.</li>
+<li>Reused the cached transition-flush document object before falling back to full document enumeration by path.</li>
+<li>Reduced timer churn by avoiding unnecessary timer re-arming when an existing timer is already scheduled soon enough.</li>
+<li>Reduced log noise in normal operation by removing some high-frequency informational messages and routing change detection through deduplicated status logs.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Fixed owner-thread/timer coordination so stale timer IDs from a previous owner thread do not interfere after thread re-adoption.</li>
+<li>Fixed cache invalidation around focus, activation, close, and similar window transitions so cached Word UI context is refreshed when it becomes unreliable.</li>
+<li>Fixed a potential performance regression where expensive Word window discovery could still be triggered too often after optimization changes.</li>
+<li>Fixed transition-flush tracking so cached document references and identities are cleared together when the request is reset.</li>
+</ul>
+<h3 id="notes">Notes</h3>
+<ul>
+<li>v3.4 does not add new user-facing features or settings.</li>
+<li>This release focuses on lower CPU/UI overhead, less background work, and smoother behavior on slower machines.</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Z-Order Override 0.8]]></title>
         <id>https://windhawk.net/mods/taskbar-z-order-override#19da50b515da4b298e6df4815c25a0f42d3b20ed</id>
@@ -413,30 +447,6 @@ modified.</li>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 1.0]]></title>
-        <id>https://windhawk.net/mods/audioswap#de26d434714384dc9cab67fa36a08a5399276e64</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-04-08T18:02:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="audiooutputswitcher">Audio Output Switcher</h1>
-<p>A lightning-fast audio toggle right in your taskbar! 🎧🔊</p>
-<h2 id="howtouseit">📖 How to Use It</h2>
-<ol>
-<li>⚙️ <strong>Configure Your Devices:</strong> Go to the <strong>Settings</strong> tab. </li>
-</ol>
-<ul>
-<li>Type the Name of your device names (e.g., "Headphones" and "Speakers").</li>
-<li>Select an icon for each device from the dropdown menus.</li>
-</ul>
-<ol>
-<li>🔍 <strong>Find the Icon:</strong> Look in your system tray. The icon will change based on which device is currently active!</li>
-<li>🎯 <strong>Click to Toggle:</strong> A single click swaps your audio and updates the icon instantly.</li>
-</ol>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

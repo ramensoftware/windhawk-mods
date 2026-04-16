@@ -1,3 +1,26 @@
+## 3.4 ([Apr 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c155764bd43a6b348c16015576dc85163f8cb5b9/mods/word-local-autosave.wh.cpp))
+
+### Improved
+- Reduced hot-path overhead in `TranslateMessage` by caching the active Word root window, native object window, and owner UI thread instead of rediscovering them repeatedly.
+- Split the lightweight message path from the heavier timer/runtime path so expensive UI state checks and automation work run less often.
+- Stopped reconnecting native Word events from the per-message path; event connection is now handled on owner-thread adoption and timer-driven recovery paths.
+- Reduced idle document-state polling when native Word events are available, lowering background activity while Word is idle.
+- Kept fast refresh for command-driven changes such as ribbon formatting and similar non-keyboard actions without relying on dense idle polling.
+- Optimized document dirty-state checks so the mod queries `Saved` first and only resolves full metadata when it is actually needed.
+- Reused the cached transition-flush document object before falling back to full document enumeration by path.
+- Reduced timer churn by avoiding unnecessary timer re-arming when an existing timer is already scheduled soon enough.
+- Reduced log noise in normal operation by removing some high-frequency informational messages and routing change detection through deduplicated status logs.
+
+### Fixed
+- Fixed owner-thread/timer coordination so stale timer IDs from a previous owner thread do not interfere after thread re-adoption.
+- Fixed cache invalidation around focus, activation, close, and similar window transitions so cached Word UI context is refreshed when it becomes unreliable.
+- Fixed a potential performance regression where expensive Word window discovery could still be triggered too often after optimization changes.
+- Fixed transition-flush tracking so cached document references and identities are cleared together when the request is reset.
+
+### Notes
+- v3.4 does not add new user-facing features or settings.
+- This release focuses on lower CPU/UI overhead, less background work, and smoother behavior on slower machines.
+
 ## 3.3 ([Apr 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e524a209a6628714426fe8bec453199be01f3e41/mods/word-local-autosave.wh.cpp))
 
 ### Added
