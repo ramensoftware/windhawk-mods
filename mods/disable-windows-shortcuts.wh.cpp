@@ -681,6 +681,7 @@ void PromptForExplorerRestart()
 // ============================================================================
 
 HHOOK g_hHook = NULL;
+HANDLE g_hookThread = NULL;
 std::atomic<bool> g_hookThreadRunning{false};
 std::atomic<DWORD> g_hookThreadId{0};
 bool g_suppressedKeys[256] = {false};
@@ -840,9 +841,7 @@ void StartHookThread()
     if (g_hookThreadRunning) return;
     
     g_hookThreadRunning = true;
-    HANDLE hThread = CreateThread(NULL, 0, HookThread, NULL, 0, (LPDWORD)&g_hookThreadId);
-    if (hThread)
-        CloseHandle(hThread);
+    g_hookThread = CreateThread(NULL, 0, HookThread, NULL, 0, (LPDWORD)&g_hookThreadId);
 }
 
 void StopHookThread()
@@ -851,6 +850,13 @@ void StopHookThread()
     {
         PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
         g_hookThreadRunning = false;
+    }
+
+    if (g_hookThread)
+    {
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = NULL;
     }
 }
 
