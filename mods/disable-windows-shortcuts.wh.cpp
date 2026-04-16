@@ -663,10 +663,10 @@ void PromptForExplorerRestart()
         int button;
         if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button, nullptr, nullptr)) && button == IDYES)
         {
-            WCHAR commandLine[] = L"cmd.exe /c \"taskkill /F /IM explorer.exe & start explorer\"";
+            WCHAR commandLine[] = L"cmd.exe /c \"taskkill /F /IM explorer.exe & explorer.exe\"";
             STARTUPINFO si = { .cb = sizeof(si) };
             PROCESS_INFORMATION pi{};
-            if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi))
+            if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
             {
                 CloseHandle(pi.hThread);
                 CloseHandle(pi.hProcess);
@@ -915,30 +915,18 @@ void Wh_ModUninit()
     if (g_isDWM)
         StopHookThread();
 
-    HWND restartExplorerPromptWindow = g_restartExplorerPromptWindow;
-    if (restartExplorerPromptWindow)
-        PostMessage(restartExplorerPromptWindow, WM_CLOSE, 0, 0);
+    if (g_isExplorer)
+    {
+        // Use the native prompt instead of PowerShell. 
+        // We call the existing prompt function and wait for it to complete.
+        PromptForExplorerRestart();
+    }
 
     if (g_restartExplorerPromptThread)
     {
         WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
         CloseHandle(g_restartExplorerPromptThread);
         g_restartExplorerPromptThread = nullptr;
-    }
-
-    if (g_isExplorer)
-    {
-        // When the mod is disabled or removed, the DLL is unloaded instantly.
-        // We use a detached PowerShell process to prompt for an Explorer restart
-        // so it survives the DLL unloading and doesn't block the Windhawk thread.
-        WCHAR commandLine[] = L"powershell.exe -WindowStyle Hidden -Command \"$wshell = New-Object -ComObject Wscript.Shell; $result = $wshell.Popup('The Disable Windows Shortcuts mod has been unloaded.\\n\\nTo fully restore standard Windows shortcuts (like Win+E), Explorer needs to be restarted.\\n\\nRestart Explorer now?', 0, 'Windhawk - Disable Windows Shortcuts', 4132); if ($result -eq 6) { Stop-Process -Name explorer -Force; Start-Process explorer }\"";
-        STARTUPINFO si = { .cb = sizeof(si) };
-        PROCESS_INFORMATION pi{};
-        if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
-        {
-            CloseHandle(pi.hThread);
-            CloseHandle(pi.hProcess);
-        }
     }
 }
 
