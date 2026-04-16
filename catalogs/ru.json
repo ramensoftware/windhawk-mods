@@ -6467,7 +6467,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1776376515000,
+                "updated": 1776377633000,
                 "users": 21
             },
             "metadata": {
@@ -6482,7 +6482,7 @@
                 ],
                 "name": "Hide NVIDIA Control Panel Missing Dialog",
                 "twitter": "https://x.com/bcrtvkcs",
-                "version": "1.1.1"
+                "version": "1.1.2"
             }
         },
         "office-ui-reverter": {

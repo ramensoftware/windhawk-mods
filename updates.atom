@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-16T21:55:15.000Z</updated>
+    <updated>2026-04-16T22:13:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide NVIDIA Control Panel Missing Dialog 1.1.2]]></title>
+        <id>https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider#41124567b0fe25b450f766ca0680f04795d5ac2c</id>
+        <link href="https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider"/>
+        <updated>2026-04-16T22:13:53.000Z</updated>
+        <content type="html"><![CDATA[<p>Update version and compatibility in mod description</p>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide NVIDIA Control Panel Missing Dialog 1.1.1]]></title>
         <id>https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider#5fca568a43648a4d4ebf953b3d4bf7e9a900d2f0</id>
@@ -366,55 +377,6 @@ modified.</li>
         <author>
             <name>ciizerr</name>
             <uri>https://github.com/ciizerr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Navigation Pane Tweaks 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-navigation-pane-tweaks#d208454541569598e6b5979b89ab1c22fea4fd1c</id>
-        <link href="https://windhawk.net/mods/explorer-navigation-pane-tweaks"/>
-        <updated>2026-04-11T14:39:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorernavigationpanetweaks">Explorer Navigation Pane Tweaks</h1>
-<p>Adjusts the indentation and visual tree style of the navigation pane in Windows Explorer.</p>
-<h2 id="beforeafter">Before / After</h2>
-<h3 id="defaultexplorer">Default Explorer</h3>
-<p><img src="https://raw.githubusercontent.com/Languster/ExplorerNavHook/main/screenshots/before.jpg" alt="Before" /></p>
-<h3 id="withexplorernavigationpanetweaks">With Explorer Navigation Pane Tweaks</h3>
-<p><img src="https://raw.githubusercontent.com/Languster/ExplorerNavHook/main/screenshots/after.jpg" alt="After" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>changes the navigation tree indent</li>
-<li>can remove expand/collapse buttons</li>
-<li>can remove connector lines</li>
-<li>can remove root lines</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Target indent</strong>: controls how far the tree items are shifted</li>
-<li><strong>Remove TVS_HASBUTTONS</strong>: removes tree buttons</li>
-<li><strong>Remove TVS_HASLINES</strong>: removes connector lines</li>
-<li><strong>Remove TVS_LINESATROOT</strong>: removes root lines</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>designed for Windows Explorer (<code>explorer.exe</code>)</li>
-<li>tested with the original ExplorerNavHook behavior migrated to Windhawk</li>
-<li>behavior may vary between different Windows builds and Explorer variants</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>targets <code>explorer.exe</code></li>
-<li>based on the original ExplorerNavHook project</li>
-<li>changes apply to the Explorer navigation tree</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>this mod targets the navigation tree in Explorer, not every tree view in the system</li>
-<li>some Explorer variants or future Windows updates may behave differently</li>
-<li>visual results depend on the current Explorer implementation</li>
-</ul>]]></content>
-        <author>
-            <name>Languster</name>
-            <uri>https://github.com/Languster</uri>
         </author>
     </entry>
 </feed>
