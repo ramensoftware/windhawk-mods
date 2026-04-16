@@ -2,12 +2,13 @@
 // @id              nvidia-control-panel-missing-dialog-hider
 // @name            Hide NVIDIA Control Panel Missing Dialog
 // @description     Hides the nvcontainer.exe popup that says NVIDIA Control Panel is not found
-// @version         1.1.0
+// @version         1.1.1
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
 // @homepage        https://grdigital.pro
 // @include         nvcontainer.exe
+// @include         NVDisplay.Container.exe
 // @compilerOptions -luser32 -lkernel32
 // ==/WindhawkMod==
 
@@ -58,7 +59,6 @@ static bool IsNvidiaDialog(HWND hWnd) {
     WCHAR cls[256] = {};
     GetClassNameW(hWnd, cls, 256);
     if (std::wstring(cls) != L"#32770") return false;
-    if (GetParent(hWnd)) return false;
     bool found = false;
     EnumChildWindows(hWnd, CheckNvidiaChild, (LPARAM)&found);
     return found;
