@@ -1,3 +1,8 @@
+## 2.3 ([Apr 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9f6a018d93adf561e55dc5318babf4428073c11c/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
+
+* Fixed a crash on system startup when the "Never" auto-hide mode is used.
+* Improved support for the new taskbar auto-hide animation in Windows 11 preview builds (ViVeTool ID: 41356296).
+
 ## 2.2 ([Mar 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ccbf8d62b852558521be1be12194cb2f2df85a56/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
 
 * Added an option to configure the time the taskbar stays visible after being shown temporarily.
