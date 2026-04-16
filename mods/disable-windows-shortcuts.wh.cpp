@@ -5,7 +5,12 @@
 // @version         1.0.0
 // @author          Lone
 // @github          https://github.com/Louis047
+// @include         explorer.exe
 // @include         dwm.exe
+// @include         ShellExperienceHost.exe
+// @include         StartMenuExperienceHost.exe
+// @include         SearchHost.exe
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -13,13 +18,13 @@
 Selectively disable Windows keyboard shortcuts with individual toggles for each shortcut.
 
 ## ⚠️ Important Installation Step ⚠️
-For this mod to function correctly, you **must** allow Windhawk to inject into the Desktop Window Manager (`dwm.exe`):
+For this mod to successfully block window snapping (Win+Arrows) and Task View (Win+Tab), you **must** allow Windhawk to inject into the Desktop Window Manager (`dwm.exe`):
 1. Open Windhawk and go to **Settings**
 2. Click on **Advanced settings** at the bottom
 3. Under **Process inclusion list**, ensure `dwm.exe` is added (or `*` is used to include all processes)
 4. Click **Save**. Windhawk will automatically restart to apply the new settings.
 
-By running inside `dwm.exe`, this mod can successfully bypass UIPI (User Interface Privilege Isolation) and block shortcuts even when Administrator/Elevated windows are focused!
+*Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to take effect. You will be prompted automatically.*
 
 ## Features
 - Disable any Windows key combination
@@ -262,6 +267,12 @@ By running inside `dwm.exe`, this mod can successfully bypass UIPI (User Interfa
 
 #include <windows.h>
 #include <atomic>
+#include <commctrl.h>
+#include <algorithm>
+#include <string>
+
+bool g_isExplorer = false;
+bool g_isDWM = false;
 
 // Settings structure
 struct
@@ -549,6 +560,116 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
     return block;
 }
 
+bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
+{
+    UINT baseMods = fsModifiers & ~MOD_NOREPEAT;
+    bool hasWin = (baseMods & MOD_WIN) != 0;
+    bool hasShift = (baseMods & MOD_SHIFT) != 0;
+    bool hasCtrl = (baseMods & MOD_CONTROL) != 0;
+    bool hasAlt = (baseMods & MOD_ALT) != 0;
+
+    // Office Hotkeys
+    if (baseMods == (MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN))
+        return true;
+
+    if (hasWin && !hasCtrl && !hasAlt)
+    {
+        if (!hasShift) {
+            // Hardcoded keys that bypass RegisterHotKey
+            if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || 
+                vk == VK_HOME || vk == VK_ESCAPE || vk == VK_SPACE ||
+                vk == VK_OEM_PERIOD || vk == VK_OEM_1 || // Emoji picker (. and ;)
+                vk == 'A' || vk == 'C' || vk == 'G' || vk == 'H' || 
+                vk == 'K' || vk == 'N' || vk == 'P' || vk == 'V' || 
+                vk == 'W' || vk == 'Z')
+                return true;
+        } else {
+            // Win+Shift+Arrows, Win+Shift+S
+            if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || vk == 'S')
+                return true;
+        }
+    }
+    
+    if (hasWin && hasCtrl && hasShift && !hasAlt && vk == 'B')
+        return true; // Win+Ctrl+Shift+B
+    return false;
+}
+
+// ============================================================================
+// RegisterHotKey hook
+// ============================================================================
+
+typedef BOOL(WINAPI *RegisterHotKey_t)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
+RegisterHotKey_t RegisterHotKey_Original;
+
+BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
+{
+    if (ShouldBlockHotkey(fsModifiers, vk))
+    {
+        SetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
+        return FALSE;
+    }
+    return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
+}
+
+// ============================================================================
+// Explorer restart prompt
+// ============================================================================
+
+HANDLE g_restartExplorerPromptThread = NULL;
+std::atomic<HWND> g_restartExplorerPromptWindow = NULL;
+
+constexpr WCHAR kRestartExplorerPromptTitle[] = L"Disable Windows Shortcuts - Windhawk";
+constexpr WCHAR kRestartExplorerPromptText[] = L"Explorer needs to be restarted to apply the changes to standard shortcuts. Restart now?";
+
+void PromptForExplorerRestart()
+{
+    if (g_restartExplorerPromptThread)
+    {
+        if (WaitForSingleObject(g_restartExplorerPromptThread, 0) != WAIT_OBJECT_0)
+            return;
+        CloseHandle(g_restartExplorerPromptThread);
+    }
+
+    g_restartExplorerPromptThread = CreateThread(nullptr, 0, [](LPVOID) WINAPI -> DWORD {
+        TASKDIALOGCONFIG taskDialogConfig{
+            .cbSize = sizeof(taskDialogConfig),
+            .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
+            .dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON,
+            .pszWindowTitle = kRestartExplorerPromptTitle,
+            .pszMainIcon = TD_INFORMATION_ICON,
+            .pszContent = kRestartExplorerPromptText,
+            .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpRefData) WINAPI -> HRESULT {
+                switch (msg)
+                {
+                case TDN_CREATED:
+                    g_restartExplorerPromptWindow = hwnd;
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                    break;
+                case TDN_DESTROYED:
+                    g_restartExplorerPromptWindow = nullptr;
+                    break;
+                }
+                return S_OK;
+            },
+        };
+
+        int button;
+        if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button, nullptr, nullptr)) && button == IDYES)
+        {
+            WCHAR commandLine[] = L"cmd.exe /c \"taskkill /F /IM explorer.exe & start explorer\"";
+            STARTUPINFO si = { .cb = sizeof(si) };
+            PROCESS_INFORMATION pi{};
+            if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi))
+            {
+                CloseHandle(pi.hThread);
+                CloseHandle(pi.hProcess);
+            }
+        }
+        return 0;
+    }, nullptr, 0, nullptr);
+}
+
 // ============================================================================
 // Low Level Keyboard Hook Implementation (AHK Method)
 // ============================================================================
@@ -646,8 +767,8 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
             if (hasShift) fsModifiers |= MOD_SHIFT;
             if (hasAlt) fsModifiers |= MOD_ALT;
 
-            // Check if this hotkey is disabled in settings
-            if (ShouldBlockHotkey(fsModifiers, vkCode))
+            // Check if this hotkey is disabled in settings AND is hardcoded
+            if (ShouldBlockHotkey(fsModifiers, vkCode) && IsKnownHardcodedHotkey(fsModifiers, vkCode))
             {
                 if (vkCode < 256)
                     g_suppressedKeys[vkCode] = true;
@@ -723,17 +844,51 @@ void StopHookThread()
 
 BOOL Wh_ModInit()
 {
+    WCHAR exeName[MAX_PATH];
+    GetModuleFileNameW(NULL, exeName, MAX_PATH);
+    std::wstring exeStr(exeName);
+    std::transform(exeStr.begin(), exeStr.end(), exeStr.begin(), ::towlower);
+
+    g_isExplorer = (exeStr.find(L"explorer.exe") != std::wstring::npos);
+    g_isDWM = (exeStr.find(L"dwm.exe") != std::wstring::npos);
+
     LoadSettings();
-    StartHookThread();
+
+    // Hook RegisterHotKey in all processes
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32)
+    {
+        void* pRegisterHotKey = (void*)GetProcAddress(hUser32, "RegisterHotKey");
+        if (pRegisterHotKey)
+            Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
+    }
+
+    if (g_isDWM)
+        StartHookThread();
+
     return TRUE;
 }
 
 void Wh_ModUninit()
 {
-    StopHookThread();
+    if (g_isDWM)
+        StopHookThread();
+
+    HWND restartExplorerPromptWindow = g_restartExplorerPromptWindow;
+    if (restartExplorerPromptWindow)
+        PostMessage(restartExplorerPromptWindow, WM_CLOSE, 0, 0);
+
+    if (g_restartExplorerPromptThread)
+    {
+        WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+        CloseHandle(g_restartExplorerPromptThread);
+        g_restartExplorerPromptThread = nullptr;
+    }
 }
 
 void Wh_ModSettingsChanged()
 {
     LoadSettings();
+    if (g_isExplorer)
+        PromptForExplorerRestart();
 }
