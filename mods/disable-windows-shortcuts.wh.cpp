@@ -854,6 +854,17 @@ void StopHookThread()
     }
 }
 
+bool NeedsDwmHook()
+{
+    return g_settings.DisableWinA || g_settings.DisableWinK || g_settings.DisableWinP || 
+           g_settings.DisableWinU || g_settings.DisableWinTab ||
+           g_settings.DisableWinUp || g_settings.DisableWinDown || 
+           g_settings.DisableWinLeft || g_settings.DisableWinRight ||
+           g_settings.DisableWinShiftUp || g_settings.DisableWinShiftDown || 
+           g_settings.DisableWinShiftLeft || g_settings.DisableWinShiftRight ||
+           g_settings.DisableWinCtrlShiftB || g_settings.DisableOfficeHotkeys;
+}
+
 // ----------------------------------------------------------------------------
 // Windhawk Mod Entry Points
 // ----------------------------------------------------------------------------
@@ -870,13 +881,21 @@ BOOL Wh_ModInit()
 
     LoadSettings();
 
-    // Hook RegisterHotKey in all processes
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32)
+    if (g_isDWM && !NeedsDwmHook())
     {
-        void* pRegisterHotKey = (void*)GetProcAddress(hUser32, "RegisterHotKey");
-        if (pRegisterHotKey)
-            Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
+        return FALSE; // Unload from DWM if no hardcoded keys are disabled
+    }
+
+    // Hook RegisterHotKey in explorer (we don't need it in DWM)
+    if (g_isExplorer)
+    {
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        if (hUser32)
+        {
+            void* pRegisterHotKey = (void*)GetProcAddress(hUser32, "RegisterHotKey");
+            if (pRegisterHotKey)
+                Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
+        }
     }
 
     if (g_isDWM)
@@ -905,6 +924,15 @@ void Wh_ModUninit()
 void Wh_ModSettingsChanged()
 {
     LoadSettings();
+    
+    if (g_isDWM)
+    {
+        if (NeedsDwmHook())
+            StartHookThread();
+        else
+            StopHookThread();
+    }
+    
     if (g_isExplorer)
         PromptForExplorerRestart();
 }
