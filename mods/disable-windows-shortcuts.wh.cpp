@@ -21,7 +21,7 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 3. Under **Process inclusion list**, ensure `dwm.exe` is added (or `*` is used to include all processes)
 4. Click **Save**. Windhawk will automatically restart to apply the new settings.
 
-*Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to take effect. You will be prompted automatically.*
+*Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to take effect. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must manually restart Explorer to restore those standard shortcuts.*
 
 ## Features
 - Disable any Windows key combination
