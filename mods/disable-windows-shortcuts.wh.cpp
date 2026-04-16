@@ -7,9 +7,6 @@
 // @github          https://github.com/Louis047
 // @include         explorer.exe
 // @include         dwm.exe
-// @include         ShellExperienceHost.exe
-// @include         StartMenuExperienceHost.exe
-// @include         SearchHost.exe
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
