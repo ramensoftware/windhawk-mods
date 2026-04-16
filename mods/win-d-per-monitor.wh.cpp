@@ -3,7 +3,7 @@
 // @name            Win+D per monitor(show desktop)
 // @description     Press Win+D to only manage the windows on the monitor where the mouse is located.
 // @description:zh-CN   按下Win+D时 只最小化/还原鼠标所在显示器的窗口
-// @version         1.4.260415
+// @version         1.5.260416
 // @author          easyatm
 // @github          https://github.com/easyatm
 // @include         explorer.exe
@@ -46,6 +46,17 @@ where the mouse cursor is located.
 按下win+d时,只最小化/还原鼠标所在监视器上的窗口
 
 ## Changelog
+
+### 2026-04-16 (v1.5.260416)
+- Fixed repeated invocation of touchpad gesture by adding debounce logic to ignore redundant calls
+- 修复触摸板手势重复进入问题，添加防抖逻辑忽略连续重复调用
+
+Known issues:
+- Touchpad swipe-down can minimize all windows and show the desktop, but swipe-up does not trigger this function, so windows cannot be restored via gesture — swipe down again to toggle
+- 已知问题：触摸板下滑可最小化窗口显示桌面，但上滑不会进入此函数，无法通过手势还原窗口，需再次下滑切换
+
+Fixes:
+- https://github.com/ramensoftware/windhawk-mods/issues/3794
 
 ### 2026-04-15 (v1.4.260415)
 - Switched hook target from `_HandleGlobalHotkey` to `_RaiseDesktop`, enabling per-monitor show desktop for both Win+D hotkey and touchpad gestures
@@ -470,11 +481,18 @@ public:
 void(__cdecl *RaiseDesktop_Original)(void *pThis, int flags);
 void RaiseDesktop_Hook(void *pThis, int flags)
 {
-    log("_RaiseDesktop called, flags={}", flags);
+    log("_RaiseDesktop called, flags={},tid={}", flags, ::GetCurrentThreadId());
 
     if (flags == 2 || flags == 3)
     {
-        WindShowDesktop::showDesktop();
+        static auto s_last_tick = 0;
+        //修复触摸手势重复进入问题,添加防抖忽略
+        //已知问题:触摸手势下滑能最小化所有窗口显示桌面,但上滑不会进入此函数不会还原桌面,想还原窗口仍需下滑
+        if (GetTickCount64() - s_last_tick > 200)
+        {
+            WindShowDesktop::showDesktop();
+            s_last_tick = ::GetTickCount64();
+        }
     }
     else
     {
