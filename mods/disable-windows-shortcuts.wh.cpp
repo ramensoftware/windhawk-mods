@@ -602,6 +602,16 @@ BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
 {
     if (ShouldBlockHotkey(fsModifiers, vk))
     {
+        // If the hotkey is a known hardcoded shell key (like Win+A for Action Center),
+        // we MUST let Explorer successfully register it. If we fake a failure here, 
+        // Explorer components fail to initialize and the user can't even open them 
+        // with a manual mouse click on the taskbar tray icons!
+        // The physical keyboard shortcut will still be blocked safely by our DWM LL hook.
+        if (IsKnownHardcodedHotkey(fsModifiers, vk))
+        {
+            return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
+        }
+
         SetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
         return FALSE;
     }
