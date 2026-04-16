@@ -51,6 +51,9 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 - Win key (Start Menu) is handled by the "Block Start Menu and Hosts" mod
 - Win+L (Lock PC) cannot be blocked through standard hooks
 - Win+Q is redundant with Win+S (both open Search)
+
+## Known Limitations
+- A small number of system shortcuts (Win+A, Win+K, Win+P, Win+U, Win+Tab, and Win+Arrows) are hardcoded into the OS at a low level. While this mod successfully blocks them from performing their default Windows actions, they cannot be freed up to be registered by third-party apps (like AutoHotkey or PowerToys). When these specific shortcuts are disabled, they simply do nothing.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -577,15 +580,11 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
         if (!hasShift) {
             // Hardcoded keys that bypass RegisterHotKey
             if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || 
-                vk == VK_HOME || vk == VK_ESCAPE || vk == VK_SPACE ||
-                vk == VK_OEM_PERIOD || vk == VK_OEM_1 || // Emoji picker (. and ;)
-                vk == 'A' || vk == 'C' || vk == 'G' || vk == 'H' || 
-                vk == 'K' || vk == 'N' || vk == 'P' || vk == 'V' || 
-                vk == 'W' || vk == 'Z')
+                vk == 'A' || vk == 'K' || vk == 'P' || vk == 'U')
                 return true;
         } else {
-            // Win+Shift+Arrows, Win+Shift+S
-            if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || vk == 'S')
+            // Win+Shift+Arrows
+            if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
                 return true;
         }
     }
