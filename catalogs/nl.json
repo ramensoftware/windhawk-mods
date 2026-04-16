@@ -6467,7 +6467,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1774614573000,
+                "updated": 1776376515000,
                 "users": 21
             },
             "metadata": {
@@ -6477,11 +6477,12 @@
                 "github": "https://github.com/bcrtvkcs",
                 "homepage": "https://grdigital.pro",
                 "include": [
-                    "nvcontainer.exe"
+                    "nvcontainer.exe",
+                    "NVDisplay.Container.exe"
                 ],
                 "name": "Hide NVIDIA Control Panel Missing Dialog",
                 "twitter": "https://x.com/bcrtvkcs",
-                "version": "1.1.0"
+                "version": "1.1.1"
             }
         },
         "office-ui-reverter": {
