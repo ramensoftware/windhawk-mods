@@ -6,7 +6,7 @@
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lshlwapi -ladvapi32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,7 +30,7 @@ Instantly toggle between two audio output devices from your system tray — no d
 
 ### v1.1.0
 - **New:** Right-click context menu — auto-detects all active audio outputs and lets you assign Device 1 and Device 2 directly from a live list. No more typing device names manually.
-- **New:** Device selections persist across restarts via the registry (`HKCU\Software\WindHawk\AudioSwap`).
+- **New:** Device selections persist across restarts.
 - **Improved:** Toggle now matches devices by their unique system ID instead of a name substring search — works correctly regardless of how Windows names your device.
 - **Improved:** Tray tooltip prompts you to configure on first run instead of showing "Unknown Device".
 - **Removed:** Device name text fields from the Settings tab (replaced by the right-click menu).
@@ -70,7 +70,6 @@ Instantly toggle between two audio output devices from your system tray — no d
 #include <mmdeviceapi.h>
 #include <propidl.h>
 #include <functiondiscoverykeys_devpkey.h>
-#include <winreg.h>
 
 #define TRAY_ICON_ID 1
 #define WM_TRAY_CALLBACK (WM_USER + 1)
@@ -91,7 +90,7 @@ static HICON g_iconDev2 = nullptr;
 static DWORD g_lastClickTime = 0;
 static UINT g_taskbarCreatedMsg = 0;
 
-// Cached device selections (loaded from registry)
+// Cached device selections (loaded from Windhawk storage)
 static WCHAR g_cachedDev1Id[512]   = {0};
 static WCHAR g_cachedDev1Name[256] = {0};
 static WCHAR g_cachedDev2Id[512]   = {0};
@@ -133,54 +132,35 @@ int GetIconIndex(PCWSTR iconSetting) {
 }
 
 void LoadDeviceSelections() {
-    // Zero out first so stale data is cleared if key doesn't exist
     g_cachedDev1Id[0] = g_cachedDev1Name[0] = L'\0';
     g_cachedDev2Id[0] = g_cachedDev2Name[0] = L'\0';
 
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\WindHawk\\AudioSwap",
-                      0, KEY_READ, &hKey) != ERROR_SUCCESS) {
-        return;
-    }
+    auto load = [](PCWSTR key, PWSTR buf, int size) {
+        PCWSTR val = Wh_GetStringValue(key);
+        if (val) {
+            lstrcpynW(buf, val, size);
+            Wh_FreeStringValue(val);
+        }
+    };
 
-    DWORD size;
-    size = sizeof(g_cachedDev1Id);
-    RegQueryValueExW(hKey, L"Device1Id",   nullptr, nullptr, (LPBYTE)g_cachedDev1Id,   &size);
-    size = sizeof(g_cachedDev1Name);
-    RegQueryValueExW(hKey, L"Device1Name", nullptr, nullptr, (LPBYTE)g_cachedDev1Name, &size);
-    size = sizeof(g_cachedDev2Id);
-    RegQueryValueExW(hKey, L"Device2Id",   nullptr, nullptr, (LPBYTE)g_cachedDev2Id,   &size);
-    size = sizeof(g_cachedDev2Name);
-    RegQueryValueExW(hKey, L"Device2Name", nullptr, nullptr, (LPBYTE)g_cachedDev2Name, &size);
-
-    RegCloseKey(hKey);
+    load(L"Device1Id",   g_cachedDev1Id,   512);
+    load(L"Device1Name", g_cachedDev1Name, 256);
+    load(L"Device2Id",   g_cachedDev2Id,   512);
+    load(L"Device2Name", g_cachedDev2Name, 256);
 }
 
 void SaveDeviceSelection(int slot, PCWSTR deviceId, PCWSTR friendlyName) {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\WindHawk\\AudioSwap",
-                        0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE,
-                        nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
-        return;
-    }
-
     if (slot == 1) {
-        RegSetValueExW(hKey, L"Device1Id",   0, REG_SZ, (const BYTE*)deviceId,
-                       (lstrlenW(deviceId) + 1) * sizeof(WCHAR));
-        RegSetValueExW(hKey, L"Device1Name", 0, REG_SZ, (const BYTE*)friendlyName,
-                       (lstrlenW(friendlyName) + 1) * sizeof(WCHAR));
+        Wh_SetStringValue(L"Device1Id",   deviceId);
+        Wh_SetStringValue(L"Device1Name", friendlyName);
         lstrcpynW(g_cachedDev1Id,   deviceId,     512);
         lstrcpynW(g_cachedDev1Name, friendlyName, 256);
     } else {
-        RegSetValueExW(hKey, L"Device2Id",   0, REG_SZ, (const BYTE*)deviceId,
-                       (lstrlenW(deviceId) + 1) * sizeof(WCHAR));
-        RegSetValueExW(hKey, L"Device2Name", 0, REG_SZ, (const BYTE*)friendlyName,
-                       (lstrlenW(friendlyName) + 1) * sizeof(WCHAR));
+        Wh_SetStringValue(L"Device2Id",   deviceId);
+        Wh_SetStringValue(L"Device2Name", friendlyName);
         lstrcpynW(g_cachedDev2Id,   deviceId,     512);
         lstrcpynW(g_cachedDev2Name, friendlyName, 256);
     }
-
-    RegCloseKey(hKey);
 }
 
 void LoadUserIconsAndSettings() {
