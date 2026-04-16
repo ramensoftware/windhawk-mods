@@ -925,6 +925,21 @@ void Wh_ModUninit()
         CloseHandle(g_restartExplorerPromptThread);
         g_restartExplorerPromptThread = nullptr;
     }
+
+    if (g_isExplorer)
+    {
+        // When the mod is disabled or removed, the DLL is unloaded instantly.
+        // We use a detached PowerShell process to prompt for an Explorer restart
+        // so it survives the DLL unloading and doesn't block the Windhawk thread.
+        WCHAR commandLine[] = L"powershell.exe -WindowStyle Hidden -Command \"$wshell = New-Object -ComObject Wscript.Shell; $result = $wshell.Popup('The Disable Windows Shortcuts mod has been unloaded.\\n\\nTo fully restore standard Windows shortcuts (like Win+E), Explorer needs to be restarted.\\n\\nRestart Explorer now?', 0, 'Windhawk - Disable Windows Shortcuts', 4132); if ($result -eq 6) { Stop-Process -Name explorer -Force; Start-Process explorer }\"";
+        STARTUPINFO si = { .cb = sizeof(si) };
+        PROCESS_INFORMATION pi{};
+        if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+        {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+    }
 }
 
 void Wh_ModSettingsChanged()
