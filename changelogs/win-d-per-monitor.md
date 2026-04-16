@@ -1,3 +1,16 @@
+## 1.5.260416 ([Apr 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6f8261d513e2718b604e812c197ca9d384a7d91c/mods/win-d-per-monitor.wh.cpp))
+
+### 2026-04-16 (v1.5.260416)
+- Fixed repeated invocation of touchpad gesture by adding debounce logic to ignore redundant calls
+- 修复触摸板手势重复进入问题，添加防抖逻辑忽略连续重复调用
+
+Known issues:
+- Touchpad swipe-down can minimize all windows and show the desktop, but swipe-up does not trigger this function, so windows cannot be restored via gesture — swipe down again to toggle
+- 已知问题：触摸板下滑可最小化窗口显示桌面，但上滑不会进入此函数，无法通过手势还原窗口，需再次下滑切换
+
+Fixes:
+- [#3794](https://github.com/ramensoftware/windhawk-mods/issues/3794)
+
 ## 1.4.260415 ([Apr 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/100d1ccbed6a49342e5f3d9c1f025a577525c223/mods/win-d-per-monitor.wh.cpp))
 
 * Switched hook target from `_HandleGlobalHotkey` to `_RaiseDesktop`, enabling per-monitor show desktop for both Win+D hotkey and touchpad gestures
