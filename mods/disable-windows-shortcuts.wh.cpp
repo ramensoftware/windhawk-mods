@@ -696,6 +696,16 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
         bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
         bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
+        // Ignore programmatically injected keystrokes. 
+        // This is extremely important because when a user manually clicks on a taskbar
+        // tray icon (like Network/Volume to open Quick Settings), Explorer actually 
+        // synthesizes a fake Win+A keystroke to trigger the flyout. If we block 
+        // injected keys, clicking the tray icon with the mouse will fail!
+        if (pKeyBoard->flags & LLKHF_INJECTED)
+        {
+            return CallNextHookEx(g_hHook, nCode, wParam, lParam);
+        }
+
         // Fast path for dummy key (used to mask Start Menu)
         if (vkCode == 0xFF)
             return CallNextHookEx(g_hHook, nCode, wParam, lParam);
