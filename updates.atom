@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-16T11:50:54.000Z</updated>
+    <updated>2026-04-16T12:09:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.1]]></title>
+        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#4c017a52c6350a00b79133b6c8fec58cf22450bb</id>
+        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
+        <updated>2026-04-16T12:09:51.000Z</updated>
+        <content type="html"><![CDATA[<p>Add error messagebox on denied access</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win+D per monitor(show desktop) 1.5.260416]]></title>
         <id>https://windhawk.net/mods/win-d-per-monitor#6f8261d513e2718b604e812c197ca9d384a7d91c</id>
@@ -413,51 +424,6 @@ modified.</li>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 3.3]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#e524a209a6628714426fe8bec453199be01f3e41</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-04-10T10:24:07.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li>Added earlier pending-save flushes at natural action boundaries, such as document/window deactivation, focus loss, close/minimize, and other transition points.</li>
-<li>Added native Word application event handling through COM connection points, with support for <code>DocumentBeforeSave</code>, <code>DocumentBeforeClose</code>, <code>DocumentChange</code>, and <code>WindowDeactivate</code>.</li>
-<li>Added Save As / rename state migration so the tracked document identity can move to the new file name/path without losing autosave context.</li>
-<li>Added per-document COM identity tracking in addition to path-based tracking, reducing ambiguity when Word changes document identity in-place.</li>
-<li>Added per-instance Word binding so the mod is more likely to stay attached to the correct <code>WINWORD.EXE</code> instance instead of relying on generic global resolution.</li>
-<li>Added explicit handling for Protected View so autosave is deferred/skipped more cleanly in that mode.</li>
-<li>Added automation-busy recovery state so pending save work is retried promptly once Word becomes responsive again.</li>
-</ul>
-<h3 id="improved">Improved</h3>
-<ul>
-<li>Improved active document resolution by walking the native object chain more carefully instead of relying only on <code>Application.ActiveDocument</code>.</li>
-<li>Improved handling of multi-window and non-trivial Word UI surfaces by resolving the current document from the active native object, parent chain, and active window context.</li>
-<li>Improved action coalescing so fast sequences of edits/formatting operations are more likely to collapse into one autosave at the end of the burst.</li>
-<li>Improved transition flush behavior so pending changes are more reliably saved for the previous document before switching away.</li>
-<li>Improved document-state polling by combining message-based heuristics with native Word events instead of relying only on one mechanism.</li>
-<li>Improved busy-state recovery so COM rejection/backoff now feeds into a faster recovery path once Word is available again.</li>
-<li>Improved status logging by deduplicating repeated messages and making skip/defer reasons clearer.</li>
-<li>Improved lifecycle cleanup for timers, event connections, status caches, and transient runtime state across init, unload, and settings reload.</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li>Fixed document tracking after <code>Save As</code> / rename so internal dirty/pending state is not left behind on the old document path.</li>
-<li>Fixed a class of cross-instance risks where automation could resolve against the wrong Word application instance.</li>
-<li>Fixed some false-positive edit detections by narrowing <code>WM_KEYDOWN</code> handling and leaning more on <code>WM_CHAR</code> for printable text.</li>
-<li>Fixed pending-save handling for cases where Word had already saved the document manually or internally, allowing the mod to clear stale pending work more accurately.</li>
-<li>Fixed event/timer coordination so document-state refresh and autosave recovery are less likely to fight each other.</li>
-<li>Fixed cleanup of native Word event subscriptions on unload/settings reload to avoid stale COM event hookups.</li>
-</ul>
-<h3 id="notes">Notes</h3>
-<ul>
-<li>The architecture is now hybrid: native Word events are used where available, while the existing <code>TranslateMessage</code>-based logic remains as a fallback.</li>
-<li>No new settings were added; this update focuses on convenience, correctness, and behavior polish on top of the existing feature set.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

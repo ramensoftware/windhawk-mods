@@ -6785,7 +6785,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1776246254000,
+                "updated": 1776341391000,
                 "users": 12
             },
             "metadata": {
@@ -6797,7 +6797,7 @@
                     "*"
                 ],
                 "name": "Paste Clipboard Content to Explorer",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "per-app-language-preferences": {
