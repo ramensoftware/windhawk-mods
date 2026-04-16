@@ -135,18 +135,10 @@ void LoadDeviceSelections() {
     g_cachedDev1Id[0] = g_cachedDev1Name[0] = L'\0';
     g_cachedDev2Id[0] = g_cachedDev2Name[0] = L'\0';
 
-    auto load = [](PCWSTR key, PWSTR buf, int size) {
-        PCWSTR val = Wh_GetStringValue(key);
-        if (val) {
-            lstrcpynW(buf, val, size);
-            Wh_FreeStringValue(val);
-        }
-    };
-
-    load(L"Device1Id",   g_cachedDev1Id,   512);
-    load(L"Device1Name", g_cachedDev1Name, 256);
-    load(L"Device2Id",   g_cachedDev2Id,   512);
-    load(L"Device2Name", g_cachedDev2Name, 256);
+    Wh_GetStringValue(L"Device1Id",   g_cachedDev1Id,   ARRAYSIZE(g_cachedDev1Id));
+    Wh_GetStringValue(L"Device1Name", g_cachedDev1Name, ARRAYSIZE(g_cachedDev1Name));
+    Wh_GetStringValue(L"Device2Id",   g_cachedDev2Id,   ARRAYSIZE(g_cachedDev2Id));
+    Wh_GetStringValue(L"Device2Name", g_cachedDev2Name, ARRAYSIZE(g_cachedDev2Name));
 }
 
 void SaveDeviceSelection(int slot, PCWSTR deviceId, PCWSTR friendlyName) {
