@@ -2,7 +2,7 @@
 // @id              paste-clipboard-content-to-explorer
 // @name            Paste Clipboard Content to Explorer
 // @description     Paste text and images from clipboard as files in Explorer and in file dialogs
-// @version         1.0
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -24,6 +24,7 @@ on the desktop and in open/save file dialogs.
 - Works with network folders (UNC paths)
 - Paste menu item is grayed out in virtual folders (This PC, Network, etc.)
 - Ctrl+V and context menu Paste both work
+- Shows system error dialog when pasting into a folder without write access
 */
 // ==/WindhawkModReadme==
 
@@ -44,8 +45,7 @@ static HWND g_lastContextMenuShellView = nullptr;
 static bool PerformPaste(HWND sourceWindow);
 
 // ============================================================
-//  Lazy GDI+ initialization — called only at real use, 
-//  not at startup
+//  Lazy GDI+ initialization
 // ============================================================
 static bool EnsureGdiplusInitialized()
 {
@@ -165,18 +165,75 @@ static bool GetPngClsid(CLSID* clsid)
 }
 
 // ============================================================
-//  Save image — GDI+ lazy initialization
+//  Check write access to directory without creating files
 // ============================================================
-static bool SaveImageFromClipboard(const std::wstring& filePath)
+static DWORD CheckDirectoryWriteAccess(const std::wstring& dir)
 {
-    // Инициализируем GDI+ только когда реально нужно
-    if (!EnsureGdiplusInitialized())
-        return false;
+    HANDLE h = CreateFileW(
+        dir.c_str(),
+        GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS,
+        nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    CloseHandle(h);
+    return 0;
+}
 
-    if (!OpenClipboard(nullptr)) return false;
+// ============================================================
+//  Show system access denied message
+// ============================================================
+static void ShowAccessDeniedMessage(HWND hwnd, const std::wstring& path)
+{
+    LPWSTR sysMsgBuf = nullptr;
+    FormatMessageW(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER |
+        FORMAT_MESSAGE_FROM_SYSTEM     |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr,
+        ERROR_ACCESS_DENIED,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPWSTR)&sysMsgBuf,
+        0,
+        nullptr);
+
+    std::wstring msg;
+    if (sysMsgBuf)
+    {
+        msg = sysMsgBuf;
+        LocalFree(sysMsgBuf);
+        while (!msg.empty() &&
+               (msg.back() == L'\n' || msg.back() == L'\r'))
+            msg.pop_back();
+    }
+    else
+    {
+        msg = L"Access is denied.";
+    }
+
+    msg += L"\n\n";
+    msg += path;
+
+    MessageBoxW(hwnd, msg.c_str(), nullptr,
+                MB_OK | MB_ICONERROR | MB_SYSTEMMODAL);
+}
+
+// ============================================================
+//  Save image — returns error code (0 = success)
+// ============================================================
+static DWORD SaveImageFromClipboard(const std::wstring& filePath,
+                                    const std::wstring& targetDir)
+{
+    if (!EnsureGdiplusInitialized())
+        return ERROR_NOT_SUPPORTED;
+
+    if (!OpenClipboard(nullptr)) return GetLastError();
 
     CLSID pngClsid;
-    bool ok = false;
+    DWORD errCode = ERROR_NOT_SUPPORTED;
 
     if (GetPngClsid(&pngClsid))
     {
@@ -230,22 +287,32 @@ static bool SaveImageFromClipboard(const std::wstring& filePath)
 
         if (bmp)
         {
-            ok = (bmp->Save(filePath.c_str(), &pngClsid, nullptr) == Ok);
+            Status st = bmp->Save(filePath.c_str(), &pngClsid, nullptr);
+            if (st == Ok)
+            {
+                errCode = 0;
+            }
+            else
+            {
+                // GDI+ не выставляет LastError — проверяем права на папку
+                DWORD accessErr = CheckDirectoryWriteAccess(targetDir);
+                errCode = (accessErr != 0) ? accessErr : ERROR_WRITE_FAULT;
+            }
             delete bmp;
         }
     }
 
     CloseClipboard();
-    return ok;
+    return errCode;
 }
 
 // ============================================================
-//  Save text
+//  Save text — returns error code (0 = success)
 // ============================================================
-static bool SaveTextFromClipboard(const std::wstring& filePath)
+static DWORD SaveTextFromClipboard(const std::wstring& filePath)
 {
-    if (!OpenClipboard(nullptr)) return false;
-    bool ok = false;
+    if (!OpenClipboard(nullptr)) return GetLastError();
+    DWORD errCode = ERROR_NO_DATA;
     HANDLE h = GetClipboardData(CF_UNICODETEXT);
     if (h)
     {
@@ -263,13 +330,17 @@ static bool SaveTextFromClipboard(const std::wstring& filePath)
                 DWORD bytes = (DWORD)(wcslen(text) * sizeof(WCHAR));
                 WriteFile(hFile, text, bytes, &written, nullptr);
                 CloseHandle(hFile);
-                ok = true;
+                errCode = 0;
+            }
+            else
+            {
+                errCode = GetLastError();
             }
             GlobalUnlock(h);
         }
     }
     CloseClipboard();
-    return ok;
+    return errCode;
 }
 
 // ============================================================
@@ -594,6 +665,66 @@ static bool IsPasteCmd(UINT id)
 }
 
 // ============================================================
+//  Perform paste
+// ============================================================
+static bool PerformPaste(HWND sourceWindow)
+{
+    if (!IsShellViewWindow(sourceWindow))  return false;
+    if (!HasNonFileClipboardContent())     return false;
+
+    std::wstring targetPath;
+    if (!GetCurrentFolderFromWindow(sourceWindow, targetPath))
+    {
+        Wh_Log(L"PerformPaste: window not recognized, hwnd=%p", sourceWindow);
+        return false;
+    }
+    if (targetPath.empty())
+    {
+        Wh_Log(L"PerformPaste: virtual folder, skipping");
+        return false;
+    }
+
+    Wh_Log(L"PerformPaste: target='%s'", targetPath.c_str());
+
+    std::wstring baseName = GetDefaultBaseName();
+    std::wstring filePath;
+    DWORD errCode = ERROR_NOT_SUPPORTED;
+
+    bool hasImage = IsClipboardFormatAvailable(CF_BITMAP)  ||
+                    IsClipboardFormatAvailable(CF_DIB)     ||
+                    IsClipboardFormatAvailable(CF_DIBV5);
+    bool hasText  = IsClipboardFormatAvailable(CF_UNICODETEXT);
+
+    if (hasImage)
+    {
+        filePath = GetUniquePath(targetPath, baseName, L".png");
+        errCode  = SaveImageFromClipboard(filePath, targetPath);
+    }
+    else if (hasText)
+    {
+        filePath = GetUniquePath(targetPath, baseName, L".txt");
+        errCode  = SaveTextFromClipboard(filePath);
+    }
+
+    if (errCode == 0)
+    {
+        Wh_Log(L"PerformPaste: created '%s'", filePath.c_str());
+        SHChangeNotify(SHCNE_CREATE,    SHCNF_PATH | SHCNF_FLUSH,
+                       filePath.c_str(),   nullptr);
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSH,
+                       targetPath.c_str(), nullptr);
+        return true;
+    }
+    else
+    {
+        Wh_Log(L"PerformPaste: failed, error=%u", errCode);
+        if (errCode == ERROR_ACCESS_DENIED)
+            ShowAccessDeniedMessage(sourceWindow, targetPath);
+        return false;
+    }
+}
+
+// ============================================================
 //  Hooks
 // ============================================================
 
@@ -719,67 +850,12 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg)
 }
 
 // ============================================================
-//  Perform paste
-// ============================================================
-static bool PerformPaste(HWND sourceWindow)
-{
-    if (!IsShellViewWindow(sourceWindow))  return false;
-    if (!HasNonFileClipboardContent())     return false;
-
-    std::wstring targetPath;
-    if (!GetCurrentFolderFromWindow(sourceWindow, targetPath))
-    {
-        Wh_Log(L"PerformPaste: window not recognized, hwnd=%p", sourceWindow);
-        return false;
-    }
-    if (targetPath.empty())
-    {
-        Wh_Log(L"PerformPaste: virtual folder, skipping");
-        return false;
-    }
-
-    Wh_Log(L"PerformPaste: target='%s'", targetPath.c_str());
-
-    std::wstring baseName = GetDefaultBaseName();
-    std::wstring filePath;
-    bool success = false;
-
-    bool hasImage = IsClipboardFormatAvailable(CF_BITMAP)  ||
-                    IsClipboardFormatAvailable(CF_DIB)     ||
-                    IsClipboardFormatAvailable(CF_DIBV5);
-    bool hasText  = IsClipboardFormatAvailable(CF_UNICODETEXT);
-
-    if (hasImage)
-    {
-        filePath = GetUniquePath(targetPath, baseName, L".png");
-        success  = SaveImageFromClipboard(filePath);
-    }
-    else if (hasText)
-    {
-        filePath = GetUniquePath(targetPath, baseName, L".txt");
-        success  = SaveTextFromClipboard(filePath);
-    }
-
-    if (success)
-    {
-        Wh_Log(L"PerformPaste: created '%s'", filePath.c_str());
-        SHChangeNotify(SHCNE_CREATE,    SHCNF_PATH | SHCNF_FLUSH,
-                       filePath.c_str(),   nullptr);
-        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSH,
-                       targetPath.c_str(), nullptr);
-    }
-    return success;
-}
-
-// ============================================================
 //  Init / Uninit
 // ============================================================
 BOOL Wh_ModInit()
 {
     Wh_Log(L"PasteClipboardToExplorer: Init");
 
-    // Initializing only the critical section for thread-safe lazy init GDI+
-    // GDI+ is not initialized here, only at first use.
     InitializeCriticalSection(&g_gdiplusCS);
     g_gdiplusCSInit = true;
 
