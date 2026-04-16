@@ -2,7 +2,7 @@
 // @id              nvidia-control-panel-missing-dialog-hider
 // @name            Hide NVIDIA Control Panel Missing Dialog
 // @description     Hides the nvcontainer.exe popup that says NVIDIA Control Panel is not found
-// @version         1.1.1
+// @version         1.1.2
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -38,7 +38,7 @@ On mod initialization, any already-visible instance of the dialog is also hidden
 
 ## Compatibility
 - Windows 10 and Windows 11
-- Targets `nvcontainer.exe` only
+- Targets `nvcontainer.exe` and `NVDisplay.Container.exe` only
 */
 // ==/WindhawkModReadme==
 
