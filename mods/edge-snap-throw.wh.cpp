@@ -2,7 +2,7 @@
 // @id              edge-snap-throw
 // @name            Edge Snap Throw
 // @description     Slide a window into a screen edge and it snaps like native Windows snap
-// @version         1.6.0
+// @version         1.9.0
 // @author          getrektbynoob20
 // @github          https://github.com/getrektbynoob20
 // @include         *
@@ -13,28 +13,28 @@
 /*
 # Edge Snap Throw
 
-![Demo](https://raw.githubusercontent.com/getrektbynoob20/Edge-snap/refs/heads/main/edge-snap.gif)
+![Demo](https://raw.githubusercontent.com/getrektbynoob20/Edge-snap/refs/heads/main/edge-snap2.0.gif)
 
-Works with the Slick Window Arrangement mod. When the sliding animation
-moves a window into a screen edge fast enough, it snaps using native
-Windows snap.
+Works best with **[Slick Window Arrangement](https://windhawk.net/mods/slick-window-arrangement)** by m417z.
+Install that mod first. It adds sliding momentum when you release a dragged window.
+This mod detects when that sliding window hits a screen edge fast enough and snaps it.
 
 Snap zones:
 - Left or right edge: 50 percent snap
 - Top edge: maximize
 - Corners: 25 percent snap
 
-Corner detection uses both position (corner zone) and throw direction.
+When you drag a snapped window back out, it restores to its original size (toggle in settings).
 
-## All settings explained
+## Settings
 
-- Velocity Threshold: how fast (px/sec) the window must be moving to trigger any snap. Lower = easier to snap. Default 500.
-- Corner Zone: how many pixels from a screen corner the window center must land to trigger a corner snap. Default 120.
-- Diagonal Angle: how close to a perfect 45 degree angle your throw must be to count as diagonal. Lower = stricter. Default 20.
-- Diagonal Min Speed: minimum speed on each axis (px/sec) for a throw to be considered diagonal. Prevents slow drifts from counting. Default 100.
-- Diagonal Axis Ratio: horizontal speed must be at least this percent of vertical (and vice versa) for diagonal detection. 40 means neither axis can be less than 40 percent of the other. Default 40.
-- Direction Threshold: minimum px/sec on an axis before it counts as intentional direction. Default 30.
-- Snap Settle Delay: ms to wait after sending snap keys before re-enabling Snap Assist. Increase if Snap Assist still shows. Default 300.
+- Velocity Threshold: how fast the window must be moving to trigger a snap. Default 500.
+- Corner Zone: pixels from a corner that count as a corner hit. Default 120.
+- Diagonal Angle: how close to 45 degrees a throw must be to count as diagonal. Default 20.
+- Diagonal Min Speed: minimum speed per axis for diagonal detection. Default 100.
+- Diagonal Axis Ratio: how balanced both axes must be for diagonal detection. Default 40.
+- Direction Threshold: minimum speed before a direction counts as intentional. Default 30.
+- Restore On Drag: when on, dragging a snapped window restores its original size. Default on.
 */
 // ==/WindhawkModReadme==
 
@@ -52,30 +52,31 @@ Corner detection uses both position (corner zone) and throw direction.
   $name: Diagonal Axis Ratio percent (default 40)
 - DirectionThreshold: 30
   $name: Direction Threshold px per second (default 30)
-- SnapSettleDelay: 300
-  $name: Snap Settle Delay milliseconds (default 300)
+- RestoreOnDrag: true
+  $name: Restore original size when dragging out of snap (default on)
 */
 // ==/WindhawkModSettings==
 
 #include <dwmapi.h>
 #include <windowsx.h>
-#include <winreg.h>
 
 #include <atomic>
 #include <cmath>
 #include <mutex>
 #include <unordered_map>
 
+// ── Settings ──────────────────────────────────────────────────────────────────
 struct Settings {
-    int velocityThreshold;
-    int cornerZone;
-    int diagonalAngle;
-    int diagonalMinSpeed;
-    int diagonalAxisRatio;
-    int directionThreshold;
-    int snapSettleDelay;
+    int  velocityThreshold;
+    int  cornerZone;
+    int  diagonalAngle;
+    int  diagonalMinSpeed;
+    int  diagonalAxisRatio;
+    int  directionThreshold;
+    bool restoreOnDrag;
 } g_settings;
 
+// ── Snap zone ─────────────────────────────────────────────────────────────────
 enum class SnapZone {
     None, Maximize, Left, Right,
     TopLeft, TopRight, BottomLeft, BottomRight,
@@ -86,11 +87,10 @@ struct PosSnapshot { DWORD tick; int x, y; };
 
 struct WinTrack {
     PosSnapshot history[6]{};
-    int  head   = 0;
-    int  count  = 0;
-    bool active = false;
+    int  head  = 0;
+    int  count = 0;
 
-    void Reset() { count = 0; active = false; }
+    void Reset() { count = 0; }
 
     void Push(int x, int y) {
         DWORD now = GetTickCount();
@@ -100,7 +100,6 @@ struct WinTrack {
         history[idx] = { now, x, y };
         if (count < 6) count++;
         else           head = (head + 1) % 6;
-        active = true;
     }
 
     bool Velocity(double* vx, double* vy) const {
@@ -124,6 +123,71 @@ struct WinTrack {
 std::mutex g_trackMutex;
 std::unordered_map<HWND, WinTrack> g_tracks;
 
+// ── Restore-on-drag state ─────────────────────────────────────────────────────
+struct SnapRestore {
+    RECT originalRect; // size before snap — only w/h matter
+    bool restored;     // true once we have done the restore
+};
+
+std::mutex g_restoreMutex;
+std::unordered_map<HWND, SnapRestore> g_restoreMap;
+
+// ── SetWindowPos hook (forward declared so RestoreSubclassProc can use it) ───
+using SetWindowPos_t = decltype(&SetWindowPos);
+SetWindowPos_t pOrigSetWindowPos;
+
+// ── Restore subclass proc ─────────────────────────────────────────────────────
+// Installed on the window's OWN thread (from SetWindowPosHook which runs there).
+// Intercepts WM_MOVING to resize the window back to its original size on the
+// first drag frame, exactly like native Windows snap restore does.
+LRESULT CALLBACK RestoreSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                     UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_MOVING) {
+        std::lock_guard<std::mutex> lock(g_restoreMutex);
+        auto it = g_restoreMap.find(hWnd);
+        if (it != g_restoreMap.end() && !it->second.restored) {
+            it->second.restored = true;
+
+            RECT& orig = it->second.originalRect;
+            int w = orig.right  - orig.left;
+            int h = orig.bottom - orig.top;
+
+            POINT cursor;
+            GetCursorPos(&cursor);
+
+            // Write into the rect Windows is using for drag positioning
+            RECT* r = (RECT*)lParam;
+            r->left   = cursor.x - w / 2;
+            r->top    = cursor.y - 10;
+            r->right  = r->left + w;
+            r->bottom = r->top  + h;
+
+            // Actually resize the window — WM_MOVING lParam only sets position
+            pOrigSetWindowPos(hWnd, nullptr, r->left, r->top, w, h,
+                SWP_NOZORDER | SWP_NOACTIVATE);
+
+            return TRUE;
+        }
+    }
+    else if (uMsg == WM_EXITSIZEMOVE) {
+        {
+            std::lock_guard<std::mutex> lock(g_restoreMutex);
+            g_restoreMap.erase(hWnd);
+        }
+        RemoveWindowSubclass(hWnd, RestoreSubclassProc, 0);
+    }
+    else if (uMsg == WM_NCDESTROY) {
+        {
+            std::lock_guard<std::mutex> lock(g_restoreMutex);
+            g_restoreMap.erase(hWnd);
+        }
+        RemoveWindowSubclass(hWnd, RestoreSubclassProc, 0);
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 static RECT GetWorkArea(HWND hWnd) {
     HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
@@ -143,10 +207,8 @@ static bool IsDiagonal(double vx, double vy) {
     double ax = fabs(vx), ay = fabs(vy);
     double minSpeed = (double)g_settings.diagonalMinSpeed;
     double ratio    = g_settings.diagonalAxisRatio / 100.0;
-
     if (ax < minSpeed || ay < minSpeed) return false;
     if (ax < ay * ratio || ay < ax * ratio) return false;
-
     constexpr double PI = 3.14159265358979323846;
     double angle = fabs(atan2(ay, ax) * 180.0 / PI);
     return fabs(angle - 45.0) <= (double)g_settings.diagonalAngle;
@@ -154,8 +216,7 @@ static bool IsDiagonal(double vx, double vy) {
 
 static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
     double speed = sqrt(vx * vx + vy * vy);
-    if (speed < g_settings.velocityThreshold)
-        return SnapZone::None;
+    if (speed < g_settings.velocityThreshold) return SnapZone::None;
 
     RECT frame = GetFrameRect(hWnd);
     RECT wa    = GetWorkArea(hWnd);
@@ -167,8 +228,7 @@ static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
     bool hitTop    = frame.top    <= wa.top;
     bool hitBottom = frame.bottom >= wa.bottom;
 
-    if (!hitLeft && !hitRight && !hitTop && !hitBottom)
-        return SnapZone::None;
+    if (!hitLeft && !hitRight && !hitTop && !hitBottom) return SnapZone::None;
 
     int cx = (frame.left + frame.right)  / 2;
     int cy = (frame.top  + frame.bottom) / 2;
@@ -182,8 +242,7 @@ static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
     bool throwRight = vx >  (double)dt;
     bool throwUp    = vy < -(double)dt;
     bool throwDown  = vy >  (double)dt;
-
-    bool diagonal = IsDiagonal(vx, vy);
+    bool diagonal   = IsDiagonal(vx, vy);
 
     // Two-edge hits
     if (hitLeft  && hitTop)    return SnapZone::TopLeft;
@@ -191,7 +250,7 @@ static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
     if (hitLeft  && hitBottom) return SnapZone::BottomLeft;
     if (hitRight && hitBottom) return SnapZone::BottomRight;
 
-    // One-edge hit + in corner zone
+    // One edge + corner zone
     if (hitTop    && nearLeft)   return SnapZone::TopLeft;
     if (hitTop    && nearRight)  return SnapZone::TopRight;
     if (hitBottom && nearLeft)   return SnapZone::BottomLeft;
@@ -203,43 +262,25 @@ static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
 
     // Diagonal throw direction
     if (diagonal) {
-        if (hitLeft  && throwUp)    return SnapZone::TopLeft;
-        if (hitLeft  && throwDown)  return SnapZone::BottomLeft;
-        if (hitRight && throwUp)    return SnapZone::TopRight;
-        if (hitRight && throwDown)  return SnapZone::BottomRight;
-        if (hitTop   && throwLeft)  return SnapZone::TopLeft;
-        if (hitTop   && throwRight) return SnapZone::TopRight;
-        if (hitBottom&& throwLeft)  return SnapZone::BottomLeft;
-        if (hitBottom&& throwRight) return SnapZone::BottomRight;
+        if (hitLeft   && throwUp)    return SnapZone::TopLeft;
+        if (hitLeft   && throwDown)  return SnapZone::BottomLeft;
+        if (hitRight  && throwUp)    return SnapZone::TopRight;
+        if (hitRight  && throwDown)  return SnapZone::BottomRight;
+        if (hitTop    && throwLeft)  return SnapZone::TopLeft;
+        if (hitTop    && throwRight) return SnapZone::TopRight;
+        if (hitBottom && throwLeft)  return SnapZone::BottomLeft;
+        if (hitBottom && throwRight) return SnapZone::BottomRight;
     }
 
     // Plain edges
-    if (hitTop)    return SnapZone::Maximize;
-    if (hitLeft)   return SnapZone::Left;
-    if (hitRight)  return SnapZone::Right;
+    if (hitTop)   return SnapZone::Maximize;
+    if (hitLeft)  return SnapZone::Left;
+    if (hitRight) return SnapZone::Right;
 
     return SnapZone::None;
 }
 
 // ── Apply snap ────────────────────────────────────────────────────────────────
-static void PressWinKey(BYTE vk) {
-    INPUT inputs[4] = {};
-    inputs[0].type = INPUT_KEYBOARD; inputs[0].ki.wVk = VK_LWIN;
-    inputs[1].type = INPUT_KEYBOARD; inputs[1].ki.wVk = vk;
-    inputs[2].type = INPUT_KEYBOARD; inputs[2].ki.wVk = vk;    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-    inputs[3].type = INPUT_KEYBOARD; inputs[3].ki.wVk = VK_LWIN; inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(4, inputs, sizeof(INPUT));
-}
-
-static void SetSnapAssist(bool enabled) {
-    DWORD val = enabled ? 1 : 0;
-    RegSetKeyValueW(HKEY_CURRENT_USER,
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-        L"SnapAssist", REG_DWORD, &val, sizeof(val));
-    SendNotifyMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-        (LPARAM)L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced");
-}
-
 static void SnapToQuarter(HWND hWnd, SnapZone zone) {
     HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
@@ -248,58 +289,66 @@ static void SnapToQuarter(HWND hWnd, SnapZone zone) {
 
     int halfW = (wa.right  - wa.left) / 2;
     int halfH = (wa.bottom - wa.top)  / 2;
-
     int x = wa.left, y = wa.top;
+
     switch (zone) {
-    case SnapZone::TopLeft:     x = wa.left;        y = wa.top;         break;
-    case SnapZone::TopRight:    x = wa.left + halfW; y = wa.top;         break;
-    case SnapZone::BottomLeft:  x = wa.left;        y = wa.top + halfH; break;
-    case SnapZone::BottomRight: x = wa.left + halfW; y = wa.top + halfH; break;
+    case SnapZone::TopLeft:     x = wa.left;         y = wa.top;         break;
+    case SnapZone::TopRight:    x = wa.left + halfW;  y = wa.top;         break;
+    case SnapZone::BottomLeft:  x = wa.left;         y = wa.top + halfH; break;
+    case SnapZone::BottomRight: x = wa.left + halfW;  y = wa.top + halfH; break;
     default: return;
     }
 
     ShowWindow(hWnd, SW_RESTORE);
     Sleep(30);
-    SetWindowPos(hWnd, nullptr, x, y, halfW, halfH,
+    pOrigSetWindowPos(hWnd, nullptr, x, y, halfW, halfH,
+        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+static void SnapToHalf(HWND hWnd, SnapZone zone) {
+    HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(mon, &mi);
+    RECT wa = mi.rcWork;
+
+    int halfW = (wa.right - wa.left) / 2;
+    int fullH =  wa.bottom - wa.top;
+    int x = (zone == SnapZone::Left) ? wa.left : wa.left + halfW;
+
+    ShowWindow(hWnd, SW_RESTORE);
+    Sleep(30);
+    pOrigSetWindowPos(hWnd, nullptr, x, wa.top, halfW, fullH,
         SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
 static void ApplySnap(HWND hWnd, SnapZone zone) {
     SetForegroundWindow(hWnd);
     Sleep(20);
-
-    // Corners: direct SetWindowPos — no snap engine, no Snap Assist popup
-    if (zone == SnapZone::TopLeft    || zone == SnapZone::TopRight ||
-        zone == SnapZone::BottomLeft || zone == SnapZone::BottomRight) {
-        SnapToQuarter(hWnd, zone);
-        return;
-    }
-
-    // Halves + maximize: suppress Snap Assist around the key send
-    SetSnapAssist(false);
     switch (zone) {
-    case SnapZone::Maximize: ShowWindow(hWnd, SW_MAXIMIZE); break;
-    case SnapZone::Left:     PressWinKey(VK_LEFT);          break;
-    case SnapZone::Right:    PressWinKey(VK_RIGHT);         break;
+    case SnapZone::Maximize:                                  ShowWindow(hWnd, SW_MAXIMIZE); break;
+    case SnapZone::Left:    case SnapZone::Right:             SnapToHalf(hWnd, zone);        break;
+    case SnapZone::TopLeft: case SnapZone::TopRight:
+    case SnapZone::BottomLeft: case SnapZone::BottomRight:    SnapToQuarter(hWnd, zone);     break;
     default: break;
     }
-    Sleep(g_settings.snapSettleDelay);
-    SetSnapAssist(true);
 }
 
 struct SnapThreadParam { HWND hWnd; SnapZone zone; };
 static DWORD WINAPI SnapThreadProc(LPVOID p) {
     auto* sp = reinterpret_cast<SnapThreadParam*>(p);
     ApplySnap(sp->hWnd, sp->zone);
-    { std::lock_guard<std::mutex> lock(g_trackMutex); g_tracks.erase(sp->hWnd); }
+    {
+        std::lock_guard<std::mutex> lock(g_trackMutex);
+        g_tracks.erase(sp->hWnd);
+    }
     delete sp;
     return 0;
 }
 
 // ── Hook SetWindowPos ─────────────────────────────────────────────────────────
-using SetWindowPos_t = decltype(&SetWindowPos);
-SetWindowPos_t pOrigSetWindowPos;
-
+// This hook runs on the window's UI thread (Slick Window Arrangement's slide
+// timer is a thread timer processed by the UI thread's message loop).
+// That means SetWindowSubclass can safely be called here.
 BOOL WINAPI SetWindowPosHook(HWND hWnd, HWND hWndInsertAfter,
     int X, int Y, int cx, int cy, UINT uFlags)
 {
@@ -318,9 +367,28 @@ BOOL WINAPI SetWindowPosHook(HWND hWnd, HWND hWndInsertAfter,
                     SnapZone zone = ClassifyCollision(hWnd, vx, vy);
                     if (zone != SnapZone::None) {
                         track.Reset();
+
+                        // ── Restore-on-drag setup ─────────────────────────
+                        // We're on the window's UI thread here, so
+                        // SetWindowSubclass is safe to call.
+                        // Save rect NOW before the snap changes the size.
+                        // The slide only moves (SWP_NOSIZE) so the current
+                        // size IS the original pre-snap size.
+                        if (g_settings.restoreOnDrag && zone != SnapZone::Maximize) {
+                            RECT rc{};
+                            GetWindowRect(hWnd, &rc);
+                            {
+                                std::lock_guard<std::mutex> rlock(g_restoreMutex);
+                                g_restoreMap[hWnd] = { rc, false };
+                            }
+                            SetWindowSubclass(hWnd, RestoreSubclassProc, 0, 0);
+                        }
+
+                        // Stop the slide and snap on a worker thread so we
+                        // don't block the UI thread with Sleep() calls
                         auto* param = new SnapThreadParam{ hWnd, zone };
                         CreateThread(nullptr, 0, SnapThreadProc, param, 0, nullptr);
-                        return TRUE;
+                        return TRUE; // block this SetWindowPos — slide stops here
                     }
                 }
             } else {
@@ -344,17 +412,16 @@ void LoadSettings() {
     g_settings.diagonalMinSpeed   = Wh_GetIntSetting(L"DiagonalMinSpeed");
     g_settings.diagonalAxisRatio  = Wh_GetIntSetting(L"DiagonalAxisRatio");
     g_settings.directionThreshold = Wh_GetIntSetting(L"DirectionThreshold");
-    g_settings.snapSettleDelay    = Wh_GetIntSetting(L"SnapSettleDelay");
+    g_settings.restoreOnDrag      = Wh_GetIntSetting(L"RestoreOnDrag") != 0;
 
-    if (g_settings.velocityThreshold  < 1)   g_settings.velocityThreshold  = 500;
-    if (g_settings.cornerZone         < 0)   g_settings.cornerZone         = 120;
-    if (g_settings.diagonalAngle      < 1)   g_settings.diagonalAngle      = 20;
-    if (g_settings.diagonalAngle      > 44)  g_settings.diagonalAngle      = 44;
-    if (g_settings.diagonalMinSpeed   < 0)   g_settings.diagonalMinSpeed   = 100;
-    if (g_settings.diagonalAxisRatio  < 0)   g_settings.diagonalAxisRatio  = 40;
-    if (g_settings.diagonalAxisRatio  > 99)  g_settings.diagonalAxisRatio  = 99;
-    if (g_settings.directionThreshold < 0)   g_settings.directionThreshold = 30;
-    if (g_settings.snapSettleDelay    < 0)   g_settings.snapSettleDelay    = 300;
+    if (g_settings.velocityThreshold  < 1)  g_settings.velocityThreshold  = 500;
+    if (g_settings.cornerZone         < 0)  g_settings.cornerZone         = 120;
+    if (g_settings.diagonalAngle      < 1)  g_settings.diagonalAngle      = 20;
+    if (g_settings.diagonalAngle      > 44) g_settings.diagonalAngle      = 44;
+    if (g_settings.diagonalMinSpeed   < 0)  g_settings.diagonalMinSpeed   = 100;
+    if (g_settings.diagonalAxisRatio  < 0)  g_settings.diagonalAxisRatio  = 40;
+    if (g_settings.diagonalAxisRatio  > 99) g_settings.diagonalAxisRatio  = 99;
+    if (g_settings.directionThreshold < 0)  g_settings.directionThreshold = 30;
 }
 
 BOOL Wh_ModInit() {
