@@ -50,7 +50,7 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 - Win+Q is redundant with Win+S (both open Search)
 
 ## Known Limitations
-- A small number of system shortcuts (Win+A, Win+K, Win+P, Win+U, Win+Tab, and Win+Arrows) are hardcoded into the OS at a low level. While this mod successfully blocks them from performing their default Windows actions, they cannot be freed up to be registered by third-party apps (like AutoHotkey or PowerToys). When these specific shortcuts are disabled, they simply do nothing.
+- A small number of system shortcuts (Win+A, Win+K, Win+N, Win+P, Win+U, Win+Tab, and Win+Arrows) are hardcoded into the OS at a low level. While this mod successfully blocks them from performing their default Windows actions, they cannot be freed up to be registered by third-party apps (like AutoHotkey or PowerToys). When these specific shortcuts are disabled, they simply do nothing.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -577,7 +577,7 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
         if (!hasShift) {
             // Hardcoded keys that bypass RegisterHotKey
             if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || 
-                vk == 'A' || vk == 'K' || vk == 'P' || vk == 'U')
+                vk == 'A' || vk == 'K' || vk == 'N' || vk == 'P' || vk == 'U')
                 return true;
         } else {
             // Win+Shift+Arrows
@@ -862,7 +862,7 @@ void StopHookThread()
 
 bool NeedsDwmHook()
 {
-    return g_settings.DisableWinA || g_settings.DisableWinK || g_settings.DisableWinP || 
+    return g_settings.DisableWinA || g_settings.DisableWinK || g_settings.DisableWinN || g_settings.DisableWinP || 
            g_settings.DisableWinU || g_settings.DisableWinTab ||
            g_settings.DisableWinUp || g_settings.DisableWinDown || 
            g_settings.DisableWinLeft || g_settings.DisableWinRight ||
