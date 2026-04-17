@@ -2,14 +2,13 @@
 // @id              auto-custom-titlebar-colors
 // @name            Auto Custom Titlebar Colors
 // @description     Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes
-// @version         1.1.1
+// @version         1.1.2
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         *
 // @exclude         devenv.exe
 // @exclude         systemsettings.exe
 // @exclude         applicationframehost.exe
-// @exclude         Flow.Launcher.exe
 // @compilerOptions -ldwmapi -luxtheme -luser32
 // ==/WindhawkMod==
 
@@ -40,7 +39,7 @@ Combines automatic dark/light titlebar switching with per-mode, per-state custom
 Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.
 
 ## Notes
-- `systemsettings.exe`, `applicationframehost.exe`, and `Flow.Launcher.exe` are excluded to avoid conflicts
+- `systemsettings.exe` and `applicationframehost.exe` are excluded to avoid conflicts
 - No forced repaint is issued while a mouse button is held (prevents drag-state corruption)
 - Window redraws are debounced (50ms minimum) to prevent interference with window managers
 - Visual redraws (SetWindowPos) only occur during window activation, not deactivation, to avoid focus-grabbing issues with tiling window managers
