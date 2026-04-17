@@ -946,7 +946,7 @@ struct ColorPickerData {
 	ID2D1StrokeStyle* pDashed;
 	IDWriteFactory* pDWFactory;
 	IDWriteTextFormat* pTextFmt;
-	DWORD flags;
+    DWORD flags;
 	LPCCHOOKPROC pccHook;
 };
 
@@ -1203,12 +1203,12 @@ static void CP_DestroyD2D(ColorPickerData* d) {
 		d->pSpecBmp = nullptr;
 	}
 	if (d->pVBarBmp)
-	{
+	{ 
 		d->pVBarBmp->Release();
 		d->pVBarBmp = nullptr;
 	}
 	if (d->pRT)
-	{
+	{ 
 		d->pRT->Release();
 		d->pRT = nullptr;
 	}
@@ -1262,7 +1262,7 @@ static void CP_Paint(HWND hwnd, HDC hdc, ColorPickerData* d) {
 	// Value bar (rounded clip)
 	if (d->pVBarBmp) {
 		D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF((float)CP_VBAR_X, (float)CP_VBAR_Y, (float)(CP_VBAR_X + CP_VBAR_W), (float)(CP_VBAR_Y + CP_SPEC_H)), CP_ROUND, CP_ROUND);
-
+		
 		ID2D1RoundedRectangleGeometry* clip = nullptr;
 		d->pFactory->CreateRoundedRectangleGeometry(rr, &clip);
 
@@ -1290,7 +1290,7 @@ static void CP_Paint(HWND hwnd, HDC hdc, ColorPickerData* d) {
 	for (int i = 0; i < 48; i++) {
 		int col = i % CP_BCOLS, row = i / CP_BCOLS;
 		float cx = CP_SPEC_X + col * CP_CIRC_STEP + CP_CIRC_D / 2.f, cy = (float)CP_GridY() + row * CP_CIRC_STEP + CP_CIRC_D / 2.f;
-
+		
 		D2D1_ELLIPSE ell = D2D1::Ellipse(D2D1::Point2F(cx, cy), CP_CIRC_D / 2.f, CP_CIRC_D / 2.f);
 		d->pRT->CreateSolidColorBrush(CP_D2D(g_basicColors[i]), &br);
 
@@ -1489,7 +1489,7 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		{
 			d->val = 1.f - (float)(my - CP_VBAR_Y) / (CP_SPEC_H - 1);
 			d->val = d->val < 0 ? 0 : d->val>1 ? 1 : d->val;
-			CP_UpdateControls(hwnd, d);
+			CP_UpdateControls(hwnd, d); 
 		}
 
 		return 0;
@@ -1585,7 +1585,7 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		return 0;
 	}
 	case WM_DESTROY:
-	{
+    {
 		CP_DestroyD2D(d);
 		if (d->specPixels)
 		{
@@ -1604,7 +1604,7 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		std::erase(vDlgs, hwnd);
 		//PostQuitMessage(0);
 		return 0;
-	}
+    }
 	case WM_CLOSE:
 		d->accepted = FALSE;
 		DestroyWindow(hwnd);
@@ -1659,7 +1659,7 @@ static BOOL CP_ShowDialog(HWND hwndOwner, ColorPickerData* data) {
 	if (hwndOwner) EnableWindow(hwndOwner, FALSE);
 
 	MSG msg;
-	while (GetMessageW(&msg, NULL, 0, 0))
+	while (IsWindow(hwnd) && GetMessageW(&msg, NULL, 0, 0))
 	{
 		if (IsDialogMessageW(hwnd, &msg))
 			continue;
@@ -1741,7 +1741,7 @@ struct FontPickerData {
 	IDWriteFactory* pDW;
 	IDWriteTextFormat* pLabelFmt;
 	LPCFHOOKPROC pcfHook;
-	LPCHOOSEFONTW lpcfOriginal;
+    LPCHOOSEFONTW lpcfOriginal;
 };
 
 // Localized font picker strings (captured from real ChooseFont dialog)
@@ -1817,19 +1817,19 @@ static void FP_LoadStrings() {
 	if (settings.localized) {
 		LOGFONTW lf = {}; lf.lfCharSet = DEFAULT_CHARSET;
 		wcscpy(lf.lfFaceName, L"Arial");
-
+		
 		lf.lfHeight = -16;
 		CHOOSEFONTW cf = {};
-
+		
 		cf.lStructSize = sizeof(cf);
 		cf.lpLogFont = &lf;
 		cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS | CF_EFFECTS | CF_ENABLEHOOK;
 		cf.lpfnHook = FP_CaptureHook;
-
+		
 		COLORREF cc = 0;
 		cf.rgbColors = cc;
 		ChooseFontW_Original(&cf);
-
+		
 		// Strip '&' accelerators
 		auto strip = [](WCHAR* s) { WCHAR* r = s; WCHAR* w = s; while (*r) { if (*r != L'&') *w++ = *r; r++; } *w = 0; };
 		strip(g_fpFont); strip(g_fpStyle); strip(g_fpSize);
@@ -1989,7 +1989,7 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 
 		std::lock_guard<std::mutex> lock(vDlgsMutex);
 		vDlgs.push_back(hwnd);
-
+		
 		CREATESTRUCTW* cs = (CREATESTRUCTW*)lParam;
 		d = (FontPickerData*)cs->lpCreateParams;
 		SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)d);
@@ -2065,11 +2065,11 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		// mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, FP_PAD+halfW+FP_GAP, FP_BTN_Y, 80, 24, IDCANCEL);
 		mk(L"BUTTON", L"OK", BS_DEFPUSHBUTTON, 0, FP_SIZ_X + 16, FP_BTN_Y, 80, 24, IDOK);
 		mk(L"BUTTON", g_cpCancel, BS_PUSHBUTTON, 0, FP_SIZ_X + 16, FP_BTN_Y + 32, 80, 24, IDCANCEL);
-
-		if (FLAG(d->flags, CF_ENABLEHOOK))
-			return d->pcfHook(hwnd, WM_INITDIALOG, wParam, (LPARAM)d->lpcfOriginal);
-
-		return 0;
+		
+        if (FLAG(d->flags, CF_ENABLEHOOK))
+            return d->pcfHook(hwnd, WM_INITDIALOG, wParam, (LPARAM)d->lpcfOriginal);
+        
+        return 0;
 	}
 
 	case WM_ERASEBKGND: return TRUE;
@@ -2167,7 +2167,7 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 	}
 
 	case WM_DESTROY:
-	{
+    {
 		if (d->pLabelFmt) { d->pLabelFmt->Release(); d->pLabelFmt = nullptr; }
 		if (d->pRT) { d->pRT->Release(); d->pRT = nullptr; }
 		if (d->pDW) { d->pDW->Release(); d->pDW = nullptr; }
@@ -2178,7 +2178,7 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		std::lock_guard<std::mutex> lock(vDlgsMutex);
 		std::erase(vDlgs, hwnd);
 		return 0;
-	}
+    }
 	case WM_CLOSE:
 		d->accepted = FALSE;
 		DestroyWindow(hwnd);
@@ -2220,13 +2220,13 @@ static BOOL FP_ShowDialog(HWND hwndOwner, FontPickerData* data) {
 	if (!hwnd) return FALSE;
 	if (hwndOwner) EnableWindow(hwndOwner, FALSE);
 
-	MSG msg;
-	while (IsWindow(hwnd) && GetMessageW(&msg, NULL, 0, 0))
-	{
-		if (IsDialogMessageW(hwnd, &msg)) continue;
-		TranslateMessage(&msg);
-		DispatchMessageW(&msg);
-	}
+    MSG msg;
+    while (IsWindow(hwnd) && GetMessageW(&msg, NULL, 0, 0))
+    {
+        if (IsDialogMessageW(hwnd, &msg)) continue;
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
 
 	return data->accepted;
 }
@@ -2234,12 +2234,12 @@ static BOOL FP_ShowDialog(HWND hwndOwner, FontPickerData* data) {
 BOOL WINAPI ChooseFontW_Hook(LPCHOOSEFONTW lpcf) {
 	if (!settings.modernFontPicker) return ChooseFontW_Original(lpcf);
 	if (FLAG(lpcf->Flags, CF_ENABLETEMPLATE) || FLAG(lpcf->Flags, CF_ENABLEHOOK))
-		return ChooseFontW_Original(lpcf);
+        return ChooseFontW_Original(lpcf);
 
 	FontPickerData data = {};
 	data.flags = lpcf->Flags;
 	data.color = lpcf->rgbColors;
-	data.lpcfOriginal = lpcf;
+    data.lpcfOriginal = lpcf;
 
 	if (FLAG(lpcf->Flags, CF_ENABLEHOOK))
 		data.pcfHook = lpcf->lpfnHook;
