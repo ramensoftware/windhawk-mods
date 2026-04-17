@@ -196,13 +196,13 @@ You can experiment with the **radius** value to achieve the best result for your
   $name:ko-KR: 시스템 버튼 제외
   $name:pt-BR: Excluir botões do sistema
   $name:it-IT: Escludi pulsanti di sistema
-  $description: 0=Animate all, 1=Exclude Start, 2=Exclude Start/Search/TaskView/Widgets, 3=Animate apps only
-  $description:uk-UA: 0=Анімація всього, 1=Без анімації Start, 2=Без Start/Search/TaskView/Widgets, 3=Анімація тільки іконок застосунків
-  $description:zh-CN: 0=全部动画，1=排除开始，2=排除开始/搜索/任务视图/小组件，3=仅应用图标动画
-  $description:ja-JP: 0=すべてアニメ、1=スタート除外、2=スタート/検索/タスクビュー/ウィジェット除外、3=アプリのみ
-  $description:ko-KR: 0=전체, 1=시작 제외, 2=시작/검색/작업 보기/위젯 제외, 3=앱만
-  $description:pt-BR: 0=Animar tudo, 1=Excluir Iniciar, 2=Excluir Iniciar/Pesquisa/Visão de tarefas/Widgets, 3=Somente apps
-  $description:it-IT: 0=Anima tutto, 1=Escludi Start, 2=Escludi Start/Ricerca/Task View/Widget, 3=Solo app
+  $description: 0=Animate all, 1=Exclude Start, 2=Exclude Start/Search/TaskView/Widgets, 3=Animate apps only, 4=Exclude Start/Search
+  $description:uk-UA: 0=Анімація всього, 1=Без анімації Start, 2=Без Start/Search/TaskView/Widgets, 3=Анімація тільки іконок застосунків, 4=Без Start/Search
+  $description:zh-CN: 0=全部动画，1=排除开始，2=排除开始/搜索/任务视图/小组件，3=仅应用图标动画，4=排除开始/搜索
+  $description:ja-JP: 0=すべてアニメ、1=スタート除外、2=スタート/検索/タスクビュー/ウィジェット除外、3=アプリのみ、4=スタート/検索除外
+  $description:ko-KR: 0=전체, 1=시작 제외, 2=시작/검색/작업 보기/위젯 제외, 3=앱만, 4=시작/검색 제외
+  $description:pt-BR: 0=Animar tudo, 1=Excluir Iniciar, 2=Excluir Iniciar/Pesquisa/Visão de tarefas/Widgets, 3=Somente apps, 4=Excluir Iniciar/Pesquisa
+  $description:it-IT: 0=Anima tutto, 1=Escludi Start, 2=Escludi Start/Ricerca/Task View/Widget, 3=Solo app, 4=Escludi Start/Ricerca
 - LerpSpeed: 60
   $name: Smoothing (Lerp speed)
   $name:uk-UA: Плавність (швидкість Lerp)
@@ -645,27 +645,30 @@ static ButtonKind ClassifyButton(FrameworkElement const& e) {
     std::wstring aid    = W(AutomationProperties::GetAutomationId(e));
     std::wstring nm     = W(AutomationProperties::GetName(e));
 
+    std::wstring cnL = ToLower(cn);
+    // 优先判断应用，避免被后续误分类为系统按钮
+    if (cnL == L"taskbar.tasklistbutton" ||
+        (cnL.size() >= 13 && cnL.rfind(L".tasklistbutton") == cnL.size() - 13)) {
+        return ButtonKind::App;
+    }
+
     std::wstring hay = ToLower(cn + L"|" + feName + L"|" + aid + L"|" + nm);
 
     auto has = [&](std::wstring_view s) {
         return hay.find(std::wstring(s)) != std::wstring::npos;
     };
 
-    if (has(L"startbutton") || has(L"start")) return ButtonKind::Start;
-    if (has(L"searchbutton") || has(L"search")) return ButtonKind::Search;
+    if (has(L"appid:")) return ButtonKind::App;
+
+    // 改为精确匹配 start 和 search，防止类似 ConsoleStartZZMI 的名字错误命中
+    std::wstring aidL   = ToLower(aid);
+    std::wstring nmL    = ToLower(nm);
+
+    if (has(L"startbutton") || aidL == L"start" || nmL == L"start") return ButtonKind::Start;
+    if (has(L"searchbutton") || aidL == L"search" || nmL == L"search") return ButtonKind::Search;
     if (has(L"taskviewbutton") || has(L"task view") || has(L"taskview")) return ButtonKind::TaskView;
     if (has(L"widgetsbutton") || has(L"widgets")) return ButtonKind::Widgets;
     if (has(L"weather")) return ButtonKind::Weather;
-
-    if (has(L"appid:")) return ButtonKind::App;
-
-    {
-        std::wstring cnL = ToLower(cn);
-        if (cnL == L"taskbar.tasklistbutton" ||
-            (cnL.size() >= 13 && cnL.rfind(L".tasklistbutton") == cnL.size() - 13)) {
-            return ButtonKind::App;
-        }
-    }
 
     return ButtonKind::SystemOther;
 }
@@ -677,8 +680,9 @@ static bool ShouldAnimateElement(FrameworkElement const& e) {
 
     ButtonKind k = ClassifyButton(e);
 
+    if (mode == 4) return k != ButtonKind::Start && k != ButtonKind::Search;
     if (mode == 3) return k == ButtonKind::App;
-    if (mode == 2) return k == ButtonKind::App;
+    if (mode == 2) return k != ButtonKind::Start && k != ButtonKind::Search && k != ButtonKind::TaskView && k != ButtonKind::Widgets && k != ButtonKind::Weather;
     if (mode == 1) return k != ButtonKind::Start;
 
     return true;
