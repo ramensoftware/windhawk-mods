@@ -2192,7 +2192,7 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		return 0;
 	}
 
-	if (FLAG(d->flags, CF_ENABLEHOOK) && d->pcfHook)
+	if (d && FLAG(d->flags, CF_ENABLEHOOK) && d->pcfHook)
 		return d->pcfHook(hwnd, msg, wParam, lParam);
 
 	return DefWindowProcW(hwnd, msg, wParam, lParam);
