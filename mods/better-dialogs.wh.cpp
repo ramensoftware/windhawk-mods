@@ -1345,16 +1345,20 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 	ColorPickerData* d = (ColorPickerData*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
 
 	switch (msg) {
+    case WM_NCCREATE:
+    {
+        CREATESTRUCTW* cs = (CREATESTRUCTW*)lParam;
+		d = (ColorPickerData*)cs->lpCreateParams;
+
+		SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)d);
+        break;
+    }
 	case WM_CREATE: {
 		nColorDlgCount++;
 
 		std::lock_guard<std::mutex> lock(vDlgsMutex);
 		vDlgs.push_back(hwnd);
 
-		CREATESTRUCTW* cs = (CREATESTRUCTW*)lParam;
-		d = (ColorPickerData*)cs->lpCreateParams;
-
-		SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)d);
 		HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
 		auto mk = [&](LPCWSTR cls, LPCWSTR text, DWORD style, DWORD exs, int x, int y, int w, int h, int id = 0) {
@@ -1612,7 +1616,7 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		return 0;
 	}
 
-	if (FLAG(d->flags, CC_ENABLEHOOK))
+	if (d && FLAG(d->flags, CC_ENABLEHOOK))
 		return d->pccHook(hwnd, msg, wParam, lParam);
 
 	return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -1676,8 +1680,11 @@ BOOL WINAPI ChooseColorW_Hook(LPCHOOSECOLORW lpcc) {
 		return ChooseColorW_Original(lpcc);
 
 	ColorPickerData data = {};
-	data.original = lpcc->rgbResult; data.result = lpcc->rgbResult;
-	data.lpCustColors = lpcc->lpCustColors; data.selectedCustom = -1;
+	data.original = lpcc->rgbResult;
+    data.result = lpcc->rgbResult;
+	data.lpCustColors = lpcc->lpCustColors;
+    data.selectedCustom = -1;
+    data.flags = lpcc->Flags;
 
 	if (FLAG(lpcc->Flags, CC_ENABLEHOOK))
 		data.pccHook = lpcc->lpfnHook;
