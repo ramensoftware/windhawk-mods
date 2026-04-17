@@ -1,3 +1,7 @@
+## 1.1.2 ([Apr 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/69a1563ab829620af049efd27a911655aee6195d/mods/auto-custom-titlebar-colors.wh.cpp))
+
+- Remove Flow Launcher from exclusion list as it doesn't cause the issue anymore with the previous fixes
+
 ## 1.1.1 ([Apr 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/61ba5925653bc3f666213d1aef8d12a5f811bcd8/mods/auto-custom-titlebar-colors.wh.cpp))
 
 Issue Fixed:

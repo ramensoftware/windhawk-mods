@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-17T15:11:35.000Z</updated>
+    <updated>2026-04-17T22:56:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.1.2]]></title>
+        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#69a1563ab829620af049efd27a911655aee6195d</id>
+        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
+        <updated>2026-04-17T22:56:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Remove Flow Launcher from exclusion list as it doesn't cause the issue anymore with the previous fixes</li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Windows Shortcuts 1.0.0]]></title>
         <id>https://windhawk.net/mods/disable-windows-shortcuts#bf450c23f6810c142a3e5a4445b9afa296df24b3</id>
@@ -391,24 +404,6 @@ activation while keeping normal typing and common Ctrl shortcuts stable.</p>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[HotCorner Hotkeys 3.56]]></title>
-        <id>https://windhawk.net/mods/hotcorner-hotkeys#0b52f7a659ffd2d00bbc14f2e69aa925616d6486</id>
-        <link href="https://windhawk.net/mods/hotcorner-hotkeys"/>
-        <updated>2026-04-12T08:39:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved hotkey registration handling for shared hotkeys</li>
-<li>Replaced <code>registered</code> flag with <code>ownsRegistration</code> for correct ownership tracking</li>
-<li>Prevented duplicate region entries per hotkey during settings load</li>
-<li>Updated readme with clearer documentation and examples</li>
-<li>Improved foreground window title parsing and Explorer selection behavior</li>
-<li>Cleaned up internal helpers, logging, and function ordering</li>
-</ul>]]></content>
-        <author>
-            <name>webberlv</name>
-            <uri>https://github.com/webberLV</uri>
         </author>
     </entry>
 </feed>
