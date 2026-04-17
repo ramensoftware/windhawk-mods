@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.0.0
+// @version         1.0.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
