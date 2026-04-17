@@ -2,7 +2,7 @@
 // @id              edge-snap-throw
 // @name            Edge Snap Throw
 // @description     Slide a window into a screen edge and it snaps like native Windows snap
-// @version         1.9.0
+// @version         2.0.0
 // @author          getrektbynoob20
 // @github          https://github.com/getrektbynoob20
 // @include         *
@@ -60,10 +60,10 @@ When you drag a snapped window back out, it restores to its original size (toggl
 #include <dwmapi.h>
 #include <windowsx.h>
 
-#include <atomic>
 #include <cmath>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 struct Settings {
@@ -82,13 +82,13 @@ enum class SnapZone {
     TopLeft, TopRight, BottomLeft, BottomRight,
 };
 
-// ── Velocity tracker ──────────────────────────────────────────────────────────
+// ── Velocity tracker (thread_local — no mutex needed) ─────────────────────────
 struct PosSnapshot { DWORD tick; int x, y; };
 
 struct WinTrack {
     PosSnapshot history[6]{};
-    int  head  = 0;
-    int  count = 0;
+    int head  = 0;
+    int count = 0;
 
     void Reset() { count = 0; }
 
@@ -120,69 +120,86 @@ struct WinTrack {
     }
 };
 
-std::mutex g_trackMutex;
-std::unordered_map<HWND, WinTrack> g_tracks;
+// thread_local: each UI thread has its own map, no mutex needed
+thread_local std::unordered_map<HWND, WinTrack> g_tracks;
 
-// ── Restore-on-drag state ─────────────────────────────────────────────────────
+// Timer-based snap: maps timer ID -> {hWnd, zone}, also thread_local
+thread_local std::unordered_map<UINT_PTR, std::pair<HWND, SnapZone>> g_pendingSnaps;
+
+// ── SetWindowPos hook (forward declared for RestoreSubclassProc) ──────────────
+using SetWindowPos_t = decltype(&SetWindowPos);
+SetWindowPos_t pOrigSetWindowPos;
+
+// ── Restore-on-drag ───────────────────────────────────────────────────────────
 struct SnapRestore {
-    RECT originalRect; // size before snap — only w/h matter
-    bool restored;     // true once we have done the restore
+    RECT originalRect;
+    bool restored;
 };
 
 std::mutex g_restoreMutex;
 std::unordered_map<HWND, SnapRestore> g_restoreMap;
 
-// ── SetWindowPos hook (forward declared so RestoreSubclassProc can use it) ───
-using SetWindowPos_t = decltype(&SetWindowPos);
-SetWindowPos_t pOrigSetWindowPos;
+// Track subclassed windows so we can clean them up on unload
+std::mutex g_subclassedMutex;
+std::unordered_set<HWND> g_subclassedWindows;
 
-// ── Restore subclass proc ─────────────────────────────────────────────────────
-// Installed on the window's OWN thread (from SetWindowPosHook which runs there).
-// Intercepts WM_MOVING to resize the window back to its original size on the
-// first drag frame, exactly like native Windows snap restore does.
+UINT g_unsubclassMsg = RegisterWindowMessage(L"Windhawk_Unsubclass_restore_edge-snap-throw");
+
 LRESULT CALLBACK RestoreSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                                      UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
+    auto cleanup = [&]() {
+        RemoveWindowSubclass(hWnd, RestoreSubclassProc, 0);
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
+            g_subclassedWindows.erase(hWnd);
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_restoreMutex);
+            g_restoreMap.erase(hWnd);
+        }
+    };
+
     if (uMsg == WM_MOVING) {
-        std::lock_guard<std::mutex> lock(g_restoreMutex);
-        auto it = g_restoreMap.find(hWnd);
-        if (it != g_restoreMap.end() && !it->second.restored) {
-            it->second.restored = true;
+        bool didRestore = false;
+        {
+            std::lock_guard<std::mutex> lock(g_restoreMutex);
+            auto it = g_restoreMap.find(hWnd);
+            if (it != g_restoreMap.end() && !it->second.restored) {
+                it->second.restored = true;
 
-            RECT& orig = it->second.originalRect;
-            int w = orig.right  - orig.left;
-            int h = orig.bottom - orig.top;
+                RECT& orig = it->second.originalRect;
+                int w = orig.right  - orig.left;
+                int h = orig.bottom - orig.top;
 
-            POINT cursor;
-            GetCursorPos(&cursor);
+                POINT cursor;
+                GetCursorPos(&cursor);
 
-            // Write into the rect Windows is using for drag positioning
-            RECT* r = (RECT*)lParam;
-            r->left   = cursor.x - w / 2;
-            r->top    = cursor.y - 10;
-            r->right  = r->left + w;
-            r->bottom = r->top  + h;
+                RECT* r = (RECT*)lParam;
+                r->left   = cursor.x - w / 2;
+                r->top    = cursor.y - 10;
+                r->right  = r->left + w;
+                r->bottom = r->top  + h;
 
-            // Actually resize the window — WM_MOVING lParam only sets position
-            pOrigSetWindowPos(hWnd, nullptr, r->left, r->top, w, h,
-                SWP_NOZORDER | SWP_NOACTIVATE);
+                pOrigSetWindowPos(hWnd, nullptr, r->left, r->top, w, h,
+                    SWP_NOZORDER | SWP_NOACTIVATE);
 
+                didRestore = true;
+            }
+        }
+        if (didRestore) {
+            // Remove subclass immediately — job is done
+            cleanup();
             return TRUE;
         }
     }
-    else if (uMsg == WM_EXITSIZEMOVE) {
-        {
-            std::lock_guard<std::mutex> lock(g_restoreMutex);
-            g_restoreMap.erase(hWnd);
-        }
-        RemoveWindowSubclass(hWnd, RestoreSubclassProc, 0);
-    }
     else if (uMsg == WM_NCDESTROY) {
-        {
-            std::lock_guard<std::mutex> lock(g_restoreMutex);
-            g_restoreMap.erase(hWnd);
-        }
-        RemoveWindowSubclass(hWnd, RestoreSubclassProc, 0);
+        cleanup();
+    }
+    else if (uMsg == g_unsubclassMsg) {
+        // Sent by Wh_ModUninit to cleanly remove subclass on unload
+        cleanup();
+        return 0;
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -244,13 +261,11 @@ static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
     bool throwDown  = vy >  (double)dt;
     bool diagonal   = IsDiagonal(vx, vy);
 
-    // Two-edge hits
     if (hitLeft  && hitTop)    return SnapZone::TopLeft;
     if (hitRight && hitTop)    return SnapZone::TopRight;
     if (hitLeft  && hitBottom) return SnapZone::BottomLeft;
     if (hitRight && hitBottom) return SnapZone::BottomRight;
 
-    // One edge + corner zone
     if (hitTop    && nearLeft)   return SnapZone::TopLeft;
     if (hitTop    && nearRight)  return SnapZone::TopRight;
     if (hitBottom && nearLeft)   return SnapZone::BottomLeft;
@@ -260,7 +275,6 @@ static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
     if (hitRight  && nearTop)    return SnapZone::TopRight;
     if (hitRight  && nearBottom) return SnapZone::BottomRight;
 
-    // Diagonal throw direction
     if (diagonal) {
         if (hitLeft   && throwUp)    return SnapZone::TopLeft;
         if (hitLeft   && throwDown)  return SnapZone::BottomLeft;
@@ -272,7 +286,6 @@ static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
         if (hitBottom && throwRight) return SnapZone::BottomRight;
     }
 
-    // Plain edges
     if (hitTop)   return SnapZone::Maximize;
     if (hitLeft)  return SnapZone::Left;
     if (hitRight) return SnapZone::Right;
@@ -281,83 +294,81 @@ static SnapZone ClassifyCollision(HWND hWnd, double vx, double vy) {
 }
 
 // ── Apply snap ────────────────────────────────────────────────────────────────
-static void SnapToQuarter(HWND hWnd, SnapZone zone) {
+static void SnapWindow(HWND hWnd, SnapZone zone) {
     HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
     GetMonitorInfo(mon, &mi);
     RECT wa = mi.rcWork;
 
-    int halfW = (wa.right  - wa.left) / 2;
-    int halfH = (wa.bottom - wa.top)  / 2;
-    int x = wa.left, y = wa.top;
+    int fullW = wa.right  - wa.left;
+    int fullH = wa.bottom - wa.top;
+    int halfW = fullW / 2;
+    int halfH = fullH / 2;
+
+    int x = wa.left, y = wa.top, w = fullW, h = fullH;
 
     switch (zone) {
-    case SnapZone::TopLeft:     x = wa.left;         y = wa.top;         break;
-    case SnapZone::TopRight:    x = wa.left + halfW;  y = wa.top;         break;
-    case SnapZone::BottomLeft:  x = wa.left;         y = wa.top + halfH; break;
-    case SnapZone::BottomRight: x = wa.left + halfW;  y = wa.top + halfH; break;
+    case SnapZone::Maximize:
+        ShowWindow(hWnd, SW_MAXIMIZE);
+        return;
+    case SnapZone::Left:        x = wa.left;        y = wa.top;         w = halfW; h = fullH; break;
+    case SnapZone::Right:       x = wa.left + halfW; y = wa.top;         w = halfW; h = fullH; break;
+    case SnapZone::TopLeft:     x = wa.left;        y = wa.top;         w = halfW; h = halfH; break;
+    case SnapZone::TopRight:    x = wa.left + halfW; y = wa.top;         w = halfW; h = halfH; break;
+    case SnapZone::BottomLeft:  x = wa.left;        y = wa.top + halfH; w = halfW; h = halfH; break;
+    case SnapZone::BottomRight: x = wa.left + halfW; y = wa.top + halfH; w = halfW; h = halfH; break;
     default: return;
     }
 
     ShowWindow(hWnd, SW_RESTORE);
-    Sleep(30);
-    pOrigSetWindowPos(hWnd, nullptr, x, y, halfW, halfH,
+    pOrigSetWindowPos(hWnd, nullptr, x, y, w, h,
         SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
-static void SnapToHalf(HWND hWnd, SnapZone zone) {
-    HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfo(mon, &mi);
-    RECT wa = mi.rcWork;
+// ── Timer-based snap (runs on UI thread — no CreateThread needed) ─────────────
+void CALLBACK SnapTimerProc(HWND, UINT, UINT_PTR idTimer, DWORD) {
+    KillTimer(nullptr, idTimer);
 
-    int halfW = (wa.right - wa.left) / 2;
-    int fullH =  wa.bottom - wa.top;
-    int x = (zone == SnapZone::Left) ? wa.left : wa.left + halfW;
+    auto it = g_pendingSnaps.find(idTimer);
+    if (it == g_pendingSnaps.end()) return;
 
-    ShowWindow(hWnd, SW_RESTORE);
-    Sleep(30);
-    pOrigSetWindowPos(hWnd, nullptr, x, wa.top, halfW, fullH,
-        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-}
+    HWND     hWnd = it->second.first;
+    SnapZone zone = it->second.second;
+    g_pendingSnaps.erase(it);
 
-static void ApplySnap(HWND hWnd, SnapZone zone) {
-    SetForegroundWindow(hWnd);
-    Sleep(20);
-    switch (zone) {
-    case SnapZone::Maximize:                                  ShowWindow(hWnd, SW_MAXIMIZE); break;
-    case SnapZone::Left:    case SnapZone::Right:             SnapToHalf(hWnd, zone);        break;
-    case SnapZone::TopLeft: case SnapZone::TopRight:
-    case SnapZone::BottomLeft: case SnapZone::BottomRight:    SnapToQuarter(hWnd, zone);     break;
-    default: break;
-    }
-}
-
-struct SnapThreadParam { HWND hWnd; SnapZone zone; };
-static DWORD WINAPI SnapThreadProc(LPVOID p) {
-    auto* sp = reinterpret_cast<SnapThreadParam*>(p);
-    ApplySnap(sp->hWnd, sp->zone);
-    {
-        std::lock_guard<std::mutex> lock(g_trackMutex);
-        g_tracks.erase(sp->hWnd);
-    }
-    delete sp;
-    return 0;
+    SnapWindow(hWnd, zone);
 }
 
 // ── Hook SetWindowPos ─────────────────────────────────────────────────────────
-// This hook runs on the window's UI thread (Slick Window Arrangement's slide
-// timer is a thread timer processed by the UI thread's message loop).
-// That means SetWindowSubclass can safely be called here.
 BOOL WINAPI SetWindowPosHook(HWND hWnd, HWND hWndInsertAfter,
     int X, int Y, int cx, int cy, UINT uFlags)
 {
+    // Verify the caller is slick-window-arrangement by checking which module
+    // the return address belongs to. _ReturnAddress() must be called directly
+    // in the hook function — it reads the actual stack return address.
+    void* callerAddr = __builtin_return_address(0);
+    {
+        HMODULE callerMod = nullptr;
+        if (GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                (LPCWSTR)callerAddr, &callerMod) && callerMod) {
+            WCHAR modPath[MAX_PATH];
+            if (GetModuleFileNameW(callerMod, modPath, MAX_PATH)) {
+                if (!wcsstr(modPath, L"slick-window-arrangement")) {
+                    return pOrigSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+                }
+            }
+        } else {
+            return pOrigSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+        }
+    }
+
     const UINT slideFlags = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
 
     if ((uFlags & slideFlags) == slideFlags && !(uFlags & SWP_NOMOVE)) {
         LONG exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
         if (!(exStyle & WS_EX_TOOLWINDOW) && IsWindowVisible(hWnd)) {
-            std::lock_guard<std::mutex> lock(g_trackMutex);
             auto& track = g_tracks[hWnd];
 
             if (track.count > 0) {
@@ -368,27 +379,28 @@ BOOL WINAPI SetWindowPosHook(HWND hWnd, HWND hWndInsertAfter,
                     if (zone != SnapZone::None) {
                         track.Reset();
 
-                        // ── Restore-on-drag setup ─────────────────────────
-                        // We're on the window's UI thread here, so
-                        // SetWindowSubclass is safe to call.
-                        // Save rect NOW before the snap changes the size.
-                        // The slide only moves (SWP_NOSIZE) so the current
-                        // size IS the original pre-snap size.
+                        // Save original size and subclass for restore-on-drag.
+                        // Safe to call SetWindowSubclass here — we are on the
+                        // window's own UI thread (slide timer runs there).
                         if (g_settings.restoreOnDrag && zone != SnapZone::Maximize) {
                             RECT rc{};
                             GetWindowRect(hWnd, &rc);
                             {
-                                std::lock_guard<std::mutex> rlock(g_restoreMutex);
+                                std::lock_guard<std::mutex> lock(g_restoreMutex);
                                 g_restoreMap[hWnd] = { rc, false };
                             }
-                            SetWindowSubclass(hWnd, RestoreSubclassProc, 0, 0);
+                            if (SetWindowSubclass(hWnd, RestoreSubclassProc, 0, 0)) {
+                                std::lock_guard<std::mutex> lock(g_subclassedMutex);
+                                g_subclassedWindows.insert(hWnd);
+                            }
                         }
 
-                        // Stop the slide and snap on a worker thread so we
-                        // don't block the UI thread with Sleep() calls
-                        auto* param = new SnapThreadParam{ hWnd, zone };
-                        CreateThread(nullptr, 0, SnapThreadProc, param, 0, nullptr);
-                        return TRUE; // block this SetWindowPos — slide stops here
+                        // Use SetTimer instead of CreateThread so snap runs on
+                        // the UI thread and g_tracks stays thread_local.
+                        UINT_PTR timerId = SetTimer(nullptr, 0, 1, SnapTimerProc);
+                        g_pendingSnaps[timerId] = { hWnd, zone };
+
+                        return TRUE; // stop the slide
                     }
                 }
             } else {
@@ -396,7 +408,6 @@ BOOL WINAPI SetWindowPosHook(HWND hWnd, HWND hWndInsertAfter,
             }
         }
     } else {
-        std::lock_guard<std::mutex> lock(g_trackMutex);
         auto it = g_tracks.find(hWnd);
         if (it != g_tracks.end()) it->second.Reset();
     }
@@ -433,6 +444,16 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Edge Snap Throw: Uninit");
+
+    // Remove all restore subclasses so the mod unloads cleanly without crashes
+    std::unordered_set<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        windows = g_subclassedWindows;
+    }
+    for (HWND hWnd : windows) {
+        SendMessage(hWnd, g_unsubclassMsg, 0, 0);
+    }
 }
 
 void Wh_ModSettingsChanged() {
