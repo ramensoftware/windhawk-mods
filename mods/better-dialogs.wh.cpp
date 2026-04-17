@@ -1508,23 +1508,14 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 		if (id == IDOK)
 		{
 			d->accepted = TRUE;
-			{
-				HWND o = GetWindow(hwnd, GW_OWNER);
-				if (o) EnableWindow(o, TRUE);
-
-				DestroyWindow(hwnd);
-				return 0;
-			}
+            DestroyWindow(hwnd);
+            return 0;
 		}
 		if (id == IDCANCEL)
 		{
 			d->accepted = FALSE;
-			{
-				HWND o = GetWindow(hwnd, GW_OWNER);
-				if (o) EnableWindow(o, TRUE);
-
-				DestroyWindow(hwnd); return 0;
-			}
+            DestroyWindow(hwnd);
+            return 0;
 		}
 
 		if (id == 4010 && d->lpCustColors)
@@ -1606,6 +1597,10 @@ static LRESULT CALLBACK CP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 
 		std::lock_guard<std::mutex> lock(vDlgsMutex);
 		std::erase(vDlgs, hwnd);
+
+        HWND o = GetWindow(hwnd, GW_OWNER);
+        if (o) EnableWindow(o, TRUE);
+
 		//PostQuitMessage(0);
 		return 0;
     }
@@ -2201,7 +2196,9 @@ static LRESULT CALLBACK FP_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 static ATOM g_fpClassAtom = 0;
 static BOOL FP_ShowDialog(HWND hwndOwner, FontPickerData* data) {
 	if (!g_fpClassAtom) {
-		WNDCLASSEXW wc = {}; wc.cbSize = sizeof(wc); wc.lpfnWndProc = FP_WndProc;
+		WNDCLASSEXW wc = {};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = FP_WndProc;
 		wc.hInstance = GetModuleHandleW(NULL); wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
 		wc.hbrBackground = (HBRUSH)(COLOR_3DFACE + 1); wc.lpszClassName = L"BetterDialogs_FontPicker";
 		g_fpClassAtom = RegisterClassExW(&wc); if (!g_fpClassAtom) return FALSE;
@@ -2234,6 +2231,8 @@ static BOOL FP_ShowDialog(HWND hwndOwner, FontPickerData* data) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+
+    if (hwndOwner) EnableWindow(hwndOwner, TRUE);
 
 	return data->accepted;
 }
