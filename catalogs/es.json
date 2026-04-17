@@ -569,19 +569,19 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1772584797000,
+                "updated": 1776466724000,
                 "users": 345
             },
             "metadata": {
                 "author": "FireBlade",
-                "compilerOptions": "-lcomdlg32 -luser32 -lshell32 -lole32 -luuid -lcomctl32",
+                "compilerOptions": "-lcomdlg32 -luser32 -lshell32 -lole32 -luuid -lcomctl32 -lgdi32 -ld2d1 -ldwrite",
                 "description": "Improves Windows dialog boxes.",
                 "github": "https://github.com/FireBlade211",
                 "include": [
                     "*"
                 ],
                 "name": "Better Dialogs",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "block-win-v": {

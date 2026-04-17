@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-17T22:56:18.000Z</updated>
+    <updated>2026-04-17T22:58:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Dialogs 1.1]]></title>
+        <id>https://windhawk.net/mods/better-dialogs#642bf56c8905e116c5d201851800312986f93d26</id>
+        <link href="https://windhawk.net/mods/better-dialogs"/>
+        <updated>2026-04-17T22:58:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Modernized Color dialog</li>
+<li>Modernized Font dialog</li>
+<li>ANSI functions hooked</li>
+<li>Legacy file pickers redirected to modern file dialog</li>
+<li>Fixed bug where message boxes with <strong>Warning</strong> icon would become Task Dialogs with an <strong>Error</strong> icon instead of the <strong>Warning</strong> icon</li>
+</ul>]]></content>
+        <author>
+            <name>FireBlade</name>
+            <uri>https://github.com/FireBlade211</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.1.2]]></title>
         <id>https://windhawk.net/mods/auto-custom-titlebar-colors#69a1563ab829620af049efd27a911655aee6195d</id>
@@ -389,21 +406,6 @@ activation while keeping normal typing and common Ctrl shortcuts stable.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Center New Windows 1.0.1]]></title>
-        <id>https://windhawk.net/mods/center-new-windows#a8b6141258658b1fbae949d1902f4ae76e55c0fc</id>
-        <link href="https://windhawk.net/mods/center-new-windows"/>
-        <updated>2026-04-12T08:41:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>SetWindowPos grace period — after a window is first centred, a 2-second grace period blocks any SetWindowPos call that tries to move it elsewhere. This fixes a known issue with Firefox-based browsers (Firefox, Floorp, Zen, LibreWolf and others) that restore their saved session position via SetWindowPos ~700 ms after ShowWindow, overriding the centred position.</li>
-<li>Vertical offset setting — shifts the centred position up or down by a fixed number of pixels. Useful for third-party docks or status bars that are not reflected in the system work area.</li>
-<li>DPI-unaware app fix — windows and dialogs that belong to processes using system scaling (e.g. Audacity, older Win32 apps) are now correctly centered at all scale levels. The previous calculation mixed physical monitor coordinates with virtual window coordinates, placing windows above and to the left of true center.</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>
