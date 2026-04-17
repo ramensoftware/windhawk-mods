@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-17T13:08:01.000Z</updated>
+    <updated>2026-04-17T15:11:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Windows Shortcuts 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disable-windows-shortcuts#bf450c23f6810c142a3e5a4445b9afa296df24b3</id>
+        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
+        <updated>2026-04-17T15:11:35.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablewindowsshortcuts">Disable Windows Shortcuts</h1>
+<p>Selectively disable Windows keyboard shortcuts with individual toggles for each shortcut.</p>
+<h2 id="importantinstallationstep">⚠️ Important Installation Step ⚠️</h2>
+<p>For this mod to successfully block window snapping (Win+Arrows) and Task View (Win+Tab), you <strong>must</strong> allow Windhawk to inject into the Desktop Window Manager (<code>dwm.exe</code>):</p>
+<ol>
+<li>Open Windhawk and go to <strong>Settings</strong></li>
+<li>Click on <strong>Advanced settings</strong> at the bottom</li>
+<li>Under <strong>Process inclusion list</strong>, ensure <code>dwm.exe</code> is added (or <code>*</code> is used to include all processes)</li>
+<li>Click <strong>Save</strong>. Windhawk will automatically restart to apply the new settings.</li>
+</ol>
+<p><em>Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to take effect. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must manually restart Explorer to restore those standard shortcuts.</em></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Disable any Windows key combination</li>
+<li>Individual toggle for each shortcut</li>
+<li>Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.</li>
+<li>Settings apply instantly without needing to restart Explorer!</li>
+</ul>
+<h2 id="supportedshortcuts">Supported Shortcuts</h2>
+<h3 id="general">General</h3>
+<ul>
+<li>Win+B through Win+Z (excluding Win, Win+L, Win+Q)</li>
+<li>Win+Tab, Win+Arrow Keys, Win+Home</li>
+</ul>
+<h3 id="withmodifiers">With Modifiers</h3>
+<ul>
+<li>Win+Shift combinations</li>
+<li>Win+Ctrl combinations</li>
+<li>Win+Alt combinations</li>
+<li>Win+Ctrl+Shift combinations</li>
+</ul>
+<h3 id="special">Special</h3>
+<ul>
+<li>Win+Number (0-9) for taskbar apps</li>
+<li>Win+Plus/Minus for Magnifier</li>
+<li>Win+Period/Semicolon for Emoji picker</li>
+<li>Office hotkeys (Ctrl+Shift+Alt+Win)</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Win key (Start Menu) is handled by the "Block Start Menu and Hosts" mod</li>
+<li>Win+L (Lock PC) cannot be blocked through standard hooks</li>
+<li>Win+Q is redundant with Win+S (both open Search)</li>
+</ul>
+<h2 id="knownlimitations">Known Limitations</h2>
+<ul>
+<li>A small number of system shortcuts (Win+A, Win+K, Win+P, Win+U, Win+Tab, and Win+Arrows) are hardcoded into the OS at a low level. While this mod successfully blocks them from performing their default Windows actions, they cannot be freed up to be registered by third-party apps (like AutoHotkey or PowerToys). When these specific shortcuts are disabled, they simply do nothing.</li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AudioSwap 1.1.0]]></title>
         <id>https://windhawk.net/mods/audioswap#b021b7eb4f7d83858aac69a9f1eac00aeafdc618</id>
@@ -351,37 +409,6 @@ activation while keeping normal typing and common Ctrl shortcuts stable.</p>
         <author>
             <name>webberlv</name>
             <uri>https://github.com/webberLV</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Window Corner Radius 1.0]]></title>
-        <id>https://windhawk.net/mods/custom-corner-radius#cae0950522f4f4165a223da43bb1ad3936f6b1f2</id>
-        <link href="https://windhawk.net/mods/custom-corner-radius"/>
-        <updated>2026-04-11T18:57:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="customwindowcornerradius">Custom Window Corner Radius</h1>
-<p>Customizes Windows 11 app window corner radius. Make corners more rounded than
-the default 8px, or reduce the radius for less rounded or completely sharp
-corners.</p>
-<p>The mod was <a href="https://github.com/ramensoftware/windhawk-mods/pull/3587">originally
-submitted</a> by
-<a href="https://github.com/kanak-buet19">Kanak415</a>.</p>
-<p><img src="https://i.imgur.com/mMGkBwc.png" alt="Screenshot" /></p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
-Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
-and make sure that <code>dwm.exe</code> is in the list.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
-<h2 id="additionalnotes">Additional notes</h2>
-<ul>
-<li>Popups and flyouts (taskbar, wifi, volume, context menus) use a smaller radius
-(4px) and are unaffected by this mod. Some of them can be customized using
-other mods, such as Windows 11 Taskbar Styler.</li>
-<li>Disabling the mod instantly restores default behavior — no system files are
-modified.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
