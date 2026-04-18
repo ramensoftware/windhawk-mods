@@ -1,11 +1,11 @@
 // ==WindhawkMod==
 // @id              osu-tray-profile
 // @name            osu!Profile in Taskbar
-// @description     Displays PP, rank, and osu! avatar next to the system tray
+// @description     Displays PP, rank, and avatar from rhythm game osu! (standard mode) next to the system tray
 // @version         3.9
 // @author          antoshika
 // @github          https://github.com/Antoshika
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -luser32 -lgdi32 -lwinhttp -lurlmon -lgdiplus
 // ==/WindhawkMod==
 
@@ -25,9 +25,8 @@ In order for the tweak to collect your statistics, you need to use your API, so 
 4. Go back to Windhawk, open the **Settings** tab and paste the copied data by cell with your nickname. _(you can use your old nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 
 ## ⚠️ Problems:
-* **"✏️ check 'Settings'"**: You didn't fill in the required fields in the settings.
+* **"✎ check 'Settings'"**: You didn't fill in the required fields in the settings.
 * **"⛔ error"**: Invalid Client ID or Client Secret. Make sure that you have copied them completely and without spaces at the end.
-
 ---
 *🥬 Im here: 💙 [hatsunemiku39.ru](http://hatsunemiku39.ru) // 🟣 [osu!profile](https://osu.ppy.sh/users/18815482) // 📶 [Discord](https://discord.gg/3jBQs9buYe)*
 */
@@ -442,14 +441,12 @@ void UiThreadFunc() {
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
         RegisterClassW(&wc);
 
-        HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-
         g_overlayHwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOOLWINDOW,
             wc.lpszClassName, L"OsuStats",
             WS_POPUP,
             0, 0, 200, 50,
-            trayWnd, NULL, wc.hInstance, NULL
+            NULL, NULL, wc.hInstance, NULL
         );
 
         ShowWindow(g_overlayHwnd, SW_SHOW);
@@ -469,7 +466,7 @@ void UiThreadFunc() {
     GdiplusShutdown(gdiplusToken);
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings(); 
     
     g_running = true;
@@ -479,7 +476,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_running = false;
 
     if (g_overlayHwnd) {
@@ -490,7 +487,128 @@ void Wh_ModUninit() {
     if (g_netThread.joinable()) g_netThread.join();
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
     g_forceUpdate = true;
+}
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            Wh_Log(L"WhTool_ModInit failed");
+            ExitProcess(1);
+        }
+
+        HMODULE module = GetModuleHandle(nullptr);
+        PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)module;
+        PIMAGE_NT_HEADERS ntHeaders = (PIMAGE_NT_HEADERS)((BYTE*)module + dosHeader->e_lfanew);
+        void* entryPoint = (BYTE*)module + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 50];
+    swprintf(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod " WH_MOD_ID, currentProcessPath);
+
+    STARTUPINFO startupInfo = {sizeof(startupInfo)};
+    PROCESS_INFORMATION processInformation;
+    if (!CreateProcess(currentProcessPath, commandLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startupInfo, &processInformation)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(processInformation.hProcess);
+    CloseHandle(processInformation.hThread);
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+
+    if (g_toolModProcessMutex) {
+        CloseHandle(g_toolModProcessMutex);
+    }
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
