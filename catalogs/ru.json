@@ -5039,7 +5039,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1771887115000,
+                "updated": 1776518109000,
                 "users": 45
             },
             "metadata": {
@@ -5053,7 +5053,7 @@
                 ],
                 "name": "IDM Clear Completed Downloads",
                 "twitter": "https://x.com/bcrtvkcs",
-                "version": "0.5.3"
+                "version": "0.5.4"
             }
         },
         "ignore-focus-loss": {
