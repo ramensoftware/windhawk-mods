@@ -2,9 +2,9 @@
 // @id              taskbar-music-lounge
 // @name            Taskbar Music Lounge
 // @description     A native-style music ticker with media controls.
-// @version         4.0.1
-// @author          Hashah2311
-// @github          https://github.com/Hashah2311
+// @version         4.0.3
+// @author          Hashah2311 & Chaython
+// @github          https://github.com/Chaython
 // @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus -lshell32
 // ==/WindhawkMod==
@@ -14,6 +14,13 @@
 # Taskbar Music Lounge
 
 A media controller that uses Windows 11 native DWM styling for a seamless look.
+
+### 🛠️ Fork Changelog (v4.0.3)
+* **Fixed:** Widget no longer leaves a visible "lip" when the taskbar auto-hides.
+* **Fixed:** Resolved visibility loop bugs causing flickering.
+* **Fixed:** Added DPI scaling support for hidden taskbars (4K monitor fix).
+* **Fixed:** Removed <vector> and <atomic> as they were called but never used.
+* *Modifications by Chaython.*
 
 ## 🚀 v3 vs v4: Major Architecture Shift
 | Feature | v3 (Legacy) | v4 (Current) |
@@ -74,8 +81,6 @@ A media controller that uses Windows 11 native DWM styling for a seamless look.
 #include <gdiplus.h>
 #include <shcore.h> 
 #include <string>
-#include <vector>
-#include <atomic>
 #include <thread>
 #include <mutex>
 #include <cstdio>
@@ -516,6 +521,30 @@ void RegisterTaskbarHook(HWND hwnd)
     }
     PostMessage(hwnd, WM_APP + 10, 0, 0);
 }
+// --- Helper for Hidden Taskbar ---
+bool IsTaskbarEffectivelyVisible(HWND hTaskbar) {
+    if (!hTaskbar || !IsWindowVisible(hTaskbar)) return false;
+    RECT rc;
+    GetWindowRect(hTaskbar, &rc);
+    
+    HMONITOR hMon = MonitorFromWindow(hTaskbar, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(MONITORINFO) };
+    if (GetMonitorInfo(hMon, &mi)) {
+        RECT intersect;
+        // Mathematically calculate how much of the taskbar is actually on the screen
+        if (IntersectRect(&intersect, &rc, &mi.rcMonitor)) {
+            int visibleWidth = intersect.right - intersect.left;
+            int visibleHeight = intersect.bottom - intersect.top;
+            
+            // A normal taskbar is ~48px. If it drops below 30px, it's collapsed.
+            // This cleanly bypasses any 4K/DPI scaling bugs.
+            if (visibleWidth <= 30 || visibleHeight <= 30) return false;
+        } else {
+            return false; // Off-screen entirely
+        }
+    }
+    return true;
+}
 
 // --- Window Procedure ---
 #define IDT_POLL_MEDIA 1001
@@ -594,14 +623,15 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 if (g_IsHiddenByIdle) shouldHide = true;
 
                 // 3. Final Visibility Check
+                HWND hTaskbar = FindWindow(L"Shell_TrayWnd", nullptr);
+                if (!IsTaskbarEffectivelyVisible(hTaskbar)) {
+                    shouldHide = true; // Force hide if taskbar slid off-screen
+                }
+
                 if (shouldHide && IsWindowVisible(hwnd)) {
                     ShowWindow(hwnd, SW_HIDE);
                 } else if (!shouldHide && !IsWindowVisible(hwnd)) {
-                    // Only restore if Taskbar is also visible
-                    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", nullptr);
-                    if (hTaskbar && IsWindowVisible(hTaskbar)) {
-                        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                    }
+                    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                 }
                 
                 InvalidateRect(hwnd, NULL, FALSE);
@@ -626,18 +656,14 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
         case WM_APP + 10: {
             HWND hTaskbar = FindWindow(TEXT("Shell_TrayWnd"), nullptr);
-            if (!hTaskbar) break;
-
-            // Merged Logic: Check visibility first
-            if (!IsWindowVisible(hTaskbar)) {
+            
+            if (!IsTaskbarEffectivelyVisible(hTaskbar)) {
                 if (IsWindowVisible(hwnd)) ShowWindow(hwnd, SW_HIDE);
                 return 0;
             }
 
             // Restore visibility if we aren't hidden by fullscreen or Idle modes
-            // (The Timer loop handles fullscreen/idle hiding, this handles Taskbar hiding)
             if (!g_IsHiddenByIdle && !IsWindowVisible(hwnd)) {
-                // Double check fullscreen mode isn't forcing hide
                 bool gameModeHide = false;
                 if (g_Settings.hideFullscreen) {
                      QUERY_USER_NOTIFICATION_STATE state;
