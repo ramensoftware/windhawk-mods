@@ -2,12 +2,39 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-18T13:15:09.000Z</updated>
+    <updated>2026-04-18T21:10:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[osu!Profile in Taskbar 3.9]]></title>
+        <id>https://windhawk.net/mods/osu-tray-profile#4355b0e4bb076792f8a6ea54649321a23b8f2856</id>
+        <link href="https://windhawk.net/mods/osu-tray-profile"/>
+        <updated>2026-04-18T21:10:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="osuprofileintaskbar">🟣 osu!Profile in Taskbar</h1>
+<p>Makes your stats always visible. This mod adds a neat widget directly to the Windows taskbar that shows your current PP, rank, and profile picture automaticaly updating in the background.</p>
+<p><img src="https://i.imgur.com/nrJVcw0.png" alt="Taskbar" /></p>
+<h2 id="howtouse">⚙️ How to use:</h2>
+<p>In order for the tweak to collect your statistics, you need to use your API, so you need to create it:</p>
+<ol>
+<li>Open <a href="https://osu.ppy.sh/home/account/edit#oauth">OAuth settings of your osu! profile</a>.</li>
+<li>Click <strong>New OAuth Application</strong> - come up with any name <strong>(Example: Taskbar)</strong>, <strong>"Application callback URL"</strong> is optional.</li>
+<li>Copy the generated <code>Client ID</code> &amp; <code>Client Secret</code>.</li>
+<li>Go back to Windhawk, open the <strong>Settings</strong> tab and paste the copied data by cell with your nickname. <em>(you can use your old nickname "XATCYHE MIKU, XATCYHE</em>MIKU, antoshika")_</li>
+</ol>
+<h2 id="problems">⚠️ Problems:</h2>
+<ul>
+<li><strong>"✎ check 'Settings'"</strong>: You didn't fill in the required fields in the settings.</li>
+</ul>
+<h2 id="errorinvalidclientidorclientsecretmakesurethatyouhavecopiedthemcompletelyandwithoutspacesattheend">* <strong>"⛔ error"</strong>: Invalid Client ID or Client Secret. Make sure that you have copied them completely and without spaces at the end.</h2>
+<p><em>🥬 Im here: 💙 <a href="http://hatsunemiku39.ru">hatsunemiku39.ru</a> // 🟣 <a href="https://osu.ppy.sh/users/18815482">osu!profile</a> // 📶 <a href="https://discord.gg/3jBQs9buYe">Discord</a></em></p>]]></content>
+        <author>
+            <name>antoshika</name>
+            <uri>https://github.com/Antoshika</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[IDM Clear Completed Downloads 0.5.4]]></title>
         <id>https://windhawk.net/mods/idm-clear-completed-downloads#cab2038aa96a42951732da498eb4b297c8bdae94</id>
@@ -373,23 +400,6 @@ on the desktop and in open/save file dialogs.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Highlight Color 1.0]]></title>
-        <id>https://windhawk.net/mods/accent-hl-color#4ba4478d760f894ae99ddd967f0036a26bc08d77</id>
-        <link href="https://windhawk.net/mods/accent-hl-color"/>
-        <updated>2026-04-13T16:36:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="accenthighlightcolor">Accent Highlight Color</h1>
-<p>Makes the highlight color use your system accent color in Win32 apps instead of the
-default blue.</p>
-<p><strong>Before</strong>:<br />
-<img src="https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/AccentHighlightColor/before.png" alt="Notepad with the text &quot;test&quot; selected in blue" /></p>
-<p><strong>After</strong>:<br />
-<img src="https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/AccentHighlightColor/after.png" alt="Notepad with the text &quot;test&quot; selected in the current accent color" /></p>]]></content>
-        <author>
-            <name>FireBlade</name>
-            <uri>https://github.com/FireBlade211</uri>
         </author>
     </entry>
 </feed>

@@ -6790,6 +6790,34 @@
                 "version": "2.0"
             }
         },
+        "osu-tray-profile": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1776546651000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1776546651000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "antoshika",
+                "compilerOptions": "-luser32 -lgdi32 -lwinhttp -lurlmon -lgdiplus",
+                "description": "Displays PP, rank, and avatar from rhythm game osu! (standard mode) next to the system tray",
+                "github": "https://github.com/Antoshika",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "osu!Profile in Taskbar",
+                "version": "3.9"
+            }
+        },
         "passkey-popup-blocker": {
             "details": {
                 "defaultSorting": 3970,
