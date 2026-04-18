@@ -501,7 +501,7 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
 
@@ -512,8 +512,10 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -528,7 +530,7 @@ BOOL Wh_ModInit() {
     }
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
@@ -551,7 +553,8 @@ BOOL Wh_ModInit() {
         HMODULE module = GetModuleHandle(nullptr);
         PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)module;
         PIMAGE_NT_HEADERS ntHeaders = (PIMAGE_NT_HEADERS)((BYTE*)module + dosHeader->e_lfanew);
-        void* entryPoint = (BYTE*)module + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
 
