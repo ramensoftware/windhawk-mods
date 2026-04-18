@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-17T22:58:44.000Z</updated>
+    <updated>2026-04-18T11:41:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Edge Snap Throw 2.0.0]]></title>
+        <id>https://windhawk.net/mods/edge-snap-throw#faf8d95fb6b3aedc1b673c2fd7ed24e2a35f0507</id>
+        <link href="https://windhawk.net/mods/edge-snap-throw"/>
+        <updated>2026-04-18T11:41:38.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="edgesnapthrow">Edge Snap Throw</h1>
+<p><img src="https://raw.githubusercontent.com/getrektbynoob20/Edge-snap/refs/heads/main/edge-snap2.0.gif" alt="Demo" /></p>
+<p>Works best with <strong><a href="https://windhawk.net/mods/slick-window-arrangement">Slick Window Arrangement</a></strong> by m417z.
+Install that mod first. It adds sliding momentum when you release a dragged window.
+This mod detects when that sliding window hits a screen edge fast enough and snaps it.</p>
+<p>Snap zones:</p>
+<ul>
+<li>Left or right edge: 50 percent snap</li>
+<li>Top edge: maximize</li>
+<li>Corners: 25 percent snap</li>
+</ul>
+<p>When you drag a snapped window back out, it restores to its original size (toggle in settings).</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li>Velocity Threshold: how fast the window must be moving to trigger a snap. Default 500.</li>
+<li>Corner Zone: pixels from a corner that count as a corner hit. Default 120.</li>
+<li>Diagonal Angle: how close to 45 degrees a throw must be to count as diagonal. Default 20.</li>
+<li>Diagonal Min Speed: minimum speed per axis for diagonal detection. Default 100.</li>
+<li>Diagonal Axis Ratio: how balanced both axes must be for diagonal detection. Default 40.</li>
+<li>Direction Threshold: minimum speed before a direction counts as intentional. Default 30.</li>
+<li>Restore On Drag: when on, dragging a snapped window restores its original size. Default on.</li>
+</ul>]]></content>
+        <author>
+            <name>getrektbynoob20</name>
+            <uri>https://github.com/getrektbynoob20</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Dialogs 1.1]]></title>
         <id>https://windhawk.net/mods/better-dialogs#642bf56c8905e116c5d201851800312986f93d26</id>
@@ -392,20 +424,6 @@ activation while keeping normal typing and common Ctrl shortcuts stable.</p>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Window Corner Radius 1.1]]></title>
-        <id>https://windhawk.net/mods/custom-corner-radius#30d57e5ca52a25eb7ad419b031b26ca3ef7bf1e1</id>
-        <link href="https://windhawk.net/mods/custom-corner-radius"/>
-        <updated>2026-04-12T18:48:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to customize elements that use a smaller radius, such as context menus, separately.</li>
-<li>Made the mod compatible with older Windows 11 versions such as 23H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

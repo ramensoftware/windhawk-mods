@@ -3264,6 +3264,34 @@
                 "version": "0.3.1"
             }
         },
+        "edge-snap-throw": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1776512498000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1776512498000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "getrektbynoob20",
+                "compilerOptions": "-lcomctl32 -ldwmapi",
+                "description": "Slide a window into a screen edge and it snaps like native Windows snap",
+                "github": "https://github.com/getrektbynoob20",
+                "include": [
+                    "*"
+                ],
+                "name": "Edge Snap Throw",
+                "version": "2.0.0"
+            }
+        },
         "edge-window-tab-manager-block": {
             "details": {
                 "defaultSorting": 12770,
