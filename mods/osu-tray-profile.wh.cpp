@@ -4,6 +4,7 @@
 // @description     Displays PP, rank, and osu! avatar next to the system tray
 // @version         3.9
 // @author          antoshika
+// @github          https://github.com/antoshika
 // @include         explorer.exe
 // @compilerOptions -luser32 -lgdi32 -lwinhttp -lurlmon -lgdiplus
 // ==/WindhawkMod==
