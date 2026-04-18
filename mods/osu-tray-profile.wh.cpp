@@ -441,14 +441,12 @@ void UiThreadFunc() {
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
         RegisterClassW(&wc);
 
-        HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-
         g_overlayHwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOOLWINDOW,
             wc.lpszClassName, L"OsuStats",
             WS_POPUP,
             0, 0, 200, 50,
-            trayWnd, NULL, wc.hInstance, NULL
+            NULL, NULL, wc.hInstance, NULL
         );
 
         ShowWindow(g_overlayHwnd, SW_SHOW);
