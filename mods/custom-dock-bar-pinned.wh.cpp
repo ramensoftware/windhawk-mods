@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              custom-dock-bar-pinned
 // @name            Custom Dock Bar (Pinned + Running)
+// @github          Alaricholt677
 // @description     Bottom dock, draggable, Start + Quick + pinned and running app icons.
 // @version         1.1
-// @author          Sean
+// @author          Alaricholt677
 // @license         MIT
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -lole32 -lshell32 -lpsapi
