@@ -7512,6 +7512,33 @@
                 "version": "1.0"
             }
         },
+        "resizable-discord": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1776632384000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1776632384000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "gameknight963",
+                "description": "Forces discord to be resizable with vencord window transparency",
+                "github": "https://github.com/Gameknight963",
+                "include": [
+                    "discord.exe"
+                ],
+                "name": "Discord Transparency Resize Fix",
+                "version": "1.0.1"
+            }
+        },
         "restore-autorun-icon-in-drive-properties": {
             "details": {
                 "defaultSorting": 513,
