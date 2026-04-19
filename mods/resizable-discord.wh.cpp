@@ -12,13 +12,12 @@
 /*
 This mod forces resizing on Discord when using window transparency + native titlebar.
 
-How it works: It enables WS_THICKFRAME by hooking ,
-which Discord disables because it uses a custom titlebar, and Electron handles
-the resize logic through software in this custom titlebar mode.
+How it works: It hooks ShowWindow to enable WS_THICKFRAME, which Discord 
+disables because it uses a custom titlebar. When it's disabled, Electron handles
+the resize logic through software. When Vencord turns on custom titlebar, it doesn't 
+set WS_THICKFRAME, so the window is not resizable. This mod fixes that.
 
-When Vencord turns on custom titlebar, it doesn't set WS_THICKFRAME, so
-the window is not resizable. This mod fixes that.
-
+![Image showing resizable cursor on border](https://i.imgur.com/GNRdQ5A.png)
 */
 // ==/WindhawkModReadme==
 
