@@ -206,7 +206,7 @@ BOOL Wh_ModInit() {
     }
 
     // Try decorated forms of CDefView::UIActivate.
-    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         // x64 - public virtual, __cdecl (most common on Win11)
         {
             { L"public: virtual long __cdecl CDefView::UIActivate(unsigned int)" },
@@ -236,7 +236,7 @@ BOOL Wh_ModInit() {
         },
     };
 
-    WindhawkUtils::HookSymbols(hShell32, hooks, ARRAYSIZE(hooks));
+    WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks));
 
     if (!CDefView_UIActivate_orig) {
         Wh_Log(L"ERROR: Could not resolve CDefView::UIActivate - mod will have no effect");
