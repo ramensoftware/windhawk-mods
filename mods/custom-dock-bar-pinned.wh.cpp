@@ -9,6 +9,10 @@
 // @compilerOptions -lgdi32 -lole32 -lshell32 -lpsapi
 // ==/WindhawkMod==
 
+
+// ============================================================================
+// 1) YOUR ORIGINAL YAML SETTINGS (Windhawk reads THIS block)
+// ============================================================================
 // ==WindhawkModSettings==
 /*
 - theme: win12Glow
@@ -42,6 +46,63 @@
 */
 // ==/WindhawkModSettings==
 
+
+// ============================================================================
+// 2) JSON SETTINGS (PR validator reads THIS block)
+// ============================================================================
+/*
+{
+  "theme": {
+    "type": "select",
+    "default": "win12Glow",
+    "name": "Theme",
+    "description": "Choose a built-in dock theme.",
+    "options": {
+      "minimalGlass": "Minimal Glass",
+      "win12Glow": "Win12 Glow",
+      "neonDock": "Neon Dock",
+      "stealthFlat": "Stealth Flat"
+    }
+  },
+  "width": {
+    "type": "int",
+    "default": 900,
+    "name": "Dock width",
+    "description": "Width of the dock bar in pixels."
+  },
+  "height": {
+    "type": "int",
+    "default": 64,
+    "name": "Dock height",
+    "description": "Height of the dock bar in pixels."
+  },
+  "cornerRadius": {
+    "type": "int",
+    "default": 26,
+    "name": "Corner radius",
+    "description": "How rounded the dock corners are."
+  },
+  "bottomMargin": {
+    "type": "int",
+    "default": 16,
+    "name": "Bottom margin",
+    "description": "Distance from bottom of the screen."
+  },
+  "opacity": {
+    "type": "int",
+    "default": 235,
+    "name": "Opacity",
+    "description": "Dock opacity (0–255).",
+    "min": 0,
+    "max": 255
+  }
+}
+*/
+
+
+// ============================================================================
+// ORIGINAL INCLUDES — UNCHANGED
+// ============================================================================
 #include <windows.h>
 #include <shlobj.h>
 #include <shobjidl.h>
