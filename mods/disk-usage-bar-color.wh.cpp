@@ -28,9 +28,6 @@ Enter colors as 6-digit hex codes without the `#` prefix (e.g. `60CDFF`).
 
 - Only drive bars in the **This PC** view are affected. File copy/move progress
   bars are filtered out using window ancestry checks.
-- To automate color updates (e.g. with pywal), write to:
-  `HKLM\SOFTWARE\Windhawk\Engine\Mods\local@disk-usage-bar-color\Settings`
-  → `barColor` (REG_SZ, 6-digit hex, no `#`). Requires administrator privileges.
 */
 // ==/WindhawkModReadme==
 
