@@ -34,12 +34,11 @@ Common property names:
 For a full list of available Shell property names, see:
 https://learn.microsoft.com/en-us/windows/win32/properties/props
 
-**Note:** 
+**Note:**
 - Any property name not recognised by Windows will be skipped.
-- There is a minimum value for Column widths (lower value will be ignored).
+- There is a minimum value for column widths; lower values will be raised automatically.
 - You can still change the columns manually but it will be temporary.
 - Changes might take effect after re-opening a folder.
-
 */
 // ==/WindhawkModReadme==
 
@@ -160,27 +159,13 @@ static void ApplyForcedColumns(void* pThis) {
 
 // ---------------------------------------------------------------------------
 // Hook: CDefView::UIActivate  (shell32.dll)
-//
-// COM virtual method - on x64 the decorated symbol is:
-//   public: virtual long __cdecl CDefView::UIActivate(unsigned int)
-// On x86:
-//   public: virtual long __thiscall CDefView::UIActivate(unsigned int)
 // ---------------------------------------------------------------------------
 
-#ifdef _WIN64
-using CDefView_UIActivate_t = HRESULT(__cdecl*)(void* pThis, UINT uState);
-#else
 using CDefView_UIActivate_t = HRESULT(__thiscall*)(void* pThis, UINT uState);
-#endif
 
 CDefView_UIActivate_t CDefView_UIActivate_orig = nullptr;
 
-#ifdef _WIN64
-HRESULT __cdecl CDefView_UIActivate_hook(void* pThis, UINT uState)
-#else
-HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState)
-#endif
-{
+HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
     HRESULT hr = CDefView_UIActivate_orig(pThis, uState);
 
     if (SUCCEEDED(hr) &&
@@ -205,40 +190,21 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Try decorated forms of CDefView::UIActivate.
     const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
-        // x64 - public virtual, __cdecl (most common on Win11)
         {
-            { L"public: virtual long __cdecl CDefView::UIActivate(unsigned int)" },
-            reinterpret_cast<void**>(&CDefView_UIActivate_orig),
-            reinterpret_cast<void*>(CDefView_UIActivate_hook),
-            true
-        },
-        // x64 - without explicit public/virtual qualifier in PDB
-        {
-            { L"long __cdecl CDefView::UIActivate(unsigned int)" },
-            reinterpret_cast<void**>(&CDefView_UIActivate_orig),
-            reinterpret_cast<void*>(CDefView_UIActivate_hook),
-            true
-        },
-        // x86 - __thiscall
-        {
-            { L"public: virtual long __thiscall CDefView::UIActivate(unsigned int)" },
-            reinterpret_cast<void**>(&CDefView_UIActivate_orig),
-            reinterpret_cast<void*>(CDefView_UIActivate_hook),
-            true
-        },
-        {
-            { L"long __thiscall CDefView::UIActivate(unsigned int)" },
-            reinterpret_cast<void**>(&CDefView_UIActivate_orig),
-            reinterpret_cast<void*>(CDefView_UIActivate_hook),
-            true
+            {
+                L"public: virtual long __cdecl CDefView::UIActivate(unsigned int)",
+                L"long __cdecl CDefView::UIActivate(unsigned int)",
+                L"public: virtual long __thiscall CDefView::UIActivate(unsigned int)",
+                L"long __thiscall CDefView::UIActivate(unsigned int)",
+            },
+            &CDefView_UIActivate_orig,
+            CDefView_UIActivate_hook,
+            false
         },
     };
 
-    WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks));
-
-    if (!CDefView_UIActivate_orig) {
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"ERROR: Could not resolve CDefView::UIActivate - mod will have no effect");
         return FALSE;
     }
