@@ -13,102 +13,100 @@
 /*
 # Taskbar Media Bar
 
-A compact media bar that sits on your taskbar, showing what's playing with synchronized lyrics, playback controls, and native Windows 11 acrylic styling.
+A compact, feature-rich media widget that lives on your Windows 11 taskbar. Displays the currently playing track with album art, playback controls, synchronized lyrics, per-app volume control, and adaptive color theming — all rendered natively with GDI+ and DWM composition.
 
-> Based on the original **Taskbar Music Lounge** by **Hashah2311** (https://github.com/Hashah2311). Extended with lyrics, mini mode, custom context menu, and various UI improvements.
+> Based on the original **Taskbar Music Lounge** by **Hashah2311** (https://github.com/Hashah2311). Extended with synchronized lyrics, mini mode, per-app volume, chameleon theming, animated hover effects, multiple visual themes, and a custom context menu.
 
 ---
 
 ## Requirements
 - **Windows 11** — required for rounded corners, acrylic blur, and native taskbar integration
-- **Disable Taskbar Widgets** — Taskbar Settings → Widgets → Off (frees up space)
+- **Disable Taskbar Widgets** — Taskbar Settings → Widgets → Off (frees up space for the bar)
 
 ---
 
-## Basic Usage
+## Features
 
-The bar appears on the left side of your taskbar as soon as media starts playing.
+### Playback Controls
+- **Left-click** the buttons (⏮ ⏯ ⏭) to control media
+- **Double-click** anywhere else on the bar to bring the media app to the foreground
+- **Scroll wheel** adjusts volume — per-app volume when Volume Control is enabled, system volume otherwise
+- **Right-click** opens the context menu
 
-- **Left-click** the playback buttons (⏮ ⏯ ⏭) to control media
-- **Double-click** anywhere on the bar (outside the buttons) to bring the media app to the foreground. If Spotify is minimized to tray, it will reopen automatically.
-- **Scroll wheel** over the bar to adjust system volume (works when the bar or another non-exclusive window is focused)
-- **Right-click** to open the context menu
+### Mini Mode
+Right-click → **Mini Mode** for a compact square widget showing only album art with a circular progress border.
+- Single-click to play/pause, double-click to bring the app forward
 
----
+### Synchronized Lyrics
+Right-click → **Show Lyrics** to open a lyrics panel above the bar.
+- Fetched automatically from **Musixmatch** (primary) and **LRCLIB** (fallback)
+- Current line shown bold, next line dimmed for context
+- Animated loading dots while fetching, auto-fade when no lyrics found
+- Panel fades out after ~4 seconds when Spotify is paused
+- Only active when Spotify is the media source
+- Use **Lyrics Offset** to fine-tune sync timing (supports negative values like -100 to advance lyrics)
 
-## Mini Mode
+### Chameleon Theming
+When **Auto Theme (Chameleon)** is enabled and a Solid or Translucent theme is selected, the widget background dynamically shifts to a gradient built from the two most dominant colors in the current album artwork. The gradient direction goes from the most frequent color on the left to the second color on the right. Separate toggles are available for the media bar and the lyrics popup.
 
-Right-click → **Mini Mode** to switch to a compact square widget that shows only the album artwork with a circular progress bar around it.
+### Per-App Volume Control
+When **Show Volume Control** is enabled:
+- A volume indicator appears on the right side of the widget
+- **Scroll wheel** controls the playing app's individual volume (not system volume)
+- **Click** the volume indicator to mute/unmute the app
+- Volume level is read from the Windows Audio Session API (IAudioSessionManager2)
 
-- **Single-click** the artwork to play/pause
-- **Double-click** the artwork to bring the media app to the foreground
-- The circular progress bar traces clockwise from the top-left corner
+### Hover Animations
+When **Hover Animations** is enabled, playback buttons smoothly fade in/out with an expanding circular glow effect at 60fps, instead of snapping instantly.
+
+### Visual Themes
+Six themes available for both the media bar and lyrics popup, independently configurable:
+- **Acrylic (Glass)** — Windows 11 acrylic blur
+- **Solid Dark / Light** — Opaque backgrounds
+- **Translucent Dark / Light** — Semi-transparent backgrounds
+- **Transparent** — Fully transparent, content only
 
 ---
 
 ## Media Source Priority
 
-Windows allows multiple apps to report media at the same time (e.g. Spotify and a browser video playing simultaneously). The bar decides what to show based on the **Spotify Priority** setting.
-
 **Spotify Priority ON (default):**
-1. **Spotify actively playing** — Spotify always takes priority when it's playing
-2. **Any other app actively playing** — if Spotify is paused or not open, the bar shows whatever is currently playing
-3. **Spotify paused** — if nothing else is playing, the bar falls back to Spotify even if it's paused
-4. **Current session** — last resort fallback
+1. Spotify playing → Spotify always wins
+2. Other app playing → shown if Spotify is paused/closed
+3. Spotify paused → fallback if nothing else is active
+4. Current session → last resort
 
 **Spotify Priority OFF:**
-The bar follows standard Windows session order — whichever app Windows considers active is shown, with no special treatment for Spotify.
+Standard Windows session order, no special treatment for any app.
 
-You can also **lock the bar to a specific source** via Right-click → Media Source regardless of which priority mode is active. The lock is released automatically if that source stops playing.
-
----
-
-## Lyrics
-
-Right-click → **Show Lyrics** to open the lyrics panel above the bar.
-
-- Lyrics are fetched automatically when a new track starts playing
-- Sources: **Musixmatch** (primary) → **LRCLIB** (fallback)
-- While fetching, an animated loading indicator is shown. If no lyrics are found, "No lyrics found" is displayed and the panel fades out after 5 seconds.
-- The lyrics panel shows the **current line** (bold) and the **next line** (dimmer) for context
-- Long lines wrap to a second line instead of being cut off
-- **Hover** over the lyrics panel to make it transparent and click-through, so it doesn't block anything underneath
-- The lyrics panel **fades out** automatically after ~3.7 seconds of Spotify being paused, and **fades back in** as soon as playback resumes
-- The lyrics panel only shows when **Spotify** is the active media source. If another app temporarily takes over (e.g. a browser video), the panel hides and returns automatically when Spotify resumes — without needing to reopen it from the menu. This behavior is independent of the Spotify Priority setting.
-- Use the **Lyrics Offset** setting to fine-tune sync. Positive values delay the lyrics, negative values advance them. The typical range is 0–1500ms for Spotify depending on your system, but if lyrics feel off it may also be a sign of incorrect lyrics from the source rather than a sync issue.
-
-> **Note:** Lyrics are only supported for **Spotify**. Other media players (browsers, Windows Media Player, etc.) are not supported for lyrics.
+You can also lock to a specific source via Right-click → Media Source.
 
 ---
 
 ## Context Menu
 
-Right-click the bar to open a custom acrylic context menu.
+Right-click the bar for a custom acrylic menu:
+- **Media Source** — switch between active sessions
+- **Shuffle / Repeat** — toggle playback modes
+- **Mini Mode** — compact widget toggle
+- **Show Lyrics** — lyrics panel toggle
+- **Lyrics Source** — Musixmatch / Auto / LRCLIB
 
-- **Media Source** — lists all active media sessions. Select one to lock the bar to that source.
-- **Shuffle** — toggles shuffle on the active session
-- **Repeat** — Off / All / This Song
-- **Mini Mode** — toggles compact mode
-- **Show Lyrics** — toggles the lyrics panel
-- **Lyrics Source** *(visible when lyrics are open)* — choose between Musixmatch, Auto, or LRCLIB. Sources unavailable for the current track appear dimmed and cannot be selected.
-
-The menu closes automatically after 2 seconds if the mouse leaves it, or immediately on a click outside. You can select multiple options without the menu closing.
+The menu auto-closes after 2 seconds when the mouse leaves.
 
 ---
 
-## Display Mode
+## Display Modes
 
-Choose how the bar is positioned relative to the taskbar via **Windhawk Settings → Display Mode**.
+**Floating (default):** Hovers above the taskbar with rounded corners, shadow, and configurable offsets.
 
-**Floating (default):** The bar hovers above the taskbar with rounded corners, a drop shadow, and configurable X/Y offsets. Looks like a separate widget.
-
-**Native:** The bar docks flush against the taskbar — no rounded corners, no gap. Height is locked to the taskbar height and the bar starts from the exact left or right edge. X Offset and Y Offset are ignored in this mode. The bar slides in and out together with the taskbar during auto-hide.
+**Native:** Docks flush inside the taskbar — no gap, no rounded corners. Height matches taskbar. Offsets are ignored. Slides with the taskbar during auto-hide.
 
 ---
 
 ## Fullscreen Behavior
 
-The bar and lyrics panel hide automatically when a fullscreen window is detected, and reappear when you return to the desktop or taskbar.
+The bar and lyrics panel hide automatically during fullscreen apps and reappear when you return to the desktop.
 
 ---
 
@@ -116,28 +114,36 @@ The bar and lyrics panel hide automatically when a fullscreen window is detected
 
 | Setting | Default | Description |
 | :--- | :--- | :--- |
-| Display Mode | floating | `floating` hovers above the taskbar with rounded corners. `native` docks flush inside the taskbar bounds — no gap, no rounded corners, offsets ignored. |
-| Panel Width | 300 | Width of the bar in pixels |
-| Panel Height | 48 | Height of the bar in pixels |
-| Font Size | 11 | Size of the track title/artist text |
-| Button Scale | 1.0 | Scale factor for playback buttons. Use 2.0 for 4K displays. |
-| X Offset | 12 | Horizontal offset from the edge of the taskbar. Ignored in Native mode. |
-| Y Offset | 0 | Vertical offset from the center of the taskbar. Ignored in Native mode. |
-| Manual Text Color | 0xFFFFFF | Widget text color (hex RGB) |
-| Acrylic Tint Opacity | 0 | Background tint strength. Keep at 0 for pure glass. |
-| Lyrics Offset (ms) | 500 | Lyrics sync offset in milliseconds |
-| Show Album Art | true | Show or hide the album artwork thumbnail |
-| Show Playback Buttons | true | Show or hide the previous / play-pause / next buttons |
-| Show Progress Bar | true | Show or hide the track progress bar |
-| Progress Bar Position | bottom | Draw the progress bar at the top or bottom edge of the widget |
-| Artwork Shape | rounded | Rounded or square corners on the album art thumbnail |
-| Widget Side | left | Dock the widget to the left or right side of the taskbar |
-| Spotify Priority | true | Give Spotify priority over other media sources while playing |
-| Auto-hide When No Media | false | Hide the widget automatically when no media is active |
-| Auto-hide Delay (ms) | 5000 | How many milliseconds to wait before hiding after media stops |
-| Hide Lyrics When Taskbar Hides | true | Also hide the lyrics panel when the taskbar slides away (auto-hide) |
+| Display Mode | floating | Floating widget or native taskbar dock |
+| Panel Width | 300 | Widget width in pixels |
+| Panel Height | 48 | Widget height in pixels |
+| Font Size | 11 | Track title/artist text size |
+| Button Scale | 1.0 | Playback button scale (2.0 for 4K) |
+| X Offset | 12 | Horizontal offset from taskbar edge |
+| Y Offset | 0 | Vertical offset from taskbar center |
+| Manual Text Color | 0xFFFFFF | Text color (hex RGB) |
+| Acrylic Tint Opacity | 0 | Background tint (0 = pure glass) |
+| Lyrics Offset (ms) | 500 | Lyrics sync offset |
+| Show Album Art | true | Album artwork thumbnail |
+| Show Playback Buttons | true | Previous / Play-Pause / Next buttons |
+| Show Progress Bar | true | Track progress bar |
+| Progress Bar Position | bottom | Top or bottom of widget |
+| Artwork Shape | rounded | Rounded or square album art corners |
+| Widget Side | left | Left or right side of taskbar |
+| Spotify Priority | true | Spotify takes priority over other sources |
+| Auto-hide When No Media | false | Hide widget when nothing is playing |
+| Auto-hide Delay (ms) | 5000 | Delay before hiding (milliseconds) |
+| Hide Lyrics When Taskbar Hides | true | Hide lyrics panel with taskbar auto-hide |
+| Auto Theme (Chameleon) | true | Album art color gradient on media bar |
+| Auto Theme for Lyrics | true | Album art color gradient on lyrics popup |
+| Adaptive Chameleon Text | true | Auto black/white text based on gradient brightness |
+| Hover Animations | true | Smooth button hover effects |
+| Show Volume Control | true | Per-app volume icon and scroll control |
+| Show Volume Icon | true | Display the volume indicator graphic |
+| Media Bar Theme | acrylic | Visual theme for the media bar |
+| Lyrics Popup Theme | acrylic | Visual theme for the lyrics window |
 
-> **Note:** The default values listed above are what the mod is tested and optimized for. Using significantly different values — especially Panel Width, Height, or Button Scale — may cause layout issues or clipped elements. Adjust at your own risk.
+> **Note:** Default values are optimized for standard 1080p/1440p displays. Significantly different Panel Width, Height, or Button Scale values may cause layout issues.
 */
 // ==/WindhawkModReadme==
 
@@ -168,7 +174,7 @@ The bar and lyrics panel hide automatically when a fullscreen window is detected
   $description: Scale factor for playback buttons. Use 2.0 for 4K displays.
 - LyricsOffset: 500
   $name: Lyrics Offset (ms)
-  $description: Lyrics sync offset in milliseconds. Typical range is 0-1500 for Spotify depending on your system. Increase if lyrics are late, decrease if early. Note that sync issues can also be caused by incorrect or poorly timed lyrics from the source, not just system latency. Setting to 0 defaults to 500ms.
+  $description: Lyrics sync offset in milliseconds. You can use negative values (e.g., -100) to advance lyrics or positive values to delay them. Note that sync issues can also be caused by incorrect or poorly timed lyrics from the source, not just system latency. Setting to 0 defaults to 500ms.
 - ShowArtwork: true
   $name: Show Album Art
   $description: Show the album artwork on the left side of the bar.
@@ -208,6 +214,44 @@ The bar and lyrics panel hide automatically when a fullscreen window is detected
 - HideLyricsWithTaskbar: true
   $name: Hide Lyrics When Taskbar Hides
   $description: When the taskbar is set to auto-hide, also hide the lyrics panel when the taskbar slides away.
+- AutoTheme: true
+  $name: Auto Theme (Chameleon)
+  $description: When using "Solid Dark/Light" or "Translucent Dark/Light" themes, dynamically change colors based on the playing album art.
+- AutoThemeLyrics: true
+  $name: Auto Theme (Chameleon) for Lyrics Popup
+  $description: Enable Chameleon gradient backgrounds specifically for the Lyrics popup when using compatible themes.
+- AdaptiveChameleonText: true
+  $name: Adaptive Chameleon Text
+  $description: Automatically switch text and icons to black or white based on the brightness of the generated Chameleon background.
+- DynamicHover: true
+  $name: Hover Animations
+  $description: Enable smooth, elegant glowing animations when hovering over playback buttons.
+- ShowVolume: true
+  $name: Show Volume Control
+  $description: Enable per-app volume control via scroll wheel. When enabled, scrolling on the widget adjusts the media app's volume instead of system volume.
+- ShowVolumeIcon: true
+  $name: Show Volume Icon
+  $description: Display a volume level indicator on the right side of the widget. Click to mute/unmute.
+- MediaTheme: acrylic
+  $name: Media Bar Theme
+  $description: Visual theme for the main media widget.
+  $options:
+    - acrylic: Acrylic (Glass)
+    - solid_dark: Solid Dark
+    - solid_light: Solid Light
+    - translucent_dark: Translucent Dark
+    - translucent_light: Translucent Light
+    - transparent: Transparent
+- LyricsTheme: acrylic
+  $name: Lyrics Popup Theme
+  $description: Visual theme for the lyrics window.
+  $options:
+    - acrylic: Acrylic (Glass)
+    - solid_dark: Solid Dark
+    - solid_light: Solid Light
+    - translucent_dark: Translucent Dark
+    - translucent_light: Translucent Light
+    - transparent: Transparent
 */
 // ==/WindhawkModSettings==
 
@@ -218,6 +262,10 @@ The bar and lyrics panel hide automatically when a fullscreen window is detected
 #include <shcore.h>
 #include <propsys.h>
 #include <winhttp.h>
+#include <mmdeviceapi.h>
+#include <audiopolicy.h>
+#include <endpointvolume.h>
+#include <functiondiscoverykeys_devpkey.h>
 
 static const PROPERTYKEY MY_PKEY_AppUserModel_ID = {
     { 0x9F4C2855, 0x9F79, 0x4B39, {0xA8,0xD0,0xE1,0xD4,0x2D,0xE1,0xD5,0xF3} }, 5
@@ -248,8 +296,13 @@ const WCHAR* FONT_NAME = L"Segoe UI Variable Display";
 
 typedef enum _WINDOWCOMPOSITIONATTRIB { WCA_ACCENT_POLICY = 19 } WINDOWCOMPOSITIONATTRIB;
 typedef enum _ACCENT_STATE {
-    ACCENT_DISABLED = 0, ACCENT_ENABLE_BLURBEHIND = 3,
-    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4, ACCENT_INVALID_STATE = 5
+    ACCENT_DISABLED = 0,
+    ACCENT_ENABLE_GRADIENT = 1,
+    ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+    ACCENT_ENABLE_BLURBEHIND = 3,
+    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+    ACCENT_INVALID_STATE = 5,
+    ACCENT_ENABLE_SOLIDCOLOR = 6
 } ACCENT_STATE;
 typedef struct _ACCENT_POLICY { ACCENT_STATE AccentState; DWORD AccentFlags; DWORD GradientColor; DWORD AnimationId; } ACCENT_POLICY;
 typedef struct _WINDOWCOMPOSITIONATTRIBDATA { WINDOWCOMPOSITIONATTRIB Attribute; PVOID Data; SIZE_T SizeOfData; } WINDOWCOMPOSITIONATTRIBDATA;
@@ -286,15 +339,113 @@ struct ModSettings {
     bool autoHideNoMedia = false;   // Hide widget when no media is active
     int  autoHideDelayMs = 5000;    // Milliseconds before hiding
     bool hideLyricsWithTaskbar = true; // Hide lyrics panel when taskbar slides away
+    bool autoTheme = true;
+    bool autoThemeLyrics = true;
+    bool adaptiveChameleonText = true;
+    bool dynamicHover = true;
+    bool showVolume = true;
+    bool showVolumeIcon = true;
     bool displayNative = false;    // false=floating, true=native
+    int mediaTheme = 0;            // 0: Acrylic, 1: Solid Dark, 3: Transparent
+    int lyricsTheme = 0;           // 0: Acrylic, 1: Solid Dark, 3: Transparent
 } g_Settings;
 
 HWND g_hMediaWindow = NULL;
 std::atomic<bool> g_Running{true};
 int g_HoverState = 0;
+float g_HoverAnimProgress[5] = {0, 0, 0, 0, 0};
 bool g_IsHidden = false;           // hidden due to fullscreen
 int  g_AutoHideAlpha  = 255;       // auto-hide fade alpha (0-255)
 int  g_AutoHideTarget = 255;       // target alpha (0=hide, 255=show)
+
+struct AlbumPalette { Color primary; Color secondary; };
+
+AlbumPalette GetAlbumPalette(Bitmap* bmp) {
+    const Color fallbackPrimary(255, 18, 18, 18);
+    const Color fallbackSecondary(255, 45, 45, 45);
+    
+    if (!bmp || bmp->GetLastStatus() != Ok) 
+        return { fallbackPrimary, fallbackSecondary };
+    
+    UINT w = bmp->GetWidth(), h = bmp->GetHeight();
+    if (w == 0 || h == 0) return { fallbackPrimary, fallbackSecondary };
+
+    BitmapData data;
+    Rect r(0, 0, (INT)w, (INT)h);
+    if (bmp->LockBits(&r, ImageLockModeRead, PixelFormat32bppARGB, &data) != Ok)
+        return { fallbackPrimary, fallbackSecondary };
+
+    // 4x4x4 = 64 color buckets for quantization
+    const int DIVS = 4;
+    const int BUCKETS = DIVS * DIVS * DIVS;
+    struct Bucket { long long rSum, gSum, bSum; int count; } buckets[64] = {};
+
+    DWORD* pixels = (DWORD*)data.Scan0;
+    int stride = data.Stride / 4;
+
+    for (UINT y = 0; y < h; y += 3) {
+        for (UINT x = 0; x < w; x += 3) {
+            DWORD p = pixels[y * stride + x];
+            BYTE pr = (p >> 16) & 0xFF;
+            BYTE pg = (p >> 8)  & 0xFF;
+            BYTE pb =  p        & 0xFF;
+
+            // Skip very dark (near-black) and very bright (near-white) pixels
+            int lum = (pr * 299 + pg * 587 + pb * 114) / 1000;
+            if (lum < 20 || lum > 240) continue;
+
+            int ri = pr * DIVS / 256;
+            int gi = pg * DIVS / 256;
+            int bi = pb * DIVS / 256;
+            if (ri >= DIVS) ri = DIVS - 1;
+            if (gi >= DIVS) gi = DIVS - 1;
+            if (bi >= DIVS) bi = DIVS - 1;
+            int idx = ri * DIVS * DIVS + gi * DIVS + bi;
+            buckets[idx].rSum += pr;
+            buckets[idx].gSum += pg;
+            buckets[idx].bSum += pb;
+            buckets[idx].count++;
+        }
+    }
+    bmp->UnlockBits(&data);
+
+    // Find the two most populated buckets
+    int best1 = -1, best2 = -1;
+    int max1 = 0, max2 = 0;
+    for (int i = 0; i < BUCKETS; i++) {
+        if (buckets[i].count > max1) {
+            best2 = best1; max2 = max1;
+            best1 = i;     max1 = buckets[i].count;
+        } else if (buckets[i].count > max2) {
+            best2 = i;     max2 = buckets[i].count;
+        }
+    }
+
+    Color primary = fallbackPrimary, secondary = fallbackSecondary;
+    if (best1 >= 0 && buckets[best1].count > 0) {
+        auto& b = buckets[best1];
+        primary = Color(255, (BYTE)(b.rSum/b.count), (BYTE)(b.gSum/b.count), (BYTE)(b.bSum/b.count));
+    }
+    if (best2 >= 0 && buckets[best2].count > 0) {
+        auto& b = buckets[best2];
+        secondary = Color(255, (BYTE)(b.rSum/b.count), (BYTE)(b.gSum/b.count), (BYTE)(b.bSum/b.count));
+    }
+
+    // If secondary too close to primary, push them apart
+    int dr = abs((int)primary.GetR() - (int)secondary.GetR());
+    int dg = abs((int)primary.GetG() - (int)secondary.GetG());
+    int db = abs((int)primary.GetB() - (int)secondary.GetB());
+    if (dr + dg + db < 80) {
+        // Saturate primary (deeper) and lighten secondary (brighter) for contrast
+        auto deepen = [](BYTE c) -> BYTE { return (BYTE)(c * 0.55f); };
+        auto lift   = [](BYTE c) -> BYTE { return (BYTE)min(255, (int)(c * 1.4f + 40)); };
+        Color deepP(255, deepen(primary.GetR()), deepen(primary.GetG()), deepen(primary.GetB()));
+        Color liftS(255, lift(primary.GetR()), lift(primary.GetG()), lift(primary.GetB()));
+        primary = deepP;
+        secondary = liftS;
+    }
+    return { primary, secondary };
+}
 
 struct MediaState {
     wstring title = L"Waiting for media...";
@@ -302,6 +453,8 @@ struct MediaState {
     bool isPlaying = false;
     bool hasMedia = false;
     Bitmap* albumArt = nullptr;
+    Color primaryColor = Color(255, 18, 18, 18);
+    Color secondaryColor = Color(255, 45, 45, 45);
     double progressRatio = 0.0;
     bool hasProgress = false;
     int positionMs = 0;
@@ -321,6 +474,13 @@ bool g_ManualSource = false;
 wstring g_ManualSourceId = L"";
 DWORD g_NoMediaSinceTick = 0;  // tick when media stopped (for auto-hide delay)
 bool g_MiniMode = false;
+
+// Volume control state
+float g_AppVolume = 1.0f;       // 0.0 .. 1.0
+bool  g_AppMuted  = false;
+DWORD g_VolumeLastFetchTick = 0;
+int   g_HoverStateVol = 0;      // 4 = hovering volume icon
+float g_HoverAnimVol = 0.0f;    // animation progress for volume icon
 
 // Lyrics slide animation (taskbar auto-hide)
 int g_LyricsSlideX = 0;       // pixel offset (0 = normal position)
@@ -355,6 +515,11 @@ DWORD g_DotDurationMs[3] = {0, 0, 0};
 float g_DotGlow[3] = {0, 0, 0};
 float g_DotAnimT[3] = {0, 0, 0}; // 0..1 animation progress
 
+// Smooth progress interpolation
+double g_SmoothProgress = 0.0;
+DWORD  g_SmoothProgressTick = 0;
+double g_SmoothProgressRate = 0.0; // progress units per millisecond
+
 
 DWORD g_LyricsPosUpdateTick = 0;
 int   g_LyricsLastPosMs = 0;
@@ -370,7 +535,17 @@ DWORD g_LyricsNotFoundTick = 0; // tick when 'not found' state was set
 
 void FetchLyricsAsync(wstring artist, wstring title);
 void UpdateLyricsWindowPos();
-DWORD GetCurrentTextColor();
+DWORD GetCurrentTextColor(int theme);
+void UpdateAppearance(HWND hwnd, int theme);
+
+void AddRoundedRect(GraphicsPath& path, int x, int y, int w, int h, int r) {
+    int d = r * 2;
+    path.AddArc(x, y, d, d, 180, 90);
+    path.AddArc(x + w - d, y, d, d, 270, 90);
+    path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+    path.AddArc(x, y + h - d, d, d, 90, 90);
+    path.CloseFigure();
+}
 
 HWINEVENTHOOK g_hForegroundHook = NULL;
 HWINEVENTHOOK g_hMoveSizeHook = NULL;
@@ -422,10 +597,38 @@ void LoadSettings() {
     if (g_Settings.autoHideDelayMs < 0)    g_Settings.autoHideDelayMs = 0;
     if (g_Settings.autoHideDelayMs > 60000) g_Settings.autoHideDelayMs = 60000;
     g_Settings.hideLyricsWithTaskbar = Wh_GetIntSetting(L"HideLyricsWithTaskbar") != 0;
+    g_Settings.autoTheme = Wh_GetIntSetting(L"AutoTheme") != 0;
+    g_Settings.autoThemeLyrics = Wh_GetIntSetting(L"AutoThemeLyrics") != 0;
+    g_Settings.adaptiveChameleonText = Wh_GetIntSetting(L"AdaptiveChameleonText") != 0;
+    g_Settings.dynamicHover = Wh_GetIntSetting(L"DynamicHover") != 0;
+    g_Settings.showVolume = Wh_GetIntSetting(L"ShowVolume") != 0;
+    g_Settings.showVolumeIcon = Wh_GetIntSetting(L"ShowVolumeIcon") != 0;
 
     PCWSTR dispModeStr = Wh_GetStringSetting(L"DisplayMode");
     g_Settings.displayNative = dispModeStr && wcscmp(dispModeStr, L"native") == 0;
     if (dispModeStr) Wh_FreeStringSetting(dispModeStr);
+
+    PCWSTR mThemeStr = Wh_GetStringSetting(L"MediaTheme");
+    if (mThemeStr) {
+        if (wcscmp(mThemeStr, L"solid_dark") == 0) g_Settings.mediaTheme = 1;
+        else if (wcscmp(mThemeStr, L"solid_light") == 0) g_Settings.mediaTheme = 2;
+        else if (wcscmp(mThemeStr, L"translucent_dark") == 0) g_Settings.mediaTheme = 3;
+        else if (wcscmp(mThemeStr, L"translucent_light") == 0) g_Settings.mediaTheme = 4;
+        else if (wcscmp(mThemeStr, L"transparent") == 0) g_Settings.mediaTheme = 5;
+        else g_Settings.mediaTheme = 0; // acrylic
+        Wh_FreeStringSetting(mThemeStr);
+    }
+
+    PCWSTR lThemeStr = Wh_GetStringSetting(L"LyricsTheme");
+    if (lThemeStr) {
+        if (wcscmp(lThemeStr, L"solid_dark") == 0) g_Settings.lyricsTheme = 1;
+        else if (wcscmp(lThemeStr, L"solid_light") == 0) g_Settings.lyricsTheme = 2;
+        else if (wcscmp(lThemeStr, L"translucent_dark") == 0) g_Settings.lyricsTheme = 3;
+        else if (wcscmp(lThemeStr, L"translucent_light") == 0) g_Settings.lyricsTheme = 4;
+        else if (wcscmp(lThemeStr, L"transparent") == 0) g_Settings.lyricsTheme = 5;
+        else g_Settings.lyricsTheme = 0; // acrylic
+        Wh_FreeStringSetting(lThemeStr);
+    }
 }
 
 // UI state (mini mode, lyrics, source, offset) saved in registry
@@ -667,6 +870,10 @@ void UpdateMediaInfo() {
                 if (g_MediaState.albumArt) { delete g_MediaState.albumArt; g_MediaState.albumArt = nullptr; }
                 auto thumbRef = props.Thumbnail();
                 if (thumbRef) { auto stream = thumbRef.OpenReadAsync().get(); g_MediaState.albumArt = StreamToBitmap(stream); }
+                
+                auto palette = GetAlbumPalette(g_MediaState.albumArt);
+                g_MediaState.primaryColor = palette.primary;
+                g_MediaState.secondaryColor = palette.secondary;
             }
             g_MediaState.title       = newTitle;
             g_MediaState.artist      = props.Artist().c_str();
@@ -676,6 +883,19 @@ void UpdateMediaInfo() {
             g_MediaState.progressRatio = ratio;
             g_MediaState.hasProgress = hasProgress;
             g_MediaState.positionMs  = posMs;
+            
+            // Update smooth progress: snap or set rate
+            if (!g_MediaState.isPlaying || abs(g_SmoothProgress - ratio) > 0.05) {
+                g_SmoothProgress = ratio;
+            }
+            // Compute rate: if total duration known, rate = 1/totalMs per ms
+            try {
+                auto end = timeline.EndTime();
+                auto endMs = chrono::duration_cast<chrono::milliseconds>(end).count();
+                if (endMs > 0) g_SmoothProgressRate = 1.0 / (double)endMs;
+                else g_SmoothProgressRate = 0.0;
+            } catch(...) { g_SmoothProgressRate = 0.0; }
+            g_SmoothProgressTick = GetTickCount();
             wstring newSourceId = session.SourceAppUserModelId().c_str();
             if (newSourceId != g_MediaState.sourceAppId)
                 Wh_Log(L"[Media] Source: %s", newSourceId.c_str());
@@ -913,6 +1133,7 @@ string HttpGet(const wchar_t* host, const wchar_t* path, bool https = true) {
     DWORD flags = https ? WINHTTP_FLAG_SECURE : 0;
     HINTERNET hReq = WinHttpOpenRequest(hConnect, L"GET", path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
     if (hReq) {
+        WinHttpSetTimeouts(hReq, 3000, 3000, 5000, 5000);
         WinHttpAddRequestHeaders(hReq, L"X-Requested-With: XMLHttpRequest\r\nAuthority: apic-desktop.musixmatch.com", -1L, WINHTTP_ADDREQ_FLAG_ADD);
         if (WinHttpSendRequest(hReq, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) && WinHttpReceiveResponse(hReq, NULL)) {
             DWORD bytesRead = 0; char buf[8192];
@@ -972,6 +1193,7 @@ string HttpGetLRCLIB(const wstring& artist, const wstring& title) {
     MultiByteToWideChar(CP_UTF8, 0, pathA.c_str(), -1, &path[0], wlen); if (!path.empty() && path.back()==0) path.pop_back();
     HINTERNET hReq = WinHttpOpenRequest(hConnect, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
     if (hReq) {
+        WinHttpSetTimeouts(hReq, 3000, 3000, 5000, 5000);
         if (WinHttpSendRequest(hReq, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) && WinHttpReceiveResponse(hReq, NULL)) {
             DWORD bytesRead = 0; char buf[4096];
             while (WinHttpReadData(hReq, buf, sizeof(buf)-1, &bytesRead) && bytesRead > 0) { buf[bytesRead] = 0; result += buf; }
@@ -990,9 +1212,11 @@ void FetchLyricsAsync(wstring artist, wstring title) {
       g_LyricsFetchDone = false; } // availability is reset on track change, not on source pref change
     if (g_hLyricsWindow) InvalidateRect(g_hLyricsWindow, NULL, FALSE);
     thread([artist, title, pref]() {
-        // Always try both sources to determine availability
-        string mxm    = FetchMxmLyrics(artist, title);
-        string lrclib = HttpGetLRCLIB(artist, title);
+        // Fetch both sources in parallel
+        string mxm, lrclib;
+        thread t1([&]() { mxm = FetchMxmLyrics(artist, title); });
+        thread t2([&]() { lrclib = HttpGetLRCLIB(artist, title); });
+        t1.join(); t2.join();
 
         bool mxmOk    = !mxm.empty();
         bool lrclibOk = !lrclib.empty();
@@ -1058,12 +1282,61 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
     if (msg == WM_PAINT) {
         PAINTSTRUCT ps; HDC hdc = BeginPaint(hwnd, &ps);
         RECT rc; GetClientRect(hwnd, &rc); int w = rc.right, h = rc.bottom;
-        HDC memDC = CreateCompatibleDC(hdc); HBITMAP memBmp = CreateCompatibleBitmap(hdc, w, h); HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
-        Graphics g(memDC); g.SetSmoothingMode(SmoothingModeAntiAlias); g.SetTextRenderingHint(TextRenderingHintAntiAlias); g.Clear(Color(0,0,0,0));
+        HDC memDC = CreateCompatibleDC(hdc);
+        BITMAPINFO bmi = {0}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER); bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h; bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
+        void* bits; HBITMAP memBmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
+        HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
+        Graphics g(memDC); g.SetSmoothingMode(SmoothingModeAntiAlias); g.SetTextRenderingHint(TextRenderingHintAntiAlias);
+        Color bgColor(0,0,0,0);
+        switch (g_Settings.lyricsTheme) {
+            case 1: bgColor = Color(255, 18, 18, 18); break;
+            case 2: bgColor = Color(255, 240, 240, 240); break;
+            case 3: bgColor = Color(180, 18, 18, 18); break;
+            case 4: bgColor = Color(160, 240, 240, 240); break;
+        }
+
+        DWORD tc = GetCurrentTextColor(g_Settings.lyricsTheme); Color mainColor{tc}; FontFamily ff(FONT_NAME, nullptr);
+        
+        bool hasMedia; Color primary, secondary;
+        { lock_guard<mutex> guard(g_MediaState.lock); hasMedia = g_MediaState.hasMedia; primary = g_MediaState.primaryColor; secondary = g_MediaState.secondaryColor; }
+
+        if (g_Settings.autoThemeLyrics && hasMedia && g_Settings.lyricsTheme != 0 && g_Settings.lyricsTheme != 5) {
+            if (g_Settings.lyricsTheme == 1 || g_Settings.lyricsTheme == 3) {
+                BYTE alpha = (g_Settings.lyricsTheme == 3) ? 180 : 255;
+                LinearGradientBrush lb(Rect(0,0,w+1,h+1), 
+                    Color(alpha, primary.GetR(), primary.GetG(), primary.GetB()), 
+                    Color(alpha, secondary.GetR(), secondary.GetG(), secondary.GetB()), 
+                    LinearGradientModeHorizontal);
+                g.FillRectangle(&lb, 0, 0, w, h);
+                if (g_Settings.adaptiveChameleonText) {
+                    int lum1 = (primary.GetR()*299 + primary.GetG()*587 + primary.GetB()*114)/1000;
+                    int lum2 = (secondary.GetR()*299 + secondary.GetG()*587 + secondary.GetB()*114)/1000;
+                    mainColor = ((lum1+lum2)/2 > 135) ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255);
+                } else {
+                    mainColor = Color(255, 255, 255, 255);
+                }
+            } else if (g_Settings.lyricsTheme == 2 || g_Settings.lyricsTheme == 4) {
+                BYTE alpha = (g_Settings.lyricsTheme == 4) ? 160 : 255;
+                auto lF = [&](BYTE c) -> BYTE { return (BYTE)(c * 0.60f + 255 * 0.40f); };
+                LinearGradientBrush lb(Rect(0,0,w+1,h+1), 
+                    Color(alpha, lF(primary.GetR()), lF(primary.GetG()), lF(primary.GetB())), 
+                    Color(alpha, lF(secondary.GetR()), lF(secondary.GetG()), lF(secondary.GetB())), 
+                    LinearGradientModeHorizontal);
+                g.FillRectangle(&lb, 0, 0, w, h);
+                if (g_Settings.adaptiveChameleonText) {
+                    int lum1 = (lF(primary.GetR())*299 + lF(primary.GetG())*587 + lF(primary.GetB())*114)/1000;
+                    int lum2 = (lF(secondary.GetR())*299 + lF(secondary.GetG())*587 + lF(secondary.GetB())*114)/1000;
+                    mainColor = ((lum1+lum2)/2 > 135) ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255);
+                } else {
+                    mainColor = Color(255, 0, 0, 0);
+                }
+            }
+        } else {
+            g.Clear(bgColor);
+        }
 
         bool hasLyrics, isLoading;
         { lock_guard<mutex> lg(g_LyricsMutex); hasLyrics = !g_Lyrics.empty(); isLoading = g_LyricsLoading; }
-        DWORD tc = GetCurrentTextColor(); Color mainColor{tc}; FontFamily ff(FONT_NAME, nullptr);
 
         if (isLoading) {
             // Continuous phase — full cycle in 1.5 seconds
@@ -1170,6 +1443,7 @@ LRESULT CALLBACK LyricsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             g.ResetClip();
         }
 
+        g.ResetClip();
         BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
         SelectObject(memDC, oldBmp); DeleteObject(memBmp); DeleteDC(memDC);
         EndPaint(hwnd, &ps); return 0;
@@ -1295,10 +1569,7 @@ void ShowLyricsWindow() {
     g_hLyricsWindow = CreateWindowEx(WS_EX_LAYERED|WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_NOACTIVATE|WS_EX_TRANSPARENT, TEXT("WML_Lyrics"), NULL, WS_POPUP|WS_VISIBLE, 0, 0, g_Settings.width, g_Settings.height*2, g_hMediaWindow, NULL, GetModuleHandle(NULL), NULL);
     if (g_hLyricsWindow) {
         SetLayeredWindowAttributes(g_hLyricsWindow, 0, 255, LWA_ALPHA);
-        HMODULE hUser = GetModuleHandle(L"user32.dll"); typedef BOOL(WINAPI* pSWCA)(HWND, void*); auto SetComp = hUser ? (pSWCA)GetProcAddress(hUser, "SetWindowCompositionAttribute") : nullptr;
-        if (SetComp) { struct { int a; void* d; size_t s; } d; struct { int st; DWORD f; DWORD c; DWORD an; } p = {4,0,0x40000000,0}; d = {19,&p,sizeof(p)}; SetComp(g_hLyricsWindow, &d); }
-        DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND; DwmSetWindowAttribute(g_hLyricsWindow, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
-        BOOL bNoAnim = TRUE; DwmSetWindowAttribute(g_hLyricsWindow, DWMWA_TRANSITIONS_FORCEDISABLED, &bNoAnim, sizeof(bNoAnim));
+        UpdateAppearance(g_hLyricsWindow, g_Settings.lyricsTheme);
         SetTimer(g_hLyricsWindow, 302, 16, NULL);
         UpdateLyricsWindowPos();
     }
@@ -1312,25 +1583,45 @@ bool IsSystemLightMode() {
     return RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"SystemUsesLightTheme", RRF_RT_DWORD, nullptr, &value, &size) == ERROR_SUCCESS && value != 0;
 }
 
-DWORD GetCurrentTextColor() {
-    return IsSystemLightMode() ? 0xFF000000 : 0xFFFFFFFF;
+DWORD GetCurrentTextColor(int theme) {
+    if (theme == 2 || theme == 4) return 0xFF000000; // Light themes -> Black text
+    return 0xFFFFFFFF; // Dark, Acrylic, Transparent -> White text
 }
 
-void UpdateAppearance(HWND hwnd) {
+void UpdateAppearance(HWND hwnd, int theme) {
     DWM_WINDOW_CORNER_PREFERENCE pref = g_Settings.displayNative ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
     DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
     BOOL bNoAnim = TRUE; DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &bNoAnim, sizeof(bNoAnim));
+
     HMODULE hUser = GetModuleHandle(L"user32.dll");
     if (hUser) {
         auto SetComp = (pSetWindowCompositionAttribute)GetProcAddress(hUser, "SetWindowCompositionAttribute");
         if (SetComp) {
-            bool light = IsSystemLightMode();
-            DWORD tint = (g_Settings.bgOpacity > 0)
-                ? ((g_Settings.bgOpacity << 24) | (light ? 0xFFFFFF : 0x000000))
-                : (light ? 0x18FFFFFF : 0x18000000);
-            ACCENT_POLICY policy = { ACCENT_ENABLE_ACRYLICBLURBEHIND, 0, tint, 0 };
-            WINDOWCOMPOSITIONATTRIBDATA data = { WCA_ACCENT_POLICY, &policy, sizeof(policy) };
-            SetComp(hwnd, &data);
+            ACCENT_POLICY policy = { ACCENT_DISABLED, 0, 0, 0 };
+            
+            if (theme == 0) { // Acrylic
+                bool light = IsSystemLightMode();
+                DWORD tint = (g_Settings.bgOpacity > 0) 
+                    ? ((g_Settings.bgOpacity << 24) | (light ? 0xFFFFFF : 0x000000)) 
+                    : (light ? 0x18FFFFFF : 0x18000000);
+                policy = { ACCENT_ENABLE_ACRYLICBLURBEHIND, 0, tint, 0 };
+
+                WINDOWCOMPOSITIONATTRIBDATA data = { WCA_ACCENT_POLICY, &policy, sizeof(policy) };
+                SetComp(hwnd, &data);
+
+                MARGINS margins = { 0, 0, 0, 0 };
+                DwmExtendFrameIntoClientArea(hwnd, &margins);
+            }
+            else { // 1, 2, 3, 4, 5
+                // Disable DWM background to let custom GDI+ colors show through correctly
+                policy = { ACCENT_DISABLED, 0, 0, 0 };
+
+                WINDOWCOMPOSITIONATTRIBDATA data = { WCA_ACCENT_POLICY, &policy, sizeof(policy) };
+                SetComp(hwnd, &data);
+
+                MARGINS margins = { -1, -1, -1, -1 };
+                DwmExtendFrameIntoClientArea(hwnd, &margins);
+            }
         }
     }
 }
@@ -1452,7 +1743,7 @@ LRESULT CALLBACK CustomMenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         RECT rcl; GetClientRect(hwnd, &rcl); int W=rcl.right, H=rcl.bottom;
         HDC mem = CreateCompatibleDC(hdc); HBITMAP bmp = CreateCompatibleBitmap(hdc, W, H); HBITMAP obmp = (HBITMAP)SelectObject(mem, bmp);
         Graphics g(mem); g.SetSmoothingMode(SmoothingModeAntiAlias); g.SetTextRenderingHint(TextRenderingHintAntiAlias); g.Clear(Color(0,0,0,0));
-        DWORD tc = GetCurrentTextColor(); Color mc{tc};
+        DWORD tc = GetCurrentTextColor(g_Settings.mediaTheme); Color mc{tc};
         FontFamily ff(FONT_NAME, nullptr);
         Font fN(&ff, (REAL)(g_Settings.fontSize+1), FontStyleBold, UnitPixel);
         Font fS(&ff, (REAL)g_Settings.fontSize, FontStyleRegular, UnitPixel);
@@ -1636,20 +1927,169 @@ void ShowCustomContextMenu(HWND parent) {
     }
 }
 // ─────────────────────────────────────────────────────────────────────────────
-void AddRoundedRect(GraphicsPath& path, int x, int y, int w, int h, int r) {
-    int d = r * 2;
-    path.AddArc(x, y, d, d, 180, 90);
-    path.AddArc(x + w - d, y, d, d, 270, 90);
-    path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
-    path.AddArc(x, y + h - d, d, d, 90, 90);
-    path.CloseFigure();
+// Volume Control via IAudioSessionManager2
+// ─────────────────────────────────────────────────────────────────────────────
+
+static bool FindAudioSessionForApp(const wstring& appId, ISimpleAudioVolume** ppVol) {
+    *ppVol = nullptr;
+    IMMDeviceEnumerator* pEnum = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+        __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
+    if (FAILED(hr) || !pEnum) return false;
+
+    IMMDevice* pDev = nullptr;
+    hr = pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDev);
+    if (FAILED(hr) || !pDev) { pEnum->Release(); return false; }
+
+    IAudioSessionManager2* pMgr = nullptr;
+    hr = pDev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, NULL, (void**)&pMgr);
+    if (FAILED(hr) || !pMgr) { pDev->Release(); pEnum->Release(); return false; }
+
+    IAudioSessionEnumerator* pSessions = nullptr;
+    hr = pMgr->GetSessionEnumerator(&pSessions);
+    if (FAILED(hr) || !pSessions) { pMgr->Release(); pDev->Release(); pEnum->Release(); return false; }
+
+    int count = 0;
+    pSessions->GetCount(&count);
+    bool found = false;
+
+    // Convert appId to lowercase exe name for matching
+    wstring appLower = appId;
+    for (auto& c : appLower) c = towlower(c);
+
+    for (int i = 0; i < count && !found; i++) {
+        IAudioSessionControl* pCtl = nullptr;
+        if (FAILED(pSessions->GetSession(i, &pCtl)) || !pCtl) continue;
+
+        IAudioSessionControl2* pCtl2 = nullptr;
+        if (SUCCEEDED(pCtl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pCtl2)) && pCtl2) {
+            DWORD pid = 0;
+            pCtl2->GetProcessId(&pid);
+            if (pid > 0) {
+                HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                if (hProc) {
+                    WCHAR exePath[MAX_PATH] = {};
+                    DWORD sz = MAX_PATH;
+                    if (QueryFullProcessImageNameW(hProc, 0, exePath, &sz)) {
+                        wstring exeLower = exePath;
+                        for (auto& c : exeLower) c = towlower(c);
+                        if (exeLower.find(appLower) != wstring::npos || appLower.find(L"spotify") != wstring::npos && exeLower.find(L"spotify") != wstring::npos) {
+                            ISimpleAudioVolume* pSimple = nullptr;
+                            if (SUCCEEDED(pCtl->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&pSimple)) && pSimple) {
+                                *ppVol = pSimple;
+                                found = true;
+                            }
+                        }
+                    }
+                    CloseHandle(hProc);
+                }
+            }
+            pCtl2->Release();
+        }
+        pCtl->Release();
+    }
+    pSessions->Release(); pMgr->Release(); pDev->Release(); pEnum->Release();
+    return found;
 }
 
+void FetchAppVolume() {
+    wstring appId;
+    { lock_guard<mutex> guard(g_MediaState.lock); appId = g_MediaState.sourceAppId; }
+    if (appId.empty()) return;
+
+    ISimpleAudioVolume* pVol = nullptr;
+    if (FindAudioSessionForApp(appId, &pVol) && pVol) {
+        float vol = 1.0f; BOOL muted = FALSE;
+        pVol->GetMasterVolume(&vol);
+        pVol->GetMute(&muted);
+        g_AppVolume = vol;
+        g_AppMuted = (muted != FALSE);
+        pVol->Release();
+    }
+    g_VolumeLastFetchTick = GetTickCount();
+}
+
+void SetAppVolume(float vol) {
+    if (vol < 0.0f) vol = 0.0f;
+    if (vol > 1.0f) vol = 1.0f;
+    g_AppVolume = vol;
+
+    wstring appId;
+    { lock_guard<mutex> guard(g_MediaState.lock); appId = g_MediaState.sourceAppId; }
+    if (appId.empty()) return;
+
+    ISimpleAudioVolume* pVol = nullptr;
+    if (FindAudioSessionForApp(appId, &pVol) && pVol) {
+        pVol->SetMasterVolume(vol, NULL);
+        pVol->Release();
+    }
+}
+
+void ToggleAppMute() {
+    wstring appId;
+    { lock_guard<mutex> guard(g_MediaState.lock); appId = g_MediaState.sourceAppId; }
+    if (appId.empty()) return;
+
+    ISimpleAudioVolume* pVol = nullptr;
+    if (FindAudioSessionForApp(appId, &pVol) && pVol) {
+        BOOL muted = FALSE;
+        pVol->GetMute(&muted);
+        pVol->SetMute(!muted, NULL);
+        g_AppMuted = !muted;
+        pVol->Release();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 void DrawMediaPanel(HDC hdc, int width, int height) {
-    Graphics g(hdc); g.SetSmoothingMode(SmoothingModeAntiAlias); g.SetTextRenderingHint(TextRenderingHintAntiAlias); g.Clear(Color(0,0,0,0));
-    Color mainColor{ GetCurrentTextColor() };
+    Graphics g(hdc); g.SetSmoothingMode(SmoothingModeAntiAlias); g.SetTextRenderingHint(TextRenderingHintAntiAlias);
+    Color mainColor{ GetCurrentTextColor(g_Settings.mediaTheme) };
     MediaState state;
-    { lock_guard<mutex> guard(g_MediaState.lock); state.title=g_MediaState.title; state.artist=g_MediaState.artist; state.albumArt=g_MediaState.albumArt?g_MediaState.albumArt->Clone():nullptr; state.hasMedia=g_MediaState.hasMedia; state.isPlaying=g_MediaState.isPlaying; state.progressRatio=g_MediaState.progressRatio; state.hasProgress=g_MediaState.hasProgress; }
+    { lock_guard<mutex> guard(g_MediaState.lock); state.title=g_MediaState.title; state.artist=g_MediaState.artist; state.albumArt=g_MediaState.albumArt?g_MediaState.albumArt->Clone():nullptr; state.primaryColor=g_MediaState.primaryColor; state.secondaryColor=g_MediaState.secondaryColor; state.hasMedia=g_MediaState.hasMedia; state.isPlaying=g_MediaState.isPlaying; state.progressRatio=g_MediaState.progressRatio; state.hasProgress=g_MediaState.hasProgress; }
+
+    Color bgColor(0,0,0,0);
+    switch (g_Settings.mediaTheme) {
+        case 1: bgColor = Color(255, 18, 18, 18); break;
+        case 2: bgColor = Color(255, 240, 240, 240); break;
+        case 3: bgColor = Color(180, 18, 18, 18); break;
+        case 4: bgColor = Color(160, 240, 240, 240); break;
+    }
+    
+    if (g_Settings.autoTheme && state.hasMedia && g_Settings.mediaTheme != 0 && g_Settings.mediaTheme != 5) {
+        if (g_Settings.mediaTheme == 1 || g_Settings.mediaTheme == 3) {
+            BYTE alpha = (g_Settings.mediaTheme == 3) ? 180 : 255;
+            LinearGradientBrush lb(Rect(0,0,width+1,height+1), 
+                Color(alpha, state.primaryColor.GetR(), state.primaryColor.GetG(), state.primaryColor.GetB()), 
+                Color(alpha, state.secondaryColor.GetR(), state.secondaryColor.GetG(), state.secondaryColor.GetB()), 
+                LinearGradientModeHorizontal);
+            g.FillRectangle(&lb, 0, 0, width, height);
+            if (g_Settings.adaptiveChameleonText) {
+                int lum1 = (state.primaryColor.GetR()*299 + state.primaryColor.GetG()*587 + state.primaryColor.GetB()*114)/1000;
+                int lum2 = (state.secondaryColor.GetR()*299 + state.secondaryColor.GetG()*587 + state.secondaryColor.GetB()*114)/1000;
+                mainColor = ((lum1+lum2)/2 > 135) ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255);
+            } else {
+                mainColor = Color(255, 255, 255, 255);
+            }
+        } else if (g_Settings.mediaTheme == 2 || g_Settings.mediaTheme == 4) {
+            BYTE alpha = (g_Settings.mediaTheme == 4) ? 160 : 255;
+            auto lF = [&](BYTE c) -> BYTE { return (BYTE)(c * 0.60f + 255 * 0.40f); };
+            LinearGradientBrush lb(Rect(0,0,width+1,height+1), 
+                Color(alpha, lF(state.primaryColor.GetR()), lF(state.primaryColor.GetG()), lF(state.primaryColor.GetB())), 
+                Color(alpha, lF(state.secondaryColor.GetR()), lF(state.secondaryColor.GetG()), lF(state.secondaryColor.GetB())), 
+                LinearGradientModeHorizontal);
+            g.FillRectangle(&lb, 0, 0, width, height);
+            if (g_Settings.adaptiveChameleonText) {
+                int lum1 = (lF(state.primaryColor.GetR())*299 + lF(state.primaryColor.GetG())*587 + lF(state.primaryColor.GetB())*114)/1000;
+                int lum2 = (lF(state.secondaryColor.GetR())*299 + lF(state.secondaryColor.GetG())*587 + lF(state.secondaryColor.GetB())*114)/1000;
+                mainColor = ((lum1+lum2)/2 > 135) ? Color(255, 0, 0, 0) : Color(255, 255, 255, 255);
+            } else {
+                mainColor = Color(255, 0, 0, 0);
+            }
+        }
+    } else {
+        g.Clear(bgColor);
+    }
 
     if (g_MiniMode) {
         const int border=4; const float penW=3.5f; const int artPad=border+(int)penW+1;
@@ -1753,55 +2193,120 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
     float nX = (float)contentStart;
     if (g_Settings.showButtons) {
         float pX=(float)(contentStart+(int)(gap/2));
-        if(g_HoverState==1)g.FillEllipse(&activeBg,pX-circR,(float)cy-circR,circR*2,circR*2);
-        { float hw=(iconW+2*sc)/2;
-          PointF pp[3]={{pX-hw+iconW,(float)cy-iconH/2},{pX-hw+iconW,(float)cy+iconH/2},{pX-hw,(float)cy}};
-          g.FillPolygon(g_HoverState==1?&hoverBrush:&iconBrush,pp,3);
-          g.FillRectangle(g_HoverState==1?&hoverBrush:&iconBrush,pX+hw-2*sc,(float)cy-iconH/2,2.0f*sc,iconH); }
-
         float plX=pX+gap;
-        if(g_HoverState==2)g.FillEllipse(&activeBg,plX-circR,(float)cy-circR,circR*2,circR*2);
-        if(state.isPlaying){
-            float bw=3.0f*sc,bh=14.0f*sc,gap2=2.0f*sc;
-            float startBar=plX-(2*bw+gap2)/2;
-            g.FillRectangle(g_HoverState==2?&hoverBrush:&iconBrush,startBar,(float)cy-bh/2,bw,bh);
-            g.FillRectangle(g_HoverState==2?&hoverBrush:&iconBrush,startBar+bw+gap2,(float)cy-bh/2,bw,bh);
-        } else {
-            float pw=10.0f*sc,ph=16.0f*sc;
-            PointF pp2[3]={{plX-pw/2,(float)cy-ph/2},{plX-pw/2,(float)cy+ph/2},{plX+pw/2,(float)cy}};
-            g.FillPolygon(g_HoverState==2?&hoverBrush:&iconBrush,pp2,3);
+        float nX_btn=plX+gap;
+        
+        auto getProg = [&](int idx) { return g_Settings.dynamicHover ? g_HoverAnimProgress[idx] : (g_HoverState==idx?1.0f:0.0f); };
+
+        for(int i=1; i<=3; i++) {
+            float prg = getProg(i);
+            if (prg > 0.0f) {
+                float cX = (i==1) ? pX : (i==2) ? plX : nX_btn;
+                float r = circR * (0.8f + 0.2f * prg);
+                SolidBrush bB{Color((BYTE)(40 * prg), mainColor.GetR(), mainColor.GetG(), mainColor.GetB())};
+                g.FillEllipse(&bB, cX - r, (float)cy - r, r*2, r*2);
+            }
         }
 
-        nX=plX+gap;
-        if(g_HoverState==3)g.FillEllipse(&activeBg,nX-circR,(float)cy-circR,circR*2,circR*2);
-        { float hw=(iconW+2*sc)/2;
-          PointF np[3]={{nX-hw,(float)cy-iconH/2},{nX-hw,(float)cy+iconH/2},{nX-hw+iconW,(float)cy}};
-          g.FillPolygon(g_HoverState==3?&hoverBrush:&iconBrush,np,3);
-          g.FillRectangle(g_HoverState==3?&hoverBrush:&iconBrush,nX+hw-2*sc,(float)cy-iconH/2,2.0f*sc,iconH); }
-        nX += gap/2;
+        Color iColor = mainColor;
+        Color hColor(255, mainColor.GetR(), mainColor.GetG(), mainColor.GetB());
+
+        auto mixColor = [&](int idx) {
+            float prg = getProg(idx);
+            return Color(
+                (BYTE)(iColor.GetA() + (hColor.GetA() - iColor.GetA())*prg),
+                (BYTE)(iColor.GetR() + (hColor.GetR() - iColor.GetR())*prg),
+                (BYTE)(iColor.GetG() + (hColor.GetG() - iColor.GetG())*prg),
+                (BYTE)(iColor.GetB() + (hColor.GetB() - iColor.GetB())*prg));
+        };
+
+        { SolidBrush b1{mixColor(1)};
+          float hw=(iconW+2*sc)/2;
+          PointF pp[3]={{pX-hw+iconW,(float)cy-iconH/2},{pX-hw+iconW,(float)cy+iconH/2},{pX-hw,(float)cy}};
+          g.FillPolygon(&b1,pp,3);
+          g.FillRectangle(&b1,pX+hw-2*sc,(float)cy-iconH/2,2.0f*sc,iconH); }
+
+        { SolidBrush b2{mixColor(2)};
+          if(state.isPlaying){
+            float bw=3.0f*sc,bh=14.0f*sc,gap2=2.0f*sc;
+            float startBar=plX-(2*bw+gap2)/2;
+            g.FillRectangle(&b2,startBar,(float)cy-bh/2,bw,bh);
+            g.FillRectangle(&b2,startBar+bw+gap2,(float)cy-bh/2,bw,bh);
+          } else {
+            float pw=10.0f*sc,ph=16.0f*sc;
+            PointF pp2[3]={{plX-pw/2,(float)cy-ph/2},{plX-pw/2,(float)cy+ph/2},{plX+pw/2,(float)cy}};
+            g.FillPolygon(&b2,pp2,3);
+          }
+        }
+
+        { SolidBrush b3{mixColor(3)};
+          float hw=(iconW+2*sc)/2;
+          PointF np[3]={{nX_btn-hw,(float)cy-iconH/2},{nX_btn-hw,(float)cy+iconH/2},{nX_btn-hw+iconW,(float)cy}};
+          g.FillPolygon(&b3,np,3);
+          g.FillRectangle(&b3,nX_btn+hw-2*sc,(float)cy-iconH/2,2.0f*sc,iconH); }
+          
+        nX = nX_btn + gap/2;
     }
 
-    int textX=(int)nX,textMaxW=width-textX-10;
+    // Volume icon area (right side)
+    float volIconX = 0;
+    const float volIconW = 20.0f * sc;
+    const float volAreaW = volIconW + 8.0f;
+    if (g_Settings.showVolume && !g_MiniMode) {
+        volIconX = (float)(width - (int)volAreaW - 4);
+    }
+
+    int textX=(int)nX, textMaxW = width - textX - 10;
+    if (g_Settings.showVolume && !g_MiniMode)
+        textMaxW = (int)volIconX - textX - 4;
+
     wstring fullText=state.title;if(!state.artist.empty())fullText+=L" \u2022 "+state.artist;
     FontFamily ff(FONT_NAME,nullptr);Font font(&ff,(REAL)g_Settings.fontSize,FontStyleBold,UnitPixel);SolidBrush textBrush{mainColor};
     RectF layout(0,0,2000,100),bound;g.MeasureString(fullText.c_str(),-1,&font,layout,&bound);g_TextWidth=(int)bound.Width;
     Region clip(Rect(textX,0,textMaxW,height));g.SetClip(&clip);float textY=(height-bound.Height)/2.0f;
     if(g_TextWidth>textMaxW){g_IsScrolling=true;float drawX=(float)(textX-g_ScrollOffset);g.DrawString(fullText.c_str(),-1,&font,PointF(drawX,textY),&textBrush);if(drawX+g_TextWidth<width)g.DrawString(fullText.c_str(),-1,&font,PointF(drawX+g_TextWidth+40,textY),&textBrush);}
     else{g_IsScrolling=false;g_ScrollOffset=0;g.DrawString(fullText.c_str(),-1,&font,PointF((float)textX,textY),&textBrush);}
+    g.ResetClip();
+
+    // Draw volume icon
+    if (g_Settings.showVolume && g_Settings.showVolumeIcon && !g_MiniMode) {
+        float vx = volIconX + 6.0f;
+        float vy = (float)cy;
+        BYTE volAlpha = (g_HoverStateVol == 4) ? 255 : 140;
+        Pen volPen(Color(volAlpha, mainColor.GetR(), mainColor.GetG(), mainColor.GetB()), 1.8f * sc);
+        volPen.SetLineCap(LineCapRound, LineCapRound, DashCapRound);
+
+        // Percentage text
+        int pct = (int)(g_AppVolume * 100.0f + 0.5f);
+        if (g_AppMuted) pct = 0;
+        wchar_t volStr[8];
+        swprintf_s(volStr, L"%d", pct);
+        FontFamily vff(FONT_NAME, nullptr);
+        Font vFont(&vff, (REAL)(g_Settings.fontSize - 2), FontStyleBold, UnitPixel);
+        SolidBrush vBrush{Color(volAlpha, mainColor.GetR(), mainColor.GetG(), mainColor.GetB())};
+        StringFormat vsf; vsf.SetAlignment(StringAlignmentCenter); vsf.SetLineAlignment(StringAlignmentCenter);
+        RectF vRect(volIconX, (float)(cy - 10*sc), volAreaW, 20.0f*sc);
+        g.DrawString(volStr, -1, &vFont, vRect, &vsf, &vBrush);
+    }
 
     if(g_Settings.showProgressBar && state.hasProgress){
-        g.ResetClip();
         const int barH=4;
         const int barY = g_Settings.progressBarOnTop ? 0 : height-barH;
         const int glowDir = g_Settings.progressBarOnTop ? 1 : -1;
-        const int fillW=(int)(width*state.progressRatio);
+        
+        // Use smooth interpolated progress
+        double displayProgress = g_SmoothProgress;
+        if (displayProgress < 0.0) displayProgress = 0.0;
+        if (displayProgress > 1.0) displayProgress = 1.0;
+        const int fillW=(int)(width * displayProgress);
+        
         SolidBrush bgBar{Color(40,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};g.FillRectangle(&bgBar,0,barY,width,barH);
         if(fillW>0){
-            SolidBrush g3{Color(25,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())},g2{Color(55,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())},g1{Color(90,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};
-            g.FillRectangle(&g3,0,barY+glowDir*(-3),fillW,barH+6);g.FillRectangle(&g2,0,barY+glowDir*(-2),fillW,barH+4);g.FillRectangle(&g1,0,barY+glowDir*(-1),fillW,barH+2);
+            SolidBrush g3{Color(20,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())},g2{Color(40,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())},g1{Color(70,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};
+            g.FillRectangle(&g3,0,barY+glowDir*(-2),fillW,barH+4);g.FillRectangle(&g2,0,barY+glowDir*(-1),fillW,barH+2);g.FillRectangle(&g1,0,barY,fillW,barH);
             SolidBrush fgBar{Color(220,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};g.FillRectangle(&fgBar,0,barY,fillW,barH);
-            const int dotR=5,dotX=fillW-dotR,dotY=barY+barH/2-dotR;
-            SolidBrush dotGlow{Color(60,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};g.FillEllipse(&dotGlow,dotX-3,dotY-3,(dotR+3)*2,(dotR+3)*2);
+            const int dotR=3,dotX=fillW-dotR,dotY=barY+barH/2-dotR;
+            SolidBrush dotGlow{Color(45,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};g.FillEllipse(&dotGlow,dotX-2,dotY-2,(dotR+2)*2,(dotR+2)*2);
             SolidBrush dotBrush{Color(255,mainColor.GetRed(),mainColor.GetGreen(),mainColor.GetBlue())};g.FillEllipse(&dotBrush,dotX,dotY,dotR*2,dotR*2);
         }
     }
@@ -1817,7 +2322,7 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     switch (msg) {
     case WM_CREATE:
         { IPropertyStore* ps=nullptr;if(SUCCEEDED(SHGetPropertyStoreForWindow(hwnd,__uuidof(IPropertyStore),(void**)&ps))){PROPVARIANT pv={};pv.vt=VT_LPWSTR;pv.pwszVal=(LPWSTR)L"WindhawkMusicLounge.Widget";ps->SetValue(MY_PKEY_AppUserModel_ID,pv);ps->Commit();ps->Release();} }
-        UpdateAppearance(hwnd);
+        UpdateAppearance(hwnd, g_Settings.mediaTheme);
         if (g_MiniMode) { int nw=g_Settings.height; SetWindowPos(hwnd,HWND_TOPMOST,0,0,nw,GetWidgetDrawHeight(),SWP_NOMOVE|SWP_NOACTIVATE); }
         SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL);
         SetTimer(hwnd, IDT_TASKBAR, 16, NULL);
@@ -1835,9 +2340,14 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         if(g_hMoveSizeHook){UnhookWinEvent(g_hMoveSizeHook);g_hMoveSizeHook=NULL;}
         if(g_hTaskbarMoveHook){UnhookWinEvent(g_hTaskbarMoveHook);g_hTaskbarMoveHook=NULL;}
         HideLyricsWindow();UnsubscribeGSMTCEvents();g_SessionManager=nullptr;PostQuitMessage(0);return 0;
-    case WM_SETTINGCHANGE: UpdateAppearance(hwnd);InvalidateRect(hwnd,NULL,TRUE);return 0;
+    case WM_SETTINGCHANGE: UpdateAppearance(hwnd, g_Settings.mediaTheme);InvalidateRect(hwnd,NULL,TRUE);return 0;
     case WM_TIMER:
-        if(wParam==IDT_POLL_MEDIA){UpdateMediaInfo();InvalidateRect(hwnd,NULL,FALSE);if(g_hLyricsWindow&&IsWindowVisible(g_hLyricsWindow))InvalidateRect(g_hLyricsWindow,NULL,FALSE);}
+        if(wParam==IDT_POLL_MEDIA){
+            UpdateMediaInfo();
+            if(g_Settings.showVolume && (GetTickCount() - g_VolumeLastFetchTick > 2000)) FetchAppVolume();
+            InvalidateRect(hwnd,NULL,FALSE);
+            if(g_hLyricsWindow&&IsWindowVisible(g_hLyricsWindow))InvalidateRect(g_hLyricsWindow,NULL,FALSE);
+        }
         else if(wParam==IDT_LYRICS){
             if(!g_hLyricsWindow) return 0;
             if(g_SessionManager){
@@ -1880,6 +2390,20 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         else if(wParam==IDT_TASKBAR){
             CheckAndApplyFullscreen();
+
+            // Smooth progress bar interpolation
+            {
+                bool isPlaying; bool hasProgress;
+                { lock_guard<mutex> guard(g_MediaState.lock); isPlaying = g_MediaState.isPlaying; hasProgress = g_MediaState.hasProgress; }
+                if (isPlaying && hasProgress && g_SmoothProgressRate > 0.0) {
+                    DWORD now = GetTickCount();
+                    DWORD dt = now - g_SmoothProgressTick;
+                    g_SmoothProgressTick = now;
+                    g_SmoothProgress += g_SmoothProgressRate * (double)dt;
+                    if (g_SmoothProgress > 1.0) g_SmoothProgress = 1.0;
+                    InvalidateRect(hwnd, NULL, FALSE);
+                }
+            }
 
             // Auto-hide fade animation
             if (g_Settings.autoHideNoMedia && !g_UserHidden) {
@@ -2067,6 +2591,20 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         else if(wParam==212){
             KillTimer(hwnd,212);
             if(g_LyricsVisible) ShowLyricsWindow();
+        } else if (wParam == 1004) {
+            bool animating = false;
+            for (int i = 1; i <= 3; i++) {
+                float target = (g_HoverState == i) ? 1.0f : 0.0f;
+                float diff = target - g_HoverAnimProgress[i];
+                if (abs(diff) > 0.01f) {
+                    g_HoverAnimProgress[i] += diff * 0.2f;
+                    animating = true;
+                } else {
+                    g_HoverAnimProgress[i] = target;
+                }
+            }
+            if (animating) InvalidateRect(hwnd, NULL, FALSE);
+            else KillTimer(hwnd, 1004);
         }
         return 0;
     case WM_MOUSEMOVE:{
@@ -2076,30 +2614,62 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         int contentStart = g_Settings.showArtwork ? 6+artSize+(int)(8*sc) : 6;
         float pX=(float)(contentStart+(int)(28*sc/2)),plX=pX+28*sc,nX=plX+28*sc,circR=12*sc;
         int newState=0;
+        int newVolState=0;
         if(g_Settings.showButtons && y>10&&y<g_Settings.height-10){
             if(x>=pX-circR&&x<=pX+circR)newState=1;
             else if(x>=plX-circR&&x<=plX+circR)newState=2;
             else if(x>=nX-circR&&x<=nX+circR)newState=3;
         }
-        if(newState!=g_HoverState){g_HoverState=newState;InvalidateRect(hwnd,NULL,FALSE);}
+        if(g_Settings.showVolume && !g_MiniMode) {
+            float volIconW = 20.0f * sc;
+            float volAreaW = volIconW + 8.0f;
+            float volIconX = (float)(g_Settings.width - (int)volAreaW - 4);
+            if(x >= (int)volIconX && x <= g_Settings.width && y > 4 && y < g_Settings.height - 4)
+                newVolState = 4;
+        }
+        if(newState!=g_HoverState || newVolState!=g_HoverStateVol){
+            g_HoverState=newState;
+            g_HoverStateVol=newVolState;
+            if(g_Settings.dynamicHover) SetTimer(hwnd, 1004, 16, NULL);
+            else InvalidateRect(hwnd,NULL,FALSE);
+        }
         TRACKMOUSEEVENT tme={sizeof(tme),TME_LEAVE,hwnd,0};TrackMouseEvent(&tme);return 0;
     }
-    case WM_MOUSELEAVE:g_HoverState=0;g_IsHoveringArt=false;HideArtPopup();InvalidateRect(hwnd,NULL,FALSE);break;
+    case WM_MOUSELEAVE:
+        g_HoverState=0;g_HoverStateVol=0;g_IsHoveringArt=false;HideArtPopup();
+        if(g_Settings.dynamicHover) SetTimer(hwnd, 1004, 16, NULL);
+        else InvalidateRect(hwnd,NULL,FALSE);
+        break;
     case WM_LBUTTONDOWN:
         if(g_MiniMode) SetTimer(hwnd, 206, GetDoubleClickTime(), NULL);
         return 0;
     case WM_LBUTTONUP:
-        if(!g_MiniMode && g_HoverState>0) SendMediaCommand(g_HoverState);
+        if(!g_MiniMode && g_HoverStateVol == 4) { ToggleAppMute(); InvalidateRect(hwnd,NULL,FALSE); }
+        else if(!g_MiniMode && g_HoverState>0) SendMediaCommand(g_HoverState);
         return 0;
     case WM_LBUTTONDBLCLK:
         if(g_MiniMode){ KillTimer(hwnd,206); BringSourceAppToFront(); }
         else if(g_HoverState==0) BringSourceAppToFront();
         return 0;
     case WM_RBUTTONUP:ShowCustomContextMenu(hwnd);return 0;
-    case WM_MOUSEWHEEL:{short zDelta=GET_WHEEL_DELTA_WPARAM(wParam);BYTE vk=zDelta>0?VK_VOLUME_UP:VK_VOLUME_DOWN;keybd_event(vk,0,0,0);keybd_event(vk,0,KEYEVENTF_KEYUP,0);return 0;}
+    case WM_MOUSEWHEEL:{
+        short zDelta=GET_WHEEL_DELTA_WPARAM(wParam);
+        if(g_Settings.showVolume) {
+            float step = 0.05f;
+            SetAppVolume(g_AppVolume + (zDelta > 0 ? step : -step));
+            InvalidateRect(hwnd,NULL,FALSE);
+        } else {
+            BYTE vk=zDelta>0?VK_VOLUME_UP:VK_VOLUME_DOWN;
+            keybd_event(vk,0,0,0);keybd_event(vk,0,KEYEVENTF_KEYUP,0);
+        }
+        return 0;
+    }
     case WM_PAINT:{
         PAINTSTRUCT ps;HDC hdc=BeginPaint(hwnd,&ps);RECT rc;GetClientRect(hwnd,&rc);
-        HDC memDC=CreateCompatibleDC(hdc);HBITMAP memBmp=CreateCompatibleBitmap(hdc,rc.right,rc.bottom);HBITMAP oldBmp=(HBITMAP)SelectObject(memDC,memBmp);
+        HDC memDC=CreateCompatibleDC(hdc);
+        BITMAPINFO bmi = {0}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER); bmi.bmiHeader.biWidth = rc.right; bmi.bmiHeader.biHeight = -rc.bottom; bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
+        void* bits; HBITMAP memBmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
+        HBITMAP oldBmp=(HBITMAP)SelectObject(memDC,memBmp);
         DrawMediaPanel(memDC,rc.right,rc.bottom);if(g_IsScrolling)SetTimer(hwnd,IDT_ANIMATION,16,NULL);
         BitBlt(hdc,0,0,rc.right,rc.bottom,memDC,0,0,SRCCOPY);SelectObject(memDC,oldBmp);DeleteObject(memBmp);DeleteDC(memDC);
         EndPaint(hwnd,&ps);return 0;
@@ -2145,7 +2715,8 @@ void WhTool_ModUninit(){
 void WhTool_ModSettingsChanged(){
     LoadSettings();
     if(g_hMediaWindow){
-        UpdateAppearance(g_hMediaWindow);
+        UpdateAppearance(g_hMediaWindow, g_Settings.mediaTheme);
+        if(g_hLyricsWindow) UpdateAppearance(g_hLyricsWindow, g_Settings.lyricsTheme);
         if(!g_Settings.showButtons) g_HoverState = 0;
         int curW = g_MiniMode ? g_Settings.height : g_Settings.width;
         SetWindowPos(g_hMediaWindow, HWND_TOPMOST, 0, 0, curW, GetWidgetDrawHeight(), SWP_NOMOVE|SWP_NOACTIVATE);
