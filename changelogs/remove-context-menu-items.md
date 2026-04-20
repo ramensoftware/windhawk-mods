@@ -1,3 +1,8 @@
+## 1.10.0 ([Apr 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/963a462ea1d6362beeb9ebc6136b035a596bc066/mods/remove-context-menu-items.wh.cpp))
+
+- Added Turkish language support (thanks to [bcrtvkcs](https://github.com/bcrtvkcs))
+- Added Russian language support (thanks to [VitalityV1nT](https://github.com/VitalityV1nT)) (80% complete due to Copilot restrictions)
+
 ## 1.9.0 ([Apr 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bf02dc77b1bc761cda1856e3e8f3c01efd8391a4/mods/remove-context-menu-items.wh.cpp))
 
 - Added Spanish language support (thanks to [frankh93](https://github.com/frankh93))
