@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-19T20:59:44.000Z</updated>
+    <updated>2026-04-20T10:09:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Details View Columns 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-force-details-columns#188c9b7c5ac412d8f3fb43b53a7d4d1a0baa7792</id>
+        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
+        <updated>2026-04-20T10:09:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerdetailsviewcolumns">Explorer Details View Columns</h1>
+<p>Forces a specific set of columns whenever a File Explorer folder is in <em>Details</em>
+view. <strong>Other view modes (<em>Icons</em>, <em>Tiles</em>, <em>List</em>, etc.) are not affected.</strong></p>
+<p>Configure which columns to show and in what order in Settings. Each entry takes a Shell property name and a width in pixels.</p>
+<p>Common property names:</p>
+<ul>
+<li><code>System.ItemNameDisplay</code> - Name</li>
+<li><code>System.Size</code> - Size</li>
+<li><code>System.DateModified</code> - Date modified</li>
+<li><code>System.DateCreated</code> - Date created</li>
+<li><code>System.ItemTypeText</code> - Type</li>
+<li><code>System.FileAttributes</code> - Attributes</li>
+<li><code>System.Author</code> - Authors</li>
+<li><code>System.Music.Artist</code> - Contributing artists</li>
+<li><code>System.Media.Duration</code> - Length</li>
+<li><code>System.Image.Dimensions</code> - Dimensions</li>
+</ul>
+<p>For a full list of available Shell property names, see:
+https://learn.microsoft.com/en-us/windows/win32/properties/props</p>
+<p><strong>Note:</strong></p>
+<ul>
+<li>Any property name not recognised by Windows will be skipped.</li>
+<li>There is a minimum value for column widths; lower values will be raised automatically.</li>
+<li>You can still change the columns manually but it will be temporary.</li>
+<li>Changes might take effect after re-opening a folder.</li>
+</ul>]]></content>
+        <author>
+            <name>ernisn</name>
+            <uri>https://github.com/ernisn</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Discord Transparency Resize Fix 1.0.1]]></title>
         <id>https://windhawk.net/mods/resizable-discord#d593f330393969b3140bf03a830ec9d2995780f9</id>
@@ -387,22 +423,6 @@ on the desktop and in open/save file dialogs.</p>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.1.0]]></title>
-        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#849442c1f7f0e050615851eedfe35ffbfac0a4b0</id>
-        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
-        <updated>2026-04-14T20:11:27.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixed a major issue with third-party apps like GlazeWM, Flow Launcher etc</p>
-<p>Issues fixed:</p>
-<ul>
-<li><p>GlazeWM - Chromium-based browsers and apps simply don't play well with running glazewm and having this mod enabled as they aggressively grab the focus and not giving the room to shift workspaces. Also, this mod seems to have caused a regression with it where when toggling so theme from dark to light and vice versa, the workspaces acts weird everytime i.e it randomly shifts workspace focus. </p></li>
-<li><p>Flow Launcher - Closes instantly on an input event. Simple fix by adding <code>Flow.Launcher.exe</code> to <code>@exclude</code></p></li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
