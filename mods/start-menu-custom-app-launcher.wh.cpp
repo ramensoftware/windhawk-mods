@@ -4,7 +4,7 @@
 // @description   Customizable buttons with custom icons and dropdown menus for the Windows 11 Start menu.
 // @version       1.0
 // @author        SharkIT-sys
-// @github        https://github.com/SharkIT-sys/MOD-Windhawk-start-menu-custom-app-launcher
+// @github        https://github.com/SharkIT-sys/
 // @include       StartMenuExperienceHost.exe
 // @include       explorer.exe
 // @architecture  x86-64
