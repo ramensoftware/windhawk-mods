@@ -18,7 +18,6 @@ Selectively disable Windows keyboard shortcuts with individual toggles for each 
 - Disable any Windows key combination
 - Individual toggle for each shortcut
 - Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.
-- Settings apply instantly without needing to restart Explorer!
 
 ## Advanced / Stubborn Shortcuts
 A small number of system shortcuts (Win+A, Win+C, Win+K, Win+N, Win+P, Win+U) and hardcoded keys (Win+Tab, Win+Arrows) operate at a lower OS level.
