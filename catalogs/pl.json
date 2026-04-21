@@ -4350,19 +4350,19 @@
                     103
                 ],
                 "ratingUsers": 112,
-                "updated": 1775845157000,
+                "updated": 1776783423000,
                 "users": 4735
             },
             "metadata": {
                 "author": "Mgg Sk",
-                "compilerOptions": "-lGdi32",
-                "description": "Fixes white flashes when creating new tabs in \"This PC\".",
+                "compilerOptions": "-lgdi32",
+                "description": "Removes the annoying white flash when opening Explorer tabs.",
                 "github": "https://github.com/MGGSK",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Fix white flashes in explorer",
-                "version": "1.3"
+                "version": "1.4"
             }
         },
         "fix-file-explorer-toolbar-position": {
