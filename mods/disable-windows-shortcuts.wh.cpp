@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.0.1
+// @version         1.1.0
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -55,15 +55,23 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- DisableWinA: false
+- DisableWinA: 0
   $name: Win+A
   $description: Action Center / Quick Settings
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinB: false
   $name: Win+B
   $description: Focus system tray
-- DisableWinC: false
+- DisableWinC: 0
   $name: Win+C
-  $description: Cortana / Copilot
+  $description: Cortana / Copilot (May require 'Block hotkey' on Win 11)
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinD: false
   $name: Win+D
   $description: Show/Hide Desktop
@@ -85,21 +93,33 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 - DisableWinJ: false
   $name: Win+J
   $description: Focus Windows tips
-- DisableWinK: false
+- DisableWinK: 0
   $name: Win+K
   $description: Connect (Cast)
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinM: false
   $name: Win+M
   $description: Minimize all windows
-- DisableWinN: false
+- DisableWinN: 0
   $name: Win+N
   $description: Notification Center
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinO: false
   $name: Win+O
   $description: Lock device orientation
-- DisableWinP: false
+- DisableWinP: 0
   $name: Win+P
   $description: Project / Display mode
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinR: false
   $name: Win+R
   $description: Run dialog
@@ -109,9 +129,13 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 - DisableWinT: false
   $name: Win+T
   $description: Cycle taskbar apps
-- DisableWinU: false
+- DisableWinU: 0
   $name: Win+U
   $description: Accessibility Settings
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinV: false
   $name: Win+V
   $description: Clipboard History
@@ -277,9 +301,9 @@ bool g_isDWM = false;
 // Settings structure
 struct
 {
-    bool DisableWinA;
+    int DisableWinA;
     bool DisableWinB;
-    bool DisableWinC;
+    int DisableWinC;
     bool DisableWinD;
     bool DisableWinE;
     bool DisableWinF;
@@ -287,15 +311,15 @@ struct
     bool DisableWinH;
     bool DisableWinI;
     bool DisableWinJ;
-    bool DisableWinK;
+    int DisableWinK;
     bool DisableWinM;
-    bool DisableWinN;
+    int DisableWinN;
     bool DisableWinO;
-    bool DisableWinP;
+    int DisableWinP;
     bool DisableWinR;
     bool DisableWinS;
     bool DisableWinT;
-    bool DisableWinU;
+    int DisableWinU;
     bool DisableWinV;
     bool DisableWinW;
     bool DisableWinX;
@@ -348,11 +372,23 @@ struct
     bool DisableWinCtrlQ;
 } g_settings;
 
+
+int GetSettingIntSafe(PCWSTR settingName) {
+    PCWSTR val = Wh_GetStringSetting(settingName);
+    if (!val) return 0;
+    int res = 0;
+    if (wcscmp(val, L"true") == 0) res = 1; // Map old 'true' to 1 (Disable hotkey)
+    else if (wcscmp(val, L"false") == 0) res = 0;
+    else res = _wtoi(val);
+    Wh_FreeStringSetting(val);
+    return res;
+}
+
 void LoadSettings()
 {
-    g_settings.DisableWinA = Wh_GetIntSetting(L"DisableWinA");
+    g_settings.DisableWinA = GetSettingIntSafe(L"DisableWinA");
     g_settings.DisableWinB = Wh_GetIntSetting(L"DisableWinB");
-    g_settings.DisableWinC = Wh_GetIntSetting(L"DisableWinC");
+    g_settings.DisableWinC = GetSettingIntSafe(L"DisableWinC");
     g_settings.DisableWinD = Wh_GetIntSetting(L"DisableWinD");
     g_settings.DisableWinE = Wh_GetIntSetting(L"DisableWinE");
     g_settings.DisableWinF = Wh_GetIntSetting(L"DisableWinF");
@@ -360,15 +396,15 @@ void LoadSettings()
     g_settings.DisableWinH = Wh_GetIntSetting(L"DisableWinH");
     g_settings.DisableWinI = Wh_GetIntSetting(L"DisableWinI");
     g_settings.DisableWinJ = Wh_GetIntSetting(L"DisableWinJ");
-    g_settings.DisableWinK = Wh_GetIntSetting(L"DisableWinK");
+    g_settings.DisableWinK = GetSettingIntSafe(L"DisableWinK");
     g_settings.DisableWinM = Wh_GetIntSetting(L"DisableWinM");
-    g_settings.DisableWinN = Wh_GetIntSetting(L"DisableWinN");
+    g_settings.DisableWinN = GetSettingIntSafe(L"DisableWinN");
     g_settings.DisableWinO = Wh_GetIntSetting(L"DisableWinO");
-    g_settings.DisableWinP = Wh_GetIntSetting(L"DisableWinP");
+    g_settings.DisableWinP = GetSettingIntSafe(L"DisableWinP");
     g_settings.DisableWinR = Wh_GetIntSetting(L"DisableWinR");
     g_settings.DisableWinS = Wh_GetIntSetting(L"DisableWinS");
     g_settings.DisableWinT = Wh_GetIntSetting(L"DisableWinT");
-    g_settings.DisableWinU = Wh_GetIntSetting(L"DisableWinU");
+    g_settings.DisableWinU = GetSettingIntSafe(L"DisableWinU");
     g_settings.DisableWinV = Wh_GetIntSetting(L"DisableWinV");
     g_settings.DisableWinW = Wh_GetIntSetting(L"DisableWinW");
     g_settings.DisableWinX = Wh_GetIntSetting(L"DisableWinX");
@@ -513,9 +549,9 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
         {
             switch (vk)
             {
-                case 'A': block = g_settings.DisableWinA; break;
+                case 'A': block = (g_settings.DisableWinA > 0); break;
                 case 'B': block = g_settings.DisableWinB; break;
-                case 'C': block = g_settings.DisableWinC; break;
+                case 'C': block = (g_settings.DisableWinC > 0); break;
                 case 'D': block = g_settings.DisableWinD; break;
                 case 'E': block = g_settings.DisableWinE; break;
                 case 'F': block = g_settings.DisableWinF; break;
@@ -523,15 +559,15 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
                 case 'H': block = g_settings.DisableWinH; break;
                 case 'I': block = g_settings.DisableWinI; break;
                 case 'J': block = g_settings.DisableWinJ; break;
-                case 'K': block = g_settings.DisableWinK; break;
+                case 'K': block = (g_settings.DisableWinK > 0); break;
                 case 'M': block = g_settings.DisableWinM; break;
-                case 'N': block = g_settings.DisableWinN; break;
+                case 'N': block = (g_settings.DisableWinN > 0); break;
                 case 'O': block = g_settings.DisableWinO; break;
-                case 'P': block = g_settings.DisableWinP; break;
+                case 'P': block = (g_settings.DisableWinP > 0); break;
                 case 'R': block = g_settings.DisableWinR; break;
                 case 'S': block = g_settings.DisableWinS; break;
                 case 'T': block = g_settings.DisableWinT; break;
-                case 'U': block = g_settings.DisableWinU; break;
+                case 'U': block = (g_settings.DisableWinU > 0); break;
                 case 'V': block = g_settings.DisableWinV; break;
                 case 'W': block = g_settings.DisableWinW; break;
                 case 'X': block = g_settings.DisableWinX; break;
@@ -576,9 +612,14 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
     {
         if (!hasShift) {
             // Hardcoded keys that bypass RegisterHotKey
-            if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || 
-                vk == 'A' || vk == 'K' || vk == 'N' || vk == 'P' || vk == 'U')
+            if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
                 return true;
+            if (vk == 'A' && g_settings.DisableWinA == 2) return true;
+            if (vk == 'C' && g_settings.DisableWinC == 2) return true;
+            if (vk == 'K' && g_settings.DisableWinK == 2) return true;
+            if (vk == 'N' && g_settings.DisableWinN == 2) return true;
+            if (vk == 'P' && g_settings.DisableWinP == 2) return true;
+            if (vk == 'U' && g_settings.DisableWinU == 2) return true;
         } else {
             // Win+Shift+Arrows
             if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
@@ -862,8 +903,10 @@ void StopHookThread()
 
 bool NeedsDwmHook()
 {
-    return g_settings.DisableWinA || g_settings.DisableWinK || g_settings.DisableWinN || g_settings.DisableWinP || 
-           g_settings.DisableWinU || g_settings.DisableWinTab ||
+    return (g_settings.DisableWinA == 2) || (g_settings.DisableWinC == 2) || 
+           (g_settings.DisableWinK == 2) || (g_settings.DisableWinN == 2) || 
+           (g_settings.DisableWinP == 2) || (g_settings.DisableWinU == 2) || 
+           g_settings.DisableWinTab ||
            g_settings.DisableWinUp || g_settings.DisableWinDown || 
            g_settings.DisableWinLeft || g_settings.DisableWinRight ||
            g_settings.DisableWinShiftUp || g_settings.DisableWinShiftDown || 
