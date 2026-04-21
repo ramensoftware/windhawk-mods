@@ -15,6 +15,11 @@
 Removes the annoying white flash when opening new tabs in File Explorer.
 This mod blocks intermediate white frames that appear during Explorer tab creation and redraw, making tab opening look cleaner and less distracting.
 
+### Before
+![Before](https://raw.githubusercontent.com/MGGSK/MGGSK/refs/heads/main/WindhawkModReadmeImages/fix-explorer-white-flash-before.png)
+### After
+![After](https://raw.githubusercontent.com/MGGSK/MGGSK/refs/heads/main/WindhawkModReadmeImages/fix-explorer-white-flash-after.png)
+
 ## Notes
 This mod is focused specifically on the white flash problem. It can also slightly reduce some of the visual jumping during tab creation, but its main purpose is removing the white flash itself.
 
@@ -54,8 +59,8 @@ struct FollowupBlock
     bool armed;
 };
 
-static RecentWhiteFill g_recent[32];
-static FollowupBlock g_followup[8];
+thread_local static RecentWhiteFill g_recent[32];
+thread_local static FollowupBlock g_followup[8];
 
 bool IsDarkModeActive()
 {
@@ -125,9 +130,6 @@ bool IsControlPanelFactoryProcess()
     if (TextContainsI(cmd, L"/factory,{5bd95610-9434-43c2-886c-57852cc8a120}"))
         return true;
 
-    if (TextContainsI(cmd, L"{5bd95610-9434-43c2-886c-57852cc8a120}"))
-        return true;
-
     return false;
 }
 
@@ -155,9 +157,6 @@ bool ShouldHandleBitBltForWindow(HWND hWndDest)
         return false;
 
     if (!IsWindowClass(hWndDest, L"DirectUIHWND"))
-        return false;
-
-    if (IsControlPanelFactoryProcess())
         return false;
 
     if (!IsRegularExplorerRootWindow(hWndDest))
@@ -443,6 +442,9 @@ BOOL WINAPI BitBlt_Hook(
 
 BOOL Wh_ModInit()
 {
+    if (IsControlPanelFactoryProcess())
+        return FALSE;
+
     g_hUxTheme = LoadLibraryExW(L"UxTheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_hUxTheme)
     {
