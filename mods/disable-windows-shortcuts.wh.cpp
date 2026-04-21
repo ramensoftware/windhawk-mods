@@ -14,8 +14,21 @@
 # Disable Windows Shortcuts
 Selectively disable Windows keyboard shortcuts with individual toggles for each shortcut.
 
-## ⚠️ Important Installation Step ⚠️
-For this mod to successfully block window snapping (Win+Arrows) and Task View (Win+Tab), you **must** allow Windhawk to inject into the Desktop Window Manager (`dwm.exe`):
+## Features
+- Disable any Windows key combination
+- Individual toggle for each shortcut
+- Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.
+- Settings apply instantly without needing to restart Explorer!
+
+## Advanced / Stubborn Shortcuts
+A small number of system shortcuts (Win+A, Win+C, Win+K, Win+N, Win+P, Win+U) and hardcoded keys (Win+Tab, Win+Arrows) operate at a lower OS level.
+To handle these properly, this mod provides **three options** for them in a dedicated section at the top of the settings:
+- **0 - Off:** The shortcut is completely unaffected.
+- **1 - Disable hotkey:** Disables the shortcut natively. Lightweight, but third-party apps that simulate these keys (like custom taskbars) will also be blocked.
+- **2 - Block hotkey:** Blocks the physical keystroke but tricks Windows into thinking it was registered. This allows simulating apps to work while physically blocking the key, but **requires injecting into `dwm.exe`**.
+
+## ⚠️ Important `dwm.exe` Installation Step ⚠️
+If you use the **"Block hotkey"** option, or if you disable window snapping (Win+Arrows) or Task View (Win+Tab), you **must** allow Windhawk to inject into the Desktop Window Manager (`dwm.exe`):
 1. Open Windhawk and go to **Settings**
 2. Click on **Advanced settings** at the bottom
 3. Under **Process inclusion list**, ensure `dwm.exe` is added (or `*` is used to include all processes)
@@ -23,38 +36,17 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 
 *Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to take effect. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must manually restart Explorer to restore those standard shortcuts.*
 
-## Features
-- Disable any Windows key combination
-- Individual toggle for each shortcut
-- Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.
-- Settings apply instantly without needing to restart Explorer!
-
-## Supported Shortcuts
-### General
-- Win+B through Win+Z (excluding Win, Win+L, Win+Q)
-- Win+Tab, Win+Arrow Keys, Win+Home
-### With Modifiers
-- Win+Shift combinations
-- Win+Ctrl combinations
-- Win+Alt combinations
-- Win+Ctrl+Shift combinations
-### Special
-- Win+Number (0-9) for taskbar apps
-- Win+Plus/Minus for Magnifier
-- Win+Period/Semicolon for Emoji picker
-- Office hotkeys (Ctrl+Shift+Alt+Win)
-
 ## Notes
 - Win key (Start Menu) is handled by the "Block Start Menu and Hosts" mod
 - Win+L (Lock PC) cannot be blocked through standard hooks
 - Win+Q is redundant with Win+S (both open Search)
-
-## Known Limitations
-- A small number of system shortcuts (Win+A, Win+K, Win+N, Win+P, Win+U, Win+Tab, and Win+Arrows) are hardcoded into the OS at a low level. While this mod successfully blocks them from performing their default Windows actions, they cannot be freed up to be registered by third-party apps (like AutoHotkey or PowerToys). When these specific shortcuts are disabled, they simply do nothing.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
+- _Separator: false
+  $name: ⬇️ Stubborn Shortcuts (3-Tier Options) ⬇️
+  $description: (Read the 'Advanced / Stubborn Shortcuts' section in Details for info)
 - DisableWinA: 0
   $name: Win+A
   $description: Action Center / Quick Settings
@@ -62,9 +54,6 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
   - 0: Off
   - 1: Disable hotkey (Simulating apps affected)
   - 2: Block hotkey (Requires dwm.exe, simulating apps work)
-- DisableWinB: false
-  $name: Win+B
-  $description: Focus system tray
 - DisableWinC: 0
   $name: Win+C
   $description: Cortana / Copilot (May require 'Block hotkey' on Win 11)
@@ -72,6 +61,40 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
   - 0: Off
   - 1: Disable hotkey (Simulating apps affected)
   - 2: Block hotkey (Requires dwm.exe, simulating apps work)
+- DisableWinK: 0
+  $name: Win+K
+  $description: Connect (Cast)
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
+- DisableWinN: 0
+  $name: Win+N
+  $description: Notification Center
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
+- DisableWinP: 0
+  $name: Win+P
+  $description: Project / Display mode
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
+- DisableWinU: 0
+  $name: Win+U
+  $description: Accessibility Settings
+  $options:
+  - 0: Off
+  - 1: Disable hotkey (Simulating apps affected)
+  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
+- _Separator2: false
+  $name: ⬇️ Standard Shortcuts (On/Off) ⬇️
+  $description: Regular shortcuts that only require Explorer
+- DisableWinB: false
+  $name: Win+B
+  $description: Focus system tray
 - DisableWinD: false
   $name: Win+D
   $description: Show/Hide Desktop
@@ -93,33 +116,12 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 - DisableWinJ: false
   $name: Win+J
   $description: Focus Windows tips
-- DisableWinK: 0
-  $name: Win+K
-  $description: Connect (Cast)
-  $options:
-  - 0: Off
-  - 1: Disable hotkey (Simulating apps affected)
-  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinM: false
   $name: Win+M
   $description: Minimize all windows
-- DisableWinN: 0
-  $name: Win+N
-  $description: Notification Center
-  $options:
-  - 0: Off
-  - 1: Disable hotkey (Simulating apps affected)
-  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinO: false
   $name: Win+O
   $description: Lock device orientation
-- DisableWinP: 0
-  $name: Win+P
-  $description: Project / Display mode
-  $options:
-  - 0: Off
-  - 1: Disable hotkey (Simulating apps affected)
-  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinR: false
   $name: Win+R
   $description: Run dialog
@@ -129,13 +131,6 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 - DisableWinT: false
   $name: Win+T
   $description: Cycle taskbar apps
-- DisableWinU: 0
-  $name: Win+U
-  $description: Accessibility Settings
-  $options:
-  - 0: Off
-  - 1: Disable hotkey (Simulating apps affected)
-  - 2: Block hotkey (Requires dwm.exe, simulating apps work)
 - DisableWinV: false
   $name: Win+V
   $description: Clipboard History
