@@ -19,7 +19,7 @@ Selectively disable Windows keyboard shortcuts with individual toggles for each 
 - Individual toggle for each shortcut
 - Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.
 
-## Advanced / Stubborn Shortcuts
+## Special Shortcuts
 A small number of system shortcuts (Win+A, Win+C, Win+K, Win+N, Win+P, Win+U) and hardcoded keys (Win+Tab, Win+Arrows) operate at a lower OS level.
 To handle these properly, this mod provides **three options** for them in a dedicated section at the top of the settings:
 - **0 - Off:** The shortcut is completely unaffected.
@@ -43,51 +43,51 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- StubbornShortcuts:
-  - DisableWinA: off
+- SpecialShortcuts:
+  - DisableWinA: "off"
     $name: Win+A
     $description: Action Center / Quick Settings
     $options:
-    - off: Off
+    - "off": Off
     - disable: Disable hotkey (Simulating apps affected)
     - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinC: off
+  - DisableWinC: "off"
     $name: Win+C
     $description: Cortana / Copilot (May require 'Block hotkey' on Win 11)
     $options:
-    - off: Off
+    - "off": Off
     - disable: Disable hotkey (Simulating apps affected)
     - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinK: off
+  - DisableWinK: "off"
     $name: Win+K
     $description: Connect (Cast)
     $options:
-    - off: Off
+    - "off": Off
     - disable: Disable hotkey (Simulating apps affected)
     - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinN: off
+  - DisableWinN: "off"
     $name: Win+N
     $description: Notification Center
     $options:
-    - off: Off
+    - "off": Off
     - disable: Disable hotkey (Simulating apps affected)
     - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinP: off
+  - DisableWinP: "off"
     $name: Win+P
     $description: Project / Display mode
     $options:
-    - off: Off
+    - "off": Off
     - disable: Disable hotkey (Simulating apps affected)
     - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinU: off
+  - DisableWinU: "off"
     $name: Win+U
     $description: Accessibility Settings
     $options:
-    - off: Off
+    - "off": Off
     - disable: Disable hotkey (Simulating apps affected)
     - block: Block hotkey (Requires dwm.exe, simulating apps work)
-  $name: Stubborn Shortcuts (3-Tier Options)
-  $description: See 'Advanced / Stubborn Shortcuts' in Details
+  $name: Special Shortcuts (3-Tier Options)
+  $description: See 'Special Shortcuts' in Details
 
 - StandardShortcuts:
   - DisableWinB: false
@@ -382,9 +382,9 @@ int GetSettingIntSafe(PCWSTR settingName) {
 
 void LoadSettings()
 {
-    g_settings.DisableWinA = GetSettingIntSafe(L"StubbornShortcuts.DisableWinA");
+    g_settings.DisableWinA = GetSettingIntSafe(L"SpecialShortcuts.DisableWinA");
     g_settings.DisableWinB = Wh_GetIntSetting(L"StandardShortcuts.DisableWinB");
-    g_settings.DisableWinC = GetSettingIntSafe(L"StubbornShortcuts.DisableWinC");
+    g_settings.DisableWinC = GetSettingIntSafe(L"SpecialShortcuts.DisableWinC");
     g_settings.DisableWinD = Wh_GetIntSetting(L"StandardShortcuts.DisableWinD");
     g_settings.DisableWinE = Wh_GetIntSetting(L"StandardShortcuts.DisableWinE");
     g_settings.DisableWinF = Wh_GetIntSetting(L"StandardShortcuts.DisableWinF");
@@ -392,15 +392,15 @@ void LoadSettings()
     g_settings.DisableWinH = Wh_GetIntSetting(L"StandardShortcuts.DisableWinH");
     g_settings.DisableWinI = Wh_GetIntSetting(L"StandardShortcuts.DisableWinI");
     g_settings.DisableWinJ = Wh_GetIntSetting(L"StandardShortcuts.DisableWinJ");
-    g_settings.DisableWinK = GetSettingIntSafe(L"StubbornShortcuts.DisableWinK");
+    g_settings.DisableWinK = GetSettingIntSafe(L"SpecialShortcuts.DisableWinK");
     g_settings.DisableWinM = Wh_GetIntSetting(L"StandardShortcuts.DisableWinM");
-    g_settings.DisableWinN = GetSettingIntSafe(L"StubbornShortcuts.DisableWinN");
+    g_settings.DisableWinN = GetSettingIntSafe(L"SpecialShortcuts.DisableWinN");
     g_settings.DisableWinO = Wh_GetIntSetting(L"StandardShortcuts.DisableWinO");
-    g_settings.DisableWinP = GetSettingIntSafe(L"StubbornShortcuts.DisableWinP");
+    g_settings.DisableWinP = GetSettingIntSafe(L"SpecialShortcuts.DisableWinP");
     g_settings.DisableWinR = Wh_GetIntSetting(L"StandardShortcuts.DisableWinR");
     g_settings.DisableWinS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinS");
     g_settings.DisableWinT = Wh_GetIntSetting(L"StandardShortcuts.DisableWinT");
-    g_settings.DisableWinU = GetSettingIntSafe(L"StubbornShortcuts.DisableWinU");
+    g_settings.DisableWinU = GetSettingIntSafe(L"SpecialShortcuts.DisableWinU");
     g_settings.DisableWinV = Wh_GetIntSetting(L"StandardShortcuts.DisableWinV");
     g_settings.DisableWinW = Wh_GetIntSetting(L"StandardShortcuts.DisableWinW");
     g_settings.DisableWinX = Wh_GetIntSetting(L"StandardShortcuts.DisableWinX");
