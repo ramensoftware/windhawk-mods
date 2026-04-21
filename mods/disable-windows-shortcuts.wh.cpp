@@ -44,48 +44,48 @@ If you use the **"Block hotkey"** option, or if you disable window snapping (Win
 // ==WindhawkModSettings==
 /*
 - StubbornShortcuts:
-  - DisableWinA: 0
+  - DisableWinA: off
     $name: Win+A
     $description: Action Center / Quick Settings
     $options:
-    - 0: Off
-    - 1: Disable hotkey (Simulating apps affected)
-    - 2: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinC: 0
+    - off: Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinC: off
     $name: Win+C
     $description: Cortana / Copilot (May require 'Block hotkey' on Win 11)
     $options:
-    - 0: Off
-    - 1: Disable hotkey (Simulating apps affected)
-    - 2: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinK: 0
+    - off: Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinK: off
     $name: Win+K
     $description: Connect (Cast)
     $options:
-    - 0: Off
-    - 1: Disable hotkey (Simulating apps affected)
-    - 2: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinN: 0
+    - off: Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinN: off
     $name: Win+N
     $description: Notification Center
     $options:
-    - 0: Off
-    - 1: Disable hotkey (Simulating apps affected)
-    - 2: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinP: 0
+    - off: Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinP: off
     $name: Win+P
     $description: Project / Display mode
     $options:
-    - 0: Off
-    - 1: Disable hotkey (Simulating apps affected)
-    - 2: Block hotkey (Requires dwm.exe, simulating apps work)
-  - DisableWinU: 0
+    - off: Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinU: off
     $name: Win+U
     $description: Accessibility Settings
     $options:
-    - 0: Off
-    - 1: Disable hotkey (Simulating apps affected)
-    - 2: Block hotkey (Requires dwm.exe, simulating apps work)
+    - off: Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
   $name: Stubborn Shortcuts (3-Tier Options)
   $description: See 'Advanced / Stubborn Shortcuts' in Details
 
@@ -372,9 +372,10 @@ int GetSettingIntSafe(PCWSTR settingName) {
     PCWSTR val = Wh_GetStringSetting(settingName);
     if (!val) return 0;
     int res = 0;
-    if (wcscmp(val, L"true") == 0) res = 1; // Map old 'true' to 1 (Disable hotkey)
-    else if (wcscmp(val, L"false") == 0) res = 0;
-    else res = _wtoi(val);
+    if (wcscmp(val, L"true") == 0 || wcscmp(val, L"disable") == 0) res = 1;
+    else if (wcscmp(val, L"false") == 0 || wcscmp(val, L"off") == 0) res = 0;
+    else if (wcscmp(val, L"block") == 0) res = 2;
+    else res = _wtoi(val); // fallback for legacy numbers
     Wh_FreeStringSetting(val);
     return res;
 }
