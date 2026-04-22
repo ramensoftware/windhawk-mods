@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-21T14:57:03.000Z</updated>
+    <updated>2026-04-22T09:07:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore folder menubar in 24h2, 25h2 1.0.1]]></title>
+        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#8dd7643ed86609f7309b6b1cf7a6495d6ec3dad1</id>
+        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
+        <updated>2026-04-22T09:07:17.000Z</updated>
+        <content type="html"><![CDATA[<p>Bump version to 1.0.1 and update readme</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix white flashes in explorer 1.4]]></title>
         <id>https://windhawk.net/mods/fix-explorer-white-flash#f8301dd5b08cb37bc3f3983d7732dc7c5a570548</id>
@@ -405,21 +416,6 @@ on the desktop and in open/save file dialogs.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win+D per monitor(show desktop) 1.4.260415]]></title>
-        <id>https://windhawk.net/mods/win-d-per-monitor#100d1ccbed6a49342e5f3d9c1f025a577525c223</id>
-        <link href="https://windhawk.net/mods/win-d-per-monitor"/>
-        <updated>2026-04-15T09:04:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Switched hook target from <code>_HandleGlobalHotkey</code> to <code>_RaiseDesktop</code>, enabling per-monitor show desktop for both Win+D hotkey and touchpad gestures</li>
-<li>将 Hook 目标从 <code>_HandleGlobalHotkey</code> 改为 <code>_RaiseDesktop</code>，同时支持 Win+D 快捷键和触摸板手势的按显示器显示桌面功能</li>
-<li>Fixes: <a href="https://github.com/ramensoftware/windhawk-mods/issues/3794">#3794: Can we add this feature for the touchpad gesture?</a></li>
-</ul>]]></content>
-        <author>
-            <name>easyatm</name>
-            <uri>https://github.com/easyatm</uri>
         </author>
     </entry>
 </feed>

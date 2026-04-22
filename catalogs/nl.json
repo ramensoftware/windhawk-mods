@@ -7666,7 +7666,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1773138544000,
+                "updated": 1776848837000,
                 "users": 42
             },
             "metadata": {
@@ -7681,7 +7681,7 @@
                     "explorer.exe"
                 ],
                 "name": "Restore folder menubar in 24h2, 25h2",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "ribbon-caption-icon-fix": {
