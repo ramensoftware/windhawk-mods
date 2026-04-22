@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-22T09:07:17.000Z</updated>
+    <updated>2026-04-22T09:56:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Edge Snap Throw 2.0.1]]></title>
+        <id>https://windhawk.net/mods/edge-snap-throw#6ab0fe7097af06e58f35e42aa68ba95e05d59a71</id>
+        <link href="https://windhawk.net/mods/edge-snap-throw"/>
+        <updated>2026-04-22T09:56:29.000Z</updated>
+        <content type="html"><![CDATA[<p>Updated author and GitHub metadata to reflect username change.</p>]]></content>
+        <author>
+            <name>Getrektbynoob15</name>
+            <uri>https://github.com/getrektbynoob15</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore folder menubar in 24h2, 25h2 1.0.1]]></title>
         <id>https://windhawk.net/mods/restore-folder-menubar-25h2#8dd7643ed86609f7309b6b1cf7a6495d6ec3dad1</id>
@@ -393,29 +404,6 @@ works correctly regardless of how Windows names the device.</p></li>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.0]]></title>
-        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#53c403569e9f3776cee0f52ec775f464543c3a24</id>
-        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
-        <updated>2026-04-15T09:44:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="pasteclipboardcontenttoexplorer">Paste Clipboard Content to Explorer</h1>
-<p>Allows pasting text and images from clipboard as files in Explorer,
-on the desktop and in open/save file dialogs.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Paste text as .txt (UTF-16 LE with BOM)</li>
-<li>Paste images as .png</li>
-<li>Auto-naming with incrementing number on conflict</li>
-<li>Works in Explorer folders, on the desktop, in file dialogs</li>
-<li>Works with network folders (UNC paths)</li>
-<li>Paste menu item is grayed out in virtual folders (This PC, Network, etc.)</li>
-<li>Ctrl+V and context menu Paste both work</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

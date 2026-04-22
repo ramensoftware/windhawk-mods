@@ -3277,19 +3277,19 @@
                     1
                 ],
                 "ratingUsers": 2,
-                "updated": 1776512498000,
+                "updated": 1776851789000,
                 "users": 56
             },
             "metadata": {
-                "author": "getrektbynoob20",
+                "author": "Getrektbynoob15",
                 "compilerOptions": "-lcomctl32 -ldwmapi",
                 "description": "Slide a window into a screen edge and it snaps like native Windows snap",
-                "github": "https://github.com/getrektbynoob20",
+                "github": "https://github.com/getrektbynoob15",
                 "include": [
                     "*"
                 ],
                 "name": "Edge Snap Throw",
-                "version": "2.0.0"
+                "version": "2.0.1"
             }
         },
         "edge-window-tab-manager-block": {
