@@ -236,11 +236,17 @@ void Wh_ModUninit() {
                                     pTaskbarList->Release();
                                 }
                             }
+
+                            pBrowser->Release();
                         }
+
+                        pDisp->Release();
                     }
                 }
             }
         }
+
+        CoUninitialize();
     }
 }
 
