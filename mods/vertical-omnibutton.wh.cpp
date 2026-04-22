@@ -4,7 +4,7 @@
 // @description     Stacks Windows 11 wifi/volume/battery OmniButton vertically
 // @version         1.0
 // @author          sb4ssman
-// @github          https://github.com/sb4ssman/Windhawk-Vertical-OmniButton
+// @github          https://github.com/sb4ssman
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
