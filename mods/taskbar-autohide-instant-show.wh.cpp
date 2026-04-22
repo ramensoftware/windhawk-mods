@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-autohide-instant-show
 // @name            Taskbar Auto-Hide Instant Show
-// @description     Removes the delay before the taskbar appears with custom animation types (elastic, bounce, fade, etc.)
-// @version         2.0
+// @description     Removes the delay before the taskbar appears with custom animation types (none, slide, elastic, bounce, fade, slide+fade, overshoot)
+// @version         2.2
 // @author          Bo0ii
 // @github          https://github.com/Bo0ii
 // @homepage        https://github.com/Bo0ii/windhawk-mods
@@ -20,10 +20,19 @@ The animation triggers instantly when your mouse touches the screen edge.
 
 ## Animation Types
 
+### No animation
+Taskbar snaps to final position instantly — no slide, no fade.
+
+### Slide (default)
+Default Windows slide, but sped up. Control speed with the speedup settings.
+
 ### Elastic (spring overshoot)
 The taskbar overshoots its target and oscillates like a spring.
 
 ![Elastic](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/elastic.gif)
+
+### Bounce
+The taskbar bounces at its final position.
 
 ### Fade (opacity)
 The taskbar fades in/out in place.
@@ -31,15 +40,12 @@ The taskbar fades in/out in place.
 ![Fade](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/Fade.gif)
 
 ### Slide + Fade (silky smooth)
-Combines sliding with a fade effect for the smoothest feel.
+Combines sliding with a fade effect using a quintic ease — the silkiest feel.
 
 ![Slide + Fade](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/fade-slide.gif)
 
-### Slide (default)
-Default Windows slide, but sped up. Control speed with the speedup settings.
-
-### Bounce
-The taskbar bounces at its final position.
+### Overshoot
+Subtle spring past the target, then settles back.
 
 ## Settings
 
@@ -55,11 +61,13 @@ For all other modes, use *Show/Hide duration (ms)* to control timing.
   $name: Animation type
   $description: How the taskbar appears and disappears
   $options:
+    - none: No animation (instant)
     - slide: Slide (default with speedup)
     - elastic: Elastic (spring overshoot)
     - bounce: Bounce
     - fade: Fade (opacity)
     - slideFade: Slide + Fade (silky smooth)
+    - overshoot: Overshoot (subtle spring)
 - showSpeedup: 400
   $name: Show speedup % (Slide mode only)
   $description: >-
@@ -100,6 +108,13 @@ For all other modes, use *Show/Hide duration (ms)* to control timing.
   $description: >-
     Enable this if you use ExplorerPatcher or similar to use the old
     Windows 10 taskbar on Windows 11.
+- edgeDetection: false
+  $name: Edge detection for empty monitors
+  $description: >-
+    Enable this if the taskbar does not appear when hovering the screen
+    edge on a monitor with no visible windows, or when a fullscreen app
+    swallows the mouse-edge event. Creates a background thread that polls
+    the cursor position.
 */
 // ==/WindhawkModSettings==
 
@@ -110,6 +125,7 @@ For all other modes, use *Show/Hide duration (ms)* to control timing.
 #include <psapi.h>
 
 #include <atomic>
+#include <vector>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -125,6 +141,7 @@ struct {
     int unhideDelay;
     int hideDelay;
     bool oldTaskbarOnWin11;
+    bool edgeDetection;
 } g_settings;
 
 enum class WinVersion {
@@ -145,6 +162,7 @@ std::atomic<DWORD> g_slideWindowThreadId;
 int g_slideWindowSpeedup;
 double g_slideWindowStartTime;
 double g_slideWindowLastFrameStartTime;
+std::atomic<int> g_animationGeneration{0};
 
 void TimerInitialize() {
     LARGE_INTEGER freq;
@@ -195,6 +213,28 @@ double EaseInCubic(double t) {
     return t * t * t;
 }
 
+double EaseOutQuint(double t) {
+    double t1 = 1.0 - t;
+    return 1.0 - t1 * t1 * t1 * t1 * t1;
+}
+
+double EaseInQuint(double t) {
+    return t * t * t * t * t;
+}
+
+double EaseOutBack(double t) {
+    const double c1 = 1.70158;
+    const double c3 = c1 + 1.0;
+    double t1 = t - 1.0;
+    return 1.0 + c3 * t1 * t1 * t1 + c1 * t1 * t1;
+}
+
+double EaseInBack(double t) {
+    const double c1 = 1.70158;
+    const double c3 = c1 + 1.0;
+    return c3 * t * t * t - c1 * t * t;
+}
+
 using GetTickCount_t = decltype(&GetTickCount);
 GetTickCount_t GetTickCount_Original;
 DWORD WINAPI GetTickCount_Hook() {
@@ -243,7 +283,8 @@ static int Lerp(int a, int b, double t) {
 void DoCustomAnimation(HWND hWnd,
                        const RECT* startRect,
                        const RECT* endRect,
-                       bool show) {
+                       bool show,
+                       int myAnimGen) {
     int animType = g_settings.animationType;
     int duration = show ? g_settings.showDuration : g_settings.hideDuration;
 
@@ -259,7 +300,8 @@ void DoCustomAnimation(HWND hWnd,
     int totalFrames = (int)(duration / frameDuration);
     if (totalFrames < 1) totalFrames = 1;
 
-    bool usePosition = (animType == 1 || animType == 2 || animType == 4);
+    bool usePosition = (animType == 1 || animType == 2 || animType == 4 ||
+                        animType == 5);
     bool useFade = (animType == 3 || animType == 4);
 
     LONG_PTR originalExStyle = 0;
@@ -283,6 +325,10 @@ void DoCustomAnimation(HWND hWnd,
     double startTime = TimerGetSeconds();
 
     for (int i = 1; i <= totalFrames; i++) {
+        if (g_animationGeneration.load() != myAnimGen) {
+            break;
+        }
+
         double t = (double)i / totalFrames;
 
         double posT = t;
@@ -300,8 +346,11 @@ void DoCustomAnimation(HWND hWnd,
                     alphaT = EaseOutCubic(t);
                     break;
                 case 4:
-                    posT = EaseOutCubic(t);
-                    alphaT = EaseOutCubic(t);
+                    posT = EaseOutQuint(t);
+                    alphaT = EaseOutQuint(t);
+                    break;
+                case 5:
+                    posT = EaseOutBack(t);
                     break;
             }
         } else {
@@ -316,8 +365,11 @@ void DoCustomAnimation(HWND hWnd,
                     alphaT = EaseInCubic(t);
                     break;
                 case 4:
-                    posT = EaseInCubic(t);
-                    alphaT = EaseInCubic(t);
+                    posT = EaseInQuint(t);
+                    alphaT = EaseInQuint(t);
+                    break;
+                case 5:
+                    posT = EaseInBack(t);
                     break;
             }
         }
@@ -374,10 +426,17 @@ void DoCustomAnimation(HWND hWnd,
             DwmFlush();
         }
 
-        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        // Remove WS_EX_LAYERED while window is either:
+        //   - off-screen (hide) — no flash possible
+        //   - at full alpha (show) — seamless transition
         if (!(originalExStyle & WS_EX_LAYERED)) {
-            DwmFlush();
             SetWindowLongPtr(hWnd, GWL_EXSTYLE, originalExStyle);
+            DwmFlush();
+        }
+
+        // Only restore full alpha if window was already layered
+        if (show && (originalExStyle & WS_EX_LAYERED)) {
+            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         }
     }
 }
@@ -397,7 +456,10 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
                                     bool animate) {
     Wh_Log(L"> show=%d animType=%d", show, g_settings.animationType);
 
-    if (g_settings.animationType == 0) {
+    if (g_settings.animationType == -1) {
+        // No animation — snap to final position instantly.
+        TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show, false);
+    } else if (g_settings.animationType == 0) {
         g_slideWindowSpeedup =
             show ? g_settings.showSpeedup : g_settings.hideSpeedup;
         g_slideWindowStartTime = TimerGetSeconds();
@@ -408,12 +470,47 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
 
         g_slideWindowThreadId = 0;
     } else {
+        int animGen = ++g_animationGeneration;
+
         RECT startRect;
         GetWindowRect(hWnd, &startRect);
 
-        DoCustomAnimation(hWnd, &startRect, rect, show);
+        if (show) {
+            // Suppress pre-animation flash: hide window, let the
+            // original update internal TrayUI state invisibly, then
+            // restore the start position for our custom animation.
+            LONG_PTR exStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+            bool addedLayered = !(exStyle & WS_EX_LAYERED);
+            if (addedLayered)
+                SetWindowLongPtr(hWnd, GWL_EXSTYLE,
+                                 exStyle | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+            DwmFlush();
 
-        TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show, false);
+            TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show,
+                                        false);
+
+            // Move back to hidden start position
+            SetWindowPos(hWnd, NULL, startRect.left, startRect.top,
+                         startRect.right - startRect.left,
+                         startRect.bottom - startRect.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+
+            // Restore window style before custom animation
+            if (addedLayered) {
+                SetWindowLongPtr(hWnd, GWL_EXSTYLE, exStyle);
+            } else {
+                SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+            }
+            DwmFlush();
+
+            DoCustomAnimation(hWnd, &startRect, rect, show, animGen);
+        } else {
+            DoCustomAnimation(hWnd, &startRect, rect, show, animGen);
+
+            TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show,
+                                        false);
+        }
     }
 }
 
@@ -434,6 +531,123 @@ UINT_PTR WINAPI SetTimer_Hook(HWND hWnd,
         }
     }
     return SetTimer_Original(hWnd, nIDEvent, uElapse, lpTimerFunc);
+}
+
+// --- Edge detection for empty monitors ---
+
+HANDLE g_edgeCheckThread = NULL;
+std::atomic<bool> g_edgeCheckRunning{false};
+
+HWND FindTaskbarForMonitor(HMONITOR hMon) {
+    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+    if (hTaskbar) {
+        HMONITOR tbMon =
+            MonitorFromWindow(hTaskbar, MONITOR_DEFAULTTONEAREST);
+        if (tbMon == hMon)
+            return hTaskbar;
+    }
+
+    HWND hSecondary = NULL;
+    while ((hSecondary = FindWindowEx(NULL, hSecondary,
+                                      L"Shell_SecondaryTrayWnd", NULL))) {
+        HMONITOR tbMon =
+            MonitorFromWindow(hSecondary, MONITOR_DEFAULTTONEAREST);
+        if (tbMon == hMon)
+            return hSecondary;
+    }
+    return NULL;
+}
+
+bool IsTaskbarEffectivelyHidden(HWND hTaskbar, HMONITOR hMon) {
+    RECT tr;
+    GetWindowRect(hTaskbar, &tr);
+
+    MONITORINFO mi = {sizeof(mi)};
+    if (!GetMonitorInfo(hMon, &mi))
+        return false;
+
+    RECT overlap;
+    if (!IntersectRect(&overlap, &tr, &mi.rcMonitor))
+        return true;
+
+    int visH = overlap.bottom - overlap.top;
+    int visW = overlap.right - overlap.left;
+    int tbH = tr.bottom - tr.top;
+    int tbW = tr.right - tr.left;
+
+    // Hidden if less than half visible in either dimension
+    return (tbH > 0 && visH < tbH / 2) || (tbW > 0 && visW < tbW / 2);
+}
+
+bool IsCursorAtMonitorEdge(POINT pt, HMONITOR hMon) {
+    MONITORINFO mi = {sizeof(mi)};
+    if (!GetMonitorInfo(hMon, &mi))
+        return false;
+
+    return pt.y >= mi.rcMonitor.bottom - 1 ||
+           pt.y <= mi.rcMonitor.top ||
+           pt.x >= mi.rcMonitor.right - 1 ||
+           pt.x <= mi.rcMonitor.left;
+}
+
+DWORD WINAPI EdgeCheckThreadProc(LPVOID) {
+    // Fast poll so we notice the cursor hitting the edge immediately.
+    const DWORD pollInterval = 20;
+    // Re-post the unhide trigger while the cursor sits at the edge and
+    // the taskbar is still hidden. No one-shot latch — a single
+    // PostMessage can be swallowed by foreground apps (fullscreen Chrome,
+    // terminals, games), so we keep retrying until it takes or the cursor
+    // leaves.
+    const DWORD retryInterval = 150;
+
+    DWORD lastRetryTime = 0;
+
+    while (g_edgeCheckRunning) {
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            HMONITOR hMon =
+                MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+            if (IsCursorAtMonitorEdge(pt, hMon)) {
+                DWORD now = GetTickCount();
+                if (lastRetryTime == 0 ||
+                    now - lastRetryTime >= retryInterval) {
+                    HWND hTaskbar = FindTaskbarForMonitor(hMon);
+                    if (hTaskbar &&
+                        IsTaskbarEffectivelyHidden(hTaskbar, hMon)) {
+                        PostMessage(hTaskbar, WM_TIMER, 3, 0);
+                    }
+                    lastRetryTime = now ? now : 1;
+                }
+            } else {
+                lastRetryTime = 0;
+            }
+        }
+
+        Sleep_Original ? Sleep_Original(pollInterval)
+                       : Sleep(pollInterval);
+    }
+
+    return 0;
+}
+
+void StartEdgeCheckThread() {
+    if (g_edgeCheckThread)
+        return;
+
+    g_edgeCheckRunning = true;
+    g_edgeCheckThread =
+        CreateThread(NULL, 0, EdgeCheckThreadProc, NULL, 0, NULL);
+}
+
+void StopEdgeCheckThread() {
+    if (!g_edgeCheckThread)
+        return;
+
+    g_edgeCheckRunning = false;
+    WaitForSingleObject(g_edgeCheckThread, 2000);
+    CloseHandle(g_edgeCheckThread);
+    g_edgeCheckThread = NULL;
 }
 
 bool HookTaskbarSymbols() {
@@ -638,7 +852,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 void LoadSettings() {
     LPCWSTR animType = Wh_GetStringSetting(L"animationType");
-    if (wcscmp(animType, L"elastic") == 0) {
+    if (wcscmp(animType, L"none") == 0) {
+        g_settings.animationType = -1;
+    } else if (wcscmp(animType, L"elastic") == 0) {
         g_settings.animationType = 1;
     } else if (wcscmp(animType, L"bounce") == 0) {
         g_settings.animationType = 2;
@@ -646,6 +862,8 @@ void LoadSettings() {
         g_settings.animationType = 3;
     } else if (wcscmp(animType, L"slideFade") == 0) {
         g_settings.animationType = 4;
+    } else if (wcscmp(animType, L"overshoot") == 0) {
+        g_settings.animationType = 5;
     } else {
         g_settings.animationType = 0;
     }
@@ -659,6 +877,7 @@ void LoadSettings() {
     g_settings.unhideDelay = Wh_GetIntSetting(L"unhideDelay");
     g_settings.hideDelay = Wh_GetIntSetting(L"hideDelay");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+    g_settings.edgeDetection = Wh_GetIntSetting(L"edgeDetection");
 }
 
 BOOL Wh_ModInit() {
@@ -719,6 +938,10 @@ BOOL Wh_ModInit() {
 
     g_initialized = true;
 
+    if (g_settings.edgeDetection) {
+        StartEdgeCheckThread();
+    }
+
     return TRUE;
 }
 
@@ -732,6 +955,7 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+    StopEdgeCheckThread();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
@@ -740,6 +964,12 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
 
     LoadSettings();
+
+    if (g_settings.edgeDetection) {
+        StartEdgeCheckThread();
+    } else {
+        StopEdgeCheckThread();
+    }
 
     *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
 

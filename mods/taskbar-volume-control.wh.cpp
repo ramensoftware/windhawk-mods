@@ -1,13 +1,15 @@
 // ==WindhawkMod==
 // @id              taskbar-volume-control
 // @name            Taskbar Volume Control
-// @description     Control the system volume by scrolling over the taskbar
-// @version         1.2.2
+// @description     Control the system volume by scrolling over the taskbar or anywhere with modifier keys
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
+// @include         ShellExperienceHost.exe
+// @include         SndVol.exe
 // @compilerOptions -DWINVER=0x0A00 -lcomctl32 -ldwmapi -lgdi32 -lole32 -lversion
 // ==/WindhawkMod==
 
@@ -25,12 +27,35 @@
 
 Control the system volume by scrolling over the taskbar.
 
+Features:
+
+* **Volume indicator**: Choose between Windows 11, Windows 10, Windows 7, or no
+  indicator.
+* **Scroll area**: Limit scrolling to the full taskbar, the tray area, or define
+  custom regions along the taskbar.
+* **Scroll anywhere**: Hold a configurable combination of modifier keys to
+  control the volume by scrolling anywhere on screen.
+* **Full screen scrolling**: Scroll at the taskbar position to control the
+  volume even when a full screen window covers the taskbar.
+* **Middle click to mute**: Middle click the volume tray icon to toggle mute.
+
 **Note:** Some laptop touchpads might not support scrolling over the taskbar. A
 workaround is to use the "pinch to zoom" gesture. For details, check out [a
 relevant
 issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt-trigger-mouse-wheel-options).
 
 ![Demonstration](https://i.imgur.com/B6mtUj9.gif)
+
+## Related mods
+
+* For per-app volume control, check out the [Taskbar Volume Control
+  Per-App](https://windhawk.net/mods/taskbar-volume-control-per-app) mod.
+* For showing the volume control on the monitor where the mouse cursor is
+  located, or on a custom monitor of choice, check out the [Volume Control open
+  location](https://windhawk.net/mods/volume-control-open-location) mod.
+* For additional actions that can be triggered by scrolling over the taskbar,
+  check out the [Taskbar Scroll
+  Actions](https://windhawk.net/mods/taskbar-scroll-actions) mod.
 */
 // ==/WindhawkModReadme==
 
@@ -49,6 +74,13 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   - taskbar: The taskbar
   - notification_area: The tray area
   - taskbarWithoutNotificationArea: The taskbar without the tray area
+  - none: None (only additional scroll regions)
+- additionalScrollRegions: ""
+  $name: Additional scroll regions
+  $description: >-
+    A comma-separated list of additional regions along the taskbar where
+    scrolling will control the system volume. Each region is a range like
+    "100-200" (pixels) or "20%-50%" (percentage of taskbar length).
 - middleClickToMute: true
   $name: Middle click to mute
   $description: >-
@@ -57,13 +89,33 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 - ctrlScrollVolumeChange: false
   $name: Ctrl + Scroll to change volume
   $description: >-
-    When enabled, holding the Ctrl key and scrolling the mouse wheel will change
-    the system volume.
+    When enabled, scrolling the mouse wheel will only change the volume when
+    the Ctrl key is held down.
+- scrollAnywhereKeys:
+  - shift: false
+  - ctrl: false
+  - alt: false
+  - win: false
+  $name: Scroll anywhere modifier keys
+  $description: >-
+    A combination of modifier keys that, when held, allow controlling the system
+    volume by scrolling the mouse wheel anywhere on the screen. Note that
+    scrolling won't work when the foreground window is of an elevated process
+    (such as Windhawk or Task Manager).
+- fullScreenScrolling: disabled
+  $name: Full screen scrolling
+  $description: >-
+    Scroll at the taskbar position to control the system volume, even when the
+    taskbar is covered by a full screen window.
+  $options:
+  - disabled: Disabled
+  - withIndicator: Enabled with indicator
+  - withoutIndicator: Enabled without indicator
 - noAutomaticMuteToggle: false
   $name: No automatic mute toggle
   $description: >-
     For the Windows 11 indicator, this option causes volume scrolling to be
-    disabled when the volume is muted. For the None control indicator: By
+    disabled when the volume is muted. For the other control indicators: By
     default, the output device is muted once the volume reaches zero, and is
     unmuted on any change to a non-zero volume. Enabling this option turns off
     this functionality, such that the device mute status is not changed.
@@ -71,8 +123,8 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   $name: Volume change step
   $description: >-
     Allows to configure the volume change that will occur with each notch of
-    mouse wheel movement. This option has effect only for the Windows 11, None
-    control indicators. For the Windows 11 indicator, must be a multiple of 2.
+    mouse wheel movement. For the Windows 11 indicator, must be a multiple of
+    2.
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
@@ -91,8 +143,12 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 #include <psapi.h>
 #include <windowsx.h>
 
+#include <algorithm>
 #include <atomic>
+#include <optional>
+#include <string_view>
 #include <unordered_set>
+#include <vector>
 
 enum class VolumeIndicator {
     None,
@@ -105,22 +161,55 @@ enum class ScrollArea {
     taskbar,
     notificationArea,
     taskbarWithoutNotificationArea,
+    none,
+};
+
+struct Region {
+    bool isPercentage;
+    int start;
+    int end;
+};
+
+enum class FullScreenScrolling {
+    disabled,
+    withIndicator,
+    withoutIndicator,
 };
 
 struct {
     VolumeIndicator volumeIndicator;
     ScrollArea scrollArea;
+    std::vector<Region> additionalScrollRegions;
     bool middleClickToMute;
     bool ctrlScrollVolumeChange;
+    struct {
+        bool shift;
+        bool ctrl;
+        bool alt;
+        bool win;
+    } scrollAnywhereKeys;
+    FullScreenScrolling fullScreenScrolling;
     bool noAutomaticMuteToggle;
     int volumeChangeStep;
     bool oldTaskbarOnWin11;
 } g_settings;
 
+enum class Target {
+    Explorer,
+    ShellExperienceHost,
+    SndVol,
+};
+
+Target g_target;
+
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 bool g_inputSiteProcHooked;
 std::unordered_set<HWND> g_secondaryTaskbarWindows;
+
+UINT g_scrollAnywhereMsg =
+    RegisterWindowMessage(L"Windhawk_ScrollAnywhere_" WH_MOD_ID);
+HANDLE g_scrollAnywhereThread;
 
 enum {
     WIN_VERSION_UNSUPPORTED = 0,
@@ -154,10 +243,10 @@ enum {
 #define WM_POINTERWHEEL 0x024E
 #endif
 
-static int g_nWinVersion;
-static int g_nExplorerVersion;
-static HWND g_hTaskbarWnd;
-static DWORD g_dwTaskbarThreadId;
+int g_nWinVersion;
+int g_nExplorerVersion;
+HWND g_hTaskbarWnd;
+DWORD g_dwTaskbarThreadId;
 
 #pragma region functions
 
@@ -201,73 +290,76 @@ bool GetNotificationAreaRect(HWND hMMTaskbarWnd, RECT* rcResult) {
     if (hMMTaskbarWnd == g_hTaskbarWnd) {
         HWND hTrayNotifyWnd =
             FindWindowEx(hMMTaskbarWnd, NULL, L"TrayNotifyWnd", NULL);
-        if (!hTrayNotifyWnd) {
-            return false;
+        if (hTrayNotifyWnd && GetWindowRect(hTrayNotifyWnd, rcResult) &&
+            !IsRectEmpty(rcResult)) {
+            return true;
         }
 
-        return GetWindowRect(hTrayNotifyWnd, rcResult);
-    }
-
-    if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
+        // When attaching an external monitor, it was observed that the rect can
+        // be empty. Use fallback in this case.
+    } else if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
         RECT rcTaskbar;
-        if (!GetWindowRect(hMMTaskbarWnd, &rcTaskbar)) {
-            return false;
-        }
-
-        HWND hBridgeWnd = FindWindowEx(
-            hMMTaskbarWnd, NULL,
-            L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
-        while (hBridgeWnd) {
-            RECT rcBridge;
-            if (!GetWindowRect(hBridgeWnd, &rcBridge)) {
-                break;
-            }
-
-            if (rcBridge.left != rcTaskbar.left ||
-                rcBridge.top != rcTaskbar.top ||
-                rcBridge.right != rcTaskbar.right ||
-                rcBridge.bottom != rcTaskbar.bottom) {
-                CopyRect(rcResult, &rcBridge);
-                return true;
-            }
-
-            hBridgeWnd = FindWindowEx(
-                hMMTaskbarWnd, hBridgeWnd,
+        if (GetWindowRect(hMMTaskbarWnd, &rcTaskbar)) {
+            HWND hBridgeWnd = FindWindowEx(
+                hMMTaskbarWnd, NULL,
                 L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
+            while (hBridgeWnd) {
+                RECT rcBridge;
+                if (!GetWindowRect(hBridgeWnd, &rcBridge)) {
+                    break;
+                }
+
+                if (!EqualRect(&rcBridge, &rcTaskbar)) {
+                    if (IsRectEmpty(&rcBridge)) {
+                        break;
+                    }
+
+                    CopyRect(rcResult, &rcBridge);
+                    return true;
+                }
+
+                hBridgeWnd = FindWindowEx(
+                    hMMTaskbarWnd, hBridgeWnd,
+                    L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
+            }
         }
 
         // On newer Win11 versions, the clock on secondary taskbars is difficult
-        // to detect without either UI Automation or UWP UI APIs. Just consider
-        // the last pixels, not accurate, but better than nothing.
-        int lastPixels =
-            MulDiv(50, GetDpiForWindowWithFallback(hMMTaskbarWnd), 96);
-        CopyRect(rcResult, &rcTaskbar);
-        if (rcResult->right - rcResult->left > lastPixels) {
-            if (GetWindowLong(hMMTaskbarWnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) {
-                rcResult->right = rcResult->left + lastPixels;
-            } else {
-                rcResult->left = rcResult->right - lastPixels;
-            }
+        // to detect without either UI Automation or UWP UI APIs. Use fallback.
+    } else if (g_nExplorerVersion >= WIN_VERSION_10_R1) {
+        HWND hClockButtonWnd =
+            FindWindowEx(hMMTaskbarWnd, NULL, L"ClockButton", NULL);
+        if (hClockButtonWnd && GetWindowRect(hClockButtonWnd, rcResult) &&
+            !IsRectEmpty(rcResult)) {
+            return true;
         }
-
+    } else {
+        // In older Windows versions, there's no clock on the secondary taskbar.
+        SetRectEmpty(rcResult);
         return true;
     }
 
-    if (g_nExplorerVersion >= WIN_VERSION_10_R1) {
-        HWND hClockButtonWnd =
-            FindWindowEx(hMMTaskbarWnd, NULL, L"ClockButton", NULL);
-        if (!hClockButtonWnd) {
-            return false;
-        }
-
-        return GetWindowRect(hClockButtonWnd, rcResult);
+    RECT rcTaskbar;
+    if (!GetWindowRect(hMMTaskbarWnd, &rcTaskbar)) {
+        return false;
     }
 
-    SetRectEmpty(rcResult);
+    // Just consider the last pixels as a fallback, not accurate, but better
+    // than nothing.
+    int lastPixels = MulDiv(50, GetDpiForWindowWithFallback(hMMTaskbarWnd), 96);
+    CopyRect(rcResult, &rcTaskbar);
+    if (rcResult->right - rcResult->left > lastPixels) {
+        if (GetWindowLong(hMMTaskbarWnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) {
+            rcResult->right = rcResult->left + lastPixels;
+        } else {
+            rcResult->left = rcResult->right - lastPixels;
+        }
+    }
+
     return true;
 }
 
-bool IsPointInsideScrollArea(HWND hMMTaskbarWnd, POINT pt) {
+bool IsPointInsideTaskbarScrollArea(HWND hMMTaskbarWnd, POINT pt) {
     switch (g_settings.scrollArea) {
         case ScrollArea::taskbar: {
             RECT rc;
@@ -286,6 +378,9 @@ bool IsPointInsideScrollArea(HWND hMMTaskbarWnd, POINT pt) {
                    (!GetNotificationAreaRect(hMMTaskbarWnd, &rc) ||
                     !PtInRect(&rc, pt));
         }
+
+        case ScrollArea::none:
+            return false;
     }
 
     return false;
@@ -394,6 +489,141 @@ BOOL WindowsVersionInit() {
 }
 
 #pragma endregion  // functions
+
+#pragma region regions
+
+// https://stackoverflow.com/a/54364173
+std::wstring_view TrimStringView(std::wstring_view s) {
+    s.remove_prefix(std::min(s.find_first_not_of(L" \t\r\v\n"), s.size()));
+    s.remove_suffix(
+        std::min(s.size() - s.find_last_not_of(L" \t\r\v\n") - 1, s.size()));
+    return s;
+}
+
+// https://stackoverflow.com/a/46931770
+std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
+                                               std::wstring_view delimiter) {
+    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+    std::wstring_view token;
+    std::vector<std::wstring_view> res;
+
+    while ((pos_end = s.find(delimiter, pos_start)) !=
+           std::wstring_view::npos) {
+        token = s.substr(pos_start, pos_end - pos_start);
+        pos_start = pos_end + delim_len;
+        res.push_back(token);
+    }
+
+    res.push_back(s.substr(pos_start));
+    return res;
+}
+
+bool SvToInt(std::wstring_view s, int* result) {
+    if (s.empty()) {
+        return false;
+    }
+
+    int value = 0;
+    for (WCHAR c : s) {
+        if (c < L'0' || c > L'9') {
+            return false;
+        }
+        value = value * 10 + (c - L'0');
+    }
+
+    *result = value;
+    return true;
+}
+
+std::optional<Region> ParseRegion(std::wstring_view regionStr) {
+    auto parts = SplitStringView(regionStr, L"-");
+    if (parts.size() != 2) {
+        Wh_Log(L"Invalid region (expected start-end): %.*s",
+               (int)regionStr.size(), regionStr.data());
+        return std::nullopt;
+    }
+
+    auto startStr = TrimStringView(parts[0]);
+    auto endStr = TrimStringView(parts[1]);
+
+    bool startIsPercentage = !startStr.empty() && startStr.back() == L'%';
+    bool endIsPercentage = !endStr.empty() && endStr.back() == L'%';
+    if (startIsPercentage != endIsPercentage) {
+        Wh_Log(L"Invalid region (mixed percent and pixel): %.*s",
+               (int)regionStr.size(), regionStr.data());
+        return std::nullopt;
+    }
+
+    bool isPercentage = startIsPercentage;
+    if (isPercentage) {
+        startStr.remove_suffix(1);
+        endStr.remove_suffix(1);
+    }
+
+    int start;
+    int end;
+    if (!SvToInt(startStr, &start) || !SvToInt(endStr, &end)) {
+        Wh_Log(L"Invalid region (non-numeric values): %.*s",
+               (int)regionStr.size(), regionStr.data());
+        return std::nullopt;
+    }
+
+    if (start >= end) {
+        Wh_Log(L"Invalid region (start must be less than end): %.*s",
+               (int)regionStr.size(), regionStr.data());
+        return std::nullopt;
+    }
+
+    return Region{isPercentage, start, end};
+}
+
+bool IsPointInsideAdditionalRegion(HWND hMMTaskbarWnd, POINT pt) {
+    if (g_settings.additionalScrollRegions.empty()) {
+        return false;
+    }
+
+    RECT rc;
+    if (!GetWindowRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
+        return false;
+    }
+
+    bool isHorizontal = (rc.right - rc.left) >= (rc.bottom - rc.top);
+    int taskbarLength;
+    int cursorOffset;
+    if (isHorizontal) {
+        taskbarLength = rc.right - rc.left;
+        cursorOffset = pt.x - rc.left;
+    } else {
+        taskbarLength = rc.bottom - rc.top;
+        cursorOffset = pt.y - rc.top;
+    }
+
+    UINT dpi = GetDpiForWindowWithFallback(hMMTaskbarWnd);
+
+    for (const auto& region : g_settings.additionalScrollRegions) {
+        int start, end;
+        if (region.isPercentage) {
+            start = MulDiv(taskbarLength, region.start, 100);
+            end = MulDiv(taskbarLength, region.end, 100);
+        } else {
+            start = MulDiv(region.start, dpi, 96);
+            end = MulDiv(region.end, dpi, 96);
+        }
+
+        if (cursorOffset >= start && cursorOffset <= end) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsPointInsideScrollArea(HWND hMMTaskbarWnd, POINT pt) {
+    return IsPointInsideTaskbarScrollArea(hMMTaskbarWnd, pt) ||
+           IsPointInsideAdditionalRegion(hMMTaskbarWnd, pt);
+}
+
+#pragma endregion  // regions
 
 #pragma region volume_functions
 
@@ -604,18 +834,26 @@ bool Win11IndicatorAdjustVolumeLevelWithMouseWheel(short delta) {
     int clicks = delta / WHEEL_DELTA;
     Wh_Log(L"%d clicks (delta=%d)", clicks, delta);
 
-    SHORT appCommand = APPCOMMAND_VOLUME_UP;
-    if (clicks < 0) {
-        clicks = -clicks;
-        appCommand = APPCOMMAND_VOLUME_DOWN;
-    }
+    if (clicks) {
+        SHORT appCommand = APPCOMMAND_VOLUME_UP;
+        if (clicks < 0) {
+            clicks = -clicks;
+            appCommand = APPCOMMAND_VOLUME_DOWN;
+        }
 
-    if (g_settings.volumeChangeStep) {
-        clicks *= g_settings.volumeChangeStep / 2;
-    }
+        if (g_settings.volumeChangeStep) {
+            clicks *= g_settings.volumeChangeStep / 2;
+        }
 
-    if (!PostAppCommand(appCommand, clicks)) {
-        return false;
+        if (clicks > 1) {
+            AddMasterVolumeLevelScalar(
+                (appCommand == APPCOMMAND_VOLUME_UP ? 0.02f : -0.02f) *
+                (float)(clicks - 1));
+        }
+
+        if (!PostAppCommand(appCommand, 1)) {
+            return false;
+        }
     }
 
     g_lastScrollTime = GetTickCount();
@@ -629,7 +867,6 @@ bool Win11IndicatorAdjustVolumeLevelWithMouseWheel(short delta) {
 #pragma region sndvol
 
 BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam);
-BOOL ScrollSndVol(WPARAM wParam, LPARAM lMousePosParam);
 void SetSndVolTimer();
 void KillSndVolTimer();
 void CleanupSndVol();
@@ -688,7 +925,7 @@ BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
     }
 
     if (CanUseModernIndicator()) {
-        if (!AdjustVolumeLevelWithMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam), 2))
+        if (!AdjustVolumeLevelWithMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam), 0))
             return FALSE;
 
         ShowSndVolModernIndicator();
@@ -699,28 +936,30 @@ BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
     if (!IsDefaultAudioEndpointAvailable())
         return FALSE;
 
+    if (!AdjustVolumeLevelWithMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam), 0))
+        return FALSE;
+
     if (ValidateSndVolProcess()) {
-        if (WaitForInputIdle(hSndVolProcess, 0) == 0)  // If not initializing
-        {
+        // If not initializing
+        if (WaitForInputIdle(hSndVolProcess, 0) == 0) {
             if (ValidateSndVolWnd()) {
-                ScrollSndVol(wParam, lMousePosParam);
+                // False because we didn't open it, it was open
+                return FALSE;
+            }
 
-                return FALSE;  // False because we didn't open it, it was open
-            } else {
-                hVolumeAppWnd = FindWindow(L"Windows Volume App Window",
-                                           L"Windows Volume App Window");
-                if (hVolumeAppWnd) {
-                    GetWindowThreadProcessId(hVolumeAppWnd, &dwProcessId);
+            hVolumeAppWnd = FindWindow(L"Windows Volume App Window",
+                                       L"Windows Volume App Window");
+            if (hVolumeAppWnd) {
+                GetWindowThreadProcessId(hVolumeAppWnd, &dwProcessId);
 
-                    if (GetProcessId(hSndVolProcess) == dwProcessId) {
-                        BOOL bOpened;
-                        if (OpenScrollSndVolInternal(wParam, lMousePosParam,
-                                                     hVolumeAppWnd, &bOpened)) {
-                            if (bOpened)
-                                SetSndVolTimer();
+                if (GetProcessId(hSndVolProcess) == dwProcessId) {
+                    BOOL bOpened;
+                    if (OpenScrollSndVolInternal(wParam, lMousePosParam,
+                                                 hVolumeAppWnd, &bOpened)) {
+                        if (bOpened)
+                            SetSndVolTimer();
 
-                            return bOpened;
-                        }
+                        return bOpened;
                     }
                 }
             }
@@ -742,23 +981,20 @@ BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
                 OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
                             FALSE, dwProcessId);
             if (hSndVolProcess) {
-                if (WaitForInputIdle(hSndVolProcess, 0) ==
-                    0)  // if not initializing
-                {
+                // if not initializing
+                if (WaitForInputIdle(hSndVolProcess, 0) == 0) {
                     if (ValidateSndVolWnd()) {
-                        ScrollSndVol(wParam, lMousePosParam);
+                        // False because we didn't open it, it was open
+                        return FALSE;
+                    }
 
-                        return FALSE;  // False because we didn't open it, it
-                                       // was open
-                    } else {
-                        BOOL bOpened;
-                        if (OpenScrollSndVolInternal(wParam, lMousePosParam,
-                                                     hVolumeAppWnd, &bOpened)) {
-                            if (bOpened)
-                                SetSndVolTimer();
+                    BOOL bOpened;
+                    if (OpenScrollSndVolInternal(wParam, lMousePosParam,
+                                                 hVolumeAppWnd, &bOpened)) {
+                        if (bOpened)
+                            SetSndVolTimer();
 
-                            return bOpened;
-                        }
+                        return bOpened;
                     }
                 }
             }
@@ -788,19 +1024,6 @@ BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
 
     SetSndVolTimer();
 
-    return TRUE;
-}
-
-BOOL ScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
-    GUITHREADINFO guithreadinfo;
-
-    guithreadinfo.cbSize = sizeof(GUITHREADINFO);
-
-    if (!GetGUIThreadInfo(GetWindowThreadProcessId(hSndVolWnd, NULL),
-                          &guithreadinfo))
-        return FALSE;
-
-    PostMessage(guithreadinfo.hwndFocus, WM_MOUSEWHEEL, wParam, lMousePosParam);
     return TRUE;
 }
 
@@ -1202,67 +1425,8 @@ static BOOL CALLBACK EnumThreadFindSndVolTrayControlWnd(HWND hWnd,
 
 ////////////////////////////////////////////////////////////
 
-// wParam - TRUE to subclass, FALSE to unsubclass
-// lParam - subclass data
-UINT g_subclassRegisteredMsg = RegisterWindowMessage(
-    L"Windhawk_SetWindowSubclassFromAnyThread_taskbar-volume-control");
-
-BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
-                                    SUBCLASSPROC pfnSubclass,
-                                    UINT_PTR uIdSubclass,
-                                    DWORD_PTR dwRefData) {
-    struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
-        SUBCLASSPROC pfnSubclass;
-        UINT_PTR uIdSubclass;
-        DWORD_PTR dwRefData;
-        BOOL result;
-    };
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
-        return FALSE;
-    }
-
-    if (dwThreadId == GetCurrentThreadId()) {
-        return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam,
-           LPARAM lParam) WINAPI_LAMBDA_RETURN(LRESULT) {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
-                    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM* param =
-                        (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM*)cwp->lParam;
-                    param->result =
-                        SetWindowSubclass(cwp->hwnd, param->pfnSubclass,
-                                          param->uIdSubclass, param->dwRefData);
-                }
-            }
-
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, dwThreadId);
-    if (!hook) {
-        return FALSE;
-    }
-
-    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
-    param.pfnSubclass = pfnSubclass;
-    param.uIdSubclass = uIdSubclass;
-    param.dwRefData = dwRefData;
-    param.result = FALSE;
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
-
-    UnhookWindowsHookEx(hook);
-
-    return param.result;
-}
-
 bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
-    if (GetCapture() != NULL) {
+    if (GetCapture()) {
         return false;
     }
 
@@ -1278,7 +1442,7 @@ bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
         return false;
     }
 
-    // Allows to steal focus
+    // Allows to steal focus.
     INPUT input;
     ZeroMemory(&input, sizeof(INPUT));
     SendInput(1, &input, sizeof(INPUT));
@@ -1292,12 +1456,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
                                            _In_ UINT uMsg,
                                            _In_ WPARAM wParam,
                                            _In_ LPARAM lParam,
-                                           _In_ UINT_PTR uIdSubclass,
                                            _In_ DWORD_PTR dwRefData) {
-    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam)) {
-        RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
-    }
-
     LRESULT result = 0;
 
     switch (uMsg) {
@@ -1362,7 +1521,17 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
             break;
 
         default:
-            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (uMsg == g_scrollAnywhereMsg) {
+                if (LOWORD(wParam) == 1) {
+                    AdjustVolumeLevelWithMouseWheel(
+                        GET_WHEEL_DELTA_WPARAM(wParam), 0);
+                } else {
+                    OpenScrollSndVol(wParam, lParam);
+                }
+                result = 0;
+            } else {
+                result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            }
             break;
     }
 
@@ -1388,11 +1557,13 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd,
 }
 
 void SubclassTaskbarWindow(HWND hWnd) {
-    SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0);
+    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd,
+                                                  TaskbarWindowSubclassProc, 0);
 }
 
 void UnsubclassTaskbarWindow(HWND hWnd) {
-    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
+                                                     TaskbarWindowSubclassProc);
 }
 
 void HandleIdentifiedInputSiteWindow(HWND hWnd) {
@@ -1418,9 +1589,9 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd) {
     // At first, I tried to subclass the window instead of hooking its wndproc,
     // but the inputsite.dll code checks that the value wasn't changed, and
     // crashes otherwise.
-    void* wndProc = (void*)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
-    Wh_SetFunctionHook(wndProc, (void*)InputSiteWindowProc_Hook,
-                       (void**)&InputSiteWindowProc_Original);
+    auto wndProc = (WNDPROC)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
+    WindhawkUtils::Wh_SetFunctionHookT(wndProc, InputSiteWindowProc_Hook,
+                                       &InputSiteWindowProc_Original);
 
     if (g_initialized) {
         Wh_ApplyHookOperations();
@@ -1530,7 +1701,6 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
     HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
                                          dwStyle, X, Y, nWidth, nHeight,
                                          hWndParent, hMenu, hInstance, lpParam);
-
     if (!hWnd)
         return hWnd;
 
@@ -1596,6 +1766,16 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
+using ForceFocusBasedMouseWheelRouting_t = DWORD_PTR(WINAPI*)(BOOL enabled);
+ForceFocusBasedMouseWheelRouting_t ForceFocusBasedMouseWheelRouting_Original;
+DWORD_PTR WINAPI ForceFocusBasedMouseWheelRouting_Hook(BOOL enabled) {
+    Wh_Log(L">");
+
+    // Always disable to prevent the volume control from stealing mouse wheel
+    // messages.
+    return ForceFocusBasedMouseWheelRouting_Original(FALSE);
+}
+
 void LoadSettings() {
     PCWSTR volumeIndicator = Wh_GetStringSetting(L"volumeIndicator");
     g_settings.volumeIndicator = VolumeIndicator::Win11;
@@ -1619,16 +1799,50 @@ void LoadSettings() {
         g_settings.scrollArea = ScrollArea::notificationArea;
     } else if (wcscmp(scrollArea, L"taskbarWithoutNotificationArea") == 0) {
         g_settings.scrollArea = ScrollArea::taskbarWithoutNotificationArea;
+    } else if (wcscmp(scrollArea, L"none") == 0) {
+        g_settings.scrollArea = ScrollArea::none;
     }
     Wh_FreeStringSetting(scrollArea);
 
     g_settings.middleClickToMute = Wh_GetIntSetting(L"middleClickToMute");
     g_settings.ctrlScrollVolumeChange =
         Wh_GetIntSetting(L"ctrlScrollVolumeChange");
+    g_settings.scrollAnywhereKeys.shift =
+        Wh_GetIntSetting(L"scrollAnywhereKeys.shift");
+    g_settings.scrollAnywhereKeys.ctrl =
+        Wh_GetIntSetting(L"scrollAnywhereKeys.ctrl");
+    g_settings.scrollAnywhereKeys.alt =
+        Wh_GetIntSetting(L"scrollAnywhereKeys.alt");
+    g_settings.scrollAnywhereKeys.win =
+        Wh_GetIntSetting(L"scrollAnywhereKeys.win");
+
+    PCWSTR fullScreenScrolling = Wh_GetStringSetting(L"fullScreenScrolling");
+    g_settings.fullScreenScrolling = FullScreenScrolling::disabled;
+    if (wcscmp(fullScreenScrolling, L"withIndicator") == 0) {
+        g_settings.fullScreenScrolling = FullScreenScrolling::withIndicator;
+    } else if (wcscmp(fullScreenScrolling, L"withoutIndicator") == 0) {
+        g_settings.fullScreenScrolling = FullScreenScrolling::withoutIndicator;
+    }
+    Wh_FreeStringSetting(fullScreenScrolling);
+
     g_settings.noAutomaticMuteToggle =
         Wh_GetIntSetting(L"noAutomaticMuteToggle");
     g_settings.volumeChangeStep = Wh_GetIntSetting(L"volumeChangeStep");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+
+    g_settings.additionalScrollRegions.clear();
+    PCWSTR additionalScrollRegions =
+        Wh_GetStringSetting(L"additionalScrollRegions");
+    for (auto regionStr : SplitStringView(additionalScrollRegions, L",")) {
+        regionStr = TrimStringView(regionStr);
+        if (regionStr.empty()) {
+            continue;
+        }
+        if (auto region = ParseRegion(regionStr)) {
+            g_settings.additionalScrollRegions.push_back(*region);
+        }
+    }
+    Wh_FreeStringSetting(additionalScrollRegions);
 }
 
 using VolumeSystemTrayIconDataModel_OnIconClicked_t =
@@ -1672,8 +1886,13 @@ HMODULE GetTaskbarViewModuleHandle() {
     return module;
 }
 
+bool ShouldHookTaskbarViewDllSymbols() {
+    return g_nWinVersion >= WIN_VERSION_11_22H2 && g_settings.middleClickToMute;
+}
+
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+    if (ShouldHookTaskbarViewDllSymbols() && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
@@ -1748,6 +1967,171 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return module;
 }
 
+bool IsScrollAnywhereEnabled() {
+    return g_settings.scrollAnywhereKeys.shift ||
+           g_settings.scrollAnywhereKeys.ctrl ||
+           g_settings.scrollAnywhereKeys.alt ||
+           g_settings.scrollAnywhereKeys.win;
+}
+
+bool IsMouseHookNeeded() {
+    return IsScrollAnywhereEnabled() ||
+           g_settings.fullScreenScrolling != FullScreenScrolling::disabled;
+}
+
+bool AreScrollAnywhereModifiersHeld() {
+    bool shiftKeyState = GetAsyncKeyState(VK_SHIFT) < 0;
+    bool ctrlKeyState = GetAsyncKeyState(VK_CONTROL) < 0;
+    bool altKeyState = GetAsyncKeyState(VK_MENU) < 0;
+    bool winKeyState =
+        (GetAsyncKeyState(VK_LWIN) < 0) || (GetAsyncKeyState(VK_RWIN) < 0);
+
+    return g_settings.scrollAnywhereKeys.shift == shiftKeyState &&
+           g_settings.scrollAnywhereKeys.ctrl == ctrlKeyState &&
+           g_settings.scrollAnywhereKeys.alt == altKeyState &&
+           g_settings.scrollAnywhereKeys.win == winKeyState;
+}
+
+LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode != HC_ACTION || wParam != WM_MOUSEWHEEL) {
+        return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    HWND hTaskbarWnd = g_hTaskbarWnd;
+    if (!hTaskbarWnd) {
+        return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
+
+    // Scroll anywhere: modifier keys held.
+    if (IsScrollAnywhereEnabled() && AreScrollAnywhereModifiersHeld()) {
+        PostMessage(hTaskbarWnd, g_scrollAnywhereMsg,
+                    MAKEWPARAM(0, HIWORD(pMouseStruct->mouseData)),
+                    MAKELPARAM(pMouseStruct->pt.x, pMouseStruct->pt.y));
+        return 1;
+    }
+
+    // Full screen scrolling: cursor in taskbar region but taskbar not visible.
+    if (g_settings.fullScreenScrolling != FullScreenScrolling::disabled) {
+        POINT pt = pMouseStruct->pt;
+
+        HWND hPointWnd = WindowFromPoint(pt);
+        if (hPointWnd) {
+            HWND hRootWnd = GetAncestor(hPointWnd, GA_ROOT);
+            if (hRootWnd && IsTaskbarWindow(hRootWnd)) {
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            }
+        }
+
+        bool isInScrollArea = false;
+
+        if (IsPointInsideScrollArea(hTaskbarWnd, pt)) {
+            isInScrollArea = true;
+        }
+
+        if (!isInScrollArea) {
+            DWORD dwTaskbarThreadId = g_dwTaskbarThreadId;
+            if (dwTaskbarThreadId) {
+                // EnumThreadWindows returns FALSE if the callback returned
+                // FALSE, i.e. a match was found.
+                if (!EnumThreadWindows(
+                        dwTaskbarThreadId,
+                        [](HWND hWnd, LPARAM lParam)
+                            WINAPI_LAMBDA_RETURN(BOOL) {
+                                WCHAR szClassName[32];
+                                if (GetClassName(hWnd, szClassName,
+                                                 ARRAYSIZE(szClassName)) &&
+                                    _wcsicmp(szClassName,
+                                             L"Shell_SecondaryTrayWnd") == 0) {
+                                    if (IsPointInsideScrollArea(
+                                            hWnd, *(POINT*)lParam)) {
+                                        return FALSE;
+                                    }
+                                }
+                                return TRUE;
+                            },
+                        (LPARAM)&pt)) {
+                    isInScrollArea = true;
+                }
+            }
+        }
+
+        if (isInScrollArea) {
+            WORD mode = (g_settings.fullScreenScrolling ==
+                         FullScreenScrolling::withoutIndicator)
+                            ? 1
+                            : 0;
+            PostMessage(hTaskbarWnd, g_scrollAnywhereMsg,
+                        MAKEWPARAM(mode, HIWORD(pMouseStruct->mouseData)),
+                        MAKELPARAM(pt.x, pt.y));
+            return 1;
+        }
+    }
+
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+DWORD WINAPI ScrollAnywhereThread(LPVOID lpParameter) {
+    HANDLE hReadyEvent = (HANDLE)lpParameter;
+
+    HHOOK hook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+
+    SetEvent(hReadyEvent);
+
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
+        return 1;
+    }
+
+    BOOL bRet;
+    MSG msg;
+    while ((bRet = GetMessage(&msg, nullptr, 0, 0)) != 0) {
+        if (bRet == -1) {
+            break;
+        }
+
+        if (msg.hwnd == nullptr && msg.message == WM_APP) {
+            PostQuitMessage(0);
+            continue;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    UnhookWindowsHookEx(hook);
+    return 0;
+}
+
+void ScrollAnywhereThreadInit() {
+    if (g_scrollAnywhereThread) {
+        return;
+    }
+
+    HANDLE hReadyEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!hReadyEvent) {
+        return;
+    }
+
+    g_scrollAnywhereThread =
+        CreateThread(nullptr, 0, ScrollAnywhereThread, hReadyEvent, 0, nullptr);
+    if (g_scrollAnywhereThread) {
+        WaitForSingleObject(hReadyEvent, INFINITE);
+    }
+
+    CloseHandle(hReadyEvent);
+}
+
+void ScrollAnywhereThreadUninit() {
+    if (g_scrollAnywhereThread) {
+        PostThreadMessage(GetThreadId(g_scrollAnywhereThread), WM_APP, 0, 0);
+        WaitForSingleObject(g_scrollAnywhereThread, INFINITE);
+        CloseHandle(g_scrollAnywhereThread);
+        g_scrollAnywhereThread = nullptr;
+    }
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -1758,13 +2142,74 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    g_target = Target::Explorer;
+
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            Wh_Log(L"GetModuleFileName failed");
+            break;
+
+        default:
+            if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
+                moduleFileName++;
+                if (_wcsicmp(moduleFileName, L"ShellExperienceHost.exe") == 0) {
+                    g_target = Target::ShellExperienceHost;
+                } else if (_wcsicmp(moduleFileName, L"SndVol.exe") == 0) {
+                    g_target = Target::SndVol;
+                }
+            } else {
+                Wh_Log(L"GetModuleFileName returned an unsupported path");
+            }
+            break;
+    }
+
+    if (g_target == Target::ShellExperienceHost || g_target == Target::SndVol) {
+        if (g_settings.volumeChangeStep == 2 &&
+            !g_settings.noAutomaticMuteToggle) {
+            return FALSE;
+        }
+
+        if (g_target == Target::ShellExperienceHost) {
+            bool useModernIndicator =
+                g_settings.volumeIndicator == VolumeIndicator::Modern &&
+                CanUseModernIndicator();
+            if (!useModernIndicator) {
+                return FALSE;
+            }
+        } else if (g_target == Target::SndVol) {
+            bool useClassicIndicator =
+                g_settings.volumeIndicator == VolumeIndicator::Classic ||
+                (g_settings.volumeIndicator == VolumeIndicator::Modern &&
+                 !CanUseModernIndicator());
+            if (!useClassicIndicator) {
+                return FALSE;
+            }
+        }
+
+        HMODULE user32Module = GetModuleHandle(L"user32.dll");
+        if (user32Module) {
+            auto pFunc = (ForceFocusBasedMouseWheelRouting_t)GetProcAddress(
+                user32Module, MAKEINTRESOURCEA(2575));
+            if (pFunc) {
+                WindhawkUtils::Wh_SetFunctionHookT(
+                    pFunc, ForceFocusBasedMouseWheelRouting_Hook,
+                    &ForceFocusBasedMouseWheelRouting_Original);
+            }
+        }
+
+        return TRUE;
+    }
+
     g_nExplorerVersion = g_nWinVersion;
     if (g_nExplorerVersion >= WIN_VERSION_11_21H2 &&
         g_settings.oldTaskbarOnWin11) {
         g_nExplorerVersion = WIN_VERSION_10_20H1;
     }
 
-    if (g_nWinVersion >= WIN_VERSION_11_22H2 && g_settings.middleClickToMute) {
+    if (ShouldHookTaskbarViewDllSymbols()) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             g_taskbarViewDllLoaded = true;
             if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
@@ -1772,32 +2217,32 @@ BOOL Wh_ModInit() {
             }
         } else {
             Wh_Log(L"Taskbar view module not loaded yet");
-
-            HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-            auto pKernelBaseLoadLibraryExW =
-                (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
-                                                          "LoadLibraryExW");
-            WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                               LoadLibraryExW_Hook,
-                                               &LoadLibraryExW_Original);
         }
     }
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
+    WindhawkUtils::Wh_SetFunctionHookT(CreateWindowExW, CreateWindowExW_Hook,
+                                       &CreateWindowExW_Original);
 
-    HMODULE user32Module = LoadLibrary(L"user32.dll");
+    HMODULE user32Module =
+        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (user32Module) {
-        void* pCreateWindowInBand =
-            (void*)GetProcAddress(user32Module, "CreateWindowInBand");
+        auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
+            user32Module, "CreateWindowInBand");
         if (pCreateWindowInBand) {
-            Wh_SetFunctionHook(pCreateWindowInBand,
-                               (void*)CreateWindowInBand_Hook,
-                               (void**)&CreateWindowInBand_Original);
+            WindhawkUtils::Wh_SetFunctionHookT(pCreateWindowInBand,
+                                               CreateWindowInBand_Hook,
+                                               &CreateWindowInBand_Original);
         }
     }
 
     HandleLoadedExplorerPatcher();
+
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
 
     g_initialized = true;
 
@@ -1807,7 +2252,11 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!g_taskbarViewDllLoaded) {
+    if (g_target != Target::Explorer) {
+        return;
+    }
+
+    if (ShouldHookTaskbarViewDllSymbols() && !g_taskbarViewDllLoaded) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");
@@ -1831,10 +2280,20 @@ void Wh_ModAfterInit() {
             HandleIdentifiedTaskbarWindow(hWnd);
         }
     }
+
+    if (IsMouseHookNeeded()) {
+        ScrollAnywhereThreadInit();
+    }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    if (g_target != Target::Explorer) {
+        return;
+    }
+
+    ScrollAnywhereThreadUninit();
 
     if (g_hTaskbarWnd) {
         UnsubclassTaskbarWindow(g_hTaskbarWnd);
@@ -1856,8 +2315,41 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     LoadSettings();
 
+    if (g_target == Target::ShellExperienceHost || g_target == Target::SndVol) {
+        if (g_settings.volumeChangeStep == 2 &&
+            !g_settings.noAutomaticMuteToggle) {
+            return FALSE;
+        }
+
+        if (g_target == Target::ShellExperienceHost) {
+            bool useModernIndicator =
+                g_settings.volumeIndicator == VolumeIndicator::Modern &&
+                CanUseModernIndicator();
+            if (!useModernIndicator) {
+                return FALSE;
+            }
+        } else if (g_target == Target::SndVol) {
+            bool useClassicIndicator =
+                g_settings.volumeIndicator == VolumeIndicator::Classic ||
+                (g_settings.volumeIndicator == VolumeIndicator::Modern &&
+                 !CanUseModernIndicator());
+            if (!useClassicIndicator) {
+                return FALSE;
+            }
+        }
+
+        return TRUE;
+    }
+
     *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11 ||
                g_settings.middleClickToMute != prevMiddleClickToMute;
+    if (!*bReload) {
+        if (IsMouseHookNeeded()) {
+            ScrollAnywhereThreadInit();
+        } else {
+            ScrollAnywhereThreadUninit();
+        }
+    }
 
     return TRUE;
 }
