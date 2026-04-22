@@ -167,6 +167,8 @@ DWORD WINAPI ThreadProc(LPVOID) {
         } else {
             Wh_Log(L"Shell window creation failed: %d", hr);
         }
+
+        CoUninitialize();
     } else {
         Wh_Log(L"COM init failed: %d", hr);
     }
