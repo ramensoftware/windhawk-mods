@@ -8557,7 +8557,7 @@
                     89
                 ],
                 "ratingUsers": 99,
-                "updated": 1771014052000,
+                "updated": 1776872583000,
                 "users": 3515
             },
             "metadata": {
@@ -8566,14 +8566,14 @@
                 ],
                 "author": "Bo0ii",
                 "compilerOptions": "-lversion -ldwmapi",
-                "description": "Removes the delay before the taskbar appears with custom animation types (elastic, bounce, fade, etc.)",
+                "description": "Removes the delay before the taskbar appears with custom animation types (none, slide, elastic, bounce, fade, slide+fade, overshoot)",
                 "github": "https://github.com/Bo0ii",
                 "homepage": "https://github.com/Bo0ii/windhawk-mods",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Taskbar Auto-Hide Instant Show",
-                "version": "2.1"
+                "version": "2.2"
             }
         },
         "taskbar-background-helper": {
