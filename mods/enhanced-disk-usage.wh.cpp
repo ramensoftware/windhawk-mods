@@ -31,6 +31,7 @@ ex.
 
 // ==WindhawkModSettings==
 /*
+
 - barNormalStart: "#2ECC71"
   $name: Bar Color Gradient Start
   $description: set start and end to the same value if you don't want a gradient
@@ -42,6 +43,8 @@ ex.
   $name: Bar Full Color Graient End
 - trackColor: "#20000000"
   $name: Track Color (Unused Space)
+- gradientDirection: 90
+  $name: Gradient Direction
 - borderColor: "#80FFFFFF"
   $name: Border Color
 - borderThickness: 1
@@ -88,7 +91,6 @@ ex.
 #include <string>
 #include <vector>
 
-
 using namespace Gdiplus;
 
 // --- Global State ---
@@ -97,6 +99,7 @@ std::wstring g_formatString;
 bool g_boldUsed, g_removeSpace, g_showGloss;
 int g_lineYOffset, g_boldYOffset, g_cornerRadius;
 int g_leftInset, g_rightInset, g_topInset, g_bottomInset;
+int g_gradientDirection;
 ARGB g_barNormalStart, g_barNormalEnd, g_barFullStart, g_barFullEnd,
     g_trackColor, g_borderColor;
 float g_borderThickness;
@@ -168,7 +171,7 @@ void LoadSettings() {
     s = Wh_GetStringSetting(L"borderColor");
     g_borderColor = ParseHexARGB(s, 0x80FFFFFF);
     Wh_FreeStringSetting(s);
-
+    g_gradientDirection = Wh_GetIntSetting(L"gradientDirection");
     g_cornerRadius = Wh_GetIntSetting(L"cornerRadius");
     g_showGloss = Wh_GetIntSetting(L"showGloss") != 0;
     g_borderThickness = (float)Wh_GetIntSetting(L"borderThickness");
@@ -283,7 +286,8 @@ static void PaintEnhancedBar(HDC hdc,
             BuildRoundedPath(fillPath, rect, (float)g_cornerRadius);
             ARGB c1 = (iStateId == 2) ? g_barFullStart : g_barNormalStart;
             ARGB c2 = (iStateId == 2) ? g_barFullEnd : g_barNormalEnd;
-            LinearGradientBrush br{rect, Color{c1}, Color{c2}, 90.0f};
+            LinearGradientBrush br{rect, Color{c1}, Color{c2},
+                                   static_cast<REAL>(g_gradientDirection)};
             graphics.FillPath(&br, &fillPath);
             if (g_showGloss) {
                 // Smooth full-height gloss
