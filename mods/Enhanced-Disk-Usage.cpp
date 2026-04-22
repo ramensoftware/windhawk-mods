@@ -4,6 +4,7 @@
 // @description     Enables the ability to customize the disk drive tiles in explorer. Several customizations are available for enhancing the 
 // @version         1.0
 // @author          bbmaster123
+// @github          https://github.com/bbmaster123
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lole32 -luuid -luser32 -lgdi32 -luxtheme -lshlwapi -lmsimg32 -lgdiplus
 // ==/WindhawkMod==
