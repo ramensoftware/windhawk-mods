@@ -21,7 +21,7 @@ outline
 - separate disk colors for when drive is near full
 - vertical linear gradient support
 - rounded corners
-- glossy overlay toggle option (for a more Windows Aero-ish look aestethic)
+- glossy overlay toggle option (for a more Windows Aero-ish looking aesthetic)
 - height/width controls (inset)
 - custom disk usage text.
 ex.
