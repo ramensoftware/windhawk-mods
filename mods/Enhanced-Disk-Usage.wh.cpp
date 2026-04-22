@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              enhanced disk usage
+// @id              enhanced-disk-usage
 // @name            Enhanced Disk Usage
 // @description     Enables the ability to customize the disk drive tiles in explorer. Several customizations are available for enhancing the 
 // @version         1.0
