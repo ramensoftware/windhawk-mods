@@ -1,213 +1,274 @@
 // ==WindhawkMod==
 // @id                   hotcorner-hotkeys
 // @name                 HotCorner Hotkeys
-// @description          Assign configurable keyboard hotkeys to up to 8 actions, gated by cursor zones (four corners + four edges) of the active monitor.
-// @version              2.4
+// @description          Assign up to 9 distinct actions per hotkey, dispatched based on which screen zone the cursor is in when pressed (4 corners, 4 edges, or elsewhere).
+// @version              3.56
 // @author               webberlv
 // @github               https://github.com/webberLV
 // @license              GPL-3.0-only
 // @include             explorer.exe
 // @compilerOptions -lcomctl32 -loleaut32 -lole32 -lversion
+
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
 //
 // For pull requests, development takes place here:
-// https://github.com/webberlv/windhawk-mods
+// https://github.com/webberlv/windhawk-mods/tree/hotcorner-hotkeys
 
 // ==WindhawkModReadme==
 /*
 # HotCorner Hotkeys
 
-This mod binds configurable keyboard hotkeys to screen zones defined by the four corners and four edges of the active monitor. Each hotkey is registered once per unique key combination and evaluated at trigger time using the current cursor position.
+Assign actions to global hotkeys, with the action chosen by the cursor's
+current screen zone when the hotkey is pressed. Each hotkey can have separate
+actions for the four corners, four edges, and everywhere else.
 
-When a hotkey is pressed, the cursor location determines which zone is active and dispatches the corresponding action. A single hotkey can therefore invoke up to eight distinct actions. If the cursor is not within a defined zone, the hotkey is intercepted and no action is executed. This mod is zone-gated by design and does not provide unconditional global hotkeys. If you were hoping for the hotkey to function globally without a zone selection restriction check out [keyboard-shortcut-actions](https://windhawk.net/mods/keyboard-shortcut-actions) instead. 
+## Cursor zones
 
-## Architecture
+Zones are detected from the **physical monitor edges**, not the taskbar or work
+area. A zone becomes active when the cursor is within **12 pixels** of that
+monitor edge.
 
-### Registration vs. dispatch
+When a hotkey is pressed, the mod first checks the exact zone under the cursor.
+If nothing is configured there, it follows the fallback chain below until it
+finds a configured action. If nothing matches, no action is run.
 
-- **Registration**: Each unique key combination is registered exactly once
-  as a global hotkey.
-- **Dispatch**: On `WM_HOTKEY`, the cursor zone is computed and the
-  `(hotkey, zone)` mapping is resolved and executed.
-### Rules
-- Action identity is `(hotkey, zone)`
-- Zones are used only during dispatch
-- A hotkey may map to multiple actions across different zones
-- Duplicate `(hotkey, zone)` mappings are invalid and rejected at load time
-- Each key combination is registered once globally
-- If no action exists for the active cursor zone:
-  - No action is executed
-  - The hotkey is still consumed 
-## Zones
-Zones are computed from the active monitor bounds using `GatePx`
-(pixel thickness).
-Corner zones take precedence over edge zones when regions overlap.
-Supported values:
-`NONE, LEFT, TOP_LEFT, TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT`
-`NONE` matches only when the cursor is outside all edge and corner gate regions.
+| Cursor zone  | Fallback order                            |
+|--------------|-------------------------------------------|
+| `TOP_LEFT`   | `TOP_LEFT` → `TOP` → `LEFT` → `ELSEWHERE` |
+| `TOP_RIGHT`  | `TOP_RIGHT` → `TOP` → `RIGHT` → `ELSEWHERE` |
+| `BOTTOM_LEFT` | `BOTTOM_LEFT` → `BOTTOM` → `LEFT` → `ELSEWHERE` |
+| `BOTTOM_RIGHT` | `BOTTOM_RIGHT` → `BOTTOM` → `RIGHT` → `ELSEWHERE` |
+| `TOP`        | `TOP` → `ELSEWHERE`                       |
+| `BOTTOM`     | `BOTTOM` → `ELSEWHERE`                    |
+| `LEFT`       | `LEFT` → `ELSEWHERE`                      |
+| `RIGHT`      | `RIGHT` → `ELSEWHERE`                     |
+| `ELSEWHERE`  | `ELSEWHERE`                               |
+
 ## Supported actions
-1. **Show desktop**  
-   Toggle desktop visibility
-2. **Ctrl+Alt+Tab**  
-   Open the Ctrl+Alt+Tab dialog
-3. **Task Manager**  
-   Open Windows Task Manager
-4. **Mute system volume**  
-   Toggle system-wide mute
-5. **Taskbar auto-hide**  
-   Toggle taskbar auto-hide
-6. **Win+Tab**  
-   Open Task View
-7. **Hide desktop icons**  
-   Toggle visibility of all desktop icons
-8. **Combine taskbar buttons**  
-   Toggle taskbar button grouping between two states
-9. **Toggle taskbar alignment**  
-   Toggle taskbar icon alignment (left/center, Windows 11 only)
-10. **Open Start menu**  
-    Send the Win key
-11. **Virtual key press**  
-    Send a virtual key sequence
-12. **Open application, path, or URL**  
-    Launch an executable, open a path, or open a URL
-13. **Media Play/Pause**
-14. **Media Next Track**
-15. **Media Previous Track**
 
-16. **Toggle Always On Top (active window)**  
-    Toggles `WS_EX_TOPMOST` on the current foreground window
+1. **Show desktop**: Toggles desktop view using the taskbar's Show Desktop command.
+2. **Ctrl+Alt+Tab**: Opens the Ctrl+Alt+Tab task switcher.
+3. **Task Manager**: Opens Windows Task Manager.
+4. **Mute system volume**: Toggles mute on all active render audio devices.
+5. **Taskbar auto-hide**: Toggles the Windows taskbar auto-hide setting.
+6. **Win+Tab**: Opens Task View.
+7. **Hide desktop icons**: Toggles desktop icon visibility.
+8. **Combine Taskbar buttons**: Toggles taskbar button combine mode between configured states. Uses Additional Arguments.
+9. **Toggle Taskbar alignment**: Toggles taskbar alignment between left and center.
+10. **Open Start menu**: Sends the Windows key to open Start.
+11. **Virtual key press**: Sends one or more parsed virtual keys with `SendInput`. Uses Additional Arguments.
+12. **Open application, path or URL**: Opens a target through `ShellExecuteEx`. Uses Additional Arguments.
+13. **Clipboard Run**: Reads the current clipboard text, appends it to a configured alias or target string, and opens the result. Uses Additional Arguments.
+14. **Open parsed title path in explorer, with fallback to exe**: Tries to extract a file path from the foreground window title and select it in Explorer; if that fails, it selects the foreground process executable instead.
+15. **Opacity Up (active window)**: Raises the active window's opacity through fixed levels. If the window is already layered and reaches the top step, the layered style is removed to restore full opacity.
+16. **Opacity Down (active window)**: Lowers the active window's opacity through fixed levels. If the window is not layered yet, it becomes layered and starts at 226.
+17. **Toggle Always On Top (active window)**: Toggles the active window between normal and topmost.
+18. **Force Kill Active Window**: Terminates the foreground window's process, except for the current `explorer.exe` host process.
+19. **Media Play/Pause**: Sends the media play/pause key.
+20. **Media Next Track**: Sends the media next-track key.
+21. **Media Previous Track**: Sends the media previous-track key.
 
-17. **Opacity Up (active window)**  
-    Increases window opacity
+## Hotkey format
 
-18. **Opacity Down (active window)**  
-    Decreases window opacity
+Use this format:
 
-# Hotkey format
+```text
+Modifier+Modifier+Key
+```
 
-Hotkeys use the form:
+Rules:
 
-`Modifier+Modifier+Key`
+- Use exactly one non-modifier key.
+- Modifiers can appear in any order.
+- Hotkey names are case-insensitive.
 
-## Modifiers
-`Alt`, `Ctrl`, `Shift`, `Win`
-#### Keys
+Supported modifiers:
 
-- Letters: `A–Z`
-- Numbers: `0–9`
-- Function keys: `F1–F24`
-- Navigation: `Home`, `End`, `PageUp`, `PageDown`, `Insert`, `Delete`,
-  `Left`, `Right`, `Up`, `Down`
-- Common: `Enter`, `Tab`, `Space`, `Backspace`, `Escape` (`Esc`),
-  `CapsLock`, `PrintScreen`, `Pause`
-- Numpad: `Numpad0–Numpad9` (`Num0–Num9`), `NumLock`,
-  `Add`, `Subtract`, `Multiply`, `Divide`, `Decimal`
-- Media: `VolumeMute`, `VolumeUp`, `VolumeDown`,
-  `MediaPlayPause`, `MediaNext`, `MediaPrev`, `MediaStop`
-- Modifier keys (Virtual Key Press only):
-  `LWin`, `RWin`, `LShift`, `RShift`,
-  `LCtrl`, `RCtrl`, `LAlt`, `RAlt`
-- Selected `VK_*` virtual-key codes (numeric forms accepted where supported)
+- `Alt`
+- `Ctrl`
+- `Shift`
+- `Win`
+- `NoRepeat`
 
-### Examples
+Common key names:
 
-- `Ctrl+Alt+D`
-- `Ctrl+Shift+F1`
-- `Alt+Home`
-- `Win+Numpad1`
-## Additional arguments
-
-Actions 8, 11, 12, 17, and 18 accept AdditionalArgs.
-
-Arguments are separated by semicolons.
-
-### 8. Combine taskbar buttons
-
-`priState1;priState2;secState1;secState2`
-
-States:
-- `COMBINE_ALWAYS`
-- `COMBINE_WHEN_FULL`
-- `COMBINE_NEVER`
-
-Example:
-`COMBINE_ALWAYS;COMBINE_NEVER;COMBINE_ALWAYS;COMBINE_NEVER`
-
-### 11. Virtual key press
-
-`key1;key2;...;keyN`  
-or  
-`Modifier+Key`
-
-Notes:
-- Each key may be a key name (`A`, `Enter`, `VK_OEM_3`)
-  or a chord (`Ctrl+Shift+Escape`)
-- Multi-key sequences press keys in order, then release
-
-Examples:
-- `Win+E`
-- `Ctrl+Shift+Escape`
-- `LCtrl;C`
-
-### 12. Open application, path, or URL
-
-`command`
-
-Notes:
-- Starts an executable (with optional arguments),
-  opens a filesystem path, or opens a URL
-- Prefix with `uac;` to request elevation
-
-Examples:
-- `notepad.exe`
-- `"C:\Program Files\App\app.exe" --arg`
-- `https://example.com`
-- `uac;C:\Windows\System32\cmd.exe`
-
-### 17/18. Opacity Up / Down (active window)
-
-Tokens (semicolon separated). All tokens are optional.  
-Unspecified values use default behavior.
-
-- `step<number>`: Opacity step per press (default `0.05`)
-- `min<number>`: Minimum opacity clamp (default `0.10`)
-- `max<number>`: Maximum opacity clamp (default `1.00`)
-- `allApp`: Apply to all top-level windows in the same process as the foreground window
-- `dontLayer`: Do not automatically add `WS_EX_LAYERED`
+- Letters: `A` to `Z`
+- Numbers: `0` to `9`
+- Function keys: `F1` to `F24`
+- Navigation: `Home`, `End`, `PageUp`, `PageDown`, `Insert`, `Delete`, `Left`, `Right`, `Up`, `Down`
+- Common: `Enter`, `Tab`, `Space`, `Backspace`, `Escape` or `Esc`, `CapsLock`, `PrintScreen`, `Pause`
+- Numpad: `Numpad0` to `Numpad9` or `Num0` to `Num9`, plus `NumLock`, `Add`, `Subtract`, `Multiply`, `Divide`, `Decimal`
+- Media: `VolumeMute`, `VolumeUp`, `VolumeDown`, `MediaPlayPause`, `MediaNext`, `MediaPrev`, `MediaStop`
+- Extra keys used mainly by **Virtual key press**: `LWin`, `RWin`, `LShift`, `RShift`, `LCtrl`, `RCtrl`, `LAlt`, `RAlt`
+- Some additional `VK_*` names from [Virtual-Key Codes](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes)
+- Numeric virtual-key codes are also accepted, such as `0x70`
 
 Examples:
 
-- `step0.03`
-- `step0.02;min0.30;max0.95`
-- `allApp;step0.02`
-- `allApp;dontLayer;min0.25;max0.90`
+```text
+Ctrl+Alt+D
+Ctrl+Shift+F1
+Alt+Home
+Win+Numpad1
+NoRepeat+Ctrl+Z
+```
 
+## Additional Arguments
+
+Only these actions use `Additional Arguments`:
+
+- **Combine Taskbar buttons**
+- **Virtual key press**
+- **Open application, path or URL**
+- **Clipboard Run**
+
+All other actions ignore this field.
+
+### Virtual key press
+
+Use one or more semicolon-separated hotkey-style entries.
+
+Each entry is parsed, then all parsed keys are flattened into one list and sent
+together in a single `SendInput` batch. That means `Ctrl+C;Alt+Tab` does **not**
+send Copy and then Alt+Tab as two separate shortcuts. It presses all parsed keys
+together in one batch.
+
+If any modifier key is still physically held when the action fires, sending is
+deferred briefly until those modifier keys are released, with a timeout of about
+500 ms.
+
+Examples:
+
+```text
+Ctrl+C
+Alt+F4
+Ctrl+Shift+Esc
+VolumeMute
+LWin+Tab
+```
+
+### Open application, path or URL
+
+This value is passed to `ShellExecuteEx`.
+
+It can be:
+
+- An executable
+- A document, folder, or path
+- A URL
+- An executable plus arguments
+
+The target is opened on the monitor where the cursor is currently located.
+
+Examples:
+
+```text
+notepad.exe
+C:\Windows\System32\cmd.exe
+"C:\Program Files\Everything\Everything.exe"
+explorer.exe C:\
+https://example.com
+```
+
+To request elevation, prefix the value with `uac;`:
+
+```text
+uac;cmd.exe
+uac;"C:\Tools\app.exe" --example
+```
+
+### Clipboard Run
+
+This action reads the current clipboard text. If the clipboard is empty, nothing
+happens.
+
+`Additional Arguments` can be:
+
+- A built-in alias
+- A custom target string, typically a URL prefix such as `https://example.com/search?q=`
+- The same value prefixed with `uac;`
+
+The clipboard text is appended **as-is** to the configured target string, and
+the result is opened through `ShellExecuteEx` on the monitor where the cursor is
+currently located.
+
+Built-in aliases:
+
+| Alias       | Expands to                                    |
+|-------------|-----------------------------------------------|
+| `gpt`       | `https://chatgpt.com/?q=`                     |
+| `yt`        | `https://www.youtube.com/results?search_query=` |
+| `google`    | `https://www.google.com/search?q=`            |
+| `copilot`   | `https://copilot.microsoft.com/?sendquery=1&q=` |
+| `x`         | `https://twitter.com/search?q=`               |
+| `reddit`    | `https://www.reddit.com/search/?q=`           |
+| `translate` | `https://translate.google.com/?text=`         |
+
+Examples:
+
+```text
+gpt
+google
+https://www.bing.com/search?q=
+uac;https://example.com/search?q=
+```
+
+### Combine taskbar buttons
+
+Use up to four semicolon-separated state values:
+
+```text
+primaryState1;primaryState2;secondaryState1;secondaryState2
+```
+
+Valid values:
+
+```text
+COMBINE_ALWAYS
+COMBINE_WHEN_FULL
+COMBINE_NEVER
+```
+
+The action toggles between the first two values for the primary taskbar. If the
+third and fourth values are also provided, they control the same toggle for
+secondary taskbars.
+
+Toggle direction is tracked by an internal variable that is initialized from the
+registry the first time the action runs. If you change the registry externally
+between presses, the next toggle may be out of sync.
+
+**Example:**
+
+```text
+COMBINE_ALWAYS;COMBINE_NEVER
+```
+
+## Notes
+
+- Zone detection is based on the monitor under the cursor at the moment the hotkey fires.
+- `Open parsed title path in explorer, with fallback to exe` checks the foreground window title from right to left, splitting on ` - `. It only accepts absolute paths that resolve to real files. If none are found, it falls back to the foreground process executable.
+- `Opacity Up (active window)` uses these fixed levels when increasing: `56`, `85`, `113`, `141`, `170`, `198`, `226`. It only works on windows that are already layered.
+- `Opacity Down (active window)` uses these fixed levels when decreasing: `226`, `198`, `170`, `141`, `113`, `85`, `56`, `0`. If the window is not layered yet, it is first made layered and set to `226`.
+- `Toggle Always On Top (active window)` and `Force Kill Active Window` operate on the current foreground window.
 
 ## Credits
 
-## Credits
-
-The actions in this mod are based on
+15 of the actions in this mod are based on
 [Click on empty taskbar space](https://windhawk.net/mods/taskbar-empty-space-clicks)
 by [m1lhaus](https://github.com/m1lhaus).
 
-The global hotkey triggering mechanism is based on 
+The global hotkey triggering mechanism is based on
 [keyboard-shortcut-actions](https://windhawk.net/mods/keyboard-shortcut-actions)
 by [m417z](https://github.com/m417z).
 
 */
 // ==/WindhawkModReadme==
 
+
 // ==WindhawkModSettings==
 /*
-- GatePx: 12
-  $name: Zone gate thickness (px)
-  $description: >-
-    Pixel thickness used to determine edge/corner zones from the monitor bounds.
-    Corners take precedence over edges. Used only for dispatcher routing.
-
 - HotkeyActions:
   - - Hotkey: ""
       $name: Keyboard Shortcut
@@ -215,49 +276,52 @@ by [m417z](https://github.com/m417z).
         Hotkey in format: Modifier+Key (e.g., Ctrl+Alt+D).
         Modifiers: Alt, Ctrl, Shift, Win.
         Keys: A-Z, 0-9, F1-F24, Enter, Space, Home, End, Insert, Delete, etc.
-    - Zone: NONE
-      $name: Zone
-      $description: >-
-        Cursor zone required for this mapping. Zone affects dispatcher routing
-        only. NONE matches only when the cursor is not within any edge/corner
-        gate region.
-      $options:
-      - NONE: None (interior)
-      - LEFT: Left edge
-      - TOP_LEFT: Top-left corner
-      - TOP: Top edge
-      - TOP_RIGHT: Top-right corner
-      - RIGHT: Right edge
-      - BOTTOM_RIGHT: Bottom-right corner
-      - BOTTOM: Bottom edge
-      - BOTTOM_LEFT: Bottom-left corner
-    - Action: ACTION_NOTHING
-      $name: Action
-      $description: Action to invoke when the hotkey is pressed.
-      $options:
-      - ACTION_NOTHING: Nothing (default)
-      - ACTION_SHOW_DESKTOP: Show desktop
-      - ACTION_ALT_TAB: Ctrl+Alt+Tab
-      - ACTION_TASK_MANAGER: Task Manager
-      - ACTION_MUTE: Mute system volume
-      - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
-      - ACTION_WIN_TAB: Win+Tab
-      - ACTION_HIDE_ICONS: Hide desktop icons
-      - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
-      - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
-      - ACTION_OPEN_START_MENU: Open Start menu
-      - ACTION_SEND_KEYPRESS: Virtual key press
-      - ACTION_START_PROCESS: Open application, path or URL
-      - ACTION_MEDIA_PLAY_PAUSE: Media Play/Pause
-      - ACTION_MEDIA_NEXT: Media Next Track
-      - ACTION_MEDIA_PREV: Media Previous Track
-      - ACTION_TOGGLE_ALWAYSONTOP_ACTIVE: Toggle Always On Top (active window)
-      - ACTION_OPACITY_UP_ACTIVE: Opacity Up (active window)
-      - ACTION_OPACITY_DOWN_ACTIVE: Opacity Down (active window)
-
-    - AdditionalArgs: ""
-      $name: Additional Args
-      $description: Additional arguments for the action (see Details tab).
+    - Regions:
+      - - Region: ELSEWHERE
+          $name: Region
+          $options:
+          - ELSEWHERE: ELSEWHERE
+          - TOP_LEFT: Top-left corner
+          - TOP: Top edge
+          - TOP_RIGHT: Top-right corner
+          - LEFT: Left edge
+          - RIGHT: Right edge
+          - BOTTOM_LEFT: Bottom-left corner
+          - BOTTOM: Bottom edge
+          - BOTTOM_RIGHT: Bottom-right corner
+        - Action: ACTION_NOTHING
+          $name: Action
+          $description: Action to invoke when the hotkey is pressed in this region.
+          $options:
+          - ACTION_NOTHING: Nothing
+          - ACTION_SHOW_DESKTOP: Show desktop
+          - ACTION_ALT_TAB: Ctrl+Alt+Tab
+          - ACTION_TASK_MANAGER: Task Manager
+          - ACTION_MUTE: Mute system volume
+          - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
+          - ACTION_WIN_TAB: Win+Tab
+          - ACTION_HIDE_ICONS: Hide desktop icons
+          - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
+          - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
+          - ACTION_OPEN_START_MENU: Open Start menu
+          - ACTION_SEND_KEYPRESS: Virtual key press
+          - ACTION_START_PROCESS: Open application, path or URL
+          - ACTION_COPYRUN: Clipboard Run
+          - ACTION_SELECT_ACTIVE_IN_EXPLORER: Open parsed title path in explorer, with fallback to exe.
+          - ACTION_OPACITY_UP_ACTIVE: Opacity Up (active window)
+          - ACTION_OPACITY_DOWN_ACTIVE: Opacity Down (active window)
+          - ACTION_TOGGLE_ALWAYSONTOP_ACTIVE: Toggle Always On Top (active window)
+          - ACTION_FORCE_KILL_ACTIVE: Force Kill Active Window
+          - ACTION_MEDIA_PLAY_PAUSE: Media Play/Pause
+          - ACTION_MEDIA_NEXT: Media Next Track
+          - ACTION_MEDIA_PREV: Media Previous Track
+        - AdditionalArgs: ""
+          $name: Additional Arguments
+          $description: >-
+            Optional. Only used by Virtual key press, Open application/path/URL,
+            Clipboard Run, and Combine Taskbar Buttons.
+            Examples: Ctrl+C • uac;cmd.exe • google; • COMBINE_ALWAYS;COMBINE_NEVER
+            See the Details tab for full documentation.
   $name: Keyboard Shortcut Actions
 */
 // ==/WindhawkModSettings==
@@ -274,17 +338,12 @@ by [m417z](https://github.com/m417z).
 #include <winuser.h>
 
 #include <algorithm>
-#include <cstdint>
 #include <cwctype>
 #include <filesystem>
 #include <functional>
-#include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #if defined(__GNUC__) && __GNUC__ > 8
@@ -311,12 +370,15 @@ using winrt::com_ptr;
 
 #pragma region declarations
 
+// Enum for taskbar buttons state
 enum TaskBarButtonsState {
     COMBINE_ALWAYS = 0,
     COMBINE_WHEN_FULL,
     COMBINE_NEVER,
     COMBINE_INVALID
 };
+
+// Enum for hotkey actions
 
 enum class HotkeyActionType {
     Nothing,
@@ -332,77 +394,48 @@ enum class HotkeyActionType {
     OpenStartMenu,
     SendKeypress,
     StartProcess,
+    CopyRun,
+    SelectActiveInExplorer,
+    OpacityUp,
+    OpacityDown,
+    ToggleAlwaysOnTop,
+    ForceKillActive,
     MediaPlayPause,
     MediaNext,
     MediaPrev,
-    ToggleAlwaysOnTopActive,
-    OpacityUpActive,
-    OpacityDownActive,
-
+    Invalid,
 };
 
-enum class Zone : uint8_t {
-    NONE = 0,
-    LEFT,
-    TOP_LEFT,
-    TOP,
-    TOP_RIGHT,
-    RIGHT,
-    BOTTOM_RIGHT,
-    BOTTOM,
-    BOTTOM_LEFT,
+enum class HotkeyRegionName {
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    Elsewhere,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
+    Invalid,
 };
 
-static const wchar_t* ZoneToString(Zone z) {
-    switch (z) {
-        case Zone::NONE: return L"NONE";
-        case Zone::LEFT: return L"LEFT";
-        case Zone::TOP_LEFT: return L"TOP_LEFT";
-        case Zone::TOP: return L"TOP";
-        case Zone::TOP_RIGHT: return L"TOP_RIGHT";
-        case Zone::RIGHT: return L"RIGHT";
-        case Zone::BOTTOM_RIGHT: return L"BOTTOM_RIGHT";
-        case Zone::BOTTOM: return L"BOTTOM";
-        case Zone::BOTTOM_LEFT: return L"BOTTOM_LEFT";
-    }
-    return L"UNKNOWN";
-}
-
-static uint64_t MakeHotkeyKey(UINT modifiers, UINT vk) {
-    return (static_cast<uint64_t>(modifiers) << 32) | static_cast<uint64_t>(vk);
-}
-
-struct HotkeyAction {
+struct HotkeyBinding {
     std::wstring hotkeyString;
-    Zone zone;
+    HotkeyRegionName region;
     HotkeyActionType actionType;
     std::wstring additionalArgs;
-
-    // executor present only if row validated and loaded
     std::function<void()> actionExecutor;
-
     UINT modifiers;
     UINT vk;
     int hotkeyId;
-    bool registered;
-};
-
-struct HotkeyStats {
-    uint64_t hits_total = 0;
-    uint64_t hits_matched = 0;
-    uint64_t hits_no_match = 0;
+    bool ownsRegistration;
 };
 
 static struct {
-    int gatePx;
-    std::vector<HotkeyAction> hotkeyActions;
-
-    // diagnostics derived from loaded actions
-    std::unordered_map<int, HotkeyStats> statsByHotkeyId;
-    std::unordered_set<uint64_t> loggedNoMatchByIdZone;  // (id<<8)|zone
-    std::unordered_set<int> loggedUnknownId;             // id only
+    std::vector<HotkeyBinding> hotkeyActions;
 } g_settings;
 
+// Wrapper for COM API initialization (audio device enumeration only)
 class AudioCOMAPI {
    public:
     AudioCOMAPI()
@@ -495,15 +528,25 @@ std::wstring trim(const std::wstring& s) {
     return rtrim(ltrim(s));
 }
 
+std::wstring trimDecorated(std::wstring s) {
+    if (!s.empty() && s.front() == L'*') {
+        s.erase(0, 1);
+    }
+
+    s = trim(s);
+
+    if (s.size() >= 2 &&
+        ((s.front() == L'"' && s.back() == L'"') ||
+         (s.front() == L'\'' && s.back() == L'\''))) {
+        s = s.substr(1, s.size() - 2);
+    }
+
+    return s;
+}
+
 std::wstring toLower(const std::wstring& s) {
     std::wstring result = s;
     std::transform(result.begin(), result.end(), result.begin(), ::towlower);
-    return result;
-}
-
-std::wstring toUpper(const std::wstring& s) {
-    std::wstring result = s;
-    std::transform(result.begin(), result.end(), result.begin(), ::towupper);
     return result;
 }
 
@@ -513,13 +556,16 @@ bool startsWith(const std::wstring& s, const std::wstring& prefix) {
     }
     return std::equal(prefix.begin(), prefix.end(), s.begin());
 }
+
 }  // namespace stringtools
 
 static HWND g_hTaskbarWnd = nullptr;
 static DWORD g_dwTaskbarThreadId = 0;
 
-static const int kHotkeyIdBase = 1768250635;  // from epochconverter.com
+// Base hotkey ID - each action gets base + index
+static const int kHotkeyIdBase = 1775748064;  // from epochconverter.com
 
+// Message for hotkey registration management
 static UINT g_hotkeyRegisteredMsg =
     RegisterWindowMessage(L"Windhawk_hotkey_" WH_MOD_ID);
 
@@ -528,33 +574,32 @@ enum {
     HOTKEY_UNREGISTER,
 };
 
+// Message to uninit COM from GUI thread
 static const UINT g_uninitCOMMsg =
     RegisterWindowMessage(L"Windhawk_UnInit_COM_" WH_MOD_ID);
 
-static const int kMaxKeypressRetryCount = 50;
+// Timer constants for keypress retry when modifier keys are pressed
+static const int kMaxKeypressRetryCount = 50;  // ~500ms max wait
 static const UINT kKeypressRetryIntervalMs = 10;
 
+// Pending keypress storage for deferred send
 static std::vector<int> g_pendingKeypressKeys;
 static int g_pendingKeypressRetryCount = 0;
 static UINT_PTR g_keypressTimerId = 0;
 
+// Forward declarations
 void LoadSettings();
 bool FromStringHotKey(std::wstring_view hotkeyString,
                       UINT* modifiersOut,
                       UINT* vkOut);
 void RegisterHotkeys(HWND hWnd);
 void UnregisterHotkeys(HWND hWnd);
-
-std::optional<HotkeyActionType> TryParseActionType(const std::wstring& actionName);
+HotkeyRegionName TryParseRegionName(const std::wstring& raw);
+HotkeyActionType TryParseActionType(const std::wstring& raw);
+const wchar_t* RegionNameToString(HotkeyRegionName region);
 const wchar_t* ActionTypeToString(HotkeyActionType actionType);
-
-bool TryBuildActionExecutor(HotkeyActionType actionType,
-                            const std::wstring& args,
-                            std::function<void()>& executorOut,
-                            std::wstring& errorOut);
-
-bool TryParseZone(std::wstring_view zoneString, Zone* zoneOut);
-Zone GetCursorZone(int gatePx);
+std::function<void()> ParseActionSetting(HotkeyActionType actionType,
+                                         const std::wstring& args);
 
 #pragma endregion  // declarations
 
@@ -572,57 +617,205 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
     };
 
     static const std::unordered_map<std::wstring_view, UINT> vkMap = {
-        {L"A", 0x41},{L"B", 0x42},{L"C", 0x43},{L"D", 0x44},{L"E", 0x45},
-        {L"F", 0x46},{L"G", 0x47},{L"H", 0x48},{L"I", 0x49},{L"J", 0x4A},
-        {L"K", 0x4B},{L"L", 0x4C},{L"M", 0x4D},{L"N", 0x4E},{L"O", 0x4F},
-        {L"P", 0x50},{L"Q", 0x51},{L"R", 0x52},{L"S", 0x53},{L"T", 0x54},
-        {L"U", 0x55},{L"V", 0x56},{L"W", 0x57},{L"X", 0x58},{L"Y", 0x59},
+        // Letters A-Z
+        {L"A", 0x41},
+        {L"B", 0x42},
+        {L"C", 0x43},
+        {L"D", 0x44},
+        {L"E", 0x45},
+        {L"F", 0x46},
+        {L"G", 0x47},
+        {L"H", 0x48},
+        {L"I", 0x49},
+        {L"J", 0x4A},
+        {L"K", 0x4B},
+        {L"L", 0x4C},
+        {L"M", 0x4D},
+        {L"N", 0x4E},
+        {L"O", 0x4F},
+        {L"P", 0x50},
+        {L"Q", 0x51},
+        {L"R", 0x52},
+        {L"S", 0x53},
+        {L"T", 0x54},
+        {L"U", 0x55},
+        {L"V", 0x56},
+        {L"W", 0x57},
+        {L"X", 0x58},
+        {L"Y", 0x59},
         {L"Z", 0x5A},
-        {L"0", 0x30},{L"1", 0x31},{L"2", 0x32},{L"3", 0x33},{L"4", 0x34},
-        {L"5", 0x35},{L"6", 0x36},{L"7", 0x37},{L"8", 0x38},{L"9", 0x39},
-        {L"F1", 0x70},{L"F2", 0x71},{L"F3", 0x72},{L"F4", 0x73},{L"F5", 0x74},
-        {L"F6", 0x75},{L"F7", 0x76},{L"F8", 0x77},{L"F9", 0x78},{L"F10", 0x79},
-        {L"F11", 0x7A},{L"F12", 0x7B},{L"F13", 0x7C},{L"F14", 0x7D},{L"F15", 0x7E},
-        {L"F16", 0x7F},{L"F17", 0x80},{L"F18", 0x81},{L"F19", 0x82},{L"F20", 0x83},
-        {L"F21", 0x84},{L"F22", 0x85},{L"F23", 0x86},{L"F24", 0x87},
-        {L"BACKSPACE", 0x08},{L"TAB", 0x09},{L"ENTER", 0x0D},{L"RETURN", 0x0D},
-        {L"PAUSE", 0x13},{L"CAPSLOCK", 0x14},{L"ESCAPE", 0x1B},{L"ESC", 0x1B},
-        {L"SPACE", 0x20},{L"SPACEBAR", 0x20},{L"PAGEUP", 0x21},{L"PAGEDOWN", 0x22},
-        {L"END", 0x23},{L"HOME", 0x24},{L"LEFT", 0x25},{L"UP", 0x26},{L"RIGHT", 0x27},
-        {L"DOWN", 0x28},{L"PRINTSCREEN", 0x2C},{L"PRTSC", 0x2C},{L"INSERT", 0x2D},
-        {L"INS", 0x2D},{L"DELETE", 0x2E},{L"DEL", 0x2E},{L"HELP", 0x2F},
-        {L"SLEEP", 0x5F},{L"APPS", 0x5D},{L"MENU", 0x5D},
-        {L"NUMPAD0", 0x60},{L"NUMPAD1", 0x61},{L"NUMPAD2", 0x62},{L"NUMPAD3", 0x63},
-        {L"NUMPAD4", 0x64},{L"NUMPAD5", 0x65},{L"NUMPAD6", 0x66},{L"NUMPAD7", 0x67},
-        {L"NUMPAD8", 0x68},{L"NUMPAD9", 0x69},
-        {L"NUM0", 0x60},{L"NUM1", 0x61},{L"NUM2", 0x62},{L"NUM3", 0x63},{L"NUM4", 0x64},
-        {L"NUM5", 0x65},{L"NUM6", 0x66},{L"NUM7", 0x67},{L"NUM8", 0x68},{L"NUM9", 0x69},
-        {L"MULTIPLY", 0x6A},{L"ADD", 0x6B},{L"SUBTRACT", 0x6D},{L"DECIMAL", 0x6E},
-        {L"DIVIDE", 0x6F},{L"NUMLOCK", 0x90},{L"SCROLLLOCK", 0x91},
-        {L"VOLUMEMUTE", 0xAD},{L"VOLUMEDOWN", 0xAE},{L"VOLUMEUP", 0xAF},
-        {L"MEDIANEXT", 0xB0},{L"MEDIAPREV", 0xB1},{L"MEDIASTOP", 0xB2},
+        // Numbers 0-9
+        {L"0", 0x30},
+        {L"1", 0x31},
+        {L"2", 0x32},
+        {L"3", 0x33},
+        {L"4", 0x34},
+        {L"5", 0x35},
+        {L"6", 0x36},
+        {L"7", 0x37},
+        {L"8", 0x38},
+        {L"9", 0x39},
+        // Function keys F1-F24
+        {L"F1", 0x70},
+        {L"F2", 0x71},
+        {L"F3", 0x72},
+        {L"F4", 0x73},
+        {L"F5", 0x74},
+        {L"F6", 0x75},
+        {L"F7", 0x76},
+        {L"F8", 0x77},
+        {L"F9", 0x78},
+        {L"F10", 0x79},
+        {L"F11", 0x7A},
+        {L"F12", 0x7B},
+        {L"F13", 0x7C},
+        {L"F14", 0x7D},
+        {L"F15", 0x7E},
+        {L"F16", 0x7F},
+        {L"F17", 0x80},
+        {L"F18", 0x81},
+        {L"F19", 0x82},
+        {L"F20", 0x83},
+        {L"F21", 0x84},
+        {L"F22", 0x85},
+        {L"F23", 0x86},
+        {L"F24", 0x87},
+        // Common keys (friendly names)
+        {L"BACKSPACE", 0x08},
+        {L"TAB", 0x09},
+        {L"ENTER", 0x0D},
+        {L"RETURN", 0x0D},
+        {L"PAUSE", 0x13},
+        {L"CAPSLOCK", 0x14},
+        {L"ESCAPE", 0x1B},
+        {L"ESC", 0x1B},
+        {L"SPACE", 0x20},
+        {L"SPACEBAR", 0x20},
+        {L"PAGEUP", 0x21},
+        {L"PAGEDOWN", 0x22},
+        {L"END", 0x23},
+        {L"HOME", 0x24},
+        {L"LEFT", 0x25},
+        {L"UP", 0x26},
+        {L"RIGHT", 0x27},
+        {L"DOWN", 0x28},
+        {L"PRINTSCREEN", 0x2C},
+        {L"PRTSC", 0x2C},
+        {L"INSERT", 0x2D},
+        {L"INS", 0x2D},
+        {L"DELETE", 0x2E},
+        {L"DEL", 0x2E},
+        {L"HELP", 0x2F},
+        {L"SLEEP", 0x5F},
+        {L"APPS", 0x5D},
+        {L"MENU", 0x5D},
+        // Numpad keys
+        {L"NUMPAD0", 0x60},
+        {L"NUMPAD1", 0x61},
+        {L"NUMPAD2", 0x62},
+        {L"NUMPAD3", 0x63},
+        {L"NUMPAD4", 0x64},
+        {L"NUMPAD5", 0x65},
+        {L"NUMPAD6", 0x66},
+        {L"NUMPAD7", 0x67},
+        {L"NUMPAD8", 0x68},
+        {L"NUMPAD9", 0x69},
+        {L"NUM0", 0x60},
+        {L"NUM1", 0x61},
+        {L"NUM2", 0x62},
+        {L"NUM3", 0x63},
+        {L"NUM4", 0x64},
+        {L"NUM5", 0x65},
+        {L"NUM6", 0x66},
+        {L"NUM7", 0x67},
+        {L"NUM8", 0x68},
+        {L"NUM9", 0x69},
+        {L"MULTIPLY", 0x6A},
+        {L"ADD", 0x6B},
+        {L"SUBTRACT", 0x6D},
+        {L"DECIMAL", 0x6E},
+        {L"DIVIDE", 0x6F},
+        {L"NUMLOCK", 0x90},
+        {L"SCROLLLOCK", 0x91},
+        // Media keys
+        {L"VOLUMEMUTE", 0xAD},
+        {L"VOLUMEDOWN", 0xAE},
+        {L"VOLUMEUP", 0xAF},
+        {L"MEDIANEXT", 0xB0},
+        {L"MEDIAPREV", 0xB1},
+        {L"MEDIASTOP", 0xB2},
         {L"MEDIAPLAYPAUSE", 0xB3},
-        {L"BROWSERBACK", 0xA6},{L"BROWSERFORWARD", 0xA7},{L"BROWSERREFRESH", 0xA8},
-        {L"BROWSERSTOP", 0xA9},{L"BROWSERSEARCH", 0xAA},{L"BROWSERFAVORITES", 0xAB},
+        // Browser keys
+        {L"BROWSERBACK", 0xA6},
+        {L"BROWSERFORWARD", 0xA7},
+        {L"BROWSERREFRESH", 0xA8},
+        {L"BROWSERSTOP", 0xA9},
+        {L"BROWSERSEARCH", 0xAA},
+        {L"BROWSERFAVORITES", 0xAB},
         {L"BROWSERHOME", 0xAC},
-        {L"LWIN", 0x5B},{L"RWIN", 0x5C},{L"LSHIFT", 0xA0},{L"RSHIFT", 0xA1},
-        {L"LCTRL", 0xA2},{L"RCTRL", 0xA3},{L"LALT", 0xA4},{L"RALT", 0xA5},
-        {L"VK_LBUTTON", 0x01},{L"VK_RBUTTON", 0x02},{L"VK_CANCEL", 0x03},
-        {L"VK_MBUTTON", 0x04},{L"VK_XBUTTON1", 0x05},{L"VK_XBUTTON2", 0x06},
-        {L"VK_CLEAR", 0x0C},{L"VK_SHIFT", 0x10},{L"VK_CONTROL", 0x11},{L"VK_MENU", 0x12},
-        {L"VK_KANA", 0x15},{L"VK_HANGUL", 0x15},{L"VK_IME_ON", 0x16},{L"VK_JUNJA", 0x17},
-        {L"VK_FINAL", 0x18},{L"VK_HANJA", 0x19},{L"VK_KANJI", 0x19},{L"VK_IME_OFF", 0x1A},
-        {L"VK_CONVERT", 0x1C},{L"VK_NONCONVERT", 0x1D},{L"VK_ACCEPT", 0x1E},
-        {L"VK_MODECHANGE", 0x1F},{L"VK_SELECT", 0x29},{L"VK_PRINT", 0x2A},
-        {L"VK_EXECUTE", 0x2B},{L"VK_SEPARATOR", 0x6C},{L"VK_LAUNCH_MAIL", 0xB4},
-        {L"VK_LAUNCH_MEDIA_SELECT", 0xB5},{L"VK_LAUNCH_APP1", 0xB6},{L"VK_LAUNCH_APP2", 0xB7},
-        {L"VK_OEM_1", 0xBA},{L"VK_OEM_PLUS", 0xBB},{L"VK_OEM_COMMA", 0xBC},
-        {L"VK_OEM_MINUS", 0xBD},{L"VK_OEM_PERIOD", 0xBE},{L"VK_OEM_2", 0xBF},
-        {L"VK_OEM_3", 0xC0},{L"VK_OEM_4", 0xDB},{L"VK_OEM_5", 0xDC},
-        {L"VK_OEM_6", 0xDD},{L"VK_OEM_7", 0xDE},{L"VK_OEM_8", 0xDF},
-        {L"VK_OEM_102", 0xE2},{L"VK_PROCESSKEY", 0xE5},{L"VK_PACKET", 0xE7},
-        {L"VK_ATTN", 0xF6},{L"VK_CRSEL", 0xF7},{L"VK_EXSEL", 0xF8},{L"VK_EREOF", 0xF9},
-        {L"VK_PLAY", 0xFA},{L"VK_ZOOM", 0xFB},{L"VK_NONAME", 0xFC},{L"VK_PA1", 0xFD},
+        // Modifier keys (for use in Virtual key press action)
+        {L"LWIN", 0x5B},
+        {L"RWIN", 0x5C},
+        {L"LSHIFT", 0xA0},
+        {L"RSHIFT", 0xA1},
+        {L"LCTRL", 0xA2},
+        {L"RCTRL", 0xA3},
+        {L"LALT", 0xA4},
+        {L"RALT", 0xA5},
+        // VK_ prefixed versions (only keys without friendly aliases)
+        {L"VK_LBUTTON", 0x01},
+        {L"VK_RBUTTON", 0x02},
+        {L"VK_CANCEL", 0x03},
+        {L"VK_MBUTTON", 0x04},
+        {L"VK_XBUTTON1", 0x05},
+        {L"VK_XBUTTON2", 0x06},
+        {L"VK_CLEAR", 0x0C},
+        {L"VK_SHIFT", 0x10},
+        {L"VK_CONTROL", 0x11},
+        {L"VK_MENU", 0x12},
+        {L"VK_KANA", 0x15},
+        {L"VK_HANGUL", 0x15},
+        {L"VK_IME_ON", 0x16},
+        {L"VK_JUNJA", 0x17},
+        {L"VK_FINAL", 0x18},
+        {L"VK_HANJA", 0x19},
+        {L"VK_KANJI", 0x19},
+        {L"VK_IME_OFF", 0x1A},
+        {L"VK_CONVERT", 0x1C},
+        {L"VK_NONCONVERT", 0x1D},
+        {L"VK_ACCEPT", 0x1E},
+        {L"VK_MODECHANGE", 0x1F},
+        {L"VK_SELECT", 0x29},
+        {L"VK_PRINT", 0x2A},
+        {L"VK_EXECUTE", 0x2B},
+        {L"VK_SEPARATOR", 0x6C},
+        {L"VK_LAUNCH_MAIL", 0xB4},
+        {L"VK_LAUNCH_MEDIA_SELECT", 0xB5},
+        {L"VK_LAUNCH_APP1", 0xB6},
+        {L"VK_LAUNCH_APP2", 0xB7},
+        {L"VK_OEM_1", 0xBA},
+        {L"VK_OEM_PLUS", 0xBB},
+        {L"VK_OEM_COMMA", 0xBC},
+        {L"VK_OEM_MINUS", 0xBD},
+        {L"VK_OEM_PERIOD", 0xBE},
+        {L"VK_OEM_2", 0xBF},
+        {L"VK_OEM_3", 0xC0},
+        {L"VK_OEM_4", 0xDB},
+        {L"VK_OEM_5", 0xDC},
+        {L"VK_OEM_6", 0xDD},
+        {L"VK_OEM_7", 0xDE},
+        {L"VK_OEM_8", 0xDF},
+        {L"VK_OEM_102", 0xE2},
+        {L"VK_PROCESSKEY", 0xE5},
+        {L"VK_PACKET", 0xE7},
+        {L"VK_ATTN", 0xF6},
+        {L"VK_CRSEL", 0xF7},
+        {L"VK_EXSEL", 0xF8},
+        {L"VK_EREOF", 0xF9},
+        {L"VK_PLAY", 0xFA},
+        {L"VK_ZOOM", 0xFB},
+        {L"VK_NONAME", 0xFC},
+        {L"VK_PA1", 0xFD},
         {L"VK_OEM_CLEAR", 0xFE},
     };
 
@@ -666,6 +859,7 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
         }
 
         if (vk) {
+            // Only one key is allowed.
             return false;
         }
 
@@ -698,190 +892,73 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
 
 // =====================================================================
 
-#pragma region zoning
-
-bool TryParseZone(std::wstring_view zoneString, Zone* zoneOut) {
-    if (zoneString.empty()) {
-        *zoneOut = Zone::NONE;
-        return true;
-    }
-
-    std::wstring s{zoneString};
-    s = stringtools::trim(s);
-    if (s.empty()) {
-        *zoneOut = Zone::NONE;
-        return true;
-    }
-
-    std::transform(s.begin(), s.end(), s.begin(), ::towupper);
-
-    static const std::unordered_map<std::wstring, Zone> kMap = {
-        {L"NONE", Zone::NONE},
-        {L"LEFT", Zone::LEFT},
-        {L"TOP_LEFT", Zone::TOP_LEFT},
-        {L"TOP", Zone::TOP},
-        {L"TOP_RIGHT", Zone::TOP_RIGHT},
-        {L"RIGHT", Zone::RIGHT},
-        {L"BOTTOM_RIGHT", Zone::BOTTOM_RIGHT},
-        {L"BOTTOM", Zone::BOTTOM},
-        {L"BOTTOM_LEFT", Zone::BOTTOM_LEFT},
-    };
-
-    auto it = kMap.find(s);
-    if (it == kMap.end()) {
-        return false;
-    }
-    *zoneOut = it->second;
-    return true;
-}
-
-Zone GetCursorZone(int gatePx) {
-    if (gatePx <= 0) {
-        return Zone::NONE;
-    }
-
-    POINT pt{};
-    if (!GetCursorPos(&pt)) {
-        return Zone::NONE;
-    }
-
-    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{};
-    mi.cbSize = sizeof(mi);
-    if (!GetMonitorInfo(hMon, &mi)) {
-        return Zone::NONE;
-    }
-
-    const RECT& rc = mi.rcMonitor;
-
-    const bool inLeft = pt.x < (rc.left + gatePx);
-    const bool inRight = pt.x >= (rc.right - gatePx);
-    const bool inTop = pt.y < (rc.top + gatePx);
-    const bool inBottom = pt.y >= (rc.bottom - gatePx);
-
-    if (inTop && inLeft) return Zone::TOP_LEFT;
-    if (inTop && inRight) return Zone::TOP_RIGHT;
-    if (inBottom && inRight) return Zone::BOTTOM_RIGHT;
-    if (inBottom && inLeft) return Zone::BOTTOM_LEFT;
-
-    if (inLeft) return Zone::LEFT;
-    if (inTop) return Zone::TOP;
-    if (inRight) return Zone::RIGHT;
-    if (inBottom) return Zone::BOTTOM;
-
-    return Zone::NONE;
-}
-
-#pragma endregion  // zoning
-
-// =====================================================================
 
 #pragma region hotkey_registration
 
 void RegisterHotkeys(HWND hWnd) {
-    // Reset stats/log state on each registration cycle.
-    g_settings.statsByHotkeyId.clear();
-    g_settings.loggedNoMatchByIdZone.clear();
-    g_settings.loggedUnknownId.clear();
+    for (auto& entry : g_settings.hotkeyActions) {
+        entry.hotkeyId = 0;
+        entry.ownsRegistration = false;
+    }
 
-    // Assign one hotkeyId per unique (modifiers,vk).
-    std::unordered_map<uint64_t, int> keyToId;
-    std::vector<uint64_t> uniqueKeys;
-    keyToId.reserve(g_settings.hotkeyActions.size());
-    uniqueKeys.reserve(g_settings.hotkeyActions.size());
+    for (size_t i = 0; i < g_settings.hotkeyActions.size();) {
+        auto& first = g_settings.hotkeyActions[i];
+        const UINT modifiers = first.modifiers;
+        const UINT vk = first.vk;
 
-    int nextIdOffset = 0;
-    for (auto& action : g_settings.hotkeyActions) {
-        const uint64_t key = MakeHotkeyKey(action.modifiers, action.vk);
-        auto it = keyToId.find(key);
-        if (it == keyToId.end()) {
-            const int id = kHotkeyIdBase + nextIdOffset++;
-            keyToId.emplace(key, id);
-            uniqueKeys.push_back(key);
-            action.hotkeyId = id;
+        size_t end = i + 1;
+        while (end < g_settings.hotkeyActions.size() &&
+               g_settings.hotkeyActions[end].modifiers == modifiers &&
+               g_settings.hotkeyActions[end].vk == vk) {
+            ++end;
+        }
+
+        int id = kHotkeyIdBase + static_cast<int>(i);
+
+        if (RegisterHotKey(hWnd, id, modifiers, vk)) {
+            first.hotkeyId = id;
+            first.ownsRegistration = true;
+
+            Wh_Log(L"Registered hotkey '%s' (id=%d)",
+                   first.hotkeyString.c_str(), id);
+
+            for (size_t j = i + 1; j < end; ++j) {
+                g_settings.hotkeyActions[j].hotkeyId = id;
+                g_settings.hotkeyActions[j].ownsRegistration = false;
+
+                Wh_Log(L"Hotkey '%s' region %s: sharing id=%d",
+                       g_settings.hotkeyActions[j].hotkeyString.c_str(),
+                       RegionNameToString(g_settings.hotkeyActions[j].region),
+                       id);
+            }
         } else {
-            action.hotkeyId = it->second;
-        }
-        action.registered = false;
+            Wh_Log(L"Hotkey '%s': failed to register (error=%lu)",
+                   first.hotkeyString.c_str(), GetLastError());
+       }
+
+        i = end;
     }
-
-    // Register each unique hotkey exactly once.
-    std::unordered_map<uint64_t, bool> keyRegistered;
-    keyRegistered.reserve(uniqueKeys.size());
-
-    for (uint64_t key : uniqueKeys) {
-        const UINT modifiers = static_cast<UINT>(key >> 32);
-        const UINT vk = static_cast<UINT>(key & 0xFFFFFFFFu);
-        const int id = keyToId.at(key);
-
-        const BOOL ok = RegisterHotKey(hWnd, id, modifiers, vk);
-        keyRegistered.emplace(key, ok ? true : false);
-
-        const HotkeyAction* sample = nullptr;
-        int affectedMappings = 0;
-        for (const auto& a : g_settings.hotkeyActions) {
-            if (MakeHotkeyKey(a.modifiers, a.vk) == key) {
-                affectedMappings++;
-                if (!sample) sample = &a;
-            }
-        }
-
-        if (ok) {
-            if (sample) {
-                Wh_Log(L"Registered hotkey %s (id=%d) [mappings=%d]",
-                       sample->hotkeyString.c_str(), id, affectedMappings);
-            } else {
-                Wh_Log(L"Registered hotkey (id=%d) [mappings=%d]", id, affectedMappings);
-            }
-            g_settings.statsByHotkeyId.emplace(id, HotkeyStats{});
-        } else {
-            const DWORD err = GetLastError();
-            if (sample) {
-                Wh_Log(L"Failed to register hotkey: %s (error=%d) [mappings=%d]",
-                       sample->hotkeyString.c_str(), err, affectedMappings);
-            } else {
-                Wh_Log(L"Failed to register hotkey (id=%d, error=%d) [mappings=%d]",
-                       id, err, affectedMappings);
-            }
-        }
-    }
-
-    // Propagate registered flag to all zone mappings of that hotkey.
-    for (auto& action : g_settings.hotkeyActions) {
-        const uint64_t key = MakeHotkeyKey(action.modifiers, action.vk);
-        auto it = keyRegistered.find(key);
-        action.registered = (it != keyRegistered.end()) ? it->second : false;
-    }
-
-    // Registration summary.
-    int uniqueCount = static_cast<int>(uniqueKeys.size());
-    int okCount = 0;
-    for (auto& kv : keyRegistered) if (kv.second) okCount++;
-    Wh_Log(L"Hotkey registration summary: unique=%d ok=%d failed=%d",
-           uniqueCount, okCount, uniqueCount - okCount);
 }
 
 void UnregisterHotkeys(HWND hWnd) {
-    std::unordered_set<int> unregistered;
-    unregistered.reserve(g_settings.hotkeyActions.size());
+    for (auto& entry : g_settings.hotkeyActions) {
+        if (entry.ownsRegistration && entry.hotkeyId != 0) {
+            if (!UnregisterHotKey(hWnd, entry.hotkeyId)) {
+                Wh_Log(L"UnregisterHotKey(id=%d) failed (error=%lu)",
+                       entry.hotkeyId, GetLastError());
+            }
+       }
 
-    for (auto& action : g_settings.hotkeyActions) {
-        if (!action.registered) {
-            continue;
-        }
-        if (unregistered.insert(action.hotkeyId).second) {
-            UnregisterHotKey(hWnd, action.hotkeyId);
-        }
-        action.registered = false;
+        entry.ownsRegistration = false;
+        entry.hotkeyId = 0;
     }
 }
-
 #pragma endregion  // hotkey_registration
-
 // =====================================================================
 
 #pragma region actions
 
+// Splits semicolon-separated argument string into vector
 std::vector<std::wstring> SplitArgs(const std::wstring& args,
                                     const wchar_t delimiter = L';') {
     std::vector<std::wstring> result;
@@ -908,6 +985,17 @@ std::vector<std::wstring> SplitArgs(const std::wstring& args,
     return result;
 }
 
+// Sends show desktop command to taskbar
+void ShowDesktop() {
+    if (g_hTaskbarWnd) {
+        Wh_Log(L"Sending ShowDesktop message");
+        SendMessage(g_hTaskbarWnd, WM_COMMAND, MAKELONG(407, 0), 0);
+    } else {
+        Wh_Log(L"Failed to show desktop - taskbar not found");
+    }
+}
+
+// Returns current taskbar autohide state
 bool GetTaskbarAutohideState() {
     if (g_hTaskbarWnd != NULL) {
         APPBARDATA msgData{};
@@ -919,6 +1007,7 @@ bool GetTaskbarAutohideState() {
     return false;
 }
 
+// Sets taskbar autohide state
 void SetTaskbarAutohide(bool enabled) {
     if (g_hTaskbarWnd != NULL) {
         APPBARDATA msgData{};
@@ -929,6 +1018,7 @@ void SetTaskbarAutohide(bool enabled) {
     }
 }
 
+// Toggles taskbar autohide state
 void ToggleTaskbarAutohide() {
     if (g_hTaskbarWnd != NULL) {
         const bool isEnabled = GetTaskbarAutohideState();
@@ -940,118 +1030,194 @@ void ToggleTaskbarAutohide() {
     }
 }
 
-void ShowDesktop() {
-    if (g_hTaskbarWnd) {
-        Wh_Log(L"Sending ShowDesktop message");
-        SendMessage(g_hTaskbarWnd, WM_COMMAND, MAKELONG(407, 0), 0);
+std::tuple<TaskBarButtonsState,
+           TaskBarButtonsState,
+           TaskBarButtonsState,
+           TaskBarButtonsState>
+ParseTaskBarButtonsState(const std::wstring& args) {
+    TaskBarButtonsState primaryState1 = COMBINE_INVALID;
+    TaskBarButtonsState primaryState2 = COMBINE_INVALID;
+    TaskBarButtonsState secondaryState1 = COMBINE_INVALID;
+    TaskBarButtonsState secondaryState2 = COMBINE_INVALID;
+
+    const auto argsSplit = SplitArgs(args);
+
+    auto parseState = [](const std::wstring& arg) -> TaskBarButtonsState {
+        if (arg == L"COMBINE_ALWAYS")
+            return COMBINE_ALWAYS;
+        if (arg == L"COMBINE_WHEN_FULL")
+            return COMBINE_WHEN_FULL;
+        if (arg == L"COMBINE_NEVER")
+            return COMBINE_NEVER;
+        return COMBINE_INVALID;
+    };
+
+    if (argsSplit.size() >= 1)
+        primaryState1 = parseState(argsSplit[0]);
+    if (argsSplit.size() >= 2)
+        primaryState2 = parseState(argsSplit[1]);
+    if (argsSplit.size() >= 3)
+        secondaryState1 = parseState(argsSplit[2]);
+    if (argsSplit.size() >= 4)
+        secondaryState2 = parseState(argsSplit[3]);
+
+    return std::make_tuple(primaryState1, primaryState2, secondaryState1,
+                           secondaryState2);
+}
+
+DWORD GetCombineTaskbarButtons(const wchar_t* optionName) {
+    HKEY hKey = NULL;
+    DWORD dwValue = 0;
+    DWORD dwBufferSize = sizeof(DWORD);
+    if (RegOpenKeyEx(HKEY_CURRENT_USER,
+                     TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explor"
+                          "er\\Advanced"),
+                     0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
+        RegQueryValueEx(hKey, optionName, NULL, NULL, (LPBYTE)&dwValue,
+                        &dwBufferSize);
+        RegCloseKey(hKey);
+    }
+    return dwValue;
+}
+
+bool SetCombineTaskbarButtons(const wchar_t* optionName, unsigned int option) {
+    bool success = false;
+    if (option <= 2) {
+        HKEY hKey = NULL;
+        if (RegOpenKeyEx(HKEY_CURRENT_USER,
+                         TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Ex"
+                              "plorer\\Advanced"),
+                         0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+            DWORD dwValue = option;
+            if (RegSetValueEx(hKey, optionName, 0, REG_DWORD, (BYTE*)&dwValue,
+                              sizeof(dwValue)) == ERROR_SUCCESS) {
+                success = true;
+            }
+            RegCloseKey(hKey);
+        }
+    }
+    return success;
+}
+
+void CombineTaskbarButtons(const TaskBarButtonsState primaryState1,
+                           const TaskBarButtonsState primaryState2,
+                           const TaskBarButtonsState secondaryState1,
+                           const TaskBarButtonsState secondaryState2) {
+    bool notify = false;
+    if (primaryState1 != COMBINE_INVALID && primaryState2 != COMBINE_INVALID) {
+        static bool zigzag =
+            (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == primaryState1);
+        zigzag = !zigzag;
+        notify |= SetCombineTaskbarButtons(
+            L"TaskbarGlomLevel", zigzag ? primaryState1 : primaryState2);
+    }
+    if (secondaryState1 != COMBINE_INVALID &&
+        secondaryState2 != COMBINE_INVALID) {
+        static bool zigzag2 = (GetCombineTaskbarButtons(
+                                   L"MMTaskbarGlomLevel") == secondaryState1);
+        zigzag2 = !zigzag2;
+        notify |= SetCombineTaskbarButtons(
+            L"MMTaskbarGlomLevel", zigzag2 ? secondaryState1 : secondaryState2);
+    }
+    if (notify) {
+        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+                           (LPARAM)TEXT("TraySettings"), SMTO_ABORTIFHUNG, 100,
+                           NULL);
+    }
+}
+
+DWORD GetTaskbarAlignment() {
+    HKEY hKey = NULL;
+    DWORD dwValue = 1;  // Default to center
+    DWORD dwBufferSize = sizeof(DWORD);
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER,
+                     TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explor"
+                          "er\\Advanced"),
+                     0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
+        RegQueryValueEx(hKey, TEXT("TaskbarAl"), NULL, NULL, (LPBYTE)&dwValue,
+                        &dwBufferSize);
+        RegCloseKey(hKey);
+    }
+    return dwValue;
+}
+
+bool SetTaskbarAlignment(DWORD alignment) {
+    HKEY hKey = NULL;
+    bool success = false;
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER,
+                     TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explor"
+                          "er\\Advanced"),
+                     0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        if (RegSetValueEx(hKey, TEXT("TaskbarAl"), 0, REG_DWORD,
+                          (BYTE*)&alignment,
+                          sizeof(alignment)) == ERROR_SUCCESS) {
+            success = true;
+        }
+        RegCloseKey(hKey);
+    }
+    return success;
+}
+
+void ToggleTaskbarAlignment() {
+    DWORD current = GetTaskbarAlignment();
+    DWORD newAlign = (current == 0) ? 1 : 0;
+    Wh_Log(L"Toggling taskbar alignment from %d to %d", current, newAlign);
+    if (SetTaskbarAlignment(newAlign)) {
+        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+                           (LPARAM)TEXT("TraySettings"), SMTO_ABORTIFHUNG, 100,
+                           NULL);
+    }
+}
+
+// Finds desktop window for show/hide icons command
+HWND FindDesktopWindow() {
+    HWND hParentWnd = FindWindow(L"Progman", NULL);
+    if (!hParentWnd) {
+        return NULL;
+    }
+
+    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL);
+    if (!hChildWnd) {
+        DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
+        EnumThreadWindows(
+            dwThreadId,
+            [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL) {
+                WCHAR szClassName[16];
+                if (GetClassName(hWnd, szClassName, _countof(szClassName)) ==
+                    0) {
+                    return TRUE;
+                }
+
+                if (lstrcmp(szClassName, L"WorkerW") != 0) {
+                    return TRUE;
+                }
+
+                HWND hChildWnd =
+                    FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
+                if (!hChildWnd) {
+                    return TRUE;
+                }
+
+                *(HWND*)lParam = hChildWnd;
+                return FALSE;
+            },
+            (LPARAM)&hChildWnd);
+    }
+
+    return hChildWnd;
+}
+
+// Toggles desktop icon visibility
+void HideIcons() {
+    HWND hDesktopWnd = FindDesktopWindow();
+    if (hDesktopWnd != NULL) {
+        Wh_Log(L"Toggling desktop icons");
+        PostMessage(hDesktopWnd, WM_COMMAND, 0x7402, 0);
     } else {
-        Wh_Log(L"Failed to show desktop - taskbar not found");
+        Wh_Log(L"Failed to find desktop window");
     }
-}
-
-bool AreModifierKeysPressed() {
-    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) ||
-           (GetAsyncKeyState(VK_MENU) & 0x8000) ||
-           (GetAsyncKeyState(VK_SHIFT) & 0x8000) ||
-           (GetAsyncKeyState(VK_LWIN) & 0x8000) ||
-           (GetAsyncKeyState(VK_RWIN) & 0x8000);
-}
-
-void SendKeypressInternal(const std::vector<int>& keys) {
-    if (keys.empty()) {
-        return;
-    }
-
-    const int NUM_KEYS = static_cast<int>(keys.size());
-    std::unique_ptr<INPUT[]> input(new INPUT[NUM_KEYS * 2]);
-
-    for (int i = 0; i < NUM_KEYS; i++) {
-        input[i].type = INPUT_KEYBOARD;
-        input[i].ki.wScan = 0;
-        input[i].ki.time = 0;
-        input[i].ki.dwExtraInfo = 0;
-        input[i].ki.wVk = static_cast<WORD>(keys[i]);
-        input[i].ki.dwFlags = 0;
-    }
-
-    for (int i = 0; i < NUM_KEYS; i++) {
-        input[NUM_KEYS + i].type = INPUT_KEYBOARD;
-        input[NUM_KEYS + i].ki.wScan = 0;
-        input[NUM_KEYS + i].ki.time = 0;
-        input[NUM_KEYS + i].ki.dwExtraInfo = 0;
-        input[NUM_KEYS + i].ki.wVk = static_cast<WORD>(keys[i]);
-        input[NUM_KEYS + i].ki.dwFlags = KEYEVENTF_KEYUP;
-    }
-
-    SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0]));
-}
-
-void CALLBACK KeypressRetryTimerProc(HWND, UINT, UINT_PTR timerId, DWORD) {
-    if (!AreModifierKeysPressed()) {
-        KillTimer(nullptr, timerId);
-        g_keypressTimerId = 0;
-        Wh_Log(L"Modifier keys released, sending deferred keypress");
-        SendKeypressInternal(g_pendingKeypressKeys);
-        g_pendingKeypressKeys.clear();
-    } else if (++g_pendingKeypressRetryCount >= kMaxKeypressRetryCount) {
-        KillTimer(nullptr, timerId);
-        g_keypressTimerId = 0;
-        Wh_Log(L"Timeout waiting for modifier keys, sending anyway");
-        SendKeypressInternal(g_pendingKeypressKeys);
-        g_pendingKeypressKeys.clear();
-    }
-}
-
-void SendKeypress(const std::vector<int>& keys) {
-    if (keys.empty()) {
-        return;
-    }
-
-    if (g_keypressTimerId) {
-        KillTimer(nullptr, g_keypressTimerId);
-        g_keypressTimerId = 0;
-    }
-
-    if (AreModifierKeysPressed()) {
-        g_pendingKeypressKeys = keys;
-        g_pendingKeypressRetryCount = 0;
-        g_keypressTimerId =
-            SetTimer(nullptr, 0, kKeypressRetryIntervalMs, KeypressRetryTimerProc);
-        Wh_Log(L"Modifier keys pressed, deferring keypress");
-        return;
-    }
-
-    SendKeypressInternal(keys);
-}
-
-void SendCtrlAltTabKeypress() {
-    Wh_Log(L"Sending Ctrl+Alt+Tab");
-    SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
-}
-
-void SendWinTabKeypress() {
-    Wh_Log(L"Sending Win+Tab");
-    SendKeypress({VK_LWIN, VK_TAB});
-}
-
-void MediaPlayPause() {
-    Wh_Log(L"Sending Media Play/Pause");
-    SendKeypress({VK_MEDIA_PLAY_PAUSE});
-}
-
-void MediaNext() {
-    Wh_Log(L"Sending Media Next Track");
-    SendKeypress({VK_MEDIA_NEXT_TRACK});
-}
-
-void MediaPrev() {
-    Wh_Log(L"Sending Media Previous Track");
-    SendKeypress({VK_MEDIA_PREV_TRACK});
-}
-
-void OpenStartMenu() {
-    Wh_Log(L"Sending Win keypress for Start menu");
-    SendKeypress({VK_LWIN});
 }
 
 void OpenTaskManager() {
@@ -1075,6 +1241,535 @@ void OpenTaskManager() {
     }
 }
 
+// Checks if any modifier keys are currently pressed
+bool AreModifierKeysPressed() {
+    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) ||
+           (GetAsyncKeyState(VK_MENU) & 0x8000) ||  // Alt
+           (GetAsyncKeyState(VK_SHIFT) & 0x8000) ||
+           (GetAsyncKeyState(VK_LWIN) & 0x8000) ||
+           (GetAsyncKeyState(VK_RWIN) & 0x8000);
+}
+
+// Internal function to send virtual key sequence
+void SendKeypressInternal(const std::vector<int>& keys) {
+    if (keys.empty()) {
+        return;
+    }
+
+    const int NUM_KEYS = static_cast<int>(keys.size());
+    std::unique_ptr<INPUT[]> input(new INPUT[NUM_KEYS * 2]);
+
+    for (int i = 0; i < NUM_KEYS; i++) {
+        input[i].type = INPUT_KEYBOARD;
+        input[i].ki.wScan = 0;
+        input[i].ki.time = 0;
+        input[i].ki.dwExtraInfo = 0;
+        input[i].ki.wVk = static_cast<WORD>(keys[i]);
+        input[i].ki.dwFlags = 0;  // KEYDOWN
+    }
+
+    for (int i = 0; i < NUM_KEYS; i++) {
+        input[NUM_KEYS + i].type = INPUT_KEYBOARD;
+        input[NUM_KEYS + i].ki.wScan = 0;
+        input[NUM_KEYS + i].ki.time = 0;
+        input[NUM_KEYS + i].ki.dwExtraInfo = 0;
+        input[NUM_KEYS + i].ki.wVk = static_cast<WORD>(keys[i]);
+        input[NUM_KEYS + i].ki.dwFlags = KEYEVENTF_KEYUP;
+    }
+
+    SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0]));
+}
+
+// Timer callback to retry sending keypress when modifier keys are released
+void CALLBACK KeypressRetryTimerProc(HWND, UINT, UINT_PTR timerId, DWORD) {
+    if (!AreModifierKeysPressed()) {
+        // Keys released, send the keypress
+        KillTimer(nullptr, timerId);
+        g_keypressTimerId = 0;
+        Wh_Log(L"Modifier keys released, sending deferred keypress");
+        SendKeypressInternal(g_pendingKeypressKeys);
+        g_pendingKeypressKeys.clear();
+    } else if (++g_pendingKeypressRetryCount >= kMaxKeypressRetryCount) {
+        // Timeout - send anyway
+        KillTimer(nullptr, timerId);
+        g_keypressTimerId = 0;
+        Wh_Log(L"Timeout waiting for modifier keys, sending anyway");
+        SendKeypressInternal(g_pendingKeypressKeys);
+        g_pendingKeypressKeys.clear();
+    }
+}
+
+// Sends virtual key sequence, deferring if modifier keys are pressed
+void SendKeypress(const std::vector<int>& keys) {
+    if (keys.empty()) {
+        return;
+    }
+
+    // Cancel any pending keypress
+    if (g_keypressTimerId) {
+        KillTimer(nullptr, g_keypressTimerId);
+        g_keypressTimerId = 0;
+    }
+
+    if (AreModifierKeysPressed()) {
+        // Defer keypress - store and start thread timer
+        g_pendingKeypressKeys = keys;
+        g_pendingKeypressRetryCount = 0;
+        g_keypressTimerId = SetTimer(nullptr, 0, kKeypressRetryIntervalMs,
+                                     KeypressRetryTimerProc);
+        Wh_Log(L"Modifier keys pressed, deferring keypress");
+        return;
+    }
+
+    SendKeypressInternal(keys);
+}
+
+void SendCtrlAltTabKeypress() {
+    Wh_Log(L"Sending Ctrl+Alt+Tab");
+    SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
+}
+
+void SendWinTabKeypress() {
+    Wh_Log(L"Sending Win+Tab");
+    SendKeypress({VK_LWIN, VK_TAB});
+}
+
+void OpenStartMenu() {
+    Wh_Log(L"Sending Win keypress for Start menu");
+    SendKeypress({VK_LWIN});
+}
+
+std::vector<int> ParseVirtualKeypressSetting(const std::wstring& args) {
+    std::vector<int> keys;
+
+    const auto argsSplit = SplitArgs(args);
+    for (const auto& arg : argsSplit) {
+        UINT modifiers = 0;
+        UINT vk = 0;
+        if (FromStringHotKey(arg, &modifiers, &vk)) {
+            // Add modifier keys first
+            if (modifiers & MOD_CONTROL) {
+                keys.push_back(VK_LCONTROL);
+            }
+            if (modifiers & MOD_ALT) {
+                keys.push_back(VK_LMENU);
+            }
+            if (modifiers & MOD_SHIFT) {
+                keys.push_back(VK_LSHIFT);
+            }
+            if (modifiers & MOD_WIN) {
+                keys.push_back(VK_LWIN);
+            }
+            // Add the main key
+            keys.push_back(static_cast<int>(vk));
+        } else {
+            Wh_Log(L"Failed to parse key: %s", arg.c_str());
+        }
+    }
+
+    return keys;
+}
+
+void MediaPlayPause() {
+    Wh_Log(L"Sending Media Play/Pause");
+    SendKeypress({VK_MEDIA_PLAY_PAUSE});
+}
+
+void MediaNext() {
+    Wh_Log(L"Sending Media Next Track");
+    SendKeypress({VK_MEDIA_NEXT_TRACK});
+}
+
+void MediaPrev() {
+    Wh_Log(L"Sending Media Previous Track");
+    SendKeypress({VK_MEDIA_PREV_TRACK});
+}
+
+// Parses command line into executable path and parameters
+std::tuple<std::wstring, std::wstring> ParseExecutableAndParameters(
+    const std::wstring& command) {
+    std::wstring executable = command;
+    std::wstring parameters;
+
+    if (stringtools::startsWith(command, L"\"") ||
+        stringtools::startsWith(command, L"'")) {
+        size_t closingQuotePos = command.find(command[0], 1);
+        if (closingQuotePos != std::wstring::npos) {
+            executable = command.substr(1, closingQuotePos - 1);
+            if (command.length() > closingQuotePos + 1) {
+                parameters = command.substr(closingQuotePos + 1);
+            }
+        }
+    } else {
+        std::vector<std::wstring> args = SplitArgs(command, L' ');
+        if (args.size() > 1) {
+            executable = L"";
+            for (const auto& arg : args) {
+                executable += arg;
+                if (std::filesystem::path(executable)
+                        .extension()
+                        .wstring()
+                        .length() > 1) {
+                    break;
+                } else {
+                    executable += L" ";
+                }
+            }
+            if (command.length() > executable.length()) {
+                parameters = command.substr(executable.length());
+            }
+        }
+    }
+    return std::make_tuple(stringtools::trim(executable),
+                           stringtools::trim(parameters));
+}
+
+void StartProcess(std::wstring command) {
+    if (command.empty()) {
+        return;
+    }
+
+    std::vector<std::wstring> uac_args = SplitArgs(command, L';');
+    std::wstring verb = L"open";
+    if (stringtools::toLower(uac_args[0]) == L"uac") {
+        verb = L"runas";
+        command = stringtools::ltrim(command.substr(uac_args[0].length() + 1));
+    }
+
+    const auto [executable, parameters] = ParseExecutableAndParameters(command);
+    Wh_Log(L"Starting: %s %s", executable.c_str(), parameters.c_str());
+
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+    HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+
+    SHELLEXECUTEINFO sei = {sizeof(sei)};
+    sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = verb.c_str();
+    sei.lpFile = executable.c_str();
+    sei.lpParameters = parameters.empty() ? NULL : parameters.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    sei.hMonitor = hMonitor;
+
+    if (!ShellExecuteEx(&sei)) {
+        DWORD error = GetLastError();
+        if (error != ERROR_CANCELLED) {
+            Wh_Log(L"ShellExecuteEx failed, error: %d", error);
+        }
+    }
+}
+
+std::tuple<std::wstring, std::wstring> ParseCopyRunCommand(const std::wstring& command) {
+    std::wstring verb = L"open";
+    std::wstring arg = stringtools::trim(command);
+    if (arg.empty()) {
+        return {verb, L""};
+    }
+
+    std::vector<std::wstring> parts = SplitArgs(command, L';');
+    if (stringtools::toLower(parts[0]) == L"uac") {
+        verb = L"runas";
+        arg = stringtools::ltrim(command.substr(parts[0].length() + 1));
+    }
+
+    arg = stringtools::trim(arg);
+    if (arg.empty()) {
+        return {verb, L""};
+    }
+
+    std::wstring lower = stringtools::toLower(arg);
+
+    if (lower == L"gpt") return {verb, L"https://chatgpt.com/?q="};
+    if (lower == L"yt") return {verb, L"https://www.youtube.com/results?search_query="};
+    if (lower == L"reddit") return {verb, L"https://www.reddit.com/search/?q="};
+    if (lower == L"google") return {verb, L"https://www.google.com/search?q="};
+    if (lower == L"copilot") return {verb, L"https://copilot.microsoft.com/?sendquery=1&q="};
+    if (lower == L"x") return {verb, L"https://twitter.com/search?q="};
+    if (lower == L"translate") return {verb, L"https://translate.google.com/?text="};
+
+    return {verb, arg};
+}
+
+void CopyRun(std::wstring command) {
+    const auto [verb, base] = ParseCopyRunCommand(command);
+    if (base.empty()) return;
+
+    std::wstring clip;
+    if (OpenClipboard(nullptr)) {
+        if (HANDLE hData = GetClipboardData(CF_UNICODETEXT)) {
+            if (const wchar_t* p =
+                    static_cast<const wchar_t*>(GlobalLock(hData))) {
+                clip = p;
+                GlobalUnlock(hData);
+            }
+        }
+        CloseClipboard();
+    }
+    if (clip.empty()) return;
+
+    std::wstring url = base + clip;
+
+    POINT pt{};
+    GetCursorPos(&pt);
+    HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = verb.c_str();  // ← same as StartProcess
+    sei.lpFile = url.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    sei.hMonitor = mon;
+
+    ShellExecuteExW(&sei);
+}
+
+bool GetForegroundWindowPathOrExe(std::wstring& outPath) {
+    outPath.clear();
+
+    HWND hWnd = GetForegroundWindow();
+    if (!hWnd ||
+        hWnd == g_hTaskbarWnd ||
+        !IsWindow(hWnd) ||
+        !IsWindowVisible(hWnd)) {
+        return false;
+    }
+
+    auto isAbsolutePath = [](const std::wstring& s) {
+        return
+            (s.size() >= 3 &&
+             iswalpha(s[0]) &&
+             s[1] == L':' &&
+             (s[2] == L'\\' || s[2] == L'/')) ||
+            (s.rfind(L"\\\\", 0) == 0);
+    };
+
+    // 1) Try window title -> real file path
+    int len = GetWindowTextLengthW(hWnd);
+    if (len > 0) {
+        std::wstring title(len + 1, L'\0');
+        int copied = GetWindowTextW(hWnd, title.data(), len + 1);
+        title.resize(copied > 0 ? copied : 0);
+
+        std::wstring current = stringtools::trimDecorated(title);
+
+        for (;;) {
+            std::wstring candidate = stringtools::trimDecorated(current);
+
+            if (isAbsolutePath(candidate)) {
+                std::error_code ec;
+                if (std::filesystem::is_regular_file(candidate, ec)) {
+                    outPath = std::move(candidate);
+                    return true;
+                }
+            }
+
+            size_t sep = current.rfind(L" - ");
+            if (sep == std::wstring::npos) {
+                break;
+            }
+
+            current.resize(sep);
+        }
+    }
+
+    // 2) Fallback -> process executable
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hWnd, &pid) || pid == 0) {
+        return false;
+    }
+
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) {
+        return false;
+    }
+
+    std::wstring exe(32768, L'\0');
+    DWORD size = static_cast<DWORD>(exe.size());
+
+    if (QueryFullProcessImageNameW(hProc, 0, exe.data(), &size) && size > 0) {
+        exe.resize(size);
+
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(exe, ec)) {
+            CloseHandle(hProc);
+            outPath = std::move(exe);
+            return true;
+        }
+    }
+
+    CloseHandle(hProc);
+    return false;
+}
+
+void SelectActiveInExplorer() {
+    std::wstring path;
+    if (!GetForegroundWindowPathOrExe(path)) {
+        Wh_Log(L"SelectActiveInExplorer: could not resolve path");
+        return;
+    }
+
+    Wh_Log(L"SelectActiveInExplorer: %s", path.c_str());
+
+    std::wstring explorerArgs = L"/select,\"" + path + L"\"";
+
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+    HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+
+    SHELLEXECUTEINFO sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = L"open";
+    sei.lpFile = L"explorer.exe";
+    sei.lpParameters = explorerArgs.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    sei.hMonitor = hMonitor;
+
+    if (!ShellExecuteEx(&sei)) {
+        DWORD err = GetLastError();
+        if (err != ERROR_CANCELLED) {
+            Wh_Log(L"SelectActiveInExplorer: launch failed (%lu)", err);
+        }
+    }
+}
+
+void OpacityUp() {
+    HWND hWnd = GetForegroundWindow();
+    if (!hWnd ||
+        hWnd == g_hTaskbarWnd ||
+        !IsWindow(hWnd) ||
+        !IsWindowVisible(hWnd)) {
+        return;
+    }
+
+    LONG_PTR ex = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    const bool isLayered = (ex & WS_EX_LAYERED) != 0;
+
+    auto resetOpacity = [&]() {
+        Wh_Log(L"OpacityUp: reset to full opacity");
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
+    };
+
+    static const BYTE kLevels[] = {0, 56, 85, 113, 141, 170, 198, 226};
+
+    if (!isLayered) {
+        // Already at full opacity, nothing to increase.
+        return;
+    }
+
+    BYTE cur = 255;
+    DWORD flags = 0;
+    if (!GetLayeredWindowAttributes(hWnd, nullptr, &cur, &flags) ||
+        !(flags & LWA_ALPHA)) {
+        return;
+    }
+
+    if (cur >= 226) {
+        resetOpacity();
+        return;
+    }
+
+    for (BYTE level : kLevels) {
+        if (cur < level) {
+            SetLayeredWindowAttributes(hWnd, 0, level, LWA_ALPHA);
+            return;
+        }
+    }
+
+    resetOpacity();
+}
+
+void OpacityDown() {
+    HWND hWnd = GetForegroundWindow();
+    if (!hWnd ||
+        hWnd == g_hTaskbarWnd ||
+        !IsWindow(hWnd) ||
+        !IsWindowVisible(hWnd)) {
+        return;
+    }
+
+    LONG_PTR ex = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    const bool isLayered = (ex & WS_EX_LAYERED) != 0;
+
+    static const BYTE kLevels[] = {226, 198, 170, 141, 113, 85, 56, 0};
+
+    if (!isLayered) {
+        Wh_Log(L"OpacityDown: starting at 226");
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+        SetLayeredWindowAttributes(hWnd, 0, 226, LWA_ALPHA);
+        return;
+    }
+
+    BYTE cur = 255;
+    DWORD flags = 0;
+    if (!GetLayeredWindowAttributes(hWnd, nullptr, &cur, &flags) ||
+        !(flags & LWA_ALPHA)) {
+        return;
+    }
+
+    if (cur > 226) {
+        SetLayeredWindowAttributes(hWnd, 0, 226, LWA_ALPHA);
+        return;
+    }
+
+    for (BYTE level : kLevels) {
+        if (cur > level) {
+            SetLayeredWindowAttributes(hWnd, 0, level, LWA_ALPHA);
+            return;
+        }
+    }
+
+    SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+}
+
+// Toggles always-on-top state of foreground window
+void ToggleAlwaysOnTop() {
+    HWND hWnd = GetForegroundWindow();
+    if (!hWnd ||
+        hWnd == g_hTaskbarWnd ||
+        !IsWindow(hWnd) ||
+        !IsWindowVisible(hWnd)) {
+        return;
+    }
+
+    bool topmost = (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+
+    SetWindowPos(hWnd,
+                 topmost ? HWND_NOTOPMOST : HWND_TOPMOST,
+                 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    Wh_Log(L"ToggleAlwaysOnTop: %s -> %s",
+           topmost ? L"topmost" : L"normal",
+           topmost ? L"normal" : L"topmost");
+}
+
+void ForceKillActiveWindow() {
+    HWND hWnd = GetForegroundWindow();
+    if (!hWnd ||
+        hWnd == g_hTaskbarWnd ||
+        !IsWindow(hWnd) ||
+        !IsWindowVisible(hWnd)) {
+        return;
+    }
+
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hWnd, &pid) ||
+        pid == 0 ||
+        pid == GetCurrentProcessId()) {
+        return;
+    }
+
+    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    if (hProcess) {
+        TerminateProcess(hProcess, 1);
+        CloseHandle(hProcess);
+        Wh_Log(L"ForceKill: terminated PID %lu", pid);
+    } else {
+        Wh_Log(L"ForceKill: OpenProcess failed for PID %lu (UAC?)", pid);
+    }
+}
+
+// Returns mute state of default audio device
 BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator) {
     const GUID XIID_IAudioEndpointVolume = {
         0x5CDF2C82,
@@ -1096,6 +1791,7 @@ BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator) {
     return isMuted;
 }
 
+// Toggles mute state for all active audio devices
 void ToggleVolMuted() {
     if (!g_audioCOM.IsInitialized()) {
         if (!g_audioCOM.Init()) {
@@ -1144,648 +1840,214 @@ void ToggleVolMuted() {
     }
 }
 
-HWND FindDesktopWindow() {
-    HWND hParentWnd = FindWindow(L"Progman", NULL);
-    if (!hParentWnd) {
-        return NULL;
-    }
+HotkeyRegionName TryParseRegionName(const std::wstring& raw) {
+    static const std::unordered_map<std::wstring, HotkeyRegionName> regionMap = 
+        {
+            {L"top_left", HotkeyRegionName::TopLeft},
+            {L"top", HotkeyRegionName::Top},
+            {L"top_right", HotkeyRegionName::TopRight},
+            {L"left", HotkeyRegionName::Left},
+            {L"elsewhere", HotkeyRegionName::Elsewhere},
+            {L"right", HotkeyRegionName::Right},
+            {L"bottom_left", HotkeyRegionName::BottomLeft},
+            {L"bottom", HotkeyRegionName::Bottom},
+            {L"bottom_right", HotkeyRegionName::BottomRight},
+        };
 
-    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL);
-    if (!hChildWnd) {
-        DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
-        EnumThreadWindows(
-            dwThreadId,
-            [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL) {
-                WCHAR szClassName[16];
-                if (GetClassName(hWnd, szClassName, _countof(szClassName)) ==
-                    0) {
-                    return TRUE;
-                }
-
-                if (lstrcmp(szClassName, L"WorkerW") != 0) {
-                    return TRUE;
-                }
-
-                HWND hChildWnd =
-                    FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
-                if (!hChildWnd) {
-                    return TRUE;
-                }
-
-                *(HWND*)lParam = hChildWnd;
-                return FALSE;
-            },
-            (LPARAM)&hChildWnd);
-    }
-
-    return hChildWnd;
-}
-
-void HideIcons() {
-    HWND hDesktopWnd = FindDesktopWindow();
-    if (hDesktopWnd != NULL) {
-        Wh_Log(L"Toggling desktop icons");
-        PostMessage(hDesktopWnd, WM_COMMAND, 0x7402, 0);
-    } else {
-        Wh_Log(L"Failed to find desktop window");
-    }
-}
-
-std::tuple<TaskBarButtonsState,
-           TaskBarButtonsState,
-           TaskBarButtonsState,
-           TaskBarButtonsState>
-ParseTaskBarButtonsState(const std::wstring& args) {
-    TaskBarButtonsState primaryState1 = COMBINE_INVALID;
-    TaskBarButtonsState primaryState2 = COMBINE_INVALID;
-    TaskBarButtonsState secondaryState1 = COMBINE_INVALID;
-    TaskBarButtonsState secondaryState2 = COMBINE_INVALID;
-
-    const auto argsSplit = SplitArgs(args);
-
-    auto parseState = [](const std::wstring& arg) -> TaskBarButtonsState {
-        if (arg == L"COMBINE_ALWAYS")
-            return COMBINE_ALWAYS;
-        if (arg == L"COMBINE_WHEN_FULL")
-            return COMBINE_WHEN_FULL;
-        if (arg == L"COMBINE_NEVER")
-            return COMBINE_NEVER;
-        return COMBINE_INVALID;
-    };
-
-    if (argsSplit.size() >= 1)
-        primaryState1 = parseState(argsSplit[0]);
-    if (argsSplit.size() >= 2)
-        primaryState2 = parseState(argsSplit[1]);
-    if (argsSplit.size() >= 3)
-        secondaryState1 = parseState(argsSplit[2]);
-    if (argsSplit.size() >= 4)
-        secondaryState2 = parseState(argsSplit[3]);
-
-    return std::make_tuple(primaryState1, primaryState2, secondaryState1,
-                           secondaryState2);
-}
-
-DWORD GetCombineTaskbarButtons(const wchar_t* optionName) {
-    HKEY hKey = NULL;
-    DWORD dwValue = 0;
-    DWORD dwBufferSize = sizeof(DWORD);
-    if (RegOpenKeyEx(HKEY_CURRENT_USER,
-                     TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
-                     0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
-        RegQueryValueEx(hKey, optionName, NULL, NULL, (LPBYTE)&dwValue,
-                        &dwBufferSize);
-        RegCloseKey(hKey);
-    }
-    return dwValue;
-}
-
-bool SetCombineTaskbarButtons(const wchar_t* optionName, unsigned int option) {
-    bool success = false;
-    if (option <= 2) {
-        HKEY hKey = NULL;
-        if (RegOpenKeyEx(HKEY_CURRENT_USER,
-                         TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
-                         0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
-            DWORD dwValue = option;
-            if (RegSetValueEx(hKey, optionName, 0, REG_DWORD, (BYTE*)&dwValue,
-                              sizeof(dwValue)) == ERROR_SUCCESS) {
-                success = true;
-            }
-            RegCloseKey(hKey);
-        }
-    }
-    return success;
-}
-
-void CombineTaskbarButtons(const TaskBarButtonsState primaryState1,
-                           const TaskBarButtonsState primaryState2,
-                           const TaskBarButtonsState secondaryState1,
-                           const TaskBarButtonsState secondaryState2) {
-    bool notify = false;
-    if (primaryState1 != COMBINE_INVALID && primaryState2 != COMBINE_INVALID) {
-        static bool zigzag =
-            (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == primaryState1);
-        zigzag = !zigzag;
-        notify |= SetCombineTaskbarButtons(
-            L"TaskbarGlomLevel", zigzag ? primaryState1 : primaryState2);
-    }
-    if (secondaryState1 != COMBINE_INVALID &&
-        secondaryState2 != COMBINE_INVALID) {
-        static bool zigzag2 = (GetCombineTaskbarButtons(
-                                   L"MMTaskbarGlomLevel") == secondaryState1);
-        zigzag2 = !zigzag2;
-        notify |= SetCombineTaskbarButtons(
-            L"MMTaskbarGlomLevel", zigzag2 ? secondaryState1 : secondaryState2);
-    }
-    if (notify) {
-        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                           (LPARAM)TEXT("TraySettings"), SMTO_ABORTIFHUNG, 100,
-                           NULL);
-    }
-}
-
-DWORD GetTaskbarAlignment() {
-    HKEY hKey = NULL;
-    DWORD dwValue = 1;
-    DWORD dwBufferSize = sizeof(DWORD);
-
-    if (RegOpenKeyEx(HKEY_CURRENT_USER,
-                     TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
-                     0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
-        RegQueryValueEx(hKey, TEXT("TaskbarAl"), NULL, NULL, (LPBYTE)&dwValue,
-                        &dwBufferSize);
-        RegCloseKey(hKey);
-    }
-    return dwValue;
-}
-
-bool SetTaskbarAlignment(DWORD alignment) {
-    HKEY hKey = NULL;
-    bool success = false;
-
-    if (RegOpenKeyEx(HKEY_CURRENT_USER,
-                     TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
-                     0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
-        if (RegSetValueEx(hKey, TEXT("TaskbarAl"), 0, REG_DWORD,
-                          (BYTE*)&alignment,
-                          sizeof(alignment)) == ERROR_SUCCESS) {
-            success = true;
-        }
-        RegCloseKey(hKey);
-    }
-    return success;
-}
-
-void ToggleTaskbarAlignment() {
-    DWORD current = GetTaskbarAlignment();
-    DWORD newAlign = (current == 0) ? 1 : 0;
-    Wh_Log(L"Toggling taskbar alignment from %d to %d", current, newAlign);
-    if (SetTaskbarAlignment(newAlign)) {
-        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                           (LPARAM)TEXT("TraySettings"), SMTO_ABORTIFHUNG, 100,
-                           NULL);
-    }
-}
-
-std::tuple<std::wstring, std::wstring> ParseExecutableAndParameters(
-    const std::wstring& command) {
-    std::wstring executable = command;
-    std::wstring parameters;
-
-    if (stringtools::startsWith(command, L"\"") ||
-        stringtools::startsWith(command, L"'")) {
-        size_t closingQuotePos = command.find(command[0], 1);
-        if (closingQuotePos != std::wstring::npos) {
-            executable = command.substr(1, closingQuotePos - 1);
-            if (command.length() > closingQuotePos + 1) {
-                parameters = command.substr(closingQuotePos + 1);
-            }
-        }
-    } else {
-        std::vector<std::wstring> args = SplitArgs(command, L' ');
-        if (args.size() > 1) {
-            executable = L"";
-            for (const auto& arg : args) {
-                executable += arg;
-                if (std::filesystem::path(executable)
-                        .extension()
-                        .wstring()
-                        .length() > 1) {
-                    break;
-                } else {
-                    executable += L" ";
-                }
-            }
-            if (command.length() > executable.length()) {
-                parameters = command.substr(executable.length());
-            }
-        }
-    }
-    return std::make_tuple(stringtools::trim(executable),
-                           stringtools::trim(parameters));
-}
-
-void StartProcess(std::wstring command) {
-    if (command.empty()) {
-        return;
-    }
-
-    std::vector<std::wstring> uac_args = SplitArgs(command, L';');
-    std::wstring verb = L"open";
-    if (!uac_args.empty() && stringtools::toLower(uac_args[0]) == L"uac") {
-        verb = L"runas";
-        command = stringtools::ltrim(command.substr(uac_args[0].length() + 1));
-    }
-
-    const auto [executable, parameters] = ParseExecutableAndParameters(command);
-    Wh_Log(L"Starting: %s %s", executable.c_str(), parameters.c_str());
-
-    POINT cursorPos;
-    GetCursorPos(&cursorPos);
-    HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
-
-    SHELLEXECUTEINFO sei = {sizeof(sei)};
-    sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-    sei.lpVerb = verb.c_str();
-    sei.lpFile = executable.c_str();
-    sei.lpParameters = parameters.empty() ? NULL : parameters.c_str();
-    sei.nShow = SW_SHOWNORMAL;
-    sei.hMonitor = hMonitor;
-
-    if (!ShellExecuteEx(&sei)) {
-        DWORD error = GetLastError();
-        if (error != ERROR_CANCELLED) {
-            Wh_Log(L"ShellExecuteEx failed, error: %d", error);
-        }
-    }
-}
-// ===================== Window targeting + always-on-top + opacity =====================
-
-static HWND GetActiveTopLevelWindow() {
-    HWND h = GetForegroundWindow();
-    if (!h) return nullptr;
-
-    h = GetAncestor(h, GA_ROOT);
-    if (!h) return nullptr;
-
-    if (g_hTaskbarWnd && h == g_hTaskbarWnd) return nullptr;
-    if (!IsWindowVisible(h)) return nullptr;
-    return h;
-}
-
-static bool IsTopmost(HWND hWnd) {
-    LONG ex = GetWindowLong(hWnd, GWL_EXSTYLE);
-    return (ex & WS_EX_TOPMOST) != 0;
-}
-
-static void ToggleAlwaysOnTopActive() {
-    HWND h = GetActiveTopLevelWindow();
-    if (!h) return;
-
-    const bool cur = IsTopmost(h);
-    SetWindowPos(h, cur ? HWND_NOTOPMOST : HWND_TOPMOST,
-                 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-}
-
-struct OpacityConfig {
-    double step = 0.05;      // default (old hardcoded)
-    double min  = 0.10;      // default (old hardcoded)
-    double max  = 1.00;      // default (old hardcoded)
-    bool forceLayered = true; // default (old behavior)
-    bool applyToApp   = false; // default off
-};
-
-static bool EnsureLayered(HWND hWnd) {
-    LONG ex = GetWindowLong(hWnd, GWL_EXSTYLE);
-    if ((ex & WS_EX_LAYERED) == 0) {
-        SetWindowLong(hWnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
-    }
-    return true;
-}
-
-static double GetOpacity(HWND hWnd) {
-    LONG ex = GetWindowLong(hWnd, GWL_EXSTYLE);
-    if ((ex & WS_EX_LAYERED) == 0) return 1.0;
-
-    COLORREF cr = 0;
-    BYTE alpha = 255;
-    DWORD flags = 0;
-    if (!GetLayeredWindowAttributes(hWnd, &cr, &alpha, &flags)) return 1.0;
-    if ((flags & LWA_ALPHA) == 0) return 1.0;
-
-    return (double)alpha / 255.0;
-}
-
-static void SetOpacity(HWND hWnd, double opacity01, bool forceLayered) {
-    if (!hWnd) return;
-
-    if (opacity01 < 0.0) opacity01 = 0.0;
-    if (opacity01 > 1.0) opacity01 = 1.0;
-
-    LONG ex = GetWindowLong(hWnd, GWL_EXSTYLE);
-    if ((ex & WS_EX_LAYERED) == 0) {
-        if (!forceLayered) {
-            // Don't touch styles: cannot apply alpha if not already layered.
-            return;
-        }
-        EnsureLayered(hWnd);
-    }
-
-    int a = (int)lround(opacity01 * 255.0);
-    if (a < 0) a = 0;
-    if (a > 255) a = 255;
-
-    SetLayeredWindowAttributes(hWnd, 0, (BYTE)a, LWA_ALPHA);
-}
-
-static bool TryParseDoubleSuffix(const std::wstring& tokenLower,
-                                 const std::wstring& prefixLower,
-                                 double& out) {
-    if (tokenLower.rfind(prefixLower, 0) != 0) return false; // not prefix
-    std::wstring num = stringtools::trim(tokenLower.substr(prefixLower.size()));
-    if (num.empty()) return false;
-
-    try {
-        size_t pos = 0;
-        out = std::stod(num, &pos);
-        return pos == num.size();
-    } catch (...) {
-        return false;
-    }
-}
-
-static OpacityConfig ParseOpacityArgs_NoEquals(const std::wstring& args) {
-    OpacityConfig cfg; // defaults
-
-    auto parts = SplitArgs(args, L';');
-    for (auto p0 : parts) {
-        std::wstring p = stringtools::toLower(stringtools::trim(p0));
-        if (p.empty()) continue;
-
-        // flags
-        if (p == L"allapp" || p == L"app" || p == L"all") {
-            cfg.applyToApp = true;
-            continue;
-        }
-        if (p == L"dontlayer" || p == L"nostyle" || p == L"noexlayered") {
-            cfg.forceLayered = false;
-            continue;
-        }
-        if (p == L"layered" || p == L"forcelayered" || p == L"force-layered") {
-            cfg.forceLayered = true;
-            continue;
+        auto normalized = stringtools::toLower(stringtools::trim(raw));
+        auto it = regionMap.find(normalized);
+        if (it != regionMap.end()) {
+            return it->second;
         }
 
-        // prefix+number
-        double v = 0.0;
-        if (TryParseDoubleSuffix(p, L"step", v)) { cfg.step = v; continue; }
-        if (TryParseDoubleSuffix(p, L"min",  v)) { cfg.min  = v; continue; }
-        if (TryParseDoubleSuffix(p, L"max",  v)) { cfg.max  = v; continue; }
+        return HotkeyRegionName::Invalid;
     }
 
-    // sanitize
-    cfg.step = std::max(0.001, std::min(cfg.step, 1.0));
-    cfg.min  = std::max(0.0,   std::min(cfg.min,  1.0));
-    cfg.max  = std::max(0.0,   std::min(cfg.max,  1.0));
-    if (cfg.min > cfg.max) std::swap(cfg.min, cfg.max);
+// Parses action string to enum
+HotkeyActionType TryParseActionType(const std::wstring& raw) {
+    static const std::unordered_map<std::wstring, HotkeyActionType> actionMap =
+        {
+            {L"action_nothing", HotkeyActionType::Nothing},
+            {L"action_show_desktop", HotkeyActionType::ShowDesktop},
+            {L"action_alt_tab", HotkeyActionType::AltTab},
+            {L"action_task_manager", HotkeyActionType::TaskManager},
+            {L"action_mute", HotkeyActionType::Mute},
+            {L"action_taskbar_autohide", HotkeyActionType::TaskbarAutohide},
+            {L"action_win_tab", HotkeyActionType::WinTab},
+            {L"action_hide_icons", HotkeyActionType::HideIcons},
+            {L"action_combine_taskbar_buttons",
+             HotkeyActionType::CombineTaskbarButtons},
+            {L"action_toggle_taskbar_alignment",
+             HotkeyActionType::ToggleTaskbarAlignment},
+            {L"action_open_start_menu", HotkeyActionType::OpenStartMenu},
+            {L"action_send_keypress", HotkeyActionType::SendKeypress},
+            {L"action_start_process", HotkeyActionType::StartProcess},
+            {L"action_copyrun", HotkeyActionType::CopyRun},
+            {L"action_select_active_in_explorer",
+             HotkeyActionType::SelectActiveInExplorer},
+            {L"action_opacity_up_active", HotkeyActionType::OpacityUp},
+            {L"action_opacity_down_active", HotkeyActionType::OpacityDown},
+            {L"action_toggle_alwaysontop_active",
+             HotkeyActionType::ToggleAlwaysOnTop},
+            {L"action_force_kill_active", HotkeyActionType::ForceKillActive},
+            {L"action_media_play_pause", HotkeyActionType::MediaPlayPause},
+            {L"action_media_next", HotkeyActionType::MediaNext},
+            {L"action_media_prev", HotkeyActionType::MediaPrev},
+        };
 
-    return cfg;
-}
-
-static bool IsEligibleOpacityTarget(HWND hWnd) {
-    if (!hWnd) return false;
-    if (!IsWindowVisible(hWnd)) return false;
-    if (g_hTaskbarWnd && hWnd == g_hTaskbarWnd) return false;
-    return true;
-}
-
-struct ApplyOpacityCtx {
-    DWORD pid = 0;
-    double opacity01 = 1.0;
-    const OpacityConfig* cfg = nullptr;
-};
-
-static BOOL CALLBACK EnumWindowsApplyOpacityProc(HWND hWnd, LPARAM lp) {
-    auto* ctx = reinterpret_cast<ApplyOpacityCtx*>(lp);
-    if (!ctx || !ctx->cfg) return TRUE;
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid != ctx->pid) return TRUE;
-
-    if (!IsEligibleOpacityTarget(hWnd)) return TRUE;
-
-    SetOpacity(hWnd, ctx->opacity01, ctx->cfg->forceLayered);
-    return TRUE;
-}
-
-static void ChangeOpacityActive(double delta, const OpacityConfig& cfg) {
-    HWND h = GetActiveTopLevelWindow();
-    if (!h) return;
-
-    double cur = GetOpacity(h);
-    double next = cur + delta;
-
-    if (next < cfg.min) next = cfg.min;
-    if (next > cfg.max) next = cfg.max;
-
-    if (!cfg.applyToApp) {
-        SetOpacity(h, next, cfg.forceLayered);
-        return;
+    auto normalized = stringtools::toLower(stringtools::trim(raw));
+    auto it = actionMap.find(normalized);
+    if (it != actionMap.end()) {
+        return it->second;
     }
 
-    DWORD pid = 0;
-    GetWindowThreadProcessId(h, &pid);
-    if (!pid) return;
-
-    ApplyOpacityCtx ctx;
-    ctx.pid = pid;
-    ctx.opacity01 = next;
-    ctx.cfg = &cfg;
-
-    EnumWindows(EnumWindowsApplyOpacityProc, reinterpret_cast<LPARAM>(&ctx));
+    return HotkeyActionType::Invalid;
 }
 
-static void OpacityUpActive(const OpacityConfig& cfg)   { ChangeOpacityActive(+cfg.step, cfg); }
-static void OpacityDownActive(const OpacityConfig& cfg) { ChangeOpacityActive(-cfg.step, cfg); }
-
-// ===================== Virtual key press parsing stays same =====================
-
-std::vector<int> ParseVirtualKeypressSetting(const std::wstring& args) {
-    std::vector<int> keys;
-
-    const auto argsSplit = SplitArgs(args);
-    for (const auto& arg : argsSplit) {
-        UINT modifiers = 0;
-        UINT vk = 0;
-        if (FromStringHotKey(arg, &modifiers, &vk)) {
-            if (modifiers & MOD_CONTROL) keys.push_back(VK_LCONTROL);
-            if (modifiers & MOD_ALT) keys.push_back(VK_LMENU);
-            if (modifiers & MOD_SHIFT) keys.push_back(VK_LSHIFT);
-            if (modifiers & MOD_WIN) keys.push_back(VK_LWIN);
-            keys.push_back(static_cast<int>(vk));
-        } else {
-            Wh_Log(L"Failed to parse key: %s", arg.c_str());
-        }
+const wchar_t* RegionNameToString(HotkeyRegionName region) {
+    switch (region) {
+        case HotkeyRegionName::TopLeft:
+            return L"TOP_LEFT";
+        case HotkeyRegionName::Top:
+            return L"TOP";
+        case HotkeyRegionName::TopRight:
+            return L"TOP_RIGHT";
+        case HotkeyRegionName::Left:
+            return L"LEFT";
+        case HotkeyRegionName::Elsewhere:
+            return L"ELSEWHERE";
+        case HotkeyRegionName::Right:
+            return L"RIGHT";
+        case HotkeyRegionName::BottomLeft:
+            return L"BOTTOM_LEFT";
+        case HotkeyRegionName::Bottom:
+            return L"BOTTOM";
+        case HotkeyRegionName::BottomRight:
+            return L"BOTTOM_RIGHT";
+        case HotkeyRegionName::Invalid:
+            return L"Invalid";
     }
-
-    return keys;
+   return L"Unknown";
 }
 
-std::optional<HotkeyActionType> TryParseActionType(const std::wstring& actionName) {
-    // Be tolerant of user casing/whitespace.
-    const std::wstring key = stringtools::toUpper(stringtools::trim(actionName));
-
-    static const std::unordered_map<std::wstring, HotkeyActionType> actionMap = {
-        {L"ACTION_NOTHING", HotkeyActionType::Nothing},
-        {L"ACTION_SHOW_DESKTOP", HotkeyActionType::ShowDesktop},
-        {L"ACTION_ALT_TAB", HotkeyActionType::AltTab},
-        {L"ACTION_TASK_MANAGER", HotkeyActionType::TaskManager},
-        {L"ACTION_MUTE", HotkeyActionType::Mute},
-        {L"ACTION_TASKBAR_AUTOHIDE", HotkeyActionType::TaskbarAutohide},
-        {L"ACTION_WIN_TAB", HotkeyActionType::WinTab},
-        {L"ACTION_HIDE_ICONS", HotkeyActionType::HideIcons},
-        {L"ACTION_COMBINE_TASKBAR_BUTTONS", HotkeyActionType::CombineTaskbarButtons},
-        {L"ACTION_TOGGLE_TASKBAR_ALIGNMENT", HotkeyActionType::ToggleTaskbarAlignment},
-        {L"ACTION_OPEN_START_MENU", HotkeyActionType::OpenStartMenu},
-        {L"ACTION_SEND_KEYPRESS", HotkeyActionType::SendKeypress},
-        {L"ACTION_START_PROCESS", HotkeyActionType::StartProcess},
-        {L"ACTION_MEDIA_PLAY_PAUSE", HotkeyActionType::MediaPlayPause},
-        {L"ACTION_MEDIA_NEXT", HotkeyActionType::MediaNext},
-        {L"ACTION_MEDIA_PREV", HotkeyActionType::MediaPrev},
-        {L"ACTION_TOGGLE_ALWAYSONTOP_ACTIVE", HotkeyActionType::ToggleAlwaysOnTopActive},
-        {L"ACTION_OPACITY_UP_ACTIVE", HotkeyActionType::OpacityUpActive},
-        {L"ACTION_OPACITY_DOWN_ACTIVE", HotkeyActionType::OpacityDownActive},
-    };
-
-    auto it = actionMap.find(key);
-    if (it == actionMap.end()) {
-        return std::nullopt;
-    }
-    return it->second;
-}
-
+// Converts action enum to string for logging
 const wchar_t* ActionTypeToString(HotkeyActionType actionType) {
     switch (actionType) {
-        case HotkeyActionType::Nothing: return L"Nothing";
-        case HotkeyActionType::ShowDesktop: return L"ShowDesktop";
-        case HotkeyActionType::AltTab: return L"AltTab";
-        case HotkeyActionType::TaskManager: return L"TaskManager";
-        case HotkeyActionType::Mute: return L"Mute";
-        case HotkeyActionType::TaskbarAutohide: return L"TaskbarAutohide";
-        case HotkeyActionType::WinTab: return L"WinTab";
-        case HotkeyActionType::HideIcons: return L"HideIcons";
-        case HotkeyActionType::CombineTaskbarButtons: return L"CombineTaskbarButtons";
-        case HotkeyActionType::ToggleTaskbarAlignment: return L"ToggleTaskbarAlignment";
-        case HotkeyActionType::OpenStartMenu: return L"OpenStartMenu";
-        case HotkeyActionType::SendKeypress: return L"SendKeypress";
-        case HotkeyActionType::StartProcess: return L"StartProcess";
-        case HotkeyActionType::MediaPlayPause: return L"MediaPlayPause";
-        case HotkeyActionType::MediaNext: return L"MediaNext";
-        case HotkeyActionType::MediaPrev: return L"MediaPrev";
-        case HotkeyActionType::ToggleAlwaysOnTopActive: return L"ToggleAlwaysOnTopActive";
-        case HotkeyActionType::OpacityUpActive: return L"OpacityUpActive";
-        case HotkeyActionType::OpacityDownActive: return L"OpacityDownActive";
+        case HotkeyActionType::Nothing:
+            return L"Nothing";
+        case HotkeyActionType::ShowDesktop:
+            return L"ShowDesktop";
+        case HotkeyActionType::AltTab:
+            return L"AltTab";
+        case HotkeyActionType::TaskManager:
+            return L"TaskManager";
+        case HotkeyActionType::Mute:
+            return L"Mute";
+        case HotkeyActionType::TaskbarAutohide:
+            return L"TaskbarAutohide";
+        case HotkeyActionType::WinTab:
+            return L"WinTab";
+        case HotkeyActionType::HideIcons:
+            return L"HideIcons";
+        case HotkeyActionType::CombineTaskbarButtons:
+            return L"CombineTaskbarButtons";
+        case HotkeyActionType::ToggleTaskbarAlignment:
+            return L"ToggleTaskbarAlignment";
+        case HotkeyActionType::OpenStartMenu:
+            return L"OpenStartMenu";
+        case HotkeyActionType::SendKeypress:
+            return L"SendKeypress";
+        case HotkeyActionType::StartProcess:
+            return L"StartProcess";
+        case HotkeyActionType::CopyRun:
+            return L"CopyRun";
+        case HotkeyActionType::SelectActiveInExplorer:
+            return L"SelectActiveInExplorer";
+        case HotkeyActionType::OpacityUp:
+            return L"OpacityUp";
+        case HotkeyActionType::OpacityDown:
+            return L"OpacityDown";
+        case HotkeyActionType::ToggleAlwaysOnTop:
+            return L"ToggleAlwaysOnTop";
+        case HotkeyActionType::ForceKillActive:
+            return L"ForceKillActive";
+        case HotkeyActionType::MediaPlayPause:
+            return L"MediaPlayPause";
+        case HotkeyActionType::MediaNext:
+            return L"MediaNext";
+        case HotkeyActionType::MediaPrev:
+            return L"MediaPrev";
+        case HotkeyActionType::Invalid:
+            return L"Invalid";
     }
-    return L"Unknown";
+   return L"Unknown";
 }
 
-bool TryBuildActionExecutor(HotkeyActionType actionType,
-                            const std::wstring& args,
-                            std::function<void()>& executorOut,
-                            std::wstring& errorOut) {
-    errorOut.clear();
-
+// Creates action executor from action type and arguments
+std::function<void()> ParseActionSetting(HotkeyActionType actionType,
+                                         const std::wstring& args) {
     switch (actionType) {
         case HotkeyActionType::Nothing:
-            errorOut = L"Action is Nothing (row ignored)";
-            return false;
-
+            return []() {};
         case HotkeyActionType::ShowDesktop:
-            executorOut = []() { ShowDesktop(); };
-            return true;
-
+            return []() { ShowDesktop(); };
         case HotkeyActionType::AltTab:
-            executorOut = []() { SendCtrlAltTabKeypress(); };
-            return true;
-
+            return []() { SendCtrlAltTabKeypress(); };
         case HotkeyActionType::TaskManager:
-            executorOut = []() { OpenTaskManager(); };
-            return true;
-
+            return []() { OpenTaskManager(); };
         case HotkeyActionType::Mute:
-            executorOut = []() { ToggleVolMuted(); };
-            return true;
-
+            return []() { ToggleVolMuted(); };
         case HotkeyActionType::TaskbarAutohide:
-            executorOut = []() { ToggleTaskbarAutohide(); };
-            return true;
-
+            return []() { ToggleTaskbarAutohide(); };
         case HotkeyActionType::WinTab:
-            executorOut = []() { SendWinTabKeypress(); };
-            return true;
-
+            return []() { SendWinTabKeypress(); };
         case HotkeyActionType::HideIcons:
-            executorOut = []() { HideIcons(); };
-            return true;
-
+            return []() { HideIcons(); };
         case HotkeyActionType::CombineTaskbarButtons: {
             const auto [s1, s2, s3, s4] = ParseTaskBarButtonsState(args);
-            const bool primaryValid = (s1 != COMBINE_INVALID && s2 != COMBINE_INVALID);
-            const bool secondaryValid = (s3 != COMBINE_INVALID && s4 != COMBINE_INVALID);
-            if (!primaryValid && !secondaryValid) {
-                errorOut = L"Invalid CombineTaskbarButtons args (no valid state pairs)";
-                return false;
-            }
-            executorOut = [s1, s2, s3, s4]() { CombineTaskbarButtons(s1, s2, s3, s4); };
-            return true;
-        }
-
+            return
+                [s1, s2, s3, s4]() { CombineTaskbarButtons(s1, s2, s3, s4); };
+       }
         case HotkeyActionType::ToggleTaskbarAlignment:
-            executorOut = []() { ToggleTaskbarAlignment(); };
-            return true;
-
+            return []() { ToggleTaskbarAlignment(); };
         case HotkeyActionType::OpenStartMenu:
-            executorOut = []() { OpenStartMenu(); };
-            return true;
-
+            return []() { OpenStartMenu(); };
         case HotkeyActionType::SendKeypress: {
             const auto keyCodes = ParseVirtualKeypressSetting(args);
-            if (keyCodes.empty()) {
-                errorOut = L"Invalid SendKeypress args (parsed key list empty)";
-                return false;
-            }
-            executorOut = [keyCodes]() {
+            return [keyCodes]() {
                 Wh_Log(L"Sending %zu keypresses", keyCodes.size());
                 SendKeypress(keyCodes);
             };
-            return true;
         }
-
         case HotkeyActionType::StartProcess: {
             std::wstring cmd = stringtools::trim(args);
-            if (cmd.empty()) {
-                errorOut = L"Invalid StartProcess args (empty command)";
-                return false;
-            }
-            executorOut = [cmd]() { StartProcess(cmd); };
-            return true;
+            return [cmd]() { StartProcess(cmd); };
         }
-
+        case HotkeyActionType::CopyRun: {
+            std::wstring cmd = stringtools::trim(args);
+            return [cmd]() { CopyRun(cmd); };
+        }
+        case HotkeyActionType::SelectActiveInExplorer:
+            return []() { SelectActiveInExplorer(); };
+        case HotkeyActionType::OpacityUp:
+            return []() { OpacityUp(); };
+        case HotkeyActionType::OpacityDown:
+            return []() { OpacityDown(); };
+        case HotkeyActionType::ToggleAlwaysOnTop:
+            return []() { ToggleAlwaysOnTop(); };
+        case HotkeyActionType::ForceKillActive:
+            return []() { ForceKillActiveWindow(); };
         case HotkeyActionType::MediaPlayPause:
-            executorOut = []() { MediaPlayPause(); };
-            return true;
-
+            return []() { MediaPlayPause(); };
         case HotkeyActionType::MediaNext:
-            executorOut = []() { MediaNext(); };
-            return true;
-
+            return []() { MediaNext(); };
         case HotkeyActionType::MediaPrev:
-            executorOut = []() { MediaPrev(); };
-            return true;
-
-        case HotkeyActionType::ToggleAlwaysOnTopActive:
-            executorOut = []() { ToggleAlwaysOnTopActive(); };
-            return true;
-
-        case HotkeyActionType::OpacityUpActive: {
-            const OpacityConfig cfg = ParseOpacityArgs_NoEquals(args);
-            executorOut = [cfg]() { OpacityUpActive(cfg); };
-            return true;
-        }
-
-        case HotkeyActionType::OpacityDownActive: {
-            const OpacityConfig cfg = ParseOpacityArgs_NoEquals(args);
-            executorOut = [cfg]() { OpacityDownActive(cfg); };
-            return true;
-        }
+            return []() { MediaPrev(); };
+        case HotkeyActionType::Invalid:
+            return []() {};
     }
-
-    errorOut = L"Unknown action type";
-    return false;
+    return []() {};
 }
-
 #pragma endregion  // actions
 
 // =====================================================================
@@ -1797,74 +2059,92 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
                                            _In_ WPARAM wParam,
                                            _In_ LPARAM lParam,
                                            _In_ DWORD_PTR dwRefData) {
-    if (uMsg == g_uninitCOMMsg) {
-        g_audioCOM.Uninit();
-        return 0;
-    }
+    switch (uMsg) {
+        case WM_HOTKEY: {
+            int hotkeyId = static_cast<int>(wParam);
 
-    if (uMsg == WM_HOTKEY) {
-        const int hotkeyId = static_cast<int>(wParam);
-        const Zone zone = GetCursorZone(g_settings.gatePx);
-
-        auto& st = g_settings.statsByHotkeyId[hotkeyId];
-        st.hits_total++;
-
-        bool anyIdMatch = false;
-        bool executed = false;
-        for (const auto& action : g_settings.hotkeyActions) {
-            if (!action.registered) {
-                continue;
-            }
-            if (action.hotkeyId != hotkeyId) {
-                continue;
-            }
-            anyIdMatch = true;
-
-            if (action.zone != zone) {
-                continue;
+            auto hotkeyIt = std::find_if(
+                g_settings.hotkeyActions.begin(),
+                g_settings.hotkeyActions.end(),
+                [&](const HotkeyBinding& e) {
+                    return e.hotkeyId == hotkeyId;
+                });
+            if (hotkeyIt == g_settings.hotkeyActions.end()) {
+                break;
             }
 
-            if (action.actionExecutor) {
-                action.actionExecutor();
+            auto tryFire = [&](HotkeyRegionName r) -> bool {
+                auto it = std::find_if(
+                    g_settings.hotkeyActions.begin(),
+                    g_settings.hotkeyActions.end(),
+                    [&](const HotkeyBinding& e) {
+                        return e.hotkeyId == hotkeyId && e.region == r;
+                    });
+                if (it == g_settings.hotkeyActions.end()) return false;
+                Wh_Log(L"Hotkey '%s' fired in region %s, executing %s",
+                       it->hotkeyString.c_str(),
+                       RegionNameToString(r),
+                       ActionTypeToString(it->actionType));
+                it->actionExecutor();
+                return true;
+            };
+
+            constexpr LONG kEdgeMargin = 12;
+            POINT cursorPos{};
+            GetCursorPos(&cursorPos);
+            HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO monitorInfo{};
+            monitorInfo.cbSize = sizeof(monitorInfo);
+            GetMonitorInfo(hMonitor, &monitorInfo);
+            const auto& r = monitorInfo.rcMonitor;
+            const bool atTop    = cursorPos.y - r.top    < kEdgeMargin;
+            const bool atBottom = r.bottom - cursorPos.y <= kEdgeMargin;
+            const bool atLeft   = cursorPos.x - r.left   < kEdgeMargin;
+            const bool atRight  = r.right - cursorPos.x  <= kEdgeMargin;
+
+            bool fired = false;
+            if (atTop && atLeft) {
+                fired = tryFire(HotkeyRegionName::TopLeft)
+                     || tryFire(HotkeyRegionName::Top)
+                     || tryFire(HotkeyRegionName::Left);
+            } else if (atTop && atRight) {
+                fired = tryFire(HotkeyRegionName::TopRight)
+                     || tryFire(HotkeyRegionName::Top)
+                     || tryFire(HotkeyRegionName::Right);
+            } else if (atBottom && atLeft) {
+                fired = tryFire(HotkeyRegionName::BottomLeft)
+                     || tryFire(HotkeyRegionName::Bottom)
+                     || tryFire(HotkeyRegionName::Left);
+            } else if (atBottom && atRight) {
+                fired = tryFire(HotkeyRegionName::BottomRight)
+                     || tryFire(HotkeyRegionName::Bottom)
+                     || tryFire(HotkeyRegionName::Right);
+            } else if (atTop)    { fired = tryFire(HotkeyRegionName::Top); }
+            else if (atBottom)   { fired = tryFire(HotkeyRegionName::Bottom); }
+            else if (atLeft)     { fired = tryFire(HotkeyRegionName::Left); }
+            else if (atRight)    { fired = tryFire(HotkeyRegionName::Right); }
+            if (!fired) tryFire(HotkeyRegionName::Elsewhere);
+            return 0;
+        }
+
+        default:
+            if (uMsg == g_hotkeyRegisteredMsg) {
+                switch (wParam) {
+                    case HOTKEY_REGISTER:
+                        RegisterHotkeys(hWnd);
+                        break;
+                    case HOTKEY_UNREGISTER:
+                        UnregisterHotkeys(hWnd);
+                        break;
+                }
+                return 0;
             }
-            executed = true;
+
+            if (uMsg == g_uninitCOMMsg) {
+                g_audioCOM.Uninit();
+                return 0;
+            }
             break;
-        }
-
-        if (executed) {
-            st.hits_matched++;
-        } else {
-            st.hits_no_match++;
-
-            if (!anyIdMatch) {
-                if (g_settings.loggedUnknownId.insert(hotkeyId).second) {
-                    Wh_Log(L"WM_HOTKEY id=%d received but no registered mapping has this id (stale registration?)",
-                           hotkeyId);
-                }
-            } else {
-                const uint64_t k = (static_cast<uint64_t>(static_cast<uint32_t>(hotkeyId)) << 8) |
-                                   static_cast<uint64_t>(static_cast<uint8_t>(zone));
-                if (g_settings.loggedNoMatchByIdZone.insert(k).second) {
-                    Wh_Log(L"Hotkey id=%d pressed but no mapping for zone %s",
-                           hotkeyId, ZoneToString(zone));
-                }
-            }
-        }
-
-        // Always consume WM_HOTKEY.
-        return 0;
-    }
-
-    if (uMsg == g_hotkeyRegisteredMsg) {
-        switch (wParam) {
-            case HOTKEY_REGISTER:
-                RegisterHotkeys(hWnd);
-                break;
-            case HOTKEY_UNREGISTER:
-                UnregisterHotkeys(hWnd);
-                break;
-        }
-        return 0;
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -1889,7 +2169,6 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd) {
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
-
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
                                  LPCWSTR lpClassName,
                                  LPCWSTR lpWindowName,
@@ -1914,11 +2193,13 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
     if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
         Wh_Log(L"Shell_TrayWnd created: %p", hWnd);
         HandleIdentifiedTaskbarWindow(hWnd);
+        RegisterHotkeys(hWnd);
     }
 
     return hWnd;
 }
 
+// Finds main taskbar window in current process
 HWND FindCurrentProcessTaskbarWindow() {
     HWND hWnd = nullptr;
 
@@ -1953,237 +2234,110 @@ HWND FindCurrentProcessTaskbarWindow() {
 
 #pragma region settings
 
-// Put near the top of the "settings" region (or above LoadSettings).
-
-struct ConfigRow {
-    std::wstring hotkeyStr;
-    std::wstring zoneStr;
-    std::wstring actionStr;
-    std::wstring argsStr;
-    int rowIndex = -1;
-
-    void Normalize() {
-        hotkeyStr = stringtools::trim(hotkeyStr);
-        zoneStr   = stringtools::trim(zoneStr);
-        actionStr = stringtools::trim(actionStr);
-        argsStr   = stringtools::trim(argsStr);
-    }
-
-    bool ZoneEmptyOrNone() const {
-        return zoneStr.empty() || stringtools::toLower(zoneStr) == L"none";
-    }
-
-    bool ActionEmptyOrNothing() const {
-        return actionStr.empty() || stringtools::toLower(actionStr) == L"action_nothing";
-    }
-
-    bool IsTerminator() const {
-        return hotkeyStr.empty() && ZoneEmptyOrNone() && ActionEmptyOrNothing() && argsStr.empty();
-    }
-
-    bool IsPartialEmptyHotkey() const {
-        return hotkeyStr.empty() && (!ActionEmptyOrNothing() || !zoneStr.empty() || !argsStr.empty());
-    }
-};
-
-static ConfigRow ReadConfigRow(int i) {
-    using WindhawkUtils::StringSetting;
-    ConfigRow r;
-    r.rowIndex  = i;
-    r.hotkeyStr = std::wstring(StringSetting::make(L"HotkeyActions[%d].Hotkey", i).get());
-    r.zoneStr   = std::wstring(StringSetting::make(L"HotkeyActions[%d].Zone", i).get());
-    r.actionStr = std::wstring(StringSetting::make(L"HotkeyActions[%d].Action", i).get());
-    r.argsStr   = std::wstring(StringSetting::make(L"HotkeyActions[%d].AdditionalArgs", i).get());
-    r.Normalize();
-    return r;
-}
-
 void LoadSettings() {
-    g_settings.gatePx = static_cast<int>(Wh_GetIntSetting(L"GatePx"));
-    if (g_settings.gatePx < 0) {
-        g_settings.gatePx = 0;
-    }
+    using WindhawkUtils::StringSetting;
 
     g_settings.hotkeyActions.clear();
 
-    struct HotkeyZoneIdentity {
-        UINT modifiers;
-        UINT vk;
-        Zone zone;
-        bool operator==(const HotkeyZoneIdentity& o) const {
-            return modifiers == o.modifiers && vk == o.vk && zone == o.zone;
-        }
-    };
-    struct HotkeyZoneIdentityHasher {
-        size_t operator()(const HotkeyZoneIdentity& k) const {
-            size_t h1 = std::hash<UINT>{}(k.modifiers);
-            size_t h2 = std::hash<UINT>{}(k.vk);
-            size_t h3 = std::hash<uint8_t>{}(static_cast<uint8_t>(k.zone));
-            return h1 ^ (h2 << 1) ^ (h3 << 17);
-        }
-    };
-
-    std::unordered_set<HotkeyZoneIdentity, HotkeyZoneIdentityHasher> seen;
-    seen.reserve(64);
-
-    // Load diagnostics (counts).
-    int scanned = 0;
-    int loaded = 0;
-    int terminatedAt = -1;
-
-    int invalid_partial_empty = 0;
-    int invalid_unknown_action = 0;
-    int invalid_zone_parse = 0;
-    int invalid_hotkey_parse = 0;
-    int invalid_duplicate_hotkey_zone = 0;
-    int invalid_inert_executor = 0;
-
-    // Per-key diagnostics.
-    struct KeyDiag {
-        std::wstring sampleHotkey;
-        int mappingCount = 0;
-        std::unordered_set<uint8_t> zones;
-    };
-    std::unordered_map<uint64_t, KeyDiag> diagByKey;
-    diagByKey.reserve(64);
+    std::unordered_map<uint64_t, int> seenCombos;
 
     for (int i = 0; i < 50; i++) {
-        ConfigRow row = ReadConfigRow(i);
-        scanned++;
+        auto hotkeyStr = stringtools::trim(std::wstring(
+            StringSetting::make(L"HotkeyActions[%d].Hotkey", i).get()));
 
-        if (row.IsTerminator()) {
-            terminatedAt = i;
+        if (hotkeyStr.empty()) {
             break;
         }
 
-        if (row.IsPartialEmptyHotkey()) {
-            invalid_partial_empty++;
-            Wh_Log(L"Row %d invalid: Hotkey empty but other fields set (Zone='%s' Action='%s' Args='%s')",
-                   i, row.zoneStr.c_str(), row.actionStr.c_str(), row.argsStr.c_str());
+        UINT modifiers = 0, vk = 0;
+        if (!FromStringHotKey(hotkeyStr, &modifiers, &vk)) {
+            Wh_Log(L"Hotkey[%d] '%s': failed to parse, skipping group",
+                   i, hotkeyStr.c_str());
             continue;
         }
 
-        if (row.hotkeyStr.empty()) {
+        uint64_t comboKey = (static_cast<uint64_t>(modifiers) << 32) | vk;
+        auto existing = seenCombos.find(comboKey);
+        if (existing != seenCombos.end()) {
+            Wh_Log(L"Hotkey[%d] '%s': duplicate combo (first at group %d), skipping group",
+                   i, hotkeyStr.c_str(), existing->second);
             continue;
         }
+        seenCombos[comboKey] = i;
 
-        // If action empty => invalid (hotkey present).
-        if (row.actionStr.empty()) {
-            invalid_partial_empty++;
-            Wh_Log(L"Row %d invalid: Action empty but Hotkey set ('%s')", i, row.hotkeyStr.c_str());
-            continue;
-        }
+        size_t startIdx = g_settings.hotkeyActions.size();
 
-        // Parse action (no internal log; row log includes context).
-        auto actionOpt = TryParseActionType(row.actionStr);
-        if (!actionOpt.has_value()) {
-            invalid_unknown_action++;
-            Wh_Log(L"Row %d invalid: Unknown Action '%s' (Hotkey='%s' Zone='%s')",
-                   i, row.actionStr.c_str(), row.hotkeyStr.c_str(), row.zoneStr.c_str());
-            continue;
-        }
+        for (int j = 0; j < 10; j++) {
+            auto regionStr = stringtools::trim(std::wstring(
+                StringSetting::make(L"HotkeyActions[%d].Regions[%d].Region", i, j)
+                    .get()));
+            auto actionStrRaw = stringtools::trim(std::wstring(
+                StringSetting::make(L"HotkeyActions[%d].Regions[%d].Action", i, j)
+                    .get()));
 
-        HotkeyActionType actionType = *actionOpt;
-
-        // Ignore ACTION_NOTHING rows intentionally, but do it explicitly.
-        if (actionType == HotkeyActionType::Nothing) {
-            // If user set additional fields with ACTION_NOTHING, log for clarity.
-            if (!row.zoneStr.empty() || !row.argsStr.empty()) {
-                Wh_Log(L"Row %d ignored: Action=ACTION_NOTHING (Hotkey='%s' Zone='%s' Args='%s')",
-                       i, row.hotkeyStr.c_str(), row.zoneStr.c_str(), row.argsStr.c_str());
+            if (regionStr.empty() && actionStrRaw.empty()) {
+                break;
             }
+
+            auto regionName = TryParseRegionName(regionStr);
+            if (regionName == HotkeyRegionName::Invalid) {
+                Wh_Log(L"Hotkey[%d] Region[%d]: unknown region '%s', skipping row",
+                       i, j, regionStr.c_str());
+                continue;
+            }
+
+            auto it = std::find_if(
+                g_settings.hotkeyActions.begin() + startIdx,
+                g_settings.hotkeyActions.end(),
+                [&](const HotkeyBinding& e) {
+                    return e.region == regionName;
+                });
+
+            if (it != g_settings.hotkeyActions.end()) {
+                Wh_Log(L"Hotkey[%d] Region[%d]: duplicate region '%s', first row wins, skipping",
+                       i, j, RegionNameToString(regionName));
+                continue;
+            }
+            auto actionType = TryParseActionType(actionStrRaw);
+            if (actionType == HotkeyActionType::Invalid) {
+                Wh_Log(L"Hotkey[%d] Region[%d]: unknown action '%s', skipping row",
+                       i, j, actionStrRaw.c_str());
+                continue;
+            }
+
+            if (actionType == HotkeyActionType::Nothing) {
+                continue;
+            }
+
+            auto argsStr = stringtools::trim(std::wstring(
+                StringSetting::make(
+                    L"HotkeyActions[%d].Regions[%d].AdditionalArgs", i, j)
+                    .get()));
+
+            HotkeyBinding entry;
+            entry.hotkeyString = hotkeyStr;
+            entry.region = regionName;
+            entry.actionType = actionType;
+            entry.additionalArgs = argsStr;
+            entry.actionExecutor = ParseActionSetting(actionType, argsStr);
+            entry.modifiers = modifiers;
+            entry.vk = vk;
+            entry.hotkeyId = 0;
+            entry.ownsRegistration = false;
+
+            g_settings.hotkeyActions.push_back(std::move(entry));
+        }
+
+        if (g_settings.hotkeyActions.size() == startIdx) {
+            Wh_Log(L"Hotkey[%d] '%s': no non-Nothing region rows configured, skipping",
+                   i, hotkeyStr.c_str());
             continue;
         }
 
-        Zone zone = Zone::NONE;
-        if (!TryParseZone(row.zoneStr, &zone)) {
-            invalid_zone_parse++;
-            Wh_Log(L"Row %d invalid: Failed to parse Zone '%s' (Hotkey='%s')",
-                   i, row.zoneStr.c_str(), row.hotkeyStr.c_str());
-            continue;
-        }
-
-        UINT modifiers = 0;
-        UINT vk = 0;
-        if (!FromStringHotKey(row.hotkeyStr, &modifiers, &vk)) {
-            invalid_hotkey_parse++;
-            Wh_Log(L"Row %d invalid: Failed to parse Hotkey '%s' (Action='%s' Zone='%s')",
-                   i, row.hotkeyStr.c_str(), row.actionStr.c_str(), row.zoneStr.c_str());
-            continue;
-        }
-
-        HotkeyZoneIdentity id{modifiers, vk, zone};
-        if (!seen.insert(id).second) {
-            invalid_duplicate_hotkey_zone++;
-            Wh_Log(L"Row %d invalid: Duplicate (hotkey, zone) rejected (Hotkey='%s' Zone='%s')",
-                   i, row.hotkeyStr.c_str(), row.zoneStr.c_str());
-            continue;
-        }
-
-        std::function<void()> exec;
-        std::wstring execErr;
-        if (!TryBuildActionExecutor(actionType, row.argsStr, exec, execErr)) {
-            invalid_inert_executor++;
-            Wh_Log(L"Row %d invalid: %s (Hotkey='%s' Action='%s' Zone='%s' Args='%s')",
-                   i, execErr.c_str(), row.hotkeyStr.c_str(), row.actionStr.c_str(),
-                   row.zoneStr.c_str(), row.argsStr.c_str());
-            continue;
-        }
-
-        HotkeyAction action;
-        action.hotkeyString = row.hotkeyStr;
-        action.zone = zone;
-        action.actionType = actionType;
-        action.additionalArgs = row.argsStr;
-        action.actionExecutor = std::move(exec);
-        action.modifiers = modifiers;
-        action.vk = vk;
-        action.hotkeyId = 0;
-        action.registered = false;
-
-        g_settings.hotkeyActions.push_back(std::move(action));
-        loaded++;
-
-        // Per-key diagnostics.
-        const uint64_t key = MakeHotkeyKey(modifiers, vk);
-        auto& kd = diagByKey[key];
-        kd.mappingCount++;
-        if (kd.sampleHotkey.empty()) kd.sampleHotkey = row.hotkeyStr;
-        kd.zones.insert(static_cast<uint8_t>(zone));
-
-        Wh_Log(L"Loaded row %d: Hotkey='%s' Zone='%s' Action='%s'",
-               i, row.hotkeyStr.c_str(), ZoneToString(zone), ActionTypeToString(actionType));
-    }
-
-    // Key-level summary.
-    Wh_Log(L"Load summary: scanned=%d loaded=%d terminatedAt=%d",
-           scanned, loaded, terminatedAt);
-
-    Wh_Log(L"Invalid/ignored counts: partialEmpty=%d unknownAction=%d zoneParse=%d hotkeyParse=%d dupHotkeyZone=%d inertArgs=%d",
-           invalid_partial_empty, invalid_unknown_action, invalid_zone_parse,
-           invalid_hotkey_parse, invalid_duplicate_hotkey_zone, invalid_inert_executor);
-
-    // Per-unique-key diagnostic: zones and mapping count.
-    // Helps detect “I configured zones but only one zone is actually loaded”.
-    for (const auto& kv : diagByKey) {
-        const auto& kd = kv.second;
-
-        // Build zone list string.
-        std::wstring zlist;
-        bool first = true;
-        for (uint8_t z : kd.zones) {
-            if (!first) zlist += L",";
-            first = false;
-            zlist += ZoneToString(static_cast<Zone>(z));
-        }
-
-        const bool hasNone = (kd.zones.find(static_cast<uint8_t>(Zone::NONE)) != kd.zones.end());
-        Wh_Log(L"Key '%s': mappings=%d zones={%s} hasNONE=%s",
-               kd.sampleHotkey.c_str(), kd.mappingCount, zlist.c_str(),
-               hasNone ? L"yes" : L"no");
+        Wh_Log(L"Loaded hotkey[%d]: '%s' with %zu region(s)", i,
+               hotkeyStr.c_str(), g_settings.hotkeyActions.size() - startIdx);
     }
 }
-
 #pragma endregion  // settings
 
 // =====================================================================
@@ -2241,6 +2395,7 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
+    // Unregister old hotkeys before loading new settings
     if (g_hTaskbarWnd) {
         SendMessage(g_hTaskbarWnd, g_hotkeyRegisteredMsg, HOTKEY_UNREGISTER, 0);
     }
@@ -2251,4 +2406,5 @@ void Wh_ModSettingsChanged() {
         SendMessage(g_hTaskbarWnd, g_hotkeyRegisteredMsg, HOTKEY_REGISTER, 0);
     }
 }
-#pragma endregion // windhawk_exports
+
+#pragma endregion  // windhawk_exports

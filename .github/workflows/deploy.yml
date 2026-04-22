@@ -56,8 +56,6 @@ jobs:
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
       - name: Install dependencies
         run: npm install
-      - name: Write commit graph
-        run: git commit-graph write --reachable --changed-paths
       - name: Prepare static content
         run: npx tsx deploy.ts
         env:

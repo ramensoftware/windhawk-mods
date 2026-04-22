@@ -2,7 +2,7 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, and pin windows with customizable hotkeys
-// @version         2.3.0
+// @version         2.4.1
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -22,8 +22,8 @@ Based on VD.ahk by FuPeiJiang.
 ### Virtual Desktop Management
 - **Quick Switch**: Jump directly to any desktop (1-9) with a single hotkey
 - **Move Windows**: Send the active window to any desktop instantly
-- **Previous Desktop (Index)**: Switch to the previous desktop (idx-1, wraps around)
-- **Next Desktop (Index)**: Switch to the next desktop (idx+1, wraps around)
+- **Previous Desktop**: Switch to the previous desktop by index (wraps around)
+- **Next Desktop**: Switch to the next desktop by index (wraps around)
 - **Last Desktop**: Toggle back to the last visited desktop
 - **Pin Windows**: Pin/unpin windows to appear on all desktops
 
@@ -33,12 +33,14 @@ Based on VD.ahk by FuPeiJiang.
 |--------|----------------|
 | Switch to desktop 1-9 | `Alt + 1-9` |
 | Move window to desktop 1-9 | `Alt + Shift + 1-9` |
-| Switch to previous desktop (idx-1) | `Alt + Z` (configurable modifier) |
-| Switch to next desktop (idx+1) | `Alt + X` (configurable modifier) |
-| Toggle last desktop | `Alt + Q` (configurable modifier) |
+| Switch to previous desktop | `Alt + Z` (configurable modifier) |
+| Switch to next desktop | `Alt + X` (configurable modifier) |
+| Switch to last visited desktop | `Alt + Q` (configurable modifier) |
 | Pin/unpin window | `Alt + P` (configurable modifier) |
 
-Note: The modifier for utility hotkeys (Previous/Next Desktop (Index), Last Desktop, Pin) can be changed in settings. Previous/next cycling is limited by the "Maximum Desktops" setting.
+Note: The modifier for all hotkey groups can be freely configured using any combination of Alt, Ctrl, Shift, and Win keys. Previous/next desktop cycling is limited by the "Maximum Desktops" setting.
+
+**⚠️ Win key note:** Win+number keys conflict with Windows taskbar shortcuts. If it doesn't work for you, you may need to disable these Win-combinations by yourself.
 
 ## Customization
 
@@ -48,7 +50,7 @@ Settings are organized by feature. Each feature has an **Enable** toggle and its
 
 - **[Switch Desktop]** - Alt+1-9 to switch desktops
 - **[Move Window]** - Alt+Shift+1-9 to move windows between desktops
-- **[Prev/Next Desktop]** - Previous/next by index and last-desktop toggle (Alt+Z, Alt+X, Alt+Q by default)
+- **[Previous/Next/Last Desktop]** - Previous/next desktop by index and last-visited desktop toggle (Alt+Z, Alt+X, Alt+Q by default)
 - **[Pin Window]** - Pin/unpin windows to all desktops (Alt+P by default)
 ### Key Binding Format
 
@@ -84,6 +86,10 @@ Select your Windows version in settings for correct functionality:
 - Windows 11 (Build 22621/22631/23H2)
 - Windows 11 (Build 26100+ / 24H2)
 
+## See Also
+
+- [Tiling Helper](https://windhawk.net/mods/tiling-helper) - Tiling window management
+
 */
 // ==/WindhawkModReadme==
 
@@ -105,13 +111,7 @@ Select your Windows version in settings for correct functionality:
 
 - SwitchDesktopModifier: alt
   $name: '[Switch Desktop] Modifier'
-  $description: Modifier keys for switching to desktop (combined with number keys 1-9)
-  $options:
-    - alt: Alt
-    - ctrl: Ctrl
-    - alt+shift: Alt + Shift
-    - ctrl+alt: Ctrl + Alt
-    - ctrl+shift: Ctrl + Shift
+  $description: 'Modifier keys for switching to desktop (combined with number keys 1-9). Combine with +: alt, ctrl, shift, win. Examples: alt, ctrl+shift, win+alt'
 
 - EnableMoveWindow: true
   $name: '[Move Window] Enable'
@@ -119,11 +119,7 @@ Select your Windows version in settings for correct functionality:
 
 - MoveWindowModifier: alt+shift
   $name: '[Move Window] Modifier'
-  $description: Modifier keys for moving active window to desktop (combined with number keys 1-9)
-  $options:
-    - alt+shift: Alt + Shift
-    - ctrl+alt: Ctrl + Alt
-    - ctrl+shift: Ctrl + Shift
+  $description: 'Modifier keys for moving active window to desktop (combined with number keys 1-9). Combine with +: alt, ctrl, shift, win. Examples: alt+shift, ctrl+alt, win+shift'
 
 - FollowMovedWindow: false
   $name: Follow Moved Window
@@ -134,30 +130,24 @@ Select your Windows version in settings for correct functionality:
   $description: Number of desktops to register hotkeys for (1-9). Set lower if you use fewer desktops to avoid hotkey conflicts.
 
 - EnablePrevNextDesktop: true
-  $name: '[Prev/Next Desktop] Enable'
-  $description: Enable hotkeys to cycle between desktops
+  $name: '[Previous/Next/Last Desktop] Enable'
+  $description: Enable hotkeys to cycle between desktops and toggle to the last visited desktop
 
 - UtilityModifier: alt
-  $name: '[Prev/Next Desktop] Modifier'
-  $description: Modifier keys for previous/next desktop hotkeys
-  $options:
-    - alt: Alt
-    - ctrl: Ctrl
-    - alt+shift: Alt + Shift
-    - ctrl+alt: Ctrl + Alt
-    - ctrl+shift: Ctrl + Shift
+  $name: '[Previous/Next/Last Desktop] Modifier'
+  $description: 'Modifier keys for previous/next/last desktop hotkeys. Combine with +: alt, ctrl, shift, win. Examples: alt, ctrl+shift, win'
 
-- PrevDesktopKey: "Q"
-  $name: '[Prev/Next Desktop] Last Desktop Key'
-  $description: 'Key to toggle back to the last visited desktop. Examples: Q, F, ~, !, [, Tab, Space'
-
-- PrevIndexKey: "Z"
-  $name: '[Prev/Next Desktop] Previous Desktop (Index) Key'
-  $description: 'Key to switch to the previous desktop by index (idx-1, wraps around). Examples: Z, A, <, ,, Tab'
+- PrevDesktopKey: "Z"
+  $name: '[Previous/Next/Last Desktop] Previous Desktop Key'
+  $description: 'Key to switch to the previous desktop by index (wraps around). Examples: Z, A, <, ,, Tab'
 
 - NextDesktopKey: "X"
-  $name: '[Prev/Next Desktop] Next Key'
-  $description: 'Key to switch to the next desktop (wraps around). Examples: X, E, N, Z, @, ], Enter'
+  $name: '[Previous/Next/Last Desktop] Next Desktop Key'
+  $description: 'Key to switch to the next desktop by index (wraps around). Examples: X, E, N, Z, @, ], Enter'
+
+- LastDesktopKey: "Q"
+  $name: '[Previous/Next/Last Desktop] Last Desktop Key'
+  $description: 'Key to toggle back to the last visited desktop. Examples: Q, F, ~, !, [, Tab, Space'
 
 - EnablePinWindow: true
   $name: '[Pin Window] Enable'
@@ -323,26 +313,28 @@ static int g_maxDesktops = 9;
 
 static GUID g_previousDesktopId = {};
 static bool g_hasPreviousDesktop = false;
+static GUID g_currentDesktopId = {};
+static bool g_hasCurrentDesktop = false;
 
 // Hotkey ID ranges:
 // HK_MOVE_BASE (1-9): Move window to desktop 1-9
 // HK_SWITCH_BASE (10-18): Switch to desktop 1-9
-// HK_PREV (19): Toggle to previous desktop
+// HK_LAST (19): Toggle to last visited desktop
 // HK_PIN (20): Pin/unpin current window
 // HK_NEXT (21): Switch to next desktop (wrap around)
-// HK_PREV_INDEX (22): Switch to previous desktop by index (wrap around)
+// HK_PREV (22): Switch to previous desktop by index (wrap around)
 enum HotkeyIds {
   HK_MOVE_BASE = 1,
   HK_SWITCH_BASE = 10,
-  HK_PREV = 19,
+  HK_LAST = 19,
   HK_PIN = 20,
   HK_NEXT = 21,
-  HK_PREV_INDEX = 22
+  HK_PREV = 22
 };
 
-static UINT g_prevDesktopKey = 'Q';
-static UINT g_prevIndexKey = 'Z';
+static UINT g_prevDesktopKey = 'Z';
 static UINT g_nextDesktopKey = 'X';
+static UINT g_lastDesktopKey = 'Q';
 static UINT g_pinKey = 'P';
 
 static bool g_enableSwitchDesktop = true;
@@ -390,6 +382,7 @@ UINT ParseModifiers(PCWSTR str) {
   if (wcsstr(str, L"alt")) modifiers |= MOD_ALT;
   if (wcsstr(str, L"ctrl")) modifiers |= MOD_CONTROL;
   if (wcsstr(str, L"shift")) modifiers |= MOD_SHIFT;
+  if (wcsstr(str, L"win")) modifiers |= MOD_WIN;
   return modifiers;
 }
 
@@ -419,6 +412,8 @@ T ReadStringSetting(PCWSTR name, Parser parser, T defaultVal) {
 UINT ReadModifierSetting(PCWSTR name, UINT defaultVal) {
   PCWSTR str = Wh_GetStringSetting(name);
   UINT result = ParseModifiers(str);
+  Wh_Log(L"ReadModifierSetting: name=%s, raw=\"%s\", parsed=0x%X, default=0x%X, using=0x%X",
+         name, str, result, defaultVal, result ? result : defaultVal);
   Wh_FreeStringSetting(str);
   return result ? result : defaultVal;
 }
@@ -478,6 +473,9 @@ void LoadSettings() {
   g_switchModifiers = ReadModifierSetting(L"SwitchDesktopModifier", MOD_ALT);
   g_utilityModifiers = ReadModifierSetting(L"UtilityModifier", MOD_ALT);
 
+  Wh_Log(L"LoadSettings: moveModifiers=0x%X, switchModifiers=0x%X, utilityModifiers=0x%X",
+         g_moveModifiers, g_switchModifiers, g_utilityModifiers);
+
   g_followMovedWindow = Wh_GetIntSetting(L"FollowMovedWindow") != 0;
   g_maxDesktops = Wh_GetIntSetting(L"MaxDesktops");
   if (g_maxDesktops < 1 || g_maxDesktops > 9) g_maxDesktops = 9;
@@ -489,9 +487,9 @@ void LoadSettings() {
   g_enablePinWindow = Wh_GetIntSetting(L"EnablePinWindow") != 0;
 
   // Load hotkey settings (single character input supporting A-Z, 0-9, and special chars)
-  g_prevDesktopKey = ReadStringSetting(L"PrevDesktopKey", ParseSingleCharKey, (UINT)'Q');
-  g_prevIndexKey = ReadStringSetting(L"PrevIndexKey", ParseSingleCharKey, (UINT)'Z');
+  g_prevDesktopKey = ReadStringSetting(L"PrevDesktopKey", ParseSingleCharKey, (UINT)'Z');
   g_nextDesktopKey = ReadStringSetting(L"NextDesktopKey", ParseSingleCharKey, (UINT)'X');
+  g_lastDesktopKey = ReadStringSetting(L"LastDesktopKey", ParseSingleCharKey, (UINT)'Q');
   g_pinKey = ReadStringSetting(L"PinKey", ParseSingleCharKey, (UINT)'P');
 }
 
@@ -734,6 +732,25 @@ bool IsEligibleWindow(HWND hwnd) {
   return GetAncestor(hwnd, GA_ROOTOWNER) == hwnd;
 }
 
+bool TryGetWindowDesktopId(HWND hwnd, GUID* outDesktopId) {
+  if (!outDesktopId || !hwnd || !g_pDesktopManager) return false;
+  return SUCCEEDED(g_pDesktopManager->GetWindowDesktopId(hwnd, outDesktopId));
+}
+
+bool IsWindowPinned(HWND hwnd) {
+  if (!hwnd || !g_pViewCollection || !g_pPinnedApps) return false;
+
+  IApplicationView* view = nullptr;
+  if (FAILED(g_pViewCollection->GetViewForHwnd(hwnd, &view)) || !view) {
+    return false;
+  }
+
+  BOOL isPinned = FALSE;
+  HRESULT hr = g_pPinnedApps->IsViewPinned(view, &isPinned);
+  view->Release();
+  return SUCCEEDED(hr) && isPinned;
+}
+
 // Find the topmost window on a specific virtual desktop
 HWND FindWindowOnDesktop(const GUID& desktopId, HWND excludeWindow = nullptr) {
   struct EnumContext {
@@ -765,6 +782,72 @@ void FocusWindow(HWND hwnd) {
   if (!hwnd) return;
   if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
   SetForegroundWindow(hwnd);
+}
+
+void UpdateCurrentDesktopTracking(const GUID& desktopId, bool updatePreviousDesktop) {
+  if (g_hasCurrentDesktop && !IsEqualGUID(g_currentDesktopId, desktopId)) {
+    if (updatePreviousDesktop) {
+      g_previousDesktopId = g_currentDesktopId;
+      g_hasPreviousDesktop = true;
+    }
+  }
+
+  g_currentDesktopId = desktopId;
+  g_hasCurrentDesktop = true;
+}
+
+bool SyncCurrentDesktopTracking(bool updatePreviousDesktop) {
+  GUID currentDesktopId = {};
+  if (!GetCurrentDesktopId(&currentDesktopId)) return false;
+
+  UpdateCurrentDesktopTracking(currentDesktopId, updatePreviousDesktop);
+  return true;
+}
+
+void HandleForegroundWindowChanged(HWND hwnd) {
+  if (!InitializeVirtualDesktopAPI()) return;
+
+  bool eligibleWindow = hwnd && IsEligibleWindow(hwnd);
+  GUID currentDesktopId = {};
+  bool hasCurrentDesktopId = GetCurrentDesktopId(&currentDesktopId);
+  GUID windowDesktopId = {};
+  bool hasWindowDesktopId = eligibleWindow && TryGetWindowDesktopId(hwnd, &windowDesktopId);
+  bool windowPinned = eligibleWindow && IsWindowPinned(hwnd);
+
+  if (!hasCurrentDesktopId && !hasWindowDesktopId) return;
+
+  GUID effectiveDesktopId = {};
+  bool hasEffectiveDesktopId = false;
+  if (hasCurrentDesktopId) {
+    effectiveDesktopId = currentDesktopId;
+    hasEffectiveDesktopId = true;
+  }
+
+  if (hasWindowDesktopId && !windowPinned &&
+      (!hasCurrentDesktopId || !IsEqualGUID(currentDesktopId, windowDesktopId))) {
+    effectiveDesktopId = windowDesktopId;
+    hasEffectiveDesktopId = true;
+  }
+
+  if (!hasEffectiveDesktopId) return;
+
+  UpdateCurrentDesktopTracking(effectiveDesktopId, true);
+
+  if (eligibleWindow && hasWindowDesktopId && !windowPinned && IsEqualGUID(windowDesktopId, effectiveDesktopId)) {
+    g_desktopFocusMap[effectiveDesktopId] = hwnd;
+  }
+}
+
+void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK hWinEventHook,
+                                     DWORD event,
+                                     HWND hwnd,
+                                     LONG idObject,
+                                     LONG idChild,
+                                     DWORD dwEventThread,
+                                     DWORD dwmsEventTime) {
+  if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
+
+  HandleForegroundWindowChanged(hwnd);
 }
 
 bool GoToDesktopNum(int desktopNum, HWND preferredFocusHwnd = nullptr) {
@@ -838,16 +921,19 @@ bool GoToDesktopNum(int desktopNum, HWND preferredFocusHwnd = nullptr) {
       g_previousDesktopId = currentDesktopId;
       g_hasPreviousDesktop = true;
     }
+    if (hasTargetId) {
+      UpdateCurrentDesktopTracking(targetDesktopId, false);
+    }
     Wh_Log(L"Switched to desktop %d", desktopNum);
   }
   return success;
 }
 
-bool SwitchToPreviousDesktop() {
+bool SwitchToLastDesktop() {
   if (!g_hasPreviousDesktop) return false;
   if (!InitializeVirtualDesktopAPI()) return false;
 
-  GUID currentId;
+  GUID currentId = {};
   if (!GetCurrentDesktopId(&currentId) || IsEqualGUID(currentId, g_previousDesktopId)) {
     return true;
   }
@@ -861,28 +947,28 @@ bool SwitchToPreviousDesktop() {
   return GoToDesktopNum(index + 1);
 }
 
-bool SwitchToPreviousIndexDesktop() {
-  Wh_Log(L"SwitchToPreviousIndexDesktop called");
+bool SwitchToPreviousDesktop() {
+  Wh_Log(L"SwitchToPreviousDesktop called");
   if (!InitializeVirtualDesktopAPI()) {
-    Wh_Log(L"SwitchToPreviousIndexDesktop: API not initialized");
+    Wh_Log(L"SwitchToPreviousDesktop: API not initialized");
     return false;
   }
 
   GUID currentDesktopId = {};
   if (!GetCurrentDesktopId(&currentDesktopId)) {
-    Wh_Log(L"SwitchToPreviousIndexDesktop: Failed to get current desktop ID");
+    Wh_Log(L"SwitchToPreviousDesktop: Failed to get current desktop ID");
     return false;
   }
 
   int currentIndex = GetDesktopIndexById(currentDesktopId);
   if (currentIndex < 0) {
-    Wh_Log(L"SwitchToPreviousIndexDesktop: Invalid current index");
+    Wh_Log(L"SwitchToPreviousDesktop: Invalid current index");
     return false;
   }
 
   IObjectArray* desktops = GetDesktops();
   if (!desktops) {
-    Wh_Log(L"SwitchToPreviousIndexDesktop: Failed to get desktops");
+    Wh_Log(L"SwitchToPreviousDesktop: Failed to get desktops");
     return false;
   }
 
@@ -890,7 +976,7 @@ bool SwitchToPreviousIndexDesktop() {
   desktops->GetCount(&desktopCount);
   desktops->Release();
 
-  Wh_Log(L"SwitchToPreviousIndexDesktop: currentIndex=%d, desktopCount=%u, maxDesktops=%d", currentIndex,
+  Wh_Log(L"SwitchToPreviousDesktop: currentIndex=%d, desktopCount=%u, maxDesktops=%d", currentIndex,
          desktopCount, g_maxDesktops);
 
   int cycleCount = (int)desktopCount;
@@ -898,7 +984,7 @@ bool SwitchToPreviousIndexDesktop() {
   if (cycleCount <= 0) return false;
 
   int prevIndex = (currentIndex - 1 + cycleCount) % cycleCount;
-  Wh_Log(L"SwitchToPreviousIndexDesktop: Switching to desktop %d", prevIndex + 1);
+  Wh_Log(L"SwitchToPreviousDesktop: Switching to desktop %d", prevIndex + 1);
   return GoToDesktopNum(prevIndex + 1);
 }
 
@@ -1023,25 +1109,47 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
 
   if (!InitializeVirtualDesktopAPI()) {
     Wh_Log(L"Virtual Desktop API failed to initialize on startup");
+  } else {
+    SyncCurrentDesktopTracking(false);
+  }
+
+  HWINEVENTHOOK foregroundHook =
+      SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundWinEventProc, 0, 0,
+                      WINEVENT_OUTOFCONTEXT);
+  if (!foregroundHook) {
+    Wh_Log(L"Failed to install foreground WinEvent hook");
   }
 
   if (g_enableMoveWindow) {
     for (int i = 1; i <= g_maxDesktops; ++i) {
-      RegisterHotKey(nullptr, HK_MOVE_BASE + i - 1, g_moveModifiers, '0' + i);
+      BOOL ok = RegisterHotKey(nullptr, HK_MOVE_BASE + i - 1, g_moveModifiers, '0' + i);
+      Wh_Log(L"RegisterHotKey MOVE_%d: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             i, g_moveModifiers, '0' + i, ok, ok ? 0 : GetLastError());
     }
   }
   if (g_enableSwitchDesktop) {
     for (int i = 1; i <= g_maxDesktops; ++i) {
-      RegisterHotKey(nullptr, HK_SWITCH_BASE + i - 1, g_switchModifiers, '0' + i);
+      BOOL ok = RegisterHotKey(nullptr, HK_SWITCH_BASE + i - 1, g_switchModifiers, '0' + i);
+      Wh_Log(L"RegisterHotKey SWITCH_%d: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             i, g_switchModifiers, '0' + i, ok, ok ? 0 : GetLastError());
     }
   }
   if (g_enablePrevNextDesktop) {
-    RegisterHotKey(nullptr, HK_PREV, g_utilityModifiers, g_prevDesktopKey);
-    RegisterHotKey(nullptr, HK_PREV_INDEX, g_utilityModifiers, g_prevIndexKey);
-    RegisterHotKey(nullptr, HK_NEXT, g_utilityModifiers, g_nextDesktopKey);
+    BOOL ok;
+    ok = RegisterHotKey(nullptr, HK_PREV, g_utilityModifiers, g_prevDesktopKey);
+    Wh_Log(L"RegisterHotKey PREV: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+           g_utilityModifiers, g_prevDesktopKey, ok, ok ? 0 : GetLastError());
+    ok = RegisterHotKey(nullptr, HK_NEXT, g_utilityModifiers, g_nextDesktopKey);
+    Wh_Log(L"RegisterHotKey NEXT: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+           g_utilityModifiers, g_nextDesktopKey, ok, ok ? 0 : GetLastError());
+    ok = RegisterHotKey(nullptr, HK_LAST, g_utilityModifiers, g_lastDesktopKey);
+    Wh_Log(L"RegisterHotKey LAST: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+           g_utilityModifiers, g_lastDesktopKey, ok, ok ? 0 : GetLastError());
   }
   if (g_enablePinWindow) {
-    RegisterHotKey(nullptr, HK_PIN, g_utilityModifiers, g_pinKey);
+    BOOL ok = RegisterHotKey(nullptr, HK_PIN, g_utilityModifiers, g_pinKey);
+    Wh_Log(L"RegisterHotKey PIN: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+           g_utilityModifiers, g_pinKey, ok, ok ? 0 : GetLastError());
   }
   Wh_Log(L"Hotkeys registered");
 
@@ -1076,10 +1184,10 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
             GoToDesktopNum(hotkeyId - HK_SWITCH_BASE + 1);
           } else if (hotkeyId == HK_PREV) {
             SwitchToPreviousDesktop();
-          } else if (hotkeyId == HK_PREV_INDEX) {
-            SwitchToPreviousIndexDesktop();
           } else if (hotkeyId == HK_NEXT) {
             SwitchToNextDesktop();
+          } else if (hotkeyId == HK_LAST) {
+            SwitchToLastDesktop();
           } else if (hotkeyId == HK_PIN) {
             TogglePinWindow();
           }
@@ -1102,11 +1210,15 @@ cleanup:
   }
   if (g_enablePrevNextDesktop) {
     UnregisterHotKey(nullptr, HK_PREV);
-    UnregisterHotKey(nullptr, HK_PREV_INDEX);
     UnregisterHotKey(nullptr, HK_NEXT);
+    UnregisterHotKey(nullptr, HK_LAST);
   }
   if (g_enablePinWindow) {
     UnregisterHotKey(nullptr, HK_PIN);
+  }
+
+  if (foregroundHook) {
+    UnhookWinEvent(foregroundHook);
   }
 
   CleanupVirtualDesktopAPI();
@@ -1159,6 +1271,8 @@ void StopHotkeyThread() {
 
   g_threadId = 0;
   g_stopHotkeyThread = false;
+  g_hasCurrentDesktop = false;
+  g_currentDesktopId = {};
 }
 
 //=============================================================================

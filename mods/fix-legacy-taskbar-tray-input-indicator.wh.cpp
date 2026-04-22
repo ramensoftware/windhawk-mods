@@ -2,10 +2,9 @@
 // @id              fix-legacy-taskbar-tray-input-indicator
 // @name            Fix language indicator in Win10 taskbar under Win11 24H2+
 // @description     Fixes text orientation in the keyboard layout indicator in Win10 taskbar running under Win11 24H2+
-// @version         1.0.0
+// @version         1.4.0
 // @author          Anixx
 // @github          https://github.com/Anixx
-// @architecture    x86-64
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -luser32
 // ==/WindhawkMod==
@@ -32,90 +31,155 @@ Windows 11 taskbar.
 
 #include <windows.h>
 
-static wchar_t g_lastText[8] = {};
-static DWORD g_captureTime = 0;
-static bool g_drawn = false;
-static LOGFONTW g_lastFont = {};
+static wchar_t g_text[8] = {};
+static LOGFONTW g_font = {};
+static int g_srcW = 0;
+static int g_srcH = 0;
+static bool g_pending = false;
+static DWORD g_threadId = 0;
+static COLORREF g_lastGoodBg = CLR_INVALID;
+static bool g_firstBltDone = false;
 
-static bool LooksLikeLayoutText(LPCWSTR lpchText, int len) {
-    if (!lpchText || len < 2 || len > 4) return false;
+static bool LooksLikeLayoutText(LPCWSTR s, int len) {
+    if (!s || len < 2 || len > 4) return false;
     for (int i = 0; i < len; i++) {
-        if (!IsCharAlphaW(lpchText[i])) return false;
+        if (!IsCharAlphaW(s[i])) return false;
     }
     return true;
 }
 
-static bool IsRotatedFont(HDC hdc) {
+static bool IsRotatedFont(HDC hdc, LOGFONTW* pLF) {
     HFONT hFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
     if (!hFont) return false;
-    if (GetObjectW(hFont, sizeof(g_lastFont), &g_lastFont) == 0) return false;
-    return (g_lastFont.lfEscapement != 0 || g_lastFont.lfOrientation != 0);
+    if (GetObjectW(hFont, sizeof(*pLF), pLF) == 0) return false;
+    return (pLF->lfEscapement != 0 || pLF->lfOrientation != 0);
 }
 
-using ExtTextOutW_t = BOOL(WINAPI*)(HDC, int, int, UINT, const RECT*, LPCWSTR, UINT, const INT*);
-ExtTextOutW_t ExtTextOutW_Original = nullptr;
+using ExtTextOutW_t = BOOL(WINAPI*)(HDC, int, int, UINT, const RECT*,
+                                     LPCWSTR, UINT, const INT*);
+static ExtTextOutW_t ExtTextOutW_Original = nullptr;
 
-BOOL WINAPI ExtTextOutW_Hook(HDC hdc, int x, int y, UINT options, 
-                              const RECT* lprect, LPCWSTR lpString, 
+BOOL WINAPI ExtTextOutW_Hook(HDC hdc, int x, int y, UINT options,
+                              const RECT* lprect, LPCWSTR lpString,
                               UINT c, const INT* lpDx) {
     int len = (int)c;
-    
-    if (LooksLikeLayoutText(lpString, len) && IsRotatedFont(hdc)) {
-        wcsncpy_s(g_lastText, lpString, len);
-        g_lastText[len] = 0;
-        g_captureTime = GetTickCount();
-        g_drawn = false;
-        return TRUE;
+    LOGFONTW lf = {};
+
+    if (LooksLikeLayoutText(lpString, len) && IsRotatedFont(hdc, &lf)) {
+        HBITMAP hbm = (HBITMAP)GetCurrentObject(hdc, OBJ_BITMAP);
+        BITMAP bm = {};
+        if (hbm && GetObject(hbm, sizeof(bm), &bm)) {
+            
+            if (!g_pending) {
+                wcsncpy_s(g_text, lpString, len);
+                g_text[len] = 0;
+                g_font = lf;
+                g_srcW = bm.bmWidth;
+                g_srcH = bm.bmHeight;
+                g_pending = true;
+                g_firstBltDone = false;
+                g_threadId = GetCurrentThreadId();
+            }
+
+            COLORREF fillColor = (g_lastGoodBg != CLR_INVALID) ? g_lastGoodBg : GetSysColor(COLOR_BTNFACE);
+            RECT rc = { 0, 0, bm.bmWidth, bm.bmHeight };
+            HBRUSH hBr = CreateSolidBrush(fillColor);
+            FillRect(hdc, &rc, hBr);
+            DeleteObject(hBr);
+
+            return TRUE;
+        }
     }
 
     return ExtTextOutW_Original(hdc, x, y, options, lprect, lpString, c, lpDx);
 }
 
 using BitBlt_t = BOOL(WINAPI*)(HDC, int, int, int, int, HDC, int, int, DWORD);
-BitBlt_t BitBlt_Original = nullptr;
+static BitBlt_t BitBlt_Original = nullptr;
 
-BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int width, int height,
+BOOL WINAPI BitBlt_Hook(HDC hdcDest, int xDest, int yDest, int w, int h,
                          HDC hdcSrc, int xSrc, int ySrc, DWORD rop) {
-    
-    BOOL result = BitBlt_Original(hdcDest, xDest, yDest, width, height, hdcSrc, xSrc, ySrc, rop);
-    
-    DWORD elapsed = GetTickCount() - g_captureTime;
-    
-    if (g_lastText[0] != 0 && elapsed < 100 && !g_drawn) {
-        if (width >= 30 && width <= 50 && height >= 15 && height <= 30) {
-            
-            RECT rc = { xDest, yDest, xDest + width, yDest + height };
-            
-            HBRUSH hBrush = GetSysColorBrush(COLOR_3DFACE);
-            FillRect(hdcDest, &rc, hBrush);
-            
-            LOGFONTW lf = g_lastFont;
-            lf.lfEscapement = 0;
-            lf.lfOrientation = 0;
-            
-            HFONT hFont = CreateFontIndirectW(&lf);
-            if (hFont) {
-                HFONT hOld = (HFONT)SelectObject(hdcDest, hFont);
-                SetBkMode(hdcDest, TRANSPARENT);
-                SetTextColor(hdcDest, GetSysColor(COLOR_BTNTEXT));
-                
-                DrawTextW(hdcDest, g_lastText, -1, &rc, 
-                          DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                
-                SelectObject(hdcDest, hOld);
-                DeleteObject(hFont);
-            }
-            
-            g_drawn = true;
-        }
+
+    BOOL result = BitBlt_Original(hdcDest, xDest, yDest, w, h, hdcSrc, xSrc, ySrc, rop);
+
+    if (!g_pending || g_srcW <= 0 || g_srcH <= 0) {
+        return result;
     }
     
+    if (GetCurrentThreadId() != g_threadId) {
+        return result;
+    }
+
+    if (xDest != 0 || yDest != 0) {
+        return result;
+    }
+
+    // BitBlt #1: точное совпадение с исходным размером — пропускаем
+    bool isFirstBlit = (w == g_srcW && h == g_srcH);
+    if (isFirstBlit) {
+        g_firstBltDone = true;
+        return result;
+    }
+    
+    if (!g_firstBltDone) {
+        return result;
+    }
+    
+    // BitBlt #2: первый после #1, размер БОЛЬШЕ исходного
+    // (индикатор всегда больше чем маленький bitmap с текстом)
+    // Ширина должна быть >= srcH (текст был повёрнут, теперь горизонтальный)
+    bool isIndicator = (w > g_srcW || h > g_srcH) && (w >= g_srcH);
+    
+    if (!isIndicator) {
+        return result;
+    }
+
+    COLORREF bgColor = GetPixel(hdcDest, w - 1, h - 1);
+    
+    if (bgColor != CLR_INVALID && bgColor != 0x000000) {
+        g_lastGoodBg = bgColor;
+    } else if (g_lastGoodBg != CLR_INVALID) {
+        bgColor = g_lastGoodBg;
+    } else {
+        bgColor = GetSysColor(COLOR_BTNFACE);
+    }
+
+    RECT rc = { 0, 0, w, h };
+
+    HBRUSH hBr = CreateSolidBrush(bgColor);
+    FillRect(hdcDest, &rc, hBr);
+    DeleteObject(hBr);
+
+    LOGFONTW lfH = g_font;
+    lfH.lfEscapement = 0;
+    lfH.lfOrientation = 0;
+
+    HFONT hFont = CreateFontIndirectW(&lfH);
+    if (hFont) {
+        HFONT hOld = (HFONT)SelectObject(hdcDest, hFont);
+        SetBkMode(hdcDest, TRANSPARENT);
+        SetTextColor(hdcDest, GetSysColor(COLOR_BTNTEXT));
+
+        DrawTextW(hdcDest, g_text, -1, &rc,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+        SelectObject(hdcDest, hOld);
+        DeleteObject(hFont);
+    }
+
+    g_pending = false;
+
     return result;
 }
 
 BOOL Wh_ModInit() {
-    Wh_SetFunctionHook((void*)ExtTextOutW, (void*)ExtTextOutW_Hook, (void**)&ExtTextOutW_Original);
-    Wh_SetFunctionHook((void*)BitBlt, (void*)BitBlt_Hook, (void**)&BitBlt_Original);
+    Wh_SetFunctionHook((void*)ExtTextOutW,
+                        (void*)ExtTextOutW_Hook,
+                        (void**)&ExtTextOutW_Original);
+
+    Wh_SetFunctionHook((void*)BitBlt,
+                        (void*)BitBlt_Hook,
+                        (void**)&BitBlt_Original);
     return TRUE;
 }
 

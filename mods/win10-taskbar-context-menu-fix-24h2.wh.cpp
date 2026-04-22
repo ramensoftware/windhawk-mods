@@ -2,9 +2,10 @@
 // @id win10-taskbar-context-menu-fix-24h2
 // @name Windows 10 Taskbar Context Menu Fix for Win11 24H2+
 // @description Fixes context menu on Windows 10 taskbar running on Windows 11 24H2, 25H2 and later
-// @version 1.0
+// @version 1.2
 // @author Anixx
 // @github          https://github.com/Anixx
+// @architecture    x86-64
 // @include explorer.exe
 // ==/WindhawkMod==
 
@@ -12,8 +13,7 @@
 /*
 The taskbar context menu (when clicking on the taskbar empty area) does not appear when
 running the Windows 10 taskbar ob Windows 11 24H2 or Windows 11 25H2.
-This mod restores the menu. If anyone knows where is stored the localization for
-the string "Lock the taskbar", feel free to contact.
+This mod restores the menu.
 */
 // ==/WindhawkModReadme==
 
@@ -23,18 +23,14 @@ the string "Lock the taskbar", feel free to contact.
 static HMODULE g_explorerModule;
 static HMODULE g_shell32Module;
 static HMODULE g_bthpropsModule;
+static HMODULE g_explorerframeModule;
 
-#define IDM_CASCADE         0x193
-#define IDM_SIDEBYSIDE      0x194
-#define IDM_STACKED         0x195
 #define IDM_SHOWDESKTOP     0x197
 #define IDM_TASKMANAGER     0x1A4
 #define IDM_LOCKTASKBAR     0x1A8
 #define IDM_SETTINGS        0x19D
+#define IDM_LOCKTOOLBARS    41484
 
-#define IDS_CASCADE         535    // explorer.exe
-#define IDS_SIDEBYSIDE      536    // explorer.exe
-#define IDS_STACKED         538    // explorer.exe
 #define IDS_SHOWDESKTOP     10113  // shell32.dll
 #define IDS_TASKMANAGER     24743  // shell32.dll
 #define IDS_SETTINGS        2128   // bthprops.cpl
@@ -44,6 +40,43 @@ LoadMenuW_t LoadMenuW_Original;
 
 static wchar_t* LoadStr(HMODULE hMod, UINT id, wchar_t* buf, int size) {
     if (LoadStringW(hMod, id, buf, size) > 0) return buf;
+    return nullptr;
+}
+
+static wchar_t* GetLockToolbarsText(wchar_t* buf, int size) {
+    // Пытаемся получить текст из explorerframe.dll menu resource
+    if (g_explorerframeModule) {
+        HMENU hMenu = LoadMenuW_Original(g_explorerframeModule, MAKEINTRESOURCEW(264));
+        if (hMenu) {
+            // Ищем в меню пункт с ID 41484
+            for (int i = 0; i < GetMenuItemCount(hMenu); i++) {
+                MENUITEMINFOW mii = {0};
+                mii.cbSize = sizeof(mii);
+                mii.fMask = MIIM_SUBMENU;
+                
+                if (GetMenuItemInfoW(hMenu, i, TRUE, &mii) && mii.hSubMenu) {
+                    for (int j = 0; j < GetMenuItemCount(mii.hSubMenu); j++) {
+                        MENUITEMINFOW subMii = {0};
+                        subMii.cbSize = sizeof(subMii);
+                        subMii.fMask = MIIM_ID | MIIM_STRING;
+                        wchar_t text[256] = {0};
+                        subMii.dwTypeData = text;
+                        subMii.cch = 255;
+                        
+                        if (GetMenuItemInfoW(mii.hSubMenu, j, TRUE, &subMii) && 
+                            subMii.wID == IDM_LOCKTOOLBARS) {
+                            wcsncpy_s(buf, size, text, _TRUNCATE);
+                            DestroyMenu(hMenu);
+                            return buf;
+                        }
+                    }
+                }
+            }
+            DestroyMenu(hMenu);
+        }
+    }
+    
+    // Fallback на английский
     return nullptr;
 }
 
@@ -61,20 +94,7 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
 
     wchar_t buf[256];
 
-    AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
-
-    wchar_t* str = LoadStr(g_explorerModule, IDS_CASCADE, buf, 256);
-    AppendMenuW(hPopup, MF_STRING, IDM_CASCADE, str ? str : L"Cascade windows");
-
-    str = LoadStr(g_explorerModule, IDS_SIDEBYSIDE, buf, 256);
-    AppendMenuW(hPopup, MF_STRING, IDM_SIDEBYSIDE, str ? str : L"Show windows side by side");
-
-    str = LoadStr(g_explorerModule, IDS_STACKED, buf, 256);
-    AppendMenuW(hPopup, MF_STRING, IDM_STACKED, str ? str : L"Show windows stacked");
-
-    AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
-
-    str = LoadStr(g_shell32Module, IDS_SHOWDESKTOP, buf, 256);
+    wchar_t* str = LoadStr(g_shell32Module, IDS_SHOWDESKTOP, buf, 256);
     AppendMenuW(hPopup, MF_STRING, IDM_SHOWDESKTOP, str ? str : L"Show the desktop");
 
     AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
@@ -84,7 +104,10 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
 
     AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
 
-    AppendMenuW(hPopup, MF_STRING, IDM_LOCKTASKBAR, L"Lock the taskbar");
+    // Получаем локализованный текст для "Lock the toolbars"
+    wchar_t lockBuf[256];
+    str = GetLockToolbarsText(lockBuf, 256);
+    AppendMenuW(hPopup, MF_STRING, IDM_LOCKTASKBAR, str ? str : L"Lock the taskbar");
 
     str = LoadStr(g_bthpropsModule, IDS_SETTINGS, buf, 256);
     AppendMenuW(hPopup, MF_STRING, IDM_SETTINGS, str ? str : L"Taskbar settings");
@@ -108,8 +131,11 @@ BOOL Wh_ModInit() {
     g_explorerModule = GetModuleHandleW(nullptr);
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
     g_bthpropsModule = LoadLibraryW(L"bthprops.cpl");
+    g_explorerframeModule = GetModuleHandleW(L"explorerframe.dll");
 
-    return Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
+    Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
+
+    return TRUE;
 }
 
 void Wh_ModUninit() {
