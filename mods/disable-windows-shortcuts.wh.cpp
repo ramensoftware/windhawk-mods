@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.0.0
+// @version         1.1.0
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -14,8 +14,20 @@
 # Disable Windows Shortcuts
 Selectively disable Windows keyboard shortcuts with individual toggles for each shortcut.
 
-## ⚠️ Important Installation Step ⚠️
-For this mod to successfully block window snapping (Win+Arrows) and Task View (Win+Tab), you **must** allow Windhawk to inject into the Desktop Window Manager (`dwm.exe`):
+## Features
+- Disable any Windows key combination
+- Individual toggle for each shortcut
+- Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.
+
+## Special Shortcuts
+A small number of system shortcuts (Win+A, Win+C, Win+K, Win+N, Win+P, Win+U) and hardcoded keys (Win+Tab, Win+Arrows) operate at a lower OS level.
+To handle these properly, this mod provides **three options** for them in a dedicated section at the top of the settings:
+- **0 - Off:** The shortcut is completely unaffected.
+- **1 - Disable hotkey:** Disables the shortcut natively. Lightweight, but third-party apps that simulate these keys (like custom taskbars) will also be blocked.
+- **2 - Block hotkey:** Blocks the physical keystroke but tricks Windows into thinking it was registered. This allows simulating apps to work while physically blocking the key, but **requires injecting into `dwm.exe`**.
+
+## ⚠️ Important `dwm.exe` Installation Step ⚠️
+If you use the **"Block hotkey"** option, or if you disable window snapping (Win+Arrows) or Task View (Win+Tab), you **must** allow Windhawk to inject into the Desktop Window Manager (`dwm.exe`):
 1. Open Windhawk and go to **Settings**
 2. Click on **Advanced settings** at the bottom
 3. Under **Process inclusion list**, ensure `dwm.exe` is added (or `*` is used to include all processes)
@@ -23,245 +35,252 @@ For this mod to successfully block window snapping (Win+Arrows) and Task View (W
 
 *Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to take effect. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must manually restart Explorer to restore those standard shortcuts.*
 
-## Features
-- Disable any Windows key combination
-- Individual toggle for each shortcut
-- Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.
-- Settings apply instantly without needing to restart Explorer!
-
-## Supported Shortcuts
-### General
-- Win+B through Win+Z (excluding Win, Win+L, Win+Q)
-- Win+Tab, Win+Arrow Keys, Win+Home
-### With Modifiers
-- Win+Shift combinations
-- Win+Ctrl combinations
-- Win+Alt combinations
-- Win+Ctrl+Shift combinations
-### Special
-- Win+Number (0-9) for taskbar apps
-- Win+Plus/Minus for Magnifier
-- Win+Period/Semicolon for Emoji picker
-- Office hotkeys (Ctrl+Shift+Alt+Win)
-
 ## Notes
 - Win key (Start Menu) is handled by the "Block Start Menu and Hosts" mod
 - Win+L (Lock PC) cannot be blocked through standard hooks
 - Win+Q is redundant with Win+S (both open Search)
-
-## Known Limitations
-- A small number of system shortcuts (Win+A, Win+K, Win+P, Win+U, Win+Tab, and Win+Arrows) are hardcoded into the OS at a low level. While this mod successfully blocks them from performing their default Windows actions, they cannot be freed up to be registered by third-party apps (like AutoHotkey or PowerToys). When these specific shortcuts are disabled, they simply do nothing.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- DisableWinA: false
-  $name: Win+A
-  $description: Action Center / Quick Settings
-- DisableWinB: false
-  $name: Win+B
-  $description: Focus system tray
-- DisableWinC: false
-  $name: Win+C
-  $description: Cortana / Copilot
-- DisableWinD: false
-  $name: Win+D
-  $description: Show/Hide Desktop
-- DisableWinE: false
-  $name: Win+E
-  $description: File Explorer
-- DisableWinF: false
-  $name: Win+F
-  $description: Feedback Hub
-- DisableWinG: false
-  $name: Win+G
-  $description: Game Bar
-- DisableWinH: false
-  $name: Win+H
-  $description: Dictation / Voice Typing
-- DisableWinI: false
-  $name: Win+I
-  $description: Settings
-- DisableWinJ: false
-  $name: Win+J
-  $description: Focus Windows tips
-- DisableWinK: false
-  $name: Win+K
-  $description: Connect (Cast)
-- DisableWinM: false
-  $name: Win+M
-  $description: Minimize all windows
-- DisableWinN: false
-  $name: Win+N
-  $description: Notification Center
-- DisableWinO: false
-  $name: Win+O
-  $description: Lock device orientation
-- DisableWinP: false
-  $name: Win+P
-  $description: Project / Display mode
-- DisableWinR: false
-  $name: Win+R
-  $description: Run dialog
-- DisableWinS: false
-  $name: Win+S
-  $description: Search
-- DisableWinT: false
-  $name: Win+T
-  $description: Cycle taskbar apps
-- DisableWinU: false
-  $name: Win+U
-  $description: Accessibility Settings
-- DisableWinV: false
-  $name: Win+V
-  $description: Clipboard History
-- DisableWinW: false
-  $name: Win+W
-  $description: Widgets
-- DisableWinX: false
-  $name: Win+X
-  $description: Quick Link menu
-- DisableWinY: false
-  $name: Win+Y
-  $description: Switch input (Mixed Reality)
-- DisableWinZ: false
-  $name: Win+Z
-  $description: Snap Layouts
-- DisableWinTab: false
-  $name: Win+Tab
-  $description: Task View
-- DisableWinUp: false
-  $name: Win+Up
-  $description: Maximize window
-- DisableWinDown: false
-  $name: Win+Down
-  $description: Restore/Minimize window
-- DisableWinLeft: false
-  $name: Win+Left
-  $description: Snap window left
-- DisableWinRight: false
-  $name: Win+Right
-  $description: Snap window right
-- DisableWinHome: false
-  $name: Win+Home
-  $description: Minimize inactive windows
-- DisableWinShiftM: false
-  $name: Win+Shift+M
-  $description: Restore minimized windows
-- DisableWinComma: false
-  $name: Win+Comma
-  $description: Peek at desktop
-- DisableWinPause: false
-  $name: Win+Pause
-  $description: System Properties
-- DisableWinCtrlD: false
-  $name: Win+Ctrl+D
-  $description: New virtual desktop
-- DisableWinCtrlF4: false
-  $name: Win+Ctrl+F4
-  $description: Close virtual desktop
-- DisableWinCtrlLeft: false
-  $name: Win+Ctrl+Left
-  $description: Previous virtual desktop
-- DisableWinCtrlRight: false
-  $name: Win+Ctrl+Right
-  $description: Next virtual desktop
-- DisableWinNumbers: false
-  $name: Win+Number (0-9)
-  $description: Launch/switch taskbar apps
-- DisableWinShiftNumbers: false
-  $name: Win+Shift+Number
-  $description: Launch new instance
-- DisableWinCtrlNumbers: false
-  $name: Win+Ctrl+Number
-  $description: Switch to last active window
-- DisableWinAltNumbers: false
-  $name: Win+Alt+Number
-  $description: Open Jump List
-- DisableWinPlus: false
-  $name: Win+Plus
-  $description: Magnifier zoom in
-- DisableWinMinus: false
-  $name: Win+Minus
-  $description: Magnifier zoom out
-- DisableWinEsc: false
-  $name: Win+Esc
-  $description: Close Magnifier
-- DisableWinCtrlEnter: false
-  $name: Win+Ctrl+Enter
-  $description: Narrator
-- DisableWinCtrlC: false
-  $name: Win+Ctrl+C
-  $description: Color filters
-- DisableWinCtrlN: false
-  $name: Win+Ctrl+N
-  $description: Narrator settings
-- DisableWinCtrlO: false
-  $name: Win+Ctrl+O
-  $description: On-Screen Keyboard
-- DisableWinCtrlS: false
-  $name: Win+Ctrl+S
-  $description: Speech Recognition
-- DisableWinSpace: false
-  $name: Win+Space
-  $description: Switch keyboard layout
-- DisableWinShiftS: false
-  $name: Win+Shift+S
-  $description: Snipping Tool screenshot
-- DisableWinAltK: false
-  $name: Win+Alt+K
-  $description: Toggle microphone (calls)
-- DisableWinPeriod: false
-  $name: Win+Period
-  $description: Emoji picker
-- DisableWinSemicolon: false
-  $name: Win+Semicolon
-  $description: Emoji picker (alt)
-- DisableWinPrtSc: false
-  $name: Win+PrtSc
-  $description: Screenshot to file
-- DisableWinShiftLeft: false
-  $name: Win+Shift+Left
-  $description: Move window to left monitor
-- DisableWinShiftRight: false
-  $name: Win+Shift+Right
-  $description: Move window to right monitor
-- DisableWinShiftUp: false
-  $name: Win+Shift+Up
-  $description: Stretch window vertically
-- DisableWinShiftDown: false
-  $name: Win+Shift+Down
-  $description: Restore/minimize height
-- DisableOfficeHotkeys: false
-  $name: Office Hotkeys
-  $description: Ctrl+Shift+Alt+Win combinations
-- DisableWinAltD: false
-  $name: Win+Alt+D
-  $description: Show date/time
-- DisableWinAltB: false
-  $name: Win+Alt+B
-  $description: Toggle HDR
-- DisableWinAltR: false
-  $name: Win+Alt+R
-  $description: Record (Game Bar)
-- DisableWinAltG: false
-  $name: Win+Alt+G
-  $description: Record last 30s (Game Bar)
-- DisableWinAltPrtSc: false
-  $name: Win+Alt+PrtSc
-  $description: Screenshot (Game Bar)
-- DisableWinAltT: false
-  $name: Win+Alt+T
-  $description: Show/hide recording timer
-- DisableWinAltM: false
-  $name: Win+Alt+M
-  $description: Toggle microphone (Game Bar)
-- DisableWinCtrlShiftB: false
-  $name: Win+Ctrl+Shift+B
-  $description: Restart graphics driver
-- DisableWinCtrlQ: false
-  $name: Win+Ctrl+Q
-  $description: Quick Assist
+- SpecialShortcuts:
+  - DisableWinA: "off"
+    $name: Win+A
+    $description: Action Center / Quick Settings
+    $options:
+    - "off": Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinC: "off"
+    $name: Win+C
+    $description: Cortana / Copilot (May require 'Block hotkey' on Win 11)
+    $options:
+    - "off": Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinK: "off"
+    $name: Win+K
+    $description: Connect (Cast)
+    $options:
+    - "off": Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinN: "off"
+    $name: Win+N
+    $description: Notification Center
+    $options:
+    - "off": Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinP: "off"
+    $name: Win+P
+    $description: Project / Display mode
+    $options:
+    - "off": Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  - DisableWinU: "off"
+    $name: Win+U
+    $description: Accessibility Settings
+    $options:
+    - "off": Off
+    - disable: Disable hotkey (Simulating apps affected)
+    - block: Block hotkey (Requires dwm.exe, simulating apps work)
+  $name: Special Shortcuts (3-Tier Options)
+  $description: See 'Special Shortcuts' in Details
+
+- StandardShortcuts:
+  - DisableWinB: false
+    $name: Win+B
+    $description: Focus system tray
+  - DisableWinD: false
+    $name: Win+D
+    $description: Show/Hide Desktop
+  - DisableWinE: false
+    $name: Win+E
+    $description: File Explorer
+  - DisableWinF: false
+    $name: Win+F
+    $description: Feedback Hub
+  - DisableWinG: false
+    $name: Win+G
+    $description: Game Bar
+  - DisableWinH: false
+    $name: Win+H
+    $description: Dictation / Voice Typing
+  - DisableWinI: false
+    $name: Win+I
+    $description: Settings
+  - DisableWinJ: false
+    $name: Win+J
+    $description: Focus Windows tips
+  - DisableWinM: false
+    $name: Win+M
+    $description: Minimize all windows
+  - DisableWinO: false
+    $name: Win+O
+    $description: Lock device orientation
+  - DisableWinR: false
+    $name: Win+R
+    $description: Run dialog
+  - DisableWinS: false
+    $name: Win+S
+    $description: Search
+  - DisableWinT: false
+    $name: Win+T
+    $description: Cycle taskbar apps
+  - DisableWinV: false
+    $name: Win+V
+    $description: Clipboard History
+  - DisableWinW: false
+    $name: Win+W
+    $description: Widgets
+  - DisableWinX: false
+    $name: Win+X
+    $description: Quick Link menu
+  - DisableWinY: false
+    $name: Win+Y
+    $description: Switch input (Mixed Reality)
+  - DisableWinZ: false
+    $name: Win+Z
+    $description: Snap Layouts
+  - DisableWinTab: false
+    $name: Win+Tab
+    $description: Task View
+  - DisableWinUp: false
+    $name: Win+Up
+    $description: Maximize window
+  - DisableWinDown: false
+    $name: Win+Down
+    $description: Restore/Minimize window
+  - DisableWinLeft: false
+    $name: Win+Left
+    $description: Snap window left
+  - DisableWinRight: false
+    $name: Win+Right
+    $description: Snap window right
+  - DisableWinHome: false
+    $name: Win+Home
+    $description: Minimize inactive windows
+  - DisableWinShiftM: false
+    $name: Win+Shift+M
+    $description: Restore minimized windows
+  - DisableWinComma: false
+    $name: Win+Comma
+    $description: Peek at desktop
+  - DisableWinPause: false
+    $name: Win+Pause
+    $description: System Properties
+  - DisableWinCtrlD: false
+    $name: Win+Ctrl+D
+    $description: New virtual desktop
+  - DisableWinCtrlF4: false
+    $name: Win+Ctrl+F4
+    $description: Close virtual desktop
+  - DisableWinCtrlLeft: false
+    $name: Win+Ctrl+Left
+    $description: Previous virtual desktop
+  - DisableWinCtrlRight: false
+    $name: Win+Ctrl+Right
+    $description: Next virtual desktop
+  - DisableWinNumbers: false
+    $name: Win+Number (0-9)
+    $description: Launch/switch taskbar apps
+  - DisableWinShiftNumbers: false
+    $name: Win+Shift+Number
+    $description: Launch new instance
+  - DisableWinCtrlNumbers: false
+    $name: Win+Ctrl+Number
+    $description: Switch to last active window
+  - DisableWinAltNumbers: false
+    $name: Win+Alt+Number
+    $description: Open Jump List
+  - DisableWinPlus: false
+    $name: Win+Plus
+    $description: Magnifier zoom in
+  - DisableWinMinus: false
+    $name: Win+Minus
+    $description: Magnifier zoom out
+  - DisableWinEsc: false
+    $name: Win+Esc
+    $description: Close Magnifier
+  - DisableWinCtrlEnter: false
+    $name: Win+Ctrl+Enter
+    $description: Narrator
+  - DisableWinCtrlC: false
+    $name: Win+Ctrl+C
+    $description: Color filters
+  - DisableWinCtrlN: false
+    $name: Win+Ctrl+N
+    $description: Narrator settings
+  - DisableWinCtrlO: false
+    $name: Win+Ctrl+O
+    $description: On-Screen Keyboard
+  - DisableWinCtrlS: false
+    $name: Win+Ctrl+S
+    $description: Speech Recognition
+  - DisableWinSpace: false
+    $name: Win+Space
+    $description: Switch keyboard layout
+  - DisableWinShiftS: false
+    $name: Win+Shift+S
+    $description: Snipping Tool screenshot
+  - DisableWinAltK: false
+    $name: Win+Alt+K
+    $description: Toggle microphone (calls)
+  - DisableWinPeriod: false
+    $name: Win+Period
+    $description: Emoji picker
+  - DisableWinSemicolon: false
+    $name: Win+Semicolon
+    $description: Emoji picker (alt)
+  - DisableWinPrtSc: false
+    $name: Win+PrtSc
+    $description: Screenshot to file
+  - DisableWinShiftLeft: false
+    $name: Win+Shift+Left
+    $description: Move window to left monitor
+  - DisableWinShiftRight: false
+    $name: Win+Shift+Right
+    $description: Move window to right monitor
+  - DisableWinShiftUp: false
+    $name: Win+Shift+Up
+    $description: Stretch window vertically
+  - DisableWinShiftDown: false
+    $name: Win+Shift+Down
+    $description: Restore/minimize height
+  - DisableOfficeHotkeys: false
+    $name: Office Hotkeys
+    $description: Ctrl+Shift+Alt+Win combinations
+  - DisableWinAltD: false
+    $name: Win+Alt+D
+    $description: Show date/time
+  - DisableWinAltB: false
+    $name: Win+Alt+B
+    $description: Toggle HDR
+  - DisableWinAltR: false
+    $name: Win+Alt+R
+    $description: Record (Game Bar)
+  - DisableWinAltG: false
+    $name: Win+Alt+G
+    $description: Record last 30s (Game Bar)
+  - DisableWinAltPrtSc: false
+    $name: Win+Alt+PrtSc
+    $description: Screenshot (Game Bar)
+  - DisableWinAltT: false
+    $name: Win+Alt+T
+    $description: Show/hide recording timer
+  - DisableWinAltM: false
+    $name: Win+Alt+M
+    $description: Toggle microphone (Game Bar)
+  - DisableWinCtrlShiftB: false
+    $name: Win+Ctrl+Shift+B
+    $description: Restart graphics driver
+  - DisableWinCtrlQ: false
+    $name: Win+Ctrl+Q
+    $description: Quick Assist
+  $name: Standard Shortcuts (On/Off)
+  $description: Regular shortcuts that only require Explorer
 */
 // ==/WindhawkModSettings==
 
@@ -277,9 +296,9 @@ bool g_isDWM = false;
 // Settings structure
 struct
 {
-    bool DisableWinA;
+    int DisableWinA;
     bool DisableWinB;
-    bool DisableWinC;
+    int DisableWinC;
     bool DisableWinD;
     bool DisableWinE;
     bool DisableWinF;
@@ -287,15 +306,15 @@ struct
     bool DisableWinH;
     bool DisableWinI;
     bool DisableWinJ;
-    bool DisableWinK;
+    int DisableWinK;
     bool DisableWinM;
-    bool DisableWinN;
+    int DisableWinN;
     bool DisableWinO;
-    bool DisableWinP;
+    int DisableWinP;
     bool DisableWinR;
     bool DisableWinS;
     bool DisableWinT;
-    bool DisableWinU;
+    int DisableWinU;
     bool DisableWinV;
     bool DisableWinW;
     bool DisableWinX;
@@ -348,77 +367,90 @@ struct
     bool DisableWinCtrlQ;
 } g_settings;
 
+
+int GetSettingIntSafe(PCWSTR settingName) {
+    PCWSTR val = Wh_GetStringSetting(settingName);
+    if (!val) return 0;
+    int res = 0;
+    if (wcscmp(val, L"true") == 0 || wcscmp(val, L"disable") == 0) res = 1;
+    else if (wcscmp(val, L"false") == 0 || wcscmp(val, L"off") == 0) res = 0;
+    else if (wcscmp(val, L"block") == 0) res = 2;
+    else res = _wtoi(val); // fallback for legacy numbers
+    Wh_FreeStringSetting(val);
+    return res;
+}
+
 void LoadSettings()
 {
-    g_settings.DisableWinA = Wh_GetIntSetting(L"DisableWinA");
-    g_settings.DisableWinB = Wh_GetIntSetting(L"DisableWinB");
-    g_settings.DisableWinC = Wh_GetIntSetting(L"DisableWinC");
-    g_settings.DisableWinD = Wh_GetIntSetting(L"DisableWinD");
-    g_settings.DisableWinE = Wh_GetIntSetting(L"DisableWinE");
-    g_settings.DisableWinF = Wh_GetIntSetting(L"DisableWinF");
-    g_settings.DisableWinG = Wh_GetIntSetting(L"DisableWinG");
-    g_settings.DisableWinH = Wh_GetIntSetting(L"DisableWinH");
-    g_settings.DisableWinI = Wh_GetIntSetting(L"DisableWinI");
-    g_settings.DisableWinJ = Wh_GetIntSetting(L"DisableWinJ");
-    g_settings.DisableWinK = Wh_GetIntSetting(L"DisableWinK");
-    g_settings.DisableWinM = Wh_GetIntSetting(L"DisableWinM");
-    g_settings.DisableWinN = Wh_GetIntSetting(L"DisableWinN");
-    g_settings.DisableWinO = Wh_GetIntSetting(L"DisableWinO");
-    g_settings.DisableWinP = Wh_GetIntSetting(L"DisableWinP");
-    g_settings.DisableWinR = Wh_GetIntSetting(L"DisableWinR");
-    g_settings.DisableWinS = Wh_GetIntSetting(L"DisableWinS");
-    g_settings.DisableWinT = Wh_GetIntSetting(L"DisableWinT");
-    g_settings.DisableWinU = Wh_GetIntSetting(L"DisableWinU");
-    g_settings.DisableWinV = Wh_GetIntSetting(L"DisableWinV");
-    g_settings.DisableWinW = Wh_GetIntSetting(L"DisableWinW");
-    g_settings.DisableWinX = Wh_GetIntSetting(L"DisableWinX");
-    g_settings.DisableWinY = Wh_GetIntSetting(L"DisableWinY");
-    g_settings.DisableWinZ = Wh_GetIntSetting(L"DisableWinZ");
-    g_settings.DisableWinTab = Wh_GetIntSetting(L"DisableWinTab");
-    g_settings.DisableWinUp = Wh_GetIntSetting(L"DisableWinUp");
-    g_settings.DisableWinDown = Wh_GetIntSetting(L"DisableWinDown");
-    g_settings.DisableWinLeft = Wh_GetIntSetting(L"DisableWinLeft");
-    g_settings.DisableWinRight = Wh_GetIntSetting(L"DisableWinRight");
-    g_settings.DisableWinHome = Wh_GetIntSetting(L"DisableWinHome");
-    g_settings.DisableWinShiftM = Wh_GetIntSetting(L"DisableWinShiftM");
-    g_settings.DisableWinComma = Wh_GetIntSetting(L"DisableWinComma");
-    g_settings.DisableWinPause = Wh_GetIntSetting(L"DisableWinPause");
-    g_settings.DisableWinCtrlD = Wh_GetIntSetting(L"DisableWinCtrlD");
-    g_settings.DisableWinCtrlF4 = Wh_GetIntSetting(L"DisableWinCtrlF4");
-    g_settings.DisableWinCtrlLeft = Wh_GetIntSetting(L"DisableWinCtrlLeft");
-    g_settings.DisableWinCtrlRight = Wh_GetIntSetting(L"DisableWinCtrlRight");
-    g_settings.DisableWinNumbers = Wh_GetIntSetting(L"DisableWinNumbers");
-    g_settings.DisableWinShiftNumbers = Wh_GetIntSetting(L"DisableWinShiftNumbers");
-    g_settings.DisableWinCtrlNumbers = Wh_GetIntSetting(L"DisableWinCtrlNumbers");
-    g_settings.DisableWinAltNumbers = Wh_GetIntSetting(L"DisableWinAltNumbers");
-    g_settings.DisableWinPlus = Wh_GetIntSetting(L"DisableWinPlus");
-    g_settings.DisableWinMinus = Wh_GetIntSetting(L"DisableWinMinus");
-    g_settings.DisableWinEsc = Wh_GetIntSetting(L"DisableWinEsc");
-    g_settings.DisableWinCtrlEnter = Wh_GetIntSetting(L"DisableWinCtrlEnter");
-    g_settings.DisableWinCtrlC = Wh_GetIntSetting(L"DisableWinCtrlC");
-    g_settings.DisableWinCtrlN = Wh_GetIntSetting(L"DisableWinCtrlN");
-    g_settings.DisableWinCtrlO = Wh_GetIntSetting(L"DisableWinCtrlO");
-    g_settings.DisableWinCtrlS = Wh_GetIntSetting(L"DisableWinCtrlS");
-    g_settings.DisableWinSpace = Wh_GetIntSetting(L"DisableWinSpace");
-    g_settings.DisableWinShiftS = Wh_GetIntSetting(L"DisableWinShiftS");
-    g_settings.DisableWinAltK = Wh_GetIntSetting(L"DisableWinAltK");
-    g_settings.DisableWinPeriod = Wh_GetIntSetting(L"DisableWinPeriod");
-    g_settings.DisableWinSemicolon = Wh_GetIntSetting(L"DisableWinSemicolon");
-    g_settings.DisableWinPrtSc = Wh_GetIntSetting(L"DisableWinPrtSc");
-    g_settings.DisableWinShiftLeft = Wh_GetIntSetting(L"DisableWinShiftLeft");
-    g_settings.DisableWinShiftRight = Wh_GetIntSetting(L"DisableWinShiftRight");
-    g_settings.DisableWinShiftUp = Wh_GetIntSetting(L"DisableWinShiftUp");
-    g_settings.DisableWinShiftDown = Wh_GetIntSetting(L"DisableWinShiftDown");
-    g_settings.DisableOfficeHotkeys = Wh_GetIntSetting(L"DisableOfficeHotkeys");
-    g_settings.DisableWinAltD = Wh_GetIntSetting(L"DisableWinAltD");
-    g_settings.DisableWinAltB = Wh_GetIntSetting(L"DisableWinAltB");
-    g_settings.DisableWinAltR = Wh_GetIntSetting(L"DisableWinAltR");
-    g_settings.DisableWinAltG = Wh_GetIntSetting(L"DisableWinAltG");
-    g_settings.DisableWinAltPrtSc = Wh_GetIntSetting(L"DisableWinAltPrtSc");
-    g_settings.DisableWinAltT = Wh_GetIntSetting(L"DisableWinAltT");
-    g_settings.DisableWinAltM = Wh_GetIntSetting(L"DisableWinAltM");
-    g_settings.DisableWinCtrlShiftB = Wh_GetIntSetting(L"DisableWinCtrlShiftB");
-    g_settings.DisableWinCtrlQ = Wh_GetIntSetting(L"DisableWinCtrlQ");
+    g_settings.DisableWinA = GetSettingIntSafe(L"SpecialShortcuts.DisableWinA");
+    g_settings.DisableWinB = Wh_GetIntSetting(L"StandardShortcuts.DisableWinB");
+    g_settings.DisableWinC = GetSettingIntSafe(L"SpecialShortcuts.DisableWinC");
+    g_settings.DisableWinD = Wh_GetIntSetting(L"StandardShortcuts.DisableWinD");
+    g_settings.DisableWinE = Wh_GetIntSetting(L"StandardShortcuts.DisableWinE");
+    g_settings.DisableWinF = Wh_GetIntSetting(L"StandardShortcuts.DisableWinF");
+    g_settings.DisableWinG = Wh_GetIntSetting(L"StandardShortcuts.DisableWinG");
+    g_settings.DisableWinH = Wh_GetIntSetting(L"StandardShortcuts.DisableWinH");
+    g_settings.DisableWinI = Wh_GetIntSetting(L"StandardShortcuts.DisableWinI");
+    g_settings.DisableWinJ = Wh_GetIntSetting(L"StandardShortcuts.DisableWinJ");
+    g_settings.DisableWinK = GetSettingIntSafe(L"SpecialShortcuts.DisableWinK");
+    g_settings.DisableWinM = Wh_GetIntSetting(L"StandardShortcuts.DisableWinM");
+    g_settings.DisableWinN = GetSettingIntSafe(L"SpecialShortcuts.DisableWinN");
+    g_settings.DisableWinO = Wh_GetIntSetting(L"StandardShortcuts.DisableWinO");
+    g_settings.DisableWinP = GetSettingIntSafe(L"SpecialShortcuts.DisableWinP");
+    g_settings.DisableWinR = Wh_GetIntSetting(L"StandardShortcuts.DisableWinR");
+    g_settings.DisableWinS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinS");
+    g_settings.DisableWinT = Wh_GetIntSetting(L"StandardShortcuts.DisableWinT");
+    g_settings.DisableWinU = GetSettingIntSafe(L"SpecialShortcuts.DisableWinU");
+    g_settings.DisableWinV = Wh_GetIntSetting(L"StandardShortcuts.DisableWinV");
+    g_settings.DisableWinW = Wh_GetIntSetting(L"StandardShortcuts.DisableWinW");
+    g_settings.DisableWinX = Wh_GetIntSetting(L"StandardShortcuts.DisableWinX");
+    g_settings.DisableWinY = Wh_GetIntSetting(L"StandardShortcuts.DisableWinY");
+    g_settings.DisableWinZ = Wh_GetIntSetting(L"StandardShortcuts.DisableWinZ");
+    g_settings.DisableWinTab = Wh_GetIntSetting(L"StandardShortcuts.DisableWinTab");
+    g_settings.DisableWinUp = Wh_GetIntSetting(L"StandardShortcuts.DisableWinUp");
+    g_settings.DisableWinDown = Wh_GetIntSetting(L"StandardShortcuts.DisableWinDown");
+    g_settings.DisableWinLeft = Wh_GetIntSetting(L"StandardShortcuts.DisableWinLeft");
+    g_settings.DisableWinRight = Wh_GetIntSetting(L"StandardShortcuts.DisableWinRight");
+    g_settings.DisableWinHome = Wh_GetIntSetting(L"StandardShortcuts.DisableWinHome");
+    g_settings.DisableWinShiftM = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftM");
+    g_settings.DisableWinComma = Wh_GetIntSetting(L"StandardShortcuts.DisableWinComma");
+    g_settings.DisableWinPause = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPause");
+    g_settings.DisableWinCtrlD = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlD");
+    g_settings.DisableWinCtrlF4 = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlF4");
+    g_settings.DisableWinCtrlLeft = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlLeft");
+    g_settings.DisableWinCtrlRight = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlRight");
+    g_settings.DisableWinNumbers = Wh_GetIntSetting(L"StandardShortcuts.DisableWinNumbers");
+    g_settings.DisableWinShiftNumbers = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftNumbers");
+    g_settings.DisableWinCtrlNumbers = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlNumbers");
+    g_settings.DisableWinAltNumbers = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltNumbers");
+    g_settings.DisableWinPlus = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPlus");
+    g_settings.DisableWinMinus = Wh_GetIntSetting(L"StandardShortcuts.DisableWinMinus");
+    g_settings.DisableWinEsc = Wh_GetIntSetting(L"StandardShortcuts.DisableWinEsc");
+    g_settings.DisableWinCtrlEnter = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlEnter");
+    g_settings.DisableWinCtrlC = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlC");
+    g_settings.DisableWinCtrlN = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlN");
+    g_settings.DisableWinCtrlO = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlO");
+    g_settings.DisableWinCtrlS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlS");
+    g_settings.DisableWinSpace = Wh_GetIntSetting(L"StandardShortcuts.DisableWinSpace");
+    g_settings.DisableWinShiftS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftS");
+    g_settings.DisableWinAltK = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltK");
+    g_settings.DisableWinPeriod = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPeriod");
+    g_settings.DisableWinSemicolon = Wh_GetIntSetting(L"StandardShortcuts.DisableWinSemicolon");
+    g_settings.DisableWinPrtSc = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPrtSc");
+    g_settings.DisableWinShiftLeft = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftLeft");
+    g_settings.DisableWinShiftRight = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftRight");
+    g_settings.DisableWinShiftUp = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftUp");
+    g_settings.DisableWinShiftDown = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftDown");
+    g_settings.DisableOfficeHotkeys = Wh_GetIntSetting(L"StandardShortcuts.DisableOfficeHotkeys");
+    g_settings.DisableWinAltD = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltD");
+    g_settings.DisableWinAltB = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltB");
+    g_settings.DisableWinAltR = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltR");
+    g_settings.DisableWinAltG = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltG");
+    g_settings.DisableWinAltPrtSc = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltPrtSc");
+    g_settings.DisableWinAltT = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltT");
+    g_settings.DisableWinAltM = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltM");
+    g_settings.DisableWinCtrlShiftB = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlShiftB");
+    g_settings.DisableWinCtrlQ = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlQ");
 }
 
 bool IsNumberKey(DWORD vkCode)
@@ -513,9 +545,9 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
         {
             switch (vk)
             {
-                case 'A': block = g_settings.DisableWinA; break;
+                case 'A': block = (g_settings.DisableWinA > 0); break;
                 case 'B': block = g_settings.DisableWinB; break;
-                case 'C': block = g_settings.DisableWinC; break;
+                case 'C': block = (g_settings.DisableWinC > 0); break;
                 case 'D': block = g_settings.DisableWinD; break;
                 case 'E': block = g_settings.DisableWinE; break;
                 case 'F': block = g_settings.DisableWinF; break;
@@ -523,15 +555,15 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
                 case 'H': block = g_settings.DisableWinH; break;
                 case 'I': block = g_settings.DisableWinI; break;
                 case 'J': block = g_settings.DisableWinJ; break;
-                case 'K': block = g_settings.DisableWinK; break;
+                case 'K': block = (g_settings.DisableWinK > 0); break;
                 case 'M': block = g_settings.DisableWinM; break;
-                case 'N': block = g_settings.DisableWinN; break;
+                case 'N': block = (g_settings.DisableWinN > 0); break;
                 case 'O': block = g_settings.DisableWinO; break;
-                case 'P': block = g_settings.DisableWinP; break;
+                case 'P': block = (g_settings.DisableWinP > 0); break;
                 case 'R': block = g_settings.DisableWinR; break;
                 case 'S': block = g_settings.DisableWinS; break;
                 case 'T': block = g_settings.DisableWinT; break;
-                case 'U': block = g_settings.DisableWinU; break;
+                case 'U': block = (g_settings.DisableWinU > 0); break;
                 case 'V': block = g_settings.DisableWinV; break;
                 case 'W': block = g_settings.DisableWinW; break;
                 case 'X': block = g_settings.DisableWinX; break;
@@ -576,9 +608,14 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
     {
         if (!hasShift) {
             // Hardcoded keys that bypass RegisterHotKey
-            if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT || 
-                vk == 'A' || vk == 'K' || vk == 'P' || vk == 'U')
+            if (vk == VK_TAB || vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
                 return true;
+            if (vk == 'A' && g_settings.DisableWinA == 2) return true;
+            if (vk == 'C' && g_settings.DisableWinC == 2) return true;
+            if (vk == 'K' && g_settings.DisableWinK == 2) return true;
+            if (vk == 'N' && g_settings.DisableWinN == 2) return true;
+            if (vk == 'P' && g_settings.DisableWinP == 2) return true;
+            if (vk == 'U' && g_settings.DisableWinU == 2) return true;
         } else {
             // Win+Shift+Arrows
             if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)
@@ -862,8 +899,10 @@ void StopHookThread()
 
 bool NeedsDwmHook()
 {
-    return g_settings.DisableWinA || g_settings.DisableWinK || g_settings.DisableWinP || 
-           g_settings.DisableWinU || g_settings.DisableWinTab ||
+    return (g_settings.DisableWinA == 2) || (g_settings.DisableWinC == 2) || 
+           (g_settings.DisableWinK == 2) || (g_settings.DisableWinN == 2) || 
+           (g_settings.DisableWinP == 2) || (g_settings.DisableWinU == 2) || 
+           g_settings.DisableWinTab ||
            g_settings.DisableWinUp || g_settings.DisableWinDown || 
            g_settings.DisableWinLeft || g_settings.DisableWinRight ||
            g_settings.DisableWinShiftUp || g_settings.DisableWinShiftDown || 
