@@ -596,7 +596,10 @@ static void ExecuteActionText(const std::wstring& raw) {
 
     std::thread([a]() {
         if (StartsWithCI(a, L"cmd:"))          { ExecuteProcess(Trim(a.substr(4)), true);  return; }
-        if (StartsWithCI(a, L"shell:"))        { ExecuteProcess(Trim(a.substr(6)), false); return; }
+        if (StartsWithCI(a, L"shell:")) { 
+            ExecuteProcess(L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command " + Trim(a.substr(6)), false); 
+            return; 
+        }
         if (StartsWithCI(a, L"ms-settings:")) {
             ShellExecuteW(nullptr, L"open", a.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             return;
