@@ -11747,7 +11747,7 @@
                     8
                 ],
                 "ratingUsers": 11,
-                "updated": 1774714315000,
+                "updated": 1776936173000,
                 "users": 226
             },
             "metadata": {
@@ -11762,8 +11762,9 @@
                     "StartMenuExperienceHost.exe",
                     "explorer.exe"
                 ],
+                "license": "MIT",
                 "name": "Windows 11 Start Menu Buttons",
-                "version": "1.1"
+                "version": "2.0"
             }
         },
         "windows-11-start-menu-styler": {

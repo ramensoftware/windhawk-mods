@@ -11747,7 +11747,7 @@
                     8
                 ],
                 "ratingUsers": 11,
-                "updated": 1774714315000,
+                "updated": 1776936173000,
                 "users": 226
             },
             "metadata": {
@@ -11756,14 +11756,15 @@
                 ],
                 "author": "Salyts",
                 "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof",
-                "description": "Customizable buttons for the Windows 11 Start menu.",
+                "description": "Настраиваемые кнопки для меню «Пуск» Windows 11.",
                 "github": "https://github.com/Salyts",
                 "include": [
                     "StartMenuExperienceHost.exe",
                     "explorer.exe"
                 ],
+                "license": "MIT",
                 "name": "Windows 11 Start Menu Buttons",
-                "version": "1.1"
+                "version": "2.0"
             }
         },
         "windows-11-start-menu-styler": {
