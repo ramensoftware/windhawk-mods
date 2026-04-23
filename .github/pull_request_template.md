@@ -14,7 +14,7 @@ If the submission is a new mod, please fill the form below.
 This mod was created by:
 
 - - [ ] Manually by the submitter (with or without AI assistance)
-- - [ ] Claude Code
+- - [ ] Claude
 - - [ ] ChatGPT
 - - [ ] Gemini
 - - [ ] Another AI (please specify): 
