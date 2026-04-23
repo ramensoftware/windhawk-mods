@@ -16,7 +16,7 @@
 
 Forces a specific set of columns whenever a File Explorer folder is in _Details_ view. **Other view modes (_Icons_, _Tiles_, _List_, etc.) are not affected.**
 
-Configure which columns to show and in what order in Settings. Each entry takes a Shell property name and a width in **logical pixels at 100% DPI scaling** (for consistent widths in case of changing between multiple monitors with different DPI settings).
+Configure which columns to show and in what order in Settings. Each entry takes a Shell property name and a width **(if _Force Width_ enabled)** in logical pixels at 100% DPI scaling (for consistent widths in case of multiple monitors with different DPI settings).
 
 Common property names:
 - `System.ItemNameDisplay` - Name
@@ -34,9 +34,8 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 
 **Note:**
 - Any property name not recognised by Windows will be skipped.
-- There is a minimum value for column widths; lower values will be raised automatically.
-- You can still change the columns manually but it will be temporary.
-- Changes should take effect immediately, otherwise re-opening a window will work.
+- To allow a column to be freely resized, turn off "Force Width".
+- Changes should take effect immediately to opened folders, but if the opened window is on **another monitor with a differnt DPI settings**, the width will be updated **after re-opening the folder once**.
 */
 // ==/WindhawkModReadme==
 
@@ -44,15 +43,24 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 /*
 - columns:
   - - property: System.ItemNameDisplay
-    - width: 300
+      $name: Column Property Name
+    - force_width: true
+      $name: Force Width
+      $description: If enabled, the column width will always use the value below, regardless of manual changes, which will stay temporary and be reverted after re-opening the folder.
+    - width: 270
+      $name: Width
+      $description: Only takes effect if Force Width is turned on.
   - - property: System.Size
-    - width: 80
+    - force_width: false
+    - width: 30
   - - property: System.DateModified
-    - width: 105
+    - force_width: true
+    - width: 110
   - - property: System.ItemTypeText
-    - width: 130
+    - force_width: false
+    - width: 60
   $name: Columns
-  $description: "Columns to show in order in Details view. Width is in logical pixels at 100% DPI scaling. Leave 0 for default width."
+  $description: "Columns to show in order in Details view. Width is in logical pixels at 100% DPI scaling."
 */
 // ==/WindhawkModSettings==
 
@@ -65,6 +73,7 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 #include <shlguid.h>
 #include <servprov.h>
 #include <vector>
+#include <cmath>
 #include <windhawk_utils.h>
 
 // IID_IServiceProvider from Windows SDK {6D5140C1-7436-11CE-8034-00AA006009FA}
@@ -78,7 +87,7 @@ DEFINE_GUID(IID_IServiceProvider_,
 
 struct ColumnEntry {
     PROPERTYKEY key;
-    int         width; // logical pixels at 100% DPI (96 dpi); 0 = keep default
+    int         width; // logical pixels at 100% DPI (96 dpi); 0 = free resize
 };
 
 static std::vector<ColumnEntry> g_columns;
@@ -95,9 +104,15 @@ static void LoadSettings() {
 
         PROPERTYKEY key;
         if (SUCCEEDED(PSGetPropertyKeyFromName(rawProp, &key))) {
+            BOOL forceWidth = Wh_GetIntSetting(L"columns[%d].force_width", i);
             int width = Wh_GetIntSetting(L"columns[%d].width", i);
+            
+            if (!forceWidth) {
+                width = 0; 
+            }
+
             g_columns.push_back({ key, width });
-            Wh_Log(L"Column[%d]: %s width=%d -> OK", i, rawProp, width);
+            Wh_Log(L"Column[%d]: %s force=%d width=%d -> OK", i, rawProp, forceWidth, width);
         } else {
             Wh_Log(L"Column[%d]: %s -> not recognised, skipped", i, rawProp);
         }
@@ -107,38 +122,44 @@ static void LoadSettings() {
 
     if (g_columns.empty()) {
         Wh_Log(L"No valid columns configured, using defaults");
-        g_columns.push_back({ PKEY_ItemNameDisplay, 300 });
-        g_columns.push_back({ PKEY_Size,             80 });
-        g_columns.push_back({ PKEY_DateModified,    105 });
-        g_columns.push_back({ PKEY_ItemTypeText,    130 });
+        g_columns.push_back({ PKEY_ItemNameDisplay, 270 });
+        g_columns.push_back({ PKEY_Size,             30 });
+        g_columns.push_back({ PKEY_DateModified,    110 });
+        g_columns.push_back({ PKEY_ItemTypeText,     60 });
     }
 }
 
 // ---------------------------------------------------------------------------
 // DPI helpers
+// Try GetDpiForWindow
 // ---------------------------------------------------------------------------
 
-// Returns the DPI of the primary monitor, or 96 if unavailable.
 static UINT GetSystemDpi() {
-    // GetDpiForSystem is available on Win10+. Use it if present.
     using GetDpiForSystem_t = UINT(WINAPI*)();
     static auto pGetDpiForSystem = reinterpret_cast<GetDpiForSystem_t>(
         GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForSystem"));
     if (pGetDpiForSystem)
         return pGetDpiForSystem();
 
-    // Fallback: read from desktop DC.
     HDC hdc = GetDC(nullptr);
     UINT dpi = hdc ? static_cast<UINT>(GetDeviceCaps(hdc, LOGPIXELSX)) : 96;
     if (hdc) ReleaseDC(nullptr, hdc);
     return dpi;
 }
 
-// Scale a logical-pixel value (at 96 dpi baseline) to physical pixels.
-static UINT ScaleToDpi(int logicalPx) {
+static UINT GetWindowDpi(HWND hwnd) {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    static auto pGetDpiForWindow = reinterpret_cast<GetDpiForWindow_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+    if (pGetDpiForWindow && hwnd)
+        return pGetDpiForWindow(hwnd);
+        
+    return GetSystemDpi();
+}
+
+static UINT ScaleToDpi(int logicalPx, UINT dpi) {
     if (logicalPx <= 0) return 0;
-    UINT dpi = GetSystemDpi();
-    return static_cast<UINT>(MulDiv(logicalPx, static_cast<int>(dpi), 96));
+    return static_cast<UINT>(std::round(logicalPx * (static_cast<double>(dpi) / 96.0)));
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +168,10 @@ static UINT ScaleToDpi(int logicalPx) {
 
 static void ApplyForcedColumns(void* pThis) {
     auto* pShellView = reinterpret_cast<IShellView*>(pThis);
+
+    HWND hwnd = nullptr;
+    pShellView->GetWindow(&hwnd);
+    UINT windowDpi = GetWindowDpi(hwnd);
 
     IFolderView2* pFV2 = nullptr;
     if (FAILED(pShellView->QueryInterface(IID_IFolderView2,
@@ -166,22 +191,51 @@ static void ApplyForcedColumns(void* pThis) {
                                           reinterpret_cast<void**>(&pCM))) || !pCM)
         return;
 
-    std::vector<PROPERTYKEY> keys;
-    keys.reserve(g_columns.size());
-    for (const auto& col : g_columns)
-        keys.push_back(col.key);
+    // Check if the column settings need update
+    UINT colCount = 0;
+    bool orderNeedsUpdate = false;
+    
+    if (FAILED(pCM->GetColumnCount(CM_ENUM_VISIBLE, &colCount)) || colCount != g_columns.size()) {
+        orderNeedsUpdate = true;
+    } else {
+        std::vector<PROPERTYKEY> currentKeys(colCount);
+        if (SUCCEEDED(pCM->GetColumns(CM_ENUM_VISIBLE, currentKeys.data(), colCount))) {
+            for (size_t i = 0; i < colCount; i++) {
+                if (currentKeys[i].fmtid != g_columns[i].key.fmtid ||
+                    currentKeys[i].pid != g_columns[i].key.pid) {
+                    orderNeedsUpdate = true;
+                    break;
+                }
+            }
+        } else {
+            orderNeedsUpdate = true;
+        }
+    }
 
-    pCM->SetColumns(keys.data(), static_cast<UINT>(keys.size()));
+    if (orderNeedsUpdate) {
+        std::vector<PROPERTYKEY> keys;
+        keys.reserve(g_columns.size());
+        for (const auto& col : g_columns) {
+            keys.push_back(col.key);
+        }
+        pCM->SetColumns(keys.data(), static_cast<UINT>(keys.size()));
+    }
 
+    // Column width enforcement for those using a width value
     for (const auto& col : g_columns) {
         if (col.width <= 0)
-            continue;
+            continue; 
 
         CM_COLUMNINFO ci = {};
         ci.cbSize = sizeof(ci);
         ci.dwMask = CM_MASK_WIDTH;
-        ci.uWidth = ScaleToDpi(col.width);
-        pCM->SetColumnInfo(col.key, &ci);
+        if (SUCCEEDED(pCM->GetColumnInfo(col.key, &ci))) {
+            UINT expectedWidth = ScaleToDpi(col.width, windowDpi);
+            if (ci.uWidth != expectedWidth) {
+                ci.uWidth = expectedWidth;
+                pCM->SetColumnInfo(col.key, &ci);
+            }
+        }
     }
 
     pCM->Release();
@@ -189,11 +243,9 @@ static void ApplyForcedColumns(void* pThis) {
 
 // ---------------------------------------------------------------------------
 // Apply to all currently open Explorer windows
-// Called on mod init/reload so existing windows are also covered
 // ---------------------------------------------------------------------------
 
 static void ApplyToAllOpenWindows() {
-    // Enumerate all shell windows via IShellWindows.
     IShellWindows* psw = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
                                 IID_IShellWindows, reinterpret_cast<void**>(&psw))) || !psw)
@@ -201,6 +253,8 @@ static void ApplyToAllOpenWindows() {
 
     long count = 0;
     psw->get_Count(&count);
+
+    DWORD currentProcessId = GetCurrentProcessId();
 
     for (long i = 0; i < count; i++) {
         VARIANT vi;
@@ -214,20 +268,33 @@ static void ApplyToAllOpenWindows() {
         IWebBrowserApp* pWBA = nullptr;
         if (SUCCEEDED(pDisp->QueryInterface(IID_IWebBrowserApp,
                                             reinterpret_cast<void**>(&pWBA))) && pWBA) {
-            IServiceProvider* pSP = nullptr;
-            if (SUCCEEDED(pWBA->QueryInterface(IID_IServiceProvider_,
-                                               reinterpret_cast<void**>(&pSP))) && pSP) {
-                IShellBrowser* pSB = nullptr;
-                if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser, IID_IShellBrowser,
-                                                reinterpret_cast<void**>(&pSB))) && pSB) {
-                    IShellView* pSV = nullptr;
-                    if (SUCCEEDED(pSB->QueryActiveShellView(&pSV)) && pSV) {
-                        ApplyForcedColumns(pSV);
-                        pSV->Release();
+            
+            HWND wnd = nullptr;
+            pWBA->get_HWND(reinterpret_cast<SHANDLE_PTR*>(&wnd));
+            
+            DWORD windowProcessId = 0;
+            if (wnd) {
+                GetWindowThreadProcessId(wnd, &windowProcessId);
+            }
+
+            if (windowProcessId == currentProcessId) {
+                IServiceProvider* pSP = nullptr;
+                if (SUCCEEDED(pWBA->QueryInterface(IID_IServiceProvider_,
+                                                   reinterpret_cast<void**>(&pSP))) && pSP) {
+                    IShellBrowser* pSB = nullptr;
+                    if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser, IID_IShellBrowser,
+                                                    reinterpret_cast<void**>(&pSB))) && pSB) {
+                        IShellView* pSV = nullptr;
+                        if (SUCCEEDED(pSB->QueryActiveShellView(&pSV)) && pSV) {
+                            ApplyForcedColumns(pSV);
+                            // Refresh directly here
+                            pSV->Refresh();
+                            pSV->Release();
+                        }
+                        pSB->Release();
                     }
-                    pSB->Release();
+                    pSP->Release();
                 }
-                pSP->Release();
             }
             pWBA->Release();
         }
@@ -238,7 +305,6 @@ static void ApplyToAllOpenWindows() {
 
 // ---------------------------------------------------------------------------
 // Hook: CDefView::UIActivate  (shell32.dll)
-// Triggered whenever a folder view is activated
 // ---------------------------------------------------------------------------
 
 using CDefView_UIActivate_t = HRESULT(__thiscall*)(void* pThis, UINT uState);
