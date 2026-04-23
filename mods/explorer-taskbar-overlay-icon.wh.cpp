@@ -5,7 +5,7 @@
 // @version         1.0
 // @author          FireBlade
 // @github          https://github.com/FireBlade211
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -lshell32 -luuid
 // ==/WindhawkMod==
 
@@ -41,7 +41,9 @@ std::unordered_map<HWND, std::wstring> g_lastPath = {};
 int nDelay = 500;
 
 DWORD WINAPI ThreadProc(LPVOID) {
-    std::wstring last;
+    LPITEMIDLIST pidlLast = 0;
+    HICON hLastIcon = 0;
+    std::wstring lastDesc = {};
 
     HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
     if (SUCCEEDED(hr))
@@ -108,28 +110,38 @@ DWORD WINAPI ThreadProc(LPVOID) {
                                                         hr = pf->GetCurFolder(&pidl);
 
                                                         if (SUCCEEDED(hr)) {
-                                                            SHFILEINFOW sfi = {};
-                                                            SHGetFileInfoW(
-                                                                (LPCWSTR)pidl,
-                                                                0,
-                                                                &sfi,
-                                                                sizeof(sfi),
-                                                                SHGFI_PIDL | SHGFI_ICON | SHGFI_SMALLICON | SHGFI_DISPLAYNAME
-                                                            );
-
                                                             ITaskbarList3* pTaskbarList;
                                                             hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
 
                                                             if (SUCCEEDED(hr)) {
-                                                                pTaskbarList->SetOverlayIcon(hwnd, sfi.hIcon, sfi.szDisplayName);
-                                                                
-                                                                // the taskbar copies the icon
-                                                                DestroyIcon(sfi.hIcon);
+                                                                if (!ILIsEqual(pidlLast, pidl)) {
+                                                                    SHFILEINFOW sfi = {};
+                                                                    SHGetFileInfoW(
+                                                                        (LPCWSTR)pidl,
+                                                                        0,
+                                                                        &sfi,
+                                                                        sizeof(sfi),
+                                                                        SHGFI_PIDL | SHGFI_ICON | SHGFI_SMALLICON | SHGFI_DISPLAYNAME
+                                                                    );
+
+                                                                    if (sfi.hIcon)
+                                                                    {
+                                                                        pTaskbarList->SetOverlayIcon(hwnd, sfi.hIcon, sfi.szDisplayName);
+                                                                        
+                                                                        lastDesc = std::wstring(sfi.szDisplayName);
+                                                                        DestroyIcon(hLastIcon);
+                                                                        hLastIcon = sfi.hIcon;
+                                                                    }
+
+                                                                    CoTaskMemFree(pidlLast);
+                                                                    pidlLast = pidl;
+                                                                } else if (hLastIcon != NULL) {
+                                                                    pTaskbarList->SetOverlayIcon(hwnd, hLastIcon, lastDesc.c_str());
+                                                                }
 
                                                                 pTaskbarList->Release();
                                                             }
-
-                                                            CoTaskMemFree(pidl);
+    
                                                         } else {
                                                             Wh_Log(L"Error fetching item ID list for window %d with code: %d", i, hr);
                                                         }
@@ -173,12 +185,18 @@ DWORD WINAPI ThreadProc(LPVOID) {
         Wh_Log(L"COM init failed: %d", hr);
     }
 
+    if (pidlLast)
+        CoTaskMemFree(pidlLast);
+
+    if (hLastIcon)
+        DestroyIcon(hLastIcon);
+
     return 0;
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
 
     nDelay = Wh_GetIntSetting(L"icon-refresh-delay");
@@ -191,70 +209,249 @@ BOOL Wh_ModInit() {
 }
 
 // The mod is being unloaded, free all allocated resources.
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
 
     g_bEndPollThread = TRUE;
     WaitForSingleObject(g_hThread, INFINITE);
     CloseHandle(g_hThread);
 
-    HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
-    if (SUCCEEDED(hr))
-    {
-        IShellWindows* pShellWindows;
-        hr = CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&pShellWindows));
+    // HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+    // if (SUCCEEDED(hr))
+    // {
+    //     IShellWindows* pShellWindows;
+    //     hr = CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&pShellWindows));
 
-        if (SUCCEEDED(hr))
-        {
-            while (true) {
-                long count = 0;
-                pShellWindows->get_Count(&count);
+    //     if (SUCCEEDED(hr))
+    //     {
+    //         while (true) {
+    //             long count = 0;
+    //             pShellWindows->get_Count(&count);
 
-                 for (long i = 0; i < count; i++) {
-                    VARIANT vtIndex;
-                    VariantInit(&vtIndex);
-                    vtIndex.vt = VT_I4;
-                    vtIndex.lVal = i;
+    //              for (long i = 0; i < count; i++) {
+    //                 VARIANT vtIndex;
+    //                 VariantInit(&vtIndex);
+    //                 vtIndex.vt = VT_I4;
+    //                 vtIndex.lVal = i;
 
-                    IDispatch* pDisp = nullptr;
-                    if (SUCCEEDED(pShellWindows->Item(vtIndex, &pDisp)) && pDisp) {
-                        IWebBrowserApp* pBrowser;
-                        hr = pDisp->QueryInterface(IID_IWebBrowserApp, (void**)&pBrowser);
+    //                 IDispatch* pDisp = nullptr;
+    //                 if (SUCCEEDED(pShellWindows->Item(vtIndex, &pDisp)) && pDisp) {
+    //                     IWebBrowserApp* pBrowser;
+    //                     hr = pDisp->QueryInterface(IID_IWebBrowserApp, (void**)&pBrowser);
 
-                        if (SUCCEEDED(hr)) {
-                            SHANDLE_PTR hwndPtr;
-                            hr = pBrowser->get_HWND(&hwndPtr);
+    //                     if (SUCCEEDED(hr)) {
+    //                         SHANDLE_PTR hwndPtr;
+    //                         hr = pBrowser->get_HWND(&hwndPtr);
 
-                            if (SUCCEEDED(hr)) {
-                                HWND hwnd = (HWND)hwndPtr;
+    //                         if (SUCCEEDED(hr)) {
+    //                             HWND hwnd = (HWND)hwndPtr;
                                 
-                                ITaskbarList3* pTaskbarList;
-                                hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
+    //                             ITaskbarList3* pTaskbarList;
+    //                             hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
 
-                                if (SUCCEEDED(hr)) {
-                                    // clear the icon
-                                    pTaskbarList->SetOverlayIcon(hwnd, NULL, L"");
+    //                             if (SUCCEEDED(hr)) {
+    //                                 // clear the icon
+    //                                 pTaskbarList->SetOverlayIcon(hwnd, NULL, L"");
                                 
-                                    pTaskbarList->Release();
-                                }
-                            }
+    //                                 pTaskbarList->Release();
+    //                             }
+    //                         }
 
-                            pBrowser->Release();
-                        }
+    //                         pBrowser->Release();
+    //                     }
 
-                        pDisp->Release();
-                    }
-                }
-            }
-        }
+    //                     pDisp->Release();
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        CoUninitialize();
-    }
+    //     CoUninitialize();
+    // }
 }
 
 // The mod setting were changed, reload them.
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
 
     nDelay = Wh_GetIntSetting(L"icon-refresh-delay");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
