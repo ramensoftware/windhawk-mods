@@ -2,7 +2,7 @@
 // @id              osu-tray-profile
 // @name            osu!Profile in Taskbar
 // @description     Displays PP, rank, and avatar from rhythm game osu! (standard mode) next to the system tray
-// @version         3.9
+// @version         3.9.1
 // @author          antoshika
 // @github          https://github.com/Antoshika
 // @include         windhawk.exe
@@ -13,8 +13,8 @@
 /*
 # 🟣 osu!Profile in Taskbar
 
-Makes your stats always visible. This mod adds a neat widget directly to the Windows taskbar that shows your current PP, rank, and profile picture automaticaly updating in the background.
-
+Makes your stats always visible.
+This mod adds a neat widget directly to the Windows taskbar that shows your current PP, rank, and profile picture automaticaly updating in the background.
 ![Taskbar](https://i.imgur.com/nrJVcw0.png)
 
 ## ⚙️ How to use:
@@ -22,7 +22,8 @@ In order for the tweak to collect your statistics, you need to use your API, so 
 1. Open [OAuth settings of your osu! profile](https://osu.ppy.sh/home/account/edit#oauth).
 2. Click **New OAuth Application** - come up with any name **(Example: Taskbar)**, **"Application callback URL"** is optional.
 3. Copy the generated `Client ID` & `Client Secret`.
-4. Go back to Windhawk, open the **Settings** tab and paste the copied data by cell with your nickname. _(you can use your old nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
+4. Go back to Windhawk, open the **Settings** tab and paste the copied data by cell with your nickname.
+_(you can use your old nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 
 ## ⚠️ Problems:
 * **"✎ check 'Settings'"**: You didn't fill in the required fields in the settings.
@@ -76,6 +77,7 @@ int g_updateInterval = 300;
 
 std::thread g_uiThread;
 std::thread g_netThread;
+
 std::atomic<bool> g_running{ false };
 std::atomic<bool> g_forceUpdate{ false };
 std::atomic<bool> g_needsRedraw{ false };
@@ -86,6 +88,7 @@ SRWLOCK g_statsLock = SRWLOCK_INIT;
 std::wstring g_displayName = L"Loading...";
 std::wstring g_displayStats = L"";
 std::wstring g_avatarPath = L"";
+int g_consecutiveErrors = 0;
 
 void LoadSettings() {
     PCWSTR clientIdStr = Wh_GetStringSetting(L"api.client_id");
@@ -133,6 +136,7 @@ std::string FormatWithDots(std::string num) {
 void FetchOsuStats() {
     if (g_clientId.empty() || g_clientSecret.empty() || g_username.empty()) {
         AcquireSRWLockExclusive(&g_statsLock);
+        g_consecutiveErrors = 1;
         g_displayName = L"✎ check \"Settings\"";
         g_displayStats = L"";
         g_avatarPath = L"";
@@ -140,8 +144,33 @@ void FetchOsuStats() {
         return;
     }
 
-    HINTERNET hSession = WinHttpOpen(L"Windhawk Osu Mod", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET hSession = NULL;
+    WINHTTP_CURRENT_USER_IE_PROXY_CONFIG proxyConfig = {0};
+    LPCWSTR userAgent = L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    if (WinHttpGetIEProxyConfigForCurrentUser(&proxyConfig)) {
+        if (proxyConfig.lpszProxy) {
+            hSession = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_NAMED_PROXY, proxyConfig.lpszProxy, proxyConfig.lpszProxyBypass, 0);
+        }
+        if (proxyConfig.lpszAutoConfigUrl) GlobalFree(proxyConfig.lpszAutoConfigUrl);
+        if (proxyConfig.lpszProxy) GlobalFree(proxyConfig.lpszProxy);
+        if (proxyConfig.lpszProxyBypass) GlobalFree(proxyConfig.lpszProxyBypass);
+    }
+
+    if (!hSession) {
+        hSession = WinHttpOpen(userAgent, 4, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    }
+
+    if (!hSession) {
+        hSession = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    }
+
     if (!hSession) return;
+
+    WinHttpSetTimeouts(hSession, 10000, 10000, 10000, 10000);
+
+    DWORD secureProtocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+    WinHttpSetOption(hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &secureProtocols, sizeof(secureProtocols));
 
     HINTERNET hConnect = WinHttpConnect(hSession, L"osu.ppy.sh", INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) { WinHttpCloseHandle(hSession); return; }
@@ -155,10 +184,12 @@ void FetchOsuStats() {
     BOOL bResults = WinHttpSendRequest(hRequestAuth, contentType.c_str(), (DWORD)-1, (LPVOID)postData.c_str(), (DWORD)postData.length(), (DWORD)postData.length(), 0);
     
     std::string token = "";
+    std::string response = "";
+    DWORD dwError = 0;
+
     if (bResults && WinHttpReceiveResponse(hRequestAuth, NULL)) {
         DWORD dwSize = 0;
         DWORD dwDownloaded = 0;
-        std::string response;
         do {
             WinHttpQueryDataAvailable(hRequestAuth, &dwSize);
             if (dwSize == 0) break;
@@ -176,6 +207,8 @@ void FetchOsuStats() {
             size_t tokenEnd = response.find("\"", tokenPos);
             token = response.substr(tokenPos, tokenEnd - tokenPos);
         }
+    } else {
+        dwError = GetLastError();
     }
     WinHttpCloseHandle(hRequestAuth);
 
@@ -183,7 +216,21 @@ void FetchOsuStats() {
         WinHttpCloseHandle(hConnect);
         WinHttpCloseHandle(hSession);
         AcquireSRWLockExclusive(&g_statsLock);
-        g_displayName = L"⛔ error";
+        
+        g_consecutiveErrors++;
+
+        if (dwError != 0) {
+            if (g_consecutiveErrors <= 4) {
+                g_displayName = L"Loading...";
+            } else {
+                g_displayName = L"⛔ Net Error: " + std::to_wstring(dwError);
+            }
+            Wh_Log(L"Network Error: %lu", dwError);
+        } else {
+            g_displayName = L"⛔ API Error";
+            Wh_Log(L"API Auth Failed. Server Response: %hs", response.c_str());
+        }
+        
         g_displayStats = L"";
         g_avatarPath = L"";
         ReleaseSRWLockExclusive(&g_statsLock);
@@ -194,7 +241,6 @@ void FetchOsuStats() {
     HINTERNET hRequestUser = WinHttpOpenRequest(hConnect, L"GET", userPath.c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
     
     std::wstring authHeader = L"Authorization: Bearer " + StringToWString(token) + L"\r\n";
-    
     bResults = WinHttpSendRequest(hRequestUser, authHeader.c_str(), (DWORD)-1, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
 
     std::string userResponse;
@@ -216,10 +262,25 @@ void FetchOsuStats() {
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
 
-    if (userResponse.empty()) return;
+    if (userResponse.empty() || userResponse.find("\"error\"") != std::string::npos || userResponse.find("\"authentication\"") != std::string::npos) {
+        Wh_Log(L"User Fetch Failed. Server Response: %hs", userResponse.c_str());
+        AcquireSRWLockExclusive(&g_statsLock);
+        
+        g_consecutiveErrors++;
+
+        if (g_consecutiveErrors <= 4) {
+            g_displayName = L"Loading...";
+        } else {
+            g_displayName = L"⛔ User Error";
+        }
+        
+        g_displayStats = L"";
+        g_avatarPath = L"";
+        ReleaseSRWLockExclusive(&g_statsLock);
+        return;
+    }
 
     std::string pp = "0", rank = "0", username = "Unknown", avatarUrl = "";
-    
     size_t unPos = userResponse.find("\"username\":\"");
     if (unPos != std::string::npos) {
         unPos += 12;
@@ -266,6 +327,7 @@ void FetchOsuStats() {
     }
 
     AcquireSRWLockExclusive(&g_statsLock);
+    g_consecutiveErrors = 0;
     g_displayName = StringToWString(username);
     g_displayStats = L"PP: " + StringToWString(pp) + L"pp // #" + StringToWString(FormatWithDots(rank));
     g_avatarPath = localAvatarPath;
@@ -311,7 +373,7 @@ void DrawOverlay(HWND hwnd) {
             format.SetLineAlignment(StringAlignmentCenter);
             RectF rect(0, 0, 200, 50);
 
-            if (g_isUpdating) {
+            if (g_isUpdating && g_consecutiveErrors == 0) {
                 graphics.DrawString(L"uno momento...", -1, &fontName, rect, &format, &textBrush);
             } else {
                 graphics.DrawString(name.c_str(), -1, &fontName, rect, &format, &textBrush);
@@ -363,10 +425,16 @@ void NetThreadFunc() {
 
         FetchOsuStats();
 
+        AcquireSRWLockShared(&g_statsLock);
+        bool hasError = (g_consecutiveErrors > 0);
+        ReleaseSRWLockShared(&g_statsLock);
+
         g_isUpdating = false;
         g_needsRedraw = true;
 
-        for(int i = 0; i < g_updateInterval && g_running; i++) {
+        int currentInterval = hasError ? 15 : g_updateInterval;
+
+        for(int i = 0; i < currentInterval && g_running; i++) {
             if (g_forceUpdate) {
                 g_forceUpdate = false;
                 break;
@@ -391,31 +459,45 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_TIMER: {
             if (wParam == 1) {
+                int width = 200;
+                int height = 50;
+                int x = 0, y = 0;
+                bool posFound = false;
+                HWND insertAfter = NULL;
+                UINT flags = SWP_NOACTIVATE;
+
                 HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
                 if (trayWnd) {
                     HWND trayNotifyWnd = FindWindowExW(trayWnd, NULL, L"TrayNotifyWnd", NULL);
-                    if (trayNotifyWnd) {
-                        RECT trayRect;
-                        GetWindowRect(trayNotifyWnd, &trayRect);
-                        
-                        int width = 200;
-                        int height = 50;
-                        int x = trayRect.left - width;
-                        int y = trayRect.top + ((trayRect.bottom - trayRect.top) - height) / 2;
+                    RECT rect;
+                    if (trayNotifyWnd && GetWindowRect(trayNotifyWnd, &rect)) {
+                        x = rect.left - width;
+                        y = rect.top + ((rect.bottom - rect.top) - height) / 2;
+                        posFound = true;
+                    } else if (GetWindowRect(trayWnd, &rect)) {
+                        x = rect.right - width - 250;
+                        y = rect.top + ((rect.bottom - rect.top) - height) / 2;
+                        posFound = true;
+                    }
 
-                        HWND wndPrev = GetWindow(trayWnd, GW_HWNDPREV);
-                        if (wndPrev != hwnd) {
-                            HWND insertAfter = wndPrev;
-                            if (!insertAfter) {
-                                LONG trayExStyle = GetWindowLongW(trayWnd, GWL_EXSTYLE);
-                                insertAfter = (trayExStyle & WS_EX_TOPMOST) ? HWND_TOPMOST : HWND_TOP;
-                            }
-                            SetWindowPos(hwnd, insertAfter, x, y, width, height, SWP_NOACTIVATE);
-                        } else {
-                            SetWindowPos(hwnd, NULL, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
-                        }
+                    HWND wndPrev = GetWindow(trayWnd, GW_HWNDPREV);
+                    if (wndPrev == hwnd) {
+                        flags |= SWP_NOZORDER;
+                    } else {
+                        insertAfter = wndPrev ? wndPrev : ((GetWindowLongW(trayWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) ? HWND_TOPMOST : HWND_TOP);
                     }
                 }
+
+                if (!posFound) {
+                    RECT workArea;
+                    SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
+                    x = workArea.right - width;
+                    y = workArea.bottom - height;
+                    insertAfter = HWND_TOPMOST;
+                    flags &= ~SWP_NOZORDER;
+                }
+
+                SetWindowPos(hwnd, insertAfter, x, y, width, height, flags);
 
                 if (g_needsRedraw) {
                     DrawOverlay(hwnd);
@@ -445,7 +527,7 @@ void UiThreadFunc() {
             WS_EX_LAYERED | WS_EX_TOOLWINDOW,
             wc.lpszClassName, L"OsuStats",
             WS_POPUP,
-            0, 0, 200, 50,
+            -1000, -1000, 200, 50, // Стартуем за пределами экрана!
             NULL, NULL, wc.hInstance, NULL
         );
 
@@ -512,10 +594,12 @@ BOOL Wh_ModInit() {
     bool isCurrentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
+
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
@@ -544,6 +628,7 @@ BOOL Wh_ModInit() {
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -560,6 +645,7 @@ BOOL Wh_ModInit() {
 
         IMAGE_DOS_HEADER* dosHeader =
             (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
@@ -594,6 +680,7 @@ void Wh_ModAfterInit() {
 
     WCHAR commandLine[MAX_PATH + 2 +
                       (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) - 1];
+
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"" WH_MOD_ID L"\"",
                currentProcessPath);
 
@@ -614,9 +701,11 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
+
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
+
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
@@ -626,6 +715,7 @@ void Wh_ModAfterInit() {
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
+
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
