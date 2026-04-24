@@ -82,7 +82,7 @@ When a switch is off, that option is not applied.
 ![After](https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeitem-tweaker-after.jpg)
 
 ## Credits
-Part of the functionality was provided by crazyboyybs.
+Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functionality.
 */
 // ==/WindhawkModReadme==
 
