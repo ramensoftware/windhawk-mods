@@ -2,7 +2,7 @@
 // @id              explorer-rename-overwrite
 // @name            Explorer Rename Overwrite
 // @description     When renaming a file in Explorer to a name that already exists, overwrite the existing file instead of being blocked by the "file already exists" prompt.
-// @version         1.1.0
+// @version         1.1.1
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -47,6 +47,11 @@ removed first (to the Recycle Bin by default, or permanently if configured).
   treatment as the recycle path. Defaults to `_old`.
 
 ## Changelog
+
+### 1.1.1
+- Fix `keep` disposition: notify the shell of the in-place rename so
+  Explorer's view doesn't transiently show both files with the suffix
+  until the window is refreshed.
 
 ### 1.1.0
 - New `keep` disposition: rename the overwritten file in place (default
@@ -231,7 +236,12 @@ bool KeepInPlace(const std::wstring& path) {
     if (g_settings.keepInPlaceSuffix.empty()) return false;
     std::wstring dst = PickAppendedPath(path);
     if (dst.empty()) return false;
-    return MoveFileExW(path.c_str(), dst.c_str(), 0) != 0;
+    if (MoveFileExW(path.c_str(), dst.c_str(), 0) == 0) return false;
+    // Tell the shell about the rename so Explorer's view doesn't end up with
+    // a stale entry pointing at the old name (which makes the new file
+    // appear with the "_old" suffix until the user refreshes).
+    SHChangeNotify(SHCNE_RENAMEITEM, SHCNF_PATHW, path.c_str(), dst.c_str());
+    return true;
 }
 
 bool DeleteToRecycleBin(const std::wstring& path) {
