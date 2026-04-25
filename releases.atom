@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-25T15:38:48.000Z</updated>
+    <updated>2026-04-25T15:41:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word OfficeMath EditBox Shade Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/word-omath-shade-fix#62d458d095e604fc6a305176822d19e9ec2ca7f1</id>
+        <link href="https://windhawk.net/mods/word-omath-shade-fix"/>
+        <updated>2026-04-25T15:41:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wordofficematheditboxshadefix">Word OfficeMath EditBox Shade Fix</h1>
+<p>This mod fixes the issue where the shade color of OfficeMath equation edit boxes does not change according to the theme (light/dark) in Microsoft Word. It achieves this by hooking into the <code>DrawMathShd</code> function in <code>wwlib.dll</code>, which is responsible for drawing the shade, and dynamically patching the hardcoded color value based on the current theme (can be customized in the settings).</p>
+<p><em>Note: this mod needs pdb symbol of <code>wwlib.dll</code> to work. The symbol file is expected to be a bit large (~90MB in size). Windhawk will download it automatically when you launch Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (wwlib.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and make sure to <strong>relaunch Word AS ADMINISTRATOR at least once</strong> after it finishes, this is to write symbols being used to SymbolCache, which speeds up launching later on.</em></p>
+<h2 id="note">⚠️ Note:</h2>
+<ul>
+<li>It is advised to <strong>turn off automatic updates</strong> for Office applications, as PDB may need to be downloaded every time after updates.</li>
+<li>Please relaunch Word as administrator <em>at least once</em> after installing the mod and wait for symbol download to complete, this is to write symbols being used to SymbolCache, which speeds up launching later on.</li>
+</ul>
+<p><em>This mod is part of <strong>The Ultimate Office Dark Mode Project</strong></em></p>
+<h1 id="beforevsafter">Before vs After</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-omath-shade-fix-before-vs-after.png" alt="Before-After" /></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Usage Bar Color 1.1.0]]></title>
         <id>https://windhawk.net/mods/disk-usage-bar-color#d9e2c14c876da8f9de4910d217adf43e4fc85bfb</id>
@@ -595,36 +616,6 @@ It then places a hook on the <code>CreateProcessInternalW</code> function: If th
         <author>
             <name>Exiled Eye</name>
             <uri>https://github.com/ExiledEye</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Pre-Vista File Copy Dialog 2.1.0]]></title>
-        <id>https://windhawk.net/mods/prevista-file-copy#a44a7e403dbeb79f3dd8e0934b6f3af779c779ba</id>
-        <link href="https://windhawk.net/mods/prevista-file-copy"/>
-        <updated>2026-04-02T23:50:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="previstafilecopydialog">Pre-Vista File Copy Dialog</h1>
-<p>This mod replaces the modern file copy/move/delete progress dialog with a
-pre-Vista style classic progress dialog.</p>
-<p>Based on the original Windows XP CProgressDialog implementation from browseui.
-Hooks CoCreateInstance to intercept CLSID_ProgressDialog and provide a custom
-implementation that reproduces XP's behavior for copy, move, delete,
-recycle, and empty recycle bin operations, including animations, per-file
-progress text, and time estimates.</p>
-<p>Works with shell32.dll from Windows 95 up to XP for loading the original AVI
-animations and strings.</p>
-<p><img src="https://i.imgur.com/wWq5rhx.png" alt="Copying" />
-<img src="https://i.imgur.com/Tiey5JK.png" alt="Moving" />
-<img src="https://i.imgur.com/5uFWHay.png" alt="Deleting" />
-<img src="https://i.imgur.com/nBMB7wB.png" alt="Emptying the Recycle Bin" /></p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Shell32 Path</strong>: Point this to a pre-Vista shell32.dll to load the original
-AVI animations (filecopy, filemove, filedel, filenuke, filedelreal). If not set
-or the file doesn't exist, animations will be skipped gracefully.</li>
-</ul>]]></content>
-        <author>
-            <name>arceus413</name>
-            <uri>https://github.com/arceuss</uri>
         </author>
     </entry>
 </feed>

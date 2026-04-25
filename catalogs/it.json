@@ -12066,6 +12066,34 @@
                 "version": "1.0.1"
             }
         },
+        "word-omath-shade-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777131686000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777131686000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Joe Ye",
+                "compilerOptions": "-lshlwapi",
+                "description": "Fix the shade color issue of OfficeMath equation edit boxes in Word dark mode.",
+                "github": "https://github.com/JoeYe-233",
+                "include": [
+                    "winword.exe"
+                ],
+                "name": "Word OfficeMath EditBox Shade Fix",
+                "version": "1.0.0"
+            }
+        },
         "word-pdf-lossless-export": {
             "details": {
                 "defaultSorting": 752,

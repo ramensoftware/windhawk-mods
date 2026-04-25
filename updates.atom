@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-25T15:38:48.000Z</updated>
+    <updated>2026-04-25T15:41:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word OfficeMath EditBox Shade Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/word-omath-shade-fix#62d458d095e604fc6a305176822d19e9ec2ca7f1</id>
+        <link href="https://windhawk.net/mods/word-omath-shade-fix"/>
+        <updated>2026-04-25T15:41:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wordofficematheditboxshadefix">Word OfficeMath EditBox Shade Fix</h1>
+<p>This mod fixes the issue where the shade color of OfficeMath equation edit boxes does not change according to the theme (light/dark) in Microsoft Word. It achieves this by hooking into the <code>DrawMathShd</code> function in <code>wwlib.dll</code>, which is responsible for drawing the shade, and dynamically patching the hardcoded color value based on the current theme (can be customized in the settings).</p>
+<p><em>Note: this mod needs pdb symbol of <code>wwlib.dll</code> to work. The symbol file is expected to be a bit large (~90MB in size). Windhawk will download it automatically when you launch Word first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (wwlib.dll)", wait until it reaches 100% and the pop up disappears, otherwise please switch your network and try again) please wait patiently and make sure to <strong>relaunch Word AS ADMINISTRATOR at least once</strong> after it finishes, this is to write symbols being used to SymbolCache, which speeds up launching later on.</em></p>
+<h2 id="note">⚠️ Note:</h2>
+<ul>
+<li>It is advised to <strong>turn off automatic updates</strong> for Office applications, as PDB may need to be downloaded every time after updates.</li>
+<li>Please relaunch Word as administrator <em>at least once</em> after installing the mod and wait for symbol download to complete, this is to write symbols being used to SymbolCache, which speeds up launching later on.</li>
+</ul>
+<p><em>This mod is part of <strong>The Ultimate Office Dark Mode Project</strong></em></p>
+<h1 id="beforevsafter">Before vs After</h1>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/word-omath-shade-fix-before-vs-after.png" alt="Before-After" /></p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Usage Bar Color 1.1.0]]></title>
         <id>https://windhawk.net/mods/disk-usage-bar-color#d9e2c14c876da8f9de4910d217adf43e4fc85bfb</id>
@@ -353,64 +374,6 @@ This mod detects when that sliding window hits a screen edge fast enough and sna
         <updated>2026-04-17T22:56:18.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Remove Flow Launcher from exclusion list as it doesn't cause the issue anymore with the previous fixes</li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Windows Shortcuts 1.0.0]]></title>
-        <id>https://windhawk.net/mods/disable-windows-shortcuts#bf450c23f6810c142a3e5a4445b9afa296df24b3</id>
-        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
-        <updated>2026-04-17T15:11:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablewindowsshortcuts">Disable Windows Shortcuts</h1>
-<p>Selectively disable Windows keyboard shortcuts with individual toggles for each shortcut.</p>
-<h2 id="importantinstallationstep">⚠️ Important Installation Step ⚠️</h2>
-<p>For this mod to successfully block window snapping (Win+Arrows) and Task View (Win+Tab), you <strong>must</strong> allow Windhawk to inject into the Desktop Window Manager (<code>dwm.exe</code>):</p>
-<ol>
-<li>Open Windhawk and go to <strong>Settings</strong></li>
-<li>Click on <strong>Advanced settings</strong> at the bottom</li>
-<li>Under <strong>Process inclusion list</strong>, ensure <code>dwm.exe</code> is added (or <code>*</code> is used to include all processes)</li>
-<li>Click <strong>Save</strong>. Windhawk will automatically restart to apply the new settings.</li>
-</ol>
-<p><em>Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to take effect. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must manually restart Explorer to restore those standard shortcuts.</em></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Disable any Windows key combination</li>
-<li>Individual toggle for each shortcut</li>
-<li>Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.</li>
-<li>Settings apply instantly without needing to restart Explorer!</li>
-</ul>
-<h2 id="supportedshortcuts">Supported Shortcuts</h2>
-<h3 id="general">General</h3>
-<ul>
-<li>Win+B through Win+Z (excluding Win, Win+L, Win+Q)</li>
-<li>Win+Tab, Win+Arrow Keys, Win+Home</li>
-</ul>
-<h3 id="withmodifiers">With Modifiers</h3>
-<ul>
-<li>Win+Shift combinations</li>
-<li>Win+Ctrl combinations</li>
-<li>Win+Alt combinations</li>
-<li>Win+Ctrl+Shift combinations</li>
-</ul>
-<h3 id="special">Special</h3>
-<ul>
-<li>Win+Number (0-9) for taskbar apps</li>
-<li>Win+Plus/Minus for Magnifier</li>
-<li>Win+Period/Semicolon for Emoji picker</li>
-<li>Office hotkeys (Ctrl+Shift+Alt+Win)</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Win key (Start Menu) is handled by the "Block Start Menu and Hosts" mod</li>
-<li>Win+L (Lock PC) cannot be blocked through standard hooks</li>
-<li>Win+Q is redundant with Win+S (both open Search)</li>
-</ul>
-<h2 id="knownlimitations">Known Limitations</h2>
-<ul>
-<li>A small number of system shortcuts (Win+A, Win+K, Win+P, Win+U, Win+Tab, and Win+Arrows) are hardcoded into the OS at a low level. While this mod successfully blocks them from performing their default Windows actions, they cannot be freed up to be registered by third-party apps (like AutoHotkey or PowerToys). When these specific shortcuts are disabled, they simply do nothing.</li>
 </ul>]]></content>
         <author>
             <name>Lone</name>
