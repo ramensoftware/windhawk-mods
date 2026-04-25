@@ -8,10 +8,18 @@
 // @compilerOptions -luser32 -lshell32 -lpowrprof -ladvapi32 -lole32 -luuid
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# Simple Scheduler
+
+Schedule hibernation, sleep, shutdown, programs, notifications, screen state, and volume by time and day.
+
+*/
+// ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - Tasks: |
-    # ==============================================================================
     # --- SYNTAX GUIDE ---
     # Format:  Time | Days | Action | Payload
     # Time:    HH:MM (24-hour format)
@@ -19,15 +27,20 @@
     # Action:  Notify, Run, Hibernate, Sleep, Shutdown, Restart, SignOut,
     #          ScreenOff, ScreenOn, SoundOff, SoundOn
     # Disable: Add a # at the start of a line to disable/toggle that specific task
+    # --- EXAMPLES ---
+    # 19:40 | Mon,Tue,Wed,Thu,Fri | Sleep | 
+    # 23:00 | Any | ScreenOff | 
+    # 02:00 | Sun | Restart | 
     # ==============================================================================
-    
-    19:34 | Any | Notify | Save your work, power down in 5 mins!
-    19:35 | Any | Hibernate | 
-    19:00 | Mon | Notify | Monday test!
-    19:44 | Any | Notify | Save your work, power down in 5 mins!
-    19:46 | Any | Notify | Save your work, power down in 5 mins!
+
+    # ================================================================== DAILY
+
+    # ================================================================== WEEKLY
+
+    # ================================================================== MONTHLY
+
   $name: Scheduled Tasks
-  $description: "Add a # at the beginning of any line to disable that specific task. See the text box for syntax and actions."
+  $description: "Edit settings in textual mode. Syntax and actions are described in the comment box."
 */
 // ==/WindhawkModSettings==
 
