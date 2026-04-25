@@ -3925,6 +3925,37 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-treeitem-tweaker": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777156793000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777156793000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Languster",
+                "compilerOptions": "-luxtheme -lcomctl32 -lgdi32 -lgdiplus",
+                "description": "Custom backgrounds and text colors for Explorer TreeView",
+                "github": "https://github.com/Languster",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer TreeItem Tweaker",
+                "version": "1.0.0"
+            }
+        },
         "explorer-treeline-killer": {
             "details": {
                 "defaultSorting": 0,

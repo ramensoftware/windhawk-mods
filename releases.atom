@@ -2,12 +2,90 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-25T19:58:32.000Z</updated>
+    <updated>2026-04-25T22:39:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer TreeItem Tweaker 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-treeitem-tweaker#f92ee2f2618c2b8bb41bd9422270347a4a47e88b</id>
+        <link href="https://windhawk.net/mods/explorer-treeitem-tweaker"/>
+        <updated>2026-04-25T22:39:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorertreeitemtweaker">Explorer TreeItem Tweaker</h1>
+<p><strong>Explorer TreeItem Tweaker</strong> is a Windhawk mod that customizes the appearance of tree items in the left navigation pane of Windows Explorer.</p>
+<p>It is designed for people who want the navigation tree to look cleaner, more polished, and more comfortable to use.</p>
+<h2 id="importantdarkthemedefaults">⚠️ Important: dark theme defaults</h2>
+<p><strong>The default settings are designed for the dark Windows system theme.</strong></p>
+<p>For a correct and clean appearance on the light Windows theme, adjust the mod settings manually, especially the text color.</p>
+<p>For example, for light theme text, try:</p>
+<p><code>R = 0, G = 0, B = 0</code></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>customize background, border, and text colors for these states:</li>
+<li>Hot</li>
+<li>Selected</li>
+<li>Selected Not Focus</li>
+<li>Hot Selected</li>
+<li>Normal Text</li>
+<li>adjust:</li>
+<li>width</li>
+<li>corner radius</li>
+<li>vertical insets</li>
+<li>item height</li>
+<li>icon size</li>
+<li>icon-text gap</li>
+<li>color</li>
+<li>background opacity</li>
+<li>border opacity</li>
+<li>text color</li>
+</ul>
+<h2 id="whythisisbetterthaneditingmsstyles">Why this is better than editing msstyles</h2>
+<p>Editing <code>msstyles</code> does not come close to this level of flexibility.</p>
+<p>With this mod, you can:</p>
+<ul>
+<li>change settings directly in Windhawk</li>
+<li>control colors, opacity, and states much more precisely</li>
+<li>get cleaner shapes and smoother rounded corners</li>
+<li>avoid editing system theme resources</li>
+</ul>
+<p>In practice, this is a much faster, more convenient, and more powerful way to customize the navigation tree.</p>
+<h2 id="recommendedsetup">Recommended setup</h2>
+<p>For the best Explorer navigation pane experience, it is recommended to use this mod together with <strong>Explorer TreeLine Killer</strong> and <strong>Explorer Navigation Pane Tweaks</strong>.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested and confirmed compatible with <strong>Windows 11 versions 23H2 through 25H2</strong>.
+Other versions have not been tested.</p>
+<h2 id="important">Important</h2>
+<ul>
+<li>this mod changes only the tree view in the left navigation pane of Explorer</li>
+<li>it does not change the Explorer window background</li>
+<li>background, border, and text can be customized independently</li>
+<li>optional layout controls can change item height, icon size, and icon-text gap</li>
+<li><strong>Item Height</strong> changes the total row height of tree items</li>
+<li><strong>Icon Size</strong> changes the width and height of the navigation icons</li>
+<li><strong>Icon-Text Gap</strong> adds space between the icon and the text</li>
+</ul>
+<h2 id="layoutcontrols">Layout controls</h2>
+<ul>
+<li><strong>Item Height</strong> increases or decreases the total height of each navigation row</li>
+<li><strong>Icon-Text Gap</strong> controls the horizontal spacing between the icon and the text</li>
+<li><strong>Icon Size</strong> controls the width and height of navigation icons</li>
+</ul>
+<p>Each option has its own enable switch.
+When a switch is off, that option is not applied.</p>
+<h2 id="beforeafter">Before / After</h2>
+<p><strong>Before</strong></p>
+<p><img src="https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeitem-tweaker-before.jpg" alt="Before" /></p>
+<p><strong>After</strong></p>
+<p><img src="https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeitem-tweaker-after.jpg" alt="After" /></p>
+<h2 id="credits">Credits</h2>
+<p>Thanks to <a href="https://github.com/crazyboyybs">crazyboyybs</a> for extending the functionality.</p>]]></content>
+        <author>
+            <name>Languster</name>
+            <uri>https://github.com/Languster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer TreeLine Killer 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-treeline-killer#ba1ed54ac2d7bf5ebfe2cc323e880128344217ca</id>
@@ -597,48 +675,6 @@ file size or drive capacity in pane 1</li>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.0.0]]></title>
-        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#03eb122ec8fd09c77818492144ff779102f0aec7</id>
-        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
-        <updated>2026-04-04T18:37:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="autodarktitlebarwithcustomcolours">Auto Dark Titlebar with Custom Colours</h1>
-<p>Combines automatic dark/light titlebar switching with per-mode, per-state custom colours. Inspired from the following mods:</p>
-<ul>
-<li><code>Auto Dark Titlebar</code> by Asteski</li>
-<li><code>Windows 11 Custom Titlebar Colors</code> by Th3Fanbus</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li>Auto-detects Windows dark/light theme via registry and applies <code>DWMWA_USE_IMMERSIVE_DARK_MODE</code></li>
-<li>Custom titlebar colours for four independent states:</li>
-<li><strong>Light Mode</strong> - Active window</li>
-<li><strong>Light Mode</strong> - Inactive window</li>
-<li><strong>Dark Mode</strong>  - Active window</li>
-<li><strong>Dark Mode</strong>  - Inactive window</li>
-<li>Per-mode "Use Custom Colours" toggle -- leave off to keep system defaults for that mode</li>
-<li>Per-mode colour input format toggle -- choose between Hex (<code>RRGGBB</code>) or separate R/G/B fields</li>
-<li>Real-time theme change detection (responds to <code>WM_SETTINGCHANGE</code> / <code>WM_DWMCOLORIZATIONCOLORCHANGED</code>)</li>
-<li>New windows receive the correct style immediately via <code>CreateWindowEx</code> hooks</li>
-<li>Dialog windows handled via <code>DefDlgProc</code> hooks</li>
-<li>Live settings reload: colour changes apply instantly without restarting the process</li>
-</ul>
-<h2 id="colourformat">Colour Format</h2>
-<ul>
-<li><strong>Hex mode</strong>: enter a 6-character hex string, e.g. <code>FF0000</code> for red (no <code>#</code> prefix)</li>
-<li><strong>RGB mode</strong>: enter R, G, B as integers 0-255 in separate fields</li>
-</ul>
-<p>Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li><code>systemsettings.exe</code> and <code>applicationframehost.exe</code> are excluded via <code>@exclude</code> to avoid conflicts</li>
-<li>No forced repaint is issued while a mouse button is held (prevents drag-state corruption)</li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
