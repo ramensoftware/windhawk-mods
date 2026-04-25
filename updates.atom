@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-25T13:35:29.000Z</updated>
+    <updated>2026-04-25T14:15:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.7.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#00185dce0fd0a9b71e0fdaa09b0611224dfaa022</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2026-04-25T14:15:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Minor improvements to system performance metrics collection.</li>
+<li>Fixed unnecessarily frequent refreshes if seconds, system metrics, and web content are all unused.</li>
+<li>Fixed compatibility with new insider Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.3.1]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#924426711ad95bf5c6947842def94e251177dd15</id>
@@ -394,17 +409,6 @@ works correctly regardless of how Windows names the device.</p></li>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide NVIDIA Control Panel Missing Dialog 1.1.2]]></title>
-        <id>https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider#41124567b0fe25b450f766ca0680f04795d5ac2c</id>
-        <link href="https://windhawk.net/mods/nvidia-control-panel-missing-dialog-hider"/>
-        <updated>2026-04-16T22:13:53.000Z</updated>
-        <content type="html"><![CDATA[<p>Update version and compatibility in mod description</p>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>

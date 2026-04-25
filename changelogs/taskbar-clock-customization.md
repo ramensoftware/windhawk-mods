@@ -1,3 +1,9 @@
+## 1.7.4 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/00185dce0fd0a9b71e0fdaa09b0611224dfaa022/mods/taskbar-clock-customization.wh.cpp))
+
+* Minor improvements to system performance metrics collection.
+* Fixed unnecessarily frequent refreshes if seconds, system metrics, and web content are all unused.
+* Fixed compatibility with new insider Windows 11 builds.
+
 ## 1.7.3 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3b3395d062442972c4a89a7ab97afb6832d08f1c/mods/taskbar-clock-customization.wh.cpp))
 
 * Fixed `%weather%` which stopped working in the previous update.
