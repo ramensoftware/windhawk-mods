@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-25T12:14:22.000Z</updated>
+    <updated>2026-04-25T12:27:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Details View Columns 1.1]]></title>
+        <id>https://windhawk.net/mods/explorer-force-details-columns#0e1772a08bdcdd2dbf87a949f7d1d2c136c2be57</id>
+        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
+        <updated>2026-04-25T12:27:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Width settings should be consistent now after changing monitors with different DPI.</li>
+<li>New changes take effect immediately now to all windows including opened ones.</li>
+</ul>]]></content>
+        <author>
+            <name>ernisn</name>
+            <uri>https://github.com/ernisn</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 3.5]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#13d66deeb8119d6504e1908a95e4131119c4d82e</id>
@@ -390,20 +404,6 @@ works correctly regardless of how Windows names the device.</p></li>
         <author>
             <name>BCRTVKCS</name>
             <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide fine tuning 2.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#9f6a018d93adf561e55dc5318babf4428073c11c</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
-        <updated>2026-04-16T21:52:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a crash on system startup when the "Never" auto-hide mode is used.</li>
-<li>Improved support for the new taskbar auto-hide animation in Windows 11 preview builds (ViVeTool ID: 41356296).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

@@ -3641,12 +3641,12 @@
                     6
                 ],
                 "ratingUsers": 7,
-                "updated": 1776679755000,
+                "updated": 1777120063000,
                 "users": 47
             },
             "metadata": {
                 "author": "ernisn",
-                "compilerOptions": "-lole32 -lshlwapi -lpropsys",
+                "compilerOptions": "-lole32 -lshlwapi -lpropsys -lgdi32",
                 "description": "Forces a fixed set of columns in File Explorer Details view. Columns and their order are configurable. Has no effect on other view modes.",
                 "github": "https://github.com/ernisn",
                 "include": [
@@ -3654,7 +3654,7 @@
                 ],
                 "license": "MIT",
                 "name": "Explorer Details View Columns",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "explorer-frame-classic": {
