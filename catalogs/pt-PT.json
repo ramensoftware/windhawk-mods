@@ -3925,6 +3925,37 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-treeline-killer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777147112000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777147112000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Languster",
+                "compilerOptions": "-lcomctl32 -lgdi32",
+                "description": "Hide navigation pane separator lines and control upper/lower spacing in Explorer",
+                "github": "https://github.com/Languster",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer TreeLine Killer",
+                "version": "1.0.0"
+            }
+        },
         "explorer-unlocked-toolbars-fix": {
             "details": {
                 "defaultSorting": 657,

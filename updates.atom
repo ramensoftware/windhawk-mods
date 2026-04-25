@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-25T16:54:52.000Z</updated>
+    <updated>2026-04-25T19:58:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer TreeLine Killer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-treeline-killer#ba1ed54ac2d7bf5ebfe2cc323e880128344217ca</id>
+        <link href="https://windhawk.net/mods/explorer-treeline-killer"/>
+        <updated>2026-04-25T19:58:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorertreelinekiller">Explorer TreeLine Killer</h1>
+<p><strong>Explorer TreeLine Killer</strong> is a Windhawk mod for Windows Explorer that hides the built-in separator lines in the left navigation pane and lets you switch the upper and lower spacing between standard and compact behavior.</p>
+<p>It is useful if you want the navigation pane to look cleaner, tighter, and more visually consistent.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>hide the built-in separator lines used by Explorer</li>
+<li>remove the upper empty space between the Home/Gallery block and the pinned items list</li>
+<li>remove the lower empty space between the pinned items list and <strong>This PC</strong></li>
+<li>choose between tighter compact spacing and more standard Windows-like spacing for each section</li>
+</ul>
+<h2 id="recommendedsetup">Recommended setup</h2>
+<p>For the best Explorer navigation pane experience, it is recommended to use this mod together with <strong>Explorer TreeItem Tweaker</strong> and <strong>Explorer Navigation Pane Tweaks</strong>.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested and confirmed compatible with <strong>Windows 11 versions 23H2 through 25H2</strong>.
+Other versions have not been tested.</p>
+<h2 id="whattheoptionsdo">What the options do</h2>
+<ul>
+<li><p><strong>Fully hide system separator lines</strong>
+Hides the default separator line used by Explorer in the lower special container.</p></li>
+<li><p><strong>Remove upper empty space</strong>
+Removes the gap between the Home/Gallery block (when those entries are visible) and the pinned items list.
+Enabled = compact mode. Disabled = standard spacing.</p></li>
+<li><p><strong>Remove lower empty space</strong>
+Removes the gap between the pinned items list and <strong>This PC</strong>.
+Enabled = compact mode. Disabled = standard spacing.</p></li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>the upper option matters only when the Home/Gallery block is visible</li>
+<li>the lower option controls the spacing before <strong>This PC</strong></li>
+<li>this mod is designed only for Explorer's left navigation pane</li>
+</ul>
+<h2 id="beforeafter">Before / After</h2>
+<p><strong>Before</strong></p>
+<p><img src="https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-before.jpg" alt="Before" /></p>
+<p><strong>After</strong></p>
+<p><img src="https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-after.jpg" alt="After" /></p>]]></content>
+        <author>
+            <name>Languster</name>
+            <uri>https://github.com/Languster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aero Peek on "Show desktop" button hover 1.0.2]]></title>
         <id>https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek#9cbb60401acaf5a46e7df2dcb5b62cb656507d3f</id>
@@ -344,38 +391,6 @@ set WS</em>THICKFRAME, so the window is not resizable. This mod fixes that.</p>
         <author>
             <name>BCRTVKCS</name>
             <uri>https://github.com/bcrtvkcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Edge Snap Throw 2.0.0]]></title>
-        <id>https://windhawk.net/mods/edge-snap-throw#faf8d95fb6b3aedc1b673c2fd7ed24e2a35f0507</id>
-        <link href="https://windhawk.net/mods/edge-snap-throw"/>
-        <updated>2026-04-18T11:41:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="edgesnapthrow">Edge Snap Throw</h1>
-<p><img src="https://raw.githubusercontent.com/getrektbynoob20/Edge-snap/refs/heads/main/edge-snap2.0.gif" alt="Demo" /></p>
-<p>Works best with <strong><a href="https://windhawk.net/mods/slick-window-arrangement">Slick Window Arrangement</a></strong> by m417z.
-Install that mod first. It adds sliding momentum when you release a dragged window.
-This mod detects when that sliding window hits a screen edge fast enough and snaps it.</p>
-<p>Snap zones:</p>
-<ul>
-<li>Left or right edge: 50 percent snap</li>
-<li>Top edge: maximize</li>
-<li>Corners: 25 percent snap</li>
-</ul>
-<p>When you drag a snapped window back out, it restores to its original size (toggle in settings).</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li>Velocity Threshold: how fast the window must be moving to trigger a snap. Default 500.</li>
-<li>Corner Zone: pixels from a corner that count as a corner hit. Default 120.</li>
-<li>Diagonal Angle: how close to 45 degrees a throw must be to count as diagonal. Default 20.</li>
-<li>Diagonal Min Speed: minimum speed per axis for diagonal detection. Default 100.</li>
-<li>Diagonal Axis Ratio: how balanced both axes must be for diagonal detection. Default 40.</li>
-<li>Direction Threshold: minimum speed before a direction counts as intentional. Default 30.</li>
-<li>Restore On Drag: when on, dragging a snapped window restores its original size. Default on.</li>
-</ul>]]></content>
-        <author>
-            <name>getrektbynoob20</name>
-            <uri>https://github.com/getrektbynoob20</uri>
         </author>
     </entry>
 </feed>

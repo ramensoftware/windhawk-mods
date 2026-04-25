@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-25T15:41:26.000Z</updated>
+    <updated>2026-04-25T19:58:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer TreeLine Killer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-treeline-killer#ba1ed54ac2d7bf5ebfe2cc323e880128344217ca</id>
+        <link href="https://windhawk.net/mods/explorer-treeline-killer"/>
+        <updated>2026-04-25T19:58:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorertreelinekiller">Explorer TreeLine Killer</h1>
+<p><strong>Explorer TreeLine Killer</strong> is a Windhawk mod for Windows Explorer that hides the built-in separator lines in the left navigation pane and lets you switch the upper and lower spacing between standard and compact behavior.</p>
+<p>It is useful if you want the navigation pane to look cleaner, tighter, and more visually consistent.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>hide the built-in separator lines used by Explorer</li>
+<li>remove the upper empty space between the Home/Gallery block and the pinned items list</li>
+<li>remove the lower empty space between the pinned items list and <strong>This PC</strong></li>
+<li>choose between tighter compact spacing and more standard Windows-like spacing for each section</li>
+</ul>
+<h2 id="recommendedsetup">Recommended setup</h2>
+<p>For the best Explorer navigation pane experience, it is recommended to use this mod together with <strong>Explorer TreeItem Tweaker</strong> and <strong>Explorer Navigation Pane Tweaks</strong>.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested and confirmed compatible with <strong>Windows 11 versions 23H2 through 25H2</strong>.
+Other versions have not been tested.</p>
+<h2 id="whattheoptionsdo">What the options do</h2>
+<ul>
+<li><p><strong>Fully hide system separator lines</strong>
+Hides the default separator line used by Explorer in the lower special container.</p></li>
+<li><p><strong>Remove upper empty space</strong>
+Removes the gap between the Home/Gallery block (when those entries are visible) and the pinned items list.
+Enabled = compact mode. Disabled = standard spacing.</p></li>
+<li><p><strong>Remove lower empty space</strong>
+Removes the gap between the pinned items list and <strong>This PC</strong>.
+Enabled = compact mode. Disabled = standard spacing.</p></li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>the upper option matters only when the Home/Gallery block is visible</li>
+<li>the lower option controls the spacing before <strong>This PC</strong></li>
+<li>this mod is designed only for Explorer's left navigation pane</li>
+</ul>
+<h2 id="beforeafter">Before / After</h2>
+<p><strong>Before</strong></p>
+<p><img src="https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-before.jpg" alt="Before" /></p>
+<p><strong>After</strong></p>
+<p><img src="https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-after.jpg" alt="After" /></p>]]></content>
+        <author>
+            <name>Languster</name>
+            <uri>https://github.com/Languster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word OfficeMath EditBox Shade Fix 1.0.0]]></title>
         <id>https://windhawk.net/mods/word-omath-shade-fix#62d458d095e604fc6a305176822d19e9ec2ca7f1</id>
@@ -592,30 +639,6 @@ file size or drive capacity in pane 1</li>
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Block Start Menu and Hosts 1.2]]></title>
-        <id>https://windhawk.net/mods/block-windows-startmenu-and-hosts#f6b25143ed7014d3e699714c4d4d86039c35947a</id>
-        <link href="https://windhawk.net/mods/block-windows-startmenu-and-hosts"/>
-        <updated>2026-04-04T10:59:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="blockstartmenuandhosts">Block Start Menu and Hosts</h1>
-<p>This Windhawk mod actively terminates existing instances of specific Windows host processes upon loading and intercepts process creation to prevent them from launching again in the future. 
-This way the mod ensures that unused selected UI components and their process are actually not running instead of simply hiding them.</p>
-<h2 id="features">Features</h2>
-<p>You can individually toggle the blocking of the following processes dynamically in the mod settings:</p>
-<ul>
-<li><strong>StartMenuExperienceHost.exe</strong> -&gt; The main Start Menu UI and process ("WIN" key)</li>
-<li><strong>SearchHost.exe</strong>              -&gt; The Search Menu UI and process ("WIN + S" shortcut) <strong>Note</strong>: <em>may</em> cause issues within folder search.</li>
-<li><strong>TextInputHost.exe</strong>           -&gt; The emoji and clipboard UI and process ("WIN + ." shortcut)</li>
-</ul>
-<h2 id="howitworks">How it Works</h2>
-<p>The mod injects into <code>explorer.exe</code> and <code>svchost.exe</code>.<br />
-Upon init, it kills any active instances of the selected hosts.<br />
-It then places a hook on the <code>CreateProcessInternalW</code> function: If the system attempts to launch any of the blocked .exe (example: user press WIN key), the hook intercepts the request and returns an <code>ERROR_ACCESS_DENIED</code> flag, preventing the launch.</p>]]></content>
-        <author>
-            <name>Exiled Eye</name>
-            <uri>https://github.com/ExiledEye</uri>
         </author>
     </entry>
 </feed>
