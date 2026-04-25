@@ -18,6 +18,16 @@
 
 It is designed for people who want the navigation tree to look cleaner, more polished, and more comfortable to use.
 
+## ⚠️ Important: dark theme defaults
+
+**The default settings are designed for the dark Windows system theme.**
+
+For a correct and clean appearance on the light Windows theme, adjust the mod settings manually, especially the text color.
+
+For example, for light theme text, try:
+
+`R = 0, G = 0, B = 0`
+
 ## Features
 - customize background, border, and text colors for these states:
   - Hot
@@ -413,7 +423,6 @@ struct StateStyle
     int textB;
 };
 
-static BOOL g_EnableLog = FALSE;
 static int  g_WidthMode = 2;
 static int  g_FullRowLeft = 6;
 static int  g_FullRowRight = 6;
@@ -453,6 +462,7 @@ static CRITICAL_SECTION g_StateLock;
 static bool g_StateLockInitialized = false;
 static std::vector<ExplorerState> g_States;
 static std::vector<TreeMetricsState> g_MetricsStates;
+static HWND g_RestartPromptWindow = nullptr;
 static HANDLE g_hWorkerThread = nullptr;
 static DWORD g_WorkerThreadId = 0;
 static HWINEVENTHOOK g_hEventHookShow = nullptr;
@@ -462,15 +472,6 @@ static HWINEVENTHOOK g_hEventHookDestroy = nullptr;
 
 static ExplorerState* GetOrCreateState_NoLock(HWND hExplorer);
 static TreeMetricsState* GetOrCreateTreeMetricsState_NoLock(HWND hTree);
-
-static void LogFmt(const wchar_t* fmt, UINT_PTR a = 0, UINT_PTR b = 0, UINT_PTR c = 0, UINT_PTR d = 0)
-{
-    if (!g_EnableLog)
-        return;
-    wchar_t buf[512] = {};
-    wsprintfW(buf, fmt, a, b, c, d);
-    Wh_Log(L"%s", buf);
-}
 
 static int ClampByte(int value)
 {
@@ -547,6 +548,23 @@ static bool ShouldSuggestExplorerRestart()
     return elapsedMs > 15000ULL;
 }
 
+static HRESULT CALLBACK RestartPromptCallback(HWND hwnd, UINT msg, WPARAM, LPARAM, LONG_PTR)
+{
+    switch (msg)
+    {
+    case TDN_CREATED:
+        g_RestartPromptWindow = hwnd;
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        break;
+
+    case TDN_DESTROYED:
+        g_RestartPromptWindow = nullptr;
+        break;
+    }
+
+    return S_OK;
+}
+
 static void MaybeSuggestExplorerRestart()
 {
     if (!ShouldSuggestExplorerRestart())
@@ -561,11 +579,12 @@ static void MaybeSuggestExplorerRestart()
     config.cbSize = sizeof(config);
     config.hwndParent = nullptr;
     config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_POSITION_RELATIVE_TO_WINDOW;
-    config.pszWindowTitle = L"NEW CUSTOM LAB";
+    config.pszWindowTitle = L"Explorer TreeItem Tweaker - Windhawk";
     config.pszContent = L"For correct color scheme operation, it is recommended to restart Explorer.";
     config.cButtons = ARRAYSIZE(buttons);
     config.pButtons = buttons;
     config.nDefaultButton = 1001;
+    config.pfCallback = RestartPromptCallback;
 
     int pressedButton = 0;
     if (SUCCEEDED(TaskDialogIndirect(&config, &pressedButton, nullptr, nullptr)))
@@ -598,7 +617,6 @@ static void MaybeSuggestExplorerRestart()
 
 static void LoadSettings()
 {
-    g_EnableLog = FALSE;
     g_WidthMode = Wh_GetIntSetting(L"Global.WidthMode");
     g_FullRowLeft = Wh_GetIntSetting(L"Global.OneWidthForAll.LeftMargin");
     g_FullRowRight = Wh_GetIntSetting(L"Global.OneWidthForAll.RightMargin");
@@ -702,14 +720,8 @@ static bool IsExplorerTopWindow(HWND hwnd)
 
 static HWND FindExplorerTopWindowFromChild(HWND hwnd)
 {
-    HWND cur = hwnd;
-    for (int i = 0; i < 20 && cur; ++i)
-    {
-        if (IsExplorerTopWindow(cur))
-            return cur;
-        cur = GetParent(cur);
-    }
-    return nullptr;
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    return IsExplorerTopWindow(root) ? root : nullptr;
 }
 
 static bool IsLikelyNavTree(HWND hwnd)
@@ -719,7 +731,7 @@ static bool IsLikelyNavTree(HWND hwnd)
 
     wchar_t cls[128] = {};
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-    if (lstrcmpiW(cls, WC_TREEVIEWW) != 0 && lstrcmpiW(cls, L"SysTreeView32") != 0)
+    if (lstrcmpiW(cls, WC_TREEVIEWW) != 0)
         return false;
 
     RECT rc{};
@@ -789,17 +801,10 @@ static bool IsEarlyNavTreeCandidate(HWND hTree)
     if (!GetClassNameW(hTree, cls, ARRAYSIZE(cls)))
         return false;
 
-    if (lstrcmpiW(cls, WC_TREEVIEWW) != 0 && lstrcmpiW(cls, L"SysTreeView32") != 0)
+    if (lstrcmpiW(cls, WC_TREEVIEWW) != 0)
         return false;
 
-    HWND cur = GetParent(hTree);
-    for (int i = 0; i < 6 && cur; ++i, cur = GetParent(cur))
-    {
-        if (IsExplorerTopWindow(cur))
-            return true;
-    }
-
-    return false;
+    return FindExplorerTopWindowFromChild(hTree) != nullptr;
 }
 
 static void RegisterTreeEarly(HWND hTree)
@@ -1462,9 +1467,6 @@ static HRESULT DrawCustomThemeText(HTHEME hTheme,
             opts.dwFlags |= DTT_TEXTCOLOR;
     }
 
-    if (g_EnableLog)
-        LogFmt(L"[016] custom text color state=%d color=%u", (UINT_PTR)iStateId, (UINT_PTR)clr, 0, 0);
-
     return DrawThemeTextEx_orig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags, pRect, &opts);
 }
 
@@ -1486,8 +1488,6 @@ HRESULT WINAPI HookedGetThemeColor(HTHEME hTheme,
     if (TryGetOverrideTextColor(iStateId, &clr))
     {
         *pColor = clr;
-        if (g_EnableLog)
-            LogFmt(L"[016] GetThemeColor override state=%d color=%u", (UINT_PTR)iStateId, (UINT_PTR)clr, 0, 0);
         return S_OK;
     }
 
@@ -1653,7 +1653,7 @@ static HWND WINAPI HookedCreateWindowExW(DWORD dwExStyle, LPCWSTR lpClassName, L
                                      hWndParent, hMenu, hInstance, lpParam);
 
     if (hwnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
-        (lstrcmpiW(lpClassName, WC_TREEVIEWW) == 0 || lstrcmpiW(lpClassName, L"SysTreeView32") == 0))
+        lstrcmpiW(lpClassName, WC_TREEVIEWW) == 0)
     {
         RegisterTreeEarly(hwnd);
     }
@@ -1837,7 +1837,7 @@ BOOL Wh_ModInit()
     GdiplusStartupInput gdiplusStartupInput;
     if (GdiplusStartup(&g_GdiplusToken, &gdiplusStartupInput, nullptr) != Ok)
     {
-        Wh_Log(L"[017] GdiplusStartup failed");
+        Wh_Log(L"[Explorer TreeItem Tweaker] GdiplusStartup failed");
         if (g_StateLockInitialized)
         {
             DeleteCriticalSection(&g_StateLock);
@@ -1848,7 +1848,7 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::SetFunctionHook(DrawThemeBackground, HookedDrawThemeBackground, &DrawThemeBackground_orig))
     {
-        Wh_Log(L"[017] failed to hook DrawThemeBackground");
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook DrawThemeBackground");
         if (g_StateLockInitialized)
         {
             DeleteCriticalSection(&g_StateLock);
@@ -1859,7 +1859,7 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::SetFunctionHook(DrawThemeBackgroundEx, HookedDrawThemeBackgroundEx, &DrawThemeBackgroundEx_orig))
     {
-        Wh_Log(L"[017] failed to hook DrawThemeBackgroundEx");
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook DrawThemeBackgroundEx");
         if (g_StateLockInitialized)
         {
             DeleteCriticalSection(&g_StateLock);
@@ -1870,7 +1870,7 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::SetFunctionHook(GetThemeColor, HookedGetThemeColor, &GetThemeColor_orig))
     {
-        Wh_Log(L"[017] failed to hook GetThemeColor");
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook GetThemeColor");
         if (g_StateLockInitialized)
         {
             DeleteCriticalSection(&g_StateLock);
@@ -1881,7 +1881,7 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::SetFunctionHook(DrawThemeTextEx, HookedDrawThemeTextEx, &DrawThemeTextEx_orig))
     {
-        Wh_Log(L"[017] failed to hook DrawThemeTextEx");
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook DrawThemeTextEx");
         if (g_StateLockInitialized)
         {
             DeleteCriticalSection(&g_StateLock);
@@ -1892,7 +1892,7 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, HookedCreateWindowExW, &CreateWindowExW_orig))
     {
-        Wh_Log(L"[017] failed to hook CreateWindowExW");
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook CreateWindowExW");
         if (g_StateLockInitialized)
         {
             DeleteCriticalSection(&g_StateLock);
@@ -1903,7 +1903,7 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::SetFunctionHook(SendMessageW, HookedSendMessageW, &SendMessageW_orig))
     {
-        Wh_Log(L"[017] failed to hook SendMessageW");
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook SendMessageW");
         if (g_StateLockInitialized)
         {
             DeleteCriticalSection(&g_StateLock);
@@ -1915,7 +1915,7 @@ BOOL Wh_ModInit()
     g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_WorkerThreadId);
     if (!g_hWorkerThread)
     {
-        Wh_Log(L"[017] failed to create worker thread");
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to create worker thread");
         if (g_StateLockInitialized)
         {
             DeleteCriticalSection(&g_StateLock);
@@ -1924,7 +1924,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    Wh_Log(L"[017] mod initialized");
+    Wh_Log(L"[Explorer TreeItem Tweaker] mod initialized");
     return TRUE;
 }
 
@@ -1957,13 +1957,8 @@ void Wh_ModUninit()
     }
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload)
+void Wh_ModSettingsChanged()
 {
     LoadSettings();
     RefreshTrackedTrees();
-
-    if (bReload)
-        *bReload = FALSE;
-
-    return TRUE;
 }
