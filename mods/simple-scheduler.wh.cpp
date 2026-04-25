@@ -4,6 +4,7 @@
 // @description     Schedule hibernation, sleep, shutdown, programs, notifications, screen state, and volume by time and day.
 // @version         1.3.0
 // @author          RadekPilich
+// @‌github          https://github.com/RadekPilich/
 // @include         explorer.exe
 // @compilerOptions -luser32 -lshell32 -lpowrprof -ladvapi32 -lole32 -luuid
 // ==/WindhawkMod==
