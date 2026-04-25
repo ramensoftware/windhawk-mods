@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              word-omath-shade-fix
 // @name            Word OfficeMath EditBox Shade Fix
-// @name:zh-CN      Word OfficeMath 编辑框阴影修复
+// @name:zh-CN      Word OfficeMath 公式编辑框阴影修复
 // @description     Fix the shade color issue of OfficeMath equation edit boxes in Word dark mode.
 // @description:zh-CN 解决 Word 深色模式下 OfficeMath 公式编辑框阴影颜色问题
 // @version         1.0.0
@@ -75,8 +75,6 @@ std::vector<void*> g_colorInstructions;
     #define SYM_SetDarkMode L"?SetDarkMode@DarkModeState@@QAEX_N0K@Z"
     #define SYM_DrawMathShd L"?DrawMathShd@@YGXPAUols@PTLS7@@AAVRT@@PBUMTXLI@@ABUPT@@PBVlsrun@2@PBUtagLSPOINT@2@PBUheights@2@JKPBURC@@@Z"
 #endif
-
-#include <wctype.h>
 
 DWORD ParseHexColor(PCWSTR hexStr, DWORD defaultColor) {
     // 1. Null pointer check
@@ -233,9 +231,20 @@ void FindAndPatchColorWithDisasm() {
                 Wh_Log(L"[Scanner] Found at +0x%X, cached %d bytes of opcode.", total_bytes, result.length - 4);
             }
         }
-
-        if (result.length == 3 && p[0] == 0xC2 && p[1] == 0x20 && p[2] == 0x00) break;
-
+        
+#ifdef _WIN64
+        // For 64-bit architecture, the function epilogue is typically a simple `ret` instruction with opcode 0xC3. When we encounter this opcode, it indicates that we've reached the end of the function, and we can stop scanning further.
+        if (result.length == 1 && p[0] == 0xC3) {
+            Wh_Log(L"[Scanner] Reached function epilogue (ret) at offset +0x%X. Scan complete.", total_bytes);
+            break;
+        }
+#else
+        // For 32-bit architecture, the function epilogue often consists of a `retn 20h` instruction, which has the opcode sequence `C2 20 00`. When we encounter this sequence, it indicates that we've reached the end of the function, and we can stop scanning further.
+        if (result.length == 3 && p[0] == 0xC2 && p[1] == 0x20 && p[2] == 0x00) {
+            Wh_Log(L"[Scanner] Reached function epilogue (retn 20h) at offset +0x%X. Scan complete.", total_bytes);
+            break;
+        }
+#endif
         p += result.length;
         total_bytes += result.length;
     }
@@ -363,9 +372,15 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    // Force the memory back to the light color before unloading to prevent leftover state from crashing the next launch
-    ApplyColorPatch(false);
-    Wh_Log(L"OMath Shade Patch Unloaded.");
+    Wh_Log(L"OMath Shade Patch Unloaded. Restoring original colors...");
+    DWORD originalOfficeColor = 0x00E6DCD7; 
+    for (void* pInstr : g_colorInstructions) {
+        DWORD oldProtect;
+        if (VirtualProtect(pInstr, sizeof(DWORD), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            *(DWORD*)pInstr = originalOfficeColor;
+            VirtualProtect(pInstr, sizeof(DWORD), oldProtect, &oldProtect);
+        }
+    }
 }
 
 // Listen for the user changing settings in the Windhawk panel
