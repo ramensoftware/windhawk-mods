@@ -75,6 +75,7 @@ Other versions have not been tested.
 
 #include <windows.h>
 #include <commctrl.h>
+#include <windhawk_utils.h>
 
 #include <string>
 #include <algorithm>
@@ -107,12 +108,11 @@ struct Settings {
 };
 
 static Settings g_settings = {};
-static HANDLE g_monitorThread = nullptr;
-static volatile bool g_stopMonitor = false;
 static DWORD g_currentPid = 0;
 static std::unordered_set<HWND> g_seenExplorerWindows;
 static std::unordered_set<HWND> g_seenTreeWindows;
 static std::unordered_set<HWND> g_attachedTreeWindows;
+static std::unordered_set<HWND> g_attachedParentWindows;
 static std::unordered_map<unsigned long long, int> g_appliedItemRows;
 static thread_local int g_normalizeDepth = 0;
 
@@ -692,7 +692,7 @@ static int GetEffectiveBaseHeight(HWND tree, const std::vector<VisibleTreeItemIn
 
 static int GetSeparatorMaskYForItem(const VisibleTreeItemInfo& info, int baseHeight) {
     int height = info.rc.bottom - info.rc.top;
-    if (height >= baseHeight + std::max(8, baseHeight / 2)) {
+    if (height >= baseHeight + baseHeight / 2) {
         return info.rc.top + baseHeight / 2;
     }
     return info.rc.top + 1;
@@ -880,7 +880,7 @@ static bool IsProbablyTallSpecialItem(const VisibleTreeItemInfo& info, int baseH
         return false;
     }
 
-    return height >= baseHeight + std::max(8, baseHeight / 2);
+    return height >= baseHeight + baseHeight / 2;
 }
 
 static std::wstring BuildTallItemHitRunString(HWND tree, const VisibleTreeItemInfo& info, int x, int step) {
@@ -1231,16 +1231,19 @@ static void MaybeAttachTreeFromCreateHook(HWND hwnd, const wchar_t* apiName) {
     }
 }
 
-static UINT_PTR MakeParentSubclassId(HWND tree, int level) {
-    return ((UINT_PTR)tree) ^ (0x9E3779B900000000ULL + (UINT_PTR)level * 0x10001ULL);
-}
+static LRESULT CALLBACK ParentSubclassProc(
+    HWND hwnd,
+    UINT uMsg,
+    WPARAM wParam,
+    LPARAM lParam,
+    DWORD_PTR dwRefData
+);
 
 static LRESULT CALLBACK TreeSubclassProc(
     HWND hwnd,
     UINT uMsg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR uIdSubclass,
     DWORD_PTR dwRefData
 ) {
     bool applyVisibleAfter = false;
@@ -1334,8 +1337,15 @@ static LRESULT CALLBACK TreeSubclassProc(
             if (g_settings.debugLogging) {
                 Wh_Log(L"[TREE MSG] hwnd=%p WM_NCDESTROY", hwnd);
             }
-            RemoveWindowSubclass(hwnd, TreeSubclassProc, uIdSubclass);
+            g_seenTreeWindows.erase(hwnd);
+            g_attachedTreeWindows.erase(hwnd);
             g_treeRoleStates.erase(hwnd);
+
+            HWND parent = GetParent(hwnd);
+            if (parent) {
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(parent, ParentSubclassProc);
+                g_attachedParentWindows.erase(parent);
+            }
             break;
     }
 
@@ -1373,25 +1383,27 @@ static LRESULT CALLBACK ParentSubclassProc(
     UINT uMsg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR uIdSubclass,
     DWORD_PTR dwRefData
 ) {
     HWND tree = (HWND)dwRefData;
 
+    if (tree && !IsWindow(tree)) {
+        tree = nullptr;
+    }
+
     switch (uMsg) {
         case WM_NOTIFY: {
             LPNMHDR hdr = (LPNMHDR)lParam;
-            if (hdr && hdr->hwndFrom == tree) {
+            if (tree && hdr && hdr->hwndFrom == tree) {
                 if (hdr->code == (UINT)NM_CUSTOMDRAW) {
                     LPNMTVCUSTOMDRAW cd = (LPNMTVCUSTOMDRAW)lParam;
                     if (g_settings.logCustomDraw) {
-                        Wh_Log(L"[PARENT NOTIFY] parent=%p tree=%p code=%s stage=%s itemSpec=0x%p levelId=0x%p rc=%s",
+                        Wh_Log(L"[PARENT NOTIFY] parent=%p tree=%p code=%s stage=%s itemSpec=0x%p rc=%s",
                                hwnd,
                                tree,
                                NotifyCodeToString(hdr->code),
                                DrawStageToString(cd->nmcd.dwDrawStage).c_str(),
                                (void*)cd->nmcd.dwItemSpec,
-                               (void*)uIdSubclass,
                                RectToString(cd->nmcd.rc).c_str());
                     }
 
@@ -1405,12 +1417,11 @@ static LRESULT CALLBACK ParentSubclassProc(
                         }
                     }
                 } else if (g_settings.debugLogging) {
-                    Wh_Log(L"[PARENT NOTIFY] parent=%p tree=%p code=%s(%u) levelId=0x%p",
+                    Wh_Log(L"[PARENT NOTIFY] parent=%p tree=%p code=%s(%u)",
                            hwnd,
                            tree,
                            NotifyCodeToString(hdr->code),
-                           hdr->code,
-                           (void*)uIdSubclass);
+                           hdr->code);
                 }
 
                 // Intentionally don't rescan/log-snapshot on expand/click here.
@@ -1421,24 +1432,23 @@ static LRESULT CALLBACK ParentSubclassProc(
 
         case WM_PAINT:
             if (g_settings.logParentPaint) {
-                Wh_Log(L"[PARENT MSG] hwnd=%p tree=%p WM_PAINT levelId=0x%p class=%s",
-                       hwnd, tree, (void*)uIdSubclass, GetWindowClassString(hwnd).c_str());
+                Wh_Log(L"[PARENT MSG] hwnd=%p tree=%p WM_PAINT class=%s",
+                       hwnd, tree, GetWindowClassString(hwnd).c_str());
             }
             break;
 
         case WM_PRINTCLIENT:
             if (g_settings.logParentPaint) {
-                Wh_Log(L"[PARENT MSG] hwnd=%p tree=%p WM_PRINTCLIENT flags=0x%llX levelId=0x%p class=%s",
+                Wh_Log(L"[PARENT MSG] hwnd=%p tree=%p WM_PRINTCLIENT flags=0x%llX class=%s",
                        hwnd,
                        tree,
                        (unsigned long long)lParam,
-                       (void*)uIdSubclass,
                        GetWindowClassString(hwnd).c_str());
             }
             break;
 
         case WM_NCDESTROY:
-            RemoveWindowSubclass(hwnd, ParentSubclassProc, uIdSubclass);
+            g_attachedParentWindows.erase(hwnd);
             break;
     }
 
@@ -1454,14 +1464,19 @@ static void AttachTreeHooks(HWND tree) {
         return;
     }
 
-    SetWindowSubclass(tree, TreeSubclassProc, (UINT_PTR)tree, 0);
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(tree, TreeSubclassProc, 0)) {
+        g_attachedTreeWindows.erase(tree);
+        return;
+    }
+
     ApplyGlobalItemHeight(tree);
     ApplyDesiredRowsToVisibleItems(tree, L"attach_once");
 
+    // The tree sends NM_CUSTOMDRAW through WM_NOTIFY to its direct parent.
+    // Subclassing higher ancestors isn't needed.
     HWND parent = GetParent(tree);
-    for (int level = 1; parent && level <= 4; level++) {
-        SetWindowSubclass(parent, ParentSubclassProc, MakeParentSubclassId(tree, level), (DWORD_PTR)tree);
-        parent = GetParent(parent);
+    if (parent && g_attachedParentWindows.insert(parent).second) {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(parent, ParentSubclassProc, (DWORD_PTR)tree);
     }
 }
 
@@ -1494,14 +1509,14 @@ static void CleanupHooksRecursive(HWND hwnd) {
     }
 
     if (IsExplorerNavigationTree(hwnd)) {
-        RemoveWindowSubclass(hwnd, TreeSubclassProc, (UINT_PTR)hwnd);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TreeSubclassProc);
         g_attachedTreeWindows.erase(hwnd);
         g_treeRoleStates.erase(hwnd);
 
         HWND parent = GetParent(hwnd);
-        for (int level = 1; parent && level <= 4; level++) {
-            RemoveWindowSubclass(parent, ParentSubclassProc, MakeParentSubclassId(hwnd, level));
-            parent = GetParent(parent);
+        if (parent) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(parent, ParentSubclassProc);
+            g_attachedParentWindows.erase(parent);
         }
     }
 
@@ -1530,33 +1545,6 @@ static BOOL CALLBACK EnumTopWindowsProc(HWND hwnd, LPARAM lParam) {
     return TRUE;
 }
 
-static void PruneSeenSets() {
-    for (auto it = g_seenExplorerWindows.begin(); it != g_seenExplorerWindows.end();) {
-        if (!IsWindow(*it)) {
-            it = g_seenExplorerWindows.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    for (auto it = g_seenTreeWindows.begin(); it != g_seenTreeWindows.end();) {
-        if (!IsWindow(*it)) {
-            it = g_seenTreeWindows.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    for (auto it = g_attachedTreeWindows.begin(); it != g_attachedTreeWindows.end();) {
-        if (!IsWindow(*it)) {
-            g_treeRoleStates.erase(*it);
-            it = g_attachedTreeWindows.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
 static void ScanExplorerWindows() {
     EnumExplorerContext ctx;
     EnumWindows(EnumTopWindowsProc, (LPARAM)&ctx);
@@ -1577,24 +1565,6 @@ static void ScanExplorerWindows() {
 
         FindAndAttachTreesRecursive(hwnd);
     }
-}
-
-static DWORD WINAPI MonitorThreadProc(LPVOID) {
-    if (g_settings.debugLogging) {
-        Wh_Log(L"[MOD] monitor thread started in pid=%lu", GetCurrentProcessId());
-    }
-
-    while (!g_stopMonitor) {
-        PruneSeenSets();
-        ScanExplorerWindows();
-
-        Sleep(1200);
-    }
-
-    if (g_settings.debugLogging) {
-        Wh_Log(L"[MOD] monitor thread stopping");
-    }
-    return 0;
 }
 
 static HWND WINAPI CreateWindowExW_Hook(
@@ -1659,7 +1629,6 @@ void Wh_ModSettingsChanged() {
 
 BOOL Wh_ModInit() {
     g_currentPid = GetCurrentProcessId();
-    g_stopMonitor = false;
 
     INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_TREEVIEW_CLASSES };
     InitCommonControlsEx(&icc);
@@ -1679,25 +1648,13 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    // Attach to tree controls that already exist when the mod is enabled.
+    // Newly created controls are handled by the CreateWindowExW/A hooks.
     ScanExplorerWindows();
-
-    if (!g_monitorThread) {
-        g_monitorThread = CreateThread(nullptr, 0, MonitorThreadProc, nullptr, 0, nullptr);
-        if (!g_monitorThread) {
-            Wh_Log(L"[MOD] CreateThread failed: %lu", GetLastError());
-        }
-    }
 }
 
 void Wh_ModBeforeUninit() {
     Wh_Log(L"[MOD] before uninit");
-    g_stopMonitor = true;
-
-    if (g_monitorThread) {
-        WaitForSingleObject(g_monitorThread, 3000);
-        CloseHandle(g_monitorThread);
-        g_monitorThread = nullptr;
-    }
 
     EnumExplorerContext ctx;
     EnumWindows(EnumTopWindowsProc, (LPARAM)&ctx);
