@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-25T16:27:22.000Z</updated>
+    <updated>2026-04-25T16:54:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aero Peek on "Show desktop" button hover 1.0.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek#9cbb60401acaf5a46e7df2dcb5b62cb656507d3f</id>
+        <link href="https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek"/>
+        <updated>2026-04-25T16:54:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with new insider Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.3]]></title>
         <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#09fd5526dd87977cebb04f6734cfbb0e6aba48e7</id>
@@ -363,23 +376,6 @@ This mod detects when that sliding window hits a screen edge fast enough and sna
         <author>
             <name>getrektbynoob20</name>
             <uri>https://github.com/getrektbynoob20</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Dialogs 1.1]]></title>
-        <id>https://windhawk.net/mods/better-dialogs#642bf56c8905e116c5d201851800312986f93d26</id>
-        <link href="https://windhawk.net/mods/better-dialogs"/>
-        <updated>2026-04-17T22:58:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Modernized Color dialog</li>
-<li>Modernized Font dialog</li>
-<li>ANSI functions hooked</li>
-<li>Legacy file pickers redirected to modern file dialog</li>
-<li>Fixed bug where message boxes with <strong>Warning</strong> icon would become Task Dialogs with an <strong>Error</strong> icon instead of the <strong>Warning</strong> icon</li>
-</ul>]]></content>
-        <author>
-            <name>FireBlade</name>
-            <uri>https://github.com/FireBlade211</uri>
         </author>
     </entry>
 </feed>
