@@ -1,3 +1,7 @@
+## 1.3.7 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5d70208acc5a1f46d1c28439cb21c13f1079ec1d/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed compatibility with new insider Windows 11 builds.
+
 ## 1.3.6 ([Oct 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c4d4cec71ba7af4f3ff2b5ccdbb3ec9a4e4ed0dc/mods/taskbar-icon-size.wh.cpp))
 
 * The mod is now compatible with the Vertical Taskbar for Windows 11 mod.

@@ -9123,7 +9123,7 @@
                     2721
                 ],
                 "ratingUsers": 3041,
-                "updated": 1761402057000,
+                "updated": 1777151262000,
                 "users": 229976
             },
             "featured": true,
@@ -9132,7 +9132,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore",
+                "compilerOptions": "-DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore -lversion",
                 "description": "Control the taskbar height and icon size, improve icon quality (Windows 11 only)",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -9141,7 +9141,7 @@
                 ],
                 "name": "Taskbar height and icon size",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3.6"
+                "version": "1.3.7"
             }
         },
         "taskbar-jump-list-on-cursor-pos": {
