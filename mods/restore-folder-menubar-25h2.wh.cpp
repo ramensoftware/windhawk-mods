@@ -2,7 +2,7 @@
 // @id              restore-folder-menubar-25h2
 // @name            Restore folder menubar in 24h2, 25h2
 // @description     Restores the menubar in folder windows in 24h2, 25h2 and later
-// @version         1.0.0
+// @version         1.0.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -27,7 +27,8 @@ with the following command before using this mod:
 
 Alternatively, you can use the [ViVeToolGUI](https://apps.microsoft.com/detail/9P1BW5WB82MH) from
 Windows Store.
-On later builds you may also need to replace the file Explorerframe.dll with the one from an older Windows version.
+On later builds (such as 26200.8037 and above) you will also need to replace the file Explorerframe.dll with the one from an older Windows version,
+because the menubar has been removed completely.
 
 */
 // ==/WindhawkModReadme==
