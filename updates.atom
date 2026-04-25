@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-25T14:15:46.000Z</updated>
+    <updated>2026-04-25T15:38:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar Color 1.1.0]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-color#d9e2c14c876da8f9de4910d217adf43e4fc85bfb</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-color"/>
+        <updated>2026-04-25T15:38:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="diskusagebarcolor">Disk Usage Bar Color</h1>
+<p>Customizes the color of the disk usage progress bars shown in File Explorer's
+<strong>This PC</strong> view.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Bar Color (Normal)</strong>: Hex color for drives with normal usage (default: <code>60CDFF</code>)</li>
+<li><strong>Bar Color (Full/Warning)</strong>: Hex color for drives that are nearly full,
+shown in red by default (default: <code>E81123</code>)</li>
+</ul>
+<p>Enter colors as 6-digit hex codes without the <code>#</code> prefix (e.g. <code>60CDFF</code>).</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Only drive bars in the <strong>This PC</strong> view are affected. File copy/move progress
+bars are filtered out using window ancestry checks.</li>
+</ul>]]></content>
+        <author>
+            <name>dirtyrazkl</name>
+            <uri>https://github.com/dirtyrazkl</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.7.4]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#00185dce0fd0a9b71e0fdaa09b0611224dfaa022</id>
@@ -390,25 +415,6 @@ This mod detects when that sliding window hits a screen edge fast enough and sna
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 1.1.0]]></title>
-        <id>https://windhawk.net/mods/audioswap#b021b7eb4f7d83858aac69a9f1eac00aeafdc618</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-04-17T13:08:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Right-click the icon to select devices:
-Windhawk settings page reduced to icon selection only.
-auto-detects all active audio outputs and lets you assign Device 1 and Device 2 directly from a live list.
-No more typing device names manually.</p></li>
-<li><p>Device selections persist across restarts.</p></li>
-<li><p>Toggle now matches devices by their unique system ID instead of a name substring search,
-works correctly regardless of how Windows names the device.</p></li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

@@ -3062,6 +3062,34 @@
                 "version": "1.0.1"
             }
         },
+        "disk-usage-bar-color": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777131528000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777131528000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "dirtyrazkl",
+                "compilerOptions": "-luxtheme -lmsimg32 -lgdi32",
+                "description": "Customize the disk usage bar color in File Explorer This PC view",
+                "github": "https://github.com/dirtyrazkl",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Disk Usage Bar Color",
+                "version": "1.1.0"
+            }
+        },
         "disk-usage-bar-in-drive-properties": {
             "details": {
                 "defaultSorting": 4280,
