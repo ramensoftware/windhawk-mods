@@ -1,3 +1,8 @@
+## 1.3.1 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/924426711ad95bf5c6947842def94e251177dd15/mods/taskbar-notification-icon-spacing.wh.cpp))
+
+* Added an option for column-first, bottom-to-top, right-to-left grid arrangement.
+* Fixed compatibility with new insider Windows 11 builds.
+
 ## 1.3 ([Jan 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7b60e3a794333aa37dc8841ac9093f4c101074b8/mods/taskbar-notification-icon-spacing.wh.cpp))
 
 * Added an option to choose the grid arrangement, e.g. whether to fill each row before moving to the next, or to fill each column first. The default option is now "Row-first, left-to-right". You can change it to "Column-first, top-to-bottom" to revert to the behavior of the previous version.
