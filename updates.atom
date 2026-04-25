@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-23T09:22:53.000Z</updated>
+    <updated>2026-04-25T12:14:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 3.5]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#13d66deeb8119d6504e1908a95e4131119c4d82e</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-04-25T12:14:22.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="improved">Improved</h3>
+<ul>
+<li>Refactored the internal runtime state into a more structured and maintainable model with cleaner ownership boundaries.</li>
+<li>Reworked native Word event handling to reduce coupling between the event sink and global runtime session state.</li>
+<li>Split autosave and document-state tick capture into more focused paths so each timer flow computes only the state it actually needs.</li>
+<li>Unified document snapshot loading through a shared plan-based pipeline used by both document-state refresh and save operations.</li>
+<li>Simplified and strengthened owner-thread handling, scheduler coordination, and reset paths.</li>
+<li>Expanded internal self-tests covering event routing, snapshot policy, scheduler behavior, owner-thread helpers, and reset helpers.</li>
+</ul>
+<h3 id="optimized">Optimized</h3>
+<ul>
+<li>Reduced unnecessary work in the autosave timer path by skipping full owner-thread/UI/input observation when no pending save exists.</li>
+<li>Removed redundant input-busy checks by reusing already captured tick state where appropriate.</li>
+<li>Replaced scattered <code>IID_PPV_ARGS</code> usage with a typed <code>QueryInterface</code> helper to make the COM path cleaner and warning-free.</li>
+<li>Fixed a signedness conversion in COM dispatch argument setup to keep the code clean under stricter compiler diagnostics.</li>
+</ul>
+<h3 id="notes">Notes</h3>
+<ul>
+<li>v3.5 does not add new user-facing features or settings.</li>
+<li>This release focuses on internal code quality, maintainability, compile-time cleanliness, and removing remaining performance/architecture debt after v3.4.</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Buttons 2.0]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-buttons#596a4eba99e22c1a8aefd4c960d33bb90879bdda</id>
@@ -373,17 +404,6 @@ works correctly regardless of how Windows names the device.</p></li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.1]]></title>
-        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#4c017a52c6350a00b79133b6c8fec58cf22450bb</id>
-        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
-        <updated>2026-04-16T12:09:51.000Z</updated>
-        <content type="html"><![CDATA[<p>Add error messagebox on denied access</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,23 @@
+## 3.5 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/13d66deeb8119d6504e1908a95e4131119c4d82e/mods/word-local-autosave.wh.cpp))
+
+### Improved
+- Refactored the internal runtime state into a more structured and maintainable model with cleaner ownership boundaries.
+- Reworked native Word event handling to reduce coupling between the event sink and global runtime session state.
+- Split autosave and document-state tick capture into more focused paths so each timer flow computes only the state it actually needs.
+- Unified document snapshot loading through a shared plan-based pipeline used by both document-state refresh and save operations.
+- Simplified and strengthened owner-thread handling, scheduler coordination, and reset paths.
+- Expanded internal self-tests covering event routing, snapshot policy, scheduler behavior, owner-thread helpers, and reset helpers.
+
+### Optimized
+- Reduced unnecessary work in the autosave timer path by skipping full owner-thread/UI/input observation when no pending save exists.
+- Removed redundant input-busy checks by reusing already captured tick state where appropriate.
+- Replaced scattered `IID_PPV_ARGS` usage with a typed `QueryInterface` helper to make the COM path cleaner and warning-free.
+- Fixed a signedness conversion in COM dispatch argument setup to keep the code clean under stricter compiler diagnostics.
+
+### Notes
+- v3.5 does not add new user-facing features or settings.
+- This release focuses on internal code quality, maintainability, compile-time cleanliness, and removing remaining performance/architecture debt after v3.4.
+
 ## 3.4 ([Apr 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c155764bd43a6b348c16015576dc85163f8cb5b9/mods/word-local-autosave.wh.cpp))
 
 ### Improved
