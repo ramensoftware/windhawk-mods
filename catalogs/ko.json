@@ -9871,7 +9871,7 @@
                     605
                 ],
                 "ratingUsers": 650,
-                "updated": 1753311615000,
+                "updated": 1777134442000,
                 "users": 55644
             },
             "metadata": {
@@ -9879,8 +9879,8 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-                "description": "Allows hiding system icons: volume, network, battery, microphone, location/GPS, Studio Effects, language bar, bell (always or when there are no new notifications), and the \"Show desktop\" button (hide or set width)",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+                "description": "Allows hiding system icons: volume, network, battery, microphone, location/GPS, Studio Effects, Recall, language bar, bell (always or when there are no new notifications), and the \"Show desktop\" button (hide or set width)",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -9888,7 +9888,7 @@
                 ],
                 "name": "Taskbar tray system icon tweaks",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.3"
+                "version": "1.3"
             }
         },
         "taskbar-vertical": {

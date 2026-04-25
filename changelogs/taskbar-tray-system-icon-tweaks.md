@@ -1,3 +1,9 @@
+## 1.3 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/09fd5526dd87977cebb04f6734cfbb0e6aba48e7/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
+
+* Added an option for a grayscale battery icon instead of its colored (e.g. green/yellow) variant.
+* Added an option to hide the Recall icon.
+Fixed compatibility with new insider Windows 11 builds.
+
 ## 1.2.3 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/0ceec46962865fdd3e2d7d83a83330ea1a3c1ca8/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
 
 * Added an option to hide the Studio Effects icon.

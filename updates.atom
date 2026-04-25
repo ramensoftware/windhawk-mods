@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-25T15:41:26.000Z</updated>
+    <updated>2026-04-25T16:27:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#09fd5526dd87977cebb04f6734cfbb0e6aba48e7</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
+        <updated>2026-04-25T16:27:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option for a grayscale battery icon instead of its colored (e.g. green/yellow) variant.</li>
+<li>Added an option to hide the Recall icon.
+Fixed compatibility with new insider Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word OfficeMath EditBox Shade Fix 1.0.0]]></title>
         <id>https://windhawk.net/mods/word-omath-shade-fix#62d458d095e604fc6a305176822d19e9ec2ca7f1</id>
@@ -365,19 +380,6 @@ This mod detects when that sliding window hits a screen edge fast enough and sna
         <author>
             <name>FireBlade</name>
             <uri>https://github.com/FireBlade211</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Custom Titlebar Colors 1.1.2]]></title>
-        <id>https://windhawk.net/mods/auto-custom-titlebar-colors#69a1563ab829620af049efd27a911655aee6195d</id>
-        <link href="https://windhawk.net/mods/auto-custom-titlebar-colors"/>
-        <updated>2026-04-17T22:56:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Remove Flow Launcher from exclusion list as it doesn't cause the issue anymore with the previous fixes</li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
