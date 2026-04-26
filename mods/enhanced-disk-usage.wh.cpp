@@ -8,6 +8,7 @@
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lole32 -luuid -luser32 -lgdi32 -luxtheme -lshlwapi -lmsimg32 -lgdiplus
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 ![Screenshot](https://raw.githubusercontent.com/bbmaster123/FWFU/refs/heads/main/Assets/screenshot.png)
@@ -22,7 +23,8 @@ outline
 - rounded corners
 - glossy overlay toggle option (for a more Windows Aero-ish looking aesthetic)
 - height/width controls (inset) controls for disk bar and track
-- custom disk usage text with font size adjustment, muti-line support, line-height adjustment, and more
+- custom disk usage text with font size adjustment, muti-line support,
+line-height adjustment, and more
 
 ex.
 100GB free | 100GB/200GB
@@ -88,7 +90,7 @@ ex.
   $name: Multi-line Spacing Offset (negative squeezes lines closer)
 - fontSize: 0
   $name: Font Size Offset
-  $description: Adjusts the font size (positive makes it larger, negative smaller). 0 for default.
+  $description: Adjusts the font size (positive is larger, negative is smaller)
 - enableWordEllipsis: false
   $name: Enable Word Ellipsis (if text is too long)
 */
@@ -103,10 +105,10 @@ ex.
 #include <windows.h>
 #include <algorithm>
 #include <cwchar>
-#include <string>
-#include <vector>
-#include <unordered_map>
 #include <shared_mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 using namespace Gdiplus;
 
@@ -167,9 +169,13 @@ HTHEME WINAPI OpenThemeData_Hook(HWND hwnd, LPCWSTR pszClassList) {
     return hTheme;
 }
 
-typedef HTHEME(WINAPI* OpenThemeDataEx_t)(HWND hwnd, LPCWSTR pszClassList, DWORD dwFlags);
+typedef HTHEME(WINAPI* OpenThemeDataEx_t)(HWND hwnd,
+                                          LPCWSTR pszClassList,
+                                          DWORD dwFlags);
 OpenThemeDataEx_t OpenThemeDataEx_Orig;
-HTHEME WINAPI OpenThemeDataEx_Hook(HWND hwnd, LPCWSTR pszClassList, DWORD dwFlags) {
+HTHEME WINAPI OpenThemeDataEx_Hook(HWND hwnd,
+                                   LPCWSTR pszClassList,
+                                   DWORD dwFlags) {
     HTHEME hTheme = OpenThemeDataEx_Orig(hwnd, pszClassList, dwFlags);
     if (hTheme && pszClassList) {
         std::unique_lock lock(g_themeClassMutex);
@@ -178,9 +184,13 @@ HTHEME WINAPI OpenThemeDataEx_Hook(HWND hwnd, LPCWSTR pszClassList, DWORD dwFlag
     return hTheme;
 }
 
-typedef HTHEME(WINAPI* OpenThemeDataForDpi_t)(HWND hwnd, LPCWSTR pszClassList, UINT dpi);
+typedef HTHEME(WINAPI* OpenThemeDataForDpi_t)(HWND hwnd,
+                                              LPCWSTR pszClassList,
+                                              UINT dpi);
 OpenThemeDataForDpi_t OpenThemeDataForDpi_Orig;
-HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hwnd, LPCWSTR pszClassList, UINT dpi) {
+HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hwnd,
+                                       LPCWSTR pszClassList,
+                                       UINT dpi) {
     HTHEME hTheme = OpenThemeDataForDpi_Orig(hwnd, pszClassList, dpi);
     if (hTheme && pszClassList) {
         std::unique_lock lock(g_themeClassMutex);
@@ -301,12 +311,17 @@ double GetUnitMultiplier(const wchar_t* u) {
         }
     }
 
-    if (prefix == L'T' || prefix == L'\x0422') return 1099511627776.0;
-    if (prefix == L'G' || prefix == L'\x0413') return 1073741824.0;
-    if (prefix == L'M' || prefix == L'\x041C') return 1048576.0;
-    if (prefix == L'K' || prefix == L'\x041A') return 1024.0;
-    if (prefix == L'B' || prefix == L'\x0411' || prefix == L'O') return 1.0;
-    
+    if (prefix == L'T' || prefix == L'\x0422')
+        return 1099511627776.0;
+    if (prefix == L'G' || prefix == L'\x0413')
+        return 1073741824.0;
+    if (prefix == L'M' || prefix == L'\x041C')
+        return 1048576.0;
+    if (prefix == L'K' || prefix == L'\x041A')
+        return 1024.0;
+    if (prefix == L'B' || prefix == L'\x0411' || prefix == L'O')
+        return 1.0;
+
     return 0.0;
 }
 
@@ -353,7 +368,7 @@ static bool IsValidDiskBarWindow(HWND hwnd) {
                 return false;
             }
             if (wCls == L"directuihwnd") {
-                return true; // Fast exit if we hit the valid container
+                return true;  // Fast exit if we hit the valid container
             }
         }
         walk = GetParent(walk);
@@ -426,7 +441,8 @@ static void PaintEnhancedBar(HDC hdc,
             BuildRoundedPath(trackPath, rect, (float)g_cornerRadius);
             SolidBrush trBr{Color{g_trackColor}};
             graphics.FillPath(&trBr, &trackPath);
-            if (((g_borderColor >> 24) & 0xFF) > 0 && g_borderThickness > 0.0f) {
+            if (((g_borderColor >> 24) & 0xFF) > 0 &&
+                g_borderThickness > 0.0f) {
                 Pen p{Color{g_borderColor}, g_borderThickness};
                 p.SetAlignment(PenAlignmentCenter);
                 graphics.DrawPath(&p, &trackPath);
@@ -450,17 +466,17 @@ static bool IsDiskBar(HTHEME hTheme,
         hwnd = GetThemeWindow_Ptr(hTheme);
     if (!hwnd)
         hwnd = WindowFromDC(hdc);
-        
-    HWND dpiHwnd = hwnd;
+    if (!hwnd)
+        hwnd = GetActiveWindow();
 
     static auto pGetDpiForWindow = (UINT(WINAPI*)(HWND))GetProcAddress(
         GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
     float scale = 1.0f;
-    if (pGetDpiForWindow && dpiHwnd) {
-        scale = (float)pGetDpiForWindow(dpiHwnd) / 96.0f;
+    if (pGetDpiForWindow && hwnd) {
+        scale = (float)pGetDpiForWindow(hwnd) / 96.0f;
     } else {
         // Fallback
-        scale = (float)GetDeviceCaps(hdc ? hdc : GetDC(NULL), LOGPIXELSY) / 96.0f;
+        scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
     }
 
     // Logical Dimensioning
@@ -471,69 +487,59 @@ static bool IsDiskBar(HTHEME hTheme,
     float logicalH = (float)h / scale;
     float logicalW = (float)w / scale;
 
-    // Be more lenient with disk bar dimensions
     if (iPartId == 5) {
-        if (logicalH < 0.5f || logicalH > 100.0f)
+        if (logicalH < 2.0f || logicalH > 15.5f)
             return false;
     } else {
-        if (logicalW < 5.0f)
+        if (logicalW < 30.0f)
             return false;
-        if (logicalH < 0.5f || logicalH > 100.0f)
+        if (logicalH < 6.0f || logicalH > 16.5f)
             return false;
     }
 
-    std::wstring themeClass;
-    {
-        std::shared_lock lock(g_themeClassMutex);
-        auto it = g_themeClasses.find(hTheme);
-        if (it != g_themeClasses.end()) {
-            themeClass = it->second;
-        }
-    }
-
-    bool hasProgressClass = false;
-    std::wstring themeClsLower;
-    if (!themeClass.empty()) {
-        themeClsLower = themeClass;
-    } else if (GetThemeClassList_Ptr) {
+    if (GetThemeClassList_Ptr) {
         wchar_t themeCls[256];
         if (SUCCEEDED(GetThemeClassList_Ptr(hTheme, themeCls, 256))) {
-            themeClsLower = themeCls;
+            std::wstring tCls(themeCls);
+            std::transform(tCls.begin(), tCls.end(), tCls.begin(), ::towlower);
+            if (tCls.find(L"progress") == std::wstring::npos)
+                return false;
+            if (tCls.find(L"scrollbar") != std::wstring::npos ||
+                tCls.find(L"header") != std::wstring::npos)
+                return false;
         }
     }
 
-    if (!themeClsLower.empty()) {
-        std::transform(themeClsLower.begin(), themeClsLower.end(), themeClsLower.begin(), ::towlower);
-        if (themeClsLower.find(L"progress") != std::wstring::npos)
-            hasProgressClass = true;
-        if (themeClsLower.find(L"scrollbar") != std::wstring::npos ||
-            themeClsLower.find(L"header") != std::wstring::npos)
-            return false;
-    }
-
-    if (themeClsLower.empty()) {
-        if (hwnd) {
+    if (hwnd) {
+        HWND walk = hwnd;
+        int limit = 15;
+        while (walk && limit-- > 0) {
             wchar_t cls[MAX_PATH];
-            if (GetClassNameW(hwnd, cls, MAX_PATH)) {
+            if (GetClassName(walk, cls, MAX_PATH)) {
                 std::wstring wCls(cls);
-                if (wCls == L"DirectUIHWND" || wCls == L"CabinetWClass") {
-                    hasProgressClass = true;
+                std::transform(wCls.begin(), wCls.end(), wCls.begin(),
+                               ::towlower);
+
+                if (wCls == L"#32770" || wCls == L"msctls_progress32" ||
+                    wCls.find(L"scrollbar") != std::wstring::npos ||
+                    wCls.find(L"header") != std::wstring::npos ||
+                    wCls.find(L"listview") != std::wstring::npos ||
+                    wCls.find(L"property") != std::wstring::npos) {
+                    return false;
                 }
             }
+            walk = GetParent(walk);
         }
     }
 
-    if (!hasProgressClass)
-        return false;
-
-    if (hwnd && !IsValidDiskBarWindow(hwnd))
-        return false;
-
     // prevent navpane being styled
-    if (pRect->left < (int)(20 * scale))
+    if (pRect->left < (int)(32 * scale))
         return false;
     return true;
 }
+
+thread_local static RECT g_lastBarRect = {0};
+thread_local static HDC g_lastBarDC = NULL;
 
 HRESULT WINAPI HookedDrawThemeBackground(HTHEME hTheme,
                                          HDC hdc,
@@ -541,22 +547,19 @@ HRESULT WINAPI HookedDrawThemeBackground(HTHEME hTheme,
                                          int iStateId,
                                          LPCRECT pRect,
                                          LPCRECT pClipRect) {
-    thread_local static RECT lastTrackRect = {0};
-
     if (IsDiskBar(hTheme, hdc, iPartId, iStateId, pRect)) {
         // Suppress native drawing entirely
-        if (iPartId == 1 || iPartId == 11) {
-            lastTrackRect = *pRect;
-            PaintEnhancedBar(hdc, pRect, pClipRect, iStateId, false);
-        } else if (iPartId == 5) {
-            if (pRect->top < lastTrackRect.top - 2 ||
-                pRect->bottom > lastTrackRect.bottom + 2) {
-                return DrawThemeBackground_Orig(hTheme, hdc, iPartId, iStateId,
-                                                pRect, pClipRect);
-            }
+        bool first = !(hdc == g_lastBarDC && EqualRect(pRect, &g_lastBarRect));
+
+        if (iPartId == 5) {
             PaintEnhancedBar(hdc, pRect, pClipRect, iStateId, true);
+        } else if (iPartId == 1 || iPartId == 11) {
+            if (first)
+                PaintEnhancedBar(hdc, pRect, pClipRect, iStateId, false);
         }
 
+        g_lastBarDC = hdc;
+        g_lastBarRect = *pRect;
         return S_OK;
     }
     return DrawThemeBackground_Orig(hTheme, hdc, iPartId, iStateId, pRect,
@@ -571,28 +574,40 @@ bool FindSpaceStats(const std::wstring& t, std::wstring& f, std::wstring& tot) {
     }
 
     size_t num1_start = nt.find_first_of(L"0123456789");
-    if (num1_start == std::wstring::npos) return false;
+    if (num1_start == std::wstring::npos)
+        return false;
 
     size_t pos = num1_start;
-    while (pos < nt.length() && (iswdigit(nt[pos]) || nt[pos] == L'.' || nt[pos] == L',' || nt[pos] == L' ')) pos++;
-    while (pos < nt.length() && nt[pos] == L' ') pos++;
-    while (pos < nt.length() && !iswdigit(nt[pos]) && nt[pos] != L' ') pos++;
+    while (pos < nt.length() && (iswdigit(nt[pos]) || nt[pos] == L'.' ||
+                                 nt[pos] == L',' || nt[pos] == L' '))
+        pos++;
+    while (pos < nt.length() && nt[pos] == L' ')
+        pos++;
+    while (pos < nt.length() && !iswdigit(nt[pos]) && nt[pos] != L' ')
+        pos++;
     size_t size1_end = pos;
 
     size_t num2_start = nt.find_first_of(L"0123456789", size1_end);
-    if (num2_start == std::wstring::npos) return false;
+    if (num2_start == std::wstring::npos)
+        return false;
 
     pos = num2_start;
-    while (pos < nt.length() && (iswdigit(nt[pos]) || nt[pos] == L'.' || nt[pos] == L',' || nt[pos] == L' ')) pos++;
-    while (pos < nt.length() && nt[pos] == L' ') pos++;
-    while (pos < nt.length() && !iswdigit(nt[pos]) && nt[pos] != L' ') pos++;
+    while (pos < nt.length() && (iswdigit(nt[pos]) || nt[pos] == L'.' ||
+                                 nt[pos] == L',' || nt[pos] == L' '))
+        pos++;
+    while (pos < nt.length() && nt[pos] == L' ')
+        pos++;
+    while (pos < nt.length() && !iswdigit(nt[pos]) && nt[pos] != L' ')
+        pos++;
     size_t size2_end = pos;
 
     f = nt.substr(num1_start, size1_end - num1_start);
     tot = nt.substr(num2_start, size2_end - num2_start);
 
-    while (!f.empty() && f.back() == L' ') f.pop_back();
-    while (!tot.empty() && tot.back() == L' ') tot.pop_back();
+    while (!f.empty() && f.back() == L' ')
+        f.pop_back();
+    while (!tot.empty() && tot.back() == L' ')
+        tot.pop_back();
 
     return true;
 }
@@ -604,9 +619,13 @@ int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR psz, int cch, LPRECT prc, UINT fmt) {
     int len = (cch == -1) ? (int)wcslen(psz) : cch;
     bool hasNum = false;
     for (int i = 0; i < len; ++i) {
-        if (psz[i] >= L'0' && psz[i] <= L'9') { hasNum = true; break; }
+        if (psz[i] >= L'0' && psz[i] <= L'9') {
+            hasNum = true;
+            break;
+        }
     }
-    if (!hasNum) return DrawTextW_Orig(hdc, psz, cch, prc, fmt);
+    if (!hasNum)
+        return DrawTextW_Orig(hdc, psz, cch, prc, fmt);
 
     // Target window verification
     if (hdc) {
@@ -629,106 +648,116 @@ int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR psz, int cch, LPRECT prc, UINT fmt) {
 
         if (swscanf(cf.c_str(), L"%lf %15s", &fv, fu) == 2 &&
             swscanf(ct.c_str(), L"%lf %15s", &tv, tu) == 2) {
-            
             double um1 = GetUnitMultiplier(fu);
             double um2 = GetUnitMultiplier(tu);
             if (um1 > 0.0 && um2 > 0.0) {
-            
-            std::wstring us = std::wstring(StrFormatByteSizeW(
-                (ULONGLONG)std::max(0.0, (tv * um2 - fv * um1)),
-                fu, 16));
+                std::wstring us = std::wstring(StrFormatByteSizeW(
+                    (ULONGLONG)std::max(0.0, (tv * um2 - fv * um1)), fu, 16));
 
-            if (g_removeSpace)
-                us.erase(std::remove(us.begin(), us.end(), L' '), us.end());
-            std::wstring fS = g_formatString;
-            size_t p1 = fS.find(L"%s"), p2 = fS.find(L"%s", p1 + 2),
-                   p3 = fS.find(L"%s", p2 + 2);
-            std::wstring s1 = fS.substr(0, p1) + fs +
-                              fS.substr(p1 + 2, p2 - p1 - 2),
-                         s2 = g_boldUsed ? MakeBoldText(us) : us,
-                         s3 = fS.substr(p2 + 2, p3 - p2 - 2) + ts +
-                              fS.substr(p3 + 2);
+                if (g_removeSpace)
+                    us.erase(std::remove(us.begin(), us.end(), L' '), us.end());
+                std::wstring fS = g_formatString;
+                size_t p1 = fS.find(L"%s"), p2 = fS.find(L"%s", p1 + 2),
+                       p3 = fS.find(L"%s", p2 + 2);
+                std::wstring s1 = fS.substr(0, p1) + fs +
+                                  fS.substr(p1 + 2, p2 - p1 - 2),
+                             s2 = g_boldUsed ? MakeBoldText(us) : us,
+                             s3 = fS.substr(p2 + 2, p3 - p2 - 2) + ts +
+                                  fS.substr(p3 + 2);
 
-            if (fmt & DT_CALCRECT) {
-                std::wstring ft = s1 + s2 + s3;
-                UINT calcFmt = fmt;
-                if (ft.find(L'\n') != std::wstring::npos) {
-                    calcFmt &= ~DT_SINGLELINE;
+                if (fmt & DT_CALCRECT) {
+                    std::wstring ft = s1 + s2 + s3;
+                    UINT calcFmt = fmt;
+                    if (ft.find(L'\n') != std::wstring::npos) {
+                        calcFmt &= ~DT_SINGLELINE;
+                    }
+                    return DrawTextW_Orig(hdc, ft.c_str(), (int)ft.length(),
+                                          prc, calcFmt);
                 }
-                return DrawTextW_Orig(hdc, ft.c_str(), (int)ft.length(), prc,
-                                      calcFmt);
-            }
-            
-            int applyLineYOffset = g_lineYOffset;
-            
-            HFONT hOldFont = NULL;
-            HFONT hNewFont = NULL;
-            float scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
-            if (g_fontSize != 0) {
-                HFONT hCurrent = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
-                LOGFONTW lf;
-                if (GetObjectW(hCurrent, sizeof(lf), &lf)) {
-                    if (lf.lfHeight < 0) lf.lfHeight -= (int)(g_fontSize * scale);
-                    else lf.lfHeight += (int)(g_fontSize * scale);
-                    hNewFont = CreateFontIndirectW(&lf);
-                    if (hNewFont) hOldFont = (HFONT)SelectObject(hdc, hNewFont);
-                }
-            }
 
-            std::wstring ft = s1 + s2 + s3;
-            bool multiLine = (ft.find(L'\n') != std::wstring::npos);
+                int applyLineYOffset = g_lineYOffset;
 
-            UINT dF = fmt | DT_NOPREFIX;
-            if (!g_enableWordEllipsis) {
-                dF &= ~(DT_END_ELLIPSIS | DT_PATH_ELLIPSIS | DT_WORD_ELLIPSIS);
-            } else {
-                dF |= DT_WORD_ELLIPSIS | DT_END_ELLIPSIS;
-            }
-            RECT r = *prc;
-            r.top += applyLineYOffset;
-            r.bottom += applyLineYOffset;
-            
-            int ft_ret = 0;
-            if (multiLine) {
-                std::vector<std::wstring> lines;
-                size_t start_pos = 0, end_pos = 0;
-                while ((end_pos = ft.find(L'\n', start_pos)) != std::wstring::npos) {
-                    lines.push_back(ft.substr(start_pos, end_pos - start_pos));
-                    start_pos = end_pos + 1;
-                }
-                lines.push_back(ft.substr(start_pos));
-
-                dF &= ~(DT_SINGLELINE | DT_VCENTER | DT_BOTTOM);
-                dF |= DT_TOP | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX;
-                
-                int totalHeight = 0;
-                for (size_t i = 0; i < lines.size(); ++i) {
-                    RECT lr = r;
-                    lr.top += totalHeight;
-                    lr.bottom += 1000;
-                    if (fmt & DT_CALCRECT) {
-                        DrawTextW_Orig(hdc, lines[i].c_str(), (int)lines[i].length(), &lr, dF | DT_CALCRECT);
-                        totalHeight += (lr.bottom - lr.top) + g_lineSpacing;
-                    } else {
-                        RECT calcR = lr;
-                        DrawTextW_Orig(hdc, lines[i].c_str(), (int)lines[i].length(), &calcR, dF | DT_CALCRECT);
-                        DrawTextW_Orig(hdc, lines[i].c_str(), (int)lines[i].length(), &lr, dF);
-                        totalHeight += (calcR.bottom - calcR.top) + g_lineSpacing;
+                HFONT hOldFont = NULL;
+                HFONT hNewFont = NULL;
+                float scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
+                if (g_fontSize != 0) {
+                    HFONT hCurrent = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
+                    LOGFONTW lf;
+                    if (GetObjectW(hCurrent, sizeof(lf), &lf)) {
+                        if (lf.lfHeight < 0)
+                            lf.lfHeight -= (int)(g_fontSize * scale);
+                        else
+                            lf.lfHeight += (int)(g_fontSize * scale);
+                        hNewFont = CreateFontIndirectW(&lf);
+                        if (hNewFont)
+                            hOldFont = (HFONT)SelectObject(hdc, hNewFont);
                     }
                 }
-                if (fmt & DT_CALCRECT) {
-                    prc->bottom = prc->top + totalHeight - g_lineSpacing;
-                }
-                ft_ret = totalHeight - g_lineSpacing;
-            } else {
-                ft_ret = DrawTextW_Orig(hdc, ft.c_str(), (int)ft.length(), &r, dF);
-            }
 
-            if (hOldFont) {
-                SelectObject(hdc, hOldFont);
-                DeleteObject(hNewFont);
-            }
-            return ft_ret;
+                std::wstring ft = s1 + s2 + s3;
+                bool multiLine = (ft.find(L'\n') != std::wstring::npos);
+
+                UINT dF = fmt | DT_NOPREFIX;
+                if (!g_enableWordEllipsis) {
+                    dF &= ~(DT_END_ELLIPSIS | DT_PATH_ELLIPSIS |
+                            DT_WORD_ELLIPSIS);
+                } else {
+                    dF |= DT_WORD_ELLIPSIS | DT_END_ELLIPSIS;
+                }
+                RECT r = *prc;
+                r.top += applyLineYOffset;
+                r.bottom += applyLineYOffset;
+
+                int ft_ret = 0;
+                if (multiLine) {
+                    std::vector<std::wstring> lines;
+                    size_t start_pos = 0, end_pos = 0;
+                    while ((end_pos = ft.find(L'\n', start_pos)) !=
+                           std::wstring::npos) {
+                        lines.push_back(
+                            ft.substr(start_pos, end_pos - start_pos));
+                        start_pos = end_pos + 1;
+                    }
+                    lines.push_back(ft.substr(start_pos));
+
+                    dF &= ~(DT_SINGLELINE | DT_VCENTER | DT_BOTTOM);
+                    dF |= DT_TOP | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX;
+
+                    int totalHeight = 0;
+                    for (size_t i = 0; i < lines.size(); ++i) {
+                        RECT lr = r;
+                        lr.top += totalHeight;
+                        lr.bottom += 1000;
+                        if (fmt & DT_CALCRECT) {
+                            DrawTextW_Orig(hdc, lines[i].c_str(),
+                                           (int)lines[i].length(), &lr,
+                                           dF | DT_CALCRECT);
+                            totalHeight += (lr.bottom - lr.top) + g_lineSpacing;
+                        } else {
+                            RECT calcR = lr;
+                            DrawTextW_Orig(hdc, lines[i].c_str(),
+                                           (int)lines[i].length(), &calcR,
+                                           dF | DT_CALCRECT);
+                            DrawTextW_Orig(hdc, lines[i].c_str(),
+                                           (int)lines[i].length(), &lr, dF);
+                            totalHeight +=
+                                (calcR.bottom - calcR.top) + g_lineSpacing;
+                        }
+                    }
+                    if (fmt & DT_CALCRECT) {
+                        prc->bottom = prc->top + totalHeight - g_lineSpacing;
+                    }
+                    ft_ret = totalHeight - g_lineSpacing;
+                } else {
+                    ft_ret = DrawTextW_Orig(hdc, ft.c_str(), (int)ft.length(),
+                                            &r, dF);
+                }
+
+                if (hOldFont) {
+                    SelectObject(hdc, hOldFont);
+                    DeleteObject(hNewFont);
+                }
+                return ft_ret;
             }
         }
     }
@@ -747,9 +776,13 @@ int WINAPI DrawTextExW_Hook(HDC hdc,
     int len = (cch == -1) ? (int)wcslen(psz) : cch;
     bool hasNum = false;
     for (int i = 0; i < len; ++i) {
-        if (psz[i] >= L'0' && psz[i] <= L'9') { hasNum = true; break; }
+        if (psz[i] >= L'0' && psz[i] <= L'9') {
+            hasNum = true;
+            break;
+        }
     }
-    if (!hasNum) return DrawTextExW_Orig(hdc, psz, cch, prc, fmt, pDtp);
+    if (!hasNum)
+        return DrawTextExW_Orig(hdc, psz, cch, prc, fmt, pDtp);
 
     // Target window verification
     if (hdc) {
@@ -773,113 +806,125 @@ int WINAPI DrawTextExW_Hook(HDC hdc,
 
         if (swscanf(cf.c_str(), L"%lf %15s", &fv, fu) == 2 &&
             swscanf(ct.c_str(), L"%lf %15s", &tv, tu) == 2) {
-            
             double um1 = GetUnitMultiplier(fu);
             double um2 = GetUnitMultiplier(tu);
             if (um1 > 0.0 && um2 > 0.0) {
-            
-            std::wstring us = std::wstring(StrFormatByteSizeW(
-                (ULONGLONG)std::max(0.0, (tv * um2 - fv * um1)),
-                fu, 16));
+                std::wstring us = std::wstring(StrFormatByteSizeW(
+                    (ULONGLONG)std::max(0.0, (tv * um2 - fv * um1)), fu, 16));
 
-            if (g_removeSpace)
-                us.erase(std::remove(us.begin(), us.end(), L' '), us.end());
-            std::wstring fS = g_formatString;
-            size_t p1 = fS.find(L"%s"), p2 = fS.find(L"%s", p1 + 2),
-                   p3 = fS.find(L"%s", p2 + 2);
-            std::wstring s1 = fS.substr(0, p1) + fs +
-                               fS.substr(p1 + 2, p2 - p1 - 2),
-                          s2 = g_boldUsed ? MakeBoldText(us) : us,
-                          s3 = fS.substr(p2 + 2, p3 - p2 - 2) + ts +
-                               fS.substr(p3 + 2);
+                if (g_removeSpace)
+                    us.erase(std::remove(us.begin(), us.end(), L' '), us.end());
+                std::wstring fS = g_formatString;
+                size_t p1 = fS.find(L"%s"), p2 = fS.find(L"%s", p1 + 2),
+                       p3 = fS.find(L"%s", p2 + 2);
+                std::wstring s1 = fS.substr(0, p1) + fs +
+                                  fS.substr(p1 + 2, p2 - p1 - 2),
+                             s2 = g_boldUsed ? MakeBoldText(us) : us,
+                             s3 = fS.substr(p2 + 2, p3 - p2 - 2) + ts +
+                                  fS.substr(p3 + 2);
 
-            if (fmt & DT_CALCRECT) {
-                std::wstring ft = s1 + s2 + s3;
-                std::vector<wchar_t> b(ft.begin(), ft.end());
-                b.push_back(0);
-                UINT calcFmt = fmt;
-                if (ft.find(L'\n') != std::wstring::npos) {
-                    calcFmt &= ~DT_SINGLELINE;
+                if (fmt & DT_CALCRECT) {
+                    std::wstring ft = s1 + s2 + s3;
+                    std::vector<wchar_t> b(ft.begin(), ft.end());
+                    b.push_back(0);
+                    UINT calcFmt = fmt;
+                    if (ft.find(L'\n') != std::wstring::npos) {
+                        calcFmt &= ~DT_SINGLELINE;
+                    }
+                    return DrawTextExW_Orig(hdc, b.data(), (int)ft.length(),
+                                            prc, calcFmt, pDtp);
                 }
-                return DrawTextExW_Orig(hdc, b.data(), (int)ft.length(), prc,
-                                        calcFmt, pDtp);
-            }
 
-            int applyLineYOffset = g_lineYOffset;
+                int applyLineYOffset = g_lineYOffset;
 
-            HFONT hOldFont = NULL;
-            HFONT hNewFont = NULL;
-            float scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
-            if (g_fontSize != 0) {
-                HFONT hCurrent = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
-                LOGFONTW lf;
-                if (GetObjectW(hCurrent, sizeof(lf), &lf)) {
-                    if (lf.lfHeight < 0) lf.lfHeight -= (int)(g_fontSize * scale);
-                    else lf.lfHeight += (int)(g_fontSize * scale);
-                    hNewFont = CreateFontIndirectW(&lf);
-                    if (hNewFont) hOldFont = (HFONT)SelectObject(hdc, hNewFont);
-                }
-            }
-
-            std::wstring ft = s1 + s2 + s3;
-            bool multiLine = (ft.find(L'\n') != std::wstring::npos);
-
-            std::vector<wchar_t> b(ft.begin(), ft.end());
-            b.push_back(0);
-            
-            UINT dF = fmt | DT_NOPREFIX;
-            if (!g_enableWordEllipsis) {
-                dF &= ~(DT_END_ELLIPSIS | DT_PATH_ELLIPSIS | DT_WORD_ELLIPSIS);
-            } else {
-                dF |= DT_WORD_ELLIPSIS | DT_END_ELLIPSIS;
-            }
-            RECT r = *prc;
-            r.top += applyLineYOffset;
-            r.bottom += applyLineYOffset;
-            
-            int ft_ret = 0;
-            if (multiLine) {
-                std::vector<std::wstring> lines;
-                size_t start_pos = 0, end_pos = 0;
-                while ((end_pos = ft.find(L'\n', start_pos)) != std::wstring::npos) {
-                    lines.push_back(ft.substr(start_pos, end_pos - start_pos));
-                    start_pos = end_pos + 1;
-                }
-                lines.push_back(ft.substr(start_pos));
-
-                dF &= ~(DT_SINGLELINE | DT_VCENTER | DT_BOTTOM);
-                dF |= DT_TOP | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX;
-                
-                int totalHeight = 0;
-                for (size_t i = 0; i < lines.size(); ++i) {
-                    RECT lr = r;
-                    lr.top += totalHeight;
-                    lr.bottom += 1000;
-                    std::vector<wchar_t> bl(lines[i].begin(), lines[i].end());
-                    bl.push_back(0);
-                    if (fmt & DT_CALCRECT) {
-                        DrawTextExW_Orig(hdc, bl.data(), (int)lines[i].length(), &lr, dF | DT_CALCRECT, pDtp);
-                        totalHeight += (lr.bottom - lr.top) + g_lineSpacing;
-                    } else {
-                        RECT calcR = lr;
-                        DrawTextExW_Orig(hdc, bl.data(), (int)lines[i].length(), &calcR, dF | DT_CALCRECT, pDtp);
-                        DrawTextExW_Orig(hdc, bl.data(), (int)lines[i].length(), &lr, dF, pDtp);
-                        totalHeight += (calcR.bottom - calcR.top) + g_lineSpacing;
+                HFONT hOldFont = NULL;
+                HFONT hNewFont = NULL;
+                float scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
+                if (g_fontSize != 0) {
+                    HFONT hCurrent = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
+                    LOGFONTW lf;
+                    if (GetObjectW(hCurrent, sizeof(lf), &lf)) {
+                        if (lf.lfHeight < 0)
+                            lf.lfHeight -= (int)(g_fontSize * scale);
+                        else
+                            lf.lfHeight += (int)(g_fontSize * scale);
+                        hNewFont = CreateFontIndirectW(&lf);
+                        if (hNewFont)
+                            hOldFont = (HFONT)SelectObject(hdc, hNewFont);
                     }
                 }
-                if (fmt & DT_CALCRECT) {
-                    prc->bottom = prc->top + totalHeight - g_lineSpacing;
-                }
-                ft_ret = totalHeight - g_lineSpacing;
-            } else {
-                ft_ret = DrawTextExW_Orig(hdc, b.data(), (int)ft.length(), &r, dF, pDtp);
-            }
 
-            if (hOldFont) {
-                SelectObject(hdc, hOldFont);
-                DeleteObject(hNewFont);
-            }
-            return ft_ret;
+                std::wstring ft = s1 + s2 + s3;
+                bool multiLine = (ft.find(L'\n') != std::wstring::npos);
+
+                std::vector<wchar_t> b(ft.begin(), ft.end());
+                b.push_back(0);
+
+                UINT dF = fmt | DT_NOPREFIX;
+                if (!g_enableWordEllipsis) {
+                    dF &= ~(DT_END_ELLIPSIS | DT_PATH_ELLIPSIS |
+                            DT_WORD_ELLIPSIS);
+                } else {
+                    dF |= DT_WORD_ELLIPSIS | DT_END_ELLIPSIS;
+                }
+                RECT r = *prc;
+                r.top += applyLineYOffset;
+                r.bottom += applyLineYOffset;
+
+                int ft_ret = 0;
+                if (multiLine) {
+                    std::vector<std::wstring> lines;
+                    size_t start_pos = 0, end_pos = 0;
+                    while ((end_pos = ft.find(L'\n', start_pos)) !=
+                           std::wstring::npos) {
+                        lines.push_back(
+                            ft.substr(start_pos, end_pos - start_pos));
+                        start_pos = end_pos + 1;
+                    }
+                    lines.push_back(ft.substr(start_pos));
+
+                    dF &= ~(DT_SINGLELINE | DT_VCENTER | DT_BOTTOM);
+                    dF |= DT_TOP | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX;
+
+                    int totalHeight = 0;
+                    for (size_t i = 0; i < lines.size(); ++i) {
+                        RECT lr = r;
+                        lr.top += totalHeight;
+                        lr.bottom += 1000;
+                        std::vector<wchar_t> bl(lines[i].begin(),
+                                                lines[i].end());
+                        bl.push_back(0);
+                        if (fmt & DT_CALCRECT) {
+                            DrawTextExW_Orig(hdc, bl.data(),
+                                             (int)lines[i].length(), &lr,
+                                             dF | DT_CALCRECT, pDtp);
+                            totalHeight += (lr.bottom - lr.top) + g_lineSpacing;
+                        } else {
+                            RECT calcR = lr;
+                            DrawTextExW_Orig(hdc, bl.data(),
+                                             (int)lines[i].length(), &calcR,
+                                             dF | DT_CALCRECT, pDtp);
+                            DrawTextExW_Orig(hdc, bl.data(),
+                                             (int)lines[i].length(), &lr, dF,
+                                             pDtp);
+                            totalHeight +=
+                                (calcR.bottom - calcR.top) + g_lineSpacing;
+                        }
+                    }
+                    if (fmt & DT_CALCRECT) {
+                        prc->bottom = prc->top + totalHeight - g_lineSpacing;
+                    }
+                    ft_ret = totalHeight - g_lineSpacing;
+                } else {
+                    ft_ret = DrawTextExW_Orig(hdc, b.data(), (int)ft.length(),
+                                              &r, dF, pDtp);
+                }
+
+                if (hOldFont) {
+                    SelectObject(hdc, hOldFont);
+                    DeleteObject(hNewFont);
+                }
+                return ft_ret;
             }
         }
     }
@@ -890,7 +935,7 @@ static BOOL CALLBACK RefreshExplorerCallback(HWND hwnd, LPARAM lParam) {
     wchar_t cls[MAX_PATH];
     if (GetClassNameW(hwnd, cls, MAX_PATH)) {
         if (wcscmp(cls, L"CabinetWClass") == 0) {
-            PostMessage(hwnd, WM_COMMAND, 41504, 0); // Refresh command
+            PostMessage(hwnd, WM_COMMAND, 41504, 0);  // Refresh command
             InvalidateRect(hwnd, NULL, TRUE);
         } else if (wcscmp(cls, L"DirectUIHWND") == 0) {
             InvalidateRect(hwnd, NULL, TRUE);
@@ -903,8 +948,8 @@ void RefreshExplorer() {
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
     SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
                        (LPARAM)L"Transitions", SMTO_ABORTIFHUNG, 5000, NULL);
-    SendMessageTimeout(HWND_BROADCAST, WM_THEMECHANGED, 0, 0,
-                       SMTO_ABORTIFHUNG, 5000, NULL);
+    SendMessageTimeout(HWND_BROADCAST, WM_THEMECHANGED, 0, 0, SMTO_ABORTIFHUNG,
+                       5000, NULL);
 
     EnumWindows(RefreshExplorerCallback, 0);
 }
@@ -919,35 +964,44 @@ BOOL Wh_ModInit() {
             (GetThemeWindow_t)GetProcAddress(uxtheme, "GetThemeWindow");
         GetThemeClassList_Ptr =
             (GetThemeClassList_t)GetProcAddress(uxtheme, "GetThemeClassList");
-            
-        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "OpenThemeData"), (void*)OpenThemeData_Hook, (void**)&OpenThemeData_Orig);
-        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "OpenThemeDataEx"), (void*)OpenThemeDataEx_Hook, (void**)&OpenThemeDataEx_Orig);
-        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "CloseThemeData"), (void*)CloseThemeData_Hook, (void**)&CloseThemeData_Orig);
- 
+
+        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "OpenThemeData"),
+                           (void*)OpenThemeData_Hook,
+                           (void**)&OpenThemeData_Orig);
+        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "OpenThemeDataEx"),
+                           (void*)OpenThemeDataEx_Hook,
+                           (void**)&OpenThemeDataEx_Orig);
+        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "CloseThemeData"),
+                           (void*)CloseThemeData_Hook,
+                           (void**)&CloseThemeData_Orig);
+
         Wh_SetFunctionHook(
             (void*)GetProcAddress(uxtheme, "DrawThemeBackground"),
             (void*)HookedDrawThemeBackground,
             (void**)&DrawThemeBackground_Orig);
     }
-    
+
     HMODULE user32 = GetModuleHandle(L"user32.dll");
     if (user32) {
         void* pOpenDpi = (void*)GetProcAddress(user32, "OpenThemeDataForDpi");
         if (pOpenDpi) {
-            Wh_SetFunctionHook(pOpenDpi, (void*)OpenThemeDataForDpi_Hook, (void**)&OpenThemeDataForDpi_Orig);
+            Wh_SetFunctionHook(pOpenDpi, (void*)OpenThemeDataForDpi_Hook,
+                               (void**)&OpenThemeDataForDpi_Orig);
         }
-        Wh_SetFunctionHook(
-            (void*)GetProcAddress(user32, "DrawTextW"),
-            (void*)DrawTextW_Hook, (void**)&DrawTextW_Orig);
-        Wh_SetFunctionHook(
-            (void*)GetProcAddress(user32, "DrawTextExW"),
-            (void*)DrawTextExW_Hook, (void**)&DrawTextExW_Orig);
+        Wh_SetFunctionHook((void*)GetProcAddress(user32, "DrawTextW"),
+                           (void*)DrawTextW_Hook, (void**)&DrawTextW_Orig);
+        Wh_SetFunctionHook((void*)GetProcAddress(user32, "DrawTextExW"),
+                           (void*)DrawTextExW_Hook, (void**)&DrawTextExW_Orig);
     }
+    RefreshExplorer();
     return TRUE;
 }
+
 void Wh_ModUninit() {
     GdiplusShutdown(g_gdiplusToken);
+    RefreshExplorer();
 }
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    RefreshExplorer();
 }
