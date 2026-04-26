@@ -2,7 +2,7 @@
 // @id              taskbar-background-helper
 // @name            Taskbar Background Helper
 // @description     Sets the taskbar background for the transparent parts, always or only when there's a maximized window, designed to be used with Windows 11 Taskbar Styler
-// @version         1.2
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -121,6 +121,7 @@ a workaround.
 
 #include <winrt/Windows.UI.ViewManagement.h>
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <optional>
@@ -1256,7 +1257,7 @@ void LoadSettings() {
                                         (((DWORD)(BYTE)transparency) << 24));
     g_settings.style.accentColor = accentColor;
     g_settings.style.useMaximizedTransparency = Wh_GetIntSetting(L"color.useMaximizedTransparency");
-    g_settings.style.maximizedTransparency = Wh_GetIntSetting(L"color.maximizedTransparency");
+    g_settings.style.maximizedTransparency = std::clamp(Wh_GetIntSetting(L"color.maximizedTransparency"), 0, 255);
 
     g_settings.onlyWhenMaximized = Wh_GetIntSetting(L"onlyWhenMaximized");
 
@@ -1306,8 +1307,9 @@ void LoadSettings() {
                                  (((DWORD)(BYTE)blue) << 16) |
                                  (((DWORD)(BYTE)transparency) << 24));
 
+        style.accentColor = Wh_GetIntSetting(L"styleForDarkMode.color.accentColor");
         style.useMaximizedTransparency = Wh_GetIntSetting(L"styleForDarkMode.color.useMaximizedTransparency");
-        style.maximizedTransparency = Wh_GetIntSetting(L"styleForDarkMode.color.maximizedTransparency");
+        style.maximizedTransparency = std::clamp(Wh_GetIntSetting(L"styleForDarkMode.color.maximizedTransparency"), 0, 255);
 
         g_settings.darkModeStyle = std::move(style);
     } else {
