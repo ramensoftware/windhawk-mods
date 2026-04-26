@@ -1,3 +1,7 @@
+## 1.0.3 ([Apr 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ec07df1fb22a03f159a88f5c817e3f8420bee634/mods/taskbar-classic-menu.wh.cpp))
+
+* Fixed compatibility with new insider Windows 11 builds.
+
 ## 1.0.2 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5e211b73c192f73dca9e2cf45f7d4d4cad962761/mods/taskbar-classic-menu.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.

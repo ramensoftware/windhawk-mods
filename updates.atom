@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-26T08:49:16.000Z</updated>
+    <updated>2026-04-26T18:02:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar classic context menu 1.0.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-classic-menu#ec07df1fb22a03f159a88f5c817e3f8420bee634</id>
+        <link href="https://windhawk.net/mods/taskbar-classic-menu"/>
+        <updated>2026-04-26T18:02:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with new insider Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[osu!Profile in Taskbar 3.9.1]]></title>
         <id>https://windhawk.net/mods/osu-tray-profile#df4a9446ecc3ecb93ff8848e8d0d6aa8cc3c2605</id>
@@ -403,42 +416,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Details View Columns 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-force-details-columns#188c9b7c5ac412d8f3fb43b53a7d4d1a0baa7792</id>
-        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
-        <updated>2026-04-20T10:09:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerdetailsviewcolumns">Explorer Details View Columns</h1>
-<p>Forces a specific set of columns whenever a File Explorer folder is in <em>Details</em>
-view. <strong>Other view modes (<em>Icons</em>, <em>Tiles</em>, <em>List</em>, etc.) are not affected.</strong></p>
-<p>Configure which columns to show and in what order in Settings. Each entry takes a Shell property name and a width in pixels.</p>
-<p>Common property names:</p>
-<ul>
-<li><code>System.ItemNameDisplay</code> - Name</li>
-<li><code>System.Size</code> - Size</li>
-<li><code>System.DateModified</code> - Date modified</li>
-<li><code>System.DateCreated</code> - Date created</li>
-<li><code>System.ItemTypeText</code> - Type</li>
-<li><code>System.FileAttributes</code> - Attributes</li>
-<li><code>System.Author</code> - Authors</li>
-<li><code>System.Music.Artist</code> - Contributing artists</li>
-<li><code>System.Media.Duration</code> - Length</li>
-<li><code>System.Image.Dimensions</code> - Dimensions</li>
-</ul>
-<p>For a full list of available Shell property names, see:
-https://learn.microsoft.com/en-us/windows/win32/properties/props</p>
-<p><strong>Note:</strong></p>
-<ul>
-<li>Any property name not recognised by Windows will be skipped.</li>
-<li>There is a minimum value for column widths; lower values will be raised automatically.</li>
-<li>You can still change the columns manually but it will be temporary.</li>
-<li>Changes might take effect after re-opening a folder.</li>
-</ul>]]></content>
-        <author>
-            <name>ernisn</name>
-            <uri>https://github.com/ernisn</uri>
         </author>
     </entry>
 </feed>
