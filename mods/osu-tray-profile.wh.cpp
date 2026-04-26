@@ -77,13 +77,11 @@ int g_updateInterval = 300;
 
 std::thread g_uiThread;
 std::thread g_netThread;
-
 std::atomic<bool> g_running{ false };
 std::atomic<bool> g_forceUpdate{ false };
 std::atomic<bool> g_needsRedraw{ false };
 std::atomic<bool> g_isUpdating{ false };
 HWND g_overlayHwnd = NULL;
-
 SRWLOCK g_statsLock = SRWLOCK_INIT;
 std::wstring g_displayName = L"Loading...";
 std::wstring g_displayStats = L"";
@@ -218,7 +216,7 @@ void FetchOsuStats() {
         AcquireSRWLockExclusive(&g_statsLock);
         
         g_consecutiveErrors++;
-
+        
         if (dwError != 0) {
             if (g_consecutiveErrors <= 4) {
                 g_displayName = L"Loading...";
@@ -244,6 +242,7 @@ void FetchOsuStats() {
     bResults = WinHttpSendRequest(hRequestUser, authHeader.c_str(), (DWORD)-1, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
 
     std::string userResponse;
+
     if (bResults && WinHttpReceiveResponse(hRequestUser, NULL)) {
         DWORD dwSize = 0;
         DWORD dwDownloaded = 0;
@@ -281,6 +280,7 @@ void FetchOsuStats() {
     }
 
     std::string pp = "0", rank = "0", username = "Unknown", avatarUrl = "";
+    
     size_t unPos = userResponse.find("\"username\":\"");
     if (unPos != std::string::npos) {
         unPos += 12;
@@ -343,7 +343,7 @@ void DrawOverlay(HWND hwnd) {
 
     HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
-
+    
     BITMAPINFO bmi = {0};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = 200;
@@ -371,6 +371,7 @@ void DrawOverlay(HWND hwnd) {
             StringFormat format;
             format.SetAlignment(StringAlignmentCenter);
             format.SetLineAlignment(StringAlignmentCenter);
+            
             RectF rect(0, 0, 200, 50);
 
             if (g_isUpdating && g_consecutiveErrors == 0) {
@@ -380,6 +381,7 @@ void DrawOverlay(HWND hwnd) {
             }
         } else {
             Image image(avPath.c_str());
+            
             if (image.GetLastStatus() == Ok) {
                 Bitmap resized(32, 32, &graphics);
                 Graphics gResize(&resized);
@@ -393,6 +395,7 @@ void DrawOverlay(HWND hwnd) {
 
                 GraphicsPath path;
                 int x = 9, y = 9, w = 32, h = 32, d = 12;
+                
                 path.AddArc(x, y, d, d, 180, 90);
                 path.AddArc(x + w - d, y, d, d, 270, 90);
                 path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
@@ -410,6 +413,7 @@ void DrawOverlay(HWND hwnd) {
     POINT ptSrc = {0, 0};
     SIZE size = {200, 50};
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    
     UpdateLayeredWindow(hwnd, hdcScreen, NULL, &size, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
 
     SelectObject(hdcMem, hOld);
@@ -464,7 +468,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 int x = 0, y = 0;
                 bool posFound = false;
                 HWND insertAfter = NULL;
-                UINT flags = SWP_NOACTIVATE;
+                UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
 
                 HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
                 if (trayWnd) {
@@ -498,7 +502,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
 
                 SetWindowPos(hwnd, insertAfter, x, y, width, height, flags);
-
+                
                 if (g_needsRedraw) {
                     DrawOverlay(hwnd);
                     g_needsRedraw = false;
@@ -527,11 +531,10 @@ void UiThreadFunc() {
             WS_EX_LAYERED | WS_EX_TOOLWINDOW,
             wc.lpszClassName, L"OsuStats",
             WS_POPUP,
-            -1000, -1000, 200, 50, // Стартуем за пределами экрана!
+            0, 0, 200, 50, 
             NULL, NULL, wc.hInstance, NULL
         );
 
-        ShowWindow(g_overlayHwnd, SW_SHOW);
         SetTimer(g_overlayHwnd, 1, 100, NULL);
 
         MSG msg;
@@ -628,7 +631,6 @@ BOOL Wh_ModInit() {
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -645,10 +647,8 @@ BOOL Wh_ModInit() {
 
         IMAGE_DOS_HEADER* dosHeader =
             (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
@@ -680,10 +680,9 @@ void Wh_ModAfterInit() {
 
     WCHAR commandLine[MAX_PATH + 2 +
                       (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) - 1];
-
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"" WH_MOD_ID L"\"",
                currentProcessPath);
-
+    
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -701,11 +700,10 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-
+        
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
-
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
@@ -715,7 +713,7 @@ void Wh_ModAfterInit() {
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
-
+    
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
