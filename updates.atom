@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-26T18:30:13.000Z</updated>
+    <updated>2026-04-26T19:06:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.2]]></title>
+        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#2eee59d291d0265584eb4beb8bf7faaf0d67dc2f</id>
+        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
+        <updated>2026-04-26T19:06:16.000Z</updated>
+        <content type="html"><![CDATA[<p>Add support for pull-down menus</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnails#92d307593c5b7accafdb2bb3cf34df6f36d050c6</id>
@@ -404,19 +415,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix white flashes in explorer 1.4]]></title>
-        <id>https://windhawk.net/mods/fix-explorer-white-flash#f8301dd5b08cb37bc3f3983d7732dc7c5a570548</id>
-        <link href="https://windhawk.net/mods/fix-explorer-white-flash"/>
-        <updated>2026-04-21T14:57:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New implementation (Credit: <a href="https://github.com/Languster">Languster</a>, <a href="https://github.com/ramensoftware/windhawk-mods/pull/3811">#3811</a>)</li>
-</ul>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>
