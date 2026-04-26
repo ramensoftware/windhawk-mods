@@ -46,20 +46,26 @@ a workaround.
   - acrylicBlur: Acrylic blur
   - color: Color
 - color:
-  - red: 255
+  - red: 0
     $name: Red
-  - green: 127
+  - green: 0
     $name: Green
-  - blue: 39
+  - blue: 0
     $name: Blue
   - accentColor: false
     $name: Current theme accent color
     $description: If enabled, the color values above are ignored
-  - transparency: 128
+  - transparency: 0
     $name: Transparency
+  - useMaximizedTransparency: false
+    $name: Use different transparency when maximized
+    $description: If enabled, a different transparency value is used when there's a maximized window
+  - maximizedTransparency: 150
+    $name: Transparency when maximized
+    $description: Transparency value (0-255) to use when a window is maximized
   $name: Custom color
   $description: Values are between 0 and 255
-- onlyWhenMaximized: true
+- onlyWhenMaximized: false
   $name: Only when maximized
   $description: >-
     Only apply the style when there's a maximized window on the monitor
@@ -86,17 +92,23 @@ a workaround.
     - acrylicBlur: Acrylic blur
     - color: Color
   - color:
-    - red: 255
+    - red: 0
       $name: Red
-    - green: 127
+    - green: 0
       $name: Green
-    - blue: 39
+    - blue: 0
       $name: Blue
     - accentColor: false
       $name: Current theme accent color
       $description: If enabled, the color values above are ignored
-    - transparency: 128
+    - transparency: 0
       $name: Transparency
+    - useMaximizedTransparency: false
+      $name: Use different transparency when maximized
+      $description: If enabled, a different transparency value is used when there's a maximized window
+    - maximizedTransparency: 150
+      $name: Transparency when maximized
+      $description: Transparency value (0-255) to use when a window is maximized
     $name: Custom color
     $description: Values are between 0 and 255
   $name: Dark mode
@@ -127,6 +139,8 @@ struct TaskbarStyle {
     BackgroundStyle backgroundStyle;
     COLORREF color;
     bool accentColor;
+    bool useMaximizedTransparency;
+    int maximizedTransparency;
 };
 
 struct {
@@ -427,7 +441,7 @@ class SpecialViewModeState {
 
 SpecialViewModeState g_specialViewMode;
 
-BOOL SetTaskbarStyle(HWND hWnd) {
+BOOL SetTaskbarStyle(HWND hWnd, bool hasMaximized = true) {
     Wh_Log(L">");
 
     TaskbarStyle& style =
@@ -453,6 +467,9 @@ BOOL SetTaskbarStyle(HWND hWnd) {
     }
 
     COLORREF color = style.color;
+    if (style.useMaximizedTransparency && hasMaximized) {
+        color = (color & 0x00FFFFFF) | (((DWORD)(BYTE)style.maximizedTransparency) << 24);
+    }
     if (style.accentColor) {
         try {
             const winrt::Windows::UI::ViewManagement::UISettings uiSettings;
@@ -608,25 +625,30 @@ void UpdateTaskbarStyleForMonitor(HMONITOR monitor, bool hasMaximized) {
         return;
     }
 
-    if (hasMaximized) {
-        SetTaskbarStyle(hMMTaskbarWnd);
+    if (g_settings.onlyWhenMaximized) {
+        if (hasMaximized) {
+            SetTaskbarStyle(hMMTaskbarWnd, true);
+        } else {
+            ResetTaskbarStyle(hMMTaskbarWnd);
+        }
     } else {
-        ResetTaskbarStyle(hMMTaskbarWnd);
+        SetTaskbarStyle(hMMTaskbarWnd, hasMaximized);
     }
 }
 
 BOOL ApplyTaskbarStyleForWindow(HWND hWnd) {
-    if (!g_settings.onlyWhenMaximized) {
-        return SetTaskbarStyle(hWnd);
-    }
-
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    if (g_specialViewMode.IsActive() ||
-        !g_monitorState.HasMaximizedWindow(monitor)) {
-        return ResetTaskbarStyle(hWnd);
+    bool hasMaximized = !g_specialViewMode.IsActive() &&
+                        g_monitorState.HasMaximizedWindow(monitor);
+
+    if (g_settings.onlyWhenMaximized) {
+        if (!hasMaximized) {
+            return ResetTaskbarStyle(hWnd);
+        }
+        return SetTaskbarStyle(hWnd, true);
     }
 
-    return SetTaskbarStyle(hWnd);
+    return SetTaskbarStyle(hWnd, hasMaximized);
 }
 
 void EnsureMonitoringThreadStarted();
@@ -1164,8 +1186,19 @@ void PopulateMonitorState() {
         reinterpret_cast<LPARAM>(&enumWindowsProc));
 }
 
+bool NeedsMonitoringThread() {
+    if (g_settings.onlyWhenMaximized) {
+        return true;
+    }
+    TaskbarStyle& style =
+        (g_settings.darkModeStyle && IsWindowsDarkModeEnabled())
+            ? *g_settings.darkModeStyle
+            : g_settings.style;
+    return style.useMaximizedTransparency;
+}
+
 void EnsureMonitoringThreadStarted() {
-    if (!g_settings.onlyWhenMaximized || g_winEventHookThread) {
+    if (!NeedsMonitoringThread() || g_winEventHookThread) {
         return;
     }
 
@@ -1222,6 +1255,8 @@ void LoadSettings() {
                                         (((DWORD)(BYTE)blue) << 16) |
                                         (((DWORD)(BYTE)transparency) << 24));
     g_settings.style.accentColor = accentColor;
+    g_settings.style.useMaximizedTransparency = Wh_GetIntSetting(L"color.useMaximizedTransparency");
+    g_settings.style.maximizedTransparency = Wh_GetIntSetting(L"color.maximizedTransparency");
 
     g_settings.onlyWhenMaximized = Wh_GetIntSetting(L"onlyWhenMaximized");
 
@@ -1270,6 +1305,9 @@ void LoadSettings() {
         style.color = (COLORREF)((BYTE)red | ((WORD)((BYTE)green) << 8) |
                                  (((DWORD)(BYTE)blue) << 16) |
                                  (((DWORD)(BYTE)transparency) << 24));
+
+        style.useMaximizedTransparency = Wh_GetIntSetting(L"styleForDarkMode.color.useMaximizedTransparency");
+        style.maximizedTransparency = Wh_GetIntSetting(L"styleForDarkMode.color.maximizedTransparency");
 
         g_settings.darkModeStyle = std::move(style);
     } else {
