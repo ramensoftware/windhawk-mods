@@ -1,3 +1,9 @@
+## 1.2 ([Apr 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/92d307593c5b7accafdb2bb3cf34df6f36d050c6/mods/taskbar-thumbnails.wh.cpp))
+
+* Added an option to disable the virtual desktop switcher flyout that appears when hovering over the Task View button on the taskbar.
+* Added an option to disable thumbnails on hover while having a list on click.
+* Fixed compatibility with new insider Windows 11 builds.
+
 ## 1.1.4 ([Mar 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1cbf79b584cf28b6428e668ff7b8f05a71eef41a/mods/taskbar-thumbnails.wh.cpp))
 
 * Fixed compatibility with update KB5053656 for Windows 11 version 24H2.

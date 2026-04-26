@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-26T18:02:01.000Z</updated>
+    <updated>2026-04-26T18:30:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnails#92d307593c5b7accafdb2bb3cf34df6f36d050c6</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
+        <updated>2026-04-26T18:30:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to disable the virtual desktop switcher flyout that appears when hovering over the Task View button on the taskbar.</li>
+<li>Added an option to disable thumbnails on hover while having a list on click.</li>
+<li>Fixed compatibility with new insider Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar classic context menu 1.0.3]]></title>
         <id>https://windhawk.net/mods/taskbar-classic-menu#ec07df1fb22a03f159a88f5c817e3f8420bee634</id>
@@ -402,20 +417,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Context Menu Items 1.10.0]]></title>
-        <id>https://windhawk.net/mods/remove-context-menu-items#963a462ea1d6362beeb9ebc6136b035a596bc066</id>
-        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
-        <updated>2026-04-20T18:48:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added Turkish language support (thanks to <a href="https://github.com/bcrtvkcs">bcrtvkcs</a>)</li>
-<li>Added Russian language support (thanks to <a href="https://github.com/VitalityV1nT">VitalityV1nT</a>) (80% complete due to Copilot restrictions)</li>
-</ul>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>

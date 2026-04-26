@@ -9867,7 +9867,7 @@
                     129
                 ],
                 "ratingUsers": 136,
-                "updated": 1743354969000,
+                "updated": 1777228213000,
                 "users": 8122
             },
             "metadata": {
@@ -9876,7 +9876,7 @@
                 ],
                 "author": "m417z",
                 "compilerOptions": "-lversion",
-                "description": "Disable taskbar thumbnails on hover, or replace them with a list",
+                "description": "Disable taskbar thumbnail and virtual desktop switcher hover flyouts, or replace thumbnails with a list",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -9884,7 +9884,7 @@
                 ],
                 "name": "Disable Taskbar Thumbnails",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.4"
+                "version": "1.2"
             }
         },
         "taskbar-tray-show-on-hover": {
