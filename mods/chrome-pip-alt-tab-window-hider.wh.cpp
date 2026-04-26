@@ -1,4 +1,4 @@
-﻿// ==WindhawkMod==
+// ==WindhawkMod==
 // @id              chrome-pip-alt-tab-window-hider
 // @name            Chrome PiP Alt+Tab Window Hider
 // @description     Hides Chrome Picture-in-Picture windows from Alt+Tab and the taskbar.
