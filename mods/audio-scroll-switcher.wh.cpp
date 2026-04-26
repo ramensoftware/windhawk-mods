@@ -11,7 +11,7 @@
 // @compilerOptions -lole32 -loleaut32 -lpropsys -lcomctl32 -lgdi32 -ldwmapi
 // @license         MIT
 // ==/WindhawkMod==
-
+ 
 // ==WindhawkModReadme==
 /*
 # Audio Output Device Switcher
@@ -19,7 +19,7 @@
 Quickly switch between audio output devices by holding **Ctrl** and scrolling
 the mouse wheel over the taskbar.
 
-## How to use
+## How to use 
 
 1. Hold **Ctrl** and scroll up/down over the taskbar
 2. Your audio output device will switch to the next/previous device
@@ -113,9 +113,25 @@ HWND g_popupWnd = nullptr;
 std::wstring g_popupText;
 const wchar_t* POPUP_CLASS_NAME = L"AudioSwitcherPopup_WH";
 bool g_popupClassRegistered = false;
+bool g_inputSiteProcHooked = false;
 
-UINT g_subclassRegisteredMsg = RegisterWindowMessage(
-    L"Windhawk_SetWindowSubclassFromAnyThread_audio-scroll-switcher");
+// Wheel-delta accumulation state. Hi-res / smooth-scrolling mice split one
+// physical notch into many small-delta messages; accumulate until a full
+// WHEEL_DELTA is crossed before firing a switch. 5s window, per-target.
+DWORD g_lastScrollTime = 0;
+short g_lastScrollRemainder = 0;
+HWND g_lastScrollTarget = nullptr;
+
+// Returns this mod's DLL HINSTANCE. GetModuleHandle(nullptr) would return
+// explorer.exe, which is wrong for RegisterClass/CreateWindowEx/UnregisterClass.
+HINSTANCE GetCurrentModuleHandle() {
+    HINSTANCE hInst = nullptr;
+    GetModuleHandleEx(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCWSTR)&GetCurrentModuleHandle, &hInst);
+    return hInst;
+}
 
 struct AudioDevice {
     std::wstring id;
@@ -126,7 +142,24 @@ struct AudioDevice {
 // Audio Device Functions
 // ============================================================================
 
+// RAII: initialize COM for the duration of the enclosing scope. Per-call
+// scoping avoids cross-thread CoInit/CoUninit pairing (Windhawk can run
+// Wh_ModInit / Wh_ModUninit on different threads).
+struct ComScope {
+    bool owned = false;
+    ComScope() {
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        owned = SUCCEEDED(hr);  // RPC_E_CHANGED_MODE -> thread already init'd; don't uninit
+    }
+    ~ComScope() {
+        if (owned) {
+            CoUninitialize();
+        }
+    }
+};
+
 std::vector<AudioDevice> GetAudioOutputDevices() {
+    ComScope com;
     std::vector<AudioDevice> devices;
     IMMDeviceEnumerator* pEnumerator = nullptr;
 
@@ -185,6 +218,7 @@ std::vector<AudioDevice> GetAudioOutputDevices() {
 }
 
 std::wstring GetDefaultDeviceId() {
+    ComScope com;
     std::wstring deviceId;
     IMMDeviceEnumerator* pEnumerator = nullptr;
 
@@ -207,6 +241,7 @@ std::wstring GetDefaultDeviceId() {
 }
 
 bool SetDefaultAudioDevice(const std::wstring& deviceId) {
+    ComScope com;
     IPolicyConfig* pPolicyConfig = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_CPolicyConfigClient, nullptr, CLSCTX_ALL,
         IID_IPolicyConfig, (void**)&pPolicyConfig);
@@ -261,6 +296,15 @@ const int POPUP_HEIGHT = 60;
 const int POPUP_CORNER_RADIUS = 12;
 const int POPUP_MARGIN = 20;
 
+// Fade animation: timer-driven so we never block the taskbar thread.
+const UINT_PTR TIMER_FADE_IN = 1;
+const UINT_PTR TIMER_HOLD = 2;
+const UINT_PTR TIMER_FADE_OUT = 3;
+const UINT FADE_TICK_MS = 16;          // ~60 fps
+const int FADE_STEP_ALPHA = 32;        // ~7 ticks (~115 ms) per fade
+const int POPUP_TARGET_ALPHA = 230;
+int g_popupAlpha = 0;
+
 // Colors (Windows 11 dark theme style)
 const COLORREF COLOR_BG = RGB(32, 32, 32);
 const COLORREF COLOR_BG_ACCENT = RGB(45, 45, 45);
@@ -291,10 +335,6 @@ LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             // Enable dark mode
             BOOL darkMode = TRUE;
             DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
-
-            // Try to enable Mica/Acrylic backdrop (Windows 11)
-            DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
-            DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
 
             return 0;
         }
@@ -350,14 +390,40 @@ LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
 
         case WM_TIMER:
-            KillTimer(hwnd, 1);
-            // Quick fade out
-            for (int alpha = 230; alpha >= 0; alpha -= 40) {
-                SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
-                Sleep(8);
+            // Three-stage fade state machine. No Sleep — keeps the
+            // taskbar thread responsive between scrolls.
+            switch (wParam) {
+                case TIMER_FADE_IN:
+                    g_popupAlpha += FADE_STEP_ALPHA;
+                    if (g_popupAlpha >= POPUP_TARGET_ALPHA) {
+                        g_popupAlpha = POPUP_TARGET_ALPHA;
+                        SetLayeredWindowAttributes(hwnd, 0, (BYTE)g_popupAlpha, LWA_ALPHA);
+                        KillTimer(hwnd, TIMER_FADE_IN);
+                        SetTimer(hwnd, TIMER_HOLD, g_settings.notificationDuration, nullptr);
+                    } else {
+                        SetLayeredWindowAttributes(hwnd, 0, (BYTE)g_popupAlpha, LWA_ALPHA);
+                    }
+                    return 0;
+                case TIMER_HOLD:
+                    KillTimer(hwnd, TIMER_HOLD);
+                    SetTimer(hwnd, TIMER_FADE_OUT, FADE_TICK_MS, nullptr);
+                    return 0;
+                case TIMER_FADE_OUT:
+                    g_popupAlpha -= FADE_STEP_ALPHA;
+                    if (g_popupAlpha <= 0) {
+                        KillTimer(hwnd, TIMER_FADE_OUT);
+                        DestroyWindow(hwnd);
+                    } else {
+                        SetLayeredWindowAttributes(hwnd, 0, (BYTE)g_popupAlpha, LWA_ALPHA);
+                    }
+                    return 0;
             }
-            DestroyWindow(hwnd);
-            g_popupWnd = nullptr;
+            break;
+
+        case WM_DESTROY:
+            if (g_popupWnd == hwnd) {
+                g_popupWnd = nullptr;
+            }
             return 0;
 
         case WM_NCHITTEST:
@@ -372,7 +438,7 @@ void RegisterPopupClass() {
     WNDCLASSEXW wc = {0};
     wc.cbSize = sizeof(WNDCLASSEXW);
     wc.lpfnWndProc = PopupWndProc;
-    wc.hInstance = GetModuleHandle(nullptr);
+    wc.hInstance = GetCurrentModuleHandle();
     wc.lpszClassName = POPUP_CLASS_NAME;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hbrBackground = nullptr; // We handle painting ourselves
@@ -390,20 +456,17 @@ void ShowNotification(const std::wstring& deviceName) {
 
     RegisterPopupClass();
 
+    // DestroyWindow synchronously fires WM_DESTROY which nulls g_popupWnd
+    // and cancels any active fade timer for that window.
     if (g_popupWnd) {
-        KillTimer(g_popupWnd, 1);
         DestroyWindow(g_popupWnd);
-        g_popupWnd = nullptr;
     }
 
-    // Store device name with parenthetical text stripped
     g_popupText = StripParentheses(deviceName);
+    g_popupAlpha = 0;
 
-    // Get work area (excludes taskbar)
     RECT workArea;
     SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
-
-    // Center horizontally, position near bottom
     int x = (workArea.right - workArea.left - POPUP_WIDTH) / 2 + workArea.left;
     int y = workArea.bottom - POPUP_HEIGHT - 50;
 
@@ -411,23 +474,14 @@ void ShowNotification(const std::wstring& deviceName) {
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
         POPUP_CLASS_NAME, L"", WS_POPUP,
         x, y, POPUP_WIDTH, POPUP_HEIGHT,
-        nullptr, nullptr, GetModuleHandle(nullptr), nullptr
+        nullptr, nullptr, GetCurrentModuleHandle(), nullptr
     );
 
     if (g_popupWnd) {
-        // Set initial transparency
         SetLayeredWindowAttributes(g_popupWnd, 0, 0, LWA_ALPHA);
         ShowWindow(g_popupWnd, SW_SHOWNOACTIVATE);
         UpdateWindow(g_popupWnd);
-
-        // Quick fade in
-        for (int alpha = 0; alpha <= 230; alpha += 50) {
-            SetLayeredWindowAttributes(g_popupWnd, 0, alpha, LWA_ALPHA);
-            Sleep(5);
-        }
-        SetLayeredWindowAttributes(g_popupWnd, 0, 230, LWA_ALPHA);
-
-        SetTimer(g_popupWnd, 1, g_settings.notificationDuration, nullptr);
+        SetTimer(g_popupWnd, TIMER_FADE_IN, FADE_TICK_MS, nullptr);
         Wh_Log(L"Notification shown");
     } else {
         Wh_Log(L"Failed to create popup: %u", GetLastError());
@@ -499,30 +553,50 @@ bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
         return false;
     }
 
-    int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-    int direction = (delta > 0) ? -1 : 1;  // Up = previous, Down = next
+    // Accumulate raw delta: hi-res/smooth-scroll mice emit many sub-notch
+    // messages per physical click. Carry the leftover within a 5s window
+    // for the same target, then only fire once per full WHEEL_DELTA crossed.
+    short delta = GET_WHEEL_DELTA_WPARAM(wParam);
+    DWORD now = GetTickCount();
+    if (g_lastScrollTarget == hWnd && now - g_lastScrollTime < 5000) {
+        delta = (short)(delta + g_lastScrollRemainder);
+    }
+    int clicks = delta / WHEEL_DELTA;
+    g_lastScrollRemainder = (short)(delta % WHEEL_DELTA);
+    g_lastScrollTime = now;
+    g_lastScrollTarget = hWnd;
 
-    Wh_Log(L"Ctrl+Scroll detected! delta=%d, direction=%d", delta, direction);
+    if (clicks == 0) {
+        Wh_Log(L"Ctrl+Scroll accumulating: carry=%d", g_lastScrollRemainder);
+        return true;  // consume so the page doesn't side-scroll
+    }
 
-    SwitchAudioDevice(direction);
+    int direction = (clicks > 0) ? -1 : 1;  // Up = previous, Down = next
+    int steps = (clicks > 0) ? clicks : -clicks;
+
+    Wh_Log(L"Ctrl+Scroll fired! delta=%d clicks=%d direction=%d", delta, clicks, direction);
+
+    for (int i = 0; i < steps; i++) {
+        SwitchAudioDevice(direction);
+    }
     return true;
 }
 
+// WindhawkUtils::SetWindowSubclassFromAnyThread wraps this and handles
+// WM_NCDESTROY / unsubclass-message routing internally — no manual cleanup
+// needed in the proc body.
 LRESULT CALLBACK TaskbarWindowSubclassProc(
     HWND hWnd,
     UINT uMsg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR uIdSubclass,
     DWORD_PTR dwRefData
 ) {
-    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam)) {
-        RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
-    }
-
     switch (uMsg) {
         case WM_MOUSEWHEEL:
-            if (OnMouseWheel(hWnd, wParam, lParam)) {
+            // On Win11 the XAML InputSite delivers WM_POINTERWHEEL separately;
+            // if that hook is active, skip this path to avoid double-firing.
+            if (!g_inputSiteProcHooked && OnMouseWheel(hWnd, wParam, lParam)) {
                 return 0;  // Consume the message
             }
             break;
@@ -550,62 +624,8 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
 }
 
-BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    struct SET_WINDOW_SUBCLASS_PARAM {
-        SUBCLASSPROC pfnSubclass;
-        UINT_PTR uIdSubclass;
-        DWORD_PTR dwRefData;
-        BOOL result;
-    };
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
-        return FALSE;
-    }
-
-    if (dwThreadId == GetCurrentThreadId()) {
-        return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
-                    auto* param = (SET_WINDOW_SUBCLASS_PARAM*)cwp->lParam;
-                    param->result = SetWindowSubclass(
-                        cwp->hwnd,
-                        param->pfnSubclass,
-                        param->uIdSubclass,
-                        param->dwRefData
-                    );
-                }
-            }
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr,
-        dwThreadId
-    );
-
-    if (!hook) {
-        return FALSE;
-    }
-
-    SET_WINDOW_SUBCLASS_PARAM param;
-    param.pfnSubclass = pfnSubclass;
-    param.uIdSubclass = uIdSubclass;
-    param.dwRefData = dwRefData;
-    param.result = FALSE;
-
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
-    UnhookWindowsHookEx(hook);
-
-    return param.result;
-}
-
 void SubclassTaskbarWindow(HWND hWnd) {
-    if (SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0)) {
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0)) {
         Wh_Log(L"Subclassed taskbar window: %p", hWnd);
     } else {
         Wh_Log(L"Failed to subclass taskbar window: %p", hWnd);
@@ -613,10 +633,8 @@ void SubclassTaskbarWindow(HWND hWnd) {
 }
 
 void UnsubclassTaskbarWindow(HWND hWnd) {
-    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc);
 }
-
-bool g_inputSiteProcHooked = false;
 
 void HandleIdentifiedInputSiteWindow(HWND hWnd) {
     if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId) {
@@ -781,11 +799,7 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     Wh_Log(L"=== Audio Output Device Switcher initializing ===");
 
-    // Initialize COM
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
-        Wh_Log(L"Failed to initialize COM: 0x%08X", hr);
-    }
+    // COM is initialized per-call (see ComScope) so it works on any thread.
 
     LoadSettings();
 
@@ -801,20 +815,14 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(L"Wh_ModAfterInit - looking for existing taskbar windows...");
-
-    // Find existing taskbar windows
-    WNDCLASS wndclass;
-    if (GetClassInfo(GetModuleHandle(nullptr), L"Shell_TrayWnd", &wndclass)) {
-        HWND hWnd = FindCurrentProcessTaskbarWindows(&g_secondaryTaskbarWindows);
-        if (hWnd) {
-            HandleIdentifiedTaskbarWindow(hWnd);
-        } else {
-            Wh_Log(L"No taskbar window found yet");
-        }
+    // For mods that load into an already-running explorer.exe, do one
+    // synchronous EnumWindows pass. New taskbars/InputSites created later
+    // (e.g. after explorer restart, monitor change) are caught by the
+    // CreateWindowExW hook installed in Wh_ModInit.
+    HWND hWnd = FindCurrentProcessTaskbarWindows(&g_secondaryTaskbarWindows);
+    if (hWnd) {
+        HandleIdentifiedTaskbarWindow(hWnd);
     }
-
-    Wh_Log(L"=== Ready! Hold Ctrl and scroll over the taskbar to switch audio devices ===");
 }
 
 void Wh_ModUninit() {
@@ -828,16 +836,16 @@ void Wh_ModUninit() {
     }
 
     if (g_popupWnd) {
-        DestroyWindow(g_popupWnd);
+        // Cross-thread safe: WM_CLOSE is marshaled to the popup's owning
+        // (taskbar) thread, which then runs DestroyWindow locally.
+        SendMessageW(g_popupWnd, WM_CLOSE, 0, 0);
         g_popupWnd = nullptr;
     }
 
     if (g_popupClassRegistered) {
-        UnregisterClassW(POPUP_CLASS_NAME, GetModuleHandle(nullptr));
+        UnregisterClassW(POPUP_CLASS_NAME, GetCurrentModuleHandle());
         g_popupClassRegistered = false;
     }
-
-    CoUninitialize();
 }
 
 void Wh_ModSettingsChanged() {
