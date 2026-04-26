@@ -8,8 +8,6 @@
 // @twitter         https://x.com/bcrtvkcs
 // @homepage        https://grdigital.pro
 // @include         chrome.exe
-// @architecture    x86-64
-// @architecture    arm64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
