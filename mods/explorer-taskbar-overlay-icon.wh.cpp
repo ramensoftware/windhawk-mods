@@ -135,8 +135,11 @@ DWORD WINAPI ThreadProc(LPVOID) {
 
                                                                     CoTaskMemFree(pidlLast);
                                                                     pidlLast = pidl;
-                                                                } else if (hLastIcon != NULL) {
-                                                                    pTaskbarList->SetOverlayIcon(hwnd, hLastIcon, lastDesc.c_str());
+                                                                } else {
+                                                                    if (hLastIcon != NULL)
+                                                                        pTaskbarList->SetOverlayIcon(hwnd, hLastIcon, lastDesc.c_str());
+
+                                                                    CoTaskMemFree(pidl);
                                                                 }
 
                                                                 pTaskbarList->Release();
@@ -145,21 +148,33 @@ DWORD WINAPI ThreadProc(LPVOID) {
                                                         } else {
                                                             Wh_Log(L"Error fetching item ID list for window %d with code: %d", i, hr);
                                                         }
+
+                                                        pf->Release();
                                                     } else {
                                                         Wh_Log(L"Error fetching persist folder for window %d with code: %d", i, hr);
                                                     }
+
+                                                    fv->Release();
                                                 } else {
                                                     Wh_Log(L"Error fetching folder view for window %d with code: %d", i, hr);
                                                 }
+
+                                                view->Release();
                                             } else {
                                                 Wh_Log(L"Error fetching shell view for window %d with code: %d", i, hr);
                                             }
                                         }
                                     }
+
+                                    pBrowser->Release();
                                 }
+
+                                sb->Release();
                             } else {
                                 Wh_Log(L"Error fetching shell browser for window %d with code: %d", i, hr);
                             }
+
+                            sp->Release();
                         } else {
                             Wh_Log(L"Error fetching service provider for window %d with code: %d", i, hr);
                         }
@@ -216,58 +231,58 @@ void WhTool_ModUninit() {
     WaitForSingleObject(g_hThread, INFINITE);
     CloseHandle(g_hThread);
 
-    // HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
-    // if (SUCCEEDED(hr))
-    // {
-    //     IShellWindows* pShellWindows;
-    //     hr = CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&pShellWindows));
+    HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if (SUCCEEDED(hr))
+    {
+        IShellWindows* pShellWindows;
+        hr = CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&pShellWindows));
 
-    //     if (SUCCEEDED(hr))
-    //     {
-    //         while (true) {
-    //             long count = 0;
-    //             pShellWindows->get_Count(&count);
+        if (SUCCEEDED(hr))
+        {
+            while (true) {
+                long count = 0;
+                pShellWindows->get_Count(&count);
 
-    //              for (long i = 0; i < count; i++) {
-    //                 VARIANT vtIndex;
-    //                 VariantInit(&vtIndex);
-    //                 vtIndex.vt = VT_I4;
-    //                 vtIndex.lVal = i;
+                 for (long i = 0; i < count; i++) {
+                    VARIANT vtIndex;
+                    VariantInit(&vtIndex);
+                    vtIndex.vt = VT_I4;
+                    vtIndex.lVal = i;
 
-    //                 IDispatch* pDisp = nullptr;
-    //                 if (SUCCEEDED(pShellWindows->Item(vtIndex, &pDisp)) && pDisp) {
-    //                     IWebBrowserApp* pBrowser;
-    //                     hr = pDisp->QueryInterface(IID_IWebBrowserApp, (void**)&pBrowser);
+                    IDispatch* pDisp = nullptr;
+                    if (SUCCEEDED(pShellWindows->Item(vtIndex, &pDisp)) && pDisp) {
+                        IWebBrowserApp* pBrowser;
+                        hr = pDisp->QueryInterface(IID_IWebBrowserApp, (void**)&pBrowser);
 
-    //                     if (SUCCEEDED(hr)) {
-    //                         SHANDLE_PTR hwndPtr;
-    //                         hr = pBrowser->get_HWND(&hwndPtr);
+                        if (SUCCEEDED(hr)) {
+                            SHANDLE_PTR hwndPtr;
+                            hr = pBrowser->get_HWND(&hwndPtr);
 
-    //                         if (SUCCEEDED(hr)) {
-    //                             HWND hwnd = (HWND)hwndPtr;
+                            if (SUCCEEDED(hr)) {
+                                HWND hwnd = (HWND)hwndPtr;
                                 
-    //                             ITaskbarList3* pTaskbarList;
-    //                             hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
+                                ITaskbarList3* pTaskbarList;
+                                hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
 
-    //                             if (SUCCEEDED(hr)) {
-    //                                 // clear the icon
-    //                                 pTaskbarList->SetOverlayIcon(hwnd, NULL, L"");
+                                if (SUCCEEDED(hr)) {
+                                    // clear the icon
+                                    pTaskbarList->SetOverlayIcon(hwnd, NULL, L"");
                                 
-    //                                 pTaskbarList->Release();
-    //                             }
-    //                         }
+                                    pTaskbarList->Release();
+                                }
+                            }
 
-    //                         pBrowser->Release();
-    //                     }
+                            pBrowser->Release();
+                        }
 
-    //                     pDisp->Release();
-    //                 }
-    //             }
-    //         }
-    //     }
+                        pDisp->Release();
+                    }
+                }
+            }
+        }
 
-    //     CoUninitialize();
-    // }
+        CoUninitialize();
+    }
 }
 
 // The mod setting were changed, reload them.
