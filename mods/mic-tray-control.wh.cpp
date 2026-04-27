@@ -2,7 +2,7 @@
 // @id              mic-tray-control
 // @name            Mic Tray Control & Decibel Viewer
 // @description     Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!
-// @version         1.5.1
+// @version         1.7
 // @author          ciahciach
 // @github          https://github.com/ciahciach
 // @include         explorer.exe
@@ -24,7 +24,7 @@ This mod adds a dedicated Microphone icon to your system tray.
 - **Scroll Control:** Hover over the tray icon and scroll to adjust your default mic volume quickly.
 - **Live Preview:** Hover over the tray icon to see exact volume in % and dB.
 - **Step Modes:** Choose between Percentage (%) or exact Decibel (dB) steps when scrolling.
-- **Custom Icons:** You can provide your own `.ico` files in the settings!
+- **Custom Icons:** You can provide your own `.ico` files in the settings, otherwise it uses a crisp native icon generated on the fly!
 */
 // ==/WindhawkModReadme==
 
@@ -118,17 +118,99 @@ void LoadSettings() {
     }
 }
 
-HICON LoadCustomOrDefaultIcon(PCWSTR customPath, int defaultResourceId) {
+// Generates a native vector UI icon on the fly using Windows system fonts
+HICON GenerateFontIcon(bool isMuted) {
+    int renderSize = 32;
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+
+    BITMAPINFO bmi = {0};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = renderSize;
+    bmi.bmiHeader.biHeight = renderSize; 
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pBits = NULL;
+    HBITMAP hbmColor = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+    HBITMAP hbmMask = CreateBitmap(renderSize, renderSize, 1, 1, NULL);
+
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hbmColor);
+
+    // Fill with transparent black
+    memset(pBits, 0, renderSize * renderSize * 4);
+
+    int fontSize = -MulDiv(20, GetDeviceCaps(hdcScreen, LOGPIXELSY), 72); 
+    HFONT hFont = CreateFontW(fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, 
+                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
+                              ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe MDL2 Assets");
+    if (!hFont) hFont = CreateFontW(fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, 
+                                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
+                                    ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI Symbol");
+
+    HFONT hOldFont = (HFONT)SelectObject(hdcMem, hFont);
+
+    SetTextColor(hdcMem, RGB(255, 255, 255));
+    SetBkMode(hdcMem, TRANSPARENT);
+    
+    // Draw the Microphone glyph
+    wchar_t glyph = 0xE720; 
+    RECT rc = {0, 0, renderSize, renderSize};
+    DrawTextW(hdcMem, &glyph, 1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    // Convert drawn text to a proper 32-bit alpha blended image
+    DWORD* pixels = (DWORD*)pBits;
+    for (int i = 0; i < renderSize * renderSize; i++) {
+        BYTE alpha = GetRValue(pixels[i]); 
+        if (alpha > 0) {
+            pixels[i] = (alpha << 24) | 0x00FFFFFF; // Full white with extracted alpha
+        } else {
+            pixels[i] = 0;
+        }
+    }
+
+    // Draw a prominent red slash if muted
+    if (isMuted) {
+        for (int i = 5; i < renderSize - 5; i++) {
+            int x = i;
+            int y = renderSize - 1 - i; // Diagonal line top-left to bottom-right
+            
+            for (int dx = -2; dx <= 2; dx++) { // Thicken the line
+                int px = x + dx;
+                if (px >= 0 && px < renderSize) {
+                    pixels[y * renderSize + px] = 0xFFFF3C3C; // Red Color with full Alpha
+                }
+            }
+        }
+    }
+
+    SelectObject(hdcMem, hOldFont);
+    SelectObject(hdcMem, hOldBmp);
+
+    ICONINFO ii = {0};
+    ii.fIcon = TRUE;
+    ii.hbmMask = hbmMask;
+    ii.hbmColor = hbmColor;
+    HICON hIcon = CreateIconIndirect(&ii);
+
+    DeleteObject(hFont);
+    DeleteObject(hbmColor);
+    DeleteObject(hbmMask);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+
+    return hIcon;
+}
+
+HICON LoadCustomOrDefaultIcon(PCWSTR customPath, bool isMuted) {
     if (customPath && wcslen(customPath) > 0) {
         HICON hIcon = (HICON)LoadImageW(NULL, customPath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
         if (hIcon) return hIcon;
     }
     
-    HICON hFallback = NULL;
-    ExtractIconExW(L"mmres.dll", defaultResourceId, NULL, &hFallback, 1);
-    
-    if (!hFallback) hFallback = LoadIconW(NULL, IDI_APPLICATION);
-    return hFallback;
+    // Fallback to our perfectly generated native UI icon!
+    return GenerateFontIcon(isMuted);
 }
 
 IAudioEndpointVolume* GetMicVolumeControl() {
@@ -186,7 +268,6 @@ void ChangeMicVolume(bool increase) {
     if (!pVol) return;
 
     if (settings.useDbStep) {
-        // Mode: Decibels
         float currentDb = 0.0f;
         pVol->GetMasterVolumeLevel(&currentDb);
 
@@ -199,7 +280,6 @@ void ChangeMicVolume(bool increase) {
 
         pVol->SetMasterVolumeLevel(newDb, NULL);
     } else {
-        // Mode: Percentage
         float currentScalar = 0.0f;
         pVol->GetMasterVolumeLevelScalar(&currentScalar);
 
@@ -411,8 +491,8 @@ void ReloadIcons() {
     if (g_hIconActive) DestroyIcon(g_hIconActive);
     if (g_hIconMuted) DestroyIcon(g_hIconMuted);
 
-    g_hIconActive = LoadCustomOrDefaultIcon(settings.activeIconPath, -3014);
-    g_hIconMuted = LoadCustomOrDefaultIcon(settings.mutedIconPath, -3020);
+    g_hIconActive = LoadCustomOrDefaultIcon(settings.activeIconPath, false);
+    g_hIconMuted = LoadCustomOrDefaultIcon(settings.mutedIconPath, true);
     
     UpdateTrayTooltip();
 }
