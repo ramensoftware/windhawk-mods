@@ -2,7 +2,7 @@
 // @id              paste-clipboard-content-to-explorer
 // @name            Paste Clipboard Content to Explorer
 // @description     Paste text and images from clipboard as files in Explorer and in file dialogs
-// @version         1.2
+// @version         1.3
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -42,7 +42,7 @@ static ULONG_PTR g_gdiplusToken = 0;
 static CRITICAL_SECTION g_gdiplusCS;
 static bool g_gdiplusCSInit = false;
 static HWND g_lastContextMenuShellView = nullptr;
-static bool g_menuCanPaste = false;
+static HWND g_menubarShellView = nullptr;
 static bool PerformPaste(HWND sourceWindow);
 
 // ============================================================
@@ -491,7 +491,7 @@ static bool GetCurrentFolderFromWindow(HWND hwnd, std::wstring& path)
 }
 
 // ============================================================
-//  CanPasteInWindow — called only at menu opening
+//  CanPasteInWindow
 // ============================================================
 static bool CanPasteInWindow(HWND hwnd)
 {
@@ -579,7 +579,10 @@ BOOL WINAPI EnableMenuItem_Hook(HMENU hMenu, UINT uIDEnableItem, UINT uEnable)
 {
     if (IsPasteCmd(uIDEnableItem) && (uEnable & (MF_GRAYED | MF_DISABLED)))
     {
-        if (g_menuCanPaste)
+        HWND hwnd = GetShellViewWindowAtCursor();
+        if (!hwnd) hwnd = g_lastContextMenuShellView;
+        if (!hwnd) hwnd = g_menubarShellView;
+        if (hwnd && CanPasteInWindow(hwnd))
             uEnable = (uEnable & ~(MF_GRAYED | MF_DISABLED)) | MF_ENABLED;
     }
     return EnableMenuItem_Orig(hMenu, uIDEnableItem, uEnable);
@@ -590,21 +593,26 @@ GetMenuState_t GetMenuState_Orig;
 UINT WINAPI GetMenuState_Hook(HMENU hMenu, UINT uId, UINT uFlags)
 {
     UINT result = GetMenuState_Orig(hMenu, uId, uFlags);
-    if (IsPasteCmd(uId) && g_menuCanPaste)
-        result = (result & ~(MF_GRAYED | MF_DISABLED)) | MF_ENABLED;
+    if (IsPasteCmd(uId))
+    {
+        HWND hwnd = GetShellViewWindowAtCursor();
+        if (!hwnd) hwnd = g_lastContextMenuShellView;
+        if (!hwnd) hwnd = g_menubarShellView;
+        if (hwnd && CanPasteInWindow(hwnd))
+            result = (result & ~(MF_GRAYED | MF_DISABLED)) | MF_ENABLED;
+    }
     return result;
 }
-
 
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, LPTPMPARAMS);
 TrackPopupMenuEx_t TrackPopupMenuEx_Orig;
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
                                    int x, int y, HWND hwnd, LPTPMPARAMS lptpm)
 {
-    g_menuCanPaste = CanPasteInWindow(hwnd);
-    g_lastContextMenuShellView = g_menuCanPaste ? hwnd : nullptr;
+    bool canPaste = CanPasteInWindow(hwnd);
+    g_lastContextMenuShellView = canPaste ? hwnd : nullptr;
 
-    if (g_menuCanPaste)
+    if (canPaste)
     {
         int n = GetMenuItemCount(hmenu);
         for (int i = 0; i < n; ++i)
@@ -620,10 +628,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
             }
         }
     }
-    BOOL result = TrackPopupMenuEx_Orig(hmenu, fuFlags, x, y, hwnd, lptpm);
-
-    g_menuCanPaste = false;
-    return result;
+    return TrackPopupMenuEx_Orig(hmenu, fuFlags, x, y, hwnd, lptpm);
 }
 
 static void HandleInitMenuPopup(HWND hWnd, HMENU hPopup)
@@ -652,8 +657,8 @@ static void HandleInitMenuPopup(HWND hWnd, HMENU hPopup)
 
     if (!svWnd) return;
 
-    g_menuCanPaste = CanPasteInWindow(svWnd);
-    g_lastContextMenuShellView = svWnd;
+    g_menubarShellView = svWnd;
+    bool canPaste = CanPasteInWindow(svWnd);
 
     int n = GetMenuItemCount(hPopup);
     for (int i = 0; i < n; ++i)
@@ -664,7 +669,7 @@ static void HandleInitMenuPopup(HWND hWnd, HMENU hPopup)
         if (GetMenuItemInfoW(hPopup, (UINT)i, TRUE, &mii) && IsPasteCmd(mii.wID))
         {
             mii.fMask  = MIIM_STATE;
-            mii.fState = g_menuCanPaste ? MFS_ENABLED : (MFS_GRAYED | MFS_DISABLED);
+            mii.fState = canPaste ? MFS_ENABLED : (MFS_GRAYED | MFS_DISABLED);
             SetMenuItemInfoW(hPopup, (UINT)i, TRUE, &mii);
         }
     }
@@ -678,7 +683,7 @@ LRESULT WINAPI CallWindowProcW_Hook(WNDPROC lpPrevWndFunc, HWND hWnd,
     if (Msg == WM_INITMENUPOPUP)
         HandleInitMenuPopup(hWnd, (HMENU)wParam);
     else if (Msg == WM_UNINITMENUPOPUP)
-        { g_menuCanPaste = false; g_lastContextMenuShellView = nullptr; }
+        g_menubarShellView = nullptr;
     return CallWindowProcW_Orig(lpPrevWndFunc, hWnd, Msg, wParam, lParam);
 }
 
@@ -690,7 +695,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg,
     if (Msg == WM_INITMENUPOPUP)
         HandleInitMenuPopup(hWnd, (HMENU)wParam);
     else if (Msg == WM_UNINITMENUPOPUP)
-        { g_menuCanPaste = false; g_lastContextMenuShellView = nullptr; }
+        g_menubarShellView = nullptr;
     return DefWindowProcW_Orig(hWnd, Msg, wParam, lParam);
 }
 
@@ -702,10 +707,14 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT Msg,
     if (Msg == WM_COMMAND && IsPasteCmd(LOWORD(wParam)) &&
         HasNonFileClipboardContent())
     {
-        HWND target = IsShellViewWindow(hWnd) ? hWnd :
-                      (g_lastContextMenuShellView &&
-                       IsShellViewWindow(g_lastContextMenuShellView)
-                           ? g_lastContextMenuShellView : nullptr);
+        HWND target = nullptr;
+        if (IsShellViewWindow(hWnd))
+            target = hWnd;
+        else if (g_menubarShellView && IsShellViewWindow(g_menubarShellView))
+            target = g_menubarShellView;
+        else if (g_lastContextMenuShellView &&
+                 IsShellViewWindow(g_lastContextMenuShellView))
+            target = g_lastContextMenuShellView;
         if (target && PerformPaste(target)) return 0;
     }
     return SendMessageW_Orig(hWnd, Msg, wParam, lParam);
@@ -719,10 +728,14 @@ BOOL WINAPI PostMessageW_Hook(HWND hWnd, UINT Msg,
     if (Msg == WM_COMMAND && IsPasteCmd(LOWORD(wParam)) &&
         HasNonFileClipboardContent())
     {
-        HWND target = IsShellViewWindow(hWnd) ? hWnd :
-                      (g_lastContextMenuShellView &&
-                       IsShellViewWindow(g_lastContextMenuShellView)
-                           ? g_lastContextMenuShellView : nullptr);
+        HWND target = nullptr;
+        if (IsShellViewWindow(hWnd))
+            target = hWnd;
+        else if (g_menubarShellView && IsShellViewWindow(g_menubarShellView))
+            target = g_menubarShellView;
+        else if (g_lastContextMenuShellView &&
+                 IsShellViewWindow(g_lastContextMenuShellView))
+            target = g_lastContextMenuShellView;
         if (target && PerformPaste(target)) return TRUE;
     }
     return PostMessageW_Orig(hWnd, Msg, wParam, lParam);
