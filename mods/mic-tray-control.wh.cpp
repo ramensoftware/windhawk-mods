@@ -4,7 +4,7 @@
 // @description     Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!
 // @version         1.4
 // @author          ciahciach
-// @github          https://github.com/TwójNickNaGithubie
+// @github          https://github.com/ciahciach
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lcomctl32 -luuid -lgdi32 -luxtheme
 // @license         MIT
