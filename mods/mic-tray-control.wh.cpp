@@ -2,7 +2,7 @@
 // @id              mic-tray-control
 // @name            Mic Tray Control & Decibel Viewer
 // @description     Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!
-// @version         1.4
+// @version         1.5
 // @author          ciahciach
 // @github          https://github.com/ciahciach
 // @include         explorer.exe
@@ -15,7 +15,7 @@
 # Mic Tray Control (EarTrumpet Style)
 This mod adds a dedicated Microphone icon to your system tray.
 
-*Vibecoded by **ciahciach** *
+*Proudly vibecoded by **ciahciach** (AI-assisted programming).* 🦾
 
 ### Features:
 - **Quick Mute:** Left-Click the icon to quickly toggle Mute for the default mic.
@@ -23,15 +23,22 @@ This mod adds a dedicated Microphone icon to your system tray.
 - **Dynamic Mute Icon:** The tray icon changes visually when your default mic is muted.
 - **Scroll Control:** Hover over the tray icon and scroll to adjust your default mic volume quickly.
 - **Live Preview:** Hover over the tray icon to see exact volume in % and dB.
+- **Step Modes:** Choose between Percentage (%) or exact Decibel (dB) steps when scrolling.
 - **Custom Icons:** You can provide your own `.ico` files in the settings!
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- useDbStep: false
+  $name: Use Decibels (dB) for Scroll Step
+  $description: If checked, scrolling changes volume by exact dB. If unchecked, it uses Percentage (%).
 - stepPercent: 2
   $name: Scroll Step (%)
-  $description: How many percentage points to change per single scroll tick.
+  $description: How many percentage points to change per tick (if dB mode is disabled).
+- stepDb: "0.5"
+  $name: Scroll Step (dB)
+  $description: How many decibels to change per tick (if dB mode is enabled). Use dot for decimals.
 - activeIconPath: ""
   $name: Custom Active Mic Icon (.ico path)
   $description: Full path to a custom .ico file (e.g. C:\icons\mic_on.ico). Leave empty for default.
@@ -68,7 +75,9 @@ HICON g_hIconActive = NULL;
 HICON g_hIconMuted = NULL;
 
 struct {
+    bool useDbStep;
     int stepPercent;
+    float stepDb;
     wchar_t activeIconPath[MAX_PATH];
     wchar_t mutedIconPath[MAX_PATH];
 } settings;
@@ -83,8 +92,14 @@ std::vector<MicEntry> g_activeMics;
 // --- Helper Functions ---
 
 void LoadSettings() {
+    settings.useDbStep = Wh_GetIntSetting(L"useDbStep") != 0;
+    
     settings.stepPercent = Wh_GetIntSetting(L"stepPercent");
     if (settings.stepPercent <= 0) settings.stepPercent = 2;
+
+    PCWSTR strDb = Wh_GetStringSetting(L"stepDb");
+    settings.stepDb = strDb ? (float)_wtof(strDb) : 0.5f;
+    if (strDb) Wh_FreeStringSetting(strDb);
 
     PCWSTR actPath = Wh_GetStringSetting(L"activeIconPath");
     if (actPath) {
@@ -104,17 +119,14 @@ void LoadSettings() {
 }
 
 HICON LoadCustomOrDefaultIcon(PCWSTR customPath, int defaultResourceId) {
-    // 1. Try to load user's custom .ico file if provided
     if (customPath && wcslen(customPath) > 0) {
         HICON hIcon = (HICON)LoadImageW(NULL, customPath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
         if (hIcon) return hIcon;
     }
     
-    // 2. Fallback to extracting from Windows system resources
     HICON hFallback = NULL;
     ExtractIconExW(L"mmres.dll", defaultResourceId, NULL, &hFallback, 1);
     
-    // 3. Absolute failsafe
     if (!hFallback) hFallback = LoadIconW(NULL, IDI_APPLICATION);
     return hFallback;
 }
@@ -173,16 +185,32 @@ void ChangeMicVolume(bool increase) {
     IAudioEndpointVolume* pVol = GetMicVolumeControl();
     if (!pVol) return;
 
-    float currentScalar = 0.0f;
-    pVol->GetMasterVolumeLevelScalar(&currentScalar);
+    if (settings.useDbStep) {
+        // Mode: Decibels
+        float currentDb = 0.0f;
+        pVol->GetMasterVolumeLevel(&currentDb);
 
-    float step = settings.stepPercent / 100.0f;
-    float newScalar = currentScalar + (increase ? step : -step);
+        float minDb = 0.0f, maxDb = 0.0f, stepHw = 0.0f;
+        pVol->GetVolumeRange(&minDb, &maxDb, &stepHw);
 
-    if (newScalar < 0.0f) newScalar = 0.0f;
-    if (newScalar > 1.0f) newScalar = 1.0f;
+        float newDb = currentDb + (increase ? settings.stepDb : -settings.stepDb);
+        if (newDb < minDb) newDb = minDb;
+        if (newDb > maxDb) newDb = maxDb;
 
-    pVol->SetMasterVolumeLevelScalar(newScalar, NULL);
+        pVol->SetMasterVolumeLevel(newDb, NULL);
+    } else {
+        // Mode: Percentage
+        float currentScalar = 0.0f;
+        pVol->GetMasterVolumeLevelScalar(&currentScalar);
+
+        float step = settings.stepPercent / 100.0f;
+        float newScalar = currentScalar + (increase ? step : -step);
+
+        if (newScalar < 0.0f) newScalar = 0.0f;
+        if (newScalar > 1.0f) newScalar = 1.0f;
+
+        pVol->SetMasterVolumeLevelScalar(newScalar, NULL);
+    }
     
     if (increase) pVol->SetMute(FALSE, NULL);
 
@@ -254,21 +282,16 @@ void ShowMicMixerUI() {
         float volScalar = 0.0f;
         pVol->GetMasterVolumeLevelScalar(&volScalar);
 
-        // Name Label
         HWND hLbl = CreateWindowW(WC_STATIC, varName.pwszVal ? varName.pwszVal : L"Unknown Mic",
             WS_CHILD | WS_VISIBLE | SS_NOPREFIX, 15, y, 290, 20, g_hPopup, NULL, GetModuleHandle(NULL), NULL);
         SendMessageW(hLbl, WM_SETFONT, (WPARAM)hFont, FALSE);
 
-        // Modern Slider (Trackbar)
         HWND hSlider = CreateWindowW(TRACKBAR_CLASSW, L"",
             WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_TRANSPARENTBKGND, 10, y + 20, 250, 30, g_hPopup, (HMENU)(INT_PTR)(ID_SLIDER_BASE + i), GetModuleHandle(NULL), NULL);
         SendMessageW(hSlider, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
         SendMessageW(hSlider, TBM_SETPOS, TRUE, (LPARAM)(volScalar * 100.0f));
-        
-        // This makes the slider look modern (Windows 10/11 style) instead of Windows 95
         SetWindowTheme(hSlider, L"Explorer", NULL);
 
-        // Percentage Label
         wchar_t pctStr[16];
         StringCchPrintfW(pctStr, ARRAYSIZE(pctStr), L"%d%%", (int)(volScalar * 100.0f));
         HWND hPctLabel = CreateWindowW(WC_STATIC, pctStr,
@@ -303,7 +326,6 @@ void ShowMicMixerUI() {
     SetFocus(g_hPopup);
 }
 
-// Window Procedure for the Custom Mixer Popup
 LRESULT CALLBACK MixerWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_ACTIVATE:
@@ -313,7 +335,6 @@ LRESULT CALLBACK MixerWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             break;
             
         case WM_CTLCOLORSTATIC: {
-            // Makes the background of the text labels transparent for a cleaner look
             HDC hdcStatic = (HDC)wParam;
             SetBkMode(hdcStatic, TRANSPARENT);
             return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
@@ -366,9 +387,9 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     switch (uMsg) {
         case WM_APP_TRAYMSG:
             if (lParam == WM_LBUTTONUP) {
-                ToggleMicMute();  // Left Click -> Mute Toggle
+                ToggleMicMute();
             } else if (lParam == WM_RBUTTONUP) {
-                ShowMicMixerUI(); // Right Click -> Open UI Mixer
+                ShowMicMixerUI();
             }
             break;
 
@@ -460,14 +481,6 @@ DWORD WINAPI ModThread(LPVOID lpParam) {
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     LoadSettings();
-    
-    // Tell the background thread to reload icons
-    if (g_dwThreadId) {
-        PostThreadMessage(g_dwThreadId, WM_APP, 0, 0); // Trigger generic wake
-        // Real icon reloading is tricky across threads safely without blocking,
-        // so for custom icons to take effect it's best to restart the mod or we can just hope 
-        // the timer loop picks up settings. But standard Windhawk behaviour handles restarts.
-    }
 }
 
 BOOL Wh_ModInit() {
