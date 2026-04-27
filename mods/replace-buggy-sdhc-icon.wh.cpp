@@ -15,7 +15,7 @@
 
 Replace the buggy SDHC card drive icon which MS does not bother to fix since before Windows 8.
 
-![Screenshot](https://i.imgur.com/TEYcBGV.png)
+![Screenshot](https://i.imgur.com/6BKSRQR.png)
 
 */
 // ==/WindhawkModReadme==
@@ -79,7 +79,7 @@ NtQueryKey_t      NtQueryKey_Func         = nullptr;
 NtQueryValueKey_t NtQueryValueKey_Original = nullptr;
 
 static const std::wstring kTargetValue  = L"%systemroot%\\syswow64\\rscricon.dll,50";
-static const std::wstring kReplacedValue = L"%SystemRoot%\\system32\\shell32.dll,194";
+static const std::wstring kReplacedValue = L"%SystemRoot%\\system32\\shell32.dll,193";
 
 // ============================================================
 //  Helpers
