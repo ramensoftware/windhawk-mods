@@ -2,7 +2,7 @@
 // @id              mic-tray-control
 // @name            Mic Tray Control & Decibel Viewer
 // @description     Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!
-// @version         1.5
+// @version         1.5.1
 // @author          ciahciach
 // @github          https://github.com/ciahciach
 // @include         explorer.exe
@@ -15,7 +15,7 @@
 # Mic Tray Control (EarTrumpet Style)
 This mod adds a dedicated Microphone icon to your system tray.
 
-*Proudly vibecoded by **ciahciach** (AI-assisted programming).* 🦾
+*Vibecoded by **ciahciach**.*
 
 ### Features:
 - **Quick Mute:** Left-Click the icon to quickly toggle Mute for the default mic.
