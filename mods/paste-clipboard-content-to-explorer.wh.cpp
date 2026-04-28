@@ -756,12 +756,7 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg)
             WCHAR className[256] = {};
             GetClassNameW(focusWnd, className, 256);
             
-            if (!wcscmp(className, L"Edit") ||
-                !wcscmp(className, L"RichEdit") ||
-                !wcscmp(className, L"RichEdit20A") ||
-                !wcscmp(className, L"RichEdit20W") ||
-                !wcscmp(className, L"REComboBox20W") ||
-                wcsstr(className, L"Edit"))
+            if (!wcscmp(className, L"Edit"))
             {
                 return TranslateAcceleratorW_Orig(hWnd, hAccTable, lpMsg);
             }
