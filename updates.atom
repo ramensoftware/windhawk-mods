@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-27T20:51:24.000Z</updated>
+    <updated>2026-04-28T08:49:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Audio Output Device Switcher 1.0]]></title>
+        <id>https://windhawk.net/mods/audio-scroll-switcher#d9349ff002901d3deca3ac680de0059ee97bc7c6</id>
+        <link href="https://windhawk.net/mods/audio-scroll-switcher"/>
+        <updated>2026-04-28T08:49:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="audiooutputdeviceswitcher">Audio Output Device Switcher</h1>
+<p>Quickly switch between audio output devices by holding <strong>Ctrl</strong> and scrolling
+the mouse wheel over the taskbar.</p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Hold <strong>Ctrl</strong> and scroll up/down over the taskbar</li>
+<li>Your audio output device will switch to the next/previous device</li>
+<li>A notification popup shows the newly selected device</li>
+</ol>
+<h2 id="features">Features</h2>
+<ul>
+<li>Works on Windows 10 and Windows 11</li>
+<li>Supports multiple monitors (works on all taskbars)</li>
+<li>Modern Windows 11-style notification popup</li>
+<li>Configurable notification duration</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Show notification</strong>: Enable/disable the popup notification</li>
+<li><strong>Notification duration</strong>: How long the popup stays visible (in milliseconds)</li>
+</ul>]]></content>
+        <author>
+            <name>Georgi AI</name>
+            <uri>https://github.com/georgiai1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.3]]></title>
         <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#2c7d5188338a6ec528397db14efd2336a9485bea</id>
@@ -404,17 +435,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>Bo0ii</name>
             <uri>https://github.com/Bo0ii</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Edge Snap Throw 2.0.1]]></title>
-        <id>https://windhawk.net/mods/edge-snap-throw#6ab0fe7097af06e58f35e42aa68ba95e05d59a71</id>
-        <link href="https://windhawk.net/mods/edge-snap-throw"/>
-        <updated>2026-04-22T09:56:29.000Z</updated>
-        <content type="html"><![CDATA[<p>Updated author and GitHub metadata to reflect username change.</p>]]></content>
-        <author>
-            <name>Getrektbynoob15</name>
-            <uri>https://github.com/getrektbynoob15</uri>
         </author>
     </entry>
 </feed>
