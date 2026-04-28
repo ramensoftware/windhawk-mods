@@ -3,7 +3,7 @@
 // @name            Per-Monitor Scale Switcher
 // @description     Per-monitor DPI scaling based on friendly name, auto-applied on connect/disconnect.
 // @version         1.0
-// @author          @jtnqr
+// @author          jtnqr
 // @github          https://github.com/jtnqr
 // @include         explorer.exe
 // @compilerOptions -luser32 -lshcore
