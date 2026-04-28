@@ -21,7 +21,7 @@ Monitors not listed in settings are left untouched.
 // ==WindhawkModSettings==
 /*
 - monitors:
-  - "BOE0998,100,125"
+  - "MonitorID,scaleSingle,scaleMulti"
   $name: Per-monitor rules
   $description: >-
     One entry per monitor. Format: ID,scaleSingle,scaleMulti
