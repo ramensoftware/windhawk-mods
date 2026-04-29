@@ -7693,6 +7693,34 @@
                 "version": "1.0"
             }
         },
+        "replace-buggy-sdhc-icon": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777498806000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777498806000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lntdll",
+                "description": "Replace the buggy SDHC card drive icon which MS does not bother to fix",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "*"
+                ],
+                "name": "Replace the buggy SDHC card drive icon",
+                "version": "1.0"
+            }
+        },
         "resizable-discord": {
             "details": {
                 "defaultSorting": 550,
