@@ -2,7 +2,7 @@
 // @id              paste-clipboard-content-to-explorer
 // @name            Paste Clipboard Content to Explorer
 // @description     Paste text and images from clipboard as files in Explorer and in file dialogs
-// @version         1.3
+// @version         1.4
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -750,6 +750,18 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg)
         !(GetKeyState(VK_SHIFT)  & 0x8000) &&
         !(GetKeyState(VK_MENU)   & 0x8000))
     {
+        HWND focusWnd = GetFocus();
+        if (focusWnd)
+        {
+            WCHAR className[256] = {};
+            GetClassNameW(focusWnd, className, 256);
+            
+            if (!wcscmp(className, L"Edit"))
+            {
+                return TranslateAcceleratorW_Orig(hWnd, hAccTable, lpMsg);
+            }
+        }
+        
         HWND target = nullptr;
         if (IsShellViewWindow(hWnd))             target = hWnd;
         else if (IsShellViewWindow(lpMsg->hwnd)) target = lpMsg->hwnd;
