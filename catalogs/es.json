@@ -930,6 +930,35 @@
                 "version": "1.0.4"
             }
         },
+        "chrome-pip-alt-tab-window-hider": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777498346000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777498346000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "BCRTVKCS",
+                "description": "Hides Chrome Picture-in-Picture windows from Alt+Tab and the taskbar.",
+                "github": "https://github.com/bcrtvkcs",
+                "homepage": "https://grdigital.pro",
+                "include": [
+                    "chrome.exe"
+                ],
+                "name": "Chrome PiP Alt+Tab Window Hider",
+                "twitter": "https://x.com/bcrtvkcs",
+                "version": "1.0.0"
+            }
+        },
         "chrome-ui-tweaks": {
             "details": {
                 "defaultSorting": 13980,

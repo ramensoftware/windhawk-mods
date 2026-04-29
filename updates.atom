@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-29T20:17:49.000Z</updated>
+    <updated>2026-04-29T21:32:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome PiP Alt+Tab Window Hider 1.0.0]]></title>
+        <id>https://windhawk.net/mods/chrome-pip-alt-tab-window-hider#0359476256587e4e3ae4d16881057a2b09eb2d79</id>
+        <link href="https://windhawk.net/mods/chrome-pip-alt-tab-window-hider"/>
+        <updated>2026-04-29T21:32:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromepipalttabwindowhider">Chrome PiP Alt+Tab Window Hider</h1>
+<p>Removes Chrome Picture-in-Picture windows from the Alt+Tab switcher and Win+Tab,
+while keeping them fully functional (always-on-top, playback controls, etc.).</p>
+<h2 id="howitworks">How it works</h2>
+<p>Chrome PiP windows are identified by three concurrent traits:</p>
+<ul>
+<li>Window class: <code>Chrome_WidgetWin_1</code></li>
+<li>Extended style: <code>WS_EX_TOPMOST</code> set</li>
+<li>No owner window</li>
+<li>Size smaller than 50% of the primary monitor in both dimensions</li>
+</ul>
+<p>When a matching window is found, <code>WS_EX_TOOLWINDOW</code> is added and
+<code>WS_EX_APPWINDOW</code> is removed — the standard Win32 technique for hiding
+a window from Alt+Tab and the taskbar.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 10 and Windows 11</li>
+<li>Targets <code>chrome.exe</code> only</li>
+</ul>]]></content>
+        <author>
+            <name>BCRTVKCS</name>
+            <uri>https://github.com/bcrtvkcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer TreeLine Killer 1.0.1]]></title>
         <id>https://windhawk.net/mods/explorer-treeline-killer#cd450a8c33e4b18e4842b53242951f4a21b97de4</id>
@@ -400,20 +429,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Details View Columns 1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-force-details-columns#0e1772a08bdcdd2dbf87a949f7d1d2c136c2be57</id>
-        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
-        <updated>2026-04-25T12:27:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Width settings should be consistent now after changing monitors with different DPI.</li>
-<li>New changes take effect immediately now to all windows including opened ones.</li>
-</ul>]]></content>
-        <author>
-            <name>ernisn</name>
-            <uri>https://github.com/ernisn</uri>
         </author>
     </entry>
 </feed>
