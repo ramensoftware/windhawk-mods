@@ -2,7 +2,7 @@
 // @id              explorer-treeline-killer
 // @name            Explorer TreeLine Killer
 // @description     Hide navigation pane separator lines and control upper/lower spacing in Explorer
-// @version         1.0.0
+// @version         1.0.1
 // @author          Languster
 // @github          https://github.com/Languster
 // @include         explorer.exe
@@ -25,7 +25,9 @@ It is useful if you want the navigation pane to look cleaner, tighter, and more 
 - choose between tighter compact spacing and more standard Windows-like spacing for each section
 
 ## Recommended setup
-For the best Explorer navigation pane experience, it is recommended to use this mod together with **Explorer TreeItem Tweaker** and **Explorer Navigation Pane Tweaks**.
+For the best Explorer navigation pane experience, it is recommended to use this mod together with [Explorer TreeItem Tweaker](https://windhawk.net/mods/explorer-treeitem-tweaker) and [Explorer Navigation Tree Offset](https://windhawk.net/mods/explorer-navigation-pane-tweaks).
+
+![Before / After](https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-before-after.jpg)
 
 ## Compatibility
 Tested and confirmed compatible with **Windows 11 versions 23H2 through 25H2**.
@@ -48,14 +50,6 @@ Other versions have not been tested.
 - the lower option controls the spacing before **This PC**
 - this mod is designed only for Explorer's left navigation pane
 
-## Before / After
-**Before**
-
-![Before](https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-before.jpg)
-
-**After**
-
-![After](https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-after.jpg)
 */
 // ==/WindhawkModReadme==
 
