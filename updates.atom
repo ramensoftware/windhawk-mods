@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-29T19:43:29.000Z</updated>
+    <updated>2026-04-29T19:47:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Windows Shortcuts 1.1.1]]></title>
+        <id>https://windhawk.net/mods/disable-windows-shortcuts#00f99498b90b44630ab4e46c10038c3e3000a663</id>
+        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
+        <updated>2026-04-29T19:47:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added new shortcuts (<a href="https://github.com/ramensoftware/windhawk-mods/issues/3880">#3880</a>)</li>
+<li>Standard: <code>Win+Q</code>, <code>Win+Ctrl+F</code>, <code>Alt+Shift</code>, <code>Ctrl+Esc</code>, <code>Win</code></li>
+<li>Special: <code>Win+/</code> </li>
+<li>Fixed an issue where after re-enabling the mod, it won't apply the settings. It shows an explorer restart prompt to re-apply the settings correctly now</li>
+<li>Fixed mod un-initialization and re-initialization delay</li>
+<li>Fixed <code>Win+Space</code> which refused to get blocked in the earlier versions</li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.4]]></title>
         <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#ec8fe4493d189fe53c06583b6f7ddcfde24b810a</id>
@@ -417,20 +435,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Windows Shortcuts 1.1.0]]></title>
-        <id>https://windhawk.net/mods/disable-windows-shortcuts#7c82186f741a488c1fa6ac78b2247bb5399c9411</id>
-        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
-        <updated>2026-04-22T19:44:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixes few shortcut keys that are hard-coded into windows with a new approach</li>
-<li>Refactored settings into two separate groups for the updated shortcuts</li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
