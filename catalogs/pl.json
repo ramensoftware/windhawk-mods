@@ -4000,7 +4000,7 @@
                     8
                 ],
                 "ratingUsers": 9,
-                "updated": 1777156793000,
+                "updated": 1777498941000,
                 "users": 94
             },
             "metadata": {
@@ -4015,7 +4015,7 @@
                     "explorer.exe"
                 ],
                 "name": "Explorer TreeItem Tweaker",
-                "version": "1.0.0"
+                "version": "1.1"
             }
         },
         "explorer-treeline-killer": {

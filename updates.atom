@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-29T21:40:06.000Z</updated>
+    <updated>2026-04-29T21:42:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer TreeItem Tweaker 1.1]]></title>
+        <id>https://windhawk.net/mods/explorer-treeitem-tweaker#2b49d734ff0ed063869998c475ddde5ee1d2dc70</id>
+        <link href="https://windhawk.net/mods/explorer-treeitem-tweaker"/>
+        <updated>2026-04-29T21:42:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an issue with child tree backgrounds in Width Mode = 2.</li>
+<li>Added an option to hide pinned item icons, based on functionality by <a href="https://github.com/valinet">valinet</a>.</li>
+<li>Added font style settings for menu item text.</li>
+</ul>]]></content>
+        <author>
+            <name>Languster</name>
+            <uri>https://github.com/Languster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Replace the buggy SDHC card drive icon 1.0]]></title>
         <id>https://windhawk.net/mods/replace-buggy-sdhc-icon#7a2c107289cd17a9b4a24a476102fb0faffd1308</id>
@@ -413,21 +428,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>dirtyrazkl</name>
             <uri>https://github.com/dirtyrazkl</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.7.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#00185dce0fd0a9b71e0fdaa09b0611224dfaa022</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2026-04-25T14:15:46.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Minor improvements to system performance metrics collection.</li>
-<li>Fixed unnecessarily frequent refreshes if seconds, system metrics, and web content are all unused.</li>
-<li>Fixed compatibility with new insider Windows 11 builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
