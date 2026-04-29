@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-28T08:49:13.000Z</updated>
+    <updated>2026-04-29T19:43:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.4]]></title>
+        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#ec8fe4493d189fe53c06583b6f7ddcfde24b810a</id>
+        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
+        <updated>2026-04-29T19:43:29.000Z</updated>
+        <content type="html"><![CDATA[<p>Don't paste a new file if Ctrl+V is pressed during editing file name</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Audio Output Device Switcher 1.0]]></title>
         <id>https://windhawk.net/mods/audio-scroll-switcher#d9349ff002901d3deca3ac680de0059ee97bc7c6</id>
@@ -420,21 +431,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Auto-Hide Instant Show 2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-autohide-instant-show#8346ae1c33be7e1d792c7e8351455d26862a2aa0</id>
-        <link href="https://windhawk.net/mods/taskbar-autohide-instant-show"/>
-        <updated>2026-04-22T15:43:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add No animation and Overshoot options</li>
-<li>Upgrade Slide + Fade to quintic ease for silkier motion</li>
-<li>Edge detection: replace one-shot trigger with throttled retry so the taskbar reliably appears over fullscreen apps and foreground windows that swallow the edge event</li>
-</ul>]]></content>
-        <author>
-            <name>Bo0ii</name>
-            <uri>https://github.com/Bo0ii</uri>
         </author>
     </entry>
 </feed>

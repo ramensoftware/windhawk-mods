@@ -1,3 +1,7 @@
+## 1.4 ([Apr 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ec8fe4493d189fe53c06583b6f7ddcfde24b810a/mods/paste-clipboard-content-to-explorer.wh.cpp))
+
+Don't paste a new file if Ctrl+V is pressed during editing file name
+
 ## 1.3 ([Apr 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2c7d5188338a6ec528397db14efd2336a9485bea/mods/paste-clipboard-content-to-explorer.wh.cpp))
 
 Fix regression in the previous version (greyed menus after Explorer's restart)
