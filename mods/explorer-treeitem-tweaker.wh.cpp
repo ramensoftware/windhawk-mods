@@ -2,7 +2,7 @@
 // @id              explorer-treeitem-tweaker
 // @name            Explorer TreeItem Tweaker
 // @description     Custom backgrounds and text colors for Explorer TreeView
-// @version         1.0.0
+// @version         1.1
 // @author          Languster
 // @github          https://github.com/Languster
 // @include         explorer.exe
@@ -18,6 +18,9 @@
 
 It is designed for people who want the navigation tree to look cleaner, more polished, and more comfortable to use.
 
+**Recommended setup**  
+For the best Explorer navigation pane experience, it is recommended to use this mod together with **[Explorer Navigation Tree Offset](https://windhawk.net/mods/explorer-navigation-pane-tweaks)** and **[Explorer TreeLine Killer](https://windhawk.net/mods/explorer-treeline-killer)**.
+
 ## ⚠️ Important: dark theme defaults
 
 **The default settings are designed for the dark Windows system theme.**
@@ -27,6 +30,14 @@ For a correct and clean appearance on the light Windows theme, adjust the mod se
 For example, for light theme text, try:
 
 `R = 0, G = 0, B = 0`
+
+## Before / After
+![Before / After](https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-tree-item-tweaker-before-after.jpg)
+
+## Width mode note
+System Width mode (0) uses the original TreeView menu item background width and is not recommended if you use **Explorer Navigation Tree Offset**, in order to avoid background clipping.
+
+Use **Width By Text** or **One Width For All** instead.
 
 ## Features
 - customize background, border, and text colors for these states:
@@ -42,6 +53,8 @@ For example, for light theme text, try:
   - item height
   - icon size
   - icon-text gap
+  - Quick Access pin button hiding
+  - custom font face and size
   - color
   - background opacity
   - border opacity
@@ -58,9 +71,6 @@ With this mod, you can:
 
 In practice, this is a much faster, more convenient, and more powerful way to customize the navigation tree.
 
-## Recommended setup
-For the best Explorer navigation pane experience, it is recommended to use this mod together with **Explorer TreeLine Killer** and **Explorer Navigation Pane Tweaks**.
-
 ## Compatibility
 Tested and confirmed compatible with **Windows 11 versions 23H2 through 25H2**.
 Other versions have not been tested.
@@ -73,26 +83,34 @@ Other versions have not been tested.
 - **Item Height** changes the total row height of tree items
 - **Icon Size** changes the width and height of the navigation icons
 - **Icon-Text Gap** adds space between the icon and the text
+- **Hide Pin Button** hides the Quick Access pin button in the navigation tree
+- **Custom Font** changes the tree item text font face and size
+- **Text Font Weight** and **Text Font Style** can be configured separately for each text state
 
 ## Layout controls
 - **Item Height** increases or decreases the total height of each navigation row
 - **Icon-Text Gap** controls the horizontal spacing between the icon and the text
 - **Icon Size** controls the width and height of navigation icons
 
-Each option has its own enable switch.
+Most layout options have their own enable switch.
 When a switch is off, that option is not applied.
 
-## Before / After
-**Before**
+## Custom Font
+The **Custom Font** block controls the common tree item font face and size before per-state text settings.
 
-![Before](https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeitem-tweaker-before.jpg)
+This block does not need a separate enable switch. Empty or `0` values keep the native Explorer font and the custom font code is not applied.
 
-**After**
+- **Font Face**: leave empty to keep the native Explorer font family
+- **Font Size**: `0` = default/native size
 
-![After](https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeitem-tweaker-after.jpg)
+Text weight and style are configured inside each text state block:
+
+- **Font Weight**: `0` = default, `1` = semibold, `2` = bold
+- **Font Style**: `0` = default, `1` = italic, `2` = underline, `3` = italic + underline
 
 ## Credits
 Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functionality.
+Thanks to [valinet](https://github.com/valinet) for the Hide Pin Button function.
 */
 // ==/WindhawkModReadme==
 
@@ -104,7 +122,7 @@ Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functi
     $description: Controls how rounded the corners are
   - WidthMode: 2
     $name: Width Mode
-    $description: Choose how item width is calculated. 0 = system, 1 = one width for all, 2 = width by text
+    $description: Choose how item width is calculated. 0 = system, 1 = one width for all, 2 = width by text. Value 0 is not recommended when using Explorer Navigation Tree Offset
   - OneWidthForAll:
     - LeftMargin: 6
       $name: Left Margin
@@ -153,7 +171,21 @@ Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functi
       $name: Icon Size (px)
       $description: Sets the width and height of navigation icons
     $name: Icon Size
+  - HidePinButton:
+    - Enabled: false
+      $name: Enabled
+      $description: Hides the Quick Access pin button in the navigation tree
+    $name: Hide Pin Button
   $name: Global
+
+- CustomFont:
+  - FaceName: ""
+    $name: Font Face
+    $description: Font family name used for tree item text. Leave empty to keep the native Explorer navigation pane font
+  - Size: 0
+    $name: Font Size (pt)
+    $description: Font size in points. Set 0 to keep the native size
+  $name: Custom Font
 
 - NormalText:
   - Enabled: true
@@ -168,6 +200,12 @@ Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functi
   - B: 210
     $name: Blue
     $description: Blue channel for the normal text color
+  - Weight: 0
+    $name: Font Weight
+    $description: Font weight mode. 0 = default, 1 = semibold, 2 = bold
+  - Style: 0
+    $name: Font Style
+    $description: Font style mode. 0 = default, 1 = italic, 2 = underline, 3 = italic + underline
   $name: Normal Text
 
 - HotState:
@@ -218,6 +256,12 @@ Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functi
     - B: 210
       $name: Blue
       $description: Blue channel for the hot text color
+    - Weight: 0
+      $name: Font Weight
+      $description: Font weight mode for the hot state. 0 = default, 1 = semibold, 2 = bold
+    - Style: 0
+      $name: Font Style
+      $description: Font style mode for the hot state. 0 = default, 1 = italic, 2 = underline, 3 = italic + underline
     $name: Text
   $name: Hot State
 
@@ -269,6 +313,12 @@ Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functi
     - B: 210
       $name: Blue
       $description: Blue channel for the selected text color
+    - Weight: 0
+      $name: Font Weight
+      $description: Font weight mode for the selected state. 0 = default, 1 = semibold, 2 = bold
+    - Style: 0
+      $name: Font Style
+      $description: Font style mode for the selected state. 0 = default, 1 = italic, 2 = underline, 3 = italic + underline
     $name: Text
   $name: Selected State
 
@@ -320,6 +370,12 @@ Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functi
     - B: 210
       $name: Blue
       $description: Blue channel for the selected not focus text color
+    - Weight: 0
+      $name: Font Weight
+      $description: Font weight mode for the selected not focus state. 0 = default, 1 = semibold, 2 = bold
+    - Style: 0
+      $name: Font Style
+      $description: Font style mode for the selected not focus state. 0 = default, 1 = italic, 2 = underline, 3 = italic + underline
     $name: Text
   $name: Selected Not Focus State
 
@@ -371,6 +427,12 @@ Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functi
     - B: 210
       $name: Blue
       $description: Blue channel for the hot selected text color
+    - Weight: 0
+      $name: Font Weight
+      $description: Font weight mode for the hot selected state. 0 = default, 1 = semibold, 2 = bold
+    - Style: 0
+      $name: Font Style
+      $description: Font style mode for the hot selected state. 0 = default, 1 = italic, 2 = underline, 3 = italic + underline
     $name: Text
   $name: Hot Selected State
 */
@@ -383,12 +445,23 @@ Thanks to [crazyboyybs](https://github.com/crazyboyybs) for extending the functi
 #include <gdiplus.h>
 #include <algorithm>
 #include <vector>
+#include <utility>
 
 #ifndef TMT_TEXTCOLOR
 #define TMT_TEXTCOLOR 3803
 #endif
 
 using namespace Gdiplus;
+
+#ifdef _WIN64
+#define STDCALL __cdecl
+#define SSTDCALL L"__cdecl"
+#else
+#define STDCALL __stdcall
+#define SSTDCALL L"__stdcall"
+#endif
+
+static HMODULE g_hExplorerFrame = nullptr;
 
 struct ExplorerState
 {
@@ -403,6 +476,20 @@ struct TreeMetricsState
     HIMAGELIST ownedNormal;
     int originalItemHeight;
     bool originalItemHeightCaptured;
+    HFONT originalFont;
+    bool originalFontCaptured;
+    LOGFONTW originalLogFont;
+    bool originalLogFontCaptured;
+    HFONT restoreFont;
+    bool restoreFontApplied;
+    HFONT customFont;
+    bool customFontApplied;
+    int customFontDpiY;
+    int customFontSize;
+    int customFontWeight;
+    BOOL customFontItalic;
+    BOOL customFontUnderline;
+    wchar_t customFontFace[LF_FACESIZE];
 };
 
 struct StateStyle
@@ -421,6 +508,20 @@ struct StateStyle
     int textR;
     int textG;
     int textB;
+    int textFontWeightMode;
+    int textFontWeight;
+    int textFontStyleMode;
+    BOOL textFontItalic;
+    BOOL textFontUnderline;
+};
+
+struct TextFontOverride
+{
+    int weightMode;
+    int weight;
+    int styleMode;
+    BOOL italic;
+    BOOL underline;
 };
 
 static int  g_WidthMode = 2;
@@ -438,11 +539,21 @@ static BOOL g_IconTextGapEnabled = FALSE;
 static int  g_IconTextGapValue = 2;
 static BOOL g_IconSizeEnabled = FALSE;
 static int  g_IconSizeValue = 22;
+static BOOL g_HidePinButtonEnabled = FALSE;
+static wchar_t g_CustomFontFace[LF_FACESIZE] = L"";
+static int  g_CustomFontSize = 0;
+static HFONT g_CustomTextFont = nullptr;
+static int  g_CustomTextFontDpiY = 0;
 
 static BOOL g_NormalTextEnabled = TRUE;
 static int  g_NormalTextR = 210;
 static int  g_NormalTextG = 210;
 static int  g_NormalTextB = 210;
+static int  g_NormalTextFontWeightMode = 0;
+static int  g_NormalTextFontWeight = FW_NORMAL;
+static int  g_NormalTextFontStyleMode = 0;
+static BOOL g_NormalTextFontItalic = FALSE;
+static BOOL g_NormalTextFontUnderline = FALSE;
 
 static StateStyle g_HotStyle{};
 static StateStyle g_SelectedStyle{};
@@ -453,8 +564,12 @@ static decltype(&DrawThemeBackground) DrawThemeBackground_orig = nullptr;
 static decltype(&DrawThemeBackgroundEx) DrawThemeBackgroundEx_orig = nullptr;
 static decltype(&GetThemeColor) GetThemeColor_orig = nullptr;
 static decltype(&DrawThemeTextEx) DrawThemeTextEx_orig = nullptr;
+static decltype(&DrawTextW) DrawTextW_orig = nullptr;
+static decltype(&DrawTextExW) DrawTextExW_orig = nullptr;
 static decltype(&SendMessageW) SendMessageW_orig = nullptr;
 static decltype(&CreateWindowExW) CreateWindowExW_orig = nullptr;
+
+static HRESULT (STDCALL *CNscTree_SetStateImageList_orig)(void*, HIMAGELIST) = nullptr;
 
 static ULONG_PTR g_GdiplusToken = 0;
 
@@ -470,8 +585,13 @@ static HWINEVENTHOOK g_hEventHookCreate = nullptr;
 static HWINEVENTHOOK g_hEventHookHide = nullptr;
 static HWINEVENTHOOK g_hEventHookDestroy = nullptr;
 
+static thread_local bool g_HasPendingDrawTextFontOverride = false;
+static thread_local TextFontOverride g_PendingDrawTextFontOverride{};
+
 static ExplorerState* GetOrCreateState_NoLock(HWND hExplorer);
 static TreeMetricsState* GetOrCreateTreeMetricsState_NoLock(HWND hTree);
+static void ApplyCustomFontToTree(HWND hTree);
+static void ApplyCustomFontToTrackedTrees();
 
 static int ClampByte(int value)
 {
@@ -490,6 +610,153 @@ static COLORREF MakeColorRef(int r, int g, int b)
     return RGB(ClampByte(r), ClampByte(g), ClampByte(b));
 }
 
+static void DestroyCustomTextFont()
+{
+    if (g_CustomTextFont)
+    {
+        DeleteObject(g_CustomTextFont);
+        g_CustomTextFont = nullptr;
+    }
+
+    g_CustomTextFontDpiY = 0;
+}
+
+static int GetDpiYForWindowSafe(HWND hwnd)
+{
+    int dpiY = 96;
+
+    if (hwnd && IsWindow(hwnd))
+    {
+        UINT dpi = GetDpiForWindow(hwnd);
+        if (dpi > 0)
+        {
+            dpiY = (int)dpi;
+        }
+        else
+        {
+            HDC hdc = GetDC(hwnd);
+            if (hdc)
+            {
+                int deviceDpi = GetDeviceCaps(hdc, LOGPIXELSY);
+                if (deviceDpi > 0)
+                    dpiY = deviceDpi;
+                ReleaseDC(hwnd, hdc);
+            }
+        }
+    }
+
+    return dpiY;
+}
+
+static bool IsActiveCustomFontWeightMode(int mode)
+{
+    return mode == 1 || mode == 2;
+}
+
+static bool IsActiveCustomFontStyleMode(int mode)
+{
+    return mode >= 1 && mode <= 3;
+}
+
+static int FontWeightFromMode(int mode)
+{
+    switch (mode)
+    {
+        case 1:
+            return 600;
+        case 2:
+            return FW_BOLD;
+        case 0:
+        default:
+            return FW_NORMAL;
+    }
+}
+
+static bool IsDefaultCustomFontSettings()
+{
+    bool defaultFace = !g_CustomFontFace[0];
+
+    // Treat older default values from previous builds as no-op too.
+    // This prevents the font from changing for users who only enable the option
+    // while keeping the old default face/size stored in Windhawk settings.
+    if (!defaultFace && g_CustomFontSize == 9)
+    {
+        defaultFace = lstrcmpiW(g_CustomFontFace, L"Segoe UI") == 0 ||
+                      lstrcmpiW(g_CustomFontFace, L"Segoe UI Variable") == 0;
+    }
+
+    return defaultFace &&
+           (g_CustomFontSize == 0 || g_CustomFontSize == 9);
+}
+
+static bool ShouldProcessCustomFont()
+{
+    if (!IsDefaultCustomFontSettings())
+        return true;
+
+    if (!g_StateLockInitialized)
+        return false;
+
+    bool hasAppliedCustomFont = false;
+
+    EnterCriticalSection(&g_StateLock);
+    for (const auto& s : g_MetricsStates)
+    {
+        if (s.customFontApplied)
+        {
+            hasAppliedCustomFont = true;
+            break;
+        }
+    }
+    LeaveCriticalSection(&g_StateLock);
+
+    return hasAppliedCustomFont;
+}
+
+static bool GetFontLogFont(HFONT hFont, LOGFONTW* pLogFont)
+{
+    if (!pLogFont)
+        return false;
+
+    if (hFont && GetObjectW(hFont, sizeof(*pLogFont), pLogFont) == sizeof(*pLogFont))
+        return true;
+
+    return SystemParametersInfoW(SPI_GETICONTITLELOGFONT, sizeof(*pLogFont), pLogFont, 0) != FALSE;
+}
+
+static HFONT CreateCustomTreeFont(HWND hTree, HFONT hBaseFont)
+{
+    if (IsDefaultCustomFontSettings())
+        return nullptr;
+
+    LOGFONTW lf{};
+    if (!GetFontLogFont(hBaseFont, &lf))
+        return nullptr;
+
+    int dpiY = GetDpiYForWindowSafe(hTree);
+    if (dpiY <= 0)
+        dpiY = 96;
+
+    if (g_CustomFontSize > 0)
+        lf.lfHeight = -MulDiv(g_CustomFontSize, dpiY, 72);
+
+    lf.lfQuality = CLEARTYPE_QUALITY;
+
+    if (g_CustomFontFace[0])
+        lstrcpynW(lf.lfFaceName, g_CustomFontFace, ARRAYSIZE(lf.lfFaceName));
+
+    return CreateFontIndirectW(&lf);
+}
+
+static bool TreeCustomFontMatches(const TreeMetricsState* state)
+{
+    if (!state || !state->customFont)
+        return false;
+
+    return state->customFontSize == g_CustomFontSize &&
+           lstrcmpW(state->customFontFace, g_CustomFontFace) == 0;
+}
+
 static void LoadStateStyle(StateStyle& style,
                            const wchar_t* backgroundEnabled,
                            const wchar_t* backgroundOpacity,
@@ -504,7 +771,9 @@ static void LoadStateStyle(StateStyle& style,
                            const wchar_t* textColorEnabled,
                            const wchar_t* textR,
                            const wchar_t* textG,
-                           const wchar_t* textB)
+                           const wchar_t* textB,
+                           const wchar_t* textWeight,
+                           const wchar_t* textStyle)
 {
     style.backgroundEnabled = Wh_GetIntSetting(backgroundEnabled);
     style.backgroundOpacity = Wh_GetIntSetting(backgroundOpacity);
@@ -520,6 +789,11 @@ static void LoadStateStyle(StateStyle& style,
     style.textR = Wh_GetIntSetting(textR);
     style.textG = Wh_GetIntSetting(textG);
     style.textB = Wh_GetIntSetting(textB);
+    style.textFontWeightMode = Wh_GetIntSetting(textWeight);
+    style.textFontWeight = FontWeightFromMode(style.textFontWeightMode);
+    style.textFontStyleMode = Wh_GetIntSetting(textStyle);
+    style.textFontItalic = (style.textFontStyleMode == 1 || style.textFontStyleMode == 3);
+    style.textFontUnderline = (style.textFontStyleMode == 2 || style.textFontStyleMode == 3);
 }
 
 static bool ShouldSuggestExplorerRestart()
@@ -632,31 +906,52 @@ static void LoadSettings()
     g_IconTextGapValue = std::clamp(Wh_GetIntSetting(L"Global.IconTextGap.Value"), 0, 32);
     g_IconSizeEnabled = Wh_GetIntSetting(L"Global.IconSize.Enabled");
     g_IconSizeValue = std::clamp(Wh_GetIntSetting(L"Global.IconSize.Value"), 8, 48);
+    g_HidePinButtonEnabled = Wh_GetIntSetting(L"Global.HidePinButton.Enabled");
+
+    PCWSTR customFontFace = Wh_GetStringSetting(L"CustomFont.FaceName");
+    if (customFontFace && customFontFace[0])
+        lstrcpynW(g_CustomFontFace, customFontFace, ARRAYSIZE(g_CustomFontFace));
+    else
+        g_CustomFontFace[0] = L'\0';
+    if (customFontFace)
+        Wh_FreeStringSetting(customFontFace);
+
+    g_CustomFontSize = std::clamp(Wh_GetIntSetting(L"CustomFont.Size"), 0, 32);
+    DestroyCustomTextFont();
 
     g_NormalTextEnabled = Wh_GetIntSetting(L"NormalText.Enabled");
     g_NormalTextR = Wh_GetIntSetting(L"NormalText.R");
     g_NormalTextG = Wh_GetIntSetting(L"NormalText.G");
     g_NormalTextB = Wh_GetIntSetting(L"NormalText.B");
+    g_NormalTextFontWeightMode = Wh_GetIntSetting(L"NormalText.Weight");
+    g_NormalTextFontWeight = FontWeightFromMode(g_NormalTextFontWeightMode);
+    g_NormalTextFontStyleMode = Wh_GetIntSetting(L"NormalText.Style");
+    g_NormalTextFontItalic = (g_NormalTextFontStyleMode == 1 || g_NormalTextFontStyleMode == 3);
+    g_NormalTextFontUnderline = (g_NormalTextFontStyleMode == 2 || g_NormalTextFontStyleMode == 3);
 
     LoadStateStyle(g_HotStyle,
                    L"HotState.Background.Enabled", L"HotState.Background.Opacity", L"HotState.Background.R", L"HotState.Background.G", L"HotState.Background.B",
                    L"HotState.Border.Enabled", L"HotState.Border.Opacity", L"HotState.Border.R", L"HotState.Border.G", L"HotState.Border.B",
-                   L"HotState.Text.Enabled", L"HotState.Text.R", L"HotState.Text.G", L"HotState.Text.B");
+                   L"HotState.Text.Enabled", L"HotState.Text.R", L"HotState.Text.G", L"HotState.Text.B",
+                   L"HotState.Text.Weight", L"HotState.Text.Style");
 
     LoadStateStyle(g_SelectedStyle,
                    L"SelectedState.Background.Enabled", L"SelectedState.Background.Opacity", L"SelectedState.Background.R", L"SelectedState.Background.G", L"SelectedState.Background.B",
                    L"SelectedState.Border.Enabled", L"SelectedState.Border.Opacity", L"SelectedState.Border.R", L"SelectedState.Border.G", L"SelectedState.Border.B",
-                   L"SelectedState.Text.Enabled", L"SelectedState.Text.R", L"SelectedState.Text.G", L"SelectedState.Text.B");
+                   L"SelectedState.Text.Enabled", L"SelectedState.Text.R", L"SelectedState.Text.G", L"SelectedState.Text.B",
+                   L"SelectedState.Text.Weight", L"SelectedState.Text.Style");
 
     LoadStateStyle(g_SelectedNotFocusStyle,
                    L"SelectedNotFocusState.Background.Enabled", L"SelectedNotFocusState.Background.Opacity", L"SelectedNotFocusState.Background.R", L"SelectedNotFocusState.Background.G", L"SelectedNotFocusState.Background.B",
                    L"SelectedNotFocusState.Border.Enabled", L"SelectedNotFocusState.Border.Opacity", L"SelectedNotFocusState.Border.R", L"SelectedNotFocusState.Border.G", L"SelectedNotFocusState.Border.B",
-                   L"SelectedNotFocusState.Text.Enabled", L"SelectedNotFocusState.Text.R", L"SelectedNotFocusState.Text.G", L"SelectedNotFocusState.Text.B");
+                   L"SelectedNotFocusState.Text.Enabled", L"SelectedNotFocusState.Text.R", L"SelectedNotFocusState.Text.G", L"SelectedNotFocusState.Text.B",
+                   L"SelectedNotFocusState.Text.Weight", L"SelectedNotFocusState.Text.Style");
 
     LoadStateStyle(g_HotSelectedStyle,
                    L"HotSelectedState.Background.Enabled", L"HotSelectedState.Background.Opacity", L"HotSelectedState.Background.R", L"HotSelectedState.Background.G", L"HotSelectedState.Background.B",
                    L"HotSelectedState.Border.Enabled", L"HotSelectedState.Border.Opacity", L"HotSelectedState.Border.R", L"HotSelectedState.Border.G", L"HotSelectedState.Border.B",
-                   L"HotSelectedState.Text.Enabled", L"HotSelectedState.Text.R", L"HotSelectedState.Text.G", L"HotSelectedState.Text.B");
+                   L"HotSelectedState.Text.Enabled", L"HotSelectedState.Text.R", L"HotSelectedState.Text.G", L"HotSelectedState.Text.B",
+                   L"HotSelectedState.Text.Weight", L"HotSelectedState.Text.Style");
 }
 
 static bool IsTreeViewTheme(HTHEME hTheme)
@@ -708,6 +1003,160 @@ static bool TryGetOverrideTextColor(INT iStateId, COLORREF* pColor)
     return false;
 }
 
+static bool TryGetOverrideTextFont(INT iStateId, TextFontOverride* pFont)
+{
+    if (!pFont)
+        return false;
+
+    if (iStateId == 1)
+    {
+        if (!IsActiveCustomFontWeightMode(g_NormalTextFontWeightMode) &&
+            !IsActiveCustomFontStyleMode(g_NormalTextFontStyleMode))
+        {
+            return false;
+        }
+
+        pFont->weightMode = g_NormalTextFontWeightMode;
+        pFont->weight = g_NormalTextFontWeight;
+        pFont->styleMode = g_NormalTextFontStyleMode;
+        pFont->italic = g_NormalTextFontItalic;
+        pFont->underline = g_NormalTextFontUnderline;
+        return true;
+    }
+
+    const StateStyle* style = GetStyleForState(iStateId);
+    if (!style)
+        return false;
+
+    if (!IsActiveCustomFontWeightMode(style->textFontWeightMode) &&
+        !IsActiveCustomFontStyleMode(style->textFontStyleMode))
+    {
+        return false;
+    }
+
+    pFont->weightMode = style->textFontWeightMode;
+    pFont->weight = style->textFontWeight;
+    pFont->styleMode = style->textFontStyleMode;
+    pFont->italic = style->textFontItalic;
+    pFont->underline = style->textFontUnderline;
+    return true;
+}
+
+static HFONT CreateStateTextFont(HDC hdc, const TextFontOverride& fontOverride)
+{
+    if (!hdc)
+        return nullptr;
+
+    if (!IsActiveCustomFontWeightMode(fontOverride.weightMode) &&
+        !IsActiveCustomFontStyleMode(fontOverride.styleMode))
+    {
+        return nullptr;
+    }
+
+    HFONT hCurrentFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
+
+    LOGFONTW lf{};
+    if (!GetFontLogFont(hCurrentFont, &lf))
+        return nullptr;
+
+    if (IsActiveCustomFontWeightMode(fontOverride.weightMode))
+        lf.lfWeight = fontOverride.weight;
+
+    if (IsActiveCustomFontStyleMode(fontOverride.styleMode))
+    {
+        lf.lfItalic = fontOverride.italic;
+        lf.lfUnderline = fontOverride.underline;
+    }
+
+    lf.lfQuality = CLEARTYPE_QUALITY;
+
+    return CreateFontIndirectW(&lf);
+}
+
+static HRESULT STDCALL CNscTree_SetStateImageList_hook(void* pThis, HIMAGELIST himl)
+{
+    if (g_HidePinButtonEnabled)
+        return S_OK;
+
+    if (CNscTree_SetStateImageList_orig)
+        return CNscTree_SetStateImageList_orig(pThis, himl);
+
+    return S_OK;
+}
+
+static bool HookExplorerFrameSymbols()
+{
+    if (!g_hExplorerFrame)
+        g_hExplorerFrame = LoadLibraryW(L"ExplorerFrame.dll");
+
+    if (!g_hExplorerFrame)
+    {
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to load ExplorerFrame.dll");
+        return true;
+    }
+
+    void** proxyAddress = nullptr;
+    WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
+        {
+            {
+                L"public: virtual long "
+                SSTDCALL
+                L" CNscTree::SetStateImageList(struct _IMAGELIST *)"
+            },
+            &proxyAddress,
+            nullptr,
+            true
+        }
+    };
+
+    if (!WindhawkUtils::HookSymbols(g_hExplorerFrame, explorerFrameDllHooks, ARRAYSIZE(explorerFrameDllHooks)))
+    {
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to resolve CNscTree::SetStateImageList");
+        return true;
+    }
+
+    if (!proxyAddress)
+    {
+        Wh_Log(L"[Explorer TreeItem Tweaker] CNscTree::SetStateImageList was not found");
+        return true;
+    }
+
+    if (!Wh_SetFunctionHook(proxyAddress,
+                            (void*)CNscTree_SetStateImageList_hook,
+                            (void**)&CNscTree_SetStateImageList_orig))
+    {
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook CNscTree::SetStateImageList");
+    }
+
+    return true;
+}
+
+static void ApplyPinButtonSettingToTree(HWND hTree)
+{
+    if (!g_HidePinButtonEnabled || !IsWindow(hTree) || !SendMessageW_orig)
+        return;
+
+    SendMessageW_orig(hTree, TVM_SETIMAGELIST, TVSIL_STATE, 0);
+}
+
+static void ApplyPinButtonSettingToTrackedTrees()
+{
+    if (!g_HidePinButtonEnabled)
+        return;
+
+    std::vector<HWND> trees;
+
+    EnterCriticalSection(&g_StateLock);
+    for (const auto& s : g_States)
+    {
+        if (IsWindow(s.hTree))
+            trees.push_back(s.hTree);
+    }
+    LeaveCriticalSection(&g_StateLock);
+
+    for (HWND hTree : trees)
+        ApplyPinButtonSettingToTree(hTree);
+}
 
 static bool IsExplorerTopWindow(HWND hwnd)
 {
@@ -746,8 +1195,64 @@ static bool IsLikelyNavTree(HWND hwnd)
     return FindExplorerTopWindowFromChild(hwnd) != nullptr;
 }
 
+static bool IsWindowOrChildOf(HWND hParent, HWND hwnd)
+{
+    if (!IsWindow(hParent) || !IsWindow(hwnd))
+        return false;
+
+    return hwnd == hParent || IsChild(hParent, hwnd);
+}
+
+static bool IsTreeActuallyTopVisible(HWND hTree)
+{
+    if (!IsWindow(hTree) || !IsWindowVisible(hTree))
+        return false;
+
+    RECT rc{};
+    if (!GetWindowRect(hTree, &rc))
+        return false;
+
+    const int w = rc.right - rc.left;
+    const int h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0)
+        return false;
+
+    int dx = w / 3;
+    if (dx < 1)
+        dx = 1;
+    else if (dx > 24)
+        dx = 24;
+
+    int dy = h / 3;
+    if (dy < 1)
+        dy = 1;
+    else if (dy > 24)
+        dy = 24;
+
+    POINT probes[] = {
+        { rc.left + w / 2, rc.top + h / 2 },
+        { rc.left + dx, rc.top + dy },
+        { rc.left + dx, rc.bottom - dy },
+        { rc.right - dx, rc.top + dy },
+        { rc.right - dx, rc.bottom - dy },
+    };
+
+    for (POINT pt : probes)
+    {
+        if (pt.x < rc.left || pt.x >= rc.right || pt.y < rc.top || pt.y >= rc.bottom)
+            continue;
+
+        HWND hit = WindowFromPoint(pt);
+        if (IsWindowOrChildOf(hTree, hit))
+            return true;
+    }
+
+    return false;
+}
+
 struct FindTreeContext
 {
+    HWND topVisibleTree;
     HWND visibleTree;
     HWND anyTree;
 };
@@ -766,8 +1271,11 @@ static BOOL CALLBACK FindTreeEnumProc(HWND hwnd, LPARAM lParam)
         if (IsWindowVisible(hwnd) && !ctx->visibleTree)
             ctx->visibleTree = hwnd;
 
-        if (ctx->visibleTree)
+        if (IsTreeActuallyTopVisible(hwnd))
+        {
+            ctx->topVisibleTree = hwnd;
             return FALSE;
+        }
     }
 
     return TRUE;
@@ -780,6 +1288,9 @@ static HWND FindNavTreeInExplorer(HWND hExplorer)
 
     FindTreeContext ctx{};
     EnumChildWindows(hExplorer, FindTreeEnumProc, (LPARAM)&ctx);
+
+    if (ctx.topVisibleTree)
+        return ctx.topVisibleTree;
 
     if (ctx.visibleTree)
         return ctx.visibleTree;
@@ -825,6 +1336,9 @@ static void RegisterTreeEarly(HWND hTree)
         s->hTree = hTree;
     GetOrCreateTreeMetricsState_NoLock(hTree);
     LeaveCriticalSection(&g_StateLock);
+
+    if (!IsDefaultCustomFontSettings())
+        ApplyCustomFontToTree(hTree);
 }
 
 static TreeMetricsState* FindTreeMetricsState_NoLock(HWND hTree)
@@ -849,6 +1363,20 @@ static TreeMetricsState* GetOrCreateTreeMetricsState_NoLock(HWND hTree)
     s.ownedNormal = nullptr;
     s.originalItemHeight = 0;
     s.originalItemHeightCaptured = false;
+    s.originalFont = nullptr;
+    s.originalFontCaptured = false;
+    ZeroMemory(&s.originalLogFont, sizeof(s.originalLogFont));
+    s.originalLogFontCaptured = false;
+    s.restoreFont = nullptr;
+    s.restoreFontApplied = false;
+    s.customFont = nullptr;
+    s.customFontApplied = false;
+    s.customFontDpiY = 0;
+    s.customFontSize = 0;
+    s.customFontWeight = 0;
+    s.customFontItalic = FALSE;
+    s.customFontUnderline = FALSE;
+    s.customFontFace[0] = L'\0';
     g_MetricsStates.push_back(s);
     return &g_MetricsStates.back();
 }
@@ -970,6 +1498,8 @@ static ExplorerState* GetOrCreateState_NoLock(HWND hExplorer)
 static void CleanupDeadStates()
 {
     std::vector<HIMAGELIST> ownedListsToDestroy;
+    std::vector<HFONT> customFontsToDestroy;
+    std::vector<HFONT> restoreFontsToDestroy;
 
     EnterCriticalSection(&g_StateLock);
 
@@ -987,6 +1517,10 @@ static void CleanupDeadStates()
         {
             if (g_MetricsStates[i].ownedNormal)
                 ownedListsToDestroy.push_back(g_MetricsStates[i].ownedNormal);
+            if (g_MetricsStates[i].customFont)
+                customFontsToDestroy.push_back(g_MetricsStates[i].customFont);
+            if (g_MetricsStates[i].restoreFont)
+                restoreFontsToDestroy.push_back(g_MetricsStates[i].restoreFont);
             g_MetricsStates.erase(g_MetricsStates.begin() + i);
         }
         else
@@ -997,6 +1531,12 @@ static void CleanupDeadStates()
 
     for (HIMAGELIST hList : ownedListsToDestroy)
         ImageList_Destroy(hList);
+
+    for (HFONT hFont : customFontsToDestroy)
+        DeleteObject(hFont);
+
+    for (HFONT hFont : restoreFontsToDestroy)
+        DeleteObject(hFont);
 }
 
 static void UpdateExplorerState(HWND hExplorer)
@@ -1014,8 +1554,12 @@ static void UpdateExplorerState(HWND hExplorer)
     GetOrCreateTreeMetricsState_NoLock(currentTree);
     LeaveCriticalSection(&g_StateLock);
 
+    ApplyCustomFontToTree(currentTree);
+
     if (AreAnyTreeMetricsEnabled())
         ApplyMetricsToTree(currentTree);
+
+    ApplyPinButtonSettingToTree(currentTree);
 }
 
 static BOOL CALLBACK EnumTopWindowsProc(HWND hwnd, LPARAM)
@@ -1076,7 +1620,7 @@ static HWND GetTrackedTreeForExplorer(HWND hExplorer)
     }
     LeaveCriticalSection(&g_StateLock);
 
-    if (result && IsWindowVisible(result))
+    if (result && IsTreeActuallyTopVisible(result))
         return result;
 
     HWND refreshed = FindNavTreeInExplorer(hExplorer);
@@ -1091,20 +1635,27 @@ static HWND GetTrackedTreeForExplorer(HWND hExplorer)
 
 static HWND GetAnyVisibleTrackedTree()
 {
-    HWND result = nullptr;
+    HWND firstVisible = nullptr;
+    HWND topVisible = nullptr;
 
     EnterCriticalSection(&g_StateLock);
     for (const auto& s : g_States)
     {
         if (IsWindow(s.hTree) && IsWindowVisible(s.hTree))
         {
-            result = s.hTree;
-            break;
+            if (!firstVisible)
+                firstVisible = s.hTree;
+
+            if (IsTreeActuallyTopVisible(s.hTree))
+            {
+                topVisible = s.hTree;
+                break;
+            }
         }
     }
     LeaveCriticalSection(&g_StateLock);
 
-    return result;
+    return topVisible ? topVisible : firstVisible;
 }
 
 static HWND GetPrimaryTrackedTree()
@@ -1141,6 +1692,37 @@ static HWND GetForegroundTrackedTree()
     return GetTrackedTreeForExplorer(hExplorer);
 }
 
+static HWND FindTrackedTreeUnderCursor()
+{
+    POINT pt{};
+    if (!GetCursorPos(&pt))
+        return nullptr;
+
+    HWND result = nullptr;
+
+    EnterCriticalSection(&g_StateLock);
+    for (const auto& s : g_MetricsStates)
+    {
+        HWND hTree = s.hTree;
+        if (!IsWindow(hTree) || !IsWindowVisible(hTree))
+            continue;
+
+        RECT rc{};
+        if (!GetWindowRect(hTree, &rc))
+            continue;
+
+        if (pt.x >= rc.left && pt.x < rc.right && pt.y >= rc.top && pt.y < rc.bottom &&
+            IsTreeActuallyTopVisible(hTree))
+        {
+            result = hTree;
+            break;
+        }
+    }
+    LeaveCriticalSection(&g_StateLock);
+
+    return result;
+}
+
 static HWND ResolveTreeFromDrawContext(HDC hdc)
 {
     if (!hdc)
@@ -1149,6 +1731,10 @@ static HWND ResolveTreeFromDrawContext(HDC hdc)
     HWND hwndFromDc = WindowFromDC(hdc);
     if (hwndFromDc && IsLikelyNavTree(hwndFromDc))
         return hwndFromDc;
+
+    HWND underCursor = FindTrackedTreeUnderCursor();
+    if (underCursor)
+        return underCursor;
 
     HWND hExplorer = FindExplorerTopWindowFromChild(hwndFromDc);
     if (hExplorer)
@@ -1271,23 +1857,27 @@ static HTREEITEM ResolveItemFromDrawContext(HWND hTree, INT iStateId, const RECT
 
 static RECT GetContentBasedRect(HDC hdc, INT iStateId, const RECT* pRect)
 {
-    RECT fallback = *pRect;
+    RECT result = *pRect;
 
     HWND hTree = ResolveTreeFromDrawContext(hdc);
     if (!hTree)
-        return fallback;
+        return result;
 
     HTREEITEM hItem = ResolveItemFromDrawContext(hTree, iStateId, pRect);
     if (!hItem)
-        return fallback;
+        return result;
 
     RECT rcItem{};
     if (!TreeView_GetItemRect(hTree, hItem, &rcItem, TRUE))
-        return fallback;
+        return result;
 
-    rcItem.left -= g_ContentExtraLeft;
-    rcItem.right += g_ContentExtraRight;
-    return rcItem;
+    // Width Mode = 2 should use the item's text rectangle only for horizontal
+    // bounds. The vertical bounds must stay tied to the current theme draw pass
+    // rect; otherwise tab changes, scrolling, or stale tree state can draw the
+    // background at a wrong Y position and leave hover artifacts.
+    result.left = rcItem.left - g_ContentExtraLeft;
+    result.right = rcItem.right + g_ContentExtraRight;
+    return result;
 }
 
 static RECT MakeAdjustedRect(HDC hdc, INT iStateId, const RECT* pRect)
@@ -1418,6 +2008,69 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(HTHEME hTheme, HDC hdc, INT iPartId, 
     return DrawThemeBackgroundEx_orig(hTheme, hdc, iPartId, iStateId, pRect, pOptions);
 }
 
+static COLORREF GetEffectiveThemeTextColor(HTHEME hTheme,
+                                         HDC hdc,
+                                         INT iPartId,
+                                         INT iStateId,
+                                         const DTTOPTS* pOptions,
+                                         bool hasTextColorOverride,
+                                         COLORREF overrideColor)
+{
+    if (hasTextColorOverride)
+        return overrideColor;
+
+    if (pOptions && (pOptions->dwFlags & DTT_TEXTCOLOR))
+        return pOptions->crText;
+
+    COLORREF themeColor = CLR_INVALID;
+    if (GetThemeColor_orig && SUCCEEDED(GetThemeColor_orig(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &themeColor)))
+        return themeColor;
+
+    return GetTextColor(hdc);
+}
+
+static HRESULT DrawTextWithStateFont(HTHEME hTheme,
+                                      HDC hdc,
+                                      INT iPartId,
+                                      INT iStateId,
+                                      LPCWSTR pszText,
+                                      INT cchText,
+                                      DWORD dwTextFlags,
+                                      LPRECT pRect,
+                                      const DTTOPTS* pOptions,
+                                      const TextFontOverride& textFont,
+                                      bool hasTextColorOverride,
+                                      COLORREF overrideColor)
+{
+    if (!hdc || !pRect || !pszText)
+        return E_FAIL;
+
+    HFONT hCustomFont = CreateStateTextFont(hdc, textFont);
+    if (!hCustomFont)
+        return E_FAIL;
+
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hCustomFont);
+    const int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+    const COLORREF oldTextColor = SetTextColor(
+        hdc,
+        GetEffectiveThemeTextColor(hTheme, hdc, iPartId, iStateId, pOptions, hasTextColorOverride, overrideColor)
+    );
+
+    if (DrawTextW_orig)
+        DrawTextW_orig(hdc, pszText, cchText, pRect, dwTextFlags);
+    else
+        DrawTextW(hdc, pszText, cchText, pRect, dwTextFlags);
+
+    SetTextColor(hdc, oldTextColor);
+    SetBkMode(hdc, oldBkMode);
+
+    if (hOldFont)
+        SelectObject(hdc, hOldFont);
+
+    DeleteObject(hCustomFont);
+    return S_OK;
+}
+
 static HRESULT DrawCustomThemeText(HTHEME hTheme,
                                    HDC hdc,
                                    INT iPartId,
@@ -1429,45 +2082,119 @@ static HRESULT DrawCustomThemeText(HTHEME hTheme,
                                    const DTTOPTS* pOptions)
 {
     COLORREF clr = 0;
-    if (!TryGetOverrideTextColor(iStateId, &clr))
+    const bool hasTextColorOverride = TryGetOverrideTextColor(iStateId, &clr);
+
+    TextFontOverride textFont{};
+    const bool hasTextFontOverride = TryGetOverrideTextFont(iStateId, &textFont);
+
+    if (!hasTextColorOverride && !hasTextFontOverride)
         return E_FAIL;
 
-    DTTOPTS opts{};
-    opts.dwSize = sizeof(opts);
-    opts.dwFlags = DTT_TEXTCOLOR;
-    opts.crText = clr;
-
-    if (pOptions)
+    // DrawThemeTextEx can ignore an HFONT selected into the HDC on some Explorer paths.
+    // Therefore state-specific weight/style is rendered directly with DrawTextW.
+    if (hasTextFontOverride)
     {
-        if (pOptions->dwFlags & DTT_COMPOSITED)
-        {
-            opts.dwFlags |= DTT_COMPOSITED;
-            opts.iGlowSize = pOptions->iGlowSize;
-        }
-
-        if (pOptions->dwFlags & DTT_GLOWSIZE)
-        {
-            opts.dwFlags |= DTT_GLOWSIZE;
-            opts.iGlowSize = pOptions->iGlowSize;
-        }
-
-        if (pOptions->dwFlags & DTT_APPLYOVERLAY)
-            opts.dwFlags |= DTT_APPLYOVERLAY;
-
-        if (pOptions->dwFlags & DTT_CALLBACK)
-            opts.dwFlags |= DTT_CALLBACK;
-
-        if (pOptions->dwFlags & DTT_CALCRECT)
-            opts.dwFlags |= DTT_CALCRECT;
-
-        if (pOptions->dwFlags & DTT_GRAYED)
-            opts.dwFlags |= DTT_GRAYED;
-
-        if (pOptions->dwFlags & DTT_TEXTCOLOR)
-            opts.dwFlags |= DTT_TEXTCOLOR;
+        return DrawTextWithStateFont(hTheme,
+                                     hdc,
+                                     iPartId,
+                                     iStateId,
+                                     pszText,
+                                     cchText,
+                                     dwTextFlags,
+                                     pRect,
+                                     pOptions,
+                                     textFont,
+                                     hasTextColorOverride,
+                                     clr);
     }
 
-    return DrawThemeTextEx_orig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags, pRect, &opts);
+    DTTOPTS opts{};
+    const DTTOPTS* pDrawOptions = pOptions;
+
+    if (hasTextColorOverride)
+    {
+        if (pOptions)
+            opts = *pOptions;
+        else
+            opts.dwSize = sizeof(opts);
+
+        opts.dwSize = sizeof(opts);
+        opts.dwFlags |= DTT_TEXTCOLOR;
+        opts.crText = clr;
+        pDrawOptions = &opts;
+    }
+
+    return DrawThemeTextEx_orig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags, pRect, pDrawOptions);
+}
+
+static void QueueDrawTextFontOverride(INT iStateId)
+{
+    TextFontOverride textFont{};
+    if (TryGetOverrideTextFont(iStateId, &textFont))
+    {
+        g_PendingDrawTextFontOverride = textFont;
+        g_HasPendingDrawTextFontOverride = true;
+    }
+}
+
+static bool TakePendingDrawTextFontOverride(TextFontOverride* pFont)
+{
+    if (!pFont || !g_HasPendingDrawTextFontOverride)
+        return false;
+
+    *pFont = g_PendingDrawTextFontOverride;
+    g_HasPendingDrawTextFontOverride = false;
+    return true;
+}
+
+static HFONT SelectStateFontForDrawText(HDC hdc, const TextFontOverride& textFont)
+{
+    HFONT hCustomFont = CreateStateTextFont(hdc, textFont);
+    if (!hCustomFont)
+        return nullptr;
+
+    SelectObject(hdc, hCustomFont);
+    return hCustomFont;
+}
+
+int WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format)
+{
+    TextFontOverride textFont{};
+    if (!TakePendingDrawTextFontOverride(&textFont))
+        return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
+
+    HFONT hOldFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
+    HFONT hCustomFont = SelectStateFontForDrawText(hdc, textFont);
+
+    int result = DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
+
+    if (hOldFont)
+        SelectObject(hdc, hOldFont);
+
+    if (hCustomFont)
+        DeleteObject(hCustomFont);
+
+    return result;
+}
+
+int WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp)
+{
+    TextFontOverride textFont{};
+    if (!TakePendingDrawTextFontOverride(&textFont))
+        return DrawTextExW_orig(hdc, lpchText, cchText, lprc, format, lpdtp);
+
+    HFONT hOldFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
+    HFONT hCustomFont = SelectStateFontForDrawText(hdc, textFont);
+
+    int result = DrawTextExW_orig(hdc, lpchText, cchText, lprc, format, lpdtp);
+
+    if (hOldFont)
+        SelectObject(hdc, hOldFont);
+
+    if (hCustomFont)
+        DeleteObject(hCustomFont);
+
+    return result;
 }
 
 HRESULT WINAPI HookedGetThemeColor(HTHEME hTheme,
@@ -1483,6 +2210,8 @@ HRESULT WINAPI HookedGetThemeColor(HTHEME hTheme,
 
     if (!IsTreeViewTheme(hTheme) || iPartId != 1)
         return hr;
+
+    QueueDrawTextFontOverride(iStateId);
 
     COLORREF clr = 0;
     if (TryGetOverrideTextColor(iStateId, &clr))
@@ -1514,6 +2243,196 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme,
     return DrawThemeTextEx_orig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwFlags, pRect, pOptions);
 }
 
+
+static void ApplyCustomFontToTree(HWND hTree)
+{
+    if (!IsWindow(hTree))
+        return;
+
+    const bool wantsCustomFont = !IsDefaultCustomFontSettings();
+
+    HFONT currentFont = (HFONT)SendMessageW_orig(hTree, WM_GETFONT, 0, 0);
+    HFONT baseFont = currentFont;
+    HFONT fontToApply = nullptr;
+    HFONT fontToDestroy = nullptr;
+    HFONT restoreFontToDestroy = nullptr;
+    LOGFONTW restoreLogFont{};
+    bool needCreate = false;
+    bool needCreateRestoreFont = false;
+    bool shouldSendFont = false;
+    bool shouldRedraw = false;
+
+    EnterCriticalSection(&g_StateLock);
+    TreeMetricsState* state = GetOrCreateTreeMetricsState_NoLock(hTree);
+    if (state)
+    {
+        const bool currentIsCustomFont = state->customFont && currentFont == state->customFont;
+        const bool currentIsRestoreFont = state->restoreFont && currentFont == state->restoreFont;
+        const bool currentLooksNative = currentFont && !currentIsCustomFont && !currentIsRestoreFont;
+
+        // Capture Explorer's native font as data, not only as an HFONT handle.
+        // The handle can become stale after Explorer/theme refreshes, while a
+        // LOGFONT snapshot lets us create a fresh default-looking font when the
+        // custom settings are returned to 0.
+        if (currentLooksNative)
+        {
+            if (!state->originalFontCaptured)
+            {
+                state->originalFont = currentFont;
+                state->originalFontCaptured = true;
+            }
+
+            if (!state->originalLogFontCaptured &&
+                GetFontLogFont(currentFont, &state->originalLogFont))
+            {
+                state->originalLogFontCaptured = true;
+            }
+        }
+
+        if (state->originalFontCaptured)
+            baseFont = state->originalFont;
+        if (state->restoreFontApplied && state->restoreFont)
+            baseFont = state->restoreFont;
+
+        if (wantsCustomFont)
+        {
+            if (TreeCustomFontMatches(state))
+            {
+                fontToApply = state->customFont;
+                shouldSendFont = currentFont != fontToApply;
+            }
+            else
+            {
+                needCreate = true;
+            }
+        }
+        else
+        {
+            // All font controls are back to native/no-op values. If this mod
+            // previously applied a custom font, replace it with a fresh copy of
+            // the captured native LOGFONT instead of reusing a possibly stale
+            // HFONT handle from Explorer.
+            if (state->customFontApplied)
+            {
+                fontToDestroy = state->customFont;
+                state->customFont = nullptr;
+                state->customFontApplied = false;
+                state->customFontDpiY = 0;
+                state->customFontSize = 0;
+                state->customFontWeight = 0;
+                state->customFontItalic = FALSE;
+                state->customFontUnderline = FALSE;
+                state->customFontFace[0] = L'\0';
+
+                if (state->originalLogFontCaptured)
+                {
+                    restoreLogFont = state->originalLogFont;
+                    needCreateRestoreFont = true;
+                }
+                else if (state->originalFontCaptured)
+                {
+                    fontToApply = state->originalFont;
+                    shouldSendFont = currentFont != fontToApply;
+                }
+            }
+            else if (state->restoreFontApplied && state->restoreFont)
+            {
+                fontToApply = state->restoreFont;
+                shouldSendFont = currentFont != fontToApply;
+            }
+        }
+    }
+    LeaveCriticalSection(&g_StateLock);
+
+    if (needCreate)
+    {
+        HFONT newFont = CreateCustomTreeFont(hTree, baseFont);
+        if (!newFont)
+            return;
+
+        SendMessageW_orig(hTree, WM_SETFONT, (WPARAM)newFont, TRUE);
+        shouldRedraw = true;
+
+        EnterCriticalSection(&g_StateLock);
+        TreeMetricsState* state = GetOrCreateTreeMetricsState_NoLock(hTree);
+        if (state)
+        {
+            fontToDestroy = state->customFont;
+            restoreFontToDestroy = state->restoreFont;
+            state->restoreFont = nullptr;
+            state->restoreFontApplied = false;
+            state->customFont = newFont;
+            state->customFontApplied = true;
+            state->customFontDpiY = GetDpiYForWindowSafe(hTree);
+            state->customFontSize = g_CustomFontSize;
+            state->customFontWeight = 0;
+            state->customFontItalic = FALSE;
+            state->customFontUnderline = FALSE;
+            lstrcpynW(state->customFontFace, g_CustomFontFace, ARRAYSIZE(state->customFontFace));
+        }
+        LeaveCriticalSection(&g_StateLock);
+
+        if (fontToDestroy && fontToDestroy != newFont)
+            DeleteObject(fontToDestroy);
+        if (restoreFontToDestroy && restoreFontToDestroy != newFont)
+            DeleteObject(restoreFontToDestroy);
+    }
+    else if (needCreateRestoreFont)
+    {
+        HFONT newRestoreFont = CreateFontIndirectW(&restoreLogFont);
+        if (!newRestoreFont)
+            return;
+
+        SendMessageW_orig(hTree, WM_SETFONT, (WPARAM)newRestoreFont, TRUE);
+        shouldRedraw = true;
+
+        EnterCriticalSection(&g_StateLock);
+        TreeMetricsState* state = GetOrCreateTreeMetricsState_NoLock(hTree);
+        if (state)
+        {
+            restoreFontToDestroy = state->restoreFont;
+            state->restoreFont = newRestoreFont;
+            state->restoreFontApplied = true;
+        }
+        LeaveCriticalSection(&g_StateLock);
+
+        if (restoreFontToDestroy && restoreFontToDestroy != newRestoreFont)
+            DeleteObject(restoreFontToDestroy);
+    }
+    else if (shouldSendFont)
+    {
+        SendMessageW_orig(hTree, WM_SETFONT, (WPARAM)fontToApply, TRUE);
+        shouldRedraw = true;
+    }
+
+    if (fontToDestroy && !needCreate)
+        DeleteObject(fontToDestroy);
+
+    if (shouldRedraw)
+    {
+        InvalidateRect(hTree, nullptr, TRUE);
+        RedrawWindow(hTree, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+    }
+}
+
+static void ApplyCustomFontToTrackedTrees()
+{
+    if (!ShouldProcessCustomFont())
+        return;
+
+    std::vector<HWND> trees;
+
+    EnterCriticalSection(&g_StateLock);
+    for (const auto& s : g_States)
+    {
+        if (IsWindow(s.hTree))
+            trees.push_back(s.hTree);
+    }
+    LeaveCriticalSection(&g_StateLock);
+
+    for (HWND hTree : trees)
+        ApplyCustomFontToTree(hTree);
+}
 
 static bool ApplyMetricsToTree(HWND hTree)
 {
@@ -1746,6 +2665,12 @@ static void RefreshTrackedTrees()
     }
     LeaveCriticalSection(&g_StateLock);
 
+    if (ShouldProcessCustomFont())
+    {
+        for (HWND hTree : trees)
+            ApplyCustomFontToTree(hTree);
+    }
+
     for (HWND hExplorer : explorers)
     {
         SendMessageW(hExplorer, WM_THEMECHANGED, 0, 0);
@@ -1763,13 +2688,16 @@ static void RefreshTrackedTrees()
     }
 
     ReapplyMetricsToTrackedTrees();
+    ApplyPinButtonSettingToTrackedTrees();
 }
 
 static DWORD WINAPI WorkerThreadProc(LPVOID)
 {
     InitialTrackAllExplorerWindows();
+    ApplyCustomFontToTrackedTrees();
     if (AreAnyTreeMetricsEnabled())
         ReapplyMetricsToTrackedTrees();
+    ApplyPinButtonSettingToTrackedTrees();
 
     DWORD pid = GetCurrentProcessId();
     g_hEventHookShow = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, WinEventProc, pid, 0, WINEVENT_OUTOFCONTEXT);
@@ -1806,17 +2734,36 @@ static DWORD WINAPI WorkerThreadProc(LPVOID)
     }
 
     std::vector<HIMAGELIST> ownedListsToDestroy;
+    std::vector<HFONT> customFontsToDestroy;
+    std::vector<HFONT> restoreFontsToDestroy;
+    std::vector<std::pair<HWND, HFONT>> fontsToRestore;
+
     EnterCriticalSection(&g_StateLock);
     for (auto& s : g_MetricsStates)
     {
         if (s.ownedNormal)
             ownedListsToDestroy.push_back(s.ownedNormal);
+        if (s.customFont)
+            customFontsToDestroy.push_back(s.customFont);
+        if (s.restoreFont)
+            restoreFontsToDestroy.push_back(s.restoreFont);
+        if ((s.customFontApplied || s.restoreFontApplied) && s.originalFontCaptured && IsWindow(s.hTree))
+            fontsToRestore.push_back({s.hTree, s.originalFont});
     }
     g_MetricsStates.clear();
     LeaveCriticalSection(&g_StateLock);
 
+    for (const auto& restore : fontsToRestore)
+        SendMessageW_orig(restore.first, WM_SETFONT, (WPARAM)restore.second, TRUE);
+
     for (HIMAGELIST hList : ownedListsToDestroy)
         ImageList_Destroy(hList);
+
+    for (HFONT hFont : customFontsToDestroy)
+        DeleteObject(hFont);
+
+    for (HFONT hFont : restoreFontsToDestroy)
+        DeleteObject(hFont);
 
     if (g_StateLockInitialized)
     {
@@ -1833,6 +2780,8 @@ BOOL Wh_ModInit()
 
     LoadSettings();
     MaybeSuggestExplorerRestart();
+
+    HookExplorerFrameSymbols();
 
     GdiplusStartupInput gdiplusStartupInput;
     if (GdiplusStartup(&g_GdiplusToken, &gdiplusStartupInput, nullptr) != Ok)
@@ -1890,6 +2839,12 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
+    if (!WindhawkUtils::SetFunctionHook(DrawTextW, HookedDrawTextW, &DrawTextW_orig))
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook DrawTextW");
+
+    if (!WindhawkUtils::SetFunctionHook(DrawTextExW, HookedDrawTextExW, &DrawTextExW_orig))
+        Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook DrawTextExW");
+
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, HookedCreateWindowExW, &CreateWindowExW_orig))
     {
         Wh_Log(L"[Explorer TreeItem Tweaker] failed to hook CreateWindowExW");
@@ -1935,6 +2890,9 @@ void Wh_ModUninit()
         g_ItemHeightEnabled = FALSE;
         g_IconTextGapEnabled = FALSE;
         g_IconSizeEnabled = FALSE;
+        g_CustomFontFace[0] = L'\0';
+        g_CustomFontSize = 0;
+        ApplyCustomFontToTrackedTrees();
         ReapplyMetricsToTrackedTrees();
     }
 
@@ -1949,6 +2907,14 @@ void Wh_ModUninit()
     }
 
     g_WorkerThreadId = 0;
+
+    if (g_hExplorerFrame)
+    {
+        FreeLibrary(g_hExplorerFrame);
+        g_hExplorerFrame = nullptr;
+    }
+
+    DestroyCustomTextFont();
 
     if (g_GdiplusToken)
     {
