@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-29T19:47:29.000Z</updated>
+    <updated>2026-04-29T19:58:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Navigation Tree Offset 1.1]]></title>
+        <id>https://windhawk.net/mods/explorer-navigation-pane-tweaks#e938aa724ca3199a2913bc62812fc5f45e7d9a99</id>
+        <link href="https://windhawk.net/mods/explorer-navigation-pane-tweaks"/>
+        <updated>2026-04-29T19:58:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the indent parameter behavior: changing the indent value now works correctly and no longer depends on whether the expandable folder glyph is hidden.</li>
+<li>Fixed the child tree indent relative to the main tree when expanding a folder.</li>
+<li>Renamed mod settings for clarity.</li>
+<li>Renamed the mod from Explorer Navigation Pane Tweaks to Explorer Navigation Tree Offset.</li>
+<li>IMPORTANT! Reconfigure the mod after updating. The improved mechanics may cause behavior differences with the same parameter values.</li>
+</ul>]]></content>
+        <author>
+            <name>Languster</name>
+            <uri>https://github.com/Languster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Windows Shortcuts 1.1.1]]></title>
         <id>https://windhawk.net/mods/disable-windows-shortcuts#00f99498b90b44630ab4e46c10038c3e3000a663</id>
@@ -415,26 +432,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Buttons 2.0]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-buttons#596a4eba99e22c1a8aefd4c960d33bb90879bdda</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-buttons"/>
-        <updated>2026-04-23T09:22:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Preset system: Pre-made button templates have been added to simplify configuration.</li>
-<li>Custom icons: Added support for .png, .ico, .jpg, .bmp, and .webp formats as button icons (thanks to <a href="https://github.com/SharkIT-sys">@SharkIT-sys</a>).</li>
-<li>Localization: Added support for Russian.</li>
-<li>Account button: New options to hide or reposition the user profile button.</li>
-<li>Action formats: You must now use the “web:” prefix to specify a link.</li>
-<li>Improved submenus: It is now easier to create submenus through Windhawk settings.</li>
-<li>Updated Readme file.</li>
-<li>Other improvements and fixes.</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

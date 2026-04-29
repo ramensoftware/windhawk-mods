@@ -3794,7 +3794,7 @@
                     15
                 ],
                 "ratingUsers": 16,
-                "updated": 1775918364000,
+                "updated": 1777492738000,
                 "users": 299
             },
             "metadata": {
@@ -3802,15 +3802,15 @@
                     "x86-64"
                 ],
                 "author": "Languster",
-                "compilerOptions": "-lcomctl32",
-                "description": "Adjusts the navigation pane tree indent and treeview visual styles in Windows Explorer",
+                "compilerOptions": "-lcomctl32 -luxtheme",
+                "description": "Adjusts the Explorer navigation tree offset and optional tree view visual styles",
                 "github": "https://github.com/Languster",
                 "include": [
-                    "%SystemRoot%\\explorer.exe"
+                    "explorer.exe"
                 ],
                 "license": "MIT",
-                "name": "Explorer Navigation Pane Tweaks",
-                "version": "1.0"
+                "name": "Explorer Navigation Tree Offset",
+                "version": "1.1"
             }
         },
         "explorer-no-toolbars-bottom-gripper": {
