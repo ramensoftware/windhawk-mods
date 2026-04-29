@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-29T19:58:58.000Z</updated>
+    <updated>2026-04-29T20:17:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer TreeLine Killer 1.0.1]]></title>
+        <id>https://windhawk.net/mods/explorer-treeline-killer#cd450a8c33e4b18e4842b53242951f4a21b97de4</id>
+        <link href="https://windhawk.net/mods/explorer-treeline-killer"/>
+        <updated>2026-04-29T20:17:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the README section.</li>
+</ul>]]></content>
+        <author>
+            <name>Languster</name>
+            <uri>https://github.com/Languster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Navigation Tree Offset 1.1]]></title>
         <id>https://windhawk.net/mods/explorer-navigation-pane-tweaks#e938aa724ca3199a2913bc62812fc5f45e7d9a99</id>
@@ -401,37 +414,6 @@ bars are filtered out using window ancestry checks.</li>
         <author>
             <name>ernisn</name>
             <uri>https://github.com/ernisn</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 3.5]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#13d66deeb8119d6504e1908a95e4131119c4d82e</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-04-25T12:14:22.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="improved">Improved</h3>
-<ul>
-<li>Refactored the internal runtime state into a more structured and maintainable model with cleaner ownership boundaries.</li>
-<li>Reworked native Word event handling to reduce coupling between the event sink and global runtime session state.</li>
-<li>Split autosave and document-state tick capture into more focused paths so each timer flow computes only the state it actually needs.</li>
-<li>Unified document snapshot loading through a shared plan-based pipeline used by both document-state refresh and save operations.</li>
-<li>Simplified and strengthened owner-thread handling, scheduler coordination, and reset paths.</li>
-<li>Expanded internal self-tests covering event routing, snapshot policy, scheduler behavior, owner-thread helpers, and reset helpers.</li>
-</ul>
-<h3 id="optimized">Optimized</h3>
-<ul>
-<li>Reduced unnecessary work in the autosave timer path by skipping full owner-thread/UI/input observation when no pending save exists.</li>
-<li>Removed redundant input-busy checks by reusing already captured tick state where appropriate.</li>
-<li>Replaced scattered <code>IID_PPV_ARGS</code> usage with a typed <code>QueryInterface</code> helper to make the COM path cleaner and warning-free.</li>
-<li>Fixed a signedness conversion in COM dispatch argument setup to keep the code clean under stricter compiler diagnostics.</li>
-</ul>
-<h3 id="notes">Notes</h3>
-<ul>
-<li>v3.5 does not add new user-facing features or settings.</li>
-<li>This release focuses on internal code quality, maintainability, compile-time cleanliness, and removing remaining performance/architecture debt after v3.4.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

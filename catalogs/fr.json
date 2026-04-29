@@ -4002,7 +4002,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1777147112000,
+                "updated": 1777493869000,
                 "users": 81
             },
             "metadata": {
@@ -4017,7 +4017,7 @@
                     "explorer.exe"
                 ],
                 "name": "Explorer TreeLine Killer",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "explorer-unlocked-toolbars-fix": {
