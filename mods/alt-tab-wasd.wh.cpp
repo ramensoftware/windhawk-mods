@@ -406,7 +406,7 @@ BOOL Wh_ModInit() {
     }
 
     if (g_winVersion == WinVersion::Win11) {
-        WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
+        WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
             {
                 {LR"(public: virtual long __cdecl XamlAltTabViewHost::ViewLoaded(void))"},
                 &XamlAltTabViewHost_ViewLoaded_Original,
@@ -426,12 +426,12 @@ BOOL Wh_ModInit() {
             },
         };
 
-        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
-                         ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellHooks,
+                         ARRAYSIZE(twinuiPcshellHooks))) {
             return FALSE;
         }
     } else if (g_winVersion == WinVersion::Win10) {
-        WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
+        WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
             {
                 {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 &CAltTabViewHost_Show_Original,
@@ -439,8 +439,8 @@ BOOL Wh_ModInit() {
             },
         };
 
-        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
-                         ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellHooks,
+                         ARRAYSIZE(twinuiPcshellHooks))) {
             return FALSE;
         }
     } else {
