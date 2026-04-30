@@ -23,7 +23,7 @@ std::vector<PatchedFloat> g_patchedFloats;
 const float kNearZeroRadius = 0.001f; // 0f - 1f is also used 
 
 // locate .rdata
-IMAGE_SECTION_HEADER* FindSection(HMODULE hModule, const char* sectionName) {
+IMAGE_SECTION_HEADER* find(HMODULE hModule, const char* name) {
     auto dosHeader = (IMAGE_DOS_HEADER*)hModule;
     if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return nullptr;
 
@@ -32,8 +32,8 @@ IMAGE_SECTION_HEADER* FindSection(HMODULE hModule, const char* sectionName) {
 
     auto section = IMAGE_FIRST_SECTION(ntHeaders);
     for (int i = 0; i < ntHeaders->FileHeader.NumberOfSections; i++, section++) {
-        // 比较段名 (如 ".rdata")
-        if (strncmp((const char*)section->Name, sectionName, 8) == 0) {
+        // compare
+        if (strncmp((const char*)section->Name, name, 8) == 0) {
             return section;
         }
     }
@@ -51,7 +51,7 @@ BOOL Wh_ModInit() {
     }
 
     // find .rdata
-    auto rdataSection = FindSection(hUdwm, ".rdata");
+    auto rdataSection = find(hUdwm, ".rdata");
     if (!rdataSection) {
         Wh_Log(L"Failed to locate .rdata section");
         return FALSE;
@@ -72,10 +72,10 @@ BOOL Wh_ModInit() {
                 // for unload
                 g_patchedFloats.push_back({ptr, *ptr});
                 
-                // change
+                // change the vaule
                 *ptr = kNearZeroRadius;
                 
-                // revover
+                // recover protect
                 VirtualProtect(ptr, sizeof(float), oldProtect, &oldProtect);
                 
                 Wh_Log(L"Patched float at %p", ptr);
