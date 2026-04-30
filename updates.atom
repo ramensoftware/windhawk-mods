@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-04-29T21:42:21.000Z</updated>
+    <updated>2026-04-30T07:03:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.8]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#c181c73c73038b460b0af0dc691c08037b047973</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2026-04-30T07:03:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.88 (CEF 146)</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer TreeItem Tweaker 1.1]]></title>
         <id>https://windhawk.net/mods/explorer-treeitem-tweaker#2b49d734ff0ed063869998c475ddde5ee1d2dc70</id>
@@ -403,31 +416,6 @@ Fixed compatibility with new insider Windows 11 builds.</li>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disk Usage Bar Color 1.1.0]]></title>
-        <id>https://windhawk.net/mods/disk-usage-bar-color#d9e2c14c876da8f9de4910d217adf43e4fc85bfb</id>
-        <link href="https://windhawk.net/mods/disk-usage-bar-color"/>
-        <updated>2026-04-25T15:38:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="diskusagebarcolor">Disk Usage Bar Color</h1>
-<p>Customizes the color of the disk usage progress bars shown in File Explorer's
-<strong>This PC</strong> view.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Bar Color (Normal)</strong>: Hex color for drives with normal usage (default: <code>60CDFF</code>)</li>
-<li><strong>Bar Color (Full/Warning)</strong>: Hex color for drives that are nearly full,
-shown in red by default (default: <code>E81123</code>)</li>
-</ul>
-<p>Enter colors as 6-digit hex codes without the <code>#</code> prefix (e.g. <code>60CDFF</code>).</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Only drive bars in the <strong>This PC</strong> view are affected. File copy/move progress
-bars are filtered out using window ancestry checks.</li>
-</ul>]]></content>
-        <author>
-            <name>dirtyrazkl</name>
-            <uri>https://github.com/dirtyrazkl</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,7 @@
+## 1.8 ([Apr 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c181c73c73038b460b0af0dc691c08037b047973/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Add support for Spotify 1.2.88 (CEF 146)
+
 ## 1.7 ([Mar 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fd34fadeb640a2fcee887aa02773f8c66c35f6aa/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Add support for Spotify 1.2.81 to 1.2.85 (CEF 144)
