@@ -2,10 +2,10 @@
 // @id              mic-tray-control
 // @name            Mic Tray Control & Decibel Viewer
 // @description     Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!
-// @version         1.7
+// @version         1.8
 // @author          ciahciach
 // @github          https://github.com/ciahciach
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -lcomctl32 -luuid -lgdi32 -luxtheme
 // @license         MIT
 // ==/WindhawkMod==
@@ -58,6 +58,7 @@ This mod adds a dedicated Microphone icon to your system tray.
 #include <vector>
 #include <initguid.h>
 #include <Functiondiscoverykeys_devpkey.h>
+#include <stdio.h>
 
 #define TRAY_ICON_ID 1001
 #define WM_APP_TRAYMSG (WM_USER + 1)
@@ -118,7 +119,6 @@ void LoadSettings() {
     }
 }
 
-// Generates a native vector UI icon on the fly using Windows system fonts
 HICON GenerateFontIcon(bool isMuted) {
     int renderSize = 32;
     HDC hdcScreen = GetDC(NULL);
@@ -138,7 +138,6 @@ HICON GenerateFontIcon(bool isMuted) {
 
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hbmColor);
 
-    // Fill with transparent black
     memset(pBits, 0, renderSize * renderSize * 4);
 
     int fontSize = -MulDiv(20, GetDeviceCaps(hdcScreen, LOGPIXELSY), 72); 
@@ -154,32 +153,29 @@ HICON GenerateFontIcon(bool isMuted) {
     SetTextColor(hdcMem, RGB(255, 255, 255));
     SetBkMode(hdcMem, TRANSPARENT);
     
-    // Draw the Microphone glyph
     wchar_t glyph = 0xE720; 
     RECT rc = {0, 0, renderSize, renderSize};
     DrawTextW(hdcMem, &glyph, 1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-    // Convert drawn text to a proper 32-bit alpha blended image
     DWORD* pixels = (DWORD*)pBits;
     for (int i = 0; i < renderSize * renderSize; i++) {
         BYTE alpha = GetRValue(pixels[i]); 
         if (alpha > 0) {
-            pixels[i] = (alpha << 24) | 0x00FFFFFF; // Full white with extracted alpha
+            pixels[i] = (alpha << 24) | 0x00FFFFFF; 
         } else {
             pixels[i] = 0;
         }
     }
 
-    // Draw a prominent red slash if muted
     if (isMuted) {
         for (int i = 5; i < renderSize - 5; i++) {
             int x = i;
-            int y = renderSize - 1 - i; // Diagonal line top-left to bottom-right
+            int y = renderSize - 1 - i; 
             
-            for (int dx = -2; dx <= 2; dx++) { // Thicken the line
+            for (int dx = -2; dx <= 2; dx++) { 
                 int px = x + dx;
                 if (px >= 0 && px < renderSize) {
-                    pixels[y * renderSize + px] = 0xFFFF3C3C; // Red Color with full Alpha
+                    pixels[y * renderSize + px] = 0xFFFF3C3C; 
                 }
             }
         }
@@ -208,8 +204,6 @@ HICON LoadCustomOrDefaultIcon(PCWSTR customPath, bool isMuted) {
         HICON hIcon = (HICON)LoadImageW(NULL, customPath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
         if (hIcon) return hIcon;
     }
-    
-    // Fallback to our perfectly generated native UI icon!
     return GenerateFontIcon(isMuted);
 }
 
@@ -309,8 +303,6 @@ void ToggleMicMute() {
     pVol->Release();
     UpdateTrayTooltip();
 }
-
-// --- Custom GUI Mixer Functions ---
 
 void CleanupMixer() {
     for (auto& mic : g_activeMics) {
@@ -441,8 +433,6 @@ LRESULT CALLBACK MixerWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-// --- Main Procedures ---
-
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && wParam == WM_MOUSEWHEEL) {
         MSLLHOOKSTRUCT* pMouse = (MSLLHOOKSTRUCT*)lParam;
@@ -558,25 +548,20 @@ DWORD WINAPI ModThread(LPVOID lpParam) {
     return 0;
 }
 
-void Wh_ModSettingsChanged() {
+// --- Mod Core Functions (Renamed for Tool Mod isolation) ---
+
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     LoadSettings();
 }
 
-BOOL Wh_ModInit() {
-    HWND hTrayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-    DWORD dwTrayPid = 0;
-    GetWindowThreadProcessId(hTrayWnd, &dwTrayPid);
-    if (GetCurrentProcessId() != dwTrayPid) {
-        return TRUE;
-    }
-
+BOOL WhTool_ModInit() {
     LoadSettings();
     g_hThread = CreateThread(NULL, 0, ModThread, NULL, 0, &g_dwThreadId);
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     if (g_dwThreadId) {
         PostThreadMessage(g_dwThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_hThread, 2000);
