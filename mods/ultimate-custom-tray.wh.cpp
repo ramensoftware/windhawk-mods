@@ -49,7 +49,7 @@ Actions run on **left-click** (or from a context menu item).
 
 | Type | Example | Description |
 |---|---|---|
-| **Glyph** | `E774` | Hex code of a Segoe Fluent Icons glyph. 4-digit hex only, no `\u` prefix. |
+| **Glyph** | `E774` | Hex code of a [Segoe Fluent Icons](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font) glyph. 4-digit hex only, no `\u` prefix. |
 | **Image file** | `C:\Icons\name.png` | Full path to an image. Supported: `.png` `.ico` `.jpg` `.bmp`. Recommended: 32x32 px, transparent background. |
 
 ---
