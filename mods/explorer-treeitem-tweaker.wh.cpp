@@ -2,7 +2,7 @@
 // @id              explorer-treeitem-tweaker
 // @name            Explorer TreeItem Tweaker
 // @description     Custom backgrounds and text colors for Explorer TreeView
-// @version         1.1
+// @version         1.1.1
 // @author          Languster
 // @github          https://github.com/Languster
 // @include         explorer.exe
@@ -32,7 +32,7 @@ For example, for light theme text, try:
 `R = 0, G = 0, B = 0`
 
 ## Before / After
-![Before / After](https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-tree-item-tweaker-before-after.jpg)
+![Before / After](https://raw.githubusercontent.com/Languster/assets-windhawk-mods/main/mods_assets/explorer-tree-item-tweaker-before-after.jpg)
 
 ## Width mode note
 System Width mode (0) uses the original TreeView menu item background width and is not recommended if you use **Explorer Navigation Tree Offset**, in order to avoid background clipping.
@@ -1073,6 +1073,97 @@ static HFONT CreateStateTextFont(HDC hdc, const TextFontOverride& fontOverride)
     return CreateFontIndirectW(&lf);
 }
 
+static int GetStateTextExtraRightPadding(HDC hdc, const TextFontOverride& fontOverride)
+{
+    int dpiX = 96;
+    if (hdc)
+    {
+        const int deviceDpiX = GetDeviceCaps(hdc, LOGPIXELSX);
+        if (deviceDpiX > 0)
+            dpiX = deviceDpiX;
+    }
+
+    int extraRight = 0;
+
+    // Italic glyphs can overhang their logical text box on the right.
+    // DrawText clips to the supplied rectangle, so give state-specific
+    // styled text a DPI-aware safety margin.
+    if (fontOverride.italic)
+        extraRight += MulDiv(10, dpiX, 96);
+
+    // Bold/Semibold can also be wider than Explorer's original text metrics.
+    if (IsActiveCustomFontWeightMode(fontOverride.weightMode))
+        extraRight += MulDiv(4, dpiX, 96);
+
+    return std::max(extraRight, 0);
+}
+
+static int GetDrawTextLength(LPCWSTR pszText, INT cchText)
+{
+    if (!pszText)
+        return 0;
+
+    if (cchText >= 0)
+        return cchText;
+
+    return lstrlenW(pszText);
+}
+
+static int MeasureCurrentFontTextWidth(HDC hdc, LPCWSTR pszText, INT cchText)
+{
+    const int length = GetDrawTextLength(pszText, cchText);
+    if (!hdc || !pszText || length <= 0)
+        return 0;
+
+    SIZE size{};
+    if (GetTextExtentPoint32W(hdc, pszText, length, &size))
+        return std::max(size.cx, 0L);
+
+    RECT rcCalc{};
+    if (DrawTextW_orig)
+        DrawTextW_orig(hdc, pszText, length, &rcCalc, DT_SINGLELINE | DT_NOPREFIX | DT_CALCRECT);
+    else
+        DrawTextW(hdc, pszText, length, &rcCalc, DT_SINGLELINE | DT_NOPREFIX | DT_CALCRECT);
+
+    return std::max(rcCalc.right - rcCalc.left, 0L);
+}
+
+static int GetStateTextExtraRightPaddingForText(HDC hdc,
+                                                LPCWSTR pszText,
+                                                INT cchText,
+                                                int currentRectWidth,
+                                                const TextFontOverride& fontOverride)
+{
+    int extraRight = GetStateTextExtraRightPadding(hdc, fontOverride);
+
+    const int measuredWidth = MeasureCurrentFontTextWidth(hdc, pszText, cchText);
+    if (measuredWidth > currentRectWidth)
+        extraRight += measuredWidth - currentRectWidth;
+
+    return std::max(extraRight, 0);
+}
+
+static RECT MakeStateTextDrawRect(HDC hdc,
+                                  const RECT* pRect,
+                                  DWORD textFlags,
+                                  const TextFontOverride& fontOverride,
+                                  LPCWSTR pszText = nullptr,
+                                  INT cchText = -1)
+{
+    RECT rc = *pRect;
+
+    if (!(textFlags & DT_CALCRECT))
+    {
+        const int currentWidth = std::max(rc.right - rc.left, 0L);
+        if (pszText)
+            rc.right += GetStateTextExtraRightPaddingForText(hdc, pszText, cchText, currentWidth, fontOverride);
+        else
+            rc.right += GetStateTextExtraRightPadding(hdc, fontOverride);
+    }
+
+    return rc;
+}
+
 static HRESULT STDCALL CNscTree_SetStateImageList_hook(void* pThis, HIMAGELIST himl)
 {
     if (g_HidePinButtonEnabled)
@@ -1875,6 +1966,11 @@ static RECT GetContentBasedRect(HDC hdc, INT iStateId, const RECT* pRect)
     // bounds. The vertical bounds must stay tied to the current theme draw pass
     // rect; otherwise tab changes, scrolling, or stale tree state can draw the
     // background at a wrong Y position and leave hover artifacts.
+    //
+    // Do not expand the background for per-state italic/bold text. State-specific
+    // text can be wider than Explorer's normal metrics, but changing the
+    // background width per state makes the item jump between hover/selected/normal.
+    // The text draw rect gets its own clipping margin in MakeStateTextDrawRect().
     result.left = rcItem.left - g_ContentExtraLeft;
     result.right = rcItem.right + g_ContentExtraRight;
     return result;
@@ -2056,10 +2152,12 @@ static HRESULT DrawTextWithStateFont(HTHEME hTheme,
         GetEffectiveThemeTextColor(hTheme, hdc, iPartId, iStateId, pOptions, hasTextColorOverride, overrideColor)
     );
 
+    RECT rcDraw = MakeStateTextDrawRect(hdc, pRect, dwTextFlags, textFont, pszText, cchText);
+
     if (DrawTextW_orig)
-        DrawTextW_orig(hdc, pszText, cchText, pRect, dwTextFlags);
+        DrawTextW_orig(hdc, pszText, cchText, &rcDraw, dwTextFlags);
     else
-        DrawTextW(hdc, pszText, cchText, pRect, dwTextFlags);
+        DrawTextW(hdc, pszText, cchText, &rcDraw, dwTextFlags);
 
     SetTextColor(hdc, oldTextColor);
     SetBkMode(hdc, oldBkMode);
@@ -2166,7 +2264,15 @@ int WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, 
     HFONT hOldFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
     HFONT hCustomFont = SelectStateFontForDrawText(hdc, textFont);
 
-    int result = DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
+    RECT rcDraw{};
+    LPRECT pDrawRect = lprc;
+    if (lprc && !(format & DT_CALCRECT))
+    {
+        rcDraw = MakeStateTextDrawRect(hdc, lprc, format, textFont, lpchText, cchText);
+        pDrawRect = &rcDraw;
+    }
+
+    int result = DrawTextW_orig(hdc, lpchText, cchText, pDrawRect, format);
 
     if (hOldFont)
         SelectObject(hdc, hOldFont);
@@ -2186,7 +2292,15 @@ int WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc,
     HFONT hOldFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
     HFONT hCustomFont = SelectStateFontForDrawText(hdc, textFont);
 
-    int result = DrawTextExW_orig(hdc, lpchText, cchText, lprc, format, lpdtp);
+    RECT rcDraw{};
+    LPRECT pDrawRect = lprc;
+    if (lprc && !(format & DT_CALCRECT))
+    {
+        rcDraw = MakeStateTextDrawRect(hdc, lprc, format, textFont, lpchText, cchText);
+        pDrawRect = &rcDraw;
+    }
+
+    int result = DrawTextExW_orig(hdc, lpchText, cchText, pDrawRect, format, lpdtp);
 
     if (hOldFont)
         SelectObject(hdc, hOldFont);
