@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-01T16:28:35.000Z</updated>
+    <updated>2026-05-01T21:20:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.11]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#b16d7ec62e9c985480bf5d9800afd4754738fb51</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2026-05-01T21:20:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option for customizing scroll regions, can be useful for using this mod with other taskbar scrolling mods such as Taskbar Volume Control or Taskbar Scroll Actions.</li>
+<li>Fixed compatibility with update KB5083631 for Windows 11 version 25H2.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.5]]></title>
         <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#2e793d254614b2390b602eeebf8fad6193c95ae2</id>
@@ -359,19 +373,6 @@ When a switch is off, that option is not applied.</p>
         <author>
             <name>Languster</name>
             <uri>https://github.com/Languster</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.3.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#5d70208acc5a1f46d1c28439cb21c13f1079ec1d</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2026-04-25T21:07:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with new insider Windows 11 builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

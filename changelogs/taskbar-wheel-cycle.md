@@ -1,3 +1,8 @@
+## 1.1.11 ([May 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b16d7ec62e9c985480bf5d9800afd4754738fb51/mods/taskbar-wheel-cycle.wh.cpp))
+
+* Added an option for customizing scroll regions, can be useful for using this mod with other taskbar scrolling mods such as Taskbar Volume Control or Taskbar Scroll Actions.
+* Fixed compatibility with update KB5083631 for Windows 11 version 25H2.
+
 ## 1.1.10 ([Dec 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c06b8a9588be043226a4fa9159d15bf6e835cc74/mods/taskbar-wheel-cycle.wh.cpp))
 
 * Fixed a crash due to the removal of unused taskbar functions in recent Windows 11 builds.

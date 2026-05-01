@@ -10159,7 +10159,7 @@
                     80
                 ],
                 "ratingUsers": 83,
-                "updated": 1765317208000,
+                "updated": 1777670420000,
                 "users": 4099
             },
             "metadata": {
@@ -10167,7 +10167,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion",
+                "compilerOptions": "-lcomctl32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lversion",
                 "description": "Use the mouse wheel and/or keyboard shortcuts to cycle between taskbar buttons",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -10176,7 +10176,7 @@
                 ],
                 "name": "Cycle taskbar buttons with mouse wheel",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.10"
+                "version": "1.1.11"
             }
         },
         "taskbar-z-order-override": {
