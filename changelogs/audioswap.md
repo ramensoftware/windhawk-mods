@@ -1,3 +1,8 @@
+## 1.1.1 ([May 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/795240a56bf0287788c83bd16e5f76245a8e37f5/mods/audioswap.wh.cpp))
+
+- New icons in the settings
+- Can now open Windhawk directly from the mod icon
+
 ## 1.1.0 ([Apr 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b021b7eb4f7d83858aac69a9f1eac00aeafdc618/mods/audioswap.wh.cpp))
 
 - Right-click the icon to select devices:
