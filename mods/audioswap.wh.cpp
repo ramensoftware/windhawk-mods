@@ -2,7 +2,7 @@
 // @id              audioswap
 // @name            AudioSwap
 // @description     Adds a tray icon to instantly toggle between two preferred audio outputs.
-// @version         1.1.0
+// @version         1.1.1
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @include         windhawk.exe
@@ -29,6 +29,11 @@ Instantly toggle between two audio output devices from your system tray — no d
 ## Changelog
 
 ### v1.1.0
+- **New:** Can now open WindHawk directly from the icon using right click
+- **New:** Added new icons to select from
+- **Improved:** added icons in the right click menu
+
+### v1.1.0
 - **New:** Right-click context menu — auto-detects all active audio outputs and lets you assign Device 1 and Device 2 directly from a live list. No more typing device names manually.
 - **New:** Device selections persist across restarts.
 - **Improved:** Toggle now matches devices by their unique system ID instead of a name substring search — works correctly regardless of how Windows names your device.
@@ -42,20 +47,32 @@ Instantly toggle between two audio output devices from your system tray — no d
 
 // ==WindhawkModSettings==
 /*
-- icon1: headphones1
+- icon1: speaker_normal
   $name: First Device Icon
   $options:
-    - headphones1: Headphones (normal)
-    - headphones2: Modern Headset (white)
-    - speaker1: Basic Speaker (normal)
-    - speaker2: Modern Speaker (white)
-- icon2: speaker1
+    - speaker_normal: Normal Speaker
+    - speaker_square: Square Speaker
+    - speaker_modern: Modern Speaker
+    - speaker_modern_square: Modern Square Speaker
+    - audio_wave: Audio Wave
+    - headphones: Headphones
+    - headset_gaming: Gaming Headset
+    - headphones_modern: Modern Headphones
+    - headset_modern: Modern Gaming Headset
+    - earphones: Earphones
+- icon2: speaker_square
   $name: Second Device Icon
   $options:
-    - headphones1: Headphones (normal)
-    - headphones2: Modern Headset (white)
-    - speaker1: Basic Speaker (normal)
-    - speaker2: Modern Speaker (white)
+    - speaker_normal: Normal Speaker
+    - speaker_square: Square Speaker
+    - speaker_modern: Modern Speaker
+    - speaker_modern_square: Modern Square Speaker
+    - audio_wave: Audio Wave
+    - headphones: Headphones
+    - headset_gaming: Gaming Headset
+    - headphones_modern: Modern Headphones
+    - headset_modern: Modern Gaming Headset
+    - earphones: Earphones
 */
 // ==/WindhawkModSettings==
 
@@ -76,6 +93,7 @@ Instantly toggle between two audio output devices from your system tray — no d
 #define WM_UPDATE_TRAY_STATE (WM_USER + 2)
 #define MENU_DEVICE1_BASE 1000
 #define MENU_DEVICE2_BASE 2000
+#define MENU_OPEN_WINDHAWK 3000
 #define MENU_MAX_DEVICES  32
 
 const DWORD CLICK_DEBOUNCE_MS = 500;
@@ -85,8 +103,13 @@ static HANDLE g_trayThread = nullptr;
 static HANDLE g_workerThread = nullptr;
 static HWND g_trayHwnd = nullptr;
 static HINSTANCE g_hInstance = nullptr;
+static WCHAR g_windhawkPath[MAX_PATH] = {0};
+static HICON g_hWindHawkIcon = nullptr;
+static HBITMAP g_hWindHawkBmp = nullptr;
 static HICON g_iconDev1 = nullptr;
+static HBITMAP g_hIconDev1Bmp = nullptr;
 static HICON g_iconDev2 = nullptr;
+static HBITMAP g_hIconDev2Bmp = nullptr;
 static DWORD g_lastClickTime = 0;
 static UINT g_taskbarCreatedMsg = 0;
 
@@ -123,10 +146,16 @@ public:
 
 int GetIconIndex(PCWSTR iconSetting) {
     if (iconSetting) {
-        if (wcscmp(iconSetting, L"headphones1") == 0) return 2;
-        if (wcscmp(iconSetting, L"headphones2") == 0) return 91;
-        if (wcscmp(iconSetting, L"speaker1") == 0) return 4;
-        if (wcscmp(iconSetting, L"speaker2") == 0) return 93;
+        if (wcscmp(iconSetting, L"speaker_normal") == 0) return 1;
+        if (wcscmp(iconSetting, L"speaker_square") == 0) return 4;
+        if (wcscmp(iconSetting, L"speaker_modern") == 0) return 90;
+        if (wcscmp(iconSetting, L"speaker_modern_square") == 0) return 93;
+        if (wcscmp(iconSetting, L"audio_wave") == 0) return 94;
+        if (wcscmp(iconSetting, L"headphones") == 0) return 2;
+        if (wcscmp(iconSetting, L"headset_gaming") == 0) return 8;
+        if (wcscmp(iconSetting, L"headphones_modern") == 0) return 91;
+        if (wcscmp(iconSetting, L"headset_modern") == 0) return 95;
+        if (wcscmp(iconSetting, L"earphones") == 0) return 6;
     }
     return 4;
 }
@@ -158,12 +187,40 @@ void SaveDeviceSelection(int slot, PCWSTR deviceId, PCWSTR friendlyName) {
 void LoadUserIconsAndSettings() {
     if (g_iconDev1) DestroyIcon(g_iconDev1);
     if (g_iconDev2) DestroyIcon(g_iconDev2);
+    if (g_hIconDev1Bmp) DeleteObject(g_hIconDev1Bmp);
+    if (g_hIconDev2Bmp) DeleteObject(g_hIconDev2Bmp);
+    g_hIconDev1Bmp = nullptr;
+    g_hIconDev2Bmp = nullptr;
 
     PCWSTR s1 = Wh_GetStringSetting(L"icon1");
     PCWSTR s2 = Wh_GetStringSetting(L"icon2");
 
     ExtractIconExW(L"ddores.dll", GetIconIndex(s1), nullptr, &g_iconDev1, 1);
     ExtractIconExW(L"ddores.dll", GetIconIndex(s2), nullptr, &g_iconDev2, 1);
+
+    if (g_iconDev1) {
+        ICONINFO iconInfo = {0};
+        if (GetIconInfo(g_iconDev1, &iconInfo)) {
+            g_hIconDev1Bmp = iconInfo.hbmColor;
+            if (!g_hIconDev1Bmp) {
+                g_hIconDev1Bmp = iconInfo.hbmMask;
+            } else if (iconInfo.hbmMask) {
+                DeleteObject(iconInfo.hbmMask);
+            }
+        }
+    }
+
+    if (g_iconDev2) {
+        ICONINFO iconInfo = {0};
+        if (GetIconInfo(g_iconDev2, &iconInfo)) {
+            g_hIconDev2Bmp = iconInfo.hbmColor;
+            if (!g_hIconDev2Bmp) {
+                g_hIconDev2Bmp = iconInfo.hbmMask;
+            } else if (iconInfo.hbmMask) {
+                DeleteObject(iconInfo.hbmMask);
+            }
+        }
+    }
 
     if (s1) Wh_FreeStringSetting(s1);
     if (s2) Wh_FreeStringSetting(s2);
@@ -246,13 +303,21 @@ BOOL ToggleAudioDevice() {
     }
 
     LPWSTR currentId = nullptr;
-    pDefaultDevice->GetId(&currentId);
+    HRESULT hr = pDefaultDevice->GetId(&currentId);
     pDefaultDevice->Release();
+    if (FAILED(hr) || !currentId) {
+        pEnum->Release(); CoUninitialize(); return FALSE;
+    }
 
     // Pick the other device by comparing IDs directly — no fuzzy name search
-    PCWSTR targetId = (currentId && wcscmp(currentId, g_cachedDev1Id) == 0)
+    PCWSTR targetId = (wcscmp(currentId, g_cachedDev1Id) == 0)
                       ? g_cachedDev2Id
                       : g_cachedDev1Id;
+
+    if (!targetId || !targetId[0]) {
+        CoTaskMemFree(currentId);
+        pEnum->Release(); CoUninitialize(); return FALSE;
+    }
 
     if (currentId) CoTaskMemFree(currentId);
 
@@ -330,8 +395,33 @@ void BuildAndShowContextMenu(HWND hWnd) {
 
     // Assemble root menu
     HMENU hMenu = CreatePopupMenu();
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSub1, L"Set as Device 1");
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSub2, L"Set as Device 2");
+
+    // Set as Device 1 with icon
+    MENUITEMINFOW mii1 = {sizeof(mii1)};
+    mii1.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_BITMAP;
+    mii1.hSubMenu = hSub1;
+    mii1.dwTypeData = (LPWSTR)L"Set as Device 1";
+    mii1.hbmpItem = g_hIconDev1Bmp;
+    InsertMenuItemW(hMenu, (UINT)-1, TRUE, &mii1);
+
+    // Set as Device 2 with icon
+    MENUITEMINFOW mii2 = {sizeof(mii2)};
+    mii2.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_BITMAP;
+    mii2.hSubMenu = hSub2;
+    mii2.dwTypeData = (LPWSTR)L"Set as Device 2";
+    mii2.hbmpItem = g_hIconDev2Bmp;
+    InsertMenuItemW(hMenu, (UINT)-1, TRUE, &mii2);
+
+    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+
+    // Open WindHawk menu item with icon
+    MENUITEMINFOW mii = {sizeof(mii)};
+    mii.fMask = MIIM_ID | MIIM_STRING | MIIM_BITMAP;
+    mii.wID = MENU_OPEN_WINDHAWK;
+    mii.dwTypeData = (LPWSTR)L"Open WindHawk";
+    mii.hbmpItem = g_hWindHawkBmp;
+    InsertMenuItemW(hMenu, (UINT)-1, TRUE, &mii);
+
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
     // Status line — get current active device name
@@ -380,6 +470,13 @@ void BuildAndShowContextMenu(HWND hWnd) {
         int idx = cmd - MENU_DEVICE2_BASE;
         SaveDeviceSelection(2, devices[idx].id, devices[idx].name);
         PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+    } else if (cmd == MENU_OPEN_WINDHAWK) {
+        SHELLEXECUTEINFOW sei;
+        ZeroMemory(&sei, sizeof(sei));
+        sei.cbSize = sizeof(sei);
+        sei.lpFile = g_windhawkPath;
+        sei.nShow = SW_SHOWNORMAL;
+        ShellExecuteExW(&sei);
     }
 }
 
@@ -443,6 +540,21 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     Wh_Log(L"AudioSwap Mod Init");
     g_hInstance = GetModuleHandle(nullptr);
+    GetModuleFileName(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath));
+    ExtractIconExW(L"ddores.dll", 98, nullptr, &g_hWindHawkIcon, 1);
+    if (!g_hWindHawkIcon) ExtractIconExW(L"ddores.dll", 94, nullptr, &g_hWindHawkIcon, 1);
+    if (!g_hWindHawkIcon) ExtractIconExW(L"ddores.dll", 95, nullptr, &g_hWindHawkIcon, 1);
+    if (!g_hWindHawkIcon) ExtractIconExW(L"ddores.dll", 6, nullptr, &g_hWindHawkIcon, 1);
+    if (g_hWindHawkIcon) {
+        ICONINFO iconInfo = {0};
+        GetIconInfo(g_hWindHawkIcon, &iconInfo);
+        g_hWindHawkBmp = iconInfo.hbmColor;
+        if (!g_hWindHawkBmp) {
+            g_hWindHawkBmp = iconInfo.hbmMask;
+        } else if (iconInfo.hbmMask) {
+            DeleteObject(iconInfo.hbmMask);
+        }
+    }
     LoadUserIconsAndSettings();
     LoadDeviceSelections();
     g_trayThread = CreateThread(nullptr, 0, TrayThreadProc, nullptr, 0, nullptr);
@@ -462,6 +574,8 @@ void WhTool_ModUninit() {
     if (g_workerThread) { WaitForSingleObject(g_workerThread, 2000); CloseHandle(g_workerThread); g_workerThread = nullptr; }
     if (g_iconDev1) { DestroyIcon(g_iconDev1); g_iconDev1 = nullptr; }
     if (g_iconDev2) { DestroyIcon(g_iconDev2); g_iconDev2 = nullptr; }
+    if (g_hWindHawkIcon) { DestroyIcon(g_hWindHawkIcon); g_hWindHawkIcon = nullptr; }
+    if (g_hWindHawkBmp) { DeleteObject(g_hWindHawkBmp); g_hWindHawkBmp = nullptr; }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
