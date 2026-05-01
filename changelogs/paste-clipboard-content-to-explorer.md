@@ -1,3 +1,7 @@
+## 1.5 ([May 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2e793d254614b2390b602eeebf8fad6193c95ae2/mods/paste-clipboard-content-to-explorer.wh.cpp))
+
+Add options for chosing encoding and disabling text paste
+
 ## 1.4 ([Apr 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ec8fe4493d189fe53c06583b6f7ddcfde24b810a/mods/paste-clipboard-content-to-explorer.wh.cpp))
 
 Don't paste a new file if Ctrl+V is pressed during editing file name

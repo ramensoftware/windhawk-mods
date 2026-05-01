@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-01T16:18:15.000Z</updated>
+    <updated>2026-05-01T16:28:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.5]]></title>
+        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#2e793d254614b2390b602eeebf8fad6193c95ae2</id>
+        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
+        <updated>2026-05-01T16:28:35.000Z</updated>
+        <content type="html"><![CDATA[<p>Add options for chosing encoding and disabling text paste</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer TreeItem Tweaker 1.1.1]]></title>
         <id>https://windhawk.net/mods/explorer-treeitem-tweaker#e40aee3bada07d63e308854363a2287cb94a6960</id>
@@ -361,53 +372,6 @@ When a switch is off, that option is not applied.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer TreeLine Killer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-treeline-killer#ba1ed54ac2d7bf5ebfe2cc323e880128344217ca</id>
-        <link href="https://windhawk.net/mods/explorer-treeline-killer"/>
-        <updated>2026-04-25T19:58:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertreelinekiller">Explorer TreeLine Killer</h1>
-<p><strong>Explorer TreeLine Killer</strong> is a Windhawk mod for Windows Explorer that hides the built-in separator lines in the left navigation pane and lets you switch the upper and lower spacing between standard and compact behavior.</p>
-<p>It is useful if you want the navigation pane to look cleaner, tighter, and more visually consistent.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>hide the built-in separator lines used by Explorer</li>
-<li>remove the upper empty space between the Home/Gallery block and the pinned items list</li>
-<li>remove the lower empty space between the pinned items list and <strong>This PC</strong></li>
-<li>choose between tighter compact spacing and more standard Windows-like spacing for each section</li>
-</ul>
-<h2 id="recommendedsetup">Recommended setup</h2>
-<p>For the best Explorer navigation pane experience, it is recommended to use this mod together with <strong>Explorer TreeItem Tweaker</strong> and <strong>Explorer Navigation Pane Tweaks</strong>.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Tested and confirmed compatible with <strong>Windows 11 versions 23H2 through 25H2</strong>.
-Other versions have not been tested.</p>
-<h2 id="whattheoptionsdo">What the options do</h2>
-<ul>
-<li><p><strong>Fully hide system separator lines</strong>
-Hides the default separator line used by Explorer in the lower special container.</p></li>
-<li><p><strong>Remove upper empty space</strong>
-Removes the gap between the Home/Gallery block (when those entries are visible) and the pinned items list.
-Enabled = compact mode. Disabled = standard spacing.</p></li>
-<li><p><strong>Remove lower empty space</strong>
-Removes the gap between the pinned items list and <strong>This PC</strong>.
-Enabled = compact mode. Disabled = standard spacing.</p></li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>the upper option matters only when the Home/Gallery block is visible</li>
-<li>the lower option controls the spacing before <strong>This PC</strong></li>
-<li>this mod is designed only for Explorer's left navigation pane</li>
-</ul>
-<h2 id="beforeafter">Before / After</h2>
-<p><strong>Before</strong></p>
-<p><img src="https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-before.jpg" alt="Before" /></p>
-<p><strong>After</strong></p>
-<p><img src="https://raw.githubusercontent.com/Languster/windhawk-mods/main/mods_assets/explorer-treeline-killer-after.jpg" alt="After" /></p>]]></content>
-        <author>
-            <name>Languster</name>
-            <uri>https://github.com/Languster</uri>
         </author>
     </entry>
 </feed>
