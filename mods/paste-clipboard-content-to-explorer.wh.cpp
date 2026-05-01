@@ -2,7 +2,7 @@
 // @id              paste-clipboard-content-to-explorer
 // @name            Paste Clipboard Content to Explorer
 // @description     Paste text and images from clipboard as files in Explorer and in file dialogs
-// @version         1.4
+// @version         1.5
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -17,7 +17,7 @@ Allows pasting text and images from clipboard as files in Explorer,
 on the desktop and in open/save file dialogs.
 
 ## Features
-- Paste text as .txt (UTF-16 LE with BOM)
+- Paste text as .txt (UTF-8 or UTF-16 LE with BOM)
 - Paste images as .png
 - Auto-naming with incrementing number on conflict
 - Works in Explorer folders, on the desktop, in file dialogs
@@ -27,6 +27,23 @@ on the desktop and in open/save file dialogs.
 - Shows system error dialog when pasting into a folder without write access
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- textEncoding: UTF-16
+  $name: Text encoding
+  $description: Encoding for pasted text files
+  $options:
+  - UTF-16: UTF-16 LE with BOM
+  - UTF-8: UTF-8 with BOM
+- enableTextPaste: true
+  $name: Enable text paste
+  $description: Allow pasting text from clipboard
+- enableImagePaste: true
+  $name: Enable image paste
+  $description: Allow pasting images from clipboard
+*/
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
@@ -44,6 +61,26 @@ static bool g_gdiplusCSInit = false;
 static HWND g_lastContextMenuShellView = nullptr;
 static HWND g_menubarShellView = nullptr;
 static bool PerformPaste(HWND sourceWindow);
+
+// Settings
+struct {
+    std::wstring textEncoding = L"UTF-16";
+    bool enableTextPaste = true;
+    bool enableImagePaste = true;
+} g_settings;
+
+// ============================================================
+//  Settings
+// ============================================================
+void LoadSettings()
+{
+    PCWSTR textEncoding = Wh_GetStringSetting(L"textEncoding");
+    g_settings.textEncoding = textEncoding ? textEncoding : L"UTF-16";
+    Wh_FreeStringSetting(textEncoding);
+    
+    g_settings.enableTextPaste = Wh_GetIntSetting(L"enableTextPaste");
+    g_settings.enableImagePaste = Wh_GetIntSetting(L"enableImagePaste");
+}
 
 // ============================================================
 //  Lazy GDI+ initialization
@@ -176,6 +213,7 @@ static void ShowAccessDeniedMessage(HWND hwnd, const std::wstring& path)
 static DWORD SaveImageFromClipboard(const std::wstring& filePath,
                                     const std::wstring& targetDir)
 {
+    if (!g_settings.enableImagePaste) return ERROR_NOT_SUPPORTED;
     if (!EnsureGdiplusInitialized()) return ERROR_NOT_SUPPORTED;
     if (!OpenClipboard(nullptr)) return GetLastError();
     CLSID pngClsid;
@@ -235,6 +273,7 @@ static DWORD SaveImageFromClipboard(const std::wstring& filePath,
 // ============================================================
 static DWORD SaveTextFromClipboard(const std::wstring& filePath)
 {
+    if (!g_settings.enableTextPaste) return ERROR_NOT_SUPPORTED;
     if (!OpenClipboard(nullptr)) return GetLastError();
     DWORD errCode = ERROR_NO_DATA;
     HANDLE h = GetClipboardData(CF_UNICODETEXT);
@@ -249,10 +288,32 @@ static DWORD SaveTextFromClipboard(const std::wstring& filePath)
             if (hFile != INVALID_HANDLE_VALUE)
             {
                 DWORD written;
-                WORD bom = 0xFEFF;
-                WriteFile(hFile, &bom, sizeof(bom), &written, nullptr);
-                WriteFile(hFile, text, (DWORD)(wcslen(text)*sizeof(WCHAR)),
-                          &written, nullptr);
+                
+                if (g_settings.textEncoding == L"UTF-8")
+                {
+                    // UTF-8 with BOM
+                    BYTE bom[3] = {0xEF, 0xBB, 0xBF};
+                    WriteFile(hFile, bom, 3, &written, nullptr);
+                    
+                    // Convert to UTF-8
+                    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+                    if (utf8Len > 0)
+                    {
+                        char* utf8Text = new char[utf8Len];
+                        WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8Text, utf8Len, nullptr, nullptr);
+                        WriteFile(hFile, utf8Text, utf8Len - 1, &written, nullptr); // -1 to skip null terminator
+                        delete[] utf8Text;
+                    }
+                }
+                else // UTF-16
+                {
+                    // UTF-16 LE with BOM
+                    WORD bom = 0xFEFF;
+                    WriteFile(hFile, &bom, sizeof(bom), &written, nullptr);
+                    WriteFile(hFile, text, (DWORD)(wcslen(text)*sizeof(WCHAR)),
+                              &written, nullptr);
+                }
+                
                 CloseHandle(hFile);
                 errCode = 0;
             }
@@ -293,10 +354,13 @@ static bool IsShellViewWindow(HWND hwnd)
 static bool HasNonFileClipboardContent()
 {
     if (IsClipboardFormatAvailable(CF_HDROP)) return false;
-    return IsClipboardFormatAvailable(CF_UNICODETEXT) ||
-           IsClipboardFormatAvailable(CF_BITMAP)      ||
-           IsClipboardFormatAvailable(CF_DIB)         ||
-           IsClipboardFormatAvailable(CF_DIBV5);
+    
+    bool hasText = g_settings.enableTextPaste && IsClipboardFormatAvailable(CF_UNICODETEXT);
+    bool hasImage = g_settings.enableImagePaste && (IsClipboardFormatAvailable(CF_BITMAP) ||
+                    IsClipboardFormatAvailable(CF_DIB) ||
+                    IsClipboardFormatAvailable(CF_DIBV5));
+    
+    return hasText || hasImage;
 }
 
 // ============================================================
@@ -547,10 +611,10 @@ static bool PerformPaste(HWND sourceWindow)
     std::wstring baseName = GetDefaultBaseName();
     std::wstring filePath;
     DWORD errCode = ERROR_NOT_SUPPORTED;
-    bool hasImage = IsClipboardFormatAvailable(CF_BITMAP)||
+    bool hasImage = g_settings.enableImagePaste && (IsClipboardFormatAvailable(CF_BITMAP)||
                     IsClipboardFormatAvailable(CF_DIB)||
-                    IsClipboardFormatAvailable(CF_DIBV5);
-    bool hasText  = IsClipboardFormatAvailable(CF_UNICODETEXT);
+                    IsClipboardFormatAvailable(CF_DIBV5));
+    bool hasText  = g_settings.enableTextPaste && IsClipboardFormatAvailable(CF_UNICODETEXT);
     if (hasImage)
         { filePath=GetUniquePath(targetPath,baseName,L".png");
           errCode=SaveImageFromClipboard(filePath,targetPath); }
@@ -780,6 +844,9 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg)
 BOOL Wh_ModInit()
 {
     Wh_Log(L"PasteClipboardToExplorer: Init");
+    
+    LoadSettings();
+    
     InitializeCriticalSection(&g_gdiplusCS);
     g_gdiplusCSInit = true;
 
@@ -808,4 +875,10 @@ void Wh_ModUninit()
     Wh_Log(L"PasteClipboardToExplorer: Uninit");
     if (g_gdiplusToken) { GdiplusShutdown(g_gdiplusToken); g_gdiplusToken = 0; }
     if (g_gdiplusCSInit) { DeleteCriticalSection(&g_gdiplusCS); g_gdiplusCSInit = false; }
+}
+
+void Wh_ModSettingsChanged()
+{
+    Wh_Log(L"PasteClipboardToExplorer: Settings changed");
+    LoadSettings();
 }
