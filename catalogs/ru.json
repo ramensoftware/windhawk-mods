@@ -10736,6 +10736,35 @@
                 "version": "1.0"
             }
         },
+        "ultimate-custom-tray": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777731225000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777731225000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Salyts",
+                "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -lshlwapi -lcomdlg32 -luuid -lgdiplus",
+                "description": "Custom tray icons with actions, context menus and image icon support.",
+                "github": "https://github.com/Salyts",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Ultimate Custom Tray",
+                "version": "1.0"
+            }
+        },
         "unlock-taskmgr-server": {
             "details": {
                 "defaultSorting": 1190,

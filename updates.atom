@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-02T13:51:31.000Z</updated>
+    <updated>2026-05-02T14:13:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Ultimate Custom Tray 1.0]]></title>
+        <id>https://windhawk.net/mods/ultimate-custom-tray#7f92885de8e49e5169175fd8adcdc46854a938e4</id>
+        <link href="https://windhawk.net/mods/ultimate-custom-tray"/>
+        <updated>2026-05-02T14:13:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="ultimatecustomtray">Ultimate Custom Tray</h1>
+<p>Adds your own icons to the system tray. Each icon can run an
+action on left-click and/or show a context menu on right-click.</p>
+<hr />
+<h2 id="quickstart">Quick start</h2>
+<ol>
+<li>Open Windhawk settings for this mod.</li>
+<li>Add one or more <strong>Items</strong> to the list.</li>
+<li>Fill in <strong>Label</strong>, <strong>Icon</strong> and <strong>Action</strong> for each item.</li>
+<li>Save — the icons appear in the tray immediately.</li>
+</ol>
+<hr />
+<h2 id="actionformats">Action formats</h2>
+<p>Actions run on <strong>left-click</strong> (or from a context menu item).</p>
+<p>| Prefix | Example | Description |
+|--------|---------|-------------|
+| <code>" "</code> | <code>"C:\Program Files\app.exe"</code> | Opens a file or folder by absolute path. |
+| <code>~</code> | <code>~Downloads</code> | Opens a folder or file by name. |
+| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
+| <code>shell:</code> | <code>shell:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code>. |
+| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
+| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
+<hr />
+<h2 id="iconfield">Icon field</h2>
+<p>| Type | Example | Description |
+|---|---|---|
+| <strong>Glyph</strong> | <code>E774</code> | Hex code of a <a href="https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font">Segoe Fluent Icons</a> glyph. 4-digit hex only, no <code>\u</code> prefix. |
+| <strong>Image file</strong> | <code>C:\Icons\name.png</code> | Full path to an image. Supported: <code>.png</code> <code>.ico</code> <code>.jpg</code> <code>.bmp</code>. Recommended: 32x32 px, transparent background. |</p>
+<hr />
+<h2 id="iconcolor">Icon color</h2>
+<p>Use the <strong>Icon color</strong> setting to choose <strong>White</strong> (for dark taskbar) or <strong>Black</strong> (for light taskbar).</p>
+<hr />
+<h2 id="contextmenus">Context menus</h2>
+<p>Each tray icon can show a right-click context menu.</p>
+<ul>
+<li>Add items under <strong>Context menu</strong> for the icon.</li>
+<li>Each item has its own <strong>Name</strong>, <strong>Icon</strong> and <strong>Action</strong>.</li>
+<li>If no items are defined, right-clicking does nothing.</li>
+<li>Left-click always runs the main <strong>Action</strong>, regardless of whether a context menu exists.</li>
+</ul>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Taskbar Overlay Icon 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-taskbar-overlay-icon#205ef84100133d3a9d4d48de951cb77d2b5fb6a6</id>
@@ -295,19 +345,6 @@ the mouse wheel over the taskbar.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[osu!Profile in Taskbar 3.9.1]]></title>
-        <id>https://windhawk.net/mods/osu-tray-profile#df4a9446ecc3ecb93ff8848e8d0d6aa8cc3c2605</id>
-        <link href="https://windhawk.net/mods/osu-tray-profile"/>
-        <updated>2026-04-26T08:49:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>After restarting the computer, the mod displayed an "error" message, which was resolved by "enabling/disabling" the mod. Now, after restarting the PC, the mod works correctly.</li>
-</ul>]]></content>
-        <author>
-            <name>antoshika</name>
-            <uri>https://github.com/Antoshika</uri>
         </author>
     </entry>
 </feed>
