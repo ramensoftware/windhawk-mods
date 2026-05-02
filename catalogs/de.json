@@ -3927,6 +3927,34 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-taskbar-overlay-icon": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777729891000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777729891000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "FireBlade",
+                "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid",
+                "description": "Shows an overlay icon on the taskbar of Explorer windows that displays the icon of the current directory.",
+                "github": "https://github.com/FireBlade211",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Explorer Taskbar Overlay Icon",
+                "version": "1.0"
+            }
+        },
         "explorer-toolbar-links-item": {
             "details": {
                 "defaultSorting": 1952,

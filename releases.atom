@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-04-29T21:40:06.000Z</updated>
+    <updated>2026-05-02T13:51:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Taskbar Overlay Icon 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-taskbar-overlay-icon#205ef84100133d3a9d4d48de951cb77d2b5fb6a6</id>
+        <link href="https://windhawk.net/mods/explorer-taskbar-overlay-icon"/>
+        <updated>2026-05-02T13:51:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorertaskbaroverlayicon">Explorer Taskbar Overlay Icon</h1>
+<p>Shows a taskbar overlay icon on Explorer windows that displays the icon of the current directory.</p>
+<p><img src="https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/ExplorerTaskbarOverlayIcon/screenshot.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>FireBlade</name>
+            <uri>https://github.com/FireBlade211</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Replace the buggy SDHC card drive icon 1.0]]></title>
         <id>https://windhawk.net/mods/replace-buggy-sdhc-icon#7a2c107289cd17a9b4a24a476102fb0faffd1308</id>
@@ -625,30 +638,6 @@ modified.</li>
         <author>
             <name>Joe Ye</name>
             <uri>https://github.com/JoeYe-233</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 1.0]]></title>
-        <id>https://windhawk.net/mods/audioswap#de26d434714384dc9cab67fa36a08a5399276e64</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-04-08T18:02:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="audiooutputswitcher">Audio Output Switcher</h1>
-<p>A lightning-fast audio toggle right in your taskbar! 🎧🔊</p>
-<h2 id="howtouseit">📖 How to Use It</h2>
-<ol>
-<li>⚙️ <strong>Configure Your Devices:</strong> Go to the <strong>Settings</strong> tab. </li>
-</ol>
-<ul>
-<li>Type the Name of your device names (e.g., "Headphones" and "Speakers").</li>
-<li>Select an icon for each device from the dropdown menus.</li>
-</ul>
-<ol>
-<li>🔍 <strong>Find the Icon:</strong> Look in your system tray. The icon will change based on which device is currently active!</li>
-<li>🎯 <strong>Click to Toggle:</strong> A single click swaps your audio and updates the icon instantly.</li>
-</ol>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>
