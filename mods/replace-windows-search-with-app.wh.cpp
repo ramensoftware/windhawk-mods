@@ -2,7 +2,7 @@
 // @id              replace-windows-search-with-app
 // @name            Windows Search Redirector
 // @description     Redirects Windows Search to Command Palette, PowerToys Run, or a custom launcher and forwards initial text
-// @version         1.0.0
+// @version         1.0.1
 // @author          Fefedu973
 // @github          https://github.com/Fefedu973
 // @include         explorer.exe
@@ -92,6 +92,20 @@ settings reference and testing commands.
 - redirectWinS: true
   $name: Redirect Win+S
   $description: Open the replacement launcher when Win+S is pressed.
+- redirectWinQ: true
+  $name: Redirect Win+Q
+  $description: Open the replacement launcher when Win+Q is pressed.
+- redirectWinC: true
+  $name: Redirect Win+C
+  $description: >-
+    Redirect Win+C when it is configured to open Windows Search. Used together
+    with the auto-detection setting by default.
+- autoDetectWinCSearchShortcut: true
+  $name: Auto-detect Win+C Search binding
+  $description: >-
+    When enabled, Win+C is redirected only if the Windows Copilot key setting is
+    currently configured for Search. Disable this to let Redirect Win+C force the
+    interception manually.
 - redirectStartMenuTyping: true
   $name: Redirect typing in Start menu
   $description: >-
@@ -184,6 +198,9 @@ struct SettingsSnapshot {
     bool allowInjectedInput = true;
     bool requireLauncherAvailable = true;
     bool redirectWinS = true;
+    bool redirectWinQ = true;
+    bool redirectWinC = true;
+    bool autoDetectWinCSearchShortcut = true;
     bool redirectStartMenuTyping = true;
     bool redirectSearchHostTyping = true;
     bool redirectStartMenuSearchBoxClick = true;
@@ -202,6 +219,9 @@ static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 static SettingsSnapshot g_settings;
 static volatile LONG g_logEnabled = 0;
 static volatile LONG g_redirectWinSEnabled = 1;
+static volatile LONG g_redirectWinQEnabled = 1;
+static volatile LONG g_redirectWinCEnabled = 1;
+static volatile LONG g_autoDetectWinCSearchShortcutEnabled = 1;
 static volatile LONG g_redirectStartMenuTypingEnabled = 1;
 static volatile LONG g_redirectSearchHostTypingEnabled = 1;
 static volatile LONG g_redirectStartMenuSearchBoxClickEnabled = 1;
@@ -303,6 +323,10 @@ static void LoadSettings() {
     next.requireLauncherAvailable =
         Wh_GetIntSetting(L"requireLauncherAvailable") != 0;
     next.redirectWinS = Wh_GetIntSetting(L"redirectWinS") != 0;
+    next.redirectWinQ = Wh_GetIntSetting(L"redirectWinQ") != 0;
+    next.redirectWinC = Wh_GetIntSetting(L"redirectWinC") != 0;
+    next.autoDetectWinCSearchShortcut =
+        Wh_GetIntSetting(L"autoDetectWinCSearchShortcut") != 0;
     next.redirectStartMenuTyping =
         Wh_GetIntSetting(L"redirectStartMenuTyping") != 0;
     next.redirectSearchHostTyping =
@@ -331,6 +355,12 @@ static void LoadSettings() {
     InterlockedExchange(&g_logEnabled, logEnabled ? 1 : 0);
     InterlockedExchange(&g_redirectWinSEnabled,
                         next.redirectWinS ? 1 : 0);
+    InterlockedExchange(&g_redirectWinQEnabled,
+                        next.redirectWinQ ? 1 : 0);
+    InterlockedExchange(&g_redirectWinCEnabled,
+                        next.redirectWinC ? 1 : 0);
+    InterlockedExchange(&g_autoDetectWinCSearchShortcutEnabled,
+                        next.autoDetectWinCSearchShortcut ? 1 : 0);
     InterlockedExchange(&g_redirectStartMenuTypingEnabled,
                         next.redirectStartMenuTyping ? 1 : 0);
     InterlockedExchange(&g_redirectSearchHostTypingEnabled,
@@ -800,6 +830,8 @@ static bool RequestReplacement(PCWSTR reason) {
 
 enum class RedirectCategory {
     WinS,
+    WinQ,
+    WinC,
     StartMenuTyping,
     SearchHostTyping,
     StartMenuSearchBoxClick,
@@ -813,10 +845,70 @@ static bool IsFlagEnabled(volatile LONG* flag) {
     return InterlockedCompareExchange(flag, 0, 0) != 0;
 }
 
+static std::wstring TrimString(std::wstring value);
+
+static std::wstring ReadRegistryStringValue(HKEY root,
+                                            PCWSTR subKey,
+                                            PCWSTR valueName) {
+    wchar_t buffer[256] = {};
+    DWORD type = 0;
+    DWORD bytes = sizeof(buffer);
+    LSTATUS status = SHGetValueW(root, subKey, valueName, &type, buffer,
+                                 &bytes);
+    if (status != ERROR_SUCCESS ||
+        (type != REG_SZ && type != REG_EXPAND_SZ)) {
+        return L"";
+    }
+
+    buffer[_countof(buffer) - 1] = L'\0';
+    return buffer;
+}
+
+static bool IsWinCConfiguredForWindowsSearchUncached() {
+    std::wstring policyAumid = ReadRegistryStringValue(
+        HKEY_CURRENT_USER,
+        L"Software\\Policies\\Microsoft\\Windows\\CopilotKey",
+        L"SetCopilotHardwareKey");
+    std::wstring trimmedPolicy = TrimString(policyAumid);
+    if (!trimmedPolicy.empty()) {
+        return _wcsicmp(trimmedPolicy.c_str(), L"Search") == 0;
+    }
+
+    std::wstring choice = ReadRegistryStringValue(
+        HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\Shell\\BrandedKey",
+        L"BrandedKeyChoiceType");
+    return _wcsicmp(choice.c_str(), L"Search") == 0;
+}
+
+static bool IsWinCConfiguredForWindowsSearch() {
+    static volatile LONG64 cacheTick = 0;
+    static volatile LONG cacheValue = 0;
+
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG tick = static_cast<ULONGLONG>(
+        InterlockedCompareExchange64(&cacheTick, 0, 0));
+    if (tick != 0 && (now - tick) < 1000) {
+        return IsFlagEnabled(&cacheValue);
+    }
+
+    bool configured = IsWinCConfiguredForWindowsSearchUncached();
+    InterlockedExchange(&cacheValue, configured ? 1 : 0);
+    InterlockedExchange64(&cacheTick, static_cast<LONG64>(now));
+    return configured;
+}
+
 static bool IsRedirectCategoryEnabled(RedirectCategory category) {
     switch (category) {
         case RedirectCategory::WinS:
             return IsFlagEnabled(&g_redirectWinSEnabled);
+
+        case RedirectCategory::WinQ:
+            return IsFlagEnabled(&g_redirectWinQEnabled);
+
+        case RedirectCategory::WinC:
+            return IsFlagEnabled(&g_redirectWinCEnabled) &&
+                   (!IsFlagEnabled(&g_autoDetectWinCSearchShortcutEnabled) ||
+                    IsWinCConfiguredForWindowsSearch());
 
         case RedirectCategory::StartMenuTyping:
             return IsFlagEnabled(&g_redirectStartMenuTypingEnabled);
@@ -944,8 +1036,6 @@ static bool ShouldCaptureTypedSearchInput() {
 
     return false;
 }
-
-static std::wstring TrimString(std::wstring value);
 
 static std::wstring SanitizeSearchText(const std::wstring& input) {
     std::wstring output;
@@ -1397,10 +1487,23 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             IgnoreUndockedSearchFor();
         }
 
-        if (keyboardInfo->vkCode == 'S' && (leftWinDown || rightWinDown) &&
-            !ctrlDown && !altDown && !shiftDown) {
-            if (IsRedirectCategoryEnabled(RedirectCategory::WinS) &&
-                RequestReplacement(L"Win+S")) {
+        RedirectCategory shortcutCategory = RedirectCategory::WinS;
+        PCWSTR shortcutName = nullptr;
+        if (keyboardInfo->vkCode == 'S') {
+            shortcutCategory = RedirectCategory::WinS;
+            shortcutName = L"Win+S";
+        } else if (keyboardInfo->vkCode == 'Q') {
+            shortcutCategory = RedirectCategory::WinQ;
+            shortcutName = L"Win+Q";
+        } else if (keyboardInfo->vkCode == 'C') {
+            shortcutCategory = RedirectCategory::WinC;
+            shortcutName = L"Win+C";
+        }
+
+        if (shortcutName && (leftWinDown || rightWinDown) && !ctrlDown &&
+            !altDown && !shiftDown) {
+            if (IsRedirectCategoryEnabled(shortcutCategory) &&
+                RequestReplacement(shortcutName)) {
                 ClearPendingText();
                 return 1;
             }
