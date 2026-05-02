@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-02T14:19:27.000Z</updated>
+    <updated>2026-05-02T19:13:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enhanced Disk Usage 1.0]]></title>
+        <id>https://windhawk.net/mods/enhanced-disk-usage#9ffbf99e36e4479e9dcd8a14026aee1840c5abcf</id>
+        <link href="https://windhawk.net/mods/enhanced-disk-usage"/>
+        <updated>2026-05-02T19:13:37.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/bbmaster123/FWFU/refs/heads/main/Assets/screenshot.png" alt="Screenshot" /></p>
+<p>Enables the ability to customize the disk drive tiles in explorer, targeting the
+disk's usage bar, as well as the details that appear below.</p>
+<ul>
+<li>custom colors with transparency for disk usage, track (background/unused), and
+outline</li>
+<li>separate disk colors for when drive is near full</li>
+<li>linear gradient support with configurable direction</li>
+<li>rounded corners</li>
+<li>glossy overlay toggle option (for a more Windows Aero-ish looking aesthetic)</li>
+<li>height/width controls (inset) controls for disk bar and track</li>
+<li>custom disk usage text with font size adjustment, multi-line support,
+line-height adjustment, and more</li>
+</ul>
+<p>ex.
+100GB free | 100GB/200GB</p>]]></content>
+        <author>
+            <name>bbmaster123</name>
+            <uri>https://github.com/bbmaster123</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MicroSwap 1.0.0]]></title>
         <id>https://windhawk.net/mods/microswap#d464024830ea0879a2e1f89c6d5be2769be2ba4c</id>
@@ -359,17 +385,6 @@ the mouse wheel over the taskbar.</p>
         <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
         <updated>2026-04-27T20:51:24.000Z</updated>
         <content type="html"><![CDATA[<p>Fix regression in the previous version (greyed menus after Explorer's restart)</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.2]]></title>
-        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#2eee59d291d0265584eb4beb8bf7faaf0d67dc2f</id>
-        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
-        <updated>2026-04-26T19:06:16.000Z</updated>
-        <content type="html"><![CDATA[<p>Add support for pull-down menus</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>

@@ -3411,6 +3411,34 @@
                 "version": "1.0"
             }
         },
+        "enhanced-disk-usage": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777749217000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777749217000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "bbmaster123",
+                "compilerOptions": "-lcomctl32 -lole32 -luuid -luser32 -lgdi32 -luxtheme -lshlwapi -lmsimg32 -lgdiplus",
+                "description": "Enables the ability to customize the disk drive tiles in explorer, targeting the disk's usage bar, as well as the details that appear below.",
+                "github": "https://github.com/bbmaster123",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Enhanced Disk Usage",
+                "version": "1.0"
+            }
+        },
         "eradicate-immersive-menus": {
             "details": {
                 "defaultSorting": 23100,
