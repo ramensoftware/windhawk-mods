@@ -22,16 +22,18 @@ DWORD g_threadId = 0;
 HINSTANCE g_hInst = NULL;
 
 static const wchar_t* CLASS_NAME = L"KeyClickWndClass";
-
 static const unsigned char clickWav[] = {
-    'R','I','F','F', 36,0,0,0, 'W','A','V','E',
+    // RIFF Header
+    'R','I','F','F', 38,0,0,0, 'W','A','V','E',
+    // Sub-chunk 1 (fmt)
     'f','m','t',' ', 16,0,0,0, 1,0, 1,0,
-    0x40,0x1F,0,0, // 8000 Hz
-    0x40,0x1F,0,0,
-    1,0, 8,0,
-    'd','a','t','a', 6,0,0,0,
-
-    128, 170, 90, 140, 120, 128
+    0x40,0x1F,0,0, // Sample Rate (8000 Hz)
+    0x40,0x1F,0,0, // Byte Rate
+    1,0, 8,0,      // Block Align, Bits per sample (8)
+    // Sub-chunk 2 (data)
+    'd','a','t','a', 8,0,0,0, 
+    // Сами байты звука:
+    128, 255, 0, 255, 0, 200, 80, 128
 };
 
 void PlayClick() {
