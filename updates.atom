@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-02T14:15:39.000Z</updated>
+    <updated>2026-05-02T14:19:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MicroSwap 1.0.0]]></title>
+        <id>https://windhawk.net/mods/microswap#d464024830ea0879a2e1f89c6d5be2769be2ba4c</id>
+        <link href="https://windhawk.net/mods/microswap"/>
+        <updated>2026-05-02T14:19:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="micswap">MicSwap</h1>
+<p>Instantly toggle between two audio input devices (microphones) from your system tray — no diving into Sound settings.</p>
+<hr />
+<h2 id="howtouse">How to Use</h2>
+<ol>
+<li><strong>Choose Icons</strong> — Open the <strong>Settings</strong> tab and pick an icon for each of your two devices.</li>
+<li><strong>Select Your Devices</strong> — Right-click the tray icon. Use <strong>Set as Input 1</strong> and <strong>Set as Input 2</strong> to assign your inputs from the live device list.</li>
+<li><strong>Toggle</strong> — Left-click the tray icon at any time to swap between the two devices instantly.</li>
+</ol>
+<blockquote>
+  <p>The tray tooltip always shows the active input. On first run it will read <em>"Right-click to configure"</em> until both devices are assigned.</p>
+</blockquote>
+<hr />
+<h2 id="changelog">Changelog</h2>
+<h3 id="v100">v1.0.0</h3>
+<ul>
+<li>Initial release. Mirrors AudioSwap but targets audio input/capture devices.</li>
+<li>Right-click context menu auto-detects all active audio inputs and lets you assign Input 1 and Input 2 from a live list.</li>
+<li>Device selections persist across restarts.</li>
+<li>Toggle matches devices by their unique system ID for reliable switching regardless of device naming.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Move Window to Monitor 1.1.0]]></title>
         <id>https://windhawk.net/mods/move-window-to-monitor#f0ef9faeba5aac55e931e6603bf30066d2e4a7f3</id>
@@ -342,21 +373,6 @@ the mouse wheel over the taskbar.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnails#92d307593c5b7accafdb2bb3cf34df6f36d050c6</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
-        <updated>2026-04-26T18:30:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to disable the virtual desktop switcher flyout that appears when hovering over the Task View button on the taskbar.</li>
-<li>Added an option to disable thumbnails on hover while having a list on click.</li>
-<li>Fixed compatibility with new insider Windows 11 builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
