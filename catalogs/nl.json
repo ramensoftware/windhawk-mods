@@ -6090,6 +6090,35 @@
                 "version": "1.0"
             }
         },
+        "move-window-to-monitor": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777731339000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777731339000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "TomberWolf",
+                "compilerOptions": "-luser32 -lgdi32 -lshcore",
+                "description": "Moves the active window to a specific monitor using configurable hotkeys (default: Ctrl+Alt+Arrows)",
+                "github": "https://github.com/TomberWolf",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Move Window to Monitor",
+                "version": "1.1.0"
+            }
+        },
         "msg-box-font-fix": {
             "details": {
                 "defaultSorting": 20730,

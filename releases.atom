@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-02T14:13:45.000Z</updated>
+    <updated>2026-05-02T14:15:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Move Window to Monitor 1.1.0]]></title>
+        <id>https://windhawk.net/mods/move-window-to-monitor#f0ef9faeba5aac55e931e6603bf30066d2e4a7f3</id>
+        <link href="https://windhawk.net/mods/move-window-to-monitor"/>
+        <updated>2026-05-02T14:15:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="movewindowtomonitor">Move Window to Monitor</h1>
+<p>Moves the active window to a specific monitor using configurable hotkeys.</p>
+<h2 id="defaultshortcutctrlaltarrowkeys">Default Shortcut: Ctrl+Alt+Arrow keys</h2>
+<h2 id="setup">Setup</h2>
+<p>Monitors are numbered automatically, sorted <strong>left to right, then top to bottom</strong>
+based on their physical position in your Windows display layout.</p>
+<p><strong>Example for a setup with 3 monitors on the bottom and 1 on top center:</strong></p>
+<pre><code>        [ 1 ]
+[ 0 ]   [ 2 ]   [ 3 ]
+</code></pre>
+<p>Set: UP=1, LEFT=0, DOWN=2, RIGHT=3</p>
+<p>Use <strong>-1</strong> to keep automatic geometric detection for a direction.</p>
+<p>When the active window is already on the target monitor, the hotkey does nothing.</p>
+<p>The <strong>Center window</strong> option centers the window on the target monitor instead
+of preserving its relative position. Works independently of <strong>Keep window size</strong>.</p>]]></content>
+        <author>
+            <name>TomberWolf</name>
+            <uri>https://github.com/TomberWolf</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Ultimate Custom Tray 1.0]]></title>
         <id>https://windhawk.net/mods/ultimate-custom-tray#7f92885de8e49e5169175fd8adcdc46854a938e4</id>
@@ -616,55 +641,6 @@ modified.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Navigation Pane Tweaks 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-navigation-pane-tweaks#d208454541569598e6b5979b89ab1c22fea4fd1c</id>
-        <link href="https://windhawk.net/mods/explorer-navigation-pane-tweaks"/>
-        <updated>2026-04-11T14:39:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorernavigationpanetweaks">Explorer Navigation Pane Tweaks</h1>
-<p>Adjusts the indentation and visual tree style of the navigation pane in Windows Explorer.</p>
-<h2 id="beforeafter">Before / After</h2>
-<h3 id="defaultexplorer">Default Explorer</h3>
-<p><img src="https://raw.githubusercontent.com/Languster/ExplorerNavHook/main/screenshots/before.jpg" alt="Before" /></p>
-<h3 id="withexplorernavigationpanetweaks">With Explorer Navigation Pane Tweaks</h3>
-<p><img src="https://raw.githubusercontent.com/Languster/ExplorerNavHook/main/screenshots/after.jpg" alt="After" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>changes the navigation tree indent</li>
-<li>can remove expand/collapse buttons</li>
-<li>can remove connector lines</li>
-<li>can remove root lines</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Target indent</strong>: controls how far the tree items are shifted</li>
-<li><strong>Remove TVS_HASBUTTONS</strong>: removes tree buttons</li>
-<li><strong>Remove TVS_HASLINES</strong>: removes connector lines</li>
-<li><strong>Remove TVS_LINESATROOT</strong>: removes root lines</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>designed for Windows Explorer (<code>explorer.exe</code>)</li>
-<li>tested with the original ExplorerNavHook behavior migrated to Windhawk</li>
-<li>behavior may vary between different Windows builds and Explorer variants</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>targets <code>explorer.exe</code></li>
-<li>based on the original ExplorerNavHook project</li>
-<li>changes apply to the Explorer navigation tree</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>this mod targets the navigation tree in Explorer, not every tree view in the system</li>
-<li>some Explorer variants or future Windows updates may behave differently</li>
-<li>visual results depend on the current Explorer implementation</li>
-</ul>]]></content>
-        <author>
-            <name>Languster</name>
-            <uri>https://github.com/Languster</uri>
         </author>
     </entry>
 </feed>
