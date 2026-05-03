@@ -2,7 +2,7 @@
 // @id              explorer-rename-overwrite
 // @name            Explorer Rename Overwrite
 // @description     When renaming a file in Explorer to a name that already exists, overwrite the existing file instead of being blocked by the "file already exists" prompt.
-// @version         1.1.1
+// @version         1.1.2
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -23,10 +23,6 @@ removed first (to the Recycle Bin by default, or permanently if configured).
 
 ## Settings
 
-- **enabled**: Master switch. When off, the mod stays loaded but does nothing —
-  Explorer falls back to its default behavior (the "file already exists"
-  prompt or auto-numbering). Useful for temporarily disabling overwrite
-  without unloading the mod.
 - **disposition**: Where the overwritten file goes — `recycle` (safer, default),
   `keep` (renamed in place, see *keepInPlaceSuffix*), or `permanent`
   (irreversible).
@@ -48,6 +44,16 @@ removed first (to the Recycle Bin by default, or permanently if configured).
 
 ## Changelog
 
+### 1.1.2
+- Remove the `enabled` master switch — disable the mod via Windhawk's own
+  toggle instead.
+- Preserve the existing target's filename casing when renaming it with the
+  recycle/keep suffix (e.g. renaming `Src.txt` over `DEST.txt` produces
+  `DEST.txt_old`, not `Dest.txt_old`).
+- Don't pass `MOVEFILE_REPLACE_EXISTING` when moving the collision target
+  to its suffixed name — the suffixed path is chosen to not exist, and
+  silently overwriting would defeat the safety of the suffix.
+
 ### 1.1.1
 - Fix `keep` disposition: notify the shell of the in-place rename so
   Explorer's view doesn't transiently show both files with the suffix
@@ -61,16 +67,13 @@ removed first (to the Recycle Bin by default, or permanently if configured).
 ### 1.0.0
 - Initial release: hook `IFileOperation::RenameItem` / `RenameItems` and
   clear the destination on collision.
-- Settings: `enabled`, `disposition` (`recycle` / `permanent`),
-  `onlyFiles`, `renameBeforeRecycle`, `recycleSuffix`.
+- Settings: `disposition` (`recycle` / `permanent`), `onlyFiles`,
+  `renameBeforeRecycle`, `recycleSuffix`.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enable overwrite-on-rename
-  $description: Master switch. When disabled, the mod does nothing and Explorer uses its default rename behavior. Useful for temporarily turning the feature off without unloading the mod.
 - disposition: recycle
   $name: Overwritten file disposition
   $description: What to do with the file being overwritten.
@@ -107,7 +110,6 @@ namespace {
 enum class Disposition { Recycle, Keep, Permanent };
 
 struct Settings {
-    bool enabled = true;
     Disposition disposition = Disposition::Recycle;
     bool onlyFiles = true;
     bool renameBeforeRecycle = true;
@@ -118,7 +120,6 @@ struct Settings {
 Settings g_settings;
 
 void LoadSettings() {
-    g_settings.enabled = Wh_GetIntSetting(L"enabled") != 0;
     PCWSTR disp = Wh_GetStringSetting(L"disposition");
     if (disp && wcscmp(disp, L"permanent") == 0) {
         g_settings.disposition = Disposition::Permanent;
@@ -193,6 +194,24 @@ void SplitPath(const std::wstring& path, std::wstring& dir,
     }
 }
 
+// Resolve `path` to the on-disk casing of its final component. Earlier
+// directory components keep whatever casing the caller supplied — only the
+// leaf name is corrected, which is enough for the suffix-rename to preserve
+// the existing file's name (e.g. when renaming "Src.txt" over an existing
+// "DEST.txt", the suffixed name should be "DEST.txt_old", not
+// "Dest.txt_old").
+std::wstring ResolveLeafCase(const std::wstring& path) {
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(path.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return path;
+    FindClose(h);
+    size_t slash = path.find_last_of(L"\\/");
+    if (slash == std::wstring::npos) return fd.cFileName;
+    std::wstring out(path, 0, slash + 1);
+    out.append(fd.cFileName);
+    return out;
+}
+
 // Pick a path of the form "<dir><stem><suffix><ext>" that does not exist.
 // If it already exists, try " (2)", " (3)", … like Explorer does.
 std::wstring PickSuffixedPath(const std::wstring& original) {
@@ -262,7 +281,18 @@ bool DeletePermanently(const std::wstring& path) {
     DWORD attr = GetFileAttributesW(path.c_str());
     if (attr == INVALID_FILE_ATTRIBUTES) return true;  // already gone
     if (attr & FILE_ATTRIBUTE_DIRECTORY) {
-        return RemoveDirectoryW(path.c_str()) != 0;
+        // RemoveDirectoryW only succeeds on empty directories. Use the shell
+        // file op for recursive deletion, just without FOF_ALLOWUNDO so it
+        // bypasses the Recycle Bin.
+        std::wstring buf = path;
+        buf.push_back(L'\0');
+        buf.push_back(L'\0');
+        SHFILEOPSTRUCTW op = {};
+        op.wFunc = FO_DELETE;
+        op.pFrom = buf.c_str();
+        op.fFlags = FOF_NO_UI | FOF_NOCONFIRMATION |
+                    FOF_NOERRORUI | FOF_SILENT;
+        return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted;
     }
     if (attr & FILE_ATTRIBUTE_READONLY) {
         SetFileAttributesW(path.c_str(), attr & ~FILE_ATTRIBUTE_READONLY);
@@ -295,9 +325,11 @@ bool ClearTarget(const std::wstring& target) {
         !g_settings.recycleSuffix.empty() &&
         !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
         std::wstring suffixed = PickSuffixedPath(target);
+        // No MOVEFILE_REPLACE_EXISTING: PickSuffixedPath already returned a
+        // path that does not exist, and silently overwriting on a TOCTOU race
+        // would defeat the safety the suffix is meant to provide.
         if (!suffixed.empty() &&
-            MoveFileExW(target.c_str(), suffixed.c_str(),
-                        MOVEFILE_REPLACE_EXISTING) != 0) {
+            MoveFileExW(target.c_str(), suffixed.c_str(), 0) != 0) {
             toRecycle = suffixed;
         } else {
             Wh_Log(L"Suffix rename failed, recycling original name");
@@ -308,7 +340,6 @@ bool ClearTarget(const std::wstring& target) {
 
 // Pre-rename hook body shared by RenameItem / RenameItems.
 void HandleRename(IShellItem* source, PCWSTR newName) {
-    if (!g_settings.enabled) return;
     if (!source || !newName || !*newName) return;
     std::wstring target;
     if (!ComputeRenameTarget(source, newName, target)) return;
@@ -321,6 +352,10 @@ void HandleRename(IShellItem* source, PCWSTR newName) {
 
     DWORD attr = GetFileAttributesW(target.c_str());
     if (attr == INVALID_FILE_ATTRIBUTES) return;  // no collision
+
+    // The existing file may have different casing than `newName`. Use the
+    // on-disk name so the suffixed rename preserves it.
+    target = ResolveLeafCase(target);
 
     Wh_Log(L"Rename collision, clearing target: %s", target.c_str());
     ClearTarget(target);
