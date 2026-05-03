@@ -1,3 +1,41 @@
+## 3.6 ([May 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/76df7f387ab9a2bcacef7bee9b1f37a85eb7efc2/mods/word-local-autosave.wh.cpp))
+
+### Improved
+
+- Refactored internal runtime state into clearer timing, status, document, event, UI, and flag ownership areas.
+- Reworked scheduler coordination so autosave, document-state refresh, and Word event cleanup have separate task paths.
+- Unified document snapshot loading through a shared plan-based pipeline used by both document-state refresh and save operations.
+- Strengthened Word event lifecycle handling, including reconnect throttling, deferred disconnect cleanup, and reset-mode behavior.
+- Added explicit runtime reset modes for shutdown vs settings reload.
+- Improved active document/application resolution, including fallback through `ActiveDocument.Application`.
+- Made autosave target selection safer for observed documents, transition flushes, and Save As migration.
+- Added RAII helpers for scoped flags and Win32 handles.
+- Hardened COM/BSTR wrappers against accidental self-reset.
+- Added explicit move handling for Word event sessions to avoid stale moved-from state.
+- Expanded internal self-tests for scheduler policy, snapshot policy, Word event policy, reset behavior, timing decisions, and helper invariants.
+
+### Optimized
+
+- Reduced unnecessary document-state polling by fully separating deferred Word event disconnect retries from document-state work.
+- Reduced COM overhead in deferred event cleanup by using one COM initialization/message filter per retry pass.
+- Retried stale cached transition documents immediately once instead of waiting for the next timer tick.
+- Simplified scheduler due-time selection and timer refresh behavior.
+- Reduced duplicate runtime observation work in autosave/document-state paths.
+
+### Fixed
+
+- Fixed cases where autosave could proceed with an unavailable copied target.
+- Fixed deferred Word event disconnects being able to trigger unrelated document-state polling.
+- Fixed terminal `Unadvise` failures being treated as retryable when the connection was already gone.
+- Fixed shutdown cleanup so pending Word event disconnect sessions get a bounded final `Unadvise` attempt instead of being discarded.
+- Fixed noisy repeated Word event disconnect failure logs through throttling.
+- Fixed unsafe test-time fake dispatch usage by replacing invalid pointer casts with a real self-test dispatch object.
+
+### Notes
+
+- v3.6 does not add new settings.
+- This release focuses on stability, internal cleanup safety, maintainability, and more predictable autosave execution.
+
 ## 3.5 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/13d66deeb8119d6504e1908a95e4131119c4d82e/mods/word-local-autosave.wh.cpp))
 
 ### Improved
