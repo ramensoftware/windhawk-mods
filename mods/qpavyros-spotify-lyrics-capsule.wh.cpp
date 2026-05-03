@@ -3100,15 +3100,9 @@ GlobalSystemMediaTransportControlsSession GetSpotifySession() {
     if (!g_SessionManager) return nullptr;
 
     GlobalSystemMediaTransportControlsSession spotifyFallback = nullptr;
-    GlobalSystemMediaTransportControlsSession anyPlaying = nullptr;
-    GlobalSystemMediaTransportControlsSession anyFallback = nullptr;
 
     auto sessionsList = g_SessionManager.GetSessions();
     for (auto const& s : sessionsList) {
-        if (!anyFallback) {
-            anyFallback = s;
-        }
-
         bool isPlaying = false;
         try {
             auto pb = s.GetPlaybackInfo();
@@ -3117,10 +3111,6 @@ GlobalSystemMediaTransportControlsSession GetSpotifySession() {
                             GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
         } catch (...) {
             isPlaying = false;
-        }
-
-        if (isPlaying && !anyPlaying) {
-            anyPlaying = s;
         }
 
         if (!IsSpotifySession(s)) {
@@ -3139,20 +3129,7 @@ GlobalSystemMediaTransportControlsSession GetSpotifySession() {
     if (spotifyFallback) {
         return spotifyFallback;
     }
-
-    try {
-        auto current = g_SessionManager.GetCurrentSession();
-        if (current) {
-            return current;
-        }
-    } catch (...) {
-    }
-
-    if (anyPlaying) {
-        return anyPlaying;
-    }
-
-    return anyFallback;
+    return nullptr;
 }
 
 void ClearMediaState() {
@@ -4942,14 +4919,14 @@ void SyncCollapseAnimationState(HWND hwnd) {
 void RefreshMediaStateAndVisibility(HWND hwnd) {
     RefreshSpotifyMediaState();
 
-    bool shouldHide = false;
+    bool shouldHideByFullscreen = false;
 
     if (g_Settings.hideFullscreen) {
         QUERY_USER_NOTIFICATION_STATE state;
         if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
             if (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN ||
                 state == QUNS_PRESENTATION_MODE) {
-                shouldHide = true;
+                shouldHideByFullscreen = true;
             }
         }
     }
@@ -4960,17 +4937,15 @@ void RefreshMediaStateAndVisibility(HWND hwnd) {
         hasMedia = g_MediaState.hasMedia;
     }
 
+    bool shouldHideByIdle = false;
     if (!hasMedia) {
         g_IsHiddenByIdle = true;
-        shouldHide = true;
+        shouldHideByIdle = true;
     } else {
         g_IsHiddenByIdle = false;
     }
 
-    if (g_RuntimeLyricsEnabled && hasMedia) {
-        shouldHide = false;
-        g_IsHiddenByIdle = false;
-    }
+    bool shouldHide = shouldHideByFullscreen || shouldHideByIdle;
 
     if (g_RuntimePinAlwaysVisible) {
         shouldHide = false;
