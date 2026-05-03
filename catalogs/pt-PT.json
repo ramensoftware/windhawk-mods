@@ -3898,6 +3898,34 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-rename-overwrite": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777847860000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777847860000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "tria",
+                "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid",
+                "description": "When renaming a file in Explorer to a name that already exists, overwrite the existing file instead of being blocked by the \"file already exists\" prompt.",
+                "github": "https://github.com/triatomic",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer Rename Overwrite",
+                "version": "1.1.2"
+            }
+        },
         "explorer-tab-utility-window-hider": {
             "details": {
                 "defaultSorting": 342,

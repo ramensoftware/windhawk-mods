@@ -2,12 +2,81 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-03T22:33:53.000Z</updated>
+    <updated>2026-05-03T22:37:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Rename Overwrite 1.1.2]]></title>
+        <id>https://windhawk.net/mods/explorer-rename-overwrite#69fb8025d4f2aa4b9b4426b3be3b042b386f96a4</id>
+        <link href="https://windhawk.net/mods/explorer-rename-overwrite"/>
+        <updated>2026-05-03T22:37:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerrenameoverwrite">Explorer Rename Overwrite</h1>
+<p>Changes Explorer's rename behavior so that renaming a file to a name that
+already exists overwrites the existing file, instead of producing the
+"file already exists" prompt or appending " (2)".</p>
+<p>Works by hooking <code>IFileOperation::RenameItem</code> / <code>IFileOperation::RenameItems</code>.
+When a rename target collides with an existing file, the existing file is
+removed first (to the Recycle Bin by default, or permanently if configured).</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>disposition</strong>: Where the overwritten file goes — <code>recycle</code> (safer, default),
+<code>keep</code> (renamed in place, see <em>keepInPlaceSuffix</em>), or <code>permanent</code>
+(irreversible).</li>
+<li><strong>onlyFiles</strong>: If enabled, never overwrite directories, only regular files.</li>
+<li><strong>renameBeforeRecycle</strong>: When recycling, append a suffix to the overwritten
+file's name before sending it to the Recycle Bin. This guarantees that
+restoring the file from the bin will not clobber the new file you just
+renamed into its place. No effect when <em>disposition</em> is <code>permanent</code>.</li>
+<li><strong>recycleSuffix</strong>: The suffix to insert before the extension
+(<code>report.txt</code> → <code>report_old.txt</code>). If a file with the suffixed name
+already exists, a number is appended (<code>report_old (2).txt</code>), matching
+Explorer's own collision behavior. Defaults to <code>_old</code>.</li>
+<li><strong>keepInPlaceSuffix</strong>: Used when <em>disposition</em> is <code>keep</code>. The suffix is
+appended to the <strong>whole filename including its extension</strong>, so
+<code>report.txt</code> becomes <code>report.txt_old</code>. This intentionally breaks the
+file association so the old file is visually distinct and won't be
+double-clicked into its old app. Collisions get the same <code>(2)</code>, <code>(3)</code>
+treatment as the recycle path. Defaults to <code>_old</code>.</li>
+</ul>
+<h2 id="changelog">Changelog</h2>
+<h3 id="112">1.1.2</h3>
+<ul>
+<li>Remove the <code>enabled</code> master switch — disable the mod via Windhawk's own
+toggle instead.</li>
+<li>Preserve the existing target's filename casing when renaming it with the
+recycle/keep suffix (e.g. renaming <code>Src.txt</code> over <code>DEST.txt</code> produces
+<code>DEST.txt_old</code>, not <code>Dest.txt_old</code>).</li>
+<li>Don't pass <code>MOVEFILE_REPLACE_EXISTING</code> when moving the collision target
+to its suffixed name — the suffixed path is chosen to not exist, and
+silently overwriting would defeat the safety of the suffix.</li>
+</ul>
+<h3 id="111">1.1.1</h3>
+<ul>
+<li>Fix <code>keep</code> disposition: notify the shell of the in-place rename so
+Explorer's view doesn't transiently show both files with the suffix
+until the window is refreshed.</li>
+</ul>
+<h3 id="110">1.1.0</h3>
+<ul>
+<li>New <code>keep</code> disposition: rename the overwritten file in place (default
+<code>&lt;name&gt;_old</code>) instead of deleting/recycling it.</li>
+<li>New <code>keepInPlaceSuffix</code> setting controlling the in-place suffix.</li>
+</ul>
+<h3 id="100">1.0.0</h3>
+<ul>
+<li>Initial release: hook <code>IFileOperation::RenameItem</code> / <code>RenameItems</code> and
+clear the destination on collision.</li>
+<li>Settings: <code>disposition</code> (<code>recycle</code> / <code>permanent</code>), <code>onlyFiles</code>,
+<code>renameBeforeRecycle</code>, <code>recycleSuffix</code>.</li>
+</ul>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Office Fix Account Display Name 1.0.0]]></title>
         <id>https://windhawk.net/mods/office-fix-account-disp-name#ce896c2c3e78759e68145761aa93cde40015a6eb</id>
@@ -630,22 +699,6 @@ on the desktop and in open/save file dialogs.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Show Link Speed 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskmgr-link-speed#2bf7cc399aa935bc14d9c0a5f12d86886f79485b</id>
-        <link href="https://windhawk.net/mods/taskmgr-link-speed"/>
-        <updated>2026-04-15T07:16:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskmanagershowlinkspeed">Task Manager Show Link Speed</h1>
-<p>This mod introduces a simple yet powerful enhancement to the Task Manager's Network tab by replacing the DNS names of network adapters with their real-time link speeds. This allows users to quickly assess the performance of their network connections without needing to open network details and cross-reference adapter names.</p>
-<p>Works for both Windows 10 and Windows 11 version of Task Manager, also supports <code>Windows 10 classic task manager for Windows 11</code> by Winaero. Supports all types of network adapters (Ethernet, Wi-Fi, etc.) by directly reading the link speed from the system's network interface data structures. By default this mod will use the system's built-in multilingual "Link speed" as the label text in Task Manager. You can also customize the label text through the mod settings.</p>
-<p><em>Note: this mod needs pdb symbol of <code>taskmgr.exe</code> to work. Windhawk will download it automatically when you launch Task Manager first time after you installed the mod (the popup at right bottom corner of your screen, please make sure that it shows percentage like "Loading symbols… 0% (taskmgr.exe)", wait until it reaches 100% and the pop up disappear, otherwise please switch your network and try again) please wait patiently and let Windhawk do the rest</em></p>
-<h1 id="beforevsafter">Before vs After</h1>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/taskmgr-link-speed-before-vs-after.png" alt="" /></p>]]></content>
-        <author>
-            <name>Joe Ye</name>
-            <uri>https://github.com/JoeYe-233</uri>
         </author>
     </entry>
 </feed>
