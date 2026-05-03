@@ -3083,17 +3083,26 @@ wstring GetCurrentLyricsLine(int64_t position100ns) {
 }
 
 bool IsSpotifyAumid(const wstring& appId) {
-    // Spotify store and desktop builds expose an AUMID containing "spotify".
-    return ToLowerCopy(appId).find(L"spotify") != wstring::npos;
+    wstring lower = ToLowerCopy(appId);
+    // Covers desktop, store, and common forks that still expose a Spotify AUMID.
+    return lower.find(L"spotify") != wstring::npos ||
+           lower.find(L"spicetify") != wstring::npos;
+}
+
+static wstring GetSessionAumidNoThrow(
+    GlobalSystemMediaTransportControlsSession const& session) {
+    if (!session) {
+        return L"";
+    }
+    try {
+        return session.SourceAppUserModelId().c_str();
+    } catch (...) {
+        return L"";
+    }
 }
 
 bool IsSpotifySession(GlobalSystemMediaTransportControlsSession const& session) {
-    if (!session) return false;
-    try {
-        return IsSpotifyAumid(session.SourceAppUserModelId().c_str());
-    } catch (...) {
-        return false;
-    }
+    return IsSpotifyAumid(GetSessionAumidNoThrow(session));
 }
 
 GlobalSystemMediaTransportControlsSession GetSpotifySession() {
@@ -3103,6 +3112,10 @@ GlobalSystemMediaTransportControlsSession GetSpotifySession() {
 
     auto sessionsList = g_SessionManager.GetSessions();
     for (auto const& s : sessionsList) {
+        if (!IsSpotifySession(s)) {
+            continue;
+        }
+
         bool isPlaying = false;
         try {
             auto pb = s.GetPlaybackInfo();
@@ -3111,10 +3124,6 @@ GlobalSystemMediaTransportControlsSession GetSpotifySession() {
                             GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
         } catch (...) {
             isPlaying = false;
-        }
-
-        if (!IsSpotifySession(s)) {
-            continue;
         }
 
         if (isPlaying) {
@@ -3126,9 +3135,34 @@ GlobalSystemMediaTransportControlsSession GetSpotifySession() {
         }
     }
 
+    try {
+        auto current = g_SessionManager.GetCurrentSession();
+        if (current && IsSpotifySession(current)) {
+            return current;
+        }
+    } catch (...) {
+    }
+
     if (spotifyFallback) {
         return spotifyFallback;
     }
+
+    static ULONGLONG s_lastNoSpotifyLogTick = 0;
+    ULONGLONG nowTick = GetTickCount64();
+    if (nowTick >= s_lastNoSpotifyLogTick + 5000ULL) {
+        s_lastNoSpotifyLogTick = nowTick;
+        wstring currentAumid;
+        try {
+            auto current = g_SessionManager.GetCurrentSession();
+            currentAumid = GetSessionAumidNoThrow(current);
+        } catch (...) {
+        }
+        DebugLog(LOG_TRACE,
+                 L"No Spotify session detected sessions=%zu currentAumid=%ls",
+                 (size_t)sessionsList.Size(),
+                 TruncateForLog(currentAumid, 72).c_str());
+    }
+
     return nullptr;
 }
 
@@ -4916,20 +4950,60 @@ void SyncCollapseAnimationState(HWND hwnd) {
     }
 }
 
+static bool IsForegroundWindowFullscreen() {
+    HWND hForeground = GetForegroundWindow();
+    if (!hForeground || hForeground == g_hMediaWindow) {
+        return false;
+    }
+
+    HWND hShell = GetShellWindow();
+    if (hForeground == hShell || !IsWindowVisible(hForeground) ||
+        IsIconic(hForeground)) {
+        return false;
+    }
+
+    RECT windowRect = {};
+    if (!GetWindowRect(hForeground, &windowRect)) {
+        return false;
+    }
+
+    HMONITOR hMonitor = MonitorFromWindow(hForeground, MONITOR_DEFAULTTONULL);
+    if (!hMonitor) {
+        return false;
+    }
+
+    MONITORINFO monitorInfo = {sizeof(monitorInfo)};
+    if (!GetMonitorInfoW(hMonitor, &monitorInfo)) {
+        return false;
+    }
+
+    const int tolerance = 2;
+    return windowRect.left <= (monitorInfo.rcMonitor.left + tolerance) &&
+           windowRect.top <= (monitorInfo.rcMonitor.top + tolerance) &&
+           windowRect.right >= (monitorInfo.rcMonitor.right - tolerance) &&
+           windowRect.bottom >= (monitorInfo.rcMonitor.bottom - tolerance);
+}
+
+static bool ShouldHideForFullscreen() {
+    if (!g_Settings.hideFullscreen) {
+        return false;
+    }
+
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
+        if (state == QUNS_RUNNING_D3D_FULL_SCREEN ||
+            state == QUNS_PRESENTATION_MODE) {
+            return true;
+        }
+    }
+
+    return IsForegroundWindowFullscreen();
+}
+
 void RefreshMediaStateAndVisibility(HWND hwnd) {
     RefreshSpotifyMediaState();
 
-    bool shouldHideByFullscreen = false;
-
-    if (g_Settings.hideFullscreen) {
-        QUERY_USER_NOTIFICATION_STATE state;
-        if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
-            if (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN ||
-                state == QUNS_PRESENTATION_MODE) {
-                shouldHideByFullscreen = true;
-            }
-        }
-    }
+    bool shouldHideByFullscreen = ShouldHideForFullscreen();
 
     bool hasMedia = false;
     {
@@ -5181,10 +5255,7 @@ LRESULT CALLBACK MediaWidgetWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             if (!g_IsHiddenByIdle && !IsWindowVisible(hwnd)) {
                 bool gameModeHide = false;
                 if (g_Settings.hideFullscreen) {
-                     QUERY_USER_NOTIFICATION_STATE state;
-                     if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
-                        if (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_PRESENTATION_MODE) gameModeHide = true;
-                     }
+                    gameModeHide = ShouldHideForFullscreen();
                 }
                 if (!gameModeHide) RequestWidgetVisibility(hwnd, true);
             }
