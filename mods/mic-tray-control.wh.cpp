@@ -2,7 +2,7 @@
 // @id              mic-tray-control
 // @name            Mic Tray Control & Decibel Viewer
 // @description     Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!
-// @version         1.12
+// @version         1.13
 // @author          ciahciach
 // @github          https://github.com/ciahciach
 // @include         windhawk.exe
@@ -63,7 +63,6 @@ This mod adds a dedicated Microphone icon to your system tray.
 #define WM_APP_TRAYMSG (WM_USER + 1)
 #define WM_APP_VOLUME_CHANGED (WM_USER + 2)
 #define WM_APP_DEFAULT_DEV_CHANGED (WM_USER + 3)
-#define UPDATE_TIMER_ID 1
 #define ID_SLIDER_BASE 2000
 
 // --- Global Variables ---
@@ -703,8 +702,6 @@ DWORD WINAPI ModThread(LPVOID lpParam) {
     g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, wc.hInstance, 0);
 
     UpdateTrayTooltip();
-    // Timer is no longer needed for polling — removed SetTimer call.
-    SetTimer(g_hWnd, UPDATE_TIMER_ID, 10000, NULL);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -712,7 +709,7 @@ DWORD WINAPI ModThread(LPVOID lpParam) {
         DispatchMessage(&msg);
     }
 
-    KillTimer(g_hWnd, UPDATE_TIMER_ID);
+
     UnhookWindowsHookEx(g_hMouseHook);
 
     // Unregister and release COM objects
@@ -760,8 +757,6 @@ DWORD WINAPI ModThread(LPVOID lpParam) {
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     LoadSettings();
-    // Fix 2: Apply icon changes (and any other setting changes) immediately
-    // without requiring a mod disable/re-enable cycle.
     if (g_hWnd) {
         ReloadIcons();
     }
