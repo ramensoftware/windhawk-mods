@@ -6058,6 +6058,35 @@
                 "version": "1.0.1"
             }
         },
+        "mic-tray-control": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1777930917000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1777930917000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ciahciach",
+                "compilerOptions": "-lole32 -loleaut32 -lcomctl32 -luuid -lgdi32 -luxtheme",
+                "description": "Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!",
+                "github": "https://github.com/ciahciach",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Mic Tray Control & Decibel Viewer",
+                "version": "1.13"
+            }
+        },
         "microswap": {
             "details": {
                 "defaultSorting": 63,

@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-03T22:37:40.000Z</updated>
+    <updated>2026-05-04T21:41:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mic Tray Control & Decibel Viewer 1.13]]></title>
+        <id>https://windhawk.net/mods/mic-tray-control#f65b714736ab2c03fa6fcb38d5118db359b977ce</id>
+        <link href="https://windhawk.net/mods/mic-tray-control"/>
+        <updated>2026-05-04T21:41:57.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mictraycontroleartrumpetstyle">Mic Tray Control (EarTrumpet Style)</h1>
+<p>This mod adds a dedicated Microphone icon to your system tray.</p>
+<p><em>Vibecoded by <strong>ciahciach</strong>.</em></p>
+<h3 id="features">Features:</h3>
+<ul>
+<li><strong>Quick Mute:</strong> Left-Click the icon to quickly toggle Mute for the default mic.</li>
+<li><strong>Multi-Mic Mixer:</strong> Right-Click the icon to open a popup UI with sliders for ALL your active recording devices.</li>
+<li><strong>Dynamic Mute Icon:</strong> The tray icon changes visually when your default mic is muted.</li>
+<li><strong>Scroll Control:</strong> Hover over the tray icon and scroll to adjust your default mic volume quickly.</li>
+<li><strong>Live Preview:</strong> Hover over the tray icon to see exact volume in % and dB.</li>
+<li><strong>Step Modes:</strong> Choose between Percentage (%) or exact Decibel (dB) steps when scrolling.</li>
+<li><strong>Custom Icons:</strong> You can provide your own <code>.ico</code> files in the settings, otherwise it uses a crisp native icon generated on the fly!</li>
+</ul>]]></content>
+        <author>
+            <name>ciahciach</name>
+            <uri>https://github.com/ciahciach</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Rename Overwrite 1.1.2]]></title>
         <id>https://windhawk.net/mods/explorer-rename-overwrite#69fb8025d4f2aa4b9b4426b3be3b042b386f96a4</id>
@@ -676,29 +699,6 @@ This mod detects when that sliding window hits a screen edge fast enough and sna
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.0]]></title>
-        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#53c403569e9f3776cee0f52ec775f464543c3a24</id>
-        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
-        <updated>2026-04-15T09:44:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="pasteclipboardcontenttoexplorer">Paste Clipboard Content to Explorer</h1>
-<p>Allows pasting text and images from clipboard as files in Explorer,
-on the desktop and in open/save file dialogs.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Paste text as .txt (UTF-16 LE with BOM)</li>
-<li>Paste images as .png</li>
-<li>Auto-naming with incrementing number on conflict</li>
-<li>Works in Explorer folders, on the desktop, in file dialogs</li>
-<li>Works with network folders (UNC paths)</li>
-<li>Paste menu item is grayed out in virtual folders (This PC, Network, etc.)</li>
-<li>Ctrl+V and context menu Paste both work</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
