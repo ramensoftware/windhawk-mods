@@ -3,7 +3,8 @@
 // @name            Window Border Customizer
 // @description     Replaces DWM stock borders with custom ARGB translucent borders.
 // @version         1.0.0
-// @author          Lockframe, m417z, Bo0ii, Languster
+// @author          Lockframe
+// @github          https://github.com/Lockframe
 // @include         dwm.exe
 // @include         explorer.exe
 // @architecture    x86-64
