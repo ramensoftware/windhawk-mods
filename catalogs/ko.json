@@ -9298,7 +9298,7 @@
                     40
                 ],
                 "ratingUsers": 46,
-                "updated": 1774079996000,
+                "updated": 1777920848000,
                 "users": 777
             },
             "metadata": {
@@ -9310,7 +9310,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Taskbar Fade",
-                "version": "2.1.1"
+                "version": "2.1.2"
             }
         },
         "taskbar-grouping": {
