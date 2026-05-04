@@ -2,7 +2,7 @@
 // @id              mic-tray-control
 // @name            Mic Tray Control & Decibel Viewer
 // @description     Adds a microphone icon to the tray. Scroll to change volume, right-click for a mixer!
-// @version         1.11
+// @version         1.12
 // @author          ciahciach
 // @github          https://github.com/ciahciach
 // @include         windhawk.exe
@@ -61,6 +61,8 @@ This mod adds a dedicated Microphone icon to your system tray.
 
 #define TRAY_ICON_ID 1001
 #define WM_APP_TRAYMSG (WM_USER + 1)
+#define WM_APP_VOLUME_CHANGED (WM_USER + 2)
+#define WM_APP_DEFAULT_DEV_CHANGED (WM_USER + 3)
 #define UPDATE_TIMER_ID 1
 #define ID_SLIDER_BASE 2000
 
@@ -70,9 +72,14 @@ HWND g_hPopup = NULL;
 HANDLE g_hThread = NULL;
 DWORD g_dwThreadId = 0;
 HHOOK g_hMouseHook = NULL;
+UINT g_uTaskbarCreatedMsg = 0;
 
 HICON g_hIconActive = NULL;
 HICON g_hIconMuted = NULL;
+
+// Cached COM objects for event-driven updates
+IAudioEndpointVolume* g_pDefaultMicVol = NULL;
+IMMDeviceEnumerator* g_pEnumerator = NULL;
 
 struct {
     bool useDbStep;
@@ -88,6 +95,24 @@ struct MicEntry {
     HWND hPctLabel;
 };
 std::vector<MicEntry> g_activeMics;
+
+// Dark Mode Detection
+
+bool IsWindowsDarkModeEnabled() {
+    constexpr WCHAR kSubKeyPath[] =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+
+    DWORD value = 0;
+    DWORD valueSize = sizeof(value);
+    LONG result =
+        RegGetValue(HKEY_CURRENT_USER, kSubKeyPath, L"AppsUseLightTheme",
+                    RRF_RT_REG_DWORD, nullptr, &value, &valueSize);
+    if (result != ERROR_SUCCESS) {
+        return false;
+    }
+
+    return value == 0;
+}
 
 // --- Helper Functions ---
 
@@ -149,7 +174,9 @@ HICON GenerateFontIcon(bool isMuted) {
 
     HFONT hOldFont = (HFONT)SelectObject(hdcMem, hFont);
 
-    SetTextColor(hdcMem, RGB(255, 255, 255));
+    // Match text color to system theme
+    COLORREF iconColor = IsWindowsDarkModeEnabled() ? RGB(255, 255, 255) : RGB(0, 0, 0);
+    SetTextColor(hdcMem, iconColor);
     SetBkMode(hdcMem, TRANSPARENT);
     
     wchar_t glyph = 0xE720; 
@@ -157,10 +184,14 @@ HICON GenerateFontIcon(bool isMuted) {
     DrawTextW(hdcMem, &glyph, 1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     DWORD* pixels = (DWORD*)pBits;
+    BYTE iconR = GetRValue(iconColor);
+    BYTE iconG = GetGValue(iconColor);
+    BYTE iconB = GetBValue(iconColor);
+
     for (int i = 0; i < renderSize * renderSize; i++) {
         BYTE alpha = GetRValue(pixels[i]); 
         if (alpha > 0) {
-            pixels[i] = (alpha << 24) | 0x00FFFFFF; 
+            pixels[i] = (alpha << 24) | ((DWORD)iconB << 16) | ((DWORD)iconG << 8) | iconR;
         } else {
             pixels[i] = 0;
         }
@@ -205,7 +236,7 @@ HICON LoadCustomOrDefaultIcon(PCWSTR customPath, bool isMuted) {
     }
     
     HICON hIcon = GenerateFontIcon(isMuted);
-    if (!hIcon) hIcon = LoadIconW(NULL, IDI_APPLICATION); // Ultimate Failsafe
+    if (!hIcon) hIcon = LoadIconW(NULL, IDI_APPLICATION);
     return hIcon;
 }
 
@@ -230,7 +261,13 @@ IAudioEndpointVolume* GetMicVolumeControl() {
 void UpdateTrayTooltip() {
     if (!g_hWnd) return;
 
-    IAudioEndpointVolume* pVol = GetMicVolumeControl();
+    // Use the cached volume object if available, otherwise fallback
+    IAudioEndpointVolume* pVol = g_pDefaultMicVol;
+    bool ownedLocally = false;
+    if (!pVol) {
+        pVol = GetMicVolumeControl();
+        ownedLocally = true;
+    }
     if (!pVol) return;
 
     float db = 0.0f;
@@ -240,7 +277,8 @@ void UpdateTrayTooltip() {
     pVol->GetMasterVolumeLevel(&db);
     pVol->GetMasterVolumeLevelScalar(&scalar);
     pVol->GetMute(&isMuted);
-    pVol->Release();
+
+    if (ownedLocally) pVol->Release();
 
     NOTIFYICONDATAW nid = { sizeof(nid) };
     nid.uFlags = NIF_TIP | NIF_ICON;
@@ -260,7 +298,13 @@ void UpdateTrayTooltip() {
 }
 
 void ChangeMicVolume(bool increase) {
-    IAudioEndpointVolume* pVol = GetMicVolumeControl();
+    // Use the cached volume object if available
+    IAudioEndpointVolume* pVol = g_pDefaultMicVol;
+    bool ownedLocally = false;
+    if (!pVol) {
+        pVol = GetMicVolumeControl();
+        ownedLocally = true;
+    }
     if (!pVol) return;
 
     if (settings.useDbStep) {
@@ -290,19 +334,25 @@ void ChangeMicVolume(bool increase) {
     
     if (increase) pVol->SetMute(FALSE, NULL);
 
-    pVol->Release();
+    if (ownedLocally) pVol->Release();
     UpdateTrayTooltip();
 }
 
 void ToggleMicMute() {
-    IAudioEndpointVolume* pVol = GetMicVolumeControl();
+    // Use the cached volume object if available
+    IAudioEndpointVolume* pVol = g_pDefaultMicVol;
+    bool ownedLocally = false;
+    if (!pVol) {
+        pVol = GetMicVolumeControl();
+        ownedLocally = true;
+    }
     if (!pVol) return;
 
     BOOL isMuted = FALSE;
     pVol->GetMute(&isMuted);
     pVol->SetMute(!isMuted, NULL);
     
-    pVol->Release();
+    if (ownedLocally) pVol->Release();
     UpdateTrayTooltip();
 }
 
@@ -400,6 +450,105 @@ void ShowMicMixerUI() {
     SetFocus(g_hPopup);
 }
 
+// IAudioEndpointVolumeCallback
+
+class CAudioEndpointVolumeCallback : public IAudioEndpointVolumeCallback {
+    LONG m_cRef;
+public:
+    CAudioEndpointVolumeCallback() : m_cRef(1) {}
+
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == __uuidof(IAudioEndpointVolumeCallback)) {
+            *ppv = static_cast<IAudioEndpointVolumeCallback*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_cRef); }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG ref = InterlockedDecrement(&m_cRef);
+        if (ref == 0) delete this;
+        return ref;
+    }
+
+    // Called by the audio engine on volume/mute change — post to the UI thread
+    STDMETHODIMP OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) override {
+        if (g_hWnd) PostMessageW(g_hWnd, WM_APP_VOLUME_CHANGED, 0, 0);
+        return S_OK;
+    }
+};
+
+CAudioEndpointVolumeCallback* g_pVolCallback = nullptr;
+
+// IMMNotificationClient — re-bind on default device change
+
+class CMMNotificationClient : public IMMNotificationClient {
+    LONG m_cRef;
+public:
+    CMMNotificationClient() : m_cRef(1) {}
+
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == __uuidof(IMMNotificationClient)) {
+            *ppv = static_cast<IMMNotificationClient*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_cRef); }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG ref = InterlockedDecrement(&m_cRef);
+        if (ref == 0) delete this;
+        return ref;
+    }
+
+    STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override {
+        if (flow == eCapture && role == eCommunications) {
+            if (g_hWnd) PostMessageW(g_hWnd, WM_APP_DEFAULT_DEV_CHANGED, 0, 0);
+        }
+        return S_OK;
+    }
+    STDMETHODIMP OnDeviceAdded(LPCWSTR) override { return S_OK; }
+    STDMETHODIMP OnDeviceRemoved(LPCWSTR) override { return S_OK; }
+    STDMETHODIMP OnDeviceStateChanged(LPCWSTR, DWORD) override { return S_OK; }
+    STDMETHODIMP OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
+};
+
+CMMNotificationClient* g_pNotifClient = nullptr;
+
+// Bind or re-bind to the current default capture device
+void BindToDefaultMic() {
+    // Unregister old callback and release old volume object
+    if (g_pDefaultMicVol && g_pVolCallback) {
+        g_pDefaultMicVol->UnregisterControlChangeNotify(g_pVolCallback);
+    }
+    if (g_pDefaultMicVol) {
+        g_pDefaultMicVol->Release();
+        g_pDefaultMicVol = nullptr;
+    }
+
+    if (!g_pEnumerator) return;
+
+    IMMDevice* pMic = nullptr;
+    HRESULT hr = g_pEnumerator->GetDefaultAudioEndpoint(eCapture, eCommunications, &pMic);
+    if (FAILED(hr) || !pMic) return;
+
+    IAudioEndpointVolume* pVol = nullptr;
+    hr = pMic->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&pVol);
+    pMic->Release();
+    if (FAILED(hr) || !pVol) return;
+
+    g_pDefaultMicVol = pVol;
+
+    if (!g_pVolCallback) {
+        g_pVolCallback = new CAudioEndpointVolumeCallback();
+    }
+    g_pDefaultMicVol->RegisterControlChangeNotify(g_pVolCallback);
+}
+
 LRESULT CALLBACK MixerWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_ACTIVATE:
@@ -455,7 +604,26 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
 }
 
+// Helper to add the tray icon (used on init and after TaskbarCreated — Fix 1)
+void AddTrayIcon() {
+    NOTIFYICONDATAW nid = { sizeof(NOTIFYICONDATAW) };
+    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    nid.hWnd = g_hWnd;
+    nid.uID = TRAY_ICON_ID;
+    nid.uCallbackMessage = WM_APP_TRAYMSG;
+    nid.hIcon = g_hIconActive;
+    StringCchCopyW(nid.szTip, ARRAYSIZE(nid.szTip), L"Microphone Control");
+    Shell_NotifyIconW(NIM_ADD, &nid);
+}
+
 LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // Re-add the tray icon when explorer.exe restarts
+    if (g_uTaskbarCreatedMsg != 0 && uMsg == g_uTaskbarCreatedMsg) {
+        AddTrayIcon();
+        UpdateTrayTooltip();
+        return 0;
+    }
+
     switch (uMsg) {
         case WM_APP_TRAYMSG:
             if (lParam == WM_LBUTTONUP) {
@@ -465,10 +633,15 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             }
             break;
 
-        case WM_TIMER:
-            if (wParam == UPDATE_TIMER_ID) {
-                UpdateTrayTooltip();
-            }
+        // Volume/mute changed via callback — just refresh the tooltip/icon
+        case WM_APP_VOLUME_CHANGED:
+            UpdateTrayTooltip();
+            break;
+
+        // Default capture device changed — re-bind and refresh
+        case WM_APP_DEFAULT_DEV_CHANGED:
+            BindToDefaultMic();
+            UpdateTrayTooltip();
             break;
 
         case WM_DESTROY:
@@ -507,23 +680,31 @@ DWORD WINAPI ModThread(LPVOID lpParam) {
     wcMixer.lpszClassName = L"WindhawkMicMixerWnd";
     RegisterClassW(&wcMixer);
 
+    // Reliable hidden window creation (instead of HWND_MESSAGE)
     g_hWnd = CreateWindowExW(WS_EX_TOOLWINDOW, wc.lpszClassName, L"WindhawkMicTrayControlWnd", WS_POPUP, 0, 0, 0, 0, NULL, NULL, wc.hInstance, NULL);
 
-    ReloadIcons();
+    // Register for the TaskbarCreated message so we can re-add the icon
+    // if explorer.exe restarts
+    g_uTaskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 
-    NOTIFYICONDATAW nid = { sizeof(NOTIFYICONDATAW) };
-    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-    nid.hWnd = g_hWnd;
-    nid.uID = TRAY_ICON_ID;
-    nid.uCallbackMessage = WM_APP_TRAYMSG;
-    nid.hIcon = g_hIconActive;
-    StringCchCopyW(nid.szTip, ARRAYSIZE(nid.szTip), L"Microphone Control");
-    Shell_NotifyIconW(NIM_ADD, &nid);
+    // Create the shared device enumerator, register notification client,
+    // and bind to the current default mic with a volume change callback
+    CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+                     __uuidof(IMMDeviceEnumerator), (void**)&g_pEnumerator);
+    if (g_pEnumerator) {
+        g_pNotifClient = new CMMNotificationClient();
+        g_pEnumerator->RegisterEndpointNotificationCallback(g_pNotifClient);
+        BindToDefaultMic();
+    }
+
+    ReloadIcons();
+    AddTrayIcon();
 
     g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, wc.hInstance, 0);
 
     UpdateTrayTooltip();
-    SetTimer(g_hWnd, UPDATE_TIMER_ID, 1000, NULL);
+    // Timer is no longer needed for polling — removed SetTimer call.
+    SetTimer(g_hWnd, UPDATE_TIMER_ID, 10000, NULL);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -533,8 +714,32 @@ DWORD WINAPI ModThread(LPVOID lpParam) {
 
     KillTimer(g_hWnd, UPDATE_TIMER_ID);
     UnhookWindowsHookEx(g_hMouseHook);
+
+    // Unregister and release COM objects
+    if (g_pDefaultMicVol && g_pVolCallback) {
+        g_pDefaultMicVol->UnregisterControlChangeNotify(g_pVolCallback);
+    }
+    if (g_pVolCallback) {
+        g_pVolCallback->Release();
+        g_pVolCallback = nullptr;
+    }
+    if (g_pDefaultMicVol) {
+        g_pDefaultMicVol->Release();
+        g_pDefaultMicVol = nullptr;
+    }
+    if (g_pNotifClient && g_pEnumerator) {
+        g_pEnumerator->UnregisterEndpointNotificationCallback(g_pNotifClient);
+    }
+    if (g_pNotifClient) {
+        g_pNotifClient->Release();
+        g_pNotifClient = nullptr;
+    }
+    if (g_pEnumerator) {
+        g_pEnumerator->Release();
+        g_pEnumerator = nullptr;
+    }
     
-    ZeroMemory(&nid, sizeof(nid));
+    NOTIFYICONDATAW nid = {};
     nid.cbSize = sizeof(NOTIFYICONDATAW);
     nid.hWnd = g_hWnd;
     nid.uID = TRAY_ICON_ID;
@@ -550,11 +755,16 @@ DWORD WINAPI ModThread(LPVOID lpParam) {
     return 0;
 }
 
-// --- Mod Core Functions ---
+// --- Mod Core Functions (Renamed for Tool Mod isolation) ---
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     LoadSettings();
+    // Fix 2: Apply icon changes (and any other setting changes) immediately
+    // without requiring a mod disable/re-enable cycle.
+    if (g_hWnd) {
+        ReloadIcons();
+    }
 }
 
 BOOL WhTool_ModInit() {
@@ -573,6 +783,20 @@ void WhTool_ModUninit() {
     }
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
