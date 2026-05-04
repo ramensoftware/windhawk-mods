@@ -687,6 +687,10 @@ def get_existing_windows_file_names():
 
 
 def is_existing_windows_file_name(name: str):
+    # Temporary special case - not yet in stable Windows builds.
+    if name.lower() in ['systemtray.dll']:
+        return True
+
     return name.lower() in get_existing_windows_file_names()
 
 
