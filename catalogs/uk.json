@@ -11854,13 +11854,10 @@
                     7
                 ],
                 "ratingUsers": 9,
-                "updated": 1772468853000,
+                "updated": 1777880171000,
                 "users": 541
             },
             "metadata": {
-                "architecture": [
-                    "x86-64"
-                ],
                 "author": "Ingan121",
                 "compilerOptions": "-lgdi32",
                 "description": "Bring back the old logon screen and sleep fade effect",
@@ -11868,11 +11865,13 @@
                 "homepage": "https://www.ingan121.com/",
                 "include": [
                     "winlogon.exe",
+                    "LogonUI.exe",
+                    "LockApp.exe",
                     "*"
                 ],
                 "name": "Logon & Sleep Fade Restorer",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "1.3"
+                "version": "1.4"
             }
         },
         "win7-style-uac-dim": {

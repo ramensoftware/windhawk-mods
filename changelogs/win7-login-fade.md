@@ -1,3 +1,8 @@
+## 1.4 ([May 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/930fda20adf00a5f1f789d3b4ffcb6eb949119e8/mods/win7-login-fade.wh.cpp))
+
+* Fix monitor not turning off when the Windows 10+ lock screen is being displayed
+* Fix monitor-off fade not working when a 32-bit app's window is focused
+
 ## 1.3 ([Mar 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a77cfa03723dfc97b23c2cd06925ee4d02ad5b3b/mods/win7-login-fade.wh.cpp))
 
 Fix the monitor-off fade not working properly when an application uses a hacky way to turn the screen off
