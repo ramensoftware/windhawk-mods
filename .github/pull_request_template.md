@@ -13,7 +13,8 @@ If the submission is a new mod, please fill the form below.
 
 This mod was created by:
 
-- - [ ] Manually by the submitter (with or without AI assistance)
+- - [ ] The submitter, without AI assistance
+- - [ ] The submitter, with AI assistance
 - - [ ] Claude
 - - [ ] ChatGPT
 - - [ ] Gemini
