@@ -4,10 +4,10 @@
 // @description     Replaces DWM stock borders with custom ARGB translucent borders.
 // @version         1.0.0
 // @author          Lockframe
-// @github          https://github.com/Lockframe
 // @include         dwm.exe
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -lwevtapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -29,7 +29,7 @@ and make sure that `dwm.exe` is in the list.
 ---
 
 ## Contributors
-[m417z](github.com/m417z/)
+[m417z](https://github.com/m417z/), 
 Krisatisa
 */
 // ==/WindhawkModReadme==
@@ -87,11 +87,6 @@ Krisatisa
     - dark_color: "#80202020"
       $name: Dark Color
   $name: Tooltip border
-
-- advanced:
-    - enable_debug_logs: false
-      $name: Enable Debug Logs
-  $name: Advanced
 */
 // ==/WindhawkModSettings==
 
@@ -99,6 +94,7 @@ Krisatisa
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <sddl.h>
+#include <winevt.h>
 #include <unordered_map>
 #include <atomic>
 #include <cmath>
@@ -229,7 +225,6 @@ struct BorderSettings {
     BorderCategorySettings maximized;
     BorderCategorySettings contextMenu;
     BorderCategorySettings tooltip;
-    bool enableDebugLogs;
 };
 
 SRWLOCK g_SettingsLock = SRWLOCK_INIT;
@@ -256,22 +251,6 @@ SRWLOCK g_EnumLock = SRWLOCK_INIT;
 std::atomic<bool> g_ModUnloading = false;
 std::atomic<ULONGLONG> g_LastEnumTick{0};
 
-void LogIfEnabled(const wchar_t* format, ...) {
-    bool shouldLog = false;
-    AcquireSRWLockShared(&g_SettingsLock);
-    shouldLog = g_Settings.enableDebugLogs;
-    ReleaseSRWLockShared(&g_SettingsLock);
-
-    if (shouldLog) {
-        va_list args;
-        va_start(args, format);
-        wchar_t buffer[512];
-        vswprintf(buffer, ARRAYSIZE(buffer), format, args);
-        va_end(args);
-        Wh_Log(L"%s", buffer);
-    }
-}
-
 static DWM_COLOR_VALUE MakeColorFromHEX(PCWSTR hex) {
     DWM_COLOR_VALUE color = {1.0f, 1.0f, 1.0f, 1.0f};
     if (!hex) return color;
@@ -287,6 +266,7 @@ static DWM_COLOR_VALUE MakeColorFromHEX(PCWSTR hex) {
             
             if (pDwmGetColorizationColor && SUCCEEDED(pDwmGetColorizationColor(&colorizationColor, &opaqueBlend))) {
                 color.a = ((colorizationColor >> 24) & 0xFF) / 255.0f;
+                if (color.a <= 0.0f) color.a = 1.0f / 255.0f;
                 color.r = ((colorizationColor >> 16) & 0xFF) / 255.0f;
                 color.g = ((colorizationColor >> 8) & 0xFF) / 255.0f;
                 color.b = (colorizationColor & 0xFF) / 255.0f;
@@ -301,6 +281,7 @@ static DWM_COLOR_VALUE MakeColorFromHEX(PCWSTR hex) {
     unsigned int argb = 0;
     if (swscanf(hex, L"%08X", &argb) == 1) {
         color.a = ((argb >> 24) & 0xFF) / 255.0f;
+        if (color.a <= 0.0f) color.a = 1.0f / 255.0f;
         color.r = ((argb >> 16) & 0xFF) / 255.0f;
         color.g = ((argb >> 8) & 0xFF) / 255.0f;
         color.b = (argb & 0xFF) / 255.0f;
@@ -308,38 +289,65 @@ static DWM_COLOR_VALUE MakeColorFromHEX(PCWSTR hex) {
     return color;
 }
 
+bool HasDwminitWarningInLastMinute() {
+    const WCHAR* queryPath = L"Application";
+    const WCHAR* query =
+        L"*[System[Provider[@Name='Dwminit'] and (Level=3) and "
+        L"TimeCreated[timediff(@SystemTime) <= 60000]]]";
+
+    EVT_HANDLE queryHandle = EvtQuery(nullptr, queryPath, query, EvtQueryChannelPath);
+    if (!queryHandle) {
+        Wh_Log(L"EvtQuery failed with error: %u", GetLastError());
+        return false;
+    }
+
+    bool found = false;
+    EVT_HANDLE eventHandle = nullptr;
+    DWORD dwReturned = 0;
+    if (EvtNext(queryHandle, 1, &eventHandle, 1000, 0, &dwReturned)) {
+        found = true;
+        EvtClose(eventHandle);
+    }
+
+    EvtClose(queryHandle);
+    return found;
+}
+
 bool CheckCrashLoopFailsafe() {
     wchar_t tempPath[MAX_PATH];
     GetTempPathW(MAX_PATH, tempPath);
-    
     DWORD sessionId;
     ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
-    
     std::wstring filePath = std::wstring(tempPath) + L"windhawk_dwm_failsafe_" + std::to_wstring(sessionId) + L".bin";
 
-    ULONGLONG currentTick = GetTickCount64();
-    ULONGLONG lastTick = 0;
+    if (!HasDwminitWarningInLastMinute()) {
+        DeleteFileW(filePath.c_str()); 
+        return true;
+    }
 
-    HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+    DWORD strikes = 0;
+    HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ | GENERIC_WRITE,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile != INVALID_HANDLE_VALUE) {
         DWORD bytesRead;
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            if (ReadFile(hFile, &lastTick, sizeof(lastTick), &bytesRead, nullptr) &&
-                bytesRead == sizeof(lastTick)) {
-                if (currentTick - lastTick < 5000) {
-                    Wh_Log(L"CRASH LOOP DETECTED: DWM restarted within 15 seconds. Disabling mod.");
-                    CloseHandle(hFile);
-                    return false;
-                }
-            }
+            ReadFile(hFile, &strikes, sizeof(strikes), &bytesRead, nullptr);
         }
+        strikes++;
         SetFilePointer(hFile, 0, nullptr, FILE_BEGIN);
         DWORD bytesWritten;
-        WriteFile(hFile, &currentTick, sizeof(currentTick), &bytesWritten, nullptr);
+        WriteFile(hFile, &strikes, sizeof(strikes), &bytesWritten, nullptr);
         SetEndOfFile(hFile);
         CloseHandle(hFile);
     }
+
+    if (strikes >= 2) {
+        Wh_Log(L"CRASH LOOP DETECTED: Dwminit warning present on %u consecutive loads. Disabling mod.", strikes);
+        return false;
+    }
+
+    Wh_Log(L"Dwminit warning detected but allowing first attempt (strike %u/2).", strikes);
     return true;
 }
 
@@ -466,6 +474,15 @@ static WindowClassification ClassifyWindow(const RECT& borderRect) {
     return {WindowKind::Normal, ctx.bestHwnd};
 }
 
+static bool IsCacheEntryValid(HWND hwnd, const RECT& borderRect) {
+    if (!hwnd || !IsWindow(hwnd)) return false;
+    RECT rc = {};
+    if (!GetWindowRect(hwnd, &rc)) return false;
+    LONG dw = std::abs((rc.right - rc.left) - (borderRect.right - borderRect.left));
+    LONG dh = std::abs((rc.bottom - rc.top) - (borderRect.bottom - borderRect.top));
+    return (dw <= 200 && dh <= 200);
+}
+
 WindowKind CheckWindowCache(void* pThis, const RECT& rect, HWND* outHwnd) {
     if (g_ModUnloading) return WindowKind::Unknown;
 
@@ -482,7 +499,7 @@ WindowKind CheckWindowCache(void* pThis, const RECT& rect, HWND* outHwnd) {
             AcquireSRWLockExclusive(&g_CacheLock);
             auto itEx = g_WindowCache.find(pThis);
             if (itEx != g_WindowCache.end()) {
-                if (itEx->second.hwnd && !IsWindow(itEx->second.hwnd)) {
+                if (!IsCacheEntryValid(itEx->second.hwnd, rect)) {
                     g_WindowCache.erase(itEx);
                     ReleaseSRWLockExclusive(&g_CacheLock);
                 } else {
@@ -628,7 +645,6 @@ long WINAPI SetBorderParameters_Hook(void* pThis,
 
 void LoadSettings() {
     BorderSettings newSettings;
-    newSettings.enableDebugLogs = Wh_GetIntSetting(L"advanced.enable_debug_logs") != 0;
 
     LOAD_CATEGORY_WITH_FOCUS(L"normal_window_border", normal, L"enable_custom_border");
     LOAD_CATEGORY_WITH_FOCUS(L"maximized_window_border", maximized, L"show_custom_border");
@@ -644,7 +660,7 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     g_ModUnloading = false;
     
-    if (!CheckCrashLoopFailsafe()) return FALSE;
+    if (!IsExplorerProcess() && !CheckCrashLoopFailsafe()) return FALSE;
     
     g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     InitSharedMemory();
