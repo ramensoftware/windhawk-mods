@@ -4,6 +4,7 @@
 // @description     Replaces DWM stock borders with custom ARGB translucent borders.
 // @version         1.0.0
 // @author          Lockframe
+// @github          https://github.com/Lockframe
 // @include         dwm.exe
 // @include         explorer.exe
 // @architecture    x86-64
