@@ -2069,9 +2069,8 @@ HMODULE GetSystemTrayModuleHandle() {
 }
 
 bool HookSystemTraySymbols(HMODULE module) {
-    // Hooks SystemTray.dll when available; falls back to the modules below.
-    // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK trayHooks[] = {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
             &ClockSystemTrayIconDataModel_RefreshIcon_Original,
@@ -2097,7 +2096,7 @@ bool HookSystemTraySymbols(HMODULE module) {
         },
     };
 
-    if (!HookSymbols(module, trayHooks, ARRAYSIZE(trayHooks))) {
+    if (!HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
@@ -2255,7 +2254,6 @@ void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR moduleName) {
 
     if (TryHookSystemTrayModule(module)) {
         Wh_ApplyHookOperations();
-        RefreshLiveTaskbarClock();
     }
 }
 
@@ -2356,6 +2354,7 @@ BOOL Wh_ModInit() {
     if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
         if (!TryHookSystemTrayModule(systemTrayModule)) {
             Wh_Log(L"System tray symbols not found in initial module");
+            return FALSE;
         }
     } else {
         Wh_Log(L"System tray module not loaded yet");
