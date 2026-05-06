@@ -104,7 +104,6 @@ Krisatisa
 // --- SHARED IPC MEMORY ---
 struct SharedThemeState {
     volatile LONG isDark;
-    HWND volatile focusedHwnd; 
 };
 
 SharedThemeState* volatile g_SharedState = nullptr;
@@ -154,34 +153,17 @@ bool IsExplorerProcess() {
     return isExplorer;
 }
 
-// --- EXPLORER THEME & FOCUS PUBLISHER ---
-using ShouldAppsUseDarkMode_t = bool (WINAPI *)();
-HWINEVENTHOOK g_hFocusHook = NULL;
-
-void CALLBACK FocusEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, 
-                             LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
-    SharedThemeState* shared = (SharedThemeState*)InterlockedCompareExchangePointer((PVOID volatile*)&g_SharedState, NULL, NULL);
-    if (event == EVENT_SYSTEM_FOREGROUND && shared) {
-        InterlockedExchangePointer((PVOID volatile*)&shared->focusedHwnd, hwnd);
-    }
-}
-
+// --- EXPLORER THEME PUBLISHER ---
 DWORD WINAPI ExplorerThemeWorker(LPVOID lpParam) {
     HMODULE hUxTheme = LoadLibraryW(L"uxtheme.dll");
+    using ShouldAppsUseDarkMode_t = bool (WINAPI *)();
     ShouldAppsUseDarkMode_t ShouldAppsUseDarkMode = nullptr;
     if (hUxTheme) {
         ShouldAppsUseDarkMode = (ShouldAppsUseDarkMode_t)GetProcAddress(hUxTheme, MAKEINTRESOURCEA(132));
     }
 
-    g_hFocusHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL, FocusEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-
-    SharedThemeState* shared = (SharedThemeState*)InterlockedCompareExchangePointer((PVOID volatile*)&g_SharedState, NULL, NULL);
-    if (shared) {
-        InterlockedExchangePointer((PVOID volatile*)&shared->focusedHwnd, GetForegroundWindow());
-    }
-
     while (true) {
-        shared = (SharedThemeState*)InterlockedCompareExchangePointer((PVOID volatile*)&g_SharedState, NULL, NULL);
+        SharedThemeState* shared = (SharedThemeState*)InterlockedCompareExchangePointer((PVOID volatile*)&g_SharedState, NULL, NULL);
         if (shared && ShouldAppsUseDarkMode) {
             LONG darkState = ShouldAppsUseDarkMode() ? 1 : 0;
             InterlockedExchange(&shared->isDark, darkState);
@@ -199,7 +181,6 @@ DWORD WINAPI ExplorerThemeWorker(LPVOID lpParam) {
         }
     }
 
-    if (g_hFocusHook) UnhookWinEvent(g_hFocusHook);
     if (hUxTheme) FreeLibrary(hUxTheme);
     return 0;
 }
@@ -598,9 +579,10 @@ long WINAPI SetBorderParameters_Hook(void* pThis,
     SharedThemeState* shared = (SharedThemeState*)InterlockedCompareExchangePointer((PVOID volatile*)&g_SharedState, NULL, NULL);
     if (shared) {
         isDarkTheme = (shared->isDark == 1);
-        if (hwnd && popupKind == WindowKind::Normal) {
-            isFocused = (hwnd == shared->focusedHwnd);
-        }
+    }
+
+    if (hwnd && popupKind == WindowKind::Normal) {
+        isFocused = (hwnd == GetForegroundWindow());
     }
 
     DWM_COLOR_VALUE effectiveColor = color;
@@ -672,7 +654,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"[Explorer Hook] Secondary explorer. Skip theme thread.");
             CloseHandle(g_hExplorerMutex);
             g_hExplorerMutex = NULL;
-            return TRUE; 
+            return FALSE; 
         }
 
         Wh_Log(L"[Explorer Hook] Initializing theme publisher thread...");
@@ -748,13 +730,11 @@ void Wh_ModUninit() {
         AcquireSRWLockExclusive(&g_CacheLock);
         g_WindowCache.clear();
         ReleaseSRWLockExclusive(&g_CacheLock);
-        
-        InterlockedExchangePointer((PVOID volatile*)&g_SharedState, NULL);
     }
 
     SharedThemeState* sharedToUnmap = (SharedThemeState*)InterlockedExchangePointer((PVOID volatile*)&g_SharedState, NULL);
     if (sharedToUnmap) {
-        Sleep(50);
+        Sleep(150);
         UnmapViewOfFile(sharedToUnmap);
     }
 
