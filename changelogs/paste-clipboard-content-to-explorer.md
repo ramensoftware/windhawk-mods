@@ -1,3 +1,7 @@
+## 1.6 ([May 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c481a1583aa87773d13dc34257d1632d037dd04a/mods/paste-clipboard-content-to-explorer.wh.cpp))
+
+Add plain UTF-8 as an option
+
 ## 1.5 ([May 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2e793d254614b2390b602eeebf8fad6193c95ae2/mods/paste-clipboard-content-to-explorer.wh.cpp))
 
 Add options for chosing encoding and disabling text paste
