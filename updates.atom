@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-06T19:32:53.000Z</updated>
+    <updated>2026-05-06T20:31:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Key Click 1.0]]></title>
+        <id>https://windhawk.net/mods/key-click#124e8b7a0c10a99882285b8d4b74de3c55de0e44</id>
+        <link href="https://windhawk.net/mods/key-click"/>
+        <updated>2026-05-06T20:31:02.000Z</updated>
+        <content type="html"><![CDATA[<p>Produces click sound on keypress, supports autorepeat</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remap Copilot Key 1.0]]></title>
         <id>https://windhawk.net/mods/remap-copilot-key#9a7068b28cbd36e3b9c10bd57ec465a1b9160647</id>
@@ -536,19 +547,6 @@ action on left-click and/or show a context menu on right-click.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.8]]></title>
-        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#c181c73c73038b460b0af0dc691c08037b047973</id>
-        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
-        <updated>2026-04-30T07:03:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for Spotify 1.2.88 (CEF 146)</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>

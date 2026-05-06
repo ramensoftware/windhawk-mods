@@ -5464,6 +5464,34 @@
                 "version": "1.1.2"
             }
         },
+        "key-click": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1778099462000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1778099462000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lwinmm",
+                "description": "Produces click sound on keypress, supports autorepeat",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Key Click",
+                "version": "1.0"
+            }
+        },
         "keyboard-shortcut-actions": {
             "details": {
                 "defaultSorting": 1818,
