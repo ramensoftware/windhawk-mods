@@ -2,7 +2,7 @@
 // @id              paste-clipboard-content-to-explorer
 // @name            Paste Clipboard Content to Explorer
 // @description     Paste text and images from clipboard as files in Explorer and in file dialogs
-// @version         1.5
+// @version         1.6
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -17,7 +17,7 @@ Allows pasting text and images from clipboard as files in Explorer,
 on the desktop and in open/save file dialogs.
 
 ## Features
-- Paste text as .txt (UTF-8 or UTF-16 LE with BOM)
+- Paste text as .txt (UTF-8, UTF-8 with BOM, or UTF-16 LE with BOM)
 - Paste images as .png
 - Auto-naming with incrementing number on conflict
 - Works in Explorer folders, on the desktop, in file dialogs
@@ -35,7 +35,8 @@ on the desktop and in open/save file dialogs.
   $description: Encoding for pasted text files
   $options:
   - UTF-16: UTF-16 LE with BOM
-  - UTF-8: UTF-8 with BOM
+  - UTF-8-BOM: UTF-8 with BOM
+  - UTF-8: UTF-8 without BOM
 - enableTextPaste: true
   $name: Enable text paste
   $description: Allow pasting text from clipboard
@@ -289,13 +290,25 @@ static DWORD SaveTextFromClipboard(const std::wstring& filePath)
             {
                 DWORD written;
                 
-                if (g_settings.textEncoding == L"UTF-8")
+                if (g_settings.textEncoding == L"UTF-8-BOM")
                 {
                     // UTF-8 with BOM
                     BYTE bom[3] = {0xEF, 0xBB, 0xBF};
                     WriteFile(hFile, bom, 3, &written, nullptr);
                     
                     // Convert to UTF-8
+                    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+                    if (utf8Len > 0)
+                    {
+                        char* utf8Text = new char[utf8Len];
+                        WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8Text, utf8Len, nullptr, nullptr);
+                        WriteFile(hFile, utf8Text, utf8Len - 1, &written, nullptr); // -1 to skip null terminator
+                        delete[] utf8Text;
+                    }
+                }
+                else if (g_settings.textEncoding == L"UTF-8")
+                {
+                    // UTF-8 without BOM
                     int utf8Len = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
                     if (utf8Len > 0)
                     {
