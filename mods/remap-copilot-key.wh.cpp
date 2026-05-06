@@ -4,6 +4,7 @@
 // @description     Global low-level hook running inside Windhawk to remap or disable the Copilot key.
 // @version         1.0
 // @author          Lukvbp
+// @github          https://github.com/lukvbp
 // @include         windhawk.exe
 // @compilerOptions -luser32
 // ==/WindhawkMod==
