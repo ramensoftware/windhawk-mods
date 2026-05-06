@@ -17,15 +17,14 @@
 ## Window Border Customizer
 
 A mod that allows you to change the color of the borders for all windows, classic menus and tooltips.
-
 ![](https://i.imgur.com/skNvSX3.png)
 
 ## ⚠ Important usage note ⚠
 
-This mod needs to hook into `dwm.exe` to work. Please navigate to Windhawk's
+This mod needs to hook into `dwm.exe` to work.
+Please navigate to Windhawk's
 Settings > Advanced settings > More advanced settings > Process inclusion list,
 and make sure that `dwm.exe` is in the list.
-
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 
 ---
@@ -95,53 +94,19 @@ Krisatisa
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <windows.h>
-#include <sddl.h>
 #include <winevt.h>
 #include <unordered_map>
 #include <atomic>
 #include <cmath>
-#include <string>
 
-// --- SHARED IPC MEMORY ---
-struct SharedThemeState {
-    volatile LONG isDark;
-};
+#define SHARED_SECTION __attribute__((section(".shared")))
+asm(".section .shared,\"dws\"\n");
+volatile LONG g_isDarkTheme SHARED_SECTION = 0;
+volatile LONG g_explorerPID SHARED_SECTION = 0;
+volatile LONG g_crashStrikes SHARED_SECTION = 0;
 
-SharedThemeState* volatile g_SharedState = nullptr;
-HANDLE g_hMapFile = NULL;
 HANDLE g_hStopEvent = NULL;
 HANDLE g_hExplorerThread = NULL;
-HANDLE g_hExplorerMutex = NULL;
-
-void InitSharedMemory() {
-    SECURITY_ATTRIBUTES sa;
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = FALSE;
-
-    PSECURITY_DESCRIPTOR pSD = NULL;
-    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:(A;;GA;;;SY)(A;;GA;;;IU)", SDDL_REVISION_1, &pSD, NULL)) {
-        sa.lpSecurityDescriptor = pSD;
-    } else {
-        sa.lpSecurityDescriptor = NULL;
-    }
-
-    g_hMapFile = CreateFileMappingW(
-        INVALID_HANDLE_VALUE,
-        &sa,
-        PAGE_READWRITE,
-        0,
-        sizeof(SharedThemeState),
-        L"Windhawk_CustomBorders_ThemeState");
-
-    if (pSD) {
-        LocalFree(pSD);
-    }
-
-    if (g_hMapFile) {
-        void* mapped = MapViewOfFile(g_hMapFile, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(SharedThemeState));
-        InterlockedExchangePointer((PVOID volatile*)&g_SharedState, mapped);
-    }
-}
 
 bool IsExplorerProcess() {
     static bool isExplorer = []() {
@@ -164,15 +129,14 @@ DWORD WINAPI ExplorerThemeWorker(LPVOID lpParam) {
     }
 
     while (true) {
-        SharedThemeState* shared = (SharedThemeState*)InterlockedCompareExchangePointer((PVOID volatile*)&g_SharedState, NULL, NULL);
-        if (shared && ShouldAppsUseDarkMode) {
+        if (ShouldAppsUseDarkMode) {
             LONG darkState = ShouldAppsUseDarkMode() ? 1 : 0;
-            InterlockedExchange(&shared->isDark, darkState);
+            InterlockedExchange(&g_isDarkTheme, darkState);
         }
 
         DWORD waitRes = MsgWaitForMultipleObjects(1, &g_hStopEvent, FALSE, 500, QS_ALLINPUT);
         if (waitRes == WAIT_OBJECT_0) {
-            break; 
+            break;
         } else if (waitRes == WAIT_OBJECT_0 + 1) {
             MSG msg;
             while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -190,7 +154,6 @@ DWORD WINAPI ExplorerThemeWorker(LPVOID lpParam) {
 struct DWM_COLOR_VALUE {
     float r, g, b, a;
 };
-
 struct BorderStateColors {
     DWM_COLOR_VALUE light;
     DWM_COLOR_VALUE dark;
@@ -212,7 +175,6 @@ struct BorderSettings {
 
 SRWLOCK g_SettingsLock = SRWLOCK_INIT;
 BorderSettings g_Settings = {};
-
 enum class WindowKind {
     Unknown,
     Pending,
@@ -220,7 +182,6 @@ enum class WindowKind {
     ContextMenu,
     Tooltip,
 };
-
 struct CacheEntry {
     WindowKind kind;
     HWND hwnd;
@@ -233,11 +194,9 @@ SRWLOCK g_EnumLock = SRWLOCK_INIT;
 
 std::atomic<bool> g_ModUnloading = false;
 std::atomic<ULONGLONG> g_LastEnumTick{0};
-
 static DWM_COLOR_VALUE MakeColorFromHEX(PCWSTR hex) {
     DWM_COLOR_VALUE color = {1.0f, 1.0f, 1.0f, 1.0f};
     if (!hex) return color;
-
     if (_wcsicmp(hex, L"accent") == 0) {
         DWORD colorizationColor = 0;
         BOOL opaqueBlend = FALSE;
@@ -246,7 +205,6 @@ static DWM_COLOR_VALUE MakeColorFromHEX(PCWSTR hex) {
             typedef HRESULT(WINAPI *DwmGetColorizationColor_t)(DWORD*, BOOL*);
             DwmGetColorizationColor_t pDwmGetColorizationColor = 
                 (DwmGetColorizationColor_t)GetProcAddress(hDwmApi, "DwmGetColorizationColor");
-            
             if (pDwmGetColorizationColor && SUCCEEDED(pDwmGetColorizationColor(&colorizationColor, &opaqueBlend))) {
                 color.a = ((colorizationColor >> 24) & 0xFF) / 255.0f;
                 if (color.a <= 0.0f) color.a = 1.0f / 255.0f;
@@ -260,7 +218,6 @@ static DWM_COLOR_VALUE MakeColorFromHEX(PCWSTR hex) {
     }
 
     if (hex[0] == L'#') hex++;
-
     unsigned int argb = 0;
     if (swscanf(hex, L"%08X", &argb) == 1) {
         color.a = ((argb >> 24) & 0xFF) / 255.0f;
@@ -277,7 +234,6 @@ bool HasDwminitWarningInLastMinute() {
     const WCHAR* query =
         L"*[System[Provider[@Name='Dwminit'] and (Level=3) and "
         L"TimeCreated[timediff(@SystemTime) <= 60000]]]";
-
     EVT_HANDLE queryHandle = EvtQuery(nullptr, queryPath, query, EvtQueryChannelPath);
     if (!queryHandle) {
         Wh_Log(L"EvtQuery failed with error: %u", GetLastError());
@@ -297,40 +253,19 @@ bool HasDwminitWarningInLastMinute() {
 }
 
 bool CheckCrashLoopFailsafe() {
-    wchar_t tempPath[MAX_PATH];
-    GetTempPathW(MAX_PATH, tempPath);
-    DWORD sessionId;
-    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
-    std::wstring filePath = std::wstring(tempPath) + L"windhawk_dwm_failsafe_" + std::to_wstring(sessionId) + L".bin";
-
     if (!HasDwminitWarningInLastMinute()) {
-        DeleteFileW(filePath.c_str()); 
+        InterlockedExchange((volatile LONG*)&g_crashStrikes, 0);
         return true;
     }
 
-    DWORD strikes = 0;
-    HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ | GENERIC_WRITE,
-                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                               OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile != INVALID_HANDLE_VALUE) {
-        DWORD bytesRead;
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            ReadFile(hFile, &strikes, sizeof(strikes), &bytesRead, nullptr);
-        }
-        strikes++;
-        SetFilePointer(hFile, 0, nullptr, FILE_BEGIN);
-        DWORD bytesWritten;
-        WriteFile(hFile, &strikes, sizeof(strikes), &bytesWritten, nullptr);
-        SetEndOfFile(hFile);
-        CloseHandle(hFile);
-    }
+    LONG strikes = InterlockedIncrement((volatile LONG*)&g_crashStrikes);
 
     if (strikes >= 2) {
-        Wh_Log(L"CRASH LOOP DETECTED: Dwminit warning present on %u consecutive loads. Disabling mod.", strikes);
+        Wh_Log(L"CRASH LOOP DETECTED: Dwminit warning present on %ld consecutive loads. Disabling mod.", strikes);
         return false;
     }
 
-    Wh_Log(L"Dwminit warning detected but allowing first attempt (strike %u/2).", strikes);
+    Wh_Log(L"Dwminit warning detected but allowing first attempt (strike %ld/2).", strikes);
     return true;
 }
 
@@ -355,7 +290,6 @@ struct WindowMatchContext {
     HWND bestHwnd;
     int bestScore;
 };
-
 static int ScoreWindowMatch(HWND hwnd, const RECT& borderRect) {
     if (!IsWindowVisible(hwnd)) return 0;
 
@@ -367,10 +301,8 @@ static int ScoreWindowMatch(HWND hwnd, const RECT& borderRect) {
     LONG borderWidth = borderRect.right - borderRect.left;
     LONG borderHeight = borderRect.bottom - borderRect.top;
     if (width <= 0 || height <= 0 || borderWidth <= 0 || borderHeight <= 0) return 0;
-
     LONG dw = std::abs(width - borderWidth);
     LONG dh = std::abs(height - borderHeight);
-
     if (dw > 200 || dh > 200) return 0;
 
     int score = 0;
@@ -378,12 +310,10 @@ static int ScoreWindowMatch(HWND hwnd, const RECT& borderRect) {
     else if (dw <= 15 && dh <= 15) score += 100;
     else if (dw <= 50 && dh <= 50) score += 50;
     else score += 10;
-
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     bool iconic = IsIconic(hwnd);
     HWND owner = GetWindow(hwnd, GW_OWNER);
-
     score += 35;
     if (!iconic) score += 10;
     if (owner) score += 12;
@@ -400,12 +330,10 @@ static int ScoreWindowMatch(HWND hwnd, const RECT& borderRect) {
     
     GetClassNameW(hwnd, className, 255);
     if (owner) GetClassNameW(owner, ownerClassName, 255);
-
     if (className[0] == L't' && wcscmp(className, L"tooltips_class32") == 0) score += 120;
     else if (className[0] == L'#' && wcscmp(className, L"#32768") == 0) score += 120;
     else if (className[0] == L'X' && wcscmp(className, L"Xaml_WindowedPopupClass") == 0) score += 95;
     else if (className[0] == L'W' && wcscmp(className, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) score += 40;
-
     if (ownerClassName[0] == L'S' && wcscmp(ownerClassName, L"Shell_TrayWnd") == 0) score += 25;
 
     return score;
@@ -422,7 +350,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         ctx->bestScore = score;
         ctx->bestHwnd = hwnd;
         if (score >= 180) {
-            return FALSE; 
+            return FALSE;
         }
     }
     return TRUE;
@@ -566,21 +494,14 @@ long WINAPI SetBorderParameters_Hook(void* pThis,
                                      int borderStyle,
                                      int shadowStyle) {
     if (g_ModUnloading) return SetBorderParameters_Orig(pThis, borderRect, cornerRadius, dpi, color, borderStyle, shadowStyle);
-
     HWND hwnd = NULL;
     WindowKind popupKind = CheckWindowCache(pThis, borderRect, &hwnd);
-
     if (popupKind == WindowKind::Pending) {
         return SetBorderParameters_Orig(pThis, borderRect, cornerRadius, dpi, color, borderStyle, shadowStyle);
     }
 
-    bool isDarkTheme = false;
+    bool isDarkTheme = (g_isDarkTheme == 1);
     bool isFocused = true; 
-
-    SharedThemeState* shared = (SharedThemeState*)InterlockedCompareExchangePointer((PVOID volatile*)&g_SharedState, NULL, NULL);
-    if (shared) {
-        isDarkTheme = (shared->isDark == 1);
-    }
 
     if (hwnd && popupKind == WindowKind::Normal) {
         isFocused = (hwnd == GetForegroundWindow());
@@ -595,7 +516,6 @@ long WINAPI SetBorderParameters_Hook(void* pThis,
     else if (popupKind == WindowKind::Tooltip) cat = &g_Settings.tooltip;
     else if (color.a <= 0.001f) cat = &g_Settings.maximized;
     else cat = &g_Settings.normal;
-
     if (cat->enabled) {
         BorderStateColors* stateColors = (cat->enableUnfocused && !isFocused) ? &cat->unfocused : &cat->focused;
         effectiveColor = isDarkTheme ? stateColors->dark : stateColors->light;
@@ -629,7 +549,6 @@ long WINAPI SetBorderParameters_Hook(void* pThis,
 
 void LoadSettings() {
     BorderSettings newSettings;
-
     LOAD_CATEGORY_WITH_FOCUS(L"normal_window_border", normal, L"enable_custom_border");
     LOAD_CATEGORY_WITH_FOCUS(L"maximized_window_border", maximized, L"show_custom_border");
     
@@ -645,31 +564,37 @@ BOOL Wh_ModInit() {
     g_ModUnloading = false;
     
     if (!IsExplorerProcess() && !CheckCrashLoopFailsafe()) return FALSE;
-    
-    g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-    InitSharedMemory();
 
     if (IsExplorerProcess()) {
-        g_hExplorerMutex = CreateMutexW(NULL, FALSE, L"Windhawk_CustomBorders_ExplorerMutex");
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"[Explorer Hook] Secondary explorer. Skip theme thread.");
-            CloseHandle(g_hExplorerMutex);
-            g_hExplorerMutex = NULL;
-            return FALSE; 
+        LONG pid = (LONG)GetCurrentProcessId();
+        LONG oldPid = InterlockedCompareExchange((volatile LONG*)&g_explorerPID, pid, 0);
+        if (oldPid != 0 && oldPid != pid) {
+            HANDLE hProc = OpenProcess(SYNCHRONIZE, FALSE, (DWORD)oldPid);
+            if (hProc) {
+                bool alive = (WaitForSingleObject(hProc, 0) == WAIT_TIMEOUT);
+                CloseHandle(hProc);
+                if (alive) {
+                    Wh_Log(L"[Explorer Hook] Secondary explorer alive. Skip.");
+                    return FALSE; 
+                }
+            }
+            if (InterlockedCompareExchange((volatile LONG*)&g_explorerPID, pid, oldPid) != oldPid) {
+                Wh_Log(L"[Explorer Hook] Race lost. Skip.");
+                return FALSE;
+            }
         }
 
+        g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
         Wh_Log(L"[Explorer Hook] Initializing theme publisher thread...");
         g_hExplorerThread = CreateThread(NULL, 0, ExplorerThemeWorker, NULL, 0, NULL);
-        return TRUE; 
+        return TRUE;
     }
 
     Wh_Log(L"[DWM Hook] Initializing Custom Translucent Borders...");
-
     LoadSettings();
 
     HMODULE udwm = LoadLibraryW(L"uDWM.dll");
     if (!udwm) return FALSE;
-
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {
             {
@@ -689,13 +614,8 @@ BOOL Wh_ModInit() {
             false
         }
     };
-
     if (!WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks))) {
         Wh_Log(L"Failed to hook Windows 11 border functions.");
-        if (g_hStopEvent) { CloseHandle(g_hStopEvent); g_hStopEvent = NULL; }
-        SharedThemeState* sharedToUnmap = (SharedThemeState*)InterlockedExchangePointer((PVOID volatile*)&g_SharedState, NULL);
-        if (sharedToUnmap) { UnmapViewOfFile(sharedToUnmap); }
-        if (g_hMapFile) { CloseHandle(g_hMapFile); g_hMapFile = NULL; }
         return FALSE;
     }
 
@@ -712,39 +632,24 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     g_ModUnloading = true;
-    
-    if (g_hStopEvent) {
-        SetEvent(g_hStopEvent);
-    }
 
     if (IsExplorerProcess()) {
+        if (g_hStopEvent) {
+            SetEvent(g_hStopEvent);
+        }
         if (g_hExplorerThread) {
             WaitForSingleObject(g_hExplorerThread, 1000);
             CloseHandle(g_hExplorerThread);
             g_hExplorerThread = NULL;
         }
-        if (g_hExplorerMutex) {
-            CloseHandle(g_hExplorerMutex);
-            g_hExplorerMutex = NULL;
+        InterlockedCompareExchange((volatile LONG*)&g_explorerPID, 0, (LONG)GetCurrentProcessId());
+        if (g_hStopEvent) {
+            CloseHandle(g_hStopEvent);
+            g_hStopEvent = NULL;
         }
     } else {
         AcquireSRWLockExclusive(&g_CacheLock);
         g_WindowCache.clear();
         ReleaseSRWLockExclusive(&g_CacheLock);
-    }
-
-    SharedThemeState* sharedToUnmap = (SharedThemeState*)InterlockedExchangePointer((PVOID volatile*)&g_SharedState, NULL);
-    if (sharedToUnmap) {
-        Sleep(150);
-        UnmapViewOfFile(sharedToUnmap);
-    }
-
-    if (g_hMapFile) {
-        CloseHandle(g_hMapFile);
-        g_hMapFile = NULL;
-    }
-    if (g_hStopEvent) {
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = NULL;
     }
 }
