@@ -10,7 +10,9 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*Produces click sound on keypress, supports autorepeat*/
+/*
+Produces click sound on keypress, supports autorepeat
+*/
 // ==/WindhawkModReadme==
 
 #include <windows.h>
