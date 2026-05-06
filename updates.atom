@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-05T14:37:36.000Z</updated>
+    <updated>2026-05-06T14:40:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Window Border Customizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/window-border-customizer#46e9b560b3ed69055810d70c273df2356d670e28</id>
+        <link href="https://windhawk.net/mods/window-border-customizer"/>
+        <updated>2026-05-06T14:40:51.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="windowbordercustomizer">Window Border Customizer</h2>
+<p>A mod that allows you to change the color of the borders for all windows, classic menus and tooltips.
+<img src="https://i.imgur.com/skNvSX3.png" alt="" /></p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>This mod needs to hook into <code>dwm.exe</code> to work.
+Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>dwm.exe</code> is in the list.
+<img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<hr />
+<h2 id="contributors">Contributors</h2>
+<p><a href="https://github.com/m417z/">m417z</a>, 
+Krisatisa</p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Desktop Indicator 1.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-desktop-indicator#c76d030cf7c5848b97696ce764c1f5ec7db9d049</id>
@@ -465,19 +488,6 @@ action on left-click and/or show a context menu on right-click.</p>
         <author>
             <name>Languster</name>
             <uri>https://github.com/Languster</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Replace the buggy SDHC card drive icon 1.0]]></title>
-        <id>https://windhawk.net/mods/replace-buggy-sdhc-icon#7a2c107289cd17a9b4a24a476102fb0faffd1308</id>
-        <link href="https://windhawk.net/mods/replace-buggy-sdhc-icon"/>
-        <updated>2026-04-29T21:40:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="replacethebuggysdhccarddriveicon">Replace the buggy SDHC card drive icon</h1>
-<p>Replace the buggy SDHC card drive icon which MS does not bother to fix since before Windows 8.</p>
-<p><img src="https://i.imgur.com/6BKSRQR.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
