@@ -9,6 +9,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lwevtapi
+// @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
