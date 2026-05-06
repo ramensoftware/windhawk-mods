@@ -7658,6 +7658,34 @@
                 "version": "1.0.0"
             }
         },
+        "remap-copilot-key": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1778095973000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1778095973000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lukvbp",
+                "compilerOptions": "-luser32",
+                "description": "Global low-level hook running inside Windhawk to remap or disable the Copilot key.",
+                "github": "https://github.com/lukvbp",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Remap Copilot Key",
+                "version": "1.0"
+            }
+        },
         "remarkable-polish": {
             "details": {
                 "defaultSorting": 230,
