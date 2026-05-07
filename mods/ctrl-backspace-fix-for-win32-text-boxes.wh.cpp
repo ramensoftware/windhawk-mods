@@ -48,8 +48,8 @@ applications.
 
 enum class CharClass {
     Whitespace,
-    Alphanumeric,
-    Punctuation
+    Punctuation,
+    Alphanumeric
 };
 
 // Helper: Determine the character class to calculate word boundaries
