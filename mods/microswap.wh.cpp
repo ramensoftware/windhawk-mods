@@ -1,8 +1,8 @@
 // ==WindhawkMod==
-// @id              audioswap
-// @name            AudioSwap
-// @description     Adds a tray icon to instantly toggle between two preferred audio outputs.
-// @version         1.1.1
+// @id              microswap
+// @name            MicroSwap
+// @description     Adds a tray icon to instantly toggle between two preferred audio inputs (microphones).
+// @version         1.0.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @include         windhawk.exe
@@ -11,66 +11,47 @@
 
 // ==WindhawkModReadme==
 /*
-# AudioSwap
-Instantly toggle between two audio output devices from your system tray — no diving into Sound settings.
+# MicSwap
+Instantly toggle between two audio input devices (microphones) from your system tray — no diving into Sound settings.
 
 ---
 
 ## How to Use
 
 1. **Choose Icons** — Open the **Settings** tab and pick an icon for each of your two devices.
-2. **Select Your Devices** — Right-click the tray icon. Use **Set as Device 1** and **Set as Device 2** to assign your outputs from the live device list.
+2. **Select Your Devices** — Right-click the tray icon. Use **Set as Input 1** and **Set as Input 2** to assign your inputs from the live device list.
 3. **Toggle** — Left-click the tray icon at any time to swap between the two devices instantly.
 
-> The tray tooltip always shows the active device. On first run it will read *"Right-click to configure"* until both devices are assigned.
+> The tray tooltip always shows the active input. On first run it will read *"Right-click to configure"* until both devices are assigned.
 
 ---
 
 ## Changelog
 
-### v1.1.0
-- **New:** Can now open WindHawk directly from the icon using right click
-- **New:** Added new icons to select from
-- **Improved:** added icons in the right click menu
-
-### v1.1.0
-- **New:** Right-click context menu — auto-detects all active audio outputs and lets you assign Device 1 and Device 2 directly from a live list. No more typing device names manually.
-- **New:** Device selections persist across restarts.
-- **Improved:** Toggle now matches devices by their unique system ID instead of a name substring search — works correctly regardless of how Windows names your device.
-- **Improved:** Tray tooltip prompts you to configure on first run instead of showing "Unknown Device".
-- **Removed:** Device name text fields from the Settings tab (replaced by the right-click menu).
-
-### v1.0.1
-- Initial release.
+### v1.0.0
+- Initial release. Mirrors AudioSwap but targets audio input/capture devices.
+- Right-click context menu auto-detects all active audio inputs and lets you assign Input 1 and Input 2 from a live list.
+- Device selections persist across restarts.
+- Toggle matches devices by their unique system ID for reliable switching regardless of device naming.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- icon1: speaker_normal
+- icon1: mic_classic
   $name: First Device Icon
   $options:
-    - speaker_normal: Normal Speaker
-    - speaker_square: Square Speaker
-    - speaker_modern: Modern Speaker
-    - speaker_modern_square: Modern Square Speaker
-    - audio_wave: Audio Wave
-    - headphones: Headphones
+    - mic_classic: Classic Microphone
+    - mic_modern: Modern Microphone
     - headset_gaming: Gaming Headset
-    - headphones_modern: Modern Headphones
     - headset_modern: Modern Gaming Headset
     - earphones: Earphones
-- icon2: speaker_square
+- icon2: headset_gaming
   $name: Second Device Icon
   $options:
-    - speaker_normal: Normal Speaker
-    - speaker_square: Square Speaker
-    - speaker_modern: Modern Speaker
-    - speaker_modern_square: Modern Square Speaker
-    - audio_wave: Audio Wave
-    - headphones: Headphones
+    - mic_classic: Classic Microphone
+    - mic_modern: Modern Microphone
     - headset_gaming: Gaming Headset
-    - headphones_modern: Modern Headphones
     - headset_modern: Modern Gaming Headset
     - earphones: Earphones
 */
@@ -146,18 +127,13 @@ public:
 
 int GetIconIndex(PCWSTR iconSetting) {
     if (iconSetting) {
-        if (wcscmp(iconSetting, L"speaker_normal") == 0) return 1;
-        if (wcscmp(iconSetting, L"speaker_square") == 0) return 4;
-        if (wcscmp(iconSetting, L"speaker_modern") == 0) return 90;
-        if (wcscmp(iconSetting, L"speaker_modern_square") == 0) return 93;
-        if (wcscmp(iconSetting, L"audio_wave") == 0) return 94;
-        if (wcscmp(iconSetting, L"headphones") == 0) return 2;
+        if (wcscmp(iconSetting, L"mic_classic")   == 0) return 3;
+        if (wcscmp(iconSetting, L"mic_modern")    == 0) return 92;
         if (wcscmp(iconSetting, L"headset_gaming") == 0) return 8;
-        if (wcscmp(iconSetting, L"headphones_modern") == 0) return 91;
         if (wcscmp(iconSetting, L"headset_modern") == 0) return 95;
-        if (wcscmp(iconSetting, L"earphones") == 0) return 6;
+        if (wcscmp(iconSetting, L"earphones")     == 0) return 6;
     }
-    return 4;
+    return 3;
 }
 
 void LoadDeviceSelections() {
@@ -235,7 +211,7 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                    __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
         IMMDevice* pDefaultDevice = nullptr;
-        if (SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDefaultDevice))) {
+        if (SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDefaultDevice))) {
             LPWSTR pId = nullptr;
             if (SUCCEEDED(pDefaultDevice->GetId(&pId))) {
                 lstrcpynW(currentId, pId, 512);
@@ -255,13 +231,11 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
         pEnum->Release();
     }
 
-    // ID-based icon selection — exact match, no fuzzy strings
     if (g_cachedDev1Id[0] != L'\0' && wcscmp(currentId, g_cachedDev1Id) == 0)
         currentIcon = g_iconDev1;
     else if (g_cachedDev2Id[0] != L'\0' && wcscmp(currentId, g_cachedDev2Id) == 0)
         currentIcon = g_iconDev2;
 
-    // CPU opt: skip redraw if nothing changed
     static WCHAR s_lastDev[256] = {0};
     static HICON s_lastIcon = nullptr;
     if (!isAdd && wcscmp(currentDev, s_lastDev) == 0 && currentIcon == s_lastIcon)
@@ -276,16 +250,15 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
 
     if (g_cachedDev1Id[0] == L'\0' || g_cachedDev2Id[0] == L'\0')
-        swprintf_s(nid.szTip, L"AudioSwap: Right-click to configure");
+        swprintf_s(nid.szTip, L"MicSwap: Right-click to configure");
     else
-        swprintf_s(nid.szTip, L"Audio: %s", currentDev);
+        swprintf_s(nid.szTip, L"Mic: %s", currentDev);
 
     nid.hIcon = currentIcon;
     Shell_NotifyIconW(isAdd ? NIM_ADD : NIM_MODIFY, &nid);
 }
 
 BOOL ToggleAudioDevice() {
-    // Guard: no-op if devices not configured yet
     if (g_cachedDev1Id[0] == L'\0' || g_cachedDev2Id[0] == L'\0') {
         return FALSE;
     }
@@ -298,7 +271,7 @@ BOOL ToggleAudioDevice() {
     }
 
     IMMDevice* pDefaultDevice = nullptr;
-    if (FAILED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDefaultDevice))) {
+    if (FAILED(pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDefaultDevice))) {
         pEnum->Release(); CoUninitialize(); return FALSE;
     }
 
@@ -309,7 +282,6 @@ BOOL ToggleAudioDevice() {
         pEnum->Release(); CoUninitialize(); return FALSE;
     }
 
-    // Pick the other device by comparing IDs directly — no fuzzy name search
     PCWSTR targetId = (wcscmp(currentId, g_cachedDev1Id) == 0)
                       ? g_cachedDev2Id
                       : g_cachedDev1Id;
@@ -344,12 +316,11 @@ void BuildAndShowContextMenu(HWND hWnd) {
     AudioDevice devices[MENU_MAX_DEVICES];
     int deviceCount = 0;
 
-    // Enumerate active render endpoints (COM already init on tray thread)
     IMMDeviceEnumerator* pEnum = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                    __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
         IMMDeviceCollection* pDevices = nullptr;
-        if (SUCCEEDED(pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pDevices))) {
+        if (SUCCEEDED(pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pDevices))) {
             UINT count = 0;
             pDevices->GetCount(&count);
             if (count > MENU_MAX_DEVICES) count = MENU_MAX_DEVICES;
@@ -382,7 +353,6 @@ void BuildAndShowContextMenu(HWND hWnd) {
         pEnum->Release();
     }
 
-    // Build submenus
     HMENU hSub1 = CreatePopupMenu();
     HMENU hSub2 = CreatePopupMenu();
 
@@ -393,28 +363,24 @@ void BuildAndShowContextMenu(HWND hWnd) {
         AppendMenuW(hSub2, flags2, MENU_DEVICE2_BASE + i, devices[i].name);
     }
 
-    // Assemble root menu
     HMENU hMenu = CreatePopupMenu();
 
-    // Set as Device 1 with icon
     MENUITEMINFOW mii1 = {sizeof(mii1)};
     mii1.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_BITMAP;
     mii1.hSubMenu = hSub1;
-    mii1.dwTypeData = (LPWSTR)L"Set as Device 1";
+    mii1.dwTypeData = (LPWSTR)L"Set as Input 1";
     mii1.hbmpItem = g_hIconDev1Bmp;
     InsertMenuItemW(hMenu, (UINT)-1, TRUE, &mii1);
 
-    // Set as Device 2 with icon
     MENUITEMINFOW mii2 = {sizeof(mii2)};
     mii2.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_BITMAP;
     mii2.hSubMenu = hSub2;
-    mii2.dwTypeData = (LPWSTR)L"Set as Device 2";
+    mii2.dwTypeData = (LPWSTR)L"Set as Input 2";
     mii2.hbmpItem = g_hIconDev2Bmp;
     InsertMenuItemW(hMenu, (UINT)-1, TRUE, &mii2);
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
-    // Open WindHawk menu item with icon
     MENUITEMINFOW mii = {sizeof(mii)};
     mii.fMask = MIIM_ID | MIIM_STRING | MIIM_BITMAP;
     mii.wID = MENU_OPEN_WINDHAWK;
@@ -424,17 +390,16 @@ void BuildAndShowContextMenu(HWND hWnd) {
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
-    // Status line — get current active device name
     WCHAR statusText[300];
     if (g_cachedDev1Id[0] == L'\0' || g_cachedDev2Id[0] == L'\0') {
-        lstrcpyW(statusText, L"Right-click to configure devices");
+        lstrcpyW(statusText, L"Right-click to configure inputs");
     } else {
         WCHAR activeName[256] = L"Unknown";
         IMMDeviceEnumerator* pEnum2 = nullptr;
         if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                        __uuidof(IMMDeviceEnumerator), (void**)&pEnum2))) {
             IMMDevice* pDefault = nullptr;
-            if (SUCCEEDED(pEnum2->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDefault))) {
+            if (SUCCEEDED(pEnum2->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDefault))) {
                 IPropertyStore* pStore = nullptr;
                 if (SUCCEEDED(pDefault->OpenPropertyStore(STGM_READ, &pStore))) {
                     PROPVARIANT v; PropVariantInit(&v);
@@ -451,17 +416,15 @@ void BuildAndShowContextMenu(HWND hWnd) {
     }
     AppendMenuW(hMenu, MF_STRING | MF_GRAYED, 0, statusText);
 
-    // Show menu at cursor
     POINT pt;
     GetCursorPos(&pt);
     SetForegroundWindow(hWnd);
     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
                              pt.x, pt.y, 0, hWnd, nullptr);
-    PostMessageW(hWnd, WM_NULL, 0, 0); // flush menu
+    PostMessageW(hWnd, WM_NULL, 0, 0);
 
-    DestroyMenu(hMenu); // also destroys attached submenus
+    DestroyMenu(hMenu);
 
-    // Handle selection
     if (cmd >= MENU_DEVICE1_BASE && cmd < MENU_DEVICE1_BASE + deviceCount) {
         int idx = cmd - MENU_DEVICE1_BASE;
         SaveDeviceSelection(1, devices[idx].id, devices[idx].name);
@@ -494,7 +457,7 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     } else if (msg == WM_TRAY_CALLBACK && lParam == WM_LBUTTONUP) {
         if (InterlockedExchange(&g_isProcessingClick, 1) == 0) {
             DWORD now = GetTickCount();
-            if (now - g_lastClickTime > CLICK_DEBOUNCE_MS) { // Corrected check
+            if (now - g_lastClickTime > CLICK_DEBOUNCE_MS) {
                 g_lastClickTime = now;
                 if (g_workerThread) { CloseHandle(g_workerThread); g_workerThread = nullptr; }
                 g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
@@ -504,7 +467,14 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         UpdateTrayTip(hWnd, FALSE);
     } else if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         UpdateTrayTip(hWnd, TRUE);
-    } else if (msg == WM_DESTROY) PostQuitMessage(0);
+    } else if (msg == WM_DESTROY) {
+        KillTimer(hWnd, 1);
+        NOTIFYICONDATAW nid = {sizeof(nid)};
+        nid.hWnd = hWnd;
+        nid.uID = TRAY_ICON_ID;
+        Shell_NotifyIconW(NIM_DELETE, &nid);
+        PostQuitMessage(0);
+    }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
@@ -514,15 +484,15 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     WNDCLASSW wc = {0};
     wc.lpfnWndProc = TrayWndProc;
     wc.hInstance = g_hInstance;
-    wc.lpszClassName = L"AudioSwitcherWindowClass";
+    wc.lpszClassName = L"MicSwitcherWindowClass";
     RegisterClassW(&wc);
-    g_trayHwnd = CreateWindowExW(0, wc.lpszClassName, L"Audio Switcher", WS_OVERLAPPED, 0,0,1,1, nullptr, nullptr, g_hInstance, nullptr);
-    
+    g_trayHwnd = CreateWindowExW(0, wc.lpszClassName, L"Mic Switcher", WS_OVERLAPPED, 0,0,1,1, nullptr, nullptr, g_hInstance, nullptr);
+
     IPropertyStore* pps = nullptr;
     if (SUCCEEDED(SHGetPropertyStoreForWindow(g_trayHwnd, IID_PPV_ARGS(&pps)))) {
         PROPVARIANT var; var.vt = VT_LPWSTR; var.pwszVal = (LPWSTR)CoTaskMemAlloc(MAX_PATH);
         if (var.pwszVal) {
-            lstrcpyW(var.pwszVal, L"BlackPaw.AudioSwitcher");
+            lstrcpyW(var.pwszVal, L"BlackPaw.MicSwitcher");
             pps->SetValue(PKEY_AppUserModel_ID, var);
             CoTaskMemFree(var.pwszVal);
         }
@@ -538,13 +508,13 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 }
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"AudioSwap Mod Init");
+    Wh_Log(L"MicSwap Mod Init");
     g_hInstance = GetModuleHandle(nullptr);
     GetModuleFileName(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath));
     ExtractIconExW(L"ddores.dll", 98, nullptr, &g_hWindHawkIcon, 1);
     if (!g_hWindHawkIcon) ExtractIconExW(L"ddores.dll", 94, nullptr, &g_hWindHawkIcon, 1);
     if (!g_hWindHawkIcon) ExtractIconExW(L"ddores.dll", 95, nullptr, &g_hWindHawkIcon, 1);
-    if (!g_hWindHawkIcon) ExtractIconExW(L"ddores.dll", 6, nullptr, &g_hWindHawkIcon, 1);
+    if (!g_hWindHawkIcon) ExtractIconExW(L"ddores.dll", 6,  nullptr, &g_hWindHawkIcon, 1);
     if (g_hWindHawkIcon) {
         ICONINFO iconInfo = {0};
         GetIconInfo(g_hWindHawkIcon, &iconInfo);
@@ -568,12 +538,14 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"AudioSwap Mod Uninit");
+    Wh_Log(L"MicSwap Mod Uninit");
     if (g_trayHwnd) PostMessageW(g_trayHwnd, WM_DESTROY, 0, 0);
     if (g_trayThread) { WaitForSingleObject(g_trayThread, 2000); CloseHandle(g_trayThread); g_trayThread = nullptr; }
     if (g_workerThread) { WaitForSingleObject(g_workerThread, 2000); CloseHandle(g_workerThread); g_workerThread = nullptr; }
     if (g_iconDev1) { DestroyIcon(g_iconDev1); g_iconDev1 = nullptr; }
     if (g_iconDev2) { DestroyIcon(g_iconDev2); g_iconDev2 = nullptr; }
+    if (g_hIconDev1Bmp) { DeleteObject(g_hIconDev1Bmp); g_hIconDev1Bmp = nullptr; }
+    if (g_hIconDev2Bmp) { DeleteObject(g_hIconDev2Bmp); g_hIconDev2Bmp = nullptr; }
     if (g_hWindHawkIcon) { DestroyIcon(g_hWindHawkIcon); g_hWindHawkIcon = nullptr; }
     if (g_hWindHawkBmp) { DeleteObject(g_hWindHawkBmp); g_hWindHawkBmp = nullptr; }
 }

@@ -2,7 +2,7 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word via direct Word saves
-// @version         3.5
+// @version         3.6
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
@@ -42,9 +42,10 @@ shortcut activations.
 - Migrates internal tracking after Save As / rename without losing document state
 - Binds more precisely to the current Word instance and current document window
 - Uses native Word application events for document transitions and manual saves when available
+- Keeps pending changes armed after direct save failures so transient file errors can be retried
 - Only saves when the active Word document window is focused
 
-## Shortcut Safety (v3.5)
+## Shortcut Safety (v3.6)
 
 - No `SendInput`
 - No synthetic `Ctrl` state
@@ -116,15 +117,19 @@ const DWORD MAX_SAVE_RETRY_INTERVAL_MS = 1000;
 const DWORD MAX_DOCUMENT_STATE_RETRY_INTERVAL_MS = 2000;
 const DWORD FAILURE_LOG_INTERVAL_MS = 2000;
 const DWORD STATUS_LOG_INTERVAL_MS = 3000;
+const DWORD WORD_EVENT_DISCONNECT_FAILURE_LOG_INTERVAL_MS = 10000;
+const DWORD WORD_EVENT_SHUTDOWN_DISCONNECT_RETRY_DELAY_MS = 50;
+const DWORD TEXT_INPUT_KEYDOWN_CHAR_SUPPRESSION_MS = 1000;
+const DWORD COM_MESSAGE_FILTER_RETRY_DELAY_MS = 150;
+const DWORD COM_MESSAGE_FILTER_CANCEL_AFTER_MS = 10000;
 const DWORD SAVE_AS_MIGRATION_TIMEOUT_MS = 15000;
 const DWORD WORD_EVENT_RECONNECT_INTERVAL_MS = 2000;
+const DWORD WORD_EVENT_DISCONNECT_RETRY_INTERVAL_MS = 2000;
+const int WORD_EVENT_SHUTDOWN_DISCONNECT_RETRY_ATTEMPTS = 6;
+const int WORD_EVENT_PENDING_DISCONNECT_CAPACITY = 4;
+const DWORD MAX_CANONICAL_PATH_CHARS = 32768;
 const int DISPATCH_MEMBER_ID_CACHE_CAPACITY = 48;
 const DWORD OBJID_NATIVEOM_VALUE = 0xFFFFFFF0u;
-
-const int VK_KEY_0 = 0x30;
-const int VK_KEY_9 = 0x39;
-const int VK_KEY_A = 0x41;
-const int VK_KEY_Z = 0x5A;
 
 const IID kIIDNull = {};
 const IID kIIDIDispatch = {
@@ -133,6 +138,17 @@ const IID kIIDIDispatch = {
     0x0000,
     {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}
 };
+
+#ifdef CONNECT_E_NOCONNECTION
+const HRESULT kConnectENoConnection = CONNECT_E_NOCONNECTION;
+#else
+const HRESULT kConnectENoConnection = static_cast<HRESULT>(0x80040200L);
+#endif
+#ifdef CO_E_OBJNOTCONNECTED
+const HRESULT kCoEObjectNotConnected = CO_E_OBJNOTCONNECTED;
+#else
+const HRESULT kCoEObjectNotConnected = static_cast<HRESULT>(0x800401FDL);
+#endif
 const IID kDIIDWordApplicationEvents4 = {
     0x00020A01,
     0x0000,
@@ -201,6 +217,10 @@ public:
     }
 
     void Reset(T* ptr = nullptr) {
+        if (m_ptr == ptr) {
+            return;
+        }
+
         if (m_ptr) {
             m_ptr->Release();
         }
@@ -258,6 +278,10 @@ public:
     }
 
     void Reset(BSTR value = nullptr) {
+        if (m_value == value) {
+            return;
+        }
+
         if (m_value) {
             SysFreeString(m_value);
         }
@@ -283,6 +307,64 @@ private:
     BSTR m_value = nullptr;
 };
 
+class ScopedHandle {
+public:
+    explicit ScopedHandle(HANDLE handle = INVALID_HANDLE_VALUE)
+        : m_handle(handle) {
+    }
+
+    ScopedHandle(const ScopedHandle&) = delete;
+    ScopedHandle& operator=(const ScopedHandle&) = delete;
+
+    ScopedHandle(ScopedHandle&& other) noexcept : m_handle(other.Detach()) {
+    }
+
+    ScopedHandle& operator=(ScopedHandle&& other) noexcept {
+        if (this != &other) {
+            Reset(other.Detach());
+        }
+
+        return *this;
+    }
+
+    ~ScopedHandle() {
+        Reset();
+    }
+
+    HANDLE Get() const {
+        return m_handle;
+    }
+
+    bool IsValid() const {
+        return IsValidHandle(m_handle);
+    }
+
+    void Reset(HANDLE handle = INVALID_HANDLE_VALUE) {
+        if (m_handle == handle) {
+            return;
+        }
+
+        if (IsValidHandle(m_handle)) {
+            CloseHandle(m_handle);
+        }
+
+        m_handle = handle;
+    }
+
+    HANDLE Detach() {
+        HANDLE handle = m_handle;
+        m_handle = INVALID_HANDLE_VALUE;
+        return handle;
+    }
+
+private:
+    static bool IsValidHandle(HANDLE handle) {
+        return handle && handle != INVALID_HANDLE_VALUE;
+    }
+
+    HANDLE m_handle = INVALID_HANDLE_VALUE;
+};
+
 // ============================================================================
 // Global State
 // ============================================================================
@@ -294,14 +376,19 @@ struct {
 
 TranslateMessage_t g_originalTranslateMessage = nullptr;
 
+class WordApplicationEventSink;
+
 struct RuntimeTimingState {
     UINT_PTR schedulerTimerId = 0;
     ULONGLONG schedulerTimerDueTime = 0;
     ULONGLONG saveTimerDueTime = 0;
     ULONGLONG documentStateTimerDueTime = 0;
+    ULONGLONG eventDisconnectRetryTimerDueTime = 0;
     ULONGLONG lastEditTime = 0;
+    ULONGLONG transitionFlushRequestTime = 0;
     ULONGLONG lastSaveTime = 0;
     ULONGLONG lastEventConnectAttemptTime = 0;
+    ULONGLONG lastTextInputKeyDownTime = 0;
     ULONGLONG pendingSaveAsTime = 0;
     DWORD saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
     DWORD documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
@@ -312,6 +399,7 @@ struct RuntimeStatusState {
     ScopedBstr lastDocumentStateStatusMessage;
     ULONGLONG lastSaveFailureLogTime = 0;
     ULONGLONG lastDocumentStateFailureLogTime = 0;
+    ULONGLONG lastEventDisconnectFailureLogTime = 0;
     ULONGLONG lastSaveStatusLogTime = 0;
     ULONGLONG lastDocumentStateStatusLogTime = 0;
 };
@@ -319,6 +407,7 @@ struct RuntimeStatusState {
 struct RuntimeDocumentState {
     ScopedBstr observedDocumentPath;
     ScopedBstr transitionFlushDocumentPath;
+    ScopedComPtr<IDispatch> observedDocument;
     ScopedComPtr<IDispatch> transitionFlushDocument;
     ScopedComPtr<IUnknown> observedDocumentIdentity;
     ScopedComPtr<IUnknown> pendingSaveAsDocumentIdentity;
@@ -329,13 +418,24 @@ struct WordEventSession {
     WordEventSession() = default;
     WordEventSession(const WordEventSession&) = delete;
     WordEventSession& operator=(const WordEventSession&) = delete;
-    WordEventSession(WordEventSession&&) = default;
-    WordEventSession& operator=(WordEventSession&&) = default;
+    WordEventSession(WordEventSession&& other) noexcept {
+        MoveFrom(&other);
+    }
+
+    WordEventSession& operator=(WordEventSession&& other) noexcept {
+        if (this != &other) {
+            Reset();
+            MoveFrom(&other);
+        }
+
+        return *this;
+    }
 
     LONG_PTR applicationHwnd = 0;
     ScopedComPtr<IDispatch> application;
     ScopedComPtr<IConnectionPoint> connectionPoint;
     ScopedComPtr<IDispatch> sink;
+    WordApplicationEventSink* sinkControl = nullptr;
     DWORD cookie = 0;
 
     void Reset() {
@@ -343,16 +443,36 @@ struct WordEventSession {
         application.Reset();
         connectionPoint.Reset();
         sink.Reset();
+        sinkControl = nullptr;
         cookie = 0;
     }
 
     bool IsConnected() const {
         return connectionPoint && cookie != 0;
     }
+
+private:
+    void MoveFrom(WordEventSession* other) {
+        if (!other) {
+            return;
+        }
+
+        applicationHwnd = other->applicationHwnd;
+        application = std::move(other->application);
+        connectionPoint = std::move(other->connectionPoint);
+        sink = std::move(other->sink);
+        sinkControl = other->sinkControl;
+        cookie = other->cookie;
+
+        other->applicationHwnd = 0;
+        other->sinkControl = nullptr;
+        other->cookie = 0;
+    }
 };
 
 struct RuntimeEventState {
     WordEventSession session;
+    WordEventSession pendingDisconnectSessions[WORD_EVENT_PENDING_DISCONNECT_CAPACITY];
 };
 
 struct RuntimeUiCacheState {
@@ -372,6 +492,10 @@ struct RuntimeFlagState {
     volatile LONG automationBusyPending = FALSE;
     volatile LONG pendingSaveAsMigration = FALSE;
     volatile LONG wordEventsConnected = FALSE;
+    volatile LONG wordEventDisconnectRetryPending = FALSE;
+    volatile LONG autoSaveInProgress = FALSE;
+    volatile LONG postTransitionRefreshPending = FALSE;
+    volatile LONG suppressNextCharacterInput = FALSE;
     volatile LONG moduleActive = FALSE;
 };
 
@@ -409,6 +533,25 @@ void SetFlag(volatile LONG& value) {
 void ClearFlag(volatile LONG& value) {
     StoreFlag(value, false);
 }
+
+class ScopedFlagSet {
+public:
+    explicit ScopedFlagSet(volatile LONG& flag) : m_flag(&flag) {
+        SetFlag(*m_flag);
+    }
+
+    ScopedFlagSet(const ScopedFlagSet&) = delete;
+    ScopedFlagSet& operator=(const ScopedFlagSet&) = delete;
+
+    ~ScopedFlagSet() {
+        if (m_flag) {
+            ClearFlag(*m_flag);
+        }
+    }
+
+private:
+    volatile LONG* m_flag = nullptr;
+};
 
 DWORD LoadOwnerThreadId() {
     return static_cast<DWORD>(InterlockedCompareExchange(&g_runtime.ownerThreadId, 0, 0));
@@ -467,11 +610,17 @@ bool ReplaceStoredComPtr(ScopedComPtr<T>* storage, T* value) {
 bool AreSameDocumentPath(const wchar_t* left, const wchar_t* right);
 bool ReplaceStoredBstr(BSTR* storage, const wchar_t* value);
 bool ReplaceStoredBstr(ScopedBstr* storage, const wchar_t* value);
+bool ReplaceStoredTextBstr(BSTR* storage, const wchar_t* value);
+bool ReplaceStoredTextBstr(ScopedBstr* storage, const wchar_t* value);
 void LogSaveStatus(const wchar_t* message);
 void LogDocumentStateStatus(const wchar_t* message);
 bool AreModifiersOrMouseButtonsHeld();
 HRESULT GetComIdentity(IUnknown* unknown, IUnknown** result);
 HRESULT GetDispatchTypeGuid(IDispatch* dispatch, GUID* result);
+HRESULT GetDocumentIdentityAndPathState(IDispatch* document,
+                                        BSTR* result,
+                                        bool* hasSavedPath);
+HRESULT GetWordDocumentFromActiveWindow(IDispatch** document);
 bool IsWindowInCurrentWordProcess(HWND hwnd);
 void InvalidateTransitionFlushDocumentCache();
 struct RuntimeFlagSnapshot;
@@ -480,6 +629,7 @@ DWORD GetSteadyDocumentStatePollDelay(const RuntimeFlagSnapshot* flags = nullptr
 enum class MessageAutosaveRole {
     None,
     EditingInput,
+    TextKeyDownInput,
     DocumentRefreshFallback,
     ActionBoundaryFallback,
     TransitionBoundaryFallback,
@@ -508,7 +658,30 @@ enum class TickDecisionAction {
 enum class ScheduledTaskKind {
     Save,
     DocumentState,
+    EventDisconnectRetry,
 };
+
+enum class ScheduledTaskScheduleMode {
+    ArmEarlier,
+    Reschedule,
+};
+
+enum class RuntimeResetMode {
+    Shutdown,
+    Reload,
+};
+
+bool ShouldPreserveDeferredWordEventDisconnects(RuntimeResetMode resetMode) {
+    switch (resetMode) {
+        case RuntimeResetMode::Reload:
+            return true;
+
+        case RuntimeResetMode::Shutdown:
+            return false;
+    }
+
+    return false;
+}
 
 bool HasClassName(HWND hwnd, const wchar_t* className) {
     if (!hwnd || !className) {
@@ -698,7 +871,7 @@ bool ShouldLogStatusMessageNow(BSTR* lastMessage,
         return ShouldLogStatusNow(lastLogTime);
     }
 
-    if (!ReplaceStoredBstr(lastMessage, message)) {
+    if (!ReplaceStoredTextBstr(lastMessage, message)) {
         return ShouldLogStatusNow(lastLogTime);
     }
 
@@ -719,7 +892,7 @@ bool ShouldLogStatusMessageNow(ScopedBstr* lastMessage,
         return ShouldLogStatusNow(lastLogTime);
     }
 
-    if (!ReplaceStoredBstr(lastMessage, message)) {
+    if (!ReplaceStoredTextBstr(lastMessage, message)) {
         return ShouldLogStatusNow(lastLogTime);
     }
 
@@ -802,6 +975,58 @@ bool ReplaceStoredBstr(ScopedBstr* storage, const wchar_t* value) {
     return true;
 }
 
+bool ReplaceStoredTextBstr(BSTR* storage, const wchar_t* value) {
+    if (!storage) {
+        return false;
+    }
+
+    const bool currentEmpty = !*storage || !**storage;
+    const bool valueEmpty = !value || !*value;
+    if ((currentEmpty && valueEmpty) ||
+        (!currentEmpty && !valueEmpty && lstrcmpW(*storage, value) == 0)) {
+        return true;
+    }
+
+    BSTR replacement = nullptr;
+    if (!valueEmpty) {
+        replacement = SysAllocString(value);
+        if (!replacement) {
+            return false;
+        }
+    }
+
+    if (*storage) {
+        SysFreeString(*storage);
+    }
+
+    *storage = replacement;
+    return true;
+}
+
+bool ReplaceStoredTextBstr(ScopedBstr* storage, const wchar_t* value) {
+    if (!storage) {
+        return false;
+    }
+
+    const bool currentEmpty = !storage->Get() || !*storage->Get();
+    const bool valueEmpty = !value || !*value;
+    if ((currentEmpty && valueEmpty) ||
+        (!currentEmpty && !valueEmpty && lstrcmpW(storage->Get(), value) == 0)) {
+        return true;
+    }
+
+    BSTR replacement = nullptr;
+    if (!valueEmpty) {
+        replacement = SysAllocString(value);
+        if (!replacement) {
+            return false;
+        }
+    }
+
+    storage->Reset(replacement);
+    return true;
+}
+
 void ClearStoredStatusMessage(BSTR* storage, ULONGLONG* lastLogTime) {
     if (storage && *storage) {
         SysFreeString(*storage);
@@ -823,14 +1048,156 @@ void ClearStoredStatusMessage(ScopedBstr* storage, ULONGLONG* lastLogTime) {
     }
 }
 
-bool AreSameDocumentPath(const wchar_t* left, const wchar_t* right) {
+bool IsAsciiDriveLetter(wchar_t value) {
+    return (value >= L'A' && value <= L'Z') ||
+           (value >= L'a' && value <= L'z');
+}
+
+bool HasWin32NamespacePrefix(const wchar_t* path, DWORD pathLength) {
+    return pathLength > 4 &&
+           path[0] == L'\\' &&
+           path[1] == L'\\' &&
+           path[2] == L'?' &&
+           path[3] == L'\\';
+}
+
+bool StoreNormalizedFinalPath(const wchar_t* finalPath, DWORD finalPathLength, ScopedBstr* result) {
+    if (!finalPath || finalPathLength == 0 || !result) {
+        return false;
+    }
+
+    if (HasWin32NamespacePrefix(finalPath, finalPathLength) &&
+        finalPathLength > 8 &&
+        finalPath[4] == L'U' &&
+        finalPath[5] == L'N' &&
+        finalPath[6] == L'C' &&
+        finalPath[7] == L'\\') {
+        const UINT normalizedLength = static_cast<UINT>(finalPathLength - 6);
+        BSTR normalizedPath = SysAllocStringLen(nullptr, normalizedLength);
+        if (!normalizedPath) {
+            return false;
+        }
+
+        normalizedPath[0] = L'\\';
+        normalizedPath[1] = L'\\';
+        CopyMemory(normalizedPath + 2,
+                   finalPath + 8,
+                   (normalizedLength - 2) * sizeof(wchar_t));
+        normalizedPath[normalizedLength] = L'\0';
+        result->Reset(normalizedPath);
+        return true;
+    }
+
+    const wchar_t* pathStart = finalPath;
+    DWORD pathLength = finalPathLength;
+    if (HasWin32NamespacePrefix(finalPath, finalPathLength) &&
+        finalPathLength > 6 &&
+        IsAsciiDriveLetter(finalPath[4]) &&
+        finalPath[5] == L':') {
+        pathStart = finalPath + 4;
+        pathLength = finalPathLength - 4;
+    }
+
+    BSTR normalizedPath = SysAllocStringLen(pathStart, static_cast<UINT>(pathLength));
+    if (!normalizedPath) {
+        return false;
+    }
+
+    result->Reset(normalizedPath);
+    return true;
+}
+
+bool TryGetCanonicalDocumentPath(const wchar_t* path, ScopedBstr* result) {
+    if (!path || !*path || !result) {
+        return false;
+    }
+
+    wchar_t fullPath[MAX_CANONICAL_PATH_CHARS] = {};
+    const DWORD fullPathLength =
+        GetFullPathNameW(path, ARRAYSIZE(fullPath), fullPath, nullptr);
+    if (fullPathLength == 0 || fullPathLength >= ARRAYSIZE(fullPath)) {
+        return false;
+    }
+
+    ScopedHandle file(CreateFileW(fullPath,
+                                  0,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                  nullptr,
+                                  OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS,
+                                  nullptr));
+    if (!file.IsValid()) {
+        return StoreNormalizedFinalPath(fullPath, fullPathLength, result);
+    }
+
+    wchar_t finalPath[MAX_CANONICAL_PATH_CHARS] = {};
+    const DWORD finalPathLength =
+        GetFinalPathNameByHandleW(file.Get(),
+                                  finalPath,
+                                  ARRAYSIZE(finalPath),
+                                  FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (finalPathLength == 0 || finalPathLength >= ARRAYSIZE(finalPath)) {
+        return StoreNormalizedFinalPath(fullPath, fullPathLength, result);
+    }
+
+    return StoreNormalizedFinalPath(finalPath, finalPathLength, result);
+}
+
+bool AreSameNormalizedDocumentPathText(const wchar_t* left, const wchar_t* right) {
     const bool leftEmpty = !left || !*left;
     const bool rightEmpty = !right || !*right;
     if (leftEmpty || rightEmpty) {
         return leftEmpty == rightEmpty;
     }
 
-    return lstrcmpiW(left, right) == 0;
+    auto isSlash = [](wchar_t value) {
+        return value == L'\\' || value == L'/';
+    };
+    auto normalizedLength = [&isSlash](const wchar_t* value) {
+        int length = lstrlenW(value);
+        while (length > 3 && isSlash(value[length - 1])) {
+            --length;
+        }
+
+        return length;
+    };
+
+    const int leftLength = normalizedLength(left);
+    const int rightLength = normalizedLength(right);
+    if (leftLength != rightLength) {
+        return false;
+    }
+
+    for (int index = 0; index < leftLength; ++index) {
+        wchar_t leftChar = isSlash(left[index]) ? L'\\' : left[index];
+        wchar_t rightChar = isSlash(right[index]) ? L'\\' : right[index];
+        if (CompareStringOrdinal(&leftChar, 1, &rightChar, 1, TRUE) != CSTR_EQUAL) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool AreSameDocumentPath(const wchar_t* left, const wchar_t* right) {
+    if (AreSameNormalizedDocumentPathText(left, right)) {
+        return true;
+    }
+
+    const bool leftEmpty = !left || !*left;
+    const bool rightEmpty = !right || !*right;
+    if (leftEmpty || rightEmpty) {
+        return false;
+    }
+
+    ScopedBstr canonicalLeft;
+    ScopedBstr canonicalRight;
+    if (!TryGetCanonicalDocumentPath(left, &canonicalLeft) ||
+        !TryGetCanonicalDocumentPath(right, &canonicalRight)) {
+        return false;
+    }
+
+    return AreSameNormalizedDocumentPathText(canonicalLeft.CStr(), canonicalRight.CStr());
 }
 
 bool SetObservedDocumentPath(const wchar_t* path) {
@@ -872,11 +1239,27 @@ void ClearExpeditedSavePending() {
     ClearFlag(g_runtime.flags.expeditedSavePending);
 }
 
-void ClearTransitionFlushRequest() {
+void ClearPostTransitionRefreshPending() {
+    ClearFlag(g_runtime.flags.postTransitionRefreshPending);
+}
+
+enum class TransitionFlushClearMode {
+    ClearPostTransitionRefresh,
+    PreservePostTransitionRefresh,
+};
+
+void ClearTransitionFlushRequest(
+    TransitionFlushClearMode clearMode =
+        TransitionFlushClearMode::ClearPostTransitionRefresh) {
     ClearFlag(g_runtime.flags.transitionFlushPending);
     g_runtime.document.transitionFlushDocumentPath.Reset();
+    g_runtime.timing.transitionFlushRequestTime = 0;
 
     InvalidateTransitionFlushDocumentCache();
+
+    if (clearMode == TransitionFlushClearMode::ClearPostTransitionRefresh) {
+        ClearPostTransitionRefreshPending();
+    }
 }
 
 bool HasPendingSaveWork() {
@@ -910,10 +1293,25 @@ bool HasPendingSaveAsMigration() {
     return LoadFlag(g_runtime.flags.pendingSaveAsMigration);
 }
 
+bool HasPendingWordEventDisconnectRetry() {
+    return LoadFlag(g_runtime.flags.wordEventDisconnectRetryPending);
+}
+
+bool HasActiveDocumentStatePollWorkForState(bool pendingSaveWork,
+                                            bool automationBusyPending,
+                                            bool pendingSaveAsMigration) {
+    return pendingSaveWork || automationBusyPending || pendingSaveAsMigration;
+}
+
 bool HasActiveDocumentStatePollWork() {
-    return HasPendingSaveWork() ||
-           LoadFlag(g_runtime.flags.automationBusyPending) ||
-           HasPendingSaveAsMigration();
+    return HasActiveDocumentStatePollWorkForState(
+        HasPendingSaveWork(),
+        LoadFlag(g_runtime.flags.automationBusyPending),
+        HasPendingSaveAsMigration());
+}
+
+bool HasTransitionFlushTarget(const wchar_t* path, IDispatch* document) {
+    return (path && *path) || document;
 }
 
 bool AreWordEventsConnected() {
@@ -947,6 +1345,7 @@ void ResetObservedDocumentState();
 
 void ResetObservedDocumentState() {
     g_runtime.document.observedDocumentPath.Reset();
+    g_runtime.document.observedDocument.Reset();
     g_runtime.document.observedDocumentIdentity.Reset();
 
     ClearFlag(g_runtime.flags.documentDirtyKnown);
@@ -956,19 +1355,30 @@ void ResetObservedDocumentState() {
 void RequestTransitionFlush(const wchar_t* path,
                            const wchar_t* reason,
                            IDispatch* document = nullptr) {
-    SetFlag(g_runtime.flags.transitionFlushPending);
-    if (!SetTransitionFlushDocumentPath(path) ||
-        (document && !SetTransitionFlushDocument(document))) {
+    if (!HasTransitionFlushTarget(path, document)) {
+        return;
+    }
+
+    if (!SetTransitionFlushDocumentPath(path)) {
         ClearTransitionFlushRequest();
-        SetFlag(g_runtime.flags.transitionFlushPending);
-        if (!SetTransitionFlushDocumentPath(path)) {
+        return;
+    }
+
+    if (document && !SetTransitionFlushDocument(document)) {
+        InvalidateTransitionFlushDocumentCache();
+        if (g_runtime.document.transitionFlushDocumentPath.Length() == 0) {
+            ClearTransitionFlushRequest();
             return;
         }
     } else if (!document) {
         SetTransitionFlushDocument(nullptr);
     }
 
+    SetFlag(g_runtime.flags.transitionFlushPending);
     SetFlag(g_runtime.flags.expeditedSavePending);
+    if (g_runtime.timing.transitionFlushRequestTime == 0) {
+        g_runtime.timing.transitionFlushRequestTime = GetTickCount64();
+    }
     if (reason) {
         LogSaveStatus(reason);
     }
@@ -1519,7 +1929,9 @@ bool CanRunOwnerThreadRuntimeWork() {
 bool ShouldTrackDocumentStateWhileInactive(bool pendingSaveWork,
                                            bool pendingSaveAsMigration,
                                            bool wordEventsConnected) {
-    return pendingSaveWork || pendingSaveAsMigration || !wordEventsConnected;
+    return pendingSaveWork ||
+           pendingSaveAsMigration ||
+           !wordEventsConnected;
 }
 
 bool ShouldRequireCleanSnapshotDetails(bool manualSavePending,
@@ -1589,6 +2001,12 @@ RuntimeTickSnapshot CaptureAutosaveTickSnapshot(const MSG* lpMsg = nullptr) {
         return snapshot;
     }
 
+    snapshot.flags.documentDirtyKnown =
+        LoadFlag(g_runtime.flags.documentDirtyKnown);
+    snapshot.flags.documentDirty =
+        LoadFlag(g_runtime.flags.documentDirty);
+    snapshot.flags.pendingSaveAsMigration =
+        LoadFlag(g_runtime.flags.pendingSaveAsMigration);
     CaptureTickWindowAndInputObservation(&snapshot.runtime, lpMsg);
     return snapshot;
 }
@@ -1607,6 +2025,15 @@ TickDecision MakeSaveRearmDecision(RuntimeStatePhase state, DWORD delayMs) {
     decision.action = TickDecisionAction::RearmSaveTimer;
     decision.delayMs = delayMs;
     return decision;
+}
+
+ULONGLONG GetAutosaveDelayBaseTime(bool transitionFlushRequested) {
+    if (transitionFlushRequested &&
+        g_runtime.timing.transitionFlushRequestTime != 0) {
+        return g_runtime.timing.transitionFlushRequestTime;
+    }
+
+    return g_runtime.timing.lastEditTime;
 }
 
 TickDecision EvaluateDocumentStateTickDecision(const RuntimeTickSnapshot& snapshot) {
@@ -1632,7 +2059,10 @@ TickDecision EvaluateDocumentStateTickDecision(const RuntimeTickSnapshot& snapsh
 
     if (snapshot.runtime.pendingSave &&
         !snapshot.runtime.manualSavePending &&
-        !snapshot.pendingSaveAsMigration) {
+        !snapshot.pendingSaveAsMigration &&
+        snapshot.flags.documentDirtyKnown &&
+        snapshot.flags.documentDirty &&
+        g_runtime.document.observedDocumentPath.Length() != 0) {
         return MakeDocumentStateRearmDecision(RuntimeStatePhase::WaitingForSaveDelay,
                                               DOCUMENT_STATE_ACTIVE_POLL_INTERVAL_MS);
     }
@@ -1672,13 +2102,16 @@ TickDecision EvaluateAutosaveTickDecision(const RuntimeTickSnapshot& snapshot) {
             ? INPUT_SETTLE_DELAY_MS
             : static_cast<DWORD>(g_settings.saveDelay);
     const ULONGLONG earliestEditSaveTime =
-        g_runtime.timing.lastEditTime + static_cast<ULONGLONG>(effectiveDelayMs);
+        GetAutosaveDelayBaseTime(snapshot.runtime.transitionFlushRequested) +
+        static_cast<ULONGLONG>(effectiveDelayMs);
     if (snapshot.now < earliestEditSaveTime) {
         return MakeSaveRearmDecision(RuntimeStatePhase::WaitingForSaveDelay,
                                      static_cast<DWORD>(earliestEditSaveTime - snapshot.now));
     }
 
-    if (g_settings.minTimeBetweenSaves > 0 && g_runtime.timing.lastSaveTime > 0) {
+    if (!snapshot.runtime.transitionFlushRequested &&
+        g_settings.minTimeBetweenSaves > 0 &&
+        g_runtime.timing.lastSaveTime > 0) {
         const ULONGLONG earliestAllowedSave =
             g_runtime.timing.lastSaveTime + static_cast<ULONGLONG>(g_settings.minTimeBetweenSaves);
         if (snapshot.now < earliestAllowedSave) {
@@ -1714,9 +2147,14 @@ HWND FindNativeWordViewWindow() {
 
 bool ArmDocumentStateTimer(DWORD delayMs);
 bool ArmSaveTimer(DWORD delayMs);
+bool RescheduleSaveTimer(DWORD delayMs);
+void CancelSchedulerTimer();
 bool EnsureWordApplicationEventsConnected(bool forceReconnect = false);
-void DisconnectWordApplicationEvents();
+void DisconnectWordApplicationEvents(bool allowDeferredRetry = true);
+void RetryPendingWordEventDisconnects();
 void CALLBACK SchedulerTimerProc(HWND, UINT, UINT_PTR, DWORD);
+struct ActiveDocumentSnapshot;
+enum class SaveAttemptResult;
 
 void AdoptOwnerThreadIfNeeded(const MSG* lpMsg) {
     if (!lpMsg || !IsOwnerCandidateMessage(lpMsg->message)) {
@@ -1744,19 +2182,22 @@ void AdoptOwnerThreadIfNeeded(const MSG* lpMsg) {
         }
     }
 
-    const DWORD previousOwnerThreadId = ExchangeOwnerThreadId(currentThreadId);
-    if (previousOwnerThreadId != currentThreadId) {
-        g_runtime.timing.schedulerTimerId = 0;
-        g_runtime.timing.schedulerTimerDueTime = 0;
-        g_runtime.timing.saveTimerDueTime = 0;
-        g_runtime.timing.documentStateTimerDueTime = 0;
-        g_runtime.timing.saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
-        g_runtime.timing.documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
-        EnsureWordApplicationEventsConnected(true);
-        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
-        if (LoadFlag(g_runtime.flags.pendingSave)) {
-            ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
-        }
+    const DWORD previousOwnerThreadId = LoadOwnerThreadId();
+    if (previousOwnerThreadId == currentThreadId) {
+        return;
+    }
+
+    CancelSchedulerTimer();
+    g_runtime.timing.saveTimerDueTime = 0;
+    g_runtime.timing.documentStateTimerDueTime = 0;
+    g_runtime.timing.saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+    g_runtime.timing.documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
+
+    ExchangeOwnerThreadId(currentThreadId);
+    EnsureWordApplicationEventsConnected(true);
+    ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+    if (LoadFlag(g_runtime.flags.pendingSave)) {
+        ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
     }
 }
 
@@ -1767,21 +2208,34 @@ ULONGLONG* GetScheduledTaskDueTimeStorage(ScheduledTaskKind taskKind) {
 
         case ScheduledTaskKind::DocumentState:
             return &g_runtime.timing.documentStateTimerDueTime;
+
+        case ScheduledTaskKind::EventDisconnectRetry:
+            return &g_runtime.timing.eventDisconnectRetryTimerDueTime;
     }
 
     return nullptr;
 }
 
-ULONGLONG GetNextScheduledTaskDueTime() {
-    ULONGLONG nextDueTime = 0;
-    if (g_runtime.timing.saveTimerDueTime != 0) {
-        nextDueTime = g_runtime.timing.saveTimerDueTime;
+void SelectEarlierScheduledTaskDueTime(ULONGLONG* selectedDueTime,
+                                       ULONGLONG candidateDueTime) {
+    if (!selectedDueTime || candidateDueTime == 0) {
+        return;
     }
 
-    if (g_runtime.timing.documentStateTimerDueTime != 0 &&
-        (nextDueTime == 0 || g_runtime.timing.documentStateTimerDueTime < nextDueTime)) {
-        nextDueTime = g_runtime.timing.documentStateTimerDueTime;
+    if (*selectedDueTime == 0 || candidateDueTime < *selectedDueTime) {
+        *selectedDueTime = candidateDueTime;
     }
+}
+
+ULONGLONG GetNextScheduledTaskDueTime() {
+    ULONGLONG nextDueTime = 0;
+    SelectEarlierScheduledTaskDueTime(&nextDueTime,
+                                      g_runtime.timing.saveTimerDueTime);
+    SelectEarlierScheduledTaskDueTime(&nextDueTime,
+                                      g_runtime.timing.documentStateTimerDueTime);
+    SelectEarlierScheduledTaskDueTime(
+        &nextDueTime,
+        g_runtime.timing.eventDisconnectRetryTimerDueTime);
 
     return nextDueTime;
 }
@@ -1827,7 +2281,18 @@ bool RefreshSchedulerTimer() {
     return true;
 }
 
-bool ScheduleTask(ScheduledTaskKind taskKind, DWORD delayMs) {
+bool ShouldKeepExistingScheduledTaskDueTime(ULONGLONG existingDueTime,
+                                            ULONGLONG candidateDueTime,
+                                            ScheduledTaskScheduleMode scheduleMode) {
+    return scheduleMode == ScheduledTaskScheduleMode::ArmEarlier &&
+           existingDueTime != 0 &&
+           existingDueTime <= candidateDueTime;
+}
+
+bool ScheduleTask(ScheduledTaskKind taskKind,
+                  DWORD delayMs,
+                  ScheduledTaskScheduleMode scheduleMode =
+                      ScheduledTaskScheduleMode::ArmEarlier) {
     if (!IsOwnerThreadSchedulerContextValid()) {
         return false;
     }
@@ -1839,7 +2304,9 @@ bool ScheduleTask(ScheduledTaskKind taskKind, DWORD delayMs) {
 
     const DWORD effectiveDelayMs = delayMs ? delayMs : 1;
     const ULONGLONG dueTime = GetTickCount64() + effectiveDelayMs;
-    if (*dueTimeStorage != 0 && *dueTimeStorage <= dueTime) {
+    if (ShouldKeepExistingScheduledTaskDueTime(*dueTimeStorage,
+                                               dueTime,
+                                               scheduleMode)) {
         return RefreshSchedulerTimer();
     }
 
@@ -1878,6 +2345,13 @@ void CancelDocumentStateTimer() {
 void HandleAutosaveTick();
 void HandleDocumentStateTick();
 void ExpirePendingSaveAsMigrationIfNeeded();
+SaveAttemptResult TrySaveActiveDocument(ActiveDocumentSnapshot* snapshot,
+                                        const wchar_t* specificPath = nullptr,
+                                        IDispatch* specificDocument = nullptr);
+void HandleAutosaveAttemptResult(SaveAttemptResult result,
+                                 const ActiveDocumentSnapshot* snapshot,
+                                 const RuntimeTickSnapshot& tick);
+void TryCriticalTransitionSaveNow(const wchar_t* path, IDispatch* document);
 
 DWORD ComputeSteadyDocumentStatePollDelay(bool hasActivePollWork,
                                           bool wordEventsConnected) {
@@ -1894,14 +2368,13 @@ DWORD ComputeSteadyDocumentStatePollDelay(bool hasActivePollWork,
 
 DWORD GetSteadyDocumentStatePollDelay(const RuntimeFlagSnapshot* flags) {
     const bool hasActivePollWork =
-        flags ? (flags->pendingSave ||
-                 flags->documentDirty ||
-                 flags->manualSavePending ||
-                 flags->automationBusyPending ||
-                 flags->pendingSaveAsMigration)
-              : (HasPendingSaveWork() ||
-                 LoadFlag(g_runtime.flags.automationBusyPending) ||
-                 HasPendingSaveAsMigration());
+        flags ? HasActiveDocumentStatePollWorkForState(
+                    flags->pendingSave ||
+                        flags->documentDirty ||
+                        flags->manualSavePending,
+                    flags->automationBusyPending,
+                    flags->pendingSaveAsMigration)
+              : HasActiveDocumentStatePollWork();
     const bool wordEventsConnected =
         flags ? flags->wordEventsConnected : AreWordEventsConnected();
 
@@ -1916,7 +2389,19 @@ void RequestPendingSaveExpedite(bool transitionFlush,
                                 const wchar_t* reason,
                                 DWORD delayMs = INPUT_SETTLE_DELAY_MS) {
     if (transitionFlush) {
-        RequestTransitionFlush(g_runtime.document.observedDocumentPath.Get(), reason);
+        if (g_runtime.document.observedDocumentPath.Length() == 0 &&
+            !g_runtime.document.observedDocument) {
+            CancelSaveTimer();
+            ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+            if (reason) {
+                LogSaveStatus(L"waiting to identify the edited document before switching away");
+            }
+            return;
+        }
+
+        RequestTransitionFlush(g_runtime.document.observedDocumentPath.Get(),
+                               reason,
+                               g_runtime.document.observedDocument.Get());
     } else {
         SetFlag(g_runtime.flags.expeditedSavePending);
         if (reason) {
@@ -1954,17 +2439,112 @@ void MaybeKickAutomationRecovery() {
     MaybeKickAutomationRecovery(GetInputState() || AreModifiersOrMouseButtonsHeld());
 }
 
+class ScopedComMessageFilter final : public IMessageFilter {
+public:
+    ScopedComMessageFilter() {
+        HRESULT hr = CoRegisterMessageFilter(this, &m_previousFilter);
+        m_registered = SUCCEEDED(hr);
+    }
+
+    ScopedComMessageFilter(const ScopedComMessageFilter&) = delete;
+    ScopedComMessageFilter& operator=(const ScopedComMessageFilter&) = delete;
+
+    ~ScopedComMessageFilter() {
+        if (m_registered) {
+            IMessageFilter* currentFilter = nullptr;
+            CoRegisterMessageFilter(m_previousFilter, &currentFilter);
+            if (currentFilter) {
+                currentFilter->Release();
+            }
+        }
+
+        if (m_previousFilter) {
+            m_previousFilter->Release();
+        }
+    }
+
+    STDMETHODIMP QueryInterface(REFIID riid, void** object) override {
+        if (!object) {
+            return E_POINTER;
+        }
+
+        *object = nullptr;
+        if (riid == IID_IUnknown || riid == IID_IMessageFilter) {
+            *object = static_cast<IMessageFilter*>(this);
+            AddRef();
+            return S_OK;
+        }
+
+        return E_NOINTERFACE;
+    }
+
+    STDMETHODIMP_(ULONG) AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&m_refCount));
+    }
+
+    STDMETHODIMP_(ULONG) Release() override {
+        return static_cast<ULONG>(InterlockedDecrement(&m_refCount));
+    }
+
+    STDMETHODIMP_(DWORD) HandleInComingCall(DWORD,
+                                            HTASK,
+                                            DWORD,
+                                            LPINTERFACEINFO) override {
+        return SERVERCALL_ISHANDLED;
+    }
+
+    STDMETHODIMP_(DWORD) RetryRejectedCall(HTASK,
+                                           DWORD elapsedMs,
+                                           DWORD rejectType) override {
+        if (rejectType == SERVERCALL_RETRYLATER &&
+            elapsedMs < COM_MESSAGE_FILTER_CANCEL_AFTER_MS) {
+            return COM_MESSAGE_FILTER_RETRY_DELAY_MS;
+        }
+
+        return static_cast<DWORD>(-1);
+    }
+
+    STDMETHODIMP_(DWORD) MessagePending(HTASK, DWORD, DWORD) override {
+        return PENDINGMSG_WAITDEFPROCESS;
+    }
+
+private:
+    volatile LONG m_refCount = 1;
+    IMessageFilter* m_previousFilter = nullptr;
+    bool m_registered = false;
+};
+
 bool ArmDocumentStateTimer(DWORD delayMs) {
     return ScheduleTask(ScheduledTaskKind::DocumentState, delayMs);
 }
 
 void ScheduleSaveFromEdit() {
-    ClearTransitionFlushRequest();
-    ClearExpeditedSavePending();
+    const bool transitionFlushPending =
+        LoadFlag(g_runtime.flags.transitionFlushPending);
+    if (!transitionFlushPending) {
+        ClearTransitionFlushRequest();
+        ClearExpeditedSavePending();
+        ClearPostTransitionRefreshPending();
+        g_runtime.timing.lastEditTime = GetTickCount64();
+    } else {
+        SetFlag(g_runtime.flags.expeditedSavePending);
+        SetFlag(g_runtime.flags.postTransitionRefreshPending);
+    }
+
     ClearAutomationBusyPending();
-    g_runtime.timing.lastEditTime = GetTickCount64();
     SetFlag(g_runtime.flags.pendingSave);
-    ArmSaveTimer(static_cast<DWORD>(g_settings.saveDelay));
+    const bool documentDirtyKnown = LoadFlag(g_runtime.flags.documentDirtyKnown);
+    const bool documentDirty = LoadFlag(g_runtime.flags.documentDirty);
+    if (!documentDirtyKnown ||
+        !documentDirty ||
+        g_runtime.document.observedDocumentPath.Length() == 0 ||
+        !g_runtime.document.observedDocument ||
+        transitionFlushPending) {
+        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+    }
+    RescheduleSaveTimer(transitionFlushPending
+                            ? INPUT_SETTLE_DELAY_MS
+                            : static_cast<DWORD>(g_settings.saveDelay));
 }
 
 void ClearPendingSave() {
@@ -1972,11 +2552,28 @@ void ClearPendingSave() {
     ClearExpeditedSavePending();
 }
 
-void HandleManualSave() {
-    ClearTransitionFlushRequest();
+bool ShouldPreserveTransitionFlushForManualSave(bool transitionFlushPending) {
+    return transitionFlushPending;
+}
+
+void PrepareManualSaveObservation() {
+    if (ShouldPreserveTransitionFlushForManualSave(
+            LoadFlag(g_runtime.flags.transitionFlushPending))) {
+        SetFlag(g_runtime.flags.expeditedSavePending);
+        SetFlag(g_runtime.flags.postTransitionRefreshPending);
+        ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
+    } else {
+        ClearTransitionFlushRequest();
+        ClearPostTransitionRefreshPending();
+        CancelSaveTimer();
+    }
+
     SetFlag(g_runtime.flags.manualSavePending);
-    CancelSaveTimer();
     ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+}
+
+void HandleManualSave() {
+    PrepareManualSaveObservation();
 }
 
 // ============================================================================
@@ -2359,6 +2956,25 @@ bool AreSameComIdentity(IUnknown* left, IUnknown* right) {
     return left && right && left == right;
 }
 
+bool AreSameDispatchComIdentity(IDispatch* left, IDispatch* right) {
+    if (!left || !right) {
+        return false;
+    }
+
+    if (left == right) {
+        return true;
+    }
+
+    ScopedComPtr<IUnknown> leftIdentity;
+    ScopedComPtr<IUnknown> rightIdentity;
+    if (FAILED(GetComIdentity(left, leftIdentity.Put())) ||
+        FAILED(GetComIdentity(right, rightIdentity.Put()))) {
+        return false;
+    }
+
+    return AreSameComIdentity(leftIdentity.Get(), rightIdentity.Get());
+}
+
 bool IsUsableWordApplicationWindowHandle(LONG_PTR hwndValue) {
     HWND hwnd = reinterpret_cast<HWND>(hwndValue);
     return hwnd &&
@@ -2374,17 +2990,32 @@ HRESULT GetApplicationWindowHandle(IDispatch* application, LONG_PTR* hwndValue) 
 
     *hwndValue = 0;
 
-    long hwndLong = 0;
-    HRESULT hr = GetIntProperty(application, L"Hwnd", &hwndLong);
+    ScopedVariant value;
+    HRESULT hr = InvokeDispatch(application,
+                                DISPATCH_PROPERTYGET,
+                                const_cast<LPOLESTR>(L"Hwnd"),
+                                value.Get());
     if (FAILED(hr)) {
         return hr;
     }
 
-    if (hwndLong == 0) {
+    ScopedVariant converted;
+    hr = VariantChangeType(converted.Get(), value.Get(), 0, VT_I8);
+    if (SUCCEEDED(hr)) {
+        *hwndValue = static_cast<LONG_PTR>(converted.Get()->llVal);
+    } else {
+        hr = VariantChangeType(converted.Get(), value.Get(), 0, VT_I4);
+        if (FAILED(hr)) {
+            return hr;
+        }
+
+        *hwndValue = static_cast<LONG_PTR>(converted.Get()->lVal);
+    }
+
+    if (*hwndValue == 0) {
         return E_FAIL;
     }
 
-    *hwndValue = static_cast<LONG_PTR>(hwndLong);
     return S_OK;
 }
 
@@ -2516,16 +3147,8 @@ HRESULT GetDocumentIdentityAndPathState(IDispatch* document,
     *result = nullptr;
     *hasSavedPath = false;
 
-    ScopedBstr fullName;
-    HRESULT hr = GetBstrProperty(document, L"FullName", fullName.Put());
-    if (SUCCEEDED(hr) && fullName.Length() > 0) {
-        *hasSavedPath = true;
-        *result = fullName.Detach();
-        return S_OK;
-    }
-
     ScopedBstr path;
-    hr = GetBstrProperty(document, L"Path", path.Put());
+    HRESULT hr = GetBstrProperty(document, L"Path", path.Put());
     if (FAILED(hr)) {
         return hr;
     }
@@ -2535,13 +3158,21 @@ HRESULT GetDocumentIdentityAndPathState(IDispatch* document,
         return S_FALSE;
     }
 
-    *hasSavedPath = true;
+    ScopedBstr fullName;
+    if (SUCCEEDED(GetBstrProperty(document, L"FullName", fullName.Put())) &&
+        fullName.Length() > 0) {
+        *hasSavedPath = true;
+        *result = fullName.Detach();
+        return S_OK;
+    }
 
     ScopedBstr name;
     hr = GetBstrProperty(document, L"Name", name.Put());
     if (FAILED(hr)) {
         return hr;
     }
+
+    *hasSavedPath = true;
 
     if (name.Length() == 0) {
         *result = path.Detach();
@@ -2672,9 +3303,12 @@ HRESULT GetWordApplicationFromActiveWindow(IDispatch** application) {
         if (SUCCEEDED(GetDispatchProperty(nativeObject.Get(),
                                           L"ActiveDocument",
                                           activeDocument.Put()))) {
-            nativeObject.Get()->AddRef();
-            *application = nativeObject.Get();
-            hr = S_OK;
+            hr = GetDispatchProperty(activeDocument.Get(), L"Application", application);
+            if (FAILED(hr) || !*application) {
+                nativeObject.Get()->AddRef();
+                *application = nativeObject.Get();
+                hr = S_OK;
+            }
         }
     }
 
@@ -2733,6 +3367,12 @@ HRESULT TryResolveWordApplicationFromSource(WordApplicationSource source,
     return E_FAIL;
 }
 
+HRESULT SelectWordApplicationResolutionFailure(bool hasRetryableFailure,
+                                               HRESULT lastRetryableFailure,
+                                               HRESULT lastFailure) {
+    return hasRetryableFailure ? lastRetryableFailure : lastFailure;
+}
+
 HRESULT ResolveWordApplication(WordApplicationResolutionStrategy strategy,
                                IDispatch** application) {
     if (!application) {
@@ -2752,7 +3392,8 @@ HRESULT ResolveWordApplication(WordApplicationResolutionStrategy strategy,
         sources[2] = WordApplicationSource::RunningObjectTable;
     }
 
-    HRESULT lastRetryableFailure = E_FAIL;
+    bool hasRetryableFailure = false;
+    HRESULT lastRetryableFailure = S_OK;
     HRESULT lastFailure = E_FAIL;
     for (WordApplicationSource source : sources) {
         HRESULT hr = TryResolveWordApplicationFromSource(source, application);
@@ -2761,13 +3402,16 @@ HRESULT ResolveWordApplication(WordApplicationResolutionStrategy strategy,
         }
 
         if (IsRetryableAutomationFailure(hr)) {
+            hasRetryableFailure = true;
             lastRetryableFailure = hr;
         } else if (FAILED(hr)) {
             lastFailure = hr;
         }
     }
 
-    return FAILED(lastRetryableFailure) ? lastRetryableFailure : lastFailure;
+    return SelectWordApplicationResolutionFailure(hasRetryableFailure,
+                                                 lastRetryableFailure,
+                                                 lastFailure);
 }
 
 HRESULT GetWordApplication(IDispatch** application) {
@@ -3011,10 +3655,11 @@ void HandleWordDocumentBeforeSaveEvent(const DISPPARAMS* params) {
     bool saveAsUi = false;
     GetBoolFromVariant(GetEventArgument(params, 1), &saveAsUi);
 
-    ClearTransitionFlushRequest();
-    SetFlag(g_runtime.flags.manualSavePending);
-    CancelSaveTimer();
-    ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+    if (LoadFlag(g_runtime.flags.autoSaveInProgress) && !saveAsUi) {
+        return;
+    }
+
+    PrepareManualSaveObservation();
 
     if (!saveAsUi || !document) {
         return;
@@ -3049,13 +3694,22 @@ void HandleWordDocumentBeforeCloseEvent(const DISPPARAMS* params) {
                                document.Get());
     } else {
         RequestTransitionFlush(g_runtime.document.observedDocumentPath.Get(),
-                               L"finishing pending changes before Word closes the current document");
+                               L"finishing pending changes before Word closes the current document",
+                               document.Get());
     }
 
     if (HasPendingAutosave()) {
-        ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
+        TryCriticalTransitionSaveNow(documentPath.Length() > 0
+                                         ? documentPath.CStr()
+                                         : g_runtime.document.observedDocumentPath.Get(),
+                                     document.Get());
+    }
+
+    if (HasPendingAutosave()) {
+        g_runtime.timing.lastEditTime = 0;
+        ArmSaveTimer(1);
     } else {
-        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+        ArmDocumentStateTimer(1);
     }
 }
 
@@ -3084,13 +3738,15 @@ void HandleWordWindowDeactivateEvent(const DISPPARAMS* params) {
                                document.Get());
     } else {
         RequestTransitionFlush(g_runtime.document.observedDocumentPath.Get(),
-                               L"finishing pending changes before Word leaves the current document window");
+                               L"finishing pending changes before Word leaves the current document window",
+                               document.Get());
     }
 
     if (HasPendingAutosave()) {
-        ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
+        g_runtime.timing.lastEditTime = 0;
+        ArmSaveTimer(1);
     } else {
-        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+        ArmDocumentStateTimer(1);
     }
 }
 
@@ -3125,6 +3781,10 @@ WordApplicationEventKind ClassifyWordApplicationEvent(const WordEventDispIds& di
 
 void DispatchWordApplicationEvent(WordApplicationEventKind eventKind,
                                   const DISPPARAMS* params) {
+    if (!LoadFlag(g_runtime.flags.moduleActive)) {
+        return;
+    }
+
     switch (eventKind) {
         case WordApplicationEventKind::DocumentBeforeSave:
             HandleWordDocumentBeforeSaveEvent(params);
@@ -3161,7 +3821,9 @@ public:
         }
 
         *object = nullptr;
-        if (riid == IID_IUnknown || riid == IID_IDispatch) {
+        if (riid == IID_IUnknown ||
+            riid == IID_IDispatch ||
+            riid == kDIIDWordApplicationEvents4) {
             *object = static_cast<IDispatch*>(this);
             AddRef();
             return S_OK;
@@ -3207,33 +3869,271 @@ public:
                         VARIANT*,
                         EXCEPINFO*,
                         UINT*) override {
+        if (!LoadFlag(m_active)) {
+            return S_OK;
+        }
+
         DispatchWordApplicationEvent(ClassifyWordApplicationEvent(m_dispIds, dispIdMember),
                                      params);
         return S_OK;
     }
 
+    void Deactivate() {
+        ClearFlag(m_active);
+    }
+
 private:
     volatile LONG m_refCount = 1;
+    volatile LONG m_active = TRUE;
     WordEventDispIds m_dispIds = {};
 };
 
-void DisconnectWordEventSession(WordEventSession* session) {
-    if (!session) {
+void DeactivateWordApplicationEventSink(WordEventSession* session) {
+    if (session && session->sinkControl) {
+        session->sinkControl->Deactivate();
+    }
+}
+
+bool IsTerminalWordEventUnadviseFailure(HRESULT hr) {
+    return hr == kConnectENoConnection ||
+           hr == kCoEObjectNotConnected ||
+           hr == RPC_E_DISCONNECTED ||
+           hr == RPC_E_SERVER_DIED ||
+           hr == RPC_E_SERVER_DIED_DNE;
+}
+
+bool DidWordEventUnadviseComplete(HRESULT hr) {
+    return SUCCEEDED(hr) || IsTerminalWordEventUnadviseFailure(hr);
+}
+
+bool IsRetryableWordEventUnadviseFailure(HRESULT hr) {
+    return IsRetryableAutomationFailure(hr);
+}
+
+bool ShouldRetryShutdownWordEventUnadvise(HRESULT hr,
+                                          int attemptIndex,
+                                          int maxAttempts) {
+    return IsRetryableWordEventUnadviseFailure(hr) &&
+           attemptIndex + 1 < maxAttempts;
+}
+
+bool ShouldLogWordEventDisconnectFailureNow() {
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG previous =
+        g_runtime.status.lastEventDisconnectFailureLogTime;
+    if (previous != 0 &&
+        now - previous < WORD_EVENT_DISCONNECT_FAILURE_LOG_INTERVAL_MS) {
+        return false;
+    }
+
+    g_runtime.status.lastEventDisconnectFailureLogTime = now;
+    return true;
+}
+
+void LogWordEventDisconnectFailure(const wchar_t* message, HRESULT hr) {
+    if (ShouldLogWordEventDisconnectFailureNow()) {
+        Wh_Log(L"Word events: %ls, hr=0x%08X", message, hr);
+    }
+}
+
+void RefreshPendingWordEventDisconnectRetryFlag() {
+    bool pending = false;
+    for (int index = 0; index < WORD_EVENT_PENDING_DISCONNECT_CAPACITY; ++index) {
+        if (g_runtime.events.pendingDisconnectSessions[index].IsConnected()) {
+            pending = true;
+            break;
+        }
+    }
+
+    StoreFlag(g_runtime.flags.wordEventDisconnectRetryPending, pending);
+}
+
+WordEventSession* FindFreePendingWordEventDisconnectSlot() {
+    for (int index = 0; index < WORD_EVENT_PENDING_DISCONNECT_CAPACITY; ++index) {
+        WordEventSession* session =
+            &g_runtime.events.pendingDisconnectSessions[index];
+        if (!session->IsConnected()) {
+            return session;
+        }
+    }
+
+    return nullptr;
+}
+
+HRESULT UnadviseWordEventSessionWithInitializedCom(WordEventSession* session) {
+    if (!session || !session->IsConnected()) {
+        return S_FALSE;
+    }
+
+    return session->connectionPoint->Unadvise(session->cookie);
+}
+
+HRESULT UnadviseWordEventSessionForShutdown(WordEventSession* session) {
+    HRESULT hr = S_FALSE;
+    for (int attemptIndex = 0;
+         attemptIndex < WORD_EVENT_SHUTDOWN_DISCONNECT_RETRY_ATTEMPTS;
+         ++attemptIndex) {
+        hr = UnadviseWordEventSessionWithInitializedCom(session);
+        if (DidWordEventUnadviseComplete(hr) ||
+            !ShouldRetryShutdownWordEventUnadvise(
+                hr,
+                attemptIndex,
+                WORD_EVENT_SHUTDOWN_DISCONNECT_RETRY_ATTEMPTS)) {
+            return hr;
+        }
+
+        Sleep(WORD_EVENT_SHUTDOWN_DISCONNECT_RETRY_DELAY_MS);
+    }
+
+    return hr;
+}
+
+bool ArmPendingWordEventDisconnectRetry() {
+    if (!HasPendingWordEventDisconnectRetry()) {
+        return false;
+    }
+
+    return ScheduleTask(ScheduledTaskKind::EventDisconnectRetry,
+                        WORD_EVENT_DISCONNECT_RETRY_INTERVAL_MS);
+}
+
+void RequestWordEventDisconnectRetryWakeup() {
+    if (ArmPendingWordEventDisconnectRetry()) {
+        return;
+    }
+
+    // The retry flag stays set and will be armed after owner-thread adoption.
+}
+
+void RetryPendingWordEventDisconnects() {
+    if (!HasPendingWordEventDisconnectRetry()) {
         return;
     }
 
     ScopedComInit comInit;
+    if (FAILED(comInit.GetResult())) {
+        LogWordEventDisconnectFailure(
+            L"COM initialization failed while retrying deferred event disconnect",
+            comInit.GetResult());
+        RequestWordEventDisconnectRetryWakeup();
+        return;
+    }
+
+    ScopedComMessageFilter messageFilter;
+    for (int index = 0; index < WORD_EVENT_PENDING_DISCONNECT_CAPACITY; ++index) {
+        WordEventSession* session =
+            &g_runtime.events.pendingDisconnectSessions[index];
+        if (!session->IsConnected()) {
+            session->Reset();
+            continue;
+        }
+
+        DeactivateWordApplicationEventSink(session);
+        const HRESULT hr = UnadviseWordEventSessionWithInitializedCom(session);
+        if (DidWordEventUnadviseComplete(hr)) {
+            if (SUCCEEDED(hr)) {
+                Wh_Log(L"Word events: completed deferred event disconnect");
+            } else {
+                LogWordEventDisconnectFailure(
+                    L"deferred unadvise no longer has an active connection",
+                    hr);
+            }
+            session->Reset();
+            continue;
+        }
+
+        LogWordEventDisconnectFailure(L"deferred unadvise still failed", hr);
+    }
+
+    RefreshPendingWordEventDisconnectRetryFlag();
+    if (HasPendingWordEventDisconnectRetry()) {
+        RequestWordEventDisconnectRetryWakeup();
+    }
+}
+
+bool QueueWordEventSessionDisconnectRetry(WordEventSession* session) {
+    if (!session || !session->IsConnected()) {
+        return false;
+    }
+
+    DeactivateWordApplicationEventSink(session);
+    WordEventSession* slot = FindFreePendingWordEventDisconnectSlot();
+    if (!slot) {
+        Wh_Log(L"Word events: no free deferred disconnect slot");
+        return false;
+    }
+
+    slot->Reset();
+    *slot = std::move(*session);
+    session->Reset();
+    SetFlag(g_runtime.flags.wordEventDisconnectRetryPending);
+    RequestWordEventDisconnectRetryWakeup();
+    return true;
+}
+
+void DisconnectWordEventSession(WordEventSession* session, bool allowDeferredRetry) {
+    if (!session) {
+        return;
+    }
+
+    const bool connected = session->IsConnected();
+    if (connected) {
+        DeactivateWordApplicationEventSink(session);
+    }
+
+    ScopedComInit comInit;
     if (SUCCEEDED(comInit.GetResult()) &&
-        session->IsConnected()) {
-        session->connectionPoint->Unadvise(session->cookie);
+        connected) {
+        ScopedComMessageFilter messageFilter;
+        const HRESULT hr = allowDeferredRetry
+                               ? UnadviseWordEventSessionWithInitializedCom(session)
+                               : UnadviseWordEventSessionForShutdown(session);
+        if (DidWordEventUnadviseComplete(hr)) {
+            if (FAILED(hr)) {
+                LogWordEventDisconnectFailure(
+                    L"unadvise found no active application event connection",
+                    hr);
+            }
+            session->Reset();
+            return;
+        }
+
+        LogWordEventDisconnectFailure(
+            allowDeferredRetry
+                ? L"failed to unadvise application events"
+                : L"shutdown unadvise failed after bounded retries",
+            hr);
+        if (allowDeferredRetry &&
+            QueueWordEventSessionDisconnectRetry(session)) {
+            return;
+        }
+    } else if (connected) {
+        LogWordEventDisconnectFailure(
+            L"COM initialization failed while disconnecting",
+            comInit.GetResult());
+        if (allowDeferredRetry &&
+            QueueWordEventSessionDisconnectRetry(session)) {
+            return;
+        }
     }
 
     session->Reset();
 }
 
-void DisconnectWordApplicationEvents() {
-    DisconnectWordEventSession(&g_runtime.events.session);
+void DisconnectWordApplicationEvents(bool allowDeferredRetry) {
+    DisconnectWordEventSession(&g_runtime.events.session, allowDeferredRetry);
     ClearFlag(g_runtime.flags.wordEventsConnected);
+}
+
+void DisconnectPendingWordEventDisconnectSessionsForShutdown() {
+    for (int index = 0; index < WORD_EVENT_PENDING_DISCONNECT_CAPACITY; ++index) {
+        WordEventSession* session =
+            &g_runtime.events.pendingDisconnectSessions[index];
+        DisconnectWordEventSession(session, false);
+        session->Reset();
+    }
+
+    ClearFlag(g_runtime.flags.wordEventDisconnectRetryPending);
 }
 
 HRESULT BuildWordEventSession(IDispatch* application, WordEventSession* session) {
@@ -3287,6 +4187,7 @@ HRESULT BuildWordEventSession(IDispatch* application, WordEventSession* session)
     session->applicationHwnd = applicationHwnd;
     session->connectionPoint.Reset(connectionPoint.Detach());
     session->sink.Reset(sink);
+    session->sinkControl = sink;
     session->cookie = cookie;
     return S_OK;
 }
@@ -3377,6 +4278,8 @@ WordEventConnectionResult EnsureWordEventSessionConnected(bool forceReconnect) {
         return result;
     }
 
+    RetryPendingWordEventDisconnects();
+
     const bool wordEventsConnected =
         LoadFlag(g_runtime.flags.wordEventsConnected);
     LONG_PTR cachedApplicationHwnd = 0;
@@ -3410,6 +4313,8 @@ WordEventConnectionResult EnsureWordEventSessionConnected(bool forceReconnect) {
     if (FAILED(comInit.GetResult())) {
         return result;
     }
+
+    ScopedComMessageFilter messageFilter;
 
     ScopedComPtr<IDispatch> application;
     LONG_PTR applicationHwnd = 0;
@@ -3474,6 +4379,7 @@ enum class SaveAttemptResult {
     Cleared,
     Deferred,
     RetryLater,
+    Failed,
 };
 
 enum class DocumentDirtyState {
@@ -3496,6 +4402,7 @@ enum class SnapshotQueryResult {
 enum class SnapshotSource {
     Active,
     SpecificPath,
+    SpecificDocument,
 };
 
 enum class SnapshotClearedReason {
@@ -3564,6 +4471,7 @@ void LogSnapshotFailure(SnapshotLogContext context, const wchar_t* message, HRES
 struct SnapshotRequest {
     SnapshotSource source = SnapshotSource::Active;
     const wchar_t* path = nullptr;
+    IDispatch* document = nullptr;
     SnapshotLogContext context = SnapshotLogContext::Save;
 };
 
@@ -3619,7 +4527,7 @@ SnapshotQueryResult PopulateSnapshotMetadata(ActiveDocumentSnapshot* snapshot,
                                          snapshot->path.Put(),
                                          &snapshot->hasPath);
     if (FAILED(hr)) {
-        LogSnapshotFailure(context, L"failed to query FullName/Name identity", hr);
+        LogSnapshotFailure(context, L"failed to query Path/Name identity", hr);
         return SnapshotQueryResult::RetryLater;
     }
 
@@ -3643,6 +4551,24 @@ bool ShouldPopulateSnapshotMetadataForMode(bool saved, SnapshotMetadataMode meta
     return true;
 }
 
+bool ShouldRetryInvalidCachedSnapshotDocument(bool usingCachedSpecificDocument,
+                                              bool retriedAfterInvalidCachedDocument) {
+    return usingCachedSpecificDocument && !retriedAfterInvalidCachedDocument;
+}
+
+void PrepareInvalidCachedSnapshotDocumentRetry(
+    ActiveDocumentSnapshot* snapshot,
+    bool* retriedAfterInvalidCachedDocument) {
+    if (snapshot) {
+        snapshot->Reset();
+    }
+
+    InvalidateTransitionFlushDocumentCache();
+    if (retriedAfterInvalidCachedDocument) {
+        *retriedAfterInvalidCachedDocument = true;
+    }
+}
+
 SnapshotQueryResult ResolveSpecificSnapshotDocument(const SnapshotRequest& request,
                                                     ActiveDocumentSnapshot* snapshot) {
     if (!snapshot) {
@@ -3659,6 +4585,22 @@ SnapshotQueryResult ResolveSpecificSnapshotDocument(const SnapshotRequest& reque
         return SnapshotQueryResult::Cleared;
     }
 
+    return SnapshotQueryResult::Ready;
+}
+
+SnapshotQueryResult ResolveSpecificSnapshotDocumentObject(const SnapshotRequest& request,
+                                                         ActiveDocumentSnapshot* snapshot) {
+    if (!snapshot) {
+        return SnapshotQueryResult::Cleared;
+    }
+
+    if (!request.document) {
+        snapshot->clearedReason = SnapshotClearedReason::MissingByPath;
+        return SnapshotQueryResult::Cleared;
+    }
+
+    request.document->AddRef();
+    snapshot->document.Reset(request.document);
     return SnapshotQueryResult::Ready;
 }
 
@@ -3726,8 +4668,15 @@ SnapshotQueryResult ResolveSnapshotDocument(const SnapshotRequest& request,
 
     snapshot->Reset();
 
-    if (request.source == SnapshotSource::SpecificPath) {
-        return ResolveSpecificSnapshotDocument(request, snapshot);
+    switch (request.source) {
+        case SnapshotSource::SpecificPath:
+            return ResolveSpecificSnapshotDocument(request, snapshot);
+
+        case SnapshotSource::SpecificDocument:
+            return ResolveSpecificSnapshotDocumentObject(request, snapshot);
+
+        case SnapshotSource::Active:
+            break;
     }
 
     ScopedComPtr<IDispatch> application;
@@ -3771,56 +4720,100 @@ SnapshotQueryResult ResolveSnapshotDocumentFromRequest(const SnapshotRequest& re
         return SnapshotQueryResult::Ready;
     }
 
+    if (request.source == SnapshotSource::SpecificDocument &&
+        request.document &&
+        g_runtime.document.transitionFlushDocument &&
+        AreSameDispatchComIdentity(request.document,
+                                   g_runtime.document.transitionFlushDocument.Get()) &&
+        IsTransitionFlushDocumentCacheValid()) {
+        snapshot->Reset();
+        g_runtime.document.transitionFlushDocument.Get()->AddRef();
+        snapshot->document.Reset(g_runtime.document.transitionFlushDocument.Get());
+        return SnapshotQueryResult::Ready;
+    }
+
     return ResolveSnapshotDocument(request, snapshot);
 }
 
 SnapshotQueryResult ExecuteSnapshotLoadPlan(const SnapshotLoadPlan& plan,
                                            ActiveDocumentSnapshot* snapshot) {
-    const SnapshotQueryResult documentResult =
-        ResolveSnapshotDocumentFromRequest(plan.request, snapshot);
-    if (documentResult != SnapshotQueryResult::Ready) {
-        return documentResult;
+    if (!snapshot) {
+        return SnapshotQueryResult::Cleared;
     }
 
-    const bool usingCachedSpecificDocument =
-        plan.request.source == SnapshotSource::SpecificPath &&
-        plan.request.path &&
-        *plan.request.path &&
-        snapshot &&
-        snapshot->document &&
-        g_runtime.document.transitionFlushDocument &&
-        snapshot->document.Get() == g_runtime.document.transitionFlushDocument.Get();
-    const SnapshotQueryResult savedStateResult =
-        PopulateSnapshotSavedState(snapshot, plan.request.context);
-    if (savedStateResult != SnapshotQueryResult::Ready) {
-        if (usingCachedSpecificDocument) {
-            InvalidateTransitionFlushDocumentCache();
+    bool retriedAfterInvalidCachedDocument = false;
+    for (;;) {
+        const SnapshotQueryResult documentResult =
+            ResolveSnapshotDocumentFromRequest(plan.request, snapshot);
+        if (documentResult != SnapshotQueryResult::Ready) {
+            return documentResult;
         }
 
-        return savedStateResult;
-    }
+        const bool usingCachedSpecificDocument =
+            (plan.request.source == SnapshotSource::SpecificPath ||
+             plan.request.source == SnapshotSource::SpecificDocument) &&
+            snapshot->document &&
+            g_runtime.document.transitionFlushDocument &&
+            AreSameDispatchComIdentity(snapshot->document.Get(),
+                                       g_runtime.document.transitionFlushDocument.Get());
+        const SnapshotQueryResult savedStateResult =
+            PopulateSnapshotSavedState(snapshot, plan.request.context);
+        if (savedStateResult != SnapshotQueryResult::Ready) {
+            if (ShouldRetryInvalidCachedSnapshotDocument(
+                    usingCachedSpecificDocument,
+                    retriedAfterInvalidCachedDocument)) {
+                PrepareInvalidCachedSnapshotDocumentRetry(
+                    snapshot,
+                    &retriedAfterInvalidCachedDocument);
+                continue;
+            }
 
-    if (!ShouldPopulateSnapshotMetadataForMode(snapshot->saved, plan.metadataMode)) {
-        return SnapshotQueryResult::Ready;
-    }
+            if (usingCachedSpecificDocument) {
+                InvalidateTransitionFlushDocumentCache();
+            }
+            return savedStateResult;
+        }
 
-    const SnapshotQueryResult metadataResult =
-        PopulateSnapshotMetadata(snapshot, plan.request.context);
-    if (metadataResult != SnapshotQueryResult::Ready &&
-        usingCachedSpecificDocument) {
-        InvalidateTransitionFlushDocumentCache();
-    }
+        if (!ShouldPopulateSnapshotMetadataForMode(snapshot->saved, plan.metadataMode)) {
+            return SnapshotQueryResult::Ready;
+        }
 
-    if (metadataResult == SnapshotQueryResult::Ready &&
-        usingCachedSpecificDocument &&
-        (!snapshot->hasPath ||
-         !AreSameDocumentPath(snapshot->path.CStr(), plan.request.path))) {
+        const SnapshotQueryResult metadataResult =
+            PopulateSnapshotMetadata(snapshot, plan.request.context);
+        if (metadataResult != SnapshotQueryResult::Ready) {
+            if (ShouldRetryInvalidCachedSnapshotDocument(
+                    usingCachedSpecificDocument,
+                    retriedAfterInvalidCachedDocument)) {
+                PrepareInvalidCachedSnapshotDocumentRetry(
+                    snapshot,
+                    &retriedAfterInvalidCachedDocument);
+                continue;
+            }
+
+            if (usingCachedSpecificDocument) {
+                InvalidateTransitionFlushDocumentCache();
+            }
+            return metadataResult;
+        }
+
+        if (!usingCachedSpecificDocument ||
+            plan.request.source == SnapshotSource::SpecificDocument ||
+            (snapshot->hasPath &&
+             AreSameDocumentPath(snapshot->path.CStr(), plan.request.path))) {
+            return SnapshotQueryResult::Ready;
+        }
+
         snapshot->Reset();
-        InvalidateTransitionFlushDocumentCache();
-        return ExecuteSnapshotLoadPlan(plan, snapshot);
-    }
+        if (!ShouldRetryInvalidCachedSnapshotDocument(
+                usingCachedSpecificDocument,
+                retriedAfterInvalidCachedDocument)) {
+            return SnapshotQueryResult::Cleared;
+        }
 
-    return metadataResult;
+        PrepareInvalidCachedSnapshotDocumentRetry(
+            snapshot,
+            &retriedAfterInvalidCachedDocument);
+    }
 }
 
 SnapshotLoadPlan MakeDocumentStateSnapshotLoadPlan(bool requireCleanSnapshotDetails) {
@@ -3832,10 +4825,16 @@ SnapshotLoadPlan MakeDocumentStateSnapshotLoadPlan(bool requireCleanSnapshotDeta
     return plan;
 }
 
-SnapshotLoadPlan MakeSaveSnapshotLoadPlan(const wchar_t* specificPath) {
+SnapshotLoadPlan MakeSaveSnapshotLoadPlan(const wchar_t* specificPath,
+                                          IDispatch* specificDocument = nullptr) {
     SnapshotLoadPlan plan = {};
-    plan.request.source =
-        (specificPath && *specificPath) ? SnapshotSource::SpecificPath : SnapshotSource::Active;
+    if (specificDocument) {
+        plan.request.source = SnapshotSource::SpecificDocument;
+        plan.request.document = specificDocument;
+    } else {
+        plan.request.source =
+            (specificPath && *specificPath) ? SnapshotSource::SpecificPath : SnapshotSource::Active;
+    }
     plan.request.path = specificPath;
     plan.request.context = SnapshotLogContext::Save;
     plan.metadataMode = SnapshotMetadataMode::Always;
@@ -3864,9 +4863,15 @@ bool SetObservedDocumentFromSnapshot(const ActiveDocumentSnapshot* snapshot, boo
     }
 
     if (!SetObservedDocumentPath(snapshot->path.CStr()) ||
-        !SetObservedDocumentIdentity(snapshot->identity.Get())) {
+        !SetObservedDocumentIdentity(snapshot->identity.Get()) ||
+        (dirty && !ReplaceStoredComPtr(&g_runtime.document.observedDocument,
+                                       snapshot->document.Get()))) {
         ResetObservedDocumentState();
         return false;
+    }
+
+    if (!dirty) {
+        g_runtime.document.observedDocument.Reset();
     }
 
     SetFlag(g_runtime.flags.documentDirtyKnown);
@@ -3909,8 +4914,11 @@ bool IsPendingSaveAsSnapshot(const ActiveDocumentSnapshot* snapshot) {
                               g_runtime.document.pendingSaveAsDocumentIdentity.Get());
 }
 
-bool TryMigrateObservedDocumentIdentity(const ActiveDocumentSnapshot* snapshot,
-                                        bool clearPendingAutosaveOnClean) {
+bool TryMigrateObservedDocumentIdentity(
+    const ActiveDocumentSnapshot* snapshot,
+    bool clearPendingAutosaveOnClean,
+    TransitionFlushClearMode transitionClearMode =
+        TransitionFlushClearMode::ClearPostTransitionRefresh) {
     if (!snapshot || !snapshot->hasPath || !snapshot->path.Length() || !snapshot->identity) {
         return false;
     }
@@ -3933,12 +4941,14 @@ bool TryMigrateObservedDocumentIdentity(const ActiveDocumentSnapshot* snapshot,
     }
 
     const bool wasDirty = LoadFlag(g_runtime.flags.documentDirty);
-    SetObservedDocumentFromSnapshot(snapshot, !snapshot->saved && wasDirty);
+    if (!SetObservedDocumentFromSnapshot(snapshot, !snapshot->saved && wasDirty)) {
+        return false;
+    }
 
     if (snapshot->saved) {
         g_runtime.timing.lastSaveTime = GetTickCount64();
         ClearManualSavePending();
-        ClearTransitionFlushRequest();
+        ClearTransitionFlushRequest(transitionClearMode);
         if (clearPendingAutosaveOnClean) {
             ClearPendingSave();
         }
@@ -3959,7 +4969,8 @@ bool ShouldTransitionFlushObservedDocument(const ActiveDocumentSnapshot* snapsho
 
 void BeginTransitionFlushForObservedDocument() {
     RequestTransitionFlush(g_runtime.document.observedDocumentPath.Get(),
-                           L"finishing the previous document before switching to another one");
+                           L"finishing the previous document before switching to another one",
+                           g_runtime.document.observedDocument.Get());
     ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
     ArmDocumentStateTimer(DOCUMENT_STATE_ACTIVE_POLL_INTERVAL_MS);
 }
@@ -3974,9 +4985,11 @@ void SyncObservedDocumentCleanState(const ActiveDocumentSnapshot* snapshot) {
 
 void FinalizeSaveAttemptState(const ActiveDocumentSnapshot* snapshot,
                               bool clearPendingSave,
-                              bool clearTransitionRequest) {
+                              bool clearTransitionRequest,
+                              TransitionFlushClearMode transitionClearMode =
+                                  TransitionFlushClearMode::ClearPostTransitionRefresh) {
     if (clearTransitionRequest) {
-        ClearTransitionFlushRequest();
+        ClearTransitionFlushRequest(transitionClearMode);
     }
 
     ClearManualSavePending();
@@ -3985,6 +4998,13 @@ void FinalizeSaveAttemptState(const ActiveDocumentSnapshot* snapshot,
     if (clearPendingSave) {
         ClearPendingSave();
     }
+}
+
+TransitionFlushClearMode GetTransitionFlushClearModeForTick(
+    const RuntimeTickSnapshot& tick) {
+    return tick.runtime.transitionFlushRequested
+               ? TransitionFlushClearMode::PreservePostTransitionRefresh
+               : TransitionFlushClearMode::ClearPostTransitionRefresh;
 }
 
 void NoteDocumentStateRefreshReady() {
@@ -3998,6 +5018,49 @@ void NoteSaveOperationReady(ULONGLONG now) {
     g_runtime.timing.lastSaveTime = now;
 }
 
+bool IsSnapshotExpectedForPendingAutosave(const ActiveDocumentSnapshot* snapshot,
+                                          const RuntimeTickSnapshot& tick) {
+    if (tick.runtime.transitionFlushRequested ||
+        g_runtime.document.observedDocumentPath.Length() == 0) {
+        return true;
+    }
+
+    if (!snapshot || !snapshot->hasPath) {
+        return false;
+    }
+
+    return IsObservedDocumentSnapshot(snapshot) ||
+           AreSameDocumentPath(g_runtime.document.observedDocumentPath.Get(),
+                               snapshot->path.CStr());
+}
+
+bool KeepPendingAutosaveForUnexpectedSnapshot(const ActiveDocumentSnapshot* snapshot,
+                                              const RuntimeTickSnapshot& tick) {
+    if (IsSnapshotExpectedForPendingAutosave(snapshot, tick)) {
+        return false;
+    }
+
+    LogSaveStatus(L"saved document did not match tracked pending document, keeping pending changes");
+    if (g_runtime.document.observedDocumentPath.Length() != 0 ||
+        g_runtime.document.observedDocument) {
+        RequestTransitionFlush(g_runtime.document.observedDocumentPath.Get(),
+                               L"retrying pending changes for the tracked document",
+                               g_runtime.document.observedDocument.Get());
+    }
+    ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
+    return true;
+}
+
+void MaybeSchedulePostTransitionRefresh(const RuntimeTickSnapshot& tick) {
+    if (!tick.runtime.transitionFlushRequested ||
+        !LoadFlag(g_runtime.flags.postTransitionRefreshPending)) {
+        return;
+    }
+
+    ClearPostTransitionRefreshPending();
+    ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+}
+
 enum class DocumentObservationApplyResult {
     None,
     RearmSteadyPoll,
@@ -4006,7 +5069,8 @@ enum class DocumentObservationApplyResult {
 };
 
 DocumentObservationApplyResult ApplyDirtyDocumentObservation(
-    const ActiveDocumentSnapshot* snapshot) {
+    const ActiveDocumentSnapshot* snapshot,
+    const RuntimeTickSnapshot& tick) {
     if (TryMigrateObservedDocumentIdentity(snapshot, false)) {
         return DocumentObservationApplyResult::RearmSteadyPoll;
     }
@@ -4016,10 +5080,27 @@ DocumentObservationApplyResult ApplyDirtyDocumentObservation(
         return DocumentObservationApplyResult::StartedTransitionFlush;
     }
 
-    if (snapshot && snapshot->hasPath && NoteObservedDocumentDirty(snapshot)) {
-        LogDocumentStateStatus(L"detected non-keyboard document change");
-        ScheduleSaveFromEdit();
-        return DocumentObservationApplyResult::ScheduledSave;
+    if (snapshot && snapshot->hasPath) {
+        const bool newlyTrackedDirtyDocument = NoteObservedDocumentDirty(snapshot);
+        if (tick.runtime.manualSavePending &&
+            tick.runtime.pendingSave &&
+            (IsObservedDocumentSnapshot(snapshot) ||
+             AreSameDocumentPath(g_runtime.document.observedDocumentPath.Get(),
+                                 snapshot->path.CStr()))) {
+            ClearManualSavePending();
+            ClearAutomationBusyPending();
+            SetFlag(g_runtime.flags.expeditedSavePending);
+            g_runtime.timing.lastEditTime = tick.now;
+            LogSaveStatus(L"manual save did not finish, retrying pending auto-save");
+            ArmSaveTimer(INPUT_SETTLE_DELAY_MS);
+            return DocumentObservationApplyResult::ScheduledSave;
+        }
+
+        if (newlyTrackedDirtyDocument) {
+            LogDocumentStateStatus(L"detected non-keyboard document change");
+            ScheduleSaveFromEdit();
+            return DocumentObservationApplyResult::ScheduledSave;
+        }
     }
 
     return DocumentObservationApplyResult::None;
@@ -4042,6 +5123,12 @@ DocumentObservationApplyResult ApplyCleanDocumentObservation(
             IsObservedDocumentSnapshot(snapshot) ||
             AreSameDocumentPath(g_runtime.document.observedDocumentPath.Get(),
                                 snapshot->path.CStr());
+        if (tick.runtime.pendingSave &&
+            !sameObservedDocument &&
+            g_runtime.document.observedDocumentPath.Length() == 0) {
+            return DocumentObservationApplyResult::RearmSteadyPoll;
+        }
+
         if (tick.runtime.manualSavePending) {
             ClearManualSavePending();
             g_runtime.timing.lastSaveTime = tick.now;
@@ -4088,6 +5175,8 @@ DocumentDirtyState QueryActiveDocumentDirtyState(ActiveDocumentSnapshot* snapsho
         return DocumentDirtyState::RetryLater;
     }
 
+    ScopedComMessageFilter messageFilter;
+
     ActiveDocumentSnapshot localSnapshot;
     if (!snapshot) {
         snapshot = &localSnapshot;
@@ -4123,19 +5212,22 @@ SaveAttemptResult InterpretSaveSnapshotQueryResult(const wchar_t* specificPath,
 }
 
 SaveAttemptResult TrySaveActiveDocument(ActiveDocumentSnapshot* snapshot,
-                                        const wchar_t* specificPath = nullptr) {
+                                        const wchar_t* specificPath,
+                                        IDispatch* specificDocument) {
     ScopedComInit comInit;
     if (FAILED(comInit.GetResult())) {
         LogSnapshotFailure(SnapshotLogContext::Save, L"CoInitializeEx failed", comInit.GetResult());
         return SaveAttemptResult::RetryLater;
     }
 
+    ScopedComMessageFilter messageFilter;
+
     ActiveDocumentSnapshot localSnapshot;
     if (!snapshot) {
         snapshot = &localSnapshot;
     }
 
-    const SnapshotLoadPlan plan = MakeSaveSnapshotLoadPlan(specificPath);
+    const SnapshotLoadPlan plan = MakeSaveSnapshotLoadPlan(specificPath, specificDocument);
     const SnapshotQueryResult snapshotResult = ExecuteSnapshotLoadPlan(plan, snapshot);
     const SaveAttemptResult snapshotInterpretation =
         InterpretSaveSnapshotQueryResult(specificPath, snapshot, snapshotResult);
@@ -4147,9 +5239,13 @@ SaveAttemptResult TrySaveActiveDocument(ActiveDocumentSnapshot* snapshot,
         return SaveAttemptResult::AlreadyClean;
     }
 
-    const HRESULT hr = InvokeDispatch(snapshot->document.Get(),
-                                      DISPATCH_METHOD,
-                                      const_cast<LPOLESTR>(L"Save"));
+    HRESULT hr = E_FAIL;
+    {
+        ScopedFlagSet autoSaveFlag(g_runtime.flags.autoSaveInProgress);
+        hr = InvokeDispatch(snapshot->document.Get(),
+                            DISPATCH_METHOD,
+                            const_cast<LPOLESTR>(L"Save"));
+    }
     if (SUCCEEDED(hr)) {
         return SaveAttemptResult::Saved;
     }
@@ -4159,33 +5255,40 @@ SaveAttemptResult TrySaveActiveDocument(ActiveDocumentSnapshot* snapshot,
     }
 
     LogSnapshotFailure(SnapshotLogContext::Save, L"document save failed", hr);
-    return SaveAttemptResult::Cleared;
+    return SaveAttemptResult::Failed;
 }
 
 void CALLBACK SchedulerTimerProc(HWND, UINT, UINT_PTR idEvent, DWORD) {
     KillTimer(nullptr, idEvent);
-    g_runtime.timing.schedulerTimerId = 0;
-    g_runtime.timing.schedulerTimerDueTime = 0;
 
-    if (!CanRunOwnerThreadRuntimeWork()) {
+    if (!CanRunOwnerThreadRuntimeWork() ||
+        g_runtime.timing.schedulerTimerId != idEvent) {
         return;
     }
 
+    g_runtime.timing.schedulerTimerId = 0;
+    g_runtime.timing.schedulerTimerDueTime = 0;
+
     const ULONGLONG now = GetTickCount64();
-    const bool documentStateDue = IsScheduledTaskDue(ScheduledTaskKind::DocumentState, now);
     const bool saveDue = IsScheduledTaskDue(ScheduledTaskKind::Save, now);
-
-    if (documentStateDue) {
-        g_runtime.timing.documentStateTimerDueTime = 0;
-        HandleDocumentStateTick();
-    }
-
-    const ULONGLONG postDocumentStateNow = GetTickCount64();
     if (saveDue &&
-        CanRunOwnerThreadRuntimeWork() &&
-        IsScheduledTaskDue(ScheduledTaskKind::Save, postDocumentStateNow)) {
+        CanRunOwnerThreadRuntimeWork()) {
         g_runtime.timing.saveTimerDueTime = 0;
         HandleAutosaveTick();
+    }
+
+    const ULONGLONG postSaveNow = GetTickCount64();
+    if (CanRunOwnerThreadRuntimeWork() &&
+        IsScheduledTaskDue(ScheduledTaskKind::EventDisconnectRetry, postSaveNow)) {
+        g_runtime.timing.eventDisconnectRetryTimerDueTime = 0;
+        RetryPendingWordEventDisconnects();
+    }
+
+    const ULONGLONG postEventDisconnectNow = GetTickCount64();
+    if (CanRunOwnerThreadRuntimeWork() &&
+        IsScheduledTaskDue(ScheduledTaskKind::DocumentState, postEventDisconnectNow)) {
+        g_runtime.timing.documentStateTimerDueTime = 0;
+        HandleDocumentStateTick();
     }
 
     if (CanRunOwnerThreadRuntimeWork()) {
@@ -4195,6 +5298,12 @@ void CALLBACK SchedulerTimerProc(HWND, UINT, UINT_PTR idEvent, DWORD) {
 
 bool ArmSaveTimer(DWORD delayMs) {
     return ScheduleTask(ScheduledTaskKind::Save, delayMs);
+}
+
+bool RescheduleSaveTimer(DWORD delayMs) {
+    return ScheduleTask(ScheduledTaskKind::Save,
+                        delayMs,
+                        ScheduledTaskScheduleMode::Reschedule);
 }
 
 void RefreshTickWordEventState(RuntimeTickSnapshot* tick) {
@@ -4254,7 +5363,7 @@ bool HandleDocumentStateRefreshResult(DocumentDirtyState dirtyState,
         case DocumentDirtyState::Dirty:
             NoteDocumentStateRefreshReady();
             return HandleDocumentObservationApplyOutcome(
-                ApplyDirtyDocumentObservation(snapshot),
+                ApplyDirtyDocumentObservation(snapshot, tick),
                 tick.steadyPollDelay);
 
         case DocumentDirtyState::Clean:
@@ -4288,6 +5397,14 @@ bool HandleAutosaveTickDecisionOutcome(const RuntimeTickSnapshot& tick,
         LogSaveStatus(DescribeWordUiPauseReason(tick.runtime.pauseReason));
     }
 
+    if (tick.runtime.pendingSave &&
+        !tick.runtime.transitionFlushRequested &&
+        (!tick.flags.documentDirtyKnown ||
+         !tick.flags.documentDirty ||
+         g_runtime.document.observedDocumentPath.Length() == 0)) {
+        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+    }
+
     ArmSaveTimer(decision.delayMs);
     return true;
 }
@@ -4299,9 +5416,19 @@ void HandleAutosaveAttemptResult(SaveAttemptResult result,
         case SaveAttemptResult::Saved:
             NoteSaveOperationReady(tick.now);
             if (snapshot->hasPath) {
-                TryMigrateObservedDocumentIdentity(snapshot, false);
+                TryMigrateObservedDocumentIdentity(
+                    snapshot,
+                    false,
+                    GetTransitionFlushClearModeForTick(tick));
             }
-            FinalizeSaveAttemptState(snapshot, true, true);
+            if (KeepPendingAutosaveForUnexpectedSnapshot(snapshot, tick)) {
+                return;
+            }
+            FinalizeSaveAttemptState(snapshot,
+                                     true,
+                                     true,
+                                     GetTransitionFlushClearModeForTick(tick));
+            MaybeSchedulePostTransitionRefresh(tick);
             if (tick.runtime.transitionFlushRequested) {
                 LogSaveStatus(L"flushed pending changes for the previous document");
             } else {
@@ -4311,10 +5438,22 @@ void HandleAutosaveAttemptResult(SaveAttemptResult result,
 
         case SaveAttemptResult::AlreadyClean:
             NoteSaveOperationReady(tick.now);
-            if (snapshot->hasPath && TryMigrateObservedDocumentIdentity(snapshot, true)) {
+            if (snapshot->hasPath &&
+                TryMigrateObservedDocumentIdentity(
+                    snapshot,
+                    true,
+                    GetTransitionFlushClearModeForTick(tick))) {
+                MaybeSchedulePostTransitionRefresh(tick);
                 return;
             }
-            FinalizeSaveAttemptState(snapshot, true, true);
+            if (KeepPendingAutosaveForUnexpectedSnapshot(snapshot, tick)) {
+                return;
+            }
+            FinalizeSaveAttemptState(snapshot,
+                                     true,
+                                     true,
+                                     GetTransitionFlushClearModeForTick(tick));
+            MaybeSchedulePostTransitionRefresh(tick);
             LogSaveStatus(tick.runtime.transitionFlushRequested
                               ? L"the previous document was already clean"
                               : L"pending changes were already saved");
@@ -4323,13 +5462,22 @@ void HandleAutosaveAttemptResult(SaveAttemptResult result,
         case SaveAttemptResult::Cleared:
             g_runtime.timing.saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
             ClearAutomationBusyPending();
-            if (snapshot->hasPath && TryMigrateObservedDocumentIdentity(snapshot, true)) {
+            if (snapshot->hasPath &&
+                TryMigrateObservedDocumentIdentity(
+                    snapshot,
+                    true,
+                    GetTransitionFlushClearModeForTick(tick))) {
+                MaybeSchedulePostTransitionRefresh(tick);
                 return;
             }
             if (snapshot->clearedReason != SnapshotClearedReason::None) {
                 LogSaveStatus(DescribeSnapshotClearedReason(snapshot->clearedReason));
             }
-            FinalizeSaveAttemptState(snapshot, true, true);
+            FinalizeSaveAttemptState(snapshot,
+                                     true,
+                                     true,
+                                     GetTransitionFlushClearModeForTick(tick));
+            MaybeSchedulePostTransitionRefresh(tick);
             return;
 
         case SaveAttemptResult::Deferred:
@@ -4343,7 +5491,102 @@ void HandleAutosaveAttemptResult(SaveAttemptResult result,
                 AdvanceRetryDelay(&g_runtime.timing.saveRetryDelayMs,
                                   MAX_SAVE_RETRY_INTERVAL_MS));
             return;
+
+        case SaveAttemptResult::Failed:
+            ClearAutomationBusyPending();
+            LogSaveStatus(L"document save failed, keeping pending changes for retry");
+            ArmSaveTimer(
+                AdvanceRetryDelay(&g_runtime.timing.saveRetryDelayMs,
+                                  MAX_SAVE_RETRY_INTERVAL_MS));
+            return;
     }
+}
+
+void TryCriticalTransitionSaveNow(const wchar_t* path, IDispatch* document) {
+    if (!HasPendingAutosave()) {
+        return;
+    }
+
+    bool copiedTarget = false;
+    ScopedBstr pathCopy;
+    if (path && *path) {
+        copiedTarget = ReplaceStoredTextBstr(&pathCopy, path);
+    }
+
+    ScopedComPtr<IDispatch> documentRef;
+    if (document) {
+        copiedTarget = ReplaceStoredComPtr(&documentRef, document) || copiedTarget;
+    }
+
+    if (!copiedTarget) {
+        LogSaveStatus(L"critical auto-save target was unavailable, keeping pending changes");
+        return;
+    }
+
+    ActiveDocumentSnapshot snapshot;
+    RuntimeTickSnapshot tick = {};
+    tick.now = GetTickCount64();
+    tick.runtime.pendingSave = true;
+    tick.runtime.transitionFlushRequested = true;
+
+    HandleAutosaveAttemptResult(
+        TrySaveActiveDocument(&snapshot,
+                              pathCopy.Length() != 0 ? pathCopy.CStr() : nullptr,
+                              documentRef.Get()),
+        &snapshot,
+        tick);
+}
+
+bool ShouldUseObservedAutosaveTarget(bool transitionFlushRequested,
+                                     bool hasObservedDocumentPath,
+                                     bool hasObservedDocument) {
+    return !transitionFlushRequested &&
+           (hasObservedDocumentPath || hasObservedDocument);
+}
+
+bool CopyAutosaveTargetFromState(const ScopedBstr& sourcePath,
+                                 IDispatch* sourceDocument,
+                                 ScopedBstr* targetPath,
+                                 ScopedComPtr<IDispatch>* targetDocument) {
+    bool copiedTarget = false;
+
+    if (sourcePath.Length() != 0) {
+        copiedTarget = ReplaceStoredTextBstr(targetPath, sourcePath.Get());
+    }
+
+    if (sourceDocument) {
+        copiedTarget = ReplaceStoredComPtr(targetDocument, sourceDocument) || copiedTarget;
+    }
+
+    return copiedTarget;
+}
+
+bool CopyAutosaveTargetForTick(const RuntimeTickSnapshot& tick,
+                               ScopedBstr* targetPath,
+                               ScopedComPtr<IDispatch>* targetDocument) {
+    if (!targetPath || !targetDocument) {
+        return false;
+    }
+
+    if (tick.runtime.transitionFlushRequested) {
+        return CopyAutosaveTargetFromState(
+            g_runtime.document.transitionFlushDocumentPath,
+            g_runtime.document.transitionFlushDocument.Get(),
+            targetPath,
+            targetDocument);
+    }
+
+    if (!ShouldUseObservedAutosaveTarget(
+            tick.runtime.transitionFlushRequested,
+            g_runtime.document.observedDocumentPath.Length() != 0,
+            static_cast<bool>(g_runtime.document.observedDocument))) {
+        return true;
+    }
+
+    return CopyAutosaveTargetFromState(g_runtime.document.observedDocumentPath,
+                                       g_runtime.document.observedDocument.Get(),
+                                       targetPath,
+                                       targetDocument);
 }
 
 void HandleDocumentStateTick() {
@@ -4391,11 +5634,22 @@ void HandleAutosaveTick() {
     }
 
     ActiveDocumentSnapshot snapshot;
-    const wchar_t* transitionPath =
-        g_runtime.document.transitionFlushDocumentPath.Length() != 0
-            ? g_runtime.document.transitionFlushDocumentPath.Get()
-            : nullptr;
-    HandleAutosaveAttemptResult(TrySaveActiveDocument(&snapshot, transitionPath), &snapshot, tick);
+    ScopedBstr targetPath;
+    ScopedComPtr<IDispatch> targetDocument;
+    if (!CopyAutosaveTargetForTick(tick, &targetPath, &targetDocument)) {
+        LogSaveStatus(L"auto-save target was unavailable, keeping pending changes for retry");
+        ArmDocumentStateTimer(INPUT_SETTLE_DELAY_MS);
+        ArmSaveTimer(AdvanceRetryDelay(&g_runtime.timing.saveRetryDelayMs,
+                                       MAX_SAVE_RETRY_INTERVAL_MS));
+        return;
+    }
+
+    HandleAutosaveAttemptResult(
+        TrySaveActiveDocument(&snapshot,
+                              targetPath.Length() != 0 ? targetPath.CStr() : nullptr,
+                              targetDocument.Get()),
+        &snapshot,
+        tick);
 }
 
 // ============================================================================
@@ -4429,10 +5683,6 @@ bool IsEditingKey(WPARAM wParam) {
         return false;
     }
 
-    if (wParam >= VK_KEY_A && wParam <= VK_KEY_Z) return true;
-    if (wParam >= VK_KEY_0 && wParam <= VK_KEY_9) return true;
-    if (wParam == VK_SPACE) return true;
-
     switch (wParam) {
         case VK_BACK:
         case VK_DELETE:
@@ -4441,24 +5691,42 @@ bool IsEditingKey(WPARAM wParam) {
             return true;
     }
 
-    if (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9) return true;
-    if (wParam == VK_MULTIPLY || wParam == VK_ADD ||
-        wParam == VK_SUBTRACT || wParam == VK_DECIMAL || wParam == VK_DIVIDE) {
+    return false;
+}
+
+bool IsPlainTextInputVirtualKeyForState(WPARAM wParam,
+                                        bool ctrlPressed,
+                                        bool altPressed,
+                                        bool winPressed) {
+    if (ctrlPressed || altPressed || winPressed) {
+        return false;
+    }
+
+    if ((wParam >= 'A' && wParam <= 'Z') ||
+        (wParam >= '0' && wParam <= '9') ||
+        (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9)) {
         return true;
     }
 
     switch (wParam) {
+        case VK_SPACE:
+        case VK_MULTIPLY:
+        case VK_ADD:
+        case VK_SUBTRACT:
+        case VK_DECIMAL:
+        case VK_DIVIDE:
         case VK_OEM_1:
+        case VK_OEM_PLUS:
+        case VK_OEM_COMMA:
+        case VK_OEM_MINUS:
+        case VK_OEM_PERIOD:
         case VK_OEM_2:
         case VK_OEM_3:
         case VK_OEM_4:
         case VK_OEM_5:
         case VK_OEM_6:
         case VK_OEM_7:
-        case VK_OEM_PLUS:
-        case VK_OEM_COMMA:
-        case VK_OEM_MINUS:
-        case VK_OEM_PERIOD:
+        case VK_OEM_8:
         case VK_OEM_102:
             return true;
     }
@@ -4466,16 +5734,57 @@ bool IsEditingKey(WPARAM wParam) {
     return false;
 }
 
+bool IsPlainTextInputKey(WPARAM wParam) {
+    return IsPlainTextInputVirtualKeyForState(
+        wParam,
+        IsQueueKeyDown(VK_CONTROL),
+        IsQueueKeyDown(VK_MENU),
+        IsQueueKeyDown(VK_LWIN) || IsQueueKeyDown(VK_RWIN));
+}
+
+bool ShouldSuppressCharacterInputAfterKeyDown(bool suppressionPending,
+                                              ULONGLONG lastKeyDownTime,
+                                              ULONGLONG now) {
+    return suppressionPending &&
+           lastKeyDownTime != 0 &&
+           now >= lastKeyDownTime &&
+           now - lastKeyDownTime <= TEXT_INPUT_KEYDOWN_CHAR_SUPPRESSION_MS;
+}
+
+void NoteTextInputKeyDownScheduled() {
+    g_runtime.timing.lastTextInputKeyDownTime = GetTickCount64();
+    SetFlag(g_runtime.flags.suppressNextCharacterInput);
+}
+
+bool ConsumeTextInputKeyDownCharacterSuppression() {
+    const bool suppressionPending =
+        LoadFlag(g_runtime.flags.suppressNextCharacterInput);
+    ClearFlag(g_runtime.flags.suppressNextCharacterInput);
+
+    return ShouldSuppressCharacterInputAfterKeyDown(
+        suppressionPending,
+        g_runtime.timing.lastTextInputKeyDownTime,
+        GetTickCount64());
+}
+
 MessageAutosaveRole ClassifyMessageAutosaveRole(const MSG* lpMsg, bool wordEventsConnected) {
     if (!lpMsg) {
         return MessageAutosaveRole::None;
     }
 
-    if (lpMsg->message == WM_KEYDOWN && IsEditingKey(lpMsg->wParam)) {
-        return MessageAutosaveRole::EditingInput;
+    if (lpMsg->message == WM_KEYDOWN) {
+        if (IsEditingKey(lpMsg->wParam)) {
+            return MessageAutosaveRole::EditingInput;
+        }
+
+        if (IsPlainTextInputKey(lpMsg->wParam)) {
+            return MessageAutosaveRole::TextKeyDownInput;
+        }
     }
 
-    if (lpMsg->message == WM_CHAR && lpMsg->wParam >= 0x20) {
+    if (lpMsg->message == WM_CHAR &&
+        lpMsg->wParam >= 0x20 &&
+        !ConsumeTextInputKeyDownCharacterSuppression()) {
         return MessageAutosaveRole::EditingInput;
     }
 
@@ -4501,6 +5810,11 @@ void HandleClassifiedMessageAutosaveRole(const MSG* lpMsg, bool wordEventsConnec
     const MessageAutosaveRole messageRole =
         ClassifyMessageAutosaveRole(lpMsg, wordEventsConnected);
     switch (messageRole) {
+        case MessageAutosaveRole::TextKeyDownInput:
+            NoteTextInputKeyDownScheduled();
+            ScheduleSaveFromEdit();
+            break;
+
         case MessageAutosaveRole::EditingInput:
             ScheduleSaveFromEdit();
             break;
@@ -4537,12 +5851,23 @@ void MaybeArmDocumentStateMonitorFromMessage() {
     }
 }
 
+void MaybeArmEventDisconnectRetryFromMessage() {
+    if (HasPendingWordEventDisconnectRetry() &&
+        !IsScheduledTaskArmed(ScheduledTaskKind::EventDisconnectRetry)) {
+        ArmPendingWordEventDisconnectRetry();
+    }
+}
+
 // ============================================================================
 // Hook
 // ============================================================================
 
 void HandleTranslateMessageAutosave(const MSG* lpMsg) {
     if (!lpMsg) {
+        return;
+    }
+
+    if (!LoadFlag(g_runtime.flags.moduleActive)) {
         return;
     }
 
@@ -4557,6 +5882,7 @@ void HandleTranslateMessageAutosave(const MSG* lpMsg) {
     }
 
     const bool wordEventsConnected = AreWordEventsConnected();
+    MaybeArmEventDisconnectRetryFromMessage();
     HandleClassifiedMessageAutosaveRole(lpMsg, wordEventsConnected);
     MaybeArmDocumentStateMonitorFromMessage();
 }
@@ -4615,6 +5941,59 @@ void ReportSelfTestFailure(bool* success, const wchar_t* area) {
     }
 }
 
+class SelfTestDispatch final : public IDispatch {
+public:
+    STDMETHODIMP QueryInterface(REFIID riid, void** object) override {
+        if (!object) {
+            return E_POINTER;
+        }
+
+        *object = nullptr;
+        if (riid == IID_IUnknown || riid == kIIDIDispatch) {
+            *object = static_cast<IDispatch*>(this);
+            AddRef();
+            return S_OK;
+        }
+
+        return E_NOINTERFACE;
+    }
+
+    STDMETHODIMP_(ULONG) AddRef() override {
+        return 2;
+    }
+
+    STDMETHODIMP_(ULONG) Release() override {
+        return 1;
+    }
+
+    STDMETHODIMP GetTypeInfoCount(UINT* pctinfo) override {
+        if (pctinfo) {
+            *pctinfo = 0;
+        }
+
+        return S_OK;
+    }
+
+    STDMETHODIMP GetTypeInfo(UINT, LCID, ITypeInfo**) override {
+        return E_NOTIMPL;
+    }
+
+    STDMETHODIMP GetIDsOfNames(REFIID, LPOLESTR*, UINT, LCID, DISPID*) override {
+        return E_NOTIMPL;
+    }
+
+    STDMETHODIMP Invoke(DISPID,
+                        REFIID,
+                        LCID,
+                        WORD,
+                        DISPPARAMS*,
+                        VARIANT*,
+                        EXCEPINFO*,
+                        UINT*) override {
+        return E_NOTIMPL;
+    }
+};
+
 void ResetRuntimeTimingState(RuntimeTimingState* timing);
 void ResetRuntimeStatusState(RuntimeStatusState* status);
 void ResetRuntimeUiCacheState(RuntimeUiCacheState* ui);
@@ -4630,10 +6009,64 @@ bool RunTimingAndFallbackSelfTests() {
         ReportSelfTestFailure(&success, L"transition coalescing delay");
     }
 
+    if (!AreSameDocumentPath(L"C:\\Docs\\Test.docx", L"c:/docs/test.docx") ||
+        !AreSameDocumentPath(L"C:\\Docs\\Test.docx\\", L"c:/docs/test.docx") ||
+        AreSameDocumentPath(L"C:\\Docs\\One.docx", L"C:\\Docs\\Two.docx")) {
+        ReportSelfTestFailure(&success, L"path comparison normalization");
+    }
+
+    const wchar_t win32DrivePath[] = L"\\\\?\\C:\\Docs\\Test.docx";
+    ScopedBstr normalizedDrivePath;
+    if (!StoreNormalizedFinalPath(win32DrivePath,
+                                  static_cast<DWORD>(lstrlenW(win32DrivePath)),
+                                  &normalizedDrivePath) ||
+        lstrcmpW(normalizedDrivePath.CStr(), L"C:\\Docs\\Test.docx") != 0) {
+        ReportSelfTestFailure(&success, L"Win32 drive path normalization");
+    }
+
+    const wchar_t win32UncPath[] = L"\\\\?\\UNC\\server\\share\\Test.docx";
+    ScopedBstr normalizedUncPath;
+    if (!StoreNormalizedFinalPath(win32UncPath,
+                                  static_cast<DWORD>(lstrlenW(win32UncPath)),
+                                  &normalizedUncPath) ||
+        lstrcmpW(normalizedUncPath.CStr(), L"\\\\server\\share\\Test.docx") != 0) {
+        ReportSelfTestFailure(&success, L"Win32 UNC path normalization");
+    }
+
+    const wchar_t win32VolumePath[] =
+        L"\\\\?\\Volume{01234567-89AB-CDEF-0123-456789ABCDEF}\\Docs\\Test.docx";
+    ScopedBstr normalizedVolumePath;
+    if (!StoreNormalizedFinalPath(win32VolumePath,
+                                  static_cast<DWORD>(lstrlenW(win32VolumePath)),
+                                  &normalizedVolumePath) ||
+        lstrcmpW(normalizedVolumePath.CStr(), win32VolumePath) != 0) {
+        ReportSelfTestFailure(&success, L"Win32 volume path preservation");
+    }
+
     DWORD retryDelayMs = MIN_RETRY_INTERVAL_MS;
     const DWORD firstDelay = AdvanceRetryDelay(&retryDelayMs, MAX_SAVE_RETRY_INTERVAL_MS);
     if (firstDelay != MIN_RETRY_INTERVAL_MS || retryDelayMs != MIN_RETRY_INTERVAL_MS * 2) {
         ReportSelfTestFailure(&success, L"retry backoff progression");
+    }
+
+    BSTR selfResetText = SysAllocString(L"self-reset");
+    ScopedBstr selfResetBstr;
+    if (!selfResetText) {
+        ReportSelfTestFailure(&success, L"BSTR self-reset allocation");
+    } else {
+        selfResetBstr.Reset(selfResetText);
+        selfResetBstr.Reset(selfResetBstr.Get());
+        if (lstrcmpW(selfResetBstr.CStr(), L"self-reset") != 0) {
+            ReportSelfTestFailure(&success, L"BSTR self-reset guard");
+        }
+    }
+
+    SelfTestDispatch selfResetDispatch;
+    ScopedComPtr<IDispatch> selfResetDispatchPtr;
+    selfResetDispatchPtr.Reset(&selfResetDispatch);
+    selfResetDispatchPtr.Reset(selfResetDispatchPtr.Get());
+    if (selfResetDispatchPtr.Get() != &selfResetDispatch) {
+        ReportSelfTestFailure(&success, L"COM pointer self-reset guard");
     }
 
     if (!ShouldUseMessageDocumentRefreshFallback(false) ||
@@ -4647,11 +6080,54 @@ bool RunTimingAndFallbackSelfTests() {
         ReportSelfTestFailure(&success, L"boundary fallback gating");
     }
 
+    if (!IsPlainTextInputVirtualKeyForState('A', false, false, false) ||
+        !IsPlainTextInputVirtualKeyForState('1', false, false, false) ||
+        !IsPlainTextInputVirtualKeyForState(VK_OEM_PERIOD, false, false, false) ||
+        IsPlainTextInputVirtualKeyForState('A', true, false, false) ||
+        IsPlainTextInputVirtualKeyForState('A', false, true, false) ||
+        IsPlainTextInputVirtualKeyForState(VK_BACK, false, false, false)) {
+        ReportSelfTestFailure(&success, L"plain text keydown classification");
+    }
+
+    if (!ShouldSuppressCharacterInputAfterKeyDown(true, 100, 150) ||
+        ShouldSuppressCharacterInputAfterKeyDown(true,
+                                                 100,
+                                                 100 + TEXT_INPUT_KEYDOWN_CHAR_SUPPRESSION_MS + 1) ||
+        ShouldSuppressCharacterInputAfterKeyDown(false, 100, 150) ||
+        ShouldSuppressCharacterInputAfterKeyDown(true, 0, 150)) {
+        ReportSelfTestFailure(&success, L"text keydown character suppression");
+    }
+
     if (!ShouldTrackDocumentStateWhileInactive(true, false, true) ||
         !ShouldTrackDocumentStateWhileInactive(false, true, true) ||
         !ShouldTrackDocumentStateWhileInactive(false, false, false) ||
         ShouldTrackDocumentStateWhileInactive(false, false, true)) {
         ReportSelfTestFailure(&success, L"inactive document-state tracking");
+    }
+
+    SelfTestDispatch dummyDispatch;
+    IDispatch* dummyDocument = &dummyDispatch;
+    if (!HasTransitionFlushTarget(L"C:\\dummy.docx", nullptr) ||
+        !HasTransitionFlushTarget(nullptr, dummyDocument) ||
+        HasTransitionFlushTarget(nullptr, nullptr) ||
+        HasTransitionFlushTarget(L"", nullptr)) {
+        ReportSelfTestFailure(&success, L"transition flush target gating");
+    }
+
+    if (!ShouldPreserveTransitionFlushForManualSave(true) ||
+        ShouldPreserveTransitionFlushForManualSave(false)) {
+        ReportSelfTestFailure(&success, L"manual save transition preservation");
+    }
+
+    const HRESULT missingWordFailure = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    if (SelectWordApplicationResolutionFailure(false,
+                                               RPC_E_SERVERCALL_RETRYLATER,
+                                               missingWordFailure) != missingWordFailure ||
+        SelectWordApplicationResolutionFailure(true,
+                                               RPC_E_SERVERCALL_RETRYLATER,
+                                               missingWordFailure) !=
+            RPC_E_SERVERCALL_RETRYLATER) {
+        ReportSelfTestFailure(&success, L"Word application failure selection");
     }
 
     if (!ShouldRequireCleanSnapshotDetails(true, false, false, false) ||
@@ -4729,6 +6205,38 @@ bool RunWordEventPolicySelfTests() {
         ReportSelfTestFailure(&success, L"Word event dispatch classification");
     }
 
+    if (!DidWordEventUnadviseComplete(S_OK) ||
+        !DidWordEventUnadviseComplete(S_FALSE) ||
+        !DidWordEventUnadviseComplete(kConnectENoConnection) ||
+        !DidWordEventUnadviseComplete(kCoEObjectNotConnected) ||
+        !DidWordEventUnadviseComplete(RPC_E_DISCONNECTED) ||
+        !DidWordEventUnadviseComplete(RPC_E_SERVER_DIED) ||
+        !DidWordEventUnadviseComplete(RPC_E_SERVER_DIED_DNE) ||
+        DidWordEventUnadviseComplete(RPC_E_SERVERCALL_RETRYLATER) ||
+        DidWordEventUnadviseComplete(E_FAIL)) {
+        ReportSelfTestFailure(&success, L"Word event unadvise completion policy");
+    }
+
+    if (!ShouldRetryShutdownWordEventUnadvise(RPC_E_SERVERCALL_RETRYLATER,
+                                              0,
+                                              2) ||
+        ShouldRetryShutdownWordEventUnadvise(RPC_E_SERVERCALL_RETRYLATER,
+                                             1,
+                                             2) ||
+        ShouldRetryShutdownWordEventUnadvise(kConnectENoConnection,
+                                             0,
+                                             2) ||
+        ShouldRetryShutdownWordEventUnadvise(E_FAIL,
+                                             0,
+                                             2)) {
+        ReportSelfTestFailure(&success, L"shutdown unadvise retry policy");
+    }
+
+    if (!ShouldPreserveDeferredWordEventDisconnects(RuntimeResetMode::Reload) ||
+        ShouldPreserveDeferredWordEventDisconnects(RuntimeResetMode::Shutdown)) {
+        ReportSelfTestFailure(&success, L"Word event reset preservation policy");
+    }
+
     return success;
 }
 
@@ -4739,6 +6247,12 @@ bool RunSnapshotPolicySelfTests() {
         ShouldPopulateSnapshotMetadataForMode(true, SnapshotMetadataMode::WhenDirty) ||
         !ShouldPopulateSnapshotMetadataForMode(true, SnapshotMetadataMode::Always)) {
         ReportSelfTestFailure(&success, L"snapshot metadata mode gating");
+    }
+
+    if (!ShouldRetryInvalidCachedSnapshotDocument(true, false) ||
+        ShouldRetryInvalidCachedSnapshotDocument(true, true) ||
+        ShouldRetryInvalidCachedSnapshotDocument(false, false)) {
+        ReportSelfTestFailure(&success, L"invalid cached snapshot retry policy");
     }
 
     const SnapshotLoadPlan documentDirtyPlan =
@@ -4767,6 +6281,49 @@ bool RunSnapshotPolicySelfTests() {
     if (specificSavePlan.request.source != SnapshotSource::SpecificPath ||
         specificSavePlan.request.path == nullptr) {
         ReportSelfTestFailure(&success, L"specific-path save snapshot load plan");
+    }
+
+    SelfTestDispatch dummyDispatch;
+    IDispatch* dummyDocument = &dummyDispatch;
+    const SnapshotLoadPlan documentSavePlan =
+        MakeSaveSnapshotLoadPlan(nullptr, dummyDocument);
+    if (documentSavePlan.request.source != SnapshotSource::SpecificDocument ||
+        documentSavePlan.request.document != dummyDocument) {
+        ReportSelfTestFailure(&success, L"specific-document save snapshot load plan");
+    }
+
+    if (!AreSameDispatchComIdentity(dummyDocument, dummyDocument) ||
+        AreSameDispatchComIdentity(dummyDocument, nullptr)) {
+        ReportSelfTestFailure(&success, L"dispatch identity fast path");
+    }
+
+    if (!ShouldUseObservedAutosaveTarget(false, true, false) ||
+        !ShouldUseObservedAutosaveTarget(false, false, true) ||
+        ShouldUseObservedAutosaveTarget(false, false, false) ||
+        ShouldUseObservedAutosaveTarget(true, true, true)) {
+        ReportSelfTestFailure(&success, L"observed autosave target selection");
+    }
+
+    ScopedBstr sourceAutosavePath;
+    ScopedBstr copiedAutosavePath;
+    ScopedComPtr<IDispatch> copiedAutosaveDocument;
+    if (!ReplaceStoredTextBstr(&sourceAutosavePath, L"C:\\dummy.docx") ||
+        !CopyAutosaveTargetFromState(sourceAutosavePath,
+                                     nullptr,
+                                     &copiedAutosavePath,
+                                     &copiedAutosaveDocument) ||
+        !AreSameDocumentPath(sourceAutosavePath.CStr(), copiedAutosavePath.CStr())) {
+        ReportSelfTestFailure(&success, L"auto-save target copy");
+    }
+
+    RuntimeTickSnapshot normalAutosaveTick = {};
+    RuntimeTickSnapshot transitionAutosaveTick = {};
+    transitionAutosaveTick.runtime.transitionFlushRequested = true;
+    if (GetTransitionFlushClearModeForTick(normalAutosaveTick) !=
+            TransitionFlushClearMode::ClearPostTransitionRefresh ||
+        GetTransitionFlushClearModeForTick(transitionAutosaveTick) !=
+            TransitionFlushClearMode::PreservePostTransitionRefresh) {
+        ReportSelfTestFailure(&success, L"transition clear mode selection");
     }
 
     ActiveDocumentSnapshot cleanSnapshot = {};
@@ -4836,6 +6393,28 @@ bool RunOwnerThreadAndSchedulerSelfTests() {
         ReportSelfTestFailure(&success, L"steady poll active delay");
     }
 
+    if (!HasActiveDocumentStatePollWorkForState(true, false, false) ||
+        !HasActiveDocumentStatePollWorkForState(false, true, false) ||
+        !HasActiveDocumentStatePollWorkForState(false, false, true) ||
+        HasActiveDocumentStatePollWorkForState(false, false, false)) {
+        ReportSelfTestFailure(&success, L"active document-state poll work policy");
+    }
+
+    if (!ShouldKeepExistingScheduledTaskDueTime(
+            100,
+            200,
+            ScheduledTaskScheduleMode::ArmEarlier) ||
+        ShouldKeepExistingScheduledTaskDueTime(
+            100,
+            200,
+            ScheduledTaskScheduleMode::Reschedule) ||
+        ShouldKeepExistingScheduledTaskDueTime(
+            0,
+            200,
+            ScheduledTaskScheduleMode::ArmEarlier)) {
+        ReportSelfTestFailure(&success, L"scheduled task update policy");
+    }
+
     WordEventSession session;
     session.applicationHwnd = 42;
     session.cookie = 17;
@@ -4849,14 +6428,35 @@ bool RunOwnerThreadAndSchedulerSelfTests() {
         ReportSelfTestFailure(&success, L"word event session reset");
     }
 
+    WordEventSession sourceSession;
+    sourceSession.applicationHwnd = 43;
+    sourceSession.cookie = 18;
+    WordEventSession movedSession(std::move(sourceSession));
+    WordEventSession assignedSession;
+    assignedSession = std::move(movedSession);
+    if (assignedSession.applicationHwnd != 43 ||
+        assignedSession.cookie != 18 ||
+        sourceSession.applicationHwnd != 0 ||
+        sourceSession.cookie != 0 ||
+        movedSession.applicationHwnd != 0 ||
+        movedSession.cookie != 0) {
+        ReportSelfTestFailure(&success, L"word event session move reset");
+    }
+
     RuntimeTimingState timingState = {};
     timingState.schedulerTimerId = 5;
+    timingState.eventDisconnectRetryTimerDueTime = 6;
     timingState.lastEditTime = 7;
+    timingState.transitionFlushRequestTime = 8;
+    timingState.lastTextInputKeyDownTime = 9;
     timingState.saveRetryDelayMs = 123;
     timingState.documentStateRetryDelayMs = 456;
     ResetRuntimeTimingState(&timingState);
     if (timingState.schedulerTimerId != 0 ||
+        timingState.eventDisconnectRetryTimerDueTime != 0 ||
         timingState.lastEditTime != 0 ||
+        timingState.transitionFlushRequestTime != 0 ||
+        timingState.lastTextInputKeyDownTime != 0 ||
         timingState.saveRetryDelayMs != MIN_RETRY_INTERVAL_MS ||
         timingState.documentStateRetryDelayMs != MIN_RETRY_INTERVAL_MS) {
         ReportSelfTestFailure(&success, L"timing-state reset helper");
@@ -4895,10 +6495,13 @@ bool RunOwnerThreadAndSchedulerSelfTests() {
     ScopedValueRestore<ULONGLONG> saveDueTimeRestore(&g_runtime.timing.saveTimerDueTime);
     ScopedValueRestore<ULONGLONG> documentStateDueTimeRestore(
         &g_runtime.timing.documentStateTimerDueTime);
+    ScopedValueRestore<ULONGLONG> eventDisconnectRetryDueTimeRestore(
+        &g_runtime.timing.eventDisconnectRetryTimerDueTime);
     g_runtime.timing.schedulerTimerDueTime = 0;
     g_runtime.timing.saveTimerDueTime = 400;
     g_runtime.timing.documentStateTimerDueTime = 250;
-    if (GetNextScheduledTaskDueTime() != 250) {
+    g_runtime.timing.eventDisconnectRetryTimerDueTime = 125;
+    if (GetNextScheduledTaskDueTime() != 125) {
         ReportSelfTestFailure(&success, L"scheduler due-time selection");
     }
 
@@ -4929,8 +6532,65 @@ bool RunTickDecisionSelfTests() {
         ReportSelfTestFailure(&success, L"ready document-state tick decision");
     }
 
+    RuntimeTickSnapshot pendingUnknownDocumentTick = {};
+    pendingUnknownDocumentTick.runtime.ownerThreadSynchronized = true;
+    pendingUnknownDocumentTick.runtime.activeWordDocumentWindow = true;
+    pendingUnknownDocumentTick.runtime.pendingSave = true;
+    pendingUnknownDocumentTick.flags.documentDirtyKnown = false;
+    TickDecision pendingUnknownDocumentDecision =
+        EvaluateDocumentStateTickDecision(pendingUnknownDocumentTick);
+    if (pendingUnknownDocumentDecision.action != TickDecisionAction::RefreshDocumentState ||
+        pendingUnknownDocumentDecision.state != RuntimeStatePhase::ReadyToRefreshDocumentState) {
+        ReportSelfTestFailure(&success, L"pending unknown-document tick decision");
+    }
+
+    ScopedValueRestore<int> saveDelayRestore(&g_settings.saveDelay);
+    ScopedValueRestore<ULONGLONG> lastEditTimeRestore(&g_runtime.timing.lastEditTime);
+    g_settings.saveDelay = 500;
+    g_runtime.timing.lastEditTime = 1000;
+
+    RuntimeTickSnapshot pendingDelaySaveTick = {};
+    pendingDelaySaveTick.now = 1200;
+    pendingDelaySaveTick.runtime.pendingSave = true;
+    pendingDelaySaveTick.runtime.ownerThreadSynchronized = true;
+    pendingDelaySaveTick.runtime.activeWordDocumentWindow = true;
+    pendingDelaySaveTick.flags.documentDirtyKnown = false;
+    TickDecision pendingDelaySaveDecision =
+        EvaluateAutosaveTickDecision(pendingDelaySaveTick);
+    if (pendingDelaySaveDecision.action != TickDecisionAction::RearmSaveTimer ||
+        pendingDelaySaveDecision.state != RuntimeStatePhase::WaitingForSaveDelay ||
+        pendingDelaySaveDecision.delayMs != 300) {
+        ReportSelfTestFailure(&success, L"configured auto-save delay gating");
+    }
+
+    RuntimeTickSnapshot unknownSaveTick = pendingDelaySaveTick;
+    unknownSaveTick.now = 1500;
+    TickDecision unknownSaveDecision = EvaluateAutosaveTickDecision(unknownSaveTick);
+    if (unknownSaveDecision.action != TickDecisionAction::SaveDocument ||
+        unknownSaveDecision.state != RuntimeStatePhase::ReadyToSave) {
+        ReportSelfTestFailure(&success, L"unknown-document auto-save readiness");
+    }
+
+    RuntimeTickSnapshot knownCleanSaveTick = unknownSaveTick;
+    knownCleanSaveTick.flags.documentDirtyKnown = true;
+    knownCleanSaveTick.flags.documentDirty = false;
+    TickDecision knownCleanSaveDecision = EvaluateAutosaveTickDecision(knownCleanSaveTick);
+    if (knownCleanSaveDecision.action != TickDecisionAction::SaveDocument ||
+        knownCleanSaveDecision.state != RuntimeStatePhase::ReadyToSave) {
+        ReportSelfTestFailure(&success, L"known-clean auto-save readiness");
+    }
+
+    ScopedValueRestore<int> minSaveIntervalRestore(&g_settings.minTimeBetweenSaves);
+    ScopedValueRestore<ULONGLONG> lastSaveTimeRestore(&g_runtime.timing.lastSaveTime);
+    ScopedValueRestore<ULONGLONG> transitionFlushRequestTimeRestore(
+        &g_runtime.timing.transitionFlushRequestTime);
+    g_settings.minTimeBetweenSaves = 5000;
+    g_runtime.timing.lastSaveTime = 900;
+    g_runtime.timing.lastEditTime = 990;
+    g_runtime.timing.transitionFlushRequestTime = 100;
+
     RuntimeTickSnapshot readySaveTick = {};
-    readySaveTick.now = 1000;
+    readySaveTick.now = 200;
     readySaveTick.runtime.pendingSave = true;
     readySaveTick.runtime.ownerThreadSynchronized = true;
     readySaveTick.runtime.activeWordDocumentWindow = true;
@@ -4939,6 +6599,11 @@ bool RunTickDecisionSelfTests() {
     if (readySaveDecision.action != TickDecisionAction::SaveDocument ||
         readySaveDecision.state != RuntimeStatePhase::ReadyToSave) {
         ReportSelfTestFailure(&success, L"ready auto-save tick decision");
+    }
+
+    if (GetAutosaveDelayBaseTime(true) != 100 ||
+        GetAutosaveDelayBaseTime(false) != 990) {
+        ReportSelfTestFailure(&success, L"auto-save delay base time");
     }
 
     return success;
@@ -4963,9 +6628,12 @@ void ResetRuntimeTimingState(RuntimeTimingState* timing) {
     timing->schedulerTimerDueTime = 0;
     timing->saveTimerDueTime = 0;
     timing->documentStateTimerDueTime = 0;
+    timing->eventDisconnectRetryTimerDueTime = 0;
     timing->lastEditTime = 0;
+    timing->transitionFlushRequestTime = 0;
     timing->lastSaveTime = 0;
     timing->lastEventConnectAttemptTime = 0;
+    timing->lastTextInputKeyDownTime = 0;
     timing->pendingSaveAsTime = 0;
     timing->saveRetryDelayMs = MIN_RETRY_INTERVAL_MS;
     timing->documentStateRetryDelayMs = MIN_RETRY_INTERVAL_MS;
@@ -4978,6 +6646,7 @@ void ResetRuntimeStatusState(RuntimeStatusState* status) {
 
     status->lastSaveFailureLogTime = 0;
     status->lastDocumentStateFailureLogTime = 0;
+    status->lastEventDisconnectFailureLogTime = 0;
     status->lastSaveStatusLogTime = 0;
     status->lastDocumentStateStatusLogTime = 0;
     ClearStoredStatusMessage(&status->lastSaveStatusMessage,
@@ -4996,22 +6665,32 @@ void ResetRuntimeUiCacheState(RuntimeUiCacheState* ui) {
     ui->cachedWordUiThreadId = 0;
 }
 
-void ResetRuntimeState() {
+void ResetRuntimeState(RuntimeResetMode resetMode = RuntimeResetMode::Shutdown) {
+    const bool preserveDeferredEventDisconnects =
+        ShouldPreserveDeferredWordEventDisconnects(resetMode);
     CancelSchedulerTimer();
+    ClearOwnerThreadId();
     ResetRuntimeTimingState(&g_runtime.timing);
     ResetRuntimeStatusState(&g_runtime.status);
     ClearDispatchMemberIdCache();
-    DisconnectWordApplicationEvents();
+    DisconnectWordApplicationEvents(preserveDeferredEventDisconnects);
+    if (preserveDeferredEventDisconnects) {
+        RefreshPendingWordEventDisconnectRetryFlag();
+    } else {
+        DisconnectPendingWordEventDisconnectSessionsForShutdown();
+    }
     ClearAutomationBusyPending();
     ClearPendingSaveAsMigration();
     ClearPendingSave();
     ClearExpeditedSavePending();
+    ClearPostTransitionRefreshPending();
     ClearTransitionFlushRequest();
     ClearManualSavePending();
+    ClearFlag(g_runtime.flags.autoSaveInProgress);
     ClearFlag(g_runtime.flags.imeComposing);
+    ClearFlag(g_runtime.flags.suppressNextCharacterInput);
     ResetObservedDocumentState();
     ResetRuntimeUiCacheState(&g_runtime.ui);
-    ClearOwnerThreadId();
 }
 
 void LoadSettings() {
@@ -5036,10 +6715,10 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave v3.5 initializing...");
+    Wh_Log(L"Word Local AutoSave v3.6 initializing...");
 
     g_runtime.wordProcessId = GetCurrentProcessId();
-    ResetRuntimeState();
+    ResetRuntimeState(RuntimeResetMode::Shutdown);
     LoadSettings();
     if (!RunInternalSelfTests()) {
         Wh_Log(L"WARNING: One or more internal self-tests failed");
@@ -5079,13 +6758,13 @@ void Wh_ModUninit() {
     Wh_Log(L"Word Local AutoSave uninitializing...");
 
     ClearFlag(g_runtime.flags.moduleActive);
-    ResetRuntimeState();
+    ResetRuntimeState(RuntimeResetMode::Shutdown);
 
     Wh_Log(L"Word Local AutoSave uninitialized");
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading...");
-    ResetRuntimeState();
+    ResetRuntimeState(RuntimeResetMode::Reload);
     LoadSettings();
 }
