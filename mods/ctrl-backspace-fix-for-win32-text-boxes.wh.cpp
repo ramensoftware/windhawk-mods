@@ -22,11 +22,11 @@ It also supports wrapped `Edit` controls used in .NET WinForms and Delphi VCL
 applications.
 
 | Before |
-| ------ |
+| :----- |
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_before.gif) |
 
 | After |
-| ----- |
+| :---- |
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_after.gif) |
 
 ## Notes
