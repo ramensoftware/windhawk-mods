@@ -2,12 +2,83 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-06T22:03:43.000Z</updated>
+    <updated>2026-05-07T08:44:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AutoScroll Win32 1.0.0]]></title>
+        <id>https://windhawk.net/mods/autoscroll-win32#126a2a9093f065ec58610d11c98e8f75a0cdb014</id>
+        <link href="https://windhawk.net/mods/autoscroll-win32"/>
+        <updated>2026-05-07T08:44:09.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/auto%20scroll%20preview.gif" alt="Preview" /></p>
+<hr />
+<h2 id="autoscrollwin32">AutoScroll Win32</h2>
+<p>Simulates browser-style autoscroll (middle mouse button) in Win32 applications
+such as File Explorer, with a WinUI-style visual indicator at the scroll origin.</p>
+<h3 id="howtouse">How to use</h3>
+<ol>
+<li><strong>Hold</strong> the <strong>middle mouse button</strong> anywhere in a scrollable area.</li>
+<li>Move the cursor <strong>up or down</strong> (and optionally sideways) from the origin
+point -- the farther from the origin, the faster the scroll.</li>
+<li><strong>Release</strong> the middle button to stop.</li>
+</ol>
+<h3 id="compatibilitywithsmoothscrollwin32">Compatibility with Smooth Scroll Win32</h3>
+<p>Fully compatible. AutoScroll Win32 posts standard WM<em>MOUSEWHEEL and
+WM</em>MOUSEHWHEEL messages, which Smooth Scroll Win32 intercepts and animates
+exactly like real mouse-wheel events.</p>
+<h3 id="addingmoreapplications">Adding more applications</h3>
+<p>By default the mod targets only explorer.exe. To enable it in other
+applications, add their executable names in the <strong>Advanced</strong> tab of the mod
+settings in Windhawk under "Include processes".</p>
+<hr />
+<h2 id="autoscrollwin32portugues">AutoScroll Win32 (Portugues)</h2>
+<p>Simula a rolagem automatica com o botao do meio do mouse (estilo navegador) em
+aplicativos Win32 como o Explorador de Arquivos, com um indicador visual
+estilo WinUI no ponto de origem da rolagem.</p>
+<h3 id="comousar">Como usar</h3>
+<ol>
+<li><strong>Segure</strong> o <strong>botao do meio do mouse</strong> em qualquer area rolavel.</li>
+<li>Mova o cursor <strong>para cima ou para baixo</strong> (e opcionalmente para os lados)
+a partir do ponto de origem -- quanto mais longe, mais rapido rola.</li>
+<li><strong>Solte</strong> o botao do meio para parar.</li>
+</ol>
+<h3 id="compatibilidadecomsmoothscrollwin32">Compatibilidade com Smooth Scroll Win32</h3>
+<p>Totalmente compativel. O AutoScroll Win32 envia mensagens padrao WM<em>MOUSEWHEEL
+e WM</em>MOUSEHWHEEL, que o Smooth Scroll Win32 intercepta e anima exatamente como
+eventos reais da roda do mouse.</p>
+<h3 id="adicionarmaisaplicativos">Adicionar mais aplicativos</h3>
+<p>Por padrao, o mod afeta apenas o explorer.exe. Para ativa-lo em outros
+aplicativos, adicione os nomes dos executaveis na aba <strong>Advanced</strong> das
+configuraces do mod no Windhawk em "Include processes".</p>
+<hr />
+<h2 id="autoscrollwin32espanol">AutoScroll Win32 (Espanol)</h2>
+<p>Simula el desplazamiento automatico con el boton central del raton (estilo
+navegador) en aplicaciones Win32 como el Explorador de archivos, con un
+indicador visual estilo WinUI en el punto de origen del desplazamiento.</p>
+<h3 id="comousar-1">Como usar</h3>
+<ol>
+<li><strong>Mantena presionado</strong> el <strong>boton central del raton</strong> en cualquier area
+desplazable.</li>
+<li>Mueve el cursor <strong>hacia arriba o hacia abajo</strong> (y opcionalmente hacia los
+lados) desde el punto de origen -- cuanto mas lejos, mas rapido se desplaza.</li>
+<li><strong>Suelta</strong> el boton central para detener.</li>
+</ol>
+<h3 id="compatibilidadconsmoothscrollwin32">Compatibilidad con Smooth Scroll Win32</h3>
+<p>Totalmente compatible. AutoScroll Win32 envia mensajes estandar WM<em>MOUSEWHEEL
+y WM</em>MOUSEHWHEEL, que Smooth Scroll Win32 intercepta y anima exactamente como
+eventos reales de la rueda del raton.</p>
+<h3 id="agregarmasaplicaciones">Agregar mas aplicaciones</h3>
+<p>De forma predeterminada, el mod solo afecta a explorer.exe. Para habilitarlo
+en otras aplicaciones, agrega los nombres de los ejecutables en la pestana <strong>Advanced</strong>
+de la configuracion del mod en Windhawk bajo "Include processes".</p>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.6]]></title>
         <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#c481a1583aa87773d13dc34257d1632d037dd04a</id>
@@ -530,20 +601,6 @@ action on left-click and/or show a context menu on right-click.</p>
         <author>
             <name>Languster</name>
             <uri>https://github.com/Languster</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 1.1.1]]></title>
-        <id>https://windhawk.net/mods/audioswap#795240a56bf0287788c83bd16e5f76245a8e37f5</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-05-01T16:12:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New icons in the settings</li>
-<li>Can now open Windhawk directly from the mod icon</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

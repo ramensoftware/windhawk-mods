@@ -492,6 +492,34 @@
                 "version": "1.1"
             }
         },
+        "autoscroll-win32": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1778143449000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1778143449000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "crazyboyybs",
+                "compilerOptions": "-luser32 -lgdi32 -ld2d1 -ladvapi32",
+                "description": "Ativa rolagem automatica com o botao do meio (estilo navegador) em aplicativos Win32. Compativel com Smooth Scroll Win32.",
+                "github": "https://github.com/crazyboyybs",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Rolagem Automatica Win32",
+                "version": "1.0.0"
+            }
+        },
         "balloon-sound-fix": {
             "details": {
                 "defaultSorting": 4040,
