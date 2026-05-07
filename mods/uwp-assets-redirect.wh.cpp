@@ -355,7 +355,7 @@ NTSTATUS NTAPI NtCreateFile_Hook(
 
         if(!redirectPath.empty()) {
 
-            //Wh_Log(L"[Redirect Attempt] %s -> %s", originalPath.c_str(), redirectPath.c_str());
+            Wh_Log(L"[Redirect Attempt] %s -> %s", originalPath.c_str(), redirectPath.c_str());
 
             ObjectName->Buffer = (PWSTR) redirectPath.c_str();
             ObjectName->Length = (USHORT) (redirectPath.length() * sizeof(WCHAR));
@@ -376,11 +376,11 @@ NTSTATUS NTAPI NtCreateFile_Hook(
             );
 
             if(NT_SUCCESS(result)) {
-                //Wh_Log(L"[Redirect Success] Redirected to: %s", redirectPath.c_str());
+                Wh_Log(L"[Redirect Success] Redirected to: %s", redirectPath.c_str());
                 return result;
             }
 
-            //Wh_Log(L"[Redirect Fail] Failed with code 0x%08X. Rolling back to original: %s", result, originalPath.c_str());
+            Wh_Log(L"[Redirect Fail] Failed with code 0x%08X. Rolling back to original: %s", result, originalPath.c_str());
 
             ObjectName->Buffer = (PWSTR) originalPath.c_str();
             ObjectName->Length = (USHORT) (originalPath.length() * sizeof(WCHAR));
