@@ -155,7 +155,7 @@ bool IsEditControl(HWND hWnd)
 
         // Fallback for .NET WinForms wrapped Edit controls
         // Required for those within PropertyGrid controls that swallow the
-        // message query
+        // WM_GETDLGCODE query.
         if (_wcsnicmp(szClassName, L"WindowsForms10.EDIT.", 20) == 0)
         {
             return true;
