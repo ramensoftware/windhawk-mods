@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-08T14:26:10.000Z</updated>
+    <updated>2026-05-08T14:34:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Details View Columns 1.2]]></title>
+        <id>https://windhawk.net/mods/explorer-force-details-columns#ee00fe42ee1bf5e16382c2e2a8529336e86278ca</id>
+        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
+        <updated>2026-05-08T14:34:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the problem causing the settings to fallback to default during mod initiating.</li>
+<li>Refined width realization and DPI calculation, fixed the problem of minimum width being too wide.</li>
+<li>Duplicated property keys are handled only once if the user added same property multiple times in settings.</li>
+<li>Fixed some other problems.</li>
+</ul>]]></content>
+        <author>
+            <name>ernisn</name>
+            <uri>https://github.com/ernisn</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mic Tray Control & Decibel Viewer 1.14]]></title>
         <id>https://windhawk.net/mods/mic-tray-control#9f108172c376cb9c51352e95152bd9a2055adc37</id>
@@ -591,17 +607,6 @@ action on left-click and/or show a context menu on right-click.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.5]]></title>
-        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#2e793d254614b2390b602eeebf8fad6193c95ae2</id>
-        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
-        <updated>2026-05-01T16:28:35.000Z</updated>
-        <content type="html"><![CDATA[<p>Add options for chosing encoding and disabling text paste</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
