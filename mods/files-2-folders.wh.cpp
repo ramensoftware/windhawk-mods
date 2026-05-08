@@ -77,6 +77,9 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
   - auto: "Auto (follow Windows app theme)"
   - light: "Light"
   - dark: "Dark"
+- nearCutCopy: false
+  $name: "Place menu item near Cut/Copy"
+  $description: "When OFF (default), the 'Files 2 Folder...' entry appears at the top of the context menu. When ON, it appears just after Cut/Copy (between Copy and Paste)."
 - slowMode: false
   $name: "Slow mode (safer, with undo)"
   $description: |-
@@ -152,6 +155,7 @@ struct ModSettings {
     std::wstring dateFormat;
     int defaultMode;
     bool slowMode;
+    bool nearCutCopy;
     std::wstring theme;
     bool hotkeyEnabled;
     std::wstring hotkeyChar;
@@ -176,6 +180,7 @@ static void LoadSettings() {
         g_settings.defaultMode = 1;
 
     g_settings.slowMode = Wh_GetIntSetting(L"slowMode") != 0;
+    g_settings.nearCutCopy = Wh_GetIntSetting(L"nearCutCopy") != 0;
 
     PCWSTR th = Wh_GetStringSetting(L"theme");
     g_settings.theme = (th && *th) ? th : L"auto";
@@ -1094,10 +1099,34 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
         std::wstring folder;
         std::vector<std::wstring> items;
         if (GetFolderAndSelectionForHwnd(hwnd, folder, items) && items.size() >= 1) {
-            // Insert separator + our item near the top of the menu.
-            InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
-            InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_STRING,
-                        F2F_MENU_CMD, L"Files 2 &Folder...");
+            // Find the Cut/Copy block and insert just after it.
+            // Explorer's shell context menu uses a small fixed range of
+            // command ids for the built-in clipboard verbs:
+            //   Cut = 25, Copy = 26, Paste = 27, (Paste shortcut = 28).
+            // We walk all items and remember the position after the last id
+            // in {Cut, Copy} we see, so we land between Copy and Paste.
+            // Position depends on the nearCutCopy setting:
+            //   off (default): top of menu, with a separator below.
+            //   on: just after Cut/Copy. Cut/Copy ids vary by shell view —
+            //       FCIDM_SHVIEW_CUT/COPY = 31001/31002 in the shell view's
+            //       own menu, or 25/26 in some legacy menus.
+            if (g_settings.nearCutCopy) {
+                int insertPos = 0;
+                int count = GetMenuItemCount(hmenu);
+                for (int i = 0; i < count; ++i) {
+                    UINT id = GetMenuItemID(hmenu, i);
+                    if (id == 31001 || id == 31002 || id == 25 || id == 26) {
+                        insertPos = i + 1;
+                    }
+                }
+                InsertMenuW(hmenu, insertPos, MF_BYPOSITION | MF_STRING,
+                            F2F_MENU_CMD, L"Files 2 &Folder...");
+                InsertMenuW(hmenu, insertPos + 1, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+            } else {
+                InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+                InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_STRING,
+                            F2F_MENU_CMD, L"Files 2 &Folder...");
+            }
             injected = true;
             g_currentMenuEligible = true;
             g_currentSelection = std::move(items);
