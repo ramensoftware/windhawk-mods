@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-07T08:44:09.000Z</updated>
+    <updated>2026-05-08T14:26:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mic Tray Control & Decibel Viewer 1.14]]></title>
+        <id>https://windhawk.net/mods/mic-tray-control#9f108172c376cb9c51352e95152bd9a2055adc37</id>
+        <link href="https://windhawk.net/mods/mic-tray-control"/>
+        <updated>2026-05-08T14:26:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed popup UI positioning for top taskbar and multi-monitor setups.</li>
+<li>Safely constrained the popup window within the bounds of the monitor where the cursor currently resides.</li>
+</ul>]]></content>
+        <author>
+            <name>ciahciach</name>
+            <uri>https://github.com/ciahciach</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AutoScroll Win32 1.0.0]]></title>
         <id>https://windhawk.net/mods/autoscroll-win32#126a2a9093f065ec58610d11c98e8f75a0cdb014</id>
@@ -588,19 +602,6 @@ action on left-click and/or show a context menu on right-click.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer TreeItem Tweaker 1.1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-treeitem-tweaker#e40aee3bada07d63e308854363a2287cb94a6960</id>
-        <link href="https://windhawk.net/mods/explorer-treeitem-tweaker"/>
-        <updated>2026-05-01T16:18:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed clipping of long menu item names when using the Italic font style</li>
-</ul>]]></content>
-        <author>
-            <name>Languster</name>
-            <uri>https://github.com/Languster</uri>
         </author>
     </entry>
 </feed>

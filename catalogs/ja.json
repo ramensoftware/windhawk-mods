@@ -6127,7 +6127,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1777930917000,
+                "updated": 1778250370000,
                 "users": 33
             },
             "metadata": {
@@ -6140,7 +6140,7 @@
                 ],
                 "license": "MIT",
                 "name": "Mic Tray Control & Decibel Viewer",
-                "version": "1.13"
+                "version": "1.14"
             }
         },
         "microswap": {
