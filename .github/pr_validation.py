@@ -165,18 +165,6 @@ def get_mod_file_metadata(
     return properties, warnings
 
 
-def get_mod_file_readme(source: str) -> Optional[str]:
-    """Extract the README block body from mod source, or None if absent."""
-    readme_block_re = re.compile(
-        r'^//[ \t]+==WindhawkModReadme==[ \t]*$'
-        r'\s*/\*\s*([\s\S]+?)\s*\*/\s*'
-        r'^//[ \t]+==/WindhawkModReadme==[ \t]*$',
-        re.MULTILINE,
-    )
-    match = readme_block_re.search(source)
-    return match.group(1) if match else None
-
-
 @cache
 def get_mod_author_data():
     url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
@@ -648,13 +636,6 @@ def validate_metadata(path: Path, expected_author: str) -> int:
     validator = ModMetadataValidator(path, properties, expected_author)
     metadata_warnings = validator.validate_all()
 
-    # Validate README presence
-    readme_warnings = 0
-    if get_mod_file_readme(source) is None:
-        readme_warnings += add_warning(
-            path, 1, 'Mod source must contain a README block (==WindhawkModReadme==)'
-        )
-
     # Validate file path
     file_warnings = 0
     if not path.name.endswith('.wh.cpp'):
@@ -662,7 +643,146 @@ def validate_metadata(path: Path, expected_author: str) -> int:
     if path.parent != Path('mods'):
         file_warnings += add_warning(path, 1, 'File is not placed in the mods folder')
 
-    return initial_warnings + metadata_warnings + readme_warnings + file_warnings
+    return initial_warnings + metadata_warnings + file_warnings
+
+
+def validate_marker_block(
+    path: Path,
+    source: str,
+    marker_name: str,
+    label: str,
+    *,
+    required: bool,
+) -> int:
+    """Validate a `// ==X== \\n /* ... */ \\n // ==/X==` block in a mod source.
+
+    Args:
+        path: source file path (used in warning output).
+        source: full file contents.
+        marker_name: the marker text without `==` decoration, e.g.
+            `WindhawkModReadme`.
+        label: human-friendly name used in warning messages, e.g. `README`.
+        required: if True, warn when the block is absent.
+
+    Returns:
+        Total number of warnings emitted.
+    """
+    open_marker = f'=={marker_name}=='
+    close_marker = f'==/{marker_name}=='
+
+    # The body capture group keeps its surrounding whitespace so we can check
+    # for the required newlines around /* and */.
+    block_re = re.compile(
+        r'^//[ \t]+' + re.escape(open_marker) + r'[ \t]*$'
+        r'\s*/\*([\s\S]+?)\*/\s*'
+        r'^//[ \t]+' + re.escape(close_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+    match = block_re.search(source)
+
+    warnings = 0
+
+    def line_of(pos: int) -> int:
+        return source.count('\n', 0, pos) + 1
+
+    def find_all(haystack: str, needle: str):
+        start = 0
+        while (pos := haystack.find(needle, start)) != -1:
+            yield pos
+            start = pos + len(needle)
+
+    # Stray-marker scan: warn about any line that looks like a marker comment
+    # line but isn't the one consumed by the matched block. The pattern is
+    # intentionally more permissive than block_re (it tolerates leading
+    # whitespace) so improperly indented marker lines are still caught, while
+    # incidental occurrences of the marker text inside other comments (e.g. "//
+    # must conform to ==X== above") are not. This runs even when the block is
+    # missing or optional.
+    open_marker_line_re = re.compile(
+        r'^\s*//[ \t]+' + re.escape(open_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+    close_marker_line_re = re.compile(
+        r'^\s*//[ \t]+' + re.escape(close_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+
+    # Sentinel -1 (str.find's not-found value) when there is no matched block,
+    # so the skip-the-matched-line check below naturally fails.
+    matched_open_pos = -1
+    matched_close_pos = -1
+    if match is not None:
+        matched_open_pos = source.find(open_marker, match.start(), match.end())
+        matched_close_pos = source.rfind(close_marker, match.start(), match.end())
+
+    for m in open_marker_line_re.finditer(source):
+        if m.start() <= matched_open_pos < m.end():
+            continue
+        warnings += add_warning(
+            path, line_of(m.start()), f'Unexpected extra "{open_marker}" marker'
+        )
+
+    for m in close_marker_line_re.finditer(source):
+        if m.start() <= matched_close_pos < m.end():
+            continue
+        warnings += add_warning(
+            path, line_of(m.start()), f'Unexpected extra "{close_marker}" marker'
+        )
+
+    if match is None:
+        if required:
+            warnings += add_warning(
+                path,
+                1,
+                f'Mod source must contain a {label} block ({open_marker})',
+            )
+        return warnings
+
+    body = match.group(1)
+    body_start = match.start(1)
+    open_line = line_of(matched_open_pos)
+
+    # The body must not contain another */ - that would actually terminate the
+    # comment block at that point in C/C++.
+    for idx in find_all(body, '*/'):
+        warnings += add_warning(
+            path,
+            line_of(body_start + idx),
+            f'{label} body must not contain an additional "*/"',
+        )
+
+    # /* must be followed by a newline and */ must be preceded by one
+    # (trailing/leading spaces or tabs on those lines are tolerated).
+    if not re.match(r'[ \t]*\n', body):
+        warnings += add_warning(
+            path, open_line, f'{label} /* must be followed by a newline'
+        )
+    if not re.search(r'\n[ \t]*\Z', body):
+        warnings += add_warning(
+            path, open_line, f'{label} */ must be preceded by a newline'
+        )
+
+    # The body must contain non-whitespace content.
+    if body.strip() == '':
+        warnings += add_warning(path, open_line, f'{label} block must not be empty')
+
+    return warnings
+
+
+def validate_readme(path: Path) -> int:
+    """Validate the mod's README block."""
+    source = path.read_text(encoding='utf-8', errors='ignore')
+    return validate_marker_block(
+        path, source, 'WindhawkModReadme', 'README', required=True
+    )
+
+
+def validate_settings(path: Path) -> int:
+    """Validate the mod's settings block, if present."""
+    source = path.read_text(encoding='utf-8', errors='ignore')
+    return validate_marker_block(
+        path, source, 'WindhawkModSettings', 'Settings', required=False
+    )
 
 
 @cache
@@ -687,6 +807,10 @@ def get_existing_windows_file_names():
 
 
 def is_existing_windows_file_name(name: str):
+    # Temporary special case - not yet in stable Windows builds.
+    if name.lower() in ['systemtray.dll']:
+        return True
+
     return name.lower() in get_existing_windows_file_names()
 
 
@@ -853,6 +977,8 @@ def test_run():
     pr_author = sys.argv[2]
     warnings = validate_encoding(path)
     warnings += validate_metadata(path, pr_author)
+    warnings += validate_readme(path)
+    warnings += validate_settings(path)
     warnings += validate_symbol_hooks(path)
     warnings += validate_specific_keywords(path)
     if warnings > 0:
@@ -893,6 +1019,8 @@ def main():
 
         path_warnings = validate_encoding(path)
         path_warnings += validate_metadata(path, pr_author)
+        path_warnings += validate_readme(path)
+        path_warnings += validate_settings(path)
         path_warnings += validate_symbol_hooks(path)
         path_warnings += validate_specific_keywords(path)
         warnings += path_warnings
