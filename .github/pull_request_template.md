@@ -1,15 +1,15 @@
-<!-- ⚠️ Please don't remove the template below. Add your content above the template. -->
+<!-- ⚠️ Please keep the template below intact and fill in the relevant sections. Any additional content can be placed above the template. -->
 
 ## Changelog
 
-If the submission is an update to an existing mod, include the changelog below:
+If this pull request updates an existing mod, describe the changes below:
 
 * Changelog item 1...
 * Changelog item 2...
 
 ## Mod authorship
 
-If the submission is a new mod, please fill the form below.
+If this pull request introduces a new mod, please complete the section below.
 
 This mod was created by:
 
@@ -21,4 +21,4 @@ This mod was created by:
 - - [ ] Another AI (please specify): 
 - - [ ] Other (please specify): 
 
-Please select the appropriate option. Your selection will not affect acceptance criteria, but will help reviewers understand the context of the code and provide relevant feedback.
+Please select the options that best apply. Your selection does not affect the acceptance criteria, but it helps reviewers understand the context of the code and provide relevant feedback.
