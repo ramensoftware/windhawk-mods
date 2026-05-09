@@ -4,7 +4,7 @@
 // @description     A persistent icon dock anchored left of the Start button. Drag any app to pin it. Left-click to launch or focus. Double-right-click to unpin. Drag within the dock to reorder.
 // @version         1.0.0
 // @author          Ashix
-// @github          https://github.com/k-ashix/
+// @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @include         explorer.exe
 // @architecture    x86-64
