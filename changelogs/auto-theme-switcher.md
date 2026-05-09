@@ -1,3 +1,7 @@
+## 1.3.1 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/97c5ff6fcd4bb755aae0e1030c6d53e542d1af4d/mods/auto-theme-switcher.wh.cpp))
+
+- Change target to windhawk.exe
+
 ## 1.3.0 ([Mar 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8af6954b1bbd43fae8577e287d460d19c9983500/mods/auto-theme-switcher.wh.cpp))
 
 - Added Hotkey support

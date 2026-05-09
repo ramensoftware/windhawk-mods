@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-09T15:22:33.000Z</updated>
+    <updated>2026-05-09T16:25:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Theme Switcher 1.3.1]]></title>
+        <id>https://windhawk.net/mods/auto-theme-switcher#97c5ff6fcd4bb755aae0e1030c6d53e542d1af4d</id>
+        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
+        <updated>2026-05-09T16:25:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Change target to windhawk.exe</li>
+</ul>]]></content>
+        <author>
+            <name>tinodin</name>
+            <uri>https://github.com/tinodin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.5]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#bd2fbb3ba729988e29eee1dd1df1cabea135c144</id>
@@ -564,31 +577,6 @@ line-height adjustment, and more</li>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Move Window to Monitor 1.1.0]]></title>
-        <id>https://windhawk.net/mods/move-window-to-monitor#f0ef9faeba5aac55e931e6603bf30066d2e4a7f3</id>
-        <link href="https://windhawk.net/mods/move-window-to-monitor"/>
-        <updated>2026-05-02T14:15:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="movewindowtomonitor">Move Window to Monitor</h1>
-<p>Moves the active window to a specific monitor using configurable hotkeys.</p>
-<h2 id="defaultshortcutctrlaltarrowkeys">Default Shortcut: Ctrl+Alt+Arrow keys</h2>
-<h2 id="setup">Setup</h2>
-<p>Monitors are numbered automatically, sorted <strong>left to right, then top to bottom</strong>
-based on their physical position in your Windows display layout.</p>
-<p><strong>Example for a setup with 3 monitors on the bottom and 1 on top center:</strong></p>
-<pre><code>        [ 1 ]
-[ 0 ]   [ 2 ]   [ 3 ]
-</code></pre>
-<p>Set: UP=1, LEFT=0, DOWN=2, RIGHT=3</p>
-<p>Use <strong>-1</strong> to keep automatic geometric detection for a direction.</p>
-<p>When the active window is already on the target monitor, the hotkey does nothing.</p>
-<p>The <strong>Center window</strong> option centers the window on the target monitor instead
-of preserving its relative position. Works independently of <strong>Keep window size</strong>.</p>]]></content>
-        <author>
-            <name>TomberWolf</name>
-            <uri>https://github.com/TomberWolf</uri>
         </author>
     </entry>
 </feed>
