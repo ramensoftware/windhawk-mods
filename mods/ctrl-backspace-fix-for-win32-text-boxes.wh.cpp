@@ -139,8 +139,8 @@ bool IsEditControl(HWND hWnd)
 
         // Query the UI framework to reveal a wrapped Edit control
         // Common class names for such controls:
-        // - WindowsForms10.EDIT.app.* | .NET WinForms
-        // - TEdit, TMemo, T*Edit      | Delphi VCL
+        // - WindowsForms10.EDIT.* | .NET WinForms
+        // - TEdit, TMemo, T*Edit  | Delphi VCL
         LRESULT lResult = SendMessageW(hWnd, WM_GETDLGCODE, 0, 0);
         if (lResult & DLGC_HASSETSEL)
         {
