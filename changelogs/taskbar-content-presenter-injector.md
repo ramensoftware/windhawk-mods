@@ -1,3 +1,7 @@
+## 1.4 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e33b63fbaf11e119f003ae9e8a165c68a14b305b/mods/taskbar-content-presenter-injector.wh.cpp))
+
+* The mod now injects into `SearchUx.SearchUI.SearchButtonRootGrid`.
+
 ## 1.3 ([Mar 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d770227ef3dda830a140a36b06c144e8ec7a5bae/mods/taskbar-content-presenter-injector.wh.cpp))
 
 * Fixed 25H2 support by implementing deferred injection
