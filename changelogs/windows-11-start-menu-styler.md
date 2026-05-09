@@ -1,3 +1,18 @@
+## 1.5 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/949923d28a43c40563236c5d2e820ea114e496fb/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Updated the Start menu layout options.
+  * The older classic layout, previously known as "Disable new layout and Phone Link", was removed in recent Windows 11 builds. It's no longer supported by built-in themes. If your custom theme requires it, it's still available as "Legacy classic layout" in older Windows 11 builds.
+  * The newer classic layout, previously known as "Disable new layout but keep Phone Link", is now the preferred layout for the classic Start menu. Built-in themes were updated to support this layout, and Phone Link can be toggled in the Windows settings.
+* Added themes: Borderless, Command Center.
+* Updated new (redesigned) Start menu themes: SideBySide, SideBySide2, SideBySideMinimal, WindowGlass, LiquidGlass, LayerMicaUI.
+* Updated classic Start menu themes: SideBySide, SideBySide2, SideBySideMinimal, Fluent2Inspired, RosePine, Windows11_Metro10Minimal, Windows10, Windows10 (Minimal), Windows11_Metro10.
+* Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.
+* Added a way to match any number of intermediate parent controls, for example: `ParentClass > * > Class#Name`.
+* Added a way to match root controls, for example: `:root > Class#Name`.
+* Added `FallbackColor` property to `WindhawkBlur`.
+* Improved `ThemeResource` handling for `WindhawkBlur`.
+* Improved property matching which now works for more properties.
+
 ## 1.4.1 ([Mar 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f6d529d39999d0cdbca3ca5f3a1233e09f4f13a3/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added the LayerMicaUI theme.

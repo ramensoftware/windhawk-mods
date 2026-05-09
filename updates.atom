@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-09T08:05:56.000Z</updated>
+    <updated>2026-05-09T11:57:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.5]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#949923d28a43c40563236c5d2e820ea114e496fb</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2026-05-09T11:57:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the Start menu layout options.</li>
+<li>The older classic layout, previously known as "Disable new layout and Phone Link", was removed in recent Windows 11 builds. It's no longer supported by built-in themes. If your custom theme requires it, it's still available as "Legacy classic layout" in older Windows 11 builds.</li>
+<li>The newer classic layout, previously known as "Disable new layout but keep Phone Link", is now the preferred layout for the classic Start menu. Built-in themes were updated to support this layout, and Phone Link can be toggled in the Windows settings.</li>
+<li>Added themes: Borderless, Command Center.</li>
+<li>Updated new (redesigned) Start menu themes: SideBySide, SideBySide2, SideBySideMinimal, WindowGlass, LiquidGlass, LayerMicaUI.</li>
+<li>Updated classic Start menu themes: SideBySide, SideBySide2, SideBySideMinimal, Fluent2Inspired, RosePine, Windows11<em>Metro10Minimal, Windows10, Windows10 (Minimal), Windows11</em>Metro10.</li>
+<li>Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.</li>
+<li>Added a way to match any number of intermediate parent controls, for example: <code>ParentClass &gt; * &gt; Class#Name</code>.</li>
+<li>Added a way to match root controls, for example: <code>:root &gt; Class#Name</code>.</li>
+<li>Added <code>FallbackColor</code> property to <code>WindhawkBlur</code>.</li>
+<li>Improved <code>ThemeResource</code> handling for <code>WindhawkBlur</code>.</li>
+<li>Improved property matching which now works for more properties.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.4]]></title>
         <id>https://windhawk.net/mods/taskbar-content-presenter-injector#e33b63fbaf11e119f003ae9e8a165c68a14b305b</id>
@@ -593,19 +617,6 @@ action on left-click and/or show a context menu on right-click.</p>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Taskbar Overlay Icon 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-taskbar-overlay-icon#205ef84100133d3a9d4d48de951cb77d2b5fb6a6</id>
-        <link href="https://windhawk.net/mods/explorer-taskbar-overlay-icon"/>
-        <updated>2026-05-02T13:51:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertaskbaroverlayicon">Explorer Taskbar Overlay Icon</h1>
-<p>Shows a taskbar overlay icon on Explorer windows that displays the icon of the current directory.</p>
-<p><img src="https://raw.githubusercontent.com/FireBlade211/FireBlade211/refs/heads/main/WindhawkModReadmeImages/ExplorerTaskbarOverlayIcon/screenshot.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>FireBlade</name>
-            <uri>https://github.com/FireBlade211</uri>
         </author>
     </entry>
 </feed>
