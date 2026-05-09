@@ -3732,7 +3732,7 @@
                     39
                 ],
                 "ratingUsers": 43,
-                "updated": 1769979420000,
+                "updated": 1778352177000,
                 "users": 1386
             },
             "metadata": {
@@ -3743,7 +3743,7 @@
                     "explorer.exe"
                 ],
                 "name": "Select filename extension on double F2",
-                "version": "3"
+                "version": "4"
             }
         },
         "explorer-font-changer": {

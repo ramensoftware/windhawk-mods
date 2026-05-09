@@ -1,3 +1,7 @@
+## 4 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2f35c17225494d7db86c2c400a08007a9279e8fe/mods/explorer-double-f2-rename-extension.wh.cpp))
+
+* fix init method signature
+
 ## 3 ([Feb 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/551e1a0a6ae59ab71315af2fd7d085c9ff6c346e/mods/explorer-double-f2-rename-extension.wh.cpp))
 
 - minor refactor
