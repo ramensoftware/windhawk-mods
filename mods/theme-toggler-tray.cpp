@@ -1,0 +1,170 @@
+// ==WindhawkMod==
+// @id              theme-toggler-tray
+// @name            Theme Toggler Tray
+// @description     Add a system tray button to toggle between Light and Dark mode instantly.
+// @version         1.1.4
+// @author          Husam-Abdulraheem
+// @github          https://github.com/Husam-Abdulraheem
+// @include         explorer.exe
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Theme Toggler Tray
+
+A practical mod that adds a customizable icon to the System Tray.
+Click it to instantly toggle between Dark and Light mode in Windows without opening the Settings app.
+
+### Customization
+You can easily change the tray icon and the tooltip text from the **Settings** tab above. 
+Just specify the DLL/EXE file containing the icons and the specific index of the icon you want to use.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- icon_file: shell32.dll
+  $name: Icon File (DLL or EXE)
+  $description: The file containing the icons (e.g., shell32.dll, imageres.dll, or a path to a custom .ico file).
+- icon_index: 25
+  $name: Icon Index
+  $description: The index of the icon inside the specified file. Put 0 if using a direct .ico file path.
+- tooltip_text: Toggle Light/Dark Theme
+  $name: Tooltip Text
+  $description: The text shown when hovering over the tray icon.
+*/
+// ==/WindhawkModSettings==
+
+#include <windows.h>
+#include <shellapi.h>
+
+#define WM_USER_TRAYICON (WM_USER + 1)
+#define WM_USER_UPDATESETTINGS (WM_USER + 2)
+
+HWND g_hWnd = NULL;
+NOTIFYICONDATAW g_nid = {0};
+HANDLE g_hThread = NULL;
+
+void ToggleTheme() {
+    HKEY hKey;
+    LPCWSTR path = L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, path, 0, KEY_READ | KEY_WRITE, &hKey) == ERROR_SUCCESS) {
+        DWORD value = 0;
+        DWORD size = sizeof(DWORD);
+        if (RegQueryValueExW(hKey, L"SystemUsesLightTheme", NULL, NULL, (LPBYTE)&value, &size) == ERROR_SUCCESS) {
+            DWORD newValue = (value == 0) ? 1 : 0;
+            RegSetValueExW(hKey, L"SystemUsesLightTheme", 0, REG_DWORD, (const BYTE*)&newValue, sizeof(newValue));
+            RegSetValueExW(hKey, L"AppsUseLightTheme", 0, REG_DWORD, (const BYTE*)&newValue, sizeof(newValue));
+            SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 5000, NULL);
+        }
+        RegCloseKey(hKey);
+    }
+}
+
+void ApplySettingsToTray() {
+    PCWSTR iconFile = Wh_GetStringSetting(L"icon_file");
+    int iconIndex = Wh_GetIntSetting(L"icon_index");
+    PCWSTR tooltipText = Wh_GetStringSetting(L"tooltip_text");
+
+    HICON hOldIcon = g_nid.hIcon;
+
+    ExtractIconExW(iconFile, iconIndex, NULL, &g_nid.hIcon, 1);
+
+    if (g_nid.hIcon == NULL) {
+        g_nid.hIcon = (HICON)LoadImageW(NULL, iconFile, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    }
+
+    if (g_nid.hIcon == NULL) {
+        g_nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
+    }
+
+    wcscpy_s(g_nid.szTip, tooltipText);
+    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
+
+    if (hOldIcon != NULL) {
+        DestroyIcon(hOldIcon);
+    }
+
+    Wh_FreeStringSetting(iconFile);
+    Wh_FreeStringSetting(tooltipText);
+}
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_USER_TRAYICON) {
+        // Only trigger on Left Click
+        if (LOWORD(lParam) == WM_LBUTTONUP) {
+            ToggleTheme();
+        }
+        return 0;
+    }
+    else if (uMsg == WM_USER_UPDATESETTINGS) {
+        ApplySettingsToTray();
+        return 0;
+    }
+    else if (uMsg == WM_DESTROY) {
+        // Ensure proper cleanup to avoid ghost icons
+        Shell_NotifyIconW(NIM_DELETE, &g_nid);
+        if (g_nid.hIcon) {
+            DestroyIcon(g_nid.hIcon);
+            g_nid.hIcon = NULL;
+        }
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+}
+
+DWORD WINAPI TrayThread(LPVOID lpParam) {
+    WNDCLASSW wc = {0};
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"ThemeTogglerHiddenWindow";
+    RegisterClassW(&wc);
+    
+    g_hWnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
+    
+    if (g_hWnd) {
+        g_nid.cbSize = sizeof(g_nid);
+        g_nid.hWnd = g_hWnd;
+        g_nid.uID = 1001;
+        g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        g_nid.uCallbackMessage = WM_USER_TRAYICON;
+        
+        wcscpy_s(g_nid.szTip, L"Loading...");
+        g_nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
+        Shell_NotifyIconW(NIM_ADD, &g_nid);
+        
+        ApplySettingsToTray();
+        
+        MSG msg;
+        while (GetMessage(&msg, NULL, 0, 0)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+    return 0;
+}
+
+BOOL Wh_ModInit() {
+    g_hThread = CreateThread(NULL, 0, TrayThread, NULL, 0, NULL);
+    return TRUE;
+}
+
+void Wh_ModUninit() {
+    if (g_hWnd) {
+        // Send close message to safely destroy the window
+        SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
+    }
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, 2000);
+        CloseHandle(g_hThread);
+        g_hThread = NULL;
+    }
+    UnregisterClassW(L"ThemeTogglerHiddenWindow", GetModuleHandleW(NULL));
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_hWnd) {
+        PostMessage(g_hWnd, WM_USER_UPDATESETTINGS, 0, 0);
+    }
+}
