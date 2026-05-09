@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-09T11:57:20.000Z</updated>
+    <updated>2026-05-09T15:22:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.5]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#bd2fbb3ba729988e29eee1dd1df1cabea135c144</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2026-05-09T15:22:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added themes: LiquidGlass, BetterControl11, LayerMicaUI, Borderless.</li>
+<li>Updated themes: WindowGlass, Fluid.</li>
+<li>Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.</li>
+<li>Added a way to match any number of intermediate parent controls, for example: <code>ParentClass &gt; * &gt; Class#Name</code>.</li>
+<li>Added a way to match root controls, for example: <code>:root &gt; Class#Name</code>.</li>
+<li>Added the following properties to&nbsp;<code>WindhawkBlur</code>:&nbsp;<code>TintLuminosityOpacity</code>,&nbsp;<code>TintSaturation</code>,&nbsp;<code>NoiseOpacity</code>, <code>NoiseDensity</code>, and <code>FallbackColor</code>. The implementation was contributed by&nbsp;<a href="https://github.com/Lockframe">Jhen</a>. For details, refer to&nbsp;<a href="https://github.com/ramensoftware/windows-11-notification-center-styling-guide#windhawkblur-effect-as-color">the styling guide</a>.</li>
+<li>Improved <code>ThemeResource</code> handling for <code>WindhawkBlur</code>.</li>
+<li>Improved property matching which now works for more properties.</li>
+<li>Added XAML syntax support for resource variables.</li>
+<li>Improved resource variable handling and theme resource refresh logic.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.5]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#949923d28a43c40563236c5d2e820ea114e496fb</id>
@@ -567,56 +589,6 @@ of preserving its relative position. Works independently of <strong>Keep window 
         <author>
             <name>TomberWolf</name>
             <uri>https://github.com/TomberWolf</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ultimate Custom Tray 1.0]]></title>
-        <id>https://windhawk.net/mods/ultimate-custom-tray#7f92885de8e49e5169175fd8adcdc46854a938e4</id>
-        <link href="https://windhawk.net/mods/ultimate-custom-tray"/>
-        <updated>2026-05-02T14:13:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="ultimatecustomtray">Ultimate Custom Tray</h1>
-<p>Adds your own icons to the system tray. Each icon can run an
-action on left-click and/or show a context menu on right-click.</p>
-<hr />
-<h2 id="quickstart">Quick start</h2>
-<ol>
-<li>Open Windhawk settings for this mod.</li>
-<li>Add one or more <strong>Items</strong> to the list.</li>
-<li>Fill in <strong>Label</strong>, <strong>Icon</strong> and <strong>Action</strong> for each item.</li>
-<li>Save — the icons appear in the tray immediately.</li>
-</ol>
-<hr />
-<h2 id="actionformats">Action formats</h2>
-<p>Actions run on <strong>left-click</strong> (or from a context menu item).</p>
-<p>| Prefix | Example | Description |
-|--------|---------|-------------|
-| <code>" "</code> | <code>"C:\Program Files\app.exe"</code> | Opens a file or folder by absolute path. |
-| <code>~</code> | <code>~Downloads</code> | Opens a folder or file by name. |
-| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
-| <code>shell:</code> | <code>shell:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code>. |
-| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
-| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
-<hr />
-<h2 id="iconfield">Icon field</h2>
-<p>| Type | Example | Description |
-|---|---|---|
-| <strong>Glyph</strong> | <code>E774</code> | Hex code of a <a href="https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font">Segoe Fluent Icons</a> glyph. 4-digit hex only, no <code>\u</code> prefix. |
-| <strong>Image file</strong> | <code>C:\Icons\name.png</code> | Full path to an image. Supported: <code>.png</code> <code>.ico</code> <code>.jpg</code> <code>.bmp</code>. Recommended: 32x32 px, transparent background. |</p>
-<hr />
-<h2 id="iconcolor">Icon color</h2>
-<p>Use the <strong>Icon color</strong> setting to choose <strong>White</strong> (for dark taskbar) or <strong>Black</strong> (for light taskbar).</p>
-<hr />
-<h2 id="contextmenus">Context menus</h2>
-<p>Each tray icon can show a right-click context menu.</p>
-<ul>
-<li>Add items under <strong>Context menu</strong> for the icon.</li>
-<li>Each item has its own <strong>Name</strong>, <strong>Icon</strong> and <strong>Action</strong>.</li>
-<li>If no items are defined, right-clicking does nothing.</li>
-<li>Left-click always runs the main <strong>Action</strong>, regardless of whether a context menu exists.</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

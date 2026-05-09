@@ -1,3 +1,16 @@
+## 1.5 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bd2fbb3ba729988e29eee1dd1df1cabea135c144/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added themes: LiquidGlass, BetterControl11, LayerMicaUI, Borderless.
+* Updated themes: WindowGlass, Fluid.
+* Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.
+* Added a way to match any number of intermediate parent controls, for example: `ParentClass > * > Class#Name`.
+* Added a way to match root controls, for example: `:root > Class#Name`.
+* Added the following properties to `WindhawkBlur`: `TintLuminosityOpacity`, `TintSaturation`, `NoiseOpacity`, `NoiseDensity`, and `FallbackColor`. The implementation was contributed by [Jhen](https://github.com/Lockframe). For details, refer to [the styling guide](https://github.com/ramensoftware/windows-11-notification-center-styling-guide#windhawkblur-effect-as-color).
+* Improved `ThemeResource` handling for `WindhawkBlur`.
+* Improved property matching which now works for more properties.
+* Added XAML syntax support for resource variables.
+* Improved resource variable handling and theme resource refresh logic.
+
 ## 1.4 ([Feb 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/33fa04031ed4e201a3f971addf10d06909ba20ca/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added new themes: TintedGlass, Fluid.
