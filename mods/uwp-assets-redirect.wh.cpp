@@ -1671,12 +1671,60 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
             const auto storage_path = std::filesystem::path{storage_path_buffer} / "icon-themes";
             std::filesystem::create_directories(storage_path);
 
-            auto icon_theme_path = storage_path / replace(icon_theme, L'/', L'\\');
+            // Workaround for: https://github.com/ramensoftware/windhawk-mods/pull/4005#discussion_r3213756330
+            // Taken and adapted from: https://github.com/m417z/my-windhawk-mods/commit/cdeeca27376e98cecea2e2f8b637902c86af9699
+            const std::wstring icon_theme_path_key = std::format(L"icon_theme_path_{}", icon_theme);
+
+            WCHAR stored_icon_theme_path[MAX_PATH];
+            Wh_GetStringValue(
+                icon_theme_path_key.c_str(),
+                stored_icon_theme_path,
+                ARRAYSIZE(stored_icon_theme_path)
+            );
 
             std::error_code error_code;
+            std::filesystem::path icon_theme_path;
+
+            if(*stored_icon_theme_path) {
+                icon_theme_path = storage_path / stored_icon_theme_path;
+                if (std::filesystem::is_directory(icon_theme_path, error_code)) {
+                    Wh_Log(L"Theme files for %s already downloaded.", icon_theme.c_str());
+                    return icon_theme_path;
+                }
+            }
+
+            // Find a usable icon theme folder name.
+            const std::wstring icon_theme_folder = replace(icon_theme, L'/', L'\\');
+
+            for (int suffix = 0; suffix < 100; suffix++) {
+
+                if (suffix == 0) {
+                    icon_theme_path = storage_path / icon_theme_folder;
+                } else {
+                    icon_theme_path = storage_path / std::format(L"{}_{}", icon_theme_folder, suffix + 1);
+                }
+
+                if (!std::filesystem::is_directory(icon_theme_path, error_code)) {
+                    // Icon theme folder doesn't exist, we can use it.
+                    break;
+                }
+
+                // Icon theme folder exists, try to remove it.
+                Wh_Log(L"Icon theme folder already exists, trying to remove: %s", icon_theme_path.c_str());
+                std::filesystem::remove_all(icon_theme_path, error_code);
+
+                if (!std::filesystem::is_directory(icon_theme_path, error_code)) {
+                    // Successfully removed icon theme folder.
+                    break;
+                }
+
+                Wh_Log(L"Failed to remove Icon theme folder, trying next usable name...");
+
+            }
+
             if (std::filesystem::is_directory(icon_theme_path, error_code)) {
-                Wh_Log(L"Theme files for %s already downloaded.", icon_theme.c_str());
-                return icon_theme_path;
+                Wh_Log(L"Failed to download Icon theme: Unable to find a usable theme folder name.");
+                return L"";
             }
 
             const auto lock_file = storage_path / std::format(L"{}_lock", replace(icon_theme, L'/', L'_'));
@@ -1694,6 +1742,8 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
             if (download_theme(icon_theme, temp_zip, temp_extract, icon_theme_path)) {
                 Wh_Log(L"Theme files for %s downloaded and extracted successfully.", icon_theme.c_str());
+                // Store the Icon theme folder name.
+                Wh_SetStringValue(icon_theme_path_key.c_str(), icon_theme_path.c_str());
             } else {
                 Wh_Log(L"Failed to download and extract icon theme.");
                 icon_theme_path.clear();
