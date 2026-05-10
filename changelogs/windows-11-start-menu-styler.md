@@ -1,3 +1,8 @@
+## 1.5.1 ([May 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4cc6f1480a29063d27efe99f52af0a7296ae7ee3/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Fixed the Start menu not opening after a restart with some themes.
+* Updated the following themes, mainly to restore compatibility with the legacy classic Start menu layout: SideBySide, SideBySide2, Windows10 (Minimal), Windows11_Metro10, RosePine, Windows11_Metro10Minimal.
+
 ## 1.5 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/949923d28a43c40563236c5d2e820ea114e496fb/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Updated the Start menu layout options.
