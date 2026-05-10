@@ -275,6 +275,8 @@ BOOL WINAPI TranslateMessage_Hook(const MSG *lpMsg)
 // Mod initialization
 BOOL Wh_ModInit()
 {
+    Wh_Log(L"Init");
+
     WindhawkUtils::SetFunctionHook(
         DispatchMessageW,
         DispatchMessageW_Hook,
