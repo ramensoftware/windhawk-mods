@@ -7246,7 +7246,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1777193356000,
+                "updated": 1778445111000,
                 "users": 21
             },
             "metadata": {
@@ -7258,7 +7258,7 @@
                     "windhawk.exe"
                 ],
                 "name": "osu!Profile in Taskbar",
-                "version": "3.9.1"
+                "version": "3.9.2"
             }
         },
         "passkey-popup-blocker": {
