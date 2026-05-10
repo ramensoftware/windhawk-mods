@@ -1773,7 +1773,7 @@ void LoadSettings() {
 
 }
 
-void Wh_ModInit() {
+BOOL Wh_ModInit() {
 
     LoadSettings();
 
@@ -1788,6 +1788,8 @@ void Wh_ModInit() {
     RefreshIcons(true);
 
     Wh_Log(L"UWP Assets Redirect has been initialized.");
+
+    return TRUE;
 
 }
 
