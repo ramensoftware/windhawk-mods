@@ -1624,6 +1624,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                 if (response->statusCode != 200) {
                     Wh_Log(L"Failed to download Icon theme: Request failed with code %d.", response->statusCode);
+                    Wh_FreeUrlContent(response);
                     return false;
                 }
 
