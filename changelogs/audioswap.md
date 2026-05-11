@@ -1,3 +1,12 @@
+## 1.3.0 ([May 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0430b67bb5347bbe8b774d3cf99e332b04c9ecb2/mods/audioswap.wh.cpp))
+
+- Select a mode in the Windhawk settings: Click / Scroll
+- Up to 6 devices; scroll-to-swap mode; dynamic right-click menu.
+- Left-click mutes in scroll mode; black dot overlay on tray icon.
+- Cycling auto-unmutes previous device.
+- Inactive/disconnected devices skipped when cycling.
+- Mute state persisted across mod restarts.
+
 ## 1.1.1 ([May 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/795240a56bf0287788c83bd16e5f76245a8e37f5/mods/audioswap.wh.cpp))
 
 - New icons in the settings
