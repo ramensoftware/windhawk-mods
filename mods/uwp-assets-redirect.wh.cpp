@@ -320,11 +320,10 @@ NTSTATUS NTAPI NtCreateFile_Hook(
     ULONG EaLength
 ) {
 
-    UNICODE_STRING* ObjectName;
     std::wstring originalPath;
 
     if(ObjectAttributes && ObjectAttributes->ObjectName) {
-        ObjectName = ObjectAttributes->ObjectName;
+        UNICODE_STRING* ObjectName = ObjectAttributes->ObjectName;
         originalPath.assign(ObjectName->Buffer, ObjectName->Length / sizeof(WCHAR));
     }
 
@@ -356,14 +355,22 @@ NTSTATUS NTAPI NtCreateFile_Hook(
 
             Wh_Log(L"[Redirect Attempt] %s -> %s", originalPath.c_str(), redirectPath.c_str());
 
-            ObjectName->Buffer = (PWSTR) redirectPath.c_str();
-            ObjectName->Length = (USHORT) (redirectPath.length() * sizeof(WCHAR));
-            ObjectName->MaximumLength = ObjectName->Length;
+            alignas(POBJECT_ATTRIBUTES) BYTE buffer[256];
+            memcpy(buffer, ObjectAttributes, ObjectAttributes->Length);
+            auto* RedirectedObjectAttributes = reinterpret_cast<POBJECT_ATTRIBUTES>(buffer);
+
+            UNICODE_STRING ObjectName = {
+                .Length = (USHORT) (redirectPath.length() * sizeof(WCHAR)),
+                .MaximumLength = ObjectName.Length,
+                .Buffer = (PWSTR) redirectPath.c_str()
+            };
+
+            RedirectedObjectAttributes->ObjectName = &ObjectName;
 
             NTSTATUS result = NtCreateFile_Original(
                 FileHandle,
                 DesiredAccess,
-                ObjectAttributes,
+                RedirectedObjectAttributes,
                 IoStatusBlock,
                 AllocationSize,
                 FileAttributes,
@@ -380,10 +387,6 @@ NTSTATUS NTAPI NtCreateFile_Hook(
             }
 
             Wh_Log(L"[Redirect Fail] Failed with code 0x%08X. Rolling back to original: %s", result, originalPath.c_str());
-
-            ObjectName->Buffer = (PWSTR) originalPath.c_str();
-            ObjectName->Length = (USHORT) (originalPath.length() * sizeof(WCHAR));
-            ObjectName->MaximumLength = ObjectName->Length;
 
         }
 
