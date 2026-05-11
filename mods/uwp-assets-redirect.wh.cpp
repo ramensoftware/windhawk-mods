@@ -787,8 +787,11 @@ void TogglePermissions(std::unordered_map<std::wstring, std::wstring>& redirecti
 
 }
 
+const std::wstring g_redirections_cache_id_key = L"redirections_cache_id";
 const std::wstring g_redirections_cache_size_key = L"redirections_cache_size";
 const std::wstring g_redirections_cache_key = L"redirections_cache";
+
+int g_redirections_cache_id = 0;
 
 const std::wstring g_default_assets_folder = L"Assets";
 const int g_max_read_tries = 20;
@@ -820,9 +823,19 @@ void write_redirections_cache(std::unordered_map<std::wstring, std::wstring>& re
     Wh_SetBinaryValue(g_redirections_cache_key.c_str(), buffer.data(), buffer.size());
     Wh_SetIntValue(g_redirections_cache_size_key.c_str(), buffer.size());
 
+    Wh_SetIntValue(g_redirections_cache_id_key.c_str(), ++g_redirections_cache_id);
+
 }
 
 bool read_redirections_cache(std::unordered_map<std::wstring, std::wstring>& redirections) {
+
+    int redirections_cache_id = Wh_GetIntValue(g_redirections_cache_id_key.c_str(), 0);
+
+    if(redirections_cache_id <= g_redirections_cache_id) {
+        return false;
+    }
+
+    g_redirections_cache_id = redirections_cache_id;
 
     std::vector<uint8_t> buffer;
 
@@ -872,6 +885,7 @@ void ClearRedirectionsCache(bool check_main = true) {
     if(!check_main || DoesCurrentProcessOwnTaskbar()) {
         Wh_DeleteValue(g_redirections_cache_size_key.c_str());
         Wh_DeleteValue(g_redirections_cache_key.c_str());
+        Wh_DeleteValue(g_redirections_cache_id_key.c_str());
     }
 }
 
@@ -1847,19 +1861,12 @@ BOOL Wh_ModInit() {
 
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
 
     Wh_Log(L"Reloading configuration...");
 
-    if(!DoesCurrentProcessOwnTaskbar()) {
-        *bReload = TRUE;
-        return TRUE;
-    }
-
     LoadSettings();
     RefreshIcons();
-
-    return TRUE;
 
 }
 
