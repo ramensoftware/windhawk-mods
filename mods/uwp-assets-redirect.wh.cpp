@@ -230,6 +230,13 @@ You can contribute to the mod development by opening a pull request [here](https
 std::unordered_map<std::wstring, std::wstring> g_redirections;
 BOOL g_grant_permissions;
 
+inline WCHAR ToLowerAscii(WCHAR c) {
+    if (c >= L'A' && c <= L'Z') {
+        return c + (L'a' - L'A');
+    }
+    return c;
+}
+
 template <typename T>
 bool match(const T* pattern, size_t pattern_length, const T* str, size_t string_length, size_t& after_match_index) {
     size_t pattern_index = 0;
@@ -267,7 +274,7 @@ bool match(const T* pattern, size_t pattern_length, const T* str, size_t string_
 
                 bool mismatch = false;
                 for (size_t k = 0; k < literal_len; ++k) {
-                    if (str[match_pos + k] != pattern[rest_start + k]) {
+                    if (ToLowerAscii(str[match_pos + k]) != ToLowerAscii(pattern[rest_start + k])) {
                         mismatch = true;
                         break;
                     }
@@ -293,7 +300,7 @@ bool match(const T* pattern, size_t pattern_length, const T* str, size_t string_
             // Make after_match_index point to the end of the matched pattern
             after_match_index = string_index;
         } else {
-            if (pattern[pattern_index] != str[string_index]) return false;
+            if (ToLowerAscii(pattern[pattern_index]) != ToLowerAscii(str[string_index])) return false;
             ++pattern_index;
             ++string_index;
         }
