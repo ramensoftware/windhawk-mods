@@ -1826,7 +1826,7 @@ void LoadSettings() {
 
         while(tries++ < g_max_read_tries && !read_redirections_cache(redirections)) {
             Wh_Log(L"Redirections haven't been cached yet, retrying... (%i/%i)", tries, g_max_read_tries);
-            Sleep(100);
+            Sleep(250);
         }
 
         if(tries > g_max_read_tries) {
