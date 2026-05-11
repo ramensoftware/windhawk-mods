@@ -64,6 +64,9 @@ A quicker and easier approach is to use something like [TileGen](https://tilegen
 generates the required assets from a single image or an `.ico` file.
 _Using an .ico file is recommended, as it already contains multiple resolutions._
 
+_Keep in mind that even if File Explorer doesn't show the non-redirected assets after you've applied them,
+they're still present. This is only a visual issue caused by how File Explorer loads folder contents._
+
 # Theme paths
 Theme paths can be set in the settings.
 Each theme path can be a folder with custom assets files and a `theme.ini` file that contains redirection rules, or the `.ini` theme file itself.
