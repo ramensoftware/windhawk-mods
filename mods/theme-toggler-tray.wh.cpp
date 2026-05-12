@@ -4,8 +4,8 @@
 // @description    Add a system tray button to toggle between Light and Dark mode instantly.
 // @version        1.2.1
 // @author         Husam-Abdulraheem
-// @github          https://github.com/Husam-Abdulraheem
-// @include         windhawk.exe
+// @github         https://github.com/Husam-Abdulraheem
+// @include        windhawk.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,6 +30,10 @@ Click the tray icon to instantly toggle between Dark and Light mode.
 
 #include <windows.h>
 #include <shellapi.h>
+#include <stdio.h>
+
+#define WM_USER_TRAYICON (WM_USER + 1)
+#define WM_USER_UPDATESETTINGS (WM_USER + 2)
 
 // --- Global Variables ---
 HWND g_hWnd = NULL;
