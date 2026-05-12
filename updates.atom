@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-12T08:44:58.000Z</updated>
+    <updated>2026-05-12T13:45:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Desktop Indicator 1.2.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-desktop-indicator#b02a1ae38487f5c013e9197b2c7ba8098c8d3e0e</id>
+        <link href="https://windhawk.net/mods/taskbar-desktop-indicator"/>
+        <updated>2026-05-12T13:45:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to hide the indicator when only one virtual desktop exists, closes <a href="https://github.com/ramensoftware/windhawk-mods/issues/3634">#3634</a></li>
+</ul>]]></content>
+        <author>
+            <name>Simon Benedict</name>
+            <uri>https://github.com/simon-ami</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Titlebar Icon and Text 1.0]]></title>
         <id>https://windhawk.net/mods/hide-titlebar-elements#d98197019252c77368c7437824031b3978cbf62c</id>
@@ -547,20 +560,6 @@ Krisatisa</p>]]></content>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Desktop Indicator 1.2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-desktop-indicator#c76d030cf7c5848b97696ce764c1f5ec7db9d049</id>
-        <link href="https://windhawk.net/mods/taskbar-desktop-indicator"/>
-        <updated>2026-05-05T14:37:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for newer Windows 11 builds where taskbar SystemTray symbols are in SystemTray.dll.</li>
-<li>Kept fallback support for older Taskbar.View.dll and ExplorerExtensions.dll builds.</li>
-</ul>]]></content>
-        <author>
-            <name>Simon Benedict</name>
-            <uri>https://github.com/simon-ami</uri>
         </author>
     </entry>
 </feed>
