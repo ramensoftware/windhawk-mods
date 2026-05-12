@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-12T16:53:53.000Z</updated>
+    <updated>2026-05-12T22:06:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Details Auto-Fit Columns 1.0.0]]></title>
+        <id>https://windhawk.net/mods/file-explorer-details-autofit-columns#3c4c5577e21c347a98f10a986e4ea252156f2b63</id>
+        <link href="https://windhawk.net/mods/file-explorer-details-autofit-columns"/>
+        <updated>2026-05-12T22:06:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fileexplorerdetailsautofitcolumns">File Explorer Details Auto-Fit Columns</h1>
+<p>Automatically fits all visible column widths to their content whenever a folder is opened or refreshed in <code>Details view</code>, eliminating truncated text and ellipsis (<code>...</code>).</p>
+<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/FEDAFC.gif" alt="File Explorer Details Auto-Fit Columns" /></p>
+<h2 id="triggers">Triggers</h2>
+<ul>
+<li>Opening or navigating to a folder</li>
+<li>Minimizing and restoring the Explorer window</li>
+<li><code>Ctrl + R</code></li>
+<li><code>F5</code></li>
+<li>Right-click context menu → Refresh</li>
+<li>The refresh button in the toolbar</li>
+</ul>
+<p>Only affects <code>Details view</code>. Other view modes (Icons, Tiles, List, etc.) are untouched.</p>
+<h2 id="settings">Settings</h2>
+<p><code>Refresh Delay (ms)</code>: How long the mod waits before auto-fitting columns. The default is 400ms, which gives Explorer enough time to finish loading files before measuring content width. If you notice columns fitting too early in large folders, increase this value. If you want a snappier response in small folders, decrease it.</p>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Per-Monitor Scale Switcher 1.0]]></title>
         <id>https://windhawk.net/mods/per-monitor-scale-switcher#2297cc0989a319d4826dff57f17e83acdf5df2fd</id>
@@ -474,82 +499,6 @@ de la configuracion del mod en Windhawk bajo "Include processes".</p>]]></conten
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remap Copilot Key 1.0]]></title>
-        <id>https://windhawk.net/mods/remap-copilot-key#9a7068b28cbd36e3b9c10bd57ec465a1b9160647</id>
-        <link href="https://windhawk.net/mods/remap-copilot-key"/>
-        <updated>2026-05-06T19:32:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="remapcopilotkey">Remap Copilot Key</h1>
-<p>A lightweight, global keyboard hook running directly inside the Windhawk engine process. </p>
-<p>Because modern Copilot keys send a macro sequence (<code>Left Shift + Left Win + F23</code>), this mod intercepts the sequence, forcefully lifts the modifier keys, and injects your custom keystroke.</p>
-<h3 id="virtualkeyvkcodereference">Virtual-Key (VK) Code Reference</h3>
-<p>If you choose the "Custom Remap" option, find the Hexadecimal code for your desired key below and enter it into the settings. For a complete list of all available keys, check the <a href="https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes">Microsoft VK Code List</a>.</p>
-<h4 id="mediavolumecontrols">▶️ Media &amp; Volume Controls</h4>
-<p>| Hex | Description | Hex | Description |
-|---|---|---|---|
-| <code>0xAD</code> | Volume Mute | <code>0xB0</code> | Next Track |
-| <code>0xAE</code> | Volume Down | <code>0xB1</code> | Previous Track |
-| <code>0xAF</code> | Volume Up | <code>0xB2</code> | Stop Media |
-| <code>0xB3</code> | Play / Pause | <code>0xB5</code> | Select Media |</p>
-<h4 id="modifierssystemkeys">⚙️ Modifiers &amp; System Keys</h4>
-<p>| Hex | Description | Hex | Description |
-|---|---|---|---|
-| <code>0x08</code> | Backspace | <code>0xA0</code> | Left Shift |
-| <code>0x09</code> | Tab | <code>0xA1</code> | Right Shift |
-| <code>0x0D</code> | Enter | <code>0xA2</code> | Left Ctrl |
-| <code>0x1B</code> | Escape | <code>0xA3</code> | Right Ctrl |
-| <code>0x20</code> | Spacebar | <code>0xA4</code> | Left Alt |
-| <code>0x5B</code> | Left Windows | <code>0xA5</code> | Right Alt |
-| <code>0x5C</code> | Right Windows | <code>0x5D</code> | Application/Menu Key |
-| <code>0x14</code> | Caps Lock | <code>0x5F</code> | Computer Sleep |</p>
-<h4 id="navigationarrows">🧭 Navigation &amp; Arrows</h4>
-<p>| Hex | Description | Hex | Description |
-|---|---|---|---|
-| <code>0x21</code> | Page Up | <code>0x25</code> | Left Arrow |
-| <code>0x22</code> | Page Down | <code>0x26</code> | Up Arrow |
-| <code>0x23</code> | End | <code>0x27</code> | Right Arrow |
-| <code>0x24</code> | Home | <code>0x28</code> | Down Arrow |
-| <code>0x2D</code> | Insert | <code>0x2E</code> | Delete |</p>
-<h4 id="alphabetnumbers">⌨️ Alphabet &amp; Numbers</h4>
-<p>| Hex | Description | Hex | Description | Hex | Description |
-|---|---|---|---|---|---|
-| <code>0x30</code> | 0 | <code>0x41</code> | A | <code>0x4E</code> | N |
-| <code>0x31</code> | 1 | <code>0x42</code> | B | <code>0x4F</code> | O |
-| <code>0x32</code> | 2 | <code>0x43</code> | C | <code>0x50</code> | P |
-| <code>0x33</code> | 3 | <code>0x44</code> | D | <code>0x51</code> | Q |
-| <code>0x34</code> | 4 | <code>0x45</code> | E | <code>0x52</code> | R |
-| <code>0x35</code> | 5 | <code>0x46</code> | F | <code>0x53</code> | S |
-| <code>0x36</code> | 6 | <code>0x47</code> | G | <code>0x54</code> | T |
-| <code>0x37</code> | 7 | <code>0x48</code> | H | <code>0x55</code> | U |
-| <code>0x38</code> | 8 | <code>0x49</code> | I | <code>0x56</code> | V |
-| <code>0x39</code> | 9 | <code>0x4A</code> | J | <code>0x57</code> | W |
-| | | <code>0x4B</code> | K | <code>0x58</code> | X |
-| | | <code>0x4C</code> | L | <code>0x59</code> | Y |
-| | | <code>0x4D</code> | M | <code>0x5A</code> | Z |</p>
-<h4 id="functionkeysf1f24">🛠️ Function Keys (F1-F24)</h4>
-<p>| Hex | Description | Hex | Description | Hex | Description |
-|---|---|---|---|---|---|
-| <code>0x70</code> | F1 | <code>0x78</code> | F9 | <code>0x80</code> | F17 |
-| <code>0x71</code> | F2 | <code>0x79</code> | F10 | <code>0x81</code> | F18 |
-| <code>0x72</code> | F3 | <code>0x7A</code> | F11 | <code>0x82</code> | F19 |
-| <code>0x73</code> | F4 | <code>0x7B</code> | F12 | <code>0x83</code> | F20 |
-| <code>0x74</code> | F5 | <code>0x7C</code> | F13 | <code>0x84</code> | F21 |
-| <code>0x75</code> | F6 | <code>0x7D</code> | F14 | <code>0x85</code> | F22 |
-| <code>0x76</code> | F7 | <code>0x7E</code> | F15 | <code>0x86</code> | F23 |
-| <code>0x77</code> | F8 | <code>0x7F</code> | F16 | <code>0x87</code> | F24 |</p>
-<h4 id="browserapps">🌐 Browser &amp; Apps</h4>
-<p>| Hex | Description | Hex | Description |
-|---|---|---|---|
-| <code>0xA6</code> | Browser Back | <code>0xAA</code> | Browser Search |
-| <code>0xA7</code> | Browser Forward | <code>0xAB</code> | Browser Favorites |
-| <code>0xA8</code> | Browser Refresh | <code>0xAC</code> | Browser Home |
-| <code>0xA9</code> | Browser Stop | <code>0xB4</code> | Start Mail |
-| <code>0xB6</code> | Start App 1 (Calculator)| <code>0xB7</code> | Start App 2 |</p>]]></content>
-        <author>
-            <name>Lukvbp</name>
-            <uri>https://github.com/lukvbp</uri>
         </author>
     </entry>
 </feed>
