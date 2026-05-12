@@ -1,8 +1,7 @@
 // ==WindhawkMod==
 // @id              per-monitor-scale-switcher
 // @name            Per-Monitor Scale Switcher
-// @description     Per-monitor DPI scaling based on friendly name, auto-applied
-// on connect/disconnect.
+// @description     Per-monitor DPI scaling based on monitor friendly name.
 // @version         1.0
 // @author          jtnqr
 // @github          https://github.com/jtnqr
