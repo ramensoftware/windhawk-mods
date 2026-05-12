@@ -5092,6 +5092,35 @@
                 "version": "1.0"
             }
         },
+        "hide-titlebar-elements": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1778575498000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1778575498000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "darkthemer",
+                "compilerOptions": "-luxtheme -ldwmapi",
+                "description": "Hides certain elements in window titlebars",
+                "github": "https://github.com/darkthemer",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "Hide Titlebar Icon and Text",
+                "version": "1.0"
+            }
+        },
         "hide-unc": {
             "details": {
                 "defaultSorting": 240,

@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-12T08:40:32.000Z</updated>
+    <updated>2026-05-12T08:44:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Titlebar Icon and Text 1.0]]></title>
+        <id>https://windhawk.net/mods/hide-titlebar-elements#d98197019252c77368c7437824031b3978cbf62c</id>
+        <link href="https://windhawk.net/mods/hide-titlebar-elements"/>
+        <updated>2026-05-12T08:44:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hidetitlebaricontext">Hide Titlebar Icon/Text</h1>
+<p>Hides certain elements in window titlebars</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><p>Hide titlebar icon
+<img src="https://i.imgur.com/phtVQdl.png" alt="hide icon preview" /></p></li>
+<li><p>Hide titlebar text
+<img src="https://i.imgur.com/G1biOig.png" alt="hide text preview" /></p></li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Implemented through overriding the <code>dwAttributes</code> argument of the <code>SetWindowThemeNonClientAttributes</code> function and
+applied to windows and dialogs that receive the <code>WM_NCCREATE</code> system message.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Inspired by an AutoHotKey script: <a href="https://www.autohotkey.com/board/topic/78706-tbariconblanker/">TBarIconBlanker</a></li>
+<li>Some other mods were used as reference:<ul>
+<li><a href="https://windhawk.net/mods/auto-custom-titlebar-colors">auto-custom-titlebar-colors</a></li>
+<li><a href="https://windhawk.net/mods/aerexplorer">aerexplorer</a></li>
+<li><a href="https://windhawk.net/mods/translucent-windows">translucent-windows</a></li></ul></li>
+</ul>]]></content>
+        <author>
+            <name>darkthemer</name>
+            <uri>https://github.com/darkthemer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.5]]></title>
         <id>https://windhawk.net/mods/vlc-discord-rpc#b2662eeac6b52ea789b3647dd224b0c42a19b05a</id>
@@ -529,29 +561,6 @@ Krisatisa</p>]]></content>
         <author>
             <name>Simon Benedict</name>
             <uri>https://github.com/simon-ami</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mic Tray Control & Decibel Viewer 1.13]]></title>
-        <id>https://windhawk.net/mods/mic-tray-control#f65b714736ab2c03fa6fcb38d5118db359b977ce</id>
-        <link href="https://windhawk.net/mods/mic-tray-control"/>
-        <updated>2026-05-04T21:41:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mictraycontroleartrumpetstyle">Mic Tray Control (EarTrumpet Style)</h1>
-<p>This mod adds a dedicated Microphone icon to your system tray.</p>
-<p><em>Vibecoded by <strong>ciahciach</strong>.</em></p>
-<h3 id="features">Features:</h3>
-<ul>
-<li><strong>Quick Mute:</strong> Left-Click the icon to quickly toggle Mute for the default mic.</li>
-<li><strong>Multi-Mic Mixer:</strong> Right-Click the icon to open a popup UI with sliders for ALL your active recording devices.</li>
-<li><strong>Dynamic Mute Icon:</strong> The tray icon changes visually when your default mic is muted.</li>
-<li><strong>Scroll Control:</strong> Hover over the tray icon and scroll to adjust your default mic volume quickly.</li>
-<li><strong>Live Preview:</strong> Hover over the tray icon to see exact volume in % and dB.</li>
-<li><strong>Step Modes:</strong> Choose between Percentage (%) or exact Decibel (dB) steps when scrolling.</li>
-<li><strong>Custom Icons:</strong> You can provide your own <code>.ico</code> files in the settings, otherwise it uses a crisp native icon generated on the fly!</li>
-</ul>]]></content>
-        <author>
-            <name>ciahciach</name>
-            <uri>https://github.com/ciahciach</uri>
         </author>
     </entry>
 </feed>
