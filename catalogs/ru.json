@@ -11081,6 +11081,41 @@
                 "version": "1.0.0"
             }
         },
+        "uwp-assets-redirect": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1778574676000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1778574676000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ferrys",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32",
+                "description": "Replace UWP app assets (such as icons) without worrying about updates or modifying system files permissions.",
+                "github": "https://github.com/atferrys",
+                "include": [
+                    "explorer.exe",
+                    "StartMenuExperienceHost.exe",
+                    "SearchHost.exe",
+                    "ShellExperienceHost.exe",
+                    "ShellHost.exe",
+                    "RuntimeBroker.exe",
+                    "Taskmgr.exe"
+                ],
+                "license": "GPL-3.0",
+                "name": "UWP Assets Redirect",
+                "version": "1.0"
+            }
+        },
         "uwp-clean": {
             "details": {
                 "defaultSorting": 1638,
