@@ -1,23 +1,19 @@
 // ==WindhawkMod==
-// @id              theme-toggler-tray
-// @name            Theme Toggler Tray
-// @description     Add a system tray button to toggle between Light and Dark mode instantly.
-// @version         1.1.4
-// @author          Husam-Abdulraheem
+// @id             theme-toggler-tray
+// @name           Theme Toggler Tray
+// @description    Add a system tray button to toggle between Light and Dark mode instantly.
+// @version        1.2.1
+// @author         Husam-Abdulraheem
 // @github          https://github.com/Husam-Abdulraheem
-// @include         explorer.exe
+// @include         windhawk.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Theme Toggler Tray
+# Theme Toggler Tray (Standalone Mode)
 
-A practical mod that adds a customizable icon to the System Tray.
-Click it to instantly toggle between Dark and Light mode in Windows without opening the Settings app.
-
-### Customization
-You can easily change the tray icon and the tooltip text from the **Settings** tab above. 
-Just specify the DLL/EXE file containing the icons and the specific index of the icon you want to use.
+This mod now runs in a dedicated Windhawk process for better stability.
+Click the tray icon to instantly toggle between Dark and Light mode.
 */
 // ==/WindhawkModReadme==
 
@@ -25,25 +21,23 @@ Just specify the DLL/EXE file containing the icons and the specific index of the
 /*
 - icon_file: shell32.dll
   $name: Icon File (DLL or EXE)
-  $description: The file containing the icons (e.g., shell32.dll, imageres.dll, or a path to a custom .ico file).
 - icon_index: 25
   $name: Icon Index
-  $description: The index of the icon inside the specified file. Put 0 if using a direct .ico file path.
 - tooltip_text: Toggle Light/Dark Theme
   $name: Tooltip Text
-  $description: The text shown when hovering over the tray icon.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <shellapi.h>
 
-#define WM_USER_TRAYICON (WM_USER + 1)
-#define WM_USER_UPDATESETTINGS (WM_USER + 2)
-
+// --- Global Variables ---
 HWND g_hWnd = NULL;
 NOTIFYICONDATAW g_nid = {0};
 HANDLE g_hThread = NULL;
+UINT g_uMsgTaskbarCreated = 0;
+
+// --- Functional Logic ---
 
 void ToggleTheme() {
     HKEY hKey;
@@ -67,73 +61,56 @@ void ApplySettingsToTray() {
     PCWSTR tooltipText = Wh_GetStringSetting(L"tooltip_text");
 
     HICON hOldIcon = g_nid.hIcon;
-
     ExtractIconExW(iconFile, iconIndex, NULL, &g_nid.hIcon, 1);
-
-    if (g_nid.hIcon == NULL) {
-        g_nid.hIcon = (HICON)LoadImageW(NULL, iconFile, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
-    }
-
-    if (g_nid.hIcon == NULL) {
-        g_nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
-    }
+    if (!g_nid.hIcon) g_nid.hIcon = (HICON)LoadImageW(NULL, iconFile, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    if (!g_nid.hIcon) g_nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
 
     wcscpy_s(g_nid.szTip, tooltipText);
-    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
+    if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid)) Shell_NotifyIconW(NIM_ADD, &g_nid);
 
-    if (hOldIcon != NULL) {
-        DestroyIcon(hOldIcon);
-    }
-
+    if (hOldIcon && hOldIcon != g_nid.hIcon) DestroyIcon(hOldIcon);
     Wh_FreeStringSetting(iconFile);
     Wh_FreeStringSetting(tooltipText);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_USER_TRAYICON) {
-        // Only trigger on Left Click
-        if (LOWORD(lParam) == WM_LBUTTONUP) {
-            ToggleTheme();
-        }
-        return 0;
-    }
-    else if (uMsg == WM_USER_UPDATESETTINGS) {
+    if (g_uMsgTaskbarCreated != 0 && uMsg == g_uMsgTaskbarCreated) {
+        Shell_NotifyIconW(NIM_ADD, &g_nid);
         ApplySettingsToTray();
         return 0;
     }
-    else if (uMsg == WM_DESTROY) {
-        // Ensure proper cleanup to avoid ghost icons
-        Shell_NotifyIconW(NIM_DELETE, &g_nid);
-        if (g_nid.hIcon) {
-            DestroyIcon(g_nid.hIcon);
-            g_nid.hIcon = NULL;
-        }
-        PostQuitMessage(0);
-        return 0;
+    switch (uMsg) {
+        case WM_USER_TRAYICON:
+            if (LOWORD(lParam) == WM_LBUTTONUP) ToggleTheme();
+            return 0;
+        case WM_USER_UPDATESETTINGS:
+            ApplySettingsToTray();
+            return 0;
+        case WM_DESTROY:
+            Shell_NotifyIconW(NIM_DELETE, &g_nid);
+            if (g_nid.hIcon) DestroyIcon(g_nid.hIcon);
+            PostQuitMessage(0);
+            return 0;
     }
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 DWORD WINAPI TrayThread(LPVOID lpParam) {
+    g_uMsgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     WNDCLASSW wc = {0};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandleW(NULL);
-    wc.lpszClassName = L"ThemeTogglerHiddenWindow";
+    wc.lpszClassName = L"ThemeTogglerToolWindow";
     RegisterClassW(&wc);
     
     g_hWnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
-    
     if (g_hWnd) {
         g_nid.cbSize = sizeof(g_nid);
         g_nid.hWnd = g_hWnd;
         g_nid.uID = 1001;
         g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         g_nid.uCallbackMessage = WM_USER_TRAYICON;
-        
-        wcscpy_s(g_nid.szTip, L"Loading...");
-        g_nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
         Shell_NotifyIconW(NIM_ADD, &g_nid);
-        
         ApplySettingsToTray();
         
         MSG msg;
@@ -145,26 +122,92 @@ DWORD WINAPI TrayThread(LPVOID lpParam) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
+// --- WhTool Callbacks ---
+
+BOOL WhTool_ModInit() {
     g_hThread = CreateThread(NULL, 0, TrayThread, NULL, 0, NULL);
-    return TRUE;
+    return (g_hThread != NULL);
 }
 
-void Wh_ModUninit() {
-    if (g_hWnd) {
-        // Send close message to safely destroy the window
-        SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
-    }
+void WhTool_ModSettingsChanged() {
+    if (g_hWnd) PostMessage(g_hWnd, WM_USER_UPDATESETTINGS, 0, 0);
+}
+
+void WhTool_ModUninit() {
+    if (g_hWnd) SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
     if (g_hThread) {
         WaitForSingleObject(g_hThread, 2000);
         CloseHandle(g_hThread);
-        g_hThread = NULL;
     }
-    UnregisterClassW(L"ThemeTogglerHiddenWindow", GetModuleHandleW(NULL));
 }
 
-void Wh_ModSettingsChanged() {
-    if (g_hWnd) {
-        PostMessage(g_hWnd, WM_USER_UPDATESETTINGS, 0, 0);
+// --- Windhawk Tool Mod Boilerplate (Do not modify) ---
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) return FALSE;
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) return FALSE;
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 || wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true; break;
+        }
+    }
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
+            break;
+        }
+    }
+    LocalFree(argv);
+
+    if (isExcluded) return FALSE;
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
+        if (!WhTool_ModInit()) ExitProcess(1);
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        Wh_SetFunctionHook((BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+    if (isToolModProcess) return FALSE;
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) return;
+    WCHAR currentProcessPath[MAX_PATH];
+    if (GetModuleFileName(nullptr, currentProcessPath, MAX_PATH) == 0) return;
+
+    WCHAR commandLine[MAX_PATH + 256];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    STARTUPINFO si = { sizeof(si) };
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi;
+    if (CreateProcessW(NULL, commandLine, NULL, NULL, FALSE, NORMAL_PRIORITY_CLASS, NULL, NULL, &si, &pi)) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
     }
 }
+
+void Wh_ModSettingsChanged() { if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged(); }
+void Wh_ModUninit() { if (!g_isToolModProcessLauncher) { WhTool_ModUninit(); ExitProcess(0); } }
