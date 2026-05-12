@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-12T13:45:58.000Z</updated>
+    <updated>2026-05-12T16:53:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Per-Monitor Scale Switcher 1.0]]></title>
+        <id>https://windhawk.net/mods/per-monitor-scale-switcher#2297cc0989a319d4826dff57f17e83acdf5df2fd</id>
+        <link href="https://windhawk.net/mods/per-monitor-scale-switcher"/>
+        <updated>2026-05-12T16:53:53.000Z</updated>
+        <content type="html"><![CDATA[<p>Automatically applies per-monitor DPI scaling based on monitor friendly names
+(e.g. "BOE0998"). Each monitor can have independent scales for single and
+multi-monitor setups. Monitors not listed in settings are left untouched.</p>]]></content>
+        <author>
+            <name>jtnqr</name>
+            <uri>https://github.com/jtnqr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Desktop Indicator 1.2.3]]></title>
         <id>https://windhawk.net/mods/taskbar-desktop-indicator#b02a1ae38487f5c013e9197b2c7ba8098c8d3e0e</id>
@@ -537,29 +550,6 @@ de la configuracion del mod en Windhawk bajo "Include processes".</p>]]></conten
         <author>
             <name>Lukvbp</name>
             <uri>https://github.com/lukvbp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Border Customizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/window-border-customizer#46e9b560b3ed69055810d70c273df2356d670e28</id>
-        <link href="https://windhawk.net/mods/window-border-customizer"/>
-        <updated>2026-05-06T14:40:51.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="windowbordercustomizer">Window Border Customizer</h2>
-<p>A mod that allows you to change the color of the borders for all windows, classic menus and tooltips.
-<img src="https://i.imgur.com/skNvSX3.png" alt="" /></p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>This mod needs to hook into <code>dwm.exe</code> to work.
-Please navigate to Windhawk's
-Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
-and make sure that <code>dwm.exe</code> is in the list.
-<img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
-<hr />
-<h2 id="contributors">Contributors</h2>
-<p><a href="https://github.com/m417z/">m417z</a>, 
-Krisatisa</p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>
