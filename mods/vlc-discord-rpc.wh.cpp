@@ -98,7 +98,7 @@ If you enable **Local Filters Only** in settings, the mod will stop downloading 
 The mod makes a few external requests for certain features:
 
 - **`www.bing.com`** — used to search for poster and artwork URLs (`FindExternalArtwork`)  
-- **`uguu.se`** — used to upload local album art (`UploadToUguu`)  
+- **`uguu.se`** — used to upload local album art (`UploadToUguu`), with files auto‑deleted after 3 hours.  
 - **`raw.githubusercontent.com`** — used to download `vlc-discord-icon.ico` and `filters.txt` for notifications and media title cleaning  
 
 These requests are only used for artwork, uploads, notifications, and media title cleaning.
