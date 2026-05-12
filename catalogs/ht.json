@@ -11397,7 +11397,7 @@
                     7
                 ],
                 "ratingUsers": 10,
-                "updated": 1775933493000,
+                "updated": 1778575232000,
                 "users": 304
             },
             "metadata": {
@@ -11407,14 +11407,15 @@
                 ],
                 "author": "ciizerr",
                 "compilerOptions": "-lwinhttp -lshell32 -lgdiplus -lole32",
-                "description": "Shows your playing status, quality tags (4K/HDR), and interactive buttons on Discord.",
+                "description": "Shows your currently playing media on Discord — with cover art, quality tags, and a search button.",
                 "github": "https://github.com/ciizerr",
                 "homepage": "https://vlc-rpc.vercel.app/",
                 "include": [
                     "vlc.exe"
                 ],
+                "license": "MIT",
                 "name": "VLC Discord Rich Presence",
-                "version": "1.1.4"
+                "version": "1.1.5"
             }
         },
         "vmware-disable-upgrade-dialog": {

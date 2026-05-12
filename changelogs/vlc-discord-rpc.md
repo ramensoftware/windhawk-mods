@@ -1,3 +1,24 @@
+## 1.1.5 ([May 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b2662eeac6b52ea789b3647dd224b0c42a19b05a/mods/vlc-discord-rpc.wh.cpp))
+
+### New
+- Music activity on Discord now shows:  
+  - **Listening to [Song title]**  
+  - **Listening to [Artist]**  
+  - **Listening to [Album]**  
+- VLC port is detected in most setups, so you don’t need to enter the port number manually.  
+- The mod now reads your VLC Lua HTTP password directly, so you can use any password without extra setup.  
+
+### Fixes
+- Toast notifications no longer repeat or display the wrong track.  
+- The image scraper now provides more accurate artwork instead of random results.  
+- Port detection works correctly across different VLC configurations, including non‑default ports.  
+
+### Improvements
+- Added `wh_log()` entries to make debugging and tracking media simpler.  
+- Artwork handling has been refined for sharper and more consistent images.  
+
+Special thanks to **@josephct** for suggesting the music activity feature and for identifying the VLC port issue that could stop Rich Presence from working.
+
 ## 1.1.4 ([Apr 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7620480f8843bd0499f3141edd9bb7eae8f8484d/mods/vlc-discord-rpc.wh.cpp))
 
 * **Cleaner TV/Movie Status:** Added toggles to show or hide the *Chapter* and *Audio Language*. You can now set your status to simply show `S01 E01` for a perfectly minimal look!
