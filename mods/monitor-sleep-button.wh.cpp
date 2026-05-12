@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              monitor-sleep-button
 // @name            Monitor Sleep Button
-// @description     Tray icon to turn off the monitor after a 3-second countdown.
+// @description     Tray icon to turn off the monitor after a configurable countdown.
 // @version         1.0.0
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
@@ -21,32 +21,64 @@ Adds a small tray icon for turning off the monitor.
 ## Usage
 
 - Left-click the tray icon.
-- A large 3-second countdown appears on the screen.
+- A countdown appears on the screen.
 - After the countdown, the monitor turns off.
 - Move the mouse or press any key to wake the monitor again.
 
+## Settings
+
+The countdown duration can be configured in the mod settings.
+
+Available values:
+- 1 second
+- 2 seconds
+- 3 seconds
+- 5 seconds
+- 10 seconds
+- 15 seconds
+- 30 seconds
+
 ## Notes
 
-This mod does not shut down, suspend, or lock the computer.
-It only sends the Windows monitor power-off command.
+This mod does not shut down, suspend, or lock the computer. It only sends the Windows monitor power-off command.
 
 Useful as a quick replacement for desktop shortcuts or batch files.
+
+This is useful when long-running downloads, renders, AI model installs, or other background tasks are running and the monitor should be turned off without putting the PC to sleep.
 */
 // ==/WindhawkModReadme==
 
 
+// ==WindhawkModSettings==
+/*
+- countdownSeconds: "3"
+  $name: "Countdown seconds"
+  $description: "Number of seconds to show before turning off the monitor."
+  $options:
+    - "1": "1 second"
+    - "2": "2 seconds"
+    - "3": "3 seconds"
+    - "5": "5 seconds"
+    - "10": "10 seconds"
+    - "15": "15 seconds"
+    - "30": "30 seconds"
+*/
+// ==/WindhawkModSettings==
+
 #include <windows.h>
 #include <shellapi.h>
-
+#include <stdlib.h>
 
 #define WM_TRAYICON (WM_USER + 1)
 #define ID_TRAYICON 1001
 
 #define TIMER_COUNTDOWN 2001
-#define COUNTDOWN_SECONDS 3
 #define COUNTDOWN_INTERVAL_MS 1000
 
+#define WM_APP_EXIT (WM_APP + 1)
+
 #define COUNTDOWN_TRANSPARENT_COLOR RGB(1, 2, 3)
+
 
 static HWND g_hwnd = nullptr;
 static HWND g_countdownHwnd = nullptr;
@@ -56,7 +88,11 @@ static NOTIFYICONDATAW g_nid = {};
 static UINT g_taskbarCreatedMessage = 0;
 
 static bool g_countdownActive = false;
-static int g_countdownValue = COUNTDOWN_SECONDS;
+static int g_countdownSeconds = 3;
+static int g_countdownValue = 3;
+
+static HANDLE g_uiThread = nullptr;
+static DWORD g_uiThreadId = 0;
 
 // ------------------------------------------------------------
 // Monitor ausschalten
@@ -70,6 +106,21 @@ void TurnMonitorOff() {
     PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
 }
 
+void LoadSettings() {
+    PCWSTR countdownSecondsW = Wh_GetStringSetting(L"countdownSeconds");
+
+    g_countdownSeconds = _wtoi(countdownSecondsW);
+
+    Wh_FreeStringSetting(countdownSecondsW);
+
+    if (g_countdownSeconds < 1) {
+        g_countdownSeconds = 1;
+    }
+
+    if (g_countdownSeconds > 30) {
+        g_countdownSeconds = 30;
+    }
+}
 
 // ------------------------------------------------------------
 // Einfaches eigenes Tray-Icon erzeugen
@@ -348,7 +399,7 @@ void StartCountdown(HWND hwnd) {
     }
 
     g_countdownActive = true;
-    g_countdownValue = COUNTDOWN_SECONDS;
+    g_countdownValue = g_countdownSeconds;
 
     Wh_Log(L"Starting monitor sleep countdown.");
 
@@ -356,7 +407,7 @@ void StartCountdown(HWND hwnd) {
 
     lstrcpynW(
         g_nid.szTip,
-        L"Monitor Sleep Button - Countdown läuft...",
+        L"Monitor Sleep Button - Countdown running...",
         ARRAYSIZE(g_nid.szTip)
     );
     g_nid.uFlags = NIF_TIP;
@@ -375,7 +426,7 @@ void FinishCountdown(HWND hwnd) {
 
     lstrcpynW(
         g_nid.szTip,
-        L"Monitor Sleep Button - Linksklick: Monitor aus",
+        L"Monitor Sleep Button - Left-click: Monitor off",
         ARRAYSIZE(g_nid.szTip)
     );
     g_nid.uFlags = NIF_TIP;
@@ -384,12 +435,38 @@ void FinishCountdown(HWND hwnd) {
     TurnMonitorOff();
 }
 
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+    Wh_Log(L"Settings changed. Countdown seconds: %d", g_countdownSeconds);
+}
 
 // ------------------------------------------------------------
 // Fenster-Prozedur für Tray-Nachrichten
 // ------------------------------------------------------------
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_APP_EXIT) {
+        Wh_Log(L"Exit message received.");
+
+        KillTimer(hwnd, TIMER_COUNTDOWN);
+
+        g_countdownActive = false;
+
+        DestroyCountdownWindow();
+        RemoveTrayIcon();
+
+        DestroyWindow(hwnd);
+        g_hwnd = nullptr;
+
+        PostQuitMessage(0);
+        return 0;
+    }
+
+    if (msg == WM_DESTROY) {
+        PostQuitMessage(0);
+        return 0;
+    }
+
     if (msg == WM_TRAYICON) {
         switch (lParam) {
             case WM_LBUTTONUP:
@@ -471,14 +548,44 @@ bool CreateHiddenWindow() {
 // Tool-Mod Logik
 // ------------------------------------------------------------
 
-BOOL WhTool_ModInit() {
-    Wh_Log(L"Initializing Monitor Sleep Button...");
+DWORD WINAPI UiThreadProc(LPVOID) {
+    Wh_Log(L"UI thread started.");
 
     if (!CreateHiddenWindow()) {
-        return FALSE;
+        Wh_Log(L"Failed to create hidden window in UI thread.");
+        return 1;
     }
 
     AddTrayIcon();
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    Wh_Log(L"UI thread message loop ended.");
+    return 0;
+}
+
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Initializing Monitor Sleep Button...");
+
+    LoadSettings();
+
+    g_uiThread = CreateThread(
+        nullptr,
+        0,
+        UiThreadProc,
+        nullptr,
+        0,
+        &g_uiThreadId
+    );
+
+    if (!g_uiThread) {
+        Wh_Log(L"Failed to create UI thread. Error: %u", GetLastError());
+        return FALSE;
+    }
 
     Wh_Log(L"Monitor Sleep Button initialized.");
     return TRUE;
@@ -489,61 +596,68 @@ void WhTool_ModUninit() {
     Wh_Log(L"Uninitializing Monitor Sleep Button...");
 
     if (g_hwnd) {
-        KillTimer(g_hwnd, TIMER_COUNTDOWN);
+        PostMessageW(g_hwnd, WM_APP_EXIT, 0, 0);
+    } else if (g_uiThreadId) {
+        PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
     }
 
-    DestroyCountdownWindow();
-
-    RemoveTrayIcon();
-
-    if (g_hwnd) {
-        DestroyWindow(g_hwnd);
-        g_hwnd = nullptr;
+    if (g_uiThread) {
+        WaitForSingleObject(g_uiThread, 3000);
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
     }
 
-    PostQuitMessage(0);
+    g_uiThreadId = 0;
 
     Wh_Log(L"Monitor Sleep Button uninitialized.");
 }
 
 
-// ------------------------------------------------------------
-// Windhawk Tool-Mod Boilerplate
-// ------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = nullptr;
-
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
-    Wh_Log(L"Tool mod process entry point hooked. Starting message loop.");
-
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-
-    Wh_Log(L"Tool mod message loop exited.");
+    Wh_Log(L">");
+    ExitThread(0);
 }
 
-
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
 
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed.");
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -562,21 +676,21 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
 
         if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed.");
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running: %s", WH_MOD_ID);
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -585,20 +699,15 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
 
         IMAGE_NT_HEADERS* ntHeaders =
-            reinterpret_cast<IMAGE_NT_HEADERS*>(
-                reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew
-            );
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        void* entryPoint =
-            reinterpret_cast<BYTE*>(dosHeader) + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
-
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -610,43 +719,37 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-
 void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-
-    DWORD length = GetModuleFileNameW(
-        nullptr,
-        currentProcessPath,
-        ARRAYSIZE(currentProcessPath)
-    );
-
-    if (length == 0 || length == ARRAYSIZE(currentProcessPath)) {
-        Wh_Log(L"GetModuleFileName failed.");
-        return;
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
     WCHAR commandLine[
-        MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR))
+        MAX_PATH + 2 +
+        (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1
     ];
 
     wsprintfW(
-    commandLine,
-    L"\"%s\" -tool-mod \"%s\"",
-    currentProcessPath,
-    WH_MOD_ID
-);
+        commandLine,
+        L"\"%s\" -tool-mod \"%s\"",
+        currentProcessPath,
+        WH_MOD_ID
+    );
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
-
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
-
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll.");
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
@@ -666,39 +769,38 @@ void Wh_ModAfterInit() {
         PHANDLE hRestrictedUserToken
     );
 
-    auto pCreateProcessInternalW =
-        reinterpret_cast<CreateProcessInternalW_t>(
-            GetProcAddress(kernelModule, "CreateProcessInternalW")
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(
+            kernelModule,
+            "CreateProcessInternalW"
         );
 
     if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW.");
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW si = {};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
 
-    PROCESS_INFORMATION pi = {};
+    PROCESS_INFORMATION pi;
 
-    BOOL created = pCreateProcessInternalW(
-        nullptr,
-        currentProcessPath,
-        commandLine,
-        nullptr,
-        nullptr,
-        FALSE,
-        CREATE_NO_WINDOW,
-        nullptr,
-        nullptr,
-        &si,
-        &pi,
-        nullptr
-    );
-
-    if (!created) {
-        Wh_Log(L"CreateProcess failed. Error: %u", GetLastError());
+    if (!pCreateProcessInternalW(
+            nullptr,
+            currentProcessPath,
+            commandLine,
+            nullptr,
+            nullptr,
+            FALSE,
+            NORMAL_PRIORITY_CLASS,
+            nullptr,
+            nullptr,
+            &si,
+            &pi,
+            nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
@@ -706,6 +808,13 @@ void Wh_ModAfterInit() {
     CloseHandle(pi.hThread);
 }
 
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
 
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
