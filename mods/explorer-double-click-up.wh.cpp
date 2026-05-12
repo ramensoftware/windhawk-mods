@@ -1,8 +1,8 @@
 // ==WindhawkMod==
-// @id              explorer-double-click-up
-// @name            Explorer Double Click Up
+// @id              explorer-double-click-up-fork
+// @name            Explorer Double Click Up - Fork
 // @description     Double click empty space to go up a folder
-// @version         1.0.1
+// @version         1.1.0
 // @author          wrldspawn
 // @github          https://github.com/wrldspawn
 // @include         explorer.exe
@@ -21,7 +21,7 @@
 /*
 # Explorer Double Click Up
 
-Double click empty space to go up a folder
+Double click empty space to go up a folder or make a directory
 
 ## Windows version support
 
@@ -30,6 +30,14 @@ Will not work on anything older than Windows 10 due to use of WinRT.
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
+/*
+- action: up
+  $name: Action
+  $description: The action when double clicking
+  $options:
+    - up: Go up a folder
+    - mkdir: Make a directory
+*/
 // ==/WindhawkModSettings==
 
 #include <initguid.h>
@@ -49,6 +57,15 @@ Will not work on anything older than Windows 10 due to use of WinRT.
 
 using bstr_ptr = _bstr_t;
 
+enum class Action {
+    up,
+    mkdir
+};
+
+struct { Action action; } settings;
+
+PCWSTR Wh_GetStringSetting(PCWSTR Action, ...);
+
 class ExplorerWrapper {
     winrt::com_ptr<IShellBrowser> hBrowser;
 
@@ -63,6 +80,16 @@ public:
 
     void GoUp() {
         hBrowser->BrowseObject(NULL, SBSP_SAMEBROWSER | SBSP_PARENT);
+    }
+
+    void MakeDirectory() {
+        keybd_event(VK_CONTROL, 0, 0, 0);
+        keybd_event(VK_SHIFT, 0, 0, 0);
+        keybd_event('N', 0, 0, 0);
+
+        keybd_event('N', 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
     }
 };
 
@@ -132,7 +159,17 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
                 for (ExplorerWrapper& wrapper: g_Wrappers) {
                     if (wrapper.hShellTab == parent) {
                         found = true;
-                        wrapper.GoUp();
+                        switch (settings.action) {
+                            case Action::up:
+                                wrapper.GoUp();
+                                break;
+                            case Action::mkdir:
+                                wrapper.MakeDirectory();
+                                break;
+                            default:
+                                wrapper.GoUp();
+                                break;
+                        }
                         break;
                     }
                 }
@@ -193,7 +230,17 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                         for (ExplorerWrapper& wrapper: g_Wrappers) {
                             if (wrapper.hShellTab == parent) {
                                 found = true;
-                                wrapper.GoUp();
+                                switch (settings.action) {
+                                    case Action::up:
+                                        wrapper.GoUp();
+                                        break;
+                                    case Action::mkdir:
+                                        wrapper.MakeDirectory();
+                                        break;
+                                    default:
+                                        wrapper.GoUp();
+                                        break;
+                                }
                                 break;
                             }
                         }
@@ -333,8 +380,18 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
+void LoadSettings() {
+    LPCWSTR actionName = Wh_GetStringSetting(L"action");
+    if (lstrcmpW(actionName, L"up") == 0) settings.action = Action::up;
+    else if (lstrcmpW(actionName, L"mkdir") == 0) settings.action = Action::mkdir;
+    else settings.action = Action::up;
+    Wh_FreeStringSetting(actionName);
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Explorer Double Click Up Init");
+
+    LoadSettings();
 
     HMODULE hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
@@ -399,4 +456,8 @@ void Wh_ModUninit() {
             }
         }
     }
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
 }
