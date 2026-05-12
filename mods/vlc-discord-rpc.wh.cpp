@@ -73,9 +73,14 @@ This mod reads playback data from VLC's built-in HTTP interface. You only need t
 | **Search Button** | Picks which site the status button links to |
 | **"Listening to..." label** | Controls what shows in the activity name for music |
 
-## Filter Updates
+## Filter List
 
-To keep title cleaning accurate, the mod can download a small community-maintained filter list from GitHub (refreshed every 6 hours). If you'd rather make zero external requests, enable **Local Filters Only** in settings — this falls back to the built-in word list plus anything you've added yourself.
+To keep title cleaning accurate, the mod can download a small community‑maintained filter list from GitHub.  
+This list is refreshed every 6 hours.  
+
+If you enable **Local Filters Only** in settings, the mod will stop downloading the online filter list and instead use:  
+- The built‑in word list  
+- Any custom filters you’ve added yourself  
 
 ## Troubleshooting
 
@@ -87,6 +92,16 @@ To keep title cleaning accurate, the mod can download a small community-maintain
 | **Could not reach VLC** | VLC may be using another port. Open **Resource Monitor** → **Network** → **Listening Ports**, find `vlc.exe`, and use that port in the mod settings. |
 | **Logs show "401 Unauthorized"** | Wrong VLC password. Ensure Lua HTTP password is exactly `1234`. Restart VLC afterward. |
 | **Wrong poster/artwork** | Enable **Clean Titles** for better filename cleanup and poster matching. |
+
+## External Requests
+
+The mod makes a few external requests for certain features:
+
+- **`www.bing.com`** — used to search for poster and artwork URLs (`FindExternalArtwork`)  
+- **`uguu.se`** — used to upload local album art (`UploadToUguu`)  
+- **`raw.githubusercontent.com`** — used to download `vlc-discord-icon.ico` and `filters.txt` for notifications and media title cleaning  
+
+These requests are only used for artwork, uploads, notifications, and media title cleaning.
 
 ## Support & Feedback
 
