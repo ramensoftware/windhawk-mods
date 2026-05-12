@@ -147,6 +147,10 @@ VOID HideTitlebarElements(HWND hWnd)
 
 BOOL CALLBACK ApplyEnumWindowsProc(HWND hWnd, LPARAM)
 {
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hWnd, &pid) || pid != GetCurrentProcessId())
+        return TRUE;
+
     HideTitlebarElements(hWnd);
 
     return TRUE;
@@ -154,6 +158,10 @@ BOOL CALLBACK ApplyEnumWindowsProc(HWND hWnd, LPARAM)
 
 BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM)
 {
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hWnd, &pid) || pid != GetCurrentProcessId())
+        return TRUE;
+
     if (!IsWindowEligible(hWnd))
         return TRUE;
 
