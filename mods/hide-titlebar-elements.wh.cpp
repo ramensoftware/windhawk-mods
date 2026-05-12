@@ -19,11 +19,14 @@ Hides certain elements in window titlebars
 ## Features
 
 - Hide titlebar icon
+![hide icon preview](https://i.imgur.com/phtVQdl.png)
+
 - Hide titlebar text
+![hide text preview](https://i.imgur.com/G1biOig.png)
 
 ## Notes
 
-- Implemented through overriding the `dwAttributes` argument of the `SetWindowThemeNonClientAttributes` function and is
+- Implemented through overriding the `dwAttributes` argument of the `SetWindowThemeNonClientAttributes` function and
 applied to windows and dialogs that receive the `WM_NCCREATE` system message.
 
 ## Credits
