@@ -2,7 +2,7 @@
 // @id              taskbar-desktop-indicator
 // @name            Taskbar Desktop Indicator
 // @description     Displays the current virtual desktop as a number or marker in the Windows 11 taskbar clock area
-// @version         1.2.2
+// @version         1.2.3
 // @author          Simon Benedict
 // @github          https://github.com/simon-ami
 // @include         explorer.exe
@@ -25,6 +25,7 @@ Displays the current virtual desktop as a number or marker in the Windows 11 tas
 * Custom marker symbol and inactive-marker dimming in workspace markers mode \
   Example symbols: `⬤`, `●`, `•`, `○`, `◉`
 * Optional custom colors for the active indicator and inactive markers
+* Optional hiding of the indicator when only one desktop exists
 * Configurable indicator weight and size
 * Configurable spacing and padding
 * Centered side indicator layout for two-line clock/date taskbar clocks
@@ -77,6 +78,9 @@ _Number mode (example)_
   $description: >-
     Optional custom color for inactive workspace markers. Use #RRGGBB or
     #AARRGGBB. Leave empty to use opacity-based dimming. [Default empty]
+- hideWhenSingleDesktop: false
+  $name: Hide when using a single desktop
+  $description: Hide the indicator while only one virtual desktop exists. [Default false]
 - numberingFormat: roman
   $name: Numbering format
   $description: Choose whether the desktop indicator uses Roman or Arabic numerals in number mode. [Default Roman numerals]
@@ -191,6 +195,7 @@ struct ModSettings {
     std::wstring markerSymbol = L"\u2b24";
     std::wstring activeIndicatorColor;
     std::wstring inactiveMarkerColor;
+    bool hideWhenSingleDesktop = false;
     NumberingFormat numberingFormat = NumberingFormat::Roman;
     int leftPadding = 6;
     int rightPadding = 0;
@@ -839,6 +844,8 @@ void LoadSettings() {
 
     StringSetting inactiveMarkerColor = StringSetting::make(L"inactiveMarkerColor");
     g_settings.inactiveMarkerColor = inactiveMarkerColor.get();
+
+    g_settings.hideWhenSingleDesktop = Wh_GetIntSetting(L"hideWhenSingleDesktop");
 
     StringSetting numberingFormat = StringSetting::make(L"numberingFormat");
     if (wcscmp(numberingFormat.get(), L"arabic") == 0) {
@@ -1812,6 +1819,16 @@ void ApplyIndicator(const ClockEntryPtr& entry) {
     int desktopCount = ReadDesktopCountFromRegistry();
 
     std::lock_guard<std::mutex> lock(entry->mutex);
+
+    if (g_settings.hideWhenSingleDesktop && desktopCount <= 1) {
+        if (!entry->lastAppliedSuffix.empty()) {
+            RestoreInlineClockTextOnly(entry);
+        }
+        if (entry->usingSeparateIndicator) {
+            RestoreSeparateIndicatorOnly(entry);
+        }
+        return;
+    }
 
     if (ShouldUseSeparateIndicator(entry)) {
         if (!entry->lastAppliedSuffix.empty()) {

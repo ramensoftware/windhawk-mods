@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
-// @description     Customize the start menu with themes contributed by others or create your own
-// @version         1.5
+// @description     Customize the Start menu with themes contributed by others or create your own
+// @version         1.5.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -26,7 +26,7 @@
 /*
 # Windows 11 Start Menu Styler
 
-Customize the start menu with themes contributed by others or create your own.
+Customize the Start menu with themes contributed by others or create your own.
 
 Also check out the **Windows 11 Taskbar Styler**, **Windows 11 Notification
 Center Styler** mods.
@@ -146,7 +146,7 @@ Center](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-st
 Command
 Center](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/Command%20Center/README.md)
 
-More themes can be found in the **Themes** section of [The Windows 11 start menu
+More themes can be found in the **Themes** section of [The Windows 11 Start menu
 styling
 guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/README.md#themes).
 Contributions of new themes are welcome!
@@ -158,7 +158,7 @@ variables. Control styles allow to override styles, such as size and color, for
 the target elements. Resource variables allow to override predefined variables.
 For a more detailed explanation and examples, refer to the sections below.
 
-The start menu's XAML resources can help find out which elements and resource
+The Start menu's XAML resources can help find out which elements and resource
 variables can be customized. To the best of my knowledge, there are no public
 tools that are able to decode the resource files of recent Windows versions, but
 here are XAML resources which were obtained via other means for your
@@ -166,10 +166,10 @@ convenience:
 [StartResources.xbf](https://gist.github.com/m417z/a7e4e2c7b451ee79c62c51ca2dba7349).
 
 The [UWPSpy](https://ramensoftware.com/uwpspy) tool can be used to inspect the
-start menu control elements in real time, and experiment with various styles.
+Start menu control elements in real time, and experiment with various styles.
 
-For a collection of commonly requested start menu styling customizations, check
-out [The Windows 11 start menu styling
+For a collection of commonly requested Start menu styling customizations, check
+out [The Windows 11 Start menu styling
 guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/README.md).
 
 ### Control styles
@@ -266,13 +266,12 @@ literal `}` - producing `{<value-of-x>}`.
 
 A bare-identifier substitution (`{{VarName}}` with no operators) inserts the
 variable's captured string form verbatim. This is meaningful only for primitive
-captured types: numeric (`Double`, `Single`, `Int32`, `Int64`, `UInt32`),
-boolean, and string. Other captured types (brushes, thicknesses, etc.) are
-currently unsupported - substitution of such a variable is treated as a failure
-and the style is skipped. Substitutions that involve arithmetic require numeric
-source values; using a non-numeric variable in an expression also skips the
-style and logs a warning. Referencing a variable that has never been captured
-likewise skips the style.
+captured types: numeric, boolean, and string. Other captured types (brushes,
+thicknesses, etc.) are currently unsupported - substitution of such a variable
+is treated as a failure and the style is skipped. Substitutions that involve
+arithmetic require numeric source values; using a non-numeric variable in an
+expression also skips the style and logs a warning. Referencing a variable that
+has never been captured likewise skips the style.
 
 Variables are global - a capture from any matched element overwrites the same
 name. Capture rules cannot be combined with `:=` or with the per-rule
@@ -340,7 +339,7 @@ page for details on which constants are available.
 
 ### Search WebView styles
 
-While the start menu uses WinUI for its user interface, most of the search
+While the Start menu uses WinUI for its user interface, most of the search
 content (all but the top search bar) is a WebView element. To style the search
 WebView, CSS targets and styles can be used. For example, to set a red
 background, the target `body` and the style `background: red !important` can be
@@ -808,6 +807,11 @@ const Theme g_themeSideBySide_variant_ClassicStartMenu = {{
         L"RenderTransform:=<TranslateTransform X=\"269\"/>"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton", {
         L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
+        L"MaxWidth=1874"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid", {
+        L"MinWidth=860",
+        L"MaxWidth=860"}},
     ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootPanel > Grid#RootGrid", {
         L"MinWidth=860",
         L"MaxWidth=860"}},
@@ -949,6 +953,11 @@ const Theme g_themeSideBySide2_variant_ClassicStartMenu = {{
         L"RenderTransform:=<TranslateTransform X=\"-284\"/>"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton", {
         L"Visibility=1"}},
+    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
+        L"MaxWidth=1874"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid", {
+        L"MinWidth=776",
+        L"MaxWidth=776"}},
     ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootPanel > Grid#RootGrid", {
         L"MinWidth=776",
         L"MaxWidth=776"}},
@@ -974,9 +983,13 @@ const Theme g_themeSideBySide2_variant_ClassicStartMenu = {{
         L"FlowDirection=0"}},
     ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid > Grid#RootContent > Grid#MainContent > Grid#InnerContent > StartDocked.SearchBoxToggleButton#StartMenuSearchBox", {
         L"Margin=23,1,23,14"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootPanel > Grid#RootGrid > Grid#RootContent > Grid#MainContent > Grid#InnerContent > StartDocked.SearchBoxToggleButton#StartMenuSearchBox", {
+        L"Margin=23,1,23,14"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#NoSuggestionsWithoutSettingsLink", {
         L"Margin=11,0,48,0"}},
-    ThemeTargetStyles{L"StartDocked.LauncherFrame > Windows.UI.Xaml.Controls.Grid#RootGrid > Windows.UI.Xaml.Controls.Grid#RootContent > Windows.UI.Xaml.Controls.Grid#MainContent > Windows.UI.Xaml.Controls.Grid#InnerContent > Windows.UI.Xaml.Shapes.Rectangle", {
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid > Grid#RootContent > Grid#MainContent > Grid#InnerContent > Rectangle", {
+        L"Margin=67,7,0,21"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootPanel > Grid#RootGrid > Grid#RootContent > Grid#MainContent > Grid#InnerContent > Rectangle", {
         L"Margin=67,7,0,21"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.SemanticZoom#ZoomControl", {
         L"IsZoomOutButtonEnabled=true"}},
@@ -2086,7 +2099,11 @@ const Theme g_themeWindows10_variant_Minimal_ClassicStartMenu = {{
     ThemeTargetStyles{L"Rectangle[4]", {
         L"Margin=0,-20,0,0"}},
     ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
-        L"Margin=-15,24,450,0"}},
+        L"Margin=-15,24,450,0",
+        L"MinWidth=400"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid", {
+        L"MinWidth=400",
+        L"MaxWidth=400"}},
     ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootPanel > Grid#RootGrid", {
         L"MinWidth=400",
         L"MaxWidth=400"}},
@@ -2422,7 +2439,17 @@ const Theme g_themeWindows11_Metro10_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
-        L"MaxHeight=670"}},
+        L"MaxHeight=670",
+        L"MaxWidth=1874"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid > Grid#RootContent", {
+        L"MinWidth=650",
+        L"MaxWidth=650"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootPanel > Grid#RootGrid", {
+        L"MinWidth=650",
+        L"MaxWidth=650"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootPanel > Grid#RootGrid > Grid#RootContent", {
+        L"MinWidth=650",
+        L"MaxWidth=650"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowAllAppsButton", {
@@ -2452,7 +2479,9 @@ const Theme g_themeWindows11_Metro10_variant_ClassicStartMenu = {{
         L"Margin=23,-101,23,14"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#NoSuggestionsWithoutSettingsLink", {
         L"Margin=11,0,48,0"}},
-    ThemeTargetStyles{L"StartDocked.LauncherFrame > Windows.UI.Xaml.Controls.Grid#RootGrid > Windows.UI.Xaml.Controls.Grid#RootContent > Windows.UI.Xaml.Controls.Grid#MainContent > Windows.UI.Xaml.Controls.Grid#InnerContent > Windows.UI.Xaml.Shapes.Rectangle", {
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid > Grid#RootContent > Grid#MainContent > Grid#InnerContent > Rectangle", {
+        L"Margin=67,7,0,21"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootPanel > Grid#RootGrid > Grid#RootContent > Grid#MainContent > Grid#InnerContent > Rectangle", {
         L"Margin=67,7,0,21"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.SemanticZoom#ZoomControl", {
         L"IsZoomOutButtonEnabled=true",
@@ -3057,8 +3086,6 @@ const Theme g_themeRosePine_variant_ClassicStartMenu = {{
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#AllAppsHeading", {
         L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
-        L"MaxHeight=580"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#UserTileIcon", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AcrylicOverlay", {
@@ -3106,6 +3133,9 @@ const Theme g_themeRosePine_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#TaskbarSearchBackground", {
         L"BorderThickness=1.5",
         L"BorderBrush=#ebbcba"}},
+    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
+        L"MaxHeight=580",
+        L"MinWidth=500"}},
     ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid > Grid#RootContent", {
         L"MinWidth=500",
         L"MaxWidth=500"}},
@@ -3219,7 +3249,7 @@ const Theme g_themeWindows11_Metro10Minimal_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"StartMenu.StartInnerFrame", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
-        L"MaxHeight=670"}},
+        L"MinWidth=460"}},
     ThemeTargetStyles{L"StartDocked.LauncherFrame > Grid#RootGrid > Grid#RootContent", {
         L"MinWidth=460",
         L"MaxWidth=460"}},
@@ -4481,9 +4511,8 @@ const Theme g_themeOnlySearch = {{
 
 const Theme g_themeOnlySearch_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
+        L"MinHeight=100",
         L"MaxHeight=160"}},
-    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
-        L"MinHeight=100"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#UndockedRoot", {
         L"Visibility=Collapsed"}},
 }};
@@ -6851,15 +6880,15 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement
     switch (mutationType)
     {
     case Add:
-        Wh_Log(L"Mutation type: Add");
+        Wh_Log(L"Mutation type: Add %llu", element.Handle);
         break;
 
     case Remove:
-        Wh_Log(L"Mutation type: Remove");
+        Wh_Log(L"Mutation type: Remove %llu", element.Handle);
         break;
 
     default:
-        Wh_Log(L"Mutation type: %d", static_cast<int>(mutationType));
+        Wh_Log(L"Mutation type: %d %llu", static_cast<int>(mutationType), element.Handle);
         break;
     }
 
@@ -7394,7 +7423,8 @@ bool g_elementPropertyModifying;
 winrt::Windows::Foundation::IAsyncOperation<bool>
     g_delayedAllAppsRootVisibilitySet;
 
-DispatcherTimer g_delayedAllAppsRootRenderTransformTimer{nullptr};
+VisualStateGroup g_allAppsRootRenderTransformVsg{nullptr};
+winrt::event_token g_allAppsRootRenderTransformToken{};
 
 enum class DisableNewStartMenuLayout {
     windowsDefault,
@@ -9255,43 +9285,114 @@ void SetOrClearValue(DependencyObject elementDo,
     }
 
     // A workaround similar to the above, but for the RenderTransform property
-    // of the AllAppsRoot Grid. Setting it too early causes a crash. Unlike the
-    // Visibility case above, dispatching via TryRunAsync, the Loaded event,
-    // LayoutUpdated, and CompositionTarget::Rendering all crash here. Use a
-    // DispatcherTimer with a delay. Apply the workaround for both initial apply
-    // and subsequent changes, as it's applied more than once on initial load.
+    // of the AllAppsRoot Grid. Setting it too early causes a crash. The safe
+    // moment is when the StartDocked.LauncherFrame's child Grid (named either
+    // RootPanel or RootGrid depending on the build) enters the ContentStates
+    // "FlipToUndocked" visual state. Walk up to that Grid and either apply now
+    // (if already there) or subscribe and apply when the state changes. Apply
+    // the workaround for both initial apply and subsequent changes, as it's
+    // applied more than once on initial load.
     if (winrt::get_class_name(elementDo) == L"Windows.UI.Xaml.Controls.Grid" &&
         elementDo.as<FrameworkElement>().Name() == L"AllAppsRoot" &&
         property == UIElement::RenderTransformProperty()) {
-        if (g_delayedAllAppsRootRenderTransformTimer) {
+        // Cancel any previous pending subscription, since this code path may
+        // run multiple times for the same property during initial load.
+        if (g_allAppsRootRenderTransformVsg) {
             Wh_Log(
-                L"Canceling delayed SetValue for AllAppsRoot RenderTransform");
-            g_delayedAllAppsRootRenderTransformTimer.Stop();
-            g_delayedAllAppsRootRenderTransformTimer = nullptr;
+                L"Canceling pending VSG subscription for AllAppsRoot "
+                L"RenderTransform");
+            g_allAppsRootRenderTransformVsg.CurrentStateChanged(
+                g_allAppsRootRenderTransformToken);
+            g_allAppsRootRenderTransformToken = {};
+            g_allAppsRootRenderTransformVsg = nullptr;
         }
 
-        Wh_Log(
-            L"Delaying SetValue for AllAppsRoot RenderTransform via "
-            L"DispatcherTimer");
-        g_delayedAllAppsRootRenderTransformTimer = DispatcherTimer();
-        g_delayedAllAppsRootRenderTransformTimer.Interval(
-            std::chrono::milliseconds(200));
-        g_delayedAllAppsRootRenderTransformTimer.Tick([elementDo, property,
-                                                       value](auto&&, auto&&) {
-            Wh_Log(L"Running delayed SetValue for AllAppsRoot RenderTransform");
-            if (g_delayedAllAppsRootRenderTransformTimer) {
-                g_delayedAllAppsRootRenderTransformTimer.Stop();
-                g_delayedAllAppsRootRenderTransformTimer = nullptr;
+        // Walk up to find StartDocked.LauncherFrame, then use its direct child
+        // (an ancestor of elementDo) which holds the ContentStates VSG. The
+        // child is named either Grid#RootPanel or Grid#RootGrid depending on
+        // the build.
+        FrameworkElement launcherGrid = nullptr;
+        DependencyObject iter = elementDo;
+        while (auto parent = Media::VisualTreeHelper::GetParent(iter)) {
+            auto parentFe = parent.try_as<FrameworkElement>();
+            if (parentFe && winrt::get_class_name(parentFe) ==
+                                L"StartDocked.LauncherFrame") {
+                launcherGrid = iter.try_as<FrameworkElement>();
+                break;
             }
-            g_elementPropertyModifying = true;
-            try {
-                elementDo.SetValue(property, value);
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            iter = parent;
+        }
+
+        VisualStateGroup contentStates = nullptr;
+        if (launcherGrid) {
+            for (const auto& vsg :
+                 VisualStateManager::GetVisualStateGroups(launcherGrid)) {
+                if (vsg.Name() == L"ContentStates") {
+                    contentStates = vsg;
+                    break;
+                }
             }
-            g_elementPropertyModifying = false;
-        });
-        g_delayedAllAppsRootRenderTransformTimer.Start();
+        }
+
+        auto currentState =
+            contentStates ? contentStates.CurrentState() : nullptr;
+        std::wstring currentStateName(currentState ? currentState.Name() : L"");
+
+        if (contentStates && currentStateName != L"FlipToUndocked") {
+            Wh_Log(
+                L"Deferring SetValue for AllAppsRoot RenderTransform "
+                L"(ContentStates=%s, waiting for FlipToUndocked)",
+                currentStateName.empty() ? L"(none)"
+                                         : currentStateName.c_str());
+            g_allAppsRootRenderTransformVsg = contentStates;
+            g_allAppsRootRenderTransformToken =
+                contentStates.CurrentStateChanged(
+                    [elementDo, property, value](
+                        winrt::Windows::Foundation::IInspectable const&,
+                        VisualStateChangedEventArgs const& e) {
+                        auto newState = e.NewState();
+                        if (!newState || newState.Name() != L"FlipToUndocked") {
+                            return;
+                        }
+                        Wh_Log(
+                            L"Running deferred SetValue for AllAppsRoot "
+                            L"RenderTransform (state=FlipToUndocked)");
+                        if (g_allAppsRootRenderTransformVsg) {
+                            g_allAppsRootRenderTransformVsg.CurrentStateChanged(
+                                g_allAppsRootRenderTransformToken);
+                            g_allAppsRootRenderTransformToken = {};
+                            g_allAppsRootRenderTransformVsg = nullptr;
+                        }
+                        g_elementPropertyModifying = true;
+                        try {
+                            elementDo.SetValue(property, value);
+                        } catch (winrt::hresult_error const& ex) {
+                            Wh_Log(L"Error %08X: %s", ex.code(),
+                                   ex.message().c_str());
+                        }
+                        g_elementPropertyModifying = false;
+                    });
+            return;
+        }
+
+        if (!contentStates) {
+            Wh_Log(
+                L"AllAppsRoot RenderTransform: ContentStates VSG not found%s, "
+                L"applying immediately",
+                launcherGrid ? L"" : L" (LauncherFrame ancestor not found)");
+        } else {
+            Wh_Log(
+                L"AllAppsRoot RenderTransform: state already FlipToUndocked, "
+                L"applying immediately");
+        }
+
+        g_elementPropertyModifying = true;
+        try {
+            elementDo.SetValue(property, value);
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+        g_elementPropertyModifying = false;
         return;
     }
 
@@ -12755,9 +12856,11 @@ void UninitializeSettingsAndTap() {
         g_delayedAllAppsRootVisibilitySet = nullptr;
     }
 
-    if (g_delayedAllAppsRootRenderTransformTimer) {
-        g_delayedAllAppsRootRenderTransformTimer.Stop();
-        g_delayedAllAppsRootRenderTransformTimer = nullptr;
+    if (g_allAppsRootRenderTransformVsg) {
+        g_allAppsRootRenderTransformVsg.CurrentStateChanged(
+            g_allAppsRootRenderTransformToken);
+        g_allAppsRootRenderTransformToken = {};
+        g_allAppsRootRenderTransformVsg = nullptr;
     }
 
     for (const auto& [handle, elementCustomizationState] :

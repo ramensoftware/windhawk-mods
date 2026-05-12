@@ -2,7 +2,7 @@
 // @id              explorer-double-f2-rename-extension
 // @name            Select filename extension on double F2
 // @description     When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension. Triple F2 selects the full name, quadruple F2 selects the base name again, etc.
-// @version         3
+// @version         4
 // @author          Marnes <leaumar@sent.com>
 // @github          https://github.com/leaumar
 // @include         explorer.exe
@@ -27,6 +27,8 @@ Since version 3, you can enable continuous looping: every F2 press steps to the
 next selection in the cycle, regardless of timing. If the selection at the
 moment of such a keypress is not one of the steps (e.g. you manually changed
 it to something random), the loop starts over.
+
+Version 4: technical bugfix.
 
 This mod works great together with
 [extension-change-no-warning](https://windhawk.net/mods/extension-change-no-warning).
@@ -463,7 +465,7 @@ static void HookIfFileView(HWND windowHandle, DWORD threadId) {
     }
 }
 
-void Wh_ModInit() {
+BOOL Wh_ModInit() {
     ModSettings::Cache();
     KeyboardHooks::onKeyDown = ApplyMultiF2Selection;
 
@@ -472,6 +474,8 @@ void Wh_ModInit() {
 
     Wh_Log(L"Hooking already open Explorer windows.");
     WindowEnumeration::ForEachOpenExplorer(HookIfFileView);
+
+    return TRUE;
 }
 
 void Wh_ModUninit() {
