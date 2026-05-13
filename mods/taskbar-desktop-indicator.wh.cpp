@@ -2,7 +2,7 @@
 // @id              taskbar-desktop-indicator
 // @name            Taskbar Desktop Indicator
 // @description     Displays the current virtual desktop as a number or marker in the Windows 11 taskbar clock area
-// @version         1.2.3
+// @version         1.3
 // @author          Simon Benedict
 // @github          https://github.com/simon-ami
 // @include         explorer.exe
@@ -20,6 +20,7 @@ Displays the current virtual desktop as a number or marker in the Windows 11 tas
 ## Features
 
 * Number mode or workspace markers mode
+* Current desktop name mode
 * Workspace markers mode with `⬤` markers by default
 * Roman or Arabic numbering in number mode
 * Custom marker symbol and inactive-marker dimming in workspace markers mode \
@@ -61,6 +62,7 @@ _Number mode (example)_
   $options:
     - number: Current desktop number
     - markers: Workspace markers
+    - desktopName: Current desktop name
 - markerSymbol: ⬤
   $name: Marker symbol
   $description: Symbol or short text used for each workspace marker in workspace markers mode. E.g. ┃, ⬤, ●, •, ○, ◉, ⎕, ∎, ◆, ♦, ★ [Default ⬤]
@@ -147,6 +149,7 @@ namespace Documents = winrt::Windows::UI::Xaml::Documents;
 enum class IndicatorMode {
     Number,
     Markers,
+    DesktopName,
 };
 
 enum class IndicatorSegmentStyle {
@@ -504,9 +507,27 @@ std::wstring BuildMarkerSequenceText(int desktopCount) {
     return result;
 }
 
-std::wstring BuildIndicatorCoreText(int currentDesktopNumber, int desktopCount) {
+std::wstring FormatDesktopNameOrNumber(
+    int value,
+    const std::vector<std::wstring>& desktopNames) {
+    if (value > 0 && static_cast<size_t>(value) <= desktopNames.size() &&
+        !desktopNames[value - 1].empty()) {
+        return desktopNames[value - 1];
+    }
+
+    return FormatDesktopNumber(value);
+}
+
+std::wstring BuildIndicatorCoreText(
+    int currentDesktopNumber,
+    int desktopCount,
+    const std::vector<std::wstring>& desktopNames) {
     if (g_settings.indicatorMode == IndicatorMode::Markers) {
         return BuildMarkerSequenceText(desktopCount);
+    }
+
+    if (g_settings.indicatorMode == IndicatorMode::DesktopName) {
+        return FormatDesktopNameOrNumber(currentDesktopNumber, desktopNames);
     }
 
     return FormatDesktopNumber(currentDesktopNumber);
@@ -825,10 +846,81 @@ int ReadDesktopCountFromRegistry() {
     return desktopIds.empty() ? 1 : static_cast<int>(desktopIds.size());
 }
 
+std::wstring ReadRegistryStringValue(HKEY root,
+                                     const std::wstring& subKey,
+                                     const std::wstring& valueName) {
+    DWORD type = 0;
+    auto buffer = ReadRegistryValue(root, subKey, valueName, &type);
+    if ((type != REG_SZ && type != REG_EXPAND_SZ) ||
+        buffer.size() < sizeof(wchar_t)) {
+        return {};
+    }
+
+    std::wstring value(reinterpret_cast<const wchar_t*>(buffer.data()),
+                       buffer.size() / sizeof(wchar_t));
+    while (!value.empty() && value.back() == L'\0') {
+        value.pop_back();
+    }
+
+    return value;
+}
+
+std::wstring GuidToRegistryString(const GUID& guid) {
+    wchar_t guidText[39] = {};
+    if (StringFromGUID2(guid, guidText, ARRAYSIZE(guidText)) == 0) {
+        return {};
+    }
+
+    return guidText;
+}
+
+std::wstring ReadVirtualDesktopName(const GUID& desktopId) {
+    DWORD sessionId = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+
+    std::wstring desktopIdText = GuidToRegistryString(desktopId);
+    if (desktopIdText.empty()) {
+        return {};
+    }
+
+    std::wstring sessionPath =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\SessionInfo\\" +
+        std::to_wstring(sessionId) + L"\\VirtualDesktops\\Desktops\\" +
+        desktopIdText;
+
+    for (const auto& path : {
+             std::wstring(
+                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VirtualDesktops\\Desktops\\") +
+                 desktopIdText,
+             sessionPath,
+         }) {
+        std::wstring name = ReadRegistryStringValue(HKEY_CURRENT_USER, path, L"Name");
+        if (!name.empty()) {
+            return name;
+        }
+    }
+
+    return {};
+}
+
+std::vector<std::wstring> ReadVirtualDesktopNames() {
+    std::vector<std::wstring> names;
+    auto desktopIds = ReadVirtualDesktopIds();
+    names.reserve(desktopIds.size());
+
+    for (const auto& desktopId : desktopIds) {
+        names.push_back(ReadVirtualDesktopName(desktopId));
+    }
+
+    return names;
+}
+
 void LoadSettings() {
     StringSetting indicatorMode = StringSetting::make(L"indicatorMode");
     if (wcscmp(indicatorMode.get(), L"number") == 0) {
         g_settings.indicatorMode = IndicatorMode::Number;
+    } else if (wcscmp(indicatorMode.get(), L"desktopName") == 0) {
+        g_settings.indicatorMode = IndicatorMode::DesktopName;
     } else {
         g_settings.indicatorMode = IndicatorMode::Markers;
     }
@@ -1365,12 +1457,15 @@ std::vector<IndicatorSegment> BuildMarkerSuffixSegments(bool hasBaseText,
 IndicatorLayout BuildIndicatorLayout(const Controls::TextBlock& source,
                                      bool hasBaseText,
                                      int currentDesktopNumber,
-                                     int desktopCount) {
+                                     int desktopCount,
+                                     const std::vector<std::wstring>& desktopNames) {
     IndicatorLayout layout;
 
     if (g_settings.indicatorMode == IndicatorMode::Markers) {
         layout.renderedSuffix = BuildIndicatorSuffix(
-            hasBaseText, BuildIndicatorCoreText(currentDesktopNumber, desktopCount));
+            hasBaseText,
+            BuildIndicatorCoreText(currentDesktopNumber, desktopCount,
+                                   desktopNames));
         layout.widestSuffixWidth = MeasureSingleRunTextWidth(
             source, layout.renderedSuffix, GetConfiguredIndicatorFontWeight());
         layout.suffixSegments = BuildMarkerSuffixSegments(
@@ -1379,15 +1474,20 @@ IndicatorLayout BuildIndicatorLayout(const Controls::TextBlock& source,
     }
 
     std::wstring visibleSuffix = BuildIndicatorSuffix(
-        hasBaseText, BuildIndicatorCoreText(currentDesktopNumber, desktopCount));
+        hasBaseText,
+        BuildIndicatorCoreText(currentDesktopNumber, desktopCount, desktopNames));
 
     double currentWidth = MeasureSingleRunTextWidth(
         source, visibleSuffix, GetConfiguredIndicatorFontWeight());
     layout.widestSuffixWidth = currentWidth;
 
     for (int i = 1; i <= desktopCount; ++i) {
-        std::wstring candidateSuffix =
-            BuildIndicatorSuffix(hasBaseText, FormatDesktopNumber(i));
+        std::wstring candidateText =
+            g_settings.indicatorMode == IndicatorMode::DesktopName
+                ? FormatDesktopNameOrNumber(i, desktopNames)
+                : FormatDesktopNumber(i);
+        std::wstring candidateSuffix = BuildIndicatorSuffix(hasBaseText,
+                                                            candidateText);
         double candidateWidth = MeasureSingleRunTextWidth(
             source, candidateSuffix, GetConfiguredIndicatorFontWeight());
         if (candidateWidth > layout.widestSuffixWidth) {
@@ -1721,7 +1821,8 @@ Controls::TextBlock EnsureSeparateIndicatorTextBlock(
 void ApplySeparateIndicator(const ClockEntryPtr& entry,
                             Controls::TextBlock sourceTextBlock,
                             int currentDesktopNumber,
-                            int desktopCount) {
+                            int desktopCount,
+                            const std::vector<std::wstring>& desktopNames) {
     auto indicatorTextBlock =
         EnsureSeparateIndicatorTextBlock(entry, sourceTextBlock);
     if (!indicatorTextBlock) {
@@ -1730,14 +1831,15 @@ void ApplySeparateIndicator(const ClockEntryPtr& entry,
 
     IndicatorLayout layout =
         BuildIndicatorLayout(sourceTextBlock, true, currentDesktopNumber,
-                             desktopCount);
+                             desktopCount, desktopNames);
     indicatorTextBlock.MinWidth(layout.widestSuffixWidth);
     SetIndicatorTextBlockContent(indicatorTextBlock, L"", layout);
 }
 
 void EnsureReservedWidth(const ClockEntryPtr& entry,
                          Controls::TextBlock targetTextBlock,
-                         const std::wstring& baseText) {
+                         const std::wstring& baseText,
+                         const std::vector<std::wstring>& desktopNames) {
     if (!targetTextBlock) {
         return;
     }
@@ -1750,14 +1852,22 @@ void EnsureReservedWidth(const ClockEntryPtr& entry,
             targetTextBlock, baseText,
             BuildIndicatorSuffix(!baseText.empty(), BuildMarkerSequenceText(desktopCount)));
     } else {
+        auto getCandidateText = [&](int desktopNumber) {
+            if (g_settings.indicatorMode == IndicatorMode::DesktopName) {
+                return FormatDesktopNameOrNumber(desktopNumber, desktopNames);
+            }
+
+            return FormatDesktopNumber(desktopNumber);
+        };
+
         widestWidth = MeasureIndicatorTextWidth(
             targetTextBlock, baseText,
-            BuildIndicatorSuffix(!baseText.empty(), FormatDesktopNumber(1)));
+            BuildIndicatorSuffix(!baseText.empty(), getCandidateText(1)));
 
         for (int i = 2; i <= desktopCount; ++i) {
             double candidateWidth = MeasureIndicatorTextWidth(
                 targetTextBlock, baseText,
-                BuildIndicatorSuffix(!baseText.empty(), FormatDesktopNumber(i)));
+                BuildIndicatorSuffix(!baseText.empty(), getCandidateText(i)));
             if (candidateWidth > widestWidth) {
                 widestWidth = candidateWidth;
             }
@@ -1817,6 +1927,10 @@ void ApplyIndicator(const ClockEntryPtr& entry) {
 
     int currentDesktopNumber = g_currentDesktopNumber.load();
     int desktopCount = ReadDesktopCountFromRegistry();
+    std::vector<std::wstring> desktopNames =
+        g_settings.indicatorMode == IndicatorMode::DesktopName
+            ? ReadVirtualDesktopNames()
+            : std::vector<std::wstring>{};
 
     std::lock_guard<std::mutex> lock(entry->mutex);
 
@@ -1837,7 +1951,7 @@ void ApplyIndicator(const ClockEntryPtr& entry) {
 
         auto sourceTextBlock = dateTextBlock ? dateTextBlock : timeTextBlock;
         ApplySeparateIndicator(entry, sourceTextBlock, currentDesktopNumber,
-                               desktopCount);
+                               desktopCount, desktopNames);
         return;
     }
 
@@ -1853,16 +1967,20 @@ void ApplyIndicator(const ClockEntryPtr& entry) {
     if (useDateLine) {
         IndicatorLayout layout =
             BuildIndicatorLayout(dateTextBlock, !entry->baseDateText.empty(),
-                                 currentDesktopNumber, desktopCount);
-        EnsureReservedWidth(entry, dateTextBlock, entry->baseDateText);
+                                 currentDesktopNumber, desktopCount,
+                                 desktopNames);
+        EnsureReservedWidth(entry, dateTextBlock, entry->baseDateText,
+                            desktopNames);
         EnsureStableTextAlignment(entry, dateTextBlock);
         SetIndicatorTextBlockContent(dateTextBlock, entry->baseDateText, layout);
         entry->lastAppliedSuffix = layout.renderedSuffix;
     } else if (timeTextBlock) {
         IndicatorLayout layout =
             BuildIndicatorLayout(timeTextBlock, !entry->baseTimeText.empty(),
-                                 currentDesktopNumber, desktopCount);
-        EnsureReservedWidth(entry, timeTextBlock, entry->baseTimeText);
+                                 currentDesktopNumber, desktopCount,
+                                 desktopNames);
+        EnsureReservedWidth(entry, timeTextBlock, entry->baseTimeText,
+                            desktopNames);
         EnsureStableTextAlignment(entry, timeTextBlock);
         SetIndicatorTextBlockContent(timeTextBlock, entry->baseTimeText, layout);
         entry->lastAppliedSuffix = layout.renderedSuffix;
