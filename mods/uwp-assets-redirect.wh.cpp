@@ -38,20 +38,20 @@ You can apply redirections to _Windows Apps_, _System Apps_ and _Custom_ paths d
 the **Settings** tab.
 
 For each redirection you will need to specify the **Bundle name** and a **Redirection folder or .ico file**:
-You can find the application bundle by following [the guide below](#finding-the-application-bundle-and-assets),
-then you can specify a folder with the custom assets files or a single `.ico` file.
+You can find the application bundle by following [the guide below](#finding-the-application-bundle-and-assets), then you can specify a folder with the
+custom assets files or a single `.ico` file.
 
 If you provide a single `.ico` file, only the app icons shown throughout the generic parts of the system will be
 replaced _(e.g. File Explorer, Start Menu, etc...)_, and it may not always be able to generate the correct assets.
 
-**To fully replace assets**, it's recommended to use a Redirection folder with the correct assets. You can
-find out more about creating custom assets [down below](#creating-custom-assets).
+**To fully replace assets**, it's recommended to use a Redirection folder with the correct assets.
+You can find out more about creating custom assets [down below](#creating-custom-assets).
 
 # Finding the Application bundle and assets
 You can quickly identify both the application bundle and its Assets folder using Task Manager.
 
-1. Open the application you want to redirect assets for. Then open Task Manager,
-right-click the application process, and select "**Open file location**":
+1. Open the application you want to redirect assets for. Then open Task Manager, right-click the
+   application process, and select "**Open file location**":
 
     ![Task Manager right-click context menu on "Microsoft Store" with "Open file location" hovered](https://raw.githubusercontent.com/atferrys/uwp-assets-redirect/main/docs-assets/task-manager-open-location.png)
 
@@ -60,36 +60,35 @@ right-click the application process, and select "**Open file location**":
     ![Application folder highlighted in File Explorer with the bundle identifier shown](https://raw.githubusercontent.com/atferrys/uwp-assets-redirect/main/docs-assets/application-folder.png)
 
 3. The application bundle is the part of the folder name that comes before the first underscore,
-in this case "`Microsoft.WindowsStore`".
+   in this case "`Microsoft.WindowsStore`".
 
 If Assets Redirect can't automatically locate the Assets folder, you can browse the application directory to manually find it.
 In this example, although it was detected automatically, the assets were located in "`Assets\AppTiles`":
 
 ![The path to the assets folder](https://raw.githubusercontent.com/atferrys/uwp-assets-redirect/main/docs-assets/assets-folder.png)
 
-You can specify them in the application bundle using this format:
-"`<application bundle>`|`<assets folder>`", and in this case "`Microsoft.WindowsStore|Assets\AppTiles`".
+You can specify them in the application bundle using this format: "`<application bundle>`|`<assets folder>`",
+and in this case "`Microsoft.WindowsStore|Assets\AppTiles`".
 
 # Creating custom assets
 You can manually create replacement assets by copying the original Assets folder, removing any files you don't
 want to replace, and editing the remaining ones making sure to preserve the original file resolutions.
 
-A quicker and easier approach is to use something like [TileGen](https://tilegen.ferrys.it/assets-redirect), an open-source tool that
-generates the required assets from a single image or an `.ico` file.
-_Using an .ico file is recommended, as it already contains multiple resolutions._
+A quicker and easier approach is to use something like [TileGen](https://tilegen.ferrys.it/assets-redirect), an open-source tool that generates the required assets
+from a single image or an `.ico` file. _Using an .ico file is recommended, as it already contains multiple resolutions._
 
-_Keep in mind that even if File Explorer doesn't show the non-redirected assets after you've applied them,
-they're still present. This is only a visual issue caused by how File Explorer loads folder contents._
+_Keep in mind that even if File Explorer doesn't show the non-redirected assets after you've applied them, they're
+still present. This is only a visual issue caused by how File Explorer loads folder contents._
 
 # Theme paths
-Theme paths can be set in the settings.
-Each theme path can be a folder with custom assets files and a `theme.ini` file that contains redirection rules, or the `.ini` theme file itself.
+Theme paths can be set in the settings. Each theme path can be a folder with custom assets files and a `theme.ini` file
+that contains redirection rules, or the `.ini` theme file itself.
 
 For example, the `theme.ini` file may contain the following redirection rules:
 
 ## WindowsApps and SystemApps redirections
-For apps found in "`C:\Program Files\WindowsApps`" and in "`C:\Windows\SystemApps`",
-you can use respectively the `[windows-apps]` and `[system-apps]` headers.
+For apps found in "`C:\Program Files\WindowsApps`" and in "`C:\Windows\SystemApps`", you can use respectively
+the `[windows-apps]` and `[system-apps]` headers.
 
 Each rule should be provided in this format: "`<application bundle>`=`<redirection folder/.ico>`".
 The application bundle can be easily found by following [the guide above](#finding-the-application-bundle-and-assets).
@@ -102,11 +101,11 @@ Microsoft.WindowsCalculator=.\Calculator
 Microsoft.WindowsTerminal=Terminal.ico
 ```
 
-Most of the time, Assets Redirect can automatically locate the bundle's Assets folder.
-However, some applications use the same application bundle as other apps, which can prevent Assets Redirect
-from identifying the correct folder.
-In these cases, you can manually specify the Assets folder within the application bundle using the
-following format: "`<application bundle>`|`<assets folder>`" (an example is shown below in `[system-apps]`).
+Most of the time, Assets Redirect can automatically locate the bundle's Assets folder. However, some applications use
+the same application bundle as other apps, which can prevent Assets Redirect from identifying the correct folder.
+
+In these cases, you can manually specify the Assets folder within the application bundle using the following format:
+"`<application bundle>`|`<assets folder>`" (an example is shown below in `[system-apps]`).
 
 ### Example config
 ```
@@ -116,8 +115,8 @@ Microsoft.PPIProjection=.\Wireless Display
 ```
 
 ## Custom redirections
-For apps that aren't found in common folders like `WindowsApps` or `SystemApps`,
-like _Settings_, you can use the `[custom]` header.
+For apps that aren't found in common folders like `WindowsApps` or `SystemApps`, like _Settings_, you can use
+the `[custom]` header.
 
 Each rule should be provided in this format: "`<assets folder>`=`<redirection folder>`".
 
@@ -128,7 +127,7 @@ Each rule should be provided in this format: "`<assets folder>`=`<redirection fo
 ```
 
 # Injecting into other processes
-By default, Assets Redirect only targets the processes that most commonly use these assets, such as File Explorer and the Start Menu.
+By default, Assets Redirect only targets the processes that most commonly use these assets, such as File Explorer and Start Menu.
 As a result, UWP applications are not affected by asset redirection out of the box.
 
 You can change this behavior using the "Custom process inclusion list" in the Advanced tab and doing one of the following:
@@ -136,8 +135,8 @@ You can change this behavior using the "Custom process inclusion list" in the Ad
 - Include the entire applications directories: "`C:\Program Files\WindowsApps\*`" and "`C:\Windows\SystemApps\*`".
 - Or, if you're willing to risk system stability, include all processes using "`*`".
 
-Doing this applies your asset changes not only to the Windows shell,
-but also to the applications themselves, changing their look as well (like the splash screen).
+Doing this applies your asset changes not only to the Windows shell, but also to the applications themselves, changing
+their look as well (like the splash screen).
 
 # Contributions
 You can contribute to the mod development by opening a pull request [here](https://github.com/atferrys/uwp-assets-redirect/pulls).
