@@ -3,7 +3,7 @@
 // @name            Ctrl+Right-click taskbar to Open file location
 // @description     Holding Ctrl while right-clicking a taskbar button opens the running program's file location in Explorer (instead of showing the jump list). Works with the classic / StartAllBack / ExplorerPatcher taskbar (MSTaskListWClass).
 // @version         1.2.0
-// @author          triatomic
+// @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
 // @architecture    x86-64
