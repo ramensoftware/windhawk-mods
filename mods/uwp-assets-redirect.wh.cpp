@@ -2,7 +2,7 @@
 // @id              uwp-assets-redirect
 // @name            UWP Assets Redirect
 // @description     Replace UWP app assets (such as icons) without worrying about updates or modifying system files permissions.
-// @version         1.0
+// @version         1.1
 // @author          ferrys
 // @github          https://github.com/atferrys
 // @license         GPL-3.0
@@ -13,7 +13,7 @@
 // @include         ShellHost.exe
 // @include         RuntimeBroker.exe
 // @include         Taskmgr.exe
-// @compilerOptions -lcomctl32 -lole32 -loleaut32
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lgdiplus -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -32,6 +32,20 @@ and their previews in the [theme repository](https://github.com/atferrys/uwp-ass
 
 _To contribute a new theme to the theme repository, follow the instructions
 [here](https://github.com/atferrys/uwp-assets-redirect/blob/main/themes/README.md#contributing-new-themes)._
+
+# Applying redirections
+You can apply redirections to _Windows Apps_, _System Apps_ and _Custom_ paths directly from
+the **Settings** tab.
+
+For each redirection you will need to specify the **Bundle name** and a **Redirection folder or .ico file**:
+You can find the application bundle by following [the guide below](#finding-the-application-bundle-and-assets),
+then you can specify a folder with the custom assets files or a single `.ico` file.
+
+If you provide a single `.ico` file, only the app icons shown throughout the generic parts of the system will be
+replaced _(e.g. File Explorer, Start Menu, etc...)_, and it may not always be able to generate the correct assets.
+
+**To fully replace assets**, it's recommended to use a Redirection folder with the correct assets. You can
+find out more about creating custom assets [down below](#creating-custom-assets).
 
 # Finding the Application bundle and assets
 You can quickly identify both the application bundle and its Assets folder using Task Manager.
@@ -77,7 +91,7 @@ For example, the `theme.ini` file may contain the following redirection rules:
 For apps found in "`C:\Program Files\WindowsApps`" and in "`C:\Windows\SystemApps`",
 you can use respectively the `[windows-apps]` and `[system-apps]` headers.
 
-Each rule should be provided in this format: "`<application bundle>`=`<redirection folder>`".
+Each rule should be provided in this format: "`<application bundle>`=`<redirection folder/.ico>`".
 The application bundle can be easily found by following [the guide above](#finding-the-application-bundle-and-assets).
 
 ### Example config
@@ -85,6 +99,7 @@ The application bundle can be easily found by following [the guide above](#findi
 [windows-apps]
 Microsoft.WindowsStore=.\Microsoft Store
 Microsoft.WindowsCalculator=.\Calculator
+Microsoft.WindowsTerminal=Terminal.ico
 ```
 
 Most of the time, Assets Redirect can automatically locate the bundle's Assets folder.
@@ -142,6 +157,7 @@ You can contribute to the mod development by opening a pull request [here](https
   $options:
   - "": None
   - "ferrys/aero": Aero (by @ferrys)
+  - "ferrys/luna": Luna (by @ferrys)
 - theme-paths: [""]
   $name: Theme paths
   $description: >-
@@ -159,8 +175,12 @@ You can contribute to the mod development by opening a pull request [here](https
         You can get easily get this via Task Manager, follow the guide in
         the details tab for more information.
     - redirect: ""
-      $name: Redirection folder
-      $description: The folder with the custom assets files.
+      $name: Redirection folder or .ico file
+      $description: >-
+        The folder with the custom assets files or a single .ico file.
+
+        Note: If you provide a single .ico file, only app icons will be replaced.
+        You can find more information in the details tab.
   $name: WindowsApps Redirections
   $description: >-
     Redirections for the apps found in "C:\Program Files\WindowsApps".
@@ -176,8 +196,12 @@ You can contribute to the mod development by opening a pull request [here](https
         You can get easily get this via Task Manager, follow the guide in
         the details tab for more information.
     - redirect: ""
-      $name: Redirection folder
-      $description: The folder with the custom assets files.
+      $name: Redirection folder or .ico file
+      $description: >-
+        The folder with the custom assets files or a single .ico file.
+
+        Note: If you provide a single .ico file, only app icons will be replaced.
+        You can find more information in the details tab.
   $name: SystemApps Redirections
   $description: >-
     Redirections for the apps found in "C:\Windows\SystemApps".
@@ -223,6 +247,7 @@ You can contribute to the mod development by opening a pull request [here](https
 #include <winrt/base.h>
 #include <comutil.h>
 #include <shldisp.h>
+#include <gdiplus.h>
 #include <format>
 #include <string>
 #include <unordered_map>
@@ -983,7 +1008,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
     auto add_bundle_redirection = [&redirections, normalize_path](std::wstring bundles_root, std::wstring bundle, std::wstring redirect, std::filesystem::path theme_folder = g_normalize_path_base_path) {
 
-        const auto deduct_bundle = [](std::wstring bundles_root, std::wstring bundle, std::wstring& bundle_id, std::wstring& assets_folder) {
+        const auto deduct_bundle = [](std::wstring bundles_root, std::wstring bundle, std::wstring& bundle_id, std::wstring& assets_folder, std::filesystem::path& assets_folder_path) {
 
             const auto get_assets_folder = [](const std::wstring& appx_manifest) -> std::wstring {
 
@@ -1102,9 +1127,13 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
                     Wh_Log(L"Invalid assets folder for \"%s\", falling back to default.", bundle_id.c_str());
                 }
 
-                if(find_bundle_folder(bundles_root, bundle_id).empty()) {
+                std::wstring bundle_folder = find_bundle_folder(bundles_root, bundle_id);
+
+                if(bundle_folder.empty()) {
                     assets_folder = L"";
                     Wh_Log(L"Failed to find bundle folder for \"%s\", skipping redirection.", bundle_id.c_str());
+                } else {
+                    assets_folder_path = std::filesystem::path(bundle_folder) / assets_folder;
                 }
 
                 return;
@@ -1127,21 +1156,337 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
                 return;
             }
 
+            assets_folder_path = std::filesystem::path(bundle_folder) / assets_folder;
+
             Wh_Log(L"Automatically found assets folder for \"%s\" in \"%s\".", bundle_id.c_str(), assets_folder.c_str());
+
+        };
+
+        const auto get_generated_assets_path = [](std::wstring bundle_id, std::wstring assets_folder, std::filesystem::path assets_folder_path, std::wstring ico_file) -> std::wstring {
+
+            WCHAR storage_path_buffer[MAX_PATH];
+            if (!Wh_GetModStoragePath(storage_path_buffer, ARRAYSIZE(storage_path_buffer))) {
+                Wh_Log(L"Failed to setup ICO redirection: Unable to get mod's storage path.");
+                return L"";
+            }
+
+            std::error_code error_code;
+            auto generated_assets_path = std::filesystem::path{storage_path_buffer} / "generated-assets" / bundle_id / assets_folder;
+
+            if(std::filesystem::is_directory(generated_assets_path, error_code)) {
+
+                WIN32_FILE_ATTRIBUTE_DATA ico_info;
+                if (!GetFileAttributesEx(ico_file.c_str(), GetFileExInfoStandard, &ico_info)) {
+                    Wh_Log(L"Failed to setup ICO redirection: Unable to get ICO file attributes for \"%s\".", ico_file.c_str());
+                    return L"";
+                }
+
+                FILETIME ico_last_modified_time = ico_info.ftLastWriteTime;
+
+                WIN32_FILE_ATTRIBUTE_DATA generated_assets_info;
+                if (!GetFileAttributesEx(generated_assets_path.c_str(), GetFileExInfoStandard, &generated_assets_info)) {
+                    Wh_Log(L"Failed to setup ICO redirection: Unable to get generated assets folder attributes for \"%s\".", bundle_id.c_str());
+                    return L"";
+                }
+
+                FILETIME generated_assets_creation_time = generated_assets_info.ftCreationTime;
+
+                if (CompareFileTime(&ico_last_modified_time, &generated_assets_creation_time) == 0) {
+                    Wh_Log(L"Assets for \"%s\" already generated and source icon didn't change.", bundle_id.c_str());
+                    return generated_assets_path;
+                }
+
+                for (int suffix = 0; suffix < 100; suffix++) {
+
+                    if (suffix > 0) {
+                        generated_assets_path = std::filesystem::path{storage_path_buffer} / "generated-assets" / std::format(L"{}_{}", bundle_id, suffix + 1) / assets_folder;
+                    }
+
+                    if (!std::filesystem::is_directory(generated_assets_path, error_code)) {
+                        // Generated assets folder doesn't exist, we can use it.
+                        break;
+                    }
+
+                    // Generated assets folder exists, try to remove it.
+                    Wh_Log(L"Generated assets folder already exists, trying to remove: %s", generated_assets_path.c_str());
+                    std::filesystem::remove_all(generated_assets_path, error_code);
+
+                    if (!std::filesystem::is_directory(generated_assets_path, error_code)) {
+                        // Successfully removed Generated assets folder.
+                        break;
+                    }
+
+                    Wh_Log(L"Failed to remove Generated assets folder, trying next usable name...");
+
+                }
+
+                if (std::filesystem::is_directory(generated_assets_path, error_code)) {
+                    Wh_Log(L"Failed to setup ICO redirection: Unable to find a usable Generated assets folder name.");
+                    return L"";
+                }
+
+                std::filesystem::create_directories(generated_assets_path, error_code);
+
+                HANDLE generated_assets_handle = CreateFile(
+                    generated_assets_path.c_str(),
+                    FILE_WRITE_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    nullptr,
+                    OPEN_EXISTING,
+                    FILE_FLAG_BACKUP_SEMANTICS,
+                    nullptr
+                );
+
+                if (generated_assets_handle != INVALID_HANDLE_VALUE) {
+                    SetFileTime(generated_assets_handle, &ico_last_modified_time, nullptr, nullptr);
+                    CloseHandle(generated_assets_handle);
+                }
+
+            }
+
+            Gdiplus::GdiplusStartupInput gdi_startup;
+            ULONG_PTR gdi_token;
+
+            if (GdiplusStartup(&gdi_token, &gdi_startup, nullptr) != Gdiplus::Ok) {
+                Wh_Log(L"Failed to setup ICO redirection: Unable to initialize GDI+.");
+                return L"";
+            }
+
+            const auto get_clsid_encoder = [](std::wstring mime_type, CLSID* clsid) -> int {
+
+                UINT encoders_count = 0;
+                UINT encoders_size = 0;
+
+                Gdiplus::GetImageEncodersSize(&encoders_count, &encoders_size);
+
+                if (encoders_size == 0) {
+                    return -1;
+                }
+
+                std::vector<Gdiplus::ImageCodecInfo> encoders(encoders_size / sizeof(Gdiplus::ImageCodecInfo));
+                Gdiplus::GetImageEncoders(encoders_count, encoders_size, encoders.data());
+
+                for (UINT i = 0; i < encoders_count; ++i) {
+                    if (wcscmp(encoders[i].MimeType, mime_type.c_str()) == 0) {
+                        *clsid = encoders[i].Clsid;
+                        return i;
+                    }
+                }
+
+                return -1;
+
+            };
+
+            CLSID png_encoder_clsid;
+
+            if (get_clsid_encoder(L"image/png", &png_encoder_clsid) == -1) {
+                Wh_Log(L"Failed to setup ICO redirection: Unable to get PNG encoder.");
+                return L"";
+            }
+
+            // Generate common tiles from an .ico file.
+            // Same concept as TileGen: https://github.com/atferrys/TileGen
+            // Partially taken and adapted from: https://stackoverflow.com/a/22885412
+
+            const auto generate_tile = [ico_file, png_encoder_clsid](int width, int height, std::wstring output_file) {
+
+                HICON icon = nullptr;
+
+                UINT result = PrivateExtractIconsW(
+                    ico_file.c_str(),
+                    0,
+                    width,
+                    height,
+                    &icon,
+                    nullptr,
+                    1,
+                    0
+                );
+
+                if (result == 0 || icon == nullptr) {
+                    Wh_Log(L"Failed to generate asset from ICO file: Unable to read icon.");
+                    return;
+                }
+
+                ICONINFO icon_info = {};
+
+                if (!GetIconInfo(icon, &icon_info)) {
+                    DestroyIcon(icon);
+                    Wh_Log(L"Failed to generate asset from ICO file: Unable to get icon info.");
+                    return;
+                }
+
+                BITMAP bitmap = {};
+                GetObject(icon_info.hbmColor, sizeof(BITMAP), &bitmap);
+
+                HDC hdc = GetDC(nullptr);
+
+                BITMAPINFO bitmap_info = {
+                    .bmiHeader = {
+                        .biSize = sizeof(BITMAPINFOHEADER),
+                        .biWidth = bitmap.bmWidth,
+                        .biHeight = -bitmap.bmHeight,
+                        .biPlanes = 1,
+                        .biBitCount = 32,
+                        .biCompression = BI_RGB
+                    }
+                };
+
+                int pixel_count = bitmap.bmWidth * bitmap.bmHeight;
+                std::vector<UINT32> pixels(pixel_count);
+
+                GetDIBits(
+                    hdc,
+                    icon_info.hbmColor,
+                    0,
+                    bitmap.bmHeight,
+                    pixels.data(),
+                    &bitmap_info,
+                    DIB_RGB_COLORS
+                );
+
+                bool has_alpha = false;
+
+                for (int pixel : pixels) {
+                    if ((pixel & 0xFF000000) != 0) {
+                        has_alpha = true;
+                        break;
+                    }
+                }
+
+                if (!has_alpha && icon_info.hbmMask) {
+
+                    std::vector<UINT32> mask(pixel_count);
+
+                    GetDIBits(
+                        hdc,
+                        icon_info.hbmMask,
+                        0,
+                        bitmap.bmHeight,
+                        mask.data(),
+                        &bitmap_info,
+                        DIB_RGB_COLORS
+                    );
+
+                    for (int i = 0; i < pixel_count; i++) {
+                        if (mask[i] == 0) {
+                            pixels[i] |= 0xFF000000;
+                        }
+                    }
+
+                }
+
+                Gdiplus::Bitmap output_bitmap(
+                    bitmap.bmWidth,
+                    bitmap.bmHeight,
+                    bitmap.bmWidth * 4,
+                    PixelFormat32bppARGB,
+                    (BYTE*) pixels.data()
+                );
+
+                if (output_bitmap.Save(output_file.c_str(), &png_encoder_clsid, nullptr) != Gdiplus::Ok) {
+                    Wh_Log(L"Failed to generate asset from ICO file: Unable to save output bitmap: %s", output_file.c_str());
+                    return;
+                }
+
+                ReleaseDC(nullptr, hdc);
+
+                if (icon_info.hbmColor) {
+                    DeleteObject(icon_info.hbmColor);
+                }
+
+                if (icon_info.hbmMask) {
+                    DeleteObject(icon_info.hbmMask);
+                }
+
+                DestroyIcon(icon);
+
+            };
+
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(assets_folder_path)) {
+
+                if (!entry.is_regular_file()) {
+                    continue;
+                }
+
+                std::filesystem::path path = entry.path();
+                std::wstring filename = path.filename().wstring();
+
+                if (!filename.ends_with(L".png")) {
+                    continue;
+                }
+
+                if (filename.find(L"targetsize") == std::wstring::npos) {
+                    continue;
+                }
+
+                if (filename.find(L"contrast") != std::wstring::npos) {
+                    continue;
+                }
+
+                Gdiplus::Image tile_image = path.c_str();
+
+                if (tile_image.GetLastStatus() != Gdiplus::Ok) {
+                    Wh_Log(L"Failed to generate asset from ICO file: Unable to read Reference Tile: %s", path.c_str());
+                    continue;
+                }
+
+                UINT tile_width = tile_image.GetWidth();
+                UINT tile_height = tile_image.GetHeight();
+
+                if (tile_width != tile_height) {
+                    continue;
+                }
+
+                const auto generated_tile_path = generated_assets_path / path.lexically_relative(assets_folder_path);
+                std::filesystem::create_directories(generated_tile_path.parent_path());
+
+                generate_tile(tile_width, tile_height, generated_tile_path);
+
+            }
+
+            Gdiplus::GdiplusShutdown(gdi_token);
+
+            Wh_Log(L"Assets for \"%s\" generated from icon successfully.", bundle_id.c_str());
+
+            return generated_assets_path;
 
         };
 
         std::wstring bundle_id;
         std::wstring assets_folder;
+        std::filesystem::path assets_folder_path;
 
-        deduct_bundle(bundles_root, std::wstring(bundle), bundle_id, assets_folder);
+        deduct_bundle(bundles_root, std::wstring(bundle), bundle_id, assets_folder, assets_folder_path);
 
         if(bundle_id.empty() || assets_folder.empty()) {
             return;
         }
 
+        std::filesystem::path normalized_redirect = normalize_path(redirect, theme_folder);
+
+        if(!assets_folder_path.empty() &&
+            std::filesystem::exists(normalized_redirect) &&
+            std::filesystem::is_regular_file(normalized_redirect) &&
+            normalized_redirect.extension() == ".ico") {
+
+            std::wstring generated_assets_path = get_generated_assets_path(
+                bundle_id,
+                assets_folder,
+                assets_folder_path,
+                normalized_redirect
+            );
+
+            if(generated_assets_path.empty()) {
+                return;
+            }
+
+            normalized_redirect = generated_assets_path;
+
+        }
+
         auto path = std::format(L"\\??\\{}\\{}_*\\{}", bundles_root, bundle_id, assets_folder);
-        auto redirection = std::format(L"\\??\\{}", normalize_path(redirect, theme_folder));
+        auto redirection = std::format(L"\\??\\{}", normalized_redirect.wstring());
 
         redirections[path] = redirection;
 
