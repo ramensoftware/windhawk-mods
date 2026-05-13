@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              mods/clipboard-forever.wh.cpp
+// @id              persistent-clipboard-forever
 // @name            Clipboard Forever
 // @description     Persist clipboard text/image history and restore it after clipboard clears or Windows restarts
 // @version         1.2.0
