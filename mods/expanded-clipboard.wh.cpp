@@ -5,7 +5,6 @@
 // @version         0.7.0
 // @author          takattowo
 // @github          https://github.com/takattowo
-// @homepage
 // @include         svchost.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
