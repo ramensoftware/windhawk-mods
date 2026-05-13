@@ -9371,7 +9371,7 @@
                     13
                 ],
                 "ratingUsers": 14,
-                "updated": 1778593558000,
+                "updated": 1778689090000,
                 "users": 604
             },
             "metadata": {
@@ -9387,7 +9387,7 @@
                 ],
                 "license": "MIT",
                 "name": "Taskbar Desktop Indicator",
-                "version": "1.2.3"
+                "version": "1.3"
             }
         },
         "taskbar-disappearing-icon-fix-win11": {
