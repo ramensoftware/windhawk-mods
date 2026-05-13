@@ -136,7 +136,7 @@ BOOL Wh_ModInit() {
            g_settings.maxItems, g_settings.maxItemSizeMB,
            g_settings.forceIncludeAll ? 1 : 0);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK cbdhsvcDllHooks[] = {
         {
             { L"public: virtual long __cdecl ClipboardSettingsImpl::get_ClipboardHistoryMaxItemsCount(unsigned int *)" },
             &g_origGetMaxItemsCount,
@@ -159,7 +159,7 @@ BOOL Wh_ModInit() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(hMod, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(hMod, cbdhsvcDllHooks, ARRAYSIZE(cbdhsvcDllHooks))) {
         Wh_Log(L"[ExpandedClipboard] HookSymbols failed");
         return FALSE;
     }
