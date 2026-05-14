@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         1.0.1
+// @version         1.2
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -208,11 +208,15 @@ void Wh_ModSettingsChanged() {
 // ============================================================
 static const UINT F2F_MENU_CMD = 0xBF20;  // unlikely to clash with shell ids
 
-// State for the currently-tracked menu
-static HWND  g_currentMenuHwnd        = nullptr;
-static bool  g_currentMenuEligible    = false;
-static std::vector<std::wstring> g_currentSelection;
-static std::wstring g_currentFolder;
+// State for the currently-tracked menu. thread_local because TrackPopupMenuEx
+// and the matching PostMessageW(WM_COMMAND) always run on the same UI thread,
+// and the PostMessageW hook itself fires on every thread in the process —
+// without thread_local, an unrelated thread's PostMessageW call could race
+// with the Explorer UI thread mid-write.
+static thread_local HWND  g_currentMenuHwnd        = nullptr;
+static thread_local bool  g_currentMenuEligible    = false;
+static thread_local std::vector<std::wstring> g_currentSelection;
+static thread_local std::wstring g_currentFolder;
 
 // ============================================================
 //  Path / name helpers
@@ -819,21 +823,11 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             SetDlgItemTextW(hDlg, IDC_HEADER, header);
         }
 
-        // Force foreground & focus regardless of foreground-lock state.
-        HWND fg = GetForegroundWindow();
-        DWORD fgTid = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-        DWORD myTid = GetCurrentThreadId();
-        bool attached = false;
-        if (fgTid && fgTid != myTid) {
-            attached = AttachThreadInput(fgTid, myTid, TRUE) != 0;
-        }
-        SetWindowPos(hDlg, HWND_TOP, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        BringWindowToTop(hDlg);
+        // Both entry points (context-menu command, WM_HOTKEY) already grant
+        // this thread foreground rights, so a plain SetForegroundWindow is
+        // enough — no AttachThreadInput stealing needed.
         SetForegroundWindow(hDlg);
-        SetActiveWindow(hDlg);
         SetFocus(hDlg);
-        if (attached) AttachThreadInput(fgTid, myTid, FALSE);
 
         int rb = IDC_RB_FIXED;
         switch (s->mode) {
