@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-14T17:39:39.000Z</updated>
+    <updated>2026-05-14T19:08:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Expanded Clipboard (Win+V) 0.7.1]]></title>
+        <id>https://windhawk.net/mods/expanded-clipboard#baa1a76097e8116eb1d7582a91ef90e80058227a</id>
+        <link href="https://windhawk.net/mods/expanded-clipboard"/>
+        <updated>2026-05-14T19:08:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="expandedclipboardwinv">Expanded Clipboard (Win+V)</h1>
+<p>Raises the 25-entry cap on Windows 11 clipboard history (the list shown by
+<strong>Win+V</strong>) and lifts the per-item size cap so large image entries are kept.</p>
+<h2 id="hooktargets">Hook targets</h2>
+<p>Hosted in <code>cbdhsvc.dll</code> (per-user <code>svchost.exe</code>, service group
+<code>UnistackSvcGroup</code>). All hooks are virtual COM methods on <code>ClipboardSettingsImpl</code>
+plus one static helper:</p>
+<ul>
+<li><code>get_ClipboardHistoryMaxItemsCount</code>: entry-count cap (default 25).</li>
+<li><code>get_ClipboardHistoryMaxItemSizeInBytes</code>: per-item byte cap (default 4 MiB).</li>
+<li><code>get_ClipboardHistoryMaxSizeInBytes</code>: total in-memory buffer cap. Empirically
+this is the gate the inner add path checks first.</li>
+<li><code>DataPackageHelper::CanIncludeInClipboardHistory</code>: opt-in override of the
+per-item allow check.</li>
+</ul>
+<h2 id="configuration">Configuration</h2>
+<ul>
+<li><code>maxItems</code> (default 100, range 25..5000): entry cap.</li>
+<li><code>maxItemSizeMB</code> (default 256, range 4..4096): per-item and total buffer byte
+cap, in MB. Both caps share this value.</li>
+<li><code>forceIncludeAll</code> (default off): when on, force the allow check to true so
+items marked "do not include in history" by their source app still land in
+Win+V.</li>
+</ul>
+<h2 id="logs">Logs</h2>
+<p>Open Windhawk Logs. Filter <code>[ExpandedClipboard]</code>.</p>]]></content>
+        <author>
+            <name>takattowo</name>
+            <uri>https://github.com/takattowo</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Monitor Sleep Button 1.0.0]]></title>
         <id>https://windhawk.net/mods/monitor-sleep-button#bba2b04e3327bb83eb2c37a9725e0782be23fb4d</id>
@@ -493,20 +529,6 @@ UI frameworks already handle their own previous-word deletion functionality.</li
         <author>
             <name>ernisn</name>
             <uri>https://github.com/ernisn</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mic Tray Control & Decibel Viewer 1.14]]></title>
-        <id>https://windhawk.net/mods/mic-tray-control#9f108172c376cb9c51352e95152bd9a2055adc37</id>
-        <link href="https://windhawk.net/mods/mic-tray-control"/>
-        <updated>2026-05-08T14:26:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed popup UI positioning for top taskbar and multi-monitor setups.</li>
-<li>Safely constrained the popup window within the bounds of the monitor where the cursor currently resides.</li>
-</ul>]]></content>
-        <author>
-            <name>ciahciach</name>
-            <uri>https://github.com/ciahciach</uri>
         </author>
     </entry>
 </feed>
