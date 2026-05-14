@@ -962,6 +962,18 @@ inline constexpr auto g_custom_redirections_blacklist = std::to_array<std::wstri
     LR"(C:\Windows\SystemApps)"
 });
 
+HANDLE g_downloading_theme_prompt_thread;
+std::atomic<HWND> g_downloading_theme_prompt;
+
+constexpr WCHAR g_downloading_theme_prompt_title[] = L"UWP Assets Redirect - Windhawk";
+constexpr WCHAR g_downloading_theme_prompt_header[] = L"Downloading Icon theme...";
+constexpr WCHAR g_downloading_theme_prompt_body[] = L"UWP Assets Redirect is downloading \"{}\", please wait...";
+
+std::atomic<HWND> g_failed_to_download_theme_prompt;
+
+constexpr WCHAR g_failed_to_download_theme_prompt_title[] = L"UWP Assets Redirect - Windhawk";
+constexpr WCHAR g_failed_to_download_theme_prompt_header[] = L"Failed to download Icon theme";
+
 constexpr auto g_normalize_path_base_path = L"C:\\Windows\\System32\\";
 
 void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirections) {
@@ -1990,6 +2002,116 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                 };
 
+                if (g_downloading_theme_prompt_thread) {
+                    if (WaitForSingleObject(g_downloading_theme_prompt_thread, 0) != WAIT_OBJECT_0) {
+                        return false;
+                    }
+                    CloseHandle(g_downloading_theme_prompt_thread);
+                }
+
+                static decltype(&TaskDialogIndirect) pTaskDialogIndirect = []() {
+                    HMODULE hComctl32 = LoadLibraryEx(L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+                    if (!hComctl32) {
+                        Wh_Log(L"Failed to load comctl32.dll");
+                            return (decltype(&TaskDialogIndirect)) nullptr;
+                        }
+                    return (decltype(&TaskDialogIndirect)) GetProcAddress(hComctl32, "TaskDialogIndirect");
+                }();
+
+                g_downloading_theme_prompt_thread = CreateThread(
+                    nullptr,
+                    0,
+                    [](LPVOID lpParameter) WINAPI -> DWORD {
+
+                        if(!pTaskDialogIndirect) {
+                            return 0;
+                        }
+
+                        const std::wstring icon_theme = *static_cast<std::wstring*>(lpParameter);
+                        const std::wstring message = std::format(g_downloading_theme_prompt_body, icon_theme.c_str());
+
+                        const TASKDIALOG_BUTTON buttons[] = {
+                            {IDCLOSE, L"Hide"}
+                        };
+
+                        TASKDIALOGCONFIG promptDialogConfig {
+                            .cbSize = sizeof(promptDialogConfig),
+                            .dwFlags = TDF_SHOW_MARQUEE_PROGRESS_BAR,
+                            .dwCommonButtons = 0,
+
+                            .pszWindowTitle = g_downloading_theme_prompt_title,
+                            .pszMainIcon = TD_INFORMATION_ICON,
+                            .pszMainInstruction = g_downloading_theme_prompt_header,
+                            .pszContent = message.c_str(),
+
+                            .cButtons = ARRAYSIZE(buttons),
+                            .pButtons = buttons,
+
+                            .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpRefData) WINAPI -> HRESULT {
+                                switch (msg) {
+                                    case TDN_CREATED:
+                                        g_downloading_theme_prompt = hwnd;
+                                        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                                        SendMessage(hwnd, TDM_SET_PROGRESS_BAR_MARQUEE, TRUE, 0);
+                                        break;
+
+                                    case TDN_DESTROYED:
+                                        g_downloading_theme_prompt = nullptr;
+                                        break;
+                                }
+                                return S_OK;
+                            },
+                        };
+
+                        pTaskDialogIndirect(&promptDialogConfig, nullptr, nullptr, nullptr);
+
+                        return 0;
+
+                    },
+                    &icon_theme,
+                    0,
+                    nullptr
+                );
+
+                const auto show_error_message = [](std::wstring message) {
+
+                    if(g_downloading_theme_prompt) {
+                        SendMessage(g_downloading_theme_prompt, TDM_CLICK_BUTTON, TDCBF_CLOSE_BUTTON, 0);
+                    }
+
+                    if(!pTaskDialogIndirect) {
+                        return;
+                    }
+
+                    TASKDIALOGCONFIG promptDialogConfig {
+                        .cbSize = sizeof(promptDialogConfig),
+                        .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
+                        .dwCommonButtons = TDCBF_CLOSE_BUTTON,
+
+                        .pszWindowTitle = g_failed_to_download_theme_prompt_title,
+                        .pszMainIcon = TD_ERROR_ICON,
+                        .pszMainInstruction = g_failed_to_download_theme_prompt_header,
+                        .pszContent = message.c_str(),
+
+                        .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpRefData) WINAPI -> HRESULT {
+                            switch (msg) {
+                                case TDN_CREATED:
+                                    g_failed_to_download_theme_prompt = hwnd;
+                                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                                    break;
+
+                                case TDN_DESTROYED:
+                                    g_failed_to_download_theme_prompt = nullptr;
+                                    break;
+                            }
+                            return S_OK;
+                        },
+                    };
+
+                    pTaskDialogIndirect(&promptDialogConfig, nullptr, nullptr, nullptr);
+
+                };
+
                 const std::wstring theme_url = std::format(
                     L"https://raw.githubusercontent.com/atferrys/uwp-assets-redirect/refs/heads/main/themes/{}.zip",
                     icon_theme
@@ -2004,12 +2126,14 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                 if (!response) {
                     Wh_Log(L"Failed to download Icon theme: Wh_GetUrlContent returned NULL.");
+                    show_error_message(L"An unknown error occurred while downloading the Icon theme.");
                     return false;
                 }
 
                 if (response->statusCode != 200) {
                     Wh_Log(L"Failed to download Icon theme: Request failed with code %d.", response->statusCode);
                     Wh_FreeUrlContent(response);
+                    show_error_message(std::format(L"Icon theme download request failed with code {}.", response->statusCode));
                     return false;
                 }
 
@@ -2019,6 +2143,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                 if(FAILED(result)) {
                     Wh_Log(L"Failed to download Icon theme: CoInitialize returned 0x%08X", result);
+                    show_error_message(std::format(L"COM initialization failed with code 0x{:08X}.", result));
                     return false;
                 }
 
@@ -2030,6 +2155,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                 if (FAILED(result)) {
                     Wh_Log(L"Failed to download Icon theme: UnzipToFolder returned 0x%08X", result);
+                    show_error_message(std::format(L"Unzipping of downloaded theme file failed with code 0x{:08X}.", result));
                     return false;
                 }
 
@@ -2038,6 +2164,10 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                 DeleteFile(temp_zip.c_str());
                 CoUninitialize();
+
+                if(g_downloading_theme_prompt) {
+                    SendMessage(g_downloading_theme_prompt, TDM_CLICK_BUTTON, TDCBF_CLOSE_BUTTON, 0);
+                }
 
                 return std::filesystem::is_directory(icon_theme_path, error_code);
 
