@@ -542,7 +542,8 @@ void RefreshIcons(bool check_should_refresh = false) {
     }
 
     g_refresh_icons_prompt_thread = CreateThread(
-        nullptr, 0,
+        nullptr,
+        0,
         [](LPVOID lpParameter) WINAPI -> DWORD {
 
             static decltype(&TaskDialogIndirect) pTaskDialogIndirect = []() {
@@ -553,9 +554,11 @@ void RefreshIcons(bool check_should_refresh = false) {
                 }
                 return (decltype(&TaskDialogIndirect)) GetProcAddress(hComctl32, "TaskDialogIndirect");
             }();
+
             if(!pTaskDialogIndirect) {
                 return 0;
             }
+
             TASKDIALOGCONFIG promptDialogConfig {
                 .cbSize = sizeof(promptDialogConfig),
                 .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_EXPAND_FOOTER_AREA,
@@ -578,6 +581,7 @@ void RefreshIcons(bool check_should_refresh = false) {
                     return S_OK;
                 },
             };
+
             int button;
             if (SUCCEEDED(pTaskDialogIndirect(&promptDialogConfig, &button, nullptr, nullptr)) && button == IDYES) {
                 WCHAR commandLine[ARRAYSIZE(g_clear_cache_command)];
@@ -587,13 +591,18 @@ void RefreshIcons(bool check_should_refresh = false) {
                 };
                 PROCESS_INFORMATION pi{};
                 if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+                    WaitForSingleObject(pi.hProcess, INFINITE);
                     CloseHandle(pi.hThread);
                     CloseHandle(pi.hProcess);
                 }
             }
+
             return 0;
+
         },
-        nullptr, 0, nullptr
+        nullptr,
+        0,
+        nullptr
     );
 
     // Let other processes some time to init/uninit.
