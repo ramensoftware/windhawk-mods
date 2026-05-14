@@ -5,7 +5,18 @@
 // @version         1.0
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
-// @include         DiskInfo*.exe
+// @include         DiskInfo32.exe
+// @include         DiskInfo64.exe
+// @include         DiskInfoA64.exe
+// @include         DiskInfo32A.exe
+// @include         DiskInfo64A.exe
+// @include         DiskInfoA64A.exe
+// @include         DiskInfo32K.exe
+// @include         DiskInfo64K.exe
+// @include         DiskInfoA64K.exe
+// @include         DiskInfo32S.exe
+// @include         DiskInfo64S.exe
+// @include         DiskInfoA64S.exe
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
