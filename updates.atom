@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-14T19:46:02.000Z</updated>
+    <updated>2026-05-14T20:37:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CrystalDiskInfo Smart Auto-Refresh 1.0]]></title>
+        <id>https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh#b6f9529af93c2bdde4ce2b9e70abff1fce8683a7</id>
+        <link href="https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh"/>
+        <updated>2026-05-14T20:37:57.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="crystaldiskinfosmartautorefresh">CrystalDiskInfo Smart Auto-Refresh</h1>
+<p>CrystalDiskInfo includes an optional Auto-Refresh feature that updates disk
+information at specified intervals, which is useful for background monitoring
+while the application is minimized to the system tray. However, when the
+application's main window is visible, automatic refreshes can interfere with the
+analysis of current disk status, as shifting attribute values make tracking
+specific metrics more difficult.</p>
+<p>This mod temporarily pauses the Auto-Refresh function by blocking its disk
+polling cycle whenever the application's main window is visible, allowing for an
+uninterrupted analysis of current disk status.</p>
+<p>The Auto-Refresh function resumes once the application is minimized to the
+taskbar or system tray.</p>
+<p><strong>Note:</strong> If CrystalDiskInfo is already running when the mod is loaded, pick one
+of the following options to activate it:</p>
+<ul>
+<li>Restart the application completely.</li>
+<li>Select an interval in <strong>Function</strong> → <strong>Auto Refresh</strong>, including the one
+currently set.</li>
+</ul>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Theme Toggler Tray 1.2.1]]></title>
         <id>https://windhawk.net/mods/theme-toggler-tray#acfafad42bba74504b8d8556fc7fe148aa512344</id>
@@ -513,19 +542,6 @@ UI frameworks already handle their own previous-word deletion functionality.</li
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-content-presenter-injector#e33b63fbaf11e119f003ae9e8a165c68a14b305b</id>
-        <link href="https://windhawk.net/mods/taskbar-content-presenter-injector"/>
-        <updated>2026-05-09T08:05:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The mod now injects into <code>SearchUx.SearchUI.SearchButtonRootGrid</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>

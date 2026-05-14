@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-14T19:46:02.000Z</updated>
+    <updated>2026-05-14T20:37:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CrystalDiskInfo Smart Auto-Refresh 1.0]]></title>
+        <id>https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh#b6f9529af93c2bdde4ce2b9e70abff1fce8683a7</id>
+        <link href="https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh"/>
+        <updated>2026-05-14T20:37:57.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="crystaldiskinfosmartautorefresh">CrystalDiskInfo Smart Auto-Refresh</h1>
+<p>CrystalDiskInfo includes an optional Auto-Refresh feature that updates disk
+information at specified intervals, which is useful for background monitoring
+while the application is minimized to the system tray. However, when the
+application's main window is visible, automatic refreshes can interfere with the
+analysis of current disk status, as shifting attribute values make tracking
+specific metrics more difficult.</p>
+<p>This mod temporarily pauses the Auto-Refresh function by blocking its disk
+polling cycle whenever the application's main window is visible, allowing for an
+uninterrupted analysis of current disk status.</p>
+<p>The Auto-Refresh function resumes once the application is minimized to the
+taskbar or system tray.</p>
+<p><strong>Note:</strong> If CrystalDiskInfo is already running when the mod is loaded, pick one
+of the following options to activate it:</p>
+<ul>
+<li>Restart the application completely.</li>
+<li>Select an interval in <strong>Function</strong> → <strong>Auto Refresh</strong>, including the one
+currently set.</li>
+</ul>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Theme Toggler Tray 1.2.1]]></title>
         <id>https://windhawk.net/mods/theme-toggler-tray#acfafad42bba74504b8d8556fc7fe148aa512344</id>
@@ -735,56 +764,6 @@ of preserving its relative position. Works independently of <strong>Keep window 
         <author>
             <name>TomberWolf</name>
             <uri>https://github.com/TomberWolf</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ultimate Custom Tray 1.0]]></title>
-        <id>https://windhawk.net/mods/ultimate-custom-tray#7f92885de8e49e5169175fd8adcdc46854a938e4</id>
-        <link href="https://windhawk.net/mods/ultimate-custom-tray"/>
-        <updated>2026-05-02T14:13:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="ultimatecustomtray">Ultimate Custom Tray</h1>
-<p>Adds your own icons to the system tray. Each icon can run an
-action on left-click and/or show a context menu on right-click.</p>
-<hr />
-<h2 id="quickstart">Quick start</h2>
-<ol>
-<li>Open Windhawk settings for this mod.</li>
-<li>Add one or more <strong>Items</strong> to the list.</li>
-<li>Fill in <strong>Label</strong>, <strong>Icon</strong> and <strong>Action</strong> for each item.</li>
-<li>Save — the icons appear in the tray immediately.</li>
-</ol>
-<hr />
-<h2 id="actionformats">Action formats</h2>
-<p>Actions run on <strong>left-click</strong> (or from a context menu item).</p>
-<p>| Prefix | Example | Description |
-|--------|---------|-------------|
-| <code>" "</code> | <code>"C:\Program Files\app.exe"</code> | Opens a file or folder by absolute path. |
-| <code>~</code> | <code>~Downloads</code> | Opens a folder or file by name. |
-| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
-| <code>shell:</code> | <code>shell:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code>. |
-| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
-| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
-<hr />
-<h2 id="iconfield">Icon field</h2>
-<p>| Type | Example | Description |
-|---|---|---|
-| <strong>Glyph</strong> | <code>E774</code> | Hex code of a <a href="https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font">Segoe Fluent Icons</a> glyph. 4-digit hex only, no <code>\u</code> prefix. |
-| <strong>Image file</strong> | <code>C:\Icons\name.png</code> | Full path to an image. Supported: <code>.png</code> <code>.ico</code> <code>.jpg</code> <code>.bmp</code>. Recommended: 32x32 px, transparent background. |</p>
-<hr />
-<h2 id="iconcolor">Icon color</h2>
-<p>Use the <strong>Icon color</strong> setting to choose <strong>White</strong> (for dark taskbar) or <strong>Black</strong> (for light taskbar).</p>
-<hr />
-<h2 id="contextmenus">Context menus</h2>
-<p>Each tray icon can show a right-click context menu.</p>
-<ul>
-<li>Add items under <strong>Context menu</strong> for the icon.</li>
-<li>Each item has its own <strong>Name</strong>, <strong>Icon</strong> and <strong>Action</strong>.</li>
-<li>If no items are defined, right-clicking does nothing.</li>
-<li>Left-click always runs the main <strong>Action</strong>, regardless of whether a context menu exists.</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

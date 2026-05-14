@@ -2385,6 +2385,45 @@
                 "version": "1.0.1"
             }
         },
+        "crystaldiskinfo-smart-auto-refresh": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1778791077000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1778791077000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Kitsune",
+                "compilerOptions": "-lcomctl32",
+                "description": "Temporarily pauses the Auto-Refresh function whenever the application's main window is visible",
+                "github": "https://github.com/AromaKitsune",
+                "include": [
+                    "DiskInfo32.exe",
+                    "DiskInfo64.exe",
+                    "DiskInfoA64.exe",
+                    "DiskInfo32A.exe",
+                    "DiskInfo64A.exe",
+                    "DiskInfoA64A.exe",
+                    "DiskInfo32K.exe",
+                    "DiskInfo64K.exe",
+                    "DiskInfoA64K.exe",
+                    "DiskInfo32S.exe",
+                    "DiskInfo64S.exe",
+                    "DiskInfoA64S.exe"
+                ],
+                "name": "CrystalDiskInfo Smart Auto-Refresh",
+                "version": "1.0"
+            }
+        },
         "ctrl-backspace-fix-for-win32-text-boxes": {
             "details": {
                 "defaultSorting": 400,
