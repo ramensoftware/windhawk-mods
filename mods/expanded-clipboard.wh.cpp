@@ -2,7 +2,7 @@
 // @id              expanded-clipboard
 // @name            Expanded Clipboard (Win+V)
 // @description     Raises the 25-item cap of Windows clipboard history (Win+V) and lifts the per-item / total buffer size limit so large images stick.
-// @version         0.7.0
+// @version         0.7.1
 // @author          takattowo
 // @github          https://github.com/takattowo
 // @include         svchost.exe
@@ -61,6 +61,8 @@ Open Windhawk Logs. Filter `[ExpandedClipboard]`.
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <windows.h>
+
+#include <atomic>
 
 struct Settings {
     int maxItems = 100;
@@ -123,19 +125,9 @@ static unsigned char WINAPI Hook_CanInclude(void* dataPackageView) {
     return g_origCanInclude(dataPackageView);
 }
 
-BOOL Wh_ModInit() {
-    LoadSettings();
+static std::atomic<bool> g_cbdhsvcDllHooked = false;
 
-    HMODULE hMod = GetModuleHandleW(L"cbdhsvc.dll");
-    if (!hMod) {
-        return FALSE;
-    }
-
-    Wh_Log(L"[ExpandedClipboard] Init. maxItems=%d, maxItemSizeMB=%d, "
-           L"forceIncludeAll=%d",
-           g_settings.maxItems, g_settings.maxItemSizeMB,
-           g_settings.forceIncludeAll ? 1 : 0);
-
+static bool HookCbdhsvcDllSymbols(HMODULE hMod) {
     WindhawkUtils::SYMBOL_HOOK cbdhsvcDllHooks[] = {
         {
             { L"public: virtual long __cdecl ClipboardSettingsImpl::get_ClipboardHistoryMaxItemsCount(unsigned int *)" },
@@ -161,10 +153,86 @@ BOOL Wh_ModInit() {
 
     if (!WindhawkUtils::HookSymbols(hMod, cbdhsvcDllHooks, ARRAYSIZE(cbdhsvcDllHooks))) {
         Wh_Log(L"[ExpandedClipboard] HookSymbols failed");
-        return FALSE;
+        return false;
     }
 
+    return true;
+}
+
+static void HandleLoadedModuleIfCbdhsvc(HMODULE module, LPCWSTR lpLibFileName) {
+    if (g_cbdhsvcDllHooked) {
+        return;
+    }
+
+    if (GetModuleHandleW(L"cbdhsvc.dll") != module) {
+        return;
+    }
+
+    if (g_cbdhsvcDllHooked.exchange(true)) {
+        return;
+    }
+
+    Wh_Log(L"[ExpandedClipboard] cbdhsvc.dll loaded (%s)",
+           lpLibFileName ? lpLibFileName : L"?");
+
+    if (HookCbdhsvcDllSymbols(module)) {
+        Wh_ApplyHookOperations();
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t LoadLibraryExW_Original;
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                          HANDLE hFile,
+                                          DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfCbdhsvc(module, lpLibFileName);
+    }
+    return module;
+}
+
+BOOL Wh_ModInit() {
+    LoadSettings();
+
+    Wh_Log(L"[ExpandedClipboard] Init. maxItems=%d, maxItemSizeMB=%d, "
+           L"forceIncludeAll=%d",
+           g_settings.maxItems, g_settings.maxItemSizeMB,
+           g_settings.forceIncludeAll ? 1 : 0);
+
+    if (HMODULE hMod = GetModuleHandleW(L"cbdhsvc.dll")) {
+        g_cbdhsvcDllHooked = true;
+        if (!HookCbdhsvcDllSymbols(hMod)) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"[ExpandedClipboard] cbdhsvc.dll not loaded yet, waiting");
+    }
+
+    HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
+    auto pKernelBaseLoadLibraryExW =
+        (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                  "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (g_cbdhsvcDllHooked) {
+        return;
+    }
+
+    if (HMODULE hMod = GetModuleHandleW(L"cbdhsvc.dll")) {
+        if (!g_cbdhsvcDllHooked.exchange(true)) {
+            Wh_Log(L"[ExpandedClipboard] cbdhsvc.dll loaded post-init");
+            if (HookCbdhsvcDllSymbols(hMod)) {
+                Wh_ApplyHookOperations();
+            }
+        }
+    }
 }
 
 void Wh_ModSettingsChanged() {
