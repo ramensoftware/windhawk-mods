@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-14T16:57:19.000Z</updated>
+    <updated>2026-05-14T17:39:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Monitor Sleep Button 1.0.0]]></title>
+        <id>https://windhawk.net/mods/monitor-sleep-button#bba2b04e3327bb83eb2c37a9725e0782be23fb4d</id>
+        <link href="https://windhawk.net/mods/monitor-sleep-button"/>
+        <updated>2026-05-14T17:39:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="monitorsleepbutton">Monitor Sleep Button</h1>
+<p>Adds a small tray icon for turning off the monitor.</p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Left-click the tray icon.</li>
+<li>A countdown appears on the screen.</li>
+<li>After the countdown, the monitor turns off.</li>
+<li>Move the mouse or press any key to wake the monitor again.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>The countdown duration can be configured in the mod settings.</p>
+<p>Available values:</p>
+<ul>
+<li>1 second</li>
+<li>2 seconds</li>
+<li>3 seconds</li>
+<li>5 seconds</li>
+<li>10 seconds</li>
+<li>15 seconds</li>
+<li>30 seconds</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<p>This mod does not shut down, suspend, or lock the computer. It only sends the Windows monitor power-off command.</p>
+<p>Useful as a quick replacement for desktop shortcuts or batch files.</p>
+<p>This is useful when long-running downloads, renders, AI model installs, or other background tasks are running and the monitor should be turned off without putting the PC to sleep.</p>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Files 2 Folders 1.2]]></title>
         <id>https://windhawk.net/mods/files-2-folders#f97bd370462cef10e23fea9e699a2debfaf651ec</id>
@@ -727,35 +762,6 @@ action on left-click and/or show a context menu on right-click.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chrome PiP Alt+Tab Window Hider 1.0.0]]></title>
-        <id>https://windhawk.net/mods/chrome-pip-alt-tab-window-hider#0359476256587e4e3ae4d16881057a2b09eb2d79</id>
-        <link href="https://windhawk.net/mods/chrome-pip-alt-tab-window-hider"/>
-        <updated>2026-04-29T21:32:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="chromepipalttabwindowhider">Chrome PiP Alt+Tab Window Hider</h1>
-<p>Removes Chrome Picture-in-Picture windows from the Alt+Tab switcher and Win+Tab,
-while keeping them fully functional (always-on-top, playback controls, etc.).</p>
-<h2 id="howitworks">How it works</h2>
-<p>Chrome PiP windows are identified by three concurrent traits:</p>
-<ul>
-<li>Window class: <code>Chrome_WidgetWin_1</code></li>
-<li>Extended style: <code>WS_EX_TOPMOST</code> set</li>
-<li>No owner window</li>
-<li>Size smaller than 50% of the primary monitor in both dimensions</li>
-</ul>
-<p>When a matching window is found, <code>WS_EX_TOOLWINDOW</code> is added and
-<code>WS_EX_APPWINDOW</code> is removed — the standard Win32 technique for hiding
-a window from Alt+Tab and the taskbar.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 10 and Windows 11</li>
-<li>Targets <code>chrome.exe</code> only</li>
-</ul>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>
