@@ -1,7 +1,7 @@
 // ==WindhawkMod==
-// @id              persistent-clipboard-forever
+// @id              clipboard-forever
 // @name            Clipboard Forever
-// @description     Persist clipboard text/image history and restore it after clipboard clears or Windows restarts
+// @description     Keep copied text and images in clipboard history after restart
 // @version         1.2.0
 // @author          Guy
 // @github          https://github.com/fggedr
@@ -13,30 +13,21 @@
 
 // ==WindhawkModReadme==
 /*
-# Persistent Clipboard Forever
+# Clipboard Forever
 
-Keeps supported clipboard items in Windhawk's mod storage and restores them
-when the clipboard becomes empty, Explorer restarts, or Windows restarts.
+Keeps copied text and images available after Windows restarts.
 
-Supported data:
+The mod saves supported clipboard items and adds them back to the Windows
+clipboard history menu (`Win+V`) when Explorer starts again.
 
-- Plain text: Unicode, ANSI, OEM text, and locale metadata.
-- Rich text helpers: HTML Format and Rich Text Format.
-- Images: DIB, DIBV5, PNG clipboard format, and a fallback conversion from
-  CF_BITMAP to DIB.
+It can save normal text, rich text, HTML, and copied images.
 
 Notes:
 
-- Windows clears its own unpinned clipboard history on restart. This mod keeps
-  its own saved history and replays it into Windows after Explorer starts so
-  `Win+V` can be rebuilt.
-- When Windows reports that the clipboard became empty, the mod deletes its
-  saved history by default so manually cleared/deleted items do not come back.
-- File-copy clipboard data and private app-only clipboard formats are left alone
-  so normal Explorer copy/paste workflows keep working.
-- "Forever" means as long as Windhawk remains installed and the mod storage file
-  is not deleted. The saved clipboard data is not encrypted, so don't use this
-  with passwords or secrets unless you accept that they can remain on disk.
+- If you clear the clipboard, the saved history is deleted by default.
+- Copied files are not saved, only copied text and image data.
+- Saved clipboard data is stored on disk and is not encrypted. Avoid copying
+  passwords or private secrets while using this mod.
 */
 // ==/WindhawkModReadme==
 
