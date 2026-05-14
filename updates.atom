@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-13T16:18:10.000Z</updated>
+    <updated>2026-05-14T16:57:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Files 2 Folders 1.2]]></title>
+        <id>https://windhawk.net/mods/files-2-folders#f97bd370462cef10e23fea9e699a2debfaf651ec</id>
+        <link href="https://windhawk.net/mods/files-2-folders"/>
+        <updated>2026-05-14T16:57:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="files2folders">Files 2 Folders</h1>
+<p>Inspired by <a href="https://www.dcmembers.com/skwire/download/files-2-folder/">Files 2 Folder</a>
+by Jody Holmes (Skwire Empire).</p>
+<p>When one or more items are selected in an Explorer window, adds a
+<strong>Files 2 Folder…</strong> entry to the right-click context menu. Choosing it opens
+a dialog with four options for moving the selection into a new subfolder:</p>
+<ol>
+<li>Move the selection into a subfolder with a fixed name (e.g. <code>folder</code>).</li>
+<li>Move each file into a subfolder named after the file (without extension):
+<code>Good.bat</code> -&gt; <code>.\Good\Good.bat</code>. With a single file selected, this just
+creates one folder around that file.</li>
+<li>Move each file into a subfolder named after its extension
+(e.g. all <code>.txt</code> files into <code>.\txt\</code>). With a single file selected, this
+creates one folder named after that file's extension.</li>
+<li>Move the selection into a subfolder named with the current date/time,
+formatted using the date format from settings.</li>
+</ol>
+<p>Folders inside the selection are skipped for modes 2 and 3 (they only make
+sense for files); they are still moved for modes 1 and 4.</p>
+<h2 id="fastvsslowmode">Fast vs. slow mode</h2>
+<p>By default the mod uses <code>MoveFileExW</code> directly, which is essentially instant
+for same-volume moves. Enable <strong>Slow mode (shell-integrated)</strong> in settings to
+route moves through <code>IFileOperation</code> instead — that gives you the standard
+Windows progress dialog, <strong>Ctrl+Z undo</strong>, UAC elevation prompts for protected
+paths, and conflict-resolution dialogs, at the cost of significantly slower
+operation on large selections.</p>
+<h2 id="workaroundforotherprograms">Workaround for other programs</h2>
+<p>A configurable global hotkey (default <strong>Ctrl+Alt+F</strong>) makes the mod usable
+from any file manager (Total Commander, Directory Opus, Files, XYplorer,
+Q-Dir, etc.):</p>
+<ol>
+<li>Select one or more files in the other program.</li>
+<li>Press <strong>Ctrl+C</strong> (or <strong>Ctrl+X</strong>) to put the file paths on the clipboard.</li>
+<li>Press the hotkey. The dialog appears, the files get moved into the chosen
+subfolder under their parent directory.</li>
+</ol>
+<p>Toggle <strong>Silent</strong> to suppress the help popup when the clipboard is empty.</p>
+<h2 id="dateformat">Date format</h2>
+<p>Uses the same tokens as Win32 <code>GetDateFormat</code> / <code>GetTimeFormat</code>:
+<code>yyyy MM dd HH mm ss</code> etc. Example: <code>yyyy-MM-dd-HH-mm</code>.</p>
+<p>Forbidden characters in folder names (<code>* : ? " &lt; &gt; | / \</code>) are replaced with
+<code>_</code> automatically.</p>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Desktop Indicator 1.3]]></title>
         <id>https://windhawk.net/mods/taskbar-desktop-indicator#cca00be44cb57cc49644279f551f0a499f97f874</id>
@@ -491,17 +543,6 @@ de la configuracion del mod en Windhawk bajo "Include processes".</p>]]></conten
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 1.6]]></title>
-        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#c481a1583aa87773d13dc34257d1632d037dd04a</id>
-        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
-        <updated>2026-05-06T22:03:43.000Z</updated>
-        <content type="html"><![CDATA[<p>Add plain UTF-8 as an option</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
