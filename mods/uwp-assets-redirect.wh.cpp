@@ -2304,7 +2304,7 @@ constexpr WCHAR g_ownership_prompt_body[] =
     L"\n"
     L"To continue, click on \"Allow\" and respond to the UAC prompt.";
 
-constexpr WCHAR g_ask_permission_command[] =
+constexpr WCHAR g_ownership_command[] =
     LR"(powershell -NoProfile -WindowStyle minimized Start-Process -Wait -FilePath cmd -Verb RunAs -ArgumentList ')"
 
     LR"(/c title "UWP Assets Redirect - Windhawk")"
@@ -2423,8 +2423,8 @@ void CheckWindowsAppsOwner() {
 
     int button;
     if (SUCCEEDED(pTaskDialogIndirect(&promptDialogConfig, &button, nullptr, nullptr)) && button == IDYES) {
-        WCHAR commandLine[ARRAYSIZE(g_ask_permission_command)];
-        memcpy(commandLine, g_ask_permission_command, sizeof(g_ask_permission_command));
+        WCHAR commandLine[ARRAYSIZE(g_ownership_command)];
+        memcpy(commandLine, g_ownership_command, sizeof(g_ownership_command));
         STARTUPINFO si = {
             .cb = sizeof(si),
         };
