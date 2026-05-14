@@ -1013,7 +1013,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                 std::wifstream file(appx_manifest.c_str());
 
-                if (!file.is_open()) {
+                if (!file.is_open() || file.fail()) {
                     Wh_Log(L"Failed to open manifest: %s", appx_manifest.c_str());
                     return L"";
                 }
@@ -1056,7 +1056,9 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
             const auto find_bundle_folder = [](const std::wstring& bundles_root, const std::wstring& app_bundle) -> std::wstring {
 
-                for (const auto& entry : std::filesystem::directory_iterator(bundles_root)) {
+                std::error_code error_code;
+
+                for (const auto& entry : std::filesystem::directory_iterator(bundles_root, error_code)) {
 
                     if (!entry.is_directory()) {
                         continue;
@@ -1079,7 +1081,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
                         continue;
                     }
 
-                    if (!std::filesystem::exists(std::filesystem::path(path) / "AppxManifest.xml")) {
+                    if (!std::filesystem::exists(std::filesystem::path(path) / "AppxManifest.xml", error_code)) {
                         continue;
                     }
 
@@ -1402,7 +1404,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
             };
 
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(assets_folder_path)) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(assets_folder_path, error_code)) {
 
                 if (!entry.is_regular_file()) {
                     continue;
@@ -1438,7 +1440,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
                 }
 
                 const auto generated_tile_path = generated_assets_path / path.lexically_relative(assets_folder_path);
-                std::filesystem::create_directories(generated_tile_path.parent_path());
+                std::filesystem::create_directories(generated_tile_path.parent_path(), error_code);
 
                 generate_tile(tile_width, tile_height, generated_tile_path);
 
@@ -1463,10 +1465,11 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
         }
 
         std::filesystem::path normalized_redirect = normalize_path(redirect, theme_folder);
+        std::error_code error_code;
 
         if(!assets_folder_path.empty() &&
-            std::filesystem::exists(normalized_redirect) &&
-            std::filesystem::is_regular_file(normalized_redirect) &&
+            std::filesystem::exists(normalized_redirect, error_code) &&
+            std::filesystem::is_regular_file(normalized_redirect, error_code) &&
             normalized_redirect.extension() == ".ico") {
 
             std::wstring generated_assets_path = get_generated_assets_path(
@@ -1562,14 +1565,16 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
     auto add_theme_redirections = [add_bundle_redirection, add_custom_redirection](std::filesystem::path theme_ini, std::filesystem::path theme_folder) {
 
-        if(!std::filesystem::exists(theme_ini)) {
+        std::error_code error_code;
+
+        if(!std::filesystem::exists(theme_ini, error_code)) {
             Wh_Log(L"Failed to read theme file, path doesn't exist: %s", theme_ini.c_str());
             return;
         }
 
-        const auto read_section = [theme_ini](std::wstring section_key, auto on_pair_read) {
+        const auto read_section = [theme_ini, &error_code](std::wstring section_key, auto on_pair_read) {
 
-            auto theme_ini_size = std::filesystem::file_size(theme_ini);
+            auto theme_ini_size = std::filesystem::file_size(theme_ini, error_code);
             std::wstring buffer(theme_ini_size + 2, L'\0');
 
             DWORD result = GetPrivateProfileSection(
