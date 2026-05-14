@@ -2156,11 +2156,156 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
 }
 
+std::atomic<HWND> g_ownership_prompt;
+
+constexpr WCHAR g_ownership_prompt_title[] = L"UWP Assets Redirect - Windhawk";
+constexpr WCHAR g_ownership_prompt_header[] = L"Access required";
+constexpr WCHAR g_ownership_prompt_body[] =
+    L"To work properly, UWP Assets Redirect requires permission to access certain system-protected locations.\n"
+    L"\n"
+    L"To continue, click on \"Allow\" and respond to the UAC prompt.";
+
+constexpr WCHAR g_ask_permission_command[] =
+    LR"(powershell -NoProfile -WindowStyle minimized Start-Process -Wait -FilePath cmd -Verb RunAs -ArgumentList ')"
+
+    LR"(/c title "UWP Assets Redirect - Windhawk")"
+    LR"(& echo Updating permissions, please wait...)"
+    LR"(& takeown /F \"C:\Program Files\WindowsApps\" /A)"
+    LR"(& icacls \"C:\Program Files\WindowsApps\" /grant \"%COMPUTERNAME%\%USERNAME%:(R)\"')";
+
+void CheckWindowsAppsOwner() {
+
+    const auto is_owner_administrators = [](std::wstring folder_path) -> BOOL {
+
+        PSECURITY_DESCRIPTOR security_descriptor = nullptr;
+        PSID owner_sid = nullptr;
+
+        DWORD result = GetNamedSecurityInfoW(
+            folder_path.c_str(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            &owner_sid,
+            nullptr,
+            nullptr,
+            nullptr,
+            &security_descriptor
+        );
+
+        if (result != ERROR_SUCCESS) {
+            if(security_descriptor) {
+                LocalFree(security_descriptor);
+            }
+            return false;
+        }
+
+        SID_IDENTIFIER_AUTHORITY nt_authority_sid = SECURITY_NT_AUTHORITY;
+        PSID administrators_sid = nullptr;
+
+        WINBOOL allocation_result = AllocateAndInitializeSid(
+            &nt_authority_sid,
+            2,
+            SECURITY_BUILTIN_DOMAIN_RID,
+            DOMAIN_ALIAS_RID_ADMINS,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &administrators_sid
+        );
+
+        if (!allocation_result) {
+            LocalFree(security_descriptor);
+            return false;
+        }
+
+        BOOL is_owner_adminstators = EqualSid(owner_sid, administrators_sid);
+
+        FreeSid(administrators_sid);
+        LocalFree(security_descriptor);
+
+        return is_owner_adminstators;
+
+    };
+
+    if(is_owner_administrators(L"C:\\Program Files\\WindowsApps")) {
+        return;
+    }
+
+    Wh_Log(L"WindowsApps folder not owned by Administrators group. This will prevent reads, asking permissions...");
+
+    static decltype(&TaskDialogIndirect) pTaskDialogIndirect = []() {
+        HMODULE hComctl32 = LoadLibraryEx(L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!hComctl32) {
+            Wh_Log(L"Failed to load comctl32.dll");
+            return (decltype(&TaskDialogIndirect)) nullptr;
+        }
+        return (decltype(&TaskDialogIndirect)) GetProcAddress(hComctl32, "TaskDialogIndirect");
+    }();
+
+    if(!pTaskDialogIndirect) {
+        return;
+    }
+
+    TASKDIALOG_BUTTON buttons[] = {
+        {IDYES, L"Allow"},
+        {IDCANCEL, L"Cancel"}
+    };
+
+    TASKDIALOGCONFIG promptDialogConfig {
+        .cbSize = sizeof(promptDialogConfig),
+        .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
+        .dwCommonButtons = 0,
+
+        .pszWindowTitle = g_ownership_prompt_title,
+        .pszMainIcon = TD_WARNING_ICON,
+        .pszMainInstruction = g_ownership_prompt_header,
+        .pszContent = g_ownership_prompt_body,
+
+        .cButtons = ARRAYSIZE(buttons),
+        .pButtons = buttons,
+
+        .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpRefData) WINAPI -> HRESULT {
+            switch (msg) {
+                case TDN_CREATED:
+                    g_ownership_prompt = hwnd;
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                    SendMessage(hwnd, TDM_SET_BUTTON_ELEVATION_REQUIRED_STATE, IDYES, TRUE);
+                    break;
+
+                case TDN_DESTROYED:
+                    g_ownership_prompt = nullptr;
+                    break;
+            }
+            return S_OK;
+        },
+    };
+
+    int button;
+    if (SUCCEEDED(pTaskDialogIndirect(&promptDialogConfig, &button, nullptr, nullptr)) && button == IDYES) {
+        WCHAR commandLine[ARRAYSIZE(g_ask_permission_command)];
+        memcpy(commandLine, g_ask_permission_command, sizeof(g_ask_permission_command));
+        STARTUPINFO si = {
+            .cb = sizeof(si),
+        };
+        PROCESS_INFORMATION pi{};
+        if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            WaitForSingleObject(pi.hProcess, INFINITE);
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+    }
+
+}
+
 void LoadSettings() {
 
     std::unordered_map<std::wstring, std::wstring> redirections;
 
     if(DoesCurrentProcessOwnTaskbar()) {
+
+        CheckWindowsAppsOwner();
 
         ClearRedirectionsCache(false);
         LoadRedirections(redirections);
