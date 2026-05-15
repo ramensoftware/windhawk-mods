@@ -1,3 +1,7 @@
+## 1.0.5 ([May 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/22ec4510d1db5a2a0734427f8aff7592aa254bda/mods/virtual-desktop-taskbar-order.wh.cpp))
+
+* Fixed compatibility with recent Windows 11 versions.
+
 ## 1.0.4 ([Sep 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/89b7248389967e412f6de6213e320adbfee9ad89/mods/virtual-desktop-taskbar-order.wh.cpp))
 
 * Added support for Windows 11 version 24H2.

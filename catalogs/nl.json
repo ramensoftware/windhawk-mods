@@ -11521,7 +11521,7 @@
                     44
                 ],
                 "ratingUsers": 51,
-                "updated": 1725909793000,
+                "updated": 1778840805000,
                 "users": 2187
             },
             "metadata": {
@@ -11529,7 +11529,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lcomctl32 -lversion -lwininet",
+                "compilerOptions": "-lcomctl32 -lversion",
                 "description": "The order on the taskbar isn't preserved between virtual desktop switches, this mod fixes it",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -11538,7 +11538,7 @@
                 ],
                 "name": "Virtual Desktop Preserve Taskbar Order",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.4"
+                "version": "1.0.5"
             }
         },
         "visio-hd-thumbnail": {
