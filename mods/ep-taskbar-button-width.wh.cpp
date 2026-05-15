@@ -159,7 +159,7 @@ BOOL Wh_ModInit() {
     HMODULE hMods[1024];
     DWORD cbNeeded;
     if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded)) {
-        size_t count = min(cbNeeded, (DWORD)sizeof(hMods)) / sizeof(HMODULE);
+        size_t count = (cbNeeded < sizeof(hMods) ? cbNeeded : sizeof(hMods)) / sizeof(HMODULE);
         for (size_t i = 0; i < count; i++) {
             if (IsExplorerPatcherModule(hMods[i])) {
                 HookExplorerPatcher(hMods[i], true);
