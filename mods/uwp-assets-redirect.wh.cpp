@@ -2087,10 +2087,12 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                         pTaskDialogIndirect(&promptDialogConfig, nullptr, nullptr, nullptr);
 
+                        delete static_cast<std::wstring*>(lpParameter);
+
                         return 0;
 
                     },
-                    &icon_theme,
+                    new std::wstring(icon_theme),
                     0,
                     nullptr
                 );
