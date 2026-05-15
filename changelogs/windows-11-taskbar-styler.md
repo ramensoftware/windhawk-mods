@@ -1,3 +1,15 @@
+## 1.7 ([May 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cf0c6b1d2269380846d0da868898d35fc8678c06/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Updated the following themes: SunValley, Windows7, WindowGlass (all variants), Oversimplified&Accentuated, Luminosity (all variants), LayerMicaUI, Fluid, TintedGlass, UltraWideFriendly, LiquidGlass (both variants), Borderless.
+  * Among notable fixes: Alt+Tab not responding to mouse hover and click events in multiple themes.
+* Fixed broken taskbar layout in some cases when multiple monitors are used. Mostly affects WindowGlass and UltraWideFriendly.
+* Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.
+* Added a way to match any number of intermediate parent controls, for example: `ParentClass > * > Class#Name`.
+* Added a way to match root controls, for example: `:root > Class#Name`.
+* Added `FallbackColor` property to `WindhawkBlur`.
+* Improved property matching which now works for more properties.
+* `WindhawkBlur` is no longer supported with the `Style=Value` syntax, the `Style:=Value` syntax must be used like with the other styler mods.
+
 ## 1.6.1 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fbe583ec54172125c1dcce0468a3cac3c3ab9ef4/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Updated the LiquidGlass theme and added LiquidGlass (Alternate).
