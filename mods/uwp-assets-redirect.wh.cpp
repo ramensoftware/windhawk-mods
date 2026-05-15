@@ -1338,10 +1338,35 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
                     return;
                 }
 
-                BITMAP bitmap = {};
-                GetObject(icon_info.hbmColor, sizeof(BITMAP), &bitmap);
-
                 HDC hdc = GetDC(nullptr);
+
+                const auto cleanup = [&hdc, &icon_info, &icon]() {
+
+                    if (hdc) {
+                        ReleaseDC(nullptr, hdc);
+                    }
+
+                    if (icon_info.hbmColor) {
+                        DeleteObject(icon_info.hbmColor);
+                    }
+
+                    if (icon_info.hbmMask) {
+                        DeleteObject(icon_info.hbmMask);
+                    }
+
+                    if (icon) {
+                        DestroyIcon(icon);
+                    }
+
+                };
+
+                BITMAP bitmap = {};
+
+                if (!GetObject(icon_info.hbmColor, sizeof(BITMAP), &bitmap)) {
+                    Wh_Log(L"Failed to generate asset from ICO file: Unable to get bitmap info.");
+                    cleanup();
+                    return;
+                }
 
                 BITMAPINFO bitmap_info = {
                     .bmiHeader = {
@@ -1357,7 +1382,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
                 int pixel_count = bitmap.bmWidth * bitmap.bmHeight;
                 std::vector<UINT32> pixels(pixel_count);
 
-                GetDIBits(
+                if (!GetDIBits(
                     hdc,
                     icon_info.hbmColor,
                     0,
@@ -1365,7 +1390,11 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
                     pixels.data(),
                     &bitmap_info,
                     DIB_RGB_COLORS
-                );
+                )) {
+                    Wh_Log(L"Failed to generate asset from ICO file: Unable to read bitmap pixels.");
+                    cleanup();
+                    return;
+                }
 
                 bool has_alpha = false;
 
@@ -1380,7 +1409,7 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                     std::vector<UINT32> mask(pixel_count);
 
-                    GetDIBits(
+                    if (!GetDIBits(
                         hdc,
                         icon_info.hbmMask,
                         0,
@@ -1388,7 +1417,11 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
                         mask.data(),
                         &bitmap_info,
                         DIB_RGB_COLORS
-                    );
+                    )) {
+                        Wh_Log(L"Failed to generate asset from ICO file: Unable to read bitmap alpha mask.");
+                        cleanup();
+                        return;
+                    }
 
                     for (int i = 0; i < pixel_count; i++) {
                         if (mask[i] == 0) {
@@ -1408,20 +1441,9 @@ void LoadRedirections(std::unordered_map<std::wstring, std::wstring>& redirectio
 
                 if (output_bitmap.Save(output_file.c_str(), &png_encoder_clsid, nullptr) != Gdiplus::Ok) {
                     Wh_Log(L"Failed to generate asset from ICO file: Unable to save output bitmap: %s", output_file.c_str());
-                    return;
                 }
 
-                ReleaseDC(nullptr, hdc);
-
-                if (icon_info.hbmColor) {
-                    DeleteObject(icon_info.hbmColor);
-                }
-
-                if (icon_info.hbmMask) {
-                    DeleteObject(icon_info.hbmMask);
-                }
-
-                DestroyIcon(icon);
+                cleanup();
 
             };
 
