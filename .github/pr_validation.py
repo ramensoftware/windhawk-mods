@@ -941,7 +941,7 @@ def validate_specific_keywords(path: Path):
             if re.search(pattern, line):
                 # Skip GWL(P)_WNDPROC when used with GetWindowLong(Ptr)
                 if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
-                    r'GetWindowLong(Ptr)?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
+                    r'GetWindowLong(Ptr)?[AW]?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
                 ):
                     continue
 
