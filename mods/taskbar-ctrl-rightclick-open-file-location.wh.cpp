@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              taskbar-ctrl-rightclick-open-file-location
 // @name            Ctrl+Right-click taskbar to Open file location
-// @description     Holding Ctrl while right-clicking a taskbar button opens the running program's file location in Explorer (instead of showing the jump list). Works with the classic / StartAllBack / ExplorerPatcher taskbar (MSTaskListWClass).
-// @version         1.2.0
+// @description     Holding Ctrl while right-clicking a taskbar button opens the running program's file location in Explorer (instead of showing the jump list). Works with the classic / StartAllBack / ExplorerPatcher taskbar and the native Windows 11 taskbar.
+// @version         1.3.0
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lpsapi -lshell32 -loleacc -luser32 -lole32 -loleaut32 -lversion -lcomctl32
+// @compilerOptions -DWINVER=0x0A00 -lpsapi -lshell32 -loleacc -luser32 -lole32 -loleaut32 -lversion -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,16 +19,23 @@ its executable in File Explorer (the file is selected — same result as the
 jump list's "Open file location" option). Without Ctrl, right-click behaves
 normally and the jump list / context menu appears.
 
-This version targets the **classic taskbar** (`MSTaskListWClass`) used by:
+This version supports both taskbar implementations:
 
-- Stock Windows 10
-- Windows 11 with **StartAllBack**
-- Windows 11 with **ExplorerPatcher** (legacy taskbar mode)
+- **Classic taskbar** (`MSTaskListWClass`) — stock Windows 10, Windows 11
+  with **StartAllBack**, Windows 11 with **ExplorerPatcher** (legacy mode).
+- **Native Windows 11 taskbar** (XAML) — stock Windows 11.
 
-It subclasses `MSTaskListWClass` directly (so the right-click never
-reaches the taskbar's own context-menu handler) and uses Microsoft Active
-Accessibility (MSAA) to identify the button under the cursor — no
-dependency on private taskbar.dll symbols, resilient to Windows updates.
+For the classic taskbar it subclasses `MSTaskListWClass` directly so the
+right-click never reaches the taskbar's own context-menu handler. For the
+native Win11 taskbar it hooks the wndproc of the XAML
+`Windows.UI.Input.InputSite.WindowClass` window hosted under
+`Shell_TrayWnd` and swallows the configured pointer event before XAML
+opens the jump list. The `taskbarType` setting lets you force one path or
+let the mod auto-attach to whichever taskbar(s) exist.
+
+Microsoft Active Accessibility (MSAA) identifies the button under the
+cursor on both paths — no dependency on private `taskbar.dll` symbols,
+resilient to Windows updates.
 
 The mod runs entirely inside `explorer.exe`, so the hook is removed
 automatically when Windhawk unloads it.
@@ -37,6 +44,13 @@ automatically when Windhawk unloads it.
 
 // ==WindhawkModSettings==
 /*
+- taskbarType: auto
+  $name: Taskbar type
+  $description: Which taskbar implementation to hook.
+  $options:
+  - auto: Auto-detect (classic + Win11 native)
+  - classic: Classic only (MSTaskListWClass — stock Win10, StartAllBack, ExplorerPatcher)
+  - win11: Win11 native only
 - modifier: ctrl
   $name: Modifier key
   $description: Which key must be held while clicking the taskbar button.
@@ -70,9 +84,11 @@ automatically when Windhawk unloads it.
 
 #include <windhawk_utils.h>
 
+#include <initguid.h>  // emit referenced GUIDs (CLSID_CUIAutomation, IID_IUIAutomation) into this TU
 #include <psapi.h>
 #include <shlobj.h>
 #include <oleacc.h>
+#include <UIAutomation.h>
 #include <windowsx.h>
 
 #include <string>
@@ -86,8 +102,10 @@ automatically when Windhawk unloads it.
 enum class Modifier { None, Ctrl, Shift, Alt, Win };
 enum class MouseBtn { Right, Middle };
 enum class Action { OpenLocation, CopyPath, RunAsAdmin };
+enum class TaskbarType { Auto, Classic, Win11 };
 
 struct Settings {
+    TaskbarType taskbarType = TaskbarType::Auto;
     Modifier modifier = Modifier::Ctrl;
     MouseBtn mouseButton = MouseBtn::Right;
     Action action = Action::OpenLocation;
@@ -117,6 +135,14 @@ static bool IsModifierHeld(Modifier m) {
 }
 
 static void LoadSettings() {
+    PCWSTR tbType = Wh_GetStringSetting(L"taskbarType");
+    g_settings.taskbarType = TaskbarType::Auto;
+    if (tbType) {
+        if (!wcscmp(tbType, L"classic")) g_settings.taskbarType = TaskbarType::Classic;
+        else if (!wcscmp(tbType, L"win11")) g_settings.taskbarType = TaskbarType::Win11;
+        Wh_FreeStringSetting(tbType);
+    }
+
     PCWSTR mod = Wh_GetStringSetting(L"modifier");
     g_settings.modifier = Modifier::Ctrl;
     if (mod) {
@@ -444,6 +470,137 @@ static HWND FindHwndInAccChildren(IAccessible* pAcc, int depth) {
     return found;
 }
 
+// UI Automation works where MSAA doesn't for the native Win11 taskbar:
+// AccessibleObjectFromPoint stops at the DesktopWindowXamlSource host, but
+// IUIAutomation::ElementFromPoint descends into the XAML tree and gives us
+// the actual TaskListButton's Name. We then resolve that name to an HWND
+// via FindWindowByLabel using the existing FileDescription / alnum-match
+// machinery (same path that handles StartAllBack today).
+static IUIAutomation* g_pUIA = nullptr;
+
+static IUIAutomation* GetUIA() {
+    if (g_pUIA) return g_pUIA;
+    HRESULT hr = CoCreateInstance(CLSID_CUIAutomation, nullptr,
+                                  CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(&g_pUIA));
+    if (FAILED(hr) || !g_pUIA) {
+        Wh_Log(L"CoCreateInstance(CLSID_CUIAutomation) failed: 0x%08lX", hr);
+        g_pUIA = nullptr;
+    }
+    return g_pUIA;
+}
+
+// Walk up the UIA tree until we find an element whose ClassName looks like
+// a taskbar button (or until we run out of parents), reading the Name along
+// the way. The "Name" on a TaskListButton is the app's friendly name
+// (e.g. "Adobe Photoshop"), exactly what FindWindowByLabel expects.
+static std::wstring GetTaskbarButtonNameViaUIA(POINT pt) {
+    IUIAutomation* uia = GetUIA();
+    if (!uia) return {};
+
+    IUIAutomationElement* el = nullptr;
+    if (FAILED(uia->ElementFromPoint(pt, &el)) || !el) return {};
+
+    std::wstring result;
+    IUIAutomationElement* cur = el;
+    cur->AddRef();
+
+    for (int depth = 0; depth < 8 && cur; ++depth) {
+        BSTR bClass = nullptr;
+        cur->get_CurrentClassName(&bClass);
+        BSTR bName = nullptr;
+        cur->get_CurrentName(&bName);
+
+        std::wstring cls = bClass ? std::wstring(bClass, SysStringLen(bClass))
+                                  : std::wstring();
+        std::wstring name = bName ? std::wstring(bName, SysStringLen(bName))
+                                  : std::wstring();
+        if (bClass) SysFreeString(bClass);
+        if (bName) SysFreeString(bName);
+
+        Wh_Log(L"UIA depth=%d class='%s' name='%s'", depth, cls.c_str(),
+               name.c_str());
+
+        // TaskListButton (Win11), or anything with both Name and a class that
+        // mentions "Task" — stop and use that name.
+        if (!name.empty() &&
+            (cls == L"Taskbar.TaskListButton" ||
+             cls.find(L"TaskListButton") != std::wstring::npos ||
+             cls.find(L"TaskbarButton") != std::wstring::npos)) {
+            result = name;
+            break;
+        }
+        // Remember first non-empty name as a fallback in case we don't find
+        // an explicit TaskListButton class.
+        if (result.empty() && !name.empty() &&
+            cls != L"DesktopWindowXamlSource" &&
+            cls != L"Windows.UI.Input.InputSite.WindowClass") {
+            result = name;
+        }
+
+        IUIAutomationTreeWalker* walker = nullptr;
+        if (FAILED(uia->get_ControlViewWalker(&walker)) || !walker) break;
+        IUIAutomationElement* parent = nullptr;
+        walker->GetParentElement(cur, &parent);
+        walker->Release();
+        cur->Release();
+        cur = parent;
+    }
+    if (cur) cur->Release();
+    el->Release();
+    return result;
+}
+
+// Native Win11 taskbar: AccessibleObjectFromPoint stops at the XAML host
+// (DesktopWindowXamlSource) instead of descending into the button. Walk
+// the tree with accHitTest until we reach a leaf with a real name, or run
+// out of depth. Each call replaces (pAcc, vChild) with the deeper match.
+static void HitTestDescend(IAccessible*& pAcc, VARIANT& vChild, POINT pt) {
+    for (int depth = 0; depth < 16; ++depth) {
+        VARIANT vHit;
+        VariantInit(&vHit);
+        if (FAILED(pAcc->accHitTest(pt.x, pt.y, &vHit))) {
+            VariantClear(&vHit);
+            return;
+        }
+
+        IAccessible* nextAcc = nullptr;
+        VARIANT nextChild;
+        VariantInit(&nextChild);
+
+        if (vHit.vt == VT_DISPATCH && vHit.pdispVal) {
+            if (SUCCEEDED(vHit.pdispVal->QueryInterface(
+                    IID_IAccessible, (void**)&nextAcc)) && nextAcc) {
+                nextChild.vt = VT_I4;
+                nextChild.lVal = CHILDID_SELF;
+            }
+        } else if (vHit.vt == VT_I4) {
+            // Numeric child id — still inside the same pAcc. Stop if it's the
+            // same one we already have; otherwise capture as our new state.
+            if (vHit.lVal == CHILDID_SELF) {
+                VariantClear(&vHit);
+                return;
+            }
+            if (vChild.vt == VT_I4 && vChild.lVal == vHit.lVal) {
+                VariantClear(&vHit);
+                return;
+            }
+            VariantClear(&vChild);
+            VariantCopy(&vChild, &vHit);
+            VariantClear(&vHit);
+            continue;
+        }
+
+        VariantClear(&vHit);
+        if (!nextAcc) return;
+
+        pAcc->Release();
+        pAcc = nextAcc;
+        VariantClear(&vChild);
+        vChild = nextChild;
+    }
+}
+
 // Query the taskbar button under the cursor for the running window's HWND.
 // First tries accValue on the exact MSAA child at the point (works for
 // single-window buttons). For grouped buttons that have no own HWND, walks
@@ -462,6 +619,10 @@ static bool GetTaskbarButtonInfoAtPoint(POINT pt, HWND& outHwnd,
     if (FAILED(hr) || !pAcc) {
         return false;
     }
+
+    // Descend into XAML for the native Win11 taskbar (host is
+    // DesktopWindowXamlSource, which has no useful name/value of its own).
+    HitTestDescend(pAcc, vChild, pt);
 
     outHwnd = ReadHwndFromAccValue(pAcc, vChild);
     outName = ReadAccName(pAcc, vChild);
@@ -493,6 +654,20 @@ static bool GetTaskbarButtonInfoAtPoint(POINT pt, HWND& outHwnd,
 
     VariantClear(&vChild);
     pAcc->Release();
+
+    // Native Win11 taskbar fallback. If MSAA gave us the XAML host class as
+    // the name (or nothing usable), ask UI Automation — it descends into
+    // XAML and returns the button's actual Name (e.g. "Adobe Photoshop").
+    bool nameIsHostStub =
+        outName == L"DesktopWindowXamlSource" ||
+        outName == L"Windows.UI.Input.InputSite.WindowClass";
+    if (!outHwnd && (outName.empty() || nameIsHostStub)) {
+        std::wstring uiaName = GetTaskbarButtonNameViaUIA(pt);
+        if (!uiaName.empty()) {
+            Wh_Log(L"UIA resolved name='%s'", uiaName.c_str());
+            outName = uiaName;
+        }
+    }
 
     return outHwnd != nullptr || !outName.empty();
 }
@@ -559,6 +734,36 @@ static void CALLBACK HoldTimerProc(HWND hWnd, UINT, UINT_PTR id, DWORD) {
     }
 }
 
+// Shared modifier+hold-timer logic used by both the classic subclass and
+// the Win11 InputSite hook. Returns true if we consumed the event (caller
+// must swallow it to suppress the jump list / default context menu).
+static bool HandleTriggerEvent(HWND timerOwner, POINT screenPt, bool isDown) {
+    if (!IsModifierHeld(g_settings.modifier)) return false;
+
+    if (isDown) {
+        if (g_settings.holdMs > 0) {
+            g_pendingPoint = screenPt;
+            UINT_PTR id = SetTimer(timerOwner, 0xC771,
+                                   (UINT)g_settings.holdMs, HoldTimerProc);
+            g_pendingTimerId.store(id);
+            Wh_Log(L"Armed hold-timer at %ld,%ld", screenPt.x, screenPt.y);
+        } else {
+            Wh_Log(L"Trigger at %ld,%ld", screenPt.x, screenPt.y);
+            if (g_hookThreadId) {
+                PostThreadMessageW(g_hookThreadId, WM_APP_OPEN_FILE_LOCATION,
+                                   MAKELONG(screenPt.x, screenPt.y), 0);
+            }
+        }
+    } else {
+        UINT_PTR id = g_pendingTimerId.exchange(0);
+        if (id) {
+            KillTimer(timerOwner, id);
+            Wh_Log(L"Hold released early; not firing");
+        }
+    }
+    return true;
+}
+
 // Subclass procedure attached to MSTaskListWClass. Running before SAB's own
 // handler lets us suppress the configured button entirely.
 static LRESULT CALLBACK TaskListSubclassProc(HWND hWnd, UINT uMsg,
@@ -570,10 +775,6 @@ static LRESULT CALLBACK TaskListSubclassProc(HWND hWnd, UINT uMsg,
                      (g_settings.mouseButton == MouseBtn::Right);
 
     if (uMsg == downMsg || uMsg == upMsg || isCtxMenu) {
-        if (!IsModifierHeld(g_settings.modifier)) {
-            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        }
-
         POINT pt;
         if (isCtxMenu) {
             pt.x = GET_X_LPARAM(lParam);
@@ -584,30 +785,9 @@ static LRESULT CALLBACK TaskListSubclassProc(HWND hWnd, UINT uMsg,
             pt.y = GET_Y_LPARAM(lParam);
             ClientToScreen(hWnd, &pt);
         }
-
-        if (uMsg == downMsg) {
-            if (g_settings.holdMs > 0) {
-                g_pendingPoint = pt;
-                UINT_PTR id = SetTimer(hWnd, 0xC771,
-                                       (UINT)g_settings.holdMs,
-                                       HoldTimerProc);
-                g_pendingTimerId.store(id);
-                Wh_Log(L"Armed hold-timer at %ld,%ld", pt.x, pt.y);
-            } else {
-                Wh_Log(L"Trigger at %ld,%ld", pt.x, pt.y);
-                if (g_hookThreadId) {
-                    PostThreadMessageW(g_hookThreadId,
-                                       WM_APP_OPEN_FILE_LOCATION,
-                                       MAKELONG(pt.x, pt.y), 0);
-                }
-            }
-        } else if (uMsg == upMsg) {
-            // Click released — cancel any pending hold-timer (short press).
-            UINT_PTR id = g_pendingTimerId.exchange(0);
-            if (id) {
-                KillTimer(hWnd, id);
-                Wh_Log(L"Hold released early; not firing");
-            }
+        bool isDown = (uMsg == downMsg) || isCtxMenu;
+        if (!HandleTriggerEvent(hWnd, pt, isDown)) {
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
         return 0;
     }
@@ -647,6 +827,220 @@ static void AttachTaskbarSubclasses() {
 }
 
 // ---------------------------------------------------------------------------
+// Win11 native taskbar (XAML)
+//
+// The Win11 taskbar dispatches pointer input through a
+// Windows.UI.Input.InputSite.WindowClass child of
+// Windows.UI.Composition.DesktopWindowContentBridge under Shell_TrayWnd.
+// That window cannot be subclassed — inputsite.dll verifies its wndproc
+// pointer hasn't changed and crashes otherwise — so we hook the wndproc
+// via Wh_SetFunctionHookT, the same trick used in taskbar-volume-control.
+// ---------------------------------------------------------------------------
+
+static WNDPROC InputSiteWindowProc_Original = nullptr;
+static WNDPROC g_hookedInputSiteProc = nullptr;  // sentinel for unhook
+
+// Pointer messages carry screen-space coordinates in lParam already.
+static POINT PointerLParamToScreen(LPARAM lParam) {
+    return {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+}
+
+static LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg,
+                                                 WPARAM wParam, LPARAM lParam) {
+    bool wantRight = (g_settings.mouseButton == MouseBtn::Right);
+    bool wantMiddle = (g_settings.mouseButton == MouseBtn::Middle);
+
+    bool isDown = false;
+    bool isUp = false;
+    bool matched = false;
+    POINT pt{};
+
+    switch (uMsg) {
+        case WM_POINTERDOWN:
+        case WM_POINTERUP: {
+            bool down = (uMsg == WM_POINTERDOWN);
+            if (wantRight && IS_POINTER_SECONDBUTTON_WPARAM(wParam)) {
+                matched = true; isDown = down; isUp = !down;
+            } else if (wantMiddle && IS_POINTER_THIRDBUTTON_WPARAM(wParam)) {
+                matched = true; isDown = down; isUp = !down;
+            }
+            if (matched) pt = PointerLParamToScreen(lParam);
+            break;
+        }
+        case WM_RBUTTONDOWN:
+            if (wantRight) {
+                matched = true; isDown = true;
+                pt.x = GET_X_LPARAM(lParam); pt.y = GET_Y_LPARAM(lParam);
+                ClientToScreen(hWnd, &pt);
+            }
+            break;
+        case WM_RBUTTONUP:
+            if (wantRight) {
+                matched = true; isUp = true;
+                pt.x = GET_X_LPARAM(lParam); pt.y = GET_Y_LPARAM(lParam);
+                ClientToScreen(hWnd, &pt);
+            }
+            break;
+        case WM_MBUTTONDOWN:
+            if (wantMiddle) {
+                matched = true; isDown = true;
+                pt.x = GET_X_LPARAM(lParam); pt.y = GET_Y_LPARAM(lParam);
+                ClientToScreen(hWnd, &pt);
+            }
+            break;
+        case WM_MBUTTONUP:
+            if (wantMiddle) {
+                matched = true; isUp = true;
+                pt.x = GET_X_LPARAM(lParam); pt.y = GET_Y_LPARAM(lParam);
+                ClientToScreen(hWnd, &pt);
+            }
+            break;
+        case WM_CONTEXTMENU:
+            if (wantRight) {
+                matched = true; isDown = true;
+                pt.x = GET_X_LPARAM(lParam); pt.y = GET_Y_LPARAM(lParam);
+                if (pt.x == -1 && pt.y == -1) GetCursorPos(&pt);
+            }
+            break;
+    }
+
+    if (matched && HandleTriggerEvent(hWnd, pt, isDown)) {
+        if (isUp || isDown) return 0;  // swallow event so XAML doesn't open the jump list
+    }
+
+    return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
+}
+
+static bool IsTaskbarRoot(HWND hWnd) {
+    WCHAR cls[64];
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
+    return wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+           wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+static void HookInputSiteWindow(HWND hWnd) {
+    if (g_hookedInputSiteProc) return;  // only need one — wndproc is shared
+
+    HWND parent = GetParent(hWnd);
+    WCHAR cls[64];
+    if (!parent || !GetClassNameW(parent, cls, ARRAYSIZE(cls)) ||
+        wcscmp(cls, L"Windows.UI.Composition.DesktopWindowContentBridge") != 0) {
+        return;
+    }
+    HWND grand = GetParent(parent);
+    if (!grand || !IsTaskbarRoot(grand)) return;
+
+    auto wndProc = (WNDPROC)GetWindowLongPtrW(hWnd, GWLP_WNDPROC);
+    if (!wndProc) return;
+    if (!WindhawkUtils::SetFunctionHook(wndProc, InputSiteWindowProc_Hook,
+                                            &InputSiteWindowProc_Original)) {
+        Wh_Log(L"Wh_SetFunctionHookT(InputSite) failed");
+        return;
+    }
+    Wh_ApplyHookOperations();
+    g_hookedInputSiteProc = wndProc;
+    Wh_Log(L"Hooked InputSite wndproc %p", wndProc);
+}
+
+static void TryAttachWin11ForTaskbar(HWND hTaskbarRoot) {
+    HWND bridge = FindWindowExW(
+        hTaskbarRoot, nullptr,
+        L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+    while (bridge) {
+        HWND inputSite = FindWindowExW(
+            bridge, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr);
+        if (inputSite) {
+            HookInputSiteWindow(inputSite);
+            if (g_hookedInputSiteProc) return;
+        }
+        bridge = FindWindowExW(
+            hTaskbarRoot, bridge,
+            L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+    }
+}
+
+static BOOL CALLBACK EnumWin11TrayProc(HWND hWnd, LPARAM /*lParam*/) {
+    if (IsTaskbarRoot(hWnd)) TryAttachWin11ForTaskbar(hWnd);
+    return TRUE;
+}
+
+static void AttachWin11Taskbar() {
+    EnumWindows(EnumWin11TrayProc, 0);
+}
+
+// CreateWindow hooks — catch InputSite windows created after Wh_ModAfterInit
+// (e.g. secondary-monitor attach, taskbar relocation).
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+static CreateWindowExW_t CreateWindowExW_Original = nullptr;
+
+static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
+                                        LPCWSTR lpWindowName, DWORD dwStyle,
+                                        int X, int Y, int nWidth, int nHeight,
+                                        HWND hWndParent, HMENU hMenu,
+                                        HINSTANCE hInstance, LPVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    if (!hWnd) return hWnd;
+
+    bool textual = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    if (!textual) return hWnd;
+
+    if (g_settings.taskbarType != TaskbarType::Classic &&
+        _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0 &&
+        !g_hookedInputSiteProc) {
+        HookInputSiteWindow(hWnd);
+    }
+    return hWnd;
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD,
+                                           int, int, int, int, HWND, HMENU,
+                                           HINSTANCE, LPVOID, DWORD);
+static CreateWindowInBand_t CreateWindowInBand_Original = nullptr;
+
+static HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName, DWORD dwStyle,
+                                           int X, int Y, int nWidth, int nHeight,
+                                           HWND hWndParent, HMENU hMenu,
+                                           HINSTANCE hInstance, LPVOID lpParam,
+                                           DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (!hWnd) return hWnd;
+
+    bool textual = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    if (!textual) return hWnd;
+
+    if (g_settings.taskbarType != TaskbarType::Classic &&
+        _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0 &&
+        !g_hookedInputSiteProc) {
+        HookInputSiteWindow(hWnd);
+    }
+    return hWnd;
+}
+
+static void InstallCreateWindowHooks() {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) return;
+
+    auto pCreateWindowExW = (CreateWindowExW_t)GetProcAddress(user32, "CreateWindowExW");
+    if (pCreateWindowExW) {
+        WindhawkUtils::SetFunctionHook(
+            pCreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
+    }
+    auto pCreateWindowInBand =
+        (CreateWindowInBand_t)GetProcAddress(user32, "CreateWindowInBand");
+    if (pCreateWindowInBand) {
+        WindhawkUtils::SetFunctionHook(
+            pCreateWindowInBand, CreateWindowInBand_Hook,
+            &CreateWindowInBand_Original);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Worker thread: owns the COM-apartment and message pump that runs the
 // "open file location" action posted from the subclass proc.
 // ---------------------------------------------------------------------------
@@ -682,6 +1076,9 @@ BOOL Wh_ModInit() {
         Wh_Log(L"CreateThread failed");
         return FALSE;
     }
+    if (g_settings.taskbarType != TaskbarType::Classic) {
+        InstallCreateWindowHooks();
+    }
     return TRUE;
 }
 
@@ -691,7 +1088,12 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModAfterInit() {
-    AttachTaskbarSubclasses();
+    if (g_settings.taskbarType != TaskbarType::Win11) {
+        AttachTaskbarSubclasses();
+    }
+    if (g_settings.taskbarType != TaskbarType::Classic) {
+        AttachWin11Taskbar();
+    }
 }
 
 void Wh_ModUninit() {
@@ -706,6 +1108,11 @@ void Wh_ModUninit() {
         }
     }
     g_subclassedWindows.clear();
+
+    if (g_pUIA) {
+        g_pUIA->Release();
+        g_pUIA = nullptr;
+    }
 
     if (g_hookThreadId) {
         PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
