@@ -13,21 +13,31 @@
 /*
 # ExplorerPatcher Taskbar Button Width
 
-The standard MinWidth registry hack doesn't work with ExplorerPatcher's
-Windows 10 taskbar. This mod lets you adjust button width as a percentage
-(default 150%).
+This mod lets you change the width of taskbar items when using ExplorerPatcher's Windows 10 taskbar on Windows 11.
 
-Requires ExplorerPatcher with Windows 10 taskbar enabled.
+Before:
+
+![Before](https://i.imgur.com/r82ISo3.png)
+
+After (120%):
+
+![After](https://i.imgur.com/qHaRdVt.png)
+
+The item scales as a percentage from a pre-computed base value not exposed by EP.
+
+(The registry hack at
+`HKCU\Control Panel\Desktop\WindowMetrics\MinWidth` doesn't work with
+ExplorerPatcher.)
+
+**Requirements:** Windows 11 with ExplorerPatcher, using the Windows 10 taskbar.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- buttonWidthPercent: 150
-  $name: Button width (% of default)
-  $description: >-
-    Percentage to scale button width. 100% = no change, 150% = 50% wider.
-    Range: 50-300.
+- buttonWidthPercent: 120
+  $name: Button width (%)
+  $description: "Recommended: 75-150%"
 */
 // ==/WindhawkModSettings==
 
@@ -35,7 +45,7 @@ Requires ExplorerPatcher with Windows 10 taskbar enabled.
 #include <atomic>
 
 struct {
-    int buttonWidthPercent;
+    int percent;
 } g_settings;
 
 std::atomic<bool> g_hooked{false};
@@ -49,10 +59,10 @@ LoadLibraryExW_t LoadLibraryExW_Original;
 int WINAPI ComputeSingleButtonWidth_Hook(void* pThis, int groupType, void* pTaskBtnGroup, int* pWidth) {
     int result = ComputeSingleButtonWidth_Original(pThis, groupType, pTaskBtnGroup, pWidth);
 
-    if (g_settings.buttonWidthPercent != 100) {
-        result = (result * g_settings.buttonWidthPercent) / 100;
+    if (g_settings.percent != 100) {
+        result = (result * g_settings.percent) / 100;
         if (pWidth) {
-            *pWidth = (*pWidth * g_settings.buttonWidthPercent) / 100;
+            *pWidth = (*pWidth * g_settings.percent) / 100;
         }
     }
 
@@ -117,7 +127,7 @@ bool HookExplorerPatcher(HMODULE module, bool calledFromInit) {
         RefreshTaskbar();
     }
 
-    Wh_Log(L"Hooked at %p (scale: %d%%)", ptr, g_settings.buttonWidthPercent);
+    Wh_Log(L"Hooked at %p (%d%%)", ptr, g_settings.percent);
     return true;
 }
 
@@ -131,13 +141,14 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 }
 
 void LoadSettings() {
-    g_settings.buttonWidthPercent = Wh_GetIntSetting(L"buttonWidthPercent");
-    if (g_settings.buttonWidthPercent < 50) g_settings.buttonWidthPercent = 50;
-    if (g_settings.buttonWidthPercent > 300) g_settings.buttonWidthPercent = 300;
+    g_settings.percent = Wh_GetIntSetting(L"buttonWidthPercent");
+    if (g_settings.percent <= 0) g_settings.percent = 120;
+    else if (g_settings.percent < 50) g_settings.percent = 50;
+    else if (g_settings.percent > 300) g_settings.percent = 300;
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== EP Taskbar Button Width v1.3.0 ===");
+    Wh_Log(L"=== EP Taskbar Button Width v1.0.0 ===");
     LoadSettings();
 
     HMODULE hMods[1024];
@@ -169,7 +180,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModUninit() {
-    g_settings.buttonWidthPercent = 100;
+    g_settings.percent = 100;
     RefreshTaskbar();
 }
 
