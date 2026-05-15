@@ -11335,12 +11335,12 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1778574676000,
+                "updated": 1778845464000,
                 "users": 22
             },
             "metadata": {
                 "author": "ferrys",
-                "compilerOptions": "-lcomctl32 -lole32 -loleaut32",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lgdiplus -lgdi32",
                 "description": "Replace UWP app assets (such as icons) without worrying about updates or modifying system files permissions.",
                 "github": "https://github.com/atferrys",
                 "include": [
@@ -11354,7 +11354,7 @@
                 ],
                 "license": "GPL-3.0",
                 "name": "UWP Assets Redirect",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "uwp-clean": {

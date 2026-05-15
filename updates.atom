@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-15T10:26:45.000Z</updated>
+    <updated>2026-05-15T11:44:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[UWP Assets Redirect 1.1]]></title>
+        <id>https://windhawk.net/mods/uwp-assets-redirect#7480b0e749aa7109e23cd6655b869cc94c380c72</id>
+        <link href="https://windhawk.net/mods/uwp-assets-redirect"/>
+        <updated>2026-05-15T11:44:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for .ico redirections:</li>
+<li>You can now provide the path to an .ico file, and assets will be automatically generated,</li>
+<li>You can find more information in the mod's details tab under "Applying redirections".</li>
+<li>Fixed WindowsApps read permissions that caused the mod to hang on loading</li>
+<li>Added dialogs during Icon themes download or when an error occurs</li>
+<li>Added "Luna" theme</li>
+</ul>]]></content>
+        <author>
+            <name>ferrys</name>
+            <uri>https://github.com/atferrys</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.5]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#22ec4510d1db5a2a0734427f8aff7592aa254bda</id>
@@ -509,28 +527,6 @@ UI frameworks already handle their own previous-word deletion functionality.</li
         <author>
             <name>tinodin</name>
             <uri>https://github.com/tinodin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.5]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#bd2fbb3ba729988e29eee1dd1df1cabea135c144</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2026-05-09T15:22:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added themes: LiquidGlass, BetterControl11, LayerMicaUI, Borderless.</li>
-<li>Updated themes: WindowGlass, Fluid.</li>
-<li>Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.</li>
-<li>Added a way to match any number of intermediate parent controls, for example: <code>ParentClass &gt; * &gt; Class#Name</code>.</li>
-<li>Added a way to match root controls, for example: <code>:root &gt; Class#Name</code>.</li>
-<li>Added the following properties to&nbsp;<code>WindhawkBlur</code>:&nbsp;<code>TintLuminosityOpacity</code>,&nbsp;<code>TintSaturation</code>,&nbsp;<code>NoiseOpacity</code>, <code>NoiseDensity</code>, and <code>FallbackColor</code>. The implementation was contributed by&nbsp;<a href="https://github.com/Lockframe">Jhen</a>. For details, refer to&nbsp;<a href="https://github.com/ramensoftware/windows-11-notification-center-styling-guide#windhawkblur-effect-as-color">the styling guide</a>.</li>
-<li>Improved <code>ThemeResource</code> handling for <code>WindhawkBlur</code>.</li>
-<li>Improved property matching which now works for more properties.</li>
-<li>Added XAML syntax support for resource variables.</li>
-<li>Improved resource variable handling and theme resource refresh logic.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
