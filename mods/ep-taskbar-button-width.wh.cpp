@@ -44,9 +44,7 @@ ExplorerPatcher.)
 #include <psapi.h>
 #include <atomic>
 
-struct {
-    int percent;
-} g_settings;
+std::atomic<int> g_settingsPercent{120};
 
 std::atomic<bool> g_hooked{false};
 
@@ -59,10 +57,11 @@ LoadLibraryExW_t LoadLibraryExW_Original;
 int WINAPI ComputeSingleButtonWidth_Hook(void* pThis, int groupType, void* pTaskBtnGroup, int* pWidth) {
     int result = ComputeSingleButtonWidth_Original(pThis, groupType, pTaskBtnGroup, pWidth);
 
-    if (g_settings.percent != 100) {
-        result = (result * g_settings.percent) / 100;
+    int percent = g_settingsPercent.load();
+    if (percent != 100) {
+        result = (result * percent) / 100;
         if (pWidth) {
-            *pWidth = (*pWidth * g_settings.percent) / 100;
+            *pWidth = (*pWidth * percent) / 100;
         }
     }
 
@@ -107,7 +106,8 @@ bool IsExplorerPatcherModule(HMODULE module) {
 }
 
 bool HookExplorerPatcher(HMODULE module, bool calledFromInit) {
-    if (g_hooked.exchange(true)) {
+    bool expected = false;
+    if (!g_hooked.compare_exchange_strong(expected, true)) {
         return true;
     }
 
@@ -120,14 +120,18 @@ bool HookExplorerPatcher(HMODULE module, bool calledFromInit) {
         return false;
     }
 
-    Wh_SetFunctionHook(ptr, (void*)ComputeSingleButtonWidth_Hook, (void**)&ComputeSingleButtonWidth_Original);
+    if (!Wh_SetFunctionHook(ptr, (void*)ComputeSingleButtonWidth_Hook, (void**)&ComputeSingleButtonWidth_Original)) {
+        Wh_Log(L"ERROR: Wh_SetFunctionHook failed");
+        g_hooked = false;
+        return false;
+    }
 
     if (!calledFromInit) {
         Wh_ApplyHookOperations();
         RefreshTaskbar();
     }
 
-    Wh_Log(L"Hooked at %p (%d%%)", ptr, g_settings.percent);
+    Wh_Log(L"Hooked at %p (%d%%)", ptr, g_settingsPercent.load());
     return true;
 }
 
@@ -141,10 +145,11 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 }
 
 void LoadSettings() {
-    g_settings.percent = Wh_GetIntSetting(L"buttonWidthPercent");
-    if (g_settings.percent <= 0) g_settings.percent = 120;
-    else if (g_settings.percent < 50) g_settings.percent = 50;
-    else if (g_settings.percent > 300) g_settings.percent = 300;
+    int percent = Wh_GetIntSetting(L"buttonWidthPercent");
+    if (percent <= 0) percent = 120;
+    else if (percent < 50) percent = 50;
+    else if (percent > 300) percent = 300;
+    g_settingsPercent.store(percent);
 }
 
 BOOL Wh_ModInit() {
@@ -154,7 +159,8 @@ BOOL Wh_ModInit() {
     HMODULE hMods[1024];
     DWORD cbNeeded;
     if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded)) {
-        for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
+        size_t count = min(cbNeeded, (DWORD)sizeof(hMods)) / sizeof(HMODULE);
+        for (size_t i = 0; i < count; i++) {
             if (IsExplorerPatcherModule(hMods[i])) {
                 HookExplorerPatcher(hMods[i], true);
                 break;
@@ -180,7 +186,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModUninit() {
-    g_settings.percent = 100;
+    g_settingsPercent.store(100);
     RefreshTaskbar();
 }
 
