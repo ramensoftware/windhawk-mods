@@ -9,6 +9,16 @@
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# Explorer No Minimum Window Size
+
+Removes the minimum window size restriction in Windows File Explorer.
+By default, Explorer prevents windows from being resized below a certain
+width and height. With this mod you can resize Explorer windows to any size.
+*/
+// ==/WindhawkModReadme==
+
 #include <windhawk_utils.h>
 #include <windows.h>
 
