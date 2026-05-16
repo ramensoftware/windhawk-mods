@@ -26,18 +26,13 @@ width and height. With this mod you can resize Explorer windows to any size.
 
 static bool IsExplorerWindow(HWND hwnd)
 {
-    if (!hwnd)
-        return false;
+    if (!hwnd) return false;
     wchar_t cls[256] = {};
-    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)))
-        return false;
-    return wcscmp(cls, L"CabinetWClass") == 0 ||
-           wcscmp(cls, L"ExploreWClass") == 0;
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return false;
+    return wcscmp(cls, L"CabinetWClass") == 0 || wcscmp(cls, L"ExploreWClass") == 0;
 }
 
-static LRESULT CALLBACK SubclassWndProc(
-    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
-    DWORD_PTR dwRefData)
+static LRESULT CALLBACK SubclassWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
     if (msg == WM_GETMINMAXINFO)
     {
@@ -52,8 +47,7 @@ static LRESULT CALLBACK SubclassWndProc(
 
 static void SubclassWindow(HWND hwnd)
 {
-    if (!IsExplorerWindow(hwnd))
-        return;
+    if (!IsExplorerWindow(hwnd)) return;
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SubclassWndProc, 0))
         Wh_Log(L"Subclassed HWND %p", hwnd);
 }
@@ -67,8 +61,7 @@ static BOOL CALLBACK EnumSubclass(HWND hwnd, LPARAM)
 {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == GetCurrentProcessId())
-        SubclassWindow(hwnd);
+    if (pid == GetCurrentProcessId()) SubclassWindow(hwnd);
     return TRUE;
 }
 
@@ -76,28 +69,17 @@ static BOOL CALLBACK EnumUnsubclass(HWND hwnd, LPARAM)
 {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == GetCurrentProcessId())
-        UnsubclassWindow(hwnd);
+    if (pid == GetCurrentProcessId()) UnsubclassWindow(hwnd);
     return TRUE;
 }
 
-using CreateWindowExW_t = HWND(WINAPI*)(
-    DWORD, LPCWSTR, LPCWSTR, DWORD,
-    int, int, int, int,
-    HWND, HMENU, HINSTANCE, LPVOID);
-
+using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
 CreateWindowExW_t originalCreateWindowExW = nullptr;
 
-HWND WINAPI CreateWindowExWHook(
-    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
+HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
 {
-    HWND hwnd = originalCreateWindowExW(
-        dwExStyle, lpClassName, lpWindowName, dwStyle,
-        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (hwnd)
-        SubclassWindow(hwnd);
+    HWND hwnd = originalCreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (hwnd) SubclassWindow(hwnd);
     return hwnd;
 }
 
@@ -118,5 +100,5 @@ void Wh_ModUninit()
     EnumWindows(EnumUnsubclass, 0);
 }
 
-void Wh_ModSettingsChanged() {}
+void Wh_ModSettingsChanged() {}ttingsChanged() {}
 }
