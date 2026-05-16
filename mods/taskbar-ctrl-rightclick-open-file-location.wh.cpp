@@ -2,12 +2,12 @@
 // @id              taskbar-ctrl-rightclick-open-file-location
 // @name            Ctrl+Right-click taskbar to Open file location
 // @description     Holding Ctrl while right-clicking a taskbar button opens the running program's file location in Explorer (instead of showing the jump list). Works with the classic / StartAllBack / ExplorerPatcher taskbar and the native Windows 11 taskbar.
-// @version         1.3.0
+// @version         1.4.0
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lpsapi -lshell32 -loleacc -luser32 -lole32 -loleaut32 -lversion -lcomctl32
+// @compilerOptions -lpsapi -lshell32 -loleacc -luser32 -lole32 -loleaut32 -lversion -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -94,6 +94,7 @@ automatically when Windhawk unloads it.
 #include <string>
 #include <vector>
 #include <atomic>
+#include <thread>
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -681,6 +682,9 @@ static std::vector<HWND> g_subclassedWindows;
 
 // Posted to the worker thread via PostThreadMessage. wParam = packed POINT.
 constexpr UINT WM_APP_OPEN_FILE_LOCATION = WM_APP + 1;
+// Posted on shutdown so the worker thread releases COM objects it created
+// (IUIAutomation must be Release()'d in the apartment that CoCreated it).
+constexpr UINT WM_APP_RELEASE_UIA = WM_APP + 2;
 
 static void RunOpenFileLocationForPoint(POINT pt) {
     HWND target = nullptr;
@@ -824,6 +828,18 @@ static BOOL CALLBACK EnumTrayWndProc(HWND hWnd, LPARAM lParam) {
 
 static void AttachTaskbarSubclasses() {
     EnumWindows(EnumTrayWndProc, 0);
+}
+
+static void DetachTaskbarSubclasses() {
+    UINT_PTR pendingId = g_pendingTimerId.exchange(0);
+    for (HWND hWnd : g_subclassedWindows) {
+        if (IsWindow(hWnd)) {
+            if (pendingId) KillTimer(hWnd, pendingId);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hWnd, TaskListSubclassProc);
+        }
+    }
+    g_subclassedWindows.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -1059,12 +1075,39 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             RunOpenFileLocationForPoint(pt);
             continue;
         }
+        if (msg.hwnd == nullptr && msg.message == WM_APP_RELEASE_UIA) {
+            if (g_pUIA) {
+                g_pUIA->Release();
+                g_pUIA = nullptr;
+            }
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
+    if (g_pUIA) {
+        g_pUIA->Release();
+        g_pUIA = nullptr;
+    }
     if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
+}
+
+static void ApplyTaskbarAttachments() {
+    if (g_settings.taskbarType != TaskbarType::Win11) {
+        AttachTaskbarSubclasses();
+    } else {
+        DetachTaskbarSubclasses();
+    }
+    if (g_settings.taskbarType != TaskbarType::Classic) {
+        AttachWin11Taskbar();
+    }
+    // Note: the InputSite wndproc hook, once installed, stays installed for
+    // the life of the mod — it's a function-pointer hook on a shared wndproc
+    // and inputsite.dll crashes if the pointer changes mid-run. The hook
+    // checks g_settings.mouseButton at call time, so toggling settings is
+    // safe without unhooking.
 }
 
 BOOL Wh_ModInit() {
@@ -1076,45 +1119,49 @@ BOOL Wh_ModInit() {
         Wh_Log(L"CreateThread failed");
         return FALSE;
     }
-    if (g_settings.taskbarType != TaskbarType::Classic) {
-        InstallCreateWindowHooks();
-    }
+    // Install CreateWindow hooks unconditionally so that if the user switches
+    // taskbarType from Classic to Auto/Win11 at runtime, late-created
+    // InputSite windows still get caught. The hook is cheap when not used.
+    InstallCreateWindowHooks();
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
+    ApplyTaskbarAttachments();
 }
 
 void Wh_ModAfterInit() {
-    if (g_settings.taskbarType != TaskbarType::Win11) {
-        AttachTaskbarSubclasses();
-    }
-    if (g_settings.taskbarType != TaskbarType::Classic) {
-        AttachWin11Taskbar();
+    ApplyTaskbarAttachments();
+
+    // If Shell_TrayWnd doesn't exist yet (mod loaded before explorer's
+    // taskbar is up — e.g. on explorer.exe start), retry until it appears.
+    // Caps at ~30s so we don't spin forever on a non-shell explorer.
+    if (g_subclassedWindows.empty() && !g_hookedInputSiteProc) {
+        std::thread([]{
+            for (int i = 0; i < 60; ++i) {
+                Sleep(500);
+                if (!FindWindowW(L"Shell_TrayWnd", nullptr)) continue;
+                ApplyTaskbarAttachments();
+                if (!g_subclassedWindows.empty() || g_hookedInputSiteProc) {
+                    Wh_Log(L"Late taskbar attach succeeded after %d tries", i + 1);
+                    return;
+                }
+            }
+            Wh_Log(L"Late taskbar attach gave up");
+        }).detach();
     }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    UINT_PTR pendingId = g_pendingTimerId.exchange(0);
-    for (HWND hWnd : g_subclassedWindows) {
-        if (IsWindow(hWnd)) {
-            if (pendingId) KillTimer(hWnd, pendingId);
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                hWnd, TaskListSubclassProc);
-        }
-    }
-    g_subclassedWindows.clear();
-
-    if (g_pUIA) {
-        g_pUIA->Release();
-        g_pUIA = nullptr;
-    }
+    DetachTaskbarSubclasses();
 
     if (g_hookThreadId) {
+        // Release IUIAutomation on the apartment that created it, then quit.
+        PostThreadMessageW(g_hookThreadId, WM_APP_RELEASE_UIA, 0, 0);
         PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
     }
     if (g_workerThread) {
