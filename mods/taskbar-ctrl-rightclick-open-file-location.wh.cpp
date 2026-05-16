@@ -2,7 +2,7 @@
 // @id              taskbar-ctrl-rightclick-open-file-location
 // @name            Ctrl+Right-click taskbar to Open file location
 // @description     Holding Ctrl while right-clicking a taskbar button opens the running program's file location in Explorer (instead of showing the jump list). Works with the classic / StartAllBack / ExplorerPatcher taskbar and the native Windows 11 taskbar.
-// @version         1.4.0
+// @version         1.5.0
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -492,17 +492,22 @@ static IUIAutomation* GetUIA() {
 }
 
 // Walk up the UIA tree until we find an element whose ClassName looks like
-// a taskbar button (or until we run out of parents), reading the Name along
-// the way. The "Name" on a TaskListButton is the app's friendly name
-// (e.g. "Adobe Photoshop"), exactly what FindWindowByLabel expects.
-static std::wstring GetTaskbarButtonNameViaUIA(POINT pt) {
+// a taskbar button (or until we run out of parents), reading both the Name
+// and NativeWindowHandle along the way. On the Win11 taskbar the
+// TaskListButton's NativeWindowHandle is the running window's HWND — using
+// it directly avoids the brittle title-mapping fallback. The Name is kept
+// as a backup for groups (where the button has no HWND of its own).
+static void GetTaskbarButtonViaUIA(POINT pt, HWND& outHwnd,
+                                   std::wstring& outName) {
+    outHwnd = nullptr;
+    outName.clear();
+
     IUIAutomation* uia = GetUIA();
-    if (!uia) return {};
+    if (!uia) return;
 
     IUIAutomationElement* el = nullptr;
-    if (FAILED(uia->ElementFromPoint(pt, &el)) || !el) return {};
+    if (FAILED(uia->ElementFromPoint(pt, &el)) || !el) return;
 
-    std::wstring result;
     IUIAutomationElement* cur = el;
     cur->AddRef();
 
@@ -511,6 +516,8 @@ static std::wstring GetTaskbarButtonNameViaUIA(POINT pt) {
         cur->get_CurrentClassName(&bClass);
         BSTR bName = nullptr;
         cur->get_CurrentName(&bName);
+        UIA_HWND uHwnd = nullptr;
+        cur->get_CurrentNativeWindowHandle(&uHwnd);
 
         std::wstring cls = bClass ? std::wstring(bClass, SysStringLen(bClass))
                                   : std::wstring();
@@ -519,24 +526,34 @@ static std::wstring GetTaskbarButtonNameViaUIA(POINT pt) {
         if (bClass) SysFreeString(bClass);
         if (bName) SysFreeString(bName);
 
-        Wh_Log(L"UIA depth=%d class='%s' name='%s'", depth, cls.c_str(),
-               name.c_str());
+        Wh_Log(L"UIA depth=%d class='%s' name='%s' hwnd=%p", depth, cls.c_str(),
+               name.c_str(), uHwnd);
 
-        // TaskListButton (Win11), or anything with both Name and a class that
-        // mentions "Task" — stop and use that name.
-        if (!name.empty() &&
-            (cls == L"Taskbar.TaskListButton" ||
-             cls.find(L"TaskListButton") != std::wstring::npos ||
-             cls.find(L"TaskbarButton") != std::wstring::npos)) {
-            result = name;
+        bool isTaskButton =
+            cls == L"Taskbar.TaskListButton" ||
+            cls.find(L"TaskListButton") != std::wstring::npos ||
+            cls.find(L"TaskbarButton") != std::wstring::npos;
+
+        if (isTaskButton) {
+            if (!name.empty()) outName = name;
+            HWND candidate = reinterpret_cast<HWND>(uHwnd);
+            // The taskbar button itself lives in explorer; skip that and any
+            // explorer-owned phantom so we only accept the represented app's
+            // HWND. The window must also belong to a different process.
+            if (candidate && IsWindow(candidate)) {
+                DWORD pid = 0;
+                GetWindowThreadProcessId(candidate, &pid);
+                if (pid && pid != GetCurrentProcessId()) {
+                    outHwnd = candidate;
+                }
+            }
             break;
         }
-        // Remember first non-empty name as a fallback in case we don't find
-        // an explicit TaskListButton class.
-        if (result.empty() && !name.empty() &&
+
+        if (outName.empty() && !name.empty() &&
             cls != L"DesktopWindowXamlSource" &&
             cls != L"Windows.UI.Input.InputSite.WindowClass") {
-            result = name;
+            outName = name;
         }
 
         IUIAutomationTreeWalker* walker = nullptr;
@@ -549,7 +566,6 @@ static std::wstring GetTaskbarButtonNameViaUIA(POINT pt) {
     }
     if (cur) cur->Release();
     el->Release();
-    return result;
 }
 
 // Native Win11 taskbar: AccessibleObjectFromPoint stops at the XAML host
@@ -656,18 +672,22 @@ static bool GetTaskbarButtonInfoAtPoint(POINT pt, HWND& outHwnd,
     VariantClear(&vChild);
     pAcc->Release();
 
-    // Native Win11 taskbar fallback. If MSAA gave us the XAML host class as
-    // the name (or nothing usable), ask UI Automation — it descends into
-    // XAML and returns the button's actual Name (e.g. "Adobe Photoshop").
+    // Native Win11 taskbar fallback. MSAA stops at the XAML host on Win11,
+    // so when we have no HWND (or only a host-stub name), ask UI Automation
+    // — it descends into XAML and exposes both the TaskListButton's Name
+    // and its NativeWindowHandle (the represented window's HWND, directly).
     bool nameIsHostStub =
         outName == L"DesktopWindowXamlSource" ||
         outName == L"Windows.UI.Input.InputSite.WindowClass";
     if (!outHwnd && (outName.empty() || nameIsHostStub)) {
-        std::wstring uiaName = GetTaskbarButtonNameViaUIA(pt);
-        if (!uiaName.empty()) {
-            Wh_Log(L"UIA resolved name='%s'", uiaName.c_str());
-            outName = uiaName;
+        HWND uiaHwnd = nullptr;
+        std::wstring uiaName;
+        GetTaskbarButtonViaUIA(pt, uiaHwnd, uiaName);
+        if (uiaHwnd) {
+            Wh_Log(L"UIA resolved hwnd=%p name='%s'", uiaHwnd, uiaName.c_str());
+            outHwnd = uiaHwnd;
         }
+        if (!uiaName.empty()) outName = uiaName;
     }
 
     return outHwnd != nullptr || !outName.empty();
@@ -816,7 +836,14 @@ static BOOL CALLBACK EnumChildSubclassProc(HWND hWnd, LPARAM /*lParam*/) {
     return TRUE;
 }
 
+static bool IsCurrentProcessWindow(HWND hWnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    return pid == GetCurrentProcessId();
+}
+
 static BOOL CALLBACK EnumTrayWndProc(HWND hWnd, LPARAM lParam) {
+    if (!IsCurrentProcessWindow(hWnd)) return TRUE;
     WCHAR cls[64];
     if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) > 0 &&
         (wcscmp(cls, L"Shell_TrayWnd") == 0 ||
@@ -976,7 +1003,9 @@ static void TryAttachWin11ForTaskbar(HWND hTaskbarRoot) {
 }
 
 static BOOL CALLBACK EnumWin11TrayProc(HWND hWnd, LPARAM /*lParam*/) {
-    if (IsTaskbarRoot(hWnd)) TryAttachWin11ForTaskbar(hWnd);
+    if (IsCurrentProcessWindow(hWnd) && IsTaskbarRoot(hWnd)) {
+        TryAttachWin11ForTaskbar(hWnd);
+    }
     return TRUE;
 }
 
