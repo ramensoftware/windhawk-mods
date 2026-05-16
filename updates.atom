@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-15T16:09:18.000Z</updated>
+    <updated>2026-05-16T12:37:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 3.7]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#78ca8b502a30cf518a14cfe95a228e1580a18c09</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-05-16T12:37:52.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Fixed</strong></p>
+<ul>
+<li>Fixed startup initialization so the mod no longer relies on changing settings to refresh its runtime state.</li>
+<li>Isolated internal self-tests from the live runtime initialization path.</li>
+<li>Reset runtime state after self-tests before loading real user settings and activating the mod.</li>
+<li>Added a safe one-shot startup bootstrap that pings the Word UI thread when Word’s window already exists during mod initialization.</li>
+</ul>
+<p><strong>Improved</strong></p>
+<ul>
+<li>Made first-run owner-thread adoption more tolerant when Word is already open or still finishing UI startup.</li>
+<li>Reduced the difference between normal startup and settings reload behavior.</li>
+<li>Added internal self-test coverage for startup owner-thread adoption policy.</li>
+</ul>
+<p><strong>Notes</strong></p>
+<ul>
+<li>v3.7 does not add new user-facing settings or features.</li>
+<li>This release focuses on startup reliability and preserving the existing autosave behavior from v3.6.</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.7]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#cf0c6b1d2269380846d0da868898d35fc8678c06</id>
@@ -522,19 +550,6 @@ UI frameworks already handle their own previous-word deletion functionality.</li
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Select filename extension on double F2 4]]></title>
-        <id>https://windhawk.net/mods/explorer-double-f2-rename-extension#2f35c17225494d7db86c2c400a08007a9279e8fe</id>
-        <link href="https://windhawk.net/mods/explorer-double-f2-rename-extension"/>
-        <updated>2026-05-09T18:42:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>fix init method signature</li>
-</ul>]]></content>
-        <author>
-            <name>Marnes &lt;leaumar@sent.com&gt;</name>
-            <uri>https://github.com/leaumar</uri>
         </author>
     </entry>
 </feed>

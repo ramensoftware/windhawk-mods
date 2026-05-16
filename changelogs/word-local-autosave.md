@@ -1,3 +1,20 @@
+## 3.7 ([May 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/78ca8b502a30cf518a14cfe95a228e1580a18c09/mods/word-local-autosave.wh.cpp))
+
+**Fixed**
+- Fixed startup initialization so the mod no longer relies on changing settings to refresh its runtime state.
+- Isolated internal self-tests from the live runtime initialization path.
+- Reset runtime state after self-tests before loading real user settings and activating the mod.
+- Added a safe one-shot startup bootstrap that pings the Word UI thread when Word’s window already exists during mod initialization.
+
+**Improved**
+- Made first-run owner-thread adoption more tolerant when Word is already open or still finishing UI startup.
+- Reduced the difference between normal startup and settings reload behavior.
+- Added internal self-test coverage for startup owner-thread adoption policy.
+
+**Notes**
+- v3.7 does not add new user-facing settings or features.
+- This release focuses on startup reliability and preserving the existing autosave behavior from v3.6.
+
 ## 3.6 ([May 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/76df7f387ab9a2bcacef7bee9b1f37a85eb7efc2/mods/word-local-autosave.wh.cpp))
 
 ### Improved
