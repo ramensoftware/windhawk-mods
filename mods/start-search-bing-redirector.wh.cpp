@@ -56,10 +56,6 @@ Open Windhawk's log viewer and filter for `[BingRedirector]`.
 - customTemplate: https://www.google.com/search?q={q}
   $name: Custom URL template
   $description: "Used only when engine is set to Custom. Use {q} as the query placeholder."
-
-- verboseLogging: false
-  $name: Verbose logging
-  $description: Log every rewrite. Turn on only when debugging.
 */
 // ==/WindhawkModSettings==
 
@@ -69,7 +65,6 @@ Open Windhawk's log viewer and filter for `[BingRedirector]`.
 #include <windows.h>
 #include <winstring.h>
 
-#include <atomic>
 #include <string>
 #include <string_view>
 
@@ -82,11 +77,10 @@ enum class Engine {
 struct Settings {
     Engine engine = Engine::Google;
     std::wstring customTemplate = L"https://www.google.com/search?q={q}";
-    bool verboseLogging = false;
 };
 
 static Settings g_settings;
-static std::atomic<bool> g_inHook{false};
+static thread_local bool g_inHook = false;
 
 static Engine ParseEngine(PCWSTR s) {
     if (!s) return Engine::Google;
@@ -124,8 +118,6 @@ static void LoadSettings() {
         ? std::wstring(tmpl)
         : std::wstring(L"https://www.google.com/search?q={q}");
     if (tmpl) Wh_FreeStringSetting(tmpl);
-
-    g_settings.verboseLogging = Wh_GetIntSetting(L"verboseLogging") != 0;
 }
 
 static std::wstring UrlEncode(std::wstring_view in) {
@@ -266,12 +258,8 @@ static std::wstring TryRewriteActivationUrl(std::wstring_view inUrl) {
     std::wstring rewritten = RewriteBingHttpUrl(decInner);
     if (rewritten.empty()) return {};
 
-    if (g_settings.verboseLogging) {
-        Wh_Log(LOG_TAG L"Rewrote: %ls -> %ls",
-               std::wstring(inUrl).c_str(), rewritten.c_str());
-    } else {
-        Wh_Log(LOG_TAG L"Rewrote click to %ls", rewritten.c_str());
-    }
+    Wh_Log(LOG_TAG L"Rewrote: %ls -> %ls",
+           std::wstring(inUrl).c_str(), rewritten.c_str());
     return rewritten;
 }
 
@@ -280,7 +268,7 @@ WindowsCreateString_t WindowsCreateString_Original;
 
 HRESULT WINAPI WindowsCreateString_Hook(PCNZWCH sourceString, UINT32 length,
                                        HSTRING* string) {
-    if (!sourceString || length < 15 || g_inHook.load()) {
+    if (!sourceString || length < 15 || g_inHook) {
         return WindowsCreateString_Original(sourceString, length, string);
     }
     // Fast filter: only consider HSTRINGs that start with microsoft-edge:.
