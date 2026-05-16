@@ -20,85 +20,67 @@ width and height. With this mod you can resize Explorer windows to any size.
 
 */
 // ==/WindhawkModReadme==
-
 #include <windhawk_utils.h>
 #include <windows.h>
 
-static bool IsExplorerWindow(HWND hwnd)
-{
+static bool IsExplorerWindow(HWND hwnd) {
     if (!hwnd) return false;
-    wchar_t cls[256] = {};
-    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return false;
+    wchar_t cls[256];
+    if (!GetClassNameW(hwnd, cls, 256)) return false;
     return wcscmp(cls, L"CabinetWClass") == 0 || wcscmp(cls, L"ExploreWClass") == 0;
 }
 
-static LRESULT CALLBACK SubclassWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
-{
-    if (msg == WM_GETMINMAXINFO)
-    {
-        LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
-        MINMAXINFO* mmi = reinterpret_cast<MINMAXINFO*>(lParam);
-        mmi->ptMinTrackSize.x = 1;
-        mmi->ptMinTrackSize.y = 1;
-        return result;
+static LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
+    if (msg == WM_GETMINMAXINFO) {
+        LRESULT r = DefSubclassProc(hwnd, msg, wp, lp);
+        MINMAXINFO* m = (MINMAXINFO*)lp;
+        m->ptMinTrackSize.x = 1;
+        m->ptMinTrackSize.y = 1;
+        return r;
     }
-    return DefSubclassProc(hwnd, msg, wParam, lParam);
+    return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
-static void SubclassWindow(HWND hwnd)
-{
-    if (!IsExplorerWindow(hwnd)) return;
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SubclassWndProc, 0))
-        Wh_Log(L"Subclassed HWND %p", hwnd);
+static void Sub(HWND hwnd) {
+    if (IsExplorerWindow(hwnd))
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SubclassProc, 0);
 }
 
-static void UnsubclassWindow(HWND hwnd)
-{
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SubclassWndProc);
+static void Unsub(HWND hwnd) {
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SubclassProc);
 }
 
-static BOOL CALLBACK EnumSubclass(HWND hwnd, LPARAM)
-{
-    DWORD pid = 0;
+static BOOL CALLBACK EnumSub(HWND hwnd, LPARAM) {
+    DWORD pid;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == GetCurrentProcessId()) SubclassWindow(hwnd);
+    if (pid == GetCurrentProcessId()) Sub(hwnd);
     return TRUE;
 }
 
-static BOOL CALLBACK EnumUnsubclass(HWND hwnd, LPARAM)
-{
-    DWORD pid = 0;
+static BOOL CALLBACK EnumUnsub(HWND hwnd, LPARAM) {
+    DWORD pid;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == GetCurrentProcessId()) UnsubclassWindow(hwnd);
+    if (pid == GetCurrentProcessId()) Unsub(hwnd);
     return TRUE;
 }
 
-using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
-CreateWindowExW_t originalCreateWindowExW = nullptr;
+typedef HWND(WINAPI* CWE_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+CWE_t oCWE;
 
-HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
-{
-    HWND hwnd = originalCreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (hwnd) SubclassWindow(hwnd);
+HWND WINAPI hCWE(DWORD a, LPCWSTR b, LPCWSTR c, DWORD d, int e, int f, int g, int h, HWND i, HMENU j, HINSTANCE k, LPVOID l) {
+    HWND hwnd = oCWE(a, b, c, d, e, f, g, h, i, j, k, l);
+    if (hwnd) Sub(hwnd);
     return hwnd;
 }
 
-BOOL Wh_ModInit()
-{
-    Wh_Log(L"init");
-    Wh_SetFunctionHook(
-        reinterpret_cast<void*>(CreateWindowExW),
-        reinterpret_cast<void*>(CreateWindowExWHook),
-        reinterpret_cast<void**>(&originalCreateWindowExW));
-    EnumWindows(EnumSubclass, 0);
+BOOL Wh_ModInit() {
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)hCWE, (void**)&oCWE);
+    EnumWindows(EnumSub, 0);
     return TRUE;
 }
 
-void Wh_ModUninit()
-{
-    Wh_Log(L"uninit");
-    EnumWindows(EnumUnsubclass, 0);
+void Wh_ModUninit() {
+    EnumWindows(EnumUnsub, 0);
 }
 
-void Wh_ModSettingsChanged() {}ttingsChanged() {}
-}
+void Wh_ModSettingsChanged() {}
