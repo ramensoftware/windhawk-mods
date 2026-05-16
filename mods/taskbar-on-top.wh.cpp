@@ -1488,8 +1488,11 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         }
 
         if (!adjusted) {
-            if (Y < workAreaRect.top) {
-                Y = workAreaRect.top;
+			MONITORINFO monitorInfo{.cbSize = sizeof(MONITORINFO)};
+			GetMonitorInfo(monitor, &monitorInfo);
+			
+            if (Y < monitorInfo.rcMonitor.top) {
+                Y = monitorInfo.rcMonitor.top;
             } else if (Y > workAreaRect.bottom - cy) {
                 Y = workAreaRect.bottom - cy;
             }
