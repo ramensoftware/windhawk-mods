@@ -3533,6 +3533,36 @@
                 "version": "1.0"
             }
         },
+        "ep-taskbar-button-width": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1778945511000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1778945511000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Rod Boev",
+                "description": "Customize the minimum width of taskbar buttons when using ExplorerPatcher's Windows 10 taskbar",
+                "github": "https://github.com/rodboev",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "ExplorerPatcher Taskbar Button Width",
+                "version": "1.0.0"
+            }
+        },
         "eradicate-immersive-menus": {
             "details": {
                 "defaultSorting": 24000,

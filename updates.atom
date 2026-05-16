@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-16T12:37:52.000Z</updated>
+    <updated>2026-05-16T15:31:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[ExplorerPatcher Taskbar Button Width 1.0.0]]></title>
+        <id>https://windhawk.net/mods/ep-taskbar-button-width#7036416753c22f8b60d43cedd65848fd88c77a15</id>
+        <link href="https://windhawk.net/mods/ep-taskbar-button-width"/>
+        <updated>2026-05-16T15:31:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerpatchertaskbarbuttonwidth">ExplorerPatcher Taskbar Button Width</h1>
+<p>This mod lets you change the width of taskbar items when using ExplorerPatcher's Windows 10 taskbar on Windows 11.</p>
+<p>Before:</p>
+<p><img src="https://i.imgur.com/r82ISo3.png" alt="Before" /></p>
+<p>After (120%):</p>
+<p><img src="https://i.imgur.com/qHaRdVt.png" alt="After" /></p>
+<p>The item scales as a percentage from a pre-computed base value not exposed by EP.</p>
+<p>(The registry hack at
+<code>HKCU\Control Panel\Desktop\WindowMetrics\MinWidth</code> doesn't work with
+ExplorerPatcher.)</p>
+<p><strong>Requirements:</strong> Windows 11 with ExplorerPatcher, using the Windows 10 taskbar.</p>]]></content>
+        <author>
+            <name>Rod Boev</name>
+            <uri>https://github.com/rodboev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 3.7]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#78ca8b502a30cf518a14cfe95a228e1580a18c09</id>
@@ -536,20 +557,6 @@ UI frameworks already handle their own previous-word deletion functionality.</li
         <author>
             <name>antoshika</name>
             <uri>https://github.com/Antoshika</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.5.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#4cc6f1480a29063d27efe99f52af0a7296ae7ee3</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2026-05-10T20:00:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the Start menu not opening after a restart with some themes.</li>
-<li>Updated the following themes, mainly to restore compatibility with the legacy classic Start menu layout: SideBySide, SideBySide2, Windows10 (Minimal), Windows11<em>Metro10, RosePine, Windows11</em>Metro10Minimal.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
