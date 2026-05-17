@@ -26,7 +26,7 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 - **Battery & Clock:** Low battery alerts and an optional minimal clock dashboard for when the island is idle.
 
 ### Usage
-- **Hover** over the island to seamlessly expand it.
+- **Hover** over the island to seamlessly expand it.the
 - **Right-click** the island to access Theme presets, Transparency settings, and to pin the island open.
 */
 // ==/WindhawkModReadme==
@@ -770,9 +770,18 @@ HICON CopyWindowIcon(HWND hwnd, WPARAM iconType) {
     return result ? CopyIcon(reinterpret_cast<HICON>(result)) : nullptr;
 }
 
+extern "C" UINT WINAPI PrivateExtractIconsW(LPCWSTR szFileName, int nIconIndex, int cxIcon, int cyIcon, HICON *phicon, UINT *piconid, UINT nIcons, UINT flags);
+
 HICON getProcessIcon(DWORD pid) {
     std::wstring path;
     if (ProcessImageNameForPid(pid, &path) && !path.empty()) {
+        HICON hIcon = nullptr;
+        UINT iconId = 0;
+        // Try to fetch a high-res 64x64 icon first to avoid pixelated icons
+        if (PrivateExtractIconsW(path.c_str(), 0, 64, 64, &hIcon, &iconId, 1, 0) == 1 && hIcon) {
+            return hIcon;
+        }
+
         SHFILEINFOW sfi = {};
         if (SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi),
                            SHGFI_ICON | SHGFI_LARGEICON)) {
@@ -1768,7 +1777,8 @@ void CaptureShellNotification(HWND hwnd) {
     notification.app = L"Notification";
     notification.title = title;
     notification.expiresAt = NowSeconds() + 4.0;
-    notification.icon = GetWindowIconPixels(hwnd, 32);
+    // Fetch a 64px icon to ensure crisp rendering inside the pill
+    notification.icon = GetWindowIconPixels(hwnd, 64);
 
     if (notification.title.size() > 96) {
         notification.body = notification.title.substr(64);
@@ -1797,8 +1807,8 @@ void CaptureClipboard(HWND hwnd) {
     if (owner && !IsIgnorableForegroundWindow(owner, ownerTitle)) {
         DWORD pid = 0;
         GetWindowThreadProcessId(owner, &pid);
-        // Fetch at 32px — 18px is often too small for icon APIs and returns empty.
-        clip.appIcon = GetWindowIconPixels(owner, 32);
+        // Fetch at 64px for crisp rendering — 18px/32px is often too small for icon APIs and returns empty.
+        clip.appIcon = GetWindowIconPixels(owner, 64);
 
         clip.appName = ownerTitle;
         if (clip.appName.empty()) {
