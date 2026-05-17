@@ -333,39 +333,53 @@ static bool ResolveAPIs() {
     return true;
 }
 
-// Persistent storage flags using Windhawk APIs instead of registry
-#define SWS_FLAG_RESTART L"SWS_RestartedByMod"
-#define SWS_FLAG_LAST_PID L"SWS_LastPID"
+// Registry flag to prevent restart prompt loop on init
+#define SWS_REG_PATH L"Software\\Windhawk\\SimpleWindowSwitcher"
+#define SWS_REG_RESTART_FLAG L"RestartedByMod"
+#define SWS_REG_LAST_PID L"LastPID"
 
-static void SetModFlag(LPCWSTR name) {
-    Wh_SetIntValue(name, 1);
+static void SetRegFlag(LPCWSTR name) {
+    HKEY hKey;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, SWS_REG_PATH, 0, NULL, 0,
+            KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+        DWORD val = 1;
+        RegSetValueExW(hKey, name, 0, REG_DWORD, (BYTE*)&val, sizeof(val));
+        RegCloseKey(hKey);
+    }
 }
 
-static bool CheckAndClearModFlag(LPCWSTR name) {
-    int val = Wh_GetIntValue(name, 0);
-    if (val == 1) {
-        Wh_SetIntValue(name, 0);
+static bool CheckAndClearRegFlag(LPCWSTR name) {
+    DWORD val = 0, sz = sizeof(val);
+    if (RegGetValueW(HKEY_CURRENT_USER, SWS_REG_PATH, name,
+            RRF_RT_REG_DWORD, NULL, &val, &sz) == ERROR_SUCCESS && val == 1) {
+        RegDeleteKeyValueW(HKEY_CURRENT_USER, SWS_REG_PATH, name);
         return true;
     }
     return false;
 }
 
-static void ClearModFlag(LPCWSTR name) {
-    Wh_SetIntValue(name, 0);
+static void ClearRegFlag(LPCWSTR name) {
+    RegDeleteKeyValueW(HKEY_CURRENT_USER, SWS_REG_PATH, name);
 }
 
 static void StoreCurrentPID() {
-    DWORD pid = GetCurrentProcessId();
-    Wh_SetIntValue(SWS_FLAG_LAST_PID, (int)pid);
+    HKEY hKey;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, SWS_REG_PATH, 0, NULL, 0,
+            KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+        DWORD pid = GetCurrentProcessId();
+        RegSetValueExW(hKey, SWS_REG_LAST_PID, 0, REG_DWORD, (BYTE*)&pid, sizeof(pid));
+        RegCloseKey(hKey);
+    }
 }
 
 // Returns true if the stored PID matches the current process (same explorer session)
 static bool CheckStoredPIDMatchesCurrent() {
-    int storedPid = Wh_GetIntValue(SWS_FLAG_LAST_PID, 0);
-    if (storedPid == 0) {
-        return false; // No stored PID = first install or cleared
+    DWORD storedPid = 0, sz = sizeof(storedPid);
+    if (RegGetValueW(HKEY_CURRENT_USER, SWS_REG_PATH, SWS_REG_LAST_PID,
+            RRF_RT_REG_DWORD, NULL, &storedPid, &sz) == ERROR_SUCCESS) {
+        return storedPid == GetCurrentProcessId();
     }
-    return storedPid == (int)GetCurrentProcessId();
+    return false; // No stored PID = first install or cleared
 }
 
 // Explorer restart prompt (adapted from sib-plusplus-tweaker)
@@ -395,8 +409,8 @@ static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
 
     int button;
     if (SUCCEEDED(TaskDialogIndirect(&tdc, &button, nullptr, nullptr)) && button == IDYES) {
-        if (shouldSetFlag) SetModFlag(SWS_FLAG_RESTART);
-        ClearModFlag(SWS_FLAG_LAST_PID);
+        if (shouldSetFlag) SetRegFlag(SWS_REG_RESTART_FLAG);
+        ClearRegFlag(SWS_REG_LAST_PID);
         WCHAR cmd[] = L"cmd.exe /c \"taskkill /F /IM explorer.exe & start explorer\"";
         STARTUPINFO si = {}; si.cb = sizeof(si);
         PROCESS_INFORMATION pi = {};
@@ -1940,7 +1954,7 @@ BOOL Wh_ModInit() {
     // - Stored PID matches current PID → same process (recompile/re-enable) → prompt
     // - No stored PID or different PID → new process (logon) or first install
     if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
-        if (CheckAndClearModFlag(SWS_FLAG_RESTART)) {
+        if (CheckAndClearRegFlag(SWS_REG_RESTART_FLAG)) {
             // We just restarted explorer via the prompt — skip
         } else if (CheckStoredPIDMatchesCurrent()) {
             // Same explorer process — this is a recompile or re-enable → prompt
@@ -1948,8 +1962,9 @@ BOOL Wh_ModInit() {
         } else {
             // Different/no PID — new explorer process (logon) or first install
             // First install: explorer has been running a while, no stored PID
-            int storedPid = Wh_GetIntValue(SWS_FLAG_LAST_PID, 0);
-            bool hadPreviousPID = (storedPid != 0);
+            DWORD storedPid = 0, sz2 = sizeof(storedPid);
+            bool hadPreviousPID = (RegGetValueW(HKEY_CURRENT_USER, SWS_REG_PATH, SWS_REG_LAST_PID,
+                RRF_RT_REG_DWORD, NULL, &storedPid, &sz2) == ERROR_SUCCESS);
             if (!hadPreviousPID) {
                 // No previous PID stored — first time install → prompt
                 PromptForExplorerRestart(true);
