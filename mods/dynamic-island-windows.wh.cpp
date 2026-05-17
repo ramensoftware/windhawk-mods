@@ -4,7 +4,7 @@
 // @description     A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.
 // @version         1.0.0
 // @author          Himanshu
-// @github          devcode90
+// @github          https://github.com/devcode90
 // @include         sihost.exe
 // @architecture    x86-64
 // @compilerOptions -std=c++20 -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi
