@@ -15,30 +15,19 @@
 /*
 # Dynamic Island for Windows
 
-A single-file Windhawk mod that creates a Direct2D-rendered, per-pixel-alpha
-floating pill in a dedicated `windhawk.exe` process (launched from `sihost.exe`).
+A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive top-center UI to your Windows desktop. 
 
-The overlay supports:
+### Features ✨
+- **Hardware Privacy Indicators:** Just like iOS, a pulsing orange dot appears when your microphone is active, and a green dot when your camera is in use!
+- **Media Controls:** Rich integration with Windows media sessions. Shows album art, song info, a live audio waveform, and playback controls.
+- **Clipboard Previews:** Instantly see what you copied—displays a preview of text snippets and even thumbnail previews of copied images.
+- **Customizable Themes:** Switch between sleek OLED Black, Dark Gray, Midnight Blue, and Deep Purple straight from the right-click menu, or customize the exact hex colors in the settings.
+- **Dynamic Animations:** Fully fluid resizing and splitting when multiple events happen at once (e.g., media playing while you copy text).
+- **Battery & Clock:** Low battery alerts and an optional minimal clock dashboard for when the island is idle.
 
-- Idle clock pill.
-- WinRT media session metadata and playback state.
-- WASAPI loopback waveform.
-- Clipboard preview for text and bitmaps.
-- Battery-low state.
-- Progress ring state.
-- Split view when two activities are active.
-- Context menu actions and basic media/app interactions.
-
-Notes:
-
-- The mod runs in a dedicated `windhawk.exe` tool process (not Explorer). A true global download
-  progress module would require injection into apps that call `ITaskbarList3`.
-  This file exposes the progress state through Windhawk local storage key
-  `ProgressPercent` so another helper mod or tool can set it.
-- Album art is decoded with Windows Imaging Component from the WinRT thumbnail
-  stream. If unavailable, the media tile falls back to an accent-colored glyph.
-- The frosted-glass effect combines DWM blur-behind with a Direct2D dark tint
-  because layered windows do not expose the Windows 11 acrylic material pipeline.
+### Usage
+- **Hover** over the island to seamlessly expand it.
+- **Right-click** the island to access Theme presets, Transparency settings, and to pin the island open.
 */
 // ==/WindhawkModReadme==
 
