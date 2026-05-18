@@ -26,7 +26,7 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 - **Battery & Clock:** Low battery alerts and an optional minimal clock dashboard for when the island is idle.
 
 ### Usage
-- **Hover** over the island to seamlessly expand it.the
+- **Hover** over the island to seamlessly expand it.
 - **Right-click** the island to access Theme presets, Transparency settings, and to pin the island open.
 */
 // ==/WindhawkModReadme==
