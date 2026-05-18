@@ -44,6 +44,11 @@ Instantly cycle between multiple audio output devices from your system tray — 
 ### v1.4.0
 - Custom .ico support — selecting "Custom Icon" in settings now auto-opens a file picker; also available via right-click → "Custom Icon for Device X..."
 - Custom icon paths stored internally (no separate text setting in the UI).
+- Patch notes: Fixed an issue where Scroll to Swap didn't work after a reboot until the icon was clicked.
+- Patch notes: Fixed a crash that occurred when using audio devices with very long names.
+- Patch notes: Fixed a bug where adding more devices in settings didn't take effect immediately.
+- Patch notes: Fixed a minor issue where cycling devices would sometimes skip the first slot.
+- Patch notes: Improved reliability of the mute toggle and overall system stability.
 
 ### v1.3.0
 - Up to 6 devices; scroll-to-swap mode; dynamic right-click menu.
@@ -196,6 +201,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
 #define WM_UPDATE_HOOK_STATE (WM_USER + 4)
 #define WM_SHOW_FILE_PICKER  (WM_USER + 5)  // lParam = bitmask of slots needing pickers
 #define WM_RELOAD_ICONS     (WM_USER + 6)  // reload icons on tray thread (eliminates cross-thread handle race)
+#define TRAY_RECT_INIT_TIMER 99   // one-shot retry timer for Shell_NotifyIconGetRect
 
 // Slot N uses menu IDs: N*100 + device_index (0..31). Max slot 6 → ID 631.
 #define MENU_SLOT_BASE     100
@@ -303,13 +309,8 @@ void LoadDeviceSelections() {
     WCHAR tmpIds[MAX_DEVICE_SLOTS][512]   = {};
     WCHAR tmpNames[MAX_DEVICE_SLOTS][256] = {};
 
-    int count;
-    EnterCriticalSection(&g_stateLock);
-    count = g_deviceSlotCount;
-    LeaveCriticalSection(&g_stateLock);
-
     WCHAR keyId[32], keyName[32];
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
         swprintf_s(keyId,   L"Device%dId",   i + 1);
         swprintf_s(keyName, L"Device%dName", i + 1);
         Wh_GetStringValue(keyId,   tmpIds[i],   512);
@@ -419,7 +420,23 @@ static void RefreshTrayIconRect() {
     NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
     nii.hWnd = hwnd;
     nii.uID  = TRAY_ICON_ID;
-    Shell_NotifyIconGetRect(&nii, &g_trayIconRect);
+    RECT newRect = {};
+    if (SUCCEEDED(Shell_NotifyIconGetRect(&nii, &newRect)) &&
+        newRect.right > newRect.left) {
+        g_trayIconRect = newRect;
+        KillTimer(hwnd, TRAY_RECT_INIT_TIMER);   // rect valid — stop retrying
+    } else {
+        // Explorer hasn't assigned screen coordinates to the icon yet.
+        // Shell_NotifyIconGetRect is a query — it won't force Explorer to
+        // finish its layout pass. Send NIM_MODIFY to give Explorer the
+        // necessary nudge to compute the icon's position.
+        NOTIFYICONDATAW nid = {sizeof(nid)};
+        nid.hWnd = hwnd;
+        nid.uID  = TRAY_ICON_ID;
+        nid.uFlags = NIF_SHOWTIP;
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+        SetTimer(hwnd, TRAY_RECT_INIT_TIMER, 200, nullptr);
+    }
 }
 
 // ─── Mute helpers ─────────────────────────────────────────────────────────────
@@ -774,11 +791,11 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
 
     if (configuredCount < 2)
-        swprintf_s(nid.szTip, L"AudioSwap: Right-click to configure");
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"AudioSwap: Right-click to configure");
     else if (localMuted)
-        swprintf_s(nid.szTip, L"Audio: %s (Muted)", currentDev);
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.100s (Muted)", currentDev);
     else
-        swprintf_s(nid.szTip, L"Audio: %s", currentDev);
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.110s", currentDev);
 
     HICON hOverlay = localMuted ? CreateMutedOverlayIcon(currentIcon) : nullptr;
     nid.hIcon = hOverlay ? hOverlay : currentIcon;
@@ -847,7 +864,7 @@ BOOL CycleAudioDevice(int direction) {
         }
     }
 
-    int startSlot = (currentSlot >= 0) ? currentSlot : 0;
+    int startSlot = (currentSlot >= 0) ? currentSlot : (localCount - 1);
     int validSlot = -1;
 
     for (int tries = 1; tries <= localCount; tries++) {
@@ -1068,7 +1085,12 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     if (msg == WM_TRAY_CALLBACK) {
         UINT event = LOWORD(lParam);  // NOTIFYICON_VERSION_4: event in LOWORD(lParam)
 
-        if (event == WM_RBUTTONUP) {
+        if (event == WM_MOUSEMOVE) {
+            POINT pt = { (short)LOWORD(wParam), (short)HIWORD(wParam) };
+            if (!PtInRect(&g_trayIconRect, pt)) {
+                RefreshTrayIconRect();
+            }
+        } else if (event == WM_RBUTTONUP) {
             BuildAndShowContextMenu(hWnd);
 
         } else if (event == WM_LBUTTONUP &&
@@ -1087,8 +1109,11 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         } else if (event == WM_LBUTTONUP &&
                    InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1) {
             // Scroll mode: left-click toggles mute (COM initialized on tray thread)
-            ToggleMuteCurrentDevice();
-            PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            if (InterlockedExchange(&g_isProcessingClick, 1) == 0) {
+                ToggleMuteCurrentDevice();
+                InterlockedExchange(&g_isProcessingClick, 0);
+                PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            }
         }
 
     } else if (msg == WM_TRAY_SCROLL) {
@@ -1100,6 +1125,13 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             int direction = static_cast<int>(static_cast<LONG_PTR>(wParam));
             SpawnCycleThread(direction);
         }
+
+    } else if (msg == WM_TIMER && wParam == TRAY_RECT_INIT_TIMER) {
+        // Fired by RefreshTrayIconRect when Shell_NotifyIconGetRect returned empty.
+        // By now Explorer has had time to complete its paint cycle and assign real
+        // screen coordinates to the icon. RefreshTrayIconRect kills the timer on
+        // success, or re-arms it for another 200ms if Explorer is still not ready.
+        RefreshTrayIconRect();
 
     } else if (msg == WM_UPDATE_TRAY_STATE) {
         UpdateTrayTip(hWnd, FALSE);
@@ -1258,7 +1290,12 @@ BOOL WhTool_ModInit() {
     InitializeCriticalSection(&g_stateLock);
 
     g_hInstance = GetModuleHandleW(nullptr);
-    GetModuleFileNameW(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath));
+    switch (GetModuleFileNameW(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath))) {
+        case 0:
+        case ARRAYSIZE(g_windhawkPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return FALSE;
+    }
 
     // Build the full system32 path for ddores.dll.
     UINT sysLen = GetSystemDirectoryW(g_ddoresDllPath, MAX_PATH);
