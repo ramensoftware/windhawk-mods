@@ -15,6 +15,10 @@
 /*
 # Dynamic Island for Windows
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/demo.gif" alt="Dynamic Island Demo" width="600"/>
+</p>
+
 A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.
 
 ### Features ✨
