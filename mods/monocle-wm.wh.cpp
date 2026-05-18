@@ -4,7 +4,7 @@
 // @description     Only one window visible at a time. Auto-minimizes non-focused windows, force-maximizes the focused one
 // @version         2.0.0
 // @author          Tederby
-// @github          https://github.com/Tederby/
+// @github          https://github.com/Tederby
 // @include         explorer.exe
 // @compilerOptions -ldwmapi
 // ==/WindhawkMod==
