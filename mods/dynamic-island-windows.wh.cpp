@@ -3485,8 +3485,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
                 if (mediaActive) {
                     SendMediaCommandAtPoint(hwnd, lParam);
-                } else {
-                    OpenRelevantApp();
                 }
             }
             return 0;
