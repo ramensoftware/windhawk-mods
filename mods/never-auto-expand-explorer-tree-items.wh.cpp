@@ -12,7 +12,7 @@
 // ==WindhawkModReadme==
 /*
 # Never Auto-Expand Explorer Tree Items
-File Explorer automatically expands navigation pane items such as "This PC"
+File Explorer automatically expands navigation pane items (such as "This PC")
 even if the "Expand to current folder" option is off, specifically when:
 * Opening any folder inside an external drive in a new tab or window.
 * Navigating to any drive after manually expanding and collapsing "This PC".
