@@ -2,7 +2,7 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word via direct Word saves
-// @version         3.6
+// @version         3.7
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
@@ -45,7 +45,7 @@ shortcut activations.
 - Keeps pending changes armed after direct save failures so transient file errors can be retried
 - Only saves when the active Word document window is focused
 
-## Shortcut Safety (v3.6)
+## Shortcut Safety (v3.7)
 
 - No `SendInput`
 - No synthetic `Ctrl` state
@@ -513,6 +513,7 @@ struct RuntimeState {
 };
 
 RuntimeState g_runtime = {};
+UINT g_startupBootstrapMessage = 0;
 
 // ============================================================================
 // Utility Helpers
@@ -714,6 +715,22 @@ bool IsOwnerCandidateMessage(UINT message) {
     }
 
     return false;
+}
+
+bool ShouldAttemptOwnerThreadAdoptionForState(
+    UINT message,
+    bool hasOwnerThread,
+    bool messageWindowInCurrentWordProcess,
+    bool foregroundWindowInCurrentWordProcess) {
+    if (IsOwnerCandidateMessage(message)) {
+        return true;
+    }
+
+    if (hasOwnerThread) {
+        return false;
+    }
+
+    return messageWindowInCurrentWordProcess || foregroundWindowInCurrentWordProcess;
 }
 
 bool IsDocumentStateRefreshMessage(UINT message) {
@@ -2156,8 +2173,31 @@ void CALLBACK SchedulerTimerProc(HWND, UINT, UINT_PTR, DWORD);
 struct ActiveDocumentSnapshot;
 enum class SaveAttemptResult;
 
+bool ShouldTryOwnerThreadAdoptionForMessage(const MSG* lpMsg) {
+    if (!lpMsg) {
+        return false;
+    }
+
+    const bool hasOwnerThread = LoadOwnerThreadId() != 0;
+    const bool messageWindowInCurrentWordProcess =
+        lpMsg->hwnd && IsWindowInCurrentWordProcess(lpMsg->hwnd);
+    bool foregroundWindowInCurrentWordProcess = false;
+    if (!messageWindowInCurrentWordProcess && !hasOwnerThread &&
+        !IsOwnerCandidateMessage(lpMsg->message)) {
+        HWND foregroundWindow = GetForegroundWindow();
+        foregroundWindowInCurrentWordProcess =
+            foregroundWindow && IsWindowInCurrentWordProcess(foregroundWindow);
+    }
+
+    return ShouldAttemptOwnerThreadAdoptionForState(
+        lpMsg->message,
+        hasOwnerThread,
+        messageWindowInCurrentWordProcess,
+        foregroundWindowInCurrentWordProcess);
+}
+
 void AdoptOwnerThreadIfNeeded(const MSG* lpMsg) {
-    if (!lpMsg || !IsOwnerCandidateMessage(lpMsg->message)) {
+    if (!ShouldTryOwnerThreadAdoptionForMessage(lpMsg)) {
         return;
     }
 
@@ -5858,6 +5898,35 @@ void MaybeArmEventDisconnectRetryFromMessage() {
     }
 }
 
+UINT EnsureStartupBootstrapMessage() {
+    if (g_startupBootstrapMessage != 0) {
+        return g_startupBootstrapMessage;
+    }
+
+    g_startupBootstrapMessage =
+        RegisterWindowMessageW(L"Windhawk.WordLocalAutoSave.StartupBootstrap");
+    return g_startupBootstrapMessage;
+}
+
+bool PostStartupBootstrapMessageToWordUi() {
+    UINT bootstrapMessage = EnsureStartupBootstrapMessage();
+    if (bootstrapMessage == 0) {
+        return false;
+    }
+
+    HWND rootWindow = FindCurrentProcessWordRootWindow();
+    if (!rootWindow) {
+        return false;
+    }
+
+    DWORD uiThreadId = GetWindowThreadProcessId(rootWindow, nullptr);
+    if (uiThreadId == 0 || LoadOwnerThreadId() == uiThreadId) {
+        return true;
+    }
+
+    return PostMessageW(rootWindow, bootstrapMessage, 0, 0) != FALSE;
+}
+
 // ============================================================================
 // Hook
 // ============================================================================
@@ -6096,6 +6165,14 @@ bool RunTimingAndFallbackSelfTests() {
         ShouldSuppressCharacterInputAfterKeyDown(false, 100, 150) ||
         ShouldSuppressCharacterInputAfterKeyDown(true, 0, 150)) {
         ReportSelfTestFailure(&success, L"text keydown character suppression");
+    }
+
+    if (!ShouldAttemptOwnerThreadAdoptionForState(WM_KEYDOWN, true, false, false) ||
+        !ShouldAttemptOwnerThreadAdoptionForState(WM_TIMER, false, true, false) ||
+        !ShouldAttemptOwnerThreadAdoptionForState(WM_TIMER, false, false, true) ||
+        ShouldAttemptOwnerThreadAdoptionForState(WM_TIMER, true, true, true) ||
+        ShouldAttemptOwnerThreadAdoptionForState(WM_TIMER, false, false, false)) {
+        ReportSelfTestFailure(&success, L"startup owner-thread adoption policy");
     }
 
     if (!ShouldTrackDocumentStateWhileInactive(true, false, true) ||
@@ -6715,12 +6792,14 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave v3.6 initializing...");
+    Wh_Log(L"Word Local AutoSave v3.7 initializing...");
 
     g_runtime.wordProcessId = GetCurrentProcessId();
     ResetRuntimeState(RuntimeResetMode::Shutdown);
+    const bool internalSelfTestsPassed = RunInternalSelfTests();
+    ResetRuntimeState(RuntimeResetMode::Shutdown);
     LoadSettings();
-    if (!RunInternalSelfTests()) {
+    if (!internalSelfTestsPassed) {
         Wh_Log(L"WARNING: One or more internal self-tests failed");
     }
 
@@ -6749,6 +6828,7 @@ BOOL Wh_ModInit() {
     }
 
     SetFlag(g_runtime.flags.moduleActive);
+    PostStartupBootstrapMessageToWordUi();
 
     Wh_Log(L"Word Local AutoSave initialized");
     return TRUE;
@@ -6767,4 +6847,5 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading...");
     ResetRuntimeState(RuntimeResetMode::Reload);
     LoadSettings();
+    PostStartupBootstrapMessageToWordUi();
 }
