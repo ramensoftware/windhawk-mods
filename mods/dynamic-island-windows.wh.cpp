@@ -2250,13 +2250,6 @@ class Renderer {
     }
 
     void EnsureBrushes(const Settings& settings, const SharedState& state) {
-        accentBrush_.Reset();
-        redBrush_.Reset();
-        textBrush_.Reset();
-        mutedBrush_.Reset();
-        tintBrush_.Reset();
-        shadowBrush_.Reset();
-
         D2D1_COLOR_F accent = settings.customAccent;
         if (settings.accentMode == AccentMode::System) {
             accent = GetSystemAccentColor();
@@ -2264,20 +2257,31 @@ class Renderer {
             accent = state.media.art.sampledAccent;
         }
 
-        target_->CreateSolidColorBrush(accent, &accentBrush_);
-        target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.27f, 0.27f, 1.0f), &redBrush_);
+        if (!accentBrush_) target_->CreateSolidColorBrush(accent, &accentBrush_);
+        else accentBrush_->SetColor(accent);
+
+        if (!redBrush_) target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.27f, 0.27f, 1.0f), &redBrush_);
+
         // Use user-configured text colors.
         D2D1_COLOR_F primary = settings.textPrimaryColor;
         primary.a = 0.96f;
+        if (!textBrush_) target_->CreateSolidColorBrush(primary, &textBrush_);
+        else textBrush_->SetColor(primary);
+
         D2D1_COLOR_F secondary = settings.textSecondaryColor;
         secondary.a = 0.72f;
-        target_->CreateSolidColorBrush(primary, &textBrush_);
-        target_->CreateSolidColorBrush(secondary, &mutedBrush_);
+        if (!mutedBrush_) target_->CreateSolidColorBrush(secondary, &mutedBrush_);
+        else mutedBrush_->SetColor(secondary);
+
         // Cache pill bg color with opacity applied.
         pillBgColor_ = settings.pillBgColor;
         pillBgColor_.a = 1.0f;
-        target_->CreateSolidColorBrush(D2D1::ColorF(0.010f, 0.010f, 0.012f, settings.blurOpacity), &tintBrush_);
-        target_->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.70f), &shadowBrush_);
+        
+        D2D1_COLOR_F tintColor = D2D1::ColorF(0.010f, 0.010f, 0.012f, settings.blurOpacity);
+        if (!tintBrush_) target_->CreateSolidColorBrush(tintColor, &tintBrush_);
+        else tintBrush_->SetColor(tintColor);
+
+        if (!shadowBrush_) target_->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.70f), &shadowBrush_);
     }
 
     void DrawPill(const SharedState& state, const Settings& settings, const Activity& activity,
