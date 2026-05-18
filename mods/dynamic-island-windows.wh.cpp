@@ -91,6 +91,22 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 */
 // ==/WindhawkModSettings==
 
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cwchar>
+#include <cstring>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
@@ -125,22 +141,6 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 #else
 #define DYNAMIC_ISLAND_HAS_USER_NOTIFICATION_LISTENER 0
 #endif
-
-#include <algorithm>
-#include <array>
-#include <atomic>
-#include <chrono>
-#include <cmath>
-#include <cstdint>
-#include <cwchar>
-#include <cstring>
-#include <mutex>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 using Microsoft::WRL::ComPtr;
 using namespace std::chrono_literals;
