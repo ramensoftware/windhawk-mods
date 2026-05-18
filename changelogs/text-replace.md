@@ -1,3 +1,7 @@
+## 1.1.1 ([May 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5a16d8006626f734697d2b1da40f47dfab2b8766/mods/text-replace.wh.cpp))
+
+* Fixed a crash when used with sandboxed processes, such as Electron or Chromium renderer processes.
+
 ## 1.1 ([Apr 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2dfdb2b7adaa857aec9b1aadfa490bc8b82e6f39/mods/text-replace.wh.cpp))
 
 * Added Direct2D, DirectWrite, and GDI+ text hooking for broader text replacement coverage.

@@ -10903,7 +10903,7 @@
                     9
                 ],
                 "ratingUsers": 11,
-                "updated": 1775316216000,
+                "updated": 1779135688000,
                 "users": 875
             },
             "metadata": {
@@ -10917,7 +10917,7 @@
                 ],
                 "name": "Text Replace",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "theme-toggler-tray": {
