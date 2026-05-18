@@ -253,6 +253,7 @@ BOOL Wh_ModInit() {
     // Loading mshtml.dll in every process is definitely not a good idea, so hook this and begin mshtml hooks only when mshtml.dll is actually loading.
     if (!Wh_SetFunctionHook((void*)LoadLibraryExW, (void*)LoadLibraryExW_hook, (void**)&LoadLibraryExW_original)) {
         Wh_Log(L"Wh_SetFunctionHook LoadLibraryExW failed");
+        return FALSE;
     }
     return TRUE;
 }
