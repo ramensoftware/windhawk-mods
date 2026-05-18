@@ -140,7 +140,7 @@ HMODULE WINAPI LoadLibraryExW_hook(const wchar_t* lpLibFileName, HANDLE hFile, D
     if (GetModuleFileNameW(res, moduleName, MAX_PATH)) {
         if (wcsstr(_wcsupr(moduleName), L"MSHTML.DLL") != NULL) {
             Wh_Log(L"mshtml.dll loaded, hooking symbols");
-            WindhawkUtils::SYMBOL_HOOK mshtmlHooks[] = {
+            WindhawkUtils::SYMBOL_HOOK mshtmlDllHooks[] = {
                 {
                     {
                         L"public: virtual long " SSTDCALL " CTridentPrivateDebugAPI::SetEnableWebControlVisuals(int)"
@@ -182,7 +182,7 @@ HMODULE WINAPI LoadLibraryExW_hook(const wchar_t* lpLibFileName, HANDLE hFile, D
                     FALSE
                 },
             };
-            WindhawkUtils::SYMBOL_HOOK d2d1Hook {
+            WindhawkUtils::SYMBOL_HOOK d2d1DllHooks {
                 {
                     #ifdef _WIN64
                     L"public: virtual void __cdecl D2DDeviceContextBase<struct ID2D1DeviceContext6,struct ID2D1DeviceContext6,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)",
@@ -196,12 +196,12 @@ HMODULE WINAPI LoadLibraryExW_hook(const wchar_t* lpLibFileName, HANDLE hFile, D
                 D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_hook,
                 false
             };
-            if (!WindhawkUtils::HookSymbols(res, mshtmlHooks, ARRAYSIZE(mshtmlHooks))) {
+            if (!WindhawkUtils::HookSymbols(res, mshtmlDllHooks, ARRAYSIZE(mshtmlDllHooks))) {
                 Wh_Log(L"HookSymbols failed");
             } else {
                 HMODULE d2d1 = GetModuleHandleW(L"d2d1.dll"); // should already be loaded at this point
                 if (d2d1) {
-                    if (WindhawkUtils::HookSymbols(d2d1, &d2d1Hook, 1)) {
+                    if (WindhawkUtils::HookSymbols(d2d1, &d2d1DllHooks, 1)) {
                         Wh_Log(L"d2d1.dll HookSymbols OK");
                     }
                 }
