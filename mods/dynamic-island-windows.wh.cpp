@@ -7,7 +7,7 @@
 // @github          https://github.com/devcode90
 // @include         sihost.exe
 // @architecture    x86-64
-// @compilerOptions -std=c++20 -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi
+// @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi
 // @license         MIT
 // ==/WindhawkMod==
 
