@@ -15,19 +15,20 @@
 /*
 # Dynamic Island for Windows
 
-A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive top-center UI to your Windows desktop. 
+A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.
 
 ### Features ✨
-- **Hardware Privacy Indicators:** Just like iOS, a pulsing orange dot appears when your microphone is active, and a green dot when your camera is in use!
-- **Media Controls:** Rich integration with Windows media sessions. Shows album art, song info, a live audio waveform, and playback controls.
-- **Clipboard Previews:** Instantly see what you copied—displays a preview of text snippets and even thumbnail previews of copied images.
-- **Customizable Themes:** Switch between sleek OLED Black, Dark Gray, Midnight Blue, and Deep Purple straight from the right-click menu, or customize the exact hex colors in the settings.
-- **Dynamic Animations:** Fully fluid resizing and splitting when multiple events happen at once (e.g., media playing while you copy text).
+- **Hardware Privacy Indicators:** A pulsing orange dot appears when your microphone is active, and a green dot when your camera is in use. Rate-limited polling ensures absolutely no CPU drain.
+- **Rich Media Integration:** Shows album art, song info, a live audio waveform, and playback controls.
+- **High-Res Clipboard & Notifications:** Instantly see what you copied or your latest Windows notifications, featuring crisp, high-fidelity 64px app icons extracted directly from system executables.
+- **Customizable Aesthetics:** Switch between sleek OLED Black, Dark Gray, Midnight Blue, and Deep Purple themes from the right-click menu, or use the settings to dial in your exact hex colors.
+- **Dynamic Fluid Animations:** Fully smooth resizing and splitting when multiple events happen at once (e.g., media playing while you copy text or receive a notification).
 - **Battery & Clock:** Low battery alerts and an optional minimal clock dashboard for when the island is idle.
 
-### Usage
+### Usage & Settings
 - **Hover** over the island to seamlessly expand it.
 - **Right-click** the island to access Theme presets, Transparency settings, and to pin the island open.
+- Visit the **Settings tab** to change the island's Position (Top, Bottom, Left, Right), Size Scale, Animation Speed, and toggle specific modules on or off.
 */
 // ==/WindhawkModReadme==
 
