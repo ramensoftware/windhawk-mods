@@ -37,17 +37,19 @@
   $name:ko-KR: Windows 7 스타일 컨트롤 활성화
   $description: Enable the old Windows 7 style controls in MSHTML, which will replace the Windows 8 style controls. This also restores the true native scrollbar styles.
   $description:ko-KR: MSHTML에서 Windows 8 스타일의 새로운 컨트롤을 Windows 7 스타일의 이전 컨트롤로 바꿉니다. 이 옵션은 스크롤바도 시스템 스타일을 따르게 합니다.
-- textrendering: default
+- textrendering: app-default
   $name: Text rendering mode
   $name:ko-KR: 텍스트 렌더링 모드
   $options:
-    - default: Default (ClearType regardless of system setting)
-    - no-cleartype: Non-ClearType Antialiasing
+    - app-default: Application Default
+    - system-default: System Default
+    - cleartype: ClearType Antialiasing
     - grayscale: Grayscale Antialiasing
     - aliased: Aliased
   $options:ko-KR:
-    - default: 기본값 (시스템 설정과 관계없이 ClearType)
-    - no-cleartype: ClearType 없는 안티앨리어싱
+    - app-default: 애플리케이션 기본값
+    - system-default: 시스템 기본값
+    - cleartype: ClearType 안티앨리어싱
     - grayscale: 그레이스케일 안티앨리어싱
     - aliased: 안티앨리어싱 없음
   $description: Customize the text rendering mode in MSHTML, which will affect how fonts are displayed.
@@ -71,15 +73,16 @@
 #endif
 
 enum TextRenderingMode {
-    Default,
-    NoClearType,
+    AppDefault,
+    SystemDefault,
+    ClearType,
     Grayscale,
     Aliased
 };
 
 struct settings {
     bool oldControls = true;
-    TextRenderingMode textRenderingMode = Default;
+    TextRenderingMode textRenderingMode = AppDefault;
     bool noDComp = false;
 } g_settings;
 
@@ -108,13 +111,16 @@ void _fastcall CDXRenderTarget_DrawGlyphRun_hook(void *pThis, void *a2, void *a3
 void (STDMETHODCALLTYPE *D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_orig)(ID2D1DeviceContext *pThis, D2D1_POINT_2F baselineOrigin, DWRITE_GLYPH_RUN *glyphRun, DWRITE_GLYPH_RUN_DESCRIPTION *glyphRunDescription, ID2D1Brush *foregroundBrush, DWRITE_MEASURING_MODE measuringMode);
 void STDMETHODCALLTYPE D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_hook(ID2D1DeviceContext *pThis, D2D1_POINT_2F baselineOrigin, DWRITE_GLYPH_RUN *glyphRun, DWRITE_GLYPH_RUN_DESCRIPTION *glyphRunDescription, ID2D1Brush *foregroundBrush, DWRITE_MEASURING_MODE measuringMode)
 {
-    if (pThis && g_fDrawGlyphRun && g_settings.textRenderingMode != Default)
+    if (pThis && g_fDrawGlyphRun && g_settings.textRenderingMode != AppDefault)
     {
         pThis->SetTextRenderingParams(NULL);
-        D2D1_TEXT_ANTIALIAS_MODE antialiasMode = D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE;
+        D2D1_TEXT_ANTIALIAS_MODE antialiasMode = D2D1_TEXT_ANTIALIAS_MODE_DEFAULT;
         switch (g_settings.textRenderingMode) {
-            case NoClearType:
+            case SystemDefault:
                 antialiasMode = D2D1_TEXT_ANTIALIAS_MODE_DEFAULT;
+                break;
+            case ClearType:
+                antialiasMode = D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE;
                 break;
             case Grayscale:
                 antialiasMode = D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE;
@@ -224,16 +230,18 @@ HMODULE WINAPI LoadLibraryExW_hook(const wchar_t* lpLibFileName, HANDLE hFile, D
 }
 
 TextRenderingMode TextRenderingModeStringToEnum(LPCWSTR str) {
-    if (wcscmp(str, L"default") == 0) {
-        return Default;
-    } else if (wcscmp(str, L"no-cleartype") == 0) {
-        return NoClearType;
+    if (wcscmp(str, L"app-default") == 0) {
+        return AppDefault;
+    } else if (wcscmp(str, L"system-default") == 0) {
+        return SystemDefault;
+    } else if (wcscmp(str, L"cleartype") == 0) {
+        return ClearType;
     } else if (wcscmp(str, L"grayscale") == 0) {
         return Grayscale;
     } else if (wcscmp(str, L"aliased") == 0) {
         return Aliased;
     } else {
-        return Default;
+        return AppDefault;
     }
 }
 
