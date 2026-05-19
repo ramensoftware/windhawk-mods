@@ -2,7 +2,7 @@
 // @id              text-replace
 // @name            Text Replace
 // @description     Replace any text with any other text in any program
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -604,9 +604,23 @@ HRESULT STDMETHODCALLTYPE IDWriteFactory_CreateGdiCompatibleTextLayoutHook(
     return pOriginalIDWriteFactory_CreateGdiCompatibleTextLayout(pThis,string,stringLength,textFormat,layoutWidth,layoutHeight,pixelsPerDip,transform,useGdiNatural,textLayout);
 }
 
+bool IsProcessWin32kSyscallsDisabled()
+{
+    PROCESS_MITIGATION_SYSTEM_CALL_DISABLE_POLICY policy{};
+    return GetProcessMitigationPolicy(GetCurrentProcess(), ProcessSystemCallDisablePolicy, &policy, sizeof(policy))
+        && policy.DisallowWin32kSystemCalls != 0;
+}
+
 void HookD2DAndDWrite()
 {
-    HMODULE hD2D1 = LoadLibraryEx(L"d2d1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    // d2d1!CreateDCRenderTarget eventually queries display adapters via DXGI,
+    // which calls into win32k. In processes with the Win32k syscall mitigation
+    // (e.g. Chromium/Electron renderer, GPU and utility sandboxes) that syscall
+    // is blocked and DXGI fail-fasts (FAST_FAIL_STACK_COOKIE_CHECK_FAILURE).
+    // DWrite below does not depend on win32k so it is left enabled.
+    HMODULE hD2D1 = IsProcessWin32kSyscallsDisabled()
+        ? nullptr
+        : LoadLibraryEx(L"d2d1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hD2D1) {
         using D2D1CreateFactory_t = HRESULT (WINAPI *)(D2D1_FACTORY_TYPE, REFIID, const D2D1_FACTORY_OPTIONS *, void **);
         auto pD2D1CreateFactory = (D2D1CreateFactory_t)GetProcAddress(hD2D1, "D2D1CreateFactory");
