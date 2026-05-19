@@ -30,6 +30,16 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - DPI-aware, multi-monitor aware
 - Rounded corners for switcher and task thumbnails (optional)
 
+## Screenshots
+
+*Horizontal squared (default)*
+
+![Horizontal default](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png)
+
+*Horizontal squared without thumbnails*
+
+![Horizontal without thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png)
+
 *Vertical small rounded*
 
 ![Vertical small](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/1.png)
@@ -37,14 +47,6 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 *Vertical large rounded*
 
 ![Vertical large](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/2.png)
-
-*Horizontal squared without thumbnails*
-
-![Horizontal without thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png)
-
-*Horizontal squared*
-
-![Horizontal default](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png)
 
 *Vertical rounded with centered task icons and titles*
 
