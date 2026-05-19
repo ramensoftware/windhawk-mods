@@ -29,6 +29,33 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - Custom border colors with optional Windows accent color
 - DPI-aware, multi-monitor aware
 - Rounded corners for switcher and task thumbnails (optional)
+
+## Screenshots
+
+*Horizontal squared (default)*
+
+![Horizontal default](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png)
+
+*Horizontal squared without thumbnails*
+
+![Horizontal without thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png)
+
+*Vertical small rounded*
+
+![Vertical small](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/1.png)
+
+*Vertical large rounded*
+
+![Vertical large](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/2.png)
+
+*Vertical rounded with centered task icons and titles*
+
+![Vertical centered](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/6.png)
+
+*Vertical squared with thumbnails*
+
+![Vertical squared with thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/5.png)
+
 */
 // ==/WindhawkModReadme==
 
@@ -333,53 +360,33 @@ static bool ResolveAPIs() {
     return true;
 }
 
-// Registry flag to prevent restart prompt loop on init
-#define SWS_REG_PATH L"Software\\Windhawk\\SimpleWindowSwitcher"
+// Persistent flags to prevent restart prompt loop on init
 #define SWS_REG_RESTART_FLAG L"RestartedByMod"
 #define SWS_REG_LAST_PID L"LastPID"
 
 static void SetRegFlag(LPCWSTR name) {
-    HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, SWS_REG_PATH, 0, NULL, 0,
-            KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-        DWORD val = 1;
-        RegSetValueExW(hKey, name, 0, REG_DWORD, (BYTE*)&val, sizeof(val));
-        RegCloseKey(hKey);
-    }
+    Wh_SetIntValue(name, 1);
 }
 
 static bool CheckAndClearRegFlag(LPCWSTR name) {
-    DWORD val = 0, sz = sizeof(val);
-    if (RegGetValueW(HKEY_CURRENT_USER, SWS_REG_PATH, name,
-            RRF_RT_REG_DWORD, NULL, &val, &sz) == ERROR_SUCCESS && val == 1) {
-        RegDeleteKeyValueW(HKEY_CURRENT_USER, SWS_REG_PATH, name);
+    if (Wh_GetIntValue(name, 0) == 1) {
+        Wh_DeleteValue(name);
         return true;
     }
     return false;
 }
 
 static void ClearRegFlag(LPCWSTR name) {
-    RegDeleteKeyValueW(HKEY_CURRENT_USER, SWS_REG_PATH, name);
+    Wh_DeleteValue(name);
 }
 
 static void StoreCurrentPID() {
-    HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, SWS_REG_PATH, 0, NULL, 0,
-            KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-        DWORD pid = GetCurrentProcessId();
-        RegSetValueExW(hKey, SWS_REG_LAST_PID, 0, REG_DWORD, (BYTE*)&pid, sizeof(pid));
-        RegCloseKey(hKey);
-    }
+    Wh_SetIntValue(SWS_REG_LAST_PID, (int)GetCurrentProcessId());
 }
 
 // Returns true if the stored PID matches the current process (same explorer session)
 static bool CheckStoredPIDMatchesCurrent() {
-    DWORD storedPid = 0, sz = sizeof(storedPid);
-    if (RegGetValueW(HKEY_CURRENT_USER, SWS_REG_PATH, SWS_REG_LAST_PID,
-            RRF_RT_REG_DWORD, NULL, &storedPid, &sz) == ERROR_SUCCESS) {
-        return storedPid == GetCurrentProcessId();
-    }
-    return false; // No stored PID = first install or cleared
+    return Wh_GetIntValue(SWS_REG_LAST_PID, -1) == (int)GetCurrentProcessId();
 }
 
 // Explorer restart prompt (adapted from sib-plusplus-tweaker)
@@ -1962,9 +1969,7 @@ BOOL Wh_ModInit() {
         } else {
             // Different/no PID — new explorer process (logon) or first install
             // First install: explorer has been running a while, no stored PID
-            DWORD storedPid = 0, sz2 = sizeof(storedPid);
-            bool hadPreviousPID = (RegGetValueW(HKEY_CURRENT_USER, SWS_REG_PATH, SWS_REG_LAST_PID,
-                RRF_RT_REG_DWORD, NULL, &storedPid, &sz2) == ERROR_SUCCESS);
+            bool hadPreviousPID = Wh_GetIntValue(SWS_REG_LAST_PID, -1) != -1;
             if (!hadPreviousPID) {
                 // No previous PID stored — first time install → prompt
                 PromptForExplorerRestart(true);
@@ -2020,5 +2025,6 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     LoadSettings();
     g_isDarkMode = ShouldUseDarkMode();
     if (g_isVisible) ShowSwitcher(g_isSticky);
+
     return TRUE;
 }
