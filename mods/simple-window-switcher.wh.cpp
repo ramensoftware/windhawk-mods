@@ -17,13 +17,6 @@ A lightweight Alt+Tab replacement for Windows, ported from the
 [Simple Window Switcher](https://github.com/valinet/sws) project.
 Additional improvements made by [Asteski](https://github.com/Asteski).
 
-![Vertical small](https://github.com/Asteski/Windhawk-Mods/blob/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/1.png)
-![Vertical large](https://github.com/Asteski/Windhawk-Mods/blob/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/2.png)
-![Horizontal default without thumbnails](https://github.com/Asteski/Windhawk-Mods/blob/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/3.png)
-![Horizontal default](https://github.com/Asteski/Windhawk-Mods/blob/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/4.png)
-![Vertical centered](https://github.com/Asteski/Windhawk-Mods/blob/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/6.png)
-![Vertical with thumbnails](https://github.com/Asteski/Windhawk-Mods/blob/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/5.png)
-
 ## Features
 - Grid layout with live DWM thumbnail previews
 - Different Task List and Header Content layouts
@@ -36,6 +29,31 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - Custom border colors with optional Windows accent color
 - DPI-aware, multi-monitor aware
 - Rounded corners for switcher and task thumbnails (optional)
+
+*Vertical small rounded*
+
+![Vertical small](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/1.png)
+
+*Vertical large rounded*
+
+![Vertical large](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/2.png)
+
+*Horizontal squared without thumbnails*
+
+![Horizontal without thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png)
+
+*Horizontal squared*
+
+![Horizontal default](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png)
+
+*Vertical rounded with centered task icons and titles*
+
+![Vertical centered](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/6.png)
+
+*Vertical squared with thumbnails*
+
+![](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/5.png)
+
 */
 // ==/WindhawkModReadme==
 
