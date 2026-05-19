@@ -10988,7 +10988,7 @@
                     2
                 ],
                 "ratingUsers": 3,
-                "updated": 1773572826000,
+                "updated": 1779186667000,
                 "users": 52
             },
             "metadata": {
@@ -11000,7 +11000,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Tiling Helper",
-                "version": "2.0.0"
+                "version": "2.0.1"
             }
         },
         "timer-resolution-control": {
@@ -11527,7 +11527,7 @@
                     22
                 ],
                 "ratingUsers": 23,
-                "updated": 1774777701000,
+                "updated": 1779186648000,
                 "users": 379
             },
             "metadata": {
@@ -11539,7 +11539,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Virtual Desktop Helper",
-                "version": "2.4.1"
+                "version": "2.4.2"
             }
         },
         "virtual-desktop-hotkey-cycle": {

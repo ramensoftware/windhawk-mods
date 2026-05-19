@@ -1,3 +1,7 @@
+## 2.0.1 ([May 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a5f2239fbd8e2bf42629535a399c346dd2023d22/mods/tiling-helper.wh.cpp))
+
+* Align tool-mod launcher with wiki recommendations
+
 ## 2.0.0 ([Mar 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b25cbfb1fa555527b71e6c68a5ddedd4816e51b5/mods/tiling-helper.wh.cpp))
 
 * Reworked Tiling Helper around a simpler always-on `Master+Stack` workflow. After tiling a monitor, windows stay managed until automatic tiling is paused.

@@ -1,3 +1,7 @@
+## 2.4.2 ([May 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3940166c632f8dd5293d1ef4bf3138376d8cc904/mods/virtual-desktop-helper.wh.cpp))
+
+* Align tool-mod launcher with wiki recommendations
+
 ## 2.4.1 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d31cc9caa1d942878e751a16924b51ab1a8a4a90/mods/virtual-desktop-helper.wh.cpp))
 
 Update last desktop tracking when the foreground window changes, so desktop switches triggered by taskbar window activation are recorded correctly.
