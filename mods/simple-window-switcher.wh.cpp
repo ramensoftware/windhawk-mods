@@ -54,7 +54,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 
 *Vertical squared with thumbnails*
 
-![](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/5.png)
+![Vertical squared with thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/5.png)
 
 */
 // ==/WindhawkModReadme==
