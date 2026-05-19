@@ -37,7 +37,7 @@
   $name:ko-KR: Windows 7 스타일 컨트롤 활성화
   $description: Enable the old Windows 7 style controls in MSHTML, which will replace the Windows 8 style controls. This also restores the true native scrollbar styles.
   $description:ko-KR: MSHTML에서 Windows 8 스타일의 새로운 컨트롤을 Windows 7 스타일의 이전 컨트롤로 바꿉니다. 이 옵션은 스크롤바도 시스템 스타일을 따르게 합니다.
-- textrendering: app-default
+- textrendering: system-default
   $name: Text rendering mode
   $name:ko-KR: 텍스트 렌더링 모드
   $options:
