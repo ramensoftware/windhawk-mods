@@ -16,6 +16,8 @@
 * Various tweaks for Internet Explorer and all the other apps using its engine (Trident/MSHTML), such as HTML Help, HelpPane, MSHTA, MMC, etc.
 * This mod can bring back old controls, customize the font smoothing type (disable the forced ClearType), and disable the DirectComposition rendering.
 * Special thanks to @xalejandro for the ClearType disabler.
+* Only works on Internet Explorer 11 engine running on Windows 10 or higher. Tested on 10 22H2 and 11 25H2. Never tested on Windows 8 or earlier Windows 10 builds. Won't work on Windows 7. (You'll need to remove hooks for some symbols that don't exist.)
+* The first launch of an MSHTML application after enabling this mod will take a lot of time, due to the large size of the symbols needed. It may not show the symbols download progress dialog depending on your internet security settings.
 ## Notes regarding the old control styles
 * Note that this mod only restores IE11's built-in Windows 7 behavior for old control styling, which uses hardcoded/fake Aero styles that do not actually match the current system theme.
 * Only the scrollbar will use actual bitmaps from the current visual style (or classic); however, they may look glitchy, especially on HiDPI displays.
