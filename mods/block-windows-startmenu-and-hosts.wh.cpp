@@ -2,7 +2,7 @@
 // @id              block-windows-startmenu-and-hosts
 // @name            Block Start Menu and Hosts
 // @description     Kills existing selected UI components on mod init and blocks any future launches.
-// @version         1.2
+// @version         1.3
 // @author          Exiled Eye
 // @github          https://github.com/ExiledEye
 // @homepage        https://exiledeye.github.io/
@@ -15,14 +15,19 @@
 /*
 # Block Start Menu and Hosts
  
-This Windhawk mod actively terminates existing instances of specific Windows host processes upon loading and intercepts process creation to prevent them from launching again in the future. 
+This Windhawk mod actively terminates existing instances of specific Windows host processes upon loading and intercepts process creation to prevent them from launching again in taahe future. 
 This way the mod ensures that unused selected UI components and their process are actually not running instead of simply hiding them.
  
 ## Features
 You can individually toggle the blocking of the following processes dynamically in the mod settings:
-*   **StartMenuExperienceHost.exe** -> The main Start Menu UI and process ("WIN" key)
-*   **SearchHost.exe**              -> The Search Menu UI and process ("WIN + S" shortcut) **Note**: _may_ cause issues within folder search.
-*   **TextInputHost.exe**           -> The emoji and clipboard UI and process ("WIN + ." shortcut)
+*   **StartMenuExperienceHost.exe**     -> The main Start Menu UI and process ("WIN" key)
+*   **SearchHost.exe**                  -> The Search Menu UI and process ("WIN + S" and "WIN+ Q" shortcut) **Note**: _may_ cause issues within folder search.
+*   **TextInputHost.exe**               -> The emoji and clipboard UI and process ("WIN + ." and "WIN + V" shortcut)
+*   **ShellHost.exe**                   -> The Action Center UI and process ("WIN + A" shortcut)
+*   **ShellExperienceHost.exe**         -> The Calenadr and Notifications UI and process ("WIN + N" key)
+*   **MicrosoftStartFeedProvider.exe**  -> The Start Menu news feed, weather, recommended and etc. UI and process
+*   **WidgetBoard.exe**                 -> The Widgets board UI and process ("WIN + W" shortcut)
+*   **WidgetService.exe**               -> The Widgets board background data, content and service infrastructure process
 ## How it Works
 The mod injects into `explorer.exe` and `svchost.exe`.  
 Upon init, it kills any active instances of the selected hosts.  
@@ -41,6 +46,21 @@ It then places a hook on the `CreateProcessInternalW` function: If the system at
 - BlockTextInput: false
   $name: Block TextInputHost.exe
   $description: Kills existing instances and blocks future launches of the Text Input host.
+- BlockShellHost: false
+  $name: Block ShellHost.exe
+  $description: Kills existing instances and blocks future launches of Action Center host.
+- BlockShellExperienceHost: false
+  $name: Block ShellExperienceHost.exe
+  $description: Kills existing instances and blocks future launches of Calendar and Notifications host.
+- BlockMicrosoftStartFeedProvider: false
+  $name: Block MicrosoftStartFeedProvider.exe
+  $description: Kills existing instances and blocks future launches of Start Feed Provider host.
+- BlockWidgetBoard: false
+  $name: Block WidgetBoard.exe
+  $description: Kills existing instances and blocks future launches of Widgets host.
+- BlockWidgetService: false
+  $name: Block WidgetService.exe
+  $description: Kills existing instances and blocks future launches of Widgets Service host.
 */
 // ==/WindhawkModSettings==
 
@@ -48,16 +68,30 @@ It then places a hook on the `CreateProcessInternalW` function: If the system at
 #include <windhawk_api.h>
 #include <tlhelp32.h>
 
+// Watcher thread state
+static HANDLE g_watcherThread = nullptr;
+static HANDLE g_watcherStopEvent = nullptr;
+
 // Global variables
 bool g_blockStartMenu = true;
 bool g_blockSearch = true;
 bool g_blockTextInput = false;
+bool g_blockShellHost = false;
+bool g_blockShellExperienceHost = false;
+bool g_blockMicrosoftStartFeedProvider = false;
+bool g_blockWidgetBoard = false;
+bool g_blockWidgetService = false;
 
 // Settings Loader
 void LoadSettings() {
     g_blockStartMenu = Wh_GetIntSetting(L"BlockStartMenu");
     g_blockSearch = Wh_GetIntSetting(L"BlockSearch");
     g_blockTextInput = Wh_GetIntSetting(L"BlockTextInput");
+    g_blockShellHost = Wh_GetIntSetting(L"BlockShellHost");
+    g_blockShellExperienceHost = Wh_GetIntSetting(L"BlockShellExperienceHost");
+    g_blockMicrosoftStartFeedProvider = Wh_GetIntSetting(L"BlockMicrosoftStartFeedProvider");
+    g_blockWidgetBoard = Wh_GetIntSetting(L"BlockWidgetBoard");
+    g_blockWidgetService = Wh_GetIntSetting(L"BlockWidgetService");
 }
 
 // Helper for process killing
@@ -93,6 +127,33 @@ void TerminateConfiguredProcesses() {
     if (g_blockTextInput) {
         TerminateProcessByName(L"TextInputHost.exe");
     }
+    // Terminate additional hosts only if their settings are enabled
+    if (g_blockShellHost) {
+        TerminateProcessByName(L"shellhost.exe");
+        TerminateProcessByName(L"ShellHost.exe");
+    }
+    if (g_blockShellExperienceHost) {
+        TerminateProcessByName(L"shellexperiencehost.exe");
+    }
+    if (g_blockMicrosoftStartFeedProvider) {
+        TerminateProcessByName(L"microsoftstartfeedprovider.exe");
+    }
+    if (g_blockWidgetBoard) {
+        TerminateProcessByName(L"WidgetBoard.exe");
+    }
+    if (g_blockWidgetService) {
+        TerminateProcessByName(L"WidgetService.exe");
+    }
+}
+
+// Background thread: watches for ShellHost.exe and kills it when the setting is on
+DWORD WINAPI ShellHostWatcherThread(LPVOID) {
+    while (WaitForSingleObject(g_watcherStopEvent, 1500) == WAIT_TIMEOUT) {
+        if (g_blockShellHost) {
+            TerminateProcessByName(L"ShellHost.exe");
+        }
+    }
+    return 0;
 }
 
 // Helper for case-insensitive substring search
@@ -140,6 +201,32 @@ BOOL WINAPI CreateProcessInternalW_Hook(
         block = true;
     }
 
+    // Block these additional hosts/processes only if configured in settings
+    else if (
+        (g_blockShellHost && (
+            (lpCmdLine && (wcsistr(lpCmdLine, L"shellhost.exe") || wcsistr(lpCmdLine, L"ShellHost") || wcsistr(lpCmdLine, L"\"ShellHost\""))) ||
+            (lpAppName && (wcsistr(lpAppName, L"shellhost.exe") || wcsistr(lpAppName, L"ShellHost")))
+        ))
+        || (g_blockShellExperienceHost && (
+            (lpCmdLine && wcsistr(lpCmdLine, L"shellexperiencehost.exe")) ||
+            (lpAppName && wcsistr(lpAppName, L"shellexperiencehost.exe"))
+        ))
+        || (g_blockMicrosoftStartFeedProvider && (
+            (lpCmdLine && wcsistr(lpCmdLine, L"microsoftstartfeedprovider.exe")) ||
+            (lpAppName && wcsistr(lpAppName, L"microsoftstartfeedprovider.exe"))
+        ))
+        || (g_blockWidgetBoard && (
+            (lpCmdLine && wcsistr(lpCmdLine, L"WidgetBoard.exe")) ||
+            (lpAppName && wcsistr(lpAppName, L"WidgetBoard.exe"))
+        ))
+        || (g_blockWidgetService && (
+            (lpCmdLine && wcsistr(lpCmdLine, L"WidgetService.exe")) ||
+            (lpAppName && wcsistr(lpAppName, L"WidgetService.exe"))
+        ))
+    ) {
+        block = true;
+    }
+
     if (block) { // Logs if process is being blocked on keypress (if logging is enabled)
         Wh_Log(L"Blocked launch: AppName=%ls, CmdLine=%ls", 
             lpAppName ? lpAppName : L"NULL", 
@@ -157,12 +244,33 @@ void Wh_ModSettingsChanged() {
     TerminateConfiguredProcesses();
 }
 
+void Wh_ModUninit() {
+    if (g_watcherStopEvent) {
+        SetEvent(g_watcherStopEvent);
+    }
+    if (g_watcherThread) {
+        WaitForSingleObject(g_watcherThread, 3000);
+        CloseHandle(g_watcherThread);
+        g_watcherThread = nullptr;
+    }
+    if (g_watcherStopEvent) {
+        CloseHandle(g_watcherStopEvent);
+        g_watcherStopEvent = nullptr;
+    }
+}
+
 BOOL Wh_ModInit() {
     // 1. Load initial settings and kill running configured processes
     LoadSettings();
     TerminateConfiguredProcesses();
 
-    // 2. Set up the hook to prevent them from ever starting again
+    // 2. Start background watcher thread for ShellHost.exe
+    g_watcherStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_watcherStopEvent) {
+        g_watcherThread = CreateThread(nullptr, 0, ShellHostWatcherThread, nullptr, 0, nullptr);
+    }
+
+    // 3. Set up the hook to prevent them from ever starting again
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
         void* pCreateProcessInternalW = (void*)GetProcAddress(hKernelBase, "CreateProcessInternalW");
