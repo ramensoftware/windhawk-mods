@@ -15,7 +15,7 @@
 /*
 # Block Start Menu and Hosts
  
-This Windhawk mod actively terminates existing instances of specific Windows host processes upon loading and intercepts process creation to prevent them from launching again in taahe future. 
+This Windhawk mod actively terminates existing instances of specific Windows host processes upon loading and intercepts process creation to prevent them from launching again in the future. 
 This way the mod ensures that unused selected UI components and their process are actually not running instead of simply hiding them.
  
 ## Features
