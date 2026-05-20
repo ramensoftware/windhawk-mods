@@ -5,7 +5,6 @@
 // @version         1.1.0
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
-// @twitter         https://twitter.com/SilverAmd
 // @homepage        https://github.com/SilverAmd
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lshell32 -lgdi32
