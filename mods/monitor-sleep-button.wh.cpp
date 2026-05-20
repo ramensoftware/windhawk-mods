@@ -5,6 +5,7 @@
 // @version         1.1.0
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
+// @twitter         https://twitter.com/SilverAmd
 // @homepage        https://github.com/SilverAmd
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lshell32 -lgdi32
@@ -211,8 +212,7 @@ Black screen mode does not save as much power as turning the monitor off, becaus
 #define COUNTDOWN_INTERVAL_MS 1000
 
 #define WM_APP_EXIT (WM_APP + 1)
-#define WM_APP_SETTINGS_CHANGED (WM_APP + 2)
-#define WM_TRAY_SCROLL (WM_APP + 3)
+#define WM_TRAY_SCROLL (WM_APP + 2)
 
 #define HIDDEN_WINDOW_CLASS L"MonitorSleepButtonHiddenWindow"
 
@@ -1164,9 +1164,9 @@ void ShowTrayContextMenu(HWND hwnd) {
     );
 
     if (g_countdownActive) {
-        AppendMenuW(menu, MF_STRING, ID_MENU_CANCEL_COUNTDOWN, L"Cancel countdown    Esc");
+        AppendMenuW(menu, MF_STRING, ID_MENU_CANCEL_COUNTDOWN, L"Cancel countdown\tEsc");
     } else {
-        AppendMenuW(menu, MF_STRING | MF_GRAYED, ID_MENU_CANCEL_COUNTDOWN, L"Cancel countdown    Esc");
+        AppendMenuW(menu, MF_STRING | MF_GRAYED, ID_MENU_CANCEL_COUNTDOWN, L"Cancel countdown\tEsc");
     }
 
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -1263,32 +1263,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
-    if (msg == WM_APP_SETTINGS_CHANGED) {
-        DWORD packedSettings = (DWORD)wParam;
-        int newCountdownSeconds = packedSettings & 0xFFFF;
-        ActionMode newActionMode =
-            (ActionMode)((packedSettings >> 16) & 0xFFFF);
-
-        DWORD packedHotkey = (DWORD)lParam;
-        bool newHotkeyEnabled = (packedHotkey & 0x01) != 0;
-        UINT newHotkeyModifiers = (packedHotkey >> 8) & 0xFF;
-        UINT newHotkeyVk = (packedHotkey >> 16) & 0xFFFF;
-
-        Wh_Log(L"Settings changed message received. Countdown seconds: %d, hotkey enabled: %d",
-            newCountdownSeconds,
-            newHotkeyEnabled);
-
-        ApplyRuntimeSettings(
-            newCountdownSeconds,
-            newActionMode,
-            newHotkeyEnabled,
-            newHotkeyModifiers,
-            newHotkeyVk
-        );
-        return 0;
-    }
-
-    if (msg == WM_DESTROY) {
+        if (msg == WM_DESTROY) {
         PostQuitMessage(0);
         return 0;
     }
@@ -1710,41 +1685,11 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) {
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
-    HWND hwnd = FindWindowW(HIDDEN_WINDOW_CLASS, L"Monitor Sleep Button");
-
-    int newCountdownSeconds = ReadCountdownSecondsSetting();
-    ActionMode newActionMode = ReadActionModeSetting();
-    bool newHotkeyEnabled = ReadHotkeyEnabledSetting();
-    UINT newHotkeyModifiers = ReadHotkeyModifiersSetting();
-    UINT newHotkeyVk = ReadHotkeyKeySetting();
-
-    DWORD packedSettings =
-        (newCountdownSeconds & 0xFFFF) |
-        (((DWORD)newActionMode & 0xFFFF) << 16);
-
-    DWORD packedHotkey =
-        (newHotkeyEnabled ? 0x01 : 0x00) |
-        ((newHotkeyModifiers & 0xFF) << 8) |
-        ((newHotkeyVk & 0xFFFF) << 16);
-
-    if (hwnd) {
-        PostMessageW(
-            hwnd,
-            WM_APP_SETTINGS_CHANGED,
-            (WPARAM)packedSettings,
-            (LPARAM)packedHotkey
-        );
-
-        Wh_Log(L"Posted settings changed message to tool window. Countdown seconds: %d, hotkey enabled: %d",
-               newCountdownSeconds,
-               newHotkeyEnabled);
-    } else {
-        Wh_Log(L"Tool window not found for settings update.");
-    }
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
