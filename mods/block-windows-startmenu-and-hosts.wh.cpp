@@ -20,15 +20,16 @@ This way the mod ensures that unused selected UI components and their process ar
  
 ## Features
 You can individually toggle the blocking of the following processes dynamically in the mod settings:
-*   **StartMenuExperienceHost.exe**     -> The main Start Menu UI and process ("WIN" key)
+*   **StartMenuExperienceHost.exe**     -> The main Start Menu UI and process ("WIN" key).
 *   **SearchHost.exe**                  -> The Search Menu UI and process ("WIN + S" and "WIN+ Q" shortcut) **Note**: _may_ cause issues within folder search.
-*   **TextInputHost.exe**               -> The emoji and clipboard UI and process ("WIN + ." and "WIN + V" shortcut)
-*   **ShellHost.exe**                   -> The Action Center UI and process ("WIN + A" shortcut)
-*   **ShellExperienceHost.exe**         -> The Calenadr and Notifications UI and process ("WIN + N" key)
-*   **MicrosoftStartFeedProvider.exe**  -> The Start Menu news feed, weather, recommended and etc. UI and process
-*   **WidgetBoard.exe**                 -> The Widgets board UI and process ("WIN + W" shortcut)
-*   **WidgetService.exe**               -> The Widgets board background data, content and service infrastructure process
-## How it Works
+*   **TextInputHost.exe**               -> The Emoji and Clipboard UI and process ("WIN + ." and "WIN + V" shortcut).
+*   **ShellHost.exe**                   -> The Action Center UI and process ("WIN + A" shortcut).
+*   **ShellExperienceHost.exe**         -> The Calendar and Notifications UI and process ("WIN + N" key).
+*   **MicrosoftStartFeedProvider.exe**  -> The Start Menu process, which provides news, weather, stock quotes, interest cards, recommended and etc.
+*   **WidgetBoard.exe**                 -> The Widgets board UI and process ("WIN + W" shortcut).
+*   **WidgetService.exe**               -> The Widgets board background data, content and service infrastructure process.
+
+## How it works
 The mod injects into `explorer.exe` and `svchost.exe`.  
 Upon init, it kills any active instances of the selected hosts.  
 It then places a hook on the `CreateProcessInternalW` function: If the system attempts to launch any of the blocked .exe (example: user press WIN key), the hook intercepts the request and returns an `ERROR_ACCESS_DENIED` flag, preventing the launch.
