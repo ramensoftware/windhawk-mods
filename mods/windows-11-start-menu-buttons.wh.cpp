@@ -535,9 +535,6 @@ static std::wstring GlyphOrEmpty(const std::wstring& s) {
 
 static wux::UIElement MakeButtonIcon(const std::wstring& iconStr) {
     std::wstring resolved = ResolveExeIcon(iconStr, 32);
-    if (resolved.empty() && IsExePath(iconStr)) {
-
-    }
 
     if (!resolved.empty() && IsImagePath(resolved)) {
         if (GetFileAttributesW(resolved.c_str()) != INVALID_FILE_ATTRIBUTES) {
