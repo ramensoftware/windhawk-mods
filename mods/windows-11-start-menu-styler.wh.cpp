@@ -120,10 +120,6 @@ Fluid](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob
 \
 Oversimplified&Accentuated](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/Oversimplified&Accentuated/README.md)
 
-[![LiquidGlass](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/LiquidGlass/screenshot-small.png)
-\
-LiquidGlass](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/LiquidGlass/README.md)
-
 [![Windows10X](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/Windows10X/screenshot-small.png)
 \
 Windows10X](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/Windows10X/README.md)
@@ -408,7 +404,6 @@ from the **TranslucentTB** project.
   - WindowGlass: WindowGlass (for the redesigned Start menu)
   - Fluid: Fluid (for the redesigned Start menu)
   - Oversimplified&Accentuated: Oversimplified&Accentuated
-  - LiquidGlass: LiquidGlass (for the redesigned Start menu)
   - Windows10X: Windows10X
   - TintedGlass: TintedGlass
   - LayerMicaUI: LayerMicaUI (for the redesigned Start menu)
@@ -12581,8 +12576,6 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeFluid;
     } else if (wcscmp(themeName, L"Oversimplified&Accentuated") == 0) {
         theme = &g_themeOversimplified_Accentuated;
-    } else if (wcscmp(themeName, L"LiquidGlass") == 0) {
-        theme = &g_themeLiquidGlass;
     } else if (wcscmp(themeName, L"Windows10X") == 0) {
         theme = g_isRedesignedStartMenu
                     ? &g_themeWindows10X
