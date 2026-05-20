@@ -2,11 +2,11 @@
 // @id              audioswap
 // @name            AudioSwap
 // @description     Tray icon to cycle between multiple preferred audio outputs. Supports up to 6 devices with click or scroll to swap.
-// @version         1.3.0
+// @version         1.4.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -20,7 +20,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
 
 1. **Choose Device Count** — Open the **Settings** tab and pick how many devices to cycle through (2–6).
 2. **Choose Interaction Mode** — Select **Click to Swap** (left-click the icon) or **Scroll to Swap** (mouse wheel over the icon).
-3. **Choose Icons** — Pick an icon for each device slot. Icons for slots 3–6 are only used when the device count is set high enough.
+3. **Choose Icons** — Pick an icon for each device slot. Icons for slots 3–6 are only used when the device count is set high enough. (select Custom and save to open the file explorer)
 4. **Assign Devices** — Right-click the tray icon. Use **Set as Device 1 / 2 / 3...** to assign each slot from the live device list.
 5. **Swap** — Click or scroll the tray icon to cycle through your assigned devices.
 
@@ -35,11 +35,20 @@ Instantly cycle between multiple audio output devices from your system tray — 
 
 ## Known Bugs
 
-- **Scroll to Swap may not respond over elevated windows.** such as **Task Manager**, **Windhawk** or other admin-elevated applications. Switch focus away from an elevated window and scrolling will work normally.
+- **Scroll to Swap may not respond over elevated windows.** such as Task Manager, Windhawk or other admin-elevated applications. Switch focus away from an elevated window and scrolling will work normally.
 
 ---
 
 ## Changelog
+
+### v1.4.0
+- Custom .ico support — selecting "Custom Icon" in settings now auto-opens a file picker; also available via right-click → "Custom Icon for Device X..."
+- Custom icon paths stored internally (no separate text setting in the UI).
+- Patch notes: Fixed an issue where Scroll to Swap didn't work after a reboot until the icon was clicked.
+- Patch notes: Fixed a crash that occurred when using audio devices with very long names.
+- Patch notes: Fixed a bug where adding more devices in settings didn't take effect immediately.
+- Patch notes: Fixed a minor issue where cycling devices would sometimes skip the first slot.
+- Patch notes: Improved reliability of the mute toggle and overall system stability.
 
 ### v1.3.0
 - Up to 6 devices; scroll-to-swap mode; dynamic right-click menu.
@@ -95,6 +104,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
     - headphones_modern: Modern Headphones
     - headset_modern: Modern Gaming Headset
     - earphones: Earphones
+    - custom: Custom Icon
 - icon2: speaker_square
   $name: Device 2 Icon
   $options:
@@ -108,6 +118,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
     - headphones_modern: Modern Headphones
     - headset_modern: Modern Gaming Headset
     - earphones: Earphones
+    - custom: Custom Icon
 - icon3: headphones
   $name: Device 3 Icon
   $description: Used when Number of Devices is 3 or more
@@ -122,6 +133,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
     - headphones_modern: Modern Headphones
     - headset_modern: Modern Gaming Headset
     - earphones: Earphones
+    - custom: Custom Icon
 - icon4: headset_gaming
   $name: Device 4 Icon
   $description: Used when Number of Devices is 4 or more
@@ -136,6 +148,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
     - headphones_modern: Modern Headphones
     - headset_modern: Modern Gaming Headset
     - earphones: Earphones
+    - custom: Custom Icon
 - icon5: headphones_modern
   $name: Device 5 Icon
   $description: Used when Number of Devices is 5 or more
@@ -150,6 +163,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
     - headphones_modern: Modern Headphones
     - headset_modern: Modern Gaming Headset
     - earphones: Earphones
+    - custom: Custom Icon
 - icon6: headset_modern
   $name: Device 6 Icon
   $description: Used when Number of Devices is 6
@@ -164,6 +178,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
     - headphones_modern: Modern Headphones
     - headset_modern: Modern Gaming Headset
     - earphones: Earphones
+    - custom: Custom Icon
 */
 // ==/WindhawkModSettings==
 
@@ -177,12 +192,16 @@ Instantly cycle between multiple audio output devices from your system tray — 
 #include <mmdeviceapi.h>
 #include <propidl.h>
 #include <functiondiscoverykeys_devpkey.h>
+#include <commdlg.h>
 
 #define TRAY_ICON_ID         1
 #define WM_TRAY_CALLBACK     (WM_USER + 1)
 #define WM_UPDATE_TRAY_STATE (WM_USER + 2)
 #define WM_TRAY_SCROLL       (WM_USER + 3)  // wParam = direction (+1 or -1)
 #define WM_UPDATE_HOOK_STATE (WM_USER + 4)
+#define WM_SHOW_FILE_PICKER  (WM_USER + 5)  // lParam = bitmask of slots needing pickers
+#define WM_RELOAD_ICONS     (WM_USER + 6)  // reload icons on tray thread (eliminates cross-thread handle race)
+#define TRAY_RECT_INIT_TIMER 99   // one-shot retry timer for Shell_NotifyIconGetRect
 
 // Slot N uses menu IDs: N*100 + device_index (0..31). Max slot 6 → ID 631.
 #define MENU_SLOT_BASE     100
@@ -190,6 +209,7 @@ Instantly cycle between multiple audio output devices from your system tray — 
 #define MENU_OPEN_WINDHAWK 9000
 
 #define MAX_DEVICE_SLOTS 6
+#define MENU_CUSTOM_ICON_BASE 8000
 
 const DWORD CLICK_DEBOUNCE_MS  = 500;
 const DWORD SCROLL_DEBOUNCE_MS = 300;
@@ -203,6 +223,7 @@ static volatile HWND  g_trayHwnd          = nullptr;
 static HINSTANCE      g_hInstance         = nullptr;
 static WCHAR          g_windhawkPath[MAX_PATH] = {};
 static WCHAR          g_ddoresDllPath[MAX_PATH] = {};  // full system32 path
+static WCHAR          g_lastIconSetting[MAX_DEVICE_SLOTS][32] = {};
 static HICON          g_hWindHawkIcon     = nullptr;
 static HBITMAP        g_hWindHawkBmp      = nullptr;
 static DWORD          g_lastClickTime     = 0;
@@ -288,13 +309,8 @@ void LoadDeviceSelections() {
     WCHAR tmpIds[MAX_DEVICE_SLOTS][512]   = {};
     WCHAR tmpNames[MAX_DEVICE_SLOTS][256] = {};
 
-    int count;
-    EnterCriticalSection(&g_stateLock);
-    count = g_deviceSlotCount;
-    LeaveCriticalSection(&g_stateLock);
-
     WCHAR keyId[32], keyName[32];
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
         swprintf_s(keyId,   L"Device%dId",   i + 1);
         swprintf_s(keyName, L"Device%dName", i + 1);
         Wh_GetStringValue(keyId,   tmpIds[i],   512);
@@ -356,11 +372,29 @@ void LoadUserIconsAndSettings() {
 
     InterlockedExchange(&g_scrollToSwap, newScroll);
 
-    WCHAR iconKey[16];
+    WCHAR iconKey[16], pathKey[32];
     for (int i = 0; i < newCount; i++) {
         swprintf_s(iconKey, L"icon%d", i + 1);
         PCWSTR s = Wh_GetStringSetting(iconKey);
-        ExtractIconExW(g_ddoresDllPath, GetIconIndex(s), nullptr, &g_iconDev[i], 1);
+
+        if (s && wcscmp(s, L"custom") == 0) {
+            swprintf_s(pathKey, L"icon%d_custom_path", i + 1);
+            WCHAR customPath[MAX_PATH] = {};
+            Wh_GetStringValue(pathKey, customPath, MAX_PATH);
+            if (customPath[0]) {
+                g_iconDev[i] = (HICON)LoadImageW(NULL, customPath, IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
+            }
+            if (!g_iconDev[i]) {
+                ExtractIconExW(g_ddoresDllPath, 4, nullptr, &g_iconDev[i], 1);
+            }
+        } else {
+            ExtractIconExW(g_ddoresDllPath, GetIconIndex(s), nullptr, &g_iconDev[i], 1);
+        }
+
+        // Save current icon setting for transition detection in SettingsChanged.
+        if (s) wcscpy_s(g_lastIconSetting[i], 32, s);
+        else   g_lastIconSetting[i][0] = L'\0';
+
         if (s) Wh_FreeStringSetting(s);
 
         if (g_iconDev[i]) {
@@ -386,7 +420,23 @@ static void RefreshTrayIconRect() {
     NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
     nii.hWnd = hwnd;
     nii.uID  = TRAY_ICON_ID;
-    Shell_NotifyIconGetRect(&nii, &g_trayIconRect);
+    RECT newRect = {};
+    if (SUCCEEDED(Shell_NotifyIconGetRect(&nii, &newRect)) &&
+        newRect.right > newRect.left) {
+        g_trayIconRect = newRect;
+        KillTimer(hwnd, TRAY_RECT_INIT_TIMER);   // rect valid — stop retrying
+    } else {
+        // Explorer hasn't assigned screen coordinates to the icon yet.
+        // Shell_NotifyIconGetRect is a query — it won't force Explorer to
+        // finish its layout pass. Send NIM_MODIFY to give Explorer the
+        // necessary nudge to compute the icon's position.
+        NOTIFYICONDATAW nid = {sizeof(nid)};
+        nid.hWnd = hwnd;
+        nid.uID  = TRAY_ICON_ID;
+        nid.uFlags = NIF_SHOWTIP;
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+        SetTimer(hwnd, TRAY_RECT_INIT_TIMER, 200, nullptr);
+    }
 }
 
 // ─── Mute helpers ─────────────────────────────────────────────────────────────
@@ -741,11 +791,11 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
 
     if (configuredCount < 2)
-        swprintf_s(nid.szTip, L"AudioSwap: Right-click to configure");
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"AudioSwap: Right-click to configure");
     else if (localMuted)
-        swprintf_s(nid.szTip, L"Audio: %s (Muted)", currentDev);
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.100s (Muted)", currentDev);
     else
-        swprintf_s(nid.szTip, L"Audio: %s", currentDev);
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.110s", currentDev);
 
     HICON hOverlay = localMuted ? CreateMutedOverlayIcon(currentIcon) : nullptr;
     nid.hIcon = hOverlay ? hOverlay : currentIcon;
@@ -814,7 +864,7 @@ BOOL CycleAudioDevice(int direction) {
         }
     }
 
-    int startSlot = (currentSlot >= 0) ? currentSlot : 0;
+    int startSlot = (currentSlot >= 0) ? currentSlot : (localCount - 1);
     int validSlot = -1;
 
     for (int tries = 1; tries <= localCount; tries++) {
@@ -915,6 +965,18 @@ void BuildAndShowContextMenu(HWND hWnd) {
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
+    for (int slot = 0; slot < localCount; slot++) {
+        WCHAR label[48];
+        swprintf_s(label, L"Custom Icon for Device %d...", slot + 1);
+        MENUITEMINFOW miiCI = {sizeof(miiCI)};
+        miiCI.fMask      = MIIM_ID | MIIM_STRING;
+        miiCI.wID        = MENU_CUSTOM_ICON_BASE + slot;
+        miiCI.dwTypeData = label;
+        InsertMenuItemW(hMenu, (UINT)-1, TRUE, &miiCI);
+    }
+
+    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+
     MENUITEMINFOW miiWH = {sizeof(miiWH)};
     miiWH.fMask      = MIIM_ID | MIIM_STRING | MIIM_BITMAP;
     miiWH.wID        = MENU_OPEN_WINDHAWK;
@@ -963,7 +1025,7 @@ void BuildAndShowContextMenu(HWND hWnd) {
     PostMessageW(hWnd, WM_NULL, 0, 0);
     DestroyMenu(hMenu);
 
-    if (cmd > 0 && cmd != MENU_OPEN_WINDHAWK) {
+    if (cmd >= MENU_SLOT_BASE && cmd < MENU_SLOT_BASE * (localCount + 1)) {
         int slot      = cmd / MENU_SLOT_BASE;
         int deviceIdx = cmd % MENU_SLOT_BASE;
         if (slot >= 1 && slot <= localCount && deviceIdx < deviceCount) {
@@ -975,6 +1037,26 @@ void BuildAndShowContextMenu(HWND hWnd) {
         sei.lpFile = g_windhawkPath;
         sei.nShow  = SW_SHOWNORMAL;
         ShellExecuteExW(&sei);
+    } else if (cmd >= MENU_CUSTOM_ICON_BASE && cmd < MENU_CUSTOM_ICON_BASE + localCount) {
+        int slot = cmd - MENU_CUSTOM_ICON_BASE + 1;
+        WCHAR path[MAX_PATH] = {};
+        OPENFILENAMEW ofn = {sizeof(ofn)};
+        ofn.hwndOwner = hWnd;
+        ofn.lpstrFilter = L"Icon Files (*.ico)\0*.ico\0All Files (*.*)\0*.*\0";
+        ofn.nFilterIndex = 1;
+        ofn.lpstrFile = path;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+        WCHAR title[64];
+        swprintf_s(title, L"Select Icon for Device %d", slot);
+        ofn.lpstrTitle = title;
+        if (GetOpenFileNameW(&ofn)) {
+            WCHAR customPathKey[32];
+            swprintf_s(customPathKey, L"icon%d_custom_path", slot);
+            Wh_SetStringValue(customPathKey, path);
+            LoadUserIconsAndSettings();
+            PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+        }
     }
 }
 
@@ -1003,7 +1085,12 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     if (msg == WM_TRAY_CALLBACK) {
         UINT event = LOWORD(lParam);  // NOTIFYICON_VERSION_4: event in LOWORD(lParam)
 
-        if (event == WM_RBUTTONUP) {
+        if (event == WM_MOUSEMOVE) {
+            POINT pt = { (short)LOWORD(wParam), (short)HIWORD(wParam) };
+            if (!PtInRect(&g_trayIconRect, pt)) {
+                RefreshTrayIconRect();
+            }
+        } else if (event == WM_RBUTTONUP) {
             BuildAndShowContextMenu(hWnd);
 
         } else if (event == WM_LBUTTONUP &&
@@ -1022,8 +1109,11 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         } else if (event == WM_LBUTTONUP &&
                    InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1) {
             // Scroll mode: left-click toggles mute (COM initialized on tray thread)
-            ToggleMuteCurrentDevice();
-            PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            if (InterlockedExchange(&g_isProcessingClick, 1) == 0) {
+                ToggleMuteCurrentDevice();
+                InterlockedExchange(&g_isProcessingClick, 0);
+                PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            }
         }
 
     } else if (msg == WM_TRAY_SCROLL) {
@@ -1036,6 +1126,13 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             SpawnCycleThread(direction);
         }
 
+    } else if (msg == WM_TIMER && wParam == TRAY_RECT_INIT_TIMER) {
+        // Fired by RefreshTrayIconRect when Shell_NotifyIconGetRect returned empty.
+        // By now Explorer has had time to complete its paint cycle and assign real
+        // screen coordinates to the icon. RefreshTrayIconRect kills the timer on
+        // success, or re-arms it for another 200ms if Explorer is still not ready.
+        RefreshTrayIconRect();
+
     } else if (msg == WM_UPDATE_TRAY_STATE) {
         UpdateTrayTip(hWnd, FALSE);
 
@@ -1046,6 +1143,53 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         } else if (!isScroll && g_mouseHook) {
             UnhookWindowsHookEx(g_mouseHook);
             g_mouseHook = nullptr;
+        }
+
+    } else if (msg == WM_RELOAD_ICONS) {
+        // Run icon reload on tray thread to eliminate cross-thread handle race.
+        WCHAR prev[MAX_DEVICE_SLOTS][32] = {};
+        for (int i = 0; i < MAX_DEVICE_SLOTS; i++)
+            wcscpy_s(prev[i], 32, g_lastIconSetting[i]);
+
+        LoadUserIconsAndSettings();
+        PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+
+        DWORD pickerSlots = 0;
+        for (int i = 0; i < g_deviceSlotCount; i++) {
+            WCHAR key[16];
+            swprintf_s(key, L"icon%d", i + 1);
+            PCWSTR s = Wh_GetStringSetting(key);
+            BOOL isCustom = (s && wcscmp(s, L"custom") == 0);
+            BOOL wasCustom = (wcscmp(prev[i], L"custom") == 0);
+            if (s) Wh_FreeStringSetting(s);
+            if (isCustom && !wasCustom)
+                pickerSlots |= (1u << i);
+        }
+        if (pickerSlots)
+            PostMessageW(hWnd, WM_SHOW_FILE_PICKER, 0, (LPARAM)pickerSlots);
+
+    } else if (msg == WM_SHOW_FILE_PICKER) {
+        DWORD slots = (DWORD)lParam;
+        for (int slot = 1; slots; slot++, slots >>= 1) {
+            if (!(slots & 1)) continue;
+            WCHAR path[MAX_PATH] = {};
+            WCHAR title[64];
+            swprintf_s(title, L"Select Icon for Device %d", slot);
+            OPENFILENAMEW ofn = {sizeof(ofn)};
+            ofn.hwndOwner = hWnd;
+            ofn.lpstrFilter = L"Icon Files (*.ico)\0*.ico\0All Files (*.*)\0*.*\0";
+            ofn.nFilterIndex = 1;
+            ofn.lpstrFile = path;
+            ofn.nMaxFile = MAX_PATH;
+            ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+            ofn.lpstrTitle = title;
+            if (GetOpenFileNameW(&ofn)) {
+                WCHAR customPathKey[32];
+                swprintf_s(customPathKey, L"icon%d_custom_path", slot);
+                Wh_SetStringValue(customPathKey, path);
+                LoadUserIconsAndSettings();
+                PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            }
         }
 
     } else if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
@@ -1146,7 +1290,12 @@ BOOL WhTool_ModInit() {
     InitializeCriticalSection(&g_stateLock);
 
     g_hInstance = GetModuleHandleW(nullptr);
-    GetModuleFileNameW(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath));
+    switch (GetModuleFileNameW(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath))) {
+        case 0:
+        case ARRAYSIZE(g_windhawkPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return FALSE;
+    }
 
     // Build the full system32 path for ddores.dll.
     UINT sysLen = GetSystemDirectoryW(g_ddoresDllPath, MAX_PATH);
@@ -1190,13 +1339,13 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    RestoreMuteExternal();         // undo mute before mode may change
-    LoadUserIconsAndSettings();
+    RestoreMuteExternal();
     LoadDeviceSelections();
     HWND hwnd = g_trayHwnd;
-    if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
-    HWND hwndHook = g_trayHwnd;
-    if (hwndHook) PostMessageW(hwndHook, WM_UPDATE_HOOK_STATE, 0, 0);
+    if (hwnd) {
+        PostMessageW(hwnd, WM_RELOAD_ICONS, 0, 0);
+        PostMessageW(hwnd, WM_UPDATE_HOOK_STATE, 0, 0);
+    }
 }
 
 void WhTool_ModUninit() {
