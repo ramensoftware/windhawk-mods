@@ -211,7 +211,8 @@ Black screen mode does not save as much power as turning the monitor off, becaus
 #define COUNTDOWN_INTERVAL_MS 1000
 
 #define WM_APP_EXIT (WM_APP + 1)
-#define WM_TRAY_SCROLL (WM_APP + 2)
+#define WM_APP_SETTINGS_CHANGED (WM_APP + 2)
+#define WM_TRAY_SCROLL (WM_APP + 3)
 
 #define HIDDEN_WINDOW_CLASS L"MonitorSleepButtonHiddenWindow"
 
@@ -1226,13 +1227,9 @@ void FinishCountdown(HWND hwnd) {
 }
 
 void WhTool_ModSettingsChanged() {
-    ApplyRuntimeSettings(
-        ReadCountdownSecondsSetting(),
-        ReadActionModeSetting(),
-        ReadHotkeyEnabledSetting(),
-        ReadHotkeyModifiersSetting(),
-        ReadHotkeyKeySetting()
-    );
+    if (g_hwnd) {
+        PostMessageW(g_hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    }
 }
 
 // ------------------------------------------------------------
@@ -1262,7 +1259,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
-        if (msg == WM_DESTROY) {
+    if (msg == WM_APP_SETTINGS_CHANGED) {
+        Wh_Log(L"Settings changed message received.");
+
+        ApplyRuntimeSettings(
+            ReadCountdownSecondsSetting(),
+            ReadActionModeSetting(),
+            ReadHotkeyEnabledSetting(),
+            ReadHotkeyModifiersSetting(),
+            ReadHotkeyKeySetting()
+        );
+
+        return 0;
+    }
+
+    if (msg == WM_DESTROY) {
         PostQuitMessage(0);
         return 0;
     }
