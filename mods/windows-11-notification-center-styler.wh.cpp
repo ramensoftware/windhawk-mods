@@ -8212,8 +8212,6 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeTintedGlass;
     } else if (wcscmp(themeName, L"Fluid") == 0) {
         theme = &g_themeFluid;
-    } else if (wcscmp(themeName, L"LiquidGlass") == 0) {
-        theme = &g_themeLiquidGlass;
     } else if (wcscmp(themeName, L"BetterControl11") == 0) {
         theme = &g_themeBetterControl11;
     } else if (wcscmp(themeName, L"LayerMicaUI") == 0) {
