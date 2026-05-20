@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-20T23:08:30.000Z</updated>
+    <updated>2026-05-20T23:12:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Monitor Sleep Button 1.1.0]]></title>
+        <id>https://windhawk.net/mods/monitor-sleep-button#6da1e2166b9f1d3ea9c073170de375ff2d8e8d91</id>
+        <link href="https://windhawk.net/mods/monitor-sleep-button"/>
+        <updated>2026-05-20T23:12:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Configurable global hotkey</li>
+<li>Ctrl / Alt / Shift / Win modifier support</li>
+<li>Right-click tray menu</li>
+<li>Esc cancels the countdown</li>
+<li>Mouse wheel over the tray icon changes countdown duration</li>
+<li>Tray icon displays the selected countdown duration</li>
+<li>Dynamic tray tooltip and menu text</li>
+<li>Open Windhawk shortcut</li>
+<li>New action mode:</li>
+<li>Turn monitor off</li>
+<li>Show black screen</li>
+<li>Black screen mode can be closed instantly with Esc, a mouse click, or by pressing the tray hotkey / tray icon again</li>
+</ul>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Single Window Tabs 0.8]]></title>
         <id>https://windhawk.net/mods/explorer-single-window-tabs#779ebe8f6cd9cce13121d4445e0cd8d6f1db4fe9</id>
@@ -442,31 +466,6 @@ subfolder under their parent directory.</li>
         <author>
             <name>Simon Benedict</name>
             <uri>https://github.com/simon-ami</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Details Auto-Fit Columns 1.0.0]]></title>
-        <id>https://windhawk.net/mods/file-explorer-details-autofit-columns#3c4c5577e21c347a98f10a986e4ea252156f2b63</id>
-        <link href="https://windhawk.net/mods/file-explorer-details-autofit-columns"/>
-        <updated>2026-05-12T22:06:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileexplorerdetailsautofitcolumns">File Explorer Details Auto-Fit Columns</h1>
-<p>Automatically fits all visible column widths to their content whenever a folder is opened or refreshed in <code>Details view</code>, eliminating truncated text and ellipsis (<code>...</code>).</p>
-<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/FEDAFC.gif" alt="File Explorer Details Auto-Fit Columns" /></p>
-<h2 id="triggers">Triggers</h2>
-<ul>
-<li>Opening or navigating to a folder</li>
-<li>Minimizing and restoring the Explorer window</li>
-<li><code>Ctrl + R</code></li>
-<li><code>F5</code></li>
-<li>Right-click context menu → Refresh</li>
-<li>The refresh button in the toolbar</li>
-</ul>
-<p>Only affects <code>Details view</code>. Other view modes (Icons, Tiles, List, etc.) are untouched.</p>
-<h2 id="settings">Settings</h2>
-<p><code>Refresh Delay (ms)</code>: How long the mod waits before auto-fitting columns. The default is 400ms, which gives Explorer enough time to finish loading files before measuring content width. If you notice columns fitting too early in large folders, increase this value. If you want a snappier response in small folders, decrease it.</p>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>
