@@ -11341,12 +11341,12 @@
                     4
                 ],
                 "ratingUsers": 5,
-                "updated": 1777731225000,
+                "updated": 1779318197000,
                 "users": 81
             },
             "metadata": {
                 "author": "Salyts",
-                "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -lshlwapi -lcomdlg32 -luuid -lgdiplus",
+                "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -lshlwapi -lcomdlg32 -luuid -lgdiplus -luxtheme",
                 "description": "Custom tray icons with actions, context menus and image icon support.",
                 "github": "https://github.com/Salyts",
                 "include": [
@@ -11354,7 +11354,7 @@
                 ],
                 "license": "MIT",
                 "name": "Ultimate Custom Tray",
-                "version": "1.0"
+                "version": "2.0"
             }
         },
         "unlock-taskmgr-server": {
