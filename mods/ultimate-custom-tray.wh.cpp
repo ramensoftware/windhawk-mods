@@ -36,7 +36,7 @@ action on left-click and/or show a context menu on right-click.
 | `~` | `~Downloads` and `~windhawk.exe` | Opens a folder or file by name. |
 | `cmd:` | `cmd:control` | Runs a command through `cmd.exe`. |
 | `shell:` | `shell:shutdown /r /f /t 0` | Runs through `powershell.exe`. |
-| `press:` | `press:Win+E` or `press:0x5Bn;0x45` | Keyboard key press using a [Win32 key code](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). |
+| `press:` | `press:Win+E` or `press:0x5B;0x45` | Keyboard key press using a [Win32 key code](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). |
 | `web:` | `web:https://windhawk.net/` | Opens a URL in the default browser. |
 | `ms-settings:` | `ms-settings:bluetooth` | Opens a Windows Settings page. |
 
