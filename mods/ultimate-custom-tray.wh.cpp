@@ -47,7 +47,7 @@ action on left-click and/or show a context menu on right-click.
 | `-` | `-"C:\Program Files\app.exe"` or `-shell:shutdown /r /f /t 0` | Runs as administrator. |
 | `*` | `*cmd:tasklist` or `*shell:Get-Process` | Execution with a terminal window. (only for `cmd:` and `shell:` prefixes). |
 
-Signs can be combined: `-*cmd:control` runs cmd in a visible window as admin.
+Signs can be combined: `-*cmd:tasklist` runs cmd in a visible window as admin.
 
 ---
 
