@@ -6633,7 +6633,7 @@
                     4
                 ],
                 "ratingUsers": 6,
-                "updated": 1772646881000,
+                "updated": 1779300155000,
                 "users": 252
             },
             "metadata": {
@@ -6641,7 +6641,7 @@
                     "x86-64"
                 ],
                 "author": "Anixx",
-                "compilerOptions": "-luser32 -lcomctl32 -ldwmapi",
+                "compilerOptions": "-luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lpropsys -lgdiplus -lshlwapi",
                 "description": "Enables native titlebars in UWP apps",
                 "github": "https://github.com/Anixx",
                 "include": [
@@ -6649,7 +6649,7 @@
                     "explorer.exe"
                 ],
                 "name": "Remove UWP titlebars Lite",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "net-toggle": {

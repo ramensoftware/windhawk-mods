@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-20T16:33:31.000Z</updated>
+    <updated>2026-05-20T18:02:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.1.0]]></title>
+        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#16941c0526e84fd525aae8bccb265ad89e2168e0</id>
+        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
+        <updated>2026-05-20T18:02:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>Add support for proper icons in titlebars</p></li>
+<li><p>Change screenshot link in native-titlebars mod</p></li>
+</ul>
+<p>Updated the screenshot link in the mod readme.</p>
+<ul>
+<li>Change screenshot URL in native-titlebars mod</li>
+</ul>
+<p>Updated the screenshot URL in the mod readme.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AudioSwap 1.4.0]]></title>
         <id>https://windhawk.net/mods/audioswap#e0943fee9ae46fd36207fa540b7047695ab1543c</id>
@@ -416,38 +435,6 @@ multi-monitor setups. Monitors not listed in settings are left untouched.</p>]]>
         <author>
             <name>Simon Benedict</name>
             <uri>https://github.com/simon-ami</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Titlebar Icon and Text 1.0]]></title>
-        <id>https://windhawk.net/mods/hide-titlebar-elements#d98197019252c77368c7437824031b3978cbf62c</id>
-        <link href="https://windhawk.net/mods/hide-titlebar-elements"/>
-        <updated>2026-05-12T08:44:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidetitlebaricontext">Hide Titlebar Icon/Text</h1>
-<p>Hides certain elements in window titlebars</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><p>Hide titlebar icon
-<img src="https://i.imgur.com/phtVQdl.png" alt="hide icon preview" /></p></li>
-<li><p>Hide titlebar text
-<img src="https://i.imgur.com/G1biOig.png" alt="hide text preview" /></p></li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Implemented through overriding the <code>dwAttributes</code> argument of the <code>SetWindowThemeNonClientAttributes</code> function and
-applied to windows and dialogs that receive the <code>WM_NCCREATE</code> system message.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Inspired by an AutoHotKey script: <a href="https://www.autohotkey.com/board/topic/78706-tbariconblanker/">TBarIconBlanker</a></li>
-<li>Some other mods were used as reference:<ul>
-<li><a href="https://windhawk.net/mods/auto-custom-titlebar-colors">auto-custom-titlebar-colors</a></li>
-<li><a href="https://windhawk.net/mods/aerexplorer">aerexplorer</a></li>
-<li><a href="https://windhawk.net/mods/translucent-windows">translucent-windows</a></li></ul></li>
-</ul>]]></content>
-        <author>
-            <name>darkthemer</name>
-            <uri>https://github.com/darkthemer</uri>
         </author>
     </entry>
 </feed>
