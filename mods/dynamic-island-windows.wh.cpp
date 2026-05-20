@@ -778,15 +778,16 @@ HICON CopyWindowIcon(HWND hwnd, WPARAM iconType) {
     return result ? CopyIcon(reinterpret_cast<HICON>(result)) : nullptr;
 }
 
-extern "C" UINT WINAPI PrivateExtractIconsW(LPCWSTR szFileName, int nIconIndex, int cxIcon, int cyIcon, HICON *phicon, UINT *piconid, UINT nIcons, UINT flags);
-
 HICON getProcessIcon(DWORD pid) {
     std::wstring path;
     if (ProcessImageNameForPid(pid, &path) && !path.empty()) {
         HICON hIcon = nullptr;
         UINT iconId = 0;
         // Try to fetch a high-res 64x64 icon first to avoid pixelated icons
-        if (PrivateExtractIconsW(path.c_str(), 0, 64, 64, &hIcon, &iconId, 1, 0) == 1 && hIcon) {
+        using PrivateExtractIconsW_t = UINT(WINAPI*)(LPCWSTR, int, int, int, HICON*, UINT*, UINT, UINT);
+        static auto pPrivateExtractIconsW = reinterpret_cast<PrivateExtractIconsW_t>(
+            GetProcAddress(GetModuleHandleW(L"user32.dll"), "PrivateExtractIconsW"));
+        if (pPrivateExtractIconsW && pPrivateExtractIconsW(path.c_str(), 0, 64, 64, &hIcon, &iconId, 1, 0) == 1 && hIcon) {
             return hIcon;
         }
 
@@ -3135,8 +3136,8 @@ class Renderer {
             target_->FillRoundedRectangle(D2D1::RoundedRect(badge, 13, 13), iconBg.Get());
             textBrush_->SetOpacity(0.95f);
             // Draw glyph centered in badge; use smallTextFormat for emoji fallback.
-            target_->DrawTextW(state.clipboard.image ? L"\u25a3" : L"\u2398",
-                               1, textFormat_.Get(), badge,
+            target_->DrawTextW(glyph,
+                               static_cast<UINT32>(wcslen(glyph)), textFormat_.Get(), badge,
                                textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
             textBrush_->SetOpacity(0.90f);
         }
