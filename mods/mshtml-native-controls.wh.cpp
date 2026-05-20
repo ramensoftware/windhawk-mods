@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              mshtml-native-controls
 // @name            MSHTML Tweaks
-// @description     Various tweaks for the IE engine
+// @description     Various tweaks for the IE engine, including old control styles and font AA options
 // @version         1.0
 // @author          Ingan121
 // @github          https://github.com/Ingan121
