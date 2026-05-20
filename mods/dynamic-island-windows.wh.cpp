@@ -92,6 +92,33 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 */
 // ==/WindhawkModSettings==
 
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#ifndef UNICODE
+#define UNICODE
+#endif
+#ifndef _UNICODE
+#define _UNICODE
+#endif
+
+#include <windows.h>
+#include <unknwn.h>
+#include <dwmapi.h>
+#include <shellapi.h>
+#include <setupapi.h>
+#include <d2d1.h>
+#include <dwrite.h>
+#include <wincodec.h>
+#include <shcore.h>
+#include <windowsx.h>
+#include <audioclient.h>
+#include <audiopolicy.h>
+#include <endpointvolume.h>
+#include <mmdeviceapi.h>
+#include <mmreg.h>
+#include <objbase.h>
+#include <wrl/client.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -107,26 +134,6 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-
-#include <windows.h>
-#include <audioclient.h>
-#include <audiopolicy.h>
-#include <setupapi.h>
-#include <d2d1.h>
-#include <dwmapi.h>
-#include <dwrite.h>
-#include <endpointvolume.h>
-#include <mmdeviceapi.h>
-#include <mmreg.h>
-#include <objbase.h>
-#include <shellapi.h>
-#include <shcore.h>
-#include <wincodec.h>
-#include <windowsx.h>
-#include <wrl/client.h>
 
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
