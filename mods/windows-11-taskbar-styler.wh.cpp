@@ -148,10 +148,6 @@ TaskbarToStatusbar](https://github.com/ramensoftware/windows-11-taskbar-styling-
 \
 UltraWideFriendly](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/UltraWideFriendly/README.md)
 
-[![LiquidGlass](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/LiquidGlass/screenshot.png)
-\
-LiquidGlass](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/LiquidGlass/README.md)
-
 [![Borderless](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/Borderless/screenshot.png)
 \
 Borderless](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/Borderless/README.md)
@@ -479,8 +475,6 @@ from the **TranslucentTB** project.
   - TintedGlass: TintedGlass
   - TaskbarToStatusbar: TaskbarToStatusbar
   - UltraWideFriendly: UltraWideFriendly
-  - LiquidGlass: LiquidGlass
-  - LiquidGlass_variant_Alternate: LiquidGlass (Alternate)
   - Borderless: Borderless
 - styleConstants: [""]
   $name: Style constants
@@ -10857,10 +10851,6 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeTaskbarToStatusbar;
     } else if (wcscmp(themeName, L"UltraWideFriendly") == 0) {
         theme = &g_themeUltraWideFriendly;
-    } else if (wcscmp(themeName, L"LiquidGlass") == 0) {
-        theme = &g_themeLiquidGlass;
-    } else if (wcscmp(themeName, L"LiquidGlass_variant_Alternate") == 0) {
-        theme = &g_themeLiquidGlass_variant_Alternate;
     } else if (wcscmp(themeName, L"Borderless") == 0) {
         theme = &g_themeBorderless;
     }
