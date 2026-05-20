@@ -1,3 +1,8 @@
+## 1.4.0 ([May 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e0943fee9ae46fd36207fa540b7047695ab1543c/mods/audioswap.wh.cpp))
+
+* added Custom icon selection from `.ico` files.
+* opens the file explorer after saving the custom settings
+
 ## 1.3.0 ([May 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0430b67bb5347bbe8b774d3cf99e332b04c9ecb2/mods/audioswap.wh.cpp))
 
 - Select a mode in the Windhawk settings: Click / Scroll

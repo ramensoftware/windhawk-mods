@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-19T10:31:07.000Z</updated>
+    <updated>2026-05-20T16:33:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AudioSwap 1.4.0]]></title>
+        <id>https://windhawk.net/mods/audioswap#e0943fee9ae46fd36207fa540b7047695ab1543c</id>
+        <link href="https://windhawk.net/mods/audioswap"/>
+        <updated>2026-05-20T16:33:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>added Custom icon selection from <code>.ico</code> files.</li>
+<li>opens the file explorer after saving the custom settings</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Tiling Helper 2.0.1]]></title>
         <id>https://windhawk.net/mods/tiling-helper#a5f2239fbd8e2bf42629535a399c346dd2023d22</id>
@@ -434,37 +448,6 @@ applied to windows and dialogs that receive the <code>WM_NCCREATE</code> system 
         <author>
             <name>darkthemer</name>
             <uri>https://github.com/darkthemer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VLC Discord Rich Presence 1.1.5]]></title>
-        <id>https://windhawk.net/mods/vlc-discord-rpc#b2662eeac6b52ea789b3647dd224b0c42a19b05a</id>
-        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
-        <updated>2026-05-12T08:40:32.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="new">New</h3>
-<ul>
-<li>Music activity on Discord now shows:  </li>
-<li><strong>Listening to [Song title]</strong>  </li>
-<li><strong>Listening to [Artist]</strong>  </li>
-<li><strong>Listening to [Album]</strong>  </li>
-<li>VLC port is detected in most setups, so you don’t need to enter the port number manually.  </li>
-<li>The mod now reads your VLC Lua HTTP password directly, so you can use any password without extra setup.  </li>
-</ul>
-<h3 id="fixes">Fixes</h3>
-<ul>
-<li>Toast notifications no longer repeat or display the wrong track.  </li>
-<li>The image scraper now provides more accurate artwork instead of random results.  </li>
-<li>Port detection works correctly across different VLC configurations, including non‑default ports.  </li>
-</ul>
-<h3 id="improvements">Improvements</h3>
-<ul>
-<li>Added <code>wh_log()</code> entries to make debugging and tracking media simpler.  </li>
-<li>Artwork handling has been refined for sharper and more consistent images.  </li>
-</ul>
-<p>Special thanks to <strong>@josephct</strong> for suggesting the music activity feature and for identifying the VLC port issue that could stop Rich Presence from working.</p>]]></content>
-        <author>
-            <name>ciizerr</name>
-            <uri>https://github.com/ciizerr</uri>
         </author>
     </entry>
 </feed>
