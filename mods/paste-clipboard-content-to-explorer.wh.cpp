@@ -2,7 +2,7 @@
 // @id              paste-clipboard-content-to-explorer
 // @name            Paste Clipboard Content to Explorer
 // @description     Paste text and images from clipboard as files in Explorer and in file dialogs
-// @version         1.1
+// @version         1.6
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -17,16 +17,34 @@ Allows pasting text and images from clipboard as files in Explorer,
 on the desktop and in open/save file dialogs.
 
 ## Features
-- Paste text as .txt (UTF-16 LE with BOM)
+- Paste text as .txt (UTF-8, UTF-8 with BOM, or UTF-16 LE with BOM)
 - Paste images as .png
 - Auto-naming with incrementing number on conflict
 - Works in Explorer folders, on the desktop, in file dialogs
 - Works with network folders (UNC paths)
 - Paste menu item is grayed out in virtual folders (This PC, Network, etc.)
-- Ctrl+V and context menu Paste both work
+- Ctrl+V, context menu Paste and menubar Paste all work
 - Shows system error dialog when pasting into a folder without write access
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- textEncoding: UTF-16
+  $name: Text encoding
+  $description: Encoding for pasted text files
+  $options:
+  - UTF-16: UTF-16 LE with BOM
+  - UTF-8-BOM: UTF-8 with BOM
+  - UTF-8: UTF-8 without BOM
+- enableTextPaste: true
+  $name: Enable text paste
+  $description: Allow pasting text from clipboard
+- enableImagePaste: true
+  $name: Enable image paste
+  $description: Allow pasting images from clipboard
+*/
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
@@ -42,36 +60,47 @@ static ULONG_PTR g_gdiplusToken = 0;
 static CRITICAL_SECTION g_gdiplusCS;
 static bool g_gdiplusCSInit = false;
 static HWND g_lastContextMenuShellView = nullptr;
+static HWND g_menubarShellView = nullptr;
 static bool PerformPaste(HWND sourceWindow);
+
+// Settings
+struct {
+    std::wstring textEncoding = L"UTF-16";
+    bool enableTextPaste = true;
+    bool enableImagePaste = true;
+} g_settings;
+
+// ============================================================
+//  Settings
+// ============================================================
+void LoadSettings()
+{
+    PCWSTR textEncoding = Wh_GetStringSetting(L"textEncoding");
+    g_settings.textEncoding = textEncoding ? textEncoding : L"UTF-16";
+    Wh_FreeStringSetting(textEncoding);
+    
+    g_settings.enableTextPaste = Wh_GetIntSetting(L"enableTextPaste");
+    g_settings.enableImagePaste = Wh_GetIntSetting(L"enableImagePaste");
+}
 
 // ============================================================
 //  Lazy GDI+ initialization
 // ============================================================
 static bool EnsureGdiplusInitialized()
 {
-    if (g_gdiplusToken != 0)
-        return true;
-
-    if (!g_gdiplusCSInit)
-        return false;
-
+    if (g_gdiplusToken != 0) return true;
+    if (!g_gdiplusCSInit)    return false;
     EnterCriticalSection(&g_gdiplusCS);
     bool result = false;
     if (g_gdiplusToken == 0)
     {
         GdiplusStartupInput gsi = {};
         gsi.GdiplusVersion = 1;
-        gsi.SuppressBackgroundThread = FALSE;
-        gsi.SuppressExternalCodecs   = FALSE;
         Status st = GdiplusStartup(&g_gdiplusToken, &gsi, nullptr);
         result = (st == Ok);
-        if (!result)
-            g_gdiplusToken = 0;
+        if (!result) g_gdiplusToken = 0;
     }
-    else
-    {
-        result = true;
-    }
+    else result = true;
     LeaveCriticalSection(&g_gdiplusCS);
     return result;
 }
@@ -82,25 +111,18 @@ static bool EnsureGdiplusInitialized()
 struct ScopedCoInit
 {
     bool m_initialized = false;
-
     ScopedCoInit()
     {
         HRESULT hr = CoInitializeEx(nullptr,
                                     COINIT_APARTMENTTHREADED |
                                     COINIT_DISABLE_OLE1DDE);
-        if (SUCCEEDED(hr))
-            m_initialized = true;
+        if (SUCCEEDED(hr)) m_initialized = true;
     }
-
-    ~ScopedCoInit()
-    {
-        if (m_initialized)
-            CoUninitialize();
-    }
+    ~ScopedCoInit() { if (m_initialized) CoUninitialize(); }
 };
 
 // ============================================================
-//  Default base name from explorerframe.dll string id 49922
+//  Default base name
 // ============================================================
 static std::wstring GetDefaultBaseName()
 {
@@ -111,12 +133,10 @@ static std::wstring GetDefaultBaseName()
     if (hMod)
     {
         WCHAR buf[512] = {};
-        if (LoadStringW(hMod, 49922, buf, 512) > 0)
-            result = buf;
+        if (LoadStringW(hMod, 49922, buf, 512) > 0) result = buf;
         FreeLibrary(hMod);
     }
-    if (result.empty())
-        result = L"Clipboard";
+    if (result.empty()) result = L"Clipboard";
     return result;
 }
 
@@ -128,13 +148,11 @@ static std::wstring GetUniquePath(const std::wstring& dir,
                                   const std::wstring& ext)
 {
     std::wstring p = dir + L'\\' + baseName + ext;
-    if (!PathFileExistsW(p.c_str()))
-        return p;
+    if (!PathFileExistsW(p.c_str())) return p;
     for (int n = 1; n < 100000; ++n)
     {
         p = dir + L'\\' + baseName + L" (" + std::to_wstring(n) + L")" + ext;
-        if (!PathFileExistsW(p.c_str()))
-            return p;
+        if (!PathFileExistsW(p.c_str())) return p;
     }
     return dir + L'\\' + baseName + ext;
 }
@@ -152,165 +170,111 @@ static bool GetPngClsid(CLSID* clsid)
     GetImageEncoders(num, size, info);
     bool found = false;
     for (UINT i = 0; i < num; ++i)
-    {
         if (!wcscmp(info[i].MimeType, L"image/png"))
-        {
-            *clsid = info[i].Clsid;
-            found = true;
-            break;
-        }
-    }
+            { *clsid = info[i].Clsid; found = true; break; }
     free(info);
     return found;
 }
 
 // ============================================================
-//  Check write access to directory without creating files
+//  Check write access
 // ============================================================
 static DWORD CheckDirectoryWriteAccess(const std::wstring& dir)
 {
-    HANDLE h = CreateFileW(
-        dir.c_str(),
-        GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,
-        nullptr,
-        OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS,
-        nullptr);
-    if (h == INVALID_HANDLE_VALUE)
-        return GetLastError();
+    HANDLE h = CreateFileW(dir.c_str(), GENERIC_WRITE,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           nullptr, OPEN_EXISTING,
+                           FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return GetLastError();
     CloseHandle(h);
     return 0;
 }
 
 // ============================================================
-//  Show system access denied message
+//  Show access denied message
 // ============================================================
 static void ShowAccessDeniedMessage(HWND hwnd, const std::wstring& path)
 {
-    LPWSTR sysMsgBuf = nullptr;
-    FormatMessageW(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER |
-        FORMAT_MESSAGE_FROM_SYSTEM     |
-        FORMAT_MESSAGE_IGNORE_INSERTS,
-        nullptr,
-        ERROR_ACCESS_DENIED,
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (LPWSTR)&sysMsgBuf,
-        0,
-        nullptr);
-
+    LPWSTR buf = nullptr;
+    FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+                   FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, ERROR_ACCESS_DENIED,
+                   MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                   (LPWSTR)&buf, 0, nullptr);
     std::wstring msg;
-    if (sysMsgBuf)
-    {
-        msg = sysMsgBuf;
-        LocalFree(sysMsgBuf);
-        while (!msg.empty() &&
-               (msg.back() == L'\n' || msg.back() == L'\r'))
-            msg.pop_back();
-    }
-    else
-    {
-        msg = L"Access is denied.";
-    }
-
-    msg += L"\n\n";
-    msg += path;
-
-    MessageBoxW(hwnd, msg.c_str(), nullptr,
-                MB_OK | MB_ICONERROR | MB_SYSTEMMODAL);
+    if (buf) { msg = buf; LocalFree(buf);
+        while (!msg.empty() && (msg.back()==L'\n'||msg.back()==L'\r')) msg.pop_back(); }
+    else msg = L"Access is denied.";
+    msg += L"\n\n"; msg += path;
+    MessageBoxW(hwnd, msg.c_str(), nullptr, MB_OK|MB_ICONERROR|MB_SYSTEMMODAL);
 }
 
 // ============================================================
-//  Save image — returns error code (0 = success)
+//  Save image
 // ============================================================
 static DWORD SaveImageFromClipboard(const std::wstring& filePath,
                                     const std::wstring& targetDir)
 {
-    if (!EnsureGdiplusInitialized())
-        return ERROR_NOT_SUPPORTED;
-
+    if (!g_settings.enableImagePaste) return ERROR_NOT_SUPPORTED;
+    if (!EnsureGdiplusInitialized()) return ERROR_NOT_SUPPORTED;
     if (!OpenClipboard(nullptr)) return GetLastError();
-
     CLSID pngClsid;
     DWORD errCode = ERROR_NOT_SUPPORTED;
-
     if (GetPngClsid(&pngClsid))
     {
         Bitmap* bmp = nullptr;
-
         HANDLE hDibV5 = GetClipboardData(CF_DIBV5);
         HANDLE hDib   = GetClipboardData(CF_DIB);
         HBITMAP hBmp  = (HBITMAP)GetClipboardData(CF_BITMAP);
-
         if (hDibV5)
         {
             BITMAPV5HEADER* p = (BITMAPV5HEADER*)GlobalLock(hDibV5);
-            if (p)
-            {
+            if (p) {
                 DWORD clrSz = 0;
                 if (p->bV5BitCount <= 8)
-                    clrSz = (p->bV5ClrUsed
-                                 ? p->bV5ClrUsed
-                                 : (1u << p->bV5BitCount)) * sizeof(RGBQUAD);
-                else if (p->bV5Compression == BI_BITFIELDS)
-                    clrSz = 3 * sizeof(DWORD);
-                void* bits = (BYTE*)p + p->bV5Size + clrSz;
-                bmp = new Bitmap((BITMAPINFO*)p, bits);
-                if (bmp->GetLastStatus() != Ok) { delete bmp; bmp = nullptr; }
+                    clrSz = (p->bV5ClrUsed ? p->bV5ClrUsed : (1u<<p->bV5BitCount))*sizeof(RGBQUAD);
+                else if (p->bV5Compression == BI_BITFIELDS) clrSz = 3*sizeof(DWORD);
+                bmp = new Bitmap((BITMAPINFO*)p, (BYTE*)p+p->bV5Size+clrSz);
+                if (bmp->GetLastStatus()!=Ok){delete bmp;bmp=nullptr;}
                 GlobalUnlock(hDibV5);
             }
         }
         if (!bmp && hDib)
         {
             BITMAPINFO* bi = (BITMAPINFO*)GlobalLock(hDib);
-            if (bi)
-            {
+            if (bi) {
                 DWORD clrSz = 0;
                 if (bi->bmiHeader.biBitCount <= 8)
-                    clrSz = (bi->bmiHeader.biClrUsed
-                                 ? bi->bmiHeader.biClrUsed
-                                 : (1u << bi->bmiHeader.biBitCount)) * sizeof(RGBQUAD);
-                else if (bi->bmiHeader.biCompression == BI_BITFIELDS)
-                    clrSz = 3 * sizeof(DWORD);
-                void* bits = (BYTE*)bi + bi->bmiHeader.biSize + clrSz;
-                bmp = new Bitmap(bi, bits);
-                if (bmp->GetLastStatus() != Ok) { delete bmp; bmp = nullptr; }
+                    clrSz = (bi->bmiHeader.biClrUsed ? bi->bmiHeader.biClrUsed : (1u<<bi->bmiHeader.biBitCount))*sizeof(RGBQUAD);
+                else if (bi->bmiHeader.biCompression == BI_BITFIELDS) clrSz = 3*sizeof(DWORD);
+                bmp = new Bitmap(bi, (BYTE*)bi+bi->bmiHeader.biSize+clrSz);
+                if (bmp->GetLastStatus()!=Ok){delete bmp;bmp=nullptr;}
                 GlobalUnlock(hDib);
             }
         }
         if (!bmp && hBmp)
         {
             bmp = Bitmap::FromHBITMAP(hBmp, nullptr);
-            if (bmp && bmp->GetLastStatus() != Ok) { delete bmp; bmp = nullptr; }
+            if (bmp && bmp->GetLastStatus()!=Ok){delete bmp;bmp=nullptr;}
         }
-
         if (bmp)
         {
             Status st = bmp->Save(filePath.c_str(), &pngClsid, nullptr);
-            if (st == Ok)
-            {
-                errCode = 0;
-            }
-            else
-            {
-                // GDI+ не выставляет LastError — проверяем права на папку
-                DWORD accessErr = CheckDirectoryWriteAccess(targetDir);
-                errCode = (accessErr != 0) ? accessErr : ERROR_WRITE_FAULT;
-            }
+            if (st == Ok) errCode = 0;
+            else { DWORD e = CheckDirectoryWriteAccess(targetDir);
+                   errCode = e ? e : ERROR_WRITE_FAULT; }
             delete bmp;
         }
     }
-
     CloseClipboard();
     return errCode;
 }
 
 // ============================================================
-//  Save text — returns error code (0 = success)
+//  Save text
 // ============================================================
 static DWORD SaveTextFromClipboard(const std::wstring& filePath)
 {
+    if (!g_settings.enableTextPaste) return ERROR_NOT_SUPPORTED;
     if (!OpenClipboard(nullptr)) return GetLastError();
     DWORD errCode = ERROR_NO_DATA;
     HANDLE h = GetClipboardData(CF_UNICODETEXT);
@@ -325,17 +289,48 @@ static DWORD SaveTextFromClipboard(const std::wstring& filePath)
             if (hFile != INVALID_HANDLE_VALUE)
             {
                 DWORD written;
-                WORD bom = 0xFEFF;
-                WriteFile(hFile, &bom, sizeof(bom), &written, nullptr);
-                DWORD bytes = (DWORD)(wcslen(text) * sizeof(WCHAR));
-                WriteFile(hFile, text, bytes, &written, nullptr);
+                
+                if (g_settings.textEncoding == L"UTF-8-BOM")
+                {
+                    // UTF-8 with BOM
+                    BYTE bom[3] = {0xEF, 0xBB, 0xBF};
+                    WriteFile(hFile, bom, 3, &written, nullptr);
+                    
+                    // Convert to UTF-8
+                    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+                    if (utf8Len > 0)
+                    {
+                        char* utf8Text = new char[utf8Len];
+                        WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8Text, utf8Len, nullptr, nullptr);
+                        WriteFile(hFile, utf8Text, utf8Len - 1, &written, nullptr); // -1 to skip null terminator
+                        delete[] utf8Text;
+                    }
+                }
+                else if (g_settings.textEncoding == L"UTF-8")
+                {
+                    // UTF-8 without BOM
+                    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+                    if (utf8Len > 0)
+                    {
+                        char* utf8Text = new char[utf8Len];
+                        WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8Text, utf8Len, nullptr, nullptr);
+                        WriteFile(hFile, utf8Text, utf8Len - 1, &written, nullptr); // -1 to skip null terminator
+                        delete[] utf8Text;
+                    }
+                }
+                else // UTF-16
+                {
+                    // UTF-16 LE with BOM
+                    WORD bom = 0xFEFF;
+                    WriteFile(hFile, &bom, sizeof(bom), &written, nullptr);
+                    WriteFile(hFile, text, (DWORD)(wcslen(text)*sizeof(WCHAR)),
+                              &written, nullptr);
+                }
+                
                 CloseHandle(hFile);
                 errCode = 0;
             }
-            else
-            {
-                errCode = GetLastError();
-            }
+            else errCode = GetLastError();
             GlobalUnlock(h);
         }
     }
@@ -353,8 +348,7 @@ static HWND FindShellDefViewInChain(HWND hwnd)
     {
         WCHAR cls[256] = {};
         GetClassNameW(w, cls, 256);
-        if (!wcscmp(cls, L"SHELLDLL_DefView"))
-            return w;
+        if (!wcscmp(cls, L"SHELLDLL_DefView")) return w;
         HWND par = GetParent(w);
         if (!par) par = GetWindow(w, GW_OWNER);
         w = par;
@@ -373,10 +367,13 @@ static bool IsShellViewWindow(HWND hwnd)
 static bool HasNonFileClipboardContent()
 {
     if (IsClipboardFormatAvailable(CF_HDROP)) return false;
-    return IsClipboardFormatAvailable(CF_UNICODETEXT) ||
-           IsClipboardFormatAvailable(CF_BITMAP)      ||
-           IsClipboardFormatAvailable(CF_DIB)         ||
-           IsClipboardFormatAvailable(CF_DIBV5);
+    
+    bool hasText = g_settings.enableTextPaste && IsClipboardFormatAvailable(CF_UNICODETEXT);
+    bool hasImage = g_settings.enableImagePaste && (IsClipboardFormatAvailable(CF_BITMAP) ||
+                    IsClipboardFormatAvailable(CF_DIB) ||
+                    IsClipboardFormatAvailable(CF_DIBV5));
+    
+    return hasText || hasImage;
 }
 
 // ============================================================
@@ -387,14 +384,11 @@ static bool IsDesktopShellWindow(HWND hwnd)
     HWND root = GetAncestor(hwnd, GA_ROOT);
     WCHAR cls[64] = {};
     GetClassNameW(root, cls, 64);
-    if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW"))
-        return true;
+    if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW")) return true;
     HWND par = GetParent(root);
-    if (par)
-    {
+    if (par) {
         GetClassNameW(par, cls, 64);
-        if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW"))
-            return true;
+        if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW")) return true;
     }
     return false;
 }
@@ -404,70 +398,52 @@ static bool GetDesktopFolderPath(std::wstring& path)
     WCHAR buf[MAX_PATH] = {};
     if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY,
                                    nullptr, 0, buf)))
-    {
-        path = buf;
-        return true;
-    }
+        { path = buf; return true; }
     return false;
 }
 
 static bool GetPathViaShellWindows(HWND topLevel, std::wstring& path)
 {
     ScopedCoInit comInit;
-
     IShellWindows* pSW = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                 IID_IShellWindows, (void**)&pSW)) || !pSW)
         return false;
-
-    long count = 0;
-    pSW->get_Count(&count);
+    long count = 0; pSW->get_Count(&count);
     bool found = false;
-
     for (long i = 0; i < count && !found; ++i)
     {
-        VARIANT vi = {};
-        vi.vt   = VT_I4;
-        vi.lVal = i;
+        VARIANT vi = {}; vi.vt = VT_I4; vi.lVal = i;
         IDispatch* pDisp = nullptr;
         if (FAILED(pSW->Item(vi, &pDisp)) || !pDisp) continue;
-
         IWebBrowserApp* pWBA = nullptr;
-        if (SUCCEEDED(pDisp->QueryInterface(IID_IWebBrowserApp,
-                                            (void**)&pWBA)) && pWBA)
+        if (SUCCEEDED(pDisp->QueryInterface(IID_IWebBrowserApp,(void**)&pWBA)) && pWBA)
         {
             HWND hwndItem = nullptr;
             pWBA->get_HWND((SHANDLE_PTR*)&hwndItem);
             if (hwndItem == topLevel)
             {
                 IServiceProvider* pSP = nullptr;
-                if (SUCCEEDED(pWBA->QueryInterface(IID_IServiceProvider,
-                                                   (void**)&pSP)) && pSP)
+                if (SUCCEEDED(pWBA->QueryInterface(IID_IServiceProvider,(void**)&pSP)) && pSP)
                 {
                     IShellBrowser* pSB = nullptr;
-                    if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser,
-                                                    IID_IShellBrowser,
-                                                    (void**)&pSB)) && pSB)
+                    if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser,IID_IShellBrowser,(void**)&pSB)) && pSB)
                     {
                         IShellView* pSV = nullptr;
                         if (SUCCEEDED(pSB->QueryActiveShellView(&pSV)) && pSV)
                         {
                             IFolderView* pFV = nullptr;
-                            if (SUCCEEDED(pSV->QueryInterface(IID_IFolderView,
-                                                              (void**)&pFV)) && pFV)
+                            if (SUCCEEDED(pSV->QueryInterface(IID_IFolderView,(void**)&pFV)) && pFV)
                             {
                                 IPersistFolder2* pPF = nullptr;
-                                if (SUCCEEDED(pFV->GetFolder(
-                                        IID_IPersistFolder2,
-                                        (void**)&pPF)) && pPF)
+                                if (SUCCEEDED(pFV->GetFolder(IID_IPersistFolder2,(void**)&pPF)) && pPF)
                                 {
                                     LPITEMIDLIST pidl = nullptr;
                                     if (SUCCEEDED(pPF->GetCurFolder(&pidl)) && pidl)
                                     {
                                         WCHAR szPath[MAX_PATH] = {};
                                         SHGetPathFromIDListW(pidl, szPath);
-                                        path  = szPath;
-                                        found = true;
+                                        path = szPath; found = true;
                                         CoTaskMemFree(pidl);
                                     }
                                     pPF->Release();
@@ -492,14 +468,10 @@ static bool GetPathViaShellWindows(HWND topLevel, std::wstring& path)
 static bool GetPathViaFileDialog(HWND topLevel, std::wstring& path)
 {
     ScopedCoInit comInit;
-
     IRunningObjectTable* pROT = nullptr;
-    if (FAILED(GetRunningObjectTable(0, &pROT)) || !pROT)
-        return false;
-
+    if (FAILED(GetRunningObjectTable(0, &pROT)) || !pROT) return false;
     IEnumMoniker* pEnum = nullptr;
     bool found = false;
-
     if (SUCCEEDED(pROT->EnumRunning(&pEnum)) && pEnum)
     {
         IMoniker* pMk = nullptr;
@@ -509,31 +481,24 @@ static bool GetPathViaFileDialog(HWND topLevel, std::wstring& path)
             if (SUCCEEDED(pROT->GetObject(pMk, &pUnk)) && pUnk)
             {
                 IFileDialog* pFD = nullptr;
-                if (SUCCEEDED(pUnk->QueryInterface(IID_IFileDialog,
-                                                   (void**)&pFD)) && pFD)
+                if (SUCCEEDED(pUnk->QueryInterface(IID_IFileDialog,(void**)&pFD)) && pFD)
                 {
                     IOleWindow* pOW = nullptr;
-                    if (SUCCEEDED(pFD->QueryInterface(IID_IOleWindow,
-                                                      (void**)&pOW)) && pOW)
+                    if (SUCCEEDED(pFD->QueryInterface(IID_IOleWindow,(void**)&pOW)) && pOW)
                     {
-                        HWND dlgHwnd = nullptr;
-                        pOW->GetWindow(&dlgHwnd);
-                        if (dlgHwnd == topLevel ||
-                            GetAncestor(dlgHwnd, GA_ROOT) == topLevel ||
-                            GetAncestor(topLevel, GA_ROOT) == dlgHwnd)
+                        HWND dlgHwnd = nullptr; pOW->GetWindow(&dlgHwnd);
+                        if (dlgHwnd==topLevel ||
+                            GetAncestor(dlgHwnd,GA_ROOT)==topLevel ||
+                            GetAncestor(topLevel,GA_ROOT)==dlgHwnd)
                         {
                             IShellItem* pFolder = nullptr;
                             if (SUCCEEDED(pFD->GetFolder(&pFolder)) && pFolder)
                             {
                                 PWSTR pszPath = nullptr;
                                 if (SUCCEEDED(pFolder->GetDisplayName(
-                                        SIGDN_FILESYSPATH, &pszPath)) && pszPath)
-                                {
-                                    path = pszPath;
-                                    CoTaskMemFree(pszPath);
-                                }
-                                found = true;
-                                pFolder->Release();
+                                        SIGDN_FILESYSPATH,&pszPath)) && pszPath)
+                                    { path=pszPath; CoTaskMemFree(pszPath); }
+                                found = true; pFolder->Release();
                             }
                         }
                         pOW->Release();
@@ -552,49 +517,36 @@ static bool GetPathViaFileDialog(HWND topLevel, std::wstring& path)
 
 static bool GetPathViaDefViewChild(HWND topLevel, std::wstring& path)
 {
-    struct FindData { HWND defView; };
-    FindData fd = {};
+    struct S { HWND defView; };
+    S s = {};
     struct CB {
         static BOOL CALLBACK Enum(HWND hw, LPARAM lp) {
-            WCHAR cls[64] = {};
-            GetClassNameW(hw, cls, 64);
-            if (!wcscmp(cls, L"SHELLDLL_DefView"))
-            {
-                ((FindData*)lp)->defView = hw;
-                return FALSE;
-            }
+            WCHAR cls[64]={};GetClassNameW(hw,cls,64);
+            if (!wcscmp(cls,L"SHELLDLL_DefView")){((S*)lp)->defView=hw;return FALSE;}
             return TRUE;
         }
     };
-    EnumChildWindows(topLevel, CB::Enum, (LPARAM)&fd);
-    if (!fd.defView) return false;
-
-    HWND defViewParent = GetParent(fd.defView);
+    EnumChildWindows(topLevel, CB::Enum, (LPARAM)&s);
+    if (!s.defView) return false;
+    HWND defViewParent = GetParent(s.defView);
     if (!defViewParent) return false;
-
-    IShellBrowser* pSB = (IShellBrowser*)SendMessageW(defViewParent,
-                                                       WM_USER + 7, 0, 0);
+    IShellBrowser* pSB = (IShellBrowser*)SendMessageW(defViewParent, WM_USER+7, 0, 0);
     if (!pSB) return false;
-
     IShellView* pSV = nullptr;
     if (FAILED(pSB->QueryActiveShellView(&pSV)) || !pSV) return false;
-
     bool found = false;
     IFolderView* pFV = nullptr;
-    if (SUCCEEDED(pSV->QueryInterface(IID_IFolderView, (void**)&pFV)) && pFV)
+    if (SUCCEEDED(pSV->QueryInterface(IID_IFolderView,(void**)&pFV)) && pFV)
     {
         IPersistFolder2* pPF = nullptr;
-        if (SUCCEEDED(pFV->GetFolder(IID_IPersistFolder2,
-                                     (void**)&pPF)) && pPF)
+        if (SUCCEEDED(pFV->GetFolder(IID_IPersistFolder2,(void**)&pPF)) && pPF)
         {
             LPITEMIDLIST pidl = nullptr;
             if (SUCCEEDED(pPF->GetCurFolder(&pidl)) && pidl)
             {
-                WCHAR szPath[MAX_PATH] = {};
-                SHGetPathFromIDListW(pidl, szPath);
-                path  = szPath;
-                found = true;
-                CoTaskMemFree(pidl);
+                WCHAR szPath[MAX_PATH]={};
+                SHGetPathFromIDListW(pidl,szPath);
+                path=szPath; found=true; CoTaskMemFree(pidl);
             }
             pPF->Release();
         }
@@ -606,16 +558,12 @@ static bool GetPathViaDefViewChild(HWND topLevel, std::wstring& path)
 
 static bool GetCurrentFolderFromWindow(HWND hwnd, std::wstring& path)
 {
-    if (IsDesktopShellWindow(hwnd))
-        return GetDesktopFolderPath(path);
-
+    if (IsDesktopShellWindow(hwnd)) return GetDesktopFolderPath(path);
     HWND root = GetAncestor(hwnd, GA_ROOT);
     if (!root) root = hwnd;
-
     if (GetPathViaShellWindows(root, path))  return true;
     if (GetPathViaFileDialog(root, path))    return true;
     if (GetPathViaDefViewChild(root, path))  return true;
-
     return false;
 }
 
@@ -627,16 +575,13 @@ static bool CanPasteInWindow(HWND hwnd)
     if (!hwnd)                         return false;
     if (!IsShellViewWindow(hwnd))      return false;
     if (!HasNonFileClipboardContent()) return false;
-
     std::wstring path;
-    if (!GetCurrentFolderFromWindow(hwnd, path))
-        return false;
-
+    if (!GetCurrentFolderFromWindow(hwnd, path)) return false;
     return !path.empty();
 }
 
 // ============================================================
-//  ShellView window at the cursor's position
+//  ShellView window at cursor
 // ============================================================
 static HWND GetShellViewWindowAtCursor()
 {
@@ -645,8 +590,7 @@ static HWND GetShellViewWindowAtCursor()
     HWND hwnd = WindowFromPoint(pt);
     while (hwnd)
     {
-        if (IsShellViewWindow(hwnd))
-            return hwnd;
+        if (IsShellViewWindow(hwnd)) return hwnd;
         HWND par = GetParent(hwnd);
         if (!par) break;
         hwnd = par;
@@ -671,57 +615,35 @@ static bool PerformPaste(HWND sourceWindow)
 {
     if (!IsShellViewWindow(sourceWindow))  return false;
     if (!HasNonFileClipboardContent())     return false;
-
     std::wstring targetPath;
     if (!GetCurrentFolderFromWindow(sourceWindow, targetPath))
-    {
-        Wh_Log(L"PerformPaste: window not recognized, hwnd=%p", sourceWindow);
-        return false;
-    }
+        { Wh_Log(L"PerformPaste: window not recognized, hwnd=%p", sourceWindow); return false; }
     if (targetPath.empty())
-    {
-        Wh_Log(L"PerformPaste: virtual folder, skipping");
-        return false;
-    }
-
+        { Wh_Log(L"PerformPaste: virtual folder, skipping"); return false; }
     Wh_Log(L"PerformPaste: target='%s'", targetPath.c_str());
-
     std::wstring baseName = GetDefaultBaseName();
     std::wstring filePath;
     DWORD errCode = ERROR_NOT_SUPPORTED;
-
-    bool hasImage = IsClipboardFormatAvailable(CF_BITMAP)  ||
-                    IsClipboardFormatAvailable(CF_DIB)     ||
-                    IsClipboardFormatAvailable(CF_DIBV5);
-    bool hasText  = IsClipboardFormatAvailable(CF_UNICODETEXT);
-
+    bool hasImage = g_settings.enableImagePaste && (IsClipboardFormatAvailable(CF_BITMAP)||
+                    IsClipboardFormatAvailable(CF_DIB)||
+                    IsClipboardFormatAvailable(CF_DIBV5));
+    bool hasText  = g_settings.enableTextPaste && IsClipboardFormatAvailable(CF_UNICODETEXT);
     if (hasImage)
-    {
-        filePath = GetUniquePath(targetPath, baseName, L".png");
-        errCode  = SaveImageFromClipboard(filePath, targetPath);
-    }
+        { filePath=GetUniquePath(targetPath,baseName,L".png");
+          errCode=SaveImageFromClipboard(filePath,targetPath); }
     else if (hasText)
-    {
-        filePath = GetUniquePath(targetPath, baseName, L".txt");
-        errCode  = SaveTextFromClipboard(filePath);
-    }
-
+        { filePath=GetUniquePath(targetPath,baseName,L".txt");
+          errCode=SaveTextFromClipboard(filePath); }
     if (errCode == 0)
     {
         Wh_Log(L"PerformPaste: created '%s'", filePath.c_str());
-        SHChangeNotify(SHCNE_CREATE,    SHCNF_PATH | SHCNF_FLUSH,
-                       filePath.c_str(),   nullptr);
-        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH | SHCNF_FLUSH,
-                       targetPath.c_str(), nullptr);
+        SHChangeNotify(SHCNE_CREATE,    SHCNF_PATH|SHCNF_FLUSH, filePath.c_str(),   nullptr);
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH|SHCNF_FLUSH, targetPath.c_str(), nullptr);
         return true;
     }
-    else
-    {
-        Wh_Log(L"PerformPaste: failed, error=%u", errCode);
-        if (errCode == ERROR_ACCESS_DENIED)
-            ShowAccessDeniedMessage(sourceWindow, targetPath);
-        return false;
-    }
+    Wh_Log(L"PerformPaste: failed, error=%u", errCode);
+    if (errCode == ERROR_ACCESS_DENIED) ShowAccessDeniedMessage(sourceWindow, targetPath);
+    return false;
 }
 
 // ============================================================
@@ -736,6 +658,7 @@ BOOL WINAPI EnableMenuItem_Hook(HMENU hMenu, UINT uIDEnableItem, UINT uEnable)
     {
         HWND hwnd = GetShellViewWindowAtCursor();
         if (!hwnd) hwnd = g_lastContextMenuShellView;
+        if (!hwnd) hwnd = g_menubarShellView;
         if (hwnd && CanPasteInWindow(hwnd))
             uEnable = (uEnable & ~(MF_GRAYED | MF_DISABLED)) | MF_ENABLED;
     }
@@ -751,6 +674,7 @@ UINT WINAPI GetMenuState_Hook(HMENU hMenu, UINT uId, UINT uFlags)
     {
         HWND hwnd = GetShellViewWindowAtCursor();
         if (!hwnd) hwnd = g_lastContextMenuShellView;
+        if (!hwnd) hwnd = g_menubarShellView;
         if (hwnd && CanPasteInWindow(hwnd))
             result = (result & ~(MF_GRAYED | MF_DISABLED)) | MF_ENABLED;
     }
@@ -773,8 +697,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
             MENUITEMINFOW mii = {};
             mii.cbSize = sizeof(mii);
             mii.fMask  = MIIM_ID | MIIM_STATE;
-            if (GetMenuItemInfoW(hmenu, (UINT)i, TRUE, &mii) &&
-                IsPasteCmd(mii.wID))
+            if (GetMenuItemInfoW(hmenu, (UINT)i, TRUE, &mii) && IsPasteCmd(mii.wID))
             {
                 mii.fMask  = MIIM_STATE;
                 mii.fState = MFS_ENABLED;
@@ -782,8 +705,75 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
             }
         }
     }
-
     return TrackPopupMenuEx_Orig(hmenu, fuFlags, x, y, hwnd, lptpm);
+}
+
+static void HandleInitMenuPopup(HWND hWnd, HMENU hPopup)
+{
+    HWND svWnd = nullptr;
+    {
+        WCHAR cls[64] = {};
+        GetClassNameW(hWnd, cls, 64);
+        if (!wcscmp(cls, L"SHELLDLL_DefView"))
+            svWnd = hWnd;
+    }
+    if (!svWnd)
+    {
+        struct S { HWND found; };
+        S s = {};
+        struct CB {
+            static BOOL CALLBACK Enum(HWND hw, LPARAM lp) {
+                WCHAR cls[64]={};GetClassNameW(hw,cls,64);
+                if (!wcscmp(cls,L"SHELLDLL_DefView")){((S*)lp)->found=hw;return FALSE;}
+                return TRUE;
+            }
+        };
+        EnumChildWindows(hWnd, CB::Enum, (LPARAM)&s);
+        svWnd = s.found;
+    }
+
+    if (!svWnd) return;
+
+    g_menubarShellView = svWnd;
+    bool canPaste = CanPasteInWindow(svWnd);
+
+    int n = GetMenuItemCount(hPopup);
+    for (int i = 0; i < n; ++i)
+    {
+        MENUITEMINFOW mii = {};
+        mii.cbSize = sizeof(mii);
+        mii.fMask  = MIIM_ID | MIIM_STATE;
+        if (GetMenuItemInfoW(hPopup, (UINT)i, TRUE, &mii) && IsPasteCmd(mii.wID))
+        {
+            mii.fMask  = MIIM_STATE;
+            mii.fState = canPaste ? MFS_ENABLED : (MFS_GRAYED | MFS_DISABLED);
+            SetMenuItemInfoW(hPopup, (UINT)i, TRUE, &mii);
+        }
+    }
+}
+
+using CallWindowProcW_t = LRESULT(WINAPI*)(WNDPROC, HWND, UINT, WPARAM, LPARAM);
+CallWindowProcW_t CallWindowProcW_Orig;
+LRESULT WINAPI CallWindowProcW_Hook(WNDPROC lpPrevWndFunc, HWND hWnd,
+                                     UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+    if (Msg == WM_INITMENUPOPUP)
+        HandleInitMenuPopup(hWnd, (HMENU)wParam);
+    else if (Msg == WM_UNINITMENUPOPUP)
+        g_menubarShellView = nullptr;
+    return CallWindowProcW_Orig(lpPrevWndFunc, hWnd, Msg, wParam, lParam);
+}
+
+using DefWindowProcW_t = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
+DefWindowProcW_t DefWindowProcW_Orig;
+LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg,
+                                    WPARAM wParam, LPARAM lParam)
+{
+    if (Msg == WM_INITMENUPOPUP)
+        HandleInitMenuPopup(hWnd, (HMENU)wParam);
+    else if (Msg == WM_UNINITMENUPOPUP)
+        g_menubarShellView = nullptr;
+    return DefWindowProcW_Orig(hWnd, Msg, wParam, lParam);
 }
 
 using SendMessageW_t = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
@@ -794,13 +784,15 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT Msg,
     if (Msg == WM_COMMAND && IsPasteCmd(LOWORD(wParam)) &&
         HasNonFileClipboardContent())
     {
-        HWND target =
-            IsShellViewWindow(hWnd) ? hWnd :
-            (g_lastContextMenuShellView &&
-             IsShellViewWindow(g_lastContextMenuShellView)
-                 ? g_lastContextMenuShellView : nullptr);
-        if (target && PerformPaste(target))
-            return 0;
+        HWND target = nullptr;
+        if (IsShellViewWindow(hWnd))
+            target = hWnd;
+        else if (g_menubarShellView && IsShellViewWindow(g_menubarShellView))
+            target = g_menubarShellView;
+        else if (g_lastContextMenuShellView &&
+                 IsShellViewWindow(g_lastContextMenuShellView))
+            target = g_lastContextMenuShellView;
+        if (target && PerformPaste(target)) return 0;
     }
     return SendMessageW_Orig(hWnd, Msg, wParam, lParam);
 }
@@ -813,13 +805,15 @@ BOOL WINAPI PostMessageW_Hook(HWND hWnd, UINT Msg,
     if (Msg == WM_COMMAND && IsPasteCmd(LOWORD(wParam)) &&
         HasNonFileClipboardContent())
     {
-        HWND target =
-            IsShellViewWindow(hWnd) ? hWnd :
-            (g_lastContextMenuShellView &&
-             IsShellViewWindow(g_lastContextMenuShellView)
-                 ? g_lastContextMenuShellView : nullptr);
-        if (target && PerformPaste(target))
-            return TRUE;
+        HWND target = nullptr;
+        if (IsShellViewWindow(hWnd))
+            target = hWnd;
+        else if (g_menubarShellView && IsShellViewWindow(g_menubarShellView))
+            target = g_menubarShellView;
+        else if (g_lastContextMenuShellView &&
+                 IsShellViewWindow(g_lastContextMenuShellView))
+            target = g_lastContextMenuShellView;
+        if (target && PerformPaste(target)) return TRUE;
     }
     return PostMessageW_Orig(hWnd, Msg, wParam, lParam);
 }
@@ -828,22 +822,30 @@ using TranslateAcceleratorW_t = int(WINAPI*)(HWND, HACCEL, LPMSG);
 TranslateAcceleratorW_t TranslateAcceleratorW_Orig;
 int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg)
 {
-    if (lpMsg                              &&
-        lpMsg->message == WM_KEYDOWN       &&
-        lpMsg->wParam  == 'V'              &&
+    if (lpMsg && lpMsg->message == WM_KEYDOWN && lpMsg->wParam == 'V' &&
         (GetKeyState(VK_CONTROL) & 0x8000) &&
         !(GetKeyState(VK_SHIFT)  & 0x8000) &&
         !(GetKeyState(VK_MENU)   & 0x8000))
     {
+        HWND focusWnd = GetFocus();
+        if (focusWnd)
+        {
+            WCHAR className[256] = {};
+            GetClassNameW(focusWnd, className, 256);
+            
+            if (!wcscmp(className, L"Edit"))
+            {
+                return TranslateAcceleratorW_Orig(hWnd, hAccTable, lpMsg);
+            }
+        }
+        
         HWND target = nullptr;
         if (IsShellViewWindow(hWnd))             target = hWnd;
         else if (IsShellViewWindow(lpMsg->hwnd)) target = lpMsg->hwnd;
-
         if (target && CanPasteInWindow(target))
         {
             Wh_Log(L"TranslateAcceleratorW_Hook: Ctrl+V hwnd=%p", target);
-            if (PerformPaste(target))
-                return 1;
+            if (PerformPaste(target)) return 1;
         }
     }
     return TranslateAcceleratorW_Orig(hWnd, hAccTable, lpMsg);
@@ -855,43 +857,41 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg)
 BOOL Wh_ModInit()
 {
     Wh_Log(L"PasteClipboardToExplorer: Init");
-
+    
+    LoadSettings();
+    
     InitializeCriticalSection(&g_gdiplusCS);
     g_gdiplusCSInit = true;
 
     Wh_SetFunctionHook((void*)EnableMenuItem,
-                       (void*)EnableMenuItem_Hook,
-                       (void**)&EnableMenuItem_Orig);
+                       (void*)EnableMenuItem_Hook,   (void**)&EnableMenuItem_Orig);
     Wh_SetFunctionHook((void*)GetMenuState,
-                       (void*)GetMenuState_Hook,
-                       (void**)&GetMenuState_Orig);
+                       (void*)GetMenuState_Hook,     (void**)&GetMenuState_Orig);
     Wh_SetFunctionHook((void*)TrackPopupMenuEx,
-                       (void*)TrackPopupMenuEx_Hook,
-                       (void**)&TrackPopupMenuEx_Orig);
+                       (void*)TrackPopupMenuEx_Hook, (void**)&TrackPopupMenuEx_Orig);
+    Wh_SetFunctionHook((void*)CallWindowProcW,
+                       (void*)CallWindowProcW_Hook,  (void**)&CallWindowProcW_Orig);
+    Wh_SetFunctionHook((void*)DefWindowProcW,
+                       (void*)DefWindowProcW_Hook,   (void**)&DefWindowProcW_Orig);
     Wh_SetFunctionHook((void*)SendMessageW,
-                       (void*)SendMessageW_Hook,
-                       (void**)&SendMessageW_Orig);
+                       (void*)SendMessageW_Hook,     (void**)&SendMessageW_Orig);
     Wh_SetFunctionHook((void*)PostMessageW,
-                       (void*)PostMessageW_Hook,
-                       (void**)&PostMessageW_Orig);
+                       (void*)PostMessageW_Hook,     (void**)&PostMessageW_Orig);
     Wh_SetFunctionHook((void*)TranslateAcceleratorW,
                        (void*)TranslateAcceleratorW_Hook,
                        (void**)&TranslateAcceleratorW_Orig);
-
     return TRUE;
 }
 
 void Wh_ModUninit()
 {
     Wh_Log(L"PasteClipboardToExplorer: Uninit");
-    if (g_gdiplusToken)
-    {
-        GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-    }
-    if (g_gdiplusCSInit)
-    {
-        DeleteCriticalSection(&g_gdiplusCS);
-        g_gdiplusCSInit = false;
-    }
+    if (g_gdiplusToken) { GdiplusShutdown(g_gdiplusToken); g_gdiplusToken = 0; }
+    if (g_gdiplusCSInit) { DeleteCriticalSection(&g_gdiplusCS); g_gdiplusCSInit = false; }
+}
+
+void Wh_ModSettingsChanged()
+{
+    Wh_Log(L"PasteClipboardToExplorer: Settings changed");
+    LoadSettings();
 }

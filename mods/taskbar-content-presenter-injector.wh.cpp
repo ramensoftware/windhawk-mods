@@ -2,7 +2,7 @@
 // @id              taskbar-content-presenter-injector
 // @name            Taskbar ContentPresenter Injector
 // @description     Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel and Taskbar.TaskListButtonPanel
-// @version         1.3
+// @version         1.4
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         explorer.exe
@@ -14,13 +14,15 @@
 /*
 # Taskbar ContentPresenter Injector
 
-This mod acts as an addon to the [Windows 11 Taskbar Styler mod](https://windhawk.net/mods/windows-11-taskbar-styler), enabling deeper customization of the taskbar, such as replacing icons with glyphs, by injecting a `ContentPresenter` named `CustomInjectedPresenter` into every `Taskbar.TaskListLabeledButtonPanel` and `Taskbar.TaskListButtonPanel`.
+This mod acts as an addon to the [Windows 11 Taskbar Styler mod](https://windhawk.net/mods/windows-11-taskbar-styler), enabling deeper customization of the taskbar, such as replacing icons with glyphs, by injecting a `ContentPresenter` named `CustomInjectedPresenter` into every `Taskbar.TaskListLabeledButtonPanel`, `Taskbar.TaskListButtonPanel` and `SearchUx.SearchUI.SearchButtonRootGrid`.
 
 ## Path to the injected element:
 
 ```Taskbar.TaskListButton > Taskbar.TaskListLabeledButtonPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
 
 ```Taskbar.ExperienceToggleButton > Taskbar.TaskListButtonPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
+
+```SearchUx.SearchUI.SearchButtonRootGrid > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
 
 ## Limitation
 Due to how Windows 11 calculates taskbar dimensions, if you want to change the Width of the Taskbar panels in Taskbar Styler, you must also define a MinWidth to apply the change.
@@ -66,6 +68,7 @@ std::atomic<bool> g_scanPending = false;
 
 constexpr std::wstring_view c_TargetPanelLabeled  = L"Taskbar.TaskListLabeledButtonPanel";
 constexpr std::wstring_view c_TargetPanelButton   = L"Taskbar.TaskListButtonPanel";
+constexpr std::wstring_view c_TargetSearchBar     = L"SearchUx.SearchUI.SearchButtonRootGrid";
 constexpr std::wstring_view c_RootFrameName       = L"Taskbar.TaskbarFrame";
 constexpr std::wstring_view c_InjectedControlName = L"CustomInjectedPresenter";
 
@@ -211,7 +214,7 @@ void ScanAndInjectRecursive(FrameworkElement element) {
     if (!element) return;
 
     auto className = winrt::get_class_name(element);
-    if (className == c_TargetPanelLabeled || className == c_TargetPanelButton) {
+    if (className == c_TargetPanelLabeled || className == c_TargetPanelButton || className == c_TargetSearchBar) {
         InjectContentPresenterIntoPanel(element);
         return;
     }

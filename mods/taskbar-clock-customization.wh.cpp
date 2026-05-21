@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM, GPU, battery), media player info, custom fonts and colors, and more
-// @version         1.7.3
+// @version         1.7.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -50,16 +50,19 @@ patterns can be used:
     the time format string with `;`. `<n>` is the additional time format number,
     starting with 2.
   * `%time_tz<n>%` - the time with a custom time zone. `<n>` is the time zone
-    number in the list of time zones configured in settings.
+    number in the list of time zones configured in the mod settings (not Windows
+    settings).
 * `%date%` - the date as configured by the date format in settings.
   * `%date<n>%` - additional date formats which can be specified by separating
     the date format string with `;`. `<n>` is the additional date format number,
     starting with 2.
   * `%date_tz<n>%` - the date with a custom time zone. `<n>` is the time zone
-    number in the list of time zones configured in settings.
+    number in the list of time zones configured in the mod settings (not Windows
+    settings).
 * `%weekday%` - the week day as configured in settings.
   * `%weekday_tz<n>%` - the week day with a custom time zone. `<n>` is the time
-    zone number in the list of time zones configured in settings.
+    zone number in the list of time zones configured in the mod settings (not
+    Windows settings).
 * `%weekday_num%` - the week day number according to the [first day of
    week](https://superuser.com/q/61002) system configuration. For example, if
    first day of week is Sunday, then the week day number is 1 for Sunday, 2 for
@@ -625,7 +628,7 @@ enum class WinVersion {
 
 WinVersion g_winVersion;
 
-std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_systemTrayModuleHooked;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
@@ -688,7 +691,7 @@ winrt::event_token g_mediaPlaybackChangedToken;
 
 std::vector<std::optional<DYNAMIC_TIME_ZONE_INFORMATION>> g_timeZoneInformation;
 
-HANDLE g_webContentUpdateThread;
+std::atomic<HANDLE> g_webContentUpdateThread;
 HANDLE g_webContentUpdateRefreshEvent;
 HANDLE g_webContentUpdateStopEvent;
 std::mutex g_webContentMutex;
@@ -1875,7 +1878,7 @@ class QueryDataCollectionSession {
     ~QueryDataCollectionSession() { PdhCloseQuery(query_); }
 
     bool AddMetric(MetricType type);
-    void UpdateMetric(MetricType type);
+    void UpdateAllMetrics();
     bool SampleData();
     std::optional<double> QueryData(MetricType type);
     std::optional<double> QueryDataAvg(MetricType type);
@@ -1886,6 +1889,7 @@ class QueryDataCollectionSession {
         size_t count;
     };
     std::optional<QueryDataResult> QueryDataWithCount(MetricType type);
+    void UpdateMetric(MetricType type);
 
     std::vector<std::wstring> ExpandEnglishWildcard(PCWSTR wildcard_path,
                                                     bool quiet);
@@ -1927,7 +1931,7 @@ class QueryDataCollectionSession {
 
     struct MetricData {
         std::vector<CounterEntry> counters;
-        bool is_wildcard = false;
+        PCWSTR wildcard_path = nullptr;
         PCWSTR adapter_name = nullptr;
     };
 
@@ -1979,7 +1983,7 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
         return false;
     }
 
-    metric.is_wildcard = is_wildcard;
+    metric.wildcard_path = is_wildcard ? counter_path : nullptr;
     metric.adapter_name = adapter_name;
 
     if (is_wildcard) {
@@ -2011,30 +2015,12 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
 void QueryDataCollectionSession::UpdateMetric(MetricType type) {
     auto& metric = metrics_[static_cast<int>(type)];
 
-    if (!metric.is_wildcard) {
+    if (!metric.wildcard_path) {
         return;
     }
 
-    PCWSTR counter_path;
-    switch (type) {
-        case MetricType::kDownloadSpeed:
-            counter_path = L"\\Network Interface(*)\\Bytes Received/sec";
-            break;
-        case MetricType::kUploadSpeed:
-            counter_path = L"\\Network Interface(*)\\Bytes Sent/sec";
-            break;
-        case MetricType::kGpuUsage:
-            counter_path = L"\\GPU Engine(*)\\Utilization Percentage";
-            break;
-        case MetricType::kCpuTemp:
-            counter_path = L"\\Thermal Zone Information(*)\\Temperature";
-            break;
-        default:
-            return;
-    }
-
     auto current_paths = ExpandAndFilterWildcardPaths(
-        type, counter_path, metric.adapter_name, /*quiet=*/true);
+        type, metric.wildcard_path, metric.adapter_name, /*quiet=*/true);
 
     // Build a set of current paths for quick lookup.
     std::unordered_set<std::wstring> current_path_set(current_paths.begin(),
@@ -2072,6 +2058,14 @@ void QueryDataCollectionSession::UpdateMetric(MetricType type) {
     }
 }
 
+void QueryDataCollectionSession::UpdateAllMetrics() {
+    for (int i = 0; i < static_cast<int>(MetricType::kCount); i++) {
+        if (metrics_[i].wildcard_path) {
+            UpdateMetric(static_cast<MetricType>(i));
+        }
+    }
+}
+
 bool QueryDataCollectionSession::SampleData() {
     PDH_STATUS hr = PdhCollectQueryData(query_);
     if (FAILED(hr)) {
@@ -2084,8 +2078,6 @@ bool QueryDataCollectionSession::SampleData() {
 
 std::optional<QueryDataCollectionSession::QueryDataResult>
 QueryDataCollectionSession::QueryDataWithCount(MetricType type) {
-    UpdateMetric(type);
-
     const auto& metric = metrics_[static_cast<int>(type)];
 
     if (metric.counters.empty()) {
@@ -2099,6 +2091,12 @@ QueryDataCollectionSession::QueryDataWithCount(MetricType type) {
         PDH_STATUS hr = PdhGetFormattedCounterValue(
             entry.counter, PDH_FMT_DOUBLE, nullptr, &val);
         if (SUCCEEDED(hr)) {
+            // Skip dead thermal zones that report implausible values (below 200
+            // Kelvin / -73°C), which would skew the average.
+            if (type == MetricType::kCpuTemp && val.doubleValue < 200) {
+                continue;
+            }
+
             sum += val.doubleValue;
             count++;
         } else {
@@ -2777,6 +2775,7 @@ void DataCollectionSampleIfNeeded() {
     DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
     if (g_dataCollectionLastFormatIndex != dataCollectionFormatIndex) {
         if (g_dataCollectionSession) {
+            g_dataCollectionSession->UpdateAllMetrics();
             g_dataCollectionSession->SampleData();
         }
 
@@ -3565,9 +3564,9 @@ void ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
     LPVOID param1,
     ClockSystemTrayIconDataModel_RefreshIcon_t original) {
     g_refreshIconThreadId = GetCurrentThreadId();
-    g_refreshIconNeedToAdjustTimer = g_settings.showSeconds ||
-                                     g_dataCollectionSession ||
-                                     !g_webContentLoaded;
+    bool webContentPending = g_webContentUpdateThread && !g_webContentLoaded;
+    g_refreshIconNeedToAdjustTimer =
+        g_settings.showSeconds || g_dataCollectionSession || webContentPending;
 
     original(pThis, param1);
 
@@ -4380,8 +4379,9 @@ ClockButton_UpdateTextStringsIfNecessary_Hook(LPVOID pThis, bool* param1) {
 
     g_updateTextStringThreadId = 0;
 
+    bool webContentPending = g_webContentUpdateThread && !g_webContentLoaded;
     if (g_settings.showSeconds || g_dataCollectionSession ||
-        !g_webContentLoaded) {
+        webContentPending) {
         // Return the time-out value for the time of the next update.
         SYSTEMTIME time;
         GetLocalTime(&time);
@@ -4734,8 +4734,8 @@ bool HookWin10TaskbarSymbols() {
     return true;
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll, ExplorerExtensions.dll
+bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
             {
@@ -4827,8 +4827,27 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     return true;
 }
 
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+// Returns the module that hosts winrt::SystemTray::* in the current build.
+// Order matters: SystemTray.dll is the new home (Win11 Insider 26200+);
+// Taskbar.View.dll and ExplorerExtensions.dll are kept as fallbacks so this
+// still works on older builds.
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
+    if (!module) {
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            // First known module version without SystemTray is Taskbar.View.dll
+            // 2604.8002.200.6000.
+            VS_FIXEDFILEINFO* fixedFileInfo =
+                GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
+                module = nullptr;
+            }
+        }
+    }
     if (!module) {
         module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
@@ -4836,13 +4855,13 @@ HMODULE GetTaskbarViewModuleHandle() {
     return module;
 }
 
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
-        GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR lpLibFileName) {
+    if (g_winVersion >= WinVersion::Win11 && !g_systemTrayModuleHooked &&
+        GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayModuleHooked.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
-        if (HookTaskbarViewDllSymbols(module)) {
+        if (HookSystemTraySymbols(module)) {
             Wh_ApplyHookOperations();
         }
     }
@@ -4856,7 +4875,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
         HandleLoadedModuleIfExplorerPatcher(module);
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+        HandleLoadedModuleIfSystemTray(module, lpLibFileName);
     }
 
     return module;
@@ -5292,13 +5311,13 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
     } else if (g_winVersion >= WinVersion::Win11) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            g_taskbarViewDllLoaded = true;
-            if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            g_systemTrayModuleHooked = true;
+            if (!HookSystemTraySymbols(systemTrayModule)) {
                 return FALSE;
             }
         } else {
-            Wh_Log(L"Taskbar view module not loaded yet");
+            Wh_Log(L"System tray module not loaded yet");
         }
     } else {
         if (!HookWin10TaskbarSymbols()) {
@@ -5377,12 +5396,12 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"Got Taskbar.View.dll");
+    if (g_winVersion >= WinVersion::Win11 && !g_systemTrayModuleHooked) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayModuleHooked.exchange(true)) {
+                Wh_Log(L"Got system tray module");
 
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                if (HookSystemTraySymbols(systemTrayModule)) {
                     Wh_ApplyHookOperations();
                 }
             }

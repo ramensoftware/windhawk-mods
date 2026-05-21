@@ -2,9 +2,9 @@
 // @id              edge-snap-throw
 // @name            Edge Snap Throw
 // @description     Slide a window into a screen edge and it snaps like native Windows snap
-// @version         2.0.0
-// @author          getrektbynoob20
-// @github          https://github.com/getrektbynoob20
+// @version         2.0.1
+// @author          Getrektbynoob15
+// @github          https://github.com/getrektbynoob15
 // @include         *
 // @compilerOptions -lcomctl32 -ldwmapi
 // ==/WindhawkMod==
