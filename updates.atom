@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-22T12:57:32.000Z</updated>
+    <updated>2026-05-22T13:04:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AutoScroll Win32 1.0.1]]></title>
+        <id>https://windhawk.net/mods/autoscroll-win32#d9e0a6536452c29607e43e8030a4dd03c7d7ee84</id>
+        <link href="https://windhawk.net/mods/autoscroll-win32"/>
+        <updated>2026-05-22T13:04:46.000Z</updated>
+        <content type="html"><![CDATA[<ol>
+<li>Fixed middle-click "open in new tab" so it now works in hold mode</li>
+<li>Fixed overscroll without Smooth Scroll Win32 (capped to 1 wheel notch per frame)</li>
+<li>Added Toggle Mode -- click to start scrolling, click again to stop</li>
+<li>Added: Block Middle Button Release -- suppresses mouse3 release for bound apps</li>
+<li>Added per-monitor DPI support for the visual indicator</li>
+<li>Improved: scroll thread idles at zero CPU (WaitForSingleObject on event)</li>
+</ol>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AudioSwap 2.0.0]]></title>
         <id>https://windhawk.net/mods/audioswap#95bddae96da8f6e404291b5e7d9842674ac104d4</id>
@@ -413,58 +431,6 @@ Win+V.</li>
         <author>
             <name>SilverAmd</name>
             <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Files 2 Folders 1.2]]></title>
-        <id>https://windhawk.net/mods/files-2-folders#f97bd370462cef10e23fea9e699a2debfaf651ec</id>
-        <link href="https://windhawk.net/mods/files-2-folders"/>
-        <updated>2026-05-14T16:57:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="files2folders">Files 2 Folders</h1>
-<p>Inspired by <a href="https://www.dcmembers.com/skwire/download/files-2-folder/">Files 2 Folder</a>
-by Jody Holmes (Skwire Empire).</p>
-<p>When one or more items are selected in an Explorer window, adds a
-<strong>Files 2 Folder…</strong> entry to the right-click context menu. Choosing it opens
-a dialog with four options for moving the selection into a new subfolder:</p>
-<ol>
-<li>Move the selection into a subfolder with a fixed name (e.g. <code>folder</code>).</li>
-<li>Move each file into a subfolder named after the file (without extension):
-<code>Good.bat</code> -&gt; <code>.\Good\Good.bat</code>. With a single file selected, this just
-creates one folder around that file.</li>
-<li>Move each file into a subfolder named after its extension
-(e.g. all <code>.txt</code> files into <code>.\txt\</code>). With a single file selected, this
-creates one folder named after that file's extension.</li>
-<li>Move the selection into a subfolder named with the current date/time,
-formatted using the date format from settings.</li>
-</ol>
-<p>Folders inside the selection are skipped for modes 2 and 3 (they only make
-sense for files); they are still moved for modes 1 and 4.</p>
-<h2 id="fastvsslowmode">Fast vs. slow mode</h2>
-<p>By default the mod uses <code>MoveFileExW</code> directly, which is essentially instant
-for same-volume moves. Enable <strong>Slow mode (shell-integrated)</strong> in settings to
-route moves through <code>IFileOperation</code> instead — that gives you the standard
-Windows progress dialog, <strong>Ctrl+Z undo</strong>, UAC elevation prompts for protected
-paths, and conflict-resolution dialogs, at the cost of significantly slower
-operation on large selections.</p>
-<h2 id="workaroundforotherprograms">Workaround for other programs</h2>
-<p>A configurable global hotkey (default <strong>Ctrl+Alt+F</strong>) makes the mod usable
-from any file manager (Total Commander, Directory Opus, Files, XYplorer,
-Q-Dir, etc.):</p>
-<ol>
-<li>Select one or more files in the other program.</li>
-<li>Press <strong>Ctrl+C</strong> (or <strong>Ctrl+X</strong>) to put the file paths on the clipboard.</li>
-<li>Press the hotkey. The dialog appears, the files get moved into the chosen
-subfolder under their parent directory.</li>
-</ol>
-<p>Toggle <strong>Silent</strong> to suppress the help popup when the clipboard is empty.</p>
-<h2 id="dateformat">Date format</h2>
-<p>Uses the same tokens as Win32 <code>GetDateFormat</code> / <code>GetTimeFormat</code>:
-<code>yyyy MM dd HH mm ss</code> etc. Example: <code>yyyy-MM-dd-HH-mm</code>.</p>
-<p>Forbidden characters in folder names (<code>* : ? " &lt; &gt; | / \</code>) are replaced with
-<code>_</code> automatically.</p>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
         </author>
     </entry>
 </feed>
