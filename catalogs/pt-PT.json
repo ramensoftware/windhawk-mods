@@ -4024,6 +4024,34 @@
                 "version": "1.1"
             }
         },
+        "explorer-no-min-size": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1779461548000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779461548000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lcomctl32",
+                "description": "Removes the minimum window size restriction in File Explorer",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer No Minimum Window Size",
+                "version": "1.0.0"
+            }
+        },
         "explorer-no-toolbars-bottom-gripper": {
             "details": {
                 "defaultSorting": 1090,

@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-22T13:57:20.000Z</updated>
+    <updated>2026-05-22T14:52:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer No Minimum Window Size 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-no-min-size#737fe5ca2c253eee455e5ca74c678a8f56db33c1</id>
+        <link href="https://windhawk.net/mods/explorer-no-min-size"/>
+        <updated>2026-05-22T14:52:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorernominimumwindowsize">Explorer No Minimum Window Size</h1>
+<p>Removes the minimum window size restriction in Windows File Explorer.
+By default, Explorer prevents windows from being resized below a certain
+width and height. With this mod you can resize Explorer windows to any size.</p>
+<p><img src="https://i.imgur.com/eE0Hmr8.png" alt="screenshot" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.0]]></title>
         <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#95a7912335a7140e3c46fb5826c1b2a1cd04a3aa</id>
@@ -382,19 +397,6 @@ currently set.</li>
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Theme Toggler Tray 1.2.1]]></title>
-        <id>https://windhawk.net/mods/theme-toggler-tray#acfafad42bba74504b8d8556fc7fe148aa512344</id>
-        <link href="https://windhawk.net/mods/theme-toggler-tray"/>
-        <updated>2026-05-14T19:46:02.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="themetogglertraystandalonemode">Theme Toggler Tray (Standalone Mode)</h1>
-<p>This mod now runs in a dedicated Windhawk process for better stability.
-Click the tray icon to instantly toggle between Dark and Light mode.</p>]]></content>
-        <author>
-            <name>Husam-Abdulraheem</name>
-            <uri>https://github.com/Husam-Abdulraheem</uri>
         </author>
     </entry>
 </feed>

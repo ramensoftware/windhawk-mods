@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-22T13:57:20.000Z</updated>
+    <updated>2026-05-22T14:52:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer No Minimum Window Size 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-no-min-size#737fe5ca2c253eee455e5ca74c678a8f56db33c1</id>
+        <link href="https://windhawk.net/mods/explorer-no-min-size"/>
+        <updated>2026-05-22T14:52:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorernominimumwindowsize">Explorer No Minimum Window Size</h1>
+<p>Removes the minimum window size restriction in Windows File Explorer.
+By default, Explorer prevents windows from being resized below a certain
+width and height. With this mod you can resize Explorer windows to any size.</p>
+<p><img src="https://i.imgur.com/eE0Hmr8.png" alt="screenshot" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.0]]></title>
         <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#95a7912335a7140e3c46fb5826c1b2a1cd04a3aa</id>
@@ -661,75 +676,6 @@ Krisatisa</p>]]></content>
         <author>
             <name>ciahciach</name>
             <uri>https://github.com/ciahciach</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Rename Overwrite 1.1.2]]></title>
-        <id>https://windhawk.net/mods/explorer-rename-overwrite#69fb8025d4f2aa4b9b4426b3be3b042b386f96a4</id>
-        <link href="https://windhawk.net/mods/explorer-rename-overwrite"/>
-        <updated>2026-05-03T22:37:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerrenameoverwrite">Explorer Rename Overwrite</h1>
-<p>Changes Explorer's rename behavior so that renaming a file to a name that
-already exists overwrites the existing file, instead of producing the
-"file already exists" prompt or appending " (2)".</p>
-<p>Works by hooking <code>IFileOperation::RenameItem</code> / <code>IFileOperation::RenameItems</code>.
-When a rename target collides with an existing file, the existing file is
-removed first (to the Recycle Bin by default, or permanently if configured).</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>disposition</strong>: Where the overwritten file goes — <code>recycle</code> (safer, default),
-<code>keep</code> (renamed in place, see <em>keepInPlaceSuffix</em>), or <code>permanent</code>
-(irreversible).</li>
-<li><strong>onlyFiles</strong>: If enabled, never overwrite directories, only regular files.</li>
-<li><strong>renameBeforeRecycle</strong>: When recycling, append a suffix to the overwritten
-file's name before sending it to the Recycle Bin. This guarantees that
-restoring the file from the bin will not clobber the new file you just
-renamed into its place. No effect when <em>disposition</em> is <code>permanent</code>.</li>
-<li><strong>recycleSuffix</strong>: The suffix to insert before the extension
-(<code>report.txt</code> → <code>report_old.txt</code>). If a file with the suffixed name
-already exists, a number is appended (<code>report_old (2).txt</code>), matching
-Explorer's own collision behavior. Defaults to <code>_old</code>.</li>
-<li><strong>keepInPlaceSuffix</strong>: Used when <em>disposition</em> is <code>keep</code>. The suffix is
-appended to the <strong>whole filename including its extension</strong>, so
-<code>report.txt</code> becomes <code>report.txt_old</code>. This intentionally breaks the
-file association so the old file is visually distinct and won't be
-double-clicked into its old app. Collisions get the same <code>(2)</code>, <code>(3)</code>
-treatment as the recycle path. Defaults to <code>_old</code>.</li>
-</ul>
-<h2 id="changelog">Changelog</h2>
-<h3 id="112">1.1.2</h3>
-<ul>
-<li>Remove the <code>enabled</code> master switch — disable the mod via Windhawk's own
-toggle instead.</li>
-<li>Preserve the existing target's filename casing when renaming it with the
-recycle/keep suffix (e.g. renaming <code>Src.txt</code> over <code>DEST.txt</code> produces
-<code>DEST.txt_old</code>, not <code>Dest.txt_old</code>).</li>
-<li>Don't pass <code>MOVEFILE_REPLACE_EXISTING</code> when moving the collision target
-to its suffixed name — the suffixed path is chosen to not exist, and
-silently overwriting would defeat the safety of the suffix.</li>
-</ul>
-<h3 id="111">1.1.1</h3>
-<ul>
-<li>Fix <code>keep</code> disposition: notify the shell of the in-place rename so
-Explorer's view doesn't transiently show both files with the suffix
-until the window is refreshed.</li>
-</ul>
-<h3 id="110">1.1.0</h3>
-<ul>
-<li>New <code>keep</code> disposition: rename the overwritten file in place (default
-<code>&lt;name&gt;_old</code>) instead of deleting/recycling it.</li>
-<li>New <code>keepInPlaceSuffix</code> setting controlling the in-place suffix.</li>
-</ul>
-<h3 id="100">1.0.0</h3>
-<ul>
-<li>Initial release: hook <code>IFileOperation::RenameItem</code> / <code>RenameItems</code> and
-clear the destination on collision.</li>
-<li>Settings: <code>disposition</code> (<code>recycle</code> / <code>permanent</code>), <code>onlyFiles</code>,
-<code>renameBeforeRecycle</code>, <code>recycleSuffix</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
         </author>
     </entry>
 </feed>
