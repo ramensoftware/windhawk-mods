@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-22T14:52:28.000Z</updated>
+    <updated>2026-05-22T18:26:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Buttons 2.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-buttons#5cebaf3b9d51243548c53c9df5d14a54bfb1dd88</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-buttons"/>
+        <updated>2026-05-22T18:26:43.000Z</updated>
+        <content type="html"><![CDATA[<p>New Features:</p>
+<ul>
+<li><p>Added press: action prefix for keyboard shortcuts (e.g., press:Win+E or press:0x5B;0x45)</p></li>
+<li><p>Added modifier signs for actions: - (run as admin) and * (show terminal window)</p></li>
+<li><p>Added support for extracting icons from .exe and .dll files</p></li>
+<li><p>Icon field now accepts 4-digit hex codes without \u prefix (e.g., E774)</p></li>
+<li><p>Icon field now accepts /u as alternative to \u for Unicode escapes</p>
+<p>Bug Fixes:</p></li>
+<li><p>Fixed icon normalization and parsing</p></li>
+<li><p>Improved GDI+ initialization for icon extraction</p></li>
+<li><p>Fixed window class registration error handling</p></li>
+<li><p>Improved code stability and error handling</p></li>
+</ul>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer No Minimum Window Size 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-no-min-size#737fe5ca2c253eee455e5ca74c678a8f56db33c1</id>
@@ -368,35 +391,6 @@ ExplorerPatcher.)</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CrystalDiskInfo Smart Auto-Refresh 1.0]]></title>
-        <id>https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh#b6f9529af93c2bdde4ce2b9e70abff1fce8683a7</id>
-        <link href="https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh"/>
-        <updated>2026-05-14T20:37:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="crystaldiskinfosmartautorefresh">CrystalDiskInfo Smart Auto-Refresh</h1>
-<p>CrystalDiskInfo includes an optional Auto-Refresh feature that updates disk
-information at specified intervals, which is useful for background monitoring
-while the application is minimized to the system tray. However, when the
-application's main window is visible, automatic refreshes can interfere with the
-analysis of current disk status, as shifting attribute values make tracking
-specific metrics more difficult.</p>
-<p>This mod temporarily pauses the Auto-Refresh function by blocking its disk
-polling cycle whenever the application's main window is visible, allowing for an
-uninterrupted analysis of current disk status.</p>
-<p>The Auto-Refresh function resumes once the application is minimized to the
-taskbar or system tray.</p>
-<p><strong>Note:</strong> If CrystalDiskInfo is already running when the mod is loaded, pick one
-of the following options to activate it:</p>
-<ul>
-<li>Restart the application completely.</li>
-<li>Select an interval in <strong>Function</strong> → <strong>Auto Refresh</strong>, including the one
-currently set.</li>
-</ul>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
