@@ -2,7 +2,7 @@
 // @id              disk-usage-bar-color
 // @name            Disk Usage Bar Color
 // @description     Customize the disk usage bar color in File Explorer This PC view
-// @version         1.2.1
+// @version         1.2.2
 // @author          dirtyrazkl
 // @github          https://github.com/dirtyrazkl
 // @include         explorer.exe
@@ -29,7 +29,8 @@ Customizes the color of the disk usage progress bars shown in File Explorer's
 - Color theming tools can also update these values programmatically by writing
     the same settings keys and triggering a mod settings reload.
 
-Enter colors as 6-digit hex codes without the `#` prefix (e.g. `60CDFF`).
+Enter colors as 6-digit hex codes (e.g. `60CDFF`). Values with `#` and
+`0x` prefixes are also accepted.
 
 ## Notes
 
@@ -59,6 +60,7 @@ Enter colors as 6-digit hex codes without the `#` prefix (e.g. `60CDFF`).
 static decltype(&DrawThemeBackground) DrawThemeBackground_orig = nullptr;
 static COLORREF g_barColor     = RGB(96, 205, 255);  // PBFS_PARTIAL (normal)
 static COLORREF g_barColorFull = RGB(232, 17, 35);   // PBFS_ERROR   (full/warning)
+static ULONGLONG g_lastSettingsRefreshTick = 0;
 
 static std::wstring GetThemeClass(HTHEME hTheme)
 {
@@ -71,6 +73,18 @@ static std::wstring GetThemeClass(HTHEME hTheme)
 
 static COLORREF ParseHexColor(PCWSTR hex, COLORREF fallback)
 {
+    if (!hex) return fallback;
+
+    // Allow common formats used by external tools: #RRGGBB and 0xRRGGBB.
+    while (*hex == L' ' || *hex == L'\t')
+        hex++;
+
+    if (*hex == L'#')
+        hex++;
+
+    if (hex[0] == L'0' && (hex[1] == L'x' || hex[1] == L'X'))
+        hex += 2;
+
     auto h = [](wchar_t c) -> int {
         if (c >= L'0' && c <= L'9') return c - L'0';
         if (c >= L'A' && c <= L'F') return c - L'A' + 10;
@@ -78,7 +92,7 @@ static COLORREF ParseHexColor(PCWSTR hex, COLORREF fallback)
         return -1;
     };
 
-    if (!hex || wcslen(hex) < 6) return fallback;
+    if (wcslen(hex) < 6) return fallback;
 
     int h0 = h(hex[0]);
     int h1 = h(hex[1]);
@@ -105,6 +119,18 @@ static void LoadSettings()
 
     g_barColor = manualBarColor;
     g_barColorFull = manualBarColorFull;
+}
+
+static void MaybeRefreshSettings()
+{
+    // External tools may update settings without firing Wh_ModSettingsChanged.
+    // Refresh once per second to pick up those changes with negligible overhead.
+    ULONGLONG now = GetTickCount64();
+    if (now - g_lastSettingsRefreshTick < 1000)
+        return;
+
+    g_lastSettingsRefreshTick = now;
+    LoadSettings();
 }
 
 static void PaintSolidRect(HDC hdc, LPCRECT pRect, COLORREF color)
@@ -170,6 +196,8 @@ HRESULT WINAPI HookedDrawThemeBackground(
     HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId,
     LPCRECT pRect, LPCRECT pClipRect)
 {
+    MaybeRefreshSettings();
+
     if (iPartId == 5 && pRect && GetThemeClass(hTheme) == L"Progress" && IsDriveListDC(hdc))
     {
         COLORREF color;
