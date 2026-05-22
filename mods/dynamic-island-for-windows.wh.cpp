@@ -1,11 +1,11 @@
 // ==WindhawkMod==
-// @id              dynamic-island-windows
+// @id              dynamic-island-for-windows
 // @name            Dynamic Island for Windows
 // @description     A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.
 // @version         1.0.0
 // @author          Himanshu
 // @github          https://github.com/devcode90
-// @include         sihost.exe
+// @include         windhawk.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi
 // @license         MIT
@@ -14,6 +14,8 @@
 // ==WindhawkModReadme==
 /*
 # Dynamic Island for Windows
+
+![Dynamic Island for Windows](https://imagur.org/i/t83jWDYZ)
 
 A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.
 
@@ -41,12 +43,12 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
     - top-left: Top Left
     - top-right: Top Right
     - bottom-center: Bottom Center
-- SizeScale: 1.0
+- SizeScale: '1.0'
   $name: Size scale
   $options:
-    - 0.8: 0.8x
-    - 1.0: 1.0x
-    - 1.2: 1.2x
+    - '0.8': 0.8x
+    - '1.0': 1.0x
+    - '1.2': 1.2x
 - AccentColorMode: auto
   $name: Accent color mode
   $options:
@@ -348,10 +350,7 @@ constexpr GUID kSubTypeIeeeFloat = {
     {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71},
 };
 
-using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
-SetWindowPos_t g_originalSetWindowPos = nullptr;
-using SetClipboardData_t = HANDLE(WINAPI*)(UINT, HANDLE);
-SetClipboardData_t g_originalSetClipboardData = nullptr;
+
 
 double NowSeconds() {
     using clock = std::chrono::steady_clock;
@@ -2030,11 +2029,14 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             LoadSettings();
             break;
         case 9: {
+            wchar_t currentProcessPath[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
             HINSTANCE result = ShellExecuteW(nullptr, L"open",
-                                             L"windhawk://mods/local@dynamic-island-windows",
-                                             nullptr, nullptr, SW_SHOWNORMAL);
+                                             currentProcessPath,
+                                             L"windhawk://mods/local@dynamic-island-for-windows",
+                                             nullptr, SW_SHOWNORMAL);
             if (reinterpret_cast<INT_PTR>(result) <= 32) {
-                Wh_Log(L"Failed to open Windhawk settings for local@dynamic-island-windows.");
+                Wh_Log(L"Failed to open Windhawk settings for local@dynamic-island-for-windows.");
             }
             break;
         }
@@ -3419,8 +3421,13 @@ Activity ActivityForKind(IslandKind kind, const Settings& settings) {
             break;
         case IslandKind::Idle:
         default:
-            activity.width = 120.0f;
-            activity.height = 36.0f;
+            if (!settings.alwaysShowClock) {
+                activity.width = 0.0f;
+                activity.height = 0.0f;
+            } else {
+                activity.width = 120.0f;
+                activity.height = 36.0f;
+            }
             break;
     }
 
@@ -3561,8 +3568,8 @@ DWORD WINAPI RenderThreadProc(void*) {
     SpringValue widthSpring;
     SpringValue heightSpring;
     SpringValue nudgeSpring;
-    widthSpring.Reset(120.0f * g_settings.sizeScale);
-    heightSpring.Reset(36.0f * g_settings.sizeScale);
+    widthSpring.Reset((g_settings.alwaysShowClock ? 120.0f : 0.0f) * g_settings.sizeScale);
+    heightSpring.Reset((g_settings.alwaysShowClock ? 36.0f : 0.0f) * g_settings.sizeScale);
     nudgeSpring.Reset(0.0f);
 
     IslandKind previousPrimary = IslandKind::Idle;
@@ -3703,38 +3710,7 @@ DWORD WINAPI RenderThreadProc(void*) {
     return 0;
 }
 
-bool IsTrayWindow(HWND hwnd) {
-    wchar_t className[64] = {};
-    GetClassNameW(hwnd, className, ARRAYSIZE(className));
-    return wcscmp(className, L"Shell_TrayWnd") == 0 ||
-           wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
-}
 
-BOOL WINAPI SetWindowPos_Hook(HWND hwnd, HWND hwndInsertAfter, int x, int y, int cx, int cy,
-                              UINT flags) {
-    BOOL result = g_originalSetWindowPos(hwnd, hwndInsertAfter, x, y, cx, cy, flags);
-
-    if (result && hwnd && IsTrayWindow(hwnd)) {
-        HWND overlay = g_hwnd;
-        if (overlay) {
-            PostMessageW(overlay, WM_APP_LAYOUT_CHANGED, 0, 0);
-        }
-    }
-
-    return result;
-}
-
-HANDLE WINAPI SetClipboardData_Hook(UINT format, HANDLE data) {
-    HANDLE result = g_originalSetClipboardData(format, data);
-    if (result && (format == CF_UNICODETEXT || format == CF_TEXT || format == CF_BITMAP ||
-                   format == CF_DIB || format == CF_DIBV5)) {
-        HWND overlay = g_hwnd;
-        if (overlay) {
-            PostMessageW(overlay, WM_CLIPBOARDUPDATE, 0, 0);
-        }
-    }
-    return result;
-}
 
 bool StartThreads() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -3783,32 +3759,12 @@ void StopThreads() {
     g_running = false;
 }
 
-void InstallTaskbarHook() {
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) {
-        return;
-    }
 
-    auto setWindowPos = reinterpret_cast<void*>(GetProcAddress(user32, "SetWindowPos"));
-    if (setWindowPos &&
-        !Wh_SetFunctionHook(setWindowPos, reinterpret_cast<void*>(SetWindowPos_Hook),
-                            reinterpret_cast<void**>(&g_originalSetWindowPos))) {
-        Wh_Log(L"Failed to hook user32!SetWindowPos for taskbar awareness.");
-    }
-
-    auto setClipboardData = reinterpret_cast<void*>(GetProcAddress(user32, "SetClipboardData"));
-    if (setClipboardData &&
-        !Wh_SetFunctionHook(setClipboardData, reinterpret_cast<void*>(SetClipboardData_Hook),
-                            reinterpret_cast<void**>(&g_originalSetClipboardData))) {
-        Wh_Log(L"Failed to hook user32!SetClipboardData for clipboard previews.");
-    }
-}
 
 }  // namespace
 
 BOOL WhTool_ModInit() {
     LoadSettings();
-    InstallTaskbarHook();
 
     if (!StartThreads()) {
         StopThreads();
@@ -3845,13 +3801,9 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    // Raw OutputDebugString - bypasses Wh_Log. Only visible if DbgViewMini runs as Admin.
-    ::OutputDebugStringW(L"[DynIsland] *** Wh_ModInit RAW ENTRY ***");
-    Wh_Log(L"[DynIsland] Wh_ModInit entered. CmdLine: %s", GetCommandLineW());
-
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
-        Wh_Log(L"[DynIsland] Skipping session 0.");
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
@@ -3865,10 +3817,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"[DynIsland] argc=%d argv[0]=%s", argc, argv[0]);
-
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 ||
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
             wcscmp(argv[i], L"-service-stop") == 0) {
             isExcluded = true;
             break;
@@ -3887,16 +3838,13 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    Wh_Log(L"[DynIsland] excluded=%d toolMod=%d currentToolMod=%d",
-           (int)isExcluded, (int)isToolModProcess, (int)isCurrentToolModProcess);
-
     if (isExcluded) {
         return FALSE;
     }
 
     if (isCurrentToolModProcess) {
-        Wh_Log(L"[DynIsland] Running as tool-mod child. Calling WhTool_ModInit...");
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -3908,17 +3856,18 @@ BOOL Wh_ModInit() {
         }
 
         if (!WhTool_ModInit()) {
-            Wh_Log(L"[DynIsland] WhTool_ModInit() FAILED.");
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
-        Wh_Log(L"[DynIsland] Child init complete. Island should be visible.");
         return TRUE;
     }
 
@@ -3926,30 +3875,29 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"[DynIsland] Launcher instance. Will spawn child in Wh_ModAfterInit.");
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(L"[DynIsland] Wh_ModAfterInit. isLauncher=%d", (int)g_isToolModProcessLauncher);
     if (!g_isToolModProcessLauncher) {
         return;
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    Wh_Log(L"[DynIsland] Launcher exe: %s", currentProcessPath);
-
-    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
-    Wh_Log(L"[DynIsland] Spawning: %s", commandLine);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
@@ -3961,49 +3909,35 @@ void Wh_ModAfterInit() {
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken,
-        LPCWSTR lpApplicationName,
-        LPWSTR lpCommandLine,
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes,
-        WINBOOL bInheritHandles,
-        DWORD dwCreationFlags,
-        LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-
-    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(
-        kernelModule, "CreateProcessInternalW");
-
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
-        Wh_Log(L"[DynIsland] CreateProcessInternalW not found - trying CreateProcessW fallback.");
-        STARTUPINFOW si = {.cb = sizeof(si), .dwFlags = STARTF_FORCEOFFFEEDBACK};
-        PROCESS_INFORMATION pi = {};
-        if (!CreateProcessW(currentProcessPath, commandLine, nullptr, nullptr, FALSE,
-                            NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
-            Wh_Log(L"[DynIsland] CreateProcessW failed (GLE=%lu)", GetLastError());
-            return;
-        }
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        Wh_Log(L"[DynIsland] Child launched via CreateProcessW.");
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW si{.cb = sizeof(STARTUPINFOW), .dwFlags = STARTF_FORCEOFFFEEDBACK};
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                  nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"[DynIsland] CreateProcessInternalW failed (GLE=%lu)", GetLastError());
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-    Wh_Log(L"[DynIsland] Child launched successfully via CreateProcessInternalW.");
 }
 
 void Wh_ModSettingsChanged() {
