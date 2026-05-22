@@ -2,7 +2,7 @@
 // @id              disk-usage-bar-color
 // @name            Disk Usage Bar Color
 // @description     Customize the disk usage bar color in File Explorer This PC view
-// @version         1.2.0
+// @version         1.2.1
 // @author          dirtyrazkl
 // @github          https://github.com/dirtyrazkl
 // @include         explorer.exe
@@ -15,6 +15,10 @@
 
 Customizes the color of the disk usage progress bars shown in File Explorer's
 **This PC** view.
+
+## Screenshot
+
+![Disk Usage Bar Color preview](https://i.imgur.com/qbkvBJ6.png)
 
 ## Settings
 
