@@ -384,7 +384,7 @@
                     28
                 ],
                 "ratingUsers": 34,
-                "updated": 1779294811000,
+                "updated": 1779454652000,
                 "users": 353
             },
             "metadata": {
@@ -396,7 +396,7 @@
                     "windhawk.exe"
                 ],
                 "name": "AudioSwap",
-                "version": "1.4.0"
+                "version": "2.0.0"
             }
         },
         "auto-custom-titlebar-colors": {

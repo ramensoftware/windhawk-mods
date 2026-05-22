@@ -1,3 +1,9 @@
+## 2.0.0 ([May 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/95bddae96da8f6e404291b5e7d9842674ac104d4/mods/audioswap.wh.cpp))
+
+improved performance
+Windows Native dashboard = right-click → **Mod Settings**.
+All configuration (device slots, icons, mode, count) lives in the dashboard; Windhawk's settings panel is no longer used.
+
 ## 1.4.0 ([May 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e0943fee9ae46fd36207fa540b7047695ab1543c/mods/audioswap.wh.cpp))
 
 * added Custom icon selection from `.ico` files.
