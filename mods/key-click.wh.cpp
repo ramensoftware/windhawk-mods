@@ -2,7 +2,7 @@
 // @id              key-click
 // @name            Key Click
 // @description     Produces click sound on keypress, supports autorepeat
-// @version         1.0
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @compilerOptions -lwinmm
@@ -11,7 +11,8 @@
 
 // ==WindhawkModReadme==
 /*
-Produces click sound on keypress, supports autorepeat
+Produces click sound on keypress, supports autorepeat.
+Modifier keys (Ctrl, Shift, Alt, Win) do not produce autorepeat sounds.
 */
 // ==/WindhawkModReadme==
 
@@ -34,7 +35,7 @@ static const unsigned char clickWav[] = {
     0x40,0x1F,0,0, // Byte Rate
     1,0, 8,0,      // Block Align, Bits per sample (8)
     // Sub-chunk 2 (data)
-    'd','a','t','a', 8,0,0,0, 
+    'd','a','t','a', 8,0,0,0,
     // Сами байты звука:
     128, 255, 0, 255, 0, 200, 80, 128
 };
@@ -43,6 +44,9 @@ void PlayClick() {
     PlaySoundA((LPCSTR)clickWav, NULL,
         SND_MEMORY | SND_ASYNC | SND_NODEFAULT | SND_NOSTOP);
 }
+
+// Массив для отслеживания состояния модификаторов (защита от автоповтора)
+static bool s_modifierDown[256] = {};
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_INPUT) {
@@ -55,8 +59,41 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 RAWINPUT* ri = (RAWINPUT*)buffer;
 
                 if (ri->header.dwType == RIM_TYPEKEYBOARD) {
-                    if (!(ri->data.keyboard.Flags & RI_KEY_BREAK)) {
-                        PlayClick();
+                    USHORT vkey = ri->data.keyboard.VKey;
+                    bool isBreak = (ri->data.keyboard.Flags & RI_KEY_BREAK) != 0;
+
+                    // Проверяем, является ли клавиша модификатором
+                    bool isModifier = (vkey == VK_SHIFT    ||
+                                       vkey == VK_LSHIFT   ||
+                                       vkey == VK_RSHIFT   ||
+                                       vkey == VK_CONTROL  ||
+                                       vkey == VK_LCONTROL ||
+                                       vkey == VK_RCONTROL ||
+                                       vkey == VK_MENU     ||
+                                       vkey == VK_LMENU    ||
+                                       vkey == VK_RMENU    ||
+                                       vkey == VK_LWIN     ||
+                                       vkey == VK_RWIN);
+
+                    if (isBreak) {
+                        // Клавиша отпущена — сбрасываем флаг для модификаторов
+                        if (isModifier && vkey < 256) {
+                            s_modifierDown[vkey] = false;
+                        }
+                    } else {
+                        // Клавиша нажата
+                        if (isModifier && vkey < 256) {
+                            bool isAutoRepeat = s_modifierDown[vkey];
+                            s_modifierDown[vkey] = true;
+
+                            // Звук только при первом нажатии, без автоповтора
+                            if (!isAutoRepeat) {
+                                PlayClick();
+                            }
+                        } else {
+                            // Обычные клавиши — звук всегда (автоповтор разрешён)
+                            PlayClick();
+                        }
                     }
                 }
             }
@@ -86,7 +123,7 @@ DWORD WINAPI MsgThread(LPVOID) {
         HWND_MESSAGE, NULL, g_hInst, NULL
     );
 
-    // регистрация Raw Input
+    // Регистрация Raw Input
     RAWINPUTDEVICE rid = {};
     rid.usUsagePage = 0x01;
     rid.usUsage = 0x06;
@@ -112,7 +149,7 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
     if (g_hwnd) {
-        // отписка от Raw Input
+        // Отписка от Raw Input
         RAWINPUTDEVICE rid = {};
         rid.usUsagePage = 0x01;
         rid.usUsage = 0x06;
@@ -138,18 +175,6 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
