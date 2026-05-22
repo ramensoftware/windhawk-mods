@@ -15,11 +15,11 @@
 /*
 # Dynamic Island for Windows
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-18%20193649.png" alt="Dynamic Island Screenshot 1" width="260"/>
-  <img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225602.png" alt="Dynamic Island Screenshot 2" width="260"/>
-  <img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225634.png" alt="Dynamic Island Screenshot 3" width="260"/>
-</p>
+![Screenshot 1](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-18%20193649.png)
+
+![Screenshot 2](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225602.png)
+
+![Screenshot 3](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225634.png)
 
 A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.
 
