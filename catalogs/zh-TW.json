@@ -3231,7 +3231,7 @@
                     7
                 ],
                 "ratingUsers": 9,
-                "updated": 1777131528000,
+                "updated": 1779455193000,
                 "users": 481
             },
             "metadata": {
@@ -3243,7 +3243,7 @@
                     "explorer.exe"
                 ],
                 "name": "Disk Usage Bar Color",
-                "version": "1.1.0"
+                "version": "1.2.1"
             }
         },
         "disk-usage-bar-in-drive-properties": {
