@@ -2,7 +2,7 @@
 // @id              audioswap
 // @name            AudioSwap
 // @description     Tray icon to cycle between multiple preferred audio outputs. Supports up to 6 devices with click or scroll to swap.
-// @version         1.4.0
+// @version         2.0.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @include         windhawk.exe
@@ -18,11 +18,12 @@ Instantly cycle between multiple audio output devices from your system tray — 
 
 ## How to Use
 
-1. **Choose Device Count** — Open the **Settings** tab and pick how many devices to cycle through (2–6).
-2. **Choose Interaction Mode** — Select **Click to Swap** (left-click the icon) or **Scroll to Swap** (mouse wheel over the icon).
-3. **Choose Icons** — Pick an icon for each device slot. Icons for slots 3–6 are only used when the device count is set high enough. (select Custom and save to open the file explorer)
-4. **Assign Devices** — Right-click the tray icon. Use **Set as Device 1 / 2 / 3...** to assign each slot from the live device list.
-5. **Swap** — Click or scroll the tray icon to cycle through your assigned devices.
+1. **Open Settings** — Right-click the tray icon and select **Mod Settings** to open the configuration dashboard.
+2. **Assign Devices** — Use the dropdown in each slot to pick a device from the live list of active audio outputs.
+3. **Choose Icons** — Select a preset icon per slot, or click **Browse...** to load a custom `.ico` file.
+4. **Choose Mode** — Pick **Click to Swap** (left-click cycles devices) or **Scroll to Swap** (mouse wheel cycles; left-click mutes).
+5. **Set Device Count** — Choose how many slots to cycle through (2–6).
+6. Click **Save and Apply** — the tray icon updates immediately, no restart needed.
 
 ### Scroll to Swap mode extras
 
@@ -35,20 +36,24 @@ Instantly cycle between multiple audio output devices from your system tray — 
 
 ## Known Bugs
 
-- **Scroll to Swap may not respond over elevated windows.** such as Task Manager, Windhawk or other admin-elevated applications. Switch focus away from an elevated window and scrolling will work normally.
+- **Scroll to Swap may not respond over elevated windows** such as Task Manager, Windhawk, or other admin-elevated applications. Switch focus away from the elevated window and scrolling will work normally.
 
 ---
 
 ## Changelog
 
+### v2.0.0
+- **New:** Native dashboard — right-click → **Mod Settings**.
+- **New:** All configuration (device slots, icons, mode, count) lives in the dashboard; Windhawk's settings panel is no longer used.
+
+
 ### v1.4.0
-- Custom .ico support — selecting "Custom Icon" in settings now auto-opens a file picker; also available via right-click → "Custom Icon for Device X..."
+- Custom .ico support — selecting "Custom Icon" in settings auto-opens a file picker; also available via right-click → "Custom Icon for Device X..."
 - Custom icon paths stored internally (no separate text setting in the UI).
-- Patch notes: Fixed an issue where Scroll to Swap didn't work after a reboot until the icon was clicked.
-- Patch notes: Fixed a crash that occurred when using audio devices with very long names.
-- Patch notes: Fixed a bug where adding more devices in settings didn't take effect immediately.
-- Patch notes: Fixed a minor issue where cycling devices would sometimes skip the first slot.
-- Patch notes: Improved reliability of the mute toggle and overall system stability.
+- Fixed: Scroll to Swap didn't work after a reboot until the icon was clicked.
+- Fixed: Crash with audio devices that have very long names.
+- Fixed: Adding more devices in settings didn't take effect immediately.
+- Fixed: Cycling devices would sometimes skip the first slot.
 
 ### v1.3.0
 - Up to 6 devices; scroll-to-swap mode; dynamic right-click menu.
@@ -74,113 +79,10 @@ Instantly cycle between multiple audio output devices from your system tray — 
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
-/*
-- deviceCount: 2
-  $name: Number of Devices
-  $description: How many audio devices to cycle through (2 to 6)
-  $options:
-    - 2: 2 Devices
-    - 3: 3 Devices
-    - 4: 4 Devices
-    - 5: 5 Devices
-    - 6: 6 Devices
-- swapMode: click_to_swap
-  $name: Interaction Mode
-  $description: How to cycle through devices
-  $options:
-    - click_to_swap: Click to Swap
-    - scroll_to_swap: Scroll to Swap
-- icon1: speaker_normal
-  $name: Device 1 Icon
-  $options:
-    - speaker_normal: Normal Speaker
-    - speaker_square: Square Speaker
-    - speaker_modern: Modern Speaker
-    - speaker_modern_square: Modern Square Speaker
-    - audio_wave: Audio Wave
-    - headphones: Headphones
-    - headset_gaming: Gaming Headset
-    - headphones_modern: Modern Headphones
-    - headset_modern: Modern Gaming Headset
-    - earphones: Earphones
-    - custom: Custom Icon
-- icon2: speaker_square
-  $name: Device 2 Icon
-  $options:
-    - speaker_normal: Normal Speaker
-    - speaker_square: Square Speaker
-    - speaker_modern: Modern Speaker
-    - speaker_modern_square: Modern Square Speaker
-    - audio_wave: Audio Wave
-    - headphones: Headphones
-    - headset_gaming: Gaming Headset
-    - headphones_modern: Modern Headphones
-    - headset_modern: Modern Gaming Headset
-    - earphones: Earphones
-    - custom: Custom Icon
-- icon3: headphones
-  $name: Device 3 Icon
-  $description: Used when Number of Devices is 3 or more
-  $options:
-    - speaker_normal: Normal Speaker
-    - speaker_square: Square Speaker
-    - speaker_modern: Modern Speaker
-    - speaker_modern_square: Modern Square Speaker
-    - audio_wave: Audio Wave
-    - headphones: Headphones
-    - headset_gaming: Gaming Headset
-    - headphones_modern: Modern Headphones
-    - headset_modern: Modern Gaming Headset
-    - earphones: Earphones
-    - custom: Custom Icon
-- icon4: headset_gaming
-  $name: Device 4 Icon
-  $description: Used when Number of Devices is 4 or more
-  $options:
-    - speaker_normal: Normal Speaker
-    - speaker_square: Square Speaker
-    - speaker_modern: Modern Speaker
-    - speaker_modern_square: Modern Square Speaker
-    - audio_wave: Audio Wave
-    - headphones: Headphones
-    - headset_gaming: Gaming Headset
-    - headphones_modern: Modern Headphones
-    - headset_modern: Modern Gaming Headset
-    - earphones: Earphones
-    - custom: Custom Icon
-- icon5: headphones_modern
-  $name: Device 5 Icon
-  $description: Used when Number of Devices is 5 or more
-  $options:
-    - speaker_normal: Normal Speaker
-    - speaker_square: Square Speaker
-    - speaker_modern: Modern Speaker
-    - speaker_modern_square: Modern Square Speaker
-    - audio_wave: Audio Wave
-    - headphones: Headphones
-    - headset_gaming: Gaming Headset
-    - headphones_modern: Modern Headphones
-    - headset_modern: Modern Gaming Headset
-    - earphones: Earphones
-    - custom: Custom Icon
-- icon6: headset_modern
-  $name: Device 6 Icon
-  $description: Used when Number of Devices is 6
-  $options:
-    - speaker_normal: Normal Speaker
-    - speaker_square: Square Speaker
-    - speaker_modern: Modern Speaker
-    - speaker_modern_square: Modern Square Speaker
-    - audio_wave: Audio Wave
-    - headphones: Headphones
-    - headset_gaming: Gaming Headset
-    - headphones_modern: Modern Headphones
-    - headset_modern: Modern Gaming Headset
-    - earphones: Earphones
-    - custom: Custom Icon
-*/
-// ==/WindhawkModSettings==
+// All settings are managed via right-click → Mod Settings (dashboard).
+// No WindhawkModSettings block: Wh_GetStringSetting reads a separate
+// YAML store that Wh_SetStringValue cannot write to, so schema entries
+// would silently conflict with dashboard saves.
 
 #include <windhawk_utils.h>
 #include <windows.h>
@@ -193,6 +95,8 @@ Instantly cycle between multiple audio output devices from your system tray — 
 #include <propidl.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <commdlg.h>
+#include <vector>
+#include <string>
 
 #define TRAY_ICON_ID         1
 #define WM_TRAY_CALLBACK     (WM_USER + 1)
@@ -200,16 +104,26 @@ Instantly cycle between multiple audio output devices from your system tray — 
 #define WM_TRAY_SCROLL       (WM_USER + 3)  // wParam = direction (+1 or -1)
 #define WM_UPDATE_HOOK_STATE (WM_USER + 4)
 #define WM_SHOW_FILE_PICKER  (WM_USER + 5)  // lParam = bitmask of slots needing pickers
-#define WM_RELOAD_ICONS     (WM_USER + 6)  // reload icons on tray thread (eliminates cross-thread handle race)
+#define WM_RELOAD_ICONS      (WM_USER + 6)  // reload icons on tray thread (eliminates cross-thread handle race)
+#define WM_RELOAD_ALL        (WM_USER + 7)  // full reload after dashboard save
 #define TRAY_RECT_INIT_TIMER 99   // one-shot retry timer for Shell_NotifyIconGetRect
 
-// Slot N uses menu IDs: N*100 + device_index (0..31). Max slot 6 → ID 631.
-#define MENU_SLOT_BASE     100
-#define MENU_MAX_DEVICES    32
-#define MENU_OPEN_WINDHAWK 9000
+#define MENU_OPEN_SETTINGS   9001
+#define MENU_OPEN_WINDHAWK   9000
+
+// With NOTIFYICON_VERSION_4 active Windows changes the tray notifications:
+//   left-click  → NIN_SELECT       (instead of / alongside WM_LBUTTONUP)
+//   right-click → WM_CONTEXTMENU   (instead of / alongside WM_RBUTTONUP)
+//   keyboard    → NIN_KEYSELECT
+// We accept both old and new forms so the icon behaves the same in either mode.
+#ifndef NIN_SELECT
+#define NIN_SELECT     (WM_USER + 0)
+#endif
+#ifndef NIN_KEYSELECT
+#define NIN_KEYSELECT  (NIN_SELECT | 0x1)
+#endif
 
 #define MAX_DEVICE_SLOTS 6
-#define MENU_CUSTOM_ICON_BASE 8000
 
 const DWORD CLICK_DEBOUNCE_MS  = 500;
 const DWORD SCROLL_DEBOUNCE_MS = 300;
@@ -240,8 +154,8 @@ static HBITMAP        g_hIconDevBmp[MAX_DEVICE_SLOTS] = {};
 
 // ── Shared state — protected by g_stateLock ──────────────────────────────────
 // Read by the worker thread (CycleAudioDevice) and tray thread (UpdateTrayTip,
-// BuildAndShowContextMenu). Written by the main thread (LoadDeviceSelections,
-// LoadUserIconsAndSettings, SaveDeviceSelection) and tray thread (mute toggle).
+// BuildAndShowContextMenu). Written by LoadDeviceSelections/LoadUserIconsAndSettings
+// (main thread or tray thread via WM_RELOAD_ALL) and ToggleMuteCurrentDevice (tray thread).
 static CRITICAL_SECTION g_stateLock;
 static WCHAR  g_cachedDevId[MAX_DEVICE_SLOTS][512]  = {};
 static WCHAR  g_cachedDevName[MAX_DEVICE_SLOTS][256] = {};
@@ -257,6 +171,12 @@ static volatile LONG  g_scrollToSwap = 0;  // 1 = scroll mode
 class AudioDeviceNotifier;
 static IMMDeviceEnumerator* g_notifEnum      = nullptr;
 static AudioDeviceNotifier* g_deviceNotifier = nullptr;
+
+// Dashboard GUI thread — written only from the tray thread (BuildAndShowContextMenu)
+// and read only from the main thread (WhTool_ModUninit), which runs after the
+// tray thread has been waited for. No concurrent access → no lock needed.
+static HANDLE        g_guiThread  = nullptr;
+static volatile LONG g_guiRunning = 0;  // 1 while dashboard window is open
 
 const CLSID CLSID_CPolicyConfigClient = {
     0x870af99c, 0x171d, 0x4f9e, {0xaf, 0x0d, 0xe6, 0x3d, 0xf4, 0x0c, 0x2b, 0xc9}
@@ -301,6 +221,603 @@ int GetIconIndex(PCWSTR s) {
     return 4;
 }
 
+// ─── Settings dashboard ───────────────────────────────────────────────────────
+
+namespace AudioSwapGui {
+
+    // ── Palette ───────────────────────────────────────────────────────────────
+    static const COLORREF kClrBg      = RGB(24, 24, 24);
+    static const COLORREF kClrSurface = RGB(36, 36, 36);
+    static const COLORREF kClrBorder  = RGB(56, 56, 56);
+    static const COLORREF kClrText    = RGB(224, 224, 224);
+    static const COLORREF kClrDim     = RGB(128, 128, 128);
+    static const COLORREF kClrInput   = RGB(28, 28, 28);
+    static const COLORREF kClrAccent  = RGB(0, 120, 212);
+    static const COLORREF kClrAccentP = RGB(0,  96, 170);  // pressed
+    static const COLORREF kClrDarkBtn = RGB(44, 44, 44);
+    static const COLORREF kClrDarkBP  = RGB(32, 32, 32);   // pressed
+
+    // ── Layout constants ──────────────────────────────────────────────────────
+    static const int kCW    = 414;  // client width
+    static const int kTopH  =  72;  // height of global-settings section
+    static const int kSlotH =  76;  // height per slot row
+    static const int kBtnH  =  52;  // button-row height
+    static const int kIconSz=  28;  // icon drawn size
+
+    struct DeviceInfo { std::wstring id, name; };
+
+    struct State {
+        HWND hTrayHwnd = nullptr;
+        HWND hMainWnd  = nullptr;
+
+        HFONT  hFont      = nullptr;
+        HBRUSH hBgBrush   = nullptr;   // kClrBg  — returned from WM_CTLCOLOR*
+        HBRUSH hInpBrush  = nullptr;   // kClrInput
+        HBRUSH hSurfBrush = nullptr;   // kClrSurface
+
+        int deviceCount = 2;
+        int swapMode    = 0;
+
+        std::vector<DeviceInfo> activeDevices;
+
+        struct Slot {
+            HWND  hDevCombo    = nullptr;
+            HWND  hIconCombo   = nullptr;
+            HWND  hBrowseBtn   = nullptr;
+            HICON hPreviewIcon = nullptr;
+            std::wstring id, name, iconKey;
+            WCHAR customPath[MAX_PATH] = {};
+        } slots[6];
+
+        HWND hCountCombo = nullptr;
+        HWND hModeCombo  = nullptr;
+        HWND hSaveBtn    = nullptr;
+        HWND hCancelBtn  = nullptr;
+    };
+
+    static const WCHAR* kIconKeys[] = {
+        L"speaker_normal", L"speaker_square", L"speaker_modern",
+        L"speaker_modern_square", L"audio_wave", L"headphones",
+        L"headset_gaming", L"headphones_modern", L"headset_modern",
+        L"earphones", L"custom"
+    };
+    static const WCHAR* kIconLabels[] = {
+        L"Normal Speaker", L"Square Speaker", L"Modern Speaker",
+        L"Modern Square Speaker", L"Audio Wave", L"Headphones",
+        L"Gaming Headset", L"Modern Headphones", L"Modern Gaming Headset",
+        L"Earphones", L"Custom Icon..."
+    };
+    static const int kIconCount = 11;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    // y-coordinate of slot i's top edge in client space.
+    static int SlotY(int i) { return kTopH + i * kSlotH; }
+
+    // Extract the preview icon for a slot (32px). Caller owns the HICON.
+    static HICON LoadSlotPreview(const std::wstring& key, const WCHAR* customPath) {
+        HICON h = nullptr;
+        if (key == L"custom" && customPath && customPath[0])
+            h = (HICON)LoadImageW(NULL, customPath, IMAGE_ICON,
+                                  kIconSz, kIconSz, LR_LOADFROMFILE);
+        if (!h) ExtractIconExW(g_ddoresDllPath,
+                               GetIconIndex(key.empty() ? nullptr : key.c_str()),
+                               nullptr, &h, 1);
+        return h;
+    }
+
+    static void RefreshPreview(State* s, int i) {
+        if (s->slots[i].hPreviewIcon) { DestroyIcon(s->slots[i].hPreviewIcon); }
+        s->slots[i].hPreviewIcon = LoadSlotPreview(s->slots[i].iconKey, s->slots[i].customPath);
+    }
+
+    // Apply DarkMode_CFD theme to a combo so its dropdown renders dark on Win10+.
+    static void DarkCombo(HWND h) {
+        HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+        if (!ux) ux = LoadLibraryW(L"uxtheme.dll");
+        if (!ux) return;
+        using Fn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
+        auto fn = reinterpret_cast<Fn>(GetProcAddress(ux, "SetWindowTheme"));
+        if (fn) fn(h, L"DarkMode_CFD", nullptr);
+    }
+
+    // Move buttons and resize the window to fit exactly deviceCount slots.
+    static void UpdateLayout(State* s) {
+        if (!s->hMainWnd) return;
+        int btnY = kTopH + s->deviceCount * kSlotH + 12;
+        SetWindowPos(s->hSaveBtn,   nullptr, 12,  btnY, 148, 28, SWP_NOZORDER|SWP_NOACTIVATE);
+        SetWindowPos(s->hCancelBtn, nullptr, 168, btnY,  88, 28, SWP_NOZORDER|SWP_NOACTIVATE);
+        int clientH = kTopH + s->deviceCount * kSlotH + kBtnH;
+        RECT rc = {0, 0, kCW, clientH};
+        AdjustWindowRectEx(&rc,
+            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+            FALSE, WS_EX_DLGMODALFRAME);
+        RECT wr; GetWindowRect(s->hMainWnd, &wr);
+        SetWindowPos(s->hMainWnd, nullptr, wr.left, wr.top,
+                     rc.right - rc.left, rc.bottom - rc.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    static void UpdateSlotVisibility(State* s) {
+        for (int i = 0; i < 6; i++) {
+            bool vis = (i < s->deviceCount);
+            ShowWindow(s->slots[i].hDevCombo,  vis ? SW_SHOW : SW_HIDE);
+            ShowWindow(s->slots[i].hIconCombo, vis ? SW_SHOW : SW_HIDE);
+            ShowWindow(s->slots[i].hBrowseBtn,
+                       (vis && s->slots[i].iconKey == L"custom") ? SW_SHOW : SW_HIDE);
+        }
+        if (s->hMainWnd) InvalidateRect(s->hMainWnd, nullptr, TRUE);
+    }
+
+    static BOOL CALLBACK ApplyFontProc(HWND child, LPARAM hf) {
+        SendMessageW(child, WM_SETFONT, (WPARAM)hf, TRUE);
+        return TRUE;
+    }
+
+    // ── State I/O ─────────────────────────────────────────────────────────────
+
+    static void LoadState(State& s) {
+        IMMDeviceEnumerator* pEnum = nullptr;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                       CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                       (void**)&pEnum))) {
+            IMMDeviceCollection* pColl = nullptr;
+            if (SUCCEEDED(pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pColl))) {
+                UINT count = 0; pColl->GetCount(&count);
+                for (UINT i = 0; i < count; i++) {
+                    IMMDevice* pDev = nullptr;
+                    if (SUCCEEDED(pColl->Item(i, &pDev))) {
+                        LPWSTR pId = nullptr;
+                        if (SUCCEEDED(pDev->GetId(&pId))) {
+                            IPropertyStore* pStore = nullptr;
+                            if (SUCCEEDED(pDev->OpenPropertyStore(STGM_READ, &pStore))) {
+                                PROPVARIANT v; PropVariantInit(&v);
+                                if (SUCCEEDED(pStore->GetValue(PKEY_Device_FriendlyName, &v))
+                                    && v.pwszVal)
+                                    s.activeDevices.push_back({pId, v.pwszVal});
+                                PropVariantClear(&v); pStore->Release();
+                            }
+                            CoTaskMemFree(pId);
+                        }
+                        pDev->Release();
+                    }
+                }
+                pColl->Release();
+            }
+            pEnum->Release();
+        }
+
+        {
+            WCHAR dcBuf[8] = {};
+            Wh_GetStringValue(L"deviceCount", dcBuf, 8);
+            int n = 0;
+            for (const WCHAR* p = dcBuf; *p >= L'0' && *p <= L'9'; p++) n = n*10 + (*p-L'0');
+            s.deviceCount = (n >= 2 && n <= 6) ? n : 2;
+        }
+        {
+            WCHAR modeBuf[32] = {};
+            Wh_GetStringValue(L"swapMode", modeBuf, 32);
+            s.swapMode = (wcscmp(modeBuf, L"scroll_to_swap") == 0) ? 1 : 0;
+        }
+
+        for (int i = 0; i < 6; i++) {
+            WCHAR kId[32], kNm[32], kPth[32], buf[512];
+            swprintf_s(kId,  L"Device%dId",         i+1);
+            swprintf_s(kNm,  L"Device%dName",       i+1);
+            swprintf_s(kPth, L"icon%d_custom_path", i+1);
+            Wh_GetStringValue(kId,  buf, 512); s.slots[i].id   = buf;
+            Wh_GetStringValue(kNm,  buf, 256); s.slots[i].name = buf;
+            WCHAR kIco[16]; swprintf_s(kIco, L"icon%d", i+1);
+            WCHAR ikBuf[32] = {};
+            Wh_GetStringValue(kIco, ikBuf, 32);
+            s.slots[i].iconKey = ikBuf[0] ? ikBuf : L"speaker_normal";
+            Wh_GetStringValue(kPth, s.slots[i].customPath, MAX_PATH);
+            s.slots[i].hPreviewIcon = LoadSlotPreview(s.slots[i].iconKey, s.slots[i].customPath);
+        }
+    }
+
+    // ── Window procedure ──────────────────────────────────────────────────────
+
+    static LRESULT CALLBACK DashboardWndProc(HWND hWnd, UINT msg,
+                                             WPARAM wParam, LPARAM lParam) {
+        State* s = reinterpret_cast<State*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+
+        switch (msg) {
+
+        // ── Initialise ────────────────────────────────────────────────────────
+        case WM_CREATE: {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            s = reinterpret_cast<State*>(cs->lpCreateParams);
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(s));
+            s->hMainWnd  = hWnd;
+            s->hFont     = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                               CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+            s->hBgBrush   = CreateSolidBrush(kClrBg);
+            s->hInpBrush  = CreateSolidBrush(kClrInput);
+            s->hSurfBrush = CreateSolidBrush(kClrSurface);
+
+            HINSTANCE hInst = GetModuleHandleW(nullptr);
+
+            // ── Top row: Devices count + Interaction Mode ─────────────────────
+            // All labels are painted in WM_PAINT; only combos are child HWNDs.
+            // Layout (x): "Devices:" @12 → combo @80 w=62 → "Mode:" @156 → combo @198 w=204
+            s->hCountCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
+                WS_CHILD|WS_VISIBLE|CBS_DROPDOWNLIST, 80, 18, 62, 200,
+                hWnd, (HMENU)(UINT_PTR)100, hInst, nullptr);
+            for (int i = 2; i <= 6; i++) {
+                WCHAR b[4]; swprintf_s(b, L"%d", i);
+                SendMessageW(s->hCountCombo, CB_ADDSTRING, 0, (LPARAM)b);
+            }
+            SendMessageW(s->hCountCombo, CB_SETCURSEL, s->deviceCount - 2, 0);
+            DarkCombo(s->hCountCombo);
+
+            s->hModeCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
+                WS_CHILD|WS_VISIBLE|CBS_DROPDOWNLIST, 198, 18, 204, 200,
+                hWnd, (HMENU)(UINT_PTR)101, hInst, nullptr);
+            SendMessageW(s->hModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Click to Swap");
+            SendMessageW(s->hModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Scroll to Swap");
+            SendMessageW(s->hModeCombo, CB_SETCURSEL, s->swapMode, 0);
+            DarkCombo(s->hModeCombo);
+
+            // ── Per-slot controls ─────────────────────────────────────────────
+            // Slot i base y = kTopH + i*kSlotH.
+            // y+0  to y+20 : header band (painted in WM_PAINT), "Slot N" text + icon
+            // y+22 to y+46 : device combo (icon preview drawn left of combo at x=12)
+            // y+50 to y+74 : icon combo | browse btn
+            for (int i = 0; i < 6; i++) {
+                int y = SlotY(i);
+
+                s->slots[i].hDevCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
+                    WS_CHILD|CBS_DROPDOWNLIST, 46, y+22, 356, 300,
+                    hWnd, (HMENU)(UINT_PTR)(200+i), hInst, nullptr);
+                for (int j = 0; j < (int)s->activeDevices.size(); j++) {
+                    int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING,
+                                                0, (LPARAM)s->activeDevices[j].name.c_str());
+                    if (s->slots[i].id == s->activeDevices[j].id)
+                        SendMessageW(s->slots[i].hDevCombo, CB_SETCURSEL, idx, 0);
+                }
+                DarkCombo(s->slots[i].hDevCombo);
+
+                s->slots[i].hIconCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
+                    WS_CHILD|CBS_DROPDOWNLIST, 46, y+50, 258, 300,
+                    hWnd, (HMENU)(UINT_PTR)(300+i), hInst, nullptr);
+                int isel = 0;
+                for (int j = 0; j < kIconCount; j++) {
+                    SendMessageW(s->slots[i].hIconCombo, CB_ADDSTRING, 0, (LPARAM)kIconLabels[j]);
+                    if (s->slots[i].iconKey == kIconKeys[j]) isel = j;
+                }
+                SendMessageW(s->slots[i].hIconCombo, CB_SETCURSEL, isel, 0);
+                DarkCombo(s->slots[i].hIconCombo);
+
+                // Browse btn — owner-drawn, shown only when iconKey == "custom"
+                s->slots[i].hBrowseBtn = CreateWindowExW(0, L"BUTTON", L"Browse...",
+                    WS_CHILD|BS_OWNERDRAW, 310, y+48, 92, 26,
+                    hWnd, (HMENU)(UINT_PTR)(400+i), hInst, nullptr);
+            }
+
+            // ── Bottom buttons — owner-drawn, positioned for initial deviceCount ─
+            int btnY = kTopH + s->deviceCount * kSlotH + 12;
+            s->hSaveBtn = CreateWindowExW(0, L"BUTTON", L"Save and Apply",
+                WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 12, btnY, 148, 28,
+                hWnd, (HMENU)IDOK, hInst, nullptr);
+            s->hCancelBtn = CreateWindowExW(0, L"BUTTON", L"Cancel",
+                WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 168, btnY, 88, 28,
+                hWnd, (HMENU)IDCANCEL, hInst, nullptr);
+
+            EnumChildWindows(hWnd, ApplyFontProc, reinterpret_cast<LPARAM>(s->hFont));
+            UpdateSlotVisibility(s);
+
+            // Request dark title bar from DWM (Win10 1903+, silently fails earlier)
+            {
+                HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
+                if (!dwm) dwm = LoadLibraryW(L"dwmapi.dll");
+                if (dwm) {
+                    using DwmFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
+                    auto fn = reinterpret_cast<DwmFn>(GetProcAddress(dwm, "DwmSetWindowAttribute"));
+                    if (fn) { BOOL dark = TRUE; fn(hWnd, 20, &dark, sizeof(dark)); }
+                }
+            }
+            return 0;
+        }
+
+        // ── Background & painting ─────────────────────────────────────────────
+        case WM_ERASEBKGND: {
+            RECT rc; GetClientRect(hWnd, &rc);
+            FillRect((HDC)wParam, &rc, s ? s->hBgBrush : (HBRUSH)GetStockObject(BLACK_BRUSH));
+            return 1;
+        }
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            SelectObject(hdc, s->hFont);
+            SetBkMode(hdc, TRANSPARENT);
+            RECT cr; GetClientRect(hWnd, &cr);
+
+            // ── Top-section labels ────────────────────────────────────────────
+            SetTextColor(hdc, kClrDim);
+            RECT r;
+            r = {12, 22, 78, 38};  DrawTextW(hdc, L"Devices:",  -1, &r, DT_LEFT|DT_TOP);
+            r = {156, 22, 196, 38}; DrawTextW(hdc, L"Mode:",    -1, &r, DT_LEFT|DT_TOP);
+
+            // Separator between top controls and slot section
+            {
+                HPEN p = CreatePen(PS_SOLID, 1, kClrBorder);
+                HPEN op = (HPEN)SelectObject(hdc, p);
+                MoveToEx(hdc, 12, kTopH - 6, nullptr);
+                LineTo(hdc, cr.right - 12, kTopH - 6);
+                SelectObject(hdc, op); DeleteObject(p);
+            }
+
+            // ── Per-slot headers, icons, and row labels ───────────────────────
+            for (int i = 0; i < s->deviceCount; i++) {
+                int y = SlotY(i);
+
+                // Slot header band
+                RECT hdr = {0, y, cr.right, y + 20};
+                FillRect(hdc, &hdr, s->hSurfBrush);
+
+                // "Slot N" label in header
+                SetTextColor(hdc, kClrDim);
+                RECT sl = {12, y + 2, 100, y + 18};
+                WCHAR lbl[16]; swprintf_s(lbl, L"Slot %d", i + 1);
+                DrawTextW(hdc, lbl, -1, &sl, DT_LEFT|DT_TOP);
+
+                // Slot icon (drawn left of the device combo, vertically centred)
+                if (s->slots[i].hPreviewIcon)
+                    DrawIconEx(hdc, 12, y + 22, s->slots[i].hPreviewIcon,
+                               kIconSz, kIconSz, 0, nullptr, DI_NORMAL);
+
+                // "Icon:" row label
+                SetTextColor(hdc, kClrDim);
+                RECT il = {12, y + 54, 44, y + 68};
+                DrawTextW(hdc, L"Icon:", -1, &il, DT_LEFT|DT_TOP);
+
+                // Row separator (between slots, not after the last visible one)
+                if (i < s->deviceCount - 1) {
+                    HPEN p = CreatePen(PS_SOLID, 1, kClrBorder);
+                    HPEN op = (HPEN)SelectObject(hdc, p);
+                    MoveToEx(hdc, 0, y + kSlotH - 1, nullptr);
+                    LineTo(hdc, cr.right, y + kSlotH - 1);
+                    SelectObject(hdc, op); DeleteObject(p);
+                }
+            }
+
+            EndPaint(hWnd, &ps);
+            return 0;
+        }
+
+        // ── Dark theming for child controls ───────────────────────────────────
+        case WM_CTLCOLORSTATIC:
+            if (s) {
+                SetTextColor((HDC)wParam, kClrDim);
+                SetBkColor((HDC)wParam, kClrBg);
+                return (LRESULT)s->hBgBrush;
+            }
+            break;
+        case WM_CTLCOLOREDIT:
+        case WM_CTLCOLORLISTBOX:
+            if (s) {
+                SetTextColor((HDC)wParam, kClrText);
+                SetBkColor((HDC)wParam, kClrInput);
+                return (LRESULT)s->hInpBrush;
+            }
+            break;
+        case WM_CTLCOLORBTN:
+            if (s) return (LRESULT)s->hBgBrush;
+            break;
+
+        // ── Owner-draw buttons ────────────────────────────────────────────────
+        case WM_DRAWITEM: {
+            auto* dis = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
+            if (dis->CtlType != ODT_BUTTON || !s) break;
+            bool pressed = (dis->itemState & ODS_SELECTED) != 0;
+            bool isSave  = (dis->CtlID == IDOK);
+            bool isBrowse= (dis->CtlID >= 400 && dis->CtlID < 406);
+
+            COLORREF bg;
+            if      (isSave)   bg = pressed ? kClrAccentP : kClrAccent;
+            else if (isBrowse) bg = pressed ? kClrDarkBP  : kClrSurface;
+            else               bg = pressed ? kClrDarkBP  : kClrDarkBtn;
+
+            HBRUSH hFill = CreateSolidBrush(bg);
+            FillRect(dis->hDC, &dis->rcItem, hFill);
+            DeleteObject(hFill);
+
+            // 1px border
+            HPEN hPen = CreatePen(PS_SOLID, 1,
+                isSave ? kClrAccentP : kClrBorder);
+            HPEN hOp  = (HPEN)SelectObject(dis->hDC, hPen);
+            SelectObject(dis->hDC, GetStockObject(NULL_BRUSH));
+            Rectangle(dis->hDC, dis->rcItem.left, dis->rcItem.top,
+                                 dis->rcItem.right, dis->rcItem.bottom);
+            SelectObject(dis->hDC, hOp); DeleteObject(hPen);
+
+            // Button label
+            WCHAR txt[64] = {}; GetWindowTextW(dis->hwndItem, txt, 64);
+            SetTextColor(dis->hDC, kClrText);
+            SetBkMode(dis->hDC, TRANSPARENT);
+            SelectObject(dis->hDC, s->hFont);
+            DrawTextW(dis->hDC, txt, -1, &dis->rcItem,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+            if (dis->itemState & ODS_FOCUS) DrawFocusRect(dis->hDC, &dis->rcItem);
+            return TRUE;
+        }
+
+        // ── User interaction ──────────────────────────────────────────────────
+        case WM_COMMAND: {
+            int id = LOWORD(wParam);
+
+            if (id == 100 && HIWORD(wParam) == CBN_SELCHANGE) {
+                // Device count changed — resize window and show/hide slot rows
+                s->deviceCount = (int)SendMessageW(s->hCountCombo, CB_GETCURSEL, 0, 0) + 2;
+                UpdateSlotVisibility(s);
+                UpdateLayout(s);
+
+            } else if (id >= 300 && id < 306 && HIWORD(wParam) == CBN_SELCHANGE) {
+                // Icon style changed for slot (id-300) — live preview update
+                int slot = id - 300;
+                int sel  = (int)SendMessageW(s->slots[slot].hIconCombo, CB_GETCURSEL, 0, 0);
+                if (sel >= 0 && sel < kIconCount) s->slots[slot].iconKey = kIconKeys[sel];
+                RefreshPreview(s, slot);
+                // Repaint the icon area only
+                RECT ir = {12, SlotY(slot)+20, 12+kIconSz+2, SlotY(slot)+20+kIconSz+2};
+                InvalidateRect(hWnd, &ir, TRUE);
+                UpdateSlotVisibility(s);  // toggles Browse button
+
+            } else if (id >= 400 && id < 406) {
+                // Browse for custom .ico
+                int slot = id - 400;
+                WCHAR path[MAX_PATH] = {};
+                wcscpy_s(path, s->slots[slot].customPath);
+                WCHAR title[64]; swprintf_s(title, L"Select Icon for Slot %d", slot + 1);
+                OPENFILENAMEW ofn = {sizeof(ofn)};
+                ofn.hwndOwner = hWnd;
+                ofn.lpstrFilter  = L"Icon Files (*.ico)\0*.ico\0All Files (*.*)\0*.*\0";
+                ofn.nFilterIndex = 1;
+                ofn.lpstrFile    = path;
+                ofn.nMaxFile     = MAX_PATH;
+                ofn.lpstrTitle   = title;
+                ofn.Flags = OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_HIDEREADONLY|OFN_NOCHANGEDIR;
+                if (GetOpenFileNameW(&ofn)) {
+                    wcscpy_s(s->slots[slot].customPath, path);
+                    RefreshPreview(s, slot);
+                    RECT ir = {12, SlotY(slot)+20, 12+kIconSz+2, SlotY(slot)+20+kIconSz+2};
+                    InvalidateRect(hWnd, &ir, TRUE);
+                }
+
+            } else if (id == IDOK) {
+                s->deviceCount = (int)SendMessageW(s->hCountCombo, CB_GETCURSEL, 0, 0) + 2;
+                s->swapMode    = (int)SendMessageW(s->hModeCombo,  CB_GETCURSEL, 0, 0);
+                for (int i = 0; i < 6; i++) {
+                    int ds = (int)SendMessageW(s->slots[i].hDevCombo, CB_GETCURSEL, 0, 0);
+                    if (ds >= 0 && ds < (int)s->activeDevices.size()) {
+                        s->slots[i].id   = s->activeDevices[ds].id;
+                        s->slots[i].name = s->activeDevices[ds].name;
+                    }
+                    int is = (int)SendMessageW(s->slots[i].hIconCombo, CB_GETCURSEL, 0, 0);
+                    if (is >= 0 && is < kIconCount) s->slots[i].iconKey = kIconKeys[is];
+                }
+                WCHAR num[4]; swprintf_s(num, L"%d", s->deviceCount);
+                Wh_SetStringValue(L"deviceCount", num);
+                Wh_SetStringValue(L"swapMode", s->swapMode ? L"scroll_to_swap" : L"click_to_swap");
+                for (int i = 0; i < 6; i++) {
+                    WCHAR kId[32], kNm[32], kIco[32], kPth[32];
+                    swprintf_s(kId,  L"Device%dId",         i+1);
+                    swprintf_s(kNm,  L"Device%dName",       i+1);
+                    swprintf_s(kIco, L"icon%d",             i+1);
+                    swprintf_s(kPth, L"icon%d_custom_path", i+1);
+                    Wh_SetStringValue(kId,  s->slots[i].id.c_str());
+                    Wh_SetStringValue(kNm,  s->slots[i].name.c_str());
+                    Wh_SetStringValue(kIco, s->slots[i].iconKey.c_str());
+                    Wh_SetStringValue(kPth, s->slots[i].customPath);
+                }
+                if (s->hTrayHwnd) PostMessageW(s->hTrayHwnd, WM_RELOAD_ALL, 0, 0);
+                DestroyWindow(hWnd);
+
+            } else if (id == IDCANCEL) {
+                DestroyWindow(hWnd);
+            }
+            return 0;
+        }
+
+        // ── Cleanup ───────────────────────────────────────────────────────────
+        case WM_DESTROY:
+            if (s) {
+                DeleteObject(s->hFont);     s->hFont     = nullptr;
+                DeleteObject(s->hBgBrush);  s->hBgBrush  = nullptr;
+                DeleteObject(s->hInpBrush); s->hInpBrush = nullptr;
+                DeleteObject(s->hSurfBrush);s->hSurfBrush= nullptr;
+                for (int i = 0; i < 6; i++) {
+                    if (s->slots[i].hPreviewIcon) {
+                        DestroyIcon(s->slots[i].hPreviewIcon);
+                        s->slots[i].hPreviewIcon = nullptr;
+                    }
+                }
+            }
+            PostQuitMessage(0);
+            return 0;
+        }
+        return DefWindowProcW(hWnd, msg, wParam, lParam);
+    }
+
+    // ── GUI thread ────────────────────────────────────────────────────────────
+
+    static DWORD WINAPI GuiThreadProc(LPVOID lpParam) {
+        CoInitialize(nullptr);
+
+        static const WCHAR kClass[] = L"AudioSwapDashboard";
+        HINSTANCE hInst = GetModuleHandleW(nullptr);
+
+        WNDCLASSEXW wc   = {sizeof(wc)};
+        wc.lpfnWndProc   = DashboardWndProc;
+        wc.hInstance     = hInst;
+        wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
+        wc.hbrBackground = nullptr;  // WM_ERASEBKGND fills background
+        wc.lpszClassName = kClass;
+        RegisterClassExW(&wc);
+
+        State state;
+        state.hTrayHwnd = reinterpret_cast<HWND>(lpParam);
+        LoadState(state);
+
+        // Size window to exactly fit the initial device count.
+        int clientH = kTopH + state.deviceCount * kSlotH + kBtnH;
+        RECT rc = {0, 0, kCW, clientH};
+        AdjustWindowRectEx(&rc,
+            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+            FALSE, WS_EX_DLGMODALFRAME);
+        int winW = rc.right - rc.left;
+        int winH = rc.bottom - rc.top;
+        int sx   = (GetSystemMetrics(SM_CXSCREEN) - winW) / 2;
+        int sy   = (GetSystemMetrics(SM_CYSCREEN) - winH) / 2;
+
+        HWND hWnd = CreateWindowExW(
+            WS_EX_DLGMODALFRAME,
+            kClass, L"AudioSwap Settings",
+            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+            sx, sy, winW, winH,
+            nullptr, nullptr, hInst, &state);
+
+        if (hWnd) {
+            ShowWindow(hWnd, SW_SHOW);
+            UpdateWindow(hWnd);
+            MSG msg;
+            while (GetMessageW(&msg, nullptr, 0, 0)) {
+                if (!IsDialogMessageW(hWnd, &msg)) {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+        }
+
+        // Icons are destroyed in WM_DESTROY; clean up here only if window never opened.
+        for (int i = 0; i < 6; i++) {
+            if (state.slots[i].hPreviewIcon) {
+                DestroyIcon(state.slots[i].hPreviewIcon);
+                state.slots[i].hPreviewIcon = nullptr;
+            }
+        }
+
+        UnregisterClassW(kClass, hInst);
+        CoUninitialize();
+        InterlockedExchange(&g_guiRunning, 0);
+        return 0;
+    }
+
+    HANDLE LaunchDashboard(HWND hTrayHwnd) {
+        if (InterlockedCompareExchange(&g_guiRunning, 1, 0) != 0)
+            return nullptr;
+        HANDLE h = CreateThread(nullptr, 0, GuiThreadProc,
+                                reinterpret_cast<LPVOID>(hTrayHwnd), 0, nullptr);
+        if (!h) InterlockedExchange(&g_guiRunning, 0);
+        return h;
+    }
+
+} // namespace AudioSwapGui
+
 // ─── Device selection data ────────────────────────────────────────────────────
 // All functions below acquire g_stateLock for writes to shared slot data.
 
@@ -325,30 +842,13 @@ void LoadDeviceSelections() {
     LeaveCriticalSection(&g_stateLock);
 }
 
-void SaveDeviceSelection(int slot, PCWSTR deviceId, PCWSTR friendlyName) {
-    if (slot < 1 || slot > MAX_DEVICE_SLOTS) return;
-    int idx = slot - 1;
-    WCHAR keyId[32], keyName[32];
-    swprintf_s(keyId,   L"Device%dId",   slot);
-    swprintf_s(keyName, L"Device%dName", slot);
-    Wh_SetStringValue(keyId,   deviceId);
-    Wh_SetStringValue(keyName, friendlyName);
-
-    EnterCriticalSection(&g_stateLock);
-    lstrcpynW(g_cachedDevId[idx],   deviceId,     512);
-    lstrcpynW(g_cachedDevName[idx], friendlyName, 256);
-    LeaveCriticalSection(&g_stateLock);
-}
 
 static int ReadDeviceCountSetting() {
-    PCWSTR s = Wh_GetStringSetting(L"deviceCount");
-    int n = 2;
-    if (s && s[0] >= L'2' && s[0] <= L'9') {
-        n = 0;
-        for (const WCHAR* p = s; *p >= L'0' && *p <= L'9'; p++)
-            n = n * 10 + (*p - L'0');
-    }
-    if (s) Wh_FreeStringSetting(s);
+    WCHAR buf[8] = {};
+    Wh_GetStringValue(L"deviceCount", buf, 8);
+    int n = 0;
+    for (const WCHAR* p = buf; *p >= L'0' && *p <= L'9'; p++)
+        n = n * 10 + (*p - L'0');
     if (n < 2) n = 2;
     if (n > MAX_DEVICE_SLOTS) n = MAX_DEVICE_SLOTS;
     return n;
@@ -362,9 +862,9 @@ void LoadUserIconsAndSettings() {
 
     int newCount = ReadDeviceCountSetting();
 
-    PCWSTR swapMode = Wh_GetStringSetting(L"swapMode");
-    LONG   newScroll = (swapMode && wcscmp(swapMode, L"scroll_to_swap") == 0) ? 1 : 0;
-    if (swapMode) Wh_FreeStringSetting(swapMode);
+    WCHAR swapModeBuf[32] = {};
+    Wh_GetStringValue(L"swapMode", swapModeBuf, 32);
+    LONG newScroll = (wcscmp(swapModeBuf, L"scroll_to_swap") == 0) ? 1 : 0;
 
     EnterCriticalSection(&g_stateLock);
     g_deviceSlotCount = newCount;
@@ -375,9 +875,10 @@ void LoadUserIconsAndSettings() {
     WCHAR iconKey[16], pathKey[32];
     for (int i = 0; i < newCount; i++) {
         swprintf_s(iconKey, L"icon%d", i + 1);
-        PCWSTR s = Wh_GetStringSetting(iconKey);
+        WCHAR iconVal[32] = {};
+        Wh_GetStringValue(iconKey, iconVal, 32);
 
-        if (s && wcscmp(s, L"custom") == 0) {
+        if (wcscmp(iconVal, L"custom") == 0) {
             swprintf_s(pathKey, L"icon%d_custom_path", i + 1);
             WCHAR customPath[MAX_PATH] = {};
             Wh_GetStringValue(pathKey, customPath, MAX_PATH);
@@ -388,14 +889,10 @@ void LoadUserIconsAndSettings() {
                 ExtractIconExW(g_ddoresDllPath, 4, nullptr, &g_iconDev[i], 1);
             }
         } else {
-            ExtractIconExW(g_ddoresDllPath, GetIconIndex(s), nullptr, &g_iconDev[i], 1);
+            ExtractIconExW(g_ddoresDllPath, GetIconIndex(iconVal), nullptr, &g_iconDev[i], 1);
         }
 
-        // Save current icon setting for transition detection in SettingsChanged.
-        if (s) wcscpy_s(g_lastIconSetting[i], 32, s);
-        else   g_lastIconSetting[i][0] = L'\0';
-
-        if (s) Wh_FreeStringSetting(s);
+        wcscpy_s(g_lastIconSetting[i], 32, iconVal);
 
         if (g_iconDev[i]) {
             ICONINFO ii = {};
@@ -894,87 +1391,10 @@ BOOL CycleAudioDevice(int direction) {
 
 // ─── Context menu ─────────────────────────────────────────────────────────────
 
-struct AudioDevice { WCHAR id[512]; WCHAR name[256]; };
-
 void BuildAndShowContextMenu(HWND hWnd) {
-    // Snapshot shared data under lock.
-    WCHAR localIds[MAX_DEVICE_SLOTS][512] = {};
-    int   localCount;
-    bool  localMuted;
-
-    EnterCriticalSection(&g_stateLock);
-    localCount = g_deviceSlotCount;
-    for (int i = 0; i < MAX_DEVICE_SLOTS; i++)
-        lstrcpynW(localIds[i], g_cachedDevId[i], 512);
-    localMuted = g_isMutedByUs;
-    LeaveCriticalSection(&g_stateLock);
-
-    AudioDevice devices[MENU_MAX_DEVICES];
-    int deviceCount = 0;
-
-    IMMDeviceEnumerator* pEnum = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                   __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
-        IMMDeviceCollection* pDevices = nullptr;
-        if (SUCCEEDED(pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pDevices))) {
-            UINT count = 0;
-            pDevices->GetCount(&count);
-            if (count > MENU_MAX_DEVICES) count = MENU_MAX_DEVICES;
-            for (UINT i = 0; i < count; i++) {
-                IMMDevice* pDevice = nullptr;
-                if (FAILED(pDevices->Item(i, &pDevice))) continue;
-                LPWSTR pId = nullptr;
-                if (SUCCEEDED(pDevice->GetId(&pId))) {
-                    lstrcpynW(devices[deviceCount].id, pId, 512);
-                    CoTaskMemFree(pId);
-                    IPropertyStore* pStore = nullptr;
-                    if (SUCCEEDED(pDevice->OpenPropertyStore(STGM_READ, &pStore))) {
-                        PROPVARIANT v; PropVariantInit(&v);
-                        if (SUCCEEDED(pStore->GetValue(PKEY_Device_FriendlyName, &v)) && v.pwszVal) {
-                            lstrcpynW(devices[deviceCount].name, v.pwszVal, 256);
-                            deviceCount++;
-                        }
-                        PropVariantClear(&v);
-                        pStore->Release();
-                    }
-                }
-                pDevice->Release();
-            }
-            pDevices->Release();
-        }
-        pEnum->Release();
-    }
-
     HMENU hMenu = CreatePopupMenu();
 
-    for (int slot = 0; slot < localCount; slot++) {
-        HMENU hSub = CreatePopupMenu();
-        for (int i = 0; i < deviceCount; i++) {
-            UINT flags = MF_STRING | (wcscmp(devices[i].id, localIds[slot]) == 0 ? MF_CHECKED : 0);
-            AppendMenuW(hSub, flags, MENU_SLOT_BASE * (slot + 1) + i, devices[i].name);
-        }
-        WCHAR label[32];
-        swprintf_s(label, L"Set as Device %d", slot + 1);
-        MENUITEMINFOW mii = {sizeof(mii)};
-        mii.fMask      = MIIM_SUBMENU | MIIM_STRING | MIIM_BITMAP;
-        mii.hSubMenu   = hSub;
-        mii.dwTypeData = label;
-        mii.hbmpItem   = g_hIconDevBmp[slot];
-        InsertMenuItemW(hMenu, (UINT)-1, TRUE, &mii);
-    }
-
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-
-    for (int slot = 0; slot < localCount; slot++) {
-        WCHAR label[48];
-        swprintf_s(label, L"Custom Icon for Device %d...", slot + 1);
-        MENUITEMINFOW miiCI = {sizeof(miiCI)};
-        miiCI.fMask      = MIIM_ID | MIIM_STRING;
-        miiCI.wID        = MENU_CUSTOM_ICON_BASE + slot;
-        miiCI.dwTypeData = label;
-        InsertMenuItemW(hMenu, (UINT)-1, TRUE, &miiCI);
-    }
-
+    AppendMenuW(hMenu, MF_STRING, MENU_OPEN_SETTINGS, L"Mod Settings...");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
     MENUITEMINFOW miiWH = {sizeof(miiWH)};
@@ -984,79 +1404,25 @@ void BuildAndShowContextMenu(HWND hWnd) {
     miiWH.hbmpItem   = g_hWindHawkBmp;
     InsertMenuItemW(hMenu, (UINT)-1, TRUE, &miiWH);
 
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-
-    WCHAR statusText[300];
-    int configuredCount = 0;
-    for (int i = 0; i < localCount; i++) if (localIds[i][0] != L'\0') configuredCount++;
-    if (configuredCount < 2) {
-        lstrcpyW(statusText, L"Right-click to configure devices");
-    } else {
-        WCHAR activeName[256] = L"Unknown";
-        IMMDeviceEnumerator* pEnum2 = nullptr;
-        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                       __uuidof(IMMDeviceEnumerator), (void**)&pEnum2))) {
-            IMMDevice* pDef = nullptr;
-            if (SUCCEEDED(pEnum2->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDef))) {
-                IPropertyStore* pStore = nullptr;
-                if (SUCCEEDED(pDef->OpenPropertyStore(STGM_READ, &pStore))) {
-                    PROPVARIANT v; PropVariantInit(&v);
-                    if (SUCCEEDED(pStore->GetValue(PKEY_Device_FriendlyName, &v)) && v.pwszVal)
-                        lstrcpynW(activeName, v.pwszVal, 256);
-                    PropVariantClear(&v);
-                    pStore->Release();
-                }
-                pDef->Release();
-            }
-            pEnum2->Release();
-        }
-        if (localMuted)
-            swprintf_s(statusText, L"Active: %s (Muted)", activeName);
-        else
-            swprintf_s(statusText, L"Active: %s", activeName);
-    }
-    AppendMenuW(hMenu, MF_STRING | MF_GRAYED, 0, statusText);
-
-    POINT pt;
-    GetCursorPos(&pt);
+    POINT pt; GetCursorPos(&pt);
     SetForegroundWindow(hWnd);
-    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
-                             pt.x, pt.y, 0, hWnd, nullptr);
+    int cmd = TrackPopupMenu(hMenu,
+        TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
+        pt.x, pt.y, 0, hWnd, nullptr);
     PostMessageW(hWnd, WM_NULL, 0, 0);
     DestroyMenu(hMenu);
 
-    if (cmd >= MENU_SLOT_BASE && cmd < MENU_SLOT_BASE * (localCount + 1)) {
-        int slot      = cmd / MENU_SLOT_BASE;
-        int deviceIdx = cmd % MENU_SLOT_BASE;
-        if (slot >= 1 && slot <= localCount && deviceIdx < deviceCount) {
-            SaveDeviceSelection(slot, devices[deviceIdx].id, devices[deviceIdx].name);
-            PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+    if (cmd == MENU_OPEN_SETTINGS) {
+        HANDLE h = AudioSwapGui::LaunchDashboard(hWnd);
+        if (h) {
+            if (g_guiThread) CloseHandle(g_guiThread);
+            g_guiThread = h;
         }
     } else if (cmd == MENU_OPEN_WINDHAWK) {
         SHELLEXECUTEINFOW sei = {sizeof(sei)};
         sei.lpFile = g_windhawkPath;
         sei.nShow  = SW_SHOWNORMAL;
         ShellExecuteExW(&sei);
-    } else if (cmd >= MENU_CUSTOM_ICON_BASE && cmd < MENU_CUSTOM_ICON_BASE + localCount) {
-        int slot = cmd - MENU_CUSTOM_ICON_BASE + 1;
-        WCHAR path[MAX_PATH] = {};
-        OPENFILENAMEW ofn = {sizeof(ofn)};
-        ofn.hwndOwner = hWnd;
-        ofn.lpstrFilter = L"Icon Files (*.ico)\0*.ico\0All Files (*.*)\0*.*\0";
-        ofn.nFilterIndex = 1;
-        ofn.lpstrFile = path;
-        ofn.nMaxFile = MAX_PATH;
-        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-        WCHAR title[64];
-        swprintf_s(title, L"Select Icon for Device %d", slot);
-        ofn.lpstrTitle = title;
-        if (GetOpenFileNameW(&ofn)) {
-            WCHAR customPathKey[32];
-            swprintf_s(customPathKey, L"icon%d_custom_path", slot);
-            Wh_SetStringValue(customPathKey, path);
-            LoadUserIconsAndSettings();
-            PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
-        }
     }
 }
 
@@ -1077,6 +1443,8 @@ static void SpawnCycleThread(int direction) {
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc,
                                   reinterpret_cast<LPVOID>(static_cast<LONG_PTR>(direction)),
                                   0, nullptr);
+    // If CreateThread fails the worker never resets the lock — do it here.
+    if (!g_workerThread) InterlockedExchange(&g_isProcessingClick, 0);
 }
 
 // ─── Tray window ──────────────────────────────────────────────────────────────
@@ -1090,12 +1458,16 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             if (!PtInRect(&g_trayIconRect, pt)) {
                 RefreshTrayIconRect();
             }
-        } else if (event == WM_RBUTTONUP) {
+        } else if (event == WM_RBUTTONUP || event == WM_CONTEXTMENU) {
+            // Right-click — opens settings menu.
+            // v4 sends WM_CONTEXTMENU; pre-v4 sends WM_RBUTTONUP.
             BuildAndShowContextMenu(hWnd);
 
-        } else if (event == WM_LBUTTONUP &&
+        } else if ((event == WM_LBUTTONUP || event == NIN_SELECT ||
+                    event == NIN_KEYSELECT) &&
                    InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 0) {
-            // Click mode: debounced forward cycle
+            // Click mode: debounced forward cycle.
+            // v4 sends NIN_SELECT (or NIN_KEYSELECT for keyboard); pre-v4 sends WM_LBUTTONUP.
             if (InterlockedExchange(&g_isProcessingClick, 1) == 0) {
                 DWORD now = GetTickCount();
                 if (now - g_lastClickTime > CLICK_DEBOUNCE_MS) {
@@ -1106,13 +1478,21 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 }
             }
 
-        } else if (event == WM_LBUTTONUP &&
+        } else if ((event == WM_LBUTTONUP || event == NIN_SELECT ||
+                    event == NIN_KEYSELECT) &&
                    InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1) {
-            // Scroll mode: left-click toggles mute (COM initialized on tray thread)
+            // Scroll mode: left-click toggles mute.
+            // Same debounce as click mode: WM_LBUTTONUP and NIN_SELECT are BOTH
+            // delivered for the same physical click under NOTIFYICON_VERSION_4.
+            // Without debouncing, mute is toggled on then immediately off (net nothing).
             if (InterlockedExchange(&g_isProcessingClick, 1) == 0) {
-                ToggleMuteCurrentDevice();
+                DWORD now = GetTickCount();
+                if (now - g_lastClickTime > CLICK_DEBOUNCE_MS) {
+                    g_lastClickTime = now;
+                    ToggleMuteCurrentDevice();
+                    PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+                }
                 InterlockedExchange(&g_isProcessingClick, 0);
-                PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
             }
         }
 
@@ -1158,10 +1538,10 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         for (int i = 0; i < g_deviceSlotCount; i++) {
             WCHAR key[16];
             swprintf_s(key, L"icon%d", i + 1);
-            PCWSTR s = Wh_GetStringSetting(key);
-            BOOL isCustom = (s && wcscmp(s, L"custom") == 0);
+            WCHAR icoVal[32] = {};
+            Wh_GetStringValue(key, icoVal, 32);
+            BOOL isCustom  = (wcscmp(icoVal,  L"custom") == 0);
             BOOL wasCustom = (wcscmp(prev[i], L"custom") == 0);
-            if (s) Wh_FreeStringSetting(s);
             if (isCustom && !wasCustom)
                 pickerSlots |= (1u << i);
         }
@@ -1194,6 +1574,14 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
     } else if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         UpdateTrayTip(hWnd, TRUE);  // re-add icon after explorer restart
+
+    } else if (msg == WM_RELOAD_ALL) {
+        // Full reload triggered by the settings dashboard after Save and Apply.
+        // Picks up new device assignments, icon choices, device count, and swap mode.
+        LoadDeviceSelections();
+        LoadUserIconsAndSettings();
+        UpdateTrayTip(hWnd, FALSE);
+        PostMessageW(hWnd, WM_UPDATE_HOOK_STATE, 0, 0);
 
     } else if (msg == WM_CLOSE) {
         // Orderly shutdown: remove tray icon, then destroy window.
@@ -1360,6 +1748,16 @@ void WhTool_ModUninit() {
         WaitForSingleObject(g_trayThread, 3000);
         CloseHandle(g_trayThread);
         g_trayThread = nullptr;
+    }
+    if (g_guiThread) {
+        // Ask the dashboard's message loop to quit, then wait for it.
+        // PostThreadMessageW with WM_QUIT causes GetMessageW to return 0,
+        // exiting the loop regardless of IsDialogMessageW.
+        DWORD guiId = GetThreadId(g_guiThread);
+        if (guiId) PostThreadMessageW(guiId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_guiThread, 2000);
+        CloseHandle(g_guiThread);
+        g_guiThread = nullptr;
     }
     if (g_workerThread) {
         WaitForSingleObject(g_workerThread, 2000);

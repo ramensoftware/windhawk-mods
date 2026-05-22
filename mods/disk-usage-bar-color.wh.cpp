@@ -197,7 +197,6 @@ HRESULT WINAPI HookedDrawThemeBackground(
     LPCRECT pRect, LPCRECT pClipRect)
 {
     MaybeRefreshSettings();
-
     if (iPartId == 5 && pRect && GetThemeClass(hTheme) == L"Progress" && IsDriveListDC(hdc))
     {
         COLORREF color;
