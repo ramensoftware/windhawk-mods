@@ -491,12 +491,17 @@ static wuxmi::BitmapSource CreateBitmapSourceFromIcon(HICON hIcon) {
         SelectObject(memDC, oldBmp);
 
         try {
+            // Create in-memory stream
             wss::InMemoryRandomAccessStream stream;
+
             EnsureGdiplus();
+
+            // Encode to PNG in memory using GDI+
             Gdiplus::Bitmap srcBmp(bm.bmWidth, bm.bmHeight, bm.bmWidth * 4,
                                    PixelFormat32bppARGB, static_cast<BYTE*>(bits));
 
             if (srcBmp.GetLastStatus() == Gdiplus::Ok) {
+                // Create IStream wrapper for WinRT stream
                 IStream* pStream = nullptr;
                 if (SUCCEEDED(CreateStreamOverRandomAccessStream(
                     winrt::get_unknown(stream), IID_PPV_ARGS(&pStream)))) {
@@ -507,6 +512,7 @@ static wuxmi::BitmapSource CreateBitmapSourceFromIcon(HICON hIcon) {
                     if (srcBmp.Save(pStream, &pngClsid, nullptr) == Gdiplus::Ok) {
                         stream.Seek(0);
 
+                        // Create BitmapImage from stream
                         wuxmi::BitmapImage bmpImage;
                         bmpImage.SetSource(stream);
                         result = bmpImage;
@@ -527,7 +533,8 @@ static wuxmi::BitmapSource CreateBitmapSourceFromIcon(HICON hIcon) {
 }
 
 static std::wstring SaveIconToPng(HICON hIcon) {
-
+    // This function is now deprecated in favor of CreateBitmapSourceFromIcon
+    // but kept for compatibility. It still creates temp files.
     if (!hIcon) return L"";
 
     wchar_t tempDir[MAX_PATH], placeholder[MAX_PATH];
@@ -592,6 +599,9 @@ static std::wstring SaveIconToPng(HICON hIcon) {
     DeleteDC(memDC);
     ReleaseDC(nullptr, screenDC);
 
+    // Note: PNG file is never deleted and will accumulate in temp folder
+    // TODO: Track created files and clean them up on mod unload
+
     return result;
 }
 
@@ -626,6 +636,7 @@ static std::wstring GlyphOrEmpty(const std::wstring& s) {
 }
 
 static wux::UIElement MakeButtonIcon(const std::wstring& iconStr) {
+    // Try in-memory approach for .exe/.dll icons first
     if (IsExePath(iconStr)) {
         auto bmpSource = ResolveExeIconInMemory(iconStr, 32);
         if (bmpSource) {
@@ -641,6 +652,7 @@ static wux::UIElement MakeButtonIcon(const std::wstring& iconStr) {
         }
     }
 
+    // Fall back to file-based approach for image files
     std::wstring resolved = ResolveExeIcon(iconStr, 32);
 
     if (!resolved.empty() && IsImagePath(resolved)) {
@@ -675,17 +687,8 @@ static wux::UIElement MakeButtonIcon(const std::wstring& iconStr) {
 }
 
 static wuxc::IconElement MakeMenuIcon(const std::wstring& iconStr) {
-    if (IsExePath(iconStr)) {
-        auto bmpSource = ResolveExeIconInMemory(iconStr, 16);
-        if (bmpSource) {
-            try {
-                wuxc::BitmapIcon bi;
-            } catch (...) {
-                Wh_Log(L"Exception creating menu icon from in-memory bitmap: %s", iconStr.c_str());
-            }
-        }
-    }
-
+    // Note: BitmapIcon only supports URI-based sources, not in-memory BitmapSource,
+    // so we use the file-based approach for all image types including .exe/.dll icons
     std::wstring resolved = ResolveExeIcon(iconStr, 16);
 
     if (!resolved.empty() && IsImagePath(resolved)) {
