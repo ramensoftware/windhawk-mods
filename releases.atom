@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-20T23:08:30.000Z</updated>
+    <updated>2026-05-22T13:57:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.0]]></title>
+        <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#95a7912335a7140e3c46fb5826c1b2a1cd04a3aa</id>
+        <link href="https://windhawk.net/mods/never-auto-expand-explorer-tree-items"/>
+        <updated>2026-05-22T13:57:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="neverautoexpandexplorertreeitems">Never Auto-Expand Explorer Tree Items</h1>
+<p>File Explorer automatically expands navigation pane items (such as "This PC")
+even if the "Expand to current folder" option is off, specifically when:</p>
+<ul>
+<li>Opening any folder inside an external drive in a new tab or window.</li>
+<li>Navigating to any drive after manually expanding and collapsing "This PC".</li>
+</ul>
+<p>This mod prevents this unwanted auto-expansion behavior, keeping the navigation
+pane tidy.</p>
+<p>| Before | After |
+| :----: | :---: |
+| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_before.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_after.png" alt="" /> |</p>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Single Window Tabs 0.8]]></title>
         <id>https://windhawk.net/mods/explorer-single-window-tabs#779ebe8f6cd9cce13121d4445e0cd8d6f1db4fe9</id>
@@ -708,49 +730,6 @@ clear the destination on collision.</li>
         <author>
             <name>tria</name>
             <uri>https://github.com/triatomic</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Office Fix Account Display Name 1.0.0]]></title>
-        <id>https://windhawk.net/mods/office-fix-account-disp-name#ce896c2c3e78759e68145761aa93cde40015a6eb</id>
-        <link href="https://windhawk.net/mods/office-fix-account-disp-name"/>
-        <updated>2026-05-03T22:33:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="officefixaccountdisplayname">Office Fix Account Display Name</h1>
-<p>Mainly for Microsoft Office 2013-2019 (including 2021+ with/without Office UI Reverter Mod)</p>
-<p><em>Will only affect the UI display name. Author name in document properties or comments will remain unaffected.</em></p>
-<h2 id="english">English</h2>
-<p>Take full control over your Microsoft Office account display name! This mod allows you to seamlessly override the name shown in the top-right corner of Office applications. You can customize it to any text you prefer, or clear the string completely to hide your name for better privacy. </p>
-<ul>
-<li>As an added bonus for CJK (Chinese, Japanese, Korean) users, the default option "[auto]" automatically detects and fixes the long-standing issue of inverted names (i.e., fix the problem of showing "Given Name + space + Family Name" instead of the correct "Family Name + Given Name") </li>
-</ul>
-<p><strong>How it works:</strong> The mod hooks into the <code>CalculateDisplayName</code> function within <code>mso30win32client.dll</code> to intercept and dynamically modify the generated display name string.</p>
-<p><em>Note: This mod requires the PDB symbol file for <code>mso30win32client.dll</code> to function correctly. The symbol file is somewhat large (~39MB). Windhawk will automatically begin downloading it the first time you launch Word after installation. Look for a popup in the bottom-right corner of your screen showing the download progress (e.g., "Loading symbols… 0% (mso30win32client.dll)"). Please wait patiently until it reaches 100% and disappears. If it hangs, try switching your network. Crucially, make sure to <strong>relaunch Word AS ADMINISTRATOR at least once</strong> after the download finishes. This writes the used symbols into the SymbolCache, significantly speeding up future launch times.</em></p>
-<h2 id="importantnotes">⚠️ Important Notes:</h2>
-<ul>
-<li>It is highly recommended to <strong>turn off automatic updates</strong> for your Office applications. Office updates will change the DLL versions, forcing Windhawk to re-download the large PDB files every time.</li>
-<li>Do not forget the mandatory <strong>Administrator relaunch</strong> after the initial symbol download to ensure caching works correctly.</li>
-</ul>
-<h2 id="beforevsafter">Before vs After</h2>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/office-fix-account-disp-name-before-vs-aft.png" alt="Before-After" /></p>
-<h2 id="">简体中文</h2>
-<p>主要针对 Microsoft Office 2013-2019（包括 2021 及更高版本，无论是否安装 Office UI Reverter Mod）</p>
-<p><em>仅会影响 UI 显示名称，文档属性或评论中的作者名称不受影响</em></p>
-<hr />
-<p>受够了 Office 右上角账户名永远显示成“名 姓”（例如“三 张”，中间还硬塞一个空格）吗？这个 Mod 专为彻底解决此痛点而生。</p>
-<p>在默认设置“[auto]”下，它会自动检测 CJK（中日韩）字符，完美去除多余空格并将名称规范化为符合直觉的“姓+名”顺序。除此之外，你也可以在设置中强制覆盖显示内容，改成任何你想要的自定义名称，甚至留空来实现彻底隐藏账户名。</p>
-<p><strong>原理解析：</strong>
-通过 Hook <code>mso30win32client.dll</code> 内部的 <code>CalculateDisplayName</code> 函数，在内存级别动态修改显示字符串。</p>
-<p><em>注意：本 Mod 依赖 <code>mso30win32client.dll</code> 的 PDB 符号文件才能生效。该文件体积约 39MB。安装本 Mod 后首次启动 Word 时，Windhawk 会自动开始下载符号。请留意屏幕右下角的弹窗进度提示（如“正在加载… 0% (mso30win32client.dll)”）。请耐心等待进度达到 100% 且弹窗消失（如果卡住请尝试切换网络）。符号下载完成后，<strong>务必以管理员身份重新启动 Word 至少一次</strong>。这一步非常关键，它能将符号写入系统 SymbolCache，从而避免以后每次启动都卡顿。</em></p>
-<h2 id="-1">⚠️ 注意事项：</h2>
-<ul>
-<li>强烈建议<strong>关闭 Office 自动更新</strong>。因为每次 Office 更新都会改变核心 DLL 的版本，导致 Windhawk 需要重新下载庞大的 PDB 符号文件。</li>
-<li>安装并下载完符号后，请务必<strong>以管理员身份运行一次 Word</strong>，以确保符号缓存成功写入。</li>
-</ul>
-<h2 id="-2">效果对比</h2>
-<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/office-fix-account-disp-name-before-vs-after.png" alt="Before-After" /></p>]]></content>
-        <author>
-            <name>Joe Ye</name>
-            <uri>https://github.com/JoeYe-233</uri>
         </author>
     </entry>
 </feed>

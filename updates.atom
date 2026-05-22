@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-22T13:06:33.000Z</updated>
+    <updated>2026-05-22T13:57:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.0]]></title>
+        <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#95a7912335a7140e3c46fb5826c1b2a1cd04a3aa</id>
+        <link href="https://windhawk.net/mods/never-auto-expand-explorer-tree-items"/>
+        <updated>2026-05-22T13:57:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="neverautoexpandexplorertreeitems">Never Auto-Expand Explorer Tree Items</h1>
+<p>File Explorer automatically expands navigation pane items (such as "This PC")
+even if the "Expand to current folder" option is off, specifically when:</p>
+<ul>
+<li>Opening any folder inside an external drive in a new tab or window.</li>
+<li>Navigating to any drive after manually expanding and collapsing "This PC".</li>
+</ul>
+<p>This mod prevents this unwanted auto-expansion behavior, keeping the navigation
+pane tidy.</p>
+<p>| Before | After |
+| :----: | :---: |
+| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_before.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_after.png" alt="" /> |</p>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Usage Bar Color 1.2.1]]></title>
         <id>https://windhawk.net/mods/disk-usage-bar-color#650420a62873ff46d0aa951457bfa4aac414dc1c</id>
@@ -373,42 +395,6 @@ Click the tray icon to instantly toggle between Dark and Light mode.</p>]]></con
         <author>
             <name>Husam-Abdulraheem</name>
             <uri>https://github.com/Husam-Abdulraheem</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Expanded Clipboard (Win+V) 0.7.1]]></title>
-        <id>https://windhawk.net/mods/expanded-clipboard#baa1a76097e8116eb1d7582a91ef90e80058227a</id>
-        <link href="https://windhawk.net/mods/expanded-clipboard"/>
-        <updated>2026-05-14T19:08:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="expandedclipboardwinv">Expanded Clipboard (Win+V)</h1>
-<p>Raises the 25-entry cap on Windows 11 clipboard history (the list shown by
-<strong>Win+V</strong>) and lifts the per-item size cap so large image entries are kept.</p>
-<h2 id="hooktargets">Hook targets</h2>
-<p>Hosted in <code>cbdhsvc.dll</code> (per-user <code>svchost.exe</code>, service group
-<code>UnistackSvcGroup</code>). All hooks are virtual COM methods on <code>ClipboardSettingsImpl</code>
-plus one static helper:</p>
-<ul>
-<li><code>get_ClipboardHistoryMaxItemsCount</code>: entry-count cap (default 25).</li>
-<li><code>get_ClipboardHistoryMaxItemSizeInBytes</code>: per-item byte cap (default 4 MiB).</li>
-<li><code>get_ClipboardHistoryMaxSizeInBytes</code>: total in-memory buffer cap. Empirically
-this is the gate the inner add path checks first.</li>
-<li><code>DataPackageHelper::CanIncludeInClipboardHistory</code>: opt-in override of the
-per-item allow check.</li>
-</ul>
-<h2 id="configuration">Configuration</h2>
-<ul>
-<li><code>maxItems</code> (default 100, range 25..5000): entry cap.</li>
-<li><code>maxItemSizeMB</code> (default 256, range 4..4096): per-item and total buffer byte
-cap, in MB. Both caps share this value.</li>
-<li><code>forceIncludeAll</code> (default off): when on, force the allow check to true so
-items marked "do not include in history" by their source app still land in
-Win+V.</li>
-</ul>
-<h2 id="logs">Logs</h2>
-<p>Open Windhawk Logs. Filter <code>[ExpandedClipboard]</code>.</p>]]></content>
-        <author>
-            <name>takattowo</name>
-            <uri>https://github.com/takattowo</uri>
         </author>
     </entry>
 </feed>

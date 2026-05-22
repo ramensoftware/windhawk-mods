@@ -6709,6 +6709,34 @@
                 "version": "1.0"
             }
         },
+        "never-auto-expand-explorer-tree-items": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1779458240000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779458240000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Kitsune",
+                "compilerOptions": "-lcomctl32 -luser32",
+                "description": "Stops the unwanted auto-expansion of navigation pane items even if the \"Expand to current folder\" option is off",
+                "github": "https://github.com/AromaKitsune",
+                "include": [
+                    "*"
+                ],
+                "name": "Never Auto-Expand Explorer Tree Items",
+                "version": "1.0"
+            }
+        },
         "nilesoft-shell-animator": {
             "details": {
                 "defaultSorting": 9336,
