@@ -551,8 +551,6 @@ class ModMetadataValidator:
         def is_allowed_option(option: str) -> bool:
             return bool(
                 option.startswith('-l')
-                or option.startswith('-D')
-                or option == '-Wl,--export-all-symbols'
                 or option == '-fms-extensions'
             )
 
