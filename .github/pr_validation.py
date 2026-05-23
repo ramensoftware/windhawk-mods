@@ -56,6 +56,18 @@ MOD_METADATA_PARAMS = {
 }
 
 
+CALLBACK_SIGNATURES: dict[str, list[str]] = {
+    'Wh_ModInit': ['BOOL Wh_ModInit()'],
+    'Wh_ModAfterInit': ['void Wh_ModAfterInit()'],
+    'Wh_ModBeforeUninit': ['void Wh_ModBeforeUninit()'],
+    'Wh_ModUninit': ['void Wh_ModUninit()'],
+    'Wh_ModSettingsChanged': [
+        'void Wh_ModSettingsChanged()',
+        'BOOL Wh_ModSettingsChanged(BOOL* bReload)',
+    ],
+}
+
+
 def add_warning(file: Path, line: int, message: str):
     # https://github.com/orgs/community/discussions/26736
     def escape_data(s: str) -> str:
@@ -549,12 +561,7 @@ class ModMetadataValidator:
             return
 
         def is_allowed_option(option: str) -> bool:
-            return bool(
-                option.startswith('-l')
-                or option.startswith('-D')
-                or option == '-Wl,--export-all-symbols'
-                or option == '-fms-extensions'
-            )
+            return bool(option.startswith('-l') or option == '-fms-extensions')
 
         options = prop.value.split()
         disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
@@ -624,11 +631,9 @@ class ModMetadataValidator:
             prop.warn(msg.rstrip('\n'))
 
 
-def validate_metadata(path: Path, expected_author: str) -> int:
-    source = path.read_text(encoding='utf-8', errors='ignore')
-
+def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
     properties, initial_warnings = get_mod_file_metadata(
-        StringIO(source),
+        StringIO(mod_source),
         warn_callback=lambda line, msg: add_warning(path, line, msg),
     )
 
@@ -769,19 +774,17 @@ def validate_marker_block(
     return warnings
 
 
-def validate_readme(path: Path) -> int:
+def validate_readme(path: Path, mod_source: str) -> int:
     """Validate the mod's README block."""
-    source = path.read_text(encoding='utf-8', errors='ignore')
     return validate_marker_block(
-        path, source, 'WindhawkModReadme', 'README', required=True
+        path, mod_source, 'WindhawkModReadme', 'README', required=True
     )
 
 
-def validate_settings(path: Path) -> int:
+def validate_settings(path: Path, mod_source: str) -> int:
     """Validate the mod's settings block, if present."""
-    source = path.read_text(encoding='utf-8', errors='ignore')
     return validate_marker_block(
-        path, source, 'WindhawkModSettings', 'Settings', required=False
+        path, mod_source, 'WindhawkModSettings', 'Settings', required=False
     )
 
 
@@ -841,10 +844,9 @@ def get_target_modules_from_previous_line(previous_line: str):
     return names
 
 
-def validate_symbol_hooks(path: Path):
+def validate_symbol_hooks(path: Path, mod_source: str):
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8', errors='ignore')
     mod_source_lines = mod_source.splitlines()
 
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
@@ -917,11 +919,10 @@ def validate_encoding(path: Path):
     return warnings
 
 
-def validate_specific_keywords(path: Path):
+def validate_specific_keywords(path: Path, mod_source: str):
     """Check for specific keywords in mod source code."""
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8', errors='ignore')
     mod_source_lines = mod_source.splitlines()
 
     # Words to check (pattern, description)
@@ -967,6 +968,91 @@ def validate_specific_keywords(path: Path):
     return warnings
 
 
+def normalize_callback_param_types(params: str) -> str:
+    """Strip parameter names and normalize whitespace/pointer style in a C parameter list."""
+    p = re.sub(r'\s+', ' ', params.strip())
+    if p in ('', 'void', 'VOID'):
+        return ''
+
+    types = []
+    for arg in p.split(','):
+        arg = re.sub(r'\s*\*\s*', '* ', arg.strip())
+        tokens = arg.split()
+        # Drop the trailing parameter name if present.
+        if len(tokens) > 1 and re.fullmatch(r'\w+', tokens[-1]):
+            tokens = tokens[:-1]
+        types.append(' '.join(tokens))
+
+    return ', '.join(types)
+
+
+def normalize_return_type(return_type: str) -> str:
+    """Treat VOID (the Windows macro) as a synonym for void."""
+    return 'void' if return_type == 'VOID' else return_type
+
+
+def validate_callback_signatures(path: Path, mod_source: str):
+    """Validate signatures of well-known Windhawk mod callback functions."""
+    warnings = 0
+
+    for callback_name, expected_signatures in CALLBACK_SIGNATURES.items():
+        # Parse expected signatures once: (return_type, normalized_param_types).
+        expected = []
+        for sig in expected_signatures:
+            m = re.fullmatch(rf'(\w+)\s+{re.escape(callback_name)}\s*\((.*)\)', sig)
+            assert m, sig
+            expected.append((m.group(1), normalize_callback_param_types(m.group(2))))
+
+        # Match: previous word + whitespace + callback name + ( params ). The
+        # previous-word check naturally skips function calls (e.g. "= Wh_Mod..."
+        # or "(Wh_Mod...") since those aren't preceded by a bare identifier.
+        pattern = r'\b(\w+)\s+' + re.escape(callback_name) + r'\s*\(([^)]*)\)'
+        for match in re.finditer(pattern, mod_source):
+            # Skip if inside a single-line comment.
+            line_start = mod_source.rfind('\n', 0, match.start()) + 1
+            if '//' in mod_source[line_start : match.start()]:
+                continue
+
+            return_type = match.group(1)
+            params = match.group(2)
+            normalized_return_type = normalize_return_type(return_type)
+            normalized_params = normalize_callback_param_types(params)
+
+            if any(
+                normalized_return_type == exp_ret and normalized_params == exp_params
+                for exp_ret, exp_params in expected
+            ):
+                continue
+
+            line_num = 1 + mod_source[: match.start()].count('\n')
+            expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Unexpected {callback_name} signature:'
+                f' "{return_type} {callback_name}({params.strip()})".'
+                f' Expected: {expected_list}',
+            )
+
+    return warnings
+
+
+def validate_mod_file(path: Path, pr_author: str) -> int:
+    mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
+        '\ufeff'
+    )
+
+    warnings = validate_encoding(path)
+    warnings += validate_metadata(path, mod_source, pr_author)
+    warnings += validate_readme(path, mod_source)
+    warnings += validate_settings(path, mod_source)
+    warnings += validate_symbol_hooks(path, mod_source)
+    warnings += validate_specific_keywords(path, mod_source)
+    warnings += validate_callback_signatures(path, mod_source)
+
+    return warnings
+
+
 def test_run():
     if len(sys.argv) != 3:
         print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
@@ -975,12 +1061,7 @@ def test_run():
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = validate_encoding(path)
-    warnings += validate_metadata(path, pr_author)
-    warnings += validate_readme(path)
-    warnings += validate_settings(path)
-    warnings += validate_symbol_hooks(path)
-    warnings += validate_specific_keywords(path)
+    warnings = validate_mod_file(path, pr_author)
     if warnings > 0:
         print(f'Got {warnings} warnings')
 
@@ -1017,12 +1098,7 @@ def main():
     for path in paths:
         print(f'Checking {path=}')
 
-        path_warnings = validate_encoding(path)
-        path_warnings += validate_metadata(path, pr_author)
-        path_warnings += validate_readme(path)
-        path_warnings += validate_settings(path)
-        path_warnings += validate_symbol_hooks(path)
-        path_warnings += validate_specific_keywords(path)
+        path_warnings = validate_mod_file(path, pr_author)
         warnings += path_warnings
 
         if path_warnings == 0:

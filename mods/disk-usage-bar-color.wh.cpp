@@ -2,7 +2,7 @@
 // @id              disk-usage-bar-color
 // @name            Disk Usage Bar Color
 // @description     Customize the disk usage bar color in File Explorer This PC view
-// @version         1.1.0
+// @version         1.2.1
 // @author          dirtyrazkl
 // @github          https://github.com/dirtyrazkl
 // @include         explorer.exe
@@ -16,11 +16,18 @@
 Customizes the color of the disk usage progress bars shown in File Explorer's
 **This PC** view.
 
+## Screenshot
+
+![Disk Usage Bar Color preview](https://i.imgur.com/qbkvBJ6.png)
+
 ## Settings
 
-- **Bar Color (Normal)**: Hex color for drives with normal usage (default: `60CDFF`)
+- **Bar Color (Normal)**: Hex color for drives with normal usage (default:
+  `60CDFF`)
 - **Bar Color (Full/Warning)**: Hex color for drives that are nearly full,
   shown in red by default (default: `E81123`)
+- Color theming tools can also update these values programmatically by writing
+    the same settings keys and triggering a mod settings reload.
 
 Enter colors as 6-digit hex codes without the `#` prefix (e.g. `60CDFF`).
 
@@ -28,6 +35,7 @@ Enter colors as 6-digit hex codes without the `#` prefix (e.g. `60CDFF`).
 
 - Only drive bars in the **This PC** view are affected. File copy/move progress
   bars are filtered out using window ancestry checks.
+- Invalid or incomplete values automatically fall back to the built-in defaults.
 */
 // ==/WindhawkModReadme==
 
@@ -67,25 +75,38 @@ static COLORREF ParseHexColor(PCWSTR hex, COLORREF fallback)
         if (c >= L'0' && c <= L'9') return c - L'0';
         if (c >= L'A' && c <= L'F') return c - L'A' + 10;
         if (c >= L'a' && c <= L'f') return c - L'a' + 10;
-        return 0;
+        return -1;
     };
+
     if (!hex || wcslen(hex) < 6) return fallback;
-    return RGB((h(hex[0])<<4)|h(hex[1]), (h(hex[2])<<4)|h(hex[3]), (h(hex[4])<<4)|h(hex[5]));
+
+    int h0 = h(hex[0]);
+    int h1 = h(hex[1]);
+    int h2 = h(hex[2]);
+    int h3 = h(hex[3]);
+    int h4 = h(hex[4]);
+    int h5 = h(hex[5]);
+
+    if (h0 < 0 || h1 < 0 || h2 < 0 || h3 < 0 || h4 < 0 || h5 < 0)
+        return fallback;
+
+    return RGB((h0 << 4) | h1, (h2 << 4) | h3, (h4 << 4) | h5);
 }
 
 static void LoadSettings()
 {
     PCWSTR hex = Wh_GetStringSetting(L"barColor");
-    g_barColor = ParseHexColor(hex, RGB(96, 205, 255));
+    COLORREF manualBarColor = ParseHexColor(hex, RGB(96, 205, 255));
     Wh_FreeStringSetting(hex);
 
     hex = Wh_GetStringSetting(L"barColorFull");
-    g_barColorFull = ParseHexColor(hex, RGB(232, 17, 35));
+    COLORREF manualBarColorFull = ParseHexColor(hex, RGB(232, 17, 35));
     Wh_FreeStringSetting(hex);
+
+    g_barColor = manualBarColor;
+    g_barColorFull = manualBarColorFull;
 }
 
-// Fill with solid color + full alpha using AlphaBlend so the alpha channel
-// in the buffered HDC is written correctly (FillRect leaves alpha=0 = transparent)
 static void PaintSolidRect(HDC hdc, LPCRECT pRect, COLORREF color)
 {
     int w = pRect->right - pRect->left;
@@ -105,7 +126,11 @@ static void PaintSolidRect(HDC hdc, LPCRECT pRect, COLORREF color)
 
     void* pixels = nullptr;
     HBITMAP dib = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &pixels, NULL, 0);
-    if (!dib) { DeleteDC(memDC); return; }
+    if (!dib)
+    {
+        DeleteDC(memDC);
+        return;
+    }
 
     HGDIOBJ old = SelectObject(memDC, dib);
 
@@ -127,15 +152,10 @@ static void PaintSolidRect(HDC hdc, LPCRECT pRect, COLORREF color)
     DeleteDC(memDC);
 }
 
-// Returns true if the DC belongs to a window inside the main Explorer cabinet
-// (the This PC view). Returns true also for DCs with no associated window (e.g.
-// buffered painting), since we can't determine context in that case.
-// Returns false only when we can positively identify a non-Explorer window (e.g.
-// a file copy/move dialog), preventing those progress bars from being colored.
 static bool IsDriveListDC(HDC hdc)
 {
     HWND hwnd = WindowFromDC(hdc);
-    if (!hwnd) return true;  // Can't determine context — allow through
+    if (!hwnd) return true;
 
     WCHAR cls[256];
     for (HWND cur = hwnd; cur; cur = GetAncestor(cur, GA_PARENT))
@@ -150,13 +170,12 @@ HRESULT WINAPI HookedDrawThemeBackground(
     HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId,
     LPCRECT pRect, LPCRECT pClipRect)
 {
-    // PP_FILL = 5; PBFS_PARTIAL = 4 (normal), PBFS_ERROR = 2 (full/warning)
     if (iPartId == 5 && pRect && GetThemeClass(hTheme) == L"Progress" && IsDriveListDC(hdc))
     {
         COLORREF color;
-        if (iStateId == 2)       // PBFS_ERROR — drive nearly full
+        if (iStateId == 2)
             color = g_barColorFull;
-        else if (iStateId == 4)  // PBFS_PARTIAL — normal usage
+        else if (iStateId == 4)
             color = g_barColor;
         else
             return DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
