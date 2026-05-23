@@ -3,11 +3,11 @@
 // @name            ZenDesktop: Double Click to Hide Icons
 // @description     A high-performance, native C++ Windhawk mod that lets you double-click empty desktop space to hide/show desktop icons. Zero lag, zero UI overhead.
 // @version         1.2.0
-// @author          Lanbo & Antigravity
+// @author          Lanbo
 // @github          https://github.com/Liset999
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
