@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-23T16:50:32.000Z</updated>
+    <updated>2026-05-23T21:15:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AudioSwap 2.1.0]]></title>
+        <id>https://windhawk.net/mods/audioswap#7f641c526280f213a15d2e9098f5c4e847729990</id>
+        <link href="https://windhawk.net/mods/audioswap"/>
+        <updated>2026-05-23T21:15:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New: Device Priority panel — rank your preferred devices; the highest-priority connected device is assigned to a swap slot automatically.</li>
+<li>New: Advanced Mode toggle in Windhawk settings — shows the Device Priority panel in Mod Settings.</li>
+<li>Fixed: GUI sizing on high-DPI monitors.</li>
+<li>Fixed: Context menu now follows your Windows dark/light theme.</li>
+<li>Fixed: AudioSwap icon is now independent — no longer linked to the Windhawk tray icon.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dynamic Island for Windows 1.0.0]]></title>
         <id>https://windhawk.net/mods/dynamic-island-for-windows#c0b6582ad2161f8406e294b2a74639851923cfac</id>
@@ -377,32 +394,6 @@ open a separate window instead.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Search Bing Redirector 1.0.0]]></title>
-        <id>https://windhawk.net/mods/start-search-bing-redirector#a6800ed0793157681e68ef726fcb595b16a4b3d9</id>
-        <link href="https://windhawk.net/mods/start-search-bing-redirector"/>
-        <updated>2026-05-16T16:25:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startsearchbingredirector">Start Search Bing Redirector</h1>
-<p>When you click a web result in the Windows Start menu search, Windows forces
-the URL through <code>microsoft-edge:?url=https://www.bing.com/search?q=...</code> so it
-always opens in Edge with Bing.</p>
-<p>This mod intercepts that hand-off, extracts the search query, and redirects
-it to your chosen engine. The <code>microsoft-edge:</code> wrapper is dropped so the
-URL opens in your <strong>default browser</strong>.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Hooks <code>WindowsCreateString</code> in <code>combase.dll</code> inside <code>SearchHost.exe</code>. When the
-HSTRING being constructed is the click activation URL, the URL is rewritten
-in place before it reaches the WinRT URI launcher.</p>
-<p>The in-flyout result previews (the right panel) are <strong>not</strong> changed. Those
-are rendered from Bing's JSON API and would need a full API proxy to swap.
-Only the click hand-off is redirected.</p>
-<h2 id="logs">Logs</h2>
-<p>Open Windhawk's log viewer and filter for <code>[BingRedirector]</code>.</p>]]></content>
-        <author>
-            <name>takattowo</name>
-            <uri>https://github.com/takattowo</uri>
         </author>
     </entry>
 </feed>

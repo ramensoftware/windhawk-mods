@@ -1,3 +1,11 @@
+## 2.1.0 ([May 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7f641c526280f213a15d2e9098f5c4e847729990/mods/audioswap.wh.cpp))
+
+- New: Device Priority panel — rank your preferred devices; the highest-priority connected device is assigned to a swap slot automatically.
+- New: Advanced Mode toggle in Windhawk settings — shows the Device Priority panel in Mod Settings.
+- Fixed: GUI sizing on high-DPI monitors.
+- Fixed: Context menu now follows your Windows dark/light theme.
+- Fixed: AudioSwap icon is now independent — no longer linked to the Windhawk tray icon.
+
 ## 2.0.0 ([May 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/95bddae96da8f6e404291b5e7d9842674ac104d4/mods/audioswap.wh.cpp))
 
 improved performance
