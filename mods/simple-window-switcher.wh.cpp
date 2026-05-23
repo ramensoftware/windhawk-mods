@@ -3,11 +3,11 @@
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
 // @version         1.0
-// @author          Lone
+// @author          Lone, Asteski
 // @github          https://github.com/Louis047
+// @include         windhawk.exe
 // @include         explorer.exe
 // @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus
-// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -162,6 +162,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #include <propkey.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <appmodel.h>
 #include <vector>
 #include <atomic>
 #include <gdiplus.h>
@@ -188,6 +189,8 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #define SWS_HOTKEY_ALTCTRLTAB       3
 #define SWS_HOTKEY_ALTSHIFTCTRLTAB  4
 #define SWS_HOTKEY_ALTBACKTICK      5
+#define SWS_HOTKEY_RETRY_TIMER_ID   100
+#define SWS_HOTKEY_RETRY_INTERVAL   2000
 #define SWS_BG_DARK          RGB(32, 32, 32)
 #define SWS_BG_LIGHT         RGB(243, 243, 243)
 #define SWS_CONTOUR_DARK     RGB(255, 255, 255)
@@ -231,6 +234,9 @@ static int g_winW = 0, g_winH = 0;
 static bool g_hotkeysRegistered = false;
 static HMONITOR g_hCurrentMonitor = NULL;
 static Settings g_settings;
+static HANDLE g_hSwitcherThread = NULL;
+static DWORD g_dwSwitcherThreadId = 0;
+static bool g_isExplorer = false;
 static HANDLE g_restartExplorerPromptThread = NULL;
 static std::atomic<HWND> g_restartExplorerPromptWindow{nullptr};
 static IsShellWindow_t g_IsShellManagedWindow = nullptr;
@@ -360,36 +366,8 @@ static bool ResolveAPIs() {
     return true;
 }
 
-// Persistent flags to prevent restart prompt loop on init
-#define SWS_REG_RESTART_FLAG L"RestartedByMod"
-#define SWS_REG_LAST_PID L"LastPID"
+// Explorer restart prompt
 
-static void SetRegFlag(LPCWSTR name) {
-    Wh_SetIntValue(name, 1);
-}
-
-static bool CheckAndClearRegFlag(LPCWSTR name) {
-    if (Wh_GetIntValue(name, 0) == 1) {
-        Wh_DeleteValue(name);
-        return true;
-    }
-    return false;
-}
-
-static void ClearRegFlag(LPCWSTR name) {
-    Wh_DeleteValue(name);
-}
-
-static void StoreCurrentPID() {
-    Wh_SetIntValue(SWS_REG_LAST_PID, (int)GetCurrentProcessId());
-}
-
-// Returns true if the stored PID matches the current process (same explorer session)
-static bool CheckStoredPIDMatchesCurrent() {
-    return Wh_GetIntValue(SWS_REG_LAST_PID, -1) == (int)GetCurrentProcessId();
-}
-
-// Explorer restart prompt (adapted from sib-plusplus-tweaker)
 constexpr WCHAR kRestartTitle[] = L"Simple Window Switcher - Windhawk";
 constexpr WCHAR kRestartText[] = L"Explorer needs to be restarted for changes to take effect. Restart now?";
 
@@ -404,7 +382,7 @@ static HRESULT CALLBACK RestartPromptDialogCallback(HWND hwnd, UINT msg, WPARAM,
 }
 
 static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
-    bool shouldSetFlag = (bool)(uintptr_t)param;
+    bool setFlag = (bool)(uintptr_t)param;
     TASKDIALOGCONFIG tdc = {};
     tdc.cbSize = sizeof(tdc);
     tdc.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
@@ -416,35 +394,28 @@ static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
 
     int button;
     if (SUCCEEDED(TaskDialogIndirect(&tdc, &button, nullptr, nullptr)) && button == IDYES) {
-        if (shouldSetFlag) SetRegFlag(SWS_REG_RESTART_FLAG);
-        ClearRegFlag(SWS_REG_LAST_PID);
-        WCHAR cmd[] = L"cmd.exe /c \"taskkill /F /IM explorer.exe & start explorer\"";
-        STARTUPINFO si = {}; si.cb = sizeof(si);
+        if (setFlag) {
+            Wh_SetIntValue(L"RestartedByMod", 1);
+        }
+        Wh_SetIntValue(L"LastPID", -1);
+        WCHAR cmd[] = L"cmd.exe /c \"timeout /t 1 /nobreak >nul & taskkill /F /IM explorer.exe & start explorer.exe\"";
+        STARTUPINFO si = { .cb = sizeof(si) };
         PROCESS_INFORMATION pi = {};
-        if (CreateProcess(nullptr, cmd, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-            CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+        if (CreateProcess(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
         }
     }
-
     return 0;
 }
 
-// setFlagOnRestart: if true, sets a registry flag before restarting so the
-// next Wh_ModInit knows to skip the prompt (breaks the init loop).
-// Init calls with true, uninit calls with false.
-static void PromptForExplorerRestart(bool setFlagOnRestart) {
+static void PromptForExplorerRestart(bool setFlag) {
     if (g_restartExplorerPromptThread) {
         if (WaitForSingleObject(g_restartExplorerPromptThread, 0) != WAIT_OBJECT_0) return;
         CloseHandle(g_restartExplorerPromptThread);
     }
     g_restartExplorerPromptThread = CreateThread(
-        nullptr,
-        0,
-        RestartPromptThreadProc,
-        (LPVOID)(uintptr_t)setFlagOnRestart,
-        0,
-        nullptr
-    );
+        nullptr, 0, RestartPromptThreadProc, (LPVOID)(uintptr_t)setFlag, 0, nullptr);
 }
 
 
@@ -483,6 +454,7 @@ static bool IsAltTabWindow(HWND h) {
 // Window Enumeration
 
 static HICON TryGetAppIconFromAumid(HWND hWnd, int desiredSizePx);
+static HICON TryGetUwpIconFromProcess(HWND hWnd, int desiredSizePx);
 
 static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     auto* list = reinterpret_cast<std::vector<WindowEntry>*>(lParam);
@@ -503,6 +475,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     if (!e.hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
     if (!e.hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
     if (!e.hIcon) e.hIcon = TryGetAppIconFromAumid(hWnd, GetHeaderIconSizePx());
+    if (!e.hIcon) e.hIcon = TryGetUwpIconFromProcess(hWnd, GetHeaderIconSizePx());
     if (!e.hIcon) e.hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
     if (!e.hIcon) e.hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
     if (!e.hIcon) e.hIcon = LoadIconW(NULL, IDI_APPLICATION);
@@ -559,6 +532,63 @@ static HICON TryGetAppIconFromAumid(HWND hWnd, int desiredSizePx) {
         CoUninitialize();
     }
 
+    return hIcon;
+}
+
+// Resolve UWP icon by finding the actual app process via CoreWindow child
+struct FindCoreWindowData { DWORD pid; };
+
+static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lParam) {
+    auto* data = (FindCoreWindowData*)lParam;
+    WCHAR cls[256];
+    GetClassNameW(hChild, cls, 256);
+    if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+        GetWindowThreadProcessId(hChild, &data->pid);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
+    WCHAR appsFolderPath[768];
+    if (swprintf_s(appsFolderPath, L"shell:AppsFolder\\%s", aumid) <= 0) return NULL;
+    PIDLIST_ABSOLUTE pidl = NULL;
+    if (!SUCCEEDED(SHParseDisplayName(appsFolderPath, NULL, &pidl, 0, NULL)) || !pidl) return NULL;
+    SHFILEINFOW sfi = {};
+    UINT flags = SHGFI_PIDL | SHGFI_ICON | (desiredSizePx > 24 ? SHGFI_LARGEICON : SHGFI_SMALLICON);
+    HICON hIcon = NULL;
+    if (SHGetFileInfoW((LPCWSTR)pidl, 0, &sfi, sizeof(sfi), flags)) {
+        hIcon = sfi.hIcon;
+    }
+    CoTaskMemFree(pidl);
+    return hIcon;
+}
+
+static HICON TryGetUwpIconFromProcess(HWND hWnd, int desiredSizePx) {
+    // Find the CoreWindow child to get the actual UWP app PID
+    FindCoreWindowData data = {0};
+    EnumChildWindows(hWnd, FindCoreWindowProc, (LPARAM)&data);
+    if (!data.pid) {
+        // No CoreWindow child — try the window's own process
+        GetWindowThreadProcessId(hWnd, &data.pid);
+    }
+    if (!data.pid) return NULL;
+
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, data.pid);
+    if (!hProc) return NULL;
+
+    HICON hIcon = NULL;
+    UINT32 aumidLen = 0;
+    LONG rc = GetApplicationUserModelId(hProc, &aumidLen, NULL);
+    if (rc == ERROR_INSUFFICIENT_BUFFER && aumidLen > 0) {
+        WCHAR* aumid = new WCHAR[aumidLen];
+        if (GetApplicationUserModelId(hProc, &aumidLen, aumid) == ERROR_SUCCESS) {
+            hIcon = ResolveIconFromAumid(aumid, desiredSizePx);
+        }
+        delete[] aumid;
+    }
+
+    CloseHandle(hProc);
     return hIcon;
 }
 
@@ -1192,9 +1222,13 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
 
         int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
         // Keep centered header content stable: reserve close-button space consistently.
-        int btnReserve = ((g_settings.centerTaskContent && !HeaderIsVertical()) || i == g_hoverIndex)
-                 ? closeBtnReserve
-                 : 0;
+        // In vertical mode, never reserve space - close button overlays without displacement.
+        int btnReserve = 0;
+        if (!HeaderIsVertical()) {
+            btnReserve = ((g_settings.centerTaskContent) || i == g_hoverIndex)
+                     ? closeBtnReserve
+                     : 0;
+        }
         int contentLeft = e.rcCell.left + padLeft;
         int contentRight = e.rcCell.right - padLeft - btnReserve;
         if (contentRight < contentLeft) contentRight = contentLeft;
@@ -1613,7 +1647,13 @@ static int HitTestThumb(int x, int y) {
 
 // WndProc
 
+static void SWS_RegisterHotkeys();
+
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_TIMER && wParam == SWS_HOTKEY_RETRY_TIMER_ID) {
+        SWS_RegisterHotkeys();
+        return 0;
+    }
     if (uMsg == WM_HOTKEY) {
         int id = (int)wParam;
         bool isBackward = false;
@@ -1827,15 +1867,27 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
 static void SWS_RegisterHotkeys() {
     if (g_hotkeysRegistered || !g_hSwitcher) return;
-    RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB, MOD_ALT, VK_TAB);
-    RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT, VK_TAB);
-    RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
-    RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
-    RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
-    g_hotkeysRegistered = true;
-    Wh_Log(L"Hotkeys registered");
+    BOOL r1 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB, MOD_ALT, VK_TAB);
+    BOOL r2 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT, VK_TAB);
+    BOOL r3 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
+    BOOL r4 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
+    BOOL r5 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
+    if (r1 && r2 && r3 && r4 && r5) {
+        g_hotkeysRegistered = true;
+        KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
+        Wh_Log(L"All hotkeys registered successfully");
+    } else {
+        if (r1) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB);
+        if (r2) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
+        if (r3) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
+        if (r4) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
+        if (r5) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+        SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
+        Wh_Log(L"Hotkey registration incomplete, retrying in %dms", SWS_HOTKEY_RETRY_INTERVAL);
+    }
 }
 static void SWS_UnregisterHotkeys() {
+    KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
     if (!g_hotkeysRegistered || !g_hSwitcher) return;
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
@@ -1918,16 +1970,37 @@ static void LoadSettings() {
 }
 
 
-// Lifecycle
+// RegisterHotKey hook for explorer.exe
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Simple Window Switcher initializing");
+static bool SWS_IsAltTabHotkey(UINT fsModifiers, UINT vk) {
+    UINT baseMods = fsModifiers & ~MOD_NOREPEAT;
+    if (vk == VK_TAB && (baseMods & MOD_ALT)) return true;
+    return false;
+}
+
+typedef BOOL(WINAPI *RegisterHotKey_t)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
+static RegisterHotKey_t RegisterHotKey_Original;
+
+static BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk) {
+    if (SWS_IsAltTabHotkey(fsModifiers, vk)) {
+        Wh_Log(L"Blocked explorer RegisterHotKey for Alt+Tab variant (vk=0x%X, mod=0x%X)", vk, fsModifiers);
+        SetLastError(0);
+        return TRUE;
+    }
+    return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
+}
+
+// Background thread for tool mod process
+
+static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
+    Wh_Log(L"SwitcherThread starting");
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     ResolveAPIs();
     LoadSettings();
     g_isDarkMode = ShouldUseDarkMode();
 
     BufferedPaintInit();
-    
+
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
 
@@ -1942,7 +2015,7 @@ BOOL Wh_ModInit() {
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED;
     g_hSwitcher = CreateWindowExW(exStyle, SWS_CLASSNAME, L"",
         WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
-    if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return FALSE; }
+    if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
 
     BOOL bExclude = TRUE;
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_EXCLUDED_FROM_PEEK, &bExclude, sizeof(bExclude));
@@ -1951,41 +2024,18 @@ BOOL Wh_ModInit() {
     g_shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
     RegisterShellHookWindow(g_hSwitcher);
 
-    // Create initial font
     g_hFont = CreateScaledFont(96);
 
     SWS_RegisterHotkeys();
 
-    // Prompt logic: detect the lifecycle event type
-    // - RestartedByMod flag → we just restarted via prompt, skip
-    // - Stored PID matches current PID → same process (recompile/re-enable) → prompt
-    // - No stored PID or different PID → new process (logon) or first install
-    if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
-        if (CheckAndClearRegFlag(SWS_REG_RESTART_FLAG)) {
-            // We just restarted explorer via the prompt — skip
-        } else if (CheckStoredPIDMatchesCurrent()) {
-            // Same explorer process — this is a recompile or re-enable → prompt
-            PromptForExplorerRestart(true);
-        } else {
-            // Different/no PID — new explorer process (logon) or first install
-            // First install: explorer has been running a while, no stored PID
-            bool hadPreviousPID = Wh_GetIntValue(SWS_REG_LAST_PID, -1) != -1;
-            if (!hadPreviousPID) {
-                // No previous PID stored — first time install → prompt
-                PromptForExplorerRestart(true);
-            }
-            // Had previous PID but different → logon/manual restart → skip
-        }
+    Wh_Log(L"Simple Window Switcher initialized, entering message loop");
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
-    // Store current PID for lifecycle detection
-    StoreCurrentPID();
 
-    Wh_Log(L"Simple Window Switcher initialized");
-    return TRUE;
-}
-
-void Wh_ModUninit() {
-    Wh_Log(L"Simple Window Switcher uninitializing");
     SWS_UnregisterHotkeys();
     if (g_isVisible) HideSwitcher();
     UnregisterThumbnails();
@@ -2000,31 +2050,278 @@ void Wh_ModUninit() {
         g_gdiplusToken = 0;
     }
 
-    // Dismiss any existing prompt first
-    HWND promptWnd = g_restartExplorerPromptWindow;
-    if (promptWnd) PostMessage(promptWnd, WM_CLOSE, 0, 0);
-
-    // Show restart prompt (handles uninstall/disable, no flag needed)
-    // Only prompt if the system is not shutting down/logging off
-    if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
-        PromptForExplorerRestart(false);
-    }
-
-    // Wait for prompt thread to complete before returning
-    if (g_restartExplorerPromptThread) {
-        WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
-        CloseHandle(g_restartExplorerPromptThread);
-        g_restartExplorerPromptThread = NULL;
-    }
-
-    Wh_Log(L"Simple Window Switcher uninitialized");
+    CoUninitialize();
+    Wh_Log(L"SwitcherThread exiting");
+    return 0;
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    Wh_Log(L"Settings changed");
-    LoadSettings();
-    g_isDarkMode = ShouldUseDarkMode();
-    if (g_isVisible) ShowSwitcher(g_isSticky);
+// Tool Mod callbacks
 
+bool WhTool_ModInit() {
+    Wh_Log(L"Simple Window Switcher: WhTool_ModInit");
+    g_hSwitcherThread = CreateThread(NULL, 0, SwitcherThread, NULL, 0, &g_dwSwitcherThreadId);
+    return g_hSwitcherThread != NULL;
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L"Simple Window Switcher: WhTool_ModUninit");
+    if (g_dwSwitcherThreadId)
+        PostThreadMessage(g_dwSwitcherThreadId, WM_QUIT, 0, 0);
+    if (g_hSwitcherThread) {
+        WaitForSingleObject(g_hSwitcherThread, INFINITE);
+        CloseHandle(g_hSwitcherThread);
+        g_hSwitcherThread = NULL;
+        g_dwSwitcherThreadId = 0;
+    }
+}
+
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"Simple Window Switcher: WhTool_ModSettingsChanged");
+    if (g_hSwitcher) {
+        LoadSettings();
+        if (g_isVisible) {
+            ShowSwitcher(g_isSticky);
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod boilerplate
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk lifecycle
+
+BOOL Wh_ModInit() {
+    WCHAR exePath[MAX_PATH];
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    WCHAR* exeName = wcsrchr(exePath, L'\\');
+    exeName = exeName ? exeName + 1 : exePath;
+    Wh_Log(L"SWS: Wh_ModInit in process: %s", exeName);
+
+    // --- explorer.exe path: hook RegisterHotKey only ---
+    if (_wcsicmp(exeName, L"explorer.exe") == 0) {
+        g_isExplorer = true;
+        Wh_Log(L"SWS: Loaded into explorer.exe, hooking RegisterHotKey");
+
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        if (hUser32) {
+            void* pRegisterHotKey = (void*)GetProcAddress(hUser32, "RegisterHotKey");
+            if (pRegisterHotKey) {
+                Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
+            }
+        }
+
+        // Restart prompt lifecycle detection
+        BOOL isShuttingDown = GetSystemMetrics(SM_SHUTTINGDOWN);
+        int restartFlag = Wh_GetIntValue(L"RestartedByMod", 0);
+        int storedPID = Wh_GetIntValue(L"LastPID", -1);
+        int currentPID = (int)GetCurrentProcessId();
+        Wh_Log(L"SWS DIAG: shuttingDown=%d restartFlag=%d storedPID=%d currentPID=%d",
+               isShuttingDown, restartFlag, storedPID, currentPID);
+
+        if (!isShuttingDown) {
+            if (restartFlag == 1) {
+                Wh_SetIntValue(L"RestartedByMod", 0);
+                Wh_Log(L"SWS: Post-restart init, skipping prompt");
+            } else if (storedPID == currentPID) {
+                Wh_Log(L"SWS: Same PID, recompile/re-enable -> prompting");
+                PromptForExplorerRestart(true);
+            } else if (storedPID == -1) {
+                Wh_Log(L"SWS: No stored PID, first install -> prompting");
+                PromptForExplorerRestart(true);
+            } else {
+                Wh_Log(L"SWS: Different PID (logon/restart), hook active -> skipping");
+            }
+        } else {
+            Wh_Log(L"SWS: System shutting down, skipping prompt");
+        }
+        Wh_SetIntValue(L"LastPID", currentPID);
+
+        return TRUE;
+    }
+
+    // --- windhawk.exe path: tool mod boilerplate ---
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isExplorer) {
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isExplorer) {
+        HWND promptWnd = g_restartExplorerPromptWindow;
+        if (promptWnd) PostMessage(promptWnd, WM_CLOSE, 0, 0);
+
+        if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
+            PromptForExplorerRestart(false);
+        }
+
+        if (g_restartExplorerPromptThread) {
+            WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            CloseHandle(g_restartExplorerPromptThread);
+            g_restartExplorerPromptThread = NULL;
+        }
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
