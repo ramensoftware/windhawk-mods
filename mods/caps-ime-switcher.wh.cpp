@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              caps-ime-switcher
 // @name            Caps IME Switcher
-// @description     Short-press Caps Lock to switch input language, long-press for Caps Lock. Keeps Simplified Chinese IMEs in Chinese mode.
+// @description     Brings the macOS Caps Lock input source switching behavior to Windows.
 // @version         0.6
 // @author          ZeonXr
 // @github          https://github.com/ZeonXr
@@ -17,14 +17,12 @@
 Short-press Caps Lock to switch to the next input language.
 Long-press Caps Lock to toggle Caps Lock on/off.
 
+Switches input languages by posting WM_INPUTLANGCHANGEREQUEST
+directly to the focused window.
+
 Optionally keeps Simplified Chinese IMEs in Chinese mode, so switching
 to a Chinese IME always lands in native input mode instead of accidental
 English mode.
-
-Unlike other tools, input language switching uses
-WM_INPUTLANGCHANGEREQUEST instead of simulating Win+Space or
-Alt+Shift. IME mode enforcement hooks each application's
-DispatchMessage.
 */
 // ==/WindhawkModReadme==
 
