@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-22T14:52:28.000Z</updated>
+    <updated>2026-05-23T15:54:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[ZenDesktop: Double Click to Hide Icons 1.2.0]]></title>
+        <id>https://windhawk.net/mods/zen-desktop-toggle-icons#130894a9b78c9429b22e05420e865d51b9f448b7</id>
+        <link href="https://windhawk.net/mods/zen-desktop-toggle-icons"/>
+        <updated>2026-05-23T15:54:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="zendesktopdoubleclicktohideicons">ZenDesktop: Double Click to Hide Icons</h1>
+<p>Have you ever wanted a clean, clutter-free desktop but found it annoying to right-click -&gt; View -&gt; Show desktop icons every time? </p>
+<p><strong>ZenDesktop</strong> brings the ultimate native solution to Windows. It allows you to <strong>double-click empty space on your desktop</strong> to instantly hide or show your icons.</p>
+<h3 id="keyfeatures">🌟 Key Features:</h3>
+<ul>
+<li><strong>Zero UI Overhead</strong>: Embedded natively inside <code>explorer.exe</code> process space. No background EXE running, no taskbar/tray icons, 0% CPU and virtually 0MB extra RAM.</li>
+<li><strong>Process-Native Hit-Testing</strong>: When you double-click, it performs a real-time ListView hit-test. If you double-click a file, folder, or shortcut, the default "open" action is triggered normally. If you double-click empty space, it toggles your desktop icons.</li>
+<li><strong>Dynamic Hooking</strong>: Automatically subclasses the shell views, meaning even if your Explorer crashes, restarts, or you plug/unplug monitors, the mod remains fully active and stable.</li>
+<li><strong>Completely Safe</strong>: Uses native Windows <code>0x7402</code> (WM_COMMAND) toggle signals, ensuring Windows handles the fade animations and desktop state natively without breaking icon grid arrangements.</li>
+</ul>]]></content>
+        <author>
+            <name>Lanbo</name>
+            <uri>https://github.com/Liset999</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer No Minimum Window Size 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-no-min-size#737fe5ca2c253eee455e5ca74c678a8f56db33c1</id>
@@ -653,29 +673,6 @@ Krisatisa</p>]]></content>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mic Tray Control & Decibel Viewer 1.13]]></title>
-        <id>https://windhawk.net/mods/mic-tray-control#f65b714736ab2c03fa6fcb38d5118db359b977ce</id>
-        <link href="https://windhawk.net/mods/mic-tray-control"/>
-        <updated>2026-05-04T21:41:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mictraycontroleartrumpetstyle">Mic Tray Control (EarTrumpet Style)</h1>
-<p>This mod adds a dedicated Microphone icon to your system tray.</p>
-<p><em>Vibecoded by <strong>ciahciach</strong>.</em></p>
-<h3 id="features">Features:</h3>
-<ul>
-<li><strong>Quick Mute:</strong> Left-Click the icon to quickly toggle Mute for the default mic.</li>
-<li><strong>Multi-Mic Mixer:</strong> Right-Click the icon to open a popup UI with sliders for ALL your active recording devices.</li>
-<li><strong>Dynamic Mute Icon:</strong> The tray icon changes visually when your default mic is muted.</li>
-<li><strong>Scroll Control:</strong> Hover over the tray icon and scroll to adjust your default mic volume quickly.</li>
-<li><strong>Live Preview:</strong> Hover over the tray icon to see exact volume in % and dB.</li>
-<li><strong>Step Modes:</strong> Choose between Percentage (%) or exact Decibel (dB) steps when scrolling.</li>
-<li><strong>Custom Icons:</strong> You can provide your own <code>.ico</code> files in the settings, otherwise it uses a crisp native icon generated on the fly!</li>
-</ul>]]></content>
-        <author>
-            <name>ciahciach</name>
-            <uri>https://github.com/ciahciach</uri>
         </author>
     </entry>
 </feed>

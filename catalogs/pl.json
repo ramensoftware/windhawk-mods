@@ -13129,6 +13129,37 @@
                 "name": "No MS Edge WebView2 for Copilot",
                 "version": "1.1"
             }
+        },
+        "zen-desktop-toggle-icons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1779551699000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779551699000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Lanbo",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
+                "description": "A high-performance, native C++ Windhawk mod that lets you double-click empty desktop space to hide/show desktop icons. Zero lag, zero UI overhead.",
+                "github": "https://github.com/Liset999",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "ZenDesktop: Double Click to Hide Icons",
+                "version": "1.2.0"
+            }
         }
     }
 }
