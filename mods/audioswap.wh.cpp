@@ -54,11 +54,9 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 ### v2.1.0
 - New: Device Priority panel — rank your preferred devices; the highest-priority connected device is assigned to a swap slot automatically.
 - New: Advanced Mode toggle in Windhawk settings — shows the Device Priority panel in Mod Settings.
-- Fixed: Scroll to Swap conflict with Monitor Sleep Button mod.
 - Fixed: GUI sizing on high-DPI monitors.
 - Fixed: Context menu now follows your Windows dark/light theme.
-- Fixed: Context menu could sometimes stay open after clicking away.
-- Fixed: Tray icon reappears correctly after Explorer restarts.
+- Fixed: AudioSwap icon is now independent — no longer linked to the Windhawk tray icon.
 
 ### v2.0.0
 - **New:** Native dashboard — right-click → **Mod Settings**.
@@ -122,6 +120,11 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 #include <commdlg.h>
 #include <vector>
 #include <string>
+
+// Stable GUID that gives our tray icon a process-independent identity.
+// Windows uses this to track pin/unpin separately from windhawk.exe.
+static const GUID AUDIOSWAP_TRAY_GUID =
+    {0xC8E2F174, 0x3B5A, 0x4D9C, {0x8F, 0x2E, 0x7A, 0x1D, 0x6B, 0x4C, 0x9E, 0x3F}};
 
 #define TRAY_ICON_ID         1
 #define WM_TRAY_CALLBACK     (WM_USER + 1)
@@ -1207,8 +1210,7 @@ static void RefreshTrayIconRect() {
     HWND hwnd = g_trayHwnd;
     if (!hwnd) return;
     NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
-    nii.hWnd = hwnd;
-    nii.uID  = TRAY_ICON_ID;
+    nii.guidItem = AUDIOSWAP_TRAY_GUID;
     RECT newRect = {};
     if (SUCCEEDED(Shell_NotifyIconGetRect(&nii, &newRect)) &&
         newRect.right > newRect.left) {
@@ -1220,9 +1222,10 @@ static void RefreshTrayIconRect() {
         // finish its layout pass. Send NIM_MODIFY to give Explorer the
         // necessary nudge to compute the icon's position.
         NOTIFYICONDATAW nid = {sizeof(nid)};
-        nid.hWnd = hwnd;
-        nid.uID  = TRAY_ICON_ID;
-        nid.uFlags = NIF_SHOWTIP;
+        nid.hWnd     = hwnd;
+        nid.uID      = TRAY_ICON_ID;
+        nid.uFlags   = NIF_SHOWTIP | NIF_GUID;
+        nid.guidItem = AUDIOSWAP_TRAY_GUID;
         Shell_NotifyIconW(NIM_MODIFY, &nid);
         SetTimer(hwnd, TRAY_RECT_INIT_TIMER, 200, nullptr);
     }
@@ -1582,7 +1585,8 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd             = hWnd;
     nid.uID              = TRAY_ICON_ID;
-    nid.uFlags           = NIF_MESSAGE | NIF_TIP | NIF_ICON;
+    nid.uFlags           = NIF_MESSAGE | NIF_TIP | NIF_ICON | NIF_GUID;
+    nid.guidItem         = AUDIOSWAP_TRAY_GUID;
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
 
     if (configuredCount < 2)
@@ -1599,9 +1603,11 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
 
     if (isAdd) {
         NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
-        nidVer.hWnd     = hWnd;
-        nidVer.uID      = TRAY_ICON_ID;
-        nidVer.uVersion = NOTIFYICON_VERSION_4;
+        nidVer.hWnd      = hWnd;
+        nidVer.uID       = TRAY_ICON_ID;
+        nidVer.uFlags    = NIF_GUID;
+        nidVer.guidItem  = AUDIOSWAP_TRAY_GUID;
+        nidVer.uVersion  = NOTIFYICON_VERSION_4;
         Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
     }
 
@@ -1999,8 +2005,10 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     } else if (msg == WM_CLOSE) {
         // Orderly shutdown: remove tray icon, then destroy window.
         NOTIFYICONDATAW nid = {sizeof(nid)};
-        nid.hWnd = hWnd;
-        nid.uID  = TRAY_ICON_ID;
+        nid.hWnd     = hWnd;
+        nid.uID      = TRAY_ICON_ID;
+        nid.uFlags   = NIF_GUID;
+        nid.guidItem = AUDIOSWAP_TRAY_GUID;
         Shell_NotifyIconW(NIM_DELETE, &nid);
         DestroyWindow(hWnd);
         return 0;
@@ -2038,27 +2046,6 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     if (!g_trayHwnd) {
         CoUninitialize();
         return 1;
-    }
-
-    // Set a unique AUMID so the OS doesn't group this icon with the main Windhawk entry.
-    // Use GetProcAddress so we don't need propkey.h / shell linking in the mod build.
-    {
-        static const PROPERTYKEY PKEY_AUMID =
-            {{0x9F4C2855,0x9F79,0x4B39,{0xA8,0xD0,0xE1,0xD4,0x2D,0xE1,0xD5,0xF3}},5};
-        using SHGetPSFWFn = HRESULT(WINAPI*)(HWND, REFIID, void**);
-        auto pfn = (SHGetPSFWFn)GetProcAddress(
-            GetModuleHandleW(L"shell32.dll"), "SHGetPropertyStoreForWindow");
-        if (pfn) {
-            IPropertyStore* pps = nullptr;
-            if (SUCCEEDED(pfn(g_trayHwnd, IID_IPropertyStore, (void**)&pps))) {
-                PROPVARIANT pv = {};
-                pv.vt      = VT_LPWSTR;
-                pv.pwszVal = const_cast<WCHAR*>(L"BlackPaw.AudioSwap");
-                pps->SetValue(PKEY_AUMID, pv);
-                pps->Commit();
-                pps->Release();
-            }
-        }
     }
 
     // Register for instant device-change notifications.
