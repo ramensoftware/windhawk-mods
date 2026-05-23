@@ -56,6 +56,18 @@ MOD_METADATA_PARAMS = {
 }
 
 
+CALLBACK_SIGNATURES: dict[str, list[str]] = {
+    'Wh_ModInit': ['BOOL Wh_ModInit()'],
+    'Wh_ModAfterInit': ['void Wh_ModAfterInit()'],
+    'Wh_ModBeforeUninit': ['void Wh_ModBeforeUninit()'],
+    'Wh_ModUninit': ['void Wh_ModUninit()'],
+    'Wh_ModSettingsChanged': [
+        'void Wh_ModSettingsChanged()',
+        'BOOL Wh_ModSettingsChanged(BOOL* bReload)',
+    ],
+}
+
+
 def read_mod_source(path: Path) -> str:
     return path.read_text(encoding='utf-8', errors='ignore').removeprefix('\ufeff')
 
@@ -553,10 +565,7 @@ class ModMetadataValidator:
             return
 
         def is_allowed_option(option: str) -> bool:
-            return bool(
-                option.startswith('-l')
-                or option == '-fms-extensions'
-            )
+            return bool(option.startswith('-l') or option == '-fms-extensions')
 
         options = prop.value.split()
         disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
@@ -969,6 +978,76 @@ def validate_specific_keywords(path: Path):
     return warnings
 
 
+def normalize_callback_param_types(params: str) -> str:
+    """Strip parameter names and normalize whitespace/pointer style in a C parameter list."""
+    p = re.sub(r'\s+', ' ', params.strip())
+    if p in ('', 'void', 'VOID'):
+        return ''
+
+    types = []
+    for arg in p.split(','):
+        arg = re.sub(r'\s*\*\s*', '* ', arg.strip())
+        tokens = arg.split()
+        # Drop the trailing parameter name if present.
+        if len(tokens) > 1 and re.fullmatch(r'\w+', tokens[-1]):
+            tokens = tokens[:-1]
+        types.append(' '.join(tokens))
+
+    return ', '.join(types)
+
+
+def normalize_return_type(return_type: str) -> str:
+    """Treat VOID (the Windows macro) as a synonym for void."""
+    return 'void' if return_type == 'VOID' else return_type
+
+
+def validate_callback_signatures(path: Path):
+    """Validate signatures of well-known Windhawk mod callback functions."""
+    warnings = 0
+    mod_source = read_mod_source(path)
+
+    for callback_name, expected_signatures in CALLBACK_SIGNATURES.items():
+        # Parse expected signatures once: (return_type, normalized_param_types).
+        expected = []
+        for sig in expected_signatures:
+            m = re.fullmatch(rf'(\w+)\s+{re.escape(callback_name)}\s*\((.*)\)', sig)
+            assert m, sig
+            expected.append((m.group(1), normalize_callback_param_types(m.group(2))))
+
+        # Match: previous word + whitespace + callback name + ( params ). The
+        # previous-word check naturally skips function calls (e.g. "= Wh_Mod..."
+        # or "(Wh_Mod...") since those aren't preceded by a bare identifier.
+        pattern = r'\b(\w+)\s+' + re.escape(callback_name) + r'\s*\(([^)]*)\)'
+        for match in re.finditer(pattern, mod_source):
+            # Skip if inside a single-line comment.
+            line_start = mod_source.rfind('\n', 0, match.start()) + 1
+            if '//' in mod_source[line_start : match.start()]:
+                continue
+
+            return_type = match.group(1)
+            params = match.group(2)
+            normalized_return_type = normalize_return_type(return_type)
+            normalized_params = normalize_callback_param_types(params)
+
+            if any(
+                normalized_return_type == exp_ret and normalized_params == exp_params
+                for exp_ret, exp_params in expected
+            ):
+                continue
+
+            line_num = 1 + mod_source[: match.start()].count('\n')
+            expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Unexpected {callback_name} signature:'
+                f' "{return_type} {callback_name}({params.strip()})".'
+                f' Expected: {expected_list}',
+            )
+
+    return warnings
+
+
 def test_run():
     if len(sys.argv) != 3:
         print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
@@ -983,6 +1062,7 @@ def test_run():
     warnings += validate_settings(path)
     warnings += validate_symbol_hooks(path)
     warnings += validate_specific_keywords(path)
+    warnings += validate_callback_signatures(path)
     if warnings > 0:
         print(f'Got {warnings} warnings')
 
@@ -1025,6 +1105,7 @@ def main():
         path_warnings += validate_settings(path)
         path_warnings += validate_symbol_hooks(path)
         path_warnings += validate_specific_keywords(path)
+        path_warnings += validate_callback_signatures(path)
         warnings += path_warnings
 
         if path_warnings == 0:
