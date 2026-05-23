@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-22T18:32:51.000Z</updated>
+    <updated>2026-05-23T12:19:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Native Brightness Shortcut (Always On Top) 1.1.0]]></title>
+        <id>https://windhawk.net/mods/native-brightness#f5a751d9735864380ff0b33a9e6ca781343632b0</id>
+        <link href="https://windhawk.net/mods/native-brightness"/>
+        <updated>2026-05-23T12:19:00.000Z</updated>
+        <content type="html"><![CDATA[<p>The new update has resolved the previous issue of mod not working properly..</p>]]></content>
+        <author>
+            <name>Prash</name>
+            <uri>https://github.com/prasmit2410</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Key Click 1.1]]></title>
         <id>https://windhawk.net/mods/key-click#42e0209f2d49af8f06d3df8d1f19edb15ec1dbcd</id>
@@ -371,24 +382,6 @@ ExplorerPatcher.)</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[UWP Assets Redirect 1.1]]></title>
-        <id>https://windhawk.net/mods/uwp-assets-redirect#7480b0e749aa7109e23cd6655b869cc94c380c72</id>
-        <link href="https://windhawk.net/mods/uwp-assets-redirect"/>
-        <updated>2026-05-15T11:44:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for .ico redirections:</li>
-<li>You can now provide the path to an .ico file, and assets will be automatically generated,</li>
-<li>You can find more information in the mod's details tab under "Applying redirections".</li>
-<li>Fixed WindowsApps read permissions that caused the mod to hang on loading</li>
-<li>Added dialogs during Icon themes download or when an error occurs</li>
-<li>Added "Luna" theme</li>
-</ul>]]></content>
-        <author>
-            <name>ferrys</name>
-            <uri>https://github.com/atferrys</uri>
         </author>
     </entry>
 </feed>

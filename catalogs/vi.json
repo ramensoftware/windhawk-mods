@@ -6661,7 +6661,7 @@
                     2
                 ],
                 "ratingUsers": 5,
-                "updated": 1773082808000,
+                "updated": 1779538740000,
                 "users": 69
             },
             "metadata": {
@@ -6674,7 +6674,7 @@
                 ],
                 "license": "MIT",
                 "name": "Native Brightness Shortcut (Always On Top)",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "native-titlebars-uwp-lite": {
