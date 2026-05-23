@@ -162,11 +162,14 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #include <shlwapi.h>
 #include <propkey.h>
 #include <shobjidl.h>
+#include <knownfolders.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include <appmodel.h>
 #include <vector>
 #include <atomic>
+#include <map>
+#include <string>
 #include <gdiplus.h>
 
 #define SWS_CLASSNAME       L"WindhawkSWS_Switcher"
@@ -202,7 +205,6 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 
 typedef BOOL (WINAPI *IsShellWindow_t)(HWND);
 typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
-typedef HRESULT (WINAPI *SHGetPropertyStoreForWindow_t)(HWND, REFIID, void**);
 struct ACCENT_POLICY { DWORD AccentState; DWORD AccentFlags; DWORD GradientColor; DWORD AnimationId; };
 struct WINDOWCOMPOSITIONATTRIBDATA { DWORD dwAttrib; PVOID pvData; SIZE_T cbData; };
 typedef BOOL(WINAPI *SetWindowCompositionAttribute_t)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
@@ -246,13 +248,8 @@ static IsShellWindow_t g_IsShellFrameWindow = nullptr;
 static GhostWindowFromHungWindow_t g_GhostWindowFromHungWindow = nullptr;
 static GhostWindowFromHungWindow_t g_HungWindowFromGhostWindow = nullptr;
 static SetWindowCompositionAttribute_t g_SetWindowCompositionAttribute = nullptr;
-static SHGetPropertyStoreForWindow_t g_SHGetPropertyStoreForWindow = nullptr;
 static ULONG_PTR g_gdiplusToken = 0;
 static bool g_isCloseHovered = false;
-static const PROPERTYKEY kPkeyAppUserModelId = {
-    {0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}},
-    5
-};
 
 // Helpers
 
@@ -356,15 +353,6 @@ static bool ResolveAPIs() {
     g_HungWindowFromGhostWindow = (GhostWindowFromHungWindow_t)GetProcAddress(h, "HungWindowFromGhostWindow");
     g_SetWindowCompositionAttribute = (SetWindowCompositionAttribute_t)GetProcAddress(h, "SetWindowCompositionAttribute");
 
-    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) {
-        hShell32 = LoadLibraryW(L"shell32.dll");
-    }
-    if (hShell32) {
-        g_SHGetPropertyStoreForWindow =
-            (SHGetPropertyStoreForWindow_t)GetProcAddress(hShell32, "SHGetPropertyStoreForWindow");
-    }
-
     return true;
 }
 
@@ -455,8 +443,7 @@ static bool IsAltTabWindow(HWND h) {
 
 // Window Enumeration
 
-static HICON TryGetAppIconFromAumid(HWND hWnd, int desiredSizePx);
-static HICON TryGetUwpIconFromProcess(HWND hWnd, int desiredSizePx);
+static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx);
 
 static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     auto* list = reinterpret_cast<std::vector<WindowEntry>*>(lParam);
@@ -473,11 +460,19 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     InternalGetWindowText(hWnd, e.title, 256);
     if (!e.title[0]) GetWindowTextW(hWnd, e.title, 256);
     e.hIcon = NULL;
-    SendMessageTimeoutW(hWnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
+    
+    bool isUwp = false;
+    if (g_IsShellFrameWindow && g_IsShellFrameWindow(hWnd)) {
+        isUwp = true;
+    }
+    
+    if (isUwp) {
+        e.hIcon = TryGetUwpIconFromExplorer(hWnd, GetHeaderIconSizePx());
+    }
+    
+    if (!e.hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
     if (!e.hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
     if (!e.hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
-    if (!e.hIcon) e.hIcon = TryGetAppIconFromAumid(hWnd, GetHeaderIconSizePx());
-    if (!e.hIcon) e.hIcon = TryGetUwpIconFromProcess(hWnd, GetHeaderIconSizePx());
     if (!e.hIcon) e.hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
     if (!e.hIcon) e.hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
     if (!e.hIcon) e.hIcon = LoadIconW(NULL, IDI_APPLICATION);
@@ -485,52 +480,19 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
-static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx);
+// === UWP Icon Extraction (Explorer IPC) ===
 
-static HICON TryGetAppIconFromAumid(HWND hWnd, int desiredSizePx) {
-    if (!g_SHGetPropertyStoreForWindow) {
-        return NULL;
-    }
+UINT g_WM_SWS_GET_UWP_ICON = 0;
+std::map<std::wstring, HICON> g_uwpIconCache;
 
-    bool shouldCoUninit = false;
-    HRESULT coInitHr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (SUCCEEDED(coInitHr)) {
-        shouldCoUninit = true;
-    } else if (coInitHr != RPC_E_CHANGED_MODE) {
-        return NULL;
-    }
-
-    HICON hIcon = NULL;
-    IPropertyStore* propertyStore = NULL;
-    if (SUCCEEDED(g_SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&propertyStore))) && propertyStore) {
-        PROPVARIANT appIdProp;
-        PropVariantInit(&appIdProp);
-
-        if (SUCCEEDED(propertyStore->GetValue(kPkeyAppUserModelId, &appIdProp)) &&
-            appIdProp.vt == VT_LPWSTR && appIdProp.pwszVal && appIdProp.pwszVal[0]) {
-            hIcon = ResolveIconFromAumid(appIdProp.pwszVal, desiredSizePx);
-        }
-
-        PropVariantClear(&appIdProp);
-        propertyStore->Release();
-    }
-
-    if (shouldCoUninit) {
-        CoUninitialize();
-    }
-
-    return hIcon;
-}
-
-// Resolve UWP icon by finding the actual app process via CoreWindow child
-struct FindCoreWindowData { DWORD pid; };
+struct FindCoreWindowData { HWND coreHwnd; };
 
 static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lParam) {
     auto* data = (FindCoreWindowData*)lParam;
     WCHAR cls[256];
     GetClassNameW(hChild, cls, 256);
     if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
-        GetWindowThreadProcessId(hChild, &data->pid);
+        data->coreHwnd = hChild;
         return FALSE;
     }
     return TRUE;
@@ -538,8 +500,6 @@ static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lParam) {
 
 static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
     HICON hIcon = NULL;
-
-    // Use SHCreateItemInKnownFolder + IShellItemImageFactory (proven approach)
     IShellItem* psi = NULL;
     if (SUCCEEDED(SHCreateItemInKnownFolder(
             FOLDERID_AppsFolder, KF_FLAG_DONT_VERIFY,
@@ -548,9 +508,7 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
         if (SUCCEEDED(psi->QueryInterface(IID_PPV_ARGS(&psiif))) && psiif) {
             SIZE sz = { desiredSizePx, desiredSizePx };
             HBITMAP hBitmap = NULL;
-            if (SUCCEEDED(psiif->GetImage(sz,
-                    SIIGBF_RESIZETOFIT | SIIGBF_ICONONLY, &hBitmap)) && hBitmap) {
-                // Convert HBITMAP to HICON via ImageList (StartAllBack technique)
+            if (SUCCEEDED(psiif->GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_ICONONLY, &hBitmap)) && hBitmap) {
                 HIMAGELIST hImageList = ImageList_Create(sz.cx, sz.cy, ILC_COLOR32, 1, 0);
                 if (hImageList) {
                     if (ImageList_Add(hImageList, hBitmap, NULL) != -1) {
@@ -564,7 +522,7 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
         }
         psi->Release();
     }
-
+    
     // Fallback: SHParseDisplayName + SHGetFileInfo
     if (!hIcon) {
         WCHAR appsFolderPath[768];
@@ -580,36 +538,94 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
             }
         }
     }
-
     return hIcon;
 }
 
-static HICON TryGetUwpIconFromProcess(HWND hWnd, int desiredSizePx) {
-    // Find the CoreWindow child to get the actual UWP app PID
-    FindCoreWindowData data = {0};
-    EnumChildWindows(hWnd, FindCoreWindowProc, (LPARAM)&data);
-    if (!data.pid) {
-        // No CoreWindow child — try the window's own process
-        GetWindowThreadProcessId(hWnd, &data.pid);
-    }
-    if (!data.pid) return NULL;
-
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, data.pid);
-    if (!hProc) return NULL;
-
-    HICON hIcon = NULL;
-    UINT32 aumidLen = 0;
-    LONG rc = GetApplicationUserModelId(hProc, &aumidLen, NULL);
-    if (rc == ERROR_INSUFFICIENT_BUFFER && aumidLen > 0) {
-        WCHAR* aumid = new WCHAR[aumidLen];
-        if (GetApplicationUserModelId(hProc, &aumidLen, aumid) == ERROR_SUCCESS) {
-            hIcon = ResolveIconFromAumid(aumid, desiredSizePx);
+LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (g_WM_SWS_GET_UWP_ICON && uMsg == g_WM_SWS_GET_UWP_ICON) {
+        HWND hWndTarget = (HWND)wParam;
+        int desiredSizePx = (int)lParam;
+        
+        // Find CoreWindow
+        FindCoreWindowData data = {0};
+        EnumChildWindows(hWndTarget, FindCoreWindowProc, (LPARAM)&data);
+        HWND hCore = data.coreHwnd ? data.coreHwnd : hWndTarget;
+        
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hCore, &pid);
+        
+        if (!pid) {
+            return NULL;
         }
-        delete[] aumid;
+        
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!hProc) {
+            return NULL;
+        }
+        
+        UINT32 aumidLen = 0;
+        LONG rc = GetApplicationUserModelId(hProc, &aumidLen, NULL);
+        std::wstring aumid;
+        
+        if (rc == ERROR_INSUFFICIENT_BUFFER && aumidLen > 0) {
+            WCHAR* buf = new WCHAR[aumidLen];
+            rc = GetApplicationUserModelId(hProc, &aumidLen, buf);
+            if (rc == ERROR_SUCCESS) {
+                aumid = buf;
+            }
+            delete[] buf;
+        }
+        CloseHandle(hProc);
+        
+        if (!aumid.empty()) {
+            std::wstring cacheKey = aumid + L"_" + std::to_wstring(desiredSizePx);
+            if (g_uwpIconCache.find(cacheKey) != g_uwpIconCache.end()) {
+                return (LRESULT)g_uwpIconCache[cacheKey];
+            }
+            
+            HICON hIcon = ResolveIconFromAumid(aumid.c_str(), desiredSizePx);
+            if (hIcon) {
+                g_uwpIconCache[cacheKey] = hIcon;
+                return (LRESULT)hIcon;
+            }
+        }
+        return NULL;
     }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
 
-    CloseHandle(hProc);
-    return hIcon;
+static DWORD WINAPI ExplorerIpcThread(LPVOID) {
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    
+    WNDCLASSW wc = {0};
+    wc.lpfnWndProc = ExplorerIpcWndProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = L"WindhawkSWS_IpcWindow";
+    RegisterClassW(&wc);
+    
+    CreateWindowExW(0, L"WindhawkSWS_IpcWindow", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
+    
+    MSG msg;
+    while (GetMessageW(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    
+    if (SUCCEEDED(hrCo)) CoUninitialize();
+    return 0;
+}
+
+static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
+    if (!g_WM_SWS_GET_UWP_ICON) {
+        g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
+    }
+    HWND hIpc = FindWindowW(L"WindhawkSWS_IpcWindow", NULL);
+    if (hIpc) {
+        DWORD_PTR res = 0;
+        SendMessageTimeoutW(hIpc, g_WM_SWS_GET_UWP_ICON, (WPARAM)hWnd, desiredSizePx, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &res);
+        return (HICON)res;
+    }
+    return NULL;
 }
 
 static void BuildWindowList() {
@@ -2132,6 +2148,11 @@ BOOL Wh_ModInit() {
         g_isExplorer = true;
         Wh_Log(L"SWS: Loaded into explorer.exe, hooking RegisterHotKey");
 
+        if (!g_WM_SWS_GET_UWP_ICON) {
+            g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
+        }
+        CreateThread(NULL, 0, ExplorerIpcThread, NULL, 0, NULL);
+
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
             void* pRegisterHotKey = (void*)GetProcAddress(hUser32, "RegisterHotKey");
@@ -2325,6 +2346,15 @@ void Wh_ModUninit() {
     if (g_isExplorer) {
         HWND promptWnd = g_restartExplorerPromptWindow;
         if (promptWnd) PostMessage(promptWnd, WM_CLOSE, 0, 0);
+
+        HWND hIpc = FindWindowW(L"WindhawkSWS_IpcWindow", NULL);
+        if (hIpc) {
+            PostMessageW(hIpc, WM_QUIT, 0, 0);
+        }
+        for (auto& pair : g_uwpIconCache) {
+            if (pair.second) DestroyIcon(pair.second);
+        }
+        g_uwpIconCache.clear();
 
         if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
             PromptForExplorerRestart(false);
