@@ -152,6 +152,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 */
 // ==/WindhawkModSettings==
 
+#include <initguid.h>
 #include <windows.h>
 #include <dwmapi.h>
 #include <uxtheme.h>
@@ -160,6 +161,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <propkey.h>
+#include <shobjidl.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include <appmodel.h>
@@ -483,6 +485,8 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
+static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx);
+
 static HICON TryGetAppIconFromAumid(HWND hWnd, int desiredSizePx) {
     if (!g_SHGetPropertyStoreForWindow) {
         return NULL;
@@ -504,24 +508,7 @@ static HICON TryGetAppIconFromAumid(HWND hWnd, int desiredSizePx) {
 
         if (SUCCEEDED(propertyStore->GetValue(kPkeyAppUserModelId, &appIdProp)) &&
             appIdProp.vt == VT_LPWSTR && appIdProp.pwszVal && appIdProp.pwszVal[0]) {
-            WCHAR appsFolderPath[768];
-            if (swprintf_s(appsFolderPath, L"shell:AppsFolder\\%s", appIdProp.pwszVal) > 0) {
-                PIDLIST_ABSOLUTE pidl = NULL;
-                if (SUCCEEDED(SHParseDisplayName(appsFolderPath, NULL, &pidl, 0, NULL)) && pidl) {
-                    SHFILEINFOW sfi = {};
-                    // Request larger icon for medium and above (>24px)
-                    UINT flags = SHGFI_PIDL | SHGFI_ICON;
-                    if (desiredSizePx > 24) {
-                        flags |= SHGFI_LARGEICON;  // 32x32
-                    } else {
-                        flags |= SHGFI_SMALLICON;  // 16x16
-                    }
-                    if (SHGetFileInfoW((LPCWSTR)pidl, 0, &sfi, sizeof(sfi), flags)) {
-                        hIcon = sfi.hIcon;
-                    }
-                    CoTaskMemFree(pidl);
-                }
-            }
+            hIcon = ResolveIconFromAumid(appIdProp.pwszVal, desiredSizePx);
         }
 
         PropVariantClear(&appIdProp);
@@ -550,17 +537,50 @@ static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lParam) {
 }
 
 static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
-    WCHAR appsFolderPath[768];
-    if (swprintf_s(appsFolderPath, L"shell:AppsFolder\\%s", aumid) <= 0) return NULL;
-    PIDLIST_ABSOLUTE pidl = NULL;
-    if (!SUCCEEDED(SHParseDisplayName(appsFolderPath, NULL, &pidl, 0, NULL)) || !pidl) return NULL;
-    SHFILEINFOW sfi = {};
-    UINT flags = SHGFI_PIDL | SHGFI_ICON | (desiredSizePx > 24 ? SHGFI_LARGEICON : SHGFI_SMALLICON);
     HICON hIcon = NULL;
-    if (SHGetFileInfoW((LPCWSTR)pidl, 0, &sfi, sizeof(sfi), flags)) {
-        hIcon = sfi.hIcon;
+
+    // Use SHCreateItemInKnownFolder + IShellItemImageFactory (proven approach)
+    IShellItem* psi = NULL;
+    if (SUCCEEDED(SHCreateItemInKnownFolder(
+            FOLDERID_AppsFolder, KF_FLAG_DONT_VERIFY,
+            aumid, IID_PPV_ARGS(&psi))) && psi) {
+        IShellItemImageFactory* psiif = NULL;
+        if (SUCCEEDED(psi->QueryInterface(IID_PPV_ARGS(&psiif))) && psiif) {
+            SIZE sz = { desiredSizePx, desiredSizePx };
+            HBITMAP hBitmap = NULL;
+            if (SUCCEEDED(psiif->GetImage(sz,
+                    SIIGBF_RESIZETOFIT | SIIGBF_ICONONLY, &hBitmap)) && hBitmap) {
+                // Convert HBITMAP to HICON via ImageList (StartAllBack technique)
+                HIMAGELIST hImageList = ImageList_Create(sz.cx, sz.cy, ILC_COLOR32, 1, 0);
+                if (hImageList) {
+                    if (ImageList_Add(hImageList, hBitmap, NULL) != -1) {
+                        hIcon = ImageList_GetIcon(hImageList, 0, 0);
+                    }
+                    ImageList_Destroy(hImageList);
+                }
+                DeleteObject(hBitmap);
+            }
+            psiif->Release();
+        }
+        psi->Release();
     }
-    CoTaskMemFree(pidl);
+
+    // Fallback: SHParseDisplayName + SHGetFileInfo
+    if (!hIcon) {
+        WCHAR appsFolderPath[768];
+        if (swprintf_s(appsFolderPath, L"shell:AppsFolder\\%s", aumid) > 0) {
+            PIDLIST_ABSOLUTE pidl = NULL;
+            if (SUCCEEDED(SHParseDisplayName(appsFolderPath, NULL, &pidl, 0, NULL)) && pidl) {
+                SHFILEINFOW sfi = {};
+                UINT flags = SHGFI_PIDL | SHGFI_ICON | (desiredSizePx > 24 ? SHGFI_LARGEICON : SHGFI_SMALLICON);
+                if (SHGetFileInfoW((LPCWSTR)pidl, 0, &sfi, sizeof(sfi), flags)) {
+                    hIcon = sfi.hIcon;
+                }
+                CoTaskMemFree(pidl);
+            }
+        }
+    }
+
     return hIcon;
 }
 
