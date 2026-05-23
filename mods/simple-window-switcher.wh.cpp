@@ -3,7 +3,7 @@
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
 // @version         1.0
-// @author          Lone, Asteski
+// @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
 // @include         explorer.exe
@@ -117,9 +117,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
   $name: Maximum Width (percentage of screen width)
 - maxHeightPercent: 80
   $name: Maximum Height (percentage of screen height)
-- windowPadding: 20
-  $name: Window Padding
-  $description: Padding around the entire window grid (pixels, before DPI scaling).
+
 - showDelay: 0
   $name: Show Delay (ms)
   $description: Delay in milliseconds before showing the switcher (0 = instant).
@@ -136,9 +134,18 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
   - altShiftTab: Alt+Shift+Tab (default)
   - altShift: Alt+Shift
   - altBacktick: Alt+Backtick
-- borderColor: "#FFFFFF"
-  $name: Border Color
-  $description: Border color in HEX format.
+- customBorderDark: false
+  $name: Use Custom Border Color (Dark Mode)
+  $description: Enable to use a custom border color in dark mode instead of the default white.
+- borderColorDark: "#FFFFFF"
+  $name: Custom Border Color (Dark Mode)
+  $description: Border color in HEX format for dark mode. Only used when custom border is enabled.
+- customBorderLight: false
+  $name: Use Custom Border Color (Light Mode)
+  $description: Enable to use a custom border color in light mode instead of the default black.
+- borderColorLight: "#000000"
+  $name: Custom Border Color (Light Mode)
+  $description: Border color in HEX format for light mode. Only used when custom border is enabled.
 - useAccentColor: false
   $name: Use Accent Color for Borders
   $description: Use Windows accent color for selection and hover borders.
@@ -218,9 +225,12 @@ struct WindowEntry {
 };
 struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32];
-    WCHAR borderColor[16];
+    WCHAR borderColorDark[16];
+    WCHAR borderColorLight[16];
+    bool customBorderDark;
+    bool customBorderLight;
     int opacity; int rowHeight; int rowWidth;
-    int maxWidthPercent; int maxHeightPercent; int windowPadding; int showDelay;
+    int maxWidthPercent; int maxHeightPercent; int showDelay;
     bool showThumbnails; bool useAccentColor; bool primaryMonitorOnly; bool perMonitorWindows; bool taskRoundedCorners;
     bool centerTaskContent;
 };
@@ -250,6 +260,7 @@ static GhostWindowFromHungWindow_t g_HungWindowFromGhostWindow = nullptr;
 static SetWindowCompositionAttribute_t g_SetWindowCompositionAttribute = nullptr;
 static ULONG_PTR g_gdiplusToken = 0;
 static bool g_isCloseHovered = false;
+static HANDLE g_explorerIpcThread = NULL;
 
 // Helpers
 
@@ -571,13 +582,6 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
     return hIcon;
 }
 
-typedef HRESULT (WINAPI *SHGetPropertyStoreForWindow_t)(HWND, REFIID, void**);
-static SHGetPropertyStoreForWindow_t g_SHGetPropertyStoreForWindow = nullptr;
-static const PROPERTYKEY kPkeyAppUserModelId = {
-    {0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}},
-    5
-};
-
 LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_WM_SWS_GET_UWP_ICON && uMsg == g_WM_SWS_GET_UWP_ICON) {
         HWND hWndTarget = (HWND)wParam;
@@ -587,18 +591,12 @@ LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         
         std::wstring aumid;
         
-        if (!g_SHGetPropertyStoreForWindow) {
-            HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-            if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
-            if (hShell32) g_SHGetPropertyStoreForWindow = (SHGetPropertyStoreForWindow_t)GetProcAddress(hShell32, "SHGetPropertyStoreForWindow");
-        }
-        
-        if (g_SHGetPropertyStoreForWindow) {
+        {
             IPropertyStore* ps = NULL;
-            if (SUCCEEDED(g_SHGetPropertyStoreForWindow(hWndTarget, IID_PPV_ARGS(&ps))) && ps) {
+            if (SUCCEEDED(SHGetPropertyStoreForWindow(hWndTarget, IID_PPV_ARGS(&ps))) && ps) {
                 PROPVARIANT pv;
                 PropVariantInit(&pv);
-                if (SUCCEEDED(ps->GetValue(kPkeyAppUserModelId, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
+                if (SUCCEEDED(ps->GetValue(PKEY_AppUserModel_ID, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
                     aumid = pv.pwszVal;
                     Wh_Log(L"Explorer IPC: Got AUMID from PropertyStore = %s", aumid.c_str());
                 }
@@ -1111,9 +1109,16 @@ static void UnregisterThumbnails() {
 static COLORREF GetContourColor() {
     if (g_settings.useAccentColor) return GetAccentColor();
 
-    COLORREF parsed;
-    if (ParseHexColor(g_settings.borderColor, &parsed)) {
-        return parsed;
+    if (g_isDarkMode && g_settings.customBorderDark) {
+        COLORREF parsed;
+        if (ParseHexColor(g_settings.borderColorDark, &parsed)) {
+            return parsed;
+        }
+    } else if (!g_isDarkMode && g_settings.customBorderLight) {
+        COLORREF parsed;
+        if (ParseHexColor(g_settings.borderColorLight, &parsed)) {
+            return parsed;
+        }
     }
 
     return g_isDarkMode ? SWS_CONTOUR_DARK : SWS_CONTOUR_LIGHT;
@@ -2061,8 +2066,7 @@ static void LoadSettings() {
     if (g_settings.maxWidthPercent <= 0 || g_settings.maxWidthPercent > 100) g_settings.maxWidthPercent = 80;
     g_settings.maxHeightPercent = Wh_GetIntSetting(L"maxHeightPercent");
     if (g_settings.maxHeightPercent <= 0 || g_settings.maxHeightPercent > 100) g_settings.maxHeightPercent = 80;
-    g_settings.windowPadding = Wh_GetIntSetting(L"windowPadding");
-    if (g_settings.windowPadding < 0) g_settings.windowPadding = 20;
+
     g_settings.showDelay = Wh_GetIntSetting(L"showDelay");
     if (g_settings.showDelay < 0) g_settings.showDelay = 0;
     g_settings.useAccentColor = Wh_GetIntSetting(L"useAccentColor");
@@ -2070,10 +2074,19 @@ static void LoadSettings() {
     g_settings.perMonitorWindows = Wh_GetIntSetting(L"perMonitorWindows");
     g_settings.centerTaskContent = Wh_GetIntSetting(L"centerTaskContent");
 
-    v = Wh_GetStringSetting(L"borderColor");
-    wcscpy_s(g_settings.borderColor, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
-    if (!ParseHexColor(g_settings.borderColor, nullptr)) {
-        wcscpy_s(g_settings.borderColor, L"#FFFFFF");
+    g_settings.customBorderDark = Wh_GetIntSetting(L"customBorderDark");
+    g_settings.customBorderLight = Wh_GetIntSetting(L"customBorderLight");
+
+    v = Wh_GetStringSetting(L"borderColorDark");
+    wcscpy_s(g_settings.borderColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
+    if (!ParseHexColor(g_settings.borderColorDark, nullptr)) {
+        wcscpy_s(g_settings.borderColorDark, L"#FFFFFF");
+    }
+
+    v = Wh_GetStringSetting(L"borderColorLight");
+    wcscpy_s(g_settings.borderColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+    if (!ParseHexColor(g_settings.borderColorLight, nullptr)) {
+        wcscpy_s(g_settings.borderColorLight, L"#000000");
     }
 
 }
@@ -2224,7 +2237,7 @@ BOOL Wh_ModInit() {
         if (!g_WM_SWS_GET_UWP_ICON) {
             g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
         }
-        CreateThread(NULL, 0, ExplorerIpcThread, NULL, 0, NULL);
+        g_explorerIpcThread = CreateThread(NULL, 0, ExplorerIpcThread, NULL, 0, NULL);
 
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
@@ -2423,6 +2436,11 @@ void Wh_ModUninit() {
         HWND hIpc = FindWindowW(L"WindhawkSWS_IpcWindow", NULL);
         if (hIpc) {
             PostMessageW(hIpc, WM_QUIT, 0, 0);
+        }
+        if (g_explorerIpcThread) {
+            WaitForSingleObject(g_explorerIpcThread, 5000);
+            CloseHandle(g_explorerIpcThread);
+            g_explorerIpcThread = NULL;
         }
         for (auto& pair : g_uwpIconCache) {
             if (pair.second) DestroyIcon(pair.second);
