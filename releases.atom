@@ -2,12 +2,83 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-23T15:54:59.000Z</updated>
+    <updated>2026-05-23T16:50:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Island for Windows 1.0.0]]></title>
+        <id>https://windhawk.net/mods/dynamic-island-for-windows#c0b6582ad2161f8406e294b2a74639851923cfac</id>
+        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
+        <updated>2026-05-23T16:50:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="dynamicislandforwindows">Dynamic Island for Windows</h1>
+<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-18%20193649.png" alt="Screenshot 1" /></p>
+<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225602.png" alt="Screenshot 2" /></p>
+<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225634.png" alt="Screenshot 3" /></p>
+<p>A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.</p>
+<h3 id="features">Features ✨</h3>
+<ul>
+<li><strong>Hardware Privacy Indicators:</strong> A pulsing orange dot appears when your microphone is active, and a green dot when your camera is in use. Rate-limited polling ensures absolutely no CPU drain.</li>
+<li><strong>Rich Media Integration:</strong> Shows album art, song info, a live audio waveform, and playback controls.</li>
+<li><strong>High-Res Clipboard & Notifications:</strong> Instantly see what you copied or your latest Windows notifications, featuring crisp, high-fidelity 64px app icons extracted directly from system executables.</li>
+<li><strong>Customizable Aesthetics:</strong> Switch between sleek OLED Black, Dark Gray, Midnight Blue, and Deep Purple themes from the right-click menu, or use the settings to dial in your exact hex colors.</li>
+<li><strong>Dynamic Fluid Animations:</strong> Fully smooth resizing and splitting when multiple events happen at once (e.g., media playing while you copy text or receive a notification).</li>
+<li><strong>Battery & Clock:</strong> Low battery alerts and an optional minimal clock dashboard for when the island is idle.</li>
+</ul>
+<h3 id="usagesettings">Usage &amp; Settings</h3>
+<ul>
+<li><strong>Hover</strong> over the island to seamlessly expand it.</li>
+<li><strong>Right-click</strong> the island to access Theme presets, Transparency settings, and to pin the island open.</li>
+<li>Visit the <strong>Settings tab</strong> to change the island's Position (Top, Bottom, Left, Right), Size Scale, Animation Speed, and toggle specific modules on or off.</li>
+</ul>]]></content>
+        <author>
+            <name>Himanshu</name>
+            <uri>https://github.com/devcode90</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Simple Window Switcher 1.0]]></title>
+        <id>https://windhawk.net/mods/simple-window-switcher#2da6ee87b56eb42c1802b43f0c201e5e5d3149aa</id>
+        <link href="https://windhawk.net/mods/simple-window-switcher"/>
+        <updated>2026-05-23T16:50:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="simplewindowswitcher">Simple Window Switcher</h1>
+<p>A lightweight Alt+Tab replacement for Windows, ported from the
+<a href="https://github.com/valinet/sws">Simple Window Switcher</a> project.
+Additional improvements made by <a href="https://github.com/Asteski">Asteski</a>.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Grid layout with live DWM thumbnail previews</li>
+<li>Different Task List and Header Content layouts</li>
+<li>Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)</li>
+<li>Mouse click to select, scroll wheel to cycle</li>
+<li>Alt+Ctrl+Tab sticky mode</li>
+<li>Theme support (None/Backdrop Acrylic)</li>
+<li>Works with elevated/admin applications</li>
+<li>Dark/light mode auto-detection</li>
+<li>Custom border colors with optional Windows accent color</li>
+<li>DPI-aware, multi-monitor aware</li>
+<li>Rounded corners for switcher and task thumbnails (optional)</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p><em>Horizontal squared (default)</em></p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png" alt="Horizontal default" /></p>
+<p><em>Horizontal squared without thumbnails</em></p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png" alt="Horizontal without thumbnails" /></p>
+<p><em>Vertical small rounded</em></p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/1.png" alt="Vertical small" /></p>
+<p><em>Vertical large rounded</em></p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/2.png" alt="Vertical large" /></p>
+<p><em>Vertical rounded with centered task icons and titles</em></p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/6.png" alt="Vertical centered" /></p>
+<p><em>Vertical squared with thumbnails</em></p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/5.png" alt="Vertical squared with thumbnails" /></p>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[ZenDesktop: Double Click to Hide Icons 1.2.0]]></title>
         <id>https://windhawk.net/mods/zen-desktop-toggle-icons#130894a9b78c9429b22e05420e865d51b9f448b7</id>
@@ -574,105 +645,6 @@ de la configuracion del mod en Windhawk bajo "Include processes".</p>]]></conten
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remap Copilot Key 1.0]]></title>
-        <id>https://windhawk.net/mods/remap-copilot-key#9a7068b28cbd36e3b9c10bd57ec465a1b9160647</id>
-        <link href="https://windhawk.net/mods/remap-copilot-key"/>
-        <updated>2026-05-06T19:32:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="remapcopilotkey">Remap Copilot Key</h1>
-<p>A lightweight, global keyboard hook running directly inside the Windhawk engine process. </p>
-<p>Because modern Copilot keys send a macro sequence (<code>Left Shift + Left Win + F23</code>), this mod intercepts the sequence, forcefully lifts the modifier keys, and injects your custom keystroke.</p>
-<h3 id="virtualkeyvkcodereference">Virtual-Key (VK) Code Reference</h3>
-<p>If you choose the "Custom Remap" option, find the Hexadecimal code for your desired key below and enter it into the settings. For a complete list of all available keys, check the <a href="https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes">Microsoft VK Code List</a>.</p>
-<h4 id="mediavolumecontrols">▶️ Media &amp; Volume Controls</h4>
-<p>| Hex | Description | Hex | Description |
-|---|---|---|---|
-| <code>0xAD</code> | Volume Mute | <code>0xB0</code> | Next Track |
-| <code>0xAE</code> | Volume Down | <code>0xB1</code> | Previous Track |
-| <code>0xAF</code> | Volume Up | <code>0xB2</code> | Stop Media |
-| <code>0xB3</code> | Play / Pause | <code>0xB5</code> | Select Media |</p>
-<h4 id="modifierssystemkeys">⚙️ Modifiers &amp; System Keys</h4>
-<p>| Hex | Description | Hex | Description |
-|---|---|---|---|
-| <code>0x08</code> | Backspace | <code>0xA0</code> | Left Shift |
-| <code>0x09</code> | Tab | <code>0xA1</code> | Right Shift |
-| <code>0x0D</code> | Enter | <code>0xA2</code> | Left Ctrl |
-| <code>0x1B</code> | Escape | <code>0xA3</code> | Right Ctrl |
-| <code>0x20</code> | Spacebar | <code>0xA4</code> | Left Alt |
-| <code>0x5B</code> | Left Windows | <code>0xA5</code> | Right Alt |
-| <code>0x5C</code> | Right Windows | <code>0x5D</code> | Application/Menu Key |
-| <code>0x14</code> | Caps Lock | <code>0x5F</code> | Computer Sleep |</p>
-<h4 id="navigationarrows">🧭 Navigation &amp; Arrows</h4>
-<p>| Hex | Description | Hex | Description |
-|---|---|---|---|
-| <code>0x21</code> | Page Up | <code>0x25</code> | Left Arrow |
-| <code>0x22</code> | Page Down | <code>0x26</code> | Up Arrow |
-| <code>0x23</code> | End | <code>0x27</code> | Right Arrow |
-| <code>0x24</code> | Home | <code>0x28</code> | Down Arrow |
-| <code>0x2D</code> | Insert | <code>0x2E</code> | Delete |</p>
-<h4 id="alphabetnumbers">⌨️ Alphabet &amp; Numbers</h4>
-<p>| Hex | Description | Hex | Description | Hex | Description |
-|---|---|---|---|---|---|
-| <code>0x30</code> | 0 | <code>0x41</code> | A | <code>0x4E</code> | N |
-| <code>0x31</code> | 1 | <code>0x42</code> | B | <code>0x4F</code> | O |
-| <code>0x32</code> | 2 | <code>0x43</code> | C | <code>0x50</code> | P |
-| <code>0x33</code> | 3 | <code>0x44</code> | D | <code>0x51</code> | Q |
-| <code>0x34</code> | 4 | <code>0x45</code> | E | <code>0x52</code> | R |
-| <code>0x35</code> | 5 | <code>0x46</code> | F | <code>0x53</code> | S |
-| <code>0x36</code> | 6 | <code>0x47</code> | G | <code>0x54</code> | T |
-| <code>0x37</code> | 7 | <code>0x48</code> | H | <code>0x55</code> | U |
-| <code>0x38</code> | 8 | <code>0x49</code> | I | <code>0x56</code> | V |
-| <code>0x39</code> | 9 | <code>0x4A</code> | J | <code>0x57</code> | W |
-| | | <code>0x4B</code> | K | <code>0x58</code> | X |
-| | | <code>0x4C</code> | L | <code>0x59</code> | Y |
-| | | <code>0x4D</code> | M | <code>0x5A</code> | Z |</p>
-<h4 id="functionkeysf1f24">🛠️ Function Keys (F1-F24)</h4>
-<p>| Hex | Description | Hex | Description | Hex | Description |
-|---|---|---|---|---|---|
-| <code>0x70</code> | F1 | <code>0x78</code> | F9 | <code>0x80</code> | F17 |
-| <code>0x71</code> | F2 | <code>0x79</code> | F10 | <code>0x81</code> | F18 |
-| <code>0x72</code> | F3 | <code>0x7A</code> | F11 | <code>0x82</code> | F19 |
-| <code>0x73</code> | F4 | <code>0x7B</code> | F12 | <code>0x83</code> | F20 |
-| <code>0x74</code> | F5 | <code>0x7C</code> | F13 | <code>0x84</code> | F21 |
-| <code>0x75</code> | F6 | <code>0x7D</code> | F14 | <code>0x85</code> | F22 |
-| <code>0x76</code> | F7 | <code>0x7E</code> | F15 | <code>0x86</code> | F23 |
-| <code>0x77</code> | F8 | <code>0x7F</code> | F16 | <code>0x87</code> | F24 |</p>
-<h4 id="browserapps">🌐 Browser &amp; Apps</h4>
-<p>| Hex | Description | Hex | Description |
-|---|---|---|---|
-| <code>0xA6</code> | Browser Back | <code>0xAA</code> | Browser Search |
-| <code>0xA7</code> | Browser Forward | <code>0xAB</code> | Browser Favorites |
-| <code>0xA8</code> | Browser Refresh | <code>0xAC</code> | Browser Home |
-| <code>0xA9</code> | Browser Stop | <code>0xB4</code> | Start Mail |
-| <code>0xB6</code> | Start App 1 (Calculator)| <code>0xB7</code> | Start App 2 |</p>]]></content>
-        <author>
-            <name>Lukvbp</name>
-            <uri>https://github.com/lukvbp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Border Customizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/window-border-customizer#46e9b560b3ed69055810d70c273df2356d670e28</id>
-        <link href="https://windhawk.net/mods/window-border-customizer"/>
-        <updated>2026-05-06T14:40:51.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="windowbordercustomizer">Window Border Customizer</h2>
-<p>A mod that allows you to change the color of the borders for all windows, classic menus and tooltips.
-<img src="https://i.imgur.com/skNvSX3.png" alt="" /></p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>This mod needs to hook into <code>dwm.exe</code> to work.
-Please navigate to Windhawk's
-Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
-and make sure that <code>dwm.exe</code> is in the list.
-<img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
-<hr />
-<h2 id="contributors">Contributors</h2>
-<p><a href="https://github.com/m417z/">m417z</a>, 
-Krisatisa</p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>

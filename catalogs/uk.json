@@ -3421,6 +3421,38 @@
                 "version": "1.0"
             }
         },
+        "dynamic-island-for-windows": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1779555032000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779555032000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Himanshu",
+                "compilerOptions": "-lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi",
+                "description": "A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.",
+                "github": "https://github.com/devcode90",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Dynamic Island for Windows",
+                "version": "1.0.0"
+            }
+        },
         "edge-hot-corner-desktop-switch": {
             "details": {
                 "defaultSorting": 472,
@@ -8840,6 +8872,35 @@
                 ],
                 "name": "StartIsBack++ Tweaker",
                 "version": "0.7.1"
+            }
+        },
+        "simple-window-switcher": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1779555015000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779555015000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Lone",
+                "compilerOptions": "-ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus",
+                "description": "Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher",
+                "github": "https://github.com/Louis047",
+                "include": [
+                    "windhawk.exe",
+                    "explorer.exe"
+                ],
+                "name": "Simple Window Switcher",
+                "version": "1.0"
             }
         },
         "slick-window-arrangement": {
