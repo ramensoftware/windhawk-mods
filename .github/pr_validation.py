@@ -68,10 +68,6 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
 }
 
 
-def read_mod_source(path: Path) -> str:
-    return path.read_text(encoding='utf-8', errors='ignore').removeprefix('\ufeff')
-
-
 def add_warning(file: Path, line: int, message: str):
     # https://github.com/orgs/community/discussions/26736
     def escape_data(s: str) -> str:
@@ -635,11 +631,9 @@ class ModMetadataValidator:
             prop.warn(msg.rstrip('\n'))
 
 
-def validate_metadata(path: Path, expected_author: str) -> int:
-    source = read_mod_source(path)
-
+def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
     properties, initial_warnings = get_mod_file_metadata(
-        StringIO(source),
+        StringIO(mod_source),
         warn_callback=lambda line, msg: add_warning(path, line, msg),
     )
 
@@ -780,19 +774,17 @@ def validate_marker_block(
     return warnings
 
 
-def validate_readme(path: Path) -> int:
+def validate_readme(path: Path, mod_source: str) -> int:
     """Validate the mod's README block."""
-    source = read_mod_source(path)
     return validate_marker_block(
-        path, source, 'WindhawkModReadme', 'README', required=True
+        path, mod_source, 'WindhawkModReadme', 'README', required=True
     )
 
 
-def validate_settings(path: Path) -> int:
+def validate_settings(path: Path, mod_source: str) -> int:
     """Validate the mod's settings block, if present."""
-    source = read_mod_source(path)
     return validate_marker_block(
-        path, source, 'WindhawkModSettings', 'Settings', required=False
+        path, mod_source, 'WindhawkModSettings', 'Settings', required=False
     )
 
 
@@ -852,10 +844,9 @@ def get_target_modules_from_previous_line(previous_line: str):
     return names
 
 
-def validate_symbol_hooks(path: Path):
+def validate_symbol_hooks(path: Path, mod_source: str):
     warnings = 0
 
-    mod_source = read_mod_source(path)
     mod_source_lines = mod_source.splitlines()
 
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
@@ -928,11 +919,10 @@ def validate_encoding(path: Path):
     return warnings
 
 
-def validate_specific_keywords(path: Path):
+def validate_specific_keywords(path: Path, mod_source: str):
     """Check for specific keywords in mod source code."""
     warnings = 0
 
-    mod_source = read_mod_source(path)
     mod_source_lines = mod_source.splitlines()
 
     # Words to check (pattern, description)
@@ -1001,10 +991,9 @@ def normalize_return_type(return_type: str) -> str:
     return 'void' if return_type == 'VOID' else return_type
 
 
-def validate_callback_signatures(path: Path):
+def validate_callback_signatures(path: Path, mod_source: str):
     """Validate signatures of well-known Windhawk mod callback functions."""
     warnings = 0
-    mod_source = read_mod_source(path)
 
     for callback_name, expected_signatures in CALLBACK_SIGNATURES.items():
         # Parse expected signatures once: (return_type, normalized_param_types).
@@ -1048,6 +1037,22 @@ def validate_callback_signatures(path: Path):
     return warnings
 
 
+def validate_mod_file(path: Path, pr_author: str) -> int:
+    mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
+        '\ufeff'
+    )
+
+    warnings = validate_encoding(path)
+    warnings += validate_metadata(path, mod_source, pr_author)
+    warnings += validate_readme(path, mod_source)
+    warnings += validate_settings(path, mod_source)
+    warnings += validate_symbol_hooks(path, mod_source)
+    warnings += validate_specific_keywords(path, mod_source)
+    warnings += validate_callback_signatures(path, mod_source)
+
+    return warnings
+
+
 def test_run():
     if len(sys.argv) != 3:
         print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
@@ -1056,13 +1061,7 @@ def test_run():
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = validate_encoding(path)
-    warnings += validate_metadata(path, pr_author)
-    warnings += validate_readme(path)
-    warnings += validate_settings(path)
-    warnings += validate_symbol_hooks(path)
-    warnings += validate_specific_keywords(path)
-    warnings += validate_callback_signatures(path)
+    warnings = validate_mod_file(path, pr_author)
     if warnings > 0:
         print(f'Got {warnings} warnings')
 
@@ -1099,13 +1098,7 @@ def main():
     for path in paths:
         print(f'Checking {path=}')
 
-        path_warnings = validate_encoding(path)
-        path_warnings += validate_metadata(path, pr_author)
-        path_warnings += validate_readme(path)
-        path_warnings += validate_settings(path)
-        path_warnings += validate_symbol_hooks(path)
-        path_warnings += validate_specific_keywords(path)
-        path_warnings += validate_callback_signatures(path)
+        path_warnings = validate_mod_file(path, pr_author)
         warnings += path_warnings
 
         if path_warnings == 0:
