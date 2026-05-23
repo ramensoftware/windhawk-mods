@@ -99,18 +99,14 @@ bool IsUserInteractingWithTreeView(HWND hTreeView)
 }
 
 // Helper: Check if the tree item is the only root node in the navigation pane
-// This ensures the "Desktop" node can still auto-expand when the "Show all
-// folders" option is on.
+// This ensures the top-level "Desktop" item can still auto-expand when the
+// "Show all folders" option is on.
 bool IsSingleRootNode(HWND hTreeView, HTREEITEM hTreeItem)
 {
-    auto hFirstRootItem = reinterpret_cast<HTREEITEM>(
-        SendMessageW(hTreeView, TVM_GETNEXTITEM, TVGN_ROOT, 0));
-    if (hFirstRootItem != nullptr && hTreeItem == hFirstRootItem)
+    auto hFirstRootItem = TreeView_GetRoot(hTreeView);
+    if (hTreeItem == hFirstRootItem)
     {
-        auto hNextSibling = reinterpret_cast<HTREEITEM>(
-            SendMessageW(hTreeView, TVM_GETNEXTITEM, TVGN_NEXT,
-                reinterpret_cast<LPARAM>(hFirstRootItem)));
-        return hNextSibling == nullptr;
+        return TreeView_GetNextSibling(hTreeView, hFirstRootItem) == nullptr;
     }
     return false;
 }
