@@ -134,18 +134,12 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
   - altShiftTab: Alt+Shift+Tab (default)
   - altShift: Alt+Shift
   - altBacktick: Alt+Backtick
-- customBorderDark: false
-  $name: Use Custom Border Color (Dark Mode)
-  $description: Enable to use a custom border color in dark mode instead of the default white.
 - borderColorDark: "#FFFFFF"
-  $name: Custom Border Color (Dark Mode)
-  $description: Border color in HEX format for dark mode. Only used when custom border is enabled.
-- customBorderLight: false
-  $name: Use Custom Border Color (Light Mode)
-  $description: Enable to use a custom border color in light mode instead of the default black.
+  $name: Border Color (Dark Mode)
+  $description: Border color in HEX format for dark mode.
 - borderColorLight: "#000000"
-  $name: Custom Border Color (Light Mode)
-  $description: Border color in HEX format for light mode. Only used when custom border is enabled.
+  $name: Border Color (Light Mode)
+  $description: Border color in HEX format for light mode.
 - useAccentColor: false
   $name: Use Accent Color for Borders
   $description: Use Windows accent color for selection and hover borders.
@@ -227,8 +221,6 @@ struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32];
     WCHAR borderColorDark[16];
     WCHAR borderColorLight[16];
-    bool customBorderDark;
-    bool customBorderLight;
     int opacity; int rowHeight; int rowWidth;
     int maxWidthPercent; int maxHeightPercent; int showDelay;
     bool showThumbnails; bool useAccentColor; bool primaryMonitorOnly; bool perMonitorWindows; bool taskRoundedCorners;
@@ -1109,16 +1101,11 @@ static void UnregisterThumbnails() {
 static COLORREF GetContourColor() {
     if (g_settings.useAccentColor) return GetAccentColor();
 
-    if (g_isDarkMode && g_settings.customBorderDark) {
-        COLORREF parsed;
-        if (ParseHexColor(g_settings.borderColorDark, &parsed)) {
-            return parsed;
-        }
-    } else if (!g_isDarkMode && g_settings.customBorderLight) {
-        COLORREF parsed;
-        if (ParseHexColor(g_settings.borderColorLight, &parsed)) {
-            return parsed;
-        }
+    COLORREF parsed;
+    if (g_isDarkMode) {
+        if (ParseHexColor(g_settings.borderColorDark, &parsed)) return parsed;
+    } else {
+        if (ParseHexColor(g_settings.borderColorLight, &parsed)) return parsed;
     }
 
     return g_isDarkMode ? SWS_CONTOUR_DARK : SWS_CONTOUR_LIGHT;
@@ -2074,8 +2061,6 @@ static void LoadSettings() {
     g_settings.perMonitorWindows = Wh_GetIntSetting(L"perMonitorWindows");
     g_settings.centerTaskContent = Wh_GetIntSetting(L"centerTaskContent");
 
-    g_settings.customBorderDark = Wh_GetIntSetting(L"customBorderDark");
-    g_settings.customBorderLight = Wh_GetIntSetting(L"customBorderLight");
 
     v = Wh_GetStringSetting(L"borderColorDark");
     wcscpy_s(g_settings.borderColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
