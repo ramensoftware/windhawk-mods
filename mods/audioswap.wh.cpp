@@ -2,11 +2,12 @@
 // @id              audioswap
 // @name            AudioSwap
 // @description     Tray icon to cycle between multiple preferred audio outputs. Supports up to 6 devices with click or scroll to swap.
-// @version         2.0.0
+// @version         2.1.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
+// @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,6 +31,15 @@ Instantly cycle between multiple audio output devices from your system tray — 
 - **Left-click** mutes the current device. Click again to unmute. The tray tooltip shows *(Muted)* and the icon gains a red dot while active.
 - **Scrolling** to a different device automatically unmutes the previous one before switching.
 
+### Device Priority (Advanced Mode)
+
+Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings tab) to show the Device Priority section inside Mod Settings.
+
+- Rank up to 6 preferred devices in order of priority.
+- When AudioSwap loads, the highest-priority device that is currently connected is automatically placed into a swap slot.
+- Disconnected priority devices are remembered and restored to their slot when reconnected.
+- Each priority entry has its own icon picker.
+
 > The tray tooltip always shows the active device. On first run it reads *"Right-click to configure"* until at least two slots are assigned.
 
 ---
@@ -42,10 +52,16 @@ Instantly cycle between multiple audio output devices from your system tray — 
 
 ## Changelog
 
+### v2.1.0
+- New: Device Priority panel — rank your preferred devices; the highest-priority connected device is assigned to a swap slot automatically.
+- New: Advanced Mode toggle in Windhawk settings — shows the Device Priority panel in Mod Settings.
+- Fixed: GUI sizing on high-DPI monitors.
+- Fixed: Context menu now follows your Windows dark/light theme.
+- Fixed: AudioSwap icon is now independent — no longer linked to the Windhawk tray icon.
+
 ### v2.0.0
 - **New:** Native dashboard — right-click → **Mod Settings**.
 - **New:** All configuration (device slots, icons, mode, count) lives in the dashboard; Windhawk's settings panel is no longer used.
-
 
 ### v1.4.0
 - Custom .ico support — selecting "Custom Icon" in settings auto-opens a file picker; also available via right-click → "Custom Icon for Device X..."
@@ -79,10 +95,18 @@ Instantly cycle between multiple audio output devices from your system tray — 
 */
 // ==/WindhawkModReadme==
 
-// All settings are managed via right-click → Mod Settings (dashboard).
-// No WindhawkModSettings block: Wh_GetStringSetting reads a separate
-// YAML store that Wh_SetStringValue cannot write to, so schema entries
-// would silently conflict with dashboard saves.
+// ==WindhawkModSettings==
+/*
+- advancedMode: false
+  $name: Advanced Mode
+  $description: Shows the Device Priority panel in Mod Settings, letting you rank preferred devices for automatic slot assignment.
+*/
+// ==/WindhawkModSettings==
+
+// Dashboard-level settings (device slots, icons, priority list) are managed via
+// right-click → Mod Settings and persisted with Wh_SetStringValue / Wh_GetStringValue.
+// The advancedMode flag above uses Wh_GetIntSetting, which reads from Windhawk's
+// separate YAML store — no conflict with dashboard keys.
 
 #include <windhawk_utils.h>
 #include <windows.h>
@@ -98,6 +122,11 @@ Instantly cycle between multiple audio output devices from your system tray — 
 #include <vector>
 #include <string>
 
+// Stable GUID that gives our tray icon a process-independent identity.
+// Windows uses this to track pin/unpin separately from windhawk.exe.
+static const GUID AUDIOSWAP_TRAY_GUID =
+    {0xC8E2F174, 0x3B5A, 0x4D9C, {0x8F, 0x2E, 0x7A, 0x1D, 0x6B, 0x4C, 0x9E, 0x3F}};
+
 #define TRAY_ICON_ID         1
 #define WM_TRAY_CALLBACK     (WM_USER + 1)
 #define WM_UPDATE_TRAY_STATE (WM_USER + 2)
@@ -105,11 +134,13 @@ Instantly cycle between multiple audio output devices from your system tray — 
 #define WM_UPDATE_HOOK_STATE (WM_USER + 4)
 #define WM_SHOW_FILE_PICKER  (WM_USER + 5)  // lParam = bitmask of slots needing pickers
 #define WM_RELOAD_ICONS      (WM_USER + 6)  // reload icons on tray thread (eliminates cross-thread handle race)
-#define WM_RELOAD_ALL        (WM_USER + 7)  // full reload after dashboard save
+#define WM_RELOAD_ALL              (WM_USER + 7)  // full reload after dashboard save
+#define WM_PRIORITY_DEVICE_ACTIVE  (WM_USER + 8)  // lParam = heap-alloc'd WCHAR* device ID
 #define TRAY_RECT_INIT_TIMER 99   // one-shot retry timer for Shell_NotifyIconGetRect
 
 #define MENU_OPEN_SETTINGS   9001
 #define MENU_OPEN_WINDHAWK   9000
+#define IDC_BTN_KOFI         9002
 
 // With NOTIFYICON_VERSION_4 active Windows changes the tray notifications:
 //   left-click  → NIN_SELECT       (instead of / alongside WM_LBUTTONUP)
@@ -144,8 +175,7 @@ static DWORD          g_lastClickTime     = 0;
 static DWORD          g_lastScrollTime    = 0;
 static UINT           g_taskbarCreatedMsg = 0;
 
-// Mouse hook
-static HHOOK          g_mouseHook         = nullptr;
+// Tray icon position (used by Raw Input scroll handler)
 static RECT           g_trayIconRect      = {};
 
 // Per-slot icon handles
@@ -163,6 +193,11 @@ static int    g_deviceSlotCount = 2;
 static bool   g_isMutedByUs     = false;
 static WCHAR  g_mutedDeviceId[512] = {};
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Priority device list — up to MAX_DEVICE_SLOTS entries, index 0 = highest priority.
+// Written on main/tray thread under no lock (only touched during reload or init).
+static WCHAR  g_priorityDevIds[MAX_DEVICE_SLOTS][512] = {};
+static int    g_priorityCount = 0;
 
 // Mode flag: set/read atomically with InterlockedExchange/InterlockedRead.
 static volatile LONG  g_scrollToSwap = 0;  // 1 = scroll mode
@@ -238,11 +273,14 @@ namespace AudioSwapGui {
     static const COLORREF kClrDarkBP  = RGB(32, 32, 32);   // pressed
 
     // ── Layout constants ──────────────────────────────────────────────────────
-    static const int kCW    = 414;  // client width
-    static const int kTopH  =  72;  // height of global-settings section
-    static const int kSlotH =  76;  // height per slot row
-    static const int kBtnH  =  52;  // button-row height
-    static const int kIconSz=  28;  // icon drawn size
+    static const int kSW       = 414;  // slots panel width (right)
+    static const int kPW       = 220;  // priority panel width (left)
+    static const int kGap      =  12;  // gap between panels
+    static const int kCW       = kSW + kGap + kPW;  // total client width (646)
+    static const int kTopH     =  72;  // height of global-settings section
+    static const int kSlotH    =  76;  // height per slot row
+    static const int kPrioRowH =  52;  // height per priority row (device + icon lines)
+    static const int kIconSz   =  28;  // icon drawn size
 
     struct DeviceInfo { std::wstring id, name; };
 
@@ -273,6 +311,20 @@ namespace AudioSwapGui {
         HWND hModeCombo  = nullptr;
         HWND hSaveBtn    = nullptr;
         HWND hCancelBtn  = nullptr;
+        HWND hKoFiBtn    = nullptr;
+
+        UINT dpi = 96;
+        bool advancedMode = false;
+
+        // Priority section
+        struct PrioSlot {
+            HWND hDevCombo  = nullptr;
+            HWND hIconCombo = nullptr;
+            HWND hBrowseBtn = nullptr;
+            std::wstring id, name, iconKey;
+            WCHAR customPath[MAX_PATH] = {};
+            bool isOffline = false;
+        } prioSlots[MAX_DEVICE_SLOTS];
     };
 
     static const WCHAR* kIconKeys[] = {
@@ -291,8 +343,17 @@ namespace AudioSwapGui {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    // y-coordinate of slot i's top edge in client space.
-    static int SlotY(int i) { return kTopH + i * kSlotH; }
+    // Scale a base-96-DPI pixel value to the current DPI.
+    static int Sc(int px, UINT dpi) { return MulDiv(px, (int)dpi, 96); }
+
+    // x-origin of the slots (right) panel.
+    static int SlotsX(UINT dpi) { return Sc(kPW + kGap, dpi); }
+
+    // y-coordinate of slot i's top edge in client space (slots panel).
+    static int SlotY(int i, UINT dpi){ return Sc(kTopH,dpi) + i * Sc(kSlotH,dpi); }
+
+    // y-coordinate of priority row i's top edge in client space (priority panel).
+    static int PrioRowY(int i, UINT dpi){ return Sc(32,dpi) + i * Sc(kPrioRowH,dpi); }
 
     // Extract the preview icon for a slot (32px). Caller owns the HICON.
     static HICON LoadSlotPreview(const std::wstring& key, const WCHAR* customPath) {
@@ -321,14 +382,46 @@ namespace AudioSwapGui {
         if (fn) fn(h, L"DarkMode_CFD", nullptr);
     }
 
-    // Move buttons and resize the window to fit exactly deviceCount slots.
-    static void UpdateLayout(State* s) {
+    // Reposition all child controls and resize the window using the current DPI.
+    static void LayoutControls(State* s) {
         if (!s->hMainWnd) return;
-        int btnY = kTopH + s->deviceCount * kSlotH + 12;
-        SetWindowPos(s->hSaveBtn,   nullptr, 12,  btnY, 148, 28, SWP_NOZORDER|SWP_NOACTIVATE);
-        SetWindowPos(s->hCancelBtn, nullptr, 168, btnY,  88, 28, SWP_NOZORDER|SWP_NOACTIVATE);
-        int clientH = kTopH + s->deviceCount * kSlotH + kBtnH;
-        RECT rc = {0, 0, kCW, clientH};
+        UINT d = s->dpi;
+        int sx = s->advancedMode ? SlotsX(d) : 0;
+
+        // Top row (right panel)
+        SetWindowPos(s->hCountCombo, nullptr, sx+Sc(80,d), Sc(18,d), Sc(62,d), Sc(200,d), SWP_NOZORDER|SWP_NOACTIVATE);
+        SetWindowPos(s->hModeCombo,  nullptr, sx+Sc(198,d), Sc(18,d), Sc(204,d), Sc(200,d), SWP_NOZORDER|SWP_NOACTIVATE);
+
+        // Slot controls (right panel)
+        for (int i = 0; i < 6; i++) {
+            int y = SlotY(i, d);
+            SetWindowPos(s->slots[i].hDevCombo,  nullptr, sx+Sc(46,d), y+Sc(22,d), Sc(356,d), Sc(300,d), SWP_NOZORDER|SWP_NOACTIVATE);
+            SetWindowPos(s->slots[i].hIconCombo, nullptr, sx+Sc(46,d), y+Sc(50,d), Sc(258,d), Sc(300,d), SWP_NOZORDER|SWP_NOACTIVATE);
+            SetWindowPos(s->slots[i].hBrowseBtn, nullptr, sx+Sc(310,d), y+Sc(48,d), Sc(92,d), Sc(26,d), SWP_NOZORDER|SWP_NOACTIVATE);
+        }
+
+        // Priority controls (left panel)
+        // x=50 leaves room for the "1st:" etc. rank label to the left of each device combo.
+        for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+            int rowY = PrioRowY(i, d);
+            bool showBrowse = s->advancedMode && (s->prioSlots[i].iconKey == L"custom");
+            int iconW = showBrowse ? Sc(106,d) : Sc(158,d);
+            SetWindowPos(s->prioSlots[i].hDevCombo,  nullptr, Sc(50,d),  rowY,          Sc(158,d), Sc(200,d), SWP_NOZORDER|SWP_NOACTIVATE);
+            SetWindowPos(s->prioSlots[i].hIconCombo, nullptr, Sc(50,d),  rowY+Sc(26,d), iconW,     Sc(200,d), SWP_NOZORDER|SWP_NOACTIVATE);
+            SetWindowPos(s->prioSlots[i].hBrowseBtn, nullptr, Sc(158,d), rowY+Sc(24,d), Sc(50,d),  Sc(24,d),  SWP_NOZORDER|SWP_NOACTIVATE);
+        }
+
+        // Button row (right panel, below visible slots)
+        int btnY = SlotY(s->deviceCount, d) + Sc(8,d);
+        SetWindowPos(s->hSaveBtn,   nullptr, sx+Sc(12,d),  btnY, Sc(148,d), Sc(28,d), SWP_NOZORDER|SWP_NOACTIVATE);
+        SetWindowPos(s->hCancelBtn, nullptr, sx+Sc(168,d), btnY, Sc(88,d),  Sc(28,d), SWP_NOZORDER|SWP_NOACTIVATE);
+        SetWindowPos(s->hKoFiBtn,   nullptr, sx+Sc(264,d), btnY, Sc(138,d), Sc(28,d), SWP_NOZORDER|SWP_NOACTIVATE);
+
+        int prioPanelH = Sc(32,d) + MAX_DEVICE_SLOTS * Sc(kPrioRowH,d) + Sc(12,d);
+        int slotsPanelH = btnY + Sc(28,d) + Sc(12,d);
+        int clientH = prioPanelH > slotsPanelH ? prioPanelH : slotsPanelH;
+
+        RECT rc = {0, 0, Sc(s->advancedMode ? kCW : kSW, d), clientH};
         AdjustWindowRectEx(&rc,
             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
             FALSE, WS_EX_DLGMODALFRAME);
@@ -346,6 +439,13 @@ namespace AudioSwapGui {
             ShowWindow(s->slots[i].hBrowseBtn,
                        (vis && s->slots[i].iconKey == L"custom") ? SW_SHOW : SW_HIDE);
         }
+        for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+            ShowWindow(s->prioSlots[i].hDevCombo,  s->advancedMode ? SW_SHOW : SW_HIDE);
+            ShowWindow(s->prioSlots[i].hIconCombo, s->advancedMode ? SW_SHOW : SW_HIDE);
+            ShowWindow(s->prioSlots[i].hBrowseBtn,
+                       (s->advancedMode && s->prioSlots[i].iconKey == L"custom") ? SW_SHOW : SW_HIDE);
+        }
+        LayoutControls(s);
         if (s->hMainWnd) InvalidateRect(s->hMainWnd, nullptr, TRUE);
     }
 
@@ -357,6 +457,8 @@ namespace AudioSwapGui {
     // ── State I/O ─────────────────────────────────────────────────────────────
 
     static void LoadState(State& s) {
+        s.advancedMode = (Wh_GetIntSetting(L"advancedMode") != 0);
+
         IMMDeviceEnumerator* pEnum = nullptr;
         if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
                                        CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
@@ -414,6 +516,27 @@ namespace AudioSwapGui {
             Wh_GetStringValue(kPth, s.slots[i].customPath, MAX_PATH);
             s.slots[i].hPreviewIcon = LoadSlotPreview(s.slots[i].iconKey, s.slots[i].customPath);
         }
+
+        for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+            WCHAR kId[32], kNm[32], kIco[32], kPth[32], buf[512];
+            swprintf_s(kId,  L"priority%d",                 i+1);
+            swprintf_s(kNm,  L"priority%d_name",             i+1);
+            swprintf_s(kIco, L"priority%d_icon",             i+1);
+            swprintf_s(kPth, L"priority%d_icon_custom_path", i+1);
+            Wh_GetStringValue(kId, buf, 512); s.prioSlots[i].id   = buf;
+            Wh_GetStringValue(kNm, buf, 512); s.prioSlots[i].name = buf;
+            WCHAR ikBuf[32] = {};
+            Wh_GetStringValue(kIco, ikBuf, 32);
+            s.prioSlots[i].iconKey = ikBuf[0] ? ikBuf : L"speaker_normal";
+            Wh_GetStringValue(kPth, s.prioSlots[i].customPath, MAX_PATH);
+            s.prioSlots[i].isOffline = false;
+            if (!s.prioSlots[i].id.empty()) {
+                bool found = false;
+                for (auto& dev : s.activeDevices)
+                    if (dev.id == s.prioSlots[i].id) { found = true; break; }
+                if (!found) s.prioSlots[i].isOffline = true;
+            }
+        }
     }
 
     // ── Window procedure ──────────────────────────────────────────────────────
@@ -429,10 +552,17 @@ namespace AudioSwapGui {
             auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
             s = reinterpret_cast<State*>(cs->lpCreateParams);
             SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(s));
-            s->hMainWnd  = hWnd;
-            s->hFont     = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                               CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+            s->hMainWnd = hWnd;
+            s->dpi      = GetDpiForWindow(hWnd);
+            {
+                LOGFONTW lf = {};
+                lf.lfHeight  = -MulDiv(10, (int)s->dpi, 72);  // 10pt at current DPI
+                lf.lfWeight  = FW_NORMAL;
+                lf.lfQuality = CLEARTYPE_QUALITY;
+                lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+                wcscpy_s(lf.lfFaceName, L"Segoe UI");
+                s->hFont = CreateFontIndirectW(&lf);
+            }
             s->hBgBrush   = CreateSolidBrush(kClrBg);
             s->hInpBrush  = CreateSolidBrush(kClrInput);
             s->hSurfBrush = CreateSolidBrush(kClrSurface);
@@ -461,15 +591,10 @@ namespace AudioSwapGui {
             DarkCombo(s->hModeCombo);
 
             // ── Per-slot controls ─────────────────────────────────────────────
-            // Slot i base y = kTopH + i*kSlotH.
-            // y+0  to y+20 : header band (painted in WM_PAINT), "Slot N" text + icon
-            // y+22 to y+46 : device combo (icon preview drawn left of combo at x=12)
-            // y+50 to y+74 : icon combo | browse btn
+            // Controls are created at (0,0) and repositioned by LayoutControls below.
             for (int i = 0; i < 6; i++) {
-                int y = SlotY(i);
-
                 s->slots[i].hDevCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
-                    WS_CHILD|CBS_DROPDOWNLIST, 46, y+22, 356, 300,
+                    WS_CHILD|CBS_DROPDOWNLIST, 0, 0, 10, 300,
                     hWnd, (HMENU)(UINT_PTR)(200+i), hInst, nullptr);
                 for (int j = 0; j < (int)s->activeDevices.size(); j++) {
                     int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING,
@@ -480,7 +605,7 @@ namespace AudioSwapGui {
                 DarkCombo(s->slots[i].hDevCombo);
 
                 s->slots[i].hIconCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
-                    WS_CHILD|CBS_DROPDOWNLIST, 46, y+50, 258, 300,
+                    WS_CHILD|CBS_DROPDOWNLIST, 0, 0, 10, 300,
                     hWnd, (HMENU)(UINT_PTR)(300+i), hInst, nullptr);
                 int isel = 0;
                 for (int j = 0; j < kIconCount; j++) {
@@ -490,23 +615,66 @@ namespace AudioSwapGui {
                 SendMessageW(s->slots[i].hIconCombo, CB_SETCURSEL, isel, 0);
                 DarkCombo(s->slots[i].hIconCombo);
 
-                // Browse btn — owner-drawn, shown only when iconKey == "custom"
                 s->slots[i].hBrowseBtn = CreateWindowExW(0, L"BUTTON", L"Browse...",
-                    WS_CHILD|BS_OWNERDRAW, 310, y+48, 92, 26,
+                    WS_CHILD|BS_OWNERDRAW, 0, 0, 10, 10,
                     hWnd, (HMENU)(UINT_PTR)(400+i), hInst, nullptr);
             }
 
-            // ── Bottom buttons — owner-drawn, positioned for initial deviceCount ─
-            int btnY = kTopH + s->deviceCount * kSlotH + 12;
+            // ── Priority controls (left panel) ────────────────────────────────
+            for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+                // Device combo (500+i)
+                s->prioSlots[i].hDevCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
+                    WS_CHILD|WS_VISIBLE|CBS_DROPDOWNLIST, 0, 0, 10, 300,
+                    hWnd, (HMENU)(UINT_PTR)(500+i), hInst, nullptr);
+                SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING, 0, (LPARAM)L"None");
+                int psel = 0;
+                for (int j = 0; j < (int)s->activeDevices.size(); j++) {
+                    int idx = (int)SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING,
+                                                0, (LPARAM)s->activeDevices[j].name.c_str());
+                    if (s->prioSlots[i].id == s->activeDevices[j].id) psel = idx;
+                }
+                if (s->prioSlots[i].isOffline && !s->prioSlots[i].name.empty()) {
+                    WCHAR offLabel[320];
+                    swprintf_s(offLabel, L"%s (offline)", s->prioSlots[i].name.c_str());
+                    int idx = (int)SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING,
+                                                0, (LPARAM)offLabel);
+                    psel = idx;
+                }
+                SendMessageW(s->prioSlots[i].hDevCombo, CB_SETCURSEL, psel, 0);
+                DarkCombo(s->prioSlots[i].hDevCombo);
+
+                // Icon combo (600+i)
+                s->prioSlots[i].hIconCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
+                    WS_CHILD|WS_VISIBLE|CBS_DROPDOWNLIST, 0, 0, 10, 300,
+                    hWnd, (HMENU)(UINT_PTR)(600+i), hInst, nullptr);
+                int isel = 0;
+                for (int j = 0; j < kIconCount; j++) {
+                    SendMessageW(s->prioSlots[i].hIconCombo, CB_ADDSTRING, 0, (LPARAM)kIconLabels[j]);
+                    if (s->prioSlots[i].iconKey == kIconKeys[j]) isel = j;
+                }
+                SendMessageW(s->prioSlots[i].hIconCombo, CB_SETCURSEL, isel, 0);
+                DarkCombo(s->prioSlots[i].hIconCombo);
+
+                // Browse button (700+i) — visible only when iconKey == "custom"
+                s->prioSlots[i].hBrowseBtn = CreateWindowExW(0, L"BUTTON", L"Browse...",
+                    WS_CHILD|BS_OWNERDRAW|(s->prioSlots[i].iconKey == L"custom" ? WS_VISIBLE : 0),
+                    0, 0, 10, 10,
+                    hWnd, (HMENU)(UINT_PTR)(700+i), hInst, nullptr);
+            }
+
+            // ── Bottom buttons ────────────────────────────────────────────────
             s->hSaveBtn = CreateWindowExW(0, L"BUTTON", L"Save and Apply",
-                WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 12, btnY, 148, 28,
+                WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 0, 0, 10, 10,
                 hWnd, (HMENU)IDOK, hInst, nullptr);
             s->hCancelBtn = CreateWindowExW(0, L"BUTTON", L"Cancel",
-                WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 168, btnY, 88, 28,
+                WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 0, 0, 10, 10,
                 hWnd, (HMENU)IDCANCEL, hInst, nullptr);
+            s->hKoFiBtn = CreateWindowExW(0, L"BUTTON", L"Buy Me Coffee",
+                WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 0, 0, 10, 10,
+                hWnd, (HMENU)IDC_BTN_KOFI, hInst, nullptr);
 
             EnumChildWindows(hWnd, ApplyFontProc, reinterpret_cast<LPARAM>(s->hFont));
-            UpdateSlotVisibility(s);
+            UpdateSlotVisibility(s);  // also calls LayoutControls → positions everything
 
             // Request dark title bar from DWM (Win10 1903+, silently fails earlier)
             {
@@ -534,52 +702,80 @@ namespace AudioSwapGui {
             SelectObject(hdc, s->hFont);
             SetBkMode(hdc, TRANSPARENT);
             RECT cr; GetClientRect(hWnd, &cr);
+            UINT d = s->dpi;
+            int sx = s->advancedMode ? SlotsX(d) : 0;
 
-            // ── Top-section labels ────────────────────────────────────────────
+            if (s->advancedMode) {
+                // ── Left panel background + vertical separator ────────────────
+                {
+                    RECT lp = {0, 0, Sc(kPW,d), cr.bottom};
+                    FillRect(hdc, &lp, s->hSurfBrush);
+                    HPEN p = CreatePen(PS_SOLID, 1, kClrBorder);
+                    HPEN op = (HPEN)SelectObject(hdc, p);
+                    MoveToEx(hdc, Sc(kPW,d), 0, nullptr);
+                    LineTo(hdc, Sc(kPW,d), cr.bottom);
+                    SelectObject(hdc, op); DeleteObject(p);
+                }
+
+                // ── Left panel: Device Priority header + rank labels ──────────
+                static const WCHAR* kRankLabels[] = {L"1st:", L"2nd:", L"3rd:", L"4th:", L"5th:", L"6th:"};
+                SetTextColor(hdc, kClrText);
+                {
+                    RECT r2 = {Sc(12,d), Sc(10,d), Sc(kPW-4,d), Sc(28,d)};
+                    DrawTextW(hdc, L"Device Priority", -1, &r2, DT_LEFT|DT_TOP);
+                }
+                SetTextColor(hdc, kClrDim);
+                for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+                    int rowY = PrioRowY(i, d);
+                    RECT rk = {Sc(12,d), rowY + Sc(3,d),  Sc(48,d), rowY + Sc(19,d)};
+                    RECT ri = {Sc(12,d), rowY + Sc(29,d), Sc(48,d), rowY + Sc(45,d)};
+                    DrawTextW(hdc, kRankLabels[i], -1, &rk, DT_LEFT|DT_TOP);
+                    DrawTextW(hdc, L"icon:",        -1, &ri, DT_LEFT|DT_TOP);
+                }
+            }
+
+            // ── Right panel: top-section labels ───────────────────────────────
             SetTextColor(hdc, kClrDim);
             RECT r;
-            r = {12, 22, 78, 38};  DrawTextW(hdc, L"Devices:",  -1, &r, DT_LEFT|DT_TOP);
-            r = {156, 22, 196, 38}; DrawTextW(hdc, L"Mode:",    -1, &r, DT_LEFT|DT_TOP);
+            r = {sx+Sc(12,d), Sc(22,d), sx+Sc(78,d), Sc(38,d)};
+            DrawTextW(hdc, L"Devices:", -1, &r, DT_LEFT|DT_TOP);
+            r = {sx+Sc(156,d), Sc(22,d), sx+Sc(196,d), Sc(38,d)};
+            DrawTextW(hdc, L"Mode:", -1, &r, DT_LEFT|DT_TOP);
 
             // Separator between top controls and slot section
             {
                 HPEN p = CreatePen(PS_SOLID, 1, kClrBorder);
                 HPEN op = (HPEN)SelectObject(hdc, p);
-                MoveToEx(hdc, 12, kTopH - 6, nullptr);
-                LineTo(hdc, cr.right - 12, kTopH - 6);
+                MoveToEx(hdc, sx+Sc(12,d), Sc(kTopH,d) - Sc(6,d), nullptr);
+                LineTo(hdc, cr.right - Sc(12,d), Sc(kTopH,d) - Sc(6,d));
                 SelectObject(hdc, op); DeleteObject(p);
             }
 
             // ── Per-slot headers, icons, and row labels ───────────────────────
             for (int i = 0; i < s->deviceCount; i++) {
-                int y = SlotY(i);
+                int y = SlotY(i, d);
 
-                // Slot header band
-                RECT hdr = {0, y, cr.right, y + 20};
+                RECT hdr = {sx, y, cr.right, y + Sc(20,d)};
                 FillRect(hdc, &hdr, s->hSurfBrush);
 
-                // "Slot N" label in header
                 SetTextColor(hdc, kClrDim);
-                RECT sl = {12, y + 2, 100, y + 18};
+                RECT sl = {sx+Sc(12,d), y + Sc(2,d), sx+Sc(100,d), y + Sc(18,d)};
                 WCHAR lbl[16]; swprintf_s(lbl, L"Slot %d", i + 1);
                 DrawTextW(hdc, lbl, -1, &sl, DT_LEFT|DT_TOP);
 
-                // Slot icon (drawn left of the device combo, vertically centred)
                 if (s->slots[i].hPreviewIcon)
-                    DrawIconEx(hdc, 12, y + 22, s->slots[i].hPreviewIcon,
-                               kIconSz, kIconSz, 0, nullptr, DI_NORMAL);
+                    DrawIconEx(hdc, sx+Sc(12,d), y + Sc(22,d), s->slots[i].hPreviewIcon,
+                               Sc(kIconSz,d), Sc(kIconSz,d), 0, nullptr, DI_NORMAL);
 
-                // "Icon:" row label
                 SetTextColor(hdc, kClrDim);
-                RECT il = {12, y + 54, 44, y + 68};
+                RECT il = {sx+Sc(12,d), y + Sc(54,d), sx+Sc(44,d), y + Sc(68,d)};
                 DrawTextW(hdc, L"Icon:", -1, &il, DT_LEFT|DT_TOP);
 
-                // Row separator (between slots, not after the last visible one)
                 if (i < s->deviceCount - 1) {
                     HPEN p = CreatePen(PS_SOLID, 1, kClrBorder);
                     HPEN op = (HPEN)SelectObject(hdc, p);
-                    MoveToEx(hdc, 0, y + kSlotH - 1, nullptr);
-                    LineTo(hdc, cr.right, y + kSlotH - 1);
+                    MoveToEx(hdc, sx, y + Sc(kSlotH,d) - 1, nullptr);
+                    LineTo(hdc, cr.right, y + Sc(kSlotH,d) - 1);
                     SelectObject(hdc, op); DeleteObject(p);
                 }
             }
@@ -614,7 +810,8 @@ namespace AudioSwapGui {
             if (dis->CtlType != ODT_BUTTON || !s) break;
             bool pressed = (dis->itemState & ODS_SELECTED) != 0;
             bool isSave  = (dis->CtlID == IDOK);
-            bool isBrowse= (dis->CtlID >= 400 && dis->CtlID < 406);
+            bool isBrowse= (dis->CtlID >= 400 && dis->CtlID < 406) ||
+                           (dis->CtlID >= 700 && dis->CtlID < 706);
 
             COLORREF bg;
             if      (isSave)   bg = pressed ? kClrAccentP : kClrAccent;
@@ -653,8 +850,7 @@ namespace AudioSwapGui {
             if (id == 100 && HIWORD(wParam) == CBN_SELCHANGE) {
                 // Device count changed — resize window and show/hide slot rows
                 s->deviceCount = (int)SendMessageW(s->hCountCombo, CB_GETCURSEL, 0, 0) + 2;
-                UpdateSlotVisibility(s);
-                UpdateLayout(s);
+                UpdateSlotVisibility(s);  // calls LayoutControls internally
 
             } else if (id >= 300 && id < 306 && HIWORD(wParam) == CBN_SELCHANGE) {
                 // Icon style changed for slot (id-300) — live preview update
@@ -662,8 +858,10 @@ namespace AudioSwapGui {
                 int sel  = (int)SendMessageW(s->slots[slot].hIconCombo, CB_GETCURSEL, 0, 0);
                 if (sel >= 0 && sel < kIconCount) s->slots[slot].iconKey = kIconKeys[sel];
                 RefreshPreview(s, slot);
-                // Repaint the icon area only
-                RECT ir = {12, SlotY(slot)+20, 12+kIconSz+2, SlotY(slot)+20+kIconSz+2};
+                UINT d = s->dpi;
+                int sx = s->advancedMode ? SlotsX(d) : 0;
+                int y = SlotY(slot, d);
+                RECT ir = {sx+Sc(12,d), y+Sc(20,d), sx+Sc(12,d)+Sc(kIconSz,d)+2, y+Sc(20,d)+Sc(kIconSz,d)+2};
                 InvalidateRect(hWnd, &ir, TRUE);
                 UpdateSlotVisibility(s);  // toggles Browse button
 
@@ -684,9 +882,38 @@ namespace AudioSwapGui {
                 if (GetOpenFileNameW(&ofn)) {
                     wcscpy_s(s->slots[slot].customPath, path);
                     RefreshPreview(s, slot);
-                    RECT ir = {12, SlotY(slot)+20, 12+kIconSz+2, SlotY(slot)+20+kIconSz+2};
+                    UINT d = s->dpi;
+                    int sx = s->advancedMode ? SlotsX(d) : 0;
+                    int y = SlotY(slot, d);
+                    RECT ir = {sx+Sc(12,d), y+Sc(20,d), sx+Sc(12,d)+Sc(kIconSz,d)+2, y+Sc(20,d)+Sc(kIconSz,d)+2};
                     InvalidateRect(hWnd, &ir, TRUE);
                 }
+
+            } else if (id >= 600 && id < 606 && HIWORD(wParam) == CBN_SELCHANGE) {
+                // Priority icon changed
+                int slot = id - 600;
+                int sel  = (int)SendMessageW(s->prioSlots[slot].hIconCombo, CB_GETCURSEL, 0, 0);
+                if (sel >= 0 && sel < kIconCount) s->prioSlots[slot].iconKey = kIconKeys[sel];
+                ShowWindow(s->prioSlots[slot].hBrowseBtn,
+                           s->prioSlots[slot].iconKey == L"custom" ? SW_SHOW : SW_HIDE);
+                LayoutControls(s);
+
+            } else if (id >= 700 && id < 706) {
+                // Browse for custom priority icon
+                int slot = id - 700;
+                WCHAR path[MAX_PATH] = {};
+                wcscpy_s(path, s->prioSlots[slot].customPath);
+                WCHAR title[64]; swprintf_s(title, L"Select Icon for Priority %d", slot + 1);
+                OPENFILENAMEW ofn = {sizeof(ofn)};
+                ofn.hwndOwner = hWnd;
+                ofn.lpstrFilter  = L"Icon Files (*.ico)\0*.ico\0All Files (*.*)\0*.*\0";
+                ofn.nFilterIndex = 1;
+                ofn.lpstrFile    = path;
+                ofn.nMaxFile     = MAX_PATH;
+                ofn.lpstrTitle   = title;
+                ofn.Flags = OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_HIDEREADONLY|OFN_NOCHANGEDIR;
+                if (GetOpenFileNameW(&ofn))
+                    wcscpy_s(s->prioSlots[slot].customPath, path);
 
             } else if (id == IDOK) {
                 s->deviceCount = (int)SendMessageW(s->hCountCombo, CB_GETCURSEL, 0, 0) + 2;
@@ -714,12 +941,63 @@ namespace AudioSwapGui {
                     Wh_SetStringValue(kIco, s->slots[i].iconKey.c_str());
                     Wh_SetStringValue(kPth, s->slots[i].customPath);
                 }
+                // Save priority list
+                for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+                    WCHAR kId[32], kNm[32], kIco[32], kPth[32];
+                    swprintf_s(kId,  L"priority%d",                 i+1);
+                    swprintf_s(kNm,  L"priority%d_name",             i+1);
+                    swprintf_s(kIco, L"priority%d_icon",             i+1);
+                    swprintf_s(kPth, L"priority%d_icon_custom_path", i+1);
+                    int psel = (int)SendMessageW(s->prioSlots[i].hDevCombo, CB_GETCURSEL, 0, 0);
+                    if (psel == 0) {
+                        Wh_SetStringValue(kId, L""); Wh_SetStringValue(kNm, L"");
+                    } else if (psel - 1 < (int)s->activeDevices.size()) {
+                        Wh_SetStringValue(kId, s->activeDevices[psel-1].id.c_str());
+                        Wh_SetStringValue(kNm, s->activeDevices[psel-1].name.c_str());
+                    } else {
+                        // offline entry selected — preserve saved ID/name
+                        Wh_SetStringValue(kId, s->prioSlots[i].id.c_str());
+                        Wh_SetStringValue(kNm, s->prioSlots[i].name.c_str());
+                    }
+                    int pisel = (int)SendMessageW(s->prioSlots[i].hIconCombo, CB_GETCURSEL, 0, 0);
+                    if (pisel >= 0 && pisel < kIconCount) {
+                        Wh_SetStringValue(kIco, kIconKeys[pisel]);
+                        s->prioSlots[i].iconKey = kIconKeys[pisel];
+                    }
+                    Wh_SetStringValue(kPth, s->prioSlots[i].customPath);
+                }
                 if (s->hTrayHwnd) PostMessageW(s->hTrayHwnd, WM_RELOAD_ALL, 0, 0);
                 DestroyWindow(hWnd);
 
             } else if (id == IDCANCEL) {
                 DestroyWindow(hWnd);
+            } else if (id == IDC_BTN_KOFI) {
+                ShellExecuteW(nullptr, L"open", L"https://ko-fi.com/blackpaw21",
+                              nullptr, nullptr, SW_SHOWNORMAL);
             }
+            return 0;
+        }
+
+        // ── DPI change ────────────────────────────────────────────────────────
+        case WM_DPICHANGED: {
+            s->dpi = HIWORD(wParam);
+            // Rebuild font at new DPI.
+            DeleteObject(s->hFont);
+            LOGFONTW lf = {};
+            lf.lfHeight  = -MulDiv(10, (int)s->dpi, 72);
+            lf.lfWeight  = FW_NORMAL;
+            lf.lfQuality = CLEARTYPE_QUALITY;
+            lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+            wcscpy_s(lf.lfFaceName, L"Segoe UI");
+            s->hFont = CreateFontIndirectW(&lf);
+            EnumChildWindows(hWnd, ApplyFontProc, (LPARAM)s->hFont);
+            // Move to OS-suggested rect (avoids visual jump on DPI boundary crossing).
+            const RECT* prc = reinterpret_cast<const RECT*>(lParam);
+            SetWindowPos(hWnd, nullptr, prc->left, prc->top,
+                         prc->right - prc->left, prc->bottom - prc->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            LayoutControls(s);
+            InvalidateRect(hWnd, nullptr, TRUE);
             return 0;
         }
 
@@ -748,6 +1026,12 @@ namespace AudioSwapGui {
     static DWORD WINAPI GuiThreadProc(LPVOID lpParam) {
         CoInitialize(nullptr);
 
+        // Set Per-Monitor DPI Awareness V2 so Windows doesn't bitmap-scale the window.
+        using SetTDACFn = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+        if (auto fn = (SetTDACFn)GetProcAddress(
+                GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"))
+            fn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
         static const WCHAR kClass[] = L"AudioSwapDashboard";
         HINSTANCE hInst = GetModuleHandleW(nullptr);
 
@@ -763,22 +1047,18 @@ namespace AudioSwapGui {
         state.hTrayHwnd = reinterpret_cast<HWND>(lpParam);
         LoadState(state);
 
-        // Size window to exactly fit the initial device count.
-        int clientH = kTopH + state.deviceCount * kSlotH + kBtnH;
-        RECT rc = {0, 0, kCW, clientH};
-        AdjustWindowRectEx(&rc,
-            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-            FALSE, WS_EX_DLGMODALFRAME);
-        int winW = rc.right - rc.left;
-        int winH = rc.bottom - rc.top;
-        int sx   = (GetSystemMetrics(SM_CXSCREEN) - winW) / 2;
-        int sy   = (GetSystemMetrics(SM_CYSCREEN) - winH) / 2;
+        // Create at center of primary monitor (LayoutControls resizes in WM_CREATE
+        // before ShowWindow, so the initial size is just a placeholder).
+        int cxScr = GetSystemMetrics(SM_CXSCREEN);
+        int cyScr = GetSystemMetrics(SM_CYSCREEN);
+        int sx = cxScr / 4;
+        int sy = cyScr / 4;
 
         HWND hWnd = CreateWindowExW(
             WS_EX_DLGMODALFRAME,
             kClass, L"AudioSwap Settings",
             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-            sx, sy, winW, winH,
+            sx, sy, cxScr / 2, cyScr / 2,
             nullptr, nullptr, hInst, &state);
 
         if (hWnd) {
@@ -820,6 +1100,22 @@ namespace AudioSwapGui {
 
 // ─── Device selection data ────────────────────────────────────────────────────
 // All functions below acquire g_stateLock for writes to shared slot data.
+
+void LoadPriorityList() {
+    WCHAR tmpIds[MAX_DEVICE_SLOTS][512] = {};
+    int count = 0;
+    for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+        WCHAR key[32];
+        swprintf_s(key, L"priority%d", i + 1);
+        Wh_GetStringValue(key, tmpIds[i], 512);
+        if (tmpIds[i][0]) count = i + 1;
+    }
+    EnterCriticalSection(&g_stateLock);
+    for (int i = 0; i < MAX_DEVICE_SLOTS; i++)
+        lstrcpynW(g_priorityDevIds[i], tmpIds[i], 512);
+    g_priorityCount = count;
+    LeaveCriticalSection(&g_stateLock);
+}
 
 void LoadDeviceSelections() {
     // Read from Windhawk storage outside the lock (Wh_GetStringValue is thread-safe).
@@ -915,8 +1211,7 @@ static void RefreshTrayIconRect() {
     HWND hwnd = g_trayHwnd;
     if (!hwnd) return;
     NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
-    nii.hWnd = hwnd;
-    nii.uID  = TRAY_ICON_ID;
+    nii.guidItem = AUDIOSWAP_TRAY_GUID;
     RECT newRect = {};
     if (SUCCEEDED(Shell_NotifyIconGetRect(&nii, &newRect)) &&
         newRect.right > newRect.left) {
@@ -928,9 +1223,10 @@ static void RefreshTrayIconRect() {
         // finish its layout pass. Send NIM_MODIFY to give Explorer the
         // necessary nudge to compute the icon's position.
         NOTIFYICONDATAW nid = {sizeof(nid)};
-        nid.hWnd = hwnd;
-        nid.uID  = TRAY_ICON_ID;
-        nid.uFlags = NIF_SHOWTIP;
+        nid.hWnd     = hwnd;
+        nid.uID      = TRAY_ICON_ID;
+        nid.uFlags   = NIF_SHOWTIP | NIF_GUID;
+        nid.guidItem = AUDIOSWAP_TRAY_GUID;
         Shell_NotifyIconW(NIM_MODIFY, &nid);
         SetTimer(hwnd, TRAY_RECT_INIT_TIMER, 200, nullptr);
     }
@@ -1078,49 +1374,55 @@ public:
         EDataFlow flow, ERole role, LPCWSTR) override
     {
         if (flow == eRender && role == eMultimedia) {
-            HWND hwnd = g_trayHwnd;
+            HWND hwnd = (HWND)InterlockedCompareExchangePointer(
+                (volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
             if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
         }
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override {
-        HWND hwnd = g_trayHwnd;
-        if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR pwstrDeviceId) override {
+        HWND hwnd = (HWND)InterlockedCompareExchangePointer(
+            (volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
+        if (hwnd) {
+            PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            if (pwstrDeviceId && pwstrDeviceId[0]) {
+                size_t idLen = wcslen(pwstrDeviceId) + 1;
+                WCHAR* idCopy = new WCHAR[idLen];
+                wcscpy_s(idCopy, idLen, pwstrDeviceId);
+                if (!PostMessageW(hwnd, WM_PRIORITY_DEVICE_ACTIVE, 0, (LPARAM)idCopy))
+                    delete[] idCopy;
+            }
+        }
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override {
-        HWND hwnd = g_trayHwnd;
+        HWND hwnd = (HWND)InterlockedCompareExchangePointer(
+            (volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
         if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override {
-        HWND hwnd = g_trayHwnd;
-        if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD newState) override {
+        HWND hwnd = (HWND)InterlockedCompareExchangePointer(
+            (volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
+        if (hwnd) {
+            PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            if (newState == DEVICE_STATE_ACTIVE && pwstrDeviceId && pwstrDeviceId[0]) {
+                size_t idLen = wcslen(pwstrDeviceId) + 1;
+                WCHAR* idCopy = new WCHAR[idLen];
+                wcscpy_s(idCopy, idLen, pwstrDeviceId);
+                if (!PostMessageW(hwnd, WM_PRIORITY_DEVICE_ACTIVE, 0, (LPARAM)idCopy))
+                    delete[] idCopy;
+            }
+        }
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(
         LPCWSTR, const PROPERTYKEY) override { return S_OK; }
 };
 
-// ─── Mouse hook ───────────────────────────────────────────────────────────────
-
-LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && wParam == WM_MOUSEWHEEL &&
-        InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1)
-    {
-        HWND hwnd = g_trayHwnd;
-        if (hwnd) {
-            const MSLLHOOKSTRUCT* ms = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-            if (PtInRect(&g_trayIconRect, ms->pt)) {
-                short delta     = static_cast<short>(HIWORD(ms->mouseData));
-                int   direction = (delta > 0) ? 1 : -1;
-                PostMessageW(hwnd, WM_TRAY_SCROLL,
-                             static_cast<WPARAM>(static_cast<LONG_PTR>(direction)), 0);
-            }
-        }
-    }
-    return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
-}
+// Scroll-to-swap uses Raw Input (RegisterRawInputDevices + WM_INPUT in TrayWndProc)
+// instead of WH_MOUSE_LL. Raw Input is delivered outside the hook chain, so no
+// other WH_MOUSE_LL hook (e.g., Monitor Sleep Button) can block it.
 
 // ─── Muted icon overlay ───────────────────────────────────────────────────────
 
@@ -1214,6 +1516,10 @@ static HICON CreateMutedOverlayIcon(HICON hBase) {
 
 // ─── Tray tip ─────────────────────────────────────────────────────────────────
 
+static WCHAR s_lastDev[256]  = {};
+static HICON s_lastIcon      = nullptr;
+static bool  s_lastMuted     = false;
+
 void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     // Snapshot shared state under lock (no COM inside the lock).
     WCHAR localDevIds[MAX_DEVICE_SLOTS][512] = {};
@@ -1266,9 +1572,7 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     for (int i = 0; i < localSlotCount; i++)
         if (localDevIds[i][0] != L'\0') configuredCount++;
 
-    static WCHAR s_lastDev[256] = {};
-    static HICON s_lastIcon     = nullptr;
-    static bool  s_lastMuted    = false;
+    // s_lastDev / s_lastIcon / s_lastMuted are file-scope to allow external reset.
     if (!isAdd &&
         wcscmp(currentDev, s_lastDev) == 0 &&
         currentIcon == s_lastIcon &&
@@ -1284,7 +1588,8 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd             = hWnd;
     nid.uID              = TRAY_ICON_ID;
-    nid.uFlags           = NIF_MESSAGE | NIF_TIP | NIF_ICON;
+    nid.uFlags           = NIF_MESSAGE | NIF_TIP | NIF_ICON | NIF_GUID;
+    nid.guidItem         = AUDIOSWAP_TRAY_GUID;
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
 
     if (configuredCount < 2)
@@ -1301,9 +1606,11 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
 
     if (isAdd) {
         NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
-        nidVer.hWnd     = hWnd;
-        nidVer.uID      = TRAY_ICON_ID;
-        nidVer.uVersion = NOTIFYICON_VERSION_4;
+        nidVer.hWnd      = hWnd;
+        nidVer.uID       = TRAY_ICON_ID;
+        nidVer.uFlags    = NIF_GUID;
+        nidVer.guidItem  = AUDIOSWAP_TRAY_GUID;
+        nidVer.uVersion  = NOTIFYICON_VERSION_4;
         Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
     }
 
@@ -1391,6 +1698,25 @@ BOOL CycleAudioDevice(int direction) {
 
 // ─── Context menu ─────────────────────────────────────────────────────────────
 
+static bool IsSystemDarkMode() {
+    DWORD value = 1, size = sizeof(value);
+    RegGetValueW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return value == 0;
+}
+
+static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
+    HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+    if (!ux) return;
+    using Fn135 = int(WINAPI*)(int);
+    using Fn133 = bool(WINAPI*)(HWND, bool);
+    using Fn136 = void(WINAPI*)();
+    if (auto f = (Fn135)GetProcAddress(ux, MAKEINTRESOURCEA(135))) f(dark ? 2 : 0);
+    if (auto f = (Fn133)GetProcAddress(ux, MAKEINTRESOURCEA(133))) f(hWnd, dark);
+    if (auto f = (Fn136)GetProcAddress(ux, MAKEINTRESOURCEA(136))) f();
+}
+
 void BuildAndShowContextMenu(HWND hWnd) {
     HMENU hMenu = CreatePopupMenu();
 
@@ -1405,6 +1731,8 @@ void BuildAndShowContextMenu(HWND hWnd) {
     InsertMenuItemW(hMenu, (UINT)-1, TRUE, &miiWH);
 
     POINT pt; GetCursorPos(&pt);
+    bool dark = IsSystemDarkMode();
+    ApplyContextMenuTheme(hWnd, dark);
     SetForegroundWindow(hWnd);
     int cmd = TrackPopupMenu(hMenu,
         TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
@@ -1439,12 +1767,70 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
 }
 
 static void SpawnCycleThread(int direction) {
-    if (g_workerThread) { CloseHandle(g_workerThread); g_workerThread = nullptr; }
+    if (g_workerThread) {
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+    }
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc,
                                   reinterpret_cast<LPVOID>(static_cast<LONG_PTR>(direction)),
                                   0, nullptr);
     // If CreateThread fails the worker never resets the lock — do it here.
     if (!g_workerThread) InterlockedExchange(&g_isProcessingClick, 0);
+}
+
+// ─── Priority device routing ──────────────────────────────────────────────────
+
+static void HandlePriorityDeviceConnected(HWND hWnd, const WCHAR* devId) {
+    // Snapshot all shared state under the lock before doing any work.
+    EnterCriticalSection(&g_stateLock);
+    int priorityCount = g_priorityCount;
+    WCHAR localPrio[MAX_DEVICE_SLOTS][512] = {};
+    for (int i = 0; i < priorityCount; i++)
+        lstrcpynW(localPrio[i], g_priorityDevIds[i], 512);
+    int slotCount = g_deviceSlotCount;
+    WCHAR localIds[MAX_DEVICE_SLOTS][512] = {};
+    for (int i = 0; i < slotCount; i++)
+        lstrcpynW(localIds[i], g_cachedDevId[i], 512);
+    LeaveCriticalSection(&g_stateLock);
+
+    if (!devId || !devId[0] || priorityCount == 0) return;
+
+    // Find rank of the newly connected device in the priority list.
+    int newRank = -1;
+    for (int i = 0; i < priorityCount; i++) {
+        if (localPrio[i][0] && wcscmp(localPrio[i], devId) == 0) {
+            newRank = i; break;
+        }
+    }
+    if (newRank < 0) return;  // not in the priority list
+
+    // Find the slot currently occupied by the lowest-priority (highest index) device.
+    int worstSlot = -1, worstRank = -1;
+    for (int s = 0; s < slotCount; s++) {
+        int rank = INT_MAX;
+        for (int p = 0; p < priorityCount; p++) {
+            if (localPrio[p][0] && wcscmp(localPrio[p], localIds[s]) == 0) {
+                rank = p; break;
+            }
+        }
+        if (rank > worstRank) { worstRank = rank; worstSlot = s; }
+    }
+
+    if (worstSlot < 0 || worstRank <= newRank) return;  // new device is not higher priority
+
+    // Replace the worst slot with the new priority device.
+    WCHAR kId[32], kNm[32];
+    swprintf_s(kId, L"Device%dId",   worstSlot + 1);
+    swprintf_s(kNm, L"Device%dName", worstSlot + 1);
+    Wh_SetStringValue(kId, devId);
+    Wh_SetStringValue(kNm, L"");
+
+    EnterCriticalSection(&g_stateLock);
+    lstrcpynW(g_cachedDevId[worstSlot],   devId, 512);
+    g_cachedDevName[worstSlot][0] = L'\0';
+    LeaveCriticalSection(&g_stateLock);
+
+    PostMessageW(hWnd, WM_RELOAD_ALL, 0, 0);
 }
 
 // ─── Tray window ──────────────────────────────────────────────────────────────
@@ -1496,8 +1882,32 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             }
         }
 
+    } else if (msg == WM_INPUT) {
+        if (InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1) {
+            UINT sz = 0;
+            GetRawInputData((HRAWINPUT)lParam, RID_INPUT, nullptr, &sz, sizeof(RAWINPUTHEADER));
+            if (sz > 0) {
+                std::vector<BYTE> buf(sz);
+                if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, buf.data(), &sz,
+                                    sizeof(RAWINPUTHEADER)) == sz) {
+                    auto* raw = reinterpret_cast<RAWINPUT*>(buf.data());
+                    if (raw->header.dwType == RIM_TYPEMOUSE &&
+                        (raw->data.mouse.usButtonFlags & RI_MOUSE_WHEEL)) {
+                        POINT pt; GetCursorPos(&pt);
+                        if (PtInRect(&g_trayIconRect, pt)) {
+                            short delta = (short)raw->data.mouse.usButtonData;
+                            int dir = (delta > 0) ? 1 : -1;
+                            PostMessageW(hWnd, WM_TRAY_SCROLL,
+                                         (WPARAM)(LONG_PTR)dir, 0);
+                        }
+                    }
+                }
+            }
+        }
+        return DefWindowProcW(hWnd, msg, wParam, lParam);
+
     } else if (msg == WM_TRAY_SCROLL) {
-        // Posted by LowLevelMouseProc when the user scrolls over the icon
+        // Posted by Raw Input handler when the user scrolls over the icon
         DWORD now = GetTickCount();
         if (now - g_lastScrollTime > SCROLL_DEBOUNCE_MS &&
             InterlockedExchange(&g_isProcessingClick, 1) == 0) {
@@ -1518,11 +1928,12 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
     } else if (msg == WM_UPDATE_HOOK_STATE) {
         LONG isScroll = InterlockedCompareExchange(&g_scrollToSwap, 0, 0);
-        if (isScroll && !g_mouseHook) {
-            g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_hInstance, 0);
-        } else if (!isScroll && g_mouseHook) {
-            UnhookWindowsHookEx(g_mouseHook);
-            g_mouseHook = nullptr;
+        if (isScroll) {
+            RAWINPUTDEVICE rid = { 1, 2, RIDEV_INPUTSINK, hWnd };
+            RegisterRawInputDevices(&rid, 1, sizeof(rid));
+        } else {
+            RAWINPUTDEVICE rid = { 1, 2, RIDEV_REMOVE, nullptr };
+            RegisterRawInputDevices(&rid, 1, sizeof(rid));
         }
 
     } else if (msg == WM_RELOAD_ICONS) {
@@ -1572,22 +1983,34 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             }
         }
 
+    } else if (msg == WM_PRIORITY_DEVICE_ACTIVE) {
+        WCHAR* devId = reinterpret_cast<WCHAR*>(lParam);
+        if (devId) {
+            HandlePriorityDeviceConnected(hWnd, devId);
+            delete[] devId;
+        }
+
     } else if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         UpdateTrayTip(hWnd, TRUE);  // re-add icon after explorer restart
+        RefreshTrayIconRect();      // re-acquire icon screen rect after explorer restart
 
     } else if (msg == WM_RELOAD_ALL) {
         // Full reload triggered by the settings dashboard after Save and Apply.
-        // Picks up new device assignments, icon choices, device count, and swap mode.
+        // Picks up new device assignments, icon choices, device count, swap mode, and priority list.
         LoadDeviceSelections();
+        LoadPriorityList();
         LoadUserIconsAndSettings();
+        s_lastIcon = nullptr;  // icon handles were recreated; force UpdateTrayTip to refresh
         UpdateTrayTip(hWnd, FALSE);
         PostMessageW(hWnd, WM_UPDATE_HOOK_STATE, 0, 0);
 
     } else if (msg == WM_CLOSE) {
         // Orderly shutdown: remove tray icon, then destroy window.
         NOTIFYICONDATAW nid = {sizeof(nid)};
-        nid.hWnd = hWnd;
-        nid.uID  = TRAY_ICON_ID;
+        nid.hWnd     = hWnd;
+        nid.uID      = TRAY_ICON_ID;
+        nid.uFlags   = NIF_GUID;
+        nid.guidItem = AUDIOSWAP_TRAY_GUID;
         Shell_NotifyIconW(NIM_DELETE, &nid);
         DestroyWindow(hWnd);
         return 0;
@@ -1627,22 +2050,6 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         return 1;
     }
 
-    // Set a unique AUMID so the OS doesn't group this with the main Windhawk icon.
-    IPropertyStore* pps = nullptr;
-    if (SUCCEEDED(SHGetPropertyStoreForWindow(g_trayHwnd, IID_PPV_ARGS(&pps)))) {
-        PROPVARIANT var;
-        PropVariantInit(&var);
-        var.vt      = VT_LPWSTR;
-        var.pwszVal = (LPWSTR)CoTaskMemAlloc(MAX_PATH * sizeof(WCHAR));
-        if (var.pwszVal) {
-            lstrcpyW(var.pwszVal, L"BlackPaw.AudioSwitcher");
-            pps->SetValue(PKEY_AppUserModel_ID, var);
-            CoTaskMemFree(var.pwszVal);
-        }
-        pps->Commit();
-        pps->Release();
-    }
-
     // Register for instant device-change notifications.
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                    __uuidof(IMMDeviceEnumerator), (void**)&g_notifEnum))) {
@@ -1650,9 +2057,10 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         g_notifEnum->RegisterEndpointNotificationCallback(g_deviceNotifier);
     }
 
-    // Global mouse hook for scroll-to-swap (only installed in scroll mode).
+    // Register Raw Input for scroll-to-swap (bypasses WH_MOUSE_LL hook chain).
     if (InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1) {
-        g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_hInstance, 0);
+        RAWINPUTDEVICE rid = { 1, 2, RIDEV_INPUTSINK, g_trayHwnd };
+        RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
 
     UpdateTrayTip(g_trayHwnd, TRUE);
@@ -1666,7 +2074,11 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         g_deviceNotifier->Release(); g_deviceNotifier = nullptr;
         g_notifEnum->Release();      g_notifEnum      = nullptr;
     }
-    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
+    // Unregister Raw Input (harmless if not registered).
+    {
+        RAWINPUTDEVICE rid = { 1, 2, RIDEV_REMOVE, nullptr };
+        RegisterRawInputDevices(&rid, 1, sizeof(rid));
+    }
     CoUninitialize();
     return 0;
 }
@@ -1722,6 +2134,7 @@ BOOL WhTool_ModInit() {
 
     LoadUserIconsAndSettings();   // sets g_deviceSlotCount first
     LoadDeviceSelections();
+    LoadPriorityList();
     g_trayThread = CreateThread(nullptr, 0, TrayThreadProc, nullptr, 0, nullptr);
     return TRUE;
 }
@@ -1729,6 +2142,7 @@ BOOL WhTool_ModInit() {
 void WhTool_ModSettingsChanged() {
     RestoreMuteExternal();
     LoadDeviceSelections();
+    LoadPriorityList();
     HWND hwnd = g_trayHwnd;
     if (hwnd) {
         PostMessageW(hwnd, WM_RELOAD_ICONS, 0, 0);
@@ -1764,7 +2178,6 @@ void WhTool_ModUninit() {
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
-    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
     if (g_notifEnum && g_deviceNotifier) {
         g_notifEnum->UnregisterEndpointNotificationCallback(g_deviceNotifier);
         g_deviceNotifier->Release(); g_deviceNotifier = nullptr;
