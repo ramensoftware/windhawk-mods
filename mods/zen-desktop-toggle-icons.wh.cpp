@@ -32,16 +32,12 @@ Have you ever wanted a clean, clutter-free desktop but found it annoying to righ
 #include <windhawk_utils.h>
 
 // Forward Declarations of Subclass Procedures
-LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
-LRESULT CALLBACK DesktopShellViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
+LRESULT CALLBACK DesktopShellViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
 
 // Real pointer to CreateWindowExW hook
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t Real_CreateWindowExW;
-
-// Unique Subclass IDs
-const UINT_PTR SUBCLASS_LISTVIEW_ID = 1001;
-const UINT_PTR SUBCLASS_SHELLVIEW_ID = 1002;
 
 // Helper to find the current active SHELLDLL_DefView window
 HWND FindDesktopShellView() {
@@ -64,11 +60,11 @@ HWND FindDesktopShellView() {
 void SubclassExistingWindows() {
     HWND hwndShell = FindDesktopShellView();
     if (hwndShell) {
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hwndShell, DesktopShellViewSubclassProc, SUBCLASS_SHELLVIEW_ID, 0);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hwndShell, DesktopShellViewSubclassProc, 0);
         
         HWND hwndListView = FindWindowExW(hwndShell, NULL, L"SysListView32", NULL);
         if (hwndListView) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hwndListView, DesktopListViewSubclassProc, SUBCLASS_LISTVIEW_ID, 0);
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hwndListView, DesktopListViewSubclassProc, 0);
         }
     }
 }
@@ -77,11 +73,11 @@ void SubclassExistingWindows() {
 void UnsubclassWindows() {
     HWND hwndShell = FindDesktopShellView();
     if (hwndShell) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwndShell, DesktopShellViewSubclassProc, SUBCLASS_SHELLVIEW_ID);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwndShell, DesktopShellViewSubclassProc);
         
         HWND hwndListView = FindWindowExW(hwndShell, NULL, L"SysListView32", NULL);
         if (hwndListView) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwndListView, DesktopListViewSubclassProc, SUBCLASS_LISTVIEW_ID);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwndListView, DesktopListViewSubclassProc);
         }
     }
 }
@@ -109,13 +105,13 @@ HWND WINAPI Hook_CreateWindowExW(
     if (hWnd) {
         if (lpClassName && !IS_INTRESOURCE(lpClassName)) {
             if (wcscmp(lpClassName, L"SHELLDLL_DefView") == 0) {
-                WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DesktopShellViewSubclassProc, SUBCLASS_SHELLVIEW_ID, 0);
+                WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DesktopShellViewSubclassProc, 0);
             }
             else if (wcscmp(lpClassName, L"SysListView32") == 0) {
                 // Ensure this ListView is indeed the desktop listview
                 WCHAR parentClass[256] = {0};
                 if (hWndParent && GetClassNameW(hWndParent, parentClass, 256) && wcscmp(parentClass, L"SHELLDLL_DefView") == 0) {
-                    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DesktopListViewSubclassProc, SUBCLASS_LISTVIEW_ID, 0);
+                    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DesktopListViewSubclassProc, 0);
                 }
             }
         }
@@ -125,7 +121,7 @@ HWND WINAPI Hook_CreateWindowExW(
 }
 
 // Subclass Proc for the Desktop ListView (Handles click empty space detection)
-LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_LBUTTONDOWN) {
         static DWORD lastClickTime = 0;
         static POINT lastClickPt = {0, 0};
@@ -171,7 +167,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam
 }
 
 // Subclass Proc for the SHELLDLL_DefView (Handles double-click when icons are already hidden)
-LRESULT CALLBACK DesktopShellViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK DesktopShellViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_LBUTTONDOWN) {
         static DWORD lastClickTime = 0;
         static POINT lastClickPt = {0, 0};
