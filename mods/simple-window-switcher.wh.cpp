@@ -493,6 +493,7 @@ static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lParam) {
     GetClassNameW(hChild, cls, 256);
     if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
         data->coreHwnd = hChild;
+        Wh_Log(L"Explorer IPC: Found CoreWindow %p for UWP app", hChild);
         return FALSE;
     }
     return TRUE;
@@ -500,94 +501,162 @@ static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lParam) {
 
 static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
     HICON hIcon = NULL;
+    Wh_Log(L"ResolveIconFromAumid: aumid=%s, desiredSizePx=%d", aumid, desiredSizePx);
+    
     IShellItem* psi = NULL;
-    if (SUCCEEDED(SHCreateItemInKnownFolder(
+    HRESULT hr = SHCreateItemInKnownFolder(
             FOLDERID_AppsFolder, KF_FLAG_DONT_VERIFY,
-            aumid, IID_PPV_ARGS(&psi))) && psi) {
+            aumid, IID_PPV_ARGS(&psi));
+    if (SUCCEEDED(hr) && psi) {
+        Wh_Log(L"ResolveIconFromAumid: SHCreateItemInKnownFolder succeeded");
         IShellItemImageFactory* psiif = NULL;
-        if (SUCCEEDED(psi->QueryInterface(IID_PPV_ARGS(&psiif))) && psiif) {
+        hr = psi->QueryInterface(IID_PPV_ARGS(&psiif));
+        if (SUCCEEDED(hr) && psiif) {
+            Wh_Log(L"ResolveIconFromAumid: QueryInterface(IShellItemImageFactory) succeeded");
             SIZE sz = { desiredSizePx, desiredSizePx };
             HBITMAP hBitmap = NULL;
-            if (SUCCEEDED(psiif->GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_ICONONLY, &hBitmap)) && hBitmap) {
+            hr = psiif->GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_ICONONLY, &hBitmap);
+            if (SUCCEEDED(hr) && hBitmap) {
+                Wh_Log(L"ResolveIconFromAumid: GetImage succeeded");
                 HIMAGELIST hImageList = ImageList_Create(sz.cx, sz.cy, ILC_COLOR32, 1, 0);
                 if (hImageList) {
                     if (ImageList_Add(hImageList, hBitmap, NULL) != -1) {
                         hIcon = ImageList_GetIcon(hImageList, 0, 0);
+                        if (hIcon) Wh_Log(L"ResolveIconFromAumid: Successfully converted to HICON");
+                        else Wh_Log(L"ResolveIconFromAumid: ImageList_GetIcon failed");
+                    } else {
+                        Wh_Log(L"ResolveIconFromAumid: ImageList_Add failed");
                     }
                     ImageList_Destroy(hImageList);
+                } else {
+                    Wh_Log(L"ResolveIconFromAumid: ImageList_Create failed");
                 }
                 DeleteObject(hBitmap);
+            } else {
+                Wh_Log(L"ResolveIconFromAumid: GetImage failed, hr=0x%08X", hr);
             }
             psiif->Release();
+        } else {
+            Wh_Log(L"ResolveIconFromAumid: QueryInterface failed, hr=0x%08X", hr);
         }
         psi->Release();
+    } else {
+        Wh_Log(L"ResolveIconFromAumid: SHCreateItemInKnownFolder failed, hr=0x%08X", hr);
     }
     
     // Fallback: SHParseDisplayName + SHGetFileInfo
     if (!hIcon) {
+        Wh_Log(L"ResolveIconFromAumid: Falling back to SHParseDisplayName");
         WCHAR appsFolderPath[768];
         if (swprintf_s(appsFolderPath, L"shell:AppsFolder\\%s", aumid) > 0) {
             PIDLIST_ABSOLUTE pidl = NULL;
-            if (SUCCEEDED(SHParseDisplayName(appsFolderPath, NULL, &pidl, 0, NULL)) && pidl) {
+            hr = SHParseDisplayName(appsFolderPath, NULL, &pidl, 0, NULL);
+            if (SUCCEEDED(hr) && pidl) {
+                Wh_Log(L"ResolveIconFromAumid: SHParseDisplayName succeeded");
                 SHFILEINFOW sfi = {};
                 UINT flags = SHGFI_PIDL | SHGFI_ICON | (desiredSizePx > 24 ? SHGFI_LARGEICON : SHGFI_SMALLICON);
                 if (SHGetFileInfoW((LPCWSTR)pidl, 0, &sfi, sizeof(sfi), flags)) {
                     hIcon = sfi.hIcon;
+                    if (hIcon) Wh_Log(L"ResolveIconFromAumid: SHGetFileInfoW succeeded");
+                    else Wh_Log(L"ResolveIconFromAumid: SHGetFileInfoW returned no icon");
+                } else {
+                    Wh_Log(L"ResolveIconFromAumid: SHGetFileInfoW failed");
                 }
                 CoTaskMemFree(pidl);
+            } else {
+                Wh_Log(L"ResolveIconFromAumid: SHParseDisplayName failed, hr=0x%08X", hr);
             }
         }
     }
     return hIcon;
 }
 
+typedef HRESULT (WINAPI *SHGetPropertyStoreForWindow_t)(HWND, REFIID, void**);
+static SHGetPropertyStoreForWindow_t g_SHGetPropertyStoreForWindow = nullptr;
+static const PROPERTYKEY kPkeyAppUserModelId = {
+    {0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}},
+    5
+};
+
 LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_WM_SWS_GET_UWP_ICON && uMsg == g_WM_SWS_GET_UWP_ICON) {
         HWND hWndTarget = (HWND)wParam;
         int desiredSizePx = (int)lParam;
         
-        // Find CoreWindow
-        FindCoreWindowData data = {0};
-        EnumChildWindows(hWndTarget, FindCoreWindowProc, (LPARAM)&data);
-        HWND hCore = data.coreHwnd ? data.coreHwnd : hWndTarget;
+        Wh_Log(L"Explorer IPC: Received icon request for HWND %p, size %d", hWndTarget, desiredSizePx);
         
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hCore, &pid);
-        
-        if (!pid) {
-            return NULL;
-        }
-        
-        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (!hProc) {
-            return NULL;
-        }
-        
-        UINT32 aumidLen = 0;
-        LONG rc = GetApplicationUserModelId(hProc, &aumidLen, NULL);
         std::wstring aumid;
         
-        if (rc == ERROR_INSUFFICIENT_BUFFER && aumidLen > 0) {
-            WCHAR* buf = new WCHAR[aumidLen];
-            rc = GetApplicationUserModelId(hProc, &aumidLen, buf);
-            if (rc == ERROR_SUCCESS) {
-                aumid = buf;
-            }
-            delete[] buf;
+        if (!g_SHGetPropertyStoreForWindow) {
+            HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+            if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
+            if (hShell32) g_SHGetPropertyStoreForWindow = (SHGetPropertyStoreForWindow_t)GetProcAddress(hShell32, "SHGetPropertyStoreForWindow");
         }
-        CloseHandle(hProc);
+        
+        if (g_SHGetPropertyStoreForWindow) {
+            IPropertyStore* ps = NULL;
+            if (SUCCEEDED(g_SHGetPropertyStoreForWindow(hWndTarget, IID_PPV_ARGS(&ps))) && ps) {
+                PROPVARIANT pv;
+                PropVariantInit(&pv);
+                if (SUCCEEDED(ps->GetValue(kPkeyAppUserModelId, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
+                    aumid = pv.pwszVal;
+                    Wh_Log(L"Explorer IPC: Got AUMID from PropertyStore = %s", aumid.c_str());
+                }
+                PropVariantClear(&pv);
+                ps->Release();
+            }
+        }
+        
+        if (aumid.empty()) {
+            Wh_Log(L"Explorer IPC: PropertyStore failed or empty, trying Process Handle fallback");
+            FindCoreWindowData data = {0};
+            EnumChildWindows(hWndTarget, FindCoreWindowProc, (LPARAM)&data);
+            HWND hCore = data.coreHwnd ? data.coreHwnd : hWndTarget;
+            
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hCore, &pid);
+            
+            if (pid) {
+                HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                if (hProc) {
+                    UINT32 aumidLen = 0;
+                    LONG rc = GetApplicationUserModelId(hProc, &aumidLen, NULL);
+                    if (rc == ERROR_INSUFFICIENT_BUFFER && aumidLen > 0) {
+                        WCHAR* buf = new WCHAR[aumidLen];
+                        if (GetApplicationUserModelId(hProc, &aumidLen, buf) == ERROR_SUCCESS) {
+                            aumid = buf;
+                            Wh_Log(L"Explorer IPC: Got AUMID from Process = %s", aumid.c_str());
+                        }
+                        delete[] buf;
+                    } else {
+                        Wh_Log(L"Explorer IPC: GetApplicationUserModelId failed, rc=%d", rc);
+                    }
+                    CloseHandle(hProc);
+                } else {
+                    Wh_Log(L"Explorer IPC: OpenProcess failed, err=%u", GetLastError());
+                }
+            }
+        }
         
         if (!aumid.empty()) {
+            Wh_Log(L"Explorer IPC: Got AUMID = %s", aumid.c_str());
+            
             std::wstring cacheKey = aumid + L"_" + std::to_wstring(desiredSizePx);
             if (g_uwpIconCache.find(cacheKey) != g_uwpIconCache.end()) {
+                Wh_Log(L"Explorer IPC: Returning cached icon %p", g_uwpIconCache[cacheKey]);
                 return (LRESULT)g_uwpIconCache[cacheKey];
             }
             
             HICON hIcon = ResolveIconFromAumid(aumid.c_str(), desiredSizePx);
             if (hIcon) {
+                Wh_Log(L"Explorer IPC: Resolved new icon %p", hIcon);
                 g_uwpIconCache[cacheKey] = hIcon;
                 return (LRESULT)hIcon;
+            } else {
+                Wh_Log(L"Explorer IPC: ResolveIconFromAumid failed");
             }
+        } else {
+            Wh_Log(L"Explorer IPC: Failed to obtain AUMID for UWP app");
         }
         return NULL;
     }
@@ -618,12 +687,16 @@ static DWORD WINAPI ExplorerIpcThread(LPVOID) {
 static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
     if (!g_WM_SWS_GET_UWP_ICON) {
         g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
+        Wh_Log(L"TryGetUwpIconFromExplorer: Registered message %u", g_WM_SWS_GET_UWP_ICON);
     }
     HWND hIpc = FindWindowW(L"WindhawkSWS_IpcWindow", NULL);
     if (hIpc) {
         DWORD_PTR res = 0;
-        SendMessageTimeoutW(hIpc, g_WM_SWS_GET_UWP_ICON, (WPARAM)hWnd, desiredSizePx, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &res);
+        LRESULT sendRes = SendMessageTimeoutW(hIpc, g_WM_SWS_GET_UWP_ICON, (WPARAM)hWnd, desiredSizePx, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &res);
+        Wh_Log(L"TryGetUwpIconFromExplorer: SendMessageTimeoutW to %p returned %ld, res = %p", hIpc, sendRes, res);
         return (HICON)res;
+    } else {
+        Wh_Log(L"TryGetUwpIconFromExplorer: WindhawkSWS_IpcWindow not found");
     }
     return NULL;
 }
