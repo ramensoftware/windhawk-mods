@@ -2033,12 +2033,9 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             LoadSettings();
             break;
         case 9: {
-            wchar_t currentProcessPath[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
             HINSTANCE result = ShellExecuteW(nullptr, L"open",
-                                             currentProcessPath,
                                              L"windhawk://mods/local@dynamic-island-for-windows",
-                                             nullptr, SW_SHOWNORMAL);
+                                             nullptr, nullptr, SW_SHOWNORMAL);
             if (reinterpret_cast<INT_PTR>(result) <= 32) {
                 Wh_Log(L"Failed to open Windhawk settings for local@dynamic-island-for-windows.");
             }
