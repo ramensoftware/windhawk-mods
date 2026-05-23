@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          Himanshu
 // @github          https://github.com/devcode90
-// @include         windhawk.exe
+// @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi
 // @license         MIT
@@ -2033,11 +2033,28 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             LoadSettings();
             break;
         case 9: {
-            wchar_t currentProcessPath[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
+            wchar_t windhawkPath[MAX_PATH] = {};
+            HKEY hKey;
+            if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                              L"SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Windhawk",
+                              0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+                DWORD type = REG_SZ;
+                DWORD size = sizeof(windhawkPath);
+                if (RegQueryValueExW(hKey, L"DisplayIcon", nullptr, &type, (LPBYTE)windhawkPath, &size) != ERROR_SUCCESS) {
+                    windhawkPath[0] = L'\0';
+                }
+                RegCloseKey(hKey);
+            }
+            if (windhawkPath[0] == L'\0') {
+                wcscpy_s(windhawkPath, MAX_PATH, L"C:\\Program Files\\Windhawk\\windhawk.exe");
+            }
+
+            wchar_t parameters[MAX_PATH] = {};
+            swprintf_s(parameters, L"windhawk://mods/%s", WH_MOD_ID);
+
             HINSTANCE result = ShellExecuteW(nullptr, L"open",
-                                             currentProcessPath,
-                                             nullptr,
+                                             windhawkPath,
+                                             parameters,
                                              nullptr, SW_SHOWNORMAL);
             if (reinterpret_cast<INT_PTR>(result) <= 32) {
                 Wh_Log(L"Failed to open Windhawk settings.");
@@ -3793,7 +3810,7 @@ void WhTool_ModUninit() {
 }
 
 //////////////////////////////////////////////////////////////////////////////////
-// Tool-mod launcher: runs mod logic in a dedicated windhawk.exe process.
+// Tool-mod launcher: runs mod logic in a dedicated explorer.exe process.
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 
 bool g_isToolModProcessLauncher;
@@ -3805,11 +3822,6 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
-    }
 
     bool isExcluded = false;
     bool isToolModProcess = false;
