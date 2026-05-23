@@ -56,6 +56,10 @@ MOD_METADATA_PARAMS = {
 }
 
 
+def read_mod_source(path: Path) -> str:
+    return path.read_text(encoding='utf-8', errors='ignore').removeprefix('\ufeff')
+
+
 def add_warning(file: Path, line: int, message: str):
     # https://github.com/orgs/community/discussions/26736
     def escape_data(s: str) -> str:
@@ -623,7 +627,7 @@ class ModMetadataValidator:
 
 
 def validate_metadata(path: Path, expected_author: str) -> int:
-    source = path.read_text(encoding='utf-8', errors='ignore')
+    source = read_mod_source(path)
 
     properties, initial_warnings = get_mod_file_metadata(
         StringIO(source),
@@ -769,7 +773,7 @@ def validate_marker_block(
 
 def validate_readme(path: Path) -> int:
     """Validate the mod's README block."""
-    source = path.read_text(encoding='utf-8', errors='ignore')
+    source = read_mod_source(path)
     return validate_marker_block(
         path, source, 'WindhawkModReadme', 'README', required=True
     )
@@ -777,7 +781,7 @@ def validate_readme(path: Path) -> int:
 
 def validate_settings(path: Path) -> int:
     """Validate the mod's settings block, if present."""
-    source = path.read_text(encoding='utf-8', errors='ignore')
+    source = read_mod_source(path)
     return validate_marker_block(
         path, source, 'WindhawkModSettings', 'Settings', required=False
     )
@@ -842,7 +846,7 @@ def get_target_modules_from_previous_line(previous_line: str):
 def validate_symbol_hooks(path: Path):
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8', errors='ignore')
+    mod_source = read_mod_source(path)
     mod_source_lines = mod_source.splitlines()
 
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
@@ -919,7 +923,7 @@ def validate_specific_keywords(path: Path):
     """Check for specific keywords in mod source code."""
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8', errors='ignore')
+    mod_source = read_mod_source(path)
     mod_source_lines = mod_source.splitlines()
 
     # Words to check (pattern, description)
