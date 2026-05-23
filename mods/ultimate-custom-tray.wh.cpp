@@ -1085,12 +1085,10 @@ static void ShowContextMenu(HWND hWnd, UINT itemId,
     for (size_t i = 0; i < items.size(); ++i) {
         const auto& mi = items[i];
 
-        // Skip hidden items
         if (mi.state == L"hidden") {
             continue;
         }
 
-        // Add separator above if requested
         if (mi.separator == L"above") {
             MENUITEMINFOW sepAbove = {};
             sepAbove.cbSize = sizeof(sepAbove);
@@ -1102,7 +1100,6 @@ static void ShowContextMenu(HWND hWnd, UINT itemId,
 
         std::wstring txt = mi.name.empty() ? L"(unnamed)" : mi.name;
 
-        // Add description on the right if provided
         if (!mi.description.empty()) {
             txt += L"\t" + mi.description;
         }
@@ -1114,7 +1111,6 @@ static void ShowContextMenu(HWND hWnd, UINT itemId,
         mii.dwTypeData = txt.data();
         mii.cch        = (UINT)txt.size();
 
-        // Set state: enabled or disabled
         if (mi.state == L"disabled") {
             mii.fState = MFS_DISABLED;
         } else {
@@ -1130,7 +1126,6 @@ static void ShowContextMenu(HWND hWnd, UINT itemId,
         InsertMenuItemW(hMenu, menuPosition, TRUE, &mii);
         menuPosition++;
 
-        // Add separator below if requested
         if (mi.separator == L"below") {
             MENUITEMINFOW sepBelow = {};
             sepBelow.cbSize = sizeof(sepBelow);
