@@ -5,6 +5,7 @@
 // @version         2.1.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
+// @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
 // @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32
 // ==/WindhawkMod==
@@ -1385,8 +1386,9 @@ public:
         if (hwnd) {
             PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
             if (pwstrDeviceId && pwstrDeviceId[0]) {
-                WCHAR* idCopy = new WCHAR[512];
-                wcscpy_s(idCopy, 512, pwstrDeviceId);
+                size_t idLen = wcslen(pwstrDeviceId) + 1;
+                WCHAR* idCopy = new WCHAR[idLen];
+                wcscpy_s(idCopy, idLen, pwstrDeviceId);
                 if (!PostMessageW(hwnd, WM_PRIORITY_DEVICE_ACTIVE, 0, (LPARAM)idCopy))
                     delete[] idCopy;
             }
@@ -1405,8 +1407,9 @@ public:
         if (hwnd) {
             PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
             if (newState == DEVICE_STATE_ACTIVE && pwstrDeviceId && pwstrDeviceId[0]) {
-                WCHAR* idCopy = new WCHAR[512];
-                wcscpy_s(idCopy, 512, pwstrDeviceId);
+                size_t idLen = wcslen(pwstrDeviceId) + 1;
+                WCHAR* idCopy = new WCHAR[idLen];
+                wcscpy_s(idCopy, idLen, pwstrDeviceId);
                 if (!PostMessageW(hwnd, WM_PRIORITY_DEVICE_ACTIVE, 0, (LPARAM)idCopy))
                     delete[] idCopy;
             }
@@ -1765,8 +1768,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
 
 static void SpawnCycleThread(int direction) {
     if (g_workerThread) {
-        if (WaitForSingleObject(g_workerThread, 0) == WAIT_OBJECT_0)
-            CloseHandle(g_workerThread);
+        CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc,
