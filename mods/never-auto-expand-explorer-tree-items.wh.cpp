@@ -2,7 +2,7 @@
 // @id              never-auto-expand-explorer-tree-items
 // @name            Never Auto-Expand Explorer Tree Items
 // @description     Stops the unwanted auto-expansion of navigation pane items even if the "Expand to current folder" option is off
-// @version         1.0
+// @version         1.0.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -15,10 +15,14 @@
 File Explorer automatically expands navigation pane items (such as "This PC")
 even if the "Expand to current folder" option is off, specifically when:
 * Opening any folder inside an external drive in a new tab or window.
-* Navigating to any drive after manually expanding and collapsing "This PC".
+* Navigating to any drive after manually expanding and collapsing the "This PC"
+  item.
 
 This mod prevents this unwanted auto-expansion behavior, keeping the navigation
 pane tidy.
+
+**Note:** The top-level "Desktop" item can still auto-expand when the
+"Show all folders" option is on, keeping the navigation pane populated.
 
 | Before | After |
 | :----: | :---: |
@@ -94,6 +98,23 @@ bool IsUserInteractingWithTreeView(HWND hTreeView)
     return false;
 }
 
+// Helper: Check if the tree item is the only root node in the navigation pane
+// This ensures the "Desktop" node can still auto-expand when the "Show all
+// folders" option is on.
+bool IsSingleRootNode(HWND hTreeView, HTREEITEM hTreeItem)
+{
+    auto hFirstRootItem = reinterpret_cast<HTREEITEM>(
+        SendMessageW(hTreeView, TVM_GETNEXTITEM, TVGN_ROOT, 0));
+    if (hFirstRootItem != nullptr && hTreeItem == hFirstRootItem)
+    {
+        auto hNextSibling = reinterpret_cast<HTREEITEM>(
+            SendMessageW(hTreeView, TVM_GETNEXTITEM, TVGN_NEXT,
+                reinterpret_cast<LPARAM>(hFirstRootItem)));
+        return hNextSibling == nullptr;
+    }
+    return false;
+}
+
 // Hook for SendMessageW
 using SendMessageW_t = decltype(&SendMessageW);
 SendMessageW_t SendMessageW_Original;
@@ -112,7 +133,8 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
             _wcsicmp(szClassName, L"SysTreeView32") == 0)
         {
             if (IsExplorerNavigationPane(hWnd) &&
-                !IsUserInteractingWithTreeView(hWnd))
+                !IsUserInteractingWithTreeView(hWnd) &&
+                !IsSingleRootNode(hWnd, reinterpret_cast<HTREEITEM>(lParam)))
             {
                 return 0;
             }
@@ -128,7 +150,9 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
             if (pTreeViewNotify->action == TVE_EXPAND)
             {
                 if (IsExplorerNavigationPane(pNotifyHeader->hwndFrom) &&
-                    !IsUserInteractingWithTreeView(pNotifyHeader->hwndFrom))
+                    !IsUserInteractingWithTreeView(pNotifyHeader->hwndFrom) &&
+                    !IsSingleRootNode(pNotifyHeader->hwndFrom,
+                        pTreeViewNotify->itemNew.hItem))
                 {
                     return TRUE;
                 }
