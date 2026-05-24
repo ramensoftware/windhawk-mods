@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              desktop-icons-toggle-fork
-// @name            Toggle iconos del escritorio - Fork
-// @description     Muestra/oculta los iconos del escritorio al instante con un boton flotante arrastrable, un atajo de teclado y opacidad ajustable.
+// @name            Toggle Desktop Icons - Fork
+// @description     Instantly show/hide desktop icons with a draggable floating button, a keyboard shortcut, and adjustable opacity.
 // @version         2.1
 // @author          Aaron - KiivYx
 // @github          https://github.com/KiivYx
@@ -12,56 +12,56 @@
 
 // ==WindhawkModReadme==
 /*
-# Toggle iconos del escritorio
+# Toggle Desktop Icons
 
-Hace lo que la opcion de Windows "Ver -> Mostrar iconos del escritorio", pero
-**sin** el menu contextual. Actua directamente sobre la ventana `SysListView32`
-del escritorio (igual que la funcion nativa).
+Does what the Windows option "View -> Show desktop icons" does, but
+**without** the context menu. It acts directly on the desktop's `SysListView32`
+window (same as the native function).
 
-## Formas de alternar
+## Ways to toggle
 
-- **Boton flotante** en pantalla: un clic alterna mostrar/ocultar. **Mantén
-  pulsado y arrastra** para moverlo donde quieras; su posicion se recuerda.
-- **Atajo de teclado global** (por defecto `Ctrl+Alt+D`).
-- **Casilla** "Mostrar iconos del escritorio" en los ajustes del mod.
+- **Floating button** on screen: one click toggles show/hide. **Click
+  and hold to drag** it wherever you want; its position is remembered.
+- **Global keyboard shortcut** (default `Ctrl+Alt+D`).
+- **Checkbox** "Show desktop icons" in the mod settings.
 
 ## Extra
 
-- **Opacidad** de los iconos de 0 a 100 (transparencia), algo que la funcion
-  nativa no permite.
+- **Icon Opacity** from 0 to 100 (transparency), something the native
+  function doesn't allow.
 
-## Uso
+## Usage
 
-1. Compila (`Ctrl+B`) y activa el mod.
-2. Veras el boton flotante. Clic para alternar, arrastra para reubicar.
-3. Puedes ajustar la opacidad del botón desde los ajustes para esconderlo completamente o hacerlo visible para moverlo.
+1. Compile (`Ctrl+B`) and enable the mod.
+2. You will see the floating button. Click to toggle, drag to relocate.
+3. You can adjust the button opacity from the settings to hide it completely or make it visible to move it.
 
-Al desactivar el mod, los iconos vuelven visibles y opacos y el boton desaparece.
+When disabling the mod, the icons become visible and opaque again, and the button disappears.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - showIcons: true
-  $name: Mostrar iconos del escritorio
-  $description: Activa o desactiva la visibilidad de los iconos del escritorio.
+  $name: Show desktop icons
+  $description: Enables or disables the visibility of the desktop icons.
 - opacity: 100
-  $name: Opacidad de los iconos
-  $description: De 0 (invisible) a 100 (totalmente opaco).
+  $name: Icons opacity
+  $description: From 0 (invisible) to 100 (fully opaque).
 - showButton: true
-  $name: Mostrar boton flotante
-  $description: Boton en pantalla para alternar (clic) y arrastrable (mantener y mover).
+  $name: Show floating button
+  $description: On-screen button to toggle (click) and draggable (hold and move).
 - buttonOpacity: 60
-  $name: Opacidad del boton flotante
-  $description: De 1 a 100. (Controla que tan transparente es el boton base).
+  $name: Floating button opacity
+  $description: From 1 to 100. (Controls how transparent the base button is).
 - buttonSize: 64
-  $name: Tamaño del boton flotante
-  $description: Tamaño en pixeles (ej. 32, 46, 64).
+  $name: Floating button size
+  $description: Size in pixels (e.g. 32, 46, 64).
 - hotkey: "Ctrl+Alt+D"
-  $name: Atajo para alternar
+  $name: Toggle shortcut
   $description: >-
-    Combinacion global. Ejemplos: Ctrl+Alt+D, Win+I, Ctrl+Shift+F8. Dejalo vacio
-    para desactivar el atajo.
+    Global combination. Examples: Ctrl+Alt+D, Win+I, Ctrl+Shift+F8. Leave it empty
+    to disable the shortcut.
 */
 // ==/WindhawkModSettings==
 
@@ -71,22 +71,22 @@ Al desactivar el mod, los iconos vuelven visibles y opacos y el boton desaparece
 #include <algorithm>
 
 // ---------------------------------------------------------------------------
-// Estado global
+// Global state
 // ---------------------------------------------------------------------------
-static bool   g_settingShow = true;   // valor de la casilla
+static bool   g_settingShow = true;   // checkbox value
 static int    g_opacity     = 100;    // 0..100
-static bool   g_showButton  = true;   // mostrar boton flotante
+static bool   g_showButton  = true;   // show floating button
 static int    g_btnOpacity  = 60;
 static int    g_btnSize     = 64;
-static bool   g_hidden      = false;  // estado en ejecucion
-static UINT   g_mods        = 0;      // modificadores del atajo
-static UINT   g_vk          = 0;      // tecla del atajo (0 = sin atajo)
+static bool   g_hidden      = false;  // runtime state
+static UINT   g_mods        = 0;      // shortcut modifiers
+static UINT   g_vk          = 0;      // shortcut key (0 = no shortcut)
 
 static HANDLE g_thread      = nullptr;
 static DWORD  g_threadId    = 0;
 static HANDLE g_threadReady = nullptr;
 
-// Boton flotante
+// Floating button
 static HWND   g_btnWnd          = nullptr;
 static bool   g_classRegistered = false;
 static bool   g_dragging        = false;
@@ -96,7 +96,7 @@ static POINT  g_winStart        = {0, 0};
 static const wchar_t* kBtnClass = L"WhDesktopIconsToggleButton";
 
 // ---------------------------------------------------------------------------
-// Localizar la ventana de iconos del escritorio (SysListView32)
+// Locate the desktop icons window (SysListView32)
 // ---------------------------------------------------------------------------
 static BOOL CALLBACK FindDefViewEnumProc(HWND top, LPARAM lp) {
     WCHAR cls[64];
@@ -106,7 +106,7 @@ static BOOL CALLBACK FindDefViewEnumProc(HWND top, LPARAM lp) {
         HWND dv = FindWindowExW(top, nullptr, L"SHELLDLL_DefView", nullptr);
         if (dv) {
             *reinterpret_cast<HWND*>(lp) = dv;
-            return FALSE;  // encontrado, detener enumeracion
+            return FALSE;  // found, stop enumeration
         }
     }
     return TRUE;
@@ -116,7 +116,7 @@ static HWND GetDesktopListView() {
     HWND progman = FindWindowW(L"Progman", nullptr);
     HWND defview = FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
 
-    // En Win10/11 con fondo activo el DefView puede colgar de un WorkerW.
+    // In Win10/11 with active background the DefView might hang from a WorkerW.
     if (!defview) {
         EnumWindows(FindDefViewEnumProc, reinterpret_cast<LPARAM>(&defview));
     }
@@ -127,12 +127,12 @@ static HWND GetDesktopListView() {
 }
 
 // ---------------------------------------------------------------------------
-// Aplicar el estado actual (visibilidad + opacidad) a los iconos
+// Apply the current state (visibility + opacity) to the icons
 // ---------------------------------------------------------------------------
 static void ApplyState() {
     HWND lv = GetDesktopListView();
     if (!lv) {
-        Wh_Log(L"No se encontro la lista de iconos del escritorio");
+        Wh_Log(L"Desktop icons list not found");
         return;
     }
 
@@ -170,7 +170,7 @@ static void ToggleNow() {
 }
 
 // ---------------------------------------------------------------------------
-// Boton flotante: dibujo y comportamiento (Minimalista)
+// Floating button: drawing and behavior (Minimalist)
 // ---------------------------------------------------------------------------
 static void PaintButton(HWND hwnd) {
     PAINTSTRUCT ps;
@@ -179,12 +179,12 @@ static void PaintButton(HWND hwnd) {
     RECT rc;
     GetClientRect(hwnd, &rc);
 
-    // Fondo magenta transparente
+    // Transparent magenta background
     HBRUSH keyBrush = CreateSolidBrush(RGB(255, 0, 255));
     FillRect(hdc, &rc, keyBrush);
     DeleteObject(keyBrush);
 
-    // Botón redondeado simple
+    // Simple rounded button
     COLORREF bgColor = g_hidden ? RGB(60, 60, 60) : RGB(0, 120, 215);
     HBRUSH body = CreateSolidBrush(bgColor);
     HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
@@ -192,10 +192,10 @@ static void PaintButton(HWND hwnd) {
     HGDIOBJ oldBody = SelectObject(hdc, body);
     HGDIOBJ oldPen = SelectObject(hdc, pen);
     
-    // Dibuja la caja
+    // Draw the box
     RoundRect(hdc, rc.left + 2, rc.top + 2, rc.right - 2, rc.bottom - 2, 12, 12);
     
-    // Indicador rojo cuando los iconos están ocultos
+    // Red indicator when icons are hidden
     if (g_hidden) {
         int padding = g_btnSize / 4;
         HPEN redPen = CreatePen(PS_SOLID, 3, RGB(230, 60, 60));
@@ -256,7 +256,7 @@ static LRESULT CALLBACK BtnWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 ReleaseCapture();
                 
                 if (!g_moved) {
-                    ToggleNow();  // fue un clic: alternar
+                    ToggleNow();  // it was a click: toggle
                 } else {
                     RECT rc;
                     GetWindowRect(hwnd, &rc);
@@ -286,7 +286,7 @@ static void CreateButtonWindow() {
         wc.hInstance     = hInst;
         wc.hCursor       = LoadCursorW(nullptr, IDC_SIZEALL);
         wc.lpszClassName = kBtnClass;
-        RegisterClassExW(&wc);  // si ya existe, se ignora
+        RegisterClassExW(&wc);  // if it already exists, it gets ignored
         g_classRegistered = true;
     }
 
@@ -325,7 +325,7 @@ static void DestroyButtonWindow() {
 }
 
 // ---------------------------------------------------------------------------
-// Parseo del atajo de teclado
+// Keyboard shortcut parsing
 // ---------------------------------------------------------------------------
 static UINT KeyNameToVk(const std::wstring& t) {
     if (t.size() == 1) {
@@ -394,7 +394,7 @@ static bool ParseHotkey(PCWSTR s, UINT* mods, UINT* vk) {
 }
 
 // ---------------------------------------------------------------------------
-// Hilo de interfaz: atajo de teclado + bombeo de mensajes del boton
+// UI Thread: keyboard shortcut + button message pumping
 // ---------------------------------------------------------------------------
 static DWORD WINAPI UiThreadProc(LPVOID) {
     MSG msg;
@@ -404,7 +404,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     if (g_vk)
         registered = RegisterHotKey(nullptr, 1, g_mods, g_vk);
     if (g_vk && !registered)
-        Wh_Log(L"No se pudo registrar el atajo (puede estar en uso)");
+        Wh_Log(L"Could not register the shortcut (might be in use)");
 
     CreateButtonWindow();
 
@@ -428,7 +428,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
 static void StartUiThread() {
     if (!g_vk && !g_showButton)
-        return;  // nada que hacer
+        return;  // nothing to do
     g_threadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_threadId);
     if (g_threadReady) {
@@ -450,7 +450,7 @@ static void StopUiThread() {
 }
 
 // ---------------------------------------------------------------------------
-// Ajustes
+// Settings
 // ---------------------------------------------------------------------------
 static void LoadSettings() {
     g_settingShow = Wh_GetIntSetting(L"showIcons") != 0;
@@ -477,7 +477,7 @@ static void LoadSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// Ciclo de vida del mod
+// Mod lifecycle
 // ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
@@ -497,7 +497,7 @@ void Wh_ModUninit() {
 
     StopUiThread();
 
-    // Restaurar iconos visibles y opacos al desactivar el mod.
+    // Restore visible and opaque icons when disabling the mod.
     g_hidden = false;
     g_opacity = 100;
     ApplyState();
@@ -509,7 +509,7 @@ void Wh_ModSettingsChanged() {
     StopUiThread();
     LoadSettings();
 
-    // La casilla manda al editar ajustes.
+    // The checkbox takes priority when editing settings.
     g_hidden = !g_settingShow;
     Wh_SetIntValue(L"hidden", g_hidden ? 1 : 0);
 
