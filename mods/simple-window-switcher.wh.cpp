@@ -2207,6 +2207,39 @@ void WINAPI EntryPoint_Hook() {
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk lifecycle
 
+static bool IsMainExplorer() {
+    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hTaskbar) {
+        DWORD trayPid = 0;
+        GetWindowThreadProcessId(hTaskbar, &trayPid);
+        if (trayPid != GetCurrentProcessId()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool IsExplorerUptimeLarge() {
+    FILETIME creationTime, exitTime, kernelTime, userTime;
+    if (GetProcessTimes(GetCurrentProcess(), &creationTime, &exitTime, &kernelTime, &userTime)) {
+        ULARGE_INTEGER creation;
+        creation.LowPart = creationTime.dwLowDateTime;
+        creation.HighPart = creationTime.dwHighDateTime;
+        
+        FILETIME systemTime;
+        GetSystemTimeAsFileTime(&systemTime);
+        ULARGE_INTEGER current;
+        current.LowPart = systemTime.dwLowDateTime;
+        current.HighPart = systemTime.dwHighDateTime;
+        
+        // 30 seconds = 300,000,000 intervals of 100ns
+        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 300000000ULL) {
+            return true;
+        }
+    }
+    return false;
+}
+
 BOOL Wh_ModInit() {
     WCHAR exePath[MAX_PATH];
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
@@ -2232,31 +2265,22 @@ BOOL Wh_ModInit() {
             }
         }
 
-        // Restart prompt lifecycle detection
-        BOOL isShuttingDown = GetSystemMetrics(SM_SHUTTINGDOWN);
-        int restartFlag = Wh_GetIntValue(L"RestartedByMod", 0);
-        int storedPID = Wh_GetIntValue(L"LastPID", -1);
-        int currentPID = (int)GetCurrentProcessId();
-        Wh_Log(L"SWS DIAG: shuttingDown=%d restartFlag=%d storedPID=%d currentPID=%d",
-               isShuttingDown, restartFlag, storedPID, currentPID);
-
-        if (!isShuttingDown) {
-            if (restartFlag == 1) {
-                Wh_SetIntValue(L"RestartedByMod", 0);
-                Wh_Log(L"SWS: Post-restart init, skipping prompt");
-            } else if (storedPID == currentPID) {
-                Wh_Log(L"SWS: Same PID, recompile/re-enable -> prompting");
-                PromptForExplorerRestart(true);
-            } else if (storedPID == -1) {
-                Wh_Log(L"SWS: No stored PID, first install -> prompting");
+        // Check if Explorer has already registered standard hotkeys.
+        // We use Alt+Tab as a probe. If it fails, Explorer is mid-session and already owns it.
+        // We only do this for the main Explorer process, and only if it's been running for a while (>30s),
+        // to avoid false prompts on system startup or when secondary Explorers are launched.
+        if (!GetSystemMetrics(SM_SHUTTINGDOWN) && IsMainExplorer() && IsExplorerUptimeLarge()) {
+            Wh_Log(L"SWS: Checking if Explorer is mid-session -> probing Alt+Tab");
+            if (!RegisterHotKey(NULL, 0x1337, MOD_ALT, VK_TAB)) {
+                Wh_Log(L"SWS: Alt+Tab failed -> Explorer is mid-session, prompting");
                 PromptForExplorerRestart(true);
             } else {
-                Wh_Log(L"SWS: Different PID (logon/restart), hook active -> skipping");
+                Wh_Log(L"SWS: Alt+Tab succeeded -> Explorer hasn't registered it, skipping prompt");
+                UnregisterHotKey(NULL, 0x1337);
             }
         } else {
-            Wh_Log(L"SWS: System shutting down, skipping prompt");
+            Wh_Log(L"SWS: System shutting down or early startup/secondary explorer, skipping prompt");
         }
-        Wh_SetIntValue(L"LastPID", currentPID);
 
         return TRUE;
     }
@@ -2432,8 +2456,10 @@ void Wh_ModUninit() {
         }
         g_uwpIconCache.clear();
 
-        if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
-            PromptForExplorerRestart(false);
+        if (g_isExplorer && IsMainExplorer()) {
+            if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
+                PromptForExplorerRestart(false);
+            }
         }
 
         if (g_restartExplorerPromptThread) {
