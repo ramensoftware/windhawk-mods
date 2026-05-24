@@ -210,7 +210,7 @@ bool ApplyHooks(HMODULE hMsHtml) {
             return false;
         }
     }
-    HMODULE d2d1 = GetModuleHandleW(L"d2d1.dll");
+    HMODULE d2d1 = GetModuleHandleW(L"d2d1.dll"); // should already be loaded at this point
     if (d2d1) {
         if (WindhawkUtils::HookSymbols(d2d1, &d2d1DllHooks, 1)) {
             Wh_Log(L"d2d1.dll HookSymbols OK");
