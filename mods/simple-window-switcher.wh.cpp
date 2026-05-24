@@ -377,8 +377,7 @@ static HRESULT CALLBACK RestartPromptDialogCallback(HWND hwnd, UINT msg, WPARAM,
     return S_OK;
 }
 
-static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
-    bool setFlag = (bool)(uintptr_t)param;
+static DWORD WINAPI RestartPromptThreadProc(LPVOID) {
     TASKDIALOGCONFIG tdc = {};
     tdc.cbSize = sizeof(tdc);
     tdc.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
@@ -390,10 +389,6 @@ static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
 
     int button;
     if (SUCCEEDED(TaskDialogIndirect(&tdc, &button, nullptr, nullptr)) && button == IDYES) {
-        if (setFlag) {
-            Wh_SetIntValue(L"RestartedByMod", 1);
-        }
-        Wh_SetIntValue(L"LastPID", -1);
         WCHAR cmd[] = L"cmd.exe /c \"timeout /t 1 /nobreak >nul & taskkill /F /IM explorer.exe & start explorer.exe\"";
         STARTUPINFO si = { .cb = sizeof(si) };
         PROCESS_INFORMATION pi = {};
@@ -405,13 +400,13 @@ static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
     return 0;
 }
 
-static void PromptForExplorerRestart(bool setFlag) {
+static void PromptForExplorerRestart() {
     if (g_restartExplorerPromptThread) {
         if (WaitForSingleObject(g_restartExplorerPromptThread, 0) != WAIT_OBJECT_0) return;
         CloseHandle(g_restartExplorerPromptThread);
     }
     g_restartExplorerPromptThread = CreateThread(
-        nullptr, 0, RestartPromptThreadProc, (LPVOID)(uintptr_t)setFlag, 0, nullptr);
+        nullptr, 0, RestartPromptThreadProc, nullptr, 0, nullptr);
 }
 
 
@@ -2406,7 +2401,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"SWS: Checking if Explorer is mid-session -> probing Alt+Tab");
             if (!RegisterHotKey(NULL, 0x1337, MOD_ALT, VK_TAB)) {
                 Wh_Log(L"SWS: Alt+Tab failed -> Explorer is mid-session, prompting");
-                PromptForExplorerRestart(true);
+                PromptForExplorerRestart();
             } else {
                 Wh_Log(L"SWS: Alt+Tab succeeded -> Explorer hasn't registered it, skipping prompt");
                 UnregisterHotKey(NULL, 0x1337);
@@ -2591,7 +2586,7 @@ void Wh_ModUninit() {
 
         if (g_isExplorer && IsMainExplorer()) {
             if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
-                PromptForExplorerRestart(false);
+                PromptForExplorerRestart();
             }
         }
 
