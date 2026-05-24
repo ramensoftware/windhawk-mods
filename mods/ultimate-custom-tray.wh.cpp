@@ -151,7 +151,7 @@ Each context menu item has the following settings:
     - light: Light
     - dark: Dark
   $name: Style Settings
-- ContextMenuSettings:
+- MenuSettings:
   - menu_near_icon: false
     $name: Open menu near tray icon
     $description: "When enabled, menu opens near the tray icon instead of at cursor position."
@@ -1241,9 +1241,9 @@ static void LoadAllSettings() {
         Wh_FreeStringSetting(pMenu);
     }
 
-    g_menuNearIcon = Wh_GetIntSetting(L"ContextMenuSettings.menu_near_icon") != 0;
+    g_menuNearIcon = Wh_GetIntSetting(L"MenuSettings.menu_near_icon") != 0;
 
-    PCWSTR pDirection = Wh_GetStringSetting(L"ContextMenuSettings.menu_direction");
+    PCWSTR pDirection = Wh_GetStringSetting(L"MenuSettings.menu_direction");
     g_menuDirection = L"top";
     if (pDirection) {
         if (wcscmp(pDirection, L"bottom") == 0) g_menuDirection = L"bottom";
@@ -1252,7 +1252,7 @@ static void LoadAllSettings() {
         Wh_FreeStringSetting(pDirection);
     }
 
-    PCWSTR pAlignment = Wh_GetStringSetting(L"ContextMenuSettings.menu_alignment");
+    PCWSTR pAlignment = Wh_GetStringSetting(L"MenuSettings.menu_alignment");
     g_menuAlignment = L"center";
     if (pAlignment) {
         if (wcscmp(pAlignment, L"left") == 0) g_menuAlignment = L"left";
@@ -1260,7 +1260,7 @@ static void LoadAllSettings() {
         Wh_FreeStringSetting(pAlignment);
     }
 
-    g_menuOffset = Wh_GetIntSetting(L"ContextMenuSettings.menu_offset");
+    g_menuOffset = Wh_GetIntSetting(L"MenuSettings.menu_offset");
     if (g_menuOffset < 0 || g_menuOffset > 200) g_menuOffset = 10;
 
     UpdateTrayIcons(true);
