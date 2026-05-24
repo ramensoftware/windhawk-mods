@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.1.1
+// @version         1.2.0
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -1030,6 +1030,43 @@ bool NeedsDwmHook()
            g_settings.DisableWinKey || g_settings.DisableCtrlEsc;
 }
 
+bool IsMainExplorer()
+{
+    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hTaskbar)
+    {
+        DWORD trayPid = 0;
+        GetWindowThreadProcessId(hTaskbar, &trayPid);
+        if (trayPid != GetCurrentProcessId())
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsExplorerUptimeLarge()
+{
+    FILETIME creationTime, exitTime, kernelTime, userTime;
+    if (GetProcessTimes(GetCurrentProcess(), &creationTime, &exitTime, &kernelTime, &userTime))
+    {
+        ULARGE_INTEGER creation;
+        creation.LowPart = creationTime.dwLowDateTime;
+        creation.HighPart = creationTime.dwHighDateTime;
+        
+        FILETIME systemTime;
+        GetSystemTimeAsFileTime(&systemTime);
+        ULARGE_INTEGER current;
+        current.LowPart = systemTime.dwLowDateTime;
+        current.HighPart = systemTime.dwHighDateTime;
+        
+        // 30 seconds = 300,000,000 intervals of 100ns
+        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 300000000ULL)
+            return true;
+    }
+    return false;
+}
+
 // ----------------------------------------------------------------------------
 // Windhawk Mod Entry Points
 // ----------------------------------------------------------------------------
@@ -1064,7 +1101,9 @@ BOOL Wh_ModInit()
 
         // Check if Explorer has already registered standard hotkeys.
         // We use Win+R as a probe. If it fails, Explorer is mid-session and already owns it.
-        if (!IsFirstTimeInit())
+        // We only do this for the main Explorer process, and only if it's been running for a while (>30s),
+        // to avoid false prompts on system startup or when secondary Explorers are launched.
+        if (IsMainExplorer() && IsExplorerUptimeLarge() && !IsFirstTimeInit())
         {
             if (!RegisterHotKey(NULL, 0x1337, MOD_WIN | MOD_NOREPEAT, 'R'))
             {
@@ -1088,7 +1127,7 @@ void Wh_ModUninit()
     if (g_isDWM)
         StopHookThread();
 
-    if (g_isExplorer)
+    if (g_isExplorer && IsMainExplorer())
     {
         // Use the native prompt instead of PowerShell. 
         // We call the existing prompt function and wait for it to complete.
@@ -1115,6 +1154,6 @@ void Wh_ModSettingsChanged()
             StopHookThread();
     }
     
-    if (g_isExplorer)
+    if (g_isExplorer && IsMainExplorer())
         PromptForExplorerRestart();
 }
