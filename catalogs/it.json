@@ -3336,6 +3336,37 @@
                 "version": "1.1"
             }
         },
+        "dwm-custom-projection-border": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1779652887000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779652887000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "erisune",
+                "description": "Customize or disable the yellow border drawn by DWM when a capture is started using WinRT",
+                "github": "https://github.com/erisune",
+                "include": [
+                    "dwm.exe"
+                ],
+                "license": "GPL-3.0",
+                "name": "DWM Custom Projection Border",
+                "version": "1.0.0"
+            }
+        },
         "dwm-ghost-mods": {
             "details": {
                 "defaultSorting": 3890,
