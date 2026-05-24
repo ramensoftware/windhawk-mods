@@ -8886,7 +8886,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1779555015000,
+                "updated": 1779645575000,
                 "users": 3
             },
             "metadata": {
@@ -8899,7 +8899,7 @@
                     "explorer.exe"
                 ],
                 "name": "Simple Window Switcher",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "slick-window-arrangement": {

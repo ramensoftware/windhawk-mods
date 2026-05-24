@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-24T15:57:38.000Z</updated>
+    <updated>2026-05-24T17:59:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Simple Window Switcher 1.1]]></title>
+        <id>https://windhawk.net/mods/simple-window-switcher#666743da4e145c838ffbbf89db8f15aa8c7915da</id>
+        <link href="https://windhawk.net/mods/simple-window-switcher"/>
+        <updated>2026-05-24T17:59:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Refactor Explorer Restart Prompt logic</li>
+<li>Fixed an issue where the Show Delay setting is broken, <a href="https://github.com/Louis047/windhawk-mods/blob/c0b6582ad2161f8406e294b2a74639851923cfac/mods/simple-window-switcher.wh.cpp#L1510">as it just freezes the switcher thread and blocks the message loop</a> Fix by <a href="https://github.com/zhilemann">@zhilemann</a></li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Ultimate Custom Tray 2.1]]></title>
         <id>https://windhawk.net/mods/ultimate-custom-tray#75eb49df7dd3d7ada526f7592d1f164290950150</id>
@@ -352,42 +366,6 @@ open a separate window instead.</li>
         <author>
             <name>ALMAS CP</name>
             <uri>https://github.com/almas-cp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ultimate Custom Tray 2.0]]></title>
-        <id>https://windhawk.net/mods/ultimate-custom-tray#d1eda85043c68ec6afa97504e8dd438f82916916</id>
-        <link href="https://windhawk.net/mods/ultimate-custom-tray"/>
-        <updated>2026-05-20T23:03:17.000Z</updated>
-        <content type="html"><![CDATA[<p>New Features:</p>
-<ul>
-<li>Added ability to swap left/right click actions for each tray icon individually. Enable "Swap mouse buttons" in settings to make left-click open context menu and right-click run the action.</li>
-<li>Icons can now be extracted directly from .exe and .dll files. Simply specify the full path to an application in the Icon field (e.g., C:\Program Files\Windhawk\windhawk.exe).</li>
-<li>Icon color now supports "Auto" mode that automatically detects Windows light/dark theme and adjusts icon colors accordingly.</li>
-<li>Context menus now support "Auto" theme mode that follows Windows system theme, plus manual Light/Dark options.</li>
-<li>Added press: prefix for keyboard shortcuts (e.g., press:Win+E), plus modifier signs - (run as admin) and * (show terminal window).</li>
-<li>Added Open menu near tray icon option — context menu can now open near the tray icon instead of at cursor position</li>
-<li>Added Menu direction setting — choose where menu appears (above/below/left/right of icon)</li>
-<li>Added Menu alignment setting — control menu alignment relative to icon (center/left/right/top/bottom)</li>
-</ul>
-<p>Improvements:</p>
-<ul>
-<li>Improved icon rendering quality with better antialiasing</li>
-<li>Better handling of icon extraction and resizing</li>
-<li>Enhanced context menu appearance with proper dark mode support</li>
-<li>Fixed pre-multiplied alpha rendering for menu icons</li>
-<li>Added support for more image formats in context menus</li>
-</ul>
-<p>Technical:</p>
-<ul>
-<li>Added uxtheme.dll integration for native dark mode menus</li>
-<li>Improved GDI+ icon scaling with high-quality interpolation</li>
-<li>Better memory management for icon resources</li>
-<li>Enhanced thread safety for icon operations</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>
