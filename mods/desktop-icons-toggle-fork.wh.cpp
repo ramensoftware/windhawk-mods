@@ -3,8 +3,8 @@
 // @name            Toggle iconos del escritorio - Fork
 // @description     Muestra/oculta los iconos del escritorio al instante con un boton flotante arrastrable, un atajo de teclado y opacidad ajustable.
 // @version         2.1
-// @author          Aaron
-// @github          https://github.com/
+// @author          Aaron - KiivYx
+// @github          https://github.com/KiivYx
 // @include         explorer.exe
 // @compilerOptions -luser32 -lgdi32
 // @license         MIT
