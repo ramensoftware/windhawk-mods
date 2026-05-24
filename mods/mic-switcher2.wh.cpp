@@ -2,9 +2,9 @@
 // @id              mic-switcher2
 // @name            Mic Switcher
 // @description     Adds a tray icon to instantly toggle between two preferred audio inputs (microphones).
-// @version         1.0.0
+// @version         1.1.0
 // @author          BlackPaw
-// @github          https://github.com/BlackPaw21
+// @github          https://github.com/fadihajji1
 // @include         windhawk.exe
 // @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lshlwapi
 // ==/WindhawkMod==
@@ -27,6 +27,16 @@ Instantly toggle between two audio input devices (microphones) from your system 
 ---
 
 ## Changelog
+
+### v1.1.0
+- Fix: Separate tray icon from Windhawk process grouping
+  - Add unique GUID (GUID_MicSwitcherTrayIcon) to tray icon to prevent Windows from grouping it with Windhawk's process
+  - Include NIF_GUID flag in Shell_NotifyIcon calls for both ADD/MODIFY and DELETE operations
+  - Set SetCurrentProcessExplicitAppUserModelID early in WhTool_ModInit() before window creation
+  - Use unique AppUserModelID ("BlackPaw.MicSwitcher.ToolMod") for tool process to ensure proper taskbar grouping
+  - Add #include <initguid.h> for GUID macro support
+  - Ensure window property store also uses tool-specific AppUserModelID
+  - Resolves issue where dragging the mic icon to the taskbar would attach it to Windhawk's icon instead of creating a separate taskbar entry
 
 ### v1.0.0
 - Initial release. Mirrors AudioSwap but targets audio input/capture devices.
