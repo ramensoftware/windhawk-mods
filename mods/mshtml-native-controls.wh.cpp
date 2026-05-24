@@ -27,6 +27,8 @@
 * Internet Explorer (`iexplore.exe`) uses a 32-bit subprocess by default, and the subprocess will fail to save its symbol downloaded from the Windhawk server.
 * To fix this, please run the following in the run dialog (Win+R) to launch a 32-bit MSHTML as a main process to load the symbols:
 * `C:\Windows\SysWOW64\hh.exe http://www.ingan121.com/` (or any other `http` URL that isn't `https`)
+## Known issues
+* Internet Explorer will crash when changing the settings or loading/unloading/updating the mod while it's running. This is not necessarily true for other apps using MSHTML.
 */
 // ==/WindhawkModReadme==
 
@@ -96,8 +98,11 @@ CTridentPrivateDebugAPI_SetDCompEnabled_t SetDCompEnabled;
 
 typedef int (__stdcall* CTooltip_ShowModernTip_t)(void* pThis, const unsigned __int16* a2, HWND a3, __int64 a4, void* a5, __int64 a6, int a7, void* a8, int a9, int a10, int a11);
 CTooltip_ShowModernTip_t CTooltip_ShowModernTip_original;
-int __stdcall CTooltip_ShowModernTip_hook(void* pThis, void* unused, const unsigned __int16* a2, HWND a3, __int64 a4, void* a5, __int64 a6, int a7, void* a8, int a9, int a10, int a11) {
-    return E_NOTIMPL; // Deny to show the older one
+int __stdcall CTooltip_ShowModernTip_hook(void* pThis, const unsigned __int16* a2, HWND a3, __int64 a4, void* a5, __int64 a6, int a7, void* a8, int a9, int a10, int a11) {
+    if (g_settings.oldControls) {
+        return E_NOTIMPL; // Deny to show the older one
+    }
+    return CTooltip_ShowModernTip_original(pThis, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11);
 }
 
 void (_fastcall *CDXRenderTarget_DrawGlyphRun_orig)(void *, void *, void *, void *, void *, void *, void *, int, int, int, int);
@@ -132,9 +137,101 @@ void STDMETHODCALLTYPE D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_hook
                 break;
         }
         pThis->SetTextAntialiasMode(antialiasMode);
+
+        return D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_orig(pThis, baselineOrigin, glyphRun, glyphRunDescription, foregroundBrush, DWRITE_MEASURING_MODE_GDI_CLASSIC);
     }
 
-    return D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_orig(pThis, baselineOrigin, glyphRun, glyphRunDescription, foregroundBrush, DWRITE_MEASURING_MODE_GDI_CLASSIC);
+    return D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_orig(pThis, baselineOrigin, glyphRun, glyphRunDescription, foregroundBrush, measuringMode);
+}
+
+WindhawkUtils::SYMBOL_HOOK mshtmlDllHooks[] = {
+    {
+        {
+            L"public: virtual long " SSTDCALL " CTridentPrivateDebugAPI::SetEnableWebControlVisuals(int)"
+        },
+        (void**)&SetEnableWebControlVisuals,
+        NULL,
+        FALSE
+    },
+    {
+        {
+            L"public: virtual long " SSTDCALL " CTridentPrivateDebugAPI::SetDCompEnabled(int)"
+        },
+        (void**)&SetDCompEnabled,
+        NULL,
+        FALSE
+    },
+    {
+        {
+            #ifdef _WIN64
+            L"private: long __cdecl CTooltip::ShowModernTip(unsigned short *,struct HWND__ *,struct tagMSG *,struct tagRECT *,unsigned __int64,int,struct tagPOINT *,int,enum TOOLTIP_PLACEMENT,enum TOOLTIP_TEXTSIZE)"
+            #else
+            L"private: long __thiscall CTooltip::ShowModernTip(unsigned short *,struct HWND__ *,struct tagMSG *,struct tagRECT *,unsigned long,int,struct tagPOINT *,int,enum TOOLTIP_PLACEMENT,enum TOOLTIP_TEXTSIZE)"
+            #endif
+        },
+        (void**)&CTooltip_ShowModernTip_original,
+        (void*)CTooltip_ShowModernTip_hook,
+        FALSE
+    },
+    {
+        {
+            #ifdef _WIN64
+            L"public: virtual void __cdecl CDXRenderTarget::DrawGlyphRun(class CPointF,struct DWRITE_GLYPH_RUN const *,struct ID2D1Brush *,unsigned short const *,unsigned int,unsigned short const *,enum IDispFont::RenderingMode,enum ColorFontMode)const "
+            #else
+            L"public: virtual void __thiscall CDXRenderTarget::DrawGlyphRun(class CPointF,struct DWRITE_GLYPH_RUN const *,struct ID2D1Brush *,unsigned short const *,unsigned int,unsigned short const *,enum IDispFont::RenderingMode,enum ColorFontMode)const "
+            #endif
+        },
+        (void**)&CDXRenderTarget_DrawGlyphRun_orig,
+        (void*)CDXRenderTarget_DrawGlyphRun_hook,
+        FALSE
+    },
+};
+WindhawkUtils::SYMBOL_HOOK d2d1DllHooks {
+    {
+        #ifdef _WIN64
+        L"public: virtual void __cdecl D2DDeviceContextBase<struct ID2D1DeviceContext6,struct ID2D1DeviceContext6,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)",
+        L"public: virtual void __cdecl D2DDeviceContextBase<struct ID2D1DeviceContext7,struct ID2D1DeviceContext7,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)"
+        #else
+        L"public: virtual void __stdcall D2DDeviceContextBase<struct ID2D1DeviceContext6,struct ID2D1DeviceContext6,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)",
+        L"public: virtual void __stdcall D2DDeviceContextBase<struct ID2D1DeviceContext7,struct ID2D1DeviceContext7,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)"
+        #endif
+    },
+    &D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_orig,
+    D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_hook,
+    false
+};
+
+bool ApplyHooks(HMODULE hMsHtml) {
+    if (hMsHtml) {
+        if (WindhawkUtils::HookSymbols(hMsHtml, mshtmlDllHooks, ARRAYSIZE(mshtmlDllHooks))) {
+            Wh_Log(L"mshtml.dll HookSymbols OK");
+        } else {
+            Wh_Log(L"mshtml.dll HookSymbols failed");
+            return false;
+        }
+    }
+    HMODULE d2d1 = GetModuleHandleW(L"d2d1.dll");
+    if (d2d1) {
+        if (WindhawkUtils::HookSymbols(d2d1, &d2d1DllHooks, 1)) {
+            Wh_Log(L"d2d1.dll HookSymbols OK");
+        } else {
+            Wh_Log(L"d2d1.dll HookSymbols failed");
+            // Not critical, continue without text rendering mode options
+        }
+    }
+
+    Wh_ApplyHookOperations();
+
+    if (g_settings.oldControls && SetEnableWebControlVisuals) {
+        SetEnableWebControlVisuals(NULL, FALSE);
+        Wh_Log(L"SetEnableWebControlVisuals called");
+    }
+    if (g_settings.noDComp && SetDCompEnabled) {
+        SetDCompEnabled(NULL, FALSE);
+        Wh_Log(L"SetDCompEnabled called");
+    }
+
+    return true;
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -148,82 +245,7 @@ HMODULE WINAPI LoadLibraryExW_hook(const wchar_t* lpLibFileName, HANDLE hFile, D
     if (GetModuleFileNameW(res, moduleName, MAX_PATH)) {
         if (wcsstr(_wcsupr(moduleName), L"MSHTML.DLL") != NULL) {
             Wh_Log(L"mshtml.dll loaded, hooking symbols");
-            WindhawkUtils::SYMBOL_HOOK mshtmlDllHooks[] = {
-                {
-                    {
-                        L"public: virtual long " SSTDCALL " CTridentPrivateDebugAPI::SetEnableWebControlVisuals(int)"
-                    },
-                    (void**)&SetEnableWebControlVisuals,
-                    NULL,
-                    FALSE
-                },
-                {
-                    {
-                        L"public: virtual long " SSTDCALL " CTridentPrivateDebugAPI::SetDCompEnabled(int)"
-                    },
-                    (void**)&SetDCompEnabled,
-                    NULL,
-                    FALSE
-                },
-                {
-                    {
-                        #ifdef _WIN64
-                        L"private: long __cdecl CTooltip::ShowModernTip(unsigned short *,struct HWND__ *,struct tagMSG *,struct tagRECT *,unsigned __int64,int,struct tagPOINT *,int,enum TOOLTIP_PLACEMENT,enum TOOLTIP_TEXTSIZE)"
-                        #else
-                        L"private: long __thiscall CTooltip::ShowModernTip(unsigned short *,struct HWND__ *,struct tagMSG *,struct tagRECT *,unsigned long,int,struct tagPOINT *,int,enum TOOLTIP_PLACEMENT,enum TOOLTIP_TEXTSIZE)"
-                        #endif
-                    },
-                    (void**)&CTooltip_ShowModernTip_original,
-                    (void*)CTooltip_ShowModernTip_hook,
-                    FALSE
-                },
-                {
-                    {
-                        #ifdef _WIN64
-                        L"public: virtual void __cdecl CDXRenderTarget::DrawGlyphRun(class CPointF,struct DWRITE_GLYPH_RUN const *,struct ID2D1Brush *,unsigned short const *,unsigned int,unsigned short const *,enum IDispFont::RenderingMode,enum ColorFontMode)const "
-                        #else
-                        L"public: virtual void __thiscall CDXRenderTarget::DrawGlyphRun(class CPointF,struct DWRITE_GLYPH_RUN const *,struct ID2D1Brush *,unsigned short const *,unsigned int,unsigned short const *,enum IDispFont::RenderingMode,enum ColorFontMode)const "
-                        #endif
-                    },
-                    (void**)&CDXRenderTarget_DrawGlyphRun_orig,
-                    (void*)CDXRenderTarget_DrawGlyphRun_hook,
-                    FALSE
-                },
-            };
-            WindhawkUtils::SYMBOL_HOOK d2d1DllHooks {
-                {
-                    #ifdef _WIN64
-                    L"public: virtual void __cdecl D2DDeviceContextBase<struct ID2D1DeviceContext6,struct ID2D1DeviceContext6,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)",
-                    L"public: virtual void __cdecl D2DDeviceContextBase<struct ID2D1DeviceContext7,struct ID2D1DeviceContext7,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)"
-                    #else
-                    L"public: virtual void __stdcall D2DDeviceContextBase<struct ID2D1DeviceContext6,struct ID2D1DeviceContext6,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)",
-                    L"public: virtual void __stdcall D2DDeviceContextBase<struct ID2D1DeviceContext7,struct ID2D1DeviceContext7,class null_type>::DrawGlyphRun(struct D2D_POINT_2F,struct DWRITE_GLYPH_RUN const *,struct DWRITE_GLYPH_RUN_DESCRIPTION const *,struct ID2D1Brush *,enum DWRITE_MEASURING_MODE)"
-                    #endif
-                },
-                &D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_orig,
-                D2DDeviceContextBase_ID2D1DeviceContext_DrawGlyphRun_hook,
-                false
-            };
-            if (!WindhawkUtils::HookSymbols(res, mshtmlDllHooks, ARRAYSIZE(mshtmlDllHooks))) {
-                Wh_Log(L"HookSymbols failed");
-            } else {
-                HMODULE d2d1 = GetModuleHandleW(L"d2d1.dll"); // should already be loaded at this point
-                if (d2d1) {
-                    if (WindhawkUtils::HookSymbols(d2d1, &d2d1DllHooks, 1)) {
-                        Wh_Log(L"d2d1.dll HookSymbols OK");
-                    }
-                }
-                Wh_ApplyHookOperations();
-
-                if (g_settings.oldControls && SetEnableWebControlVisuals) {
-                    SetEnableWebControlVisuals(NULL, FALSE);
-                    Wh_Log(L"SetEnableWebControlVisuals called");
-                }
-                if (g_settings.noDComp && SetDCompEnabled) {
-                    SetDCompEnabled(NULL, FALSE);
-                    Wh_Log(L"SetDCompEnabled called");
-                }
-            }
+            ApplyHooks(res);
         }
     }
     return res;
@@ -260,11 +282,20 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    HMODULE hMsHtml = GetModuleHandleW(L"mshtml.dll");
+    if (hMsHtml) {
+        Wh_Log(L"mshtml.dll already loaded, hooking symbols");
+        if (ApplyHooks(hMsHtml)) {
+            return TRUE;
+        }
+    }
+
     // Loading mshtml.dll in every process is definitely not a good idea, so hook this and begin mshtml hooks only when mshtml.dll is actually loading.
     if (!Wh_SetFunctionHook((void*)LoadLibraryExW, (void*)LoadLibraryExW_hook, (void**)&LoadLibraryExW_original)) {
         Wh_Log(L"Wh_SetFunctionHook LoadLibraryExW failed");
         return FALSE;
     }
+
     return TRUE;
 }
 
@@ -275,4 +306,12 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    if (SetEnableWebControlVisuals) {
+        SetEnableWebControlVisuals(NULL, !g_settings.oldControls);
+        Wh_Log(L"SetEnableWebControlVisuals called");
+    }
+    if (SetDCompEnabled) {
+        SetDCompEnabled(NULL, !g_settings.noDComp);
+        Wh_Log(L"SetDCompEnabled called");
+    }
 }
