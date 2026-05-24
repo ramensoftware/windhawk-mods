@@ -1,3 +1,7 @@
+## 1.2.0 ([May 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4960f73fdd2c7d829d7d160372887ad73b46f0be/mods/disable-windows-shortcuts.wh.cpp))
+
+- Fixed an annoying issue for users with PowerToys installed where it triggers the explorer restart prompt every time during startup. Addresses [#3973](https://github.com/ramensoftware/windhawk-mods/issues/3973)
+
 ## 1.1.1 ([Apr 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/00f99498b90b44630ab4e46c10038c3e3000a663/mods/disable-windows-shortcuts.wh.cpp))
 
 - Added new shortcuts ([#3880](https://github.com/ramensoftware/windhawk-mods/issues/3880))

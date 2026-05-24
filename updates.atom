@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-24T07:08:26.000Z</updated>
+    <updated>2026-05-24T08:50:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Windows Shortcuts 1.2.0]]></title>
+        <id>https://windhawk.net/mods/disable-windows-shortcuts#4960f73fdd2c7d829d7d160372887ad73b46f0be</id>
+        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
+        <updated>2026-05-24T08:50:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an annoying issue for users with PowerToys installed where it triggers the explorer restart prompt every time during startup. Addresses <a href="https://github.com/ramensoftware/windhawk-mods/issues/3973">#3973</a></li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dynamic Island for Windows 1.0.1]]></title>
         <id>https://windhawk.net/mods/dynamic-island-for-windows#b6e013b94fe87b954b5fa2621b7388d150cfae22</id>
@@ -377,20 +390,6 @@ open a separate window instead.</li>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 1.4.0]]></title>
-        <id>https://windhawk.net/mods/audioswap#e0943fee9ae46fd36207fa540b7047695ab1543c</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-05-20T16:33:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>added Custom icon selection from <code>.ico</code> files.</li>
-<li>opens the file explorer after saving the custom settings</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

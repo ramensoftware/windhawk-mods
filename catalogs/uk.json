@@ -3148,7 +3148,7 @@
                     10
                 ],
                 "ratingUsers": 11,
-                "updated": 1777492049000,
+                "updated": 1779612626000,
                 "users": 76
             },
             "metadata": {
@@ -3161,7 +3161,7 @@
                     "dwm.exe"
                 ],
                 "name": "Disable Windows Shortcuts",
-                "version": "1.1.1"
+                "version": "1.2.0"
             }
         },
         "discord-balloon-notifs": {
