@@ -2,7 +2,7 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as https from 'https';
 import * as path from 'path';
-import ModSourceUtils from './modSourceUtils';
+import ModSourceUtils from './modSourceUtils.js';
 import { Feed } from 'feed';
 import { OutgoingHttpHeaders } from 'http';
 import showdown from 'showdown';
@@ -13,6 +13,62 @@ type ModAuthorData = {
     homepages: string[],
     twitter?: string;
 };
+
+type CommitMeta = {
+    timestamp: number;
+    message: string;
+};
+
+type FileChange = {
+    changeType: string;
+    filePath: string;
+};
+
+class GitCache {
+    commitMeta: Map<string, CommitMeta>;
+    commitOrder: string[];
+    modCommits: Map<string, { commit: string; changeType: string }[]>;
+    commitFiles: Map<string, FileChange[]>;
+    blobs: Map<string, string>;
+
+    constructor(data: {
+        commitMeta: Map<string, CommitMeta>;
+        commitOrder: string[];
+        modCommits: Map<string, { commit: string; changeType: string }[]>;
+        commitFiles: Map<string, FileChange[]>;
+        blobs: Map<string, string>;
+    }) {
+        this.commitMeta = data.commitMeta;
+        this.commitOrder = data.commitOrder;
+        this.modCommits = data.modCommits;
+        this.commitFiles = data.commitFiles;
+        this.blobs = data.blobs;
+    }
+
+    getCommitMeta(commit: string): CommitMeta {
+        const meta = this.commitMeta.get(commit);
+        if (!meta) {
+            throw new Error(`No metadata for commit ${commit}`);
+        }
+        return meta;
+    }
+
+    getModCommits(modId: string): { commit: string; changeType: string }[] {
+        const entries = this.modCommits.get(modId);
+        if (!entries || entries.length === 0) {
+            throw new Error(`No commit history for mod ${modId}`);
+        }
+        return entries;
+    }
+
+    getBlob(ref: string): string {
+        const content = this.blobs.get(ref);
+        if (content === undefined) {
+            throw new Error(`Blob not found in cache: ${ref}`);
+        }
+        return content;
+    }
+}
 
 // Inspired by https://gist.github.com/ktheory/df3440b01d4b9d3197180d5254d7fb65
 async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
@@ -59,35 +115,156 @@ function gitExec(args: string[]) {
     return result.stdout;
 }
 
-function getModCreatedTime(modId: string) {
-    const time = parseInt(gitExec([
-        'log',
-        '--diff-filter=A',
-        '--format=%ct',
-        '-1',
-        '--',
-        `mods/${modId}.wh.cpp`,
-    ]), 10);
-    if (isNaN(time)) {
-        throw new Error(`Can't get created time for ${modId}`);
+function batchReadBlobs(refs: string[]): Map<string, string> {
+    if (refs.length === 0) {
+        return new Map();
     }
 
-    return time * 1000;
+    const result = child_process.spawnSync('git', ['cat-file', '--batch'], {
+        input: refs.join('\n') + '\n',
+        maxBuffer: 512 * 1024 * 1024,
+    });
+
+    if (result.status !== 0) {
+        throw new Error('git cat-file --batch failed with status ' + result.status +
+            ' and stderr ' + (result.stderr?.toString() ?? ''));
+    }
+
+    const output = result.stdout;
+    const map = new Map<string, string>();
+    let offset = 0;
+
+    for (let i = 0; i < refs.length; i++) {
+        const headerEnd = output.indexOf(0x0A, offset);
+        if (headerEnd === -1) {
+            throw new Error(`Unexpected end of cat-file output at ref ${refs[i]}`);
+        }
+        const header = output.subarray(offset, headerEnd).toString('utf8');
+
+        if (header.endsWith('missing')) {
+            throw new Error(`git cat-file: ${refs[i]} → ${header}`);
+        }
+
+        const size = parseInt(header.split(' ')[2], 10);
+        const contentStart = headerEnd + 1;
+        const content = output.subarray(contentStart, contentStart + size).toString('utf8');
+        map.set(refs[i], content);
+        offset = contentStart + size + 1;
+    }
+
+    return map;
 }
 
-function getModModifiedTime(modId: string) {
-    const time = parseInt(gitExec([
-        'log',
-        '--format=%ct',
-        '-1',
-        '--',
-        `mods/${modId}.wh.cpp`,
-    ]), 10);
-    if (isNaN(time)) {
-        throw new Error(`Can't get modified time for ${modId}`);
+function buildGitCache(): GitCache {
+    console.log('Building git cache...');
+
+    // Bulk 1: All commit metadata (hash, timestamp, message).
+    // Uses double-null as record separator, single-null as field separator.
+    console.log('  Loading commit metadata...');
+    const metaOutput = gitExec(['log', '--format=%H%x00%ct%x00%B%x00%x00']);
+    const commitMeta = new Map<string, CommitMeta>();
+    const commitOrder: string[] = [];
+
+    for (const record of metaOutput.split('\0\0')) {
+        const trimmed = record.replace(/^\n/, '');
+        if (!trimmed) {
+            continue;
+        }
+        const firstNull = trimmed.indexOf('\0');
+        const secondNull = trimmed.indexOf('\0', firstNull + 1);
+        const hash = trimmed.slice(0, firstNull);
+        const timestamp = parseInt(trimmed.slice(firstNull + 1, secondNull), 10);
+        const message = trimmed.slice(secondNull + 1);
+        commitMeta.set(hash, { timestamp, message });
+        commitOrder.push(hash);
+    }
+    console.log(`  ${commitMeta.size} commits`);
+
+    // Bulk 2: All commits with their changed files (name-status).
+    // Null byte before hash makes commit boundaries unambiguous.
+    console.log('  Loading commit file changes...');
+    const fileOutput = gitExec(['log', '--format=%x00%H', '--name-status', '--no-renames']);
+    const modCommits = new Map<string, { commit: string; changeType: string }[]>();
+    const commitFiles = new Map<string, FileChange[]>();
+
+    const chunks = fileOutput.split('\0');
+    // First chunk is always empty (before the leading null byte).
+    if (chunks[0].trim()) {
+        throw new Error('Unexpected content before first null byte in git log output');
     }
 
-    return time * 1000;
+    for (let ci = 1; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+        if (!chunk.trim()) {
+            // Trailing empty chunk after last null byte.
+            if (ci !== chunks.length - 1) {
+                throw new Error('Unexpected empty chunk in git log output');
+            }
+            break;
+        }
+        const lines = chunk.split('\n');
+        const hash = lines[0].trim();
+        if (!/^[0-9a-f]{40}$/.test(hash)) {
+            throw new Error(`Expected a commit hash, got '${hash}'`);
+        }
+
+        const files: FileChange[] = [];
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) {
+                // Blank lines separate the hash from file entries.
+                continue;
+            }
+            const statusMatch = line.match(/^([A-Z]\d*)\t(.+)$/);
+            if (!statusMatch) {
+                throw new Error(`Unexpected name-status line in commit ${hash}: '${line}'`);
+            }
+            const changeType = statusMatch[1][0];
+            const filePath = statusMatch[2].split('\t').pop()!; // last part handles renames
+
+            files.push({ changeType, filePath });
+
+            const match = filePath.match(/^mods\/(.+)\.wh\.cpp$/);
+            if (match) {
+                const modId = match[1];
+                if (!modCommits.has(modId)) {
+                    modCommits.set(modId, []);
+                }
+                modCommits.get(modId)!.push({ commit: hash, changeType });
+            }
+        }
+        commitFiles.set(hash, files);
+    }
+    console.log(`  ${modCommits.size} mods, ${commitFiles.size} commits with file data`);
+
+    // Bulk 3: Pre-fetch all mod blobs via cat-file --batch.
+    console.log('  Pre-fetching mod blobs...');
+    const blobRefs: string[] = [];
+    for (const [modId, entries] of modCommits) {
+        for (const entry of entries) {
+            if (entry.changeType !== 'D') {
+                blobRefs.push(`${entry.commit}:mods/${modId}.wh.cpp`);
+            }
+        }
+    }
+    const blobs = batchReadBlobs(blobRefs);
+    console.log(`  ${blobs.size} blobs loaded`);
+
+    return new GitCache({ commitMeta, commitOrder, modCommits, commitFiles, blobs });
+}
+
+function getModCreatedTime(modId: string, cache: GitCache) {
+    const entries = cache.getModCommits(modId);
+    const oldest = entries[entries.length - 1];
+    if (oldest.changeType !== 'A') {
+        throw new Error(`Expected first commit for mod ${modId} to be an add, got '${oldest.changeType}'`);
+    }
+    return cache.getCommitMeta(oldest.commit).timestamp * 1000;
+}
+
+function getModModifiedTime(modId: string, cache: GitCache) {
+    const entries = cache.getModCommits(modId);
+    return cache.getCommitMeta(entries[0].commit).timestamp * 1000;
 }
 
 function findCachedMod(modId: string, version: string, arch: string) {
@@ -235,13 +412,9 @@ function handleCompiledFiles(
     }
 }
 
-function generateChangelogEntry(modId: string, commit: string, lastCommit: string, metadata: { version: string }) {
-    const commitTime = parseInt(gitExec([
-        'log',
-        '--format=%ct',
-        '-1',
-        commit,
-    ]), 10);
+function generateChangelogEntry(modId: string, commit: string, lastCommit: string, metadata: { version: string }, cache: GitCache) {
+    const meta = cache.getCommitMeta(commit);
+    const commitTime = meta.timestamp;
 
     const commitFormattedDate = new Date(commitTime * 1000)
         .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -251,13 +424,7 @@ function generateChangelogEntry(modId: string, commit: string, lastCommit: strin
     let changelogEntry = `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
 
     if (commit !== lastCommit) {
-        const commitMessage = gitExec([
-            'log',
-            '-1',
-            '--pretty=format:%B',
-            commit,
-        ]);
-        const changelogItem = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
+        const changelogItem = getModChangelogTextForVersion(modId, metadata.version, meta.message);
         changelogEntry += `${changelogItem}\n\n`;
     } else {
         changelogEntry += 'Initial release.\n';
@@ -266,7 +433,7 @@ function generateChangelogEntry(modId: string, commit: string, lastCommit: strin
     return { changelogEntry, commitTime };
 }
 
-function generateModData(modId: string, changelogPath: string, modDir: string, modAuthorData: Record<string, ModAuthorData>) {
+function generateModData(modId: string, changelogPath: string, modDir: string, modAuthorData: Record<string, ModAuthorData>, cache: GitCache) {
     if (!fs.existsSync(modDir)) {
         fs.mkdirSync(modDir);
     }
@@ -281,19 +448,11 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
 
     const modSourceUtils = new ModSourceUtils('mods');
 
-    const commits = gitExec([
-        'rev-list',
-        'HEAD',
-        '--',
-        `mods/${modId}.wh.cpp`,
-    ]).trim().split('\n');
+    const commits = cache.getModCommits(modId).map(e => e.commit);
     const lastCommit = commits[commits.length - 1];
 
     for (const commit of commits) {
-        const modFile = gitExec([
-            'show',
-            `${commit}:mods/${modId}.wh.cpp`,
-        ]);
+        const modFile = cache.getBlob(`${commit}:mods/${modId}.wh.cpp`);
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
@@ -333,7 +492,7 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
 
         const { changelogEntry, commitTime } = generateChangelogEntry(modId, commit, lastCommit, {
             version: metadata.version,
-        });
+        }, cache);
         changelog += changelogEntry;
 
         versions.unshift({
@@ -386,7 +545,7 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
     }
 }
 
-function generateModsData() {
+function generateModsData(cache: GitCache) {
     const changelogDir = 'changelogs';
     if (!fs.existsSync(changelogDir)) {
         fs.mkdirSync(changelogDir);
@@ -402,7 +561,7 @@ function generateModsData() {
                 const modId = modsSourceDirEntry.name.slice(0, -'.wh.cpp'.length);
                 const changelogPath = path.join(changelogDir, `${modId}.md`);
                 const modDir = path.join('mods', modId);
-                generateModData(modId, changelogPath, modDir, modAuthorData);
+                generateModData(modId, changelogPath, modDir, modAuthorData, cache);
             }
         }
     } finally {
@@ -414,7 +573,7 @@ function generateModsData() {
     fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 4));
 }
 
-function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any) {
+function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any, cache: GitCache) {
     const app = {
         version: enrichment.app.version,
         versionBleedingEdge: enrichment.app.versionBleedingEdge,
@@ -428,8 +587,8 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
         }
 
         modTimes[id] = modTimes[id] || {
-            published: getModCreatedTime(id),
-            updated: getModModifiedTime(id),
+            published: getModCreatedTime(id, cache),
+            updated: getModModifiedTime(id, cache),
         };
 
         mods[id] = {
@@ -457,7 +616,7 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
     };
 }
 
-async function generateModCatalogs() {
+async function generateModCatalogs(cache: GitCache) {
     const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
     const enrichment = await fetchJson(enrichmentUrl);
 
@@ -471,7 +630,7 @@ async function generateModCatalogs() {
     const modTimes = {};
 
     const catalog = modSourceUtils.getMetadataOfMods('en-US');
-    const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
+    const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes, cache);
     fs.writeFileSync('catalog.json', JSONstringifyOrder(catalogEnriched, 4));
 
     const catalogsDir = 'catalogs';
@@ -487,7 +646,7 @@ async function generateModCatalogs() {
 
         const language = translateFileName.slice(0, -'.yml'.length);
         const catalog = modSourceUtils.getMetadataOfMods(language);
-        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
+        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes, cache);
         fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 4));
     }
 }
@@ -508,7 +667,7 @@ function getModChangelogTextForVersion(modId: string, modVersion: string, commit
     }
 }
 
-function generateRssFeed() {
+function generateRssFeed(feedType: 'updates' | 'releases', cache: GitCache) {
     type FeedItem = {
         commit: string;
         title: string;
@@ -525,24 +684,16 @@ function generateRssFeed() {
 
     const modSourceUtils = new ModSourceUtils('mods');
 
-    const commits = gitExec([
-        'rev-list',
-        'HEAD',
-    ]).trim().split('\n');
+    const allowedChangeTypes = feedType === 'releases' ? ['A'] : ['A', 'M'];
 
-    for (const commit of commits) {
-        const changedFiles = gitExec([
-            'show',
-            '--name-status',
-            '--pretty=format:',
-            commit,
-        ]).trim().split('\n');
-        if (changedFiles.length !== 1) {
+    for (const commit of cache.commitOrder) {
+        const files = cache.commitFiles.get(commit);
+        if (!files || files.length !== 1) {
             continue;
         }
 
-        const [changeType, filePath] = changedFiles[0].split('\t');
-        if (changeType !== 'A' && changeType !== 'M') {
+        const { changeType, filePath } = files[0];
+        if (!allowedChangeTypes.includes(changeType)) {
             continue;
         }
 
@@ -553,10 +704,7 @@ function generateRssFeed() {
 
         const modId = match[1];
 
-        const modFile = gitExec([
-            'show',
-            `${commit}:mods/${modId}.wh.cpp`,
-        ]);
+        const modFile = cache.getBlob(`${commit}:mods/${modId}.wh.cpp`);
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
@@ -564,22 +712,12 @@ function generateRssFeed() {
             throw new Error(`Mod ${modId} has no version in commit ${commit}`);
         }
 
-        const commitTime = parseInt(gitExec([
-            'log',
-            '--format=%ct',
-            '-1',
-            commit,
-        ]), 10);
+        const meta = cache.getCommitMeta(commit);
+        const commitTime = meta.timestamp;
 
         let content = '';
         if (changeType === 'M') {
-            const commitMessage = gitExec([
-                'log',
-                '-1',
-                '--pretty=format:%B',
-                commit,
-            ]);
-            content = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
+            content = getModChangelogTextForVersion(modId, metadata.version, meta.message);
         } else {
             content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
         }
@@ -602,8 +740,12 @@ function generateRssFeed() {
     }
 
     const feed = new Feed({
-        title: 'Windhawk Mod Updates',
-        description: 'Updates in the official collection of Windhawk mods',
+        title: feedType === 'releases'
+            ? 'Windhawk New Mod Releases'
+            : 'Windhawk Mod Updates',
+        description: feedType === 'releases'
+            ? 'New mods in the official collection of Windhawk mods'
+            : 'Updates in the official collection of Windhawk mods',
         id: 'https://windhawk.net/',
         link: 'https://windhawk.net/',
         favicon: 'https://windhawk.net/favicon.ico',
@@ -636,11 +778,14 @@ function generateRssFeed() {
 }
 
 async function main() {
-    generateModsData();
+    const cache = buildGitCache();
 
-    await generateModCatalogs();
+    generateModsData(cache);
 
-    fs.writeFileSync('updates.atom', generateRssFeed());
+    await generateModCatalogs(cache);
+
+    fs.writeFileSync('updates.atom', generateRssFeed('updates', cache));
+    fs.writeFileSync('releases.atom', generateRssFeed('releases', cache));
 
     const srcPath = 'public';
     for (const file of fs.readdirSync(srcPath, { withFileTypes: true })) {

@@ -11,6 +11,7 @@ import re
 import sys
 import unicodedata
 import urllib.error
+import urllib.parse
 import urllib.request
 from functools import cache
 from io import StringIO
@@ -52,6 +53,18 @@ MOD_METADATA_PARAMS = {
         'exclude',
         'architecture',
     },
+}
+
+
+CALLBACK_SIGNATURES: dict[str, list[str]] = {
+    'Wh_ModInit': ['BOOL Wh_ModInit()'],
+    'Wh_ModAfterInit': ['void Wh_ModAfterInit()'],
+    'Wh_ModBeforeUninit': ['void Wh_ModBeforeUninit()'],
+    'Wh_ModUninit': ['void Wh_ModUninit()'],
+    'Wh_ModSettingsChanged': [
+        'void Wh_ModSettingsChanged()',
+        'BOOL Wh_ModSettingsChanged(BOOL* bReload)',
+    ],
 }
 
 
@@ -187,7 +200,7 @@ def is_valid_license_identifier(license_id: str):
 def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
     """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
     try:
-        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{mod_id}.wh.cpp'
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}.wh.cpp'
         response = urllib.request.urlopen(url)
         content = response.read().decode('utf-8')
 
@@ -212,7 +225,7 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
 def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
     """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
     try:
-        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{mod_id}/versions.json'
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
         response = urllib.request.urlopen(url)
         data = json.loads(response.read())
         return [item['version'] for item in data]
@@ -548,12 +561,7 @@ class ModMetadataValidator:
             return
 
         def is_allowed_option(option: str) -> bool:
-            return bool(
-                option.startswith('-l')
-                or option.startswith('-D')
-                or option == '-Wl,--export-all-symbols'
-                or option == '-fms-extensions'
-            )
+            return bool(option.startswith('-l') or option == '-fms-extensions')
 
         options = prop.value.split()
         disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
@@ -623,11 +631,11 @@ class ModMetadataValidator:
             prop.warn(msg.rstrip('\n'))
 
 
-def validate_metadata(path: Path, expected_author: str) -> int:
-    with path.open(encoding='utf-8', errors='ignore') as file:
-        properties, initial_warnings = get_mod_file_metadata(
-            file, warn_callback=lambda line, msg: add_warning(path, line, msg)
-        )
+def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
+    properties, initial_warnings = get_mod_file_metadata(
+        StringIO(mod_source),
+        warn_callback=lambda line, msg: add_warning(path, line, msg),
+    )
 
     # Validate metadata properties
     validator = ModMetadataValidator(path, properties, expected_author)
@@ -641,6 +649,143 @@ def validate_metadata(path: Path, expected_author: str) -> int:
         file_warnings += add_warning(path, 1, 'File is not placed in the mods folder')
 
     return initial_warnings + metadata_warnings + file_warnings
+
+
+def validate_marker_block(
+    path: Path,
+    source: str,
+    marker_name: str,
+    label: str,
+    *,
+    required: bool,
+) -> int:
+    """Validate a `// ==X== \\n /* ... */ \\n // ==/X==` block in a mod source.
+
+    Args:
+        path: source file path (used in warning output).
+        source: full file contents.
+        marker_name: the marker text without `==` decoration, e.g.
+            `WindhawkModReadme`.
+        label: human-friendly name used in warning messages, e.g. `README`.
+        required: if True, warn when the block is absent.
+
+    Returns:
+        Total number of warnings emitted.
+    """
+    open_marker = f'=={marker_name}=='
+    close_marker = f'==/{marker_name}=='
+
+    # The body capture group keeps its surrounding whitespace so we can check
+    # for the required newlines around /* and */.
+    block_re = re.compile(
+        r'^//[ \t]+' + re.escape(open_marker) + r'[ \t]*$'
+        r'\s*/\*([\s\S]+?)\*/\s*'
+        r'^//[ \t]+' + re.escape(close_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+    match = block_re.search(source)
+
+    warnings = 0
+
+    def line_of(pos: int) -> int:
+        return source.count('\n', 0, pos) + 1
+
+    def find_all(haystack: str, needle: str):
+        start = 0
+        while (pos := haystack.find(needle, start)) != -1:
+            yield pos
+            start = pos + len(needle)
+
+    # Stray-marker scan: warn about any line that looks like a marker comment
+    # line but isn't the one consumed by the matched block. The pattern is
+    # intentionally more permissive than block_re (it tolerates leading
+    # whitespace) so improperly indented marker lines are still caught, while
+    # incidental occurrences of the marker text inside other comments (e.g. "//
+    # must conform to ==X== above") are not. This runs even when the block is
+    # missing or optional.
+    open_marker_line_re = re.compile(
+        r'^[ \t]*//[ \t]+' + re.escape(open_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+    close_marker_line_re = re.compile(
+        r'^[ \t]*//[ \t]+' + re.escape(close_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+
+    # Sentinel -1 (str.find's not-found value) when there is no matched block,
+    # so the skip-the-matched-line check below naturally fails.
+    matched_open_pos = -1
+    matched_close_pos = -1
+    if match is not None:
+        matched_open_pos = source.find(open_marker, match.start(), match.end())
+        matched_close_pos = source.rfind(close_marker, match.start(), match.end())
+
+    for m in open_marker_line_re.finditer(source):
+        if m.start() <= matched_open_pos < m.end():
+            continue
+        warnings += add_warning(
+            path, line_of(m.start()), f'Unexpected extra "{open_marker}" marker'
+        )
+
+    for m in close_marker_line_re.finditer(source):
+        if m.start() <= matched_close_pos < m.end():
+            continue
+        warnings += add_warning(
+            path, line_of(m.start()), f'Unexpected extra "{close_marker}" marker'
+        )
+
+    if match is None:
+        if required:
+            warnings += add_warning(
+                path,
+                1,
+                f'Mod source must contain a {label} block ({open_marker})',
+            )
+        return warnings
+
+    body = match.group(1)
+    body_start = match.start(1)
+    open_line = line_of(matched_open_pos)
+
+    # The body must not contain another */ - that would actually terminate the
+    # comment block at that point in C/C++.
+    for idx in find_all(body, '*/'):
+        warnings += add_warning(
+            path,
+            line_of(body_start + idx),
+            f'{label} body must not contain an additional "*/"',
+        )
+
+    # /* must be followed by a newline and */ must be preceded by one
+    # (trailing/leading spaces or tabs on those lines are tolerated).
+    if not re.match(r'[ \t]*\n', body):
+        warnings += add_warning(
+            path, open_line, f'{label} /* must be followed by a newline'
+        )
+    if not re.search(r'\n[ \t]*\Z', body):
+        warnings += add_warning(
+            path, open_line, f'{label} */ must be preceded by a newline'
+        )
+
+    # The body must contain non-whitespace content.
+    if body.strip() == '':
+        warnings += add_warning(path, open_line, f'{label} block must not be empty')
+
+    return warnings
+
+
+def validate_readme(path: Path, mod_source: str) -> int:
+    """Validate the mod's README block."""
+    return validate_marker_block(
+        path, mod_source, 'WindhawkModReadme', 'README', required=True
+    )
+
+
+def validate_settings(path: Path, mod_source: str) -> int:
+    """Validate the mod's settings block, if present."""
+    return validate_marker_block(
+        path, mod_source, 'WindhawkModSettings', 'Settings', required=False
+    )
 
 
 @cache
@@ -665,6 +810,10 @@ def get_existing_windows_file_names():
 
 
 def is_existing_windows_file_name(name: str):
+    # Temporary special case - not yet in stable Windows builds.
+    if name.lower() in ['systemtray.dll']:
+        return True
+
     return name.lower() in get_existing_windows_file_names()
 
 
@@ -695,10 +844,9 @@ def get_target_modules_from_previous_line(previous_line: str):
     return names
 
 
-def validate_symbol_hooks(path: Path):
+def validate_symbol_hooks(path: Path, mod_source: str):
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8', errors='ignore')
     mod_source_lines = mod_source.splitlines()
 
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
@@ -771,11 +919,10 @@ def validate_encoding(path: Path):
     return warnings
 
 
-def validate_specific_keywords(path: Path):
+def validate_specific_keywords(path: Path, mod_source: str):
     """Check for specific keywords in mod source code."""
     warnings = 0
 
-    mod_source = path.read_text(encoding='utf-8', errors='ignore')
     mod_source_lines = mod_source.splitlines()
 
     # Words to check (pattern, description)
@@ -795,7 +942,7 @@ def validate_specific_keywords(path: Path):
             if re.search(pattern, line):
                 # Skip GWL(P)_WNDPROC when used with GetWindowLong(Ptr)
                 if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
-                    r'GetWindowLong(Ptr)?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
+                    r'GetWindowLong(Ptr)?[AW]?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
                 ):
                     continue
 
@@ -821,6 +968,91 @@ def validate_specific_keywords(path: Path):
     return warnings
 
 
+def normalize_callback_param_types(params: str) -> str:
+    """Strip parameter names and normalize whitespace/pointer style in a C parameter list."""
+    p = re.sub(r'\s+', ' ', params.strip())
+    if p in ('', 'void', 'VOID'):
+        return ''
+
+    types = []
+    for arg in p.split(','):
+        arg = re.sub(r'\s*\*\s*', '* ', arg.strip())
+        tokens = arg.split()
+        # Drop the trailing parameter name if present.
+        if len(tokens) > 1 and re.fullmatch(r'\w+', tokens[-1]):
+            tokens = tokens[:-1]
+        types.append(' '.join(tokens))
+
+    return ', '.join(types)
+
+
+def normalize_return_type(return_type: str) -> str:
+    """Treat VOID (the Windows macro) as a synonym for void."""
+    return 'void' if return_type == 'VOID' else return_type
+
+
+def validate_callback_signatures(path: Path, mod_source: str):
+    """Validate signatures of well-known Windhawk mod callback functions."""
+    warnings = 0
+
+    for callback_name, expected_signatures in CALLBACK_SIGNATURES.items():
+        # Parse expected signatures once: (return_type, normalized_param_types).
+        expected = []
+        for sig in expected_signatures:
+            m = re.fullmatch(rf'(\w+)\s+{re.escape(callback_name)}\s*\((.*)\)', sig)
+            assert m, sig
+            expected.append((m.group(1), normalize_callback_param_types(m.group(2))))
+
+        # Match: previous word + whitespace + callback name + ( params ). The
+        # previous-word check naturally skips function calls (e.g. "= Wh_Mod..."
+        # or "(Wh_Mod...") since those aren't preceded by a bare identifier.
+        pattern = r'\b(\w+)\s+' + re.escape(callback_name) + r'\s*\(([^)]*)\)'
+        for match in re.finditer(pattern, mod_source):
+            # Skip if inside a single-line comment.
+            line_start = mod_source.rfind('\n', 0, match.start()) + 1
+            if '//' in mod_source[line_start : match.start()]:
+                continue
+
+            return_type = match.group(1)
+            params = match.group(2)
+            normalized_return_type = normalize_return_type(return_type)
+            normalized_params = normalize_callback_param_types(params)
+
+            if any(
+                normalized_return_type == exp_ret and normalized_params == exp_params
+                for exp_ret, exp_params in expected
+            ):
+                continue
+
+            line_num = 1 + mod_source[: match.start()].count('\n')
+            expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Unexpected {callback_name} signature:'
+                f' "{return_type} {callback_name}({params.strip()})".'
+                f' Expected: {expected_list}',
+            )
+
+    return warnings
+
+
+def validate_mod_file(path: Path, pr_author: str) -> int:
+    mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
+        '\ufeff'
+    )
+
+    warnings = validate_encoding(path)
+    warnings += validate_metadata(path, mod_source, pr_author)
+    warnings += validate_readme(path, mod_source)
+    warnings += validate_settings(path, mod_source)
+    warnings += validate_symbol_hooks(path, mod_source)
+    warnings += validate_specific_keywords(path, mod_source)
+    warnings += validate_callback_signatures(path, mod_source)
+
+    return warnings
+
+
 def test_run():
     if len(sys.argv) != 3:
         print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
@@ -829,10 +1061,7 @@ def test_run():
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = validate_encoding(path)
-    warnings += validate_metadata(path, pr_author)
-    warnings += validate_symbol_hooks(path)
-    warnings += validate_specific_keywords(path)
+    warnings = validate_mod_file(path, pr_author)
     if warnings > 0:
         print(f'Got {warnings} warnings')
 
@@ -869,10 +1098,7 @@ def main():
     for path in paths:
         print(f'Checking {path=}')
 
-        path_warnings = validate_encoding(path)
-        path_warnings += validate_metadata(path, pr_author)
-        path_warnings += validate_symbol_hooks(path)
-        path_warnings += validate_specific_keywords(path)
+        path_warnings = validate_mod_file(path, pr_author)
         warnings += path_warnings
 
         if path_warnings == 0:
