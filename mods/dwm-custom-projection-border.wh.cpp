@@ -111,8 +111,8 @@ struct {
     unsigned int innerSize;
     MARGINS margins;
 } g_modSettings;
-bool g_outerBorderDrawn = false;
-bool g_colorConverted = false;
+thread_local bool g_outerBorderDrawn = false;
+thread_local bool g_innerBorderDrawn = false;
 
 bool IsHighContrastMode()
 {
@@ -121,32 +121,16 @@ bool IsHighContrastMode()
     return hc.dwFlags & HCF_HIGHCONTRASTON;
 }
 
-void SetBorderProperties(LPRECT lpRect, UINT &uSize, D3DCOLORVALUE *pColor)
+void AdjustInnerRect(LPRECT lpRect)
 {
-    if (!g_outerBorderDrawn) {
-        pColor->a = g_modSettings.outerColor.a;
-        pColor->r = g_modSettings.outerColor.r;
-        pColor->g = g_modSettings.outerColor.g;
-        pColor->b = g_modSettings.outerColor.b;
-        uSize = g_modSettings.outerSize;
-        g_outerBorderDrawn = true;
-    }
-    else {
-        /* 
-         * DWM already deflates the inner rect by 2 (or 4 in High Contrast mode)
-         * in CProjectionBorderVisual::_UpdateInstructions so we undo that before
-         * applying our own setting.
-         */
-        const int oldDeflate = IsHighContrastMode() ? 4 : 2;
-        const int newDeflate = oldDeflate - g_modSettings.outerSize;
-        InflateRect(lpRect, newDeflate, newDeflate);
-
-        pColor->a = g_modSettings.innerColor.a;
-        pColor->r = g_modSettings.innerColor.r;
-        pColor->g = g_modSettings.innerColor.g;
-        pColor->b = g_modSettings.innerColor.b;
-        uSize = g_modSettings.innerSize;
-    }
+    /* 
+     * DWM already deflates the inner rect by 2 (or 4 in High Contrast mode)
+     * in CProjectionBorderVisual::_UpdateInstructions so we undo that before
+     * applying our own setting.
+     */
+    const int oldDeflate = IsHighContrastMode() ? 4 : 2;
+    const int newDeflate = oldDeflate - g_modSettings.outerSize;
+    InflateRect(lpRect, newDeflate, newDeflate);
 }
 
 HRESULT (*CProjectionBorderVisual__ValidateVisual_orig)(void *);
@@ -157,11 +141,13 @@ HRESULT CProjectionBorderVisual__ValidateVisual_hook(void *pThis) {
 
 void (*CProjectionBorderVisual__UpdateRect_orig)(void *, LPRECT);
 void CProjectionBorderVisual__UpdateRect_hook(void *pThis, LPRECT lpRect) {
-    lpRect->left += g_modSettings.margins.cxLeftWidth;
-    lpRect->right += g_modSettings.margins.cxRightWidth;
-    lpRect->top += g_modSettings.margins.cyTopHeight;
-    lpRect->bottom += g_modSettings.margins.cyBottomHeight;
-    CProjectionBorderVisual__UpdateRect_orig(pThis, lpRect);
+    RECT newRect;
+    CopyRect(&newRect, lpRect);
+    newRect.left += g_modSettings.margins.cxLeftWidth;
+    newRect.right += g_modSettings.margins.cxRightWidth;
+    newRect.top += g_modSettings.margins.cyTopHeight;
+    newRect.bottom += g_modSettings.margins.cyBottomHeight;
+    CProjectionBorderVisual__UpdateRect_orig(pThis, &newRect);
 }
 
 /* 
@@ -220,12 +206,6 @@ HRESULT CProjectionBorderVisual___AddBorderInstructions_hook(
     UINT uSize,
     D3DCOLORVALUE *pColor)
 {
-    if (!g_colorConverted) {
-        Convert_MilColorF_sRGB_To_MilColorF_scRGB(&g_modSettings.outerColor);
-        Convert_MilColorF_sRGB_To_MilColorF_scRGB(&g_modSettings.innerColor);
-        g_colorConverted = true;
-    }
-
     if (g_modSettings.disableBorder) {
         return S_OK;
     }
@@ -234,9 +214,22 @@ HRESULT CProjectionBorderVisual___AddBorderInstructions_hook(
         return S_OK;
     }
 
-    SetBorderProperties(lpRect, uSize, pColor);
-
-    return CProjectionBorderVisual___AddBorderInstructions_orig(pThis, lpRect, uSize, pColor);
+    UINT newSize;
+    D3DCOLORVALUE newColor;
+    if (!g_outerBorderDrawn) {
+        g_outerBorderDrawn = true;
+        newSize = g_modSettings.outerSize;
+        newColor = g_modSettings.outerColor;
+        return CProjectionBorderVisual___AddBorderInstructions_orig(pThis, lpRect, newSize, &newColor);
+    }
+    else {
+        RECT newRect;
+        CopyRect(&newRect, lpRect);
+        AdjustInnerRect(&newRect);
+        newSize = g_modSettings.innerSize;
+        newColor = g_modSettings.innerColor;
+        return CProjectionBorderVisual___AddBorderInstructions_orig(pThis, &newRect, newSize, &newColor);
+    }
 }
 
 /* For Windows 11 26H1 */
@@ -255,15 +248,43 @@ HRESULT CProjectionBorderVisual___CreateOrUpdateBrush_hook(
      * versions it's converted to scRGB.
      */
     if (g_modSettings.disableBorder) {
-        SetRectEmpty(lpRect);
+        RECT rcEmpty = { 0 };
+        return CProjectionBorderVisual___CreateOrUpdateBrush_orig(pThis, &rcEmpty, uSize, pColor, pNineGridVisual);
     }
     else if (g_modSettings.drawOuterOnly && g_outerBorderDrawn) {
-        SetRectEmpty(lpRect);
+        RECT rcEmpty = { 0 };
+        return CProjectionBorderVisual___CreateOrUpdateBrush_orig(pThis, &rcEmpty, uSize, pColor, pNineGridVisual);
     }
     else {
-        SetBorderProperties(lpRect, uSize, pColor);
+        UINT newSize;
+        D3DCOLORVALUE newColor;
+        if (!g_outerBorderDrawn) {
+            g_outerBorderDrawn = true;
+            newSize = g_modSettings.outerSize;
+            newColor = g_modSettings.outerColor;
+        }
+        else {
+            g_innerBorderDrawn = true;
+            newSize = g_modSettings.innerSize;
+            newColor = g_modSettings.innerColor;
+        }
+        return CProjectionBorderVisual___CreateOrUpdateBrush_orig(pThis, lpRect, newSize, &newColor, pNineGridVisual);
     }
-    return CProjectionBorderVisual___CreateOrUpdateBrush_orig(pThis, lpRect, uSize, pColor, pNineGridVisual);
+}
+
+/* For Windows 11 26H1, called shortly after CProjectionBorderVisual::_CreateOrUpdateBrush */
+void (*CRectangleVisual__SetRect_orig)(void *, LPRECT);
+void CRectangleVisual__SetRect_hook(void *pThis, LPRECT lpRect) {
+    if (g_innerBorderDrawn) {
+        g_innerBorderDrawn = false;
+        RECT newRect;
+        CopyRect(&newRect, lpRect);
+        AdjustInnerRect(&newRect);
+        return CRectangleVisual__SetRect_orig(pThis, &newRect);
+    }
+    else {
+        return CRectangleVisual__SetRect_orig(pThis, lpRect);
+    }
 }
 
 float Convert_IntSetting_To_MilColorF_sRGB(LPCWSTR setting)
@@ -290,12 +311,15 @@ void LoadSettings()
     g_modSettings.innerColor.a = Convert_IntSetting_To_MilColorF_sRGB(L"innerBorder.alpha");
     g_modSettings.innerSize = Wh_GetIntSetting(L"innerBorder.size");
 
+    if (CProjectionBorderVisual___AddBorderInstructions_orig) {
+        Convert_MilColorF_sRGB_To_MilColorF_scRGB(&g_modSettings.outerColor);
+        Convert_MilColorF_sRGB_To_MilColorF_scRGB(&g_modSettings.innerColor);
+    }
+
     g_modSettings.margins.cxLeftWidth = Wh_GetIntSetting(L"margins.left");
     g_modSettings.margins.cxRightWidth = Wh_GetIntSetting(L"margins.right");
     g_modSettings.margins.cyTopHeight = Wh_GetIntSetting(L"margins.top");
     g_modSettings.margins.cyBottomHeight = Wh_GetIntSetting(L"margins.bottom");
-
-    g_colorConverted = false;
 }
 
 void Wh_ModSettingsChanged(void)
@@ -335,14 +359,20 @@ WindhawkUtils::SYMBOL_HOOK uDWMDllHooks[] = {
         &CProjectionBorderVisual___CreateOrUpdateBrush_orig,
         CProjectionBorderVisual___CreateOrUpdateBrush_hook,
         true
+    },
+    {
+        {
+            L"public: void __cdecl CRectangleVisual::SetRect(struct tagRECT const &)"
+        },
+        &CRectangleVisual__SetRect_orig,
+        CRectangleVisual__SetRect_hook,
+        true
     }
 };
 
 BOOL Wh_ModInit(void)
 {
     Wh_Log(L"Init");
-
-    LoadSettings();
 
     HMODULE uDWMDll = LoadLibraryW(L"uDWM.dll");
     if (!uDWMDll)
@@ -356,6 +386,8 @@ BOOL Wh_ModInit(void)
         Wh_Log(L"Failed to hook uDWM.dll");
         return FALSE;
     }
+
+    LoadSettings();
 
     return TRUE;
 }
