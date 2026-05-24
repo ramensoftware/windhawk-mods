@@ -15,6 +15,10 @@ Produces click sound on keypress, supports autorepeat.
 Modifier keys (Ctrl, Shift, Alt, Win) do not produce autorepeat sounds.
 Intercepts keyboard events at the lowest possible user-mode level (WH_KEYBOARD_LL),
 before remappers that use SendInput/Raw Input.
+
+ This mod needs to hook into `dwm.exe` to work. Please navigate to Windhawk's 
+ Settings > Advanced settings > More advanced settings > Process inclusion list, 
+ and make sure that `dwm.exe` is in the list.
 */
 // ==/WindhawkModReadme==
 
