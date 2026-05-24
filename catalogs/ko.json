@@ -3436,13 +3436,10 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1779555032000,
+                "updated": 1779606506000,
                 "users": 9
             },
             "metadata": {
-                "architecture": [
-                    "x86-64"
-                ],
                 "author": "Himanshu",
                 "compilerOptions": "-lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi",
                 "description": "A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.",
@@ -3452,7 +3449,7 @@
                 ],
                 "license": "MIT",
                 "name": "Dynamic Island for Windows",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "edge-hot-corner-desktop-switch": {
