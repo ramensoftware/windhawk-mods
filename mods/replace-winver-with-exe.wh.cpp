@@ -5,7 +5,7 @@
 // @version         1.0
 // @author          winui64
 // @github          https://github.com/winui64
-// @include         *
+// @include         winver.exe
 // @compilerOptions -lshell32 -lshlwapi
 // ==/WindhawkMod==
 
