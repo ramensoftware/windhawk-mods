@@ -203,6 +203,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #define SWS_CONTOUR_LIGHT    RGB(0, 0, 0)
 #define SWS_TEXT_DARK         RGB(255, 255, 255)
 #define SWS_TEXT_LIGHT        RGB(0, 0, 0)
+#define SWS_SHOW_DELAY_TIMER_ID 101
 
 typedef BOOL (WINAPI *IsShellWindow_t)(HWND);
 typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
@@ -253,6 +254,8 @@ static SetWindowCompositionAttribute_t g_SetWindowCompositionAttribute = nullptr
 static ULONG_PTR g_gdiplusToken = 0;
 static bool g_isCloseHovered = false;
 static HANDLE g_explorerIpcThread = NULL;
+static bool g_isPendingShow = false;
+static RECT g_pendingSwitcherRect = {0, 0, 0, 0};
 
 // Helpers
 
@@ -1444,6 +1447,56 @@ static void ResetDwmAttributes() {
     }
 }
 
+static void GetOffscreenDelayPosition(int* x, int* y) {
+    // Put the 1x1 window just outside the virtual screen bounds.
+    // This avoids alpha/layered hacks while keeping the window shown/foreground.
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+
+    *x = vx - 2;
+    *y = vy - 2;
+}
+
+static void CancelPendingShow() {
+    if (g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
+    }
+
+    g_isPendingShow = false;
+}
+
+static void ShowPendingOffscreenWindow() {
+    int x, y;
+    GetOffscreenDelayPosition(&x, &y);
+
+    // Show as 1x1 off-screen. No transparency/style changes needed.
+    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, 1, 1, SWP_NOACTIVATE);
+
+    ShowWindow(g_hSwitcher, SW_SHOWNA);
+    SetForegroundWindow(g_hSwitcher);
+}
+
+static void RevealPendingSwitcher() {
+    if (!g_isPendingShow || !g_hSwitcher) {
+        return;
+    }
+
+    KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
+
+    g_isPendingShow = false;
+    g_isVisible = true;
+
+    int x = g_pendingSwitcherRect.left;
+    int y = g_pendingSwitcherRect.top;
+    int w = g_pendingSwitcherRect.right - g_pendingSwitcherRect.left;
+    int h = g_pendingSwitcherRect.bottom - g_pendingSwitcherRect.top;
+
+    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+
+    RegisterThumbnails();
+    PaintSwitcher();
+}
+
 static void ShowSwitcher(bool sticky) {
     UnregisterThumbnails(); BuildWindowList();
     if (g_windows.empty()) return;
@@ -1503,19 +1556,53 @@ static void ShowSwitcher(bool sticky) {
 
     INT cp = GetCornerPref();
     DwmSetWindowAttribute(g_hSwitcher, 33, &cp, sizeof(cp));
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+
+    g_pendingSwitcherRect = {
+        cx,
+        cy,
+        cx + g_winW,
+        cy + g_winH
+    };
+
     g_layoutStartIndex = 0; // Always start from the first window on initial show
     g_selectedIndex = (g_windows.size() > 1) ? 1 : 0;
-    g_hoverIndex = -1; g_isVisible = true;
-    if (g_settings.showDelay > 0) Sleep(g_settings.showDelay);
+    g_hoverIndex = -1;
+    g_isCloseHovered = false;
+
+    CancelPendingShow();
+
+    if (g_settings.showDelay > 0 && !sticky) {
+        g_isPendingShow = true;
+        g_isVisible = false;
+
+        ShowPendingOffscreenWindow();
+
+        SetTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID, g_settings.showDelay, NULL);
+        return;
+    }
+
+    g_isPendingShow = false;
+    g_isVisible = true;
+
+    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     SetForegroundWindow(g_hSwitcher);
-    RegisterThumbnails(); PaintSwitcher();
+
+    RegisterThumbnails();
+    PaintSwitcher();
 }
 
 static void HideSwitcher() {
-    UnregisterThumbnails(); ShowWindow(g_hSwitcher, SW_HIDE);
-    g_isVisible = false; g_isSticky = false;
+    CancelPendingShow();
+
+    UnregisterThumbnails();
+    if (g_hSwitcher) {
+        ShowWindow(g_hSwitcher, SW_HIDE);
+    }
+
+    g_isVisible = false;
+    g_isPendingShow = false;
+    g_isSticky = false;
 }
 
 static void SwitchToSelected() {
@@ -1547,6 +1634,22 @@ static void RecomputeAndReposition() {
     GetMonitorInfoW(hMon, &mi);
     int cx = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - g_winW) / 2;
     int cy = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - g_winH) / 2;
+
+    g_pendingSwitcherRect = {
+        cx,
+        cy,
+        cx + g_winW,
+        cy + g_winH
+    };
+
+    if (g_isPendingShow) {
+        int ox, oy;
+        GetOffscreenDelayPosition(&ox, &oy);
+
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, ox, oy, 1, 1, SWP_NOACTIVATE);
+        return;
+    }
+
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     RegisterThumbnails();
 }
@@ -1751,9 +1854,16 @@ static int HitTestThumb(int x, int y) {
 static void SWS_RegisterHotkeys();
 
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_TIMER && wParam == SWS_HOTKEY_RETRY_TIMER_ID) {
-        SWS_RegisterHotkeys();
-        return 0;
+    if (uMsg == WM_TIMER) {
+        if (wParam == SWS_HOTKEY_RETRY_TIMER_ID) {
+            SWS_RegisterHotkeys();
+            return 0;
+        }
+
+        if (wParam == SWS_SHOW_DELAY_TIMER_ID) {
+            RevealPendingSwitcher();
+            return 0;
+        }
     }
     if (uMsg == WM_HOTKEY) {
         int id = (int)wParam;
@@ -1783,11 +1893,26 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             return 0;
         }
 
-        if (!g_isVisible) {
+        if (!g_isVisible && !g_isPendingShow) {
             ShowSwitcher(isCtrl);
-            if (isBackward && g_windows.size() > 1) { g_selectedIndex = (int)g_windows.size() - 1; PaintSwitcher(); }
+
+            if (isBackward && g_windows.size() > 1) {
+                g_selectedIndex = (int)g_windows.size() - 1;
+
+                if (g_isVisible) {
+                    PaintSwitcher();
+                }
+            }
         } else {
+            if (g_isPendingShow && isCtrl) {
+                g_isSticky = true;
+            }
+
             CycleLinear(isBackward ? -1 : 1);
+
+            if (g_isPendingShow) {
+                RevealPendingSwitcher();
+            }
         }
         return 0;
     }
@@ -1822,7 +1947,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
         }
-        if (wParam == VK_MENU && g_isVisible && !g_isSticky) { SwitchToSelected(); return 0; }
+
+        if (wParam == VK_MENU && (g_isVisible || g_isPendingShow) && !g_isSticky) {
+            SwitchToSelected();
+            return 0;
+        }
         if (wParam == VK_ESCAPE && g_isVisible) { HideSwitcher(); return 0; }
         if (wParam == VK_RETURN && g_isVisible) { SwitchToSelected(); return 0; }
         break;
@@ -1834,7 +1963,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
         }
-        if (wParam == VK_MENU && g_isVisible && !g_isSticky) { SwitchToSelected(); return 0; }
+
+        if (wParam == VK_MENU && (g_isVisible || g_isPendingShow) && !g_isSticky) {
+            SwitchToSelected();
+            return 0;
+        }
         break;
     case WM_SYSKEYDOWN: case WM_KEYDOWN:
         if (g_isVisible) {
