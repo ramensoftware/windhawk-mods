@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-24T08:50:26.000Z</updated>
+    <updated>2026-05-24T15:57:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Ultimate Custom Tray 2.1]]></title>
+        <id>https://windhawk.net/mods/ultimate-custom-tray#75eb49df7dd3d7ada526f7592d1f164290950150</id>
+        <link href="https://windhawk.net/mods/ultimate-custom-tray"/>
+        <updated>2026-05-24T15:57:38.000Z</updated>
+        <content type="html"><![CDATA[<p>New Features:</p>
+<ul>
+<li>Menu item states: Enabled / Disabled / Hidden</li>
+<li>Menu descriptions: Add text on the right (e.g., "Win+E")</li>
+<li>Menu separators: Add lines above/below items</li>
+<li>New folder shortcuts: ~network, ~personal, ~sounds</li>
+</ul>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Windows Shortcuts 1.2.0]]></title>
         <id>https://windhawk.net/mods/disable-windows-shortcuts#4960f73fdd2c7d829d7d160372887ad73b46f0be</id>
@@ -371,25 +388,6 @@ open a separate window instead.</li>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.1.0]]></title>
-        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#16941c0526e84fd525aae8bccb265ad89e2168e0</id>
-        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
-        <updated>2026-05-20T18:02:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Add support for proper icons in titlebars</p></li>
-<li><p>Change screenshot link in native-titlebars mod</p></li>
-</ul>
-<p>Updated the screenshot link in the mod readme.</p>
-<ul>
-<li>Change screenshot URL in native-titlebars mod</li>
-</ul>
-<p>Updated the screenshot URL in the mod readme.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

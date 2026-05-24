@@ -11486,20 +11486,20 @@
                     5
                 ],
                 "ratingUsers": 6,
-                "updated": 1779318197000,
+                "updated": 1779638258000,
                 "users": 90
             },
             "metadata": {
                 "author": "Salyts",
                 "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -lshlwapi -lcomdlg32 -luuid -lgdiplus -luxtheme",
-                "description": "Custom tray icons with actions, context menus and image icon support.",
+                "description": "Этот мод добавляет настраиваемые иконки в системный трей Windows с возможностью назначения действий и контекстных меню, поддержкой файлов изображений и иконок приложений, а также автоматической адаптацией под тему системы.",
                 "github": "https://github.com/Salyts",
                 "include": [
                     "windhawk.exe"
                 ],
                 "license": "MIT",
                 "name": "Ultimate Custom Tray",
-                "version": "2.0"
+                "version": "2.1"
             }
         },
         "unlock-taskmgr-server": {

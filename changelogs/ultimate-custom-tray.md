@@ -1,3 +1,11 @@
+## 2.1 ([May 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/75eb49df7dd3d7ada526f7592d1f164290950150/mods/ultimate-custom-tray.wh.cpp))
+
+New Features:
+- Menu item states: Enabled / Disabled / Hidden
+- Menu descriptions: Add text on the right (e.g., "Win+E")
+- Menu separators: Add lines above/below items
+- New folder shortcuts: ~network, ~personal, ~sounds
+
 ## 2.0 ([May 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d1eda85043c68ec6afa97504e8dd438f82916916/mods/ultimate-custom-tray.wh.cpp))
 
 New Features:
