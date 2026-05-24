@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.2.0
+// @version         1.1.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -1103,11 +1103,9 @@ BOOL Wh_ModInit()
         // We use Win+R as a probe. If it fails, Explorer is mid-session and already owns it.
         // We only do this for the main Explorer process, and only if it's been running for a while (>30s),
         // to avoid false prompts on system startup or when secondary Explorers are launched.
-        if (IsMainExplorer() && IsExplorerUptimeLarge() && RegisterHotKey_Original && !IsFirstTimeInit())
+        if (IsMainExplorer() && IsExplorerUptimeLarge() && !IsFirstTimeInit())
         {
-            // We must use RegisterHotKey_Original to bypass our own hook, which would otherwise 
-            // return FALSE if the user has DisableWinR enabled, causing a false positive prompt.
-            if (!RegisterHotKey_Original(NULL, 0x1337, MOD_WIN | MOD_NOREPEAT, 'R'))
+            if (!RegisterHotKey(NULL, 0x1337, MOD_WIN | MOD_NOREPEAT, 'R'))
             {
                 PromptForExplorerRestart();
             }
