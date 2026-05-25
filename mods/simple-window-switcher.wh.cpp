@@ -2,7 +2,7 @@
 // @id              simple-window-switcher
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
-// @version         1.1
+// @version         1.2
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
@@ -13,22 +13,24 @@
 // ==WindhawkModReadme==
 /*
 # Simple Window Switcher
-A lightweight Alt+Tab replacement for Windows, ported from the
-[Simple Window Switcher](https://github.com/valinet/sws) project.
+A lightweight Alt+Tab replacement for Windows, ported from the [Simple Window Switcher](https://github.com/valinet/sws) project.
 Additional improvements made by [Asteski](https://github.com/Asteski).
 
 ## Features
 - Grid layout with live DWM thumbnail previews
 - Different Task List and Header Content layouts
+- Center align task list content and titles (horizontal and vertical options)
 - Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)
 - Mouse click to select, scroll wheel to cycle
 - Alt+Ctrl+Tab sticky mode
-- Theme support (None/Backdrop Acrylic)
+- Theme support (None/Backdrop Acrylic) with fully customizable background opacity
 - Works with elevated/admin applications
 - Dark/light mode auto-detection
 - Custom border colors with optional Windows accent color
 - DPI-aware, multi-monitor aware
 - Rounded corners for switcher and task thumbnails (optional)
+- Dynamic UI adjustments (e.g., intelligent close button placement over thumbnails)
+- Highly reliable Explorer restart prompt handling without infinite loops
 
 ## Screenshots
 
@@ -89,6 +91,10 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - showThumbnails: true
   $name: Show Thumbnails
   $description: Show DWM live thumbnail previews of windows.
+- showTitle: true
+  $name: Show Title Label
+- showIcon: true
+  $name: Show Icon
 - taskListOrientation: horizontal
   $name: Task List Orientation
   $description: Arrange tasks left-to-right or top-to-bottom.
@@ -222,13 +228,20 @@ struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32];
     WCHAR borderColorDark[16];
     WCHAR borderColorLight[16];
-    int opacity; int rowHeight; int rowWidth;
-    int maxWidthPercent; int maxHeightPercent; int showDelay;
-    bool showThumbnails; bool useAccentColor; bool primaryMonitorOnly; bool perMonitorWindows; bool taskRoundedCorners;
+    int opacity;
+    int rowHeight;
+    int rowWidth;
+    bool showThumbnails;
+    bool showTitle;
+    bool showIcon;
+    int maxWidthPercent;
+    int maxHeightPercent; int showDelay;
+    bool useAccentColor; bool primaryMonitorOnly; bool perMonitorWindows; bool taskRoundedCorners;
     bool centerTaskContent;
 };
 
 static HWND g_hSwitcher = NULL;
+static HWND g_hCloseBtnWnd = NULL;
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
 static int g_layoutStartIndex = 0; // EP-style: first window index visible in the layout
@@ -281,12 +294,19 @@ static int GetHeaderTitleHeightPx() {
     return MulDiv(18, g_dpiY, 96);
 }
 static int GetHeaderRowHeightPx() {
+    if (!g_settings.showTitle && !g_settings.showIcon) {
+        return 0;
+    }
+
     if (!HeaderIsVertical()) {
         return MulDiv(SWS_ROW_TITLE_HEIGHT, g_dpiY, 96);
     }
 
     int gap = MulDiv(4, g_dpiY, 96);
-    return GetHeaderIconSizePx() + gap + GetHeaderTitleHeightPx();
+    int h = 0;
+    if (g_settings.showIcon) h += GetHeaderIconSizePx();
+    if (g_settings.showTitle) h += (h > 0 ? gap : 0) + GetHeaderTitleHeightPx();
+    return h;
 }
 static INT GetCornerPref() {
     if (wcscmp(g_settings.cornerPreference, L"none") == 0) return 1;
@@ -815,7 +835,8 @@ static void ComputeLayout(HMONITOR hMon) {
     // bottomInc    = (thumbH + padBot) + elemPadBot + initialTop
     int initialLeft = elemPadLeft + padLeft;
     int rightInc    = (padRight + elemPadRight) + initialLeft;
-    int initialTop  = elemPadTop + (padTop + rowTitleH + padDivider);
+    int activePadDivider = (g_settings.showThumbnails && rowTitleH > 0) ? padDivider : 0;
+    int initialTop  = elemPadTop + (padTop + rowTitleH + activePadDivider);
     int bottomInc   = (thumbH + padBot) + elemPadBot + initialTop;
 
     int maxW = monW * g_settings.maxWidthPercent / 100;
@@ -1237,6 +1258,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
 
     if (fillBg) {
         BYTE bgA = (BYTE)(g_settings.opacity * 255 / 100);
+        if (bgA == 0) bgA = 1; // Prevent full transparency click-through
         COLORREF bgC = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
         BYTE bgR = GetRValue(bgC), bgG = GetGValue(bgC), bgB = GetBValue(bgC);
         RGBQUAD bgPx = { (BYTE)(bgB*bgA/255), (BYTE)(bgG*bgA/255), (BYTE)(bgR*bgA/255), bgA };
@@ -1280,12 +1302,120 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
             MaskRectCorners(hdc, inset, cornerRadius);
         }
 
+        int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
+        // Keep centered header content stable: reserve close-button space consistently.
+        // In vertical mode, never reserve space - close button overlays without displacement.
+        int btnReserve = 0;
+        if (!HeaderIsVertical()) {
+            btnReserve = ((g_settings.centerTaskContent) || i == g_hoverIndex)
+                     ? closeBtnReserve
+                     : 0;
+        }
+        int contentLeft = e.rcCell.left + padLeft;
+        int contentRight = e.rcCell.right - padLeft - btnReserve;
+        if (contentRight < contentLeft) contentRight = contentLeft;
+
+        int iconX = contentLeft;
+        int iconY = e.rcCell.top + padTop + (rowTitleH - iconSz) / 2;
+        int textLeft = contentLeft;
+        if (g_settings.showIcon) textLeft += iconSz + padLeft;
+        int textRight = contentRight;
+        int textTop = e.rcCell.top + padTop;
+        int textBottom = textTop + rowTitleH;
+
+        if (HeaderIsVertical()) {
+            int availableW = contentRight - contentLeft;
+            if (availableW < 0) availableW = 0;
+
+            iconX = contentLeft + fmax(0, (availableW - iconSz) / 2);
+            iconY = e.rcCell.top + padTop;
+
+            int headerGap = DpiScale(4, g_dpiY);
+            int textH = GetHeaderTitleHeightPx();
+            textTop = g_settings.showIcon ? (iconY + iconSz + headerGap) : iconY;
+            textBottom = textTop + textH;
+            textLeft = contentLeft;
+            textRight = contentRight;
+        } else if (g_settings.centerTaskContent) {
+            int availableW = contentRight - contentLeft;
+            if (availableW < 0) availableW = 0;
+
+            int gap = padLeft;
+            int textMaxW = availableW - (g_settings.showIcon ? iconSz + gap : 0);
+            if (textMaxW < 0) textMaxW = 0;
+
+            int textW = 0;
+            if (g_settings.showTitle && textMaxW > 0 && e.title[0]) {
+                RECT rcMeasure = { 0, 0, textMaxW, rowTitleH };
+                DrawTextW(hdc, e.title, -1, &rcMeasure,
+                          DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX | DT_CALCRECT);
+                textW = rcMeasure.right - rcMeasure.left;
+                if (textW < 0) textW = 0;
+                if (textW > textMaxW) textW = textMaxW;
+            }
+
+            int blockW = (g_settings.showIcon ? iconSz : 0) + ((g_settings.showIcon && textW > 0) ? gap : 0) + textW;
+            if (blockW < availableW) {
+                iconX = contentLeft + (availableW - blockW) / 2;
+            }
+
+            textLeft = iconX + (g_settings.showIcon ? iconSz + ((textW > 0) ? gap : 0) : 0);
+            textRight = textLeft + textW;
+        }
+
+        // Icon
+        if (g_settings.showIcon && e.hIcon) DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+
+        // Title text
+        if (g_settings.showTitle) {
+            RECT rcText = { textLeft, textTop, textRight, textBottom };
+            if (rcText.right < rcText.left) rcText.right = rcText.left;
+            if (g_hTheme) {
+                DTTOPTS opts = { sizeof(DTTOPTS) };
+                opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
+                opts.crText = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+                DrawThemeTextEx(g_hTheme, hdc, 0, 0, e.title, -1,
+                    DT_SINGLELINE | (HeaderIsVertical() ? DT_CENTER : DT_VCENTER) | DT_END_ELLIPSIS | DT_NOPREFIX, &rcText, &opts);
+            } else {
+                SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
+                DrawTextW(hdc, e.title, -1, &rcText,
+                          DT_SINGLELINE | (HeaderIsVertical() ? DT_CENTER : DT_VCENTER) | DT_END_ELLIPSIS | DT_NOPREFIX);
+            }
+        }
+    }
+    SelectObject(hdc, hOldFont);
+}
+
+
+// Rendering
+
+static bool IsWindowTruncated(int idx);
+
+static void DrawSwitcherOverlay(HDC hdc) {
+    if (g_windows.empty()) return;
+
+    int padTop = DpiScale(SWS_PAD_TOP, g_dpiY);
+    int padLeft = DpiScale(SWS_PAD_LEFT, g_dpiX);
+    int rowTitleH = GetHeaderRowHeightPx();
+
+    for (int idx = 0; idx < (int)g_windows.size(); idx++) {
+        int i = (g_layoutStartIndex + idx) % g_windows.size();
+        auto& e = g_windows[i];
+        if (IsWindowTruncated(i)) continue;
+
         // Close button (positioned at top-right of the cell, in title area)
         if (i == g_hoverIndex) {
             int btnSz = DpiScale(24, g_dpiX);
-            int bx = e.rcCell.right - padLeft - btnSz;
-            int by = HeaderIsVertical() ? (e.rcCell.top + padTop)
+            int bx, by;
+            if (rowTitleH == 0) {
+                int btnPadding = DpiScale(4, g_dpiX);
+                bx = e.rcThumbActual.right - btnSz - btnPadding;
+                by = e.rcThumbActual.top + btnPadding;
+            } else {
+                bx = e.rcCell.right - padLeft - btnSz;
+                by = HeaderIsVertical() ? (e.rcCell.top + padTop)
                                         : (e.rcCell.top + padTop + (rowTitleH - btnSz) / 2);
+            }
 
             if (g_isCloseHovered) {
                 // Red rounded background for close button
@@ -1318,90 +1448,31 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
             graphics.DrawLine(&xPen, bx + p, by + p, bx + btnSz - p, by + btnSz - p);
             graphics.DrawLine(&xPen, bx + btnSz - p, by + p, bx + p, by + btnSz - p);
         }
-
-        int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
-        // Keep centered header content stable: reserve close-button space consistently.
-        // In vertical mode, never reserve space - close button overlays without displacement.
-        int btnReserve = 0;
-        if (!HeaderIsVertical()) {
-            btnReserve = ((g_settings.centerTaskContent) || i == g_hoverIndex)
-                     ? closeBtnReserve
-                     : 0;
-        }
-        int contentLeft = e.rcCell.left + padLeft;
-        int contentRight = e.rcCell.right - padLeft - btnReserve;
-        if (contentRight < contentLeft) contentRight = contentLeft;
-
-        int iconX = contentLeft;
-        int iconY = e.rcCell.top + padTop + (rowTitleH - iconSz) / 2;
-        int textLeft = iconX + iconSz + padLeft;
-        int textRight = contentRight;
-        int textTop = e.rcCell.top + padTop;
-        int textBottom = textTop + rowTitleH;
-
-        if (HeaderIsVertical()) {
-            int availableW = contentRight - contentLeft;
-            if (availableW < 0) availableW = 0;
-
-            iconX = contentLeft + fmax(0, (availableW - iconSz) / 2);
-            iconY = e.rcCell.top + padTop;
-
-            int headerGap = DpiScale(4, g_dpiY);
-            int textH = GetHeaderTitleHeightPx();
-            textTop = iconY + iconSz + headerGap;
-            textBottom = textTop + textH;
-            textLeft = contentLeft;
-            textRight = contentRight;
-        } else if (g_settings.centerTaskContent) {
-            int availableW = contentRight - contentLeft;
-            if (availableW < 0) availableW = 0;
-
-            int gap = padLeft;
-            int textMaxW = availableW - iconSz - gap;
-            if (textMaxW < 0) textMaxW = 0;
-
-            int textW = 0;
-            if (textMaxW > 0 && e.title[0]) {
-                RECT rcMeasure = { 0, 0, textMaxW, rowTitleH };
-                DrawTextW(hdc, e.title, -1, &rcMeasure,
-                          DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX | DT_CALCRECT);
-                textW = rcMeasure.right - rcMeasure.left;
-                if (textW < 0) textW = 0;
-                if (textW > textMaxW) textW = textMaxW;
-            }
-
-            int blockW = iconSz + ((textW > 0) ? gap : 0) + textW;
-            if (blockW < availableW) {
-                iconX = contentLeft + (availableW - blockW) / 2;
-            }
-
-            textLeft = iconX + iconSz + ((textW > 0) ? gap : 0);
-            textRight = textLeft + textW;
-        }
-
-        // Icon
-        if (e.hIcon) DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
-
-        // Title text
-        RECT rcText = { textLeft, textTop, textRight, textBottom };
-        if (rcText.right < rcText.left) rcText.right = rcText.left;
-        if (g_hTheme) {
-            DTTOPTS opts = { sizeof(DTTOPTS) };
-            opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
-            opts.crText = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
-            DrawThemeTextEx(g_hTheme, hdc, 0, 0, e.title, -1,
-                DT_SINGLELINE | (HeaderIsVertical() ? DT_CENTER : DT_VCENTER) | DT_END_ELLIPSIS | DT_NOPREFIX, &rcText, &opts);
-        } else {
-            SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
-            DrawTextW(hdc, e.title, -1, &rcText,
-                      DT_SINGLELINE | (HeaderIsVertical() ? DT_CENTER : DT_VCENTER) | DT_END_ELLIPSIS | DT_NOPREFIX);
-        }
     }
-    SelectObject(hdc, hOldFont);
 }
 
+static void PaintSwitcherOverlay() {
+    if (!g_hCloseBtnWnd || !g_isVisible) return;
+    RECT rc; GetClientRect(g_hSwitcher, &rc);
+    int w = rc.right, h = rc.bottom;
+    if (w <= 0 || h <= 0) return;
+    HDC hdcScreen = GetDC(g_hCloseBtnWnd);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    BITMAPINFO bmi = {}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
+    void* bits = NULL;
+    HBITMAP hBmp = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
+    HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
 
-// Rendering
+    DrawSwitcherOverlay(hdcMem);
+
+    POINT ptSrc = {0,0}; SIZE sz = {w, h};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(g_hCloseBtnWnd, hdcScreen, NULL, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
+    SelectObject(hdcMem, hOld); DeleteObject(hBmp); DeleteDC(hdcMem);
+    ReleaseDC(g_hCloseBtnWnd, hdcScreen);
+}
 
 static void PaintSwitcher() {
     if (!g_hSwitcher || !g_isVisible) return;
@@ -1424,10 +1495,12 @@ static void PaintSwitcher() {
         UpdateLayeredWindow(g_hSwitcher, hdcScreen, NULL, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
         SelectObject(hdcMem, hOld); DeleteObject(hBmp); DeleteDC(hdcMem);
         ReleaseDC(g_hSwitcher, hdcScreen);
+        PaintSwitcherOverlay();
     } else {
         // Acrylic: trigger WM_PAINT via InvalidateRect
         InvalidateRect(g_hSwitcher, NULL, TRUE);
         UpdateWindow(g_hSwitcher);
+        PaintSwitcherOverlay();
     }
 }
 
@@ -1487,6 +1560,10 @@ static void RevealPendingSwitcher() {
     int h = g_pendingSwitcherRect.bottom - g_pendingSwitcherRect.top;
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+    if (g_hCloseBtnWnd) {
+        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+        ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
+    }
 
     RegisterThumbnails();
     PaintSwitcher();
@@ -1582,6 +1659,10 @@ static void ShowSwitcher(bool sticky) {
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     SetForegroundWindow(g_hSwitcher);
+    if (g_hCloseBtnWnd) {
+        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+        ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
+    }
 
     RegisterThumbnails();
     PaintSwitcher();
@@ -1593,6 +1674,9 @@ static void HideSwitcher() {
     UnregisterThumbnails();
     if (g_hSwitcher) {
         ShowWindow(g_hSwitcher, SW_HIDE);
+    }
+    if (g_hCloseBtnWnd) {
+        ShowWindow(g_hCloseBtnWnd, SW_HIDE);
     }
 
     g_isVisible = false;
@@ -1646,6 +1730,9 @@ static void RecomputeAndReposition() {
     }
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+    if (g_hCloseBtnWnd && g_isVisible && !g_isPendingShow) {
+        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+    }
     RegisterThumbnails();
 }
 
@@ -2025,9 +2112,16 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             int padT = DpiScale(SWS_PAD_TOP, g_dpiY);
             int titleH = GetHeaderRowHeightPx();
             int btnSz = DpiScale(24, g_dpiX);
-            int bx = e.rcCell.right - padL - btnSz;
-            int by = HeaderIsVertical() ? (e.rcCell.top + padT)
+            int bx, by;
+            if (titleH == 0) {
+                int btnPadding = DpiScale(4, g_dpiX);
+                bx = e.rcThumbActual.right - btnSz - btnPadding;
+                by = e.rcThumbActual.top + btnPadding;
+            } else {
+                bx = e.rcCell.right - padL - btnSz;
+                by = HeaderIsVertical() ? (e.rcCell.top + padT)
                                         : (e.rcCell.top + padT + (titleH - btnSz) / 2);
+            }
             if (x >= bx && x <= bx + btnSz && y >= by && y <= by + btnSz) {
                 closeHovered = true;
             }
@@ -2058,6 +2152,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     int cx = (rmi.rcWork.left + rmi.rcWork.right - g_winW) / 2;
                     int cy = (rmi.rcWork.top + rmi.rcWork.bottom - g_winH) / 2;
                     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+                    if (g_hCloseBtnWnd) {
+                        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+                    }
                     RegisterThumbnails();
                     g_hoverIndex = -1;
                     g_isCloseHovered = false;
@@ -2094,6 +2191,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
 // Hotkey Helpers
 
+static HANDLE g_hHotkeyMutex = NULL;
+
 static void SWS_RegisterHotkeys() {
     if (g_hotkeysRegistered || !g_hSwitcher) return;
     BOOL r1 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB, MOD_ALT, VK_TAB);
@@ -2103,6 +2202,9 @@ static void SWS_RegisterHotkeys() {
     BOOL r5 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
     if (r1 && r2 && r3 && r4 && r5) {
         g_hotkeysRegistered = true;
+        if (!g_hHotkeyMutex) {
+            g_hHotkeyMutex = CreateMutexW(NULL, TRUE, L"Windhawk_SWS_HotkeyMutex");
+        }
         KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
         Wh_Log(L"All hotkeys registered successfully");
     } else {
@@ -2124,6 +2226,11 @@ static void SWS_UnregisterHotkeys() {
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
     g_hotkeysRegistered = false;
+    if (g_hHotkeyMutex) {
+        ReleaseMutex(g_hHotkeyMutex);
+        CloseHandle(g_hHotkeyMutex);
+        g_hHotkeyMutex = NULL;
+    }
     Wh_Log(L"Hotkeys unregistered");
 }
 
@@ -2171,12 +2278,18 @@ static void LoadSettings() {
     }
 
     g_settings.opacity = Wh_GetIntSetting(L"opacity");
-    if (g_settings.opacity <= 0 || g_settings.opacity > 100) g_settings.opacity = 90;
+    if (g_settings.opacity < 0) g_settings.opacity = 0;
+    if (g_settings.opacity > 100) g_settings.opacity = 100;
     g_settings.rowHeight = Wh_GetIntSetting(L"rowHeight");
     if (g_settings.rowHeight <= 0) g_settings.rowHeight = 230;
     g_settings.rowWidth = Wh_GetIntSetting(L"rowWidth");
     if (g_settings.rowWidth < 0) g_settings.rowWidth = 0;
     g_settings.showThumbnails = Wh_GetIntSetting(L"showThumbnails");
+    g_settings.showTitle = Wh_GetIntSetting(L"showTitle");
+    g_settings.showIcon = Wh_GetIntSetting(L"showIcon");
+    if (!g_settings.showThumbnails && !g_settings.showTitle && !g_settings.showIcon) {
+        g_settings.showTitle = true;
+    }
     g_settings.maxWidthPercent = Wh_GetIntSetting(L"maxWidthPercent");
     if (g_settings.maxWidthPercent <= 0 || g_settings.maxWidthPercent > 100) g_settings.maxWidthPercent = 80;
     g_settings.maxHeightPercent = Wh_GetIntSetting(L"maxHeightPercent");
@@ -2252,6 +2365,11 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
         WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
 
+    g_hCloseBtnWnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+        SWS_CLASSNAME, L"",
+        WS_POPUP, 0, 0, 0, 0, g_hSwitcher, NULL, GetModuleHandleW(NULL), NULL);
+
     BOOL bExclude = TRUE;
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_EXCLUDED_FROM_PEEK, &bExclude, sizeof(bExclude));
 
@@ -2275,6 +2393,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     if (g_isVisible) HideSwitcher();
     UnregisterThumbnails();
     g_windows.clear();
+    if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
     if (g_hSwitcher) { DeregisterShellHookWindow(g_hSwitcher); DestroyWindow(g_hSwitcher); g_hSwitcher = NULL; }
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
     if (g_hFont) { DeleteObject(g_hFont); g_hFont = NULL; }
@@ -2347,26 +2466,7 @@ static bool IsMainExplorer() {
     return true;
 }
 
-static bool IsExplorerUptimeLarge() {
-    FILETIME creationTime, exitTime, kernelTime, userTime;
-    if (GetProcessTimes(GetCurrentProcess(), &creationTime, &exitTime, &kernelTime, &userTime)) {
-        ULARGE_INTEGER creation;
-        creation.LowPart = creationTime.dwLowDateTime;
-        creation.HighPart = creationTime.dwHighDateTime;
-        
-        FILETIME systemTime;
-        GetSystemTimeAsFileTime(&systemTime);
-        ULARGE_INTEGER current;
-        current.LowPart = systemTime.dwLowDateTime;
-        current.HighPart = systemTime.dwHighDateTime;
-        
-        // 30 seconds = 300,000,000 intervals of 100ns
-        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 300000000ULL) {
-            return true;
-        }
-    }
-    return false;
-}
+
 
 BOOL Wh_ModInit() {
     WCHAR exePath[MAX_PATH];
@@ -2395,19 +2495,33 @@ BOOL Wh_ModInit() {
 
         // Check if Explorer has already registered standard hotkeys.
         // We use Alt+Tab as a probe. If it fails, Explorer is mid-session and already owns it.
-        // We only do this for the main Explorer process, and only if it's been running for a while (>30s),
-        // to avoid false prompts on system startup or when secondary Explorers are launched.
-        if (!GetSystemMetrics(SM_SHUTTINGDOWN) && IsMainExplorer() && IsExplorerUptimeLarge()) {
+        // We only do this for the main Explorer process to avoid false prompts in secondary Explorers.
+        if (!GetSystemMetrics(SM_SHUTTINGDOWN) && IsMainExplorer()) {
             Wh_Log(L"SWS: Checking if Explorer is mid-session -> probing Alt+Tab");
             if (!RegisterHotKey(NULL, 0x1337, MOD_ALT, VK_TAB)) {
-                Wh_Log(L"SWS: Alt+Tab failed -> Explorer is mid-session, prompting");
-                PromptForExplorerRestart();
+                HANDLE hMutex = OpenMutexW(MUTEX_ALL_ACCESS, FALSE, L"Windhawk_SWS_HotkeyMutex");
+                bool isToolModHolding = false;
+                if (hMutex) {
+                    if (WaitForSingleObject(hMutex, 0) == WAIT_TIMEOUT) {
+                        isToolModHolding = true;
+                    } else {
+                        ReleaseMutex(hMutex);
+                    }
+                    CloseHandle(hMutex);
+                }
+
+                if (isToolModHolding) {
+                    Wh_Log(L"SWS: Alt+Tab failed, but tool mod holds mutex -> skipping prompt");
+                } else {
+                    Wh_Log(L"SWS: Alt+Tab failed, tool mod does NOT hold mutex -> Explorer is mid-session, prompting");
+                    PromptForExplorerRestart();
+                }
             } else {
                 Wh_Log(L"SWS: Alt+Tab succeeded -> Explorer hasn't registered it, skipping prompt");
                 UnregisterHotKey(NULL, 0x1337);
             }
         } else {
-            Wh_Log(L"SWS: System shutting down or early startup/secondary explorer, skipping prompt");
+            Wh_Log(L"SWS: System shutting down or secondary explorer, skipping prompt");
         }
 
         return TRUE;
