@@ -2,11 +2,10 @@
 // @id              dynamic-island-for-windows
 // @name            Dynamic Island for Windows
 // @description     A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Himanshu
 // @github          https://github.com/devcode90
 // @include         windhawk.exe
-// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi
 // @license         MIT
 // ==/WindhawkMod==
@@ -3793,8 +3792,18 @@ void WhTool_ModUninit() {
 }
 
 //////////////////////////////////////////////////////////////////////////////////
-// Tool-mod launcher: runs mod logic in a dedicated windhawk.exe process.
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;

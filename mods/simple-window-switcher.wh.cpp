@@ -2,7 +2,7 @@
 // @id              simple-window-switcher
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
-// @version         1.0
+// @version         1.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
@@ -203,6 +203,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #define SWS_CONTOUR_LIGHT    RGB(0, 0, 0)
 #define SWS_TEXT_DARK         RGB(255, 255, 255)
 #define SWS_TEXT_LIGHT        RGB(0, 0, 0)
+#define SWS_SHOW_DELAY_TIMER_ID 101
 
 typedef BOOL (WINAPI *IsShellWindow_t)(HWND);
 typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
@@ -253,6 +254,8 @@ static SetWindowCompositionAttribute_t g_SetWindowCompositionAttribute = nullptr
 static ULONG_PTR g_gdiplusToken = 0;
 static bool g_isCloseHovered = false;
 static HANDLE g_explorerIpcThread = NULL;
+static bool g_isPendingShow = false;
+static RECT g_pendingSwitcherRect = {0, 0, 0, 0};
 
 // Helpers
 
@@ -374,8 +377,7 @@ static HRESULT CALLBACK RestartPromptDialogCallback(HWND hwnd, UINT msg, WPARAM,
     return S_OK;
 }
 
-static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
-    bool setFlag = (bool)(uintptr_t)param;
+static DWORD WINAPI RestartPromptThreadProc(LPVOID) {
     TASKDIALOGCONFIG tdc = {};
     tdc.cbSize = sizeof(tdc);
     tdc.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
@@ -387,10 +389,6 @@ static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
 
     int button;
     if (SUCCEEDED(TaskDialogIndirect(&tdc, &button, nullptr, nullptr)) && button == IDYES) {
-        if (setFlag) {
-            Wh_SetIntValue(L"RestartedByMod", 1);
-        }
-        Wh_SetIntValue(L"LastPID", -1);
         WCHAR cmd[] = L"cmd.exe /c \"timeout /t 1 /nobreak >nul & taskkill /F /IM explorer.exe & start explorer.exe\"";
         STARTUPINFO si = { .cb = sizeof(si) };
         PROCESS_INFORMATION pi = {};
@@ -402,13 +400,13 @@ static DWORD WINAPI RestartPromptThreadProc(LPVOID param) {
     return 0;
 }
 
-static void PromptForExplorerRestart(bool setFlag) {
+static void PromptForExplorerRestart() {
     if (g_restartExplorerPromptThread) {
         if (WaitForSingleObject(g_restartExplorerPromptThread, 0) != WAIT_OBJECT_0) return;
         CloseHandle(g_restartExplorerPromptThread);
     }
     g_restartExplorerPromptThread = CreateThread(
-        nullptr, 0, RestartPromptThreadProc, (LPVOID)(uintptr_t)setFlag, 0, nullptr);
+        nullptr, 0, RestartPromptThreadProc, nullptr, 0, nullptr);
 }
 
 
@@ -1444,6 +1442,56 @@ static void ResetDwmAttributes() {
     }
 }
 
+static void GetOffscreenDelayPosition(int* x, int* y) {
+    // Put the 1x1 window just outside the virtual screen bounds.
+    // This avoids alpha/layered hacks while keeping the window shown/foreground.
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+
+    *x = vx - 2;
+    *y = vy - 2;
+}
+
+static void CancelPendingShow() {
+    if (g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
+    }
+
+    g_isPendingShow = false;
+}
+
+static void ShowPendingOffscreenWindow() {
+    int x, y;
+    GetOffscreenDelayPosition(&x, &y);
+
+    // Show as 1x1 off-screen. No transparency/style changes needed.
+    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, 1, 1, SWP_NOACTIVATE);
+
+    ShowWindow(g_hSwitcher, SW_SHOWNA);
+    SetForegroundWindow(g_hSwitcher);
+}
+
+static void RevealPendingSwitcher() {
+    if (!g_isPendingShow || !g_hSwitcher) {
+        return;
+    }
+
+    KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
+
+    g_isPendingShow = false;
+    g_isVisible = true;
+
+    int x = g_pendingSwitcherRect.left;
+    int y = g_pendingSwitcherRect.top;
+    int w = g_pendingSwitcherRect.right - g_pendingSwitcherRect.left;
+    int h = g_pendingSwitcherRect.bottom - g_pendingSwitcherRect.top;
+
+    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+
+    RegisterThumbnails();
+    PaintSwitcher();
+}
+
 static void ShowSwitcher(bool sticky) {
     UnregisterThumbnails(); BuildWindowList();
     if (g_windows.empty()) return;
@@ -1503,19 +1551,53 @@ static void ShowSwitcher(bool sticky) {
 
     INT cp = GetCornerPref();
     DwmSetWindowAttribute(g_hSwitcher, 33, &cp, sizeof(cp));
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+
+    g_pendingSwitcherRect = {
+        cx,
+        cy,
+        cx + g_winW,
+        cy + g_winH
+    };
+
     g_layoutStartIndex = 0; // Always start from the first window on initial show
     g_selectedIndex = (g_windows.size() > 1) ? 1 : 0;
-    g_hoverIndex = -1; g_isVisible = true;
-    if (g_settings.showDelay > 0) Sleep(g_settings.showDelay);
+    g_hoverIndex = -1;
+    g_isCloseHovered = false;
+
+    CancelPendingShow();
+
+    if (g_settings.showDelay > 0 && !sticky) {
+        g_isPendingShow = true;
+        g_isVisible = false;
+
+        ShowPendingOffscreenWindow();
+
+        SetTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID, g_settings.showDelay, NULL);
+        return;
+    }
+
+    g_isPendingShow = false;
+    g_isVisible = true;
+
+    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     SetForegroundWindow(g_hSwitcher);
-    RegisterThumbnails(); PaintSwitcher();
+
+    RegisterThumbnails();
+    PaintSwitcher();
 }
 
 static void HideSwitcher() {
-    UnregisterThumbnails(); ShowWindow(g_hSwitcher, SW_HIDE);
-    g_isVisible = false; g_isSticky = false;
+    CancelPendingShow();
+
+    UnregisterThumbnails();
+    if (g_hSwitcher) {
+        ShowWindow(g_hSwitcher, SW_HIDE);
+    }
+
+    g_isVisible = false;
+    g_isPendingShow = false;
+    g_isSticky = false;
 }
 
 static void SwitchToSelected() {
@@ -1547,6 +1629,22 @@ static void RecomputeAndReposition() {
     GetMonitorInfoW(hMon, &mi);
     int cx = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - g_winW) / 2;
     int cy = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - g_winH) / 2;
+
+    g_pendingSwitcherRect = {
+        cx,
+        cy,
+        cx + g_winW,
+        cy + g_winH
+    };
+
+    if (g_isPendingShow) {
+        int ox, oy;
+        GetOffscreenDelayPosition(&ox, &oy);
+
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, ox, oy, 1, 1, SWP_NOACTIVATE);
+        return;
+    }
+
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     RegisterThumbnails();
 }
@@ -1751,9 +1849,16 @@ static int HitTestThumb(int x, int y) {
 static void SWS_RegisterHotkeys();
 
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_TIMER && wParam == SWS_HOTKEY_RETRY_TIMER_ID) {
-        SWS_RegisterHotkeys();
-        return 0;
+    if (uMsg == WM_TIMER) {
+        if (wParam == SWS_HOTKEY_RETRY_TIMER_ID) {
+            SWS_RegisterHotkeys();
+            return 0;
+        }
+
+        if (wParam == SWS_SHOW_DELAY_TIMER_ID) {
+            RevealPendingSwitcher();
+            return 0;
+        }
     }
     if (uMsg == WM_HOTKEY) {
         int id = (int)wParam;
@@ -1783,11 +1888,26 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             return 0;
         }
 
-        if (!g_isVisible) {
+        if (!g_isVisible && !g_isPendingShow) {
             ShowSwitcher(isCtrl);
-            if (isBackward && g_windows.size() > 1) { g_selectedIndex = (int)g_windows.size() - 1; PaintSwitcher(); }
+
+            if (isBackward && g_windows.size() > 1) {
+                g_selectedIndex = (int)g_windows.size() - 1;
+
+                if (g_isVisible) {
+                    PaintSwitcher();
+                }
+            }
         } else {
+            if (g_isPendingShow && isCtrl) {
+                g_isSticky = true;
+            }
+
             CycleLinear(isBackward ? -1 : 1);
+
+            if (g_isPendingShow) {
+                RevealPendingSwitcher();
+            }
         }
         return 0;
     }
@@ -1822,7 +1942,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
         }
-        if (wParam == VK_MENU && g_isVisible && !g_isSticky) { SwitchToSelected(); return 0; }
+
+        if (wParam == VK_MENU && (g_isVisible || g_isPendingShow) && !g_isSticky) {
+            SwitchToSelected();
+            return 0;
+        }
         if (wParam == VK_ESCAPE && g_isVisible) { HideSwitcher(); return 0; }
         if (wParam == VK_RETURN && g_isVisible) { SwitchToSelected(); return 0; }
         break;
@@ -1834,7 +1958,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
         }
-        if (wParam == VK_MENU && g_isVisible && !g_isSticky) { SwitchToSelected(); return 0; }
+
+        if (wParam == VK_MENU && (g_isVisible || g_isPendingShow) && !g_isSticky) {
+            SwitchToSelected();
+            return 0;
+        }
         break;
     case WM_SYSKEYDOWN: case WM_KEYDOWN:
         if (g_isVisible) {
@@ -2207,6 +2335,39 @@ void WINAPI EntryPoint_Hook() {
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk lifecycle
 
+static bool IsMainExplorer() {
+    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hTaskbar) {
+        DWORD trayPid = 0;
+        GetWindowThreadProcessId(hTaskbar, &trayPid);
+        if (trayPid != GetCurrentProcessId()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool IsExplorerUptimeLarge() {
+    FILETIME creationTime, exitTime, kernelTime, userTime;
+    if (GetProcessTimes(GetCurrentProcess(), &creationTime, &exitTime, &kernelTime, &userTime)) {
+        ULARGE_INTEGER creation;
+        creation.LowPart = creationTime.dwLowDateTime;
+        creation.HighPart = creationTime.dwHighDateTime;
+        
+        FILETIME systemTime;
+        GetSystemTimeAsFileTime(&systemTime);
+        ULARGE_INTEGER current;
+        current.LowPart = systemTime.dwLowDateTime;
+        current.HighPart = systemTime.dwHighDateTime;
+        
+        // 30 seconds = 300,000,000 intervals of 100ns
+        if (current.QuadPart > creation.QuadPart && (current.QuadPart - creation.QuadPart) > 300000000ULL) {
+            return true;
+        }
+    }
+    return false;
+}
+
 BOOL Wh_ModInit() {
     WCHAR exePath[MAX_PATH];
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
@@ -2232,31 +2393,22 @@ BOOL Wh_ModInit() {
             }
         }
 
-        // Restart prompt lifecycle detection
-        BOOL isShuttingDown = GetSystemMetrics(SM_SHUTTINGDOWN);
-        int restartFlag = Wh_GetIntValue(L"RestartedByMod", 0);
-        int storedPID = Wh_GetIntValue(L"LastPID", -1);
-        int currentPID = (int)GetCurrentProcessId();
-        Wh_Log(L"SWS DIAG: shuttingDown=%d restartFlag=%d storedPID=%d currentPID=%d",
-               isShuttingDown, restartFlag, storedPID, currentPID);
-
-        if (!isShuttingDown) {
-            if (restartFlag == 1) {
-                Wh_SetIntValue(L"RestartedByMod", 0);
-                Wh_Log(L"SWS: Post-restart init, skipping prompt");
-            } else if (storedPID == currentPID) {
-                Wh_Log(L"SWS: Same PID, recompile/re-enable -> prompting");
-                PromptForExplorerRestart(true);
-            } else if (storedPID == -1) {
-                Wh_Log(L"SWS: No stored PID, first install -> prompting");
-                PromptForExplorerRestart(true);
+        // Check if Explorer has already registered standard hotkeys.
+        // We use Alt+Tab as a probe. If it fails, Explorer is mid-session and already owns it.
+        // We only do this for the main Explorer process, and only if it's been running for a while (>30s),
+        // to avoid false prompts on system startup or when secondary Explorers are launched.
+        if (!GetSystemMetrics(SM_SHUTTINGDOWN) && IsMainExplorer() && IsExplorerUptimeLarge()) {
+            Wh_Log(L"SWS: Checking if Explorer is mid-session -> probing Alt+Tab");
+            if (!RegisterHotKey(NULL, 0x1337, MOD_ALT, VK_TAB)) {
+                Wh_Log(L"SWS: Alt+Tab failed -> Explorer is mid-session, prompting");
+                PromptForExplorerRestart();
             } else {
-                Wh_Log(L"SWS: Different PID (logon/restart), hook active -> skipping");
+                Wh_Log(L"SWS: Alt+Tab succeeded -> Explorer hasn't registered it, skipping prompt");
+                UnregisterHotKey(NULL, 0x1337);
             }
         } else {
-            Wh_Log(L"SWS: System shutting down, skipping prompt");
+            Wh_Log(L"SWS: System shutting down or early startup/secondary explorer, skipping prompt");
         }
-        Wh_SetIntValue(L"LastPID", currentPID);
 
         return TRUE;
     }
@@ -2432,8 +2584,10 @@ void Wh_ModUninit() {
         }
         g_uwpIconCache.clear();
 
-        if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
-            PromptForExplorerRestart(false);
+        if (g_isExplorer && IsMainExplorer()) {
+            if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
+                PromptForExplorerRestart();
+            }
         }
 
         if (g_restartExplorerPromptThread) {
