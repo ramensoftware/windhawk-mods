@@ -2,12 +2,160 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-25T14:10:12.000Z</updated>
+    <updated>2026-05-25T21:35:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Calendar Live Overlay 0.0.1]]></title>
+        <id>https://windhawk.net/mods/calendar-live-overlay#8422b6be0bd211cdb967c20f14a6e171cf629499</id>
+        <link href="https://windhawk.net/mods/calendar-live-overlay"/>
+        <updated>2026-05-25T21:35:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="calendarliveoverlay">Calendar Live Overlay</h1>
+<p>Displays a customizable monthly calendar directly on the desktop behind the desktop icons.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/A3gcKe0.png" alt="Calendar Live Overlay preview 1" /></p>
+<p><img src="https://i.imgur.com/AuCGcoP.png" alt="Calendar Live Overlay preview 2" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Shows the current month as a clean desktop overlay</li>
+<li>Runs behind desktop icons, based on the Desktop Live Overlay method</li>
+<li>Designed to visually match Desktop Live Overlay Mod https://windhawk.net/mods/desktop-live-overlay</li>
+<li>Custom absolute X/Y positioning</li>
+<li>Optional percentage-based positioning</li>
+<li>Multi-monitor support</li>
+<li>Adjustable font size, font family, font weight and font style</li>
+<li>Custom text color with alpha transparency</li>
+<li>Optional German or English month/day names</li>
+<li>Optional Monday or Sunday week start</li>
+<li>Optional month header</li>
+<li>Optional week numbers</li>
+<li>Optional leading zero day numbers</li>
+<li>Optional box drawing border</li>
+<li>Adjustable border content offset</li>
+<li>Highlight today's date with custom color</li>
+<li>Optional bold style for today's date</li>
+<li>Optional underline for today's date</li>
+<li>Highlight weekends with custom color and opacity</li>
+<li>Optional custom color for week numbers</li>
+<li>Optional custom color for weekday names</li>
+<li>Adjustable column and row spacing</li>
+<li>Header alignment: left, center or right</li>
+<li>Optional background with color, padding, rounded corners, border and blur</li>
+<li>Optional background border with custom color and size</li>
+<li>Automatic refresh shortly after each minute change</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<p>Enable the mod and adjust the position and appearance in the mod settings.</p>
+<p>For best alignment, use a monospaced font such as Cascadia Mono, Consolas, JetBrains Mono, or Courier New.</p>
+<h2 id="colorformat">Color Format</h2>
+<p>Colors use hexadecimal format:</p>
+<ul>
+<li><code>#RRGGBB</code></li>
+<li><code>#AARRGGBB</code></li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li><code>#FFFFFFFF</code> = white, fully visible</li>
+<li><code>#80FFFFFF</code> = white, 50% transparent</li>
+<li><code>#FFFF6060</code> = red, fully visible</li>
+<li><code>#FFFFB060</code> = orange, fully visible</li>
+<li><code>#30000000</code> = black, very transparent</li>
+</ul>
+<p>In <code>#AARRGGBB</code>:</p>
+<ul>
+<li><code>AA</code> = alpha / transparency</li>
+<li><code>RR</code> = red</li>
+<li><code>GG</code> = green</li>
+<li><code>BB</code> = blue</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<h3 id="calendar">Calendar</h3>
+<ul>
+<li>Show week numbers</li>
+<li>Week starts on Monday or Sunday</li>
+<li>Use German names</li>
+<li>Show month header</li>
+<li>Leading zero day numbers</li>
+<li>Use box drawing border</li>
+<li>Border content offset</li>
+<li>Column spacing</li>
+<li>Row spacing</li>
+<li>Header alignment</li>
+</ul>
+<h3 id="highlighting">Highlighting</h3>
+<ul>
+<li>Highlight today</li>
+<li>Today color</li>
+<li>Today bold</li>
+<li>Today underline</li>
+<li>Highlight weekends</li>
+<li>Weekend color</li>
+<li>Weekend opacity</li>
+<li>Highlight week numbers</li>
+<li>Week number color</li>
+<li>Highlight weekday names</li>
+<li>Weekday name color</li>
+</ul>
+<h3 id="position">Position</h3>
+<ul>
+<li>Use absolute X/Y position</li>
+<li>X-Position</li>
+<li>Y-Position</li>
+<li>Vertical position percent</li>
+<li>Horizontal position percent</li>
+<li>Monitor</li>
+</ul>
+<h3 id="font">Font</h3>
+<ul>
+<li>Font size</li>
+<li>Text color</li>
+<li>Font family</li>
+<li>Font weight</li>
+<li>Font style</li>
+</ul>
+<p>For best alignment, use a monospaced font.</p>
+<p>Recommended:</p>
+<ul>
+<li>Cascadia Mono</li>
+<li>Consolas</li>
+<li>JetBrains Mono</li>
+<li>Courier New</li>
+</ul>
+<p>Proportional fonts such as Arial, Calibri or Verdana can distort the calendar layout because the calendar uses fixed-width text alignment.</p>
+<h3 id="background">Background</h3>
+<ul>
+<li>Enable background</li>
+<li>Background color</li>
+<li>Background padding</li>
+<li>Background corner radius</li>
+<li>Background blur</li>
+<li>Background border size</li>
+<li>Background border color</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Based on and inspired by Desktop Live Overlay by m417z.</p>
+<p>Special thanks to m417z for the original overlay implementation and the Windhawk ecosystem.</p>
+<p>Additional development help and debugging guidance: ChatGPT by OpenAI.</p>
+<h2 id="notes">Notes</h2>
+<p>This mod is injected into <code>explorer.exe</code> and creates the calendar overlay as part of the desktop window structure.</p>
+<p>If the desktop does not refresh correctly after changing settings, restart Explorer or disable and re-enable the mod.</p>
+<p>The calendar refreshes automatically shortly after each minute change, which is enough to update the highlighted day after midnight.</p>
+<p>For best alignment, use a monospaced font such as:</p>
+<ul>
+<li>Cascadia Mono</li>
+<li>Consolas</li>
+<li>JetBrains Mono</li>
+<li>Courier New</li>
+</ul>
+<p>The mod does not open a normal application window and does not appear in the taskbar.</p>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MSHTML Tweaks 1.0]]></title>
         <id>https://windhawk.net/mods/mshtml-native-controls#f7de3782e55d3abd9b6d97588c8116ac80e7e0b1</id>
@@ -592,41 +740,6 @@ but also to the applications themselves, changing their look as well (like the s
         <author>
             <name>ferrys</name>
             <uri>https://github.com/atferrys</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ctrl+Backspace Fix for Win32 Text Boxes 1.0]]></title>
-        <id>https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes#acc8f118a355bb4d3e49fb0531e85b7c2f1c83ee</id>
-        <link href="https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes"/>
-        <updated>2026-05-11T20:51:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="ctrlbackspacefixforwin32textboxes">Ctrl+Backspace Fix for Win32 Text Boxes</h1>
-<p>Win32 text boxes often lack previous-word deletion functionality, resulting in
-the <code>Ctrl+Backspace</code> hotkey inserting the <code>Delete</code> control character instead of
-deleting the previous word.</p>
-<p>This mod resolves this behavior by adding previous-word deletion functionality
-to those <code>Edit</code> controls.</p>
-<p>It also supports wrapped <code>Edit</code> controls used in .NET WinForms and Delphi VCL
-applications.</p>
-<p>| Before |
-| :----- |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_before.gif" alt="" /> |</p>
-<p>| After |
-| :---- |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_after.gif" alt="" /> |</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>In hotkey text boxes, pressing <code>Ctrl+Backspace</code> deletes the text instead of
-assigning the hotkey.</li>
-<li>In masked text boxes, pressing <code>Ctrl+Backspace</code> deletes the placeholder
-characters, breaking the input mask and preventing further input into those
-missing slots.</li>
-<li>Custom-drawn text boxes, such as those in Qt applications, are unaffected
-because they do not utilize standard Win32 <code>Edit</code> controls. Most custom-drawn
-UI frameworks already handle their own previous-word deletion functionality.</li>
-</ul>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>

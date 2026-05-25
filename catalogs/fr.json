@@ -732,6 +732,38 @@
                 "version": "0.7"
             }
         },
+        "calendar-live-overlay": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1779744942000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779744942000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "SilverAmd",
+                "compilerOptions": "-ldxgi -ld2d1 -ldwrite -ld3d11 -ldcomp -ldwmapi -lgdi32 -lshcore",
+                "description": "Display a customizable monthly calendar on the desktop behind icons.",
+                "github": "https://github.com/SilverAmd",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "GPL-3.0",
+                "name": "Calendar Live Overlay",
+                "version": "0.0.1"
+            }
+        },
         "ce-disable-process-button-flashing": {
             "details": {
                 "defaultSorting": 190,
