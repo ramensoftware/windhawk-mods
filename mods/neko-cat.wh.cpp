@@ -2,7 +2,7 @@
 // @id              neko-cat
 // @name            Neko Cat
 // @description     Adds a desktop pet cat that runs around and follows your mouse
-// @version         1.1.0
+// @version         1.2.0
 // @author          ciizerr
 // @github          https://github.com/ciizerr
 // @include         windhawk.exe
@@ -15,36 +15,50 @@
 A cute desktop pet that follows your mouse and runs around your screen.
 ![Neko Cat Preview](https://raw.githubusercontent.com/ciizerr/wh-mods/main/previews/Neko-cat.gif)
 
+## ✨ What's New in v1.2.0?
+*   **Play With Window:** Neko can now climb the sides of your active window and pace along the title bar! He even reacts physically if you drag the window into him while he's sleeping.
+*   **Multiple Cats:** Feeling lonely? You can now spawn an entire litter of cats! They have built-in separation physics so they won't just stack on top of each other.
+*   **Neko Key:** Set a custom keyboard shortcut to instantly hide all your cats and mute their sounds when you need to focus.
+
 ## 🎮 How to Interact
-*   **Left-Click:** Cycles through 5 different behaviors.
-*   **Right-Click:** Wakes Neko up instantly.
-*   **Drag & Drop:** Use your mouse to move Neko. Dropping him makes him fall into a deep sleep.
+*   **Left-Click:** Cycles through 6 different behaviors.
+*   **Right-Click:** Wakes Neko up instantly if he's napping.
+*   **Drag & Drop:** Pick him up and drop him! He'll yawn, take a quick nap, and then automatically wake up and go back to what he was doing.
+*   **Window Nudging:** If Neko is exhausted and deeply asleep on the floor, try dragging a window edge into him. He'll slide out of the way and wake up to see what bumped him!
 
 ## 🏃 Cat Behaviors
-1.  **Chase Mouse:** (Default) He follows you everywhere!
+1.  **Chase Mouse:** (Default) He follows your cursor everywhere!
 2.  **Run Away:** Try to catch him if you can!
-3.  **Random:** He has the zoomies!
-4.  **Pace:** He patrols the edges of your screen.
+3.  **Random:** Total zoomies!
+4.  **Pace:** He patrols the bottom of your screen.
 5.  **Run Around:** He chases an invisible ball.
+6.  **Play With Window:** He hunts down your currently focused window to climb the walls and pace the roof.
 
 ## 🖥️ Multi-Monitor Support
-Neko can now roam across **all your monitors**! He can jump from one screen to another to follow your mouse.
+Neko can roam freely across **all your monitors**! He can seamlessly jump from one screen to another to follow your mouse.
 
 ## ⚙️ Customization
-You can change Neko's **Size**, **Speed**, and **FPS** in the settings. You can also turn sounds on or off.
+You can tweak almost everything in the settings: **Size**, **Speed**, **FPS**, **How many cats to spawn**, and your **Neko Key shortcut**. You can also turn his meows and snores on or off.
 
 ## 🔒 Assets & Transparency
 Neko's graphics and sounds are downloaded automatically on the first run.
 *   **Source:** All files come from the GitHub repository: [assets/neko-cat](https://github.com/ciizerr/wh-mods/tree/main/assets/neko-cat)
 *   **Standard API:** The mod uses the trusted Windhawk `Wh_GetUrlContent` API.
-*   **Local Storage:** Files are saved in the Windhawk `modstorage` folder for safety.
+*   **Local Storage:** Files are safely cached in your Windhawk `modstorage` folder.
+
+## 📜 License & Credits
+This mod uses implementations, logic, and state definitions referenced from the **Neko 98** source code.
+*   **Original Author:** Masayuki Koba (X-Windows Neko)
+*   **Windows Port (Neko 98):** David Harvey - [Neko98 Source on SourceForge](https://sourceforge.net/projects/neko98/)
+*   **JavaScript Port (nekojs):** Louis Abraham - [louisabraham/nekojs on GitHub](https://github.com/louisabraham/nekojs)
+*   **License:** Used in accordance with the Neko 98 source code license (freely usable as long as credit is given).
 
 ## 💬 Feedback & Support
 Got ideas or found a bug? I’d love to hear from you!
 *   **Discord:** `ciizerr`
 *   **GitHub:** [wh-mods](https://github.com/ciizerr/wh-mods)
 
-Enjoy your new friend!
+Enjoy your new friends!
 */
 // ==/WindhawkModReadme==
 
@@ -69,6 +83,12 @@ Enjoy your new friend!
 - fps: 60
   $name: Fluidity (FPS)
   $description: Smoothness of movement. Use 30 to save battery.
+- cat_count: 1
+  $name: Number of Cats
+  $description: "How many cats do you want? (Max recommended: 10)"
+- neko_key: "Ctrl+Alt+N"
+  $name: Neko Key Shortcut
+  $description: Keyboard shortcut to quickly hide/unhide Neko. (e.g. Ctrl+Alt+N, Shift+Esc, empty to disable)
 */
 // ==/WindhawkModSettings==
 
@@ -78,28 +98,31 @@ Enjoy your new friend!
 #include <mmsystem.h>
 #include <string>
 #include <cmath>
+#include <vector>
 
 using namespace Gdiplus;
 
 enum NekoState {
     STOP = 0, WASH, SCRATCH, YAWN, SLEEP, AWAKE,
     U_MOVE, D_MOVE, L_MOVE, R_MOVE, UL_MOVE, UR_MOVE, DL_MOVE, DR_MOVE,
-    U_CLAW, D_CLAW, L_CLAW, R_CLAW, MAX_STATE
+    U_CLAW, D_CLAW, L_CLAW, R_CLAW, FALL, MAX_STATE
 };
 
 enum BehaviorMode {
-    CHASE_MOUSE = 0, RUN_AWAY, RANDOM, PACE, RUN_AROUND, FORCED_SLEEP, MAX_BEHAVIOR
+    CHASE_MOUSE = 0, RUN_AWAY, RANDOM, PACE, RUN_AROUND, PLAY_WITH_WINDOW, FORCED_SLEEP, EXHAUSTED_SLEEP, MAX_BEHAVIOR
 };
 
 inline const wchar_t* GetBehaviorName(int mode) {
     switch (mode) {
-        case CHASE_MOUSE: return L"Chase Mouse";
-        case RUN_AWAY:    return L"Run Away";
-        case RANDOM:      return L"Random";
-        case PACE:        return L"Pace";
-        case RUN_AROUND:  return L"Run Around";
-        case FORCED_SLEEP: return L"Forced Sleep";
-        default:          return L"Unknown";
+        case CHASE_MOUSE:     return L"Chase Mouse";
+        case RUN_AWAY:        return L"Run Away";
+        case RANDOM:          return L"Random";
+        case PACE:            return L"Pace";
+        case RUN_AROUND:      return L"Run Around";
+        case PLAY_WITH_WINDOW:return L"Play With Window";
+        case FORCED_SLEEP:    return L"Forced Sleep";
+        case EXHAUSTED_SLEEP: return L"Exhausted Sleep";
+        default:              return L"Unknown";
     }
 }
 
@@ -119,7 +142,50 @@ bool g_soundEnabled = true;
 int g_sleepSoundInterval = 30;
 bool g_sleepSoundRepeat = true;
 int g_fps = 60;
+int g_catCount = 1;
 static bool g_modExit = false;
+
+std::wstring g_nekoKeyStr = L"Ctrl+Alt+N";
+bool g_isHidden = false;
+#define WM_UPDATE_SETTINGS (WM_APP + 1)
+
+UINT ParseHotkeyModifiers(const std::wstring& hotkeyStr) {
+    UINT modifiers = MOD_NOREPEAT;
+    std::wstring upperStr = hotkeyStr;
+    for (auto& c : upperStr) c = towupper(c);
+    
+    if (upperStr.find(L"CTRL") != std::wstring::npos) modifiers |= MOD_CONTROL;
+    if (upperStr.find(L"ALT") != std::wstring::npos) modifiers |= MOD_ALT;
+    if (upperStr.find(L"SHIFT") != std::wstring::npos) modifiers |= MOD_SHIFT;
+    if (upperStr.find(L"WIN") != std::wstring::npos) modifiers |= MOD_WIN;
+    return modifiers;
+}
+
+UINT ParseHotkeyVK(const std::wstring& hotkeyStr) {
+    std::wstring upperStr = hotkeyStr;
+    for (auto& c : upperStr) c = towupper(c);
+    
+    size_t lastPlus = upperStr.find_last_of(L"+");
+    std::wstring keyPart = (lastPlus != std::wstring::npos) ? upperStr.substr(lastPlus + 1) : upperStr;
+    
+    keyPart.erase(0, keyPart.find_first_not_of(L" "));
+    keyPart.erase(keyPart.find_last_not_of(L" ") + 1);
+    
+    if (keyPart.length() == 1) return keyPart[0];
+    if (keyPart == L"ESC" || keyPart == L"ESCAPE") return VK_ESCAPE;
+    if (keyPart == L"SPACE") return VK_SPACE;
+    if (keyPart == L"ENTER") return VK_RETURN;
+    if (keyPart == L"TAB") return VK_TAB;
+    if (keyPart == L"UP") return VK_UP;
+    if (keyPart == L"DOWN") return VK_DOWN;
+    if (keyPart == L"LEFT") return VK_LEFT;
+    if (keyPart == L"RIGHT") return VK_RIGHT;
+    if (keyPart.find(L"F") == 0 && keyPart.length() > 1) {
+        int fNum = _wtoi(keyPart.substr(1).c_str());
+        if (fNum >= 1 && fNum <= 24) return VK_F1 + fNum - 1;
+    }
+    return 0;
+}
 
 // Tool mod handles
 static HWND   g_hwndOverlay = nullptr;
@@ -149,6 +215,7 @@ SpriteConfig g_spriteConfigs[MAX_STATE] = {
     { L"downclaw1.png", L"downclaw2.png" }, // D_CLAW
     { L"leftclaw1.png", L"leftclaw2.png" }, // L_CLAW
     { L"rightclaw1.png", L"rightclaw2.png" }, // R_CLAW
+    { L"awake.png", L"awake.png" } // FALL
 };
 
 void CreatePath(std::wstring path) {
@@ -219,6 +286,7 @@ public:
     Bitmap* sprites[MAX_STATE][2] = {};
 
     int behaviorMode = CHASE_MOUSE;
+    int prevBehaviorMode = CHASE_MOUSE;  // restored after FORCED_SLEEP
     int idleThreshold = 6;
     NekoState state = STOP;
     int tickCount = 0;
@@ -250,6 +318,9 @@ public:
     ULONGLONG lastSleepSoundTime = 0;
     bool hasPlayedSleepSound = false;
 
+    int offsetX = 0;
+    int offsetY = 0;
+
     void LoadSprites() {
         for (int i = 0; i < MAX_STATE; i++) {
             for (int f = 0; f < 2; f++) {
@@ -272,6 +343,18 @@ public:
     }
     void StopAudio() {
         PlaySoundW(NULL, NULL, 0);
+    }
+
+    void UpdateOffsets(int index, int total) {
+        if (total <= 1) {
+            offsetX = 0;
+            offsetY = 0;
+            return;
+        }
+        double angle = (2.0 * 3.1415926535 / total) * index;
+        double radius = (16.0 + 8.0 * total) * g_scale;
+        offsetX = (int)(cos(angle) * radius);
+        offsetY = (int)(sin(angle) * radius);
     }
 
     void Init() {
@@ -322,10 +405,10 @@ public:
                 pThis->SetState(AWAKE);
                 pThis->CycleBehavior();
             }
-            // Let it fall to DefWindowProc so dragging still functions
+            SetForegroundWindow(hwnd);
         } else if (msg == WM_NCRBUTTONDOWN || msg == WM_RBUTTONDOWN) {
-            if (pThis->behaviorMode == FORCED_SLEEP) {
-                pThis->behaviorMode = CHASE_MOUSE;
+            if (pThis->behaviorMode == FORCED_SLEEP || pThis->behaviorMode == EXHAUSTED_SLEEP) {
+                pThis->behaviorMode = pThis->prevBehaviorMode;
                 if (pThis->state == SLEEP || pThis->state == YAWN) {
                     pThis->PlayAudio(L"awake.wav", false);
                 } else {
@@ -348,6 +431,7 @@ public:
             pThis->prevLogicX = pThis->x;
             pThis->prevLogicY = pThis->y;
             
+            pThis->prevBehaviorMode = pThis->behaviorMode;
             pThis->behaviorMode = FORCED_SLEEP;
             Wh_Log(L"Neko dropped at %d, %d. Behavior: %d (%s)", 
                    (int)pThis->x, (int)pThis->y, pThis->behaviorMode, GetBehaviorName(pThis->behaviorMode));
@@ -364,14 +448,16 @@ public:
 
     void CycleBehavior() {
         if (behaviorMode == FORCED_SLEEP) return;
-        int behaviors[] = {CHASE_MOUSE, RUN_AWAY, RANDOM, PACE, RUN_AROUND};
+        int behaviors[] = {CHASE_MOUSE, RUN_AWAY, RANDOM, PACE, RUN_AROUND, PLAY_WITH_WINDOW};
+        int count = 6;
         int nextMode = CHASE_MOUSE;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < count; i++) {
             if (behaviorMode == behaviors[i]) {
-                nextMode = behaviors[(i + 1) % 5];
+                nextMode = behaviors[(i + 1) % count];
                 break;
             }
         }
+        prevBehaviorMode = behaviorMode;
         behaviorMode = nextMode;
         Wh_Log(L"Behavior changed to: %d (%s)", behaviorMode, GetBehaviorName(behaviorMode));
         if (state == SLEEP) SetState(AWAKE);
@@ -414,6 +500,42 @@ public:
         x = prevLogicX + (logicX - prevLogicX) * t;
         y = prevLogicY + (logicY - prevLogicY) * t;
 
+        // Smooth window collision resolution
+        if (!isDragging && (behaviorMode == PLAY_WITH_WINDOW || behaviorMode == EXHAUSTED_SLEEP)) {
+            RECT r;
+            if (GetPlayWindow(r)) {
+                int sz = SPRITE_SIZE * g_scale;
+                if (x + sz > r.left && x < r.right && y + sz > r.top && y < r.bottom) {
+                    double distLeft = (x + sz) - r.left;
+                    double distRight = r.right - x;
+                    double distTop = (y + sz) - r.top;
+                    double distBottom = r.bottom - y;
+
+                    double minDist = std::min({distLeft, distRight, distTop, distBottom});
+
+                    if (minDist == distTop) {
+                        y = r.top - sz;
+                    } else if (minDist == distBottom) {
+                        y = (double)r.bottom;
+                    } else if (minDist == distLeft) {
+                        x = r.left - sz;
+                    } else {
+                        x = (double)r.right;
+                    }
+                    
+                    // Sync logic coordinates so the tick engine doesn't fight the push
+                    logicX = prevLogicX = x;
+                    logicY = prevLogicY = y;
+
+                    // Wake up if pushed while exhausted
+                    if (behaviorMode == EXHAUSTED_SLEEP) {
+                        behaviorMode = prevBehaviorMode; // Resumes PLAY_WITH_WINDOW
+                        SetState(AWAKE);
+                    }
+                }
+            }
+        }
+
         UpdateWindowPosition();
     }
 
@@ -422,15 +544,26 @@ public:
         if (tickCount >= 9999) tickCount = 0;
         if (tickCount % 2 == 0) stateCount++;
 
+        if (logicY < virtualY + boundsHeight && (state == SLEEP || state == STOP || state == WASH || state == SCRATCH || state == YAWN) && behaviorMode == FORCED_SLEEP) {
+            // falling while in forced_sleep, gravity handled by ForcedSleep()
+        }
+
         switch (behaviorMode) {
             case CHASE_MOUSE: ChaseMouse(); break;
             case RUN_AWAY: RunAwayFromMouse(); break;
             case RANDOM: RunRandomly(); break;
             case PACE: PaceAroundScreen(); break;
             case RUN_AROUND: RunAround(); break;
-            case FORCED_SLEEP: ForcedSleep(); break;
+            case PLAY_WITH_WINDOW: PlayWithWindow(); break;
+            case FORCED_SLEEP: 
+            case EXHAUSTED_SLEEP: ForcedSleep(); break;
         }
 
+        // Auto-restore behavior after post-drop sleep cycle finishes
+        if (behaviorMode == FORCED_SLEEP && state == SLEEP && stateCount >= WASH_TIME * 3) {
+            behaviorMode = prevBehaviorMode;
+            SetState(AWAKE);
+        }
         if (state == SLEEP) {
             ULONGLONG now = GetTickCount64();
             bool shouldPlay = false;
@@ -449,7 +582,8 @@ public:
             }
         } else {
             // random chance to purr/idle noise
-            if ((state == STOP || state == WASH) && g_soundEnabled && rand() % 50 == 0) {
+            // skip if forced sleep is active or if the user wants a quiet sleeping cat
+            if ((state == STOP || state == WASH) && g_soundEnabled && g_sleepSoundRepeat && behaviorMode != FORCED_SLEEP && rand() % 100 == 0) {
                 const wchar_t* idles[] = { L"idle1.wav", L"idle2.wav", L"idle3.wav" };
                 PlayAudio(idles[rand() % 3], false);
             }
@@ -457,7 +591,260 @@ public:
     }
 
     void ForcedSleep() {
-        RunTowards(logicX + SPRITE_SIZE * g_scale / 2.0, logicY + SPRITE_SIZE * g_scale);
+        if ((int)logicY < virtualY + boundsHeight) {
+            double fallSpeed = g_speed * 4.0 * g_scale;
+            if (state != FALL) SetState(FALL);
+            logicY = std::min(logicY + fallSpeed, (double)(virtualY + boundsHeight));
+            moveDX = moveDY = 0;
+        } else {
+            // Landed — do the yawn->sleep sequence
+            if (state == FALL) SetState(YAWN);
+            else if (state == YAWN && stateCount >= YAWN_TIME) SetState(SLEEP);
+            moveDX = moveDY = 0;
+        }
+    }
+
+    // -------------------------------------------------------
+    // PLAY_WITH_WINDOW logic
+    // Neko interacts with the currently active (non-maximized)
+    // window: falls onto it, walks its top edge, climbs sides.
+    // -------------------------------------------------------
+    bool playWindowValid = false;
+    RECT playWindowRect = {};
+    int  climbRetries  = 0;
+    int  climbSide     = 0;
+    bool climbOnFloor  = false;
+
+    bool GetPlayWindow(RECT& out) {
+        HWND hw = GetForegroundWindow();
+        if (!hw || hw == GetDesktopWindow() || hw == GetShellWindow() || hw == hwnd) return false;
+        if (IsZoomed(hw)) return false;  // skip maximised
+        WINDOWPLACEMENT wp = {};
+        wp.length = sizeof(wp);
+        GetWindowPlacement(hw, &wp);
+        if (wp.showCmd == SW_SHOWMINIMIZED) return false;
+        RECT r;
+        if (!GetWindowRect(hw, &r)) return false;
+        out = r;
+        return true;
+    }
+
+    void PlayWithWindow() {
+        int sz = SPRITE_SIZE * g_scale;
+        double fallSpeed = g_speed * 4.0 * g_scale;
+        double climbSpeed = g_speed * 1.0 * g_scale;
+
+        RECT r;
+        playWindowValid = GetPlayWindow(r);
+
+        if (!playWindowValid) {
+            // No window — fall to screen bottom
+            if ((int)logicY < virtualY + boundsHeight) {
+                if (state != FALL) SetState(FALL);
+                logicY = std::min(logicY + fallSpeed, (double)(virtualY + boundsHeight));
+            } else {
+                if (state == FALL) SetState(STOP);
+            }
+            moveDX = moveDY = 0;
+            return;
+        }
+
+        int catCenterX = (int)logicX + sz / 2;
+        int catBottom  = (int)logicY + sz;
+
+        // Snap tolerance: within 2px of the window top counts as "landed"
+        int snapTol = 2;
+        bool landedOnTop = catBottom >= r.top - snapTol && catBottom <= r.top + snapTol;
+        bool overWindowX = catCenterX >= r.left && catCenterX <= r.right;
+        bool strictlyAbove = catBottom < r.top - snapTol;   // clearly not touching
+        bool leftOfWindow  = catCenterX < r.left;
+        bool rightOfWindow = catCenterX > r.right;
+
+        // --- 1. Landed on top: snap and walk left/right ---
+        if (landedOnTop && overWindowX) {
+            logicY = r.top - sz; // hard snap
+            if (state == FALL) SetState(STOP);
+            if (moveDX == 0) moveDX = g_speed * g_scale;
+            double newX = logicX + moveDX;
+            if (newX < r.left)         { newX = r.left;        moveDX =  g_speed * g_scale; }
+            if (newX + sz > r.right)   { newX = r.right - sz;  moveDX = -g_speed * g_scale; }
+            logicX = newX;
+            moveDY = 0;
+            lastMoveDX = (int)moveDX; lastMoveDY = 0;
+            CalcDirection(moveDX, 0);
+            return;
+        }
+
+        // --- 2. Strictly above the window and over it: fall straight down ---
+        if (strictlyAbove && overWindowX) {
+            if (state != FALL) SetState(FALL);
+            double newY = logicY + fallSpeed;
+            if (newY + sz >= r.top) {
+                // Land precisely
+                logicY = r.top - sz;
+                moveDX = g_speed * g_scale; // start walking on landing
+                SetState(STOP);
+            } else {
+                logicY = newY;
+            }
+            moveDX = 0; moveDY = 0;
+            return;
+        }
+
+        // --- 3. Left of window: approach then climb the left wall ---
+        if (leftOfWindow) {
+            double runSpeed = g_speed * (double)g_scale;
+            // Target: cat's left edge flush with window left wall
+            double wallX = r.left - sz;  // logicX target when at wall
+            bool onFloor  = std::abs(logicY - (virtualY + boundsHeight)) < 2.0;
+            bool atWall   = std::abs(logicX - wallX) < runSpeed + 2.0;
+
+            if (climbSide != -1) { climbSide = -1; climbRetries = 0; }
+
+            if (!atWall) {
+                if (!onFloor) {
+                    // Still falling to floor
+                    if (state != FALL) SetState(FALL);
+                    logicY = std::min(logicY + fallSpeed, (double)(virtualY + boundsHeight));
+                } else {
+                    // On floor — walk directly toward wall (no RunTowards)
+                    if (climbOnFloor == false) {
+                        if (climbRetries >= 3) {
+                            climbRetries = 0;
+                            climbSide = 0;
+                            prevBehaviorMode = PLAY_WITH_WINDOW;
+                            behaviorMode = EXHAUSTED_SLEEP;
+                            return;
+                        }
+                        // Just landed after a fall — record retry
+                        if (climbRetries > 0) {
+                            // Shift position: alternate left/right small offsets
+                            int offset = (climbRetries % 2 == 1 ? 1 : -1) * (climbRetries / 2 + 1) * sz / 4;
+                            logicX = std::max((double)virtualX, wallX + offset);
+                        }
+                        climbRetries++;
+                    }
+                    climbOnFloor = true;
+                    double dx = wallX - logicX;
+                    if (state == FALL) SetState(STOP);
+                    if (std::abs(dx) > runSpeed) {
+                        logicX += (dx > 0 ? runSpeed : -runSpeed);
+                        CalcDirection(dx, 0);
+                    } else {
+                        logicX = wallX;
+                    }
+                }
+            } else {
+                // Snap to wall and climb
+                climbOnFloor = false;
+                logicX = wallX;
+                if ((int)logicY > r.top - sz + 2) {
+                    if (state != U_MOVE) SetState(U_MOVE);
+                    logicY -= climbSpeed;
+                } else {
+                    // Reached the top!
+                    logicY = r.top - sz;
+                    logicX = r.left;
+                    moveDX = (int)runSpeed;
+                    climbRetries = 0; climbSide = 0;
+                    SetState(STOP);
+                }
+            }
+            moveDX = 0; moveDY = 0;
+            return;
+        }
+
+        // --- 4. Right of window: approach then climb the right wall ---
+        if (rightOfWindow) {
+            double runSpeed = g_speed * (double)g_scale;
+            // Target: cat's right edge flush with window right wall
+            double wallX = (double)r.right;  // logicX target when at wall
+            bool onFloor  = std::abs(logicY - (virtualY + boundsHeight)) < 2.0;
+            bool atWall   = std::abs(logicX - wallX) < runSpeed + 2.0;
+
+            if (climbSide != 1) { climbSide = 1; climbRetries = 0; }
+
+            if (!atWall) {
+                if (!onFloor) {
+                    if (state != FALL) SetState(FALL);
+                    logicY = std::min(logicY + fallSpeed, (double)(virtualY + boundsHeight));
+                } else {
+                    if (climbOnFloor == false) {
+                        if (climbRetries >= 3) {
+                            climbRetries = 0;
+                            climbSide = 0;
+                            prevBehaviorMode = PLAY_WITH_WINDOW;
+                            behaviorMode = EXHAUSTED_SLEEP;
+                            return;
+                        }
+                        if (climbRetries > 0) {
+                            int offset = (climbRetries % 2 == 1 ? -1 : 1) * (climbRetries / 2 + 1) * sz / 4;
+                            logicX = std::min((double)(virtualX + boundsWidth), wallX + offset);
+                        }
+                        climbRetries++;
+                    }
+                    climbOnFloor = true;
+                    double dx = wallX - logicX;
+                    if (state == FALL) SetState(STOP);
+                    if (std::abs(dx) > runSpeed) {
+                        logicX += (dx > 0 ? runSpeed : -runSpeed);
+                        CalcDirection(dx, 0);
+                    } else {
+                        logicX = wallX;
+                    }
+                }
+            } else {
+                climbOnFloor = false;
+                logicX = wallX;
+                if ((int)logicY > r.top - sz + 2) {
+                    if (state != U_MOVE) SetState(U_MOVE);
+                    logicY -= climbSpeed;
+                } else {
+                    logicY = r.top - sz;
+                    logicX = r.right - sz;
+                    moveDX = -(int)runSpeed;
+                    climbRetries = 0; climbSide = 0;
+                    SetState(STOP);
+                }
+            }
+            moveDX = 0; moveDY = 0;
+            return;
+        }
+
+        // --- 5. Cat is under the window (on floor, overWindowX but not at top) ---
+        // Shuffle sideways to the nearest wall edge so we can start climbing.
+        // Never use RunTowards here — it triggers the sleep cycle.
+        {
+            double runSpeed = g_speed * (double)g_scale;
+            bool onFloor = std::abs(logicY - (virtualY + boundsHeight)) < 2.0;
+
+            if (!onFloor) {
+                // Fall to floor first
+                if (state != FALL) SetState(FALL);
+                logicY = std::min(logicY + fallSpeed, (double)(virtualY + boundsHeight));
+            } else {
+                // On floor — move toward the nearer window edge
+                if (state == FALL) SetState(STOP);
+                int catCX = (int)logicX + sz / 2;
+                double distToLeft  = catCX - r.left;
+                double distToRight = r.right - catCX;
+                double targetX;
+                if (distToLeft <= distToRight) {
+                    // Nearer to left wall — exit left
+                    targetX = r.left - sz;
+                    double dx = targetX - logicX;
+                    logicX += (std::abs(dx) > runSpeed ? -runSpeed : dx);
+                    CalcDirection(-runSpeed, 0);
+                } else {
+                    // Nearer to right wall — exit right
+                    targetX = (double)r.right;
+                    double dx = targetX - logicX;
+                    logicX += (std::abs(dx) > runSpeed ? runSpeed : dx);
+                    CalcDirection(runSpeed, 0);
+                }
+            }
+            moveDX = 0; moveDY = 0;
+        }
     }
 
     void ChaseMouse() {
@@ -465,7 +852,7 @@ public:
             RunTowards(logicX + SPRITE_SIZE * g_scale / 2.0, logicY + SPRITE_SIZE * g_scale);
             return;
         }
-        RunTowards(mouseX, mouseY);
+        RunTowards(mouseX + offsetX, mouseY + offsetY);
     }
 
     void RunAwayFromMouse() {
@@ -494,11 +881,11 @@ public:
     }
 
     void RunRandomly() {
-        if (state == SLEEP) actionCount++;
-        if (actionCount > idleThreshold * 10) {
+        if (state != SLEEP) actionCount++;
+        if (state != SLEEP && actionCount > idleThreshold * 20) {
             actionCount = 0;
-            targetX = virtualX + rand() % boundsWidth;
-            targetY = virtualY + rand() % boundsHeight;
+            targetX = virtualX + rand() % (boundsWidth > 0 ? boundsWidth : 1);
+            targetY = virtualY + rand() % (boundsHeight > 0 ? boundsHeight : 1);
             RunTowards(targetX, targetY);
         } else {
             RunTowards(targetX, targetY);
@@ -548,6 +935,12 @@ public:
         }
         if (newState == SLEEP && state != SLEEP) {
             hasPlayedSleepSound = false;
+        }
+
+        // 50% chance to meow/purr when starting to yawn before sleep
+        if (newState == YAWN && g_soundEnabled && (rand() % 2 == 0)) {
+            const wchar_t* idles[] = { L"idle1.wav", L"idle2.wav", L"idle3.wav" };
+            PlayAudio(idles[rand() % 3], false);
         }
 
         tickCount = 0;
@@ -640,6 +1033,7 @@ public:
             case AWAKE:
                 if (stateCount >= AWAKE_TIME + rand() % 20) CalcDirection(moveDX, moveDY);
                 break;
+            case FALL:
             case U_MOVE: case D_MOVE: case L_MOVE: case R_MOVE:
             case UL_MOVE: case UR_MOVE: case DL_MOVE: case DR_MOVE: {
                 double nx = logicX + moveDX;
@@ -735,7 +1129,32 @@ public:
     }
 };
 
-Neko* g_pNeko = nullptr;
+std::vector<Neko*> g_Nekos;
+
+void CALLBACK UpdateAllCatsTimer(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    if (g_isHidden || g_modExit) return;
+    for (size_t i = 0; i < g_Nekos.size(); i++) {
+        for (size_t j = i + 1; j < g_Nekos.size(); j++) {
+            Neko* a = g_Nekos[i];
+            Neko* b = g_Nekos[j];
+            double dx = a->logicX - b->logicX;
+            double dy = a->logicY - b->logicY;
+            double distSq = dx*dx + dy*dy;
+            double minDist = 32.0 * g_scale;
+            if (distSq < minDist * minDist && distSq > 0.001) {
+                double dist = sqrt(distSq);
+                double overlap = minDist - dist;
+                double pushX = (dx / dist) * overlap * 0.1;
+                double pushY = (dy / dist) * overlap * 0.1;
+                a->logicX += pushX; a->logicY += pushY;
+                b->logicX -= pushX; b->logicY -= pushY;
+            }
+        }
+    }
+    for (auto pNeko : g_Nekos) {
+        pNeko->Update();
+    }
+}
 
 DWORD WINAPI NekoProcessThread(LPVOID param) {
     GdiplusStartupInput gdiplusStartupInput;
@@ -744,37 +1163,105 @@ DWORD WINAPI NekoProcessThread(LPVOID param) {
 
     DownloadMissingAssets();
 
-    g_pNeko = new Neko();
-    g_pNeko->Init();
+    for (int i = 0; i < g_catCount; ++i) {
+        Neko* pNeko = new Neko();
+        pNeko->Init();
+        if (g_catCount > 1) pNeko->behaviorMode = rand() % 5;
+        g_Nekos.push_back(pNeko);
+    }
+    for (size_t i = 0; i < g_Nekos.size(); ++i) {
+        g_Nekos[i]->UpdateOffsets(i, g_Nekos.size());
+    }
     
     // Track the overlay HWND for the tool mod
-    g_hwndOverlay = g_pNeko->hwnd;
+    if (!g_Nekos.empty()) g_hwndOverlay = g_Nekos[0]->hwnd;
     
     // Signal that the window is ready
     if (g_hWindowReady) {
         SetEvent(g_hWindowReady);
     }
 
-    int intervalMs = 1000 / g_fps;
+    int intervalMs = 1000 / (g_fps > 0 ? g_fps : 60);
+
+    UINT modifiers = 0;
+    UINT vk = 0;
+    bool hotkeyRegistered = false;
+    
+    auto RegisterNekoKey = [&]() {
+        if (hotkeyRegistered) {
+            UnregisterHotKey(NULL, 1);
+            hotkeyRegistered = false;
+        }
+        if (!g_nekoKeyStr.empty()) {
+            modifiers = ParseHotkeyModifiers(g_nekoKeyStr);
+            vk = ParseHotkeyVK(g_nekoKeyStr);
+            if (vk != 0) {
+                hotkeyRegistered = RegisterHotKey(NULL, 1, modifiers, vk);
+                if (!hotkeyRegistered) {
+                    Wh_Log(L"Failed to register neko key. It might be in use.");
+                } else {
+                    Wh_Log(L"Registered Neko Key");
+                }
+            }
+        }
+    };
+    
+    RegisterNekoKey();
+
+    UINT_PTR timerId = SetTimer(NULL, 1, intervalMs, UpdateAllCatsTimer);
 
     MSG msg;
-    while (!g_modExit) {
-        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_QUIT) {
-                g_modExit = true;
-                break;
+    while (!g_modExit && GetMessage(&msg, NULL, 0, 0) > 0) {
+        if (msg.message == WM_UPDATE_SETTINGS) {
+            intervalMs = 1000 / (g_fps > 0 ? g_fps : 60);
+            KillTimer(NULL, timerId);
+            timerId = SetTimer(NULL, 1, intervalMs, UpdateAllCatsTimer);
+            RegisterNekoKey();
+            
+            while ((int)g_Nekos.size() < g_catCount) {
+                Neko* pNeko = new Neko();
+                pNeko->Init();
+                if (g_catCount > 1) pNeko->behaviorMode = rand() % 5;
+                if (g_isHidden) ShowWindow(pNeko->hwnd, SW_HIDE);
+                g_Nekos.push_back(pNeko);
             }
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        } else {
-            g_pNeko->Update();
-            Sleep(intervalMs);
+            while ((int)g_Nekos.size() > g_catCount) {
+                Neko* pNeko = g_Nekos.back();
+                g_Nekos.pop_back();
+                pNeko->StopAudio();
+                delete pNeko;
+            }
+            for (size_t i = 0; i < g_Nekos.size(); ++i) {
+                g_Nekos[i]->UpdateOffsets(i, g_Nekos.size());
+            }
+            if (!g_Nekos.empty()) g_hwndOverlay = g_Nekos[0]->hwnd;
+        } else if (msg.message == WM_HOTKEY && msg.wParam == 1) {
+            g_isHidden = !g_isHidden;
+            for (auto pNeko : g_Nekos) {
+                ShowWindow(pNeko->hwnd, g_isHidden ? SW_HIDE : SW_SHOWNA);
+                if (g_isHidden) {
+                    pNeko->StopAudio();
+                } else {
+                    pNeko->hasMouseMoved = false;
+                }
+            }
+            Wh_Log(L"Neko Key toggled. IsHidden: %d", g_isHidden);
         }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    
+    if (timerId) KillTimer(NULL, timerId);
+    
+    if (hotkeyRegistered) {
+        UnregisterHotKey(NULL, 1);
     }
 
-    g_pNeko->StopAudio();
-    delete g_pNeko;
-    g_pNeko = nullptr;
+    for (auto pNeko : g_Nekos) {
+        pNeko->StopAudio();
+        delete pNeko;
+    }
+    g_Nekos.clear();
 
     GdiplusShutdown(gdiplusToken);
     return 0;
@@ -812,12 +1299,15 @@ BOOL WhTool_ModInit()
 void WhTool_ModSettingsChanged()
 {
     LoadSettings();
-    if (g_pNeko) {
+    if (g_hThread) {
+        PostThreadMessage(GetThreadId(g_hThread), WM_UPDATE_SETTINGS, 0, 0);
+    }
+    for (auto pNeko : g_Nekos) {
         // Force bounds recalculation
-        g_pNeko->virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        g_pNeko->virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        g_pNeko->boundsWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
-        g_pNeko->boundsHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
+        pNeko->virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        pNeko->virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        pNeko->boundsWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
+        pNeko->boundsHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN) - SPRITE_SIZE * g_scale;
     }
 }
 
@@ -867,6 +1357,16 @@ void LoadSettings() {
     g_sleepSoundInterval = Wh_GetIntSetting(L"sleep_sound_interval");
     g_sleepSoundRepeat = Wh_GetIntSetting(L"sleep_sound_repeat") != 0;
     g_fps = Wh_GetIntSetting(L"fps");
+    g_catCount = Wh_GetIntSetting(L"cat_count");
+    if (g_catCount < 1) g_catCount = 1;
+
+    PCWSTR nekoKeyStr = Wh_GetStringSetting(L"neko_key");
+    if (nekoKeyStr) {
+        g_nekoKeyStr = nekoKeyStr;
+        Wh_FreeStringSetting(nekoKeyStr);
+    } else {
+        g_nekoKeyStr = L"";
+    }
 }
 
 void Wh_ModSettingsChanged() {
