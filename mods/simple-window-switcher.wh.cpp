@@ -589,6 +589,17 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
             }
         }
     }
+    // Additional fallback for Windows 10: try resolving from process executable
+    if (!hIcon) {
+        Wh_Log(L"ResolveIconFromAumid: Falling back to process exe icon");
+        // Attempt to parse AUMID for package family or exe; if not, try to find process owning the app
+        // A caller should pass a window handle context; as a best-effort here we try to locate any process
+        // associated with the AUMID by enumerating package family is complex; instead this fallback
+        // will be used by callers that have a HWND and can call TryGetUwpIconFromExplorer first. Here
+        // provide a helper-like attempt using shell APIs if possible.
+        // No-op in this function since we don't have HWND; real fallback is implemented where callers
+        // have HWND context (see TryGetUwpIconFromExplorer usage).
+    }
     return hIcon;
 }
 
@@ -642,6 +653,47 @@ LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     CloseHandle(hProc);
                 } else {
                     Wh_Log(L"Explorer IPC: OpenProcess failed, err=%u", GetLastError());
+                }
+            }
+            // If still no AUMID (common on Win10), try to get the process executable and return its icon
+            if (aumid.empty() && pid) {
+                // First try window/class icons via WM_GETICON / GetClassLongPtr — sometimes available on Win10
+                HICON hWinIcon = NULL;
+                HICON hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_BIG, 0);
+                if (!hTmp) hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_SMALL, 0);
+                if (!hTmp) hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_SMALL2, 0);
+                if (hTmp) hWinIcon = hTmp;
+                if (!hWinIcon) {
+                    HICON hClassIcon = (HICON)GetClassLongPtrW(hCore, GCLP_HICON);
+                    if (!hClassIcon) hClassIcon = (HICON)GetClassLongPtrW(hCore, GCLP_HICONSM);
+                    if (hClassIcon) hWinIcon = hClassIcon;
+                }
+                if (hWinIcon) {
+                    Wh_Log(L"Explorer IPC: Returning WM_GETICON/GetClassLongPtr icon %p as Win10 fallback", hWinIcon);
+                    g_uwpIconCache[L"wm_icon_" + std::to_wstring((uintptr_t)hWinIcon) + L"_" + std::to_wstring(desiredSizePx)] = hWinIcon;
+                    return (LRESULT)hWinIcon;
+                }
+
+                WCHAR exePath[MAX_PATH] = {0};
+                HANDLE hProc2 = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+                if (hProc2) {
+                    DWORD size = MAX_PATH;
+                    if (QueryFullProcessImageNameW(hProc2, 0, exePath, &size)) {
+                        Wh_Log(L"Explorer IPC: Fallback exe path = %s", exePath);
+                        SHFILEINFOW sfi = {};
+                        UINT flags = SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | (desiredSizePx > 24 ? SHGFI_LARGEICON : SHGFI_SMALLICON);
+                        if (SHGetFileInfoW(exePath, FILE_ATTRIBUTE_NORMAL, &sfi, sizeof(sfi), flags)) {
+                            if (sfi.hIcon) {
+                                Wh_Log(L"Explorer IPC: Returning exe icon %p as Win10 fallback", sfi.hIcon);
+                                g_uwpIconCache[std::wstring(exePath) + L"_" + std::to_wstring(desiredSizePx)] = sfi.hIcon;
+                                CloseHandle(hProc2);
+                                return (LRESULT)sfi.hIcon;
+                            }
+                        }
+                    } else {
+                        Wh_Log(L"Explorer IPC: QueryFullProcessImageNameW failed, err=%u", GetLastError());
+                    }
+                    CloseHandle(hProc2);
                 }
             }
         }
@@ -702,7 +754,51 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
         DWORD_PTR res = 0;
         LRESULT sendRes = SendMessageTimeoutW(hIpc, g_WM_SWS_GET_UWP_ICON, (WPARAM)hWnd, desiredSizePx, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &res);
         Wh_Log(L"TryGetUwpIconFromExplorer: SendMessageTimeoutW to %p returned %ld, res = %p", hIpc, sendRes, res);
-        return (HICON)res;
+        if (res) {
+            // On Windows 11 explorer returns usable icon handles via IPC in our environment.
+            // Avoid attempting local AUMID->icon resolution on Win11 to preserve that behavior.
+            auto IsWindows11OrGreater = []() -> bool {
+                DWORD build = 0; DWORD sz = sizeof(build);
+                if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, NULL, &sz) == ERROR_SUCCESS) {
+                    // Read as string
+                    std::wstring buf; buf.resize(sz/2);
+                    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, &buf[0], &sz) == ERROR_SUCCESS) {
+                        int buildNum = _wtoi(buf.c_str());
+                        return buildNum >= 22000;
+                    }
+                }
+                return false;
+            };
+            if (IsWindows11OrGreater()) {
+                return (HICON)res;
+            }
+            // We got an icon handle from Explorer, but HICON handles are process-local —
+            // prefer resolving the AUMID locally and creating an icon in this process.
+            // Try to get the AUMID locally using SHGetPropertyStoreForWindow; if available,
+            // create a local icon via ResolveIconFromAumid and return it.
+            std::wstring aumidLocal;
+            IPropertyStore* ps = NULL;
+            if (SUCCEEDED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&ps))) && ps) {
+                PROPVARIANT pv; PropVariantInit(&pv);
+                if (SUCCEEDED(ps->GetValue(PKEY_AppUserModel_ID, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
+                    aumidLocal = pv.pwszVal;
+                    Wh_Log(L"TryGetUwpIconFromExplorer: Got AUMID locally = %s", aumidLocal.c_str());
+                }
+                PropVariantClear(&pv);
+                ps->Release();
+            }
+            if (!aumidLocal.empty()) {
+                HICON hLocal = ResolveIconFromAumid(aumidLocal.c_str(), desiredSizePx);
+                if (hLocal) {
+                    Wh_Log(L"TryGetUwpIconFromExplorer: Resolved local icon %p from AUMID", hLocal);
+                    return hLocal;
+                }
+                Wh_Log(L"TryGetUwpIconFromExplorer: Local ResolveIconFromAumid failed for %s", aumidLocal.c_str());
+            }
+            // As a last resort, return the handle from explorer (may not be valid across processes)
+            return (HICON)res;
+        }
+        return NULL;
     } else {
         Wh_Log(L"TryGetUwpIconFromExplorer: WindhawkSWS_IpcWindow not found");
     }
