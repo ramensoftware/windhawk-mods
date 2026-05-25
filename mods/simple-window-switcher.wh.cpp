@@ -299,7 +299,9 @@ static int GetHeaderRowHeightPx() {
     }
 
     if (!HeaderIsVertical()) {
-        return MulDiv(SWS_ROW_TITLE_HEIGHT, g_dpiY, 96);
+        int h = MulDiv(SWS_ROW_TITLE_HEIGHT, g_dpiY, 96);
+        if (g_settings.showIcon && GetHeaderIconSizePx() > h) h = GetHeaderIconSizePx();
+        return h;
     }
 
     int gap = MulDiv(4, g_dpiY, 96);
@@ -991,7 +993,11 @@ static void ComputeLayout(HMONITOR hMon) {
                     if (w.effectiveSourceSize.cx > 0 && width > w.effectiveSourceSize.cx) width = w.effectiveSourceSize.cx;
                 }
             } else {
-                width = DpiScale(160, dpiX);
+                if (!g_settings.showTitle && g_settings.showIcon) {
+                    width = GetHeaderIconSizePx() + DpiScale(16, dpiX); // Base padding
+                } else {
+                    width = DpiScale(160, dpiX);
+                }
             }
 
             if (g_settings.rowWidth > 0) {
@@ -1399,13 +1405,14 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
         }
 
         int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
-        // Keep centered header content stable: reserve close-button space consistently.
-        // In vertical mode, never reserve space - close button overlays without displacement.
         int btnReserve = 0;
         if (!HeaderIsVertical()) {
-            btnReserve = ((g_settings.centerTaskContent) || i == g_hoverIndex)
-                     ? closeBtnReserve
-                     : 0;
+            bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
+            if (!isIconOnly) {
+                btnReserve = ((g_settings.centerTaskContent) || i == g_hoverIndex)
+                         ? closeBtnReserve
+                         : 0;
+            }
         }
         int contentLeft = e.rcCell.left + padLeft;
         int contentRight = e.rcCell.right - padLeft - btnReserve;
@@ -1423,7 +1430,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
             int availableW = contentRight - contentLeft;
             if (availableW < 0) availableW = 0;
 
-            iconX = contentLeft + fmax(0, (availableW - iconSz) / 2);
+            iconX = contentLeft + ((availableW > iconSz) ? (availableW - iconSz) / 2 : 0);
             iconY = e.rcCell.top + padTop;
 
             int headerGap = DpiScale(4, g_dpiY);
@@ -1507,6 +1514,29 @@ static void DrawSwitcherOverlay(HDC hdc) {
                 int btnPadding = DpiScale(4, g_dpiX);
                 bx = e.rcThumbActual.right - btnSz - btnPadding;
                 by = e.rcThumbActual.top + btnPadding;
+            } else if (!g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon) {
+                int contentLeft = e.rcCell.left + padLeft;
+                int contentRight = e.rcCell.right - padLeft;
+                int iconSz = GetHeaderIconSizePx();
+                int availableW = contentRight - contentLeft;
+                if (availableW < 0) availableW = 0;
+                
+                int iconX = contentLeft;
+                int iconY = e.rcCell.top + padTop + (rowTitleH - iconSz) / 2;
+                
+                if (HeaderIsVertical()) {
+                    iconX = contentLeft + ((availableW > iconSz) ? (availableW - iconSz) / 2 : 0);
+                    iconY = e.rcCell.top + padTop;
+                } else if (g_settings.centerTaskContent) {
+                    if (iconSz < availableW) {
+                        iconX = contentLeft + (availableW - iconSz) / 2;
+                    }
+                }
+
+                int btnPadding = DpiScale(2, g_dpiX);
+                btnSz = DpiScale(16, g_dpiX);
+                bx = iconX + iconSz - btnSz + btnPadding;
+                by = iconY - btnPadding;
             } else {
                 bx = e.rcCell.right - padLeft - btnSz;
                 by = HeaderIsVertical() ? (e.rcCell.top + padTop)
@@ -1540,7 +1570,7 @@ static void DrawSwitcherOverlay(HDC hdc) {
             graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
             COLORREF xc = g_isCloseHovered ? RGB(255, 255, 255) : GetContourColor();
             Gdiplus::Pen xPen(Gdiplus::Color(255, GetRValue(xc), GetGValue(xc), GetBValue(xc)), 1.5f * g_dpiX / 96.0f);
-            int p = DpiScale(7, g_dpiX);
+            int p = (btnSz == DpiScale(16, g_dpiX)) ? DpiScale(4, g_dpiX) : DpiScale(7, g_dpiX);
             graphics.DrawLine(&xPen, bx + p, by + p, bx + btnSz - p, by + btnSz - p);
             graphics.DrawLine(&xPen, bx + btnSz - p, by + p, bx + p, by + btnSz - p);
         }
@@ -2213,6 +2243,29 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 int btnPadding = DpiScale(4, g_dpiX);
                 bx = e.rcThumbActual.right - btnSz - btnPadding;
                 by = e.rcThumbActual.top + btnPadding;
+            } else if (!g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon) {
+                int contentLeft = e.rcCell.left + padL;
+                int contentRight = e.rcCell.right - padL;
+                int iconSz = GetHeaderIconSizePx();
+                int availableW = contentRight - contentLeft;
+                if (availableW < 0) availableW = 0;
+                
+                int iconX = contentLeft;
+                int iconY = e.rcCell.top + padT + (titleH - iconSz) / 2;
+                
+                if (HeaderIsVertical()) {
+                    iconX = contentLeft + ((availableW > iconSz) ? (availableW - iconSz) / 2 : 0);
+                    iconY = e.rcCell.top + padT;
+                } else if (g_settings.centerTaskContent) {
+                    if (iconSz < availableW) {
+                        iconX = contentLeft + (availableW - iconSz) / 2;
+                    }
+                }
+
+                int btnPadding = DpiScale(2, g_dpiX);
+                btnSz = DpiScale(16, g_dpiX);
+                bx = iconX + iconSz - btnSz + btnPadding;
+                by = iconY - btnPadding;
             } else {
                 bx = e.rcCell.right - padL - btnSz;
                 by = HeaderIsVertical() ? (e.rcCell.top + padT)
