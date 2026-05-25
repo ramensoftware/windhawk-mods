@@ -209,6 +209,9 @@ bool ApplyHooks(HMODULE hMsHtml) {
             Wh_Log(L"mshtml.dll HookSymbols failed");
             return false;
         }
+    } else {
+        Wh_Log(L"hMsHtml == NULL on ApplyHooks!");
+        return false;
     }
     HMODULE d2d1 = GetModuleHandleW(L"d2d1.dll"); // should already be loaded at this point
     if (d2d1) {
