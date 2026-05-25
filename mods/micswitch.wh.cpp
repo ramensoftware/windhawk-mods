@@ -39,6 +39,7 @@ Instantly toggle between two audio input devices (microphones) from your system 
 - Fixed: occasional hang when Windhawk unloads the mod.
 - Fixed: tray window appeared in Alt+Tab.
 - Fixed: tray icon failed to load on some Windows configurations.
+- Tray / Taskbar icon is now independent, no longer linked to the Windhawk icon.
 
 ### v1.0.0
 - Initial release.
