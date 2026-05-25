@@ -5,19 +5,25 @@
 // @version         0.0.1
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
-// @homepage        https://github.com/SilverAmd
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -ldxgi -ld2d1 -ldwrite -ld3d11 -ldcomp -ldwmapi -lgdi32 -lshcore
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
-
+// Source code is published under The GNU General Public License v3.0.
 
 // ==WindhawkModReadme==
 /*
 # Calendar Live Overlay
 
 Displays a customizable monthly calendar directly on the desktop behind the desktop icons.
+
+## Preview
+
+![Calendar Live Overlay preview 1](https://i.imgur.com/A3gcKe0.png)
+
+![Calendar Live Overlay preview 2](https://i.imgur.com/AuCGcoP.png)
+
 
 ## Features
 
@@ -52,64 +58,7 @@ Displays a customizable monthly calendar directly on the desktop behind the desk
 
 Enable the mod and adjust the position and appearance in the mod settings.
 
-Recommended basic settings:
-
-- Font family: `Cascadia Mono`
-- Font size: `36`
-- Text color: `#A0FFFFFF`
-- Use absolute X/Y position: disabled
-- Horizontal position percent: `4`
-- Vertical position percent: `4`
-- Monitor: `1`
-
-## Recommended Settings Preset
-
-You can import the following settings via Windhawk's mod settings import/export field:
-
-```json
-{
-  "calendarFontSize": 36,
-  "calendarTextColor": "#A0FFFFFF",
-  "calendarFontFamily": "Cascadia Mono",
-  "calendarFontWeight": "Normal",
-  "calendarFontStyle": "Normal",
-  "calendarShowWeekNumbers": 1,
-  "calendarWeekStartDay": "Monday",
-  "calendarUseGermanNames": 0,
-  "calendarShowHeader": 1,
-  "calendarLeadingZeroDayNumbers": 0,
-  "calendarUseBoxDrawing": 1,
-  "calendarBorderLeftOffset": 2,
-  "calendarHighlightToday": 1,
-  "calendarTodayColor": "#FFFF6060",
-  "calendarTodayBold": 1,
-  "calendarTodayUnderline": 1,
-  "calendarHighlightWeekends": 1,
-  "calendarWeekendColor": "#FFFFB060",
-  "calendarWeekendOpacity": 100,
-  "calendarHighlightWeekNumbers": 1,
-  "calendarWeekNumberColor": "#A0B8E8FF",
-  "calendarHighlightDayNames": 1,
-  "calendarDayNameColor": "#A0FFF0B0",
-  "calendarColumnSpacing": 2,
-  "calendarRowSpacing": 0,
-  "calendarHeaderAlignment": "Center",
-  "useAbsolutePosition": 0,
-  "xPosition": 220,
-  "yPosition": 120,
-  "verticalPosition": 4,
-  "horizontalPosition": 4,
-  "monitor": 1,
-  "refreshInterval": 60,
-  "backgroundEnabled": 0,
-  "backgroundColor": "#30000000",
-  "backgroundPadding": 20,
-  "backgroundCornerRadius": 16,
-  "backgroundBlur": 0,
-  "backgroundBorderSize": 0,
-  "backgroundBorderColor": "#50FFFFFF"
-}
-```
+For best alignment, use a monospaced font such as Cascadia Mono, Consolas, JetBrains Mono, or Courier New.
 
 ## Color Format
 Colors use hexadecimal format:
@@ -198,10 +147,6 @@ Proportional fonts such as Arial, Calibri or Verdana can distort the calendar la
 - Background blur
 - Background border size
 - Background border color
-
-### Refresh
-
-- Refresh interval seconds
 
 ## Credits
 
@@ -313,7 +258,7 @@ The mod does not open a normal application window and does not appear in the tas
   $description: "Default is true"
 - calendarWeekNumberColor: "#80B8E8FF"
   $name: Week number color
-  $description: "Color for KW and week numbers in #AARRGGBB or #RRGGBB format. Default is #A0B8E8FF"
+  $description: "Color for week number label and week numbers in #AARRGGBB or #RRGGBB format. Default is #80B8E8FF"
 
 - calendarHighlightDayNames: true
   $name: Highlight day names
@@ -348,15 +293,12 @@ The mod does not open a normal application window and does not appear in the tas
 - verticalPosition: 4
   $name: Vertical position percent
   $description: "Default is 4"
-- horizontalPosition: 4
+- horizontalPosition: 96
   $name: Horizontal position percent
-  $description: "Default is 4"
+  $description: "Default is 96"
 - monitor: 1
   $name: Monitor
   $description: "Monitor number starting from 1. Usually 1 is the primary display. Use 2, 3, etc. for additional monitors. Values are limited to 1-16."
-- refreshInterval: 60
-  $name: Refresh interval seconds
-  $description: "Default is 60"
 
 - backgroundEnabled: false
   $name: Enable background
@@ -441,7 +383,6 @@ struct LineSettings {
 
 struct Settings {
     LineSettings topLine;
-    int refreshInterval;
     bool backgroundEnabled;
     BYTE backgroundColorA;
     BYTE backgroundColorR;
@@ -1088,7 +1029,7 @@ PCWSTR GetCalendarFormatted() {
     int headerCol = 0;
     if (g_settings.calendarShowWeekNumbers) {
         UINT32 rangeStart = (UINT32)out.size();
-        appendCell(L"KW");
+        appendCell(g_settings.calendarUseGermanNames ? L"KW" : L"Wk");
         g_calendarWeekNumberRanges.push_back({rangeStart, 2});
         appendGapIfNeeded(headerCol++, visibleColumns);
     }
@@ -2371,7 +2312,7 @@ void CreateOverlayWindow() {
 ////////////////////////////////////////////////////////////////////////////////
 // Message window for system notifications
 
-#define MESSAGE_WINDOW_CLASS L"DesktopLiveOverlay_Message_" WH_MOD_ID
+#define MESSAGE_WINDOW_CLASS L"CalendarLiveOverlay_Message_" WH_MOD_ID
 
 bool g_messageClassRegistered = false;
 
@@ -2524,11 +2465,6 @@ void LoadSettings() {
 
     g_settings.topLine.fontSize =
     ClampInt(Wh_GetIntSetting(L"calendarFontSize"), 16, 200);
-
-    g_settings.refreshInterval = Wh_GetIntSetting(L"refreshInterval");
-    if (g_settings.refreshInterval <= 0) {
-        g_settings.refreshInterval = 1;
-    }
 
     g_settings.backgroundEnabled = Wh_GetIntSetting(L"backgroundEnabled");
 
