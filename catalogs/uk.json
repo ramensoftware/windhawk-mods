@@ -5836,7 +5836,7 @@
                     4
                 ],
                 "ratingUsers": 5,
-                "updated": 1779474771000,
+                "updated": 1779705837000,
                 "users": 16
             },
             "metadata": {
@@ -5845,10 +5845,10 @@
                 "description": "Produces click sound on keypress, supports autorepeat",
                 "github": "https://github.com/Anixx",
                 "include": [
-                    "windhawk.exe"
+                    "dwm.exe"
                 ],
                 "name": "Key Click",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "keyboard-shortcut-actions": {
