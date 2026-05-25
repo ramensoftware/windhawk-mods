@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-24T20:01:27.000Z</updated>
+    <updated>2026-05-25T14:10:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MSHTML Tweaks 1.0]]></title>
+        <id>https://windhawk.net/mods/mshtml-native-controls#f7de3782e55d3abd9b6d97588c8116ac80e7e0b1</id>
+        <link href="https://windhawk.net/mods/mshtml-native-controls"/>
+        <updated>2026-05-25T14:10:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mshtmltweaks">MSHTML Tweaks</h1>
+<ul>
+<li>Various tweaks for Internet Explorer and all the other apps using its engine (Trident/MSHTML), such as HTML Help, HelpPane, MSHTA, MMC, etc.</li>
+<li>This mod can bring back old controls, customize the font smoothing type (disable the forced ClearType), and disable the DirectComposition rendering.</li>
+<li>Special thanks to @xalejandro for the ClearType disabler.</li>
+<li>Only works on Internet Explorer 11 engine running on Windows 10 or higher. Tested on 10 22H2 and 11 25H2. Never tested on Windows 8 or earlier Windows 10 builds. Won't work on Windows 7. (You'll need to remove hooks for some symbols that don't exist.)</li>
+<li>The first launch of an MSHTML application after enabling this mod will take a lot of time, due to the large size of the symbols needed. It may not show the symbols download progress dialog depending on your internet security settings.</li>
+</ul>
+<h2 id="notesregardingtheoldcontrolstyles">Notes regarding the old control styles</h2>
+<ul>
+<li>Note that this mod only restores IE11's built-in Windows 7 behavior for old control styling, which uses hardcoded/fake Aero styles that do not actually match the current system theme.</li>
+<li>Only the scrollbar will use actual bitmaps from the current visual style (or classic); however, they may look glitchy, especially on HiDPI displays.</li>
+<li>You may want to disable the visual styles for controls in Internet Options (<code>inetcpl.cpl</code>) -&gt; Advanced -&gt; <code>Enable visual styles on buttons and controls in web pages</code> to make them look better on older themes such as XP.
+<img src="https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/ie_fakeaero.png" alt="Comparison of fake and real control styles" /></li>
+</ul>
+<h2 id="ifinternetexplorerhangsonstartup">If Internet Explorer hangs on startup</h2>
+<ul>
+<li>Internet Explorer (<code>iexplore.exe</code>) uses a 32-bit subprocess by default, and the subprocess will fail to save its symbol downloaded from the Windhawk server.</li>
+<li>To fix this, please run the following in the run dialog (Win+R) to launch a 32-bit MSHTML as a main process to load the symbols:</li>
+<li><code>C:\Windows\SysWOW64\hh.exe http://www.ingan121.com/</code> (or any other <code>http</code> URL that isn't <code>https</code>)</li>
+</ul>
+<h2 id="knownissues">Known issues</h2>
+<ul>
+<li>Internet Explorer will crash when changing the settings or loading/unloading/updating the mod while it's running. This is not necessarily true for other apps using MSHTML.</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DWM Custom Projection Border 1.0.0]]></title>
         <id>https://windhawk.net/mods/dwm-custom-projection-border#eefcd95278ff79bf6a79f81175c0eacd6cf2efb7</id>
@@ -592,77 +627,6 @@ UI frameworks already handle their own previous-word deletion functionality.</li
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AutoScroll Win32 1.0.0]]></title>
-        <id>https://windhawk.net/mods/autoscroll-win32#126a2a9093f065ec58610d11c98e8f75a0cdb014</id>
-        <link href="https://windhawk.net/mods/autoscroll-win32"/>
-        <updated>2026-05-07T08:44:09.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/auto%20scroll%20preview.gif" alt="Preview" /></p>
-<hr />
-<h2 id="autoscrollwin32">AutoScroll Win32</h2>
-<p>Simulates browser-style autoscroll (middle mouse button) in Win32 applications
-such as File Explorer, with a WinUI-style visual indicator at the scroll origin.</p>
-<h3 id="howtouse">How to use</h3>
-<ol>
-<li><strong>Hold</strong> the <strong>middle mouse button</strong> anywhere in a scrollable area.</li>
-<li>Move the cursor <strong>up or down</strong> (and optionally sideways) from the origin
-point -- the farther from the origin, the faster the scroll.</li>
-<li><strong>Release</strong> the middle button to stop.</li>
-</ol>
-<h3 id="compatibilitywithsmoothscrollwin32">Compatibility with Smooth Scroll Win32</h3>
-<p>Fully compatible. AutoScroll Win32 posts standard WM<em>MOUSEWHEEL and
-WM</em>MOUSEHWHEEL messages, which Smooth Scroll Win32 intercepts and animates
-exactly like real mouse-wheel events.</p>
-<h3 id="addingmoreapplications">Adding more applications</h3>
-<p>By default the mod targets only explorer.exe. To enable it in other
-applications, add their executable names in the <strong>Advanced</strong> tab of the mod
-settings in Windhawk under "Include processes".</p>
-<hr />
-<h2 id="autoscrollwin32portugues">AutoScroll Win32 (Portugues)</h2>
-<p>Simula a rolagem automatica com o botao do meio do mouse (estilo navegador) em
-aplicativos Win32 como o Explorador de Arquivos, com um indicador visual
-estilo WinUI no ponto de origem da rolagem.</p>
-<h3 id="comousar">Como usar</h3>
-<ol>
-<li><strong>Segure</strong> o <strong>botao do meio do mouse</strong> em qualquer area rolavel.</li>
-<li>Mova o cursor <strong>para cima ou para baixo</strong> (e opcionalmente para os lados)
-a partir do ponto de origem -- quanto mais longe, mais rapido rola.</li>
-<li><strong>Solte</strong> o botao do meio para parar.</li>
-</ol>
-<h3 id="compatibilidadecomsmoothscrollwin32">Compatibilidade com Smooth Scroll Win32</h3>
-<p>Totalmente compativel. O AutoScroll Win32 envia mensagens padrao WM<em>MOUSEWHEEL
-e WM</em>MOUSEHWHEEL, que o Smooth Scroll Win32 intercepta e anima exatamente como
-eventos reais da roda do mouse.</p>
-<h3 id="adicionarmaisaplicativos">Adicionar mais aplicativos</h3>
-<p>Por padrao, o mod afeta apenas o explorer.exe. Para ativa-lo em outros
-aplicativos, adicione os nomes dos executaveis na aba <strong>Advanced</strong> das
-configuraces do mod no Windhawk em "Include processes".</p>
-<hr />
-<h2 id="autoscrollwin32espanol">AutoScroll Win32 (Espanol)</h2>
-<p>Simula el desplazamiento automatico con el boton central del raton (estilo
-navegador) en aplicaciones Win32 como el Explorador de archivos, con un
-indicador visual estilo WinUI en el punto de origen del desplazamiento.</p>
-<h3 id="comousar-1">Como usar</h3>
-<ol>
-<li><strong>Mantena presionado</strong> el <strong>boton central del raton</strong> en cualquier area
-desplazable.</li>
-<li>Mueve el cursor <strong>hacia arriba o hacia abajo</strong> (y opcionalmente hacia los
-lados) desde el punto de origen -- cuanto mas lejos, mas rapido se desplaza.</li>
-<li><strong>Suelta</strong> el boton central para detener.</li>
-</ol>
-<h3 id="compatibilidadconsmoothscrollwin32">Compatibilidad con Smooth Scroll Win32</h3>
-<p>Totalmente compatible. AutoScroll Win32 envia mensajes estandar WM<em>MOUSEWHEEL
-y WM</em>MOUSEHWHEEL, que Smooth Scroll Win32 intercepta y anima exactamente como
-eventos reales de la rueda del raton.</p>
-<h3 id="agregarmasaplicaciones">Agregar mas aplicaciones</h3>
-<p>De forma predeterminada, el mod solo afecta a explorer.exe. Para habilitarlo
-en otras aplicaciones, agrega los nombres de los ejecutables en la pestana <strong>Advanced</strong>
-de la configuracion del mod en Windhawk bajo "Include processes".</p>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

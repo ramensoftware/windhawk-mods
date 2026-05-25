@@ -6677,6 +6677,35 @@
                 "version": "2.3.0"
             }
         },
+        "mshtml-native-controls": {
+            "details": {
+                "defaultSorting": 9,
+                "published": 1779718212000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779718212000,
+                "users": 1
+            },
+            "metadata": {
+                "author": "Ingan121",
+                "description": "Various tweaks for the IE engine, including old control styles and font AA options",
+                "github": "https://github.com/Ingan121",
+                "homepage": "https://www.ingan121.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "MSHTML Tweaks",
+                "twitter": "https://twitter.com/Ingan121",
+                "version": "1.0"
+            }
+        },
         "mspaint-dark": {
             "details": {
                 "defaultSorting": 34533,
