@@ -62,16 +62,6 @@ INT WINAPI ShellAboutW_hook(
     LPCWSTR szOtherStuff,
     HICON hIcon)
 {
-    // Only replace Winver itself
-    if (!IsWinverProcess())
-    {
-        return ShellAboutW_orig(
-            hWnd,
-            szApp,
-            szOtherStuff,
-            hIcon
-        );
-    }
 
     const wchar_t* exePath = g_replacementExe.get();
 
