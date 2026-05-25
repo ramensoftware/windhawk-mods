@@ -96,11 +96,11 @@ CTridentPrivateDebugAPI_SetEnableWebControlVisuals_t SetEnableWebControlVisuals;
 typedef __int64 (__stdcall* CTridentPrivateDebugAPI_SetDCompEnabled_t)(void* pThis, int enable);
 CTridentPrivateDebugAPI_SetDCompEnabled_t SetDCompEnabled;
 
-typedef int (__thiscall* CTooltip_ShowModernTip_t)(void* pThis, const unsigned __int16* a2, HWND a3, __int64 a4, void* a5, __int64 a6, int a7, void* a8, int a9, int a10, int a11);
+typedef HRESULT (__thiscall* CTooltip_ShowModernTip_t)(void* pThis, const unsigned short* a2, HWND a3, MSG* a4, RECT* a5, UINT_PTR a6, int a7, POINT* a8, int a9, int a10, int a11);
 CTooltip_ShowModernTip_t CTooltip_ShowModernTip_original;
-int __thiscall CTooltip_ShowModernTip_hook(void* pThis, const unsigned __int16* a2, HWND a3, __int64 a4, void* a5, __int64 a6, int a7, void* a8, int a9, int a10, int a11) {
+HRESULT __thiscall CTooltip_ShowModernTip_hook(void* pThis, const unsigned short* a2, HWND a3, MSG* a4, RECT* a5, UINT_PTR a6, int a7, POINT* a8, int a9, int a10, int a11) {
     if (g_settings.oldControls) {
-        return E_NOTIMPL; // Deny to show the older one
+        return E_NOTIMPL; // Deny to show the older one. Original code also has path to return E_NOTIMPL under some condition
     }
     return CTooltip_ShowModernTip_original(pThis, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11);
 }
