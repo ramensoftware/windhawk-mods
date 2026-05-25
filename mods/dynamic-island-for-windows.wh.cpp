@@ -52,6 +52,10 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
     - '0.8': 0.8x
     - '1.0': 1.0x
     - '1.2': 1.2x
+    - '1.5': 1.5x
+    - '1.8': 1.8x
+    - '2.0': 2.0x
+    - '2.5': 2.5x
 - AccentColorMode: auto
   $name: Accent color mode
   $options:
@@ -85,6 +89,12 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
   $description: Shows FPS, CPU, RAM, GPU placeholder, disk, and foreground app.
 - AlwaysShowClock: true
   $name: Always show clock
+- AlwaysOnTop: true
+  $name: Always on top
+  $description: "Keep the island above all other windows. Disable if it blocks other software."
+- AutoDpiScale: true
+  $name: Auto DPI scaling
+  $description: "Automatically scale the island to match your monitor's DPI (recommended for 4K/HiDPI screens)."
 - PillBgColor: "#0D0D0F"
   $name: Pill background color
   $description: "Hex color for pill background. Presets: #0D0D0F (OLED Black), #1C1C1E (Dark Gray), #0A0A1A (Midnight Blue), #12001E (Deep Purple)"
@@ -207,6 +217,8 @@ struct Settings {
     float pillOpacity = 0.96f;
     bool gameOverlay = false;
     bool alwaysShowClock = true;
+    bool alwaysOnTop = true;
+    bool autoDpiScale = true;
     // Color customization
     D2D1_COLOR_F pillBgColor = D2D1::ColorF(0.051f, 0.051f, 0.059f, 1.0f); // #0D0D0F
     D2D1_COLOR_F textPrimaryColor = D2D1::ColorF(0.969f, 0.969f, 0.969f, 1.0f); // #F7F7F7
@@ -441,6 +453,20 @@ D2D1_COLOR_F ColorFromHex(std::wstring text, D2D1_COLOR_F fallback) {
         1.0f);
 }
 
+// Returns the DPI scale factor for the primary monitor (1.0 = 96 DPI = 100%)
+float GetPrimaryMonitorDpiScale() {
+    POINT pt = {0, 0};
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    UINT dpiX = 96, dpiY = 96;
+    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+    static auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
+        GetProcAddress(GetModuleHandleW(L"shcore.dll"), "GetDpiForMonitor"));
+    if (pGetDpiForMonitor) {
+        pGetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY);
+    }
+    return static_cast<float>(dpiX) / 96.0f;
+}
+
 D2D1_COLOR_F GetSystemAccentColor() {
     DWORD color = 0;
     BOOL opaque = FALSE;
@@ -472,10 +498,18 @@ void LoadSettings() {
     }
 
     const std::wstring scale = GetStringSettingCopy(L"SizeScale");
-    if (scale == L"0.8") {
-        next.sizeScale = 0.8f;
-    } else if (scale == L"1.2") {
-        next.sizeScale = 1.2f;
+    if (!scale.empty()) {
+        wchar_t* end;
+        float parsedScale = wcstof(scale.c_str(), &end);
+        if (end != scale.c_str() && parsedScale > 0.1f && parsedScale < 10.0f) {
+            next.sizeScale = parsedScale;
+        }
+    }
+
+    // Auto DPI scaling: multiply sizeScale by monitor DPI factor.
+    // On a 4K 200% display this doubles the island to the right physical size.
+    if (Wh_GetIntSetting(L"AutoDpiScale") != 0) {
+        next.sizeScale *= GetPrimaryMonitorDpiScale();
     }
 
     const std::wstring accentMode = GetStringSettingCopy(L"AccentColorMode");
@@ -505,6 +539,8 @@ void LoadSettings() {
                              0.35f, 1.0f);
     next.gameOverlay = Wh_GetIntSetting(L"GameOverlay") != 0;
     next.alwaysShowClock = Wh_GetIntSetting(L"AlwaysShowClock") != 0;
+    next.alwaysOnTop = Wh_GetIntSetting(L"AlwaysOnTop") != 0;
+    next.autoDpiScale = Wh_GetIntSetting(L"AutoDpiScale") != 0;
 
     // Color settings — check local theme override first, then settings YAML.
     struct ThemeColors { const wchar_t* bg; const wchar_t* fg; const wchar_t* sec; };
@@ -575,7 +611,8 @@ void PositionOverlayWindow(HWND hwnd, int width, int height) {
             break;
     }
 
-    SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height,
+    HWND zOrder = g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST;
+    SetWindowPos(hwnd, zOrder, x, y, width, height,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 }
 
@@ -2239,6 +2276,7 @@ class Renderer {
     bool Render(const SharedState& state, const Settings& settings, const Activity& primary,
                 const std::optional<Activity>& secondary, float width, float height,
                 float nudge, bool hover, bool pinned, double now) {
+        EnsureTextFormats(settings.sizeScale);
         const int pixelWidth = std::max(1, static_cast<int>(std::ceil(width + kRenderPadX * 2.0f)));
         const int pixelHeight = std::max(1, static_cast<int>(std::ceil(height + kRenderPadY * 2.0f)));
 
@@ -2374,6 +2412,46 @@ class Renderer {
         bitmapWidth_ = width;
         bitmapHeight_ = height;
         return true;
+    }
+
+    float lastFontScale_ = 0.0f;
+    void EnsureTextFormats(float scale) {
+        if (std::abs(scale - lastFontScale_) < 0.001f) {
+            return;
+        }
+
+        textFormat_ = nullptr;
+        smallTextFormat_ = nullptr;
+        clockFormat_ = nullptr;
+
+        dwriteFactory_->CreateTextFormat(L"Segoe UI Variable Display", nullptr,
+                                         DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                                         DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         13.5f * scale, L"", &textFormat_);
+        dwriteFactory_->CreateTextFormat(L"Segoe UI Variable Small", nullptr,
+                                         DWRITE_FONT_WEIGHT_NORMAL,
+                                         DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         11.0f * scale, L"", &smallTextFormat_);
+        dwriteFactory_->CreateTextFormat(L"Segoe UI Variable Display", nullptr,
+                                         DWRITE_FONT_WEIGHT_BOLD,
+                                         DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         13.5f * scale, L"", &clockFormat_);
+
+        if (textFormat_) {
+            textFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        }
+        if (smallTextFormat_) {
+            smallTextFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        }
+        if (clockFormat_) {
+            clockFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            clockFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+
+        lastFontScale_ = scale;
     }
 
     void EnsureBrushes(const Settings& settings, const SharedState& state) {
@@ -2608,7 +2686,7 @@ class Renderer {
         }
 
         if (settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0) {
-            DrawGameOverlay(state, rect);
+            DrawGameOverlay(state, rect, settings.sizeScale);
             return;
         }
 
@@ -2618,8 +2696,9 @@ class Renderer {
         GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &local, nullptr, buffer,
                         ARRAYSIZE(buffer));
 
+        const float scale = settings.sizeScale;
         const float width = rect.right - rect.left;
-        if (width < 190.0f) {
+        if (width / scale < 190.0f) {
             const int page = static_cast<int>(now / 4.0) % 6;
             wchar_t label[64] = {};
             switch (page) {
@@ -2650,12 +2729,12 @@ class Renderer {
             target_->DrawTextW(label, static_cast<UINT32>(wcslen(label)), clockFormat_.Get(), rect,
                                mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
             mutedBrush_->SetOpacity(0.58f);
-            DrawPageDots(rect, page, 6);
+            DrawPageDots(rect, page, 6, scale);
             return;
         }
 
-        D2D1_RECT_F timeRect = D2D1::RectF(rect.left + 18, rect.top + 10,
-                                          rect.left + 104, rect.top + 31);
+        D2D1_RECT_F timeRect = D2D1::RectF(rect.left + 18.0f * scale, rect.top + 10.0f * scale,
+                                           rect.left + 104.0f * scale, rect.top + 31.0f * scale);
         textBrush_->SetOpacity(0.94f);
         target_->DrawTextW(buffer, static_cast<UINT32>(wcslen(buffer)), clockFormat_.Get(),
                            timeRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
@@ -2664,8 +2743,8 @@ class Renderer {
         wchar_t date[64] = {};
         GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd, MMM d",
                         date, ARRAYSIZE(date), nullptr);
-        D2D1_RECT_F dateRect = D2D1::RectF(rect.left + 20, rect.top + 31,
-                                          rect.left + 118, rect.bottom - 8);
+        D2D1_RECT_F dateRect = D2D1::RectF(rect.left + 20.0f * scale, rect.top + 31.0f * scale,
+                                           rect.left + 118.0f * scale, rect.bottom - 8.0f * scale);
         mutedBrush_->SetOpacity(0.50f);
         target_->DrawTextW(date, static_cast<UINT32>(wcslen(date)), smallTextFormat_.Get(),
                            dateRect, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
@@ -2673,73 +2752,73 @@ class Renderer {
         ComPtr<ID2D1SolidColorBrush> divider;
         target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.075f * settingsOpacity_), &divider);
         target_->FillRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(rect.left + 126, rect.top + 14,
-                                          rect.left + 127, rect.bottom - 14),
-                              0.5f, 0.5f),
+            D2D1::RoundedRect(D2D1::RectF(rect.left + 126.0f * scale, rect.top + 14.0f * scale,
+                                           rect.left + 127.0f * scale, rect.bottom - 14.0f * scale),
+                              0.5f * scale, 0.5f * scale),
             divider.Get());
 
-        const float chipTop = rect.top + 11;
-        const float cardW = 58.0f;
-        const float gap = 7.0f;
-        const float start = rect.right - 18.0f - cardW * 3.0f - gap * 2.0f;
-        DrawMetricChip(state, D2D1::RectF(start, chipTop, start + cardW, rect.bottom - 10),
+        const float chipTop = rect.top + 11.0f * scale;
+        const float cardW = 58.0f * scale;
+        const float gap = 7.0f * scale;
+        const float start = rect.right - 18.0f * scale - cardW * 3.0f - gap * 2.0f;
+        DrawMetricChip(state, D2D1::RectF(start, chipTop, start + cardW, rect.bottom - 10.0f * scale),
                        state.system.charging ? L"CHG" : L"BAT", state.battery.percent, 1);
         DrawMetricChip(state, D2D1::RectF(start + cardW + gap, chipTop,
-                                   start + cardW * 2.0f + gap, rect.bottom - 10),
+                                   start + cardW * 2.0f + gap, rect.bottom - 10.0f * scale),
                        state.system.volumeMuted ? L"MUT" : L"VOL", state.system.volumePercent, 2);
         DrawMetricChip(state, D2D1::RectF(start + cardW * 2.0f + gap * 2.0f, chipTop,
-                                   start + cardW * 3.0f + gap * 2.0f, rect.bottom - 10),
+                                   start + cardW * 3.0f + gap * 2.0f, rect.bottom - 10.0f * scale),
                        L"CPU", state.system.cpuPercent, 3);
 
         mutedBrush_->SetOpacity(0.58f);
     }
 
-    void DrawGameOverlay(const SharedState& state, D2D1_RECT_F rect) {
+    void DrawGameOverlay(const SharedState& state, D2D1_RECT_F rect, float scale) {
         ComPtr<ID2D1SolidColorBrush> panelBrush;
         target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.080f * settingsOpacity_), &panelBrush);
 
-        D2D1_RECT_F fpsPanel = D2D1::RectF(rect.left + 10, rect.top + 10,
-                                          rect.left + 84, rect.bottom - 10);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(fpsPanel, 15, 15), panelBrush.Get());
+        D2D1_RECT_F fpsPanel = D2D1::RectF(rect.left + 10.0f * scale, rect.top + 10.0f * scale,
+                                          rect.left + 84.0f * scale, rect.bottom - 10.0f * scale);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(fpsPanel, 15.0f * scale, 15.0f * scale), panelBrush.Get());
 
         ComPtr<ID2D1SolidColorBrush> fpsIconBrush;
         target_->CreateSolidColorBrush(D2D1::ColorF(0.0f, 1.0f, 0.65f, 1.0f), &fpsIconBrush);
-        DrawGameIcon(D2D1::Point2F(fpsPanel.left + 18, fpsPanel.top + 17), 7.0f, 0, fpsIconBrush.Get());
+        DrawGameIcon(D2D1::Point2F(fpsPanel.left + 18.0f * scale, fpsPanel.top + 17.0f * scale), 7.0f * scale, 0, fpsIconBrush.Get(), scale);
         mutedBrush_->SetOpacity(0.44f);
         target_->DrawTextW(L"FPS", 3, smallTextFormat_.Get(),
-                           D2D1::RectF(fpsPanel.left + 31, fpsPanel.top + 6,
-                                       fpsPanel.right - 10, fpsPanel.top + 24),
+                           D2D1::RectF(fpsPanel.left + 31.0f * scale, fpsPanel.top + 6.0f * scale,
+                                       fpsPanel.right - 10.0f * scale, fpsPanel.top + 24.0f * scale),
                            mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
 
         wchar_t fpsValue[16] = {};
         swprintf_s(fpsValue, L"%d", state.system.renderFps);
         textBrush_->SetOpacity(0.96f);
         target_->DrawTextW(fpsValue, static_cast<UINT32>(wcslen(fpsValue)), textFormat_.Get(),
-                           D2D1::RectF(fpsPanel.left + 16, fpsPanel.top + 24,
-                                       fpsPanel.right - 10, fpsPanel.bottom - 5),
+                           D2D1::RectF(fpsPanel.left + 16.0f * scale, fpsPanel.top + 24.0f * scale,
+                                       fpsPanel.right - 10.0f * scale, fpsPanel.bottom - 5.0f * scale),
                            textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
 
-        const float cardTop = rect.top + 10;
-        const float cardW = 62.0f;
-        const float gap = 6.0f;
-        const float start = fpsPanel.right + 8.0f;
-        DrawGameMetricCard(D2D1::RectF(start, cardTop, start + cardW, rect.bottom - 10),
-                           L"CPU", state.system.cpuPercent, 1);
+        const float cardTop = rect.top + 10.0f * scale;
+        const float cardW = 62.0f * scale;
+        const float gap = 6.0f * scale;
+        const float start = fpsPanel.right + 8.0f * scale;
+        DrawGameMetricCard(D2D1::RectF(start, cardTop, start + cardW, rect.bottom - 10.0f * scale),
+                           L"CPU", state.system.cpuPercent, 1, scale);
         DrawGameMetricCard(D2D1::RectF(start + cardW + gap, cardTop,
-                                       start + cardW * 2.0f + gap, rect.bottom - 10),
-                           L"RAM", state.system.memoryPercent, 2);
+                                       start + cardW * 2.0f + gap, rect.bottom - 10.0f * scale),
+                           L"RAM", state.system.memoryPercent, 2, scale);
         DrawGameMetricCard(D2D1::RectF(start + cardW * 2.0f + gap * 2.0f, cardTop,
-                                       start + cardW * 3.0f + gap * 2.0f, rect.bottom - 10),
-                           L"GPU", state.system.gpuPercent, 3);
+                                       start + cardW * 3.0f + gap * 2.0f, rect.bottom - 10.0f * scale),
+                           L"GPU", state.system.gpuPercent, 3, scale);
         DrawGameMetricCard(D2D1::RectF(start + cardW * 3.0f + gap * 3.0f, cardTop,
-                                       start + cardW * 4.0f + gap * 3.0f, rect.bottom - 10),
-                           L"DSK", 100 - state.system.diskFreePercent, 4);
+                                       start + cardW * 4.0f + gap * 3.0f, rect.bottom - 10.0f * scale),
+                           L"DSK", 100 - state.system.diskFreePercent, 4, scale);
 
         textBrush_->SetOpacity(0.90f);
         mutedBrush_->SetOpacity(0.58f);
     }
 
-    void DrawGameMetricCard(D2D1_RECT_F rect, const wchar_t* label, int percent, int iconKind) {
+    void DrawGameMetricCard(D2D1_RECT_F rect, const wchar_t* label, int percent, int iconKind, float scale) {
         D2D1_COLOR_F metricColor = D2D1::ColorF(0.0f, 0.82f, 1.0f, 1.0f);
         switch (iconKind) {
             case 1:
@@ -2766,19 +2845,19 @@ class Renderer {
         ComPtr<ID2D1SolidColorBrush> borderBrush;
         target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.080f * settingsOpacity_), &cardBrush);
         target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.060f * settingsOpacity_), &borderBrush);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(rect, 16, 16), cardBrush.Get());
-        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 16, 16), borderBrush.Get(), 1.0f);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(rect, 16.0f * scale, 16.0f * scale), cardBrush.Get());
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 16.0f * scale, 16.0f * scale), borderBrush.Get(), 1.0f * scale);
 
         metricBrush->SetOpacity(0.24f * settingsOpacity_);
-        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 16, 16), metricBrush.Get(), 1.2f);
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 16.0f * scale, 16.0f * scale), metricBrush.Get(), 1.2f * scale);
         metricBrush->SetOpacity(1.0f);
 
-        DrawGameIcon(D2D1::Point2F(rect.left + 18, rect.top + 18), 8.0f, iconKind, metricBrush.Get());
+        DrawGameIcon(D2D1::Point2F(rect.left + 18.0f * scale, rect.top + 18.0f * scale), 8.0f * scale, iconKind, metricBrush.Get(), scale);
 
         mutedBrush_->SetOpacity(0.56f);
         target_->DrawTextW(label, static_cast<UINT32>(wcslen(label)), smallTextFormat_.Get(),
-                           D2D1::RectF(rect.left + 31, rect.top + 6,
-                                       rect.right - 5, rect.top + 23),
+                           D2D1::RectF(rect.left + 31.0f * scale, rect.top + 6.0f * scale,
+                                       rect.right - 5.0f * scale, rect.top + 23.0f * scale),
                            mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
 
         wchar_t value[16] = {};
@@ -2789,49 +2868,49 @@ class Renderer {
         }
         textBrush_->SetOpacity(0.90f);
         target_->DrawTextW(value, static_cast<UINT32>(wcslen(value)), textFormat_.Get(),
-                           D2D1::RectF(rect.left + 10, rect.top + 23,
-                                       rect.right - 8, rect.bottom - 9),
+                           D2D1::RectF(rect.left + 10.0f * scale, rect.top + 23.0f * scale,
+                                       rect.right - 8.0f * scale, rect.bottom - 9.0f * scale),
                            textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
 
         const float pct = percent < 0 ? 0.0f : Clamp(percent / 100.0f, 0.0f, 1.0f);
-        D2D1_RECT_F track = D2D1::RectF(rect.left + 10, rect.bottom - 6,
-                                       rect.right - 10, rect.bottom - 3);
+        D2D1_RECT_F track = D2D1::RectF(rect.left + 10.0f * scale, rect.bottom - 6.0f * scale,
+                                       rect.right - 10.0f * scale, rect.bottom - 3.0f * scale);
         borderBrush->SetOpacity(0.12f * settingsOpacity_);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(track, 1.5f, 1.5f), borderBrush.Get());
+        target_->FillRoundedRectangle(D2D1::RoundedRect(track, 1.5f * scale, 1.5f * scale), borderBrush.Get());
         D2D1_RECT_F fillRect = D2D1::RectF(track.left, track.top,
                                           track.left + (track.right - track.left) * pct,
                                           track.bottom);
         metricBrush->SetOpacity(0.85f);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(fillRect, 1.5f, 1.5f), metricBrush.Get());
+        target_->FillRoundedRectangle(D2D1::RoundedRect(fillRect, 1.5f * scale, 1.5f * scale), metricBrush.Get());
         metricBrush->SetOpacity(1.0f);
     }
 
-    void DrawGameIcon(D2D1_POINT_2F center, float radius, int kind, ID2D1SolidColorBrush* customBrush = nullptr) {
+    void DrawGameIcon(D2D1_POINT_2F center, float radius, int kind, ID2D1SolidColorBrush* customBrush = nullptr, float scale = 1.0f) {
         ID2D1SolidColorBrush* brush = customBrush ? customBrush : accentBrush_.Get();
         brush->SetOpacity(0.88f);
         switch (kind) {
             case 1: {
                 const float size = radius * 0.82f;
                 D2D1_RECT_F outerRect = D2D1::RectF(center.x - size, center.y - size, center.x + size, center.y + size);
-                target_->DrawRoundedRectangle(D2D1::RoundedRect(outerRect, 2.0f, 2.0f), brush, 1.4f);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(outerRect, 2.0f * scale, 2.0f * scale), brush, 1.4f * scale);
                 const float dieSize = size * 0.45f;
                 D2D1_RECT_F dieRect = D2D1::RectF(center.x - dieSize, center.y - dieSize, center.x + dieSize, center.y + dieSize);
-                target_->FillRoundedRectangle(D2D1::RoundedRect(dieRect, 1.0f, 1.0f), brush);
-                const float pinLength = 2.0f;
+                target_->FillRoundedRectangle(D2D1::RoundedRect(dieRect, 1.0f * scale, 1.0f * scale), brush);
+                const float pinLength = 2.0f * scale;
                 const float pinSpacing = size * 0.45f;
-                for (float offset = -pinSpacing; offset <= pinSpacing + 0.1f; offset += pinSpacing) {
+                for (float offset = -pinSpacing; offset <= pinSpacing + 0.1f * scale; offset += pinSpacing) {
                     target_->DrawLine(D2D1::Point2F(center.x + offset, center.y - size),
                                       D2D1::Point2F(center.x + offset, center.y - size - pinLength),
-                                      brush, 1.0f);
+                                      brush, 1.0f * scale);
                     target_->DrawLine(D2D1::Point2F(center.x + offset, center.y + size),
                                       D2D1::Point2F(center.x + offset, center.y + size + pinLength),
-                                      brush, 1.0f);
+                                      brush, 1.0f * scale);
                     target_->DrawLine(D2D1::Point2F(center.x - size, center.y + offset),
                                       D2D1::Point2F(center.x - size - pinLength, center.y + offset),
-                                      brush, 1.0f);
+                                      brush, 1.0f * scale);
                     target_->DrawLine(D2D1::Point2F(center.x + size, center.y + offset),
                                       D2D1::Point2F(center.x + size + pinLength, center.y + offset),
-                                      brush, 1.0f);
+                                      brush, 1.0f * scale);
                 }
                 break;
             }
@@ -2839,19 +2918,19 @@ class Renderer {
                 const float w = radius * 1.15f;
                 const float h = radius * 0.45f;
                 D2D1_RECT_F pcb = D2D1::RectF(center.x - w, center.y - h, center.x + w, center.y + h);
-                target_->DrawRoundedRectangle(D2D1::RoundedRect(pcb, 1.0f, 1.0f), brush, 1.3f);
-                const float chipW = (w * 2.0f - 6.0f) / 3.0f;
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(pcb, 1.0f * scale, 1.0f * scale), brush, 1.3f * scale);
+                const float chipW = (w * 2.0f - 6.0f * scale) / 3.0f;
                 const float chipH = h * 0.65f;
                 for (int i = 0; i < 3; ++i) {
-                    float cx = center.x - w + 2.0f + i * (chipW + 1.0f);
+                    float cx = center.x - w + 2.0f * scale + i * (chipW + 1.0f * scale);
                     D2D1_RECT_F chip = D2D1::RectF(cx, center.y - chipH, cx + chipW, center.y + chipH);
                     target_->FillRectangle(chip, brush);
                 }
                 const float pinY = center.y + h;
-                for (float px = center.x - w + 2.0f; px <= center.x + w - 2.0f; px += 2.2f) {
+                for (float px = center.x - w + 2.0f * scale; px <= center.x + w - 2.0f * scale; px += 2.2f * scale) {
                     target_->DrawLine(D2D1::Point2F(px, pinY),
-                                      D2D1::Point2F(px, pinY + 1.2f),
-                                      brush, 0.9f);
+                                      D2D1::Point2F(px, pinY + 1.2f * scale),
+                                      brush, 0.9f * scale);
                 }
                 break;
             }
@@ -2859,86 +2938,87 @@ class Renderer {
                 const float w = radius * 1.1f;
                 const float h = radius * 0.7f;
                 D2D1_RECT_F shroud = D2D1::RectF(center.x - w, center.y - h, center.x + w, center.y + h);
-                target_->DrawRoundedRectangle(D2D1::RoundedRect(shroud, 1.5f, 1.5f), brush, 1.3f);
-                target_->DrawLine(D2D1::Point2F(center.x - w - 1.5f, center.y - h - 1.0f),
-                                  D2D1::Point2F(center.x - w - 1.5f, center.y + h + 1.0f),
-                                  brush, 1.4f);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(shroud, 1.5f * scale, 1.5f * scale), brush, 1.3f * scale);
+                target_->DrawLine(D2D1::Point2F(center.x - w - 1.5f * scale, center.y - h - 1.0f * scale),
+                                  D2D1::Point2F(center.x - w - 1.5f * scale, center.y + h + 1.0f * scale),
+                                  brush, 1.4f * scale);
                 const float fanR = h * 0.75f;
-                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y), fanR, fanR), brush, 1.2f);
-                target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y), 1.5f, 1.5f), brush);
+                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y), fanR, fanR), brush, 1.2f * scale);
+                target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y), 1.5f * scale, 1.5f * scale), brush);
                 for (int i = 0; i < 4; ++i) {
                     float angle = i * 3.14159f / 4.0f;
                     float dx = std::cos(angle) * fanR;
                     float dy = std::sin(angle) * fanR;
                     target_->DrawLine(D2D1::Point2F(center.x - dx, center.y - dy),
                                       D2D1::Point2F(center.x + dx, center.y + dy),
-                                      brush, 0.8f);
+                                      brush, 0.8f * scale);
                 }
-                target_->DrawLine(D2D1::Point2F(center.x - w + 3.0f, center.y + h + 1.2f),
-                                  D2D1::Point2F(center.x + w - 2.0f, center.y + h + 1.2f),
-                                  brush, 1.0f);
+                target_->DrawLine(D2D1::Point2F(center.x - w + 3.0f * scale, center.y + h + 1.2f * scale),
+                                  D2D1::Point2F(center.x + w - 2.0f * scale, center.y + h + 1.2f * scale),
+                                  brush, 1.0f * scale);
                 break;
             }
             case 4: {
                 const float w = radius * 0.85f;
                 const float h = radius * 1.05f;
                 D2D1_RECT_F enc = D2D1::RectF(center.x - w, center.y - h, center.x + w, center.y + h);
-                target_->DrawRoundedRectangle(D2D1::RoundedRect(enc, 2.0f, 2.0f), brush, 1.3f);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(enc, 2.0f * scale, 2.0f * scale), brush, 1.3f * scale);
                 const float platR = w * 0.82f;
-                const float platY = center.y + h - platR - 2.0f;
-                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, platY), platR, platR), brush, 1.2f);
-                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, platY), 2.0f, 2.0f), brush, 1.0f);
-                const float pivotX = center.x - w + 3.0f;
-                const float pivotY = center.y - h + 3.5f;
-                target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(pivotX, pivotY), 1.5f, 1.5f), brush);
+                const float platY = center.y + h - platR - 2.0f * scale;
+                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, platY), platR, platR), brush, 1.2f * scale);
+                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, platY), 2.0f * scale, 2.0f * scale), brush, 1.0f * scale);
+                const float pivotX = center.x - w + 3.0f * scale;
+                const float pivotY = center.y - h + 3.5f * scale;
+                target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(pivotX, pivotY), 1.5f * scale, 1.5f * scale), brush);
                 target_->DrawLine(D2D1::Point2F(pivotX, pivotY),
-                                  D2D1::Point2F(center.x + 1.0f, platY - 1.0f),
-                                  brush, 1.1f);
+                                  D2D1::Point2F(center.x + 1.0f * scale, platY - 1.0f * scale),
+                                  brush, 1.1f * scale);
                 break;
             }
             case 0:
             default: {
                 const float dialR = radius * 1.05f;
-                target_->DrawEllipse(D2D1::Ellipse(center, dialR, dialR), brush, 1.3f);
+                target_->DrawEllipse(D2D1::Ellipse(center, dialR, dialR), brush, 1.3f * scale);
                 for (int i = 0; i < 5; ++i) {
                     float angle = -3.14159f * 0.8f + i * 3.14159f * 0.4f;
                     float dx1 = std::cos(angle) * dialR;
                     float dy1 = std::sin(angle) * dialR;
-                    float dx2 = std::cos(angle) * (dialR - 2.0f);
-                    float dy2 = std::sin(angle) * (dialR - 2.0f);
+                    float dx2 = std::cos(angle) * (dialR - 2.0f * scale);
+                    float dy2 = std::sin(angle) * (dialR - 2.0f * scale);
                     target_->DrawLine(D2D1::Point2F(center.x + dx1, center.y + dy1),
                                       D2D1::Point2F(center.x + dx2, center.y + dy2),
-                                      brush, 0.9f);
+                                      brush, 0.9f * scale);
                 }
-                target_->FillEllipse(D2D1::Ellipse(center, 1.6f, 1.6f), brush);
+                target_->FillEllipse(D2D1::Ellipse(center, 1.6f * scale, 1.6f * scale), brush);
                 const float needleAngle = -3.14159f * 0.25f;
                 const float needleLen = dialR * 0.85f;
                 target_->DrawLine(center,
                                   D2D1::Point2F(center.x + std::cos(needleAngle) * needleLen,
                                                 center.y + std::sin(needleAngle) * needleLen),
-                                  brush, 1.4f);
+                                  brush, 1.4f * scale);
                 break;
             }
         }
         brush->SetOpacity(1.0f);
     }
 
-    void DrawPageDots(D2D1_RECT_F rect, int active, int count) {
-        const float gap = 6.0f;
-        const float total = count * 3.0f + (count - 1) * gap;
+    void DrawPageDots(D2D1_RECT_F rect, int active, int count, float scale) {
+        const float gap = 6.0f * scale;
+        const float total = count * 3.0f * scale + (count - 1) * gap;
         const float start = (rect.left + rect.right - total) * 0.5f;
-        const float y = rect.bottom - 7.0f;
+        const float y = rect.bottom - 7.0f * scale;
         for (int i = 0; i < count; ++i) {
             mutedBrush_->SetOpacity(i == active ? 0.45f : 0.16f);
-            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(start + i * (3.0f + gap), y),
-                                               i == active ? 2.0f : 1.5f,
-                                               i == active ? 2.0f : 1.5f),
+            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(start + i * (3.0f * scale + gap), y),
+                                               (i == active ? 2.0f : 1.5f) * scale,
+                                               (i == active ? 2.0f : 1.5f) * scale),
                                  mutedBrush_.Get());
         }
         mutedBrush_->SetOpacity(0.58f);
     }
 
     void DrawMetricChip(const SharedState& state, D2D1_RECT_F rect, const wchar_t* label, int percent, int iconKind) {
+        const float scale = g_settings.sizeScale;
         D2D1_COLOR_F metricColor = D2D1::ColorF(0.0f, 0.82f, 1.0f, 1.0f);
         switch (iconKind) {
             case 1: {
@@ -2967,43 +3047,43 @@ class Renderer {
         ComPtr<ID2D1SolidColorBrush> chipBorder;
         target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.070f * settingsOpacity_), &chipBg);
         target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.060f * settingsOpacity_), &chipBorder);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(rect, 11, 11), chipBg.Get());
-        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 11, 11), chipBorder.Get(), 1.0f);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(rect, 11.0f * scale, 11.0f * scale), chipBg.Get());
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 11.0f * scale, 11.0f * scale), chipBorder.Get(), 1.0f * scale);
 
         metricBrush->SetOpacity(0.24f * settingsOpacity_);
-        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 11, 11), metricBrush.Get(), 1.2f);
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 11.0f * scale, 11.0f * scale), metricBrush.Get(), 1.2f * scale);
         metricBrush->SetOpacity(1.0f);
 
-        D2D1_POINT_2F iconCenter = D2D1::Point2F(rect.left + 14.5f, rect.top + 13.0f);
-        const float radius = 5.5f;
+        D2D1_POINT_2F iconCenter = D2D1::Point2F(rect.left + 14.5f * scale, rect.top + 13.0f * scale);
+        const float radius = 5.5f * scale;
         
         switch (iconKind) {
             case 1: {
-                const float w = 6.2f;
-                const float h = 3.4f;
-                D2D1_RECT_F batBody = D2D1::RectF(iconCenter.x - w, iconCenter.y - h, iconCenter.x + w - 1.2f, iconCenter.y + h);
+                const float w = 6.2f * scale;
+                const float h = 3.4f * scale;
+                D2D1_RECT_F batBody = D2D1::RectF(iconCenter.x - w, iconCenter.y - h, iconCenter.x + w - 1.2f * scale, iconCenter.y + h);
                 metricBrush->SetOpacity(0.85f);
-                target_->DrawRoundedRectangle(D2D1::RoundedRect(batBody, 0.8f, 0.8f), metricBrush.Get(), 1.1f);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(batBody, 0.8f * scale, 0.8f * scale), metricBrush.Get(), 1.1f * scale);
                 
-                D2D1_RECT_F batTip = D2D1::RectF(iconCenter.x + w - 1.2f, iconCenter.y - h * 0.45f, iconCenter.x + w, iconCenter.y + h * 0.45f);
-                target_->FillRoundedRectangle(D2D1::RoundedRect(batTip, 0.4f, 0.4f), metricBrush.Get());
+                D2D1_RECT_F batTip = D2D1::RectF(iconCenter.x + w - 1.2f * scale, iconCenter.y - h * 0.45f, iconCenter.x + w, iconCenter.y + h * 0.45f);
+                target_->FillRoundedRectangle(D2D1::RoundedRect(batTip, 0.4f * scale, 0.4f * scale), metricBrush.Get());
                 
                 const float fillPercent = percent < 0 ? 0.0f : Clamp(percent / 100.0f, 0.0f, 1.0f);
-                const float fillW = (batBody.right - batBody.left - 2.0f) * fillPercent;
-                if (fillW > 0.5f) {
-                    D2D1_RECT_F batFill = D2D1::RectF(batBody.left + 1.0f, batBody.top + 1.0f, batBody.left + 1.0f + fillW, batBody.bottom - 1.0f);
-                    target_->FillRoundedRectangle(D2D1::RoundedRect(batFill, 0.4f, 0.4f), metricBrush.Get());
+                const float fillW = (batBody.right - batBody.left - 2.0f * scale) * fillPercent;
+                if (fillW > 0.5f * scale) {
+                    D2D1_RECT_F batFill = D2D1::RectF(batBody.left + 1.0f * scale, batBody.top + 1.0f * scale, batBody.left + 1.0f * scale + fillW, batBody.bottom - 1.0f * scale);
+                    target_->FillRoundedRectangle(D2D1::RoundedRect(batFill, 0.4f * scale, 0.4f * scale), metricBrush.Get());
                 }
                 
                 if (state.system.charging) {
                     ComPtr<ID2D1SolidColorBrush> boltBrush;
                     target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.85f, 0.0f, 1.0f), &boltBrush);
-                    D2D1_POINT_2F p1 = D2D1::Point2F(iconCenter.x - 0.8f, iconCenter.y - 3.2f);
-                    D2D1_POINT_2F p2 = D2D1::Point2F(iconCenter.x - 1.6f, iconCenter.y + 0.3f);
-                    D2D1_POINT_2F p3 = D2D1::Point2F(iconCenter.x - 0.4f, iconCenter.y + 0.3f);
-                    D2D1_POINT_2F p4 = D2D1::Point2F(iconCenter.x - 1.2f, iconCenter.y + 3.6f);
-                    D2D1_POINT_2F p5 = D2D1::Point2F(iconCenter.x + 0.6f, iconCenter.y - 0.1f);
-                    D2D1_POINT_2F p6 = D2D1::Point2F(iconCenter.x - 0.4f, iconCenter.y - 0.1f);
+                    D2D1_POINT_2F p1 = D2D1::Point2F(iconCenter.x - 0.8f * scale, iconCenter.y - 3.2f * scale);
+                    D2D1_POINT_2F p2 = D2D1::Point2F(iconCenter.x - 1.6f * scale, iconCenter.y + 0.3f * scale);
+                    D2D1_POINT_2F p3 = D2D1::Point2F(iconCenter.x - 0.4f * scale, iconCenter.y + 0.3f * scale);
+                    D2D1_POINT_2F p4 = D2D1::Point2F(iconCenter.x - 1.2f * scale, iconCenter.y + 3.6f * scale);
+                    D2D1_POINT_2F p5 = D2D1::Point2F(iconCenter.x + 0.6f * scale, iconCenter.y - 0.1f * scale);
+                    D2D1_POINT_2F p6 = D2D1::Point2F(iconCenter.x - 0.4f * scale, iconCenter.y - 0.1f * scale);
                     ComPtr<ID2D1PathGeometry> boltGeom;
                     d2dFactory_->CreatePathGeometry(&boltGeom);
                     ComPtr<ID2D1GeometrySink> sink;
@@ -3019,14 +3099,14 @@ class Renderer {
                         target_->FillGeometry(boltGeom.Get(), boltBrush.Get());
                         ComPtr<ID2D1SolidColorBrush> outline;
                         target_->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.8f), &outline);
-                        target_->DrawGeometry(boltGeom.Get(), outline.Get(), 0.5f);
+                        target_->DrawGeometry(boltGeom.Get(), outline.Get(), 0.5f * scale);
                     }
                 }
                 break;
             }
             case 2: {
                 D2D1_RECT_F spkBox = D2D1::RectF(iconCenter.x - radius * 0.95f, iconCenter.y - radius * 0.45f, iconCenter.x - radius * 0.35f, iconCenter.y + radius * 0.45f);
-                target_->FillRoundedRectangle(D2D1::RoundedRect(spkBox, 0.5f, 0.5f), metricBrush.Get());
+                target_->FillRoundedRectangle(D2D1::RoundedRect(spkBox, 0.5f * scale, 0.5f * scale), metricBrush.Get());
                 
                 ComPtr<ID2D1PathGeometry> coneGeom;
                 d2dFactory_->CreatePathGeometry(&coneGeom);
@@ -3046,10 +3126,10 @@ class Renderer {
                     const float xCenter = iconCenter.x + radius * 0.60f;
                     target_->DrawLine(D2D1::Point2F(xCenter - off, iconCenter.y - off),
                                       D2D1::Point2F(xCenter + off, iconCenter.y + off),
-                                      metricBrush.Get(), 1.2f);
+                                      metricBrush.Get(), 1.2f * scale);
                     target_->DrawLine(D2D1::Point2F(xCenter - off, iconCenter.y + off),
                                       D2D1::Point2F(xCenter + off, iconCenter.y - off),
-                                      metricBrush.Get(), 1.2f);
+                                      metricBrush.Get(), 1.2f * scale);
                 } else {
                     const float xCenter = iconCenter.x + radius * 0.15f;
                     if (percent > 0) {
@@ -3065,7 +3145,7 @@ class Renderer {
                             ));
                             sink1->EndFigure(D2D1_FIGURE_END_OPEN);
                             sink1->Close();
-                            target_->DrawGeometry(wave1.Get(), metricBrush.Get(), 1.2f);
+                            target_->DrawGeometry(wave1.Get(), metricBrush.Get(), 1.2f * scale);
                         }
                     }
                     if (percent > 50) {
@@ -3081,7 +3161,7 @@ class Renderer {
                             ));
                             sink2->EndFigure(D2D1_FIGURE_END_OPEN);
                             sink2->Close();
-                            target_->DrawGeometry(wave2.Get(), metricBrush.Get(), 1.2f);
+                            target_->DrawGeometry(wave2.Get(), metricBrush.Get(), 1.2f * scale);
                         }
                     }
                 }
@@ -3091,33 +3171,33 @@ class Renderer {
             default: {
                 const float size = radius * 0.78f;
                 D2D1_RECT_F outerRect = D2D1::RectF(iconCenter.x - size, iconCenter.y - size, iconCenter.x + size, iconCenter.y + size);
-                target_->DrawRoundedRectangle(D2D1::RoundedRect(outerRect, 1.5f, 1.5f), metricBrush.Get(), 1.1f);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(outerRect, 1.5f * scale, 1.5f * scale), metricBrush.Get(), 1.1f * scale);
                 
                 const float dieSize = size * 0.42f;
                 D2D1_RECT_F dieRect = D2D1::RectF(iconCenter.x - dieSize, iconCenter.y - dieSize, iconCenter.x + dieSize, iconCenter.y + dieSize);
-                target_->FillRoundedRectangle(D2D1::RoundedRect(dieRect, 0.5f, 0.5f), metricBrush.Get());
+                target_->FillRoundedRectangle(D2D1::RoundedRect(dieRect, 0.5f * scale, 0.5f * scale), metricBrush.Get());
                 
-                const float pinLength = 1.6f;
+                const float pinLength = 1.6f * scale;
                 const float pinSpacing = size * 0.5f;
                 for (float offset = -pinSpacing; offset <= pinSpacing + 0.1f; offset += pinSpacing * 2.0f) {
                     target_->DrawLine(D2D1::Point2F(iconCenter.x + offset, iconCenter.y - size),
                                       D2D1::Point2F(iconCenter.x + offset, iconCenter.y - size - pinLength),
-                                      metricBrush.Get(), 0.9f);
+                                      metricBrush.Get(), 0.9f * scale);
                     target_->DrawLine(D2D1::Point2F(iconCenter.x + offset, iconCenter.y + size),
                                       D2D1::Point2F(iconCenter.x + offset, iconCenter.y + size + pinLength),
-                                      metricBrush.Get(), 0.9f);
+                                      metricBrush.Get(), 0.9f * scale);
                     target_->DrawLine(D2D1::Point2F(iconCenter.x - size, iconCenter.y + offset),
                                       D2D1::Point2F(iconCenter.x - size - pinLength, iconCenter.y + offset),
-                                      metricBrush.Get(), 0.9f);
+                                      metricBrush.Get(), 0.9f * scale);
                     target_->DrawLine(D2D1::Point2F(iconCenter.x + size, iconCenter.y + offset),
                                       D2D1::Point2F(iconCenter.x + size + pinLength, iconCenter.y + offset),
-                                      metricBrush.Get(), 0.9f);
+                                      metricBrush.Get(), 0.9f * scale);
                 }
                 break;
             }
         }
 
-        D2D1_RECT_F labelRect = D2D1::RectF(rect.left + 23.0f, rect.top + 5.0f, rect.right - 6.0f, rect.top + 18.0f);
+        D2D1_RECT_F labelRect = D2D1::RectF(rect.left + 23.0f * scale, rect.top + 5.0f * scale, rect.right - 6.0f * scale, rect.top + 18.0f * scale);
         mutedBrush_->SetOpacity(0.48f);
         target_->DrawTextW(label, static_cast<UINT32>(wcslen(label)), smallTextFormat_.Get(), labelRect,
                            mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
@@ -3129,20 +3209,20 @@ class Renderer {
             swprintf_s(value, L"%d%%", percent);
         }
         textBrush_->SetOpacity(0.90f);
-        D2D1_RECT_F valueRect = D2D1::RectF(rect.left + 7.5f, rect.top + 15.5f, rect.right - 6.0f, rect.bottom - 11.0f);
+        D2D1_RECT_F valueRect = D2D1::RectF(rect.left + 7.5f * scale, rect.top + 15.5f * scale, rect.right - 6.0f * scale, rect.bottom - 11.0f * scale);
         target_->DrawTextW(value, static_cast<UINT32>(wcslen(value)), textFormat_.Get(),
                            valueRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
 
         const float clamped = percent < 0 ? 0.0f : Clamp(percent / 100.0f, 0.0f, 1.0f);
-        D2D1_RECT_F meterTrack = D2D1::RectF(rect.left + 8, rect.bottom - 6, rect.right - 8, rect.bottom - 4);
+        D2D1_RECT_F meterTrack = D2D1::RectF(rect.left + 8.0f * scale, rect.bottom - 6.0f * scale, rect.right - 8.0f * scale, rect.bottom - 4.0f * scale);
         chipBorder->SetOpacity(0.12f * settingsOpacity_);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(meterTrack, 1.0f, 1.0f), chipBorder.Get());
+        target_->FillRoundedRectangle(D2D1::RoundedRect(meterTrack, 1.0f * scale, 1.0f * scale), chipBorder.Get());
         
         D2D1_RECT_F meterFill = D2D1::RectF(meterTrack.left, meterTrack.top,
                                            meterTrack.left + (meterTrack.right - meterTrack.left) * clamped,
                                            meterTrack.bottom);
         metricBrush->SetOpacity(0.85f);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(meterFill, 1.0f, 1.0f), metricBrush.Get());
+        target_->FillRoundedRectangle(D2D1::RoundedRect(meterFill, 1.0f * scale, 1.0f * scale), metricBrush.Get());
         
         textBrush_->SetOpacity(0.90f);
         mutedBrush_->SetOpacity(0.58f);
