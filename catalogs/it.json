@@ -11109,7 +11109,7 @@
                     2
                 ],
                 "ratingUsers": 3,
-                "updated": 1778787962000,
+                "updated": 1779711603000,
                 "users": 51
             },
             "metadata": {
@@ -11120,7 +11120,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Theme Toggler Tray",
-                "version": "1.2.1"
+                "version": "1.2.2"
             }
         },
         "themed-regedit-listview": {

@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-25T10:43:57.000Z</updated>
+    <updated>2026-05-25T12:20:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Theme Toggler Tray 1.2.2]]></title>
+        <id>https://windhawk.net/mods/theme-toggler-tray#4859d479f73c86feed28cd9e3b9f50d98c8b5a8b</id>
+        <link href="https://windhawk.net/mods/theme-toggler-tray"/>
+        <updated>2026-05-25T12:20:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an architectural issue where the tray icon permanently disappears when explorer.exe restarts or the taskbar is recreated (e.g., due to DPI changes).</li>
+<li>Changed the hidden message-only window (HWND<em>MESSAGE) to a hidden top-level tool window (WS</em>EX<em>TOOLWINDOW and WS</em>POPUP) to ensure it correctly receives the TaskbarCreated system broadcast.</li>
+<li>Refactored the TaskbarCreated handler in WindowProc to safely and robustly reconstruct the icon.</li>
+</ul>]]></content>
+        <author>
+            <name>Husam-Abdulraheem</name>
+            <uri>https://github.com/Husam-Abdulraheem</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Key Click 1.2]]></title>
         <id>https://windhawk.net/mods/key-click#02cb5e875e7f8cf77d890eb3860cf6fafbf60a00</id>
@@ -347,19 +362,6 @@ pane tidy.</p>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 2.0.0]]></title>
-        <id>https://windhawk.net/mods/audioswap#95bddae96da8f6e404291b5e7d9842674ac104d4</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-05-22T12:57:32.000Z</updated>
-        <content type="html"><![CDATA[<p>improved performance
-Windows Native dashboard = right-click → <strong>Mod Settings</strong>.
-All configuration (device slots, icons, mode, count) lives in the dashboard; Windhawk's settings panel is no longer used.</p>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>
