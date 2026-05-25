@@ -14,11 +14,13 @@
 /*
 # Dynamic Island for Windows
 
-![Screenshot 1](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-18%20193649.png)
+![Screenshot 1](https://raw.githubusercontent.com/devcode90/STONIC-3.0/main/Screenshot%202026-05-25%20201746.png)
 
-![Screenshot 2](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225602.png)
+![Screenshot 2](https://raw.githubusercontent.com/devcode90/STONIC-3.0/main/Screenshot%202026-05-25%20201826.png)
 
-![Screenshot 3](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225634.png)
+![Screenshot 3](https://raw.githubusercontent.com/devcode90/STONIC-3.0/main/Screenshot%202026-05-25%20201836.png)
+
+![Screenshot 4](https://raw.githubusercontent.com/devcode90/STONIC-3.0/main/Screenshot%202026-05-25%20201852.png)
 
 A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.
 
@@ -95,6 +97,9 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 - AutoDpiScale: true
   $name: Auto DPI scaling
   $description: "Automatically scale the island to match your monitor's DPI (recommended for 4K/HiDPI screens)."
+- W11Style: false
+  $name: Native Windows 11 style
+  $description: "Renders the island as a modern Windows 11 Fluent flyout (rounded rectangle with 8px corners) instead of an iOS pill."
 - PillBgColor: "#0D0D0F"
   $name: Pill background color
   $description: "Hex color for pill background. Presets: #0D0D0F (OLED Black), #1C1C1E (Dark Gray), #0A0A1A (Midnight Blue), #12001E (Deep Purple)"
@@ -219,6 +224,7 @@ struct Settings {
     bool alwaysShowClock = true;
     bool alwaysOnTop = true;
     bool autoDpiScale = true;
+    bool w11Style = false;
     // Color customization
     D2D1_COLOR_F pillBgColor = D2D1::ColorF(0.051f, 0.051f, 0.059f, 1.0f); // #0D0D0F
     D2D1_COLOR_F textPrimaryColor = D2D1::ColorF(0.969f, 0.969f, 0.969f, 1.0f); // #F7F7F7
@@ -542,6 +548,9 @@ void LoadSettings() {
     next.alwaysOnTop = Wh_GetIntSetting(L"AlwaysOnTop") != 0;
     next.autoDpiScale = Wh_GetIntSetting(L"AutoDpiScale") != 0;
 
+    const int localW11Style = Wh_GetIntValue(L"W11StyleOverride", -1);
+    next.w11Style = localW11Style >= 0 ? (localW11Style != 0) : (Wh_GetIntSetting(L"W11Style") != 0);
+
     // Color settings — check local theme override first, then settings YAML.
     struct ThemeColors { const wchar_t* bg; const wchar_t* fg; const wchar_t* sec; };
     static constexpr ThemeColors kThemes[] = {
@@ -549,6 +558,7 @@ void LoadSettings() {
         {L"#1C1C1E", L"#FFFFFF", L"#999999"},  // 1: Dark Gray
         {L"#050D1A", L"#E8F0FF", L"#7090BB"},  // 2: Midnight Blue
         {L"#0E0014", L"#F0E8FF", L"#9060BB"},  // 3: Deep Purple
+        {L"#1F1F1F", L"#FFFFFF", L"#A0A0A0"},  // 4: Fluent Design
     };
     const int theme = Wh_GetIntValue(L"ColorTheme", -1);
     if (theme >= 0 && theme < static_cast<int>(ARRAYSIZE(kThemes))) {
@@ -2130,6 +2140,10 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING, 1, L"Dismiss");
     AppendMenuW(menu, MF_STRING, 2, L"Pin expanded");
     AppendMenuW(menu, MF_STRING, 3, Wh_GetIntValue(L"GameOverlayPinned", 0) ? L"Hide game overlay" : L"Show game overlay");
+    const int activeW11 = Wh_GetIntValue(L"W11StyleOverride", -1) >= 0
+                          ? Wh_GetIntValue(L"W11StyleOverride", 0)
+                          : Wh_GetIntSetting(L"W11Style");
+    AppendMenuW(menu, MF_STRING, 10, activeW11 ? L"Use iPhone Pill Style" : L"Use Windows 11 Flyout Style");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 4, L"Transparency 100%");
     AppendMenuW(menu, MF_STRING, 5, L"Transparency 85%");
@@ -2142,6 +2156,7 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING, 21, L"Theme: Dark Gray");
     AppendMenuW(menu, MF_STRING, 22, L"Theme: Midnight Blue");
     AppendMenuW(menu, MF_STRING, 23, L"Theme: Deep Purple");
+    AppendMenuW(menu, MF_STRING, 24, L"Theme: Fluent Design");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 9, L"Open Windhawk settings");
 
@@ -2193,6 +2208,15 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             }
             break;
         }
+        case 10: {
+            const int activeW11Val = Wh_GetIntValue(L"W11StyleOverride", -1) >= 0
+                                  ? Wh_GetIntValue(L"W11StyleOverride", 0)
+                                  : Wh_GetIntSetting(L"W11Style");
+            Wh_SetIntValue(L"W11StyleOverride", activeW11Val ? 0 : 1);
+            LoadSettings();
+            g_layoutDirty = true;
+            break;
+        }
         // Color theme presets — stored as integer index in local mod storage.
         case 20:  // OLED Black
             Wh_SetIntValue(L"ColorTheme", 0);
@@ -2208,6 +2232,10 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             break;
         case 23:  // Deep Purple
             Wh_SetIntValue(L"ColorTheme", 3);
+            LoadSettings();
+            break;
+        case 24:  // Fluent Design
+            Wh_SetIntValue(L"ColorTheme", 4);
             LoadSettings();
             break;
     }
@@ -2497,11 +2525,11 @@ class Renderer {
         const float h = (rect.bottom - rect.top) * scale;
         rect = D2D1::RectF(cx - w * 0.5f, cy - h * 0.5f, cx + w * 0.5f, cy + h * 0.5f);
 
-        const float radius = (rect.bottom - rect.top) * 0.5f;
+        const float radius = settings.w11Style ? 8.0f * settings.sizeScale : (rect.bottom - rect.top) * 0.5f;
         DrawSoftShadow(rect, radius);
 
         D2D1_ROUNDED_RECT pill = D2D1::RoundedRect(rect, radius, radius);
-        DrawPillSurface(rect, radius, activity.kind);
+        DrawPillSurface(rect, radius, activity.kind, settings.w11Style);
 
         if (activity.kind == IslandKind::Progress) {
             DrawProgressRing(rect, state.progress.percent);
@@ -2518,13 +2546,15 @@ class Renderer {
             accentBrush_->SetOpacity(1.0f);
         }
 
-        ComPtr<ID2D1SolidColorBrush> highlight;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.10f * settingsOpacity_), &highlight);
-        target_->DrawRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(rect.left + 1, rect.top + 1, rect.right - 1,
-                                          rect.bottom - 1),
-                              radius - 1, radius - 1),
-            highlight.Get(), 1.0f);
+        if (!settings.w11Style) {
+            ComPtr<ID2D1SolidColorBrush> highlight;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.10f * settingsOpacity_), &highlight);
+            target_->DrawRoundedRectangle(
+                D2D1::RoundedRect(D2D1::RectF(rect.left + 1, rect.top + 1, rect.right - 1,
+                                              rect.bottom - 1),
+                                  radius - 1, radius - 1),
+                highlight.Get(), 1.0f);
+        }
 
         switch (activity.kind) {
             case IslandKind::Media:
@@ -2626,7 +2656,7 @@ class Renderer {
         }
     }
 
-    void DrawPillSurface(D2D1_RECT_F rect, float radius, IslandKind kind) {
+    void DrawPillSurface(D2D1_RECT_F rect, float radius, IslandKind kind, bool w11Style) {
         UNREFERENCED_PARAMETER(kind);
         // User-defined pill background color.
         ComPtr<ID2D1SolidColorBrush> blackBrush;
@@ -2638,25 +2668,40 @@ class Renderer {
                                           blackBrush.Get());
         }
 
-        // Thin top-edge gloss: simulates iPhone notch glass shine.
-        ComPtr<ID2D1SolidColorBrush> gloss;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.055f * settingsOpacity_),
-                                       &gloss);
-        if (gloss) {
-            D2D1_RECT_F glossLine = D2D1::RectF(rect.left + radius, rect.top + 0.5f,
-                                                rect.right - radius, rect.top + 1.2f);
-            target_->FillRectangle(glossLine, gloss.Get());
-        }
+        if (w11Style) {
+            // In Windows 11 style, we draw a double-layer modern border.
+            // Windows 11 uses a very subtle 1px border. In dark mode, it's white with 15% opacity.
+            ComPtr<ID2D1SolidColorBrush> border;
+            target_->CreateSolidColorBrush(
+                D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.15f * settingsOpacity_), &border);
+            if (border) {
+                target_->DrawRoundedRectangle(
+                    D2D1::RoundedRect(D2D1::RectF(rect.left + 0.5f, rect.top + 0.5f,
+                                                  rect.right - 0.5f, rect.bottom - 0.5f),
+                                      radius, radius),
+                    border.Get(), 1.0f);
+            }
+        } else {
+            // Thin top-edge gloss: simulates iPhone notch glass shine.
+            ComPtr<ID2D1SolidColorBrush> gloss;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.055f * settingsOpacity_),
+                                           &gloss);
+            if (gloss) {
+                D2D1_RECT_F glossLine = D2D1::RectF(rect.left + radius, rect.top + 0.5f,
+                                                    rect.right - radius, rect.top + 1.2f);
+                target_->FillRectangle(glossLine, gloss.Get());
+            }
 
-        // Outer border: extremely subtle white rim like iPhone Dynamic Island edge.
-        ComPtr<ID2D1SolidColorBrush> border;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f * settingsOpacity_),
-                                       &border);
-        if (border) {
-            target_->DrawRoundedRectangle(D2D1::RoundedRect(
-                D2D1::RectF(rect.left + 0.5f, rect.top + 0.5f,
-                            rect.right - 0.5f, rect.bottom - 0.5f),
-                radius, radius), border.Get(), 0.8f);
+            // Outer border: extremely subtle white rim like iPhone Dynamic Island edge.
+            ComPtr<ID2D1SolidColorBrush> border;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f * settingsOpacity_),
+                                           &border);
+            if (border) {
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(
+                    D2D1::RectF(rect.left + 0.5f, rect.top + 0.5f,
+                                rect.right - 0.5f, rect.bottom - 0.5f),
+                    radius, radius), border.Get(), 0.8f);
+            }
         }
     }
 
