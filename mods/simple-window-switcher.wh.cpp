@@ -994,7 +994,11 @@ static void ComputeLayout(HMONITOR hMon) {
                 }
             } else {
                 if (!g_settings.showTitle && g_settings.showIcon) {
-                    width = GetHeaderIconSizePx() + DpiScale(16, dpiX); // Base padding
+                    if (g_settings.centerTaskContent) {
+                        width = GetHeaderIconSizePx() + DpiScale(16, dpiX); // Base padding
+                    } else {
+                        width = GetHeaderIconSizePx() + DpiScale(20, dpiX); // Icon + btnSz(16) + gap(4)
+                    }
                 } else {
                     width = DpiScale(160, dpiX);
                 }
@@ -1103,7 +1107,15 @@ static void ComputeLayout(HMONITOR hMon) {
                     if (w.effectiveSourceSize.cx > 0 && width > w.effectiveSourceSize.cx) width = w.effectiveSourceSize.cx;
                 }
             } else {
-                width = DpiScale(160, dpiX);
+                if (!g_settings.showTitle && g_settings.showIcon) {
+                    if (g_settings.centerTaskContent) {
+                        width = GetHeaderIconSizePx() + DpiScale(16, dpiX); // Base padding
+                    } else {
+                        width = GetHeaderIconSizePx() + DpiScale(20, dpiX); // Icon + btnSz(16) + gap(4)
+                    }
+                } else {
+                    width = DpiScale(160, dpiX);
+                }
             }
 
             if (g_settings.rowWidth > 0) {
@@ -1406,8 +1418,8 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
 
         int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
         int btnReserve = 0;
+        bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
         if (!HeaderIsVertical()) {
-            bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
             if (!isIconOnly) {
                 btnReserve = ((g_settings.centerTaskContent) || i == g_hoverIndex)
                          ? closeBtnReserve
@@ -1426,7 +1438,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
         int textTop = e.rcCell.top + padTop;
         int textBottom = textTop + rowTitleH;
 
-        if (HeaderIsVertical()) {
+        if (HeaderIsVertical() && !isIconOnly) {
             int availableW = contentRight - contentLeft;
             if (availableW < 0) availableW = 0;
 
@@ -1524,10 +1536,7 @@ static void DrawSwitcherOverlay(HDC hdc) {
                 int iconX = contentLeft;
                 int iconY = e.rcCell.top + padTop + (rowTitleH - iconSz) / 2;
                 
-                if (HeaderIsVertical()) {
-                    iconX = contentLeft + ((availableW > iconSz) ? (availableW - iconSz) / 2 : 0);
-                    iconY = e.rcCell.top + padTop;
-                } else if (g_settings.centerTaskContent) {
+                if (g_settings.centerTaskContent) {
                     if (iconSz < availableW) {
                         iconX = contentLeft + (availableW - iconSz) / 2;
                     }
@@ -1535,8 +1544,15 @@ static void DrawSwitcherOverlay(HDC hdc) {
 
                 int btnPadding = DpiScale(2, g_dpiX);
                 btnSz = DpiScale(16, g_dpiX);
-                bx = iconX + iconSz - btnSz + btnPadding;
-                by = iconY - btnPadding;
+                
+                if (g_settings.centerTaskContent) {
+                    bx = iconX + iconSz - btnSz + btnPadding;
+                    by = iconY - btnPadding;
+                } else {
+                    int gap = DpiScale(4, g_dpiX);
+                    bx = iconX + iconSz + gap;
+                    by = iconY;
+                }
             } else {
                 bx = e.rcCell.right - padLeft - btnSz;
                 by = HeaderIsVertical() ? (e.rcCell.top + padTop)
@@ -2253,10 +2269,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 int iconX = contentLeft;
                 int iconY = e.rcCell.top + padT + (titleH - iconSz) / 2;
                 
-                if (HeaderIsVertical()) {
-                    iconX = contentLeft + ((availableW > iconSz) ? (availableW - iconSz) / 2 : 0);
-                    iconY = e.rcCell.top + padT;
-                } else if (g_settings.centerTaskContent) {
+                if (g_settings.centerTaskContent) {
                     if (iconSz < availableW) {
                         iconX = contentLeft + (availableW - iconSz) / 2;
                     }
@@ -2264,8 +2277,15 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
                 int btnPadding = DpiScale(2, g_dpiX);
                 btnSz = DpiScale(16, g_dpiX);
-                bx = iconX + iconSz - btnSz + btnPadding;
-                by = iconY - btnPadding;
+                
+                if (g_settings.centerTaskContent) {
+                    bx = iconX + iconSz - btnSz + btnPadding;
+                    by = iconY - btnPadding;
+                } else {
+                    int gap = DpiScale(4, g_dpiX);
+                    bx = iconX + iconSz + gap;
+                    by = iconY;
+                }
             } else {
                 bx = e.rcCell.right - padL - btnSz;
                 by = HeaderIsVertical() ? (e.rcCell.top + padT)
