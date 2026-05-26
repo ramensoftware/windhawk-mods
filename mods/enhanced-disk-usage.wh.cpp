@@ -2,7 +2,7 @@
 // @id              enhanced-disk-usage
 // @name            Enhanced Disk Usage
 // @description     Enables the ability to customize the disk drive tiles in explorer, targeting the disk's usage bar, as well as the details that appear below.
-// @version         1.0.1
+// @version         1.1.0
 // @author          bbmaster123
 // @github          https://github.com/bbmaster123
 // @include         explorer.exe
@@ -31,38 +31,44 @@ ex.
 
 // ==WindhawkModSettings==
 /*
-
+- useAccentColor: false
+  $name: Follow System Accent Color
+  $description: Uses the system accent color for the disk usage bar gradient. Disable to use custom colors below
+- accentColorGradientDelta: 15
+  $name: Accent Color Gradient Delta (%)
+  $description: How strong the gradient appears. Set to 0 for a solid color.
 - barNormalStart: "#FF2ECC71"
-  $name: Bar Color Gradient Start
+  $name: Disk Bar Color Gradient Start
   $description: set start and end to the same value if you do not want a gradient
 - barNormalEnd: "#FF27AE60"
-  $name: Bar Color Gradient End
+  $name: Disk Bar Color Gradient End
 - barFullStart: "#FFE74C3C"
-  $name: Bar Full Color Gradient Start
+  $name: Disk Bar Full Color Gradient Start
 - barFullEnd: "#FFC0392B"
-  $name: Bar Full Color Gradient End
+  $name: Disk Bar Full Color Gradient End
 - gradientDirection: 90
   $name: Gradient Direction
-- cornerRadius: 6
-  $name: Corner Radius
+- cornerRadius: 24
+  $name: Corner Radius (Quarter Pixels)
+  $description: Set corner radius in quarter pixels. Ex. 41 = 10.25px, 22 = 5.5px
 - roundFillBothSides: true
   $name: Round Both Sides of Fill
   $description: If enabled, both sides of the progress bar will be rounded. If disabled, the right side will be flat unless full.   
 - showGloss: true
   $name: Enable Glossy Overlay
 - fillPadding: 0
-  $name: Fill Bar Padding
-  $description: Extra space between the progress fill and the track border.  
+  $name: Disk Bar Fill Padding (Quarter Pixels)
+  $description: Extra space between the progress fill and the track border in quarter pixels.  
 - leftInset: 0
-  $name: Bar Inset Left
+  $name: Disk Bar Inset Left
 - rightInset: 0
-  $name: Bar Inset Right
+  $name: Disk Bar Inset Right
 - topInset: 0
-  $name: Bar Inset Top
+  $name: Disk Bar Inset Top
 - bottomInset: 0
-  $name: Bar Inset Bottom
+  $name: Disk Bar Inset Bottom
 - barYOffset: 0
-  $name: Progress Bar Vertical Offset  
+  $name: Disk Bar Vertical Offset  
 - trackColor: "#20000000" 
   $name: Track Color (Unused Space)  
 - trackLeftInset: 0
@@ -75,11 +81,12 @@ ex.
   $name: Track Inset Bottom
 - borderColor: "#80BBBBBB"
   $name: Border Color
-- borderThickness: 1
-  $name: Border Thickness
+- borderThickness: 4
+  $name: Border Thickness (Quarter Pixels)
+  $description: Border thickness in quarter pixels
 - trackBorderOffset: 0
-  $name: Border Offset
-  $description: Adjusts the border position relative to the track. Positive values expand outwards.
+  $name: Border Offset (Quarter Pixels)
+  $description: Adjusts the border position relative to the track in quarter pixels. Positive values expand outwards.
 - formatString: "%s free | %s used\\n%s Total"
   $name: Text Display Format
   $description: custom disk usage text.%s for each disk usage stat, \n for new line
@@ -98,8 +105,8 @@ ex.
   $name: Line Height
   $description: Adjusts the vertical space between lines of text
 - fontSize: 0
-  $name: Font Size
-  $description: Adjusts the font size (positive is larger, negative is smaller)
+  $name: Font Size (Quarter Pixels)
+  $description: Adjusts the font size (positive is larger, negative is smaller) in quarter pixels. Ex. 4 = +1px, -2 = -0.5px.
 - enableWordEllipsis: false
   $name: Enable Word Ellipsis
   $description: (Adds "..." if text is too long)
@@ -126,15 +133,17 @@ using namespace Gdiplus;
 enum class BoldStyle { Serif, SansSerif };
 std::wstring g_formatString;
 bool g_boldUsed, g_removeSpace, g_showGloss, g_enableWordEllipsis,
-    g_roundFillBothSides;
-int g_lineYOffset, g_cornerRadius, g_fontSize;
+    g_roundFillBothSides, g_useAccentColor;
+int g_lineYOffset, g_accentColorGradientDelta;
+DWORD g_lastAccentColor = 0;
 int g_barYOffset, g_lineSpacing;
 int g_leftInset, g_rightInset, g_topInset, g_bottomInset;
 int g_trackLeftInset, g_trackRightInset, g_trackTopInset, g_trackBottomInset;
 int g_gradientDirection;
 ARGB g_barNormalStart, g_barNormalEnd, g_barFullStart, g_barFullEnd,
     g_trackColor, g_borderColor;
-float g_borderThickness, g_trackBorderOffset, g_fillPadding;
+float g_borderThickness, g_trackBorderOffset, g_fillPadding, g_cornerRadius,
+    g_fontSize;
 BoldStyle g_boldStyle;
 ULONG_PTR g_gdiplusToken;
 
@@ -237,6 +246,36 @@ static ARGB ParseHexARGB(PCWSTR hex, ARGB fallback) {
     }
 }
 
+void RefreshAccentColorIfNeeded() {
+    if (!g_useAccentColor)
+        return;
+    DWORD color = 0;
+    DWORD size = sizeof(DWORD);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM",
+                     L"ColorizationColor", RRF_RT_DWORD, nullptr, &color,
+                     &size) == ERROR_SUCCESS) {
+        color |= 0xFF000000;
+        if (color != g_lastAccentColor) {
+            g_lastAccentColor = color;
+            g_barNormalStart = color;
+
+            float multiplier =
+                1.0f - ((float)g_accentColorGradientDelta / 100.0f);
+            if (multiplier < 0.0f)
+                multiplier = 0.0f;
+            if (multiplier > 1.0f)
+                multiplier = 1.0f;
+
+            BYTE a = (color >> 24) & 0xFF;
+            BYTE r = (BYTE)(((color >> 16) & 0xFF) * multiplier);
+            BYTE g = (BYTE)(((color >> 8) & 0xFF) * multiplier);
+            BYTE b = (BYTE)((color & 0xFF) * multiplier);
+
+            g_barNormalEnd = (a << 24) | (r << 16) | (g << 8) | b;
+        }
+    }
+}
+
 void LoadSettings() {
     PCWSTR s;
     s = Wh_GetStringSetting(L"barNormalStart");
@@ -258,12 +297,12 @@ void LoadSettings() {
     g_borderColor = ParseHexARGB(s, 0x80FFFFFF);
     Wh_FreeStringSetting(s);
     g_gradientDirection = Wh_GetIntSetting(L"gradientDirection");
-    g_cornerRadius = Wh_GetIntSetting(L"cornerRadius");
+    g_cornerRadius = (float)Wh_GetIntSetting(L"cornerRadius") / 4.0f;
     g_showGloss = Wh_GetIntSetting(L"showGloss") != 0;
     g_roundFillBothSides = Wh_GetIntSetting(L"roundFillBothSides") != 0;
-    g_borderThickness = (float)Wh_GetIntSetting(L"borderThickness");
-    g_trackBorderOffset = (float)Wh_GetIntSetting(L"trackBorderOffset");
-    g_fillPadding = (float)Wh_GetIntSetting(L"fillPadding");
+    g_borderThickness = (float)Wh_GetIntSetting(L"borderThickness") / 4.0f;
+    g_trackBorderOffset = (float)Wh_GetIntSetting(L"trackBorderOffset") / 4.0f;
+    g_fillPadding = (float)Wh_GetIntSetting(L"fillPadding") / 4.0f;
     g_leftInset = Wh_GetIntSetting(L"leftInset");
     g_rightInset = Wh_GetIntSetting(L"rightInset");
     g_topInset = Wh_GetIntSetting(L"topInset");
@@ -296,7 +335,14 @@ void LoadSettings() {
     g_lineYOffset = Wh_GetIntSetting(L"lineYOffset");
     g_barYOffset = Wh_GetIntSetting(L"barYOffset");
     g_lineSpacing = Wh_GetIntSetting(L"lineSpacing");
-    g_fontSize = Wh_GetIntSetting(L"fontSize");
+    g_fontSize = (float)Wh_GetIntSetting(L"fontSize") / 4.0f;
+    g_useAccentColor = Wh_GetIntSetting(L"useAccentColor") != 0;
+    g_accentColorGradientDelta = Wh_GetIntSetting(L"accentColorGradientDelta");
+
+    g_lastAccentColor = 0;
+    if (g_useAccentColor) {
+        RefreshAccentColorIfNeeded();
+    }
 }
 
 std::wstring CleanNumericString(const std::wstring& s) {
@@ -322,11 +368,33 @@ bool IsValidUnitString(const wchar_t* u) {
     size_t len = wcslen(u);
     if (len == 0 || len > 10)
         return false;
-    for (size_t i = 0; i < len; ++i) {
-        if (!iswalpha(u[i]))
-            return false;
+
+    std::wstring up = u;
+    std::transform(up.begin(), up.end(), up.begin(), ::towupper);
+
+    if (up == L"B" || up == L"KB" || up == L"MB" || up == L"GB" ||
+        up == L"TB" || up == L"PB" || up == L"EB")
+        return true;
+    if (up == L"O" || up == L"KO" || up == L"MO" || up == L"GO" ||
+        up == L"TO" || up == L"PO" || up == L"EO")
+        return true;
+    if (up == L"\x0411" || up == L"\x041A\x0411" || up == L"\x041C\x0411" ||
+        up == L"\x0413\x0411" || up == L"\x0422\x0411" || up == L"\x041F\x0411")
+        return true;
+    if (up == L"BYTES" || up == L"BYTE")
+        return true;
+    if (up.find(L"\x0411\x0410\x0419\x0422") != std::wstring::npos)
+        return true;
+
+    if (len <= 2) {
+        for (size_t i = 0; i < len; ++i) {
+            if (!iswalpha(u[i]))
+                return false;
+        }
+        return true;
     }
-    return true;
+
+    return false;
 }
 
 double GetUnitMultiplier(const wchar_t* u) {
@@ -398,7 +466,12 @@ static bool IsValidDiskBarWindow(HWND hwnd) {
                 wCls.find(L"scrollbar") != std::wstring::npos ||
                 wCls.find(L"header") != std::wstring::npos ||
                 wCls.find(L"listview") != std::wstring::npos ||
-                wCls.find(L"property") != std::wstring::npos) {
+                wCls.find(L"treeview") != std::wstring::npos ||
+                wCls.find(L"toolbar") != std::wstring::npos ||
+                wCls.find(L"breadcrumb") != std::wstring::npos ||
+                wCls.find(L"address") != std::wstring::npos ||
+                (wCls.find(L"property") != std::wstring::npos &&
+                 wCls.find(L"propertycontrol") == std::wstring::npos)) {
                 return false;
             }
             if (wCls == L"directuihwnd") {
@@ -471,6 +544,9 @@ static void PaintEnhancedBar(HDC hdc,
                              LPCRECT pClipRect,
                              int iStateId,
                              bool isFill) {
+    if (g_useAccentColor) {
+        RefreshAccentColorIfNeeded();
+    }
     float scale = 1.0f;
     static auto pGetDpiForWindow = (UINT(WINAPI*)(HWND))GetProcAddress(
         GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
@@ -512,25 +588,25 @@ static void PaintEnhancedBar(HDC hdc,
         trackRect = barRect;
     }
 
-    trackRect.X += (float)g_trackLeftInset;
-    trackRect.Y += (float)g_trackTopInset;
-    trackRect.Width -= (float)(g_trackLeftInset + g_trackRightInset);
-    trackRect.Height -= (float)(g_trackTopInset + g_trackBottomInset);
+    trackRect.X += (float)g_trackLeftInset * scale;
+    trackRect.Y += (float)g_trackTopInset * scale;
+    trackRect.Width -= (float)(g_trackLeftInset + g_trackRightInset) * scale;
+    trackRect.Height -= (float)(g_trackTopInset + g_trackBottomInset) * scale;
 
     if (trackRect.Width <= 0.1f || trackRect.Height <= 0.1f)
         return;
 
     // 2. Paths
     GraphicsPath trackPath;
-    BuildRoundedPath(trackPath, trackRect, (float)g_cornerRadius);
+    BuildRoundedPath(trackPath, trackRect, (float)g_cornerRadius * scale);
 
     RectF borderRect = trackRect;
-    float bOff = g_trackBorderOffset;
+    float bOff = g_trackBorderOffset * scale;
     if (bOff != 0) {
         borderRect.Inflate(bOff, bOff);
     }
     GraphicsPath borderPath;
-    BuildRoundedPath(borderPath, borderRect, (float)g_cornerRadius);
+    BuildRoundedPath(borderPath, borderRect, (float)g_cornerRadius * scale);
 
     if (!isFill) {
         // PASS A: Background
@@ -538,7 +614,7 @@ static void PaintEnhancedBar(HDC hdc,
         graphics.FillPath(&trBr, &trackPath);
 
         if (((g_borderColor >> 24) & 0xFF) > 0 && g_borderThickness > 0.01f) {
-            Pen p{Color{g_borderColor}, g_borderThickness};
+            Pen p{Color{g_borderColor}, g_borderThickness * scale};
             p.SetAlignment(PenAlignmentCenter);
             graphics.DrawPath(&p, &borderPath);
         }
@@ -546,12 +622,12 @@ static void PaintEnhancedBar(HDC hdc,
         // PASS B: Fill
 
         RectF fillRect = barRect;
-        fillRect.X += (float)g_leftInset;
-        fillRect.Y += (float)g_topInset;
-        fillRect.Width -= (float)(g_leftInset + g_rightInset);
-        fillRect.Height -= (float)(g_topInset + g_bottomInset);
+        fillRect.X += (float)g_leftInset * scale;
+        fillRect.Y += (float)g_topInset * scale;
+        fillRect.Width -= (float)(g_leftInset + g_rightInset) * scale;
+        fillRect.Height -= (float)(g_topInset + g_bottomInset) * scale;
 
-        float fPad = g_fillPadding;
+        float fPad = g_fillPadding * scale;
         if (fPad != 0) {
             fillRect.Inflate(-fPad, -fPad);
         }
@@ -567,8 +643,8 @@ static void PaintEnhancedBar(HDC hdc,
             }
 
             GraphicsPath fillPath;
-            BuildRoundedPath(fillPath, fillRect, (float)g_cornerRadius, true,
-                             rR);
+            BuildRoundedPath(fillPath, fillRect, (float)g_cornerRadius * scale,
+                             true, rR);
 
             ARGB c1 = (iStateId == 2) ? g_barFullStart : g_barNormalStart;
             ARGB c2 = (iStateId == 2) ? g_barFullEnd : g_barNormalEnd;
@@ -599,11 +675,21 @@ static bool IsDiskBar(HTHEME hTheme,
                       HDC hdc,
                       int iPartId,
                       int iStateId,
-                      LPCRECT pRect) {
-    if (!pRect)
+                      LPCRECT pRect,
+                      bool logMismatches = false) {
+    if (!pRect) {
+        if (logMismatches)
+            Wh_Log(L"IsDiskBar: FAILED because pRect is NULL");
         return false;
-    if (iPartId != 1 && iPartId != 5 && iPartId != 11)
+    }
+    if (iPartId != 1 && iPartId != 5 && iPartId != 11) {
+        if (logMismatches)
+            Wh_Log(
+                L"IsDiskBar: FAILED because iPartId is %d (must be 1, 5, or "
+                L"11)",
+                iPartId);
         return false;
+    }
 
     HWND hwnd = NULL;
     if (GetThemeWindow_Ptr)
@@ -632,13 +718,29 @@ static bool IsDiskBar(HTHEME hTheme,
     float logicalW = (float)w / scale;
 
     if (iPartId == 5) {
-        if (logicalH < 2.0f || logicalH > 15.5f)
+        if (logicalH < 2.0f || logicalH > 35.0f) {
+            if (logMismatches)
+                Wh_Log(
+                    L"IsDiskBar: FAILED Part 5 because logicalH=%f is out of "
+                    L"bounds [2.0, 35.0]",
+                    logicalH);
             return false;
+        }
     } else {
-        if (logicalW < 30.0f)
+        if (logicalW < 30.0f) {
+            if (logMismatches)
+                Wh_Log(L"IsDiskBar: FAILED because logicalW=%f < 30.0",
+                       logicalW);
             return false;
-        if (logicalH < 6.0f || logicalH > 16.5f)
+        }
+        if (logicalH < 4.0f || logicalH > 35.0f) {
+            if (logMismatches)
+                Wh_Log(
+                    L"IsDiskBar: FAILED because logicalH=%f is out of bounds "
+                    L"[4.0, 35.0]",
+                    logicalH);
             return false;
+        }
     }
 
     if (GetThemeClassList_Ptr) {
@@ -646,14 +748,27 @@ static bool IsDiskBar(HTHEME hTheme,
         if (SUCCEEDED(GetThemeClassList_Ptr(hTheme, themeCls, 256))) {
             std::wstring tCls(themeCls);
             std::transform(tCls.begin(), tCls.end(), tCls.begin(), ::towlower);
-            if (tCls.find(L"progress") == std::wstring::npos)
+            if (tCls.find(L"progress") == std::wstring::npos) {
+                if (logMismatches)
+                    Wh_Log(
+                        L"IsDiskBar: FAILED because Theme Class List '%s' does "
+                        L"not contain 'progress'",
+                        themeCls);
                 return false;
+            }
             if (tCls.find(L"scrollbar") != std::wstring::npos ||
-                tCls.find(L"header") != std::wstring::npos)
+                tCls.find(L"header") != std::wstring::npos) {
+                if (logMismatches)
+                    Wh_Log(
+                        L"IsDiskBar: FAILED because Theme Class List '%s' "
+                        L"contains 'scrollbar' or 'header'",
+                        themeCls);
                 return false;
+            }
         }
     }
 
+    bool isPropertyControl = false;
     if (hwnd) {
         HWND walk = hwnd;
         int limit = 15;
@@ -664,15 +779,26 @@ static bool IsDiskBar(HTHEME hTheme,
                 std::transform(wCls.begin(), wCls.end(), wCls.begin(),
                                ::towlower);
 
+                if (wCls.find(L"propertycontrol") != std::wstring::npos) {
+                    isPropertyControl = true;
+                }
+
                 if (wCls == L"#32770" || wCls == L"msctls_progress32" ||
                     wCls.find(L"scrollbar") != std::wstring::npos ||
                     wCls.find(L"header") != std::wstring::npos ||
                     wCls.find(L"listview") != std::wstring::npos ||
-                    wCls.find(L"property") != std::wstring::npos) {
+                    wCls.find(L"treeview") != std::wstring::npos ||
+                    wCls.find(L"toolbar") != std::wstring::npos ||
+                    wCls.find(L"breadcrumb") != std::wstring::npos ||
+                    wCls.find(L"address") != std::wstring::npos ||
+                    (wCls.find(L"property") != std::wstring::npos &&
+                     wCls.find(L"propertycontrol") == std::wstring::npos)) {
+                    if (logMismatches)
+                        Wh_Log(
+                            L"IsDiskBar: FAILED due to excluded parent window "
+                            L"class: '%s'",
+                            cls);
                     return false;
-                }
-                if (wCls == L"directuihwnd") {
-                    break;
                 }
             }
             walk = GetParent(walk);
@@ -680,8 +806,12 @@ static bool IsDiskBar(HTHEME hTheme,
     }
 
     // prevent navpane being styled
-    if (pRect->left < (int)(32 * scale))
+    if (!isPropertyControl && pRect->left < (int)(32 * scale)) {
+        if (logMismatches)
+            Wh_Log(L"IsDiskBar: FAILED because pRect->left (%d) < 32 * scale",
+                   pRect->left);
         return false;
+    }
     return true;
 }
 
@@ -693,7 +823,51 @@ HRESULT WINAPI HookedDrawThemeBackground(HTHEME hTheme,
                                          int iStateId,
                                          LPCRECT pRect,
                                          LPCRECT pClipRect) {
-    if (IsDiskBar(hTheme, hdc, iPartId, iStateId, pRect)) {
+    bool isProgressSize = false;
+    if (pRect) {
+        int h = pRect->bottom - pRect->top;
+        int w = pRect->right - pRect->left;
+        if (h >= 3 && h <= 35 && w >= 15) {
+            isProgressSize = true;
+        }
+    }
+
+    if (isProgressSize) {
+        wchar_t themeCls[256] = L"Unknown";
+        if (GetThemeClassList_Ptr) {
+            GetThemeClassList_Ptr(hTheme, themeCls, 256);
+        }
+        wchar_t parentCls[256] = L"None";
+        HWND hwnd = NULL;
+        if (GetThemeWindow_Ptr)
+            hwnd = GetThemeWindow_Ptr(hTheme);
+        if (!hwnd)
+            hwnd = WindowFromDC(hdc);
+        if (hwnd)
+            GetClassNameW(hwnd, parentCls, 256);
+
+        bool isDisk = IsDiskBar(hTheme, hdc, iPartId, iStateId, pRect, false);
+        if (!isDisk) {
+            Wh_Log(L"--- HookedDrawThemeBackground (Potential Disk Bar) ---");
+            Wh_Log(
+                L"PartID=%d, StateID=%d, Rect=[l:%d, t:%d, r:%d, b:%d] (w=%d, "
+                L"h=%d), Class='%s', ParentWindow='%s'",
+                iPartId, iStateId, pRect->left, pRect->top, pRect->right,
+                pRect->bottom, pRect->right - pRect->left,
+                pRect->bottom - pRect->top, themeCls, parentCls);
+            // Run again with logging enabled to print the precise mismatch
+            IsDiskBar(hTheme, hdc, iPartId, iStateId, pRect, true);
+        } else {
+            Wh_Log(
+                L"IsDiskBar MATCH: PartID=%d, StateID=%d, Rect=[l:%d, t:%d, "
+                L"r:%d, b:%d] (w=%d, h=%d), Class='%s'",
+                iPartId, iStateId, pRect->left, pRect->top, pRect->right,
+                pRect->bottom, pRect->right - pRect->left,
+                pRect->bottom - pRect->top, themeCls);
+        }
+    }
+
+    if (IsDiskBar(hTheme, hdc, iPartId, iStateId, pRect, false)) {
         bool first = !(hdc == g_lastBarDC && EqualRect(pRect, &g_lastBarRect));
 
         if (iPartId == 5) {
@@ -725,14 +899,19 @@ bool FindSpaceStats(const std::wstring& t, std::wstring& f, std::wstring& tot) {
         return false;
 
     size_t pos = num1_start;
-    while (pos < nt.length() && (iswdigit(nt[pos]) || nt[pos] == L'.' ||
-                                 nt[pos] == L',' || nt[pos] == L' '))
+    while (pos < nt.length() &&
+           (iswdigit(nt[pos]) || nt[pos] == L'.' || nt[pos] == L',' ||
+            nt[pos] == L' ' || nt[pos] == 0xA0))
         pos++;
-    while (pos < nt.length() && nt[pos] == L' ')
-        pos++;
+
+    size_t unit1_start = pos;
     while (pos < nt.length() && !iswdigit(nt[pos]) && nt[pos] != L' ')
         pos++;
     size_t size1_end = pos;
+
+    std::wstring u1 = nt.substr(unit1_start, size1_end - unit1_start);
+    if (!IsValidUnitString(u1.c_str()))
+        return false;
 
     size_t num2_start = nt.find_first_of(L"0123456789", size1_end);
     if (num2_start == std::wstring::npos)
@@ -742,14 +921,24 @@ bool FindSpaceStats(const std::wstring& t, std::wstring& f, std::wstring& tot) {
         return false;
 
     pos = num2_start;
-    while (pos < nt.length() && (iswdigit(nt[pos]) || nt[pos] == L'.' ||
-                                 nt[pos] == L',' || nt[pos] == L' '))
+    while (pos < nt.length() &&
+           (iswdigit(nt[pos]) || nt[pos] == L'.' || nt[pos] == L',' ||
+            nt[pos] == L' ' || nt[pos] == 0xA0))
         pos++;
-    while (pos < nt.length() && nt[pos] == L' ')
-        pos++;
+
+    size_t unit2_start = pos;
     while (pos < nt.length() && !iswdigit(nt[pos]) && nt[pos] != L' ')
         pos++;
     size_t size2_end = pos;
+
+    std::wstring u2 = nt.substr(unit2_start, size2_end - unit2_start);
+    if (!IsValidUnitString(u2.c_str()))
+        return false;
+
+    // Reject if there is another number after the second unit
+    if (nt.find_first_of(L"0123456789", size2_end) != std::wstring::npos) {
+        return false;
+    }
 
     f = nt.substr(num1_start, size1_end - num1_start);
     tot = nt.substr(num2_start, size2_end - num2_start);
@@ -847,14 +1036,17 @@ int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR psz, int cch, LPRECT prc, UINT fmt) {
                     HFONT hOldFont = NULL;
                     HFONT hNewFont = NULL;
                     float scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
-                    if (g_fontSize != 0) {
+                    if (g_fontSize != 0.0f) {
                         HFONT hCurrent = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
                         LOGFONTW lf;
                         if (GetObjectW(hCurrent, sizeof(lf), &lf)) {
+                            int delta =
+                                (int)(g_fontSize * scale +
+                                      (g_fontSize >= 0.0f ? 0.5f : -0.5f));
                             if (lf.lfHeight < 0)
-                                lf.lfHeight -= (int)(g_fontSize * scale);
+                                lf.lfHeight -= delta;
                             else
-                                lf.lfHeight += (int)(g_fontSize * scale);
+                                lf.lfHeight += delta;
                             hNewFont = CreateFontIndirectW(&lf);
                             if (hNewFont)
                                 hOldFont = (HFONT)SelectObject(hdc, hNewFont);
@@ -1028,14 +1220,17 @@ int WINAPI DrawTextExW_Hook(HDC hdc,
                     HFONT hOldFont = NULL;
                     HFONT hNewFont = NULL;
                     float scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
-                    if (g_fontSize != 0) {
+                    if (g_fontSize != 0.0f) {
                         HFONT hCurrent = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
                         LOGFONTW lf;
                         if (GetObjectW(hCurrent, sizeof(lf), &lf)) {
+                            int delta =
+                                (int)(g_fontSize * scale +
+                                      (g_fontSize >= 0.0f ? 0.5f : -0.5f));
                             if (lf.lfHeight < 0)
-                                lf.lfHeight -= (int)(g_fontSize * scale);
+                                lf.lfHeight -= delta;
                             else
-                                lf.lfHeight += (int)(g_fontSize * scale);
+                                lf.lfHeight += delta;
                             hNewFont = CreateFontIndirectW(&lf);
                             if (hNewFont)
                                 hOldFont = (HFONT)SelectObject(hdc, hNewFont);
