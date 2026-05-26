@@ -91,6 +91,14 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - showThumbnails: true
   $name: Show Thumbnails
   $description: Show DWM live thumbnail previews of windows.
+- thumbnailPosition: bottom
+  $name: Thumbnail Position
+  $description: Place the thumbnail below or above the header row.
+  $options:
+  - bottom: Bottom (below header)
+  - top: Top (above header)
+  - left: Left (before header)
+  - right: Right (after header)
 - showTitle: true
   $name: Show Title Label
 - showIcon: true
@@ -119,11 +127,13 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - rowWidth: 0
   $name: Row Width
   $description: Width of each thumbnail tile in pixels (before DPI scaling). Set to 0 for automatic width based on window aspect ratio.
+- stretchThumbnailsToTaskWidth: true
+  $name: Stretch Thumbnails To Task Width
+  $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
 - maxWidthPercent: 80
   $name: Maximum Width (percentage of screen width)
 - maxHeightPercent: 80
   $name: Maximum Height (percentage of screen height)
-
 - showDelay: 0
   $name: Show Delay (ms)
   $description: Delay in milliseconds before showing the switcher (0 = instant).
@@ -147,8 +157,15 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
   $name: Border Color (Light Mode)
   $description: Border color in HEX format for light mode.
 - useAccentColor: false
-  $name: Use Accent Color for Borders
+  $name: Accent Color for Borders and Background Fill
   $description: Use Windows accent color for selection and hover borders.
+- highlightStyle: border
+  $name: Selected Task Highlight Style
+  $description: Style used for the selected task row/tile.
+  $options:
+  - border: Border only
+  - fillAndBorder: Background fill and border
+  - fillOnly: Background fill only
 - centerTaskContent: false
   $name: Center Task Icon and Title
   $description: Center the icon and title together in each task row.
@@ -177,6 +194,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #include <atomic>
 #include <map>
 #include <string>
+#include <algorithm>
 #include <gdiplus.h>
 
 #define SWS_CLASSNAME       L"WindhawkSWS_Switcher"
@@ -225,12 +243,14 @@ struct WindowEntry {
     SIZE effectiveSourceSize;  // Source size after cropping invisible frame
 };
 struct Settings {
-    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32];
+    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32];
+    WCHAR highlightStyle[32];
     WCHAR borderColorDark[16];
     WCHAR borderColorLight[16];
     int opacity;
     int rowHeight;
     int rowWidth;
+    bool stretchThumbnailsToTaskWidth;
     bool showThumbnails;
     bool showTitle;
     bool showIcon;
@@ -278,9 +298,25 @@ static bool LayoutIsVertical() { return wcscmp(g_settings.taskListOrientation, L
 static bool HeaderOrientationIs(const WCHAR* v) { return wcscmp(g_settings.headerContentOrientation, v) == 0; }
 static bool IconSizeIs(const WCHAR* v) { return wcscmp(g_settings.iconSize, v) == 0; }
 static bool BackwardShortcutIs(const WCHAR* v) { return wcscmp(g_settings.backwardShortcut, v) == 0; }
+static bool ThumbnailPositionIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailPosition, v) == 0; }
+static bool HighlightStyleIs(const WCHAR* v) { return wcscmp(g_settings.highlightStyle, v) == 0; }
 static bool UseAltShiftTabBackward() { return BackwardShortcutIs(L"altShiftTab"); }
 static bool UseAltShiftBackward() { return BackwardShortcutIs(L"altShift"); }
 static bool UseAltBacktickBackward() { return BackwardShortcutIs(L"altBacktick"); }
+static bool ThumbnailIsBottom() { return ThumbnailPositionIs(L"bottom"); }
+static bool ThumbnailIsTop() { return ThumbnailPositionIs(L"top"); }
+static bool ThumbnailIsLeft() { return ThumbnailPositionIs(L"left"); }
+static bool ThumbnailIsRight() { return ThumbnailPositionIs(L"right"); }
+static bool ThumbnailIsSide() { return ThumbnailIsLeft() || ThumbnailIsRight(); }
+static bool HighlightHasFill() {
+    return HighlightStyleIs(L"fillAndBorder") || HighlightStyleIs(L"fillOnly");
+}
+static bool HighlightHasBorder() {
+    return HighlightStyleIs(L"border") || HighlightStyleIs(L"fillAndBorder");
+}
+static bool StretchThumbsToTaskWidth() {
+    return g_settings.stretchThumbnailsToTaskWidth;
+}
 static bool HeaderIsVertical() {
     return HeaderOrientationIs(L"vertical");
 }
@@ -918,9 +954,10 @@ static void ComputeLayout(HMONITOR hMon) {
     // EP: cbThumbnailAvailableHeight = cbRowHeight - cbRowTitleHeight - cbTopPadding - 2 * cbBottomPadding
     // All values are DPI-scaled at this point (matching EP lines 826-844)
     int scaledRowH = DpiScale(g_settings.rowHeight, dpiY);
+    bool sidePlacement = ThumbnailIsSide() && g_settings.showThumbnails;
     int thumbH = 0;
     if (g_settings.showThumbnails) {
-        thumbH = scaledRowH - rowTitleH - padTop - 2 * padBot;
+        thumbH = scaledRowH - (sidePlacement ? 0 : rowTitleH) - padTop - 2 * padBot;
         if (thumbH < 0) thumbH = 0;
     }
     // EP: cbMaxTileWidth = cbRowHeight * MAX_TILE_WIDTH (computed before DPI, then scaled)
@@ -933,9 +970,18 @@ static void ComputeLayout(HMONITOR hMon) {
     // bottomInc    = (thumbH + padBot) + elemPadBot + initialTop
     int initialLeft = elemPadLeft + padLeft;
     int rightInc    = (padRight + elemPadRight) + initialLeft;
-    int activePadDivider = (g_settings.showThumbnails && rowTitleH > 0) ? padDivider : 0;
-    int initialTop  = elemPadTop + (padTop + rowTitleH + activePadDivider);
-    int bottomInc   = (thumbH + padBot) + elemPadBot + initialTop;
+    bool showThumbs = g_settings.showThumbnails;
+    bool thumbBottom = showThumbs ? ThumbnailIsBottom() : true;
+    bool thumbTop = showThumbs ? ThumbnailIsTop() : false;
+    bool thumbSide = showThumbs ? ThumbnailIsSide() : false;
+    
+    int activePadDivider = (showThumbs && rowTitleH > 0) ? padDivider : 0;
+    int headerAndDividerH = rowTitleH + activePadDivider;
+    int thumbTopOffset = padTop + (thumbBottom ? headerAndDividerH : 0);
+    int initialTop  = elemPadTop + thumbTopOffset;
+    int baseContentH = thumbSide ? std::max(thumbH, rowTitleH) : thumbH;
+    int bottomInc   = (baseContentH + padBot) + elemPadBot + initialTop + (thumbTop ? headerAndDividerH : 0);
+    int sideHeaderWidth = DpiScale(HeaderIsVertical() ? 96 : 150, dpiX);
 
     int maxW = monW * g_settings.maxWidthPercent / 100;
     int maxH = monH * g_settings.maxHeightPercent / 100;
@@ -979,18 +1025,47 @@ static void ComputeLayout(HMONITOR hMon) {
             }
 
             int width = 0;
-            int original_width = 0;
+            int thumbWidth = 0;
+            int actualThumbH = thumbH;
 
             if (g_settings.showThumbnails && thumbH > 0) {
                 if (w.effectiveSourceSize.cx > 0 && w.effectiveSourceSize.cy > 0) {
-                    width = (int)((double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy);
+                    thumbWidth = (int)((double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy);
                 } else {
-                    width = thumbH;
+                    thumbWidth = thumbH;
                 }
-                if (width > maxTileW || width > w.effectiveSourceSize.cx) {
-                    original_width = width;
-                    if (width > maxTileW) width = maxTileW;
-                    if (w.effectiveSourceSize.cx > 0 && width > w.effectiveSourceSize.cx) width = w.effectiveSourceSize.cx;
+
+                int naturalThumbWidth = thumbWidth;
+                if (thumbWidth > maxTileW) thumbWidth = maxTileW;
+                if (w.effectiveSourceSize.cx > 0 && thumbWidth > w.effectiveSourceSize.cx) thumbWidth = w.effectiveSourceSize.cx;
+                if (naturalThumbWidth > 0 && thumbWidth != naturalThumbWidth) {
+                    actualThumbH = (int)((double)thumbWidth * thumbH / naturalThumbWidth);
+                }
+
+                width = thumbWidth;
+                if (g_settings.rowWidth > 0) {
+                    width = DpiScale(g_settings.rowWidth, dpiX);
+                    if (StretchThumbsToTaskWidth()) {
+                        thumbWidth = sidePlacement ? std::max(0, width - ((rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0)) : width;
+                        if (thumbWidth <= 0) thumbWidth = DpiScale(16, dpiX);
+                        actualThumbH = thumbH;
+                    } else if (thumbWidth > width && width > 0) {
+                        actualThumbH = (int)((double)width * actualThumbH / thumbWidth);
+                        thumbWidth = width;
+                    }
+                }
+
+                if (sidePlacement) {
+                    int headerExtra = (rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0;
+                    if (g_settings.rowWidth > 0) {
+                        int maxThumbW = width - headerExtra;
+                        if (maxThumbW > 0 && thumbWidth > maxThumbW) {
+                            actualThumbH = (int)((double)maxThumbW * actualThumbH / thumbWidth);
+                            thumbWidth = maxThumbW;
+                        }
+                    } else {
+                        width = thumbWidth + headerExtra;
+                    }
                 }
             } else {
                 if (!g_settings.showTitle && g_settings.showIcon) {
@@ -1002,10 +1077,13 @@ static void ComputeLayout(HMONITOR hMon) {
                 } else {
                     width = DpiScale(160, dpiX);
                 }
+                thumbWidth = width;
+                actualThumbH = 0;
             }
 
-            if (g_settings.rowWidth > 0) {
+            if (!g_settings.showThumbnails && g_settings.rowWidth > 0) {
                 width = DpiScale(g_settings.rowWidth, dpiX);
+                thumbWidth = width;
             }
 
             if (curX + width + rightInc - initialLeft > maxW - masterPad && curX > initialLeft + masterPad) {
@@ -1020,21 +1098,35 @@ static void ComputeLayout(HMONITOR hMon) {
                 curY = curY + bottomInc;
             }
 
-            int actualThumbH = thumbH;
-            if (original_width > 0 && thumbH > 0) {
-                actualThumbH = (int)((double)width * thumbH / original_width);
-            }
-
             w.rcCell.left   = curX - initialLeft + elemPadLeft;
             w.rcCell.top    = curY - initialTop + elemPadTop;
             w.rcCell.right  = curX + width + rightInc - initialLeft - elemPadRight;
             w.rcCell.bottom = curY + bottomInc - initialTop - elemPadBot;
-            if (original_width > 0) {
-                w.rcCell.bottom -= (thumbH - actualThumbH);
+            if (g_settings.showThumbnails) {
+                if (sidePlacement) {
+                    int contentH = std::max(actualThumbH, rowTitleH);
+                    int baseH = std::max(thumbH, rowTitleH);
+                    if (contentH < baseH) {
+                        w.rcCell.bottom -= (baseH - contentH);
+                    }
+                } else if (actualThumbH < thumbH) {
+                    w.rcCell.bottom -= (thumbH - actualThumbH);
+                }
             }
 
             if (g_settings.showThumbnails) {
-                w.rcThumbActual = { curX, curY, curX + width, curY + actualThumbH };
+                int thumbX = curX;
+                int thumbY = curY;
+                if (sidePlacement) {
+                    int contentH = std::max(actualThumbH, rowTitleH);
+                    thumbY = curY + (contentH - actualThumbH) / 2;
+                    if (ThumbnailIsRight()) {
+                        thumbX = curX + width - thumbWidth;
+                    }
+                } else if (!StretchThumbsToTaskWidth() && width > thumbWidth) {
+                    thumbX += (width - thumbWidth) / 2;
+                }
+                w.rcThumbActual = { thumbX, thumbY, thumbX + thumbWidth, thumbY + actualThumbH };
                 w.rcThumb = w.rcThumbActual;
             }
 
@@ -1093,18 +1185,47 @@ static void ComputeLayout(HMONITOR hMon) {
             }
 
             int width = 0;
-            int original_width = 0;
+            int thumbWidth = 0;
+            int actualThumbH = thumbH;
 
             if (g_settings.showThumbnails && thumbH > 0) {
                 if (w.effectiveSourceSize.cx > 0 && w.effectiveSourceSize.cy > 0) {
-                    width = (int)((double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy);
+                    thumbWidth = (int)((double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy);
                 } else {
-                    width = thumbH;
+                    thumbWidth = thumbH;
                 }
-                if (width > maxTileW || width > w.effectiveSourceSize.cx) {
-                    original_width = width;
-                    if (width > maxTileW) width = maxTileW;
-                    if (w.effectiveSourceSize.cx > 0 && width > w.effectiveSourceSize.cx) width = w.effectiveSourceSize.cx;
+
+                int naturalThumbWidth = thumbWidth;
+                if (thumbWidth > maxTileW) thumbWidth = maxTileW;
+                if (w.effectiveSourceSize.cx > 0 && thumbWidth > w.effectiveSourceSize.cx) thumbWidth = w.effectiveSourceSize.cx;
+                if (naturalThumbWidth > 0 && thumbWidth != naturalThumbWidth) {
+                    actualThumbH = (int)((double)thumbWidth * thumbH / naturalThumbWidth);
+                }
+
+                width = thumbWidth;
+                if (g_settings.rowWidth > 0) {
+                    width = DpiScale(g_settings.rowWidth, dpiX);
+                    if (StretchThumbsToTaskWidth()) {
+                        thumbWidth = sidePlacement ? std::max(0, width - ((rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0)) : width;
+                        if (thumbWidth <= 0) thumbWidth = DpiScale(16, dpiX);
+                        actualThumbH = thumbH;
+                    } else if (thumbWidth > width && width > 0) {
+                        actualThumbH = (int)((double)width * actualThumbH / thumbWidth);
+                        thumbWidth = width;
+                    }
+                }
+
+                if (sidePlacement) {
+                    int headerExtra = (rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0;
+                    if (g_settings.rowWidth > 0) {
+                        int maxThumbW = width - headerExtra;
+                        if (maxThumbW > 0 && thumbWidth > maxThumbW) {
+                            actualThumbH = (int)((double)maxThumbW * actualThumbH / thumbWidth);
+                            thumbWidth = maxThumbW;
+                        }
+                    } else {
+                        width = thumbWidth + headerExtra;
+                    }
                 }
             } else {
                 if (!g_settings.showTitle && g_settings.showIcon) {
@@ -1116,10 +1237,13 @@ static void ComputeLayout(HMONITOR hMon) {
                 } else {
                     width = DpiScale(160, dpiX);
                 }
+                thumbWidth = width;
+                actualThumbH = 0;
             }
 
-            if (g_settings.rowWidth > 0) {
+            if (!g_settings.showThumbnails && g_settings.rowWidth > 0) {
                 width = DpiScale(g_settings.rowWidth, dpiX);
+                thumbWidth = width;
             }
 
             if (curY + bottomInc - initialTop > maxH - masterPad && curY > initialTop + masterPad) {
@@ -1132,21 +1256,35 @@ static void ComputeLayout(HMONITOR hMon) {
                 }
             }
 
-            int actualThumbH = thumbH;
-            if (original_width > 0 && thumbH > 0) {
-                actualThumbH = (int)((double)width * thumbH / original_width);
-            }
-
             w.rcCell.left   = curX - initialLeft + elemPadLeft;
             w.rcCell.top    = curY - initialTop + elemPadTop;
             w.rcCell.right  = curX + width + rightInc - initialLeft - elemPadRight;
             w.rcCell.bottom = curY + bottomInc - initialTop - elemPadBot;
-            if (original_width > 0) {
-                w.rcCell.bottom -= (thumbH - actualThumbH);
+            if (g_settings.showThumbnails) {
+                if (sidePlacement) {
+                    int contentH = std::max(actualThumbH, rowTitleH);
+                    int baseH = std::max(thumbH, rowTitleH);
+                    if (contentH < baseH) {
+                        w.rcCell.bottom -= (baseH - contentH);
+                    }
+                } else if (actualThumbH < thumbH) {
+                    w.rcCell.bottom -= (thumbH - actualThumbH);
+                }
             }
 
             if (g_settings.showThumbnails) {
-                w.rcThumbActual = { curX, curY, curX + width, curY + actualThumbH };
+                int thumbX = curX;
+                int thumbY = curY;
+                if (sidePlacement) {
+                    int contentH = std::max(actualThumbH, rowTitleH);
+                    thumbY = curY + (contentH - actualThumbH) / 2;
+                    if (ThumbnailIsRight()) {
+                        thumbX = curX + width - thumbWidth;
+                    }
+                } else if (!StretchThumbsToTaskWidth() && width > thumbWidth) {
+                    thumbX += (width - thumbWidth) / 2;
+                }
+                w.rcThumbActual = { thumbX, thumbY, thumbX + thumbWidth, thumbY + actualThumbH };
                 w.rcThumb = w.rcThumbActual;
             }
 
@@ -1365,6 +1503,104 @@ static void DrawContour(HDC hdc, RECT rc, int contourSize, int direction) {
     }
 }
 
+static void DrawSelectionFill(HDC hdc, RECT rc) {
+    RECT fillRc = rc;
+    InflateRect(&fillRc, -1, -1);
+    int width = fillRc.right - fillRc.left;
+    int height = fillRc.bottom - fillRc.top;
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+
+    COLORREF c = GetContourColor();
+    BYTE r = GetRValue(c);
+    BYTE g = GetGValue(c);
+    BYTE b = GetBValue(c);
+
+    int cornerRadius = GetTaskUiCornerRadiusPx();
+    if (cornerRadius > 0) {
+        int maxRadius = std::min(width, height) / 2;
+        if (cornerRadius > maxRadius) cornerRadius = maxRadius;
+    }
+
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    Gdiplus::SolidBrush brush(Gdiplus::Color(64, r, g, b));
+
+    if (cornerRadius > 0) {
+        Gdiplus::REAL left = (Gdiplus::REAL)fillRc.left;
+        Gdiplus::REAL top = (Gdiplus::REAL)fillRc.top;
+        Gdiplus::REAL w = (Gdiplus::REAL)(fillRc.right - fillRc.left);
+        Gdiplus::REAL h = (Gdiplus::REAL)(fillRc.bottom - fillRc.top);
+        Gdiplus::REAL d = (Gdiplus::REAL)(cornerRadius * 2);
+
+        Gdiplus::GraphicsPath path;
+        path.AddArc(left, top, d, d, 180, 90);
+        path.AddArc(left + w - d, top, d, d, 270, 90);
+        path.AddArc(left + w - d, top + h - d, d, d, 0, 90);
+        path.AddArc(left, top + h - d, d, d, 90, 90);
+        path.CloseFigure();
+        graphics.FillPath(&brush, &path);
+        return;
+    }
+
+    graphics.FillRectangle(&brush,
+                           (Gdiplus::REAL)fillRc.left,
+                           (Gdiplus::REAL)fillRc.top,
+                           (Gdiplus::REAL)width,
+                           (Gdiplus::REAL)height);
+}
+
+static RECT GetHeaderContentRectForEntry(const WindowEntry& e) {
+    int padLeft = DpiScale(SWS_PAD_LEFT, g_dpiX);
+    int padTop = DpiScale(SWS_PAD_TOP, g_dpiY);
+    int padBottom = DpiScale(SWS_PAD_BOTTOM, g_dpiY);
+    RECT rc = {
+        e.rcCell.left + padLeft,
+        e.rcCell.top + padTop,
+        e.rcCell.right - padLeft,
+        e.rcCell.bottom - padBottom,
+    };
+
+    if (!g_settings.showThumbnails) {
+        return rc;
+    }
+
+    if (ThumbnailIsTop()) {
+        int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiY);
+        rc.top = e.rcThumbActual.bottom + divider;
+    } else if (ThumbnailIsBottom()) {
+        int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiY);
+        rc.bottom = e.rcThumbActual.top - divider;
+    } else if (ThumbnailIsSide()) {
+        int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiX);
+        if (ThumbnailIsLeft()) {
+            rc.left = e.rcThumbActual.right + divider;
+        } else {
+            rc.right = e.rcThumbActual.left - divider;
+        }
+    }
+
+    if (rc.right < rc.left) rc.right = rc.left;
+    if (rc.bottom < rc.top) rc.bottom = rc.top;
+    return rc;
+}
+
+static int GetHeaderTopForEntry(const WindowEntry& e) {
+    RECT rcHeader = GetHeaderContentRectForEntry(e);
+    int rowTitleH = GetHeaderRowHeightPx();
+    if (rowTitleH <= 0) {
+        return rcHeader.top;
+    }
+
+    int available = rcHeader.bottom - rcHeader.top;
+    if (available <= rowTitleH) {
+        return rcHeader.top;
+    }
+
+    return rcHeader.top + (available - rowTitleH) / 2;
+}
+
 // Shared drawing routine for both layered and buffered paint paths
 static void DrawSwitcherContent(HDC hdc, bool fillBg) {
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
@@ -1387,7 +1623,6 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
 
     // DPI-scale layout constants for drawing
     int padLeft    = DpiScale(SWS_PAD_LEFT, g_dpiX);
-    int padTop     = DpiScale(SWS_PAD_TOP, g_dpiY);
     int rowTitleH  = GetHeaderRowHeightPx();
     int iconSz     = GetHeaderIconSizePx();
     int cornerRadius = GetTaskUiCornerRadiusPx();
@@ -1399,9 +1634,14 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
         if (e.rcCell.left == 0 && e.rcCell.right == 0 &&
             e.rcCell.top == 0 && e.rcCell.bottom == 0) continue;
 
-        // Selection border: inner contour on rcCell
+        // Selection highlight: configurable border/fill combinations on rcCell.
         if (i == g_selectedIndex) {
-            DrawContour(hdc, e.rcCell, SWS_CONTOUR_SIZE, 1);
+            if (HighlightHasFill()) {
+                DrawSelectionFill(hdc, e.rcCell);
+            }
+            if (HighlightHasBorder()) {
+                DrawContour(hdc, e.rcCell, SWS_CONTOUR_SIZE, 1);
+            }
         }
 
         // Hover thumbnail border: outer contour on rcThumbActual (EP draws both independently)
@@ -1417,25 +1657,29 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
         }
 
         int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
+        // Keep centered header content stable: reserve close-button space consistently.
+        // In vertical mode, never reserve space - close button overlays without displacement.
         int btnReserve = 0;
         bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
         if (!HeaderIsVertical()) {
-            if (!isIconOnly) {
+            if (!isIconOnly && !(g_settings.showThumbnails && ThumbnailIsSide())) {
                 btnReserve = ((g_settings.centerTaskContent) || i == g_hoverIndex)
                          ? closeBtnReserve
                          : 0;
             }
         }
-        int contentLeft = e.rcCell.left + padLeft;
-        int contentRight = e.rcCell.right - padLeft - btnReserve;
+        RECT rcHeaderContent = GetHeaderContentRectForEntry(e);
+        int contentLeft = rcHeaderContent.left;
+        int contentRight = rcHeaderContent.right - btnReserve;
         if (contentRight < contentLeft) contentRight = contentLeft;
 
+        int headerTop = GetHeaderTopForEntry(e);
         int iconX = contentLeft;
-        int iconY = e.rcCell.top + padTop + (rowTitleH - iconSz) / 2;
+        int iconY = headerTop + (rowTitleH - iconSz) / 2;
         int textLeft = contentLeft;
         if (g_settings.showIcon) textLeft += iconSz + padLeft;
         int textRight = contentRight;
-        int textTop = e.rcCell.top + padTop;
+        int textTop = headerTop;
         int textBottom = textTop + rowTitleH;
 
         if (HeaderIsVertical() && !isIconOnly) {
@@ -1443,7 +1687,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
             if (availableW < 0) availableW = 0;
 
             iconX = contentLeft + ((availableW > iconSz) ? (availableW - iconSz) / 2 : 0);
-            iconY = e.rcCell.top + padTop;
+            iconY = headerTop;
 
             int headerGap = DpiScale(4, g_dpiY);
             int textH = GetHeaderTitleHeightPx();
@@ -1509,8 +1753,6 @@ static bool IsWindowTruncated(int idx);
 static void DrawSwitcherOverlay(HDC hdc) {
     if (g_windows.empty()) return;
 
-    int padTop = DpiScale(SWS_PAD_TOP, g_dpiY);
-    int padLeft = DpiScale(SWS_PAD_LEFT, g_dpiX);
     int rowTitleH = GetHeaderRowHeightPx();
 
     for (int idx = 0; idx < (int)g_windows.size(); idx++) {
@@ -1522,11 +1764,13 @@ static void DrawSwitcherOverlay(HDC hdc) {
         if (i == g_hoverIndex) {
             int btnSz = DpiScale(24, g_dpiX);
             int bx, by;
-            if (rowTitleH == 0) {
+            if (rowTitleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide())) {
                 int btnPadding = DpiScale(4, g_dpiX);
                 bx = e.rcThumbActual.right - btnSz - btnPadding;
                 by = e.rcThumbActual.top + btnPadding;
             } else if (!g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon) {
+                int padLeft = DpiScale(SWS_PAD_LEFT, g_dpiX);
+                int padTop = DpiScale(SWS_PAD_TOP, g_dpiY);
                 int contentLeft = e.rcCell.left + padLeft;
                 int contentRight = e.rcCell.right - padLeft;
                 int iconSz = GetHeaderIconSizePx();
@@ -1554,9 +1798,11 @@ static void DrawSwitcherOverlay(HDC hdc) {
                     by = iconY;
                 }
             } else {
-                bx = e.rcCell.right - padLeft - btnSz;
-                by = HeaderIsVertical() ? (e.rcCell.top + padTop)
-                                        : (e.rcCell.top + padTop + (rowTitleH - btnSz) / 2);
+                RECT rcHeaderContent = GetHeaderContentRectForEntry(e);
+                int headerTop = GetHeaderTopForEntry(e);
+                bx = rcHeaderContent.right - btnSz;
+                by = HeaderIsVertical() ? headerTop
+                                        : (headerTop + (rowTitleH - btnSz) / 2);
             }
 
             if (g_isCloseHovered) {
@@ -2250,16 +2496,16 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         bool closeHovered = false;
         if (idx >= 0) {
             auto& e = g_windows[idx];
-            int padL = DpiScale(SWS_PAD_LEFT, g_dpiX);
-            int padT = DpiScale(SWS_PAD_TOP, g_dpiY);
             int titleH = GetHeaderRowHeightPx();
             int btnSz = DpiScale(24, g_dpiX);
             int bx, by;
-            if (titleH == 0) {
+            if (titleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide())) {
                 int btnPadding = DpiScale(4, g_dpiX);
                 bx = e.rcThumbActual.right - btnSz - btnPadding;
                 by = e.rcThumbActual.top + btnPadding;
             } else if (!g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon) {
+                int padL = DpiScale(SWS_PAD_LEFT, g_dpiX);
+                int padT = DpiScale(SWS_PAD_TOP, g_dpiY);
                 int contentLeft = e.rcCell.left + padL;
                 int contentRight = e.rcCell.right - padL;
                 int iconSz = GetHeaderIconSizePx();
@@ -2287,9 +2533,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     by = iconY;
                 }
             } else {
-                bx = e.rcCell.right - padL - btnSz;
-                by = HeaderIsVertical() ? (e.rcCell.top + padT)
-                                        : (e.rcCell.top + padT + (titleH - btnSz) / 2);
+                RECT rcHeaderContent = GetHeaderContentRectForEntry(e);
+                int headerTop = GetHeaderTopForEntry(e);
+                bx = rcHeaderContent.right - btnSz;
+                by = HeaderIsVertical() ? headerTop
+                                        : (headerTop + (titleH - btnSz) / 2);
             }
             if (x >= bx && x <= bx + btnSz && y >= by && y <= by + btnSz) {
                 closeHovered = true;
@@ -2431,6 +2679,14 @@ static void LoadSettings() {
         wcscmp(g_settings.iconSize, L"large") != 0) {
         wcscpy_s(g_settings.iconSize, L"small");
     }
+    v = Wh_GetStringSetting(L"thumbnailPosition");
+    wcscpy_s(g_settings.thumbnailPosition, v ? v : L"bottom"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.thumbnailPosition, L"bottom") != 0 &&
+        wcscmp(g_settings.thumbnailPosition, L"top") != 0 &&
+        wcscmp(g_settings.thumbnailPosition, L"left") != 0 &&
+        wcscmp(g_settings.thumbnailPosition, L"right") != 0) {
+        wcscpy_s(g_settings.thumbnailPosition, L"bottom");
+    }
     v = Wh_GetStringSetting(L"backwardShortcut");
     if (v) {
         wcscpy_s(g_settings.backwardShortcut, v);
@@ -2446,6 +2702,15 @@ static void LoadSettings() {
         wcscpy_s(g_settings.backwardShortcut, L"altShiftTab");
     }
 
+    v = Wh_GetStringSetting(L"highlightStyle");
+    wcscpy_s(g_settings.highlightStyle, v ? v : L"border");
+    Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.highlightStyle, L"border") != 0 &&
+        wcscmp(g_settings.highlightStyle, L"fillAndBorder") != 0 &&
+        wcscmp(g_settings.highlightStyle, L"fillOnly") != 0) {
+        wcscpy_s(g_settings.highlightStyle, L"border");
+    }
+
     g_settings.opacity = Wh_GetIntSetting(L"opacity");
     if (g_settings.opacity < 0) g_settings.opacity = 0;
     if (g_settings.opacity > 100) g_settings.opacity = 100;
@@ -2453,6 +2718,7 @@ static void LoadSettings() {
     if (g_settings.rowHeight <= 0) g_settings.rowHeight = 230;
     g_settings.rowWidth = Wh_GetIntSetting(L"rowWidth");
     if (g_settings.rowWidth < 0) g_settings.rowWidth = 0;
+    g_settings.stretchThumbnailsToTaskWidth = Wh_GetIntSetting(L"stretchThumbnailsToTaskWidth");
     g_settings.showThumbnails = Wh_GetIntSetting(L"showThumbnails");
     g_settings.showTitle = Wh_GetIntSetting(L"showTitle");
     g_settings.showIcon = Wh_GetIntSetting(L"showIcon");
