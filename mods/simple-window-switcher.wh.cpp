@@ -18,7 +18,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 
 ## Features
 - Grid layout with live DWM thumbnail previews
-- Different Task List and Header Content layouts
+- Different Task List, Header Content and Thumbnails layouts
 - Center align task list content and titles (horizontal and vertical options)
 - Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)
 - Mouse click to select, scroll wheel to cycle
@@ -27,6 +27,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - Works with elevated/admin applications
 - Dark/light mode auto-detection
 - Custom border colors with optional Windows accent color
+- Different item highlight options
 - DPI-aware, multi-monitor aware
 - Rounded corners for switcher and task thumbnails (optional)
 - Dynamic UI adjustments (e.g., intelligent close button placement over thumbnails)
@@ -50,13 +51,17 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 
 ![Vertical large](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/2.png)
 
-*Vertical rounded with centered task icons and titles*
+*Horizontal rounded with centered task icons and titles*
 
-![Vertical centered](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/6.png)
+![Horizontal centered](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/6.png)
 
-*Vertical squared with thumbnails*
+*Horizontal squared with thumbnails on top*
 
-![Vertical squared with thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/5.png)
+![Horizontal squared with thumbnails on top](https://github.com/Asteski/Windhawk-Mods/blob/cc72179d1ff603f3d3cf94fd41230ebea774bc8b/img/simple-window-switcher/7.png)
+
+*Horizontal rounded with thumbnails and no icons*
+
+![Horizontal rounded with thumbnails and no icons]https://github.com/Asteski/Windhawk-Mods/blob/cc72179d1ff603f3d3cf94fd41230ebea774bc8b/img/simple-window-switcher/8.png)
 
 */
 // ==/WindhawkModReadme==
