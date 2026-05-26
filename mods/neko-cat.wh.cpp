@@ -2,7 +2,7 @@
 // @id              neko-cat
 // @name            Neko Cat
 // @description     Adds a desktop pet cat that runs around and follows your mouse
-// @version         1.2.0
+// @version         1.2.1
 // @author          ciizerr
 // @github          https://github.com/ciizerr
 // @include         windhawk.exe
@@ -13,7 +13,7 @@
 /*
 # 🐱 Neko Cat
 A cute desktop pet that follows your mouse and runs around your screen.
-![Neko Cat Preview](https://raw.githubusercontent.com/ciizerr/wh-mods/main/previews/Neko-cat.gif)
+![Neko Cat Preview](https://raw.githubusercontent.com/ciizerr/wh-mods/2c1ecbf9ba9d0964e1a764a090cb2b7df729dc5c/previews/Neko-cat.gif)
 
 ## ✨ What's New in v1.2.0?
 *   **Play With Window:** Neko can now climb the sides of your active window and pace along the title bar! He even reacts physically if you drag the window into him while he's sleeping.
@@ -42,7 +42,7 @@ You can tweak almost everything in the settings: **Size**, **Speed**, **FPS**, *
 
 ## 🔒 Assets & Transparency
 Neko's graphics and sounds are downloaded automatically on the first run.
-*   **Source:** All files come from the GitHub repository: [assets/neko-cat](https://github.com/ciizerr/wh-mods/tree/main/assets/neko-cat)
+*   **Source:** All files come from the GitHub repository: [assets/neko-cat](https://github.com/ciizerr/wh-mods/tree/2c1ecbf9ba9d0964e1a764a090cb2b7df729dc5c/assets/neko-cat)
 *   **Standard API:** The mod uses the trusted Windhawk `Wh_GetUrlContent` API.
 *   **Local Storage:** Files are safely cached in your Windhawk `modstorage` folder.
 
@@ -264,7 +264,7 @@ void DownloadMissingAssets() {
     CreatePath(g_assetPath);
     CreatePath(g_assetPath + L"\\sounds");
 
-    std::wstring baseUrl = L"https://raw.githubusercontent.com/ciizerr/wh-mods/main/assets/neko-cat/";
+    std::wstring baseUrl = L"https://raw.githubusercontent.com/ciizerr/wh-mods/2c1ecbf9ba9d0964e1a764a090cb2b7df729dc5c/assets/neko-cat/";
 
     for (int i = 0; i < MAX_STATE; i++) {
         for (int f = 0; f < 2; f++) {
@@ -1270,7 +1270,29 @@ DWORD WINAPI NekoProcessThread(LPVOID param) {
 // ─────────────────────────────────────────────
 //  Tool mod implementation
 // ─────────────────────────────────────────────
-void LoadSettings();
+void LoadSettings() {
+    WCHAR storagePath[MAX_PATH];
+    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+        g_assetPath = storagePath;
+    }
+
+    g_scale = Wh_GetIntSetting(L"scale");
+    g_speed = Wh_GetIntSetting(L"speed");
+    g_soundEnabled = Wh_GetIntSetting(L"sound") != 0;
+    g_sleepSoundInterval = Wh_GetIntSetting(L"sleep_sound_interval");
+    g_sleepSoundRepeat = Wh_GetIntSetting(L"sleep_sound_repeat") != 0;
+    g_fps = Wh_GetIntSetting(L"fps");
+    g_catCount = Wh_GetIntSetting(L"cat_count");
+    if (g_catCount < 1) g_catCount = 1;
+
+    PCWSTR nekoKeyStr = Wh_GetStringSetting(L"neko_key");
+    if (nekoKeyStr) {
+        g_nekoKeyStr = nekoKeyStr;
+        Wh_FreeStringSetting(nekoKeyStr);
+    } else {
+        g_nekoKeyStr = L"";
+    }
+}
 
 BOOL WhTool_ModInit()
 {
@@ -1343,41 +1365,12 @@ void WINAPI EntryPoint_Hook() {
     ExitThread(0);
 }
 
-HANDLE hThread = NULL;
-
-void LoadSettings() {
-    WCHAR storagePath[MAX_PATH];
-    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
-        g_assetPath = storagePath;
-    }
-
-    g_scale = Wh_GetIntSetting(L"scale");
-    g_speed = Wh_GetIntSetting(L"speed");
-    g_soundEnabled = Wh_GetIntSetting(L"sound") != 0;
-    g_sleepSoundInterval = Wh_GetIntSetting(L"sleep_sound_interval");
-    g_sleepSoundRepeat = Wh_GetIntSetting(L"sleep_sound_repeat") != 0;
-    g_fps = Wh_GetIntSetting(L"fps");
-    g_catCount = Wh_GetIntSetting(L"cat_count");
-    if (g_catCount < 1) g_catCount = 1;
-
-    PCWSTR nekoKeyStr = Wh_GetStringSetting(L"neko_key");
-    if (nekoKeyStr) {
-        g_nekoKeyStr = nekoKeyStr;
-        Wh_FreeStringSetting(nekoKeyStr);
-    } else {
-        g_nekoKeyStr = L"";
-    }
-}
-
-void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
-}
-
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -1414,15 +1407,14 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Neko Cat mod already running (%s)", WH_MOD_ID);
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -1430,10 +1422,8 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
@@ -1509,6 +1499,14 @@ void Wh_ModAfterInit() {
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
