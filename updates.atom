@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-25T21:35:42.000Z</updated>
+    <updated>2026-05-26T08:11:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Replace Winver With EXE 1.0]]></title>
+        <id>https://windhawk.net/mods/replace-winver-with-exe#a29be1e094e31a959458e0b49dd13d70eea9f776</id>
+        <link href="https://windhawk.net/mods/replace-winver-with-exe"/>
+        <updated>2026-05-26T08:11:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="redirectwinvertoanexefile">Redirect Winver to an .exe file.</h1>
+<p>This is a simple mod that intercepts the traditional Winver dialog and replaces it with a custom .exe file of your choice. This can be a Winver replacement like Fluver or Modern Winver for example.</p>]]></content>
+        <author>
+            <name>winui64</name>
+            <uri>https://github.com/winui64</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Calendar Live Overlay 0.0.1]]></title>
         <id>https://windhawk.net/mods/calendar-live-overlay#8422b6be0bd211cdb967c20f14a6e171cf629499</id>
@@ -492,28 +504,6 @@ width and height. With this mod you can resize Explorer windows to any size.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.0]]></title>
-        <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#95a7912335a7140e3c46fb5826c1b2a1cd04a3aa</id>
-        <link href="https://windhawk.net/mods/never-auto-expand-explorer-tree-items"/>
-        <updated>2026-05-22T13:57:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="neverautoexpandexplorertreeitems">Never Auto-Expand Explorer Tree Items</h1>
-<p>File Explorer automatically expands navigation pane items (such as "This PC")
-even if the "Expand to current folder" option is off, specifically when:</p>
-<ul>
-<li>Opening any folder inside an external drive in a new tab or window.</li>
-<li>Navigating to any drive after manually expanding and collapsing "This PC".</li>
-</ul>
-<p>This mod prevents this unwanted auto-expansion behavior, keeping the navigation
-pane tidy.</p>
-<p>| Before | After |
-| :----: | :---: |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_before.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_after.png" alt="" /> |</p>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>

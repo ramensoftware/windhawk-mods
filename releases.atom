@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-25T21:35:42.000Z</updated>
+    <updated>2026-05-26T08:11:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Replace Winver With EXE 1.0]]></title>
+        <id>https://windhawk.net/mods/replace-winver-with-exe#a29be1e094e31a959458e0b49dd13d70eea9f776</id>
+        <link href="https://windhawk.net/mods/replace-winver-with-exe"/>
+        <updated>2026-05-26T08:11:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="redirectwinvertoanexefile">Redirect Winver to an .exe file.</h1>
+<p>This is a simple mod that intercepts the traditional Winver dialog and replaces it with a custom .exe file of your choice. This can be a Winver replacement like Fluver or Modern Winver for example.</p>]]></content>
+        <author>
+            <name>winui64</name>
+            <uri>https://github.com/winui64</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Calendar Live Overlay 0.0.1]]></title>
         <id>https://windhawk.net/mods/calendar-live-overlay#8422b6be0bd211cdb967c20f14a6e171cf629499</id>
@@ -650,96 +662,6 @@ applied to windows and dialogs that receive the <code>WM_NCCREATE</code> system 
         <author>
             <name>darkthemer</name>
             <uri>https://github.com/darkthemer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[UWP Assets Redirect 1.0]]></title>
-        <id>https://windhawk.net/mods/uwp-assets-redirect#536e0c3b2ceabf3bd065c386c8ea420d43511a0f</id>
-        <link href="https://windhawk.net/mods/uwp-assets-redirect"/>
-        <updated>2026-05-12T08:31:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="uwpassetsredirect">UWP Assets Redirect</h1>
-<p>Replace UWP app assets (such as icons) without worrying about updates
-or modifying system files permissions.</p>
-<h2 id="examplebeforeandafter">Example: Before and After</h2>
-<p><img src="https://raw.githubusercontent.com/atferrys/uwp-assets-redirect/main/docs-assets/example-before-after.png" alt="Before and after comparison of some applications" /></p>
-<h1 id="iconthemes">Icon themes</h1>
-<p>You can apply Icon themes directly from the <strong>Settings</strong> tab by selecting one from the list.
-The theme will be automatically downloaded and applied. You can see the full list of themes
-and their previews in the <a href="https://github.com/atferrys/uwp-assets-redirect/tree/main/themes">theme repository</a>.</p>
-<p><em>To contribute a new theme to the theme repository, follow the instructions
-<a href="https://github.com/atferrys/uwp-assets-redirect/blob/main/themes/README.md#contributing-new-themes">here</a>.</em></p>
-<h1 id="findingtheapplicationbundleandassets">Finding the Application bundle and assets</h1>
-<p>You can quickly identify both the application bundle and its Assets folder using Task Manager.</p>
-<ol>
-<li><p>Open the application you want to redirect assets for. Then open Task Manager,
-right-click the application process, and select "<strong>Open file location</strong>":</p>
-<p><img src="https://raw.githubusercontent.com/atferrys/uwp-assets-redirect/main/docs-assets/task-manager-open-location.png" alt="Task Manager right-click context menu on &quot;Microsoft Store&quot; with &quot;Open file location&quot; hovered" /></p></li>
-<li><p>A File Explorer window will open with the application's folder highlighted:</p>
-<p><img src="https://raw.githubusercontent.com/atferrys/uwp-assets-redirect/main/docs-assets/application-folder.png" alt="Application folder highlighted in File Explorer with the bundle identifier shown" /></p></li>
-<li><p>The application bundle is the part of the folder name that comes before the first underscore,
-in this case "<code>Microsoft.WindowsStore</code>".</p></li>
-</ol>
-<p>If Assets Redirect can't automatically locate the Assets folder, you can browse the application directory to manually find it.
-In this example, although it was detected automatically, the assets were located in "<code>Assets\AppTiles</code>":</p>
-<p><img src="https://raw.githubusercontent.com/atferrys/uwp-assets-redirect/main/docs-assets/assets-folder.png" alt="The path to the assets folder" /></p>
-<p>You can specify them in the application bundle using this format:
-"<code>&lt;application bundle&gt;</code>|<code>&lt;assets folder&gt;</code>", and in this case "<code>Microsoft.WindowsStore|Assets\AppTiles</code>".</p>
-<h1 id="creatingcustomassets">Creating custom assets</h1>
-<p>You can manually create replacement assets by copying the original Assets folder, removing any files you don't
-want to replace, and editing the remaining ones making sure to preserve the original file resolutions.</p>
-<p>A quicker and easier approach is to use something like <a href="https://tilegen.ferrys.it/assets-redirect">TileGen</a>, an open-source tool that
-generates the required assets from a single image or an <code>.ico</code> file.
-<em>Using an .ico file is recommended, as it already contains multiple resolutions.</em></p>
-<p><em>Keep in mind that even if File Explorer doesn't show the non-redirected assets after you've applied them,
-they're still present. This is only a visual issue caused by how File Explorer loads folder contents.</em></p>
-<h1 id="themepaths">Theme paths</h1>
-<p>Theme paths can be set in the settings.
-Each theme path can be a folder with custom assets files and a <code>theme.ini</code> file that contains redirection rules, or the <code>.ini</code> theme file itself.</p>
-<p>For example, the <code>theme.ini</code> file may contain the following redirection rules:</p>
-<h2 id="windowsappsandsystemappsredirections">WindowsApps and SystemApps redirections</h2>
-<p>For apps found in "<code>C:\Program Files\WindowsApps</code>" and in "<code>C:\Windows\SystemApps</code>",
-you can use respectively the <code>[windows-apps]</code> and <code>[system-apps]</code> headers.</p>
-<p>Each rule should be provided in this format: "<code>&lt;application bundle&gt;</code>=<code>&lt;redirection folder&gt;</code>".
-The application bundle can be easily found by following <a href="#finding-the-application-bundle-and-assets">the guide above</a>.</p>
-<h3 id="exampleconfig">Example config</h3>
-<pre><code>[windows-apps]
-Microsoft.WindowsStore=.\Microsoft Store
-Microsoft.WindowsCalculator=.\Calculator
-</code></pre>
-<p>Most of the time, Assets Redirect can automatically locate the bundle's Assets folder.
-However, some applications use the same application bundle as other apps, which can prevent Assets Redirect
-from identifying the correct folder.
-In these cases, you can manually specify the Assets folder within the application bundle using the
-following format: "<code>&lt;application bundle&gt;</code>|<code>&lt;assets folder&gt;</code>" (an example is shown below in <code>[system-apps]</code>).</p>
-<h3 id="exampleconfig-1">Example config</h3>
-<pre><code>[system-apps]
-MicrosoftWindows.Client.CBS|WindowsBackup\Assets=.\Windows Backup
-Microsoft.PPIProjection=.\Wireless Display
-</code></pre>
-<h2 id="customredirections">Custom redirections</h2>
-<p>For apps that aren't found in common folders like <code>WindowsApps</code> or <code>SystemApps</code>,
-like <em>Settings</em>, you can use the <code>[custom]</code> header.</p>
-<p>Each rule should be provided in this format: "<code>&lt;assets folder&gt;</code>=<code>&lt;redirection folder&gt;</code>".</p>
-<h3 id="exampleconfig-2">Example config</h3>
-<pre><code>[custom]
-%SystemRoot%\ImmersiveControlPanel\images=.\Settings
-</code></pre>
-<h1 id="injectingintootherprocesses">Injecting into other processes</h1>
-<p>By default, Assets Redirect only targets the processes that most commonly use these assets, such as File Explorer and the Start Menu.
-As a result, UWP applications are not affected by asset redirection out of the box.</p>
-<p>You can change this behavior using the "Custom process inclusion list" in the Advanced tab and doing one of the following:</p>
-<ul>
-<li>Include a specific application's executable name or path like "<code>WinStore.App.exe</code>" (you can find this in the Details tab of Task Manager).</li>
-<li>Include the entire applications directories: "<code>C:\Program Files\WindowsApps\*</code>" and "<code>C:\Windows\SystemApps\*</code>".</li>
-<li>Or, if you're willing to risk system stability, include all processes using "<code>*</code>".</li>
-</ul>
-<p>Doing this applies your asset changes not only to the Windows shell,
-but also to the applications themselves, changing their look as well (like the splash screen).</p>
-<h1 id="contributions">Contributions</h1>
-<p>You can contribute to the mod development by opening a pull request <a href="https://github.com/atferrys/uwp-assets-redirect/pulls">here</a>.</p>]]></content>
-        <author>
-            <name>ferrys</name>
-            <uri>https://github.com/atferrys</uri>
         </author>
     </entry>
 </feed>
