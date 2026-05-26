@@ -9093,7 +9093,7 @@
                     25
                 ],
                 "ratingUsers": 34,
-                "updated": 1775382984000,
+                "updated": 1779783329000,
                 "users": 1046
             },
             "metadata": {
@@ -9106,10 +9106,11 @@
                     "regedit.exe",
                     "mmc.exe",
                     "control.exe",
-                    "wordpad.exe"
+                    "wordpad.exe",
+                    "taskmgr.exe"
                 ],
                 "name": "Rolagem Suave para Win32",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "spoof-light-dark-theme": {

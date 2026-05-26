@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-26T08:11:09.000Z</updated>
+    <updated>2026-05-26T08:15:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.3]]></title>
+        <id>https://windhawk.net/mods/smooth-scroll-win32#8a4b44b30b8e194e4e7d7e4651ef8a21fecc57db</id>
+        <link href="https://windhawk.net/mods/smooth-scroll-win32"/>
+        <updated>2026-05-26T08:15:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Consistent scroll speed across folder sizes</strong> — the UIA percent-per-line
+estimate now uses a multi-range curve (quadratic for view sizes 25–70,
+power-5 for 70–92, power-20 for 92–100) that keeps scroll distance
+consistent regardless of how many items a folder contains.
+Credit: <strong>@JTFA</strong> (github.com/JTFA).</li>
+<li><strong>Smooth-only mode</strong> — a new setting disables spring physics entirely.
+Scrolling uses linear easing like a touchscreen: no bounce, no overshoot,
+just a clean deceleration. Tune the speed with <strong>Smooth Speed</strong>.</li>
+<li><strong>Improved spring physics</strong> — progressive damping near the target
+eliminates micro-oscillation at rest without affecting the feel of
+the main animation.</li>
+<li><strong>Control Panel scroll no longer blocked</strong> — legacy <code>DirectUIHWND</code> containers
+(Control Panel) are now correctly identified via the root window's WndProc
+module and passed through to the native scroll handler. Detection is stable
+from the first scroll, eliminating the intermittent first-open failure.</li>
+<li><strong>Overshoot</strong> — new setting that underdamps the spring for a subtle
+mobile-like bounce. The progressive near-target damping still prevents
+endless oscillation. No effect in Smooth-only mode.</li>
+<li><strong>Automatic refresh rate</strong> — Animation Interval and V-Sync settings removed.
+The timer interval is now detected per window from the actual monitor's
+refresh rate and updates automatically when the window moves to another
+display.</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Replace Winver With EXE 1.0]]></title>
         <id>https://windhawk.net/mods/replace-winver-with-exe#a29be1e094e31a959458e0b49dd13d70eea9f776</id>
@@ -489,21 +523,6 @@ Additional improvements made by <a href="https://github.com/Asteski">Asteski</a>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer No Minimum Window Size 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-no-min-size#737fe5ca2c253eee455e5ca74c678a8f56db33c1</id>
-        <link href="https://windhawk.net/mods/explorer-no-min-size"/>
-        <updated>2026-05-22T14:52:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorernominimumwindowsize">Explorer No Minimum Window Size</h1>
-<p>Removes the minimum window size restriction in Windows File Explorer.
-By default, Explorer prevents windows from being resized below a certain
-width and height. With this mod you can resize Explorer windows to any size.</p>
-<p><img src="https://i.imgur.com/eE0Hmr8.png" alt="screenshot" /></p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
