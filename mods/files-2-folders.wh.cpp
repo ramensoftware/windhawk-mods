@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         1.2
+// @version         1.3
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -840,7 +840,18 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
         return TRUE;
     }
     case WM_COMMAND: {
-        WORD id = LOWORD(wp);
+        WORD id   = LOWORD(wp);
+        WORD code = HIWORD(wp);
+
+        // Clicking or tabbing into an edit box selects its companion radio,
+        // so the mode the user is editing is the mode that runs on OK.
+        if (code == EN_SETFOCUS) {
+            if (id == IDC_ED_FIXED)
+                CheckRadioButton(hDlg, IDC_RB_FIXED, IDC_RB_DATE, IDC_RB_FIXED);
+            else if (id == IDC_ED_DATE)
+                CheckRadioButton(hDlg, IDC_RB_FIXED, IDC_RB_DATE, IDC_RB_DATE);
+            return TRUE;
+        }
         if (id == IDOK) {
             if (IsDlgButtonChecked(hDlg, IDC_RB_FIXED) == BST_CHECKED)        s->mode = MODE_FIXED_NAME;
             else if (IsDlgButtonChecked(hDlg, IDC_RB_PERNAME) == BST_CHECKED) s->mode = MODE_PER_FILE_NAME;
