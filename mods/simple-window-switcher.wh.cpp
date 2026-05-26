@@ -57,7 +57,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 
 *Horizontal squared with thumbnails on top*
 
-![Horizontal squared with thumbnails on top](https://github.com/Asteski/Windhawk-Mods/blob/cc72179d1ff603f3d3cf94fd41230ebea774bc8b/img/simple-window-switcher/7.png)
+![Horizontal squared with thumbnails on top](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/7.png)
 
 *Horizontal rounded with thumbnails and no icons*
 
