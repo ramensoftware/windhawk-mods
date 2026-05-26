@@ -35,33 +35,21 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 
 ## Screenshots
 
-*Horizontal squared (default)*
+| Horizontal squared (default) | Horizontal squared without thumbnails |
+| :---: | :---: |
+| ![Horizontal default](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png) | ![Horizontal without thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png) |
 
-![Horizontal default](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png)
+| Vertical small rounded | Vertical large rounded |
+| :---: | :---: |
+| ![Vertical small](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/1.png) | ![Vertical large](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/2.png) |
 
-*Horizontal squared without thumbnails*
+| Horizontal rounded with centered task icons and titles | Horizontal squared with thumbnails on top |
+| :---: | :---: |
+| ![Horizontal centered](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/6.png) | ![Horizontal squared with thumbnails on top](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/7.png) |
 
-![Horizontal without thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png)
-
-*Vertical small rounded*
-
-![Vertical small](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/1.png)
-
-*Vertical large rounded*
-
-![Vertical large](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/2.png)
-
-*Horizontal rounded with centered task icons and titles*
-
-![Horizontal centered](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/6.png)
-
-*Horizontal squared with thumbnails on top*
-
-![Horizontal squared with thumbnails on top](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/7.png)
-
-*Horizontal rounded with thumbnails and no icons*
-
-![Horizontal rounded with thumbnails and no icons](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/8.png)
+| Horizontal rounded with thumbnails and no icons |
+| :---: |
+| ![Horizontal rounded with thumbnails and no icons](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/8.png) |
 
 */
 // ==/WindhawkModReadme==
