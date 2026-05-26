@@ -63,116 +63,132 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 
 // ==WindhawkModSettings==
 /*
-- theme: none
-  $name: Theme
-  $description: Visual theme for the switcher background.
-  $options:
-  - none: None (transparent)
-  - backdrop: Backdrop (Acrylic)
-- opacity: 100
-  $name: Background Opacity
-  $description: Background opacity percentage (0-100), applies to None theme.
-- colorScheme: system
-  $name: Color Scheme
-  $options:
-  - system: Follow system setting
-  - light: Light
-  - dark: Dark
-- cornerPreference: none
-  $name: Corner Preference
-  $description: Corner radius for the switcher window only.
-  $options:
-  - none: Do not round
-  - round: Round
-  - roundSmall: Round small
-- taskRoundedCorners: false
-  $name: Round Task Borders and Close Button
-  $description: Apply small rounded corners to the selected task border and close button.
-- showThumbnails: true
-  $name: Show Thumbnails
-  $description: Show DWM live thumbnail previews of windows.
-- thumbnailPosition: bottom
-  $name: Thumbnail Position
-  $description: Place the thumbnail below or above the header row.
-  $options:
-  - bottom: Bottom (below header)
-  - top: Top (above header)
-  - left: Left (before header)
-  - right: Right (after header)
-- showTitle: true
-  $name: Show Title Label
-- showIcon: true
-  $name: Show Icon
-- taskListOrientation: horizontal
-  $name: Task List Orientation
-  $description: Arrange tasks left-to-right or top-to-bottom.
-  $options:
-  - horizontal: Horizontal
-  - vertical: Vertical
-- headerContentOrientation: horizontal
-  $name: Header Content Orientation
-  $description: Orientation of the task header icon and title.
-  $options:
-  - horizontal: Horizontal
-  - vertical: Vertical
-- iconSize: small
-  $name: Icon Size
-  $description: Size of the header icon.
-  $options:
-  - small: Small
-  - large: Large
-- rowHeight: 230
-  $name: Row Height
-  $description: Total height of each thumbnail row in pixels (before DPI scaling). Default 230 matches ExplorerPatcher.
-- rowWidth: 0
-  $name: Row Width
-  $description: Width of each thumbnail tile in pixels (before DPI scaling). Set to 0 for automatic width based on window aspect ratio.
-- stretchThumbnailsToTaskWidth: true
-  $name: Stretch Thumbnails To Task Width
-  $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
-- maxWidthPercent: 80
-  $name: Maximum Width (percentage of screen width)
-- maxHeightPercent: 80
-  $name: Maximum Height (percentage of screen height)
-- showDelay: 0
-  $name: Show Delay (ms)
-  $description: Delay in milliseconds before showing the switcher (0 = instant).
-- scrollWheelBehavior: never
-  $name: Scroll Wheel to Change Selection
-  $options:
-  - never: Never
-  - always: Always
-  - stickyOnly: Only in sticky mode
-- backwardShortcut: altShiftTab
-  $name: Backward Shortcut
-  $description: Shortcut used to move backward in the switcher.
-  $options:
-  - altShiftTab: Alt+Shift+Tab (default)
-  - altShift: Alt+Shift
-  - altBacktick: Alt+Backtick
-- borderColorDark: "#FFFFFF"
-  $name: Border Color (Dark Mode)
-  $description: Border color in HEX format for dark mode.
-- borderColorLight: "#000000"
-  $name: Border Color (Light Mode)
-  $description: Border color in HEX format for light mode.
-- useAccentColor: false
-  $name: Accent Color for Borders and Background Fill
-  $description: Use Windows accent color for selection and hover borders.
-- highlightStyle: border
-  $name: Selected Task Highlight Style
-  $description: Style used for the selected task row/tile.
-  $options:
-  - border: Border only
-  - fillAndBorder: Background fill and border
-  - fillOnly: Background fill only
-- centerTaskContent: false
-  $name: Center Task Icon and Title
-  $description: Center the icon and title together in each task row.
-- primaryMonitorOnly: false
-  $name: Always Display Switcher on Primary Monitor
-- perMonitorWindows: false
-  $name: Display Windows Only From the Monitor Containing the Cursor
+- Style:
+    - theme: none
+      $name: Theme
+      $description: Visual theme for the switcher background.
+      $options:
+      - none: None (transparent)
+      - backdrop: Backdrop (Acrylic)
+    - opacity: 100
+      $name: Background Opacity
+      $description: Background opacity percentage (0-100), applies to None theme.
+    - colorScheme: system
+      $name: Color Scheme
+      $options:
+      - system: Follow system setting
+      - light: Light
+      - dark: Dark
+    - highlightStyle: border
+      $name: Selected Task Highlight Style
+      $description: Style used for the selected task row/tile.
+      $options:
+      - border: Border only
+      - fillAndBorder: Background fill and border
+      - fillOnly: Background fill only
+    - borderColorDark: "#FFFFFF"
+      $name: Border Color (Dark Mode)
+      $description: Border color in HEX format for dark mode.
+    - borderColorLight: "#000000"
+      $name: Border Color (Light Mode)
+      $description: Border color in HEX format for light mode.
+    - useAccentColor: false
+      $name: Accent Color for Borders and Background Fill
+      $description: Use Windows accent color for selection and hover borders.
+  $name: Theme Style
+- Appearance:
+    - Corners:
+        - cornerPreference: none
+          $name: Corner Preference
+          $description: Corner radius for the switcher window only.
+          $options:
+          - none: Do not round
+          - round: Round
+          - roundSmall: Round small
+        - taskRoundedCorners: false
+          $name: Round Task Borders and Close Button
+          $description: Apply small rounded corners to the selected task border and close button.
+      $name: Corners
+    - Thumbnails:
+        - thumbnailPosition: bottom
+          $name: Thumbnail Position
+          $description: Place the thumbnail below or above the header row.
+          $options:
+          - bottom: Bottom (below header)
+          - top: Top (above header)
+          - left: Left (before header)
+          - right: Right (after header)
+        - showThumbnails: true
+          $name: Show Thumbnails
+          $description: Show DWM live thumbnail previews of windows.
+      $name: Thumbnails
+    - HeaderContent:
+        - iconSize: small
+          $name: Icon Size
+          $description: Size of the header icon.
+          $options:
+          - small: Small
+          - large: Large
+        - showTitle: true
+          $name: Show Title Label
+        - showIcon: true
+          $name: Show Icon
+        - centerTaskContent: false
+          $name: Center Task Icon and Title
+          $description: Center the icon and title together in each task row.
+      $name: Header Content
+    - Orientation:
+        - taskListOrientation: horizontal
+          $name: Task List Orientation
+          $description: Arrange tasks left-to-right or top-to-bottom.
+          $options:
+          - horizontal: Horizontal
+          - vertical: Vertical
+        - headerContentOrientation: horizontal
+          $name: Header Content Orientation
+          $description: Orientation of the task header icon and title.
+          $options:
+          - horizontal: Horizontal
+          - vertical: Vertical
+      $name: Orientation
+  $name: Appearance
+- Dimensions:
+    - rowHeight: 230
+      $name: Row Height
+      $description: Total height of each thumbnail row in pixels (before DPI scaling). Default 230 matches ExplorerPatcher.
+    - rowWidth: 0
+      $name: Row Width
+      $description: Width of each thumbnail tile in pixels (before DPI scaling). Set to 0 for automatic width based on window aspect ratio.
+    - maxWidthPercent: 80
+      $name: Maximum Width (percentage of screen width)
+    - maxHeightPercent: 80
+      $name: Maximum Height (percentage of screen height)
+    - stretchThumbnailsToTaskWidth: true
+      $name: Stretch Thumbnails To Task Width
+      $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
+  $name: Dimensions
+- Miscellaneous:
+    - showDelay: 0
+      $name: Show Delay (ms)
+      $description: Delay in milliseconds before showing the switcher (0 = instant).
+    - scrollWheelBehavior: never
+      $name: Scroll Wheel to Change Selection
+      $options:
+      - never: Never
+      - always: Always
+      - stickyOnly: Only in sticky mode
+    - backwardShortcut: altShiftTab
+      $name: Backward Shortcut
+      $description: Shortcut used to move backward in the switcher.
+      $options:
+      - altShiftTab: Alt+Shift+Tab (default)
+      - altShift: Alt+Shift
+      - altBacktick: Alt+Backtick
+    - primaryMonitorOnly: false
+      $name: Always Display Switcher on Primary Monitor
+    - perMonitorWindows: false
+      $name: Display Windows Only From the Monitor Containing the Cursor
+  $name: Miscellaneous
 */
 // ==/WindhawkModSettings==
 
@@ -2656,30 +2672,30 @@ static void SWS_UnregisterHotkeys() {
 
 static void LoadSettings() {
     LPCWSTR v;
-    v = Wh_GetStringSetting(L"theme");
+    v = Wh_GetStringSetting(L"Style.theme");
     wcscpy_s(g_settings.theme, v ? v : L"none"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"colorScheme");
+    v = Wh_GetStringSetting(L"Style.colorScheme");
     wcscpy_s(g_settings.colorScheme, v ? v : L"system"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"cornerPreference");
+    v = Wh_GetStringSetting(L"Appearance.Corners.cornerPreference");
     wcscpy_s(g_settings.cornerPreference, v ? v : L"round"); Wh_FreeStringSetting(v);
-    g_settings.taskRoundedCorners = Wh_GetIntSetting(L"taskRoundedCorners");
-    v = Wh_GetStringSetting(L"scrollWheelBehavior");
+    g_settings.taskRoundedCorners = Wh_GetIntSetting(L"Appearance.Corners.taskRoundedCorners");
+    v = Wh_GetStringSetting(L"Miscellaneous.scrollWheelBehavior");
     wcscpy_s(g_settings.scrollWheelBehavior, v ? v : L"never"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"taskListOrientation");
+    v = Wh_GetStringSetting(L"Appearance.Orientation.taskListOrientation");
     wcscpy_s(g_settings.taskListOrientation, v ? v : L"horizontal"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"headerContentOrientation");
+    v = Wh_GetStringSetting(L"Appearance.Orientation.headerContentOrientation");
     wcscpy_s(g_settings.headerContentOrientation, v ? v : L"horizontal"); Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.headerContentOrientation, L"horizontal") != 0 &&
         wcscmp(g_settings.headerContentOrientation, L"vertical") != 0) {
         wcscpy_s(g_settings.headerContentOrientation, L"horizontal");
     }
-    v = Wh_GetStringSetting(L"iconSize");
+    v = Wh_GetStringSetting(L"Appearance.HeaderContent.iconSize");
     wcscpy_s(g_settings.iconSize, v ? v : L"small"); Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.iconSize, L"small") != 0 &&
         wcscmp(g_settings.iconSize, L"large") != 0) {
         wcscpy_s(g_settings.iconSize, L"small");
     }
-    v = Wh_GetStringSetting(L"thumbnailPosition");
+    v = Wh_GetStringSetting(L"Appearance.Thumbnails.thumbnailPosition");
     wcscpy_s(g_settings.thumbnailPosition, v ? v : L"bottom"); Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.thumbnailPosition, L"bottom") != 0 &&
         wcscmp(g_settings.thumbnailPosition, L"top") != 0 &&
@@ -2687,7 +2703,7 @@ static void LoadSettings() {
         wcscmp(g_settings.thumbnailPosition, L"right") != 0) {
         wcscpy_s(g_settings.thumbnailPosition, L"bottom");
     }
-    v = Wh_GetStringSetting(L"backwardShortcut");
+    v = Wh_GetStringSetting(L"Miscellaneous.backwardShortcut");
     if (v) {
         wcscpy_s(g_settings.backwardShortcut, v);
         Wh_FreeStringSetting(v);
@@ -2702,7 +2718,7 @@ static void LoadSettings() {
         wcscpy_s(g_settings.backwardShortcut, L"altShiftTab");
     }
 
-    v = Wh_GetStringSetting(L"highlightStyle");
+    v = Wh_GetStringSetting(L"Style.highlightStyle");
     wcscpy_s(g_settings.highlightStyle, v ? v : L"border");
     Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.highlightStyle, L"border") != 0 &&
@@ -2711,40 +2727,40 @@ static void LoadSettings() {
         wcscpy_s(g_settings.highlightStyle, L"border");
     }
 
-    g_settings.opacity = Wh_GetIntSetting(L"opacity");
+    g_settings.opacity = Wh_GetIntSetting(L"Style.opacity");
     if (g_settings.opacity < 0) g_settings.opacity = 0;
     if (g_settings.opacity > 100) g_settings.opacity = 100;
-    g_settings.rowHeight = Wh_GetIntSetting(L"rowHeight");
+    g_settings.rowHeight = Wh_GetIntSetting(L"Dimensions.rowHeight");
     if (g_settings.rowHeight <= 0) g_settings.rowHeight = 230;
-    g_settings.rowWidth = Wh_GetIntSetting(L"rowWidth");
+    g_settings.rowWidth = Wh_GetIntSetting(L"Dimensions.rowWidth");
     if (g_settings.rowWidth < 0) g_settings.rowWidth = 0;
-    g_settings.stretchThumbnailsToTaskWidth = Wh_GetIntSetting(L"stretchThumbnailsToTaskWidth");
-    g_settings.showThumbnails = Wh_GetIntSetting(L"showThumbnails");
-    g_settings.showTitle = Wh_GetIntSetting(L"showTitle");
-    g_settings.showIcon = Wh_GetIntSetting(L"showIcon");
+    g_settings.stretchThumbnailsToTaskWidth = Wh_GetIntSetting(L"Dimensions.stretchThumbnailsToTaskWidth");
+    g_settings.showThumbnails = Wh_GetIntSetting(L"Appearance.Thumbnails.showThumbnails");
+    g_settings.showTitle = Wh_GetIntSetting(L"Appearance.HeaderContent.showTitle");
+    g_settings.showIcon = Wh_GetIntSetting(L"Appearance.HeaderContent.showIcon");
     if (!g_settings.showThumbnails && !g_settings.showTitle && !g_settings.showIcon) {
         g_settings.showTitle = true;
     }
-    g_settings.maxWidthPercent = Wh_GetIntSetting(L"maxWidthPercent");
+    g_settings.maxWidthPercent = Wh_GetIntSetting(L"Dimensions.maxWidthPercent");
     if (g_settings.maxWidthPercent <= 0 || g_settings.maxWidthPercent > 100) g_settings.maxWidthPercent = 80;
-    g_settings.maxHeightPercent = Wh_GetIntSetting(L"maxHeightPercent");
+    g_settings.maxHeightPercent = Wh_GetIntSetting(L"Dimensions.maxHeightPercent");
     if (g_settings.maxHeightPercent <= 0 || g_settings.maxHeightPercent > 100) g_settings.maxHeightPercent = 80;
 
-    g_settings.showDelay = Wh_GetIntSetting(L"showDelay");
+    g_settings.showDelay = Wh_GetIntSetting(L"Miscellaneous.showDelay");
     if (g_settings.showDelay < 0) g_settings.showDelay = 0;
-    g_settings.useAccentColor = Wh_GetIntSetting(L"useAccentColor");
-    g_settings.primaryMonitorOnly = Wh_GetIntSetting(L"primaryMonitorOnly");
-    g_settings.perMonitorWindows = Wh_GetIntSetting(L"perMonitorWindows");
-    g_settings.centerTaskContent = Wh_GetIntSetting(L"centerTaskContent");
+    g_settings.useAccentColor = Wh_GetIntSetting(L"Style.useAccentColor");
+    g_settings.primaryMonitorOnly = Wh_GetIntSetting(L"Miscellaneous.primaryMonitorOnly");
+    g_settings.perMonitorWindows = Wh_GetIntSetting(L"Miscellaneous.perMonitorWindows");
+    g_settings.centerTaskContent = Wh_GetIntSetting(L"Appearance.HeaderContent.centerTaskContent");
 
 
-    v = Wh_GetStringSetting(L"borderColorDark");
+    v = Wh_GetStringSetting(L"Style.borderColorDark");
     wcscpy_s(g_settings.borderColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
     if (!ParseHexColor(g_settings.borderColorDark, nullptr)) {
         wcscpy_s(g_settings.borderColorDark, L"#FFFFFF");
     }
 
-    v = Wh_GetStringSetting(L"borderColorLight");
+    v = Wh_GetStringSetting(L"Style.borderColorLight");
     wcscpy_s(g_settings.borderColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
     if (!ParseHexColor(g_settings.borderColorLight, nullptr)) {
         wcscpy_s(g_settings.borderColorLight, L"#000000");
