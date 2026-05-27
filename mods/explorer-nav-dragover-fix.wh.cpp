@@ -2,7 +2,7 @@
 // @id           explorer-nav-dragover-fix
 // @name         Explorer Nav DragOver Fix
 // @description  Stops File Explorer's nav pane from jumping when a folder auto-expands during a drag, and restores mouse-wheel scrolling to reach out-of-view drop targets
-// @version      1.1.8
+// @version      1.1.9
 // @author       tonythethompson
 // @github       https://github.com/tonythethompson
 // @include      explorer.exe
@@ -210,6 +210,12 @@ constexpr uint64_t kPostJumpScrollSuppressionMs = 200;
 constexpr DWORD kWheelForwardTimeoutMs = 200;
 constexpr DWORD kWinEventThreadReadyTimeoutMs = 5000;
 constexpr DWORD kWinEventHelperJoinTimeoutMs = 10000;
+// Cap UIA Scroll() calls per intercepted wheel message (fast/high-res wheels).
+constexpr int kMaxUiScrollCallsPerWheelMessage = 24;
+
+#ifndef WHEEL_PAGESCROLL
+#define WHEEL_PAGESCROLL static_cast<UINT>(-1)
+#endif
 thread_local uint64_t g_lastJumpAttemptTickMs = 0;
 
 // Set while one of our helpers calls back into the subclassed tree, so the
@@ -659,6 +665,49 @@ IUIAutomation* GetUIAutomation() {
     return g_threadUiAutomation;
 }
 
+// Map one wheel detent (|delta|/WHEEL_DELTA) to how many UIA Scroll() calls to
+// issue, using the same SPI the shell honors for line scroll (typically 3).
+int UiScrollCallCountForWheelSteps(bool verticalWheel,
+                                     int steps,
+                                     ScrollAmount* outAmount) {
+    if (!outAmount || steps <= 0) {
+        return 0;
+    }
+
+    UINT unitsPerDetent = 3;
+    const UINT spi =
+        verticalWheel ? SPI_GETWHEELSCROLLLINES : SPI_GETWHEELSCROLLCHARS;
+    if (!SystemParametersInfoW(spi, 0, &unitsPerDetent, 0)) {
+        unitsPerDetent = 3;
+    }
+
+    if (unitsPerDetent == WHEEL_PAGESCROLL) {
+        *outAmount = ScrollAmount_LargeIncrement;
+        int scrollCalls = steps;
+        if (scrollCalls > kMaxUiScrollCallsPerWheelMessage) {
+            scrollCalls = kMaxUiScrollCallsPerWheelMessage;
+        }
+        return scrollCalls;
+    }
+
+    if (unitsPerDetent == 0) {
+        unitsPerDetent = 3;
+    }
+    if (unitsPerDetent > 20) {
+        unitsPerDetent = 20;
+    }
+
+    *outAmount = ScrollAmount_SmallIncrement;
+    int scrollCalls = steps * static_cast<int>(unitsPerDetent);
+    if (scrollCalls > kMaxUiScrollCallsPerWheelMessage) {
+        scrollCalls = kMaxUiScrollCallsPerWheelMessage;
+    }
+    if (scrollCalls < 1) {
+        scrollCalls = 1;
+    }
+    return scrollCalls;
+}
+
 // Scroll via UIA so we never post wheel/scroll messages to SHELLDLL_DefView
 // during DoDragDrop (those can cancel or complete the OLE drag).
 bool ScrollExplorerPaneViaUIAutomation(HWND hwnd,
@@ -704,19 +753,22 @@ bool ScrollExplorerPaneViaUIAutomation(HWND hwnd,
         scroll = acquired;
     }
 
-    const ScrollAmount noAmount = ScrollAmount_NoAmount;
-    ScrollAmount primaryAmount =
-        increment ? ScrollAmount_SmallIncrement : ScrollAmount_SmallDecrement;
-    int scrollCalls = steps;
-    if (steps >= 3) {
-        primaryAmount = increment ? ScrollAmount_LargeIncrement
-                                  : ScrollAmount_LargeDecrement;
-        scrollCalls = (steps + 2) / 3;
-    }
-    if (scrollCalls > 2) {
-        scrollCalls = 2;
+    ScrollAmount primaryAmount = ScrollAmount_SmallIncrement;
+    int scrollCalls =
+        UiScrollCallCountForWheelSteps(verticalWheel, steps, &primaryAmount);
+    if (scrollCalls <= 0) {
+        return false;
     }
 
+    if (!increment) {
+        if (primaryAmount == ScrollAmount_LargeIncrement) {
+            primaryAmount = ScrollAmount_LargeDecrement;
+        } else {
+            primaryAmount = ScrollAmount_SmallDecrement;
+        }
+    }
+
+    const ScrollAmount noAmount = ScrollAmount_NoAmount;
     ScrollAmount horizontalAmount = noAmount;
     ScrollAmount verticalAmount = noAmount;
     if (verticalWheel) {
