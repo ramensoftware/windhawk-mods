@@ -178,7 +178,7 @@ install this mod: [*Remember the folder windows' positions*](https://windhawk.ne
 [Fix Windows Tools Folder View](https://windhawk.net/mods/fix-windows-tools-view).
 
 40. To make the MSHTML content (CHM viewer, Outlook Express, classic Windows Mail, Internet Explorer) to use controls
-from Classic Theme, install this mod:
+from Classic Theme, install this mod and follow the instructions there:
 [MSHTML Tweaks](https://windhawk.net/mods/mshtml-native-controls)
 
 41. To make the folder windows freely resizable, the way it was before Windows Vista, install this mod:
