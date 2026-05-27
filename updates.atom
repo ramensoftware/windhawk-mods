@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-27T10:26:51.000Z</updated>
+    <updated>2026-05-27T11:07:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#6e1ccf5d5ff53ada6ae7d58fd31c81a9723e12ea</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2026-05-27T11:07:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with recent Windows 11 versions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Neko Cat 1.2.1]]></title>
         <id>https://windhawk.net/mods/neko-cat#b35660a81b786d8523a45cec049c59d24270b648</id>
@@ -561,17 +574,6 @@ Additional improvements made by <a href="https://github.com/Asteski">Asteski</a>
         <author>
             <name>Lanbo</name>
             <uri>https://github.com/Liset999</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Native Brightness Shortcut (Always On Top) 1.1.0]]></title>
-        <id>https://windhawk.net/mods/native-brightness#f5a751d9735864380ff0b33a9e6ca781343632b0</id>
-        <link href="https://windhawk.net/mods/native-brightness"/>
-        <updated>2026-05-23T12:19:00.000Z</updated>
-        <content type="html"><![CDATA[<p>The new update has resolved the previous issue of mod not working properly..</p>]]></content>
-        <author>
-            <name>Prash</name>
-            <uri>https://github.com/prasmit2410</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,7 @@
+## 1.1.7 ([May 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6e1ccf5d5ff53ada6ae7d58fd31c81a9723e12ea/mods/taskbar-on-top.wh.cpp))
+
+* Fixed compatibility with recent Windows 11 versions.
+
 ## 1.1.6 ([Dec 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/de4cfd5ea752b671743eb99a1dd9abeba39e413f/mods/taskbar-on-top.wh.cpp))
 
 * Implemented basic support for taskbar auto-hide.
