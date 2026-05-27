@@ -2,7 +2,7 @@
 // @id              taskbar-music-lounge
 // @name            Taskbar Music Lounge
 // @description     A native-style music ticker with media controls.
-// @version         4.0.1
+// @version         4.0.2
 // @author          Hashah2311
 // @github          https://github.com/Hashah2311
 // @include         explorer.exe
@@ -52,6 +52,8 @@ A media controller that uses Windows 11 native DWM styling for a seamless look.
   $name: Button Scale (1.0 = Normal, 2.0 = 4K)
 - HideFullscreen: false
   $name: Hide when Fullscreen
+- HideNoMedia: false
+  $name: Hide when No Media is active
 - IdleTimeout: 0
   $name: Auto-hide when paused (Seconds). Set 0 to disable.
 - OffsetX: 12
@@ -162,6 +164,7 @@ struct ModSettings {
     int fontSize = 11;
     double buttonScale = 1.0; 
     bool hideFullscreen = false;
+    bool hideNoMedia = false;
     int idleTimeout = 0; 
     int offsetX = 12;
     int offsetY = 0;
@@ -217,6 +220,7 @@ void LoadSettings() {
     if (g_Settings.buttonScale > 4.0) g_Settings.buttonScale = 4.0;
 
     g_Settings.hideFullscreen = Wh_GetIntSetting(L"HideFullscreen") != 0;
+    g_Settings.hideNoMedia = Wh_GetIntSetting(L"HideNoMedia") != 0;
     g_Settings.idleTimeout = Wh_GetIntSetting(L"IdleTimeout");
 
     PCWSTR textHex = Wh_GetStringSetting(L"TextColor");
@@ -572,9 +576,16 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
                 // 2. Check Idle Timeout
                 bool isPlaying = false;
+                bool hasMedia = false;
                 {
                     lock_guard<mutex> guard(g_MediaState.lock);
                     isPlaying = g_MediaState.isPlaying;
+                    hasMedia = g_MediaState.hasMedia;
+                }
+
+                if(!hasMedia && g_Settings.hideNoMedia)
+                {
+                    shouldHide = true;
                 }
 
                 if (g_Settings.idleTimeout > 0) {
