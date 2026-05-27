@@ -19,7 +19,7 @@
 /*
 # Explorer Nav DragOver Fix
 
-Two fixes for File Explorer's nav pane drag-over behavior:
+Two fixes for File Explorer's drag-over behavior:
 
 1. **Stops the jump.** When you drag a file or folder onto a root-level entry
    in the nav pane (drives, pinned folders, the "This PC" grouping), Explorer
@@ -32,9 +32,10 @@ Two fixes for File Explorer's nav pane drag-over behavior:
 
 2. **Re-enables the mouse wheel.** Windows normally swallows wheel input
    during drag-and-drop. This mod intercepts the wheel and forwards it to
-   the nav pane so you can scroll to drop targets that aren't currently in
-   view, without having to abort the drag and start over. Disable the
-   corresponding setting to fall back to native behavior.
+   the Explorer navigation pane and main file list pane so you can scroll
+   to drop targets that aren't currently in view, without having to abort
+   the drag and start over. Disable the corresponding setting to fall back
+   to native behavior.
 
 ## Demo
 
@@ -90,11 +91,11 @@ persisted between drags; everything is scoped to the active drag loop.
 - enableWheelScrollDuringDrag: true
   $name: Enable scroll-wheel during drag
   $description: >-
-    Allow the mouse wheel to scroll the navigation pane while you drag a
-    file or folder. Windows normally blocks the wheel during drag-and-drop;
-    this re-enables it so you can scroll to reach folders that aren't in
-    view without releasing the drag. Disable to fall back to native
-    (no-scroll) behavior.
+    Allow the mouse wheel to scroll Explorer's navigation pane and main
+    file list pane while you drag a file or folder. Windows normally blocks
+    the wheel during drag-and-drop; this re-enables it so you can scroll to
+    reach drop targets that aren't in view without releasing the drag.
+    Disable to fall back to native (no-scroll) behavior.
 */
 // ==/WindhawkModSettings==
 
