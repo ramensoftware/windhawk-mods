@@ -239,6 +239,8 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #define SWS_HOTKEY_ALTCTRLTAB       3
 #define SWS_HOTKEY_ALTSHIFTCTRLTAB  4
 #define SWS_HOTKEY_ALTBACKTICK      5
+#define SWS_HOTKEY_WINALTTAB        6
+#define SWS_HOTKEY_WINALTSHIFTTAB   7
 #define SWS_HOTKEY_RETRY_TIMER_ID   100
 #define SWS_HOTKEY_RETRY_INTERVAL   2000
 #define SWS_BG_DARK          RGB(32, 32, 32)
@@ -2413,9 +2415,17 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         switch (id) {
         case SWS_HOTKEY_ALTTAB:
             break;
+        case SWS_HOTKEY_WINALTTAB:
+            g_showAllMonitors = true;
+            break;
         case SWS_HOTKEY_ALTSHIFTTAB:
             if (!UseAltShiftTabBackward()) return 0;
             isBackward = true;
+            break;
+        case SWS_HOTKEY_WINALTSHIFTTAB:
+            if (!UseAltShiftTabBackward()) return 0;
+            isBackward = true;
+            g_showAllMonitors = true;
             break;
         case SWS_HOTKEY_ALTCTRLTAB:
             isCtrl = true;
@@ -2434,9 +2444,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (!g_isVisible && !g_isPendingShow) {
-            if (GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0) {
-                g_showAllMonitors = true;
-            }
             ShowSwitcher(isCtrl);
 
             if (isBackward && g_windows.size() > 1) {
@@ -2698,7 +2705,9 @@ static void SWS_RegisterHotkeys() {
     BOOL r3 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
     BOOL r4 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
     BOOL r5 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
-    if (r1 && r2 && r3 && r4 && r5) {
+    BOOL r6 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB, MOD_ALT | MOD_WIN, VK_TAB);
+    BOOL r7 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB, MOD_ALT | MOD_SHIFT | MOD_WIN, VK_TAB);
+    if (r1 && r2 && r3 && r4 && r5 && r6 && r7) {
         g_hotkeysRegistered = true;
         if (!g_hHotkeyMutex) {
             g_hHotkeyMutex = CreateMutexW(NULL, TRUE, L"Windhawk_SWS_HotkeyMutex");
@@ -2711,6 +2720,8 @@ static void SWS_RegisterHotkeys() {
         if (r3) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
         if (r4) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
         if (r5) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+        if (r6) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
+        if (r7) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
         SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
         Wh_Log(L"Hotkey registration incomplete, retrying in %dms", SWS_HOTKEY_RETRY_INTERVAL);
     }
@@ -2723,6 +2734,8 @@ static void SWS_UnregisterHotkeys() {
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+    UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
+    UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
     g_hotkeysRegistered = false;
     if (g_hHotkeyMutex) {
         ReleaseMutex(g_hHotkeyMutex);
