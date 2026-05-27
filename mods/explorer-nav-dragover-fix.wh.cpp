@@ -2,12 +2,12 @@
 // @id           explorer-nav-dragover-fix
 // @name         Explorer Nav DragOver Fix
 // @description  Stops File Explorer's nav pane from jumping when a folder auto-expands during a drag, and restores mouse-wheel scrolling to reach out-of-view drop targets
-// @version      1.1.1
+// @version      1.1.8
 // @author       tonythethompson
 // @github       https://github.com/tonythethompson
 // @include      explorer.exe
 // @architecture x86-64
-// @compilerOptions -lole32 -lcomctl32
+// @compilerOptions -lole32 -lcomctl32 -luiautomationcore
 // @license      MIT
 // @donateUrl    https://ko-fi.com/tonythethompson
 // ==/WindhawkMod==
@@ -32,10 +32,11 @@ Two fixes for File Explorer's drag-over behavior:
 
 2. **Re-enables the mouse wheel.** Windows normally swallows wheel input
    during drag-and-drop. This mod intercepts the wheel and forwards it to
-   the Explorer navigation pane and main file list pane so you can scroll
-   to drop targets that aren't currently in view, without having to abort
-   the drag and start over. Disable the corresponding setting to fall back
-   to native behavior.
+   the Explorer navigation pane (left tree) and the main file list on the
+   right (Details / ItemsView on Win11 25H2, and classic Large icons / List
+   views via SysListView32). Scrolling prefers UI Automation so wheel messages
+   are not sent to SHELLDLL_DefView during a drag. Disable the corresponding
+   setting to fall back to native behavior.
 
 ## Demo
 
@@ -48,6 +49,15 @@ The mod hooks `DoDragDrop` (to track drag generations across threads),
 subclasses each nav-pane `SysTreeView32`, and watches `EVENT_OBJECT_CREATE`
 on a dedicated helper thread to pick up new Explorer windows. No state is
 persisted between drags; everything is scoped to the active drag loop.
+
+## Troubleshooting
+
+If you disable the mod and see a log line like **"WinEvent helper thread did
+not exit within 10s"**, an Explorer thread was wedged mid-callback (for
+example while subclassing a nav tree). The mod intentionally leaks that
+helper handle rather than calling `TerminateThread`, which would be unsafe.
+**Restart File Explorer** (or sign out) to clear the state. This is rare in
+normal use.
 
 ## Compatibility
 
@@ -91,10 +101,12 @@ persisted between drags; everything is scoped to the active drag loop.
 - enableWheelScrollDuringDrag: true
   $name: Enable scroll-wheel during drag
   $description: >-
-    Allow the mouse wheel to scroll Explorer's navigation pane and main
-    file list pane while you drag a file or folder. Windows normally blocks
-    the wheel during drag-and-drop; this re-enables it so you can scroll to
-    reach drop targets that aren't in view without releasing the drag.
+    Allow the mouse wheel to scroll Explorer's left navigation pane and
+    right-hand file list while you drag a file or folder. Windows normally
+    blocks the wheel during drag-and-drop; this re-enables it so you can
+    scroll to reach drop targets that aren't in view without releasing the
+    drag. On Win11 25H2 Details view the file list uses DirectUI ItemsView,
+    not SysListView32.
     Disable to fall back to native (no-scroll) behavior.
 */
 // ==/WindhawkModSettings==
@@ -131,6 +143,8 @@ persisted between drags; everything is scoped to the active drag loop.
 #include <windows.h>
 #include <commctrl.h>
 #include <ole2.h>
+#include <initguid.h>  // must come before uiautomation.h
+#include <uiautomation.h>
 #include <wchar.h>
 
 #include <atomic>
@@ -193,6 +207,9 @@ thread_local struct ProtectedHoverState {
 // of a jump tail if it arrives within the window. Outside the window it must
 // be user-driven edge-scroll, so let it through.
 constexpr uint64_t kPostJumpScrollSuppressionMs = 200;
+constexpr DWORD kWheelForwardTimeoutMs = 200;
+constexpr DWORD kWinEventThreadReadyTimeoutMs = 5000;
+constexpr DWORD kWinEventHelperJoinTimeoutMs = 10000;
 thread_local uint64_t g_lastJumpAttemptTickMs = 0;
 
 // Set while one of our helpers calls back into the subclassed tree, so the
@@ -329,6 +346,11 @@ bool WindowClassEquals(HWND hwnd, const wchar_t* expectedClass) {
     return wcscmp(className, expectedClass) == 0;
 }
 
+bool IsExplorerCabinetRoot(HWND hwnd) {
+    return WindowClassEquals(hwnd, L"CabinetWClass") ||
+           WindowClassEquals(hwnd, L"ExploreWClass");
+}
+
 bool IsExplorerNavigationTree(HWND hwnd) {
     if (!IsWindow(hwnd) || !WindowClassEquals(hwnd, L"SysTreeView32")) {
         return false;
@@ -341,15 +363,20 @@ bool IsExplorerNavigationTree(HWND hwnd) {
     // for older/classic Explorer windows. Win11's tabbed explorer still uses
     // CabinetWClass at the root; revisit if a future build wraps the tree in
     // a different shell.
-    return WindowClassEquals(root, L"CabinetWClass") ||
-           WindowClassEquals(root, L"ExploreWClass");
+    return IsExplorerCabinetRoot(root);
 }
 
-bool IsExplorerFileListView(HWND hwnd) {
-    // Explorer's main content pane uses a ListView control (SysListView32)
-    // across most view modes. We forward drag-time wheel messages here so
-    // users can scroll to off-screen drop targets without aborting.
-    if (!IsWindow(hwnd) || !WindowClassEquals(hwnd, L"SysListView32")) {
+bool IsExplorerFileContentHost(HWND hwnd) {
+    // Win11 Details view (including 25H2) uses DirectUI ItemsView hosts
+    // (UIItemsView / ItemsView / DirectUIHWND) instead of SysListView32.
+    // Classic layouts and some view modes still expose SysListView32.
+    if (!IsWindow(hwnd)) {
+        return false;
+    }
+    if (!WindowClassEquals(hwnd, L"SysListView32") &&
+        !WindowClassEquals(hwnd, L"UIItemsView") &&
+        !WindowClassEquals(hwnd, L"ItemsView") &&
+        !WindowClassEquals(hwnd, L"DirectUIHWND")) {
         return false;
     }
 
@@ -358,8 +385,408 @@ bool IsExplorerFileListView(HWND hwnd) {
         return false;
     }
 
-    return WindowClassEquals(root, L"CabinetWClass") ||
-           WindowClassEquals(root, L"ExploreWClass");
+    return IsExplorerCabinetRoot(root);
+}
+
+bool PointInWindow(HWND hwnd, POINT ptScreen) {
+    RECT rc = {};
+    return IsWindow(hwnd) && GetWindowRect(hwnd, &rc) && PtInRect(&rc, ptScreen);
+}
+
+struct FindDescendantClassContext {
+    const wchar_t* className = nullptr;
+    HWND found = nullptr;
+};
+
+BOOL CALLBACK FindDescendantClassEnumProc(HWND hwnd, LPARAM lParam) {
+    auto* ctx = reinterpret_cast<FindDescendantClassContext*>(lParam);
+    if (WindowClassEquals(hwnd, ctx->className)) {
+        ctx->found = hwnd;
+        return FALSE;
+    }
+    EnumChildWindows(hwnd, FindDescendantClassEnumProc, lParam);
+    if (ctx->found) {
+        return FALSE;
+    }
+    return TRUE;
+}
+
+HWND FindDescendantClass(HWND root, const wchar_t* className) {
+    if (!IsWindow(root)) {
+        return nullptr;
+    }
+    FindDescendantClassContext ctx{className};
+    EnumChildWindows(root, FindDescendantClassEnumProc,
+                     reinterpret_cast<LPARAM>(&ctx));
+    return ctx.found;
+}
+
+HWND FindShellDefViewInCabinet(HWND cabinet) {
+    // Win11's tabbed UI nests SHELLDLL_DefView under DirectUI hosts; a
+    // recursive search covers both classic and modern Explorer layouts.
+    return FindDescendantClass(cabinet, L"SHELLDLL_DefView");
+}
+
+struct CabinetAtPointContext {
+    POINT pt = {};
+    HWND found = nullptr;
+};
+
+BOOL CALLBACK CabinetAtPointEnumProc(HWND hwnd, LPARAM lParam) {
+    auto* ctx = reinterpret_cast<CabinetAtPointContext*>(lParam);
+    if (!IsWindowVisible(hwnd) || !IsExplorerCabinetRoot(hwnd)) {
+        return TRUE;
+    }
+    RECT rc = {};
+    if (!GetWindowRect(hwnd, &rc) || !PtInRect(&rc, ctx->pt)) {
+        return TRUE;
+    }
+    ctx->found = hwnd;
+    return FALSE;
+}
+
+HWND GetExplorerCabinetAtPoint(POINT pt) {
+    HWND at = WindowFromPoint(pt);
+    if (at) {
+        HWND root = GetAncestor(at, GA_ROOT);
+        if (root && IsExplorerCabinetRoot(root)) {
+            return root;
+        }
+    }
+
+    CabinetAtPointContext ctx{pt};
+    EnumWindows(CabinetAtPointEnumProc, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.found;
+}
+
+struct ExplorerFilePaneWheelTarget {
+    HWND defView = nullptr;
+    HWND contentHost = nullptr;
+};
+
+// Per-drag caches for file-pane wheel scrolling. Re-resolving the DefView /
+// ItemsView tree and re-acquiring the UIA scroll pattern on every wheel tick
+// was causing visible hitches during fast scrolling.
+thread_local struct {
+    uint64_t dragGeneration = 0;
+    ExplorerFilePaneWheelTarget target{};
+} g_filePaneTargetCache;
+
+thread_local struct FilePaneUiScrollCache {
+    uint64_t dragGeneration = 0;
+    HWND scrollHost = nullptr;
+    IUIAutomationScrollPattern* scroll = nullptr;
+} g_filePaneUiScrollCache;
+
+void ClearFilePaneUiScrollCache() {
+    if (g_filePaneUiScrollCache.scroll) {
+        g_filePaneUiScrollCache.scroll->Release();
+    }
+    g_filePaneUiScrollCache = {};
+}
+
+void ClearFilePaneWheelCaches() {
+    ClearFilePaneUiScrollCache();
+    g_filePaneTargetCache = {};
+}
+
+// COM must be initialized on the thread that creates UIA objects. Drag-time
+// wheel forwarding runs on the DoDragDrop thread via WH_MOUSE; Explorer often
+// already initialized COM there, but we probe explicitly so UIA is reliable.
+thread_local struct ThreadComForUIA {
+    bool probeDone = false;
+    bool comUsable = false;
+    bool weInitialized = false;
+} g_threadComForUIA;
+
+thread_local IUIAutomation* g_threadUiAutomation = nullptr;
+
+bool EnsureComForUIA() {
+    if (g_threadComForUIA.probeDone) {
+        return g_threadComForUIA.comUsable;
+    }
+    g_threadComForUIA.probeDone = true;
+    const HRESULT hr =
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (hr == RPC_E_CHANGED_MODE) {
+        // COM is already active on this thread under a different model; UIA
+        // may still work if Explorer initialized the apartment.
+        g_threadComForUIA.comUsable = true;
+        g_threadComForUIA.weInitialized = false;
+    } else if (SUCCEEDED(hr)) {
+        g_threadComForUIA.comUsable = true;
+        g_threadComForUIA.weInitialized = (hr == S_OK);
+    } else {
+        g_threadComForUIA.comUsable = false;
+        g_threadComForUIA.weInitialized = false;
+        Wh_Log(L"CoInitializeEx for UIA failed (hr 0x%08lx)", hr);
+    }
+    return g_threadComForUIA.comUsable;
+}
+
+void TeardownDragThreadWheelState() {
+    ClearFilePaneWheelCaches();
+
+    if (g_threadUiAutomation) {
+        g_threadUiAutomation->Release();
+        g_threadUiAutomation = nullptr;
+    }
+
+    if (g_threadComForUIA.weInitialized) {
+        CoUninitialize();
+    }
+    g_threadComForUIA = {};
+}
+
+struct ContentHostAtPointContext {
+    POINT pt = {};
+    HWND found = nullptr;
+    LONG bestArea = LONG_MAX;
+};
+
+BOOL CALLBACK ContentHostAtPointEnumProc(HWND hwnd, LPARAM lParam) {
+    auto* ctx = reinterpret_cast<ContentHostAtPointContext*>(lParam);
+    if (IsExplorerFileContentHost(hwnd) && PointInWindow(hwnd, ctx->pt)) {
+        RECT rc = {};
+        if (GetWindowRect(hwnd, &rc)) {
+            LONG area = (rc.right - rc.left) * (rc.bottom - rc.top);
+            if (area > 0 && area < ctx->bestArea) {
+                ctx->bestArea = area;
+                ctx->found = hwnd;
+            }
+        }
+    }
+    EnumChildWindows(hwnd, ContentHostAtPointEnumProc, lParam);
+    return TRUE;
+}
+
+HWND FindSmallestContentHostUnderDefView(HWND defView, POINT pt) {
+    ContentHostAtPointContext ctx{pt};
+    EnumChildWindows(defView, ContentHostAtPointEnumProc,
+                     reinterpret_cast<LPARAM>(&ctx));
+    return ctx.found;
+}
+
+ExplorerFilePaneWheelTarget FindExplorerFilePaneWheelTargetAtPoint(POINT pt) {
+    ExplorerFilePaneWheelTarget target{};
+    HWND cabinet = GetExplorerCabinetAtPoint(pt);
+    if (!cabinet) {
+        return target;
+    }
+
+    HWND defView = FindShellDefViewInCabinet(cabinet);
+    if (!defView || !PointInWindow(defView, pt)) {
+        return target;
+    }
+    target.defView = defView;
+
+    POINT clientPt = pt;
+    if (!ScreenToClient(defView, &clientPt)) {
+        return target;
+    }
+
+    // Geometry-based hit test under DefView: works during drag even when
+    // WindowFromPoint lands on a drag overlay instead of the file pane.
+    HWND hit = ChildWindowFromPointEx(
+        defView, clientPt, CWP_SKIPINVISIBLE | CWP_SKIPTRANSPARENT);
+    HWND content = nullptr;
+    if (hit && hit != defView) {
+        for (HWND w = hit; w && w != defView; w = GetParent(w)) {
+            if (IsExplorerFileContentHost(w)) {
+                content = w;
+                break;
+            }
+        }
+        if (!content && IsExplorerFileContentHost(hit)) {
+            content = hit;
+        }
+    }
+
+    if (!content) {
+        HWND listView =
+            FindWindowExW(defView, nullptr, L"SysListView32", nullptr);
+        if (listView && IsExplorerFileContentHost(listView) &&
+            PointInWindow(listView, pt)) {
+            content = listView;
+        }
+    }
+
+    if (!content) {
+        content = FindSmallestContentHostUnderDefView(defView, pt);
+    }
+
+    target.contentHost = content;
+    return target;
+}
+
+ExplorerFilePaneWheelTarget GetFilePaneWheelTargetCached(POINT pt) {
+    const uint64_t generation =
+        g_dragGeneration.load(std::memory_order_relaxed);
+    const ExplorerFilePaneWheelTarget& cached = g_filePaneTargetCache.target;
+    if (g_filePaneTargetCache.dragGeneration == generation && cached.defView &&
+        IsWindow(cached.defView) && PointInWindow(cached.defView, pt)) {
+        return cached;
+    }
+
+    ExplorerFilePaneWheelTarget target =
+        FindExplorerFilePaneWheelTargetAtPoint(pt);
+    if (target.defView || target.contentHost) {
+        if (g_filePaneTargetCache.target.contentHost != target.contentHost) {
+            ClearFilePaneUiScrollCache();
+        }
+        g_filePaneTargetCache.dragGeneration = generation;
+        g_filePaneTargetCache.target = target;
+    }
+    return target;
+}
+
+IUIAutomation* GetUIAutomation() {
+    if (!EnsureComForUIA()) {
+        return nullptr;
+    }
+    // Per drag-thread instance: avoids a data race on a process-wide static
+    // and keeps the automation object on the same thread that runs the WH_MOUSE
+    // hook (wheel forwarding during DoDragDrop).
+    if (g_threadUiAutomation) {
+        return g_threadUiAutomation;
+    }
+    IUIAutomation* created = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(&created)))) {
+        return nullptr;
+    }
+    g_threadUiAutomation = created;
+    return g_threadUiAutomation;
+}
+
+// Scroll via UIA so we never post wheel/scroll messages to SHELLDLL_DefView
+// during DoDragDrop (those can cancel or complete the OLE drag).
+bool ScrollExplorerPaneViaUIAutomation(HWND hwnd,
+                                       int steps,
+                                       bool verticalWheel,
+                                       bool increment) {
+    if (!hwnd || steps <= 0 || !IsWindow(hwnd)) {
+        return false;
+    }
+
+    const uint64_t generation =
+        g_dragGeneration.load(std::memory_order_relaxed);
+    IUIAutomationScrollPattern* scroll = nullptr;
+    if (g_filePaneUiScrollCache.scroll &&
+        g_filePaneUiScrollCache.scrollHost == hwnd &&
+        g_filePaneUiScrollCache.dragGeneration == generation) {
+        scroll = g_filePaneUiScrollCache.scroll;
+    } else {
+        ClearFilePaneUiScrollCache();
+
+        IUIAutomation* automation = GetUIAutomation();
+        if (!automation) {
+            return false;
+        }
+
+        IUIAutomationElement* element = nullptr;
+        if (FAILED(automation->ElementFromHandle(hwnd, &element)) ||
+            !element) {
+            return false;
+        }
+
+        IUIAutomationScrollPattern* acquired = nullptr;
+        const HRESULT patternHr = element->GetCurrentPatternAs(
+            UIA_ScrollPatternId, IID_PPV_ARGS(&acquired));
+        element->Release();
+        if (FAILED(patternHr) || !acquired) {
+            return false;
+        }
+
+        g_filePaneUiScrollCache.dragGeneration = generation;
+        g_filePaneUiScrollCache.scrollHost = hwnd;
+        g_filePaneUiScrollCache.scroll = acquired;
+        scroll = acquired;
+    }
+
+    const ScrollAmount noAmount = ScrollAmount_NoAmount;
+    ScrollAmount primaryAmount =
+        increment ? ScrollAmount_SmallIncrement : ScrollAmount_SmallDecrement;
+    int scrollCalls = steps;
+    if (steps >= 3) {
+        primaryAmount = increment ? ScrollAmount_LargeIncrement
+                                  : ScrollAmount_LargeDecrement;
+        scrollCalls = (steps + 2) / 3;
+    }
+    if (scrollCalls > 2) {
+        scrollCalls = 2;
+    }
+
+    ScrollAmount horizontalAmount = noAmount;
+    ScrollAmount verticalAmount = noAmount;
+    if (verticalWheel) {
+        verticalAmount = primaryAmount;
+    } else {
+        horizontalAmount = primaryAmount;
+    }
+
+    for (int i = 0; i < scrollCalls; i++) {
+        scroll->Scroll(horizontalAmount, verticalAmount);
+    }
+    return true;
+}
+
+void ForwardWheelToExplorerFilePane(const ExplorerFilePaneWheelTarget& target,
+                                    UINT wheelMsg,
+                                    const MOUSEHOOKSTRUCTEX* info) {
+    if (!target.defView && !target.contentHost) {
+        return;
+    }
+
+    const short delta = static_cast<short>(HIWORD(info->mouseData));
+    if (delta == 0) {
+        return;
+    }
+
+    int steps = static_cast<int>(delta / WHEEL_DELTA);
+    if (steps < 0) {
+        steps = -steps;
+    }
+    if (steps == 0) {
+        steps = 1;
+    }
+
+    const bool verticalWheel = (wheelMsg == WM_MOUSEWHEEL);
+    const bool increment = (delta < 0);
+
+    // UIA first for every resolved content host (ItemsView, DirectUI, and
+    // SysListView32 in Large icons / List / etc.). Avoids posting wheel/scroll
+    // messages to SHELLDLL_DefView during DoDragDrop when the pattern is available.
+    if (target.contentHost) {
+        if (ScrollExplorerPaneViaUIAutomation(target.contentHost, steps,
+                                              verticalWheel, increment)) {
+            return;
+        }
+    }
+
+    HWND wheelTarget = target.contentHost;
+    const bool listViewContentHost =
+        wheelTarget && WindowClassEquals(wheelTarget, L"SysListView32");
+    if (!wheelTarget) {
+        wheelTarget = target.defView;
+    }
+    if (!wheelTarget) {
+        return;
+    }
+
+    // Never message DefView when we already resolved a modern (non-ListView)
+    // content host -- that was ending the drag in testing.
+    if (target.contentHost && !listViewContentHost &&
+        wheelTarget == target.defView) {
+        return;
+    }
+
+    const WPARAM wheelWParam = MAKEWPARAM(0, HIWORD(info->mouseData));
+    const LPARAM screenLParam = MAKELPARAM(info->pt.x, info->pt.y);
+    DWORD_PTR replyDummy = 0;
+    SendMessageTimeoutW(wheelTarget, wheelMsg, wheelWParam, screenLParam,
+                        SMTO_NORMAL | SMTO_ABORTIFHUNG, kWheelForwardTimeoutMs,
+                        &replyDummy);
 }
 
 HTREEITEM TreeParent(HWND hwndTree, HTREEITEM hItem) {
@@ -404,19 +831,14 @@ bool IsSameOrDescendant(HWND hwndTree, HTREEITEM hItem,
         return false;
     }
     int guard = 0;
-    for (; hItem && guard < 64; guard++) {
+    for (; hItem && guard < 32; guard++) {
         if (hItem == possibleAncestor) {
             return true;
         }
         hItem = TreeParent(hwndTree, hItem);
     }
-    if (guard >= 64) {
-        // Same boundary semantics as TreeItemDepth: at 64 levels we cap the
-        // walk and return false. Item may genuinely not be a descendant, or
-        // the ancestor may be deeper than 64 hops up. Treat as not a
-        // descendant either way -- the protection logic only cares about
-        // the answer, not the reason.
-        Wh_Log(L"IsSameOrDescendant capped at 64 levels");
+    if (guard >= 32) {
+        Wh_Log(L"IsSameOrDescendant capped at 32 levels");
     }
     return false;
 }
@@ -663,6 +1085,7 @@ LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             std::lock_guard<std::mutex> lock(g_subclassMutex);
             g_subclassedTrees.erase(hWnd);
         }
+        // Safe if Wh_ModUninit already removed the subclass on this HWND.
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
                                                          TreeSubclassProc);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -673,6 +1096,7 @@ LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             std::lock_guard<std::mutex> lock(g_subclassMutex);
             g_subclassedTrees.erase(hWnd);
         }
+        // Duplicate Remove is a no-op when uninit already ran.
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
                                                          TreeSubclassProc);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -739,9 +1163,10 @@ LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                 if (wParam == TVGN_DROPHILITE && lParam != 0 &&
                     reinterpret_cast<HTREEITEM>(lParam) !=
                         g_protectedHover.hItem) {
-                    return SendInternal(
-                        hWnd, TVM_SELECTITEM, TVGN_DROPHILITE,
-                        reinterpret_cast<LPARAM>(g_protectedHover.hItem));
+                    SendInternal(hWnd, TVM_SELECTITEM, TVGN_DROPHILITE,
+                                 reinterpret_cast<LPARAM>(
+                                     g_protectedHover.hItem));
+                    return TRUE;
                 }
                 break;
 
@@ -843,11 +1268,14 @@ void TrySubclassTree(HWND hwnd) {
         auto it = g_subclassedTrees.find(hwnd);
         if (it != g_subclassedTrees.end()) {
             it->second = SubclassState::Installed;
+            Wh_Log(L"Subclassed nav tree %p", hwnd);
+        } else {
+            // WM_NCDESTROY erased our Installing entry while the cross-thread
+            // install was in flight; drop the subclass so we don't leak an
+            // untracked pointer into our image.
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, TreeSubclassProc);
         }
-        // If the entry is gone, WM_NCDESTROY (or the uninit-in-progress
-        // branch) ran on the owning thread between install and this flip;
-        // the proc has already removed itself, so there is nothing to do.
-        Wh_Log(L"Subclassed nav tree %p", hwnd);
     } else {
         // Roll back the Installing marker so a future retry on the same
         // hwnd can proceed instead of being stuck behind a phantom entry.
@@ -999,37 +1427,41 @@ LRESULT CALLBACK DragMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     POINT pt = info->pt;
     HWND tree = nullptr;
-    HWND listView = nullptr;
     for (HWND w = WindowFromPoint(pt); w; w = GetParent(w)) {
         // Prefer nav-tree routing when the cursor is over the tree.
         if (IsExplorerNavigationTree(w)) {
             tree = w;
             break;
         }
-        if (!listView && IsExplorerFileListView(w)) {
-            listView = w;
-        }
     }
 
-    HWND target = tree ? tree : listView;
-    if (!target) {
+    ExplorerFilePaneWheelTarget filePane{};
+    if (!tree) {
+        filePane = GetFilePaneWheelTargetCached(pt);
+    }
+
+    const bool hasFilePaneTarget =
+        filePane.defView || filePane.contentHost;
+    if (!tree && !hasFilePaneTarget) {
         // Cursor isn't over any tracked Explorer scroll target. Let normal
         // processing run (which means OLE will still eat wheel input, matching
         // native behavior for non-scroll targets during drag).
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
     }
 
-    // SendMessage bypasses the message queue, so the dispatched WM_MOUSEWHEEL
-    // does NOT re-enter this hook -- no recursion concern. The timeout
-    // variant with SMTO_ABORTIFHUNG protects against the rare cross-process
-    // case ("launch folder windows in a separate process" mode), where the
-    // target tree could be on a wedged thread; without it, a hung tree would
-    // freeze the drag loop. 200 ms is generous for a tree wheel handler.
-    DWORD_PTR replyDummy = 0;
-    SendMessageTimeoutW(target, static_cast<UINT>(wParam),
-                        MAKEWPARAM(0, HIWORD(info->mouseData)),
-                        MAKELPARAM(pt.x, pt.y),
-                        SMTO_NORMAL | SMTO_ABORTIFHUNG, 200, &replyDummy);
+    if (tree) {
+        // SendMessage bypasses the message queue, so the dispatched
+        // WM_MOUSEWHEEL does NOT re-enter this hook -- no recursion concern.
+        DWORD_PTR replyDummy = 0;
+        SendMessageTimeoutW(
+            tree, static_cast<UINT>(wParam),
+            MAKEWPARAM(0, HIWORD(info->mouseData)), MAKELPARAM(pt.x, pt.y),
+            SMTO_NORMAL | SMTO_ABORTIFHUNG, kWheelForwardTimeoutMs,
+            &replyDummy);
+    } else {
+        ForwardWheelToExplorerFilePane(filePane, static_cast<UINT>(wParam),
+                                       info);
+    }
 
     if (tree) {
         // Bump the drag generation AFTER the synthesized wheel has actually
@@ -1079,11 +1511,13 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* pDataObj, IDropSource* pDropSource,
     }
 
     // Install the per-thread mouse hook for the duration of the modal drag
-    // loop. The SetWindowsHookExW call and the g_activeDragHooks insert run
-    // under one mutex so an uninit sweep cannot snapshot an empty
-    // g_activeDragHooks in the window between the hook being installed and
-    // the registry being updated -- that gap would otherwise leave a live
-    // hook handle pointing into our about-to-be-unmapped DragMouseHookProc.
+    // loop. g_dragMouseHook is thread_local; g_dragHookMutex only serializes
+    // updates to g_activeDragHooks (visible to Wh_ModUninit). The
+    // SetWindowsHookExW call and the g_activeDragHooks insert run under that
+    // mutex so an uninit sweep cannot snapshot an empty g_activeDragHooks in
+    // the window between the hook being installed and the registry being
+    // updated -- that gap would otherwise leave a live hook handle pointing
+    // into our about-to-be-unmapped DragMouseHookProc.
     // We also re-check g_uninitInProgress while holding the lock for the
     // same reason. SetWindowsHookExW is a syscall that does not recurse into
     // our code, so calling it under the mutex is deadlock-safe.
@@ -1128,6 +1562,7 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* pDataObj, IDropSource* pDropSource,
 
     if (g_dragLoopDepth.fetch_sub(1, std::memory_order_acq_rel) == 1) {
         ClearProtectedHover();
+        TeardownDragThreadWheelState();
     }
     return result;
 }
@@ -1277,7 +1712,9 @@ BOOL Wh_ModInit() {
         // Block until the helper thread has finished SetWinEventHook (or
         // signalled failure). This guarantees subsequent SetEvent on
         // g_helperStopEvent will be observed by a fully-initialised helper.
-        if (WaitForSingleObject(g_winEventThreadReady, 5000) == WAIT_TIMEOUT) {
+        if (WaitForSingleObject(g_winEventThreadReady,
+                                kWinEventThreadReadyTimeoutMs) ==
+            WAIT_TIMEOUT) {
             Wh_Log(L"WinEvent helper thread did not signal ready within 5s; "
                    L"shutdown may rely on the helper exiting on its own");
         }
@@ -1382,7 +1819,8 @@ void Wh_ModUninit() {
                        L"path and may keep running");
             }
 
-            if (WaitForSingleObject(g_winEventThread, 10000) ==
+            if (WaitForSingleObject(g_winEventThread,
+                                    kWinEventHelperJoinTimeoutMs) ==
                 WAIT_TIMEOUT) {
                 // The helper did not observe the event within 10s. The
                 // only way this happens in practice is if a dispatched
