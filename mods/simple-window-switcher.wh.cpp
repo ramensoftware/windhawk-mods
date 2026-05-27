@@ -2,7 +2,7 @@
 // @id              simple-window-switcher
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
-// @version         1.2
+// @version         2.0
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
@@ -21,7 +21,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - Different Task List, Header Content and Thumbnails layouts
 - Center align task list content and titles (horizontal and vertical options)
 - Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)
-- Mouse click to select, scroll wheel to cycle
+- Mouse click to select, scroll wheel to cycle from anywhere
+- Virtual Desktop Support (Show windows across multiple virtual desktops)
+- Win+Alt+Tab override to display windows from all monitors when using Per-Monitor mode
 - Alt+Ctrl+Tab sticky mode
 - Theme support (None/Backdrop Acrylic) with fully customizable background opacity
 - Works with elevated/admin applications
@@ -62,7 +64,8 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $description: Visual theme for the switcher background.
       $options:
       - none: None (transparent)
-      - backdrop: Backdrop (Acrylic)
+      - backdrop: Acrylic (Windows 10+)
+      - mica: Mica (Windows 11 Only)
     - opacity: 100
       $name: Background Opacity
       $description: Background opacity percentage (0-100), applies to None theme.
@@ -170,6 +173,8 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - never: Never
       - always: Always
       - stickyOnly: Only in sticky mode
+    - reverseScrollDirection: false
+      $name: Reverse Scroll Direction
     - backwardShortcut: altShiftTab
       $name: Backward Shortcut
       $description: Shortcut used to move backward in the switcher.
@@ -181,6 +186,12 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Always Display Switcher on Primary Monitor
     - perMonitorWindows: false
       $name: Display Windows Only From the Monitor Containing the Cursor
+    - virtualDesktopBehavior: currentOnly
+      $name: Virtual Desktop Behavior
+      $description: Choose which virtual desktops to show windows from.
+      $options:
+      - currentOnly: Show windows from current virtual desktop only
+      - allDesktops: Show windows from all virtual desktops
   $name: Miscellaneous
 */
 // ==/WindhawkModSettings==
@@ -253,7 +264,7 @@ struct WindowEntry {
 };
 struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32];
-    WCHAR highlightStyle[32];
+    WCHAR highlightStyle[32]; WCHAR virtualDesktopBehavior[32];
     WCHAR borderColorDark[16];
     WCHAR borderColorLight[16];
     int opacity;
@@ -265,12 +276,15 @@ struct Settings {
     bool showIcon;
     int maxWidthPercent;
     int maxHeightPercent; int showDelay;
-    bool useAccentColor; bool primaryMonitorOnly; bool perMonitorWindows; bool taskRoundedCorners;
+    bool useAccentColor; bool primaryMonitorOnly; bool perMonitorWindows; bool taskRoundedCorners; bool reverseScrollDirection;
     bool centerTaskContent;
 };
 
 static HWND g_hSwitcher = NULL;
 static HWND g_hCloseBtnWnd = NULL;
+static IVirtualDesktopManager* g_pVirtualDesktopManager = NULL;
+static bool g_showAllMonitors = false;
+static HHOOK g_hMouseHook = NULL;
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
 static int g_layoutStartIndex = 0; // EP-style: first window index visible in the layout
@@ -519,8 +533,15 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     if (!IsAltTabWindow(hWnd)) return TRUE;
     BOOL cloaked = FALSE;
     DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    if (cloaked) return TRUE;
-    if (g_settings.perMonitorWindows && g_hCurrentMonitor) {
+    if (cloaked) {
+        if (wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") == 0 && g_pVirtualDesktopManager) {
+            BOOL onCurrent = FALSE;
+            if (SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hWnd, &onCurrent)) && !onCurrent) {
+                // allow cloaked window since it's just on another virtual desktop
+            } else return TRUE;
+        } else return TRUE;
+    }
+    if (g_settings.perMonitorWindows && !g_showAllMonitors && g_hCurrentMonitor) {
         if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL) != g_hCurrentMonitor) return TRUE;
     }
     WindowEntry e = {};
@@ -1941,6 +1962,22 @@ static void ShowPendingOffscreenWindow() {
     SetForegroundWindow(g_hSwitcher);
 }
 
+static void CycleLinear(int delta);
+
+static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && g_isVisible && wParam == WM_MOUSEWHEEL) {
+        MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
+        bool ok = ScrollIs(L"always") || (ScrollIs(L"stickyOnly") && g_isSticky);
+        if (ok) {
+            int dir = (short)HIWORD(pMouseStruct->mouseData) > 0 ? -1 : 1;
+            if (g_settings.reverseScrollDirection) dir = -dir;
+            CycleLinear(dir);
+            return 1;
+        }
+    }
+    return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+}
+
 static void RevealPendingSwitcher() {
     if (!g_isPendingShow || !g_hSwitcher) {
         return;
@@ -1950,6 +1987,9 @@ static void RevealPendingSwitcher() {
 
     g_isPendingShow = false;
     g_isVisible = true;
+    if (!g_hMouseHook) {
+        g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
+    }
 
     int x = g_pendingSwitcherRect.left;
     int y = g_pendingSwitcherRect.top;
@@ -1975,7 +2015,7 @@ static void ShowSwitcher(bool sticky) {
         MonitorFromPoint({0,0}, MONITOR_DEFAULTTOPRIMARY) :
         MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
     g_hCurrentMonitor = hMon;
-    if (g_settings.perMonitorWindows) {
+    if (g_settings.perMonitorWindows && !g_showAllMonitors) {
         UnregisterThumbnails(); BuildWindowList();
         if (g_windows.empty()) return;
     }
@@ -1996,7 +2036,7 @@ static void ShowSwitcher(bool sticky) {
 
     // Apply theme (EP: sws_WindowSwitcher.c lines 510-570)
     // Step 1: Reset DWM frame and blur state (EP lines 510-524)
-    MARGINS marGlassInset = { 0, 0, 0, 0 };
+    MARGINS marGlassInset = ThemeIs(L"mica") ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
     DwmExtendFrameIntoClientArea(g_hSwitcher, &marGlassInset);
 
     LONG_PTR exs = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
@@ -2006,20 +2046,29 @@ static void ShowSwitcher(bool sticky) {
         SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exs & ~WS_EX_LAYERED);
         BOOL dark = g_isDarkMode;
         DwmSetWindowAttribute(g_hSwitcher, 20, &dark, sizeof(dark));
+        if (ThemeIs(L"mica")) {
+            int micaVal = 2; // DWMSBT_MAINWINDOW
+            HRESULT hr = DwmSetWindowAttribute(g_hSwitcher, 38, &micaVal, sizeof(micaVal));
+            if (FAILED(hr) && ThemeIs(L"mica")) {
+                // Try old undocumented DWMWA_MICA_EFFECT (1029)
+                int oldMicaVal = 1;
+                hr = DwmSetWindowAttribute(g_hSwitcher, 1029, &oldMicaVal, sizeof(oldMicaVal));
+            }
+            if (FAILED(hr)) {
+                // Fallback to none
+                SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE) | WS_EX_LAYERED);
+            }
+        }
         if (ThemeIs(L"backdrop") && g_SetWindowCompositionAttribute) {
-            // EP: blur = (dwOpacity / 100.0) * 255
             DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
             COLORREF bg = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
-            // EP: nColor = (Opacity << 24) | (Color & 0xFFFFFF)
-            // COLORREF is 0x00BBGGRR, so this works directly
             ACCENT_POLICY accent = {};
-            accent.AccentState = 4; // ACCENT_ENABLE_ACRYLICBLURBEHIND
+            accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
             accent.AccentFlags = 0;
             accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
             WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
             g_SetWindowCompositionAttribute(g_hSwitcher, &data);
         }
-        // EP: Set black background brush for DWM compositing (line 566)
         SetClassLongPtrW(g_hSwitcher, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
     }
 
@@ -2052,6 +2101,9 @@ static void ShowSwitcher(bool sticky) {
 
     g_isPendingShow = false;
     g_isVisible = true;
+    if (!g_hMouseHook) {
+        g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
+    }
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
@@ -2066,6 +2118,7 @@ static void ShowSwitcher(bool sticky) {
 }
 
 static void HideSwitcher() {
+    g_showAllMonitors = false;
     CancelPendingShow();
 
     UnregisterThumbnails();
@@ -2078,6 +2131,10 @@ static void HideSwitcher() {
 
     g_isVisible = false;
     g_isPendingShow = false;
+    if (g_hMouseHook) {
+        UnhookWindowsHookEx(g_hMouseHook);
+        g_hMouseHook = NULL;
+    }
     g_isSticky = false;
 }
 
@@ -2333,6 +2390,10 @@ static int HitTestThumb(int x, int y) {
 static void SWS_RegisterHotkeys();
 
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_NCCALCSIZE && wParam == TRUE) {
+        return 0; // Remove standard frame for WS_OVERLAPPED
+    }
+
     if (uMsg == WM_TIMER) {
         if (wParam == SWS_HOTKEY_RETRY_TIMER_ID) {
             SWS_RegisterHotkeys();
@@ -2373,6 +2434,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (!g_isVisible && !g_isPendingShow) {
+            if (GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0) {
+                g_showAllMonitors = true;
+            }
             ShowSwitcher(isCtrl);
 
             if (isBackward && g_windows.size() > 1) {
@@ -2494,9 +2558,17 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     case WM_MOUSEWHEEL:
         if (g_isVisible) {
             bool ok = ScrollIs(L"always") || (ScrollIs(L"stickyOnly") && g_isSticky);
-            if (ok) { CycleLinear(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1); return 0; }
+            if (ok) {
+                int dir = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1;
+                if (g_settings.reverseScrollDirection) dir = -dir;
+                CycleLinear(dir); 
+                return 0; 
+            }
         }
         break;
+    case WM_SETCURSOR:
+        SetCursor(LoadCursor(NULL, IDC_ARROW));
+        return TRUE;
     case WM_MOUSEMOVE: {
         int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
         int idx = g_settings.showThumbnails ? HitTestThumb(x, y) : HitTest(x, y);
@@ -2720,6 +2792,14 @@ static void LoadSettings() {
         wcscpy_s(g_settings.highlightStyle, L"border");
     }
 
+    v = Wh_GetStringSetting(L"Miscellaneous.virtualDesktopBehavior");
+    wcscpy_s(g_settings.virtualDesktopBehavior, v ? v : L"currentOnly");
+    Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.virtualDesktopBehavior, L"currentOnly") != 0 &&
+        wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") != 0) {
+        wcscpy_s(g_settings.virtualDesktopBehavior, L"currentOnly");
+    }
+
     g_settings.opacity = Wh_GetIntSetting(L"Style.opacity");
     if (g_settings.opacity < 0) g_settings.opacity = 0;
     if (g_settings.opacity > 100) g_settings.opacity = 100;
@@ -2744,6 +2824,7 @@ static void LoadSettings() {
     g_settings.useAccentColor = Wh_GetIntSetting(L"Style.useAccentColor");
     g_settings.primaryMonitorOnly = Wh_GetIntSetting(L"Miscellaneous.primaryMonitorOnly");
     g_settings.perMonitorWindows = Wh_GetIntSetting(L"Miscellaneous.perMonitorWindows");
+    g_settings.reverseScrollDirection = Wh_GetIntSetting(L"Miscellaneous.reverseScrollDirection");
     g_settings.centerTaskContent = Wh_GetIntSetting(L"Appearance.HeaderContent.centerTaskContent");
 
 
@@ -2804,9 +2885,12 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     wc.style = CS_DBLCLKS;
     RegisterClassExW(&wc);
 
+    // Use WS_OVERLAPPED instead of WS_POPUP. Windows 11 DWM (Mica/Acrylic) has
+    // much better support for standard top-level windows. We remove the frame via WM_NCCALCSIZE.
+    DWORD dwStyle = WS_OVERLAPPED | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED;
     g_hSwitcher = CreateWindowExW(exStyle, SWS_CLASSNAME, L"",
-        WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
+        dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
 
     g_hCloseBtnWnd = CreateWindowExW(
@@ -3030,6 +3114,9 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
+        CoInitialize(NULL);
+        CoCreateInstance(CLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER, IID_IVirtualDesktopManager, (void**)&g_pVirtualDesktopManager);
+
         IMAGE_DOS_HEADER* dosHeader =
             (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
@@ -3160,6 +3247,10 @@ void Wh_ModUninit() {
         return;
     }
 
+    if (g_pVirtualDesktopManager) {
+        g_pVirtualDesktopManager->Release();
+        g_pVirtualDesktopManager = NULL;
+    }
     WhTool_ModUninit();
     ExitProcess(0);
 }
