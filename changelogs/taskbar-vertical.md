@@ -1,3 +1,7 @@
+## 1.3.11 ([May 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8a1f76c14f1a5089841348d37e838c85123bb26f/mods/taskbar-vertical.wh.cpp))
+
+* Fixed compatibility with recent Windows 11 versions.
+
 ## 1.3.10 ([Jan 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/504d49f85d2c5c33dc4b6a009b3d7ee1424ec3d3/mods/taskbar-vertical.wh.cpp))
 
 * Fixed drag and drop for tray icons when high DPI is used.

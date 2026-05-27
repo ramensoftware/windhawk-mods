@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-27T11:07:49.000Z</updated>
+    <updated>2026-05-27T11:25:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.11]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#8a1f76c14f1a5089841348d37e838c85123bb26f</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2026-05-27T11:25:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with recent Windows 11 versions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.7]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#6e1ccf5d5ff53ada6ae7d58fd31c81a9723e12ea</id>
@@ -554,26 +567,6 @@ Additional improvements made by <a href="https://github.com/Asteski">Asteski</a>
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ZenDesktop: Double Click to Hide Icons 1.2.0]]></title>
-        <id>https://windhawk.net/mods/zen-desktop-toggle-icons#130894a9b78c9429b22e05420e865d51b9f448b7</id>
-        <link href="https://windhawk.net/mods/zen-desktop-toggle-icons"/>
-        <updated>2026-05-23T15:54:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="zendesktopdoubleclicktohideicons">ZenDesktop: Double Click to Hide Icons</h1>
-<p>Have you ever wanted a clean, clutter-free desktop but found it annoying to right-click -&gt; View -&gt; Show desktop icons every time? </p>
-<p><strong>ZenDesktop</strong> brings the ultimate native solution to Windows. It allows you to <strong>double-click empty space on your desktop</strong> to instantly hide or show your icons.</p>
-<h3 id="keyfeatures">🌟 Key Features:</h3>
-<ul>
-<li><strong>Zero UI Overhead</strong>: Embedded natively inside <code>explorer.exe</code> process space. No background EXE running, no taskbar/tray icons, 0% CPU and virtually 0MB extra RAM.</li>
-<li><strong>Process-Native Hit-Testing</strong>: When you double-click, it performs a real-time ListView hit-test. If you double-click a file, folder, or shortcut, the default "open" action is triggered normally. If you double-click empty space, it toggles your desktop icons.</li>
-<li><strong>Dynamic Hooking</strong>: Automatically subclasses the shell views, meaning even if your Explorer crashes, restarts, or you plug/unplug monitors, the mod remains fully active and stable.</li>
-<li><strong>Completely Safe</strong>: Uses native Windows <code>0x7402</code> (WM_COMMAND) toggle signals, ensuring Windows handles the fade animations and desktop state natively without breaking icon grid arrangements.</li>
-</ul>]]></content>
-        <author>
-            <name>Lanbo</name>
-            <uri>https://github.com/Liset999</uri>
         </author>
     </entry>
 </feed>
