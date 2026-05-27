@@ -312,7 +312,7 @@ bool InPostJumpScrollSuppressionWindow() {
 // disappear for the rest of the session.
 struct InternalCallGuard {
     InternalCallGuard() { g_internalCallDepth++; }
-    ~InternalCallGuard() { g_internalCallDepth--; }
+    ~InternalCallGuard() { g_internalCallDepth--; } 
 };
 
 LRESULT SendInternal(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1130,8 +1130,9 @@ void LoadSettings() {
                                         std::memory_order_relaxed);
     g_settings.capturedRowMarginY.store(ClampInt(marginY, 0, 64),
                                         std::memory_order_relaxed);
-    g_settings.enableWheelScrollDuringDrag.store(wheelDuringDrag != 0,
-                                                 std::memory_order_relaxed);
+    g_settings.enableWheelScrollDuringDrag.store(
+        Wh_GetIntSetting(L"enableWheelScrollDuringDrag") != 0,
+        std::memory_order_relaxed);
 }
 
 }  // namespace
