@@ -344,6 +344,23 @@ bool IsExplorerNavigationTree(HWND hwnd) {
            WindowClassEquals(root, L"ExploreWClass");
 }
 
+bool IsExplorerFileListView(HWND hwnd) {
+    // Explorer's main content pane uses a ListView control (SysListView32)
+    // across most view modes. We forward drag-time wheel messages here so
+    // users can scroll to off-screen drop targets without aborting.
+    if (!IsWindow(hwnd) || !WindowClassEquals(hwnd, L"SysListView32")) {
+        return false;
+    }
+
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (!root) {
+        return false;
+    }
+
+    return WindowClassEquals(root, L"CabinetWClass") ||
+           WindowClassEquals(root, L"ExploreWClass");
+}
+
 HTREEITEM TreeParent(HWND hwndTree, HTREEITEM hItem) {
     return reinterpret_cast<HTREEITEM>(
         SendInternal(hwndTree, TVM_GETNEXTITEM, TVGN_PARENT,
@@ -981,16 +998,23 @@ LRESULT CALLBACK DragMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     POINT pt = info->pt;
     HWND tree = nullptr;
+    HWND listView = nullptr;
     for (HWND w = WindowFromPoint(pt); w; w = GetParent(w)) {
+        // Prefer nav-tree routing when the cursor is over the tree.
         if (IsExplorerNavigationTree(w)) {
             tree = w;
             break;
         }
+        if (!listView && IsExplorerFileListView(w)) {
+            listView = w;
+        }
     }
-    if (!tree) {
-        // Cursor isn't over any tracked nav tree. Let normal processing run
-        // (which means OLE will still eat it, but that matches native
-        // behavior for any non-tree target).
+
+    HWND target = tree ? tree : listView;
+    if (!target) {
+        // Cursor isn't over any tracked Explorer scroll target. Let normal
+        // processing run (which means OLE will still eat wheel input, matching
+        // native behavior for non-scroll targets during drag).
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
     }
 
@@ -1001,20 +1025,22 @@ LRESULT CALLBACK DragMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     // target tree could be on a wedged thread; without it, a hung tree would
     // freeze the drag loop. 200 ms is generous for a tree wheel handler.
     DWORD_PTR replyDummy = 0;
-    SendMessageTimeoutW(tree, static_cast<UINT>(wParam),
+    SendMessageTimeoutW(target, static_cast<UINT>(wParam),
                         MAKEWPARAM(0, HIWORD(info->mouseData)),
                         MAKELPARAM(pt.x, pt.y),
                         SMTO_NORMAL | SMTO_ABORTIFHUNG, 200, &replyDummy);
 
-    // Bump the drag generation AFTER the synthesized wheel has actually
-    // scrolled the tree. Any capture established mid-dispatch by
-    // UpdateProtectedHoverFromCursor would have cached pre-scroll item
-    // rects (now stale); bumping here forces the next message on the
-    // tree's thread to clear that capture and re-evaluate against post-
-    // scroll geometry. Bumping BEFORE SendMessageTimeoutW would itself
-    // create a mid-dispatch stale capture, since the tree hadn't yet
-    // scrolled at hit-test time.
-    g_dragGeneration.fetch_add(1, std::memory_order_acq_rel);
+    if (tree) {
+        // Bump the drag generation AFTER the synthesized wheel has actually
+        // scrolled the tree. Any capture established mid-dispatch by
+        // UpdateProtectedHoverFromCursor would have cached pre-scroll item
+        // rects (now stale); bumping here forces the next message on the
+        // tree's thread to clear that capture and re-evaluate against post-
+        // scroll geometry. Bumping BEFORE SendMessageTimeoutW would itself
+        // create a mid-dispatch stale capture, since the tree hadn't yet
+        // scrolled at hit-test time.
+        g_dragGeneration.fetch_add(1, std::memory_order_acq_rel);
+    }
 
     // Returning non-zero stops the system from passing the message through
     // to OLE's drag loop, which would otherwise eat it.
