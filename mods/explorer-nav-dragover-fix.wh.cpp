@@ -1143,8 +1143,6 @@ void LoadSettings() {
     int releaseY = static_cast<int>(Wh_GetIntSetting(L"releaseMoveY"));
     int marginX = static_cast<int>(Wh_GetIntSetting(L"capturedRowMarginX"));
     int marginY = static_cast<int>(Wh_GetIntSetting(L"capturedRowMarginY"));
-    int wheelDuringDrag =
-        static_cast<int>(Wh_GetIntSetting(L"enableWheelScrollDuringDrag"));
 
     // Upper bounds keep a typo'd setting from making the nav pane feel broken
     // (e.g. depth 999, release 500). The ranges are intentionally generous
