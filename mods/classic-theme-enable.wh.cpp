@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.2.3
+// @version         1.2.4
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -176,6 +176,13 @@ install this mod: [*Remember the folder windows' positions*](https://windhawk.ne
 
 39. To male the Windows Tools (Administrative Tools) folder to remember its view mode, install this mod:
 [Fix Windows Tools Folder View](https://windhawk.net/mods/fix-windows-tools-view).
+
+40. To make the MSHTML content (CHM viewer, Outlook Express, classic Windows Mail, Internet Explorer) to use controls
+from Classic Theme, install this mod:
+[MSHTML Tweaks](https://windhawk.net/mods/mshtml-native-controls)
+
+41. To make the folder windows freely resizable, the way it was before Windows Vista, install this mod:
+[Explorer No Minimum Window Size](https://windhawk.net/mods/explorer-no-min-size)
 
 To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
 utility, but make sure to install and run it in Windows 2000 or XP compatibility mode (in Windows XP mode
