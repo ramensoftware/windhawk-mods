@@ -51,6 +51,7 @@ the later mod, also the mod [*Fake Explorer path*](https://windhawk.net/mods/fak
 After this, the tray language indicator (if you use one) will appear vertical, so to fix it install this mod:
 [*Fix language indicator in Win10 taskbar under Win11 24H2+*](https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator).
 The labels of the taskbar buttons won't be visible by default but they can be enabled via the Settings app.
+To customize the tray icons in Win10 taskbar, run this command: `explorer shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}`
 
 5. The Windows 10 taskbar still needs a compatibility fix, so install the mod
 [*Classic Theme Explorer Lite*](https://windhawk.net/mods/classic-theme-explorer-lite). 
