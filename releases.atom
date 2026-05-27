@@ -2,12 +2,73 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-26T08:11:09.000Z</updated>
+    <updated>2026-05-27T10:26:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Neko Cat 1.2.1]]></title>
+        <id>https://windhawk.net/mods/neko-cat#b35660a81b786d8523a45cec049c59d24270b648</id>
+        <link href="https://windhawk.net/mods/neko-cat"/>
+        <updated>2026-05-27T10:26:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="nekocat">🐱 Neko Cat</h1>
+<p>A cute desktop pet that follows your mouse and runs around your screen.
+<img src="https://raw.githubusercontent.com/ciizerr/wh-mods/2c1ecbf9ba9d0964e1a764a090cb2b7df729dc5c/previews/Neko-cat.gif" alt="Neko Cat Preview" /></p>
+<h2 id="whatsnewinv120">✨ What's New in v1.2.0?</h2>
+<ul>
+<li><strong>Play With Window:</strong> Neko can now climb the sides of your active window and pace along the title bar! He even reacts physically if you drag the window into him while he's sleeping.</li>
+<li><strong>Multiple Cats:</strong> Feeling lonely? You can now spawn an entire litter of cats! They have built-in separation physics so they won't just stack on top of each other.</li>
+<li><strong>Neko Key:</strong> Set a custom keyboard shortcut to instantly hide all your cats and mute their sounds when you need to focus.</li>
+</ul>
+<h2 id="howtointeract">🎮 How to Interact</h2>
+<ul>
+<li><strong>Left-Click:</strong> Cycles through 6 different behaviors.</li>
+<li><strong>Right-Click:</strong> Wakes Neko up instantly if he's napping.</li>
+<li><strong>Drag & Drop:</strong> Pick him up and drop him! He'll yawn, take a quick nap, and then automatically wake up and go back to what he was doing.</li>
+<li><strong>Window Nudging:</strong> If Neko is exhausted and deeply asleep on the floor, try dragging a window edge into him. He'll slide out of the way and wake up to see what bumped him!</li>
+</ul>
+<h2 id="catbehaviors">🏃 Cat Behaviors</h2>
+<ol>
+<li><strong>Chase Mouse:</strong> (Default) He follows your cursor everywhere!</li>
+<li><strong>Run Away:</strong> Try to catch him if you can!</li>
+<li><strong>Random:</strong> Total zoomies!</li>
+<li><strong>Pace:</strong> He patrols the bottom of your screen.</li>
+<li><strong>Run Around:</strong> He chases an invisible ball.</li>
+<li><strong>Play With Window:</strong> He hunts down your currently focused window to climb the walls and pace the roof.</li>
+</ol>
+<h2 id="multimonitorsupport">🖥️ Multi-Monitor Support</h2>
+<p>Neko can roam freely across <strong>all your monitors</strong>! He can seamlessly jump from one screen to another to follow your mouse.</p>
+<h2 id="customization">⚙️ Customization</h2>
+<p>You can tweak almost everything in the settings: <strong>Size</strong>, <strong>Speed</strong>, <strong>FPS</strong>, <strong>How many cats to spawn</strong>, and your <strong>Neko Key shortcut</strong>. You can also turn his meows and snores on or off.</p>
+<h2 id="assetstransparency">🔒 Assets &amp; Transparency</h2>
+<p>Neko's graphics and sounds are downloaded automatically on the first run.</p>
+<ul>
+<li><strong>Source:</strong> All files come from the GitHub repository: <a href="https://github.com/ciizerr/wh-mods/tree/2c1ecbf9ba9d0964e1a764a090cb2b7df729dc5c/assets/neko-cat">assets/neko-cat</a></li>
+<li><strong>Standard API:</strong> The mod uses the trusted Windhawk <code>Wh_GetUrlContent</code> API.</li>
+<li><strong>Local Storage:</strong> Files are safely cached in your Windhawk <code>modstorage</code> folder.</li>
+</ul>
+<h2 id="licensecredits">📜 License &amp; Credits</h2>
+<p>This mod uses implementations, logic, and state definitions referenced from the <strong>Neko 98</strong> source code.</p>
+<ul>
+<li><strong>Original Author:</strong> Masayuki Koba (X-Windows Neko)</li>
+<li><strong>Windows Port (Neko 98):</strong> David Harvey - <a href="https://sourceforge.net/projects/neko98/">Neko98 Source on SourceForge</a></li>
+<li><strong>JavaScript Port (nekojs):</strong> Louis Abraham - <a href="https://github.com/louisabraham/nekojs">louisabraham/nekojs on GitHub</a></li>
+<li><strong>License:</strong> Used in accordance with the Neko 98 source code license (freely usable as long as credit is given).</li>
+</ul>
+<h2 id="feedbacksupport">💬 Feedback &amp; Support</h2>
+<p>Got ideas or found a bug? I’d love to hear from you!</p>
+<ul>
+<li><strong>Discord:</strong> <code>ciizerr</code></li>
+<li><strong>GitHub:</strong> <a href="https://github.com/ciizerr/wh-mods">wh-mods</a></li>
+</ul>
+<p>Enjoy your new friends!</p>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Replace Winver With EXE 1.0]]></title>
         <id>https://windhawk.net/mods/replace-winver-with-exe#a29be1e094e31a959458e0b49dd13d70eea9f776</id>
@@ -630,38 +691,6 @@ multi-monitor setups. Monitors not listed in settings are left untouched.</p>]]>
         <author>
             <name>jtnqr</name>
             <uri>https://github.com/jtnqr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Titlebar Icon and Text 1.0]]></title>
-        <id>https://windhawk.net/mods/hide-titlebar-elements#d98197019252c77368c7437824031b3978cbf62c</id>
-        <link href="https://windhawk.net/mods/hide-titlebar-elements"/>
-        <updated>2026-05-12T08:44:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidetitlebaricontext">Hide Titlebar Icon/Text</h1>
-<p>Hides certain elements in window titlebars</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><p>Hide titlebar icon
-<img src="https://i.imgur.com/phtVQdl.png" alt="hide icon preview" /></p></li>
-<li><p>Hide titlebar text
-<img src="https://i.imgur.com/G1biOig.png" alt="hide text preview" /></p></li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Implemented through overriding the <code>dwAttributes</code> argument of the <code>SetWindowThemeNonClientAttributes</code> function and
-applied to windows and dialogs that receive the <code>WM_NCCREATE</code> system message.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Inspired by an AutoHotKey script: <a href="https://www.autohotkey.com/board/topic/78706-tbariconblanker/">TBarIconBlanker</a></li>
-<li>Some other mods were used as reference:<ul>
-<li><a href="https://windhawk.net/mods/auto-custom-titlebar-colors">auto-custom-titlebar-colors</a></li>
-<li><a href="https://windhawk.net/mods/aerexplorer">aerexplorer</a></li>
-<li><a href="https://windhawk.net/mods/translucent-windows">translucent-windows</a></li></ul></li>
-</ul>]]></content>
-        <author>
-            <name>darkthemer</name>
-            <uri>https://github.com/darkthemer</uri>
         </author>
     </entry>
 </feed>

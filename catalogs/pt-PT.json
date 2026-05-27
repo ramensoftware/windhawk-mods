@@ -6833,6 +6833,34 @@
                 "version": "1.1.0"
             }
         },
+        "neko-cat": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1779877611000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1779877611000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ciizerr",
+                "compilerOptions": "-lgdiplus -lwinmm -lgdi32 -lshell32",
+                "description": "Adds a desktop pet cat that runs around and follows your mouse",
+                "github": "https://github.com/ciizerr",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Neko Cat",
+                "version": "1.2.1"
+            }
+        },
         "net-toggle": {
             "details": {
                 "defaultSorting": 920,
