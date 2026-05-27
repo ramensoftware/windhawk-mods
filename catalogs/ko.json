@@ -6519,19 +6519,20 @@
                     1
                 ],
                 "ratingUsers": 2,
-                "updated": 1777731567000,
+                "updated": 1779876787000,
                 "users": 25
             },
             "metadata": {
                 "author": "BlackPaw",
-                "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lshlwapi",
-                "description": "Adds a tray icon to instantly toggle between two preferred audio inputs (microphones).",
+                "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32",
+                "description": "Tray icon to instantly toggle between two preferred audio inputs (microphones).",
+                "donateUrl": "https://ko-fi.com/blackpaw21",
                 "github": "https://github.com/BlackPaw21",
                 "include": [
                     "windhawk.exe"
                 ],
-                "name": "MicroSwap",
-                "version": "1.0.0"
+                "name": "MicSwitch",
+                "version": "1.1.0"
             }
         },
         "modern-notepad-to-classic-editor": {

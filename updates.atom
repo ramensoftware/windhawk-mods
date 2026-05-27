@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-26T08:15:29.000Z</updated>
+    <updated>2026-05-27T10:13:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MicSwitch 1.1.0]]></title>
+        <id>https://windhawk.net/mods/microswap#4a08293dac7c0135a0a059dbda268f29117f8da8</id>
+        <link href="https://windhawk.net/mods/microswap"/>
+        <updated>2026-05-27T10:13:07.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Renamed from MicroSwap to MicSwitch.</strong></li>
+<li>Custom icon support — pick your own image for each device via Settings or right-click.</li>
+<li>Added donate button on the mod page.</li>
+<li>Context menu now follows your Windows dark/light theme.</li>
+<li>Active device shown at the top of the right-click menu.</li>
+<li>Fixed: rare crash when switching devices rapidly.</li>
+<li>Fixed: occasional hang when Windhawk unloads the mod.</li>
+<li>Fixed: tray window appeared in Alt+Tab.</li>
+<li>Fixed: tray icon failed to load on some Windows configurations.</li>
+<li>Tray / Taskbar icon is now independent, no longer linked to the Windhawk icon.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.3]]></title>
         <id>https://windhawk.net/mods/smooth-scroll-win32#8a4b44b30b8e194e4e7d7e4651ef8a21fecc57db</id>
@@ -500,29 +522,6 @@ Additional improvements made by <a href="https://github.com/Asteski">Asteski</a>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Buttons 2.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-buttons#5cebaf3b9d51243548c53c9df5d14a54bfb1dd88</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-buttons"/>
-        <updated>2026-05-22T18:26:43.000Z</updated>
-        <content type="html"><![CDATA[<p>New Features:</p>
-<ul>
-<li><p>Added press: action prefix for keyboard shortcuts (e.g., press:Win+E or press:0x5B;0x45)</p></li>
-<li><p>Added modifier signs for actions: - (run as admin) and * (show terminal window)</p></li>
-<li><p>Added support for extracting icons from .exe and .dll files</p></li>
-<li><p>Icon field now accepts 4-digit hex codes without \u prefix (e.g., E774)</p></li>
-<li><p>Icon field now accepts /u as alternative to \u for Unicode escapes</p>
-<p>Bug Fixes:</p></li>
-<li><p>Fixed icon normalization and parsing</p></li>
-<li><p>Improved GDI+ initialization for icon extraction</p></li>
-<li><p>Fixed window class registration error handling</p></li>
-<li><p>Improved code stability and error handling</p></li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>
