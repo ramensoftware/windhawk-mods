@@ -509,12 +509,27 @@ static bool IsReallyVisible(HWND h) { RECT r; GetWindowRect(h, &r); return IsWin
 static bool IsGhosted(HWND h) { return g_GhostWindowFromHungWindow && g_GhostWindowFromHungWindow(h) != NULL; }
 static bool ShouldListInAltTab(HWND hwnd) {
     if (!IsWindow(hwnd)) return false;
+    if (!IsReallyVisible(hwnd)) return false;
+    if (IsGhosted(hwnd)) return false;
+
     DWORD ex = (DWORD)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+
+    // WS_EX_TOOLWINDOW always excludes from alt-tab, regardless of other flags
+    if (ex & WS_EX_TOOLWINDOW) return false;
+
+    // WS_EX_NOACTIVATE excludes unless WS_EX_APPWINDOW is also set
+    if ((ex & WS_EX_NOACTIVATE) && !(ex & WS_EX_APPWINDOW)) return false;
+
+    // Owner chain: if window has a visible, enabled owner, exclude it
+    // unless WS_EX_APPWINDOW forces inclusion
     HWND own = GetWindow(hwnd, GW_OWNER);
     bool ownVis = IsWindow(own) && IsWindowEnabled(own) && IsReallyVisible(own);
-    bool noAct = (ex & WS_EX_NOACTIVATE) || (ex & WS_EX_TOOLWINDOW);
-    if (ex & WS_EX_APPWINDOW) noAct = false;
-    return IsReallyVisible(hwnd) && !noAct && ((ex & WS_EX_APPWINDOW) || (!ownVis && !IsOwnerToolWindow(hwnd))) && !IsGhosted(hwnd);
+    if (ownVis && !(ex & WS_EX_APPWINDOW)) return false;
+
+    // Check if an ancestor in the owner chain is a tool window
+    if (IsOwnerToolWindow(hwnd)) return false;
+
+    return true;
 }
 static bool IsAltTabWindow(HWND h) {
     if (!IsWindow(h)) return false;
