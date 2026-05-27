@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.2
+// @version         1.1.3
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -840,7 +840,11 @@ static void RestoreTree(HWND hTree)
         if (ownsRef)
             ts->ownsNscRef = false;
         ts->pNscTree = nullptr;
-        ts->pFilter = nullptr;
+        if (ts->pFilter)
+        {
+            ts->pFilter->Release();
+            ts->pFilter = nullptr;
+        }
     }
 
     // Release TreeState's ownership ref (separate from our ComRef AddRef)
@@ -848,7 +852,7 @@ static void RestoreTree(HWND hTree)
         pNsc.p->Release();
 
     Wh_Log(L"[DISABLE] Cleaned up tree=%p", hTree);
-    // ComRef destructors release our local AddRefs (pFilter, pNsc, pDesktop, pThisPC)
+    // ComRef destructors release our local AddRefs (pFilter, pNsc)
 }
 
 static void FullRebuildTree(HWND hTree)
@@ -1523,6 +1527,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
                 if (IsInsertableItem(id))
                 {
+                    ts.hiddenDuplicate = nullptr;
                     ts.pendingWork |= WORK_QA_CLEANUP;
                     if (!ts.pNscTree)
                     {
@@ -1735,6 +1740,26 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         TreeState* ts = GetTree(hWnd);
         ts = RunDeferredWork(hWnd, ts, WORK_FULL_REBUILD, FullRebuildTree);
         ts = RunDeferredWork(hWnd, ts, WORK_HOT_INSERT, HotEnableInsert);
+
+        if (ts && (ts->pendingWork & WORK_QA_CLEANUP) &&
+            ((g_settings.items[NAV_THISPC].showAtTop && g_settings.items[NAV_THISPC].hideFromQA) ||
+             (g_settings.items[NAV_DESKTOP].showAtTop && g_settings.items[NAV_DESKTOP].hideFromQA)))
+        {
+            if (CleanupQuickAccessDuplicates(hWnd, *ts))
+            {
+                ts->pendingWork &= ~WORK_QA_CLEANUP;
+                ts->qaEverCleaned = true;
+            }
+            ts = GetTree(hWnd);
+        }
+
+        if (ts && (ts->pendingWork & WORK_HG_CLEANUP) && ts->pNscTree &&
+            (g_navItems[NAV_HOME].pidl || g_navItems[NAV_GALLERY].pidl) &&
+            (g_settings.items[NAV_HOME].hide || g_settings.items[NAV_GALLERY].hide))
+        {
+            if (RemoveHiddenInheritedItems(hWnd, *ts))
+                ts->pendingWork &= ~WORK_HG_CLEANUP;
+        }
         return 0;
     }
 
@@ -1749,42 +1774,21 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         ts = RunDeferredWork(hWnd, ts, WORK_FULL_REBUILD, FullRebuildTree, true);
         ts = RunDeferredWork(hWnd, ts, WORK_HOT_INSERT, HotEnableInsert, true);
 
-        if (ts && (ts->pendingWork & WORK_QA_CLEANUP) &&
-            ((g_settings.items[NAV_THISPC].showAtTop && g_settings.items[NAV_THISPC].hideFromQA) ||
-             (g_settings.items[NAV_DESKTOP].showAtTop && g_settings.items[NAV_DESKTOP].hideFromQA)))
-        {
-            if (CleanupQuickAccessDuplicates(hWnd, *ts))
-            {
-                ts->pendingWork &= ~WORK_QA_CLEANUP;
-                ts->qaEverCleaned = true;
-            }
-        }
+        // TVM_DELETEITEM during paint crashes (TV_SelectItem re-entrancy)
+        if (ts && (ts->pendingWork & (WORK_QA_CLEANUP | WORK_HG_CLEANUP)))
+            PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
 
-        // Collapse visible duplicates of our items so they don't
-        // mirror the expanded state of our top copies. Runs whenever
-        // a dup is visible: parent off (dup never hidden) or parent
-        // on but not hiding from nav. Uses PIDL fallback for names
-        // when our item handle doesn't exist.
         if (ts && (ts->pendingWork & WORK_DUP_COLLAPSE))
         {
             WCHAR collapseText[NAV_COUNT][64] = {};
             int collapseCount = BuildMatchList(collapseText, NAV_COUNT,
                 [](int id, const NavItemSettings& s) {
-                    return IsInsertableItem(id) && !(s.showAtTop && s.hideFromQA);
+                    return IsInsertableItem(id) && s.showAtTop && !s.hideFromQA;
                 });
 
             ts->pendingWork &= ~WORK_DUP_COLLAPSE;
             if (collapseCount > 0)
                 CollapseMatchingItems(hWnd, ts, collapseText, collapseCount);
-        }
-
-        // Remove hidden inherited items (Home/Gallery) by PIDL
-        if (ts && (ts->pendingWork & WORK_HG_CLEANUP) && ts->pNscTree &&
-            (g_navItems[NAV_HOME].pidl || g_navItems[NAV_GALLERY].pidl) &&
-            (g_settings.items[NAV_HOME].hide || g_settings.items[NAV_GALLERY].hide))
-        {
-            if (RemoveHiddenInheritedItems(hWnd, *ts))
-                ts->pendingWork &= ~WORK_HG_CLEANUP;
         }
 
         // Collapse iIntegral on visible inherited items so there's no
@@ -2074,7 +2078,10 @@ void Wh_ModAfterInit()
             return TRUE;
         WCHAR cls[64];
         GetClassNameW(hTop, cls, ARRAYSIZE(cls));
-        if (wcscmp(cls, L"CabinetWClass") != 0)
+
+        bool isCabinet = (wcscmp(cls, L"CabinetWClass") == 0);
+        bool isDialog = (wcscmp(cls, L"#32770") == 0);
+        if (!isCabinet && !isDialog)
             return TRUE;
 
         HWND hShellTab = FindWindowExW(hTop, nullptr, L"ShellTabWindowClass", nullptr);
@@ -2084,17 +2091,26 @@ void Wh_ModAfterInit()
         if (!pSB)
             pSB = (IShellBrowser *)SendMessageW(hTop, WM_USER + 7, 0, 0);
         if (!pSB)
+        {
+            Wh_Log(L"[DISCOVER] %s hwnd=%p — no IShellBrowser", cls, hTop);
             return TRUE;
+        }
 
         IServiceProvider *pSP = nullptr;
         if (FAILED(pSB->QueryInterface(IID_IServiceProvider, (void **)&pSP)))
+        {
+            Wh_Log(L"[DISCOVER] %s hwnd=%p — no IServiceProvider", cls, hTop);
             return TRUE;
+        }
 
         INameSpaceTreeControl *pNsc = nullptr;
         HRESULT hr = pSP->QueryService(IID_INameSpaceTreeControl, IID_INameSpaceTreeControl, (void **)&pNsc);
         pSP->Release();
         if (FAILED(hr))
+        {
+            Wh_Log(L"[DISCOVER] %s hwnd=%p — no INameSpaceTreeControl (hr=0x%08X)", cls, hTop, hr);
             return TRUE;
+        }
 
         HWND hTree = nullptr;
         IOleWindow *pOleWin = nullptr;
@@ -2108,6 +2124,7 @@ void Wh_ModAfterInit()
 
         if (!hTree)
         {
+            Wh_Log(L"[DISCOVER] %s hwnd=%p — no SysTreeView32", cls, hTop);
             pNsc->Release();
             return TRUE;
         }
@@ -2117,6 +2134,7 @@ void Wh_ModAfterInit()
         if (!enumFlags)
             enumFlags = SHCONTF_FOLDERS;
 
+        Wh_Log(L"[DISCOVER] %s hwnd=%p tree=%p pNsc=%p — accepted", cls, hTop, hTree, pNsc);
         out.push_back({ hTop, hTree, pNsc, enumFlags });
         return TRUE;
     }, (LPARAM)&discovered);
