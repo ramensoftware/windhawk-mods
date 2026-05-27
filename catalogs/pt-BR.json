@@ -12972,7 +12972,7 @@
                     6053
                 ],
                 "ratingUsers": 7148,
-                "updated": 1778443238000,
+                "updated": 1779898932000,
                 "users": 624240
             },
             "featured": true,
@@ -12981,7 +12981,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion",
                 "description": "Customize the Start menu with themes contributed by others or create your own",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -12992,7 +12992,7 @@
                 ],
                 "name": "Windows 11 Start Menu Styler",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.5.1"
+                "version": "1.5.2"
             }
         },
         "windows-11-taskbar-styler": {

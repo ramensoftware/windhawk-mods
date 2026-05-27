@@ -1,3 +1,7 @@
+## 1.5.2 ([May 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/49b5f6cd2e724208e8efb94951fd51f70f97c524/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Disabled the classic Start menu layout in the latest Windows 11 update. In the latest update, reverting to the classic layout (either with the mod or via ViVeTool flags) causes the Start menu to fail to open. At this point, it's unclear whether it's a temporary Windows issue, or if it's caused by the removal of the classic layout from Windows.
+
 ## 1.5.1 ([May 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4cc6f1480a29063d27efe99f52af0a7296ae7ee3/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Fixed the Start menu not opening after a restart with some themes.
