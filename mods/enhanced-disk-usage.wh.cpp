@@ -718,11 +718,11 @@ static bool IsDiskBar(HTHEME hTheme,
     float logicalW = (float)w / scale;
 
     if (iPartId == 5) {
-        if (logicalH < 2.0f || logicalH > 35.0f) {
+        if (logicalH < 2.0f || logicalH > 16.5f) {
             if (logMismatches)
                 Wh_Log(
                     L"IsDiskBar: FAILED Part 5 because logicalH=%f is out of "
-                    L"bounds [2.0, 35.0]",
+                    L"bounds [2.0, 16.5]",
                     logicalH);
             return false;
         }
@@ -733,11 +733,11 @@ static bool IsDiskBar(HTHEME hTheme,
                        logicalW);
             return false;
         }
-        if (logicalH < 4.0f || logicalH > 35.0f) {
+        if (logicalH < 4.0f || logicalH > 16.5f) {
             if (logMismatches)
                 Wh_Log(
                     L"IsDiskBar: FAILED because logicalH=%f is out of bounds "
-                    L"[4.0, 35.0]",
+                    L"[4.0, 16.5]",
                     logicalH);
             return false;
         }
