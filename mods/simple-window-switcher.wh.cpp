@@ -928,7 +928,9 @@ static void RegisterThumbnailsEarly() {
                 // the window extends beyond screen edges to hide the frame.
                 // Skip for minimized windows: GetWindowRect/DWMWA_EXTENDED_FRAME_BOUNDS
                 // return garbage coords (-32000) for iconic windows, causing zoom.
-                if (!IsIconic(w.hWnd)) {
+                // ONLY apply manual crop for maximized windows (IsZoomed). Non-maximized 
+                // windows are natively handled by DWM (preserves rounded corners perfectly).
+                if (!IsIconic(w.hWnd) && IsZoomed(w.hWnd)) {
                     RECT wr = {0}, efb = {0};
                     GetWindowRect(w.hWnd, &wr);
                     if (SUCCEEDED(DwmGetWindowAttribute(w.hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb, sizeof(efb)))) {
