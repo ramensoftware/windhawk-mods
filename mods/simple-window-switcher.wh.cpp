@@ -2025,18 +2025,22 @@ static void RevealPendingSwitcher() {
 }
 
 static void ShowSwitcher(bool sticky) {
-    UnregisterThumbnails(); BuildWindowList();
-    if (g_windows.empty()) return;
-    g_isDarkMode = ShouldUseDarkMode(); g_isSticky = sticky;
     POINT pt; GetCursorPos(&pt);
     HMONITOR hMon = g_settings.primaryMonitorOnly ?
         MonitorFromPoint({0,0}, MONITOR_DEFAULTTOPRIMARY) :
         MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+
     g_hCurrentMonitor = hMon;
-    if (g_settings.perMonitorWindows && !g_showAllMonitors) {
-        UnregisterThumbnails(); BuildWindowList();
-        if (g_windows.empty()) return;
-    }
+    UnregisterThumbnails(); BuildWindowList();
+    if (g_windows.empty()) return;
+
+    g_isDarkMode = ShouldUseDarkMode(); g_isSticky = sticky;
+
+    g_layoutStartIndex = 0; // Always start from the first window on initial show
+    g_selectedIndex = (g_windows.size() > 1) ? 1 : 0;
+    g_hoverIndex = -1;
+    g_isCloseHovered = false;
+
     RegisterThumbnailsEarly();
     ComputeLayout(hMon);
     if (g_winW <= 0 || g_winH <= 0) return;
@@ -2099,11 +2103,6 @@ static void ShowSwitcher(bool sticky) {
         cx + g_winW,
         cy + g_winH
     };
-
-    g_layoutStartIndex = 0; // Always start from the first window on initial show
-    g_selectedIndex = (g_windows.size() > 1) ? 1 : 0;
-    g_hoverIndex = -1;
-    g_isCloseHovered = false;
 
     CancelPendingShow();
 
