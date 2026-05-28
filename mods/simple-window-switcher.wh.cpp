@@ -1297,10 +1297,11 @@ static void ComputeLayout(HMONITOR hMon) {
                 curY = initialTop + masterPad;
                 curX = curX + curColMaxW + rightInc;
                 curColMaxW = 0;
-                if (curX + width + rightInc - initialLeft > maxW - masterPad) {
-                    truncateRemaining(idx);
-                    break;
-                }
+            }
+
+            if (curX + width + rightInc - initialLeft > maxW - masterPad && idx > 0) {
+                truncateRemaining(idx);
+                break;
             }
 
             w.rcCell.left   = curX - initialLeft + elemPadLeft;
