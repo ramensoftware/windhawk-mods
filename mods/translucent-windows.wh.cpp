@@ -616,7 +616,10 @@ BOOL IsWindowEligible(HWND hWnd)
     BOOL isFlyoutWindow = IsWindowClass(hWnd, TOOLTIPS_CLASS) || IsWindowClass(hWnd, L"DropDown") || IsWindowClass(hWnd, L"ViewControlClass");
     if (isFlyoutWindow && g_settings.FlyoutsEffects)
         return TRUE;   
-    
+
+	if (IsWindowClass(hWnd, L"#32770"))
+    	return TRUE;
+	
     LONG_PTR styleEx = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
     
@@ -1495,9 +1498,7 @@ static COLORREF GetDefaultSysColor(INT nIndex)
 
 static COLORREF GetCustomSysColor(INT nIndex) 
 {
-    if (nIndex == COLOR_SCROLLBAR || nIndex == COLOR_BACKGROUND || nIndex == COLOR_MENU ||
-        nIndex == COLOR_WINDOW || nIndex == COLOR_INACTIVEBORDER || nIndex == COLOR_INFOBK ||
-        nIndex == COLOR_MENUBAR)
+    if (nIndex == COLOR_SCROLLBAR || nIndex == COLOR_BACKGROUND || nIndex == COLOR_MENU || nIndex == COLOR_WINDOW || nIndex == COLOR_INACTIVEBORDER || nIndex == COLOR_INFOBK || nIndex == COLOR_MENUBAR || nIndex == COLOR_BTNFACE)
         return RGB(0, 0, 0);
     else if (nIndex == COLOR_GRADIENTACTIVECAPTION || nIndex == COLOR_INACTIVECAPTION)
         return (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 0, 0);
@@ -1516,8 +1517,6 @@ static COLORREF GetCustomSysColor(INT nIndex)
         return RGB(8, 8, 8);
     else if (nIndex == COLOR_HIGHLIGHT || nIndex == COLOR_MENUHILIGHT)
         return (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 120, 215);
-    else if (nIndex == COLOR_BTNFACE)
-        return RGB(1, 1, 1);
     else if (nIndex == COLOR_GRAYTEXT)
         return RGB(128, 128, 128);
     else if (nIndex == COLOR_INACTIVECAPTIONTEXT)
