@@ -91,6 +91,16 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
   $description: Shows FPS, CPU, RAM, GPU placeholder, disk, and foreground app.
 - AlwaysShowClock: true
   $name: Always show clock
+- SleepTimer: 0
+  $name: Sleep timer (seconds)
+  $description: "Duration (in seconds) the clock/idle island remains visible before automatically sleeping. Set to 0 to never sleep."
+  $options:
+    - 0: Never
+    - 5: 5 seconds
+    - 10: 10 seconds
+    - 30: 30 seconds
+    - 60: 1 minute
+    - 300: 5 minutes
 - AlwaysOnTop: true
   $name: Always on top
   $description: "Keep the island above all other windows. Disable if it blocks other software."
@@ -222,6 +232,7 @@ struct Settings {
     float pillOpacity = 0.96f;
     bool gameOverlay = false;
     bool alwaysShowClock = true;
+    int sleepTimer = 0;
     bool alwaysOnTop = true;
     bool autoDpiScale = true;
     bool w11Style = false;
@@ -545,6 +556,8 @@ void LoadSettings() {
                              0.35f, 1.0f);
     next.gameOverlay = Wh_GetIntSetting(L"GameOverlay") != 0;
     next.alwaysShowClock = Wh_GetIntSetting(L"AlwaysShowClock") != 0;
+    const int localSleepTimer = Wh_GetIntValue(L"SleepTimerOverride", -1);
+    next.sleepTimer = localSleepTimer >= 0 ? localSleepTimer : Wh_GetIntSetting(L"SleepTimer");
     next.alwaysOnTop = Wh_GetIntSetting(L"AlwaysOnTop") != 0;
     next.autoDpiScale = Wh_GetIntSetting(L"AutoDpiScale") != 0;
 
@@ -2151,6 +2164,21 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING, 7, L"Transparency 55%");
     AppendMenuW(menu, MF_STRING, 8, L"Reset transparency");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+
+    // Sleep Timer sub-menu
+    HMENU sleepMenu = CreatePopupMenu();
+    const int activeSleep = Wh_GetIntValue(L"SleepTimerOverride", -1) >= 0
+                            ? Wh_GetIntValue(L"SleepTimerOverride", 0)
+                            : Wh_GetIntSetting(L"SleepTimer");
+    AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 0 ? MF_CHECKED : 0), 30, L"Never sleep");
+    AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 5 ? MF_CHECKED : 0), 31, L"5 Seconds");
+    AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 10 ? MF_CHECKED : 0), 32, L"10 Seconds");
+    AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 30 ? MF_CHECKED : 0), 33, L"30 Seconds");
+    AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 60 ? MF_CHECKED : 0), 34, L"1 Minute");
+    AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 300 ? MF_CHECKED : 0), 35, L"5 Minutes");
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(sleepMenu), L"Sleep Timer");
+
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     // Color theme presets
     AppendMenuW(menu, MF_STRING, 20, L"Theme: OLED Black (default)");
     AppendMenuW(menu, MF_STRING, 21, L"Theme: Dark Gray");
@@ -2236,6 +2264,30 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             break;
         case 24:  // Fluent Design
             Wh_SetIntValue(L"ColorTheme", 4);
+            LoadSettings();
+            break;
+        case 30:
+            Wh_SetIntValue(L"SleepTimerOverride", 0);
+            LoadSettings();
+            break;
+        case 31:
+            Wh_SetIntValue(L"SleepTimerOverride", 5);
+            LoadSettings();
+            break;
+        case 32:
+            Wh_SetIntValue(L"SleepTimerOverride", 10);
+            LoadSettings();
+            break;
+        case 33:
+            Wh_SetIntValue(L"SleepTimerOverride", 30);
+            LoadSettings();
+            break;
+        case 34:
+            Wh_SetIntValue(L"SleepTimerOverride", 60);
+            LoadSettings();
+            break;
+        case 35:
+            Wh_SetIntValue(L"SleepTimerOverride", 300);
             LoadSettings();
             break;
     }
@@ -4345,6 +4397,7 @@ DWORD WINAPI RenderThreadProc(void*) {
     nudgeSpring.Reset(0.0f);
 
     IslandKind previousPrimary = IslandKind::Idle;
+    double lastActiveTime = NowSeconds();
     auto previousFrame = std::chrono::steady_clock::now();
     double nextBatteryPoll = 0.0;
     double nextProgressPoll = 0.0;
@@ -4442,6 +4495,21 @@ DWORD WINAPI RenderThreadProc(void*) {
             (g_settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0)) {
             primary.width = 372.0f * g_settings.sizeScale;
             primary.height = 64.0f * g_settings.sizeScale;
+        }
+
+        const bool activeEvent = (primary.kind != IslandKind::Idle) || hover || pinned;
+        if (activeEvent) {
+            lastActiveTime = now;
+        }
+
+        const bool isSleeping = g_settings.alwaysShowClock &&
+                                g_settings.sleepTimer > 0 &&
+                                (now - lastActiveTime >= g_settings.sleepTimer) &&
+                                !hover &&
+                                !pinned;
+        if (isSleeping) {
+            primary.width = 0.0f;
+            primary.height = 0.0f;
         }
 
         float targetWidth = primary.width;
