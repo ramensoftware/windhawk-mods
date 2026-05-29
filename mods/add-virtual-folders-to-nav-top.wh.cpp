@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.5
+// @version         1.1.6
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -1417,12 +1417,11 @@ static bool CleanupQuickAccessDuplicates(HWND hTree, TreeState& ts)
         InvalidateRect(hTree, nullptr, TRUE);
     }
 
-    int totalFound = childlessCount + sectionCount;
-    bool complete = (totalFound >= expectedCount);
-    if (needDelete && (complete || ts.hiddenDuplicate != prevDup))
-        Wh_Log(L"[QA-HIDE] tree=%p childless=%d sections=%d expected=%d", hTree, childlessCount, sectionCount, expectedCount);
+    if (needDelete || ts.hiddenDuplicate != prevDup)
+        Wh_Log(L"[QA-HIDE] tree=%p childless=%d sections=%d expected=%d",
+               hTree, childlessCount, sectionCount, expectedCount);
 
-    return complete;
+    return true;
 }
 
 static bool RemoveHiddenInheritedItems(HWND hTree, TreeState& ts)
@@ -1587,7 +1586,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                     for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
                         if (ts->hItems[i]) { hasOurItems = true; break; }
 
-                    if (hasOurItems)
+                    if (hasOurItems && !g_deferredOpInProgress && !g_inTreePaint)
                     {
                         ts->pendingWork |= WORK_FULL_REBUILD;
                         PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
@@ -1837,8 +1836,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         if (ts && ts->hiddenDuplicate)
             SetWindowSubclass(hWnd, TreeInteractionProc, 0xAF01, 0);
 
-        if (g_settings.fixChevronDrawing)
-            g_inTreePaint = true;
+        g_inTreePaint = true;
 
         LRESULT result = SubClassTreeWndProc_orig(hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData);
 
@@ -1886,7 +1884,7 @@ HRESULT WINAPI DrawThemeBackground_hook(HTHEME hTheme, HDC hdc, int iPartId, int
             Wh_Log(L"[CHEVRON] DTB hook active, inPaint=%d fixEnabled=%d",
                 (int)g_inTreePaint, (int)g_settings.fixChevronDrawing);
         }
-        if (g_inTreePaint)
+        if (g_inTreePaint && g_settings.fixChevronDrawing)
         {
             RECT drawRect;
             CalcGlyphRect(pRect, &drawRect);
