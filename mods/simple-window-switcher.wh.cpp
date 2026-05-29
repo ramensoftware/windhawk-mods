@@ -197,6 +197,8 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - never: Never
       - always: Always
       - stickyOnly: Only in sticky mode
+    - reverseScrollDirection: false
+      $name: Reverse Scroll Direction
     - backwardShortcut: altShiftTab
       $name: Backward Shortcut
       $description: Shortcut used to move backward in the switcher.
@@ -204,19 +206,12 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - altShiftTab: Alt+Shift+Tab (default)
       - altShift: Alt+Shift
       - altBacktick: Alt+Backtick
-<<<<<<< HEAD
-    - reverseScrollDirection: false
-      $name: Reverse Scroll Direction
-    - primaryMonitorOnly: false
-      $name: Always Display Switcher on Primary Monitor
-=======
     - switcherDisplayBehavior: cursorMonitor
       $name: Switcher Display Behavior
       $options:
       - primaryOnly: Show Switcher in Primary Monitor only
       - allMonitors: All Monitors
       - cursorMonitor: Monitor Based On Cursor Location
->>>>>>> 0fc3be76 (Refactor Simple Window Switcher UI, apply upstream layout fixes, add multi-monitor mirror support, and implement structured array schemas for excluded windows)
     - perMonitorWindows: false
       $name: Display Windows Only From the Monitor Containing the Cursor
     - ExcludedWindows:
@@ -312,11 +307,7 @@ struct WindowEntry {
     SIZE effectiveSourceSize;  // Source size after cropping invisible frame
 };
 struct Settings {
-<<<<<<< HEAD
-    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32];
-=======
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
->>>>>>> 0fc3be76 (Refactor Simple Window Switcher UI, apply upstream layout fixes, add multi-monitor mirror support, and implement structured array schemas for excluded windows)
     WCHAR highlightStyle[32]; WCHAR virtualDesktopBehavior[32];
     WCHAR borderColorDark[16];
     WCHAR borderColorLight[16];
@@ -381,7 +372,6 @@ static bool HeaderOrientationIs(const WCHAR* v) { return wcscmp(g_settings.heade
 static bool IconSizeIs(const WCHAR* v) { return wcscmp(g_settings.iconSize, v) == 0; }
 static bool BackwardShortcutIs(const WCHAR* v) { return wcscmp(g_settings.backwardShortcut, v) == 0; }
 static bool ThumbnailPositionIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailPosition, v) == 0; }
-static bool ThumbnailAlignmentIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailAlignment, v) == 0; }
 static bool HighlightStyleIs(const WCHAR* v) { return wcscmp(g_settings.highlightStyle, v) == 0; }
 static bool UseAltShiftTabBackward() { return BackwardShortcutIs(L"altShiftTab"); }
 static bool UseAltShiftBackward() { return BackwardShortcutIs(L"altShift"); }
@@ -391,11 +381,7 @@ static bool ThumbnailIsTop() { return ThumbnailPositionIs(L"top"); }
 static bool ThumbnailIsLeft() { return ThumbnailPositionIs(L"left"); }
 static bool ThumbnailIsRight() { return ThumbnailPositionIs(L"right"); }
 static bool ThumbnailIsSide() { return ThumbnailIsLeft() || ThumbnailIsRight(); }
-<<<<<<< HEAD
-static bool ThumbnailAlignLeft() { return ThumbnailAlignmentIs(L"left"); }
-=======
 static bool ThumbnailAlignmentIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailAlignment, v) == 0; }
->>>>>>> 0fc3be76 (Refactor Simple Window Switcher UI, apply upstream layout fixes, add multi-monitor mirror support, and implement structured array schemas for excluded windows)
 static bool ThumbnailAlignCentered() { return ThumbnailAlignmentIs(L"centered"); }
 static bool ThumbnailAlignRight() { return ThumbnailAlignmentIs(L"right"); }
 static bool HighlightHasFill() {
@@ -1228,10 +1214,13 @@ static void ComputeLayout(HMONITOR hMon) {
                 if (sidePlacement) {
                     int headerExtra = (rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0;
                     if (g_settings.rowWidth > 0) {
-                        int minWidth = sideThumbSlotW + headerExtra;
-                        if (width < minWidth) width = minWidth;
+                        int maxThumbW = width - headerExtra;
+                        if (maxThumbW > 0 && thumbWidth > maxThumbW) {
+                            actualThumbH = (int)((double)maxThumbW * actualThumbH / thumbWidth);
+                            thumbWidth = maxThumbW;
+                        }
                     } else {
-                        width = sideThumbSlotW + headerExtra;
+                        width = thumbWidth + headerExtra;
                     }
                 }
             } else {
