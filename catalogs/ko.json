@@ -3612,7 +3612,7 @@
                     10
                 ],
                 "ratingUsers": 14,
-                "updated": 1777749217000,
+                "updated": 1780055460000,
                 "users": 375
             },
             "metadata": {
@@ -3624,7 +3624,7 @@
                     "explorer.exe"
                 ],
                 "name": "Enhanced Disk Usage",
-                "version": "1.0"
+                "version": "1.1.0"
             }
         },
         "ep-taskbar-button-width": {
