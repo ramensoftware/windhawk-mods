@@ -5253,6 +5253,34 @@
                 "version": "1.0.0"
             }
         },
+        "genie-minimize-animation": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780056449000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780056449000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "lolstijl",
+                "compilerOptions": "-ldwmapi -lgdi32",
+                "description": "Definitely not inspired from MacOS.",
+                "github": "https://github.com/lolstijl",
+                "include": [
+                    "*"
+                ],
+                "name": "Genie Animation Mod",
+                "version": "1.0.0"
+            }
+        },
         "hide-action-center-icon": {
             "details": {
                 "defaultSorting": 1160,

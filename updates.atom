@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-29T11:51:00.000Z</updated>
+    <updated>2026-05-29T12:07:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Genie Animation Mod 1.0.0]]></title>
+        <id>https://windhawk.net/mods/genie-minimize-animation#4e24d3c633491a476404255c01c4b49194e9847b</id>
+        <link href="https://windhawk.net/mods/genie-minimize-animation"/>
+        <updated>2026-05-29T12:07:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="genieanimationmod">Genie Animation Mod</h1>
+<p>This is a mod that adds a genie like minimize animation.
+Since I don't know C++ yet, this mode was written by gemini and claude.
+This mod isn't perfect but windows isn't giving me a lot to work with. (windows animation api is almost 20 years old)
+Keep in mind that these animation can use a lot of cpu power but from my experience this only spikes when you spam the animations.</p>
+<p>I'll try to add settings for this mod later.</p>]]></content>
+        <author>
+            <name>lolstijl</name>
+            <uri>https://github.com/lolstijl</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enhanced Disk Usage 1.1.0]]></title>
         <id>https://windhawk.net/mods/enhanced-disk-usage#87147b198c32a43877d51a7803c3afc9d4a0712e</id>
@@ -506,19 +522,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Windows Shortcuts 1.2.0]]></title>
-        <id>https://windhawk.net/mods/disable-windows-shortcuts#4960f73fdd2c7d829d7d160372887ad73b46f0be</id>
-        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
-        <updated>2026-05-24T08:50:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an annoying issue for users with PowerToys installed where it triggers the explorer restart prompt every time during startup. Addresses <a href="https://github.com/ramensoftware/windhawk-mods/issues/3973">#3973</a></li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
