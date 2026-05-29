@@ -209,7 +209,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
     - switcherDisplayBehavior: cursorMonitor
       $name: Switcher Display Behavior
       $options:
-      - primaryOnly: Show Switcher in Primary Monitor only
+      - primaryOnly: Primary Monitor Only
       - allMonitors: All Monitors
       - cursorMonitor: Monitor Based On Cursor Location
     - perMonitorWindows: false
@@ -223,7 +223,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           - exe: Executable Name
         - Value: ""
           $name: Pattern
-          $description: "The pattern to exclude (regex supported). Separate multiple entries with a comma. Example: chrome\\.exe, msedge\\.exe"
+          $description: "The pattern to exclude (wildcards supported: * matches any characters, ? matches one). Separate multiple entries with a comma. Example: *chrome*, msedge.exe"
       $name: Excluded Windows
       $description: Exclude specific windows from appearing in the switcher.
     - virtualDesktopBehavior: currentOnly
@@ -240,7 +240,6 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #include <windows.h>
 #include <dwmapi.h>
 #include <uxtheme.h>
-#include <vssym32.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -256,7 +255,6 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #include <string>
 #include <algorithm>
 #include <gdiplus.h>
-#include <regex>
 
 #define SWS_CLASSNAME       L"WindhawkSWS_Switcher"
 #define SWS_ICON_SIZE       16
@@ -274,7 +272,6 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #define SWS_ROW_TITLE_HEIGHT    30  // Height of icon+title row
 #define SWS_MAX_TILE_ASPECT     2.0 // Max thumbnail width = thumbH * this
 #define SWS_CONTOUR_SIZE        2
-#define SWS_HIGHLIGHT_SIZE      2
 #define SWS_HOTKEY_ALTTAB           1
 #define SWS_HOTKEY_ALTSHIFTTAB      2
 #define SWS_HOTKEY_ALTCTRLTAB       3
@@ -300,8 +297,8 @@ struct WINDOWCOMPOSITIONATTRIBDATA { DWORD dwAttrib; PVOID pvData; SIZE_T cbData
 typedef BOOL(WINAPI *SetWindowCompositionAttribute_t)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
 struct WindowEntry {
-    HWND hWnd; HICON hIcon; WCHAR title[256]; HTHUMBNAIL hThumb;
-    RECT rcCell; RECT rcThumb; RECT rcThumbActual; RECT rcThumbSlot;
+    HWND hWnd; HICON hIcon; WCHAR title[256]; std::map<HWND, HTHUMBNAIL> hThumbs;
+    RECT rcCell; RECT rcThumbActual; RECT rcThumbSlot;
     SIZE sourceSize;           // Raw DWM surface size
     RECT rcSourceCrop;         // Source crop rect for DWM_TNP_RECTSOURCE
     SIZE effectiveSourceSize;  // Source size after cropping invisible frame
@@ -326,8 +323,8 @@ struct Settings {
     bool centerTaskContent;
 };
 
-static std::vector<std::wregex> g_excludeTitleRegexes;
-static std::vector<std::wregex> g_excludeExeRegexes;
+static std::vector<std::wstring> g_excludeTitlePatterns;
+static std::vector<std::wstring> g_excludeExePatterns;
 static std::vector<HWND> g_hMirrorSwitchers;
 
 static HWND g_hSwitcher = NULL;
@@ -337,6 +334,7 @@ static bool g_showAllMonitors = false;
 static HHOOK g_hMouseHook = NULL;
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
+static HWND g_hoverWnd = NULL;
 static int g_layoutStartIndex = 0; // EP-style: first window index visible in the layout
 static bool g_isVisible = false, g_isSticky = false, g_isDarkMode = false;
 static HFONT g_hFont = NULL;
@@ -609,7 +607,8 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
             } else return TRUE;
         } else return TRUE;
     }
-    if (g_settings.perMonitorWindows && !g_showAllMonitors && g_hCurrentMonitor) {
+    bool isPrimaryOnly = (wcscmp(g_settings.switcherDisplayBehavior, L"primaryOnly") == 0);
+    if (g_settings.perMonitorWindows && !g_showAllMonitors && g_hCurrentMonitor && !isPrimaryOnly) {
         if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL) != g_hCurrentMonitor) return TRUE;
     }
     WindowEntry e = {};
@@ -618,10 +617,10 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     if (!e.title[0]) GetWindowTextW(hWnd, e.title, 256);
     
     bool excluded = false;
-    for (const auto& rx : g_excludeTitleRegexes) {
-        if (std::regex_search(e.title, rx)) { excluded = true; break; }
+    for (const auto& pat : g_excludeTitlePatterns) {
+        if (PathMatchSpecW(e.title, pat.c_str())) { excluded = true; break; }
     }
-    if (!excluded && !g_excludeExeRegexes.empty()) {
+    if (!excluded && !g_excludeExePatterns.empty()) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hWnd, &pid);
         if (pid) {
@@ -631,8 +630,8 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
                 DWORD size = MAX_PATH;
                 if (QueryFullProcessImageNameW(hProc, 0, exePath, &size)) {
                     WCHAR* filename = PathFindFileNameW(exePath);
-                    for (const auto& rx : g_excludeExeRegexes) {
-                        if (std::regex_search(filename, rx)) { excluded = true; break; }
+                    for (const auto& pat : g_excludeExePatterns) {
+                        if (PathMatchSpecW(filename, pat.c_str())) { excluded = true; break; }
                     }
                 }
                 CloseHandle(hProc);
@@ -750,17 +749,7 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
             }
         }
     }
-    // Additional fallback for Windows 10: try resolving from process executable
-    if (!hIcon) {
-        Wh_Log(L"ResolveIconFromAumid: Falling back to process exe icon");
-        // Attempt to parse AUMID for package family or exe; if not, try to find process owning the app
-        // A caller should pass a window handle context; as a best-effort here we try to locate any process
-        // associated with the AUMID by enumerating package family is complex; instead this fallback
-        // will be used by callers that have a HWND and can call TryGetUwpIconFromExplorer first. Here
-        // provide a helper-like attempt using shell APIs if possible.
-        // No-op in this function since we don't have HWND; real fallback is implemented where callers
-        // have HWND context (see TryGetUwpIconFromExplorer usage).
-    }
+
     return hIcon;
 }
 
@@ -967,9 +956,15 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
 }
 
 static void BuildWindowList() {
-    for (auto& w : g_windows) if (w.hThumb) { DwmUnregisterThumbnail(w.hThumb); w.hThumb = NULL; }
+    for (auto& w : g_windows) {
+        for (const auto& kv : w.hThumbs) { if (kv.second) DwmUnregisterThumbnail(kv.second); }
+        w.hThumbs.clear();
+    }
     g_windows.clear();
     EnumWindows(EnumWindowsProc, (LPARAM)&g_windows);
+    std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
+        return IsIconic(a.hWnd) < IsIconic(b.hWnd);
+    });
 }
 
 // Layout + Thumbnails
@@ -1008,43 +1003,56 @@ static HFONT CreateScaledFont(int dpiY) {
 static void RegisterThumbnailsEarly() {
     if (!g_settings.showThumbnails || !g_hSwitcher) return;
     for (auto& w : g_windows) {
-        if (!w.hThumb) {
-            if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &w.hThumb))) {
-                SIZE src = {0}; DwmQueryThumbnailSourceSize(w.hThumb, &src);
+        if (!w.hThumbs.count(g_hSwitcher)) {
+            HTHUMBNAIL hT = NULL;
+            if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT))) {
+                w.hThumbs[g_hSwitcher] = hT;
+                SIZE src = {0}; DwmQueryThumbnailSourceSize(hT, &src);
                 w.sourceSize = src;
+            }
+        }
+        for (HWND m : g_hMirrorSwitchers) {
+            if (!w.hThumbs.count(m)) {
+                HTHUMBNAIL hT = NULL;
+                if (SUCCEEDED(DwmRegisterThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = hT;
+            }
+        }
+        SIZE src = w.sourceSize;
 
-                // Compute invisible frame crop using DWMWA_EXTENDED_FRAME_BOUNDS
-                // This fixes thumbnail displacement for maximized windows where
-                // the window extends beyond screen edges to hide the frame.
-                // Skip for minimized windows: GetWindowRect/DWMWA_EXTENDED_FRAME_BOUNDS
-                // return garbage coords (-32000) for iconic windows, causing zoom.
-                // ONLY apply manual crop for maximized windows (IsZoomed). Non-maximized 
-                // windows are natively handled by DWM (preserves rounded corners perfectly).
-                if (!IsIconic(w.hWnd) && IsZoomed(w.hWnd)) {
-                    RECT wr = {0}, efb = {0};
-                    GetWindowRect(w.hWnd, &wr);
-                    if (SUCCEEDED(DwmGetWindowAttribute(w.hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb, sizeof(efb)))) {
-                        int wrW = wr.right - wr.left, wrH = wr.bottom - wr.top;
-                        if (wrW > 0 && wrH > 0 && src.cx > 0 && src.cy > 0) {
-                            double sx = (double)src.cx / wrW;
-                            double sy = (double)src.cy / wrH;
-                            int ml = (int)((efb.left - wr.left) * sx);
-                            int mt = (int)((efb.top - wr.top) * sy);
-                            int mr = (int)((wr.right - efb.right) * sx);
-                            int mb = (int)((wr.bottom - efb.bottom) * sy);
-                            if (ml < 0) ml = 0; if (mt < 0) mt = 0;
-                            if (mr < 0) mr = 0; if (mb < 0) mb = 0;
-                            w.rcSourceCrop = { ml, mt, src.cx - mr, src.cy - mb };
-                            w.effectiveSourceSize = { src.cx - ml - mr, src.cy - mt - mb };
-                            if (w.effectiveSourceSize.cx <= 0 || w.effectiveSourceSize.cy <= 0) {
-                                w.effectiveSourceSize = src;
-                                w.rcSourceCrop = { 0, 0, src.cx, src.cy };
-                            }
-                        } else {
-                            w.effectiveSourceSize = src;
-                            w.rcSourceCrop = { 0, 0, src.cx, src.cy };
-                        }
-                    } else {
+        // Compute invisible frame crop using DWMWA_EXTENDED_FRAME_BOUNDS.
+        // This fixes thumbnail displacement for maximized windows where
+        // the window extends beyond screen edges to hide the frame.
+        // Only apply for actively maximized windows (not minimized).
+        // Minimized windows use DWM's low-res cached thumbnail where
+        // frame borders are negligible; cropping them causes aspect ratio
+        // distortion that makes the thumbnail overflow its destination.
+        // Non-maximized windows are natively handled by DWM.
+        if (IsZoomed(w.hWnd) && !IsIconic(w.hWnd)) {
+            RECT wr = {0}, efb = {0};
+            GetWindowRect(w.hWnd, &wr);
+            if (SUCCEEDED(DwmGetWindowAttribute(w.hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb, sizeof(efb)))) {
+                int wrW = wr.right - wr.left, wrH = wr.bottom - wr.top;
+                int efbW = efb.right - efb.left, efbH = efb.bottom - efb.top;
+                if (wrW > 0 && wrH > 0 && efbW > 0 && efbH > 0 && src.cx > 0 && src.cy > 0) {
+                    int ml = 0, mt = 0, mr = 0, mb = 0;
+                    double diffEfb = ((double)src.cx / efbW) - ((double)src.cy / efbH);
+                    if (diffEfb < 0) diffEfb = -diffEfb;
+                    double diffWr = ((double)src.cx / wrW) - ((double)src.cy / wrH);
+                    if (diffWr < 0) diffWr = -diffWr;
+                    
+                    if (diffEfb >= diffWr) {
+                        double sx = (double)src.cx / wrW;
+                        double sy = (double)src.cy / wrH;
+                        ml = (int)((efb.left - wr.left) * sx);
+                        mt = (int)((efb.top - wr.top) * sy);
+                        mr = (int)((wr.right - efb.right) * sx);
+                        mb = (int)((wr.bottom - efb.bottom) * sy);
+                    }
+                    if (ml < 0) ml = 0; if (mt < 0) mt = 0;
+                    if (mr < 0) mr = 0; if (mb < 0) mb = 0;
+                    w.rcSourceCrop = { ml, mt, src.cx - mr, src.cy - mb };
+                    w.effectiveSourceSize = { src.cx - ml - mr, src.cy - mt - mb };
+                    if (w.effectiveSourceSize.cx <= 0 || w.effectiveSourceSize.cy <= 0) {
                         w.effectiveSourceSize = src;
                         w.rcSourceCrop = { 0, 0, src.cx, src.cy };
                     }
@@ -1053,10 +1061,12 @@ static void RegisterThumbnailsEarly() {
                     w.rcSourceCrop = { 0, 0, src.cx, src.cy };
                 }
             } else {
-                w.sourceSize = {0, 0};
-                w.effectiveSourceSize = {0, 0};
-                w.rcSourceCrop = {0, 0, 0, 0};
+                w.effectiveSourceSize = src;
+                w.rcSourceCrop = { 0, 0, src.cx, src.cy };
             }
+        } else {
+            w.effectiveSourceSize = src;
+            w.rcSourceCrop = { 0, 0, src.cx, src.cy };
         }
     }
 }
@@ -1151,12 +1161,11 @@ static void ComputeLayout(HMONITOR hMon) {
             g_windows[ji].sourceSize = {0, 0};
             g_windows[ji].rcCell = {0, 0, 0, 0};
             g_windows[ji].rcThumbActual = {0, 0, 0, 0};
-            g_windows[ji].rcThumb = {0, 0, 0, 0};
             g_windows[ji].rcThumbSlot = {0, 0, 0, 0};
-            if (g_windows[ji].hThumb) {
-                DwmUnregisterThumbnail(g_windows[ji].hThumb);
-                g_windows[ji].hThumb = NULL;
+            for (const auto& kv : g_windows[ji].hThumbs) {
+                if (kv.second) DwmUnregisterThumbnail(kv.second);
             }
+            g_windows[ji].hThumbs.clear();
         }
         placedCount = startIdx;
     };
@@ -1296,7 +1305,6 @@ static void ComputeLayout(HMONITOR hMon) {
                     thumbX += (width - thumbWidth) / 2;
                 }
                 w.rcThumbActual = { thumbX, thumbY, thumbX + thumbWidth, thumbY + actualThumbH };
-                w.rcThumb = w.rcThumbActual;
                 w.rcThumbSlot = { slotX, thumbY, slotX + slotW, thumbY + actualThumbH };
             }
 
@@ -1327,8 +1335,6 @@ static void ComputeLayout(HMONITOR hMon) {
                     g_windows[j].rcCell.right += diff;
                     g_windows[j].rcThumbActual.left += diff;
                     g_windows[j].rcThumbActual.right += diff;
-                    g_windows[j].rcThumb.left += diff;
-                    g_windows[j].rcThumb.right += diff;
                     g_windows[j].rcThumbSlot.left += diff;
                     g_windows[j].rcThumbSlot.right += diff;
                 }
@@ -1468,7 +1474,6 @@ static void ComputeLayout(HMONITOR hMon) {
                     thumbX += (width - thumbWidth) / 2;
                 }
                 w.rcThumbActual = { thumbX, thumbY, thumbX + thumbWidth, thumbY + actualThumbH };
-                w.rcThumb = w.rcThumbActual;
                 w.rcThumbSlot = { slotX, thumbY, slotX + slotW, thumbY + actualThumbH };
             }
 
@@ -1505,8 +1510,6 @@ static void ComputeLayout(HMONITOR hMon) {
                     g_windows[j].rcCell.bottom += diff;
                     g_windows[j].rcThumbActual.top += diff;
                     g_windows[j].rcThumbActual.bottom += diff;
-                    g_windows[j].rcThumb.top += diff;
-                    g_windows[j].rcThumb.bottom += diff;
                     g_windows[j].rcThumbSlot.top += diff;
                     g_windows[j].rcThumbSlot.bottom += diff;
                 }
@@ -1520,13 +1523,24 @@ static void ComputeLayout(HMONITOR hMon) {
 static void RegisterThumbnails() {
     if (!g_settings.showThumbnails || !g_hSwitcher) return;
     for (auto& w : g_windows) {
-        if (!w.hThumb) {
-            if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &w.hThumb))) {
-                SIZE src = {0}; DwmQueryThumbnailSourceSize(w.hThumb, &src);
+        if (!w.hThumbs.count(g_hSwitcher)) {
+            HTHUMBNAIL hT = NULL;
+            if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT))) {
+                w.hThumbs[g_hSwitcher] = hT;
+                SIZE src = {0}; DwmQueryThumbnailSourceSize(hT, &src);
                 w.sourceSize = src;
             }
         }
-        if (w.hThumb) {
+        for (HWND m : g_hMirrorSwitchers) {
+            if (!w.hThumbs.count(m)) {
+                HTHUMBNAIL hT = NULL;
+                if (SUCCEEDED(DwmRegisterThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = hT;
+            }
+        }
+        
+        for (const auto& kv : w.hThumbs) {
+            HTHUMBNAIL hThumb = kv.second;
+            if (!hThumb) continue;
             // Skip truncated windows with zero destination rect
             if (w.rcThumbActual.left == 0 && w.rcThumbActual.right == 0 &&
                 w.rcThumbActual.top == 0 && w.rcThumbActual.bottom == 0) continue;
@@ -1544,12 +1558,17 @@ static void RegisterThumbnails() {
                 p.dwFlags |= DWM_TNP_RECTSOURCE;
                 p.rcSource = w.rcSourceCrop;
             }
-            DwmUpdateThumbnailProperties(w.hThumb, &p);
+            DwmUpdateThumbnailProperties(hThumb, &p);
         }
     }
 }
 static void UnregisterThumbnails() {
-    for (auto& w : g_windows) if (w.hThumb) { DwmUnregisterThumbnail(w.hThumb); w.hThumb = NULL; }
+    for (auto& w : g_windows) {
+        for (const auto& kv : w.hThumbs) {
+            if (kv.second) DwmUnregisterThumbnail(kv.second);
+        }
+        w.hThumbs.clear();
+    }
 }
 
 
@@ -1627,18 +1646,12 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx) {
     graphics.FillPath(&brush, &cutBl);
 }
 
-// Draw a sharp rectangular contour using StretchDIBits (EP's _DrawContour approach)
+// Draw a rectangular contour around a rect.
 // direction: 1 = inner (shrinks inward), -1 = outer (grows outward)
+// Uses GDI+ rounded path for inner contours when cornerRadius > 0, FrameRect otherwise.
 static void DrawContour(HDC hdc, RECT rc, int contourSize, int direction) {
     COLORREF c = GetContourColor();
     BYTE r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
-    BITMAPINFO bi = {};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = 1; bi.bmiHeader.biHeight = 1;
-    bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
-    RGBQUAD px = { b, g, r, 0xFF };
-
-    int t = direction * (contourSize * g_dpiX / 96);
 
     int cornerRadius = GetTaskUiCornerRadiusPx();
     if (cornerRadius > 0 && direction > 0) {
@@ -1674,19 +1687,25 @@ static void DrawContour(HDC hdc, RECT rc, int contourSize, int direction) {
         return;
     }
 
+    HBRUSH hBrush = CreateSolidBrush(RGB(r, g, b));
     if (direction < 0) {
-        // Outer contour (EP: SWS_CONTOUR_OUTER)
-        StretchDIBits(hdc, rc.left + t, rc.top, -t, rc.bottom - rc.top, 0, 0, 1, 1, &px, &bi, DIB_RGB_COLORS, SRCCOPY);
-        StretchDIBits(hdc, rc.right, rc.top, -t, rc.bottom - rc.top, 0, 0, 1, 1, &px, &bi, DIB_RGB_COLORS, SRCCOPY);
-        StretchDIBits(hdc, rc.left + t, rc.top + t, (rc.right - rc.left) - t * 2, -t, 0, 0, 1, 1, &px, &bi, DIB_RGB_COLORS, SRCCOPY);
-        StretchDIBits(hdc, rc.left + t, rc.bottom, (rc.right - rc.left) - t * 2, -t, 0, 0, 1, 1, &px, &bi, DIB_RGB_COLORS, SRCCOPY);
+        // Outer contour: DWM composites thumbnails on top of GDI and renders
+        // inclusively at rcDestination's right/bottom edges. Inflate by i+2
+        // so FrameRect's border pixels land 1px beyond DWM's last column/row.
+        for (int i = 0; i < contourSize; i++) {
+            RECT r_rect = rc;
+            InflateRect(&r_rect, i + 2, i + 2);
+            FrameRect(hdc, &r_rect, hBrush);
+        }
     } else {
-        // Inner contour (EP: SWS_CONTOUR_INNER)
-        StretchDIBits(hdc, rc.left, rc.top, t, rc.bottom - rc.top, 0, 0, 1, 1, &px, &bi, DIB_RGB_COLORS, SRCCOPY);
-        StretchDIBits(hdc, rc.right - t, rc.top, t, rc.bottom - rc.top, 0, 0, 1, 1, &px, &bi, DIB_RGB_COLORS, SRCCOPY);
-        StretchDIBits(hdc, rc.left, rc.top, rc.right - rc.left, t, 0, 0, 1, 1, &px, &bi, DIB_RGB_COLORS, SRCCOPY);
-        StretchDIBits(hdc, rc.left, rc.bottom - t, rc.right - rc.left, t, 0, 0, 1, 1, &px, &bi, DIB_RGB_COLORS, SRCCOPY);
+        // Inner contour
+        for (int i = 0; i < contourSize; i++) {
+            RECT r_rect = rc;
+            InflateRect(&r_rect, -i, -i);
+            FrameRect(hdc, &r_rect, hBrush);
+        }
     }
+    DeleteObject(hBrush);
 }
 
 static void DrawSelectionFill(HDC hdc, RECT rc) {
@@ -1793,7 +1812,7 @@ static int GetHeaderTopForEntry(const WindowEntry& e) {
 }
 
 // Shared drawing routine for both layered and buffered paint paths
-static void DrawSwitcherContent(HDC hdc, bool fillBg) {
+static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right, h = rcClient.bottom;
 
@@ -1836,7 +1855,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
         }
 
         // Hover thumbnail border: outer contour on rcThumbActual (EP draws both independently)
-        if (i == g_hoverIndex && g_settings.showThumbnails) {
+        if (i == g_hoverIndex && g_hoverWnd == hWnd && g_settings.showThumbnails) {
             DrawContour(hdc, e.rcThumbActual, 1, -1);
         }
 
@@ -1854,7 +1873,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
         bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
         if (!HeaderIsVertical()) {
             if (!isIconOnly && !(g_settings.showThumbnails && ThumbnailIsSide())) {
-                btnReserve = ((g_settings.centerTaskContent) || i == g_hoverIndex)
+                btnReserve = ((g_settings.centerTaskContent) || (i == g_hoverIndex && g_hoverWnd == hWnd))
                          ? closeBtnReserve
                          : 0;
             }
@@ -1941,7 +1960,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg) {
 
 static bool IsWindowTruncated(int idx);
 
-static void DrawSwitcherOverlay(HDC hdc) {
+static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     if (g_windows.empty()) return;
 
     int rowTitleH = GetHeaderRowHeightPx();
@@ -1952,7 +1971,7 @@ static void DrawSwitcherOverlay(HDC hdc) {
         if (IsWindowTruncated(i)) continue;
 
         // Close button (positioned at top-right of the cell, in title area)
-        if (i == g_hoverIndex) {
+        if (i == g_hoverIndex && g_hoverWnd == hWnd) {
             int btnSz = DpiScale(24, g_dpiX);
             int bx, by;
             if (rowTitleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide())) {
@@ -2044,7 +2063,7 @@ static void PaintSwitcherOverlay() {
     HBITMAP hBmp = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
     HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
 
-    DrawSwitcherOverlay(hdcMem);
+    DrawSwitcherOverlay(hdcMem, g_hSwitcher);
 
     POINT ptSrc = {0,0}; SIZE sz = {w, h};
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
@@ -2068,12 +2087,13 @@ static void PaintSwitcher() {
         void* bits = NULL;
         HBITMAP hBmp = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
         HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
-        DrawSwitcherContent(hdcMem, true);
+        DrawSwitcherContent(hdcMem, true, g_hSwitcher);
         POINT ptSrc = {0,0}; SIZE sz = {w, h};
         BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
         UpdateLayeredWindow(g_hSwitcher, hdcScreen, NULL, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
         for (HWND hMirror : g_hMirrorSwitchers) {
             if (IsWindow(hMirror)) {
+                DrawSwitcherContent(hdcMem, true, hMirror);
                 HDC hdcMirrorScreen = GetDC(hMirror);
                 UpdateLayeredWindow(hMirror, hdcMirrorScreen, NULL, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
                 ReleaseDC(hMirror, hdcMirrorScreen);
@@ -2192,14 +2212,28 @@ static void ApplyThemeToWindow(HWND hWnd) {
         BOOL dark = g_isDarkMode;
         DwmSetWindowAttribute(hWnd, 20, &dark, sizeof(dark));
         if (ThemeIs(L"mica")) {
-            int micaVal = 2; // DWMSBT_MAINWINDOW
-            HRESULT hr = DwmSetWindowAttribute(hWnd, 38, &micaVal, sizeof(micaVal));
-            if (FAILED(hr) && ThemeIs(L"mica")) {
-                int oldMicaVal = 1;
-                hr = DwmSetWindowAttribute(hWnd, 1029, &oldMicaVal, sizeof(oldMicaVal));
-            }
-            if (FAILED(hr)) {
-                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
+            if (hWnd == g_hSwitcher) {
+                // Native Mica for the primary active window
+                int micaVal = 2; // DWMSBT_MAINWINDOW
+                HRESULT hr = DwmSetWindowAttribute(hWnd, 38, &micaVal, sizeof(micaVal));
+                if (FAILED(hr)) {
+                    int oldMicaVal = 1;
+                    hr = DwmSetWindowAttribute(hWnd, 1029, &oldMicaVal, sizeof(oldMicaVal));
+                }
+                if (FAILED(hr)) {
+                    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
+                }
+            } else if (g_SetWindowCompositionAttribute) {
+                // Unfocused mirror windows drop to solid grey with native Mica.
+                // We use SetWindowCompositionAttribute (Acrylic Blur) to force a translucent effect.
+                DWORD blur = 200; // Fixed opacity (~78%) to closely simulate Mica blur
+                COLORREF bg = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
+                ACCENT_POLICY accent = {};
+                accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
+                accent.AccentFlags = 0;
+                accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
+                WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
+                g_SetWindowCompositionAttribute(hWnd, &data);
             }
         }
         if (ThemeIs(L"backdrop") && g_SetWindowCompositionAttribute) {
@@ -2224,7 +2258,7 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
         GetMonitorInfoW(hM, &mInfo);
         int mx = (mInfo.rcWork.left + mInfo.rcWork.right - g_winW) / 2;
         int my = (mInfo.rcWork.top + mInfo.rcWork.bottom - g_winH) / 2;
-        HWND hMirror = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, SWS_CLASSNAME, L"", WS_POPUP, mx, my, g_winW, g_winH, NULL, NULL, GetModuleHandle(NULL), NULL);
+        HWND hMirror = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, SWS_CLASSNAME, L"", WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, mx, my, g_winW, g_winH, g_hSwitcher, NULL, GetModuleHandle(NULL), NULL);
         if (hMirror) {
             ApplyThemeToWindow(hMirror);
             g_hMirrorSwitchers.push_back(hMirror);
@@ -2250,6 +2284,7 @@ static void ShowSwitcher(bool sticky) {
     g_layoutStartIndex = 0; // Always start from the first window on initial show
     g_selectedIndex = (g_windows.size() > 1) ? 1 : 0;
     g_hoverIndex = -1;
+    g_hoverWnd = NULL;
     g_isCloseHovered = false;
 
     RegisterThumbnailsEarly();
@@ -2578,7 +2613,7 @@ static int HitTest(int x, int y) {
 static int HitTestThumb(int x, int y) {
     if (!g_settings.showThumbnails) return -1;
     for (int i = 0; i < (int)g_windows.size(); i++) {
-        RECT r = g_windows[i].rcThumb;
+        RECT r = g_windows[i].rcThumbActual;
         if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return i;
     }
     return -1;
@@ -2592,6 +2627,10 @@ static void SWS_RegisterHotkeys();
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_NCCALCSIZE && wParam == TRUE) {
         return 0; // Remove standard frame for WS_OVERLAPPED
+    }
+    if (uMsg == WM_NCACTIVATE) {
+        // Force DWM to keep the active visual state (Mica/Backdrop) even when unfocused
+        return DefWindowProcW(hWnd, uMsg, TRUE, lParam);
     }
 
     if (uMsg == WM_TIMER) {
@@ -2683,7 +2722,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         HDC hdcBuf = NULL;
         HPAINTBUFFER hBP = BeginBufferedPaint(hdc, &rc, BPBF_TOPDOWNDIB, &params, &hdcBuf);
         if (hBP) {
-            DrawSwitcherContent(hdcBuf, false);
+            DrawSwitcherContent(hdcBuf, false, hWnd);
             // Do NOT call BufferedPaintSetAlpha here — it would force all pixels
             // to opaque (alpha=255), blocking the acrylic blur from showing through.
             // BPPF_ERASE already cleared the buffer to RGBA(0,0,0,0) = transparent.
@@ -2840,6 +2879,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         
         if (idx != g_hoverIndex || closeHovered != g_isCloseHovered) {
             g_hoverIndex = idx;
+            g_hoverWnd = hWnd;
             g_isCloseHovered = closeHovered;
             PaintSwitcher();
         }
@@ -2868,6 +2908,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     }
                     RegisterThumbnails();
                     g_hoverIndex = -1;
+                    g_hoverWnd = NULL;
                     g_isCloseHovered = false;
                     PaintSwitcher();
                 }
@@ -3077,8 +3118,8 @@ static void LoadSettings() {
     v = Wh_GetStringSetting(L"Miscellaneous.switcherDisplayBehavior");
     wcscpy_s(g_settings.switcherDisplayBehavior, v ? v : L"cursorMonitor"); Wh_FreeStringSetting(v);
 
-    g_excludeTitleRegexes.clear();
-    g_excludeExeRegexes.clear();
+    g_excludeTitlePatterns.clear();
+    g_excludeExePatterns.clear();
     for (int i = 0; ; i++) {
         PCWSTR method = Wh_GetStringSetting(L"Miscellaneous.ExcludedWindows[%d].Method", i);
         bool done = !method || !*method;
@@ -3104,9 +3145,9 @@ static void LoadSettings() {
                     token = token.substr(0, last + 1);
                     
                     if (wcscmp(method, L"title") == 0) {
-                        try { g_excludeTitleRegexes.push_back(std::wregex(token)); } catch (...) {}
+                        g_excludeTitlePatterns.push_back(token);
                     } else if (wcscmp(method, L"exe") == 0) {
-                        try { g_excludeExeRegexes.push_back(std::wregex(token)); } catch (...) {}
+                        g_excludeExePatterns.push_back(token);
                     }
                 }
                 start = end + 1;
@@ -3161,9 +3202,9 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     wc.style = CS_DBLCLKS;
     RegisterClassExW(&wc);
 
-    // Use WS_OVERLAPPED instead of WS_POPUP. Windows 11 DWM (Mica/Acrylic) has
-    // much better support for standard top-level windows. We remove the frame via WM_NCCALCSIZE.
-    DWORD dwStyle = WS_OVERLAPPED | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
+    // Use WS_POPUP | WS_THICKFRAME to get DWM rounded corners and shadows, 
+    // without the system caption buttons. We remove the frame via WM_NCCALCSIZE.
+    DWORD dwStyle = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED;
     g_hSwitcher = CreateWindowExW(exStyle, SWS_CLASSNAME, L"",
         dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
