@@ -60,10 +60,10 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 /*
 - Style:
     - theme: none
-      $name: Theme
-      $description: Visual theme for the switcher background.
+      $name: Style
+      $description: Visual theme style for the switcher background.
       $options:
-      - none: None (transparent)
+      - none: None (Transparent)
       - backdrop: Acrylic (Windows 10+)
       - mica: Mica Blur (Windows 11 only)
     - opacity: 100
@@ -83,15 +83,15 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - fillAndBorder: Background fill and border
       - fillOnly: Background fill only
     - borderColorDark: "#FFFFFF"
-      $name: Border Color (Dark Mode)
+      $name: Dark Mode Border Color
       $description: Border color in HEX format for dark mode.
     - borderColorLight: "#000000"
-      $name: Border Color (Light Mode)
+      $name: Light Mode Border Color
       $description: Border color in HEX format for light mode.
     - useAccentColor: false
-      $name: Accent Color for Borders and Background Fill
-      $description: Use Windows accent color for selection and hover borders.
-  $name: Theme Style
+      $name: Use Accent Color for Borders and Background Fill
+      $description: Use Windows accent color for selection and hover borders. 
+  $name: Theme
 - Appearance:
     - Corners:
         - cornerPreference: none
@@ -108,7 +108,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
     - Thumbnails:
         - thumbnailPosition: bottom
           $name: Thumbnail Position
-          $description: Place the thumbnail below or above the header row.
+          $description: Change the thumbnail position.
           $options:
           - bottom: Bottom
           - top: Top
@@ -187,7 +187,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Stretch Thumbnails to Task Width
       $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
   $name: Dimensions
-- Miscellaneous:
+- Accessibility:
     - showDelay: 0
       $name: Show Delay (ms)
       $description: Delay in milliseconds before showing the switcher (0 = instant).
@@ -211,28 +211,29 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $options:
       - primaryOnly: Primary Monitor Only
       - allMonitors: All Monitors
-      - cursorMonitor: Monitor Based On Cursor Location
+      - cursorMonitor: Monitor Based on Cursor Location
     - perMonitorWindows: false
-      $name: Display Windows Only From the Monitor Containing the Cursor
-    - ExcludedWindows:
-      - - Method: title
-          $name: Exclusion Method
-          $description: Exclude by window title or executable name
-          $options:
-          - title: Window Title
-          - exe: Executable Name
-        - Value: ""
-          $name: Pattern
-          $description: "The pattern to exclude (wildcards supported: * matches any characters, ? matches one). Separate multiple entries with a comma. Example: *chrome*, msedge.exe"
-      $name: Excluded Windows
-      $description: Exclude specific windows from appearing in the switcher.
+      $name: Display Windows Only from the Monitor Containing the Cursor
     - virtualDesktopBehavior: currentOnly
       $name: Virtual Desktop Behavior
       $description: Choose which virtual desktops to show windows from.
       $options:
       - currentOnly: Show windows from current virtual desktop only
       - allDesktops: Show windows from all virtual desktops
-  $name: Miscellaneous
+  $name: Accessibility
+- ExcludedWindows:
+  - - Method: title
+      $name: Exclusion Method
+      $description: Exclude by window title or executable name
+      $options:
+      - title: Window Title
+      - exe: Executable Name
+    - Value: ""
+      $name: Pattern
+      $description: "The pattern to exclude (wildcards supported: * matches any characters, ? matches one). Separate multiple entries with a comma. Example: *chrome*, msedge.exe"
+  $name: Excluded Windows
+  $description: Exclude specific windows from appearing in the switcher.
+
 */
 // ==/WindhawkModSettings==
 
