@@ -7,7 +7,7 @@
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus
+// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -23,6 +23,8 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)
 - Mouse click to select, scroll wheel to cycle from anywhere
 - Virtual Desktop Support (Show windows across multiple virtual desktops)
+- Group windows by application (macOS Cmd+Tab style, one entry per app)
+- Drill into an app's windows with a Ctrl tap to pick a specific window (Esc backs out)
 - Win+Alt+Tab override to display windows from all monitors when using Per-Monitor mode
 - Alt+Ctrl+Tab sticky mode
 - Theme support (None/Backdrop Acrylic) with fully customizable background opacity
@@ -130,8 +132,10 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           $name: Icon Size
           $description: Size of the header icon.
           $options:
-          - small: Small
-          - large: Large
+          - small: Small (16x16)
+          - medium: Medium (32x32)
+          - large: Large (48x48)
+          - xlarge: Extra Large (64x64)
         - showTitle: true
           $name: Show Title Label
         - showIcon: true
@@ -187,6 +191,21 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Stretch Thumbnails to Task Width
       $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
   $name: Dimensions
+- Grouping:
+    - showApplications: false
+      $name: Group Windows by Application
+      $description: Show one entry per application instead of one per window, similar to macOS Cmd+Tab. Selecting an application switches to its most recently used window. Tap Ctrl while an application is selected to expand it and show all of its windows as thumbnails.
+    - showTitles: windowTitle
+      $name: Show Titles
+      $description: Which title text to display for each entry. Only applies when "Group Windows by Application" is enabled.
+      $options:
+      - windowTitle: Window Title
+      - appName: Application Name
+      - appNameWindowTitle: Application Name - Window Title
+    - restoreAllWindows: false
+      $name: Restore All Windows
+      $description: When switching to an application, restore all of its minimized windows to their previous state. Only applies when "Group Windows by Application" is enabled. Tip - to act on a single window instead, tap Ctrl while the application is selected to show all of its windows and pick one.
+  $name: Grouping
 - Accessibility:
     - showDelay: 0
       $name: Show Delay (ms)
@@ -303,6 +322,7 @@ struct WindowEntry {
     SIZE sourceSize;           // Raw DWM surface size
     RECT rcSourceCrop;         // Source crop rect for DWM_TNP_RECTSOURCE
     SIZE effectiveSourceSize;  // Source size after cropping invisible frame
+    std::vector<HWND> groupWindows;  // All app windows when grouping by application
 };
 struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
@@ -322,6 +342,9 @@ struct Settings {
     int maxHeightPercent; int showDelay;
     bool useAccentColor; bool perMonitorWindows; bool taskRoundedCorners; bool reverseScrollDirection;
     bool centerTaskContent;
+    bool showApplications;
+    WCHAR showTitles[32];
+    bool restoreAllWindows;
 };
 
 static std::vector<std::wstring> g_excludeTitlePatterns;
@@ -337,6 +360,13 @@ static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
 static HWND g_hoverWnd = NULL;
 static int g_layoutStartIndex = 0; // EP-style: first window index visible in the layout
+// App drill-in: when grouping by application, Ctrl drills into the selected app's
+// windows. The grouped app list is stashed here so it can be restored on exit.
+static bool g_drilledIn = false;
+static std::vector<WindowEntry> g_savedAppList;
+static int g_savedSelectedIndex = 0;
+static int g_savedLayoutStartIndex = 0;
+static bool g_consumeEscUp = false;
 static bool g_isVisible = false, g_isSticky = false, g_isDarkMode = false;
 static HFONT g_hFont = NULL;
 static HTHEME g_hTheme = NULL;
@@ -395,11 +425,14 @@ static bool StretchThumbsToTaskWidth() {
 static bool HeaderIsVertical() {
     return HeaderOrientationIs(L"vertical");
 }
+static int GetHeaderIconSizeBase() {
+    if (IconSizeIs(L"xlarge")) return 64;
+    if (IconSizeIs(L"large")) return 48;
+    if (IconSizeIs(L"medium")) return 32;
+    return SWS_ICON_SIZE;
+}
 static int GetHeaderIconSizePx() {
-    if (IconSizeIs(L"large")) {
-        return MulDiv(32, g_dpiX, 96);
-    }
-    return MulDiv(SWS_ICON_SIZE, g_dpiX, 96);
+    return MulDiv(GetHeaderIconSizeBase(), g_dpiX, 96);
 }
 static int GetHeaderTitleHeightPx() {
     return MulDiv(18, g_dpiY, 96);
@@ -594,6 +627,57 @@ static bool IsAltTabWindow(HWND h) {
 
 static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx);
 
+// Cache of crisp icons extracted from exe files at a specific pixel size.
+// Owned here (DestroyIcon at unload); keyed by "<exePath>_<sizePx>".
+static std::map<std::wstring, HICON> g_exeIconCache;
+
+// WM_GETICON returns a fixed (usually 32px) icon that looks blurry when scaled
+// up to 48/64. PrivateExtractIconsW pulls the best-matching frame from the
+// exe's icon resource at the exact requested size for a crisp result.
+static HICON TryGetCrispExeIcon(HWND hWnd, int desiredSizePx) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (!pid) return NULL;
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) return NULL;
+    WCHAR exePath[MAX_PATH] = {0};
+    DWORD size = MAX_PATH;
+    BOOL ok = QueryFullProcessImageNameW(hProc, 0, exePath, &size);
+    CloseHandle(hProc);
+    if (!ok || !exePath[0]) return NULL;
+
+    std::wstring key = std::wstring(exePath) + L"_" + std::to_wstring(desiredSizePx);
+    auto it = g_exeIconCache.find(key);
+    if (it != g_exeIconCache.end()) return it->second;
+
+    HICON hIcon = NULL;
+    if (PrivateExtractIconsW(exePath, 0, desiredSizePx, desiredSizePx,
+                             &hIcon, NULL, 1, 0) == 1 && hIcon) {
+        g_exeIconCache[key] = hIcon;
+        return hIcon;
+    }
+    return NULL;
+}
+
+static HICON LoadWindowIcon(HWND hWnd) {
+    HICON hIcon = NULL;
+    if (g_IsShellFrameWindow && g_IsShellFrameWindow(hWnd)) {
+        hIcon = TryGetUwpIconFromExplorer(hWnd, GetHeaderIconSizePx());
+    }
+    // For the larger sizes, a crisp full-resolution exe icon beats the
+    // upscaled WM_GETICON result.
+    if (!hIcon && GetHeaderIconSizeBase() > 32) {
+        hIcon = TryGetCrispExeIcon(hWnd, GetHeaderIconSizePx());
+    }
+    if (!hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&hIcon);
+    if (!hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&hIcon);
+    if (!hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&hIcon);
+    if (!hIcon) hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
+    if (!hIcon) hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
+    if (!hIcon) hIcon = LoadIconW(NULL, IDI_APPLICATION);
+    return hIcon;
+}
+
 static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     auto* list = reinterpret_cast<std::vector<WindowEntry>*>(lParam);
     if (hWnd == g_hSwitcher) return TRUE;
@@ -641,23 +725,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     }
     if (excluded) return TRUE;
 
-    e.hIcon = NULL;
-    
-    bool isUwp = false;
-    if (g_IsShellFrameWindow && g_IsShellFrameWindow(hWnd)) {
-        isUwp = true;
-    }
-    
-    if (isUwp) {
-        e.hIcon = TryGetUwpIconFromExplorer(hWnd, GetHeaderIconSizePx());
-    }
-    
-    if (!e.hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
-    if (!e.hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
-    if (!e.hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&e.hIcon);
-    if (!e.hIcon) e.hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
-    if (!e.hIcon) e.hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
-    if (!e.hIcon) e.hIcon = LoadIconW(NULL, IDI_APPLICATION);
+    e.hIcon = LoadWindowIcon(hWnd);
     list->push_back(e);
     return TRUE;
 }
@@ -956,6 +1024,76 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
     return NULL;
 }
 
+// Identity key used to group windows by application. UWP/app-frame-host windows
+// all share a single host process, so keying them by executable would merge
+// unrelated apps; those are keyed per-window to avoid over-grouping.
+static void GetWindowGroupKey(HWND hWnd, WCHAR* out, size_t cch) {
+    out[0] = 0;
+    if (g_IsShellFrameWindow && g_IsShellFrameWindow(hWnd)) {
+        swprintf_s(out, cch, L"hwnd:%p", (void*)hWnd);
+        return;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid) {
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (hProc) {
+            WCHAR exePath[MAX_PATH] = {0};
+            DWORD size = MAX_PATH;
+            if (QueryFullProcessImageNameW(hProc, 0, exePath, &size)) {
+                wcsncpy_s(out, cch, exePath, _TRUNCATE);
+            }
+            CloseHandle(hProc);
+        }
+    }
+    if (!out[0]) swprintf_s(out, cch, L"hwnd:%p", (void*)hWnd);
+}
+
+// Human-readable application name for a window, taken from the executable's
+// FileDescription version-info field (e.g. "Google Chrome"), falling back to
+// the executable file name without extension.
+static void GetAppName(HWND hWnd, WCHAR* out, size_t cch) {
+    out[0] = 0;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (!pid) return;
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) return;
+    WCHAR exePath[MAX_PATH] = {0};
+    DWORD size = MAX_PATH;
+    bool gotPath = QueryFullProcessImageNameW(hProc, 0, exePath, &size);
+    CloseHandle(hProc);
+    if (!gotPath) return;
+
+    DWORD handle = 0;
+    DWORD verSize = GetFileVersionInfoSizeW(exePath, &handle);
+    if (verSize) {
+        std::vector<BYTE> buf(verSize);
+        if (GetFileVersionInfoW(exePath, handle, verSize, buf.data())) {
+            struct LangAndCodePage { WORD wLanguage; WORD wCodePage; } *translate = nullptr;
+            UINT cbTranslate = 0;
+            if (VerQueryValueW(buf.data(), L"\\VarFileInfo\\Translation",
+                               (LPVOID*)&translate, &cbTranslate) &&
+                cbTranslate >= sizeof(LangAndCodePage)) {
+                WCHAR subBlock[64];
+                swprintf_s(subBlock, ARRAYSIZE(subBlock),
+                           L"\\StringFileInfo\\%04x%04x\\FileDescription",
+                           translate[0].wLanguage, translate[0].wCodePage);
+                LPWSTR desc = nullptr;
+                UINT descLen = 0;
+                if (VerQueryValueW(buf.data(), subBlock, (LPVOID*)&desc, &descLen) &&
+                    desc && desc[0]) {
+                    wcsncpy_s(out, cch, desc, _TRUNCATE);
+                }
+            }
+        }
+    }
+    if (!out[0]) {
+        wcsncpy_s(out, cch, PathFindFileNameW(exePath), _TRUNCATE);
+        PathRemoveExtensionW(out);
+    }
+}
+
 static void BuildWindowList() {
     for (auto& w : g_windows) {
         for (const auto& kv : w.hThumbs) { if (kv.second) DwmUnregisterThumbnail(kv.second); }
@@ -963,6 +1101,53 @@ static void BuildWindowList() {
     }
     g_windows.clear();
     EnumWindows(EnumWindowsProc, (LPARAM)&g_windows);
+    // App grouping: keep one entry per application. EnumWindows yields windows in
+    // Z-order (top to bottom), so the first window seen for each app is its most
+    // recently used one, which becomes the representative entry.
+    if (g_settings.showApplications) {
+        std::vector<WindowEntry> grouped;
+        grouped.reserve(g_windows.size());
+        std::vector<std::wstring> seenKeys;  // parallel to grouped
+        for (auto& w : g_windows) {
+            WCHAR key[MAX_PATH];
+            GetWindowGroupKey(w.hWnd, key, ARRAYSIZE(key));
+            int found = -1;
+            for (size_t i = 0; i < seenKeys.size(); i++) {
+                if (seenKeys[i] == key) { found = (int)i; break; }
+            }
+            if (found >= 0) {
+                grouped[found].groupWindows.push_back(w.hWnd);
+                continue;
+            }
+            seenKeys.emplace_back(key);
+            w.groupWindows.assign(1, w.hWnd);
+            grouped.push_back(std::move(w));
+        }
+        for (auto& e : grouped) {
+            if (wcscmp(g_settings.showTitles, L"windowTitle") == 0) continue;
+            WCHAR appName[256] = {0};
+            GetAppName(e.hWnd, appName, ARRAYSIZE(appName));
+            if (!appName[0]) continue;
+            // UWP apps share the "Application Frame Host" executable, whose
+            // FileDescription is useless as an app name; use the window title instead.
+            if (_wcsicmp(appName, L"Application Frame Host") == 0 && e.title[0]) {
+                wcscpy_s(appName, e.title);
+            }
+            if (wcscmp(g_settings.showTitles, L"appName") == 0) {
+                wcscpy_s(e.title, appName);
+            } else {  // appNameWindowTitle
+                if (e.title[0]) {
+                    WCHAR combined[256];
+                    _snwprintf_s(combined, ARRAYSIZE(combined), _TRUNCATE,
+                                 L"%s - %s", appName, e.title);
+                    wcscpy_s(e.title, combined);
+                } else {
+                    wcscpy_s(e.title, appName);
+                }
+            }
+        }
+        g_windows = std::move(grouped);
+    }
     std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
         return IsIconic(a.hWnd) < IsIconic(b.hWnd);
     });
@@ -2283,6 +2468,9 @@ static void ShowSwitcher(bool sticky) {
     g_isDarkMode = ShouldUseDarkMode(); g_isSticky = sticky;
 
     g_layoutStartIndex = 0; // Always start from the first window on initial show
+    g_drilledIn = false;
+    g_savedAppList.clear();
+    g_consumeEscUp = false;
     g_selectedIndex = (g_windows.size() > 1) ? 1 : 0;
     g_hoverIndex = -1;
     g_hoverWnd = NULL;
@@ -2372,12 +2560,22 @@ static void HideSwitcher() {
         g_hMouseHook = NULL;
     }
     g_isSticky = false;
+    g_drilledIn = false;
+    g_savedAppList.clear();
+    g_consumeEscUp = false;
 }
 
 static void SwitchToSelected() {
     if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size()) { HideSwitcher(); return; }
     HWND hT = g_windows[g_selectedIndex].hWnd;
+    std::vector<HWND> groupWindows;
+    if (g_settings.showApplications && g_settings.restoreAllWindows) {
+        groupWindows = g_windows[g_selectedIndex].groupWindows;
+    }
     HideSwitcher();
+    for (HWND hw : groupWindows) {
+        if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_RESTORE);
+    }
     if (IsWindow(hT)) {
         HWND hP = GetLastActivePopup(hT);
         HWND hF = IsWindowVisible(hP) ? hP : hT;
@@ -2424,6 +2622,67 @@ static void RecomputeAndReposition() {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     }
     RegisterThumbnails();
+}
+
+// Drill into the selected application's windows: stash the grouped app list and
+// replace g_windows with one entry per window of that app.
+static void EnterAppGroup() {
+    if (!g_settings.showApplications || g_drilledIn) return;
+    if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size()) return;
+    std::vector<HWND> members = g_windows[g_selectedIndex].groupWindows;
+    if (members.size() <= 1) return;  // nothing to expand
+
+    UnregisterThumbnails();  // release app-list thumbnails before stashing
+    g_savedAppList = std::move(g_windows);
+    g_savedSelectedIndex = g_selectedIndex;
+    g_savedLayoutStartIndex = g_layoutStartIndex;
+
+    g_windows.clear();
+    for (HWND hw : members) {
+        if (!IsWindow(hw)) continue;
+        WindowEntry e = {};
+        e.hWnd = hw;
+        InternalGetWindowText(hw, e.title, 256);
+        if (!e.title[0]) GetWindowTextW(hw, e.title, 256);
+        e.hIcon = LoadWindowIcon(hw);
+        g_windows.push_back(std::move(e));
+    }
+    if (g_windows.empty()) {  // every window closed in the meantime; abort
+        g_windows = std::move(g_savedAppList);
+        RecomputeAndReposition();
+        return;
+    }
+    g_drilledIn = true;
+    g_selectedIndex = 0;
+    g_layoutStartIndex = 0;
+    g_hoverIndex = -1;
+    g_hoverWnd = NULL;
+    g_isCloseHovered = false;
+    RecomputeAndReposition();
+    PaintSwitcher();
+}
+
+// Leave the drilled-in window view and restore the grouped application list.
+static void ExitAppGroup() {
+    if (!g_drilledIn) return;
+    UnregisterThumbnails();  // release drilled-window thumbnails
+    g_windows = std::move(g_savedAppList);
+    g_savedAppList.clear();
+    g_selectedIndex = g_savedSelectedIndex;
+    g_layoutStartIndex = g_savedLayoutStartIndex;
+    if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
+    if (g_selectedIndex < 0) g_selectedIndex = 0;
+    g_drilledIn = false;
+    g_hoverIndex = -1;
+    g_hoverWnd = NULL;
+    g_isCloseHovered = false;
+    RecomputeAndReposition();
+    PaintSwitcher();
+}
+
+static void ToggleAppDrill() {
+    if (g_drilledIn) ExitAppGroup();
+    else EnterAppGroup();
 }
 
 // Linear navigation: Tab, Shift+Tab, Left, Right, Hotkeys, Scroll
@@ -2748,7 +3007,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             SwitchToSelected();
             return 0;
         }
-        if (wParam == VK_ESCAPE && g_isVisible) { HideSwitcher(); return 0; }
+        if (wParam == VK_ESCAPE && g_isVisible) {
+            if (g_consumeEscUp) { g_consumeEscUp = false; return 0; }
+            HideSwitcher();
+            return 0;
+        }
         if (wParam == VK_RETURN && g_isVisible) { SwitchToSelected(); return 0; }
         break;
     case WM_SYSKEYUP:
@@ -2767,6 +3030,13 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         break;
     case WM_SYSKEYDOWN: case WM_KEYDOWN:
         if (g_isVisible) {
+            // Ctrl tap: drill into / out of the selected application's windows.
+            if ((wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL)
+                && g_settings.showApplications) {
+                bool isRepeat = (lParam & 0x40000000) != 0;
+                if (!isRepeat) ToggleAppDrill();
+                return 0;
+            }
             // Block Alt+Shift+Tab from reaching the system if setting is enabled
             if (UseAltShiftBackward() && wParam == VK_TAB) {
                 bool altDown = (GetKeyState(VK_MENU) & 0x8000) != 0;
@@ -2803,7 +3073,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 if (wParam == VK_LEFT) { CycleDirectional(-1); return 0; }
                 if (wParam == VK_RIGHT) { CycleDirectional(1); return 0; }
             }
-            if (wParam == VK_ESCAPE) { HideSwitcher(); return 0; }
+            if (wParam == VK_ESCAPE) {
+                if (g_drilledIn) { ExitAppGroup(); g_consumeEscUp = true; }
+                else HideSwitcher();
+                return 0;
+            }
             if (wParam == VK_RETURN || wParam == VK_SPACE) { SwitchToSelected(); return 0; }
         }
         break;
@@ -3005,7 +3279,7 @@ static void LoadSettings() {
     v = Wh_GetStringSetting(L"Appearance.Corners.cornerPreference");
     wcscpy_s(g_settings.cornerPreference, v ? v : L"round"); Wh_FreeStringSetting(v);
     g_settings.taskRoundedCorners = Wh_GetIntSetting(L"Appearance.Corners.taskRoundedCorners");
-    v = Wh_GetStringSetting(L"Miscellaneous.scrollWheelBehavior");
+    v = Wh_GetStringSetting(L"Accessibility.scrollWheelBehavior");
     wcscpy_s(g_settings.scrollWheelBehavior, v ? v : L"never"); Wh_FreeStringSetting(v);
     v = Wh_GetStringSetting(L"Appearance.Orientation.taskListOrientation");
     wcscpy_s(g_settings.taskListOrientation, v ? v : L"horizontal"); Wh_FreeStringSetting(v);
@@ -3018,7 +3292,9 @@ static void LoadSettings() {
     v = Wh_GetStringSetting(L"Appearance.HeaderContent.iconSize");
     wcscpy_s(g_settings.iconSize, v ? v : L"small"); Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.iconSize, L"small") != 0 &&
-        wcscmp(g_settings.iconSize, L"large") != 0) {
+        wcscmp(g_settings.iconSize, L"medium") != 0 &&
+        wcscmp(g_settings.iconSize, L"large") != 0 &&
+        wcscmp(g_settings.iconSize, L"xlarge") != 0) {
         wcscpy_s(g_settings.iconSize, L"small");
     }
     v = Wh_GetStringSetting(L"Appearance.Thumbnails.thumbnailPosition");
@@ -3036,7 +3312,7 @@ static void LoadSettings() {
         wcscmp(g_settings.thumbnailAlignment, L"right") != 0) {
         wcscpy_s(g_settings.thumbnailAlignment, L"left");
     }
-    v = Wh_GetStringSetting(L"Miscellaneous.backwardShortcut");
+    v = Wh_GetStringSetting(L"Accessibility.backwardShortcut");
     if (v) {
         wcscpy_s(g_settings.backwardShortcut, v);
         Wh_FreeStringSetting(v);
@@ -3060,7 +3336,7 @@ static void LoadSettings() {
         wcscpy_s(g_settings.highlightStyle, L"border");
     }
 
-    v = Wh_GetStringSetting(L"Miscellaneous.virtualDesktopBehavior");
+    v = Wh_GetStringSetting(L"Accessibility.virtualDesktopBehavior");
     wcscpy_s(g_settings.virtualDesktopBehavior, v ? v : L"currentOnly");
     Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.virtualDesktopBehavior, L"currentOnly") != 0 &&
@@ -3087,11 +3363,20 @@ static void LoadSettings() {
     g_settings.maxHeightPercent = Wh_GetIntSetting(L"Dimensions.maxHeightPercent");
     if (g_settings.maxHeightPercent <= 0 || g_settings.maxHeightPercent > 100) g_settings.maxHeightPercent = 80;
 
-    g_settings.showDelay = Wh_GetIntSetting(L"Miscellaneous.showDelay");
+    g_settings.showDelay = Wh_GetIntSetting(L"Accessibility.showDelay");
     if (g_settings.showDelay < 0) g_settings.showDelay = 0;
     g_settings.useAccentColor = Wh_GetIntSetting(L"Style.useAccentColor");
-    g_settings.perMonitorWindows = Wh_GetIntSetting(L"Miscellaneous.perMonitorWindows");
-    g_settings.reverseScrollDirection = Wh_GetIntSetting(L"Miscellaneous.reverseScrollDirection");
+    g_settings.perMonitorWindows = Wh_GetIntSetting(L"Accessibility.perMonitorWindows");
+    g_settings.reverseScrollDirection = Wh_GetIntSetting(L"Accessibility.reverseScrollDirection");
+    g_settings.showApplications = Wh_GetIntSetting(L"Grouping.showApplications");
+    g_settings.restoreAllWindows = Wh_GetIntSetting(L"Grouping.restoreAllWindows");
+    v = Wh_GetStringSetting(L"Grouping.showTitles");
+    wcscpy_s(g_settings.showTitles, v ? v : L"windowTitle"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.showTitles, L"windowTitle") != 0 &&
+        wcscmp(g_settings.showTitles, L"appName") != 0 &&
+        wcscmp(g_settings.showTitles, L"appNameWindowTitle") != 0) {
+        wcscpy_s(g_settings.showTitles, L"windowTitle");
+    }
     g_settings.centerTaskContent = Wh_GetIntSetting(L"Appearance.HeaderContent.centerTaskContent");
 
 
@@ -3116,13 +3401,13 @@ static void LoadSettings() {
     v = Wh_GetStringSetting(L"Appearance.Font.fontStyle");
     wcscpy_s(g_settings.fontStyle, v ? v : L"regular"); Wh_FreeStringSetting(v);
 
-    v = Wh_GetStringSetting(L"Miscellaneous.switcherDisplayBehavior");
+    v = Wh_GetStringSetting(L"Accessibility.switcherDisplayBehavior");
     wcscpy_s(g_settings.switcherDisplayBehavior, v ? v : L"cursorMonitor"); Wh_FreeStringSetting(v);
 
     g_excludeTitlePatterns.clear();
     g_excludeExePatterns.clear();
     for (int i = 0; ; i++) {
-        PCWSTR method = Wh_GetStringSetting(L"Miscellaneous.ExcludedWindows[%d].Method", i);
+        PCWSTR method = Wh_GetStringSetting(L"ExcludedWindows[%d].Method", i);
         bool done = !method || !*method;
         
         if (done) {
@@ -3130,7 +3415,7 @@ static void LoadSettings() {
             break;
         }
         
-        PCWSTR value = Wh_GetStringSetting(L"Miscellaneous.ExcludedWindows[%d].Value", i);
+        PCWSTR value = Wh_GetStringSetting(L"ExcludedWindows[%d].Value", i);
         if (value && *value) {
             std::wstring valStr(value);
             size_t start = 0;
@@ -3546,6 +3831,10 @@ void Wh_ModUninit() {
             if (pair.second) DestroyIcon(pair.second);
         }
         g_uwpIconCache.clear();
+        for (auto& pair : g_exeIconCache) {
+            if (pair.second) DestroyIcon(pair.second);
+        }
+        g_exeIconCache.clear();
 
         if (g_isExplorer && IsMainExplorer()) {
             if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
