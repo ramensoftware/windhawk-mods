@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-27T16:22:12.000Z</updated>
+    <updated>2026-05-29T11:08:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Files 2 Folders 1.3]]></title>
+        <id>https://windhawk.net/mods/files-2-folders#edd5a740b5d5c349acaf60598478c0abc5cfe994</id>
+        <link href="https://windhawk.net/mods/files-2-folders"/>
+        <updated>2026-05-29T11:08:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Auto-select a mode's radio button when its companion edit box receives focus (by mouse click or Tab). Focusing the subfolder-name box now selects the fixed-name mode; focusing the date box selects the date-named mode. Previously you could type a name into a box without its radio being checked, so the move would run under whichever mode happened to be selected. This makes the mode you're editing the mode that runs on OK.
+tl;dr: Clicking on subfolder name box or date will choose that mod now.</li>
+</ul>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.5.2]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#49b5f6cd2e724208e8efb94951fd51f70f97c524</id>
@@ -509,36 +523,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Island for Windows 1.0.0]]></title>
-        <id>https://windhawk.net/mods/dynamic-island-for-windows#c0b6582ad2161f8406e294b2a74639851923cfac</id>
-        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
-        <updated>2026-05-23T16:50:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dynamicislandforwindows">Dynamic Island for Windows</h1>
-<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-18%20193649.png" alt="Screenshot 1" /></p>
-<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225602.png" alt="Screenshot 2" /></p>
-<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225634.png" alt="Screenshot 3" /></p>
-<p>A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.</p>
-<h3 id="features">Features ✨</h3>
-<ul>
-<li><strong>Hardware Privacy Indicators:</strong> A pulsing orange dot appears when your microphone is active, and a green dot when your camera is in use. Rate-limited polling ensures absolutely no CPU drain.</li>
-<li><strong>Rich Media Integration:</strong> Shows album art, song info, a live audio waveform, and playback controls.</li>
-<li><strong>High-Res Clipboard & Notifications:</strong> Instantly see what you copied or your latest Windows notifications, featuring crisp, high-fidelity 64px app icons extracted directly from system executables.</li>
-<li><strong>Customizable Aesthetics:</strong> Switch between sleek OLED Black, Dark Gray, Midnight Blue, and Deep Purple themes from the right-click menu, or use the settings to dial in your exact hex colors.</li>
-<li><strong>Dynamic Fluid Animations:</strong> Fully smooth resizing and splitting when multiple events happen at once (e.g., media playing while you copy text or receive a notification).</li>
-<li><strong>Battery & Clock:</strong> Low battery alerts and an optional minimal clock dashboard for when the island is idle.</li>
-</ul>
-<h3 id="usagesettings">Usage &amp; Settings</h3>
-<ul>
-<li><strong>Hover</strong> over the island to seamlessly expand it.</li>
-<li><strong>Right-click</strong> the island to access Theme presets, Transparency settings, and to pin the island open.</li>
-<li>Visit the <strong>Settings tab</strong> to change the island's Position (Top, Bottom, Left, Right), Size Scale, Animation Speed, and toggle specific modules on or off.</li>
-</ul>]]></content>
-        <author>
-            <name>Himanshu</name>
-            <uri>https://github.com/devcode90</uri>
         </author>
     </entry>
 </feed>

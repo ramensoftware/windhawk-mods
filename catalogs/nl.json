@@ -4810,7 +4810,7 @@
                     2
                 ],
                 "ratingUsers": 3,
-                "updated": 1778777839000,
+                "updated": 1780052905000,
                 "users": 65
             },
             "metadata": {
@@ -4822,7 +4822,7 @@
                     "explorer.exe"
                 ],
                 "name": "Files 2 Folders",
-                "version": "1.2"
+                "version": "1.3"
             }
         },
         "firefox-border-fix": {
