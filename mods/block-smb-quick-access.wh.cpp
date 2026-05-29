@@ -3,8 +3,8 @@
 // @name            Block SMB Quick Access
 // @description     Prevents SMB/UNC network paths from being added to Quick Access in Windows Explorer
 // @version         1.1
-// @author          NOSMB
-// @github          https://github.com/nosmb
+// @author          Townrain
+// @github          https://github.com/Townrain
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lshlwapi -lole32
