@@ -18,10 +18,6 @@
 
 ![Screenshot 2](https://raw.githubusercontent.com/devcode90/STONIC-3.0/main/Screenshot%202026-05-25%20201826.png)
 
-![Screenshot 3](https://raw.githubusercontent.com/devcode90/STONIC-3.0/main/Screenshot%202026-05-25%20201836.png)
-
-![Screenshot 4](https://raw.githubusercontent.com/devcode90/STONIC-3.0/main/Screenshot%202026-05-25%20201852.png)
-
 A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.
 
 ### Features ✨
@@ -91,23 +87,23 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
   $description: Shows FPS, CPU, RAM, GPU placeholder, disk, and foreground app.
 - AlwaysShowClock: true
   $name: Always show clock
-- SleepTimer: 0
+- SleepTimer: '0'
   $name: Sleep timer (seconds)
   $description: "Duration (in seconds) the clock/idle island remains visible before automatically sleeping. Set to 0 to never sleep."
   $options:
-    - 0: Never
-    - 5: 5 seconds
-    - 10: 10 seconds
-    - 30: 30 seconds
-    - 60: 1 minute
-    - 300: 5 minutes
+    - '0': Never
+    - '5': 5 seconds
+    - '10': 10 seconds
+    - '30': 30 seconds
+    - '60': 1 minute
+    - '300': 5 minutes
 - AlwaysOnTop: true
   $name: Always on top
   $description: "Keep the island above all other windows. Disable if it blocks other software."
 - AutoDpiScale: true
   $name: Auto DPI scaling
   $description: "Automatically scale the island to match your monitor's DPI (recommended for 4K/HiDPI screens)."
-- W11Style: false
+- W11Style: true
   $name: Native Windows 11 style
   $description: "Renders the island as a modern Windows 11 Fluent flyout (rounded rectangle with 8px corners) instead of an iOS pill."
 - PillBgColor: "#0D0D0F"
@@ -389,6 +385,9 @@ std::mutex g_stateMutex;
 SharedState g_state;
 std::atomic<uint64_t> g_artGenerationCounter = 0;
 
+std::atomic<double> g_lastWakeUpTime{0.0};
+std::atomic<bool> g_systemResumed{false};
+
 HWND g_hwnd = nullptr;
 HANDLE g_stopEvent = nullptr;
 HANDLE g_renderThread = nullptr;
@@ -556,8 +555,20 @@ void LoadSettings() {
                              0.35f, 1.0f);
     next.gameOverlay = Wh_GetIntSetting(L"GameOverlay") != 0;
     next.alwaysShowClock = Wh_GetIntSetting(L"AlwaysShowClock") != 0;
+    next.sleepTimer = 0;
     const int localSleepTimer = Wh_GetIntValue(L"SleepTimerOverride", -1);
-    next.sleepTimer = localSleepTimer >= 0 ? localSleepTimer : Wh_GetIntSetting(L"SleepTimer");
+    if (localSleepTimer >= 0) {
+        next.sleepTimer = localSleepTimer;
+    } else {
+        std::wstring sleepStr = GetStringSettingCopy(L"SleepTimer");
+        if (!sleepStr.empty()) {
+            wchar_t* end;
+            long val = wcstol(sleepStr.c_str(), &end, 10);
+            if (end != sleepStr.c_str()) {
+                next.sleepTimer = static_cast<int>(val);
+            }
+        }
+    }
     next.alwaysOnTop = Wh_GetIntSetting(L"AlwaysOnTop") != 0;
     next.autoDpiScale = Wh_GetIntSetting(L"AutoDpiScale") != 0;
 
@@ -582,11 +593,21 @@ void LoadSettings() {
         next.textSecondaryColor = ColorFromHex(kThemes[theme].sec,
                                                D2D1::ColorF(0.533f, 0.533f, 0.533f, 1.0f));
     } else {
-        next.pillBgColor = ColorFromHex(GetStringSettingCopy(L"PillBgColor"),
+        std::wstring configBg = GetStringSettingCopy(L"PillBgColor");
+        std::wstring configFg = GetStringSettingCopy(L"TextPrimaryColor");
+        std::wstring configSec = GetStringSettingCopy(L"TextSecondaryColor");
+
+        if (next.w11Style) {
+            if (configBg.empty() || EqualsNoCase(configBg, L"#0D0D0F")) configBg = L"#1F1F1F";
+            if (configFg.empty() || EqualsNoCase(configFg, L"#F7F7F7")) configFg = L"#FFFFFF";
+            if (configSec.empty() || EqualsNoCase(configSec, L"#888888")) configSec = L"#A0A0A0";
+        }
+
+        next.pillBgColor = ColorFromHex(configBg,
                                         D2D1::ColorF(0.051f, 0.051f, 0.059f, 1.0f));
-        next.textPrimaryColor = ColorFromHex(GetStringSettingCopy(L"TextPrimaryColor"),
+        next.textPrimaryColor = ColorFromHex(configFg,
                                              D2D1::ColorF(0.969f, 0.969f, 0.969f, 1.0f));
-        next.textSecondaryColor = ColorFromHex(GetStringSettingCopy(L"TextSecondaryColor"),
+        next.textSecondaryColor = ColorFromHex(configSec,
                                                D2D1::ColorF(0.533f, 0.533f, 0.533f, 1.0f));
     }
 
@@ -599,6 +620,31 @@ void EnableBlurBehind(HWND hwnd) {
     blur.dwFlags = DWM_BB_ENABLE;
     blur.fEnable = FALSE;
     DwmEnableBlurBehindWindow(hwnd, &blur);
+}
+
+typedef BOOL (WINAPI *WTSRegisterSessionNotification_t)(HWND, DWORD);
+typedef BOOL (WINAPI *WTSUnRegisterSessionNotification_t)(HWND);
+
+void RegisterSessionNotification(HWND hwnd) {
+    HMODULE hWts = LoadLibraryW(L"wtsapi32.dll");
+    if (hWts) {
+        auto pRegister = (WTSRegisterSessionNotification_t)GetProcAddress(hWts, "WTSRegisterSessionNotification");
+        if (pRegister) {
+            pRegister(hwnd, 0); // NOTIFY_FOR_THIS_SESSION = 0
+        }
+        FreeLibrary(hWts);
+    }
+}
+
+void UnregisterSessionNotification(HWND hwnd) {
+    HMODULE hWts = LoadLibraryW(L"wtsapi32.dll");
+    if (hWts) {
+        auto pUnregister = (WTSUnRegisterSessionNotification_t)GetProcAddress(hWts, "WTSUnRegisterSessionNotification");
+        if (pUnregister) {
+            pUnregister(hwnd);
+        }
+        FreeLibrary(hWts);
+    }
 }
 
 
@@ -1220,6 +1266,10 @@ DWORD WINAPI MediaThreadProc(void*) {
         MediaSnapshot next;
 
         try {
+            if (g_systemResumed.exchange(false)) {
+                manager = nullptr;
+            }
+
             if (!manager) {
                 manager = Manager::RequestAsync().get();
             }
@@ -1257,6 +1307,7 @@ DWORD WINAPI MediaThreadProc(void*) {
                 }
             }
         } catch (...) {
+            manager = nullptr;
             if (!loggedUnavailable) {
                 Wh_Log(L"WinRT media session unavailable; media module will fall back to idle.");
                 loggedUnavailable = true;
@@ -2167,9 +2218,20 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
 
     // Sleep Timer sub-menu
     HMENU sleepMenu = CreatePopupMenu();
-    const int activeSleep = Wh_GetIntValue(L"SleepTimerOverride", -1) >= 0
-                            ? Wh_GetIntValue(L"SleepTimerOverride", 0)
-                            : Wh_GetIntSetting(L"SleepTimer");
+    int activeSleep = 0;
+    const int localSleepOverride = Wh_GetIntValue(L"SleepTimerOverride", -1);
+    if (localSleepOverride >= 0) {
+        activeSleep = localSleepOverride;
+    } else {
+        std::wstring sleepStr = GetStringSettingCopy(L"SleepTimer");
+        if (!sleepStr.empty()) {
+            wchar_t* end;
+            long val = wcstol(sleepStr.c_str(), &end, 10);
+            if (end != sleepStr.c_str()) {
+                activeSleep = static_cast<int>(val);
+            }
+        }
+    }
     AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 0 ? MF_CHECKED : 0), 30, L"Never sleep");
     AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 5 ? MF_CHECKED : 0), 31, L"5 Seconds");
     AppendMenuW(sleepMenu, MF_STRING | (activeSleep == 10 ? MF_CHECKED : 0), 32, L"10 Seconds");
@@ -2592,7 +2654,7 @@ class Renderer {
             redBrush_->SetOpacity(0.45f + 0.45f * pulse);
             target_->DrawRoundedRectangle(pill, redBrush_.Get(), 2.0f);
             redBrush_->SetOpacity(1.0f);
-        } else {
+        } else if (!settings.w11Style) {
             accentBrush_->SetOpacity(activity.kind == IslandKind::Idle ? 0.18f : 0.34f);
             target_->DrawRoundedRectangle(pill, accentBrush_.Get(), 1.0f);
             accentBrush_->SetOpacity(1.0f);
@@ -4240,14 +4302,69 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_CREATE:
             AddClipboardFormatListener(hwnd);
             RegisterShellHookWindow(hwnd);
+            RegisterSessionNotification(hwnd);
             g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
             return 0;
 
         case WM_DESTROY:
-            if (g_keyboardHook) UnhookWindowsHookEx(g_keyboardHook);
+            if (g_keyboardHook) {
+                UnhookWindowsHookEx(g_keyboardHook);
+                g_keyboardHook = nullptr;
+            }
             RemoveClipboardFormatListener(hwnd);
             DeregisterShellHookWindow(hwnd);
+            UnregisterSessionNotification(hwnd);
             return 0;
+
+        case 0x0218: { // WM_POWERBROADCAST
+            if (wParam == 0x0007 || wParam == 0x0012) { // PBT_APMRESUMESUSPEND or PBT_APMRESUMEAUTOMATIC
+                g_systemResumed = true;
+
+                // Re-register low-level keyboard hook
+                if (g_keyboardHook) {
+                    UnhookWindowsHookEx(g_keyboardHook);
+                    g_keyboardHook = nullptr;
+                }
+                g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
+
+                // Re-register clipboard listener
+                RemoveClipboardFormatListener(hwnd);
+                AddClipboardFormatListener(hwnd);
+
+                // Re-register shell hook window
+                DeregisterShellHookWindow(hwnd);
+                RegisterShellHookWindow(hwnd);
+
+                // Wake up the Dynamic Island immediately
+                g_lastWakeUpTime = NowSeconds();
+                TriggerNudge();
+            }
+            return TRUE;
+        }
+
+        case 0x02B1: { // WM_WTSSESSION_CHANGE
+            if (wParam == 0x0008) { // WTS_SESSION_UNLOCK
+                // Re-register low-level keyboard hook
+                if (g_keyboardHook) {
+                    UnhookWindowsHookEx(g_keyboardHook);
+                    g_keyboardHook = nullptr;
+                }
+                g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
+
+                // Re-register clipboard listener
+                RemoveClipboardFormatListener(hwnd);
+                AddClipboardFormatListener(hwnd);
+
+                // Re-register shell hook window
+                DeregisterShellHookWindow(hwnd);
+                RegisterShellHookWindow(hwnd);
+
+                // Wake up the Dynamic Island immediately
+                g_lastWakeUpTime = NowSeconds();
+                TriggerNudge();
+            }
+            return 0;
+        }
 
         case WM_APP_CAPSLOCK: {
             bool isNum = (wParam == VK_NUMLOCK);
@@ -4500,6 +4617,11 @@ DWORD WINAPI RenderThreadProc(void*) {
         const bool activeEvent = (primary.kind != IslandKind::Idle) || hover || pinned;
         if (activeEvent) {
             lastActiveTime = now;
+        }
+
+        double lastWake = g_lastWakeUpTime.load();
+        if (lastWake > lastActiveTime) {
+            lastActiveTime = lastWake;
         }
 
         const bool isSleeping = g_settings.alwaysShowClock &&
