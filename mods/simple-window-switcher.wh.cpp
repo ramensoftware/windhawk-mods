@@ -935,7 +935,14 @@ static void RegisterThumbnailsEarly() {
                     GetWindowRect(w.hWnd, &wr);
                     if (SUCCEEDED(DwmGetWindowAttribute(w.hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb, sizeof(efb)))) {
                         int wrW = wr.right - wr.left, wrH = wr.bottom - wr.top;
-                        if (wrW > 0 && wrH > 0 && src.cx > 0 && src.cy > 0) {
+                        int efbW = efb.right - efb.left;
+                        
+                        // DWM in Windows 11 natively crops off-screen borders for maximized windows.
+                        // If the thumbnail source size is already closer to the visible bounds (efb) 
+                        // than the physical bounds (wr), we skip manual cropping to avoid double-cropping.
+                        bool dwmNativelyCropped = (abs(src.cx - efbW) < abs(src.cx - wrW));
+                        
+                        if (!dwmNativelyCropped && wrW > 0 && wrH > 0 && src.cx > 0 && src.cy > 0) {
                             double sx = (double)src.cx / wrW;
                             double sy = (double)src.cy / wrH;
                             int ml = (int)((efb.left - wr.left) * sx);
