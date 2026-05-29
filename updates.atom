@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-29T11:08:25.000Z</updated>
+    <updated>2026-05-29T11:21:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remap Copilot Key 2.0]]></title>
+        <id>https://windhawk.net/mods/remap-copilot-key#a921984f6f70885c56bf5d92ddad683d87e8c73f</id>
+        <link href="https://windhawk.net/mods/remap-copilot-key"/>
+        <updated>2026-05-29T11:21:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added Per-App Rules: Users can now map the Copilot key to different custom VK codes depending on which application is currently in the foreground.</li>
+</ul>]]></content>
+        <author>
+            <name>Lukvbp</name>
+            <uri>https://github.com/lukvbp</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Files 2 Folders 1.3]]></title>
         <id>https://windhawk.net/mods/files-2-folders#edd5a740b5d5c349acaf60598478c0abc5cfe994</id>
@@ -506,23 +519,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 2.1.0]]></title>
-        <id>https://windhawk.net/mods/audioswap#7f641c526280f213a15d2e9098f5c4e847729990</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-05-23T21:15:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New: Device Priority panel — rank your preferred devices; the highest-priority connected device is assigned to a swap slot automatically.</li>
-<li>New: Advanced Mode toggle in Windhawk settings — shows the Device Priority panel in Mod Settings.</li>
-<li>Fixed: GUI sizing on high-DPI monitors.</li>
-<li>Fixed: Context menu now follows your Windows dark/light theme.</li>
-<li>Fixed: AudioSwap icon is now independent — no longer linked to the Windhawk tray icon.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

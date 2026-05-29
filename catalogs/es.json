@@ -8235,19 +8235,19 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1778095973000,
+                "updated": 1780053695000,
                 "users": 71
             },
             "metadata": {
                 "author": "Lukvbp",
                 "compilerOptions": "-luser32",
-                "description": "Global low-level hook running inside Windhawk to remap or disable the Copilot key.",
+                "description": "Global low-level hook running inside Windhawk to remap or disable the Copilot key, featuring per-app rules.",
                 "github": "https://github.com/lukvbp",
                 "include": [
                     "windhawk.exe"
                 ],
                 "name": "Remap Copilot Key",
-                "version": "1.0"
+                "version": "2.0"
             }
         },
         "remarkable-polish": {
