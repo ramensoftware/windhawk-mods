@@ -68,7 +68,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - mica: Mica Blur (Windows 11 only)
     - opacity: 100
       $name: Background Opacity
-      $description: Background opacity percentage (0-100), applies to None theme.
+      $description: Background opacity percentage (0-100), applies to None and Acrylic themes. Set value to '80' for Acrylic to see the effect.
     - colorScheme: system
       $name: Color Scheme
       $options:
@@ -154,6 +154,23 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           - horizontal: Horizontal
           - vertical: Vertical
       $name: Orientation
+    - Font:
+        - fontFamily: Segoe UI
+          $name: Font Family
+          $description: Font used for window titles (e.g., Segoe UI, Tahoma).
+        - fontSize: 9
+          $name: Font Size
+          $description: Size of the font in points.
+        - fontStyle: regular
+          $name: Font Style
+          $options:
+          - light: Light
+          - regular: Regular
+          - semibold: Semi-Bold
+          - bold: Bold
+          - italic: Italic
+          - boldItalic: Bold Italic
+      $name: Font
   $name: Appearance
 - Dimensions:
     - rowHeight: 230
@@ -187,12 +204,33 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - altShiftTab: Alt+Shift+Tab (default)
       - altShift: Alt+Shift
       - altBacktick: Alt+Backtick
+<<<<<<< HEAD
     - reverseScrollDirection: false
       $name: Reverse Scroll Direction
     - primaryMonitorOnly: false
       $name: Always Display Switcher on Primary Monitor
+=======
+    - switcherDisplayBehavior: cursorMonitor
+      $name: Switcher Display Behavior
+      $options:
+      - primaryOnly: Show Switcher in Primary Monitor only
+      - allMonitors: All Monitors
+      - cursorMonitor: Monitor Based On Cursor Location
+>>>>>>> 0fc3be76 (Refactor Simple Window Switcher UI, apply upstream layout fixes, add multi-monitor mirror support, and implement structured array schemas for excluded windows)
     - perMonitorWindows: false
       $name: Display Windows Only From the Monitor Containing the Cursor
+    - ExcludedWindows:
+      - - Method: title
+          $name: Exclusion Method
+          $description: Exclude by window title or executable name
+          $options:
+          - title: Window Title
+          - exe: Executable Name
+        - Value: ""
+          $name: Pattern
+          $description: "The pattern to exclude (regex supported). Separate multiple entries with a comma. Example: chrome\\.exe, msedge\\.exe"
+      $name: Excluded Windows
+      $description: Exclude specific windows from appearing in the switcher.
     - virtualDesktopBehavior: currentOnly
       $name: Virtual Desktop Behavior
       $description: Choose which virtual desktops to show windows from.
@@ -223,6 +261,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #include <string>
 #include <algorithm>
 #include <gdiplus.h>
+#include <regex>
 
 #define SWS_CLASSNAME       L"WindhawkSWS_Switcher"
 #define SWS_ICON_SIZE       16
@@ -257,6 +296,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #define SWS_TEXT_DARK         RGB(255, 255, 255)
 #define SWS_TEXT_LIGHT        RGB(0, 0, 0)
 #define SWS_SHOW_DELAY_TIMER_ID 101
+#define SWS_ALT_POLL_TIMER_ID   102
 
 typedef BOOL (WINAPI *IsShellWindow_t)(HWND);
 typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
@@ -272,10 +312,16 @@ struct WindowEntry {
     SIZE effectiveSourceSize;  // Source size after cropping invisible frame
 };
 struct Settings {
+<<<<<<< HEAD
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32];
+=======
+    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
+>>>>>>> 0fc3be76 (Refactor Simple Window Switcher UI, apply upstream layout fixes, add multi-monitor mirror support, and implement structured array schemas for excluded windows)
     WCHAR highlightStyle[32]; WCHAR virtualDesktopBehavior[32];
     WCHAR borderColorDark[16];
     WCHAR borderColorLight[16];
+    WCHAR fontFamily[64]; WCHAR fontStyle[32];
+    int fontSize;
     int opacity;
     int rowHeight;
     int rowWidth;
@@ -285,9 +331,13 @@ struct Settings {
     bool showIcon;
     int maxWidthPercent;
     int maxHeightPercent; int showDelay;
-    bool useAccentColor; bool primaryMonitorOnly; bool perMonitorWindows; bool taskRoundedCorners; bool reverseScrollDirection;
+    bool useAccentColor; bool perMonitorWindows; bool taskRoundedCorners; bool reverseScrollDirection;
     bool centerTaskContent;
 };
+
+static std::vector<std::wregex> g_excludeTitleRegexes;
+static std::vector<std::wregex> g_excludeExeRegexes;
+static std::vector<HWND> g_hMirrorSwitchers;
 
 static HWND g_hSwitcher = NULL;
 static HWND g_hCloseBtnWnd = NULL;
@@ -341,7 +391,11 @@ static bool ThumbnailIsTop() { return ThumbnailPositionIs(L"top"); }
 static bool ThumbnailIsLeft() { return ThumbnailPositionIs(L"left"); }
 static bool ThumbnailIsRight() { return ThumbnailPositionIs(L"right"); }
 static bool ThumbnailIsSide() { return ThumbnailIsLeft() || ThumbnailIsRight(); }
+<<<<<<< HEAD
 static bool ThumbnailAlignLeft() { return ThumbnailAlignmentIs(L"left"); }
+=======
+static bool ThumbnailAlignmentIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailAlignment, v) == 0; }
+>>>>>>> 0fc3be76 (Refactor Simple Window Switcher UI, apply upstream layout fixes, add multi-monitor mirror support, and implement structured array schemas for excluded windows)
 static bool ThumbnailAlignCentered() { return ThumbnailAlignmentIs(L"centered"); }
 static bool ThumbnailAlignRight() { return ThumbnailAlignmentIs(L"right"); }
 static bool HighlightHasFill() {
@@ -576,6 +630,31 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     e.hWnd = hWnd;
     InternalGetWindowText(hWnd, e.title, 256);
     if (!e.title[0]) GetWindowTextW(hWnd, e.title, 256);
+    
+    bool excluded = false;
+    for (const auto& rx : g_excludeTitleRegexes) {
+        if (std::regex_search(e.title, rx)) { excluded = true; break; }
+    }
+    if (!excluded && !g_excludeExeRegexes.empty()) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid) {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc) {
+                WCHAR exePath[MAX_PATH] = {0};
+                DWORD size = MAX_PATH;
+                if (QueryFullProcessImageNameW(hProc, 0, exePath, &size)) {
+                    WCHAR* filename = PathFindFileNameW(exePath);
+                    for (const auto& rx : g_excludeExeRegexes) {
+                        if (std::regex_search(filename, rx)) { excluded = true; break; }
+                    }
+                }
+                CloseHandle(hProc);
+            }
+        }
+    }
+    if (excluded) return TRUE;
+
     e.hIcon = NULL;
     
     bool isUwp = false;
@@ -922,7 +1001,21 @@ static HFONT CreateScaledFont(int dpiY) {
         SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
     }
     LOGFONTW lf = ncm.lfMessageFont;
-    lf.lfWeight = FW_NORMAL;
+    if (g_settings.fontFamily[0] != L'\0') {
+        wcsncpy_s(lf.lfFaceName, g_settings.fontFamily, _TRUNCATE);
+    }
+    lf.lfHeight = -MulDiv(g_settings.fontSize, dpiY, 72);
+    if (wcscmp(g_settings.fontStyle, L"light") == 0) {
+        lf.lfWeight = FW_LIGHT;
+    } else if (wcscmp(g_settings.fontStyle, L"semibold") == 0) {
+        lf.lfWeight = FW_SEMIBOLD;
+    } else if (wcscmp(g_settings.fontStyle, L"bold") == 0 || wcscmp(g_settings.fontStyle, L"boldItalic") == 0) {
+        lf.lfWeight = FW_BOLD;
+    } else {
+        lf.lfWeight = FW_NORMAL;
+    }
+    lf.lfItalic = (wcscmp(g_settings.fontStyle, L"italic") == 0 || wcscmp(g_settings.fontStyle, L"boldItalic") == 0) ? TRUE : FALSE;
+    lf.lfQuality = CLEARTYPE_QUALITY;
     return CreateFontIndirectW(&lf);
 }
 
@@ -1990,6 +2083,13 @@ static void PaintSwitcher() {
         POINT ptSrc = {0,0}; SIZE sz = {w, h};
         BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
         UpdateLayeredWindow(g_hSwitcher, hdcScreen, NULL, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
+        for (HWND hMirror : g_hMirrorSwitchers) {
+            if (IsWindow(hMirror)) {
+                HDC hdcMirrorScreen = GetDC(hMirror);
+                UpdateLayeredWindow(hMirror, hdcMirrorScreen, NULL, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
+                ReleaseDC(hMirror, hdcMirrorScreen);
+            }
+        }
         SelectObject(hdcMem, hOld); DeleteObject(hBmp); DeleteDC(hdcMem);
         ReleaseDC(g_hSwitcher, hdcScreen);
         PaintSwitcherOverlay();
@@ -1997,20 +2097,17 @@ static void PaintSwitcher() {
         // Acrylic: trigger WM_PAINT via InvalidateRect
         InvalidateRect(g_hSwitcher, NULL, TRUE);
         UpdateWindow(g_hSwitcher);
+        for (HWND hMirror : g_hMirrorSwitchers) {
+            if (IsWindow(hMirror)) {
+                InvalidateRect(hMirror, NULL, TRUE);
+                UpdateWindow(hMirror);
+            }
+        }
         PaintSwitcherOverlay();
     }
 }
 
 // Switcher Show / Hide / Switch
-
-static void ResetDwmAttributes() {
-    // Reset acrylic
-    if (g_SetWindowCompositionAttribute) {
-        ACCENT_POLICY a = {}; a.AccentState = 0;
-        WINDOWCOMPOSITIONATTRIBDATA d = {19, &a, sizeof(a)};
-        g_SetWindowCompositionAttribute(g_hSwitcher, &d);
-    }
-}
 
 static void GetOffscreenDelayPosition(int* x, int* y) {
     // Put the 1x1 window just outside the virtual screen bounds.
@@ -2083,13 +2180,77 @@ static void RevealPendingSwitcher() {
 
     RegisterThumbnails();
     PaintSwitcher();
+
+    if (!g_isSticky) {
+        SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
+    }
+}
+
+static void ApplyThemeToWindow(HWND hWnd) {
+    if (g_SetWindowCompositionAttribute) {
+        ACCENT_POLICY a = {}; a.AccentState = 0;
+        WINDOWCOMPOSITIONATTRIBDATA d = {19, &a, sizeof(a)};
+        g_SetWindowCompositionAttribute(hWnd, &d);
+    }
+    MARGINS marGlassInset = ThemeIs(L"mica") ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
+    DwmExtendFrameIntoClientArea(hWnd, &marGlassInset);
+
+    LONG_PTR exs = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if (ThemeIs(L"none")) {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exs | WS_EX_LAYERED);
+    } else {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exs & ~WS_EX_LAYERED);
+        BOOL dark = g_isDarkMode;
+        DwmSetWindowAttribute(hWnd, 20, &dark, sizeof(dark));
+        if (ThemeIs(L"mica")) {
+            int micaVal = 2; // DWMSBT_MAINWINDOW
+            HRESULT hr = DwmSetWindowAttribute(hWnd, 38, &micaVal, sizeof(micaVal));
+            if (FAILED(hr) && ThemeIs(L"mica")) {
+                int oldMicaVal = 1;
+                hr = DwmSetWindowAttribute(hWnd, 1029, &oldMicaVal, sizeof(oldMicaVal));
+            }
+            if (FAILED(hr)) {
+                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
+            }
+        }
+        if (ThemeIs(L"backdrop") && g_SetWindowCompositionAttribute) {
+            DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
+            COLORREF bg = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
+            ACCENT_POLICY accent = {};
+            accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
+            accent.AccentFlags = 0;
+            accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
+            WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
+            g_SetWindowCompositionAttribute(hWnd, &data);
+        }
+        SetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
+    }
+    INT cp = GetCornerPref();
+    DwmSetWindowAttribute(hWnd, 33, &cp, sizeof(cp));
+}
+
+static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
+    if (hM != g_hCurrentMonitor) {
+        MONITORINFO mInfo = { sizeof(mInfo) };
+        GetMonitorInfoW(hM, &mInfo);
+        int mx = (mInfo.rcWork.left + mInfo.rcWork.right - g_winW) / 2;
+        int my = (mInfo.rcWork.top + mInfo.rcWork.bottom - g_winH) / 2;
+        HWND hMirror = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, SWS_CLASSNAME, L"", WS_POPUP, mx, my, g_winW, g_winH, NULL, NULL, GetModuleHandle(NULL), NULL);
+        if (hMirror) {
+            ApplyThemeToWindow(hMirror);
+            g_hMirrorSwitchers.push_back(hMirror);
+            SetWindowPos(hMirror, HWND_TOPMOST, mx, my, g_winW, g_winH, SWP_NOACTIVATE);
+            ShowWindow(hMirror, SW_SHOWNA);
+        }
+    }
+    return TRUE;
 }
 
 static void ShowSwitcher(bool sticky) {
     POINT pt; GetCursorPos(&pt);
-    HMONITOR hMon = g_settings.primaryMonitorOnly ?
-        MonitorFromPoint({0,0}, MONITOR_DEFAULTTOPRIMARY) :
-        MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR hMon = (wcscmp(g_settings.switcherDisplayBehavior, L"primaryOnly") == 0) ?
+                    MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY) :
+                    MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
 
     g_hCurrentMonitor = hMon;
     UnregisterThumbnails(); BuildWindowList();
@@ -2114,49 +2275,7 @@ static void ShowSwitcher(bool sticky) {
     int cx = (mi.rcWork.left + mi.rcWork.right - g_winW) / 2;
     int cy = (mi.rcWork.top + mi.rcWork.bottom - g_winH) / 2;
 
-    // Always reset DWM attributes first to avoid leftovers
-    ResetDwmAttributes();
-
-    // Apply theme (EP: sws_WindowSwitcher.c lines 510-570)
-    // Step 1: Reset DWM frame and blur state (EP lines 510-524)
-    MARGINS marGlassInset = ThemeIs(L"mica") ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
-    DwmExtendFrameIntoClientArea(g_hSwitcher, &marGlassInset);
-
-    LONG_PTR exs = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
-    if (ThemeIs(L"none")) {
-        SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exs | WS_EX_LAYERED);
-    } else {
-        SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exs & ~WS_EX_LAYERED);
-        BOOL dark = g_isDarkMode;
-        DwmSetWindowAttribute(g_hSwitcher, 20, &dark, sizeof(dark));
-        if (ThemeIs(L"mica")) {
-            int micaVal = 2; // DWMSBT_MAINWINDOW
-            HRESULT hr = DwmSetWindowAttribute(g_hSwitcher, 38, &micaVal, sizeof(micaVal));
-            if (FAILED(hr) && ThemeIs(L"mica")) {
-                // Try old undocumented DWMWA_MICA_EFFECT (1029)
-                int oldMicaVal = 1;
-                hr = DwmSetWindowAttribute(g_hSwitcher, 1029, &oldMicaVal, sizeof(oldMicaVal));
-            }
-            if (FAILED(hr)) {
-                // Fallback to none
-                SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE) | WS_EX_LAYERED);
-            }
-        }
-        if (ThemeIs(L"backdrop") && g_SetWindowCompositionAttribute) {
-            DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
-            COLORREF bg = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
-            ACCENT_POLICY accent = {};
-            accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
-            accent.AccentFlags = 0;
-            accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
-            WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
-            g_SetWindowCompositionAttribute(g_hSwitcher, &data);
-        }
-        SetClassLongPtrW(g_hSwitcher, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
-    }
-
-    INT cp = GetCornerPref();
-    DwmSetWindowAttribute(g_hSwitcher, 33, &cp, sizeof(cp));
+    ApplyThemeToWindow(g_hSwitcher);
 
     g_pendingSwitcherRect = {
         cx,
@@ -2191,13 +2310,27 @@ static void ShowSwitcher(bool sticky) {
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
     }
 
+    if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
+        EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
+    }
+
     RegisterThumbnails();
     PaintSwitcher();
+
+    if (!sticky) {
+        SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
+    }
 }
 
 static void HideSwitcher() {
     g_showAllMonitors = false;
     CancelPendingShow();
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
+
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (IsWindow(hMirror)) DestroyWindow(hMirror);
+    }
+    g_hMirrorSwitchers.clear();
 
     UnregisterThumbnails();
     if (g_hSwitcher) {
@@ -2480,6 +2613,14 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (wParam == SWS_SHOW_DELAY_TIMER_ID) {
             RevealPendingSwitcher();
+            return 0;
+        }
+
+        if (wParam == SWS_ALT_POLL_TIMER_ID) {
+            if (!g_isSticky && (GetAsyncKeyState(VK_MENU) & 0x8000) == 0) {
+                KillTimer(hWnd, SWS_ALT_POLL_TIMER_ID);
+                SwitchToSelected();
+            }
             return 0;
         }
     }
@@ -2918,7 +3059,6 @@ static void LoadSettings() {
     g_settings.showDelay = Wh_GetIntSetting(L"Miscellaneous.showDelay");
     if (g_settings.showDelay < 0) g_settings.showDelay = 0;
     g_settings.useAccentColor = Wh_GetIntSetting(L"Style.useAccentColor");
-    g_settings.primaryMonitorOnly = Wh_GetIntSetting(L"Miscellaneous.primaryMonitorOnly");
     g_settings.perMonitorWindows = Wh_GetIntSetting(L"Miscellaneous.perMonitorWindows");
     g_settings.reverseScrollDirection = Wh_GetIntSetting(L"Miscellaneous.reverseScrollDirection");
     g_settings.centerTaskContent = Wh_GetIntSetting(L"Appearance.HeaderContent.centerTaskContent");
@@ -2936,6 +3076,57 @@ static void LoadSettings() {
         wcscpy_s(g_settings.borderColorLight, L"#000000");
     }
 
+    v = Wh_GetStringSetting(L"Appearance.Font.fontFamily");
+    wcscpy_s(g_settings.fontFamily, v ? v : L"Segoe UI"); Wh_FreeStringSetting(v);
+    
+    g_settings.fontSize = Wh_GetIntSetting(L"Appearance.Font.fontSize");
+    if (g_settings.fontSize <= 0) g_settings.fontSize = 9;
+
+    v = Wh_GetStringSetting(L"Appearance.Font.fontStyle");
+    wcscpy_s(g_settings.fontStyle, v ? v : L"regular"); Wh_FreeStringSetting(v);
+
+    v = Wh_GetStringSetting(L"Miscellaneous.switcherDisplayBehavior");
+    wcscpy_s(g_settings.switcherDisplayBehavior, v ? v : L"cursorMonitor"); Wh_FreeStringSetting(v);
+
+    g_excludeTitleRegexes.clear();
+    g_excludeExeRegexes.clear();
+    for (int i = 0; ; i++) {
+        PCWSTR method = Wh_GetStringSetting(L"Miscellaneous.ExcludedWindows[%d].Method", i);
+        bool done = !method || !*method;
+        
+        if (done) {
+            if (method) Wh_FreeStringSetting(method);
+            break;
+        }
+        
+        PCWSTR value = Wh_GetStringSetting(L"Miscellaneous.ExcludedWindows[%d].Value", i);
+        if (value && *value) {
+            std::wstring valStr(value);
+            size_t start = 0;
+            while (start < valStr.length()) {
+                size_t end = valStr.find(L',', start);
+                if (end == std::wstring::npos) end = valStr.length();
+                
+                std::wstring token = valStr.substr(start, end - start);
+                size_t first = token.find_first_not_of(L" \t");
+                if (first != std::wstring::npos) {
+                    token = token.substr(first);
+                    size_t last = token.find_last_not_of(L" \t");
+                    token = token.substr(0, last + 1);
+                    
+                    if (wcscmp(method, L"title") == 0) {
+                        try { g_excludeTitleRegexes.push_back(std::wregex(token)); } catch (...) {}
+                    } else if (wcscmp(method, L"exe") == 0) {
+                        try { g_excludeExeRegexes.push_back(std::wregex(token)); } catch (...) {}
+                    }
+                }
+                start = end + 1;
+            }
+        }
+        
+        Wh_FreeStringSetting(method);
+        if (value) Wh_FreeStringSetting(value);
+    }
 }
 
 
