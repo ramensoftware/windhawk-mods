@@ -1519,7 +1519,6 @@ static HICON CreateMutedOverlayIcon(HICON hBase) {
 static WCHAR s_lastDev[256]  = {};
 static HICON s_lastIcon      = nullptr;
 static bool  s_lastMuted     = false;
-static int   s_lastVolume    = -1;
 
 void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     // Snapshot shared state under lock (no COM inside the lock).
@@ -1536,7 +1535,6 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
 
     WCHAR currentDev[256] = L"Unknown Device";
     WCHAR currentId[512]  = {};
-    int   currentVolume   = -1;  // -1 sentinel = query failed; omit from tooltip
 
     IMMDeviceEnumerator* pEnum = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
@@ -1556,17 +1554,6 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
                 PropVariantClear(&v);
                 pStore->Release();
             }
-            IAudioEndpointVolume* pVol = nullptr;
-            if (SUCCEEDED(pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
-                                         nullptr, (void**)&pVol))) {
-                float scalar = 0.0f;
-                if (SUCCEEDED(pVol->GetMasterVolumeLevelScalar(&scalar))) {
-                    currentVolume = (int)(scalar * 100.0f + 0.5f);
-                    if (currentVolume < 0)   currentVolume = 0;
-                    if (currentVolume > 100) currentVolume = 100;
-                }
-                pVol->Release();
-            }
             pDev->Release();
         }
         pEnum->Release();
@@ -1585,38 +1572,30 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     for (int i = 0; i < localSlotCount; i++)
         if (localDevIds[i][0] != L'\0') configuredCount++;
 
-    // s_lastDev / s_lastIcon / s_lastMuted / s_lastVolume are file-scope to allow external reset.
+    // s_lastDev / s_lastIcon / s_lastMuted are file-scope to allow external reset.
     if (!isAdd &&
         wcscmp(currentDev, s_lastDev) == 0 &&
         currentIcon == s_lastIcon &&
-        s_lastMuted == localMuted &&
-        s_lastVolume == currentVolume)
+        s_lastMuted == localMuted)
     {
         RefreshTrayIconRect();
         return;
     }
     lstrcpyW(s_lastDev, currentDev);
-    s_lastIcon   = currentIcon;
-    s_lastMuted  = localMuted;
-    s_lastVolume = currentVolume;
+    s_lastIcon  = currentIcon;
+    s_lastMuted = localMuted;
 
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd             = hWnd;
     nid.uID              = TRAY_ICON_ID;
-    // NIF_SHOWTIP is required under NOTIFYICON_VERSION_4 — without it the shell
-    // assumes the app draws its own tooltip and the standard one never appears on hover.
-    nid.uFlags           = NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP | NIF_ICON | NIF_GUID;
+    nid.uFlags           = NIF_MESSAGE | NIF_TIP | NIF_ICON | NIF_GUID;
     nid.guidItem         = AUDIOSWAP_TRAY_GUID;
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
 
     if (configuredCount < 2)
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"AudioSwap: Right-click to configure");
-    else if (localMuted && currentVolume >= 0)
-        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.90s (%d%%, Muted)", currentDev, currentVolume);
     else if (localMuted)
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.100s (Muted)", currentDev);
-    else if (currentVolume >= 0)
-        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.100s (%d%%)", currentDev, currentVolume);
     else
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.110s", currentDev);
 
