@@ -2,7 +2,7 @@
 // @id              crystaldiskinfo-smart-auto-refresh
 // @name            CrystalDiskInfo Smart Auto-Refresh
 // @description     Temporarily pauses the Auto-Refresh function whenever the application's main window is visible
-// @version         1.0
+// @version         1.0.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         DiskInfo32.exe
@@ -48,12 +48,12 @@ of the following options to activate it:
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <commctrl.h>
-#include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-std::mutex g_timerMutex;
+std::shared_mutex g_timerMutex;
 std::unordered_map<HWND, std::unordered_set<UINT_PTR>> g_timerMap;
 
 // Subclass procedure
@@ -64,9 +64,9 @@ LRESULT CALLBACK AutoRefreshSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     {
         bool isAutoRefreshTimer = false;
         {
-            std::lock_guard<std::mutex> lock(g_timerMutex);
+            std::shared_lock lock(g_timerMutex);
             auto it = g_timerMap.find(hWnd);
-            if (it != g_timerMap.end() && it->second.count(wParam))
+            if (it != g_timerMap.end() && it->second.contains(wParam))
             {
                 isAutoRefreshTimer = true;
             }
@@ -90,7 +90,7 @@ LRESULT CALLBACK AutoRefreshSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
             AutoRefreshSubclassProc);
-        std::lock_guard<std::mutex> lock(g_timerMutex);
+        std::unique_lock lock(g_timerMutex);
         g_timerMap.erase(hWnd);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -110,7 +110,7 @@ UINT_PTR WINAPI SetTimer_Hook(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse,
     {
         bool isSubclassRequired = false;
         {
-            std::lock_guard<std::mutex> lock(g_timerMutex);
+            std::unique_lock lock(g_timerMutex);
             auto [it, inserted] = g_timerMap.try_emplace(hWnd);
             if (inserted)
             {
@@ -135,11 +135,15 @@ BOOL WINAPI KillTimer_Hook(HWND hWnd, UINT_PTR nIDEvent)
 {
     if (hWnd)
     {
-        std::lock_guard<std::mutex> lock(g_timerMutex);
+        std::unique_lock lock(g_timerMutex);
         auto it = g_timerMap.find(hWnd);
         if (it != g_timerMap.end())
         {
             it->second.erase(nIDEvent);
+            if (it->second.empty())
+            {
+                g_timerMap.erase(it);
+            }
         }
     }
     return KillTimer_Original(hWnd, nIDEvent);
@@ -172,7 +176,7 @@ void Wh_ModUninit()
 
     std::vector<HWND> windowsToDetach;
     {
-        std::lock_guard<std::mutex> lock(g_timerMutex);
+        std::unique_lock lock(g_timerMutex);
         for (const auto& timerEntry : g_timerMap)
         {
             windowsToDetach.push_back(timerEntry.first);
