@@ -2,12 +2,77 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-29T12:07:29.000Z</updated>
+    <updated>2026-05-29T13:01:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Status Bar Metadata 1.4.0]]></title>
+        <id>https://windhawk.net/mods/explorer-status-metadata#531762a55d231b40dc5f3a6e374ea8ac8135ecfb</id>
+        <link href="https://windhawk.net/mods/explorer-status-metadata"/>
+        <updated>2026-05-29T13:01:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerstatusbarmetadatav140">Explorer Status Bar Metadata — v1.4.0</h1>
+<p>Appends file metadata to the Windows Explorer status bar when a single file
+is selected: dimensions, modification date, file type, duration, bitrate, fps.</p>
+<h2 id="howitworks">How it works</h2>
+<ul>
+<li>No timers, no polling. Metadata is computed only when the selected file changes.</li>
+<li>Path-keyed LRU-style cache (1000 entries). Same file = instant return, zero COM calls.</li>
+<li>Hooks <code>PSFormatForDisplayAlloc</code> in propsys.dll — the exact function Explorer calls
+to format the file size for the status bar. Language-independent, no text matching.</li>
+<li>Filter: <code>key == System.Size</code> AND <code>SHELL32.dll</code> appears in the first 5 call stack
+frames (status bar path), but NOT <code>explorerframe.dll</code> (Details column — skipped).</li>
+<li>Compatible with "Better file sizes in Explorer details" — multi-frame stack scan
+handles chained hooks transparently.</li>
+<li>Custom binary parsers for formats the Windows Property System does not index:
+SVG, HDR, EXR, TIFF/TX (LE+BE), TGA, PSD/PSB, WebM/MKV (EBML).</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Network drives</strong> — disabled by default. Can freeze Explorer on slow networks.</li>
+<li><strong>Removable drives</strong> — enabled by default. Disable if you use slow USB media.</li>
+<li><strong>Cache evict count</strong> — how many old entries to drop when the 1000-entry limit is hit.</li>
+</ul>
+<h2 id="changelog">Changelog</h2>
+<h3 id="v140">v1.4.0</h3>
+<ul>
+<li>Replaced DrawTextW/GetTextExtentPoint32W hooks with PSFormatForDisplayAlloc hook
+(language-independent, no text matching, no "selected"-string false positives)</li>
+<li>SHELL32.dll stack filter (5 frames) precisely identifies the status bar call</li>
+<li>Selection path discovery uses IFolderView2::GetSelection — same-thread, no
+CWM_GETISHELLBROWSER broadcast to arbitrary windows</li>
+<li>CWM_GETISHELLBROWSER is now sent only to windows of known safe classes:
+CabinetWClass and ShellTabWindowClass</li>
+<li>SafeGetShellBrowser: thread-ID guard replaced with process-ID guard.
+PSFormatForDisplayAlloc fires on a shell worker thread (not the GUI thread),
+so the thread-ID check always failed and GetSelectedFilePath always returned
+empty. Process-ID check is sufficient and works correctly from any thread.</li>
+<li>Added Wh<em>Log to Wh</em>ModInit/Wh_ModUninit for basic injection diagnostics</li>
+<li>Added Wh_ModSettingsChanged so settings take effect without restarting Explorer</li>
+<li>Cache upgraded from FIFO to true LRU: cache hits now move the entry to the
+back of the eviction queue, keeping frequently-accessed files safe from eviction</li>
+<li>SVG parser rewritten with ExtractAttribute helper: tolerant of whitespace
+around '=' and both quote styles (viewBox = "…", width='100px', etc.)</li>
+<li>Added PSD/PSB binary parser (width/height from fixed 26-byte header)</li>
+<li>File type moved to last position (right edge) for all file types</li>
+<li>CleanTypeString strips spurious ".<digits>" suffix from type names (Windows
+shell quirk: "Adobe Photoshop Image.27" → "Adobe Photoshop Image")</li>
+<li>PSD/PSB type label overridden to "Adobe Photoshop File" for consistency</li>
+<li>Removed cross-window fallback (Strategy 3): GetSelectedFilePath is strictly
+scoped to the root window identified by GetGUIThreadInfo / GetForegroundWindow
+— no risk of reading a selection from a different Explorer window</li>
+</ul>
+<h3 id="v130">v1.3.0</h3>
+<ul>
+<li>Initial release</li>
+</ul>]]></content>
+        <author>
+            <name>VitalS</name>
+            <uri>https://github.com/VitalSkib</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Genie Animation Mod 1.0.0]]></title>
         <id>https://windhawk.net/mods/genie-minimize-animation#4e24d3c633491a476404255c01c4b49194e9847b</id>
@@ -505,23 +570,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ultimate Custom Tray 2.1]]></title>
-        <id>https://windhawk.net/mods/ultimate-custom-tray#75eb49df7dd3d7ada526f7592d1f164290950150</id>
-        <link href="https://windhawk.net/mods/ultimate-custom-tray"/>
-        <updated>2026-05-24T15:57:38.000Z</updated>
-        <content type="html"><![CDATA[<p>New Features:</p>
-<ul>
-<li>Menu item states: Enabled / Disabled / Hidden</li>
-<li>Menu descriptions: Add text on the right (e.g., "Win+E")</li>
-<li>Menu separators: Add lines above/below items</li>
-<li>New folder shortcuts: ~network, ~personal, ~sounds</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>
