@@ -65,7 +65,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $options:
       - none: None (transparent)
       - backdrop: Acrylic (Windows 10+)
-      - mica: Mica (Windows 11 Only)
+      - mica: Mica Blur (Windows 11 only)
     - opacity: 100
       $name: Background Opacity
       $description: Background opacity percentage (0-100), applies to None theme.
@@ -98,9 +98,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           $name: Corner Preference
           $description: Corner radius for the switcher window only.
           $options:
-          - none: Do not round
-          - round: Round
-          - roundSmall: Round small
+          - none: Squared
+          - round: Rounded
+          - roundSmall: Rounded small
         - taskRoundedCorners: false
           $name: Round Task Borders and Close Button
           $description: Apply small rounded corners to the selected task border and close button.
@@ -110,10 +110,17 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           $name: Thumbnail Position
           $description: Place the thumbnail below or above the header row.
           $options:
-          - bottom: Bottom (below header)
-          - top: Top (above header)
-          - left: Left (before header)
-          - right: Right (after header)
+          - bottom: Bottom
+          - top: Top
+          - left: Left
+          - right: Right
+        - thumbnailAlignment: left
+          $name: Thumbnail Alignment
+          $description: Align thumbnail content inside the available thumbnail area.
+          $options:
+          - left: Left
+          - centered: Center
+          - right: Right
         - showThumbnails: true
           $name: Show Thumbnails
           $description: Show DWM live thumbnail previews of windows.
@@ -160,7 +167,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
     - maxHeightPercent: 80
       $name: Maximum Height (percentage of screen height)
     - stretchThumbnailsToTaskWidth: true
-      $name: Stretch Thumbnails To Task Width
+      $name: Stretch Thumbnails to Task Width
       $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
   $name: Dimensions
 - Miscellaneous:
@@ -173,8 +180,6 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - never: Never
       - always: Always
       - stickyOnly: Only in sticky mode
-    - reverseScrollDirection: false
-      $name: Reverse Scroll Direction
     - backwardShortcut: altShiftTab
       $name: Backward Shortcut
       $description: Shortcut used to move backward in the switcher.
@@ -182,6 +187,8 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - altShiftTab: Alt+Shift+Tab (default)
       - altShift: Alt+Shift
       - altBacktick: Alt+Backtick
+    - reverseScrollDirection: false
+      $name: Reverse Scroll Direction
     - primaryMonitorOnly: false
       $name: Always Display Switcher on Primary Monitor
     - perMonitorWindows: false
@@ -259,13 +266,13 @@ typedef BOOL(WINAPI *SetWindowCompositionAttribute_t)(HWND, WINDOWCOMPOSITIONATT
 
 struct WindowEntry {
     HWND hWnd; HICON hIcon; WCHAR title[256]; HTHUMBNAIL hThumb;
-    RECT rcCell; RECT rcThumb; RECT rcThumbActual;
+    RECT rcCell; RECT rcThumb; RECT rcThumbActual; RECT rcThumbSlot;
     SIZE sourceSize;           // Raw DWM surface size
     RECT rcSourceCrop;         // Source crop rect for DWM_TNP_RECTSOURCE
     SIZE effectiveSourceSize;  // Source size after cropping invisible frame
 };
 struct Settings {
-    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32];
+    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32];
     WCHAR highlightStyle[32]; WCHAR virtualDesktopBehavior[32];
     WCHAR borderColorDark[16];
     WCHAR borderColorLight[16];
@@ -324,6 +331,7 @@ static bool HeaderOrientationIs(const WCHAR* v) { return wcscmp(g_settings.heade
 static bool IconSizeIs(const WCHAR* v) { return wcscmp(g_settings.iconSize, v) == 0; }
 static bool BackwardShortcutIs(const WCHAR* v) { return wcscmp(g_settings.backwardShortcut, v) == 0; }
 static bool ThumbnailPositionIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailPosition, v) == 0; }
+static bool ThumbnailAlignmentIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailAlignment, v) == 0; }
 static bool HighlightStyleIs(const WCHAR* v) { return wcscmp(g_settings.highlightStyle, v) == 0; }
 static bool UseAltShiftTabBackward() { return BackwardShortcutIs(L"altShiftTab"); }
 static bool UseAltShiftBackward() { return BackwardShortcutIs(L"altShift"); }
@@ -333,6 +341,9 @@ static bool ThumbnailIsTop() { return ThumbnailPositionIs(L"top"); }
 static bool ThumbnailIsLeft() { return ThumbnailPositionIs(L"left"); }
 static bool ThumbnailIsRight() { return ThumbnailPositionIs(L"right"); }
 static bool ThumbnailIsSide() { return ThumbnailIsLeft() || ThumbnailIsRight(); }
+static bool ThumbnailAlignLeft() { return ThumbnailAlignmentIs(L"left"); }
+static bool ThumbnailAlignCentered() { return ThumbnailAlignmentIs(L"centered"); }
+static bool ThumbnailAlignRight() { return ThumbnailAlignmentIs(L"right"); }
 static bool HighlightHasFill() {
     return HighlightStyleIs(L"fillAndBorder") || HighlightStyleIs(L"fillOnly");
 }
@@ -935,14 +946,7 @@ static void RegisterThumbnailsEarly() {
                     GetWindowRect(w.hWnd, &wr);
                     if (SUCCEEDED(DwmGetWindowAttribute(w.hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb, sizeof(efb)))) {
                         int wrW = wr.right - wr.left, wrH = wr.bottom - wr.top;
-                        int efbW = efb.right - efb.left;
-                        
-                        // DWM in Windows 11 natively crops off-screen borders for maximized windows.
-                        // If the thumbnail source size is already closer to the visible bounds (efb) 
-                        // than the physical bounds (wr), we skip manual cropping to avoid double-cropping.
-                        bool dwmNativelyCropped = (abs(src.cx - efbW) < abs(src.cx - wrW));
-                        
-                        if (!dwmNativelyCropped && wrW > 0 && wrH > 0 && src.cx > 0 && src.cy > 0) {
+                        if (wrW > 0 && wrH > 0 && src.cx > 0 && src.cy > 0) {
                             double sx = (double)src.cx / wrW;
                             double sy = (double)src.cy / wrH;
                             int ml = (int)((efb.left - wr.left) * sx);
@@ -1042,6 +1046,22 @@ static void ComputeLayout(HMONITOR hMon) {
     int maxW = monW * g_settings.maxWidthPercent / 100;
     int maxH = monH * g_settings.maxHeightPercent / 100;
 
+    int sideThumbSlotW = 0;
+    if (g_settings.showThumbnails && sidePlacement && thumbH > 0) {
+        for (const auto& w : g_windows) {
+            int slotW = thumbH;
+            if (w.effectiveSourceSize.cx > 0 && w.effectiveSourceSize.cy > 0) {
+                slotW = (int)((double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy);
+            }
+            if (slotW > maxTileW) slotW = maxTileW;
+            if (w.effectiveSourceSize.cx > 0 && slotW > w.effectiveSourceSize.cx) slotW = w.effectiveSourceSize.cx;
+            if (slotW > sideThumbSlotW) sideThumbSlotW = slotW;
+        }
+        if (sideThumbSlotW <= 0) {
+            sideThumbSlotW = DpiScale(16, dpiX);
+        }
+    }
+
     int curX = initialLeft + masterPad;
     int curY = initialTop + masterPad;
     int placedCount = n; // Track how many windows were actually placed
@@ -1053,6 +1073,7 @@ static void ComputeLayout(HMONITOR hMon) {
             g_windows[ji].rcCell = {0, 0, 0, 0};
             g_windows[ji].rcThumbActual = {0, 0, 0, 0};
             g_windows[ji].rcThumb = {0, 0, 0, 0};
+            g_windows[ji].rcThumbSlot = {0, 0, 0, 0};
             if (g_windows[ji].hThumb) {
                 DwmUnregisterThumbnail(g_windows[ji].hThumb);
                 g_windows[ji].hThumb = NULL;
@@ -1101,7 +1122,7 @@ static void ComputeLayout(HMONITOR hMon) {
                 width = thumbWidth;
                 if (g_settings.rowWidth > 0) {
                     width = DpiScale(g_settings.rowWidth, dpiX);
-                    if (StretchThumbsToTaskWidth()) {
+                    if (StretchThumbsToTaskWidth() && !sidePlacement) {
                         thumbWidth = sidePlacement ? std::max(0, width - ((rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0)) : width;
                         if (thumbWidth <= 0) thumbWidth = DpiScale(16, dpiX);
                         actualThumbH = thumbH;
@@ -1114,13 +1135,10 @@ static void ComputeLayout(HMONITOR hMon) {
                 if (sidePlacement) {
                     int headerExtra = (rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0;
                     if (g_settings.rowWidth > 0) {
-                        int maxThumbW = width - headerExtra;
-                        if (maxThumbW > 0 && thumbWidth > maxThumbW) {
-                            actualThumbH = (int)((double)maxThumbW * actualThumbH / thumbWidth);
-                            thumbWidth = maxThumbW;
-                        }
+                        int minWidth = sideThumbSlotW + headerExtra;
+                        if (width < minWidth) width = minWidth;
                     } else {
-                        width = thumbWidth + headerExtra;
+                        width = sideThumbSlotW + headerExtra;
                     }
                 }
             } else {
@@ -1173,17 +1191,31 @@ static void ComputeLayout(HMONITOR hMon) {
             if (g_settings.showThumbnails) {
                 int thumbX = curX;
                 int thumbY = curY;
+                int slotX = curX;
+                int slotW = width;
                 if (sidePlacement) {
                     int contentH = std::max(actualThumbH, rowTitleH);
+                    int headerExtra = (rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0;
+                    int thumbAreaW = (g_settings.rowWidth > 0) ? sideThumbSlotW : std::max(0, width - headerExtra);
+                    int thumbAreaStart = ThumbnailIsRight()
+                        ? (curX + std::max(0, width - thumbAreaW))
+                        : curX;
+                    slotX = thumbAreaStart;
+                    slotW = thumbAreaW;
                     thumbY = curY + (contentH - actualThumbH) / 2;
-                    if (ThumbnailIsRight()) {
-                        thumbX = curX + width - thumbWidth;
+                    if (ThumbnailAlignRight()) {
+                        thumbX = thumbAreaStart + std::max(0, thumbAreaW - thumbWidth);
+                    } else if (ThumbnailAlignCentered()) {
+                        thumbX = thumbAreaStart + std::max(0, (thumbAreaW - thumbWidth) / 2);
+                    } else {
+                        thumbX = thumbAreaStart;
                     }
                 } else if (!StretchThumbsToTaskWidth() && width > thumbWidth) {
                     thumbX += (width - thumbWidth) / 2;
                 }
                 w.rcThumbActual = { thumbX, thumbY, thumbX + thumbWidth, thumbY + actualThumbH };
                 w.rcThumb = w.rcThumbActual;
+                w.rcThumbSlot = { slotX, thumbY, slotX + slotW, thumbY + actualThumbH };
             }
 
             curX = curX + width + rightInc;
@@ -1215,6 +1247,8 @@ static void ComputeLayout(HMONITOR hMon) {
                     g_windows[j].rcThumbActual.right += diff;
                     g_windows[j].rcThumb.left += diff;
                     g_windows[j].rcThumb.right += diff;
+                    g_windows[j].rcThumbSlot.left += diff;
+                    g_windows[j].rcThumbSlot.right += diff;
                 }
             }
             while (idx + 1 < placedCount && g_windows[(g_layoutStartIndex + idx + 1) % n].rcCell.top == rowTop) idx++;
@@ -1261,7 +1295,7 @@ static void ComputeLayout(HMONITOR hMon) {
                 width = thumbWidth;
                 if (g_settings.rowWidth > 0) {
                     width = DpiScale(g_settings.rowWidth, dpiX);
-                    if (StretchThumbsToTaskWidth()) {
+                    if (StretchThumbsToTaskWidth() && !sidePlacement) {
                         thumbWidth = sidePlacement ? std::max(0, width - ((rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0)) : width;
                         if (thumbWidth <= 0) thumbWidth = DpiScale(16, dpiX);
                         actualThumbH = thumbH;
@@ -1274,13 +1308,10 @@ static void ComputeLayout(HMONITOR hMon) {
                 if (sidePlacement) {
                     int headerExtra = (rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0;
                     if (g_settings.rowWidth > 0) {
-                        int maxThumbW = width - headerExtra;
-                        if (maxThumbW > 0 && thumbWidth > maxThumbW) {
-                            actualThumbH = (int)((double)maxThumbW * actualThumbH / thumbWidth);
-                            thumbWidth = maxThumbW;
-                        }
+                        int minWidth = sideThumbSlotW + headerExtra;
+                        if (width < minWidth) width = minWidth;
                     } else {
-                        width = thumbWidth + headerExtra;
+                        width = sideThumbSlotW + headerExtra;
                     }
                 }
             } else {
@@ -1332,17 +1363,31 @@ static void ComputeLayout(HMONITOR hMon) {
             if (g_settings.showThumbnails) {
                 int thumbX = curX;
                 int thumbY = curY;
+                int slotX = curX;
+                int slotW = width;
                 if (sidePlacement) {
                     int contentH = std::max(actualThumbH, rowTitleH);
+                    int headerExtra = (rowTitleH > 0) ? (sideHeaderWidth + padDivider) : 0;
+                    int thumbAreaW = (g_settings.rowWidth > 0) ? sideThumbSlotW : std::max(0, width - headerExtra);
+                    int thumbAreaStart = ThumbnailIsRight()
+                        ? (curX + std::max(0, width - thumbAreaW))
+                        : curX;
+                    slotX = thumbAreaStart;
+                    slotW = thumbAreaW;
                     thumbY = curY + (contentH - actualThumbH) / 2;
-                    if (ThumbnailIsRight()) {
-                        thumbX = curX + width - thumbWidth;
+                    if (ThumbnailAlignRight()) {
+                        thumbX = thumbAreaStart + std::max(0, thumbAreaW - thumbWidth);
+                    } else if (ThumbnailAlignCentered()) {
+                        thumbX = thumbAreaStart + std::max(0, (thumbAreaW - thumbWidth) / 2);
+                    } else {
+                        thumbX = thumbAreaStart;
                     }
                 } else if (!StretchThumbsToTaskWidth() && width > thumbWidth) {
                     thumbX += (width - thumbWidth) / 2;
                 }
                 w.rcThumbActual = { thumbX, thumbY, thumbX + thumbWidth, thumbY + actualThumbH };
                 w.rcThumb = w.rcThumbActual;
+                w.rcThumbSlot = { slotX, thumbY, slotX + slotW, thumbY + actualThumbH };
             }
 
             if (width > curColMaxW) curColMaxW = width;
@@ -1380,6 +1425,8 @@ static void ComputeLayout(HMONITOR hMon) {
                     g_windows[j].rcThumbActual.bottom += diff;
                     g_windows[j].rcThumb.top += diff;
                     g_windows[j].rcThumb.bottom += diff;
+                    g_windows[j].rcThumbSlot.top += diff;
+                    g_windows[j].rcThumbSlot.bottom += diff;
                 }
             }
 
@@ -1623,18 +1670,23 @@ static RECT GetHeaderContentRectForEntry(const WindowEntry& e) {
         return rc;
     }
 
+    const RECT& rcHeaderSplit = ((e.rcThumbSlot.left != 0 || e.rcThumbSlot.top != 0 ||
+                                  e.rcThumbSlot.right != 0 || e.rcThumbSlot.bottom != 0))
+                                    ? e.rcThumbSlot
+                                    : e.rcThumbActual;
+
     if (ThumbnailIsTop()) {
         int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiY);
-        rc.top = e.rcThumbActual.bottom + divider;
+        rc.top = rcHeaderSplit.bottom + divider;
     } else if (ThumbnailIsBottom()) {
         int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiY);
-        rc.bottom = e.rcThumbActual.top - divider;
+        rc.bottom = rcHeaderSplit.top - divider;
     } else if (ThumbnailIsSide()) {
         int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiX);
         if (ThumbnailIsLeft()) {
-            rc.left = e.rcThumbActual.right + divider;
+            rc.left = rcHeaderSplit.right + divider;
         } else {
-            rc.right = e.rcThumbActual.left - divider;
+            rc.right = rcHeaderSplit.left - divider;
         }
     }
 
@@ -2804,6 +2856,13 @@ static void LoadSettings() {
         wcscmp(g_settings.thumbnailPosition, L"left") != 0 &&
         wcscmp(g_settings.thumbnailPosition, L"right") != 0) {
         wcscpy_s(g_settings.thumbnailPosition, L"bottom");
+    }
+    v = Wh_GetStringSetting(L"Appearance.Thumbnails.thumbnailAlignment");
+    wcscpy_s(g_settings.thumbnailAlignment, v ? v : L"left"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.thumbnailAlignment, L"left") != 0 &&
+        wcscmp(g_settings.thumbnailAlignment, L"centered") != 0 &&
+        wcscmp(g_settings.thumbnailAlignment, L"right") != 0) {
+        wcscpy_s(g_settings.thumbnailAlignment, L"left");
     }
     v = Wh_GetStringSetting(L"Miscellaneous.backwardShortcut");
     if (v) {
