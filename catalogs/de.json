@@ -12809,7 +12809,7 @@
                     1
                 ],
                 "ratingUsers": 4,
-                "updated": 1778078451000,
+                "updated": 1780054945000,
                 "users": 220
             },
             "metadata": {
@@ -12826,7 +12826,7 @@
                 ],
                 "license": "MIT",
                 "name": "Window Border Customizer",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "window-opacity": {

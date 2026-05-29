@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-29T11:23:35.000Z</updated>
+    <updated>2026-05-29T11:42:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Window Border Customizer 1.0.1]]></title>
+        <id>https://windhawk.net/mods/window-border-customizer#2ccc12f1169deec32560f6d0fcd3a903a8d9cd72</id>
+        <link href="https://windhawk.net/mods/window-border-customizer"/>
+        <updated>2026-05-29T11:42:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed custom borders being randomly disabled in certain windows until they are either minimized/restored or the mod is toggled off and on again.</li>
+</ul>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme 1.2.4]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#6d9ee12a3235a734856adc0fa9326d16ff5e19a3</id>
@@ -505,20 +518,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>Himanshu</name>
             <uri>https://github.com/devcode90</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Window Corner Radius 1.2]]></title>
-        <id>https://windhawk.net/mods/custom-corner-radius#c34c936368a39cae882a2e21ba729d94131a87c5</id>
-        <link href="https://windhawk.net/mods/custom-corner-radius"/>
-        <updated>2026-05-23T22:45:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option for customizing tooltip corner radius.</li>
-<li>Added the ability to specify -1 for each of the settings to use the default corner radius.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
