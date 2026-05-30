@@ -38,12 +38,9 @@ COLORREF WINAPI SetTextColor_Hook(HDC hdc, COLORREF color)
 {
     COLORREF menuTextColor = GetSysColor(COLOR_MENUTEXT);
 
-    if (IsGreyColor(color, menuTextColor))
+    if (IsGreyColor(color, menuTextColor) && !WindowFromDC(hdc))
     {
-        if (!WindowFromDC(hdc))
-        {
-            return SetTextColor_Original(hdc, menuTextColor);
-        }
+        return SetTextColor_Original(hdc, menuTextColor);
     }
 
     return SetTextColor_Original(hdc, color);
