@@ -2432,7 +2432,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1778791077000,
+                "updated": 1780137987000,
                 "users": 21
             },
             "metadata": {
@@ -2455,7 +2455,7 @@
                     "DiskInfoA64S.exe"
                 ],
                 "name": "CrystalDiskInfo Smart Auto-Refresh",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "ctrl-backspace-fix-for-win32-text-boxes": {
