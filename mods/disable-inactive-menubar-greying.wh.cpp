@@ -30,28 +30,31 @@ bool IsGreyColor(COLORREF color, COLORREF menuTextColor)
     BYTE r = GetRValue(color);
     BYTE g = GetGValue(color);
     BYTE b = GetBValue(color);
-    
-    return ((r == g && g == b) && (r > 0) && (r < 255)&&!(color == menuTextColor));
+
+    return (r == g && g == b && r > 0 && r < 255 && color != menuTextColor);
 }
 
 COLORREF WINAPI SetTextColor_Hook(HDC hdc, COLORREF color)
 {
     COLORREF menuTextColor = GetSysColor(COLOR_MENUTEXT);
-    
+
     if (IsGreyColor(color, menuTextColor))
     {
-        return SetTextColor_Original(hdc, menuTextColor);
+        if (!WindowFromDC(hdc))
+        {
+            return SetTextColor_Original(hdc, menuTextColor);
+        }
     }
-    
+
     return SetTextColor_Original(hdc, color);
 }
 
-
 BOOL Wh_ModInit()
 {
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "SetTextColor"),
-                       (void*)SetTextColor_Hook,
-                       (void**)&SetTextColor_Original);
+    Wh_SetFunctionHook(
+        (void*)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "SetTextColor"),
+        (void*)SetTextColor_Hook,
+        (void**)&SetTextColor_Original);
 
     return TRUE;
 }
