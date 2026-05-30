@@ -68,24 +68,7 @@ std::atomic<UINT_PTR> g_longPressTimerId{0};
 std::atomic<bool> g_capsIsDown{false};
 std::atomic<bool> g_capsLongPressTriggered{false};
 
-enum class ProcessRole { kNone, kLauncher, kToolMod };
-ProcessRole g_processRole = ProcessRole::kNone;
-HANDLE g_toolModProcessMutex = nullptr;
-
 std::vector<std::wstring> g_passThroughList;
-
-bool IsCurrentProcessWindhawk() {
-    WCHAR processPath[MAX_PATH];
-    DWORD pathLength =
-        GetModuleFileNameW(nullptr, processPath, ARRAYSIZE(processPath));
-    if (pathLength == 0 || pathLength == ARRAYSIZE(processPath)) {
-        return false;
-    }
-
-    const WCHAR* fileName = wcsrchr(processPath, L'\\');
-    fileName = fileName ? fileName + 1 : processPath;
-    return lstrcmpiW(fileName, L"windhawk.exe") == 0;
-}
 
 void LoadSettings() {
     int longPressMs = Wh_GetIntSetting(L"LongPressMs");
@@ -417,22 +400,34 @@ void WhTool_ModUninit() {
     }
 
     if (g_workerThread) {
-        DWORD waitResult = WaitForSingleObject(g_workerThread, 5000);
-        if (waitResult == WAIT_TIMEOUT) {
-            Wh_Log(L"Worker thread did not exit in time");
-            // Safe here because ExitProcess(0) follows in Wh_ModUninit,
-            // which will clean up all thread resources.
-            TerminateThread(g_workerThread, 1);
-        }
+        // Best-effort wait so the keyboard hook can be unhooked cleanly.
+        // If the thread fails to exit in time, ExitProcess(0) in Wh_ModUninit
+        // tears down everything anyway.
+        WaitForSingleObject(g_workerThread, 1000);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
 }
 
-// Prevents the tool mod child process from running its normal entry point.
-// The worker thread keeps running; this effectively makes the process a
-// container for our keyboard hook logic.
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -444,17 +439,16 @@ BOOL Wh_ModInit() {
     }
 
     bool isExcluded = false;
+    bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-    bool isAnyToolModProcess = false;
-
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
-    for (int i = 1; i < argc; ++i) {
+    for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
             wcscmp(argv[i], L"-service-stop") == 0) {
@@ -463,10 +457,12 @@ BOOL Wh_ModInit() {
         }
     }
 
-    for (int i = 1; i < argc - 1; ++i) {
+    for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isAnyToolModProcess = true;
-            isCurrentToolModProcess = wcscmp(argv[i + 1], WH_MOD_ID) == 0;
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
             break;
         }
     }
@@ -478,148 +474,116 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        g_processRole = ProcessRole::kToolMod;
-
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutexW failed: %lu", GetLastError());
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
             ExitProcess(1);
         }
 
         if (!WhTool_ModInit()) {
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
             ExitProcess(1);
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        IMAGE_NT_HEADERS* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        DWORD entryPointRva = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) + entryPointRva;
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook),
-                           nullptr);
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isAnyToolModProcess) {
+    if (isToolModProcess) {
         return FALSE;
     }
 
-    LoadSettings();
-
-    if (IsCurrentProcessWindhawk()) {
-        g_processRole = ProcessRole::kLauncher;
-        return TRUE;
-    }
-
-    return FALSE;
+    g_isToolModProcessLauncher = true;
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (g_processRole != ProcessRole::kLauncher) {
+    if (!g_isToolModProcessLauncher) {
         return;
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    DWORD pathLength =
-        GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
-    if (pathLength == 0 || pathLength == ARRAYSIZE(currentProcessPath)) {
-        Wh_Log(L"GetModuleFileNameW failed: %lu", GetLastError());
-        return;
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
-    WCHAR commandLine[MAX_PATH * 2];
-    int written = swprintf_s(commandLine, ARRAYSIZE(commandLine),
-                           L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-                           WH_MOD_ID);
-    if (written <= 0) {
-        Wh_Log(L"Command line formatting failed");
-        return;
-    }
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
-    }
-
-    if (!kernelModule) {
-        Wh_Log(L"No kernelbase.dll/kernel32.dll");
-        return;
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-
-    auto createProcessInternalW = reinterpret_cast<CreateProcessInternalW_t>(
-        GetProcAddress(kernelModule, "CreateProcessInternalW"));
-    if (!createProcessInternalW) {
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW startupInfo = {sizeof(startupInfo)};
-    startupInfo.dwFlags = STARTF_FORCEOFFFEEDBACK;
-
-    PROCESS_INFORMATION processInformation = {};
-    if (!createProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                nullptr, nullptr, &startupInfo,
-                                &processInformation, nullptr)) {
-        Wh_Log(L"CreateProcessInternalW failed: %lu", GetLastError());
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
-    CloseHandle(processInformation.hProcess);
-    CloseHandle(processInformation.hThread);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    if (g_processRole == ProcessRole::kLauncher) {
-        return TRUE;
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
     }
 
-    if (g_processRole == ProcessRole::kToolMod) {
-        WhTool_ModSettingsChanged();
-        return TRUE;
-    }
-
-    return TRUE;
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_processRole == ProcessRole::kLauncher) {
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
-    if (g_processRole == ProcessRole::kToolMod) {
-        WhTool_ModUninit();
-
-        if (g_toolModProcessMutex) {
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
-        }
-
-        // ExitProcess is necessary here because the original entry point
-        // was hooked with EntryPoint_Hook, so the process has no normal
-        // exit path.
-        ExitProcess(0);
-    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
