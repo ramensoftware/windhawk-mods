@@ -34,6 +34,9 @@ English mode.
 - ForceChineseNativeMode: false
   $name: Keep Simplified Chinese IMEs in Chinese mode
   $description: Automatically switch Simplified Chinese IMEs to Chinese input mode when activated
+- PassThroughProcesses: ""
+  $name: Caps Lock pass-through process list
+  $description: Comma-separated process names where Caps Lock should not be intercepted (e.g. "Moonlight.exe,mstsc.exe"). Useful for remote desktop clients.
 */
 // ==/WindhawkModSettings==
 
@@ -43,6 +46,7 @@ English mode.
 
 #include <atomic>
 #include <cwchar>
+#include <string>
 #include <vector>
 
 #ifndef IMC_SETCONVERSIONMODE
@@ -86,6 +90,8 @@ std::atomic<bool> g_capsLongPressTriggered{false};
 enum class ProcessRole { kNone, kLauncher, kToolMod, kApp };
 ProcessRole g_processRole = ProcessRole::kNone;
 HANDLE g_toolModProcessMutex = nullptr;
+
+std::vector<std::wstring> g_passThroughList;
 
 std::atomic<UINT> g_msuimPrivateMessage{0};
 
@@ -169,6 +175,30 @@ void LoadSettings() {
         bool enabled =
             Wh_GetIntSetting(kImeModeProfiles[i].settingsKey) != 0;
         g_profileEnabled[i].store(enabled, std::memory_order_relaxed);
+    }
+
+    PCWSTR passThroughProcesses = Wh_GetStringSetting(L"PassThroughProcesses");
+    g_passThroughList.clear();
+    if (passThroughProcesses) {
+        if (*passThroughProcesses) {
+            std::wstring list(passThroughProcesses);
+            size_t pos = 0;
+            while (pos < list.size()) {
+                size_t comma = list.find(L',', pos);
+                std::wstring token = list.substr(pos, comma - pos);
+                size_t start = token.find_first_not_of(L" \t");
+                if (start != std::wstring::npos) {
+                    size_t end = token.find_last_not_of(L" \t");
+                    token = token.substr(start, end - start + 1);
+                    if (!token.empty()) {
+                        g_passThroughList.push_back(token);
+                    }
+                }
+                if (comma == std::wstring::npos) break;
+                pos = comma + 1;
+            }
+        }
+        Wh_FreeStringSetting(passThroughProcesses);
     }
 
     g_longPressMs.store(longPressMs, std::memory_order_relaxed);
@@ -412,6 +442,44 @@ bool IsOwnInjectedCapsEvent(const KBDLLHOOKSTRUCT* keyboardInfo) {
            keyboardInfo->dwExtraInfo == kInjectedCapsExtraInfo;
 }
 
+bool IsPassThroughForeground() {
+    if (g_passThroughList.empty()) {
+        return false;
+    }
+
+    HWND foreground = GetForegroundWindow();
+    if (!foreground) {
+        return false;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(foreground, &pid);
+    if (!pid) {
+        return false;
+    }
+
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProcess) {
+        return false;
+    }
+
+    WCHAR name[MAX_PATH] = {};
+    DWORD size = ARRAYSIZE(name);
+    QueryFullProcessImageNameW(hProcess, 0, name, &size);
+    CloseHandle(hProcess);
+
+    PCWSTR fileName = wcsrchr(name, L'\\');
+    fileName = fileName ? fileName + 1 : name;
+
+    for (const auto& token : g_passThroughList) {
+        if (lstrcmpiW(fileName, token.c_str()) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode != HC_ACTION) {
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
@@ -427,6 +495,10 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     }
 
     if (IsOwnInjectedCapsEvent(keyboardInfo)) {
+        return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+    }
+
+    if (IsPassThroughForeground()) {
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
