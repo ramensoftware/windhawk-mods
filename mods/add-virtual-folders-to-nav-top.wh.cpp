@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.11
+// @version         1.1.12
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -912,22 +912,24 @@ static void RestoreTree(HWND hTree)
 
     // Remove our roots
     RootShellItems roots;
-    if (!roots.Create()) return;
-    roots.RemoveInsertableRoots(pNsc.get());
-
-    if (roots.items[NAV_DESKTOP] && pNscRaw)
+    if (roots.Create())
     {
-        g_inCustomAppend = true;
-        AppendRoot_orig(pNscRaw, roots.items[NAV_DESKTOP].get(), enumFlags, 0x1, pFilter.get());
-        g_inCustomAppend = false;
+        roots.RemoveInsertableRoots(pNsc.get());
 
-        WCHAR collapseNames[NAV_COUNT][64] = {};
-        int collapseCount = BuildMatchList(collapseNames, NAV_COUNT,
-            [](int id, const NavItemSettings&) {
-                return IsInsertableItem(id) && g_navItems[id].label[0];
-            });
-        if (collapseCount > 0)
-            CollapseMatchingItems(hTree, nullptr, collapseNames, collapseCount);
+        if (roots.items[NAV_DESKTOP] && pNscRaw)
+        {
+            g_inCustomAppend = true;
+            AppendRoot_orig(pNscRaw, roots.items[NAV_DESKTOP].get(), enumFlags, 0x1, pFilter.get());
+            g_inCustomAppend = false;
+
+            WCHAR collapseNames[NAV_COUNT][64] = {};
+            int collapseCount = BuildMatchList(collapseNames, NAV_COUNT,
+                [](int id, const NavItemSettings&) {
+                    return IsInsertableItem(id) && g_navItems[id].label[0];
+                });
+            if (collapseCount > 0)
+                CollapseMatchingItems(hTree, nullptr, collapseNames, collapseCount);
+        }
     }
 
     RemoveWindowSubclass(hTree, TreeInteractionProc, 0xAF01);
@@ -1035,6 +1037,7 @@ static void InsertHomeSpacer(HWND hTree)
     bool desktopAtBottom = ts->hItems[NAV_DESKTOP] &&
         (!ts->hItems[NAV_THISPC] || !g_settings.desktopAboveThisPC);
     if (!ts->pNscTree || !desktopAtBottom) return;
+    if (GetHiddenItem(*ts)) return;
 
     int spacerId = g_navItems[NAV_HOME].pidl ? NAV_HOME
                  : (g_navItems[NAV_GALLERY].pidl ? NAV_GALLERY : -1);
