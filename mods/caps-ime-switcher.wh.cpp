@@ -2,11 +2,11 @@
 // @id              caps-ime-switcher
 // @name            Caps IME Switcher
 // @description     Brings the macOS Caps Lock input source switching behavior to Windows.
-// @version         0.6
+// @version         0.7
 // @author          ZeonXr
 // @github          https://github.com/ZeonXr
-// @include         *
-// @compilerOptions -luser32 -lshell32 -limm32
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -14,15 +14,22 @@
 /*
 # Caps IME Switcher
 
+Brings the macOS Caps Lock input source switching behavior to Windows.
+
 Short-press Caps Lock to switch to the next input language.
 Long-press Caps Lock to toggle Caps Lock on/off.
 
-Switches input languages by posting WM_INPUTLANGCHANGEREQUEST
-directly to the focused window.
+**Pair with** IME Native Mode Lock (`ime-mode-lock`) — auto-locks
+IMEs to their native mode. Best experience when used together.
 
-Optionally keeps Simplified Chinese IMEs in Chinese mode, so switching
-to a Chinese IME always lands in native input mode instead of accidental
-English mode.
+---
+
+将 macOS 的 Caps Lock 输入法切换方式带到 Windows。
+
+短按 Caps Lock 切换下一个输入语言，长按触发大小写锁定。
+
+**推荐搭配** IME Native Mode Lock (`ime-mode-lock`) — 可在切换输入法时
+自动锁定中文模式，两个 mod 配合使用体验最佳。
 */
 // ==/WindhawkModReadme==
 
@@ -31,9 +38,6 @@ English mode.
 - LongPressMs: 300
   $name: Long press threshold (ms)
   $description: How long to hold Caps Lock (in milliseconds) before it toggles Caps Lock instead of switching input language
-- ForceChineseNativeMode: false
-  $name: Keep Simplified Chinese IMEs in Chinese mode
-  $description: Automatically switch Simplified Chinese IMEs to Chinese input mode when activated
 - PassThroughProcesses: ""
   $name: Caps Lock pass-through process list
   $description: Comma-separated process names where Caps Lock should not be intercepted (e.g. "Moonlight.exe,mstsc.exe"). Useful for remote desktop clients.
@@ -42,42 +46,19 @@ English mode.
 
 #include <windows.h>
 #include <shellapi.h>
-#include <imm.h>
+
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
 
 #include <atomic>
 #include <cwchar>
 #include <string>
 #include <vector>
 
-#ifndef IMC_SETCONVERSIONMODE
-#define IMC_SETCONVERSIONMODE 0x0002
-#endif
-
-#ifndef IME_CMODE_CHINESE
-#define IME_CMODE_CHINESE 0x0001
-#endif
-
-#ifndef IMN_SETCONVERSIONMODE
-#define IMN_SETCONVERSIONMODE 0x0006
-#endif
-
 constexpr UINT kSwitchInputSourceMessage = WM_APP + 1;
-constexpr LANGID kSimplifiedChineseLangId = 0x0804;
 constexpr ULONG_PTR kInjectedCapsExtraInfo = 0x43494D45;
 
-struct ImeModeProfile {
-    PCWSTR settingsKey;
-    LANGID langId;
-    DWORD conversionMode;
-};
-
-const ImeModeProfile kImeModeProfiles[] = {
-    {L"ForceChineseNativeMode", kSimplifiedChineseLangId, IME_CMODE_CHINESE},
-};
-constexpr size_t kImeModeProfileCount = ARRAYSIZE(kImeModeProfiles);
-
 std::atomic<int> g_longPressMs{300};
-std::atomic<bool> g_profileEnabled[kImeModeProfileCount];
 
 HHOOK g_keyboardHook = nullptr;
 HANDLE g_workerThread = nullptr;
@@ -87,32 +68,11 @@ std::atomic<UINT_PTR> g_longPressTimerId{0};
 std::atomic<bool> g_capsIsDown{false};
 std::atomic<bool> g_capsLongPressTriggered{false};
 
-enum class ProcessRole { kNone, kLauncher, kToolMod, kApp };
+enum class ProcessRole { kNone, kLauncher, kToolMod };
 ProcessRole g_processRole = ProcessRole::kNone;
 HANDLE g_toolModProcessMutex = nullptr;
 
 std::vector<std::wstring> g_passThroughList;
-
-std::atomic<UINT> g_msuimPrivateMessage{0};
-
-void InitializeMsuimMessage() {
-    if (g_msuimPrivateMessage.load(std::memory_order_acquire)) {
-        return;
-    }
-    g_msuimPrivateMessage.store(
-        RegisterWindowMessageW(L"MSUIM.Msg.Private"),
-        std::memory_order_release);
-}
-
-using DispatchMessageA_t = decltype(&DispatchMessageA);
-using DispatchMessageW_t = decltype(&DispatchMessageW);
-DispatchMessageA_t DispatchMessageA_Original = nullptr;
-DispatchMessageW_t DispatchMessageW_Original = nullptr;
-
-LRESULT WINAPI DispatchMessageA_Hook(const MSG* msg);
-LRESULT WINAPI DispatchMessageW_Hook(const MSG* msg);
-
-bool AnyProfileEnabled();
 
 bool IsCurrentProcessWindhawk() {
     WCHAR processPath[MAX_PATH];
@@ -127,54 +87,12 @@ bool IsCurrentProcessWindhawk() {
     return lstrcmpiW(fileName, L"windhawk.exe") == 0;
 }
 
-BOOL InstallAppProcessHooks() {
-    if (!AnyProfileEnabled()) {
-        return TRUE;
-    }
-
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(DispatchMessageA),
-                            reinterpret_cast<void*>(DispatchMessageA_Hook),
-                            reinterpret_cast<void**>(&DispatchMessageA_Original))) {
-        Wh_Log(L"Failed to hook DispatchMessageA");
-        return FALSE;
-    }
-
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(DispatchMessageW),
-                            reinterpret_cast<void*>(DispatchMessageW_Hook),
-                            reinterpret_cast<void**>(&DispatchMessageW_Original))) {
-        Wh_Log(L"Failed to hook DispatchMessageW");
-        // No need to manually unhook DispatchMessageA here:
-        // returning FALSE from Wh_ModInit causes the engine to
-        // discard all registered hooks automatically.
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-bool AnyProfileEnabled() {
-    for (size_t i = 0; i < kImeModeProfileCount; ++i) {
-        if (g_profileEnabled[i].load(std::memory_order_relaxed)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void LoadSettings() {
-    InitializeMsuimMessage();
-
     int longPressMs = Wh_GetIntSetting(L"LongPressMs");
     if (longPressMs < 50) {
         longPressMs = 50;
     } else if (longPressMs > 5000) {
         longPressMs = 5000;
-    }
-
-    for (size_t i = 0; i < kImeModeProfileCount; ++i) {
-        bool enabled =
-            Wh_GetIntSetting(kImeModeProfiles[i].settingsKey) != 0;
-        g_profileEnabled[i].store(enabled, std::memory_order_relaxed);
     }
 
     PCWSTR passThroughProcesses = Wh_GetStringSetting(L"PassThroughProcesses");
@@ -211,8 +129,6 @@ HWND GetInputTargetWindow() {
     }
 
     DWORD foregroundThreadId = GetWindowThreadProcessId(foregroundWindow, nullptr);
-    // If the thread ID cannot be obtained, skip the focused control lookup
-    // and fall back to the top-level foreground window.
     if (!foregroundThreadId) {
         return foregroundWindow;
     }
@@ -271,122 +187,11 @@ void RequestNextInputSource() {
         return;
     }
 
-    // No need to check IsWindow() here: PostMessageW safely returns
-    // FALSE if the window has been destroyed since we looked it up.
-
     if (!PostMessageW(targetWindow, WM_INPUTLANGCHANGEREQUEST,
                       INPUTLANGCHANGE_FORWARD,
                       reinterpret_cast<LPARAM>(nextLayout))) {
         Wh_Log(L"WM_INPUTLANGCHANGEREQUEST failed: %lu", GetLastError());
     }
-}
-
-LANGID GetKeyboardLayoutLangId(HKL keyboardLayout) {
-    return static_cast<LANGID>(reinterpret_cast<UINT_PTR>(keyboardLayout) &
-                               0xFFFF);
-}
-
-bool IsProfileEnabled(size_t profileIndex) {
-    if (profileIndex >= kImeModeProfileCount) {
-        return false;
-    }
-    return g_profileEnabled[profileIndex].load(std::memory_order_relaxed);
-}
-
-const ImeModeProfile* FindMatchingImeModeProfile(HKL keyboardLayout) {
-    LANGID currentLangId = GetKeyboardLayoutLangId(keyboardLayout);
-
-    for (size_t i = 0; i < kImeModeProfileCount; ++i) {
-        if (IsProfileEnabled(i) && currentLangId == kImeModeProfiles[i].langId) {
-            return &kImeModeProfiles[i];
-        }
-    }
-
-    return nullptr;
-}
-
-void ApplyNativeImeMode(HWND preferredTargetWindow = nullptr) {
-    if (!AnyProfileEnabled()) {
-        return;
-    }
-
-    HWND targetWindow = preferredTargetWindow ? preferredTargetWindow
-                                              : GetInputTargetWindow();
-    if (!targetWindow) {
-        return;
-    }
-
-    DWORD targetThreadId = GetWindowThreadProcessId(targetWindow, nullptr);
-    HKL keyboardLayout = GetKeyboardLayout(targetThreadId ? targetThreadId : 0);
-    const ImeModeProfile* profile =
-        FindMatchingImeModeProfile(keyboardLayout);
-    if (!profile) {
-        return;
-    }
-
-    DWORD desiredConversionMode = profile->conversionMode;
-    if (!desiredConversionMode) {
-        return;
-    }
-
-    HWND imeWindow = ImmGetDefaultIMEWnd(targetWindow);
-    if (!imeWindow) {
-        return;
-    }
-
-    DWORD_PTR ignoredResult = 0;
-    SendMessageTimeoutW(imeWindow, WM_IME_CONTROL, IMC_SETCONVERSIONMODE,
-                        desiredConversionMode, SMTO_ABORTIFHUNG, 100,
-                        &ignoredResult);
-    SendMessageTimeoutW(imeWindow, WM_IME_NOTIFY, IMN_SETCONVERSIONMODE, 0,
-                        SMTO_ABORTIFHUNG, 100, &ignoredResult);
-}
-
-bool ShouldApplyNativeImeModeAfterDispatch(const MSG* msg) {
-    if (!msg || !AnyProfileEnabled()) {
-        return false;
-    }
-
-    UINT msuimMessage = g_msuimPrivateMessage.load(std::memory_order_acquire);
-    if (msuimMessage && msg->message == msuimMessage) {
-        // This message is only used as an extra trigger. The target IME
-        // is still selected by LANGID, so all Simplified Chinese IMEs
-        // share the same behavior.
-        return true;
-    }
-
-    // Only trigger on conversion mode changes, not every WM_IME_NOTIFY
-    // (which fires very frequently for candidate window show/hide, etc.).
-    if (msg->message == WM_IME_NOTIFY &&
-        msg->wParam == IMN_SETCONVERSIONMODE) {
-        return true;
-    }
-
-    if (msg->message == WM_INPUTLANGCHANGE) {
-        return true;
-    }
-
-    return false;
-}
-
-void HandlePossibleNativeImeModeChange(const MSG* msg) {
-    if (!ShouldApplyNativeImeModeAfterDispatch(msg)) {
-        return;
-    }
-
-    ApplyNativeImeMode(msg->hwnd);
-}
-
-LRESULT WINAPI DispatchMessageA_Hook(const MSG* msg) {
-    LRESULT result = DispatchMessageA_Original(msg);
-    HandlePossibleNativeImeModeChange(msg);
-    return result;
-}
-
-LRESULT WINAPI DispatchMessageW_Hook(const MSG* msg) {
-    LRESULT result = DispatchMessageW_Original(msg);
-    HandlePossibleNativeImeModeChange(msg);
-    return result;
 }
 
 void SendRealCapsLockToggle() {
@@ -719,8 +524,7 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    g_processRole = ProcessRole::kApp;
-    return InstallAppProcessHooks();
+    return FALSE;
 }
 
 void Wh_ModAfterInit() {
@@ -795,10 +599,6 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     if (g_processRole == ProcessRole::kToolMod) {
         WhTool_ModSettingsChanged();
         return TRUE;
-    }
-
-    if (g_processRole == ProcessRole::kApp && bReload) {
-        *bReload = TRUE;
     }
 
     return TRUE;
