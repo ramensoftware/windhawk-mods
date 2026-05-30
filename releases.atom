@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-30T14:11:46.000Z</updated>
+    <updated>2026-05-30T18:43:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Caps IME Switcher 0.7]]></title>
+        <id>https://windhawk.net/mods/caps-ime-switcher#8877ffddffed29cd23d442cb2a803d65cdfea9e3</id>
+        <link href="https://windhawk.net/mods/caps-ime-switcher"/>
+        <updated>2026-05-30T18:43:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="capsimeswitcher">Caps IME Switcher</h1>
+<p>Brings the macOS Caps Lock input source switching behavior to Windows.</p>
+<p>Short-press Caps Lock to switch to the next input language.
+Long-press Caps Lock to toggle Caps Lock on/off.</p>
+<p><strong>Pair with</strong> IME Native Mode Lock (<code>ime-mode-lock</code>) — auto-locks
+IMEs to their native mode. Best experience when used together.</p>
+<hr />
+<p>将 macOS 的 Caps Lock 输入法切换方式带到 Windows。</p>
+<p>短按 Caps Lock 切换下一个输入语言，长按触发大小写锁定。</p>
+<p><strong>推荐搭配</strong> IME Native Mode Lock (<code>ime-mode-lock</code>) — 可在切换输入法时
+自动锁定中文模式，两个 mod 配合使用体验最佳。</p>]]></content>
+        <author>
+            <name>ZeonXr</name>
+            <uri>https://github.com/ZeonXr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Block SMB Quick Access 1.2]]></title>
         <id>https://windhawk.net/mods/block-smb-quick-access#ab9754b6038bca2df2ffd75fc3f8f13e3ac15359</id>
@@ -690,19 +711,6 @@ currently set.</li>
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Theme Toggler Tray 1.2.1]]></title>
-        <id>https://windhawk.net/mods/theme-toggler-tray#acfafad42bba74504b8d8556fc7fe148aa512344</id>
-        <link href="https://windhawk.net/mods/theme-toggler-tray"/>
-        <updated>2026-05-14T19:46:02.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="themetogglertraystandalonemode">Theme Toggler Tray (Standalone Mode)</h1>
-<p>This mod now runs in a dedicated Windhawk process for better stability.
-Click the tray icon to instantly toggle between Dark and Light mode.</p>]]></content>
-        <author>
-            <name>Husam-Abdulraheem</name>
-            <uri>https://github.com/Husam-Abdulraheem</uri>
         </author>
     </entry>
 </feed>
