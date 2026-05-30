@@ -161,13 +161,17 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
   $name: Theme
 - Appearance:
     - Corners:
-        - cornerPreference: none
+        - cornerPreference: round
           $name: Corner Preference
-          $description: Corner radius for the switcher window only.
+          $description: Corner radius for the switcher window and its elements.
           $options:
           - none: Squared
           - round: Rounded
           - roundSmall: Rounded small
+          - custom: Custom
+        - customCornerRadius: 8
+          $name: Custom Corner Radius (px)
+          $description: Corner radius in pixels, used when Corner Preference is set to Custom. Applies to task borders, close buttons, and thumbnails.
         - taskRoundedCorners: false
           $name: Round Task Borders and Close Button
           $description: Apply small rounded corners to the selected task border and close button.
@@ -191,6 +195,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
         - showThumbnails: true
           $name: Show Thumbnails
           $description: Show DWM live thumbnail previews of windows.
+        - showHoverBorder: true
+          $name: Show Hover Border
+          $description: Show a colored border around the thumbnail when hovered.
       $name: Thumbnails
     - HeaderContent:
         - iconSize: small
@@ -223,6 +230,24 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           - horizontal: Horizontal
           - vertical: Vertical
       $name: Orientation
+    - Position:
+        - switcherPosition: center
+          $name: Switcher Position
+          $description: Where the switcher should appear on the screen.
+          $options:
+          - topLeft: Top Left
+          - topCenter: Top Center
+          - topRight: Top Right
+          - centerLeft: Center Left
+          - center: Center
+          - centerRight: Center Right
+          - bottomLeft: Bottom Left
+          - bottomCenter: Bottom Center
+          - bottomRight: Bottom Right
+        - switcherPositionMargin: 0
+          $name: Switcher Position Margin (px)
+          $description: Offset from the screen edges when using non-centered positions.
+      $name: Position
     - Font:
         - fontFamily: Segoe UI
           $name: Font Family
@@ -412,6 +437,10 @@ struct Settings {
     bool showApplications;
     WCHAR showTitles[32];
     bool restoreAllWindows;
+    int customCornerRadius;
+    WCHAR switcherPosition[32];
+    int switcherPositionMargin;
+    bool showHoverBorder;
 };
 
 static std::vector<std::wstring> g_excludeTitlePatterns;
@@ -526,6 +555,7 @@ static int GetHeaderRowHeightPx() {
 static INT GetCornerPref() {
     if (wcscmp(g_settings.cornerPreference, L"none") == 0) return 1;
     if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) return 3;
+    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) return 1; // Don't let DWM round, we'll try to manual mask
     return 2; // Default to round
 }
 
@@ -537,7 +567,35 @@ static int GetTaskUiCornerRadiusPx() {
     if (!UseTaskRoundedCorners()) {
         return 0;
     }
+    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        return MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+    }
     return MulDiv(4, g_dpiX, 96);
+}
+
+static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY) {
+    int w = workArea.right - workArea.left;
+    int h = workArea.bottom - workArea.top;
+    int m = MulDiv(g_settings.switcherPositionMargin, g_dpiX, 96);
+    if (wcscmp(g_settings.switcherPosition, L"topLeft") == 0) {
+        *outX = workArea.left + m; *outY = workArea.top + m;
+    } else if (wcscmp(g_settings.switcherPosition, L"topCenter") == 0) {
+        *outX = workArea.left + (w - g_winW) / 2; *outY = workArea.top + m;
+    } else if (wcscmp(g_settings.switcherPosition, L"topRight") == 0) {
+        *outX = workArea.right - g_winW - m; *outY = workArea.top + m;
+    } else if (wcscmp(g_settings.switcherPosition, L"centerLeft") == 0) {
+        *outX = workArea.left + m; *outY = workArea.top + (h - g_winH) / 2;
+    } else if (wcscmp(g_settings.switcherPosition, L"centerRight") == 0) {
+        *outX = workArea.right - g_winW - m; *outY = workArea.top + (h - g_winH) / 2;
+    } else if (wcscmp(g_settings.switcherPosition, L"bottomLeft") == 0) {
+        *outX = workArea.left + m; *outY = workArea.bottom - g_winH - m;
+    } else if (wcscmp(g_settings.switcherPosition, L"bottomCenter") == 0) {
+        *outX = workArea.left + (w - g_winW) / 2; *outY = workArea.bottom - g_winH - m;
+    } else if (wcscmp(g_settings.switcherPosition, L"bottomRight") == 0) {
+        *outX = workArea.right - g_winW - m; *outY = workArea.bottom - g_winH - m;
+    } else { // center
+        *outX = workArea.left + (w - g_winW) / 2; *outY = workArea.top + (h - g_winH) / 2;
+    }
 }
 
 static int GetCloseButtonCornerRadiusPx() {
@@ -1871,7 +1929,7 @@ static COLORREF GetBgColor() {
                         SWS_BG_LIGHT);
 }
 
-static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx) {
+static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
     if (radiusPx <= 0) {
         return;
     }
@@ -1889,38 +1947,42 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx) {
         return;
     }
 
-    COLORREF bg = GetBgColor();
+    COLORREF bg = (overrideBg != CLR_INVALID) ? overrideBg : GetBgColor();
     // In layered mode, punch fully transparent corners to force thumbnail clipping.
-    BYTE alpha = ThemeIs(L"none") ? 0 : 255;
+    BYTE alpha = (ThemeIs(L"none") && !forceOpaque) ? 0 : 255;
 
     Gdiplus::Graphics graphics(hdc);
+    if (alpha == 0) {
+        graphics.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+    }
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     Gdiplus::SolidBrush brush(Gdiplus::Color(alpha, GetRValue(bg), GetGValue(bg), GetBValue(bg)));
 
     int d = r * 2;
     Gdiplus::GraphicsPath cutTl, cutTr, cutBr, cutBl;
+    Gdiplus::REAL ext = (alpha != 0) ? 1.0f : 0.0f; // Extend outward to cover anti-aliased edge
 
     cutTl.StartFigure();
-    cutTl.AddLine((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top + r, (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top);
-    cutTl.AddLine((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)rc.left + r, (Gdiplus::REAL)rc.top);
+    cutTl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top + r, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top - ext);
+    cutTl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.left + r, (Gdiplus::REAL)rc.top - ext);
     cutTl.AddArc((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 270, -90);
     cutTl.CloseFigure();
 
     cutTr.StartFigure();
-    cutTr.AddLine((Gdiplus::REAL)rc.right - r, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)rc.right, (Gdiplus::REAL)rc.top);
-    cutTr.AddLine((Gdiplus::REAL)rc.right, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)rc.right, (Gdiplus::REAL)rc.top + r);
+    cutTr.AddLine((Gdiplus::REAL)rc.right - r, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top - ext);
+    cutTr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top + r);
     cutTr.AddArc((Gdiplus::REAL)rc.right - d, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 0, -90);
     cutTr.CloseFigure();
 
     cutBr.StartFigure();
-    cutBr.AddLine((Gdiplus::REAL)rc.right, (Gdiplus::REAL)rc.bottom - r, (Gdiplus::REAL)rc.right, (Gdiplus::REAL)rc.bottom);
-    cutBr.AddLine((Gdiplus::REAL)rc.right, (Gdiplus::REAL)rc.bottom, (Gdiplus::REAL)rc.right - r, (Gdiplus::REAL)rc.bottom);
+    cutBr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom - r, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom + ext);
+    cutBr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.right - r, (Gdiplus::REAL)rc.bottom + ext);
     cutBr.AddArc((Gdiplus::REAL)rc.right - d, (Gdiplus::REAL)rc.bottom - d, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 90, -90);
     cutBr.CloseFigure();
 
     cutBl.StartFigure();
-    cutBl.AddLine((Gdiplus::REAL)rc.left + r, (Gdiplus::REAL)rc.bottom, (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.bottom);
-    cutBl.AddLine((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.bottom, (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.bottom - r);
+    cutBl.AddLine((Gdiplus::REAL)rc.left + r, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom + ext);
+    cutBl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom - r);
     cutBl.AddArc((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.bottom - d, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 180, -90);
     cutBl.CloseFigure();
 
@@ -1932,17 +1994,22 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx) {
 
 // Draw a rectangular contour around a rect.
 // direction: 1 = inner (shrinks inward), -1 = outer (grows outward)
-// Uses GDI+ rounded path for inner contours when cornerRadius > 0, FrameRect otherwise.
-static void DrawContour(HDC hdc, RECT rc, int contourSize, int direction) {
+// Uses GDI+ rounded path for contours when cornerRadius > 0.
+static void DrawContour(HDC hdc, RECT rc, int contourSize, int direction, int overrideCornerRadius = -1) {
     COLORREF c = GetContourColor();
     BYTE r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
 
-    int cornerRadius = GetTaskUiCornerRadiusPx();
-    if (cornerRadius > 0 && direction > 0) {
+    int cornerRadius = (overrideCornerRadius != -1) ? overrideCornerRadius : GetTaskUiCornerRadiusPx();
+    if (cornerRadius > 0) {
         int penWidth = contourSize * g_dpiX / 96;
         if (penWidth < 1) penWidth = 1;
 
         RECT drawRc = rc;
+        if (direction < 0) {
+            InflateRect(&drawRc, 2, 2);
+            cornerRadius += 2 + penWidth / 2;
+        }
+
         int width = drawRc.right - drawRc.left - penWidth;
         int height = drawRc.bottom - drawRc.top - penWidth;
         if (width <= 0 || height <= 0) {
@@ -1976,9 +2043,6 @@ static void DrawContour(HDC hdc, RECT rc, int contourSize, int direction) {
     Gdiplus::SolidBrush solidBrush(Gdiplus::Color(255, r, g, b));
 
     if (direction < 0) {
-        // Outer contour: DWM composites thumbnails on top of GDI and renders
-        // inclusively at rcDestination's right/bottom edges. Inflate by i+2
-        // so border pixels land 1px beyond DWM's last column/row.
         for (int i = 0; i < contourSize; i++) {
             RECT r_rect = rc;
             InflateRect(&r_rect, i + 2, i + 2);
@@ -1988,7 +2052,6 @@ static void DrawContour(HDC hdc, RECT rc, int contourSize, int direction) {
             graphics.FillRectangle(&solidBrush, r_rect.right - 1, r_rect.top + 1, 1, (r_rect.bottom - r_rect.top) - 2);
         }
     } else {
-        // Inner contour
         for (int i = 0; i < contourSize; i++) {
             RECT r_rect = rc;
             InflateRect(&r_rect, -i, -i);
@@ -2146,12 +2209,9 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
             }
         }
 
-        // Hover thumbnail border: outer contour on rcThumbActual (EP draws both independently)
-        if (i == g_hoverIndex && g_hoverWnd == hWnd && g_settings.showThumbnails) {
-            DrawContour(hdc, e.rcThumbActual, 1, -1);
-        }
+        // Hover thumbnail border is now drawn in DrawSwitcherOverlay so it sits above the thumbnail mask
 
-        if (g_settings.showThumbnails && cornerRadius > 0) {
+        if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none")) {
             MaskRectCorners(hdc, e.rcThumbActual, cornerRadius);
             RECT inset = e.rcThumbActual;
             InflateRect(&inset, -1, -1);
@@ -2256,11 +2316,30 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     if (g_windows.empty()) return;
 
     int rowTitleH = GetHeaderRowHeightPx();
+    int cornerRadius = GetTaskUiCornerRadiusPx();
 
     for (int idx = 0; idx < (int)g_windows.size(); idx++) {
         int i = (g_layoutStartIndex + idx) % g_windows.size();
         auto& e = g_windows[i];
         if (IsWindowTruncated(i)) continue;
+
+        // ALWAYS draw opaque mask on the overlay window to cover the DWM thumbnail's square corners.
+        // Even for the transparent theme, DWM on Windows 11 does not clip the thumbnail to the layered window's alpha channel.
+        if (g_settings.showThumbnails && cornerRadius > 0) {
+            COLORREF maskColor = GetBgColor();
+            if (i == g_selectedIndex && HighlightHasFill()) {
+                maskColor = GetHighlightFillColor();
+            }
+            MaskRectCorners(hdc, e.rcThumbActual, cornerRadius, true, maskColor);
+            RECT inset = e.rcThumbActual;
+            InflateRect(&inset, -1, -1);
+            MaskRectCorners(hdc, inset, cornerRadius, true, maskColor);
+        }
+
+        // Hover thumbnail border: outer contour on rcThumbActual (drawn here to overlay the mask)
+        if (i == g_hoverIndex && g_hoverWnd == hWnd && g_settings.showThumbnails && g_settings.showHoverBorder) {
+            DrawContour(hdc, e.rcThumbActual, 1, -1, cornerRadius);
+        }
 
         // Close button (positioned at top-right of the cell, in title area)
         if (i == g_hoverIndex && g_hoverWnd == hWnd) {
@@ -2354,6 +2433,18 @@ static void PaintSwitcherOverlay() {
     void* bits = NULL;
     HBITMAP hBmp = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
     HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
+
+    // Clip the overlay DC to the same rounded rect as the main window.
+    // SetWindowRgn is ignored for layered windows using UpdateLayeredWindow,
+    // so we must clip manually to prevent corner masks from bleeding outside
+    // the main window's rounded boundary.
+    INT cp = GetCornerPref();
+    if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        int radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+        HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+        SelectClipRgn(hdcMem, hClip);
+        DeleteObject(hClip);
+    }
 
     DrawSwitcherOverlay(hdcMem, g_hSwitcher);
 
@@ -2541,15 +2632,29 @@ static void ApplyThemeToWindow(HWND hWnd) {
         SetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
     }
     INT cp = GetCornerPref();
-    DwmSetWindowAttribute(hWnd, 33, &cp, sizeof(cp));
+    if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        COLORREF none = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+        DwmSetWindowAttribute(hWnd, 34 /* DWMWA_BORDER_COLOR */, &none, sizeof(none));
+        
+        // Always use DONOTROUND for custom corners. SetWindowRgn defines the
+        // window shape; DWM's own rounding (ROUND/ROUNDSMALL) uses a fixed
+        // radius that conflicts with our custom radius, creating visible
+        // glass artifacts at the corners.
+        INT shadowCp = 1; // DWMWCP_DONOTROUND
+        DwmSetWindowAttribute(hWnd, 33, &shadowCp, sizeof(shadowCp));
+    } else {
+        DwmSetWindowAttribute(hWnd, 33, &cp, sizeof(cp));
+        COLORREF defaultColor = 0xFFFFFFFF; // DWMWA_COLOR_DEFAULT
+        DwmSetWindowAttribute(hWnd, 34, &defaultColor, sizeof(defaultColor));
+    }
 }
 
 static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
     if (hM != g_hCurrentMonitor) {
         MONITORINFO mInfo = { sizeof(mInfo) };
         GetMonitorInfoW(hM, &mInfo);
-        int mx = (mInfo.rcWork.left + mInfo.rcWork.right - g_winW) / 2;
-        int my = (mInfo.rcWork.top + mInfo.rcWork.bottom - g_winH) / 2;
+        int mx, my;
+        GetSwitcherPosition(mInfo.rcWork, &mx, &my);
         HWND hMirror = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, SWS_CLASSNAME, L"", WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, mx, my, g_winW, g_winH, g_hSwitcher, NULL, GetModuleHandle(NULL), NULL);
         if (hMirror) {
             ApplyThemeToWindow(hMirror);
@@ -2591,10 +2696,22 @@ static void ShowSwitcher(bool sticky) {
     g_hFont = CreateScaledFont(g_dpiY);
 
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
-    int cx = (mi.rcWork.left + mi.rcWork.right - g_winW) / 2;
-    int cy = (mi.rcWork.top + mi.rcWork.bottom - g_winH) / 2;
+    int cx, cy;
+    GetSwitcherPosition(mi.rcWork, &cx, &cy);
 
     ApplyThemeToWindow(g_hSwitcher);
+
+    INT cp = GetCornerPref();
+    if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        int radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+        HRGN hRgn1 = CreateRoundRectRgn(0, 0, g_winW + 1, g_winH + 1, radius * 2, radius * 2);
+        SetWindowRgn(g_hSwitcher, hRgn1, TRUE);
+        // NOTE: Do NOT call SetWindowRgn on g_hCloseBtnWnd — it is a layered
+        // window using UpdateLayeredWindow, which ignores SetWindowRgn.
+        // Instead, the overlay DC is clipped in PaintSwitcherOverlay.
+    } else {
+        SetWindowRgn(g_hSwitcher, NULL, TRUE);
+    }
 
     g_pendingSwitcherRect = {
         cx,
@@ -2705,8 +2822,8 @@ static void RecomputeAndReposition() {
     ComputeLayout(hMon);
     MONITORINFO mi = { sizeof(mi) };
     GetMonitorInfoW(hMon, &mi);
-    int cx = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - g_winW) / 2;
-    int cy = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - g_winH) / 2;
+    int cx, cy;
+    GetSwitcherPosition(mi.rcWork, &cx, &cy);
 
     g_pendingSwitcherRect = {
         cx,
@@ -3281,8 +3398,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     ComputeLayout(g_hCurrentMonitor);
                     // Resize and re-center the window to match new layout
                     MONITORINFO rmi = { sizeof(rmi) }; GetMonitorInfoW(g_hCurrentMonitor, &rmi);
-                    int cx = (rmi.rcWork.left + rmi.rcWork.right - g_winW) / 2;
-                    int cy = (rmi.rcWork.top + rmi.rcWork.bottom - g_winH) / 2;
+                    int cx, cy;
+                    GetSwitcherPosition(rmi.rcWork, &cx, &cy);
                     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
                     if (g_hCloseBtnWnd) {
                         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
@@ -3384,6 +3501,9 @@ static void LoadSettings() {
     wcscpy_s(g_settings.colorScheme, v ? v : L"system"); Wh_FreeStringSetting(v);
     v = Wh_GetStringSetting(L"Appearance.Corners.cornerPreference");
     wcscpy_s(g_settings.cornerPreference, v ? v : L"round"); Wh_FreeStringSetting(v);
+    g_settings.customCornerRadius = Wh_GetIntSetting(L"Appearance.Corners.customCornerRadius");
+    if (g_settings.customCornerRadius < 0) g_settings.customCornerRadius = 0;
+    if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
     g_settings.taskRoundedCorners = Wh_GetIntSetting(L"Appearance.Corners.taskRoundedCorners");
     v = Wh_GetStringSetting(L"Accessibility.scrollWheelBehavior");
     wcscpy_s(g_settings.scrollWheelBehavior, v ? v : L"never"); Wh_FreeStringSetting(v);
@@ -3395,6 +3515,22 @@ static void LoadSettings() {
         wcscmp(g_settings.headerContentOrientation, L"vertical") != 0) {
         wcscpy_s(g_settings.headerContentOrientation, L"horizontal");
     }
+    
+    v = Wh_GetStringSetting(L"Appearance.Position.switcherPosition");
+    wcscpy_s(g_settings.switcherPosition, v ? v : L"center"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.switcherPosition, L"topLeft") != 0 &&
+        wcscmp(g_settings.switcherPosition, L"topCenter") != 0 &&
+        wcscmp(g_settings.switcherPosition, L"topRight") != 0 &&
+        wcscmp(g_settings.switcherPosition, L"centerLeft") != 0 &&
+        wcscmp(g_settings.switcherPosition, L"center") != 0 &&
+        wcscmp(g_settings.switcherPosition, L"centerRight") != 0 &&
+        wcscmp(g_settings.switcherPosition, L"bottomLeft") != 0 &&
+        wcscmp(g_settings.switcherPosition, L"bottomCenter") != 0 &&
+        wcscmp(g_settings.switcherPosition, L"bottomRight") != 0) {
+        wcscpy_s(g_settings.switcherPosition, L"center");
+    }
+    g_settings.switcherPositionMargin = Wh_GetIntSetting(L"Appearance.Position.switcherPositionMargin");
+    if (g_settings.switcherPositionMargin < 0) g_settings.switcherPositionMargin = 0;
     v = Wh_GetStringSetting(L"Appearance.HeaderContent.iconSize");
     wcscpy_s(g_settings.iconSize, v ? v : L"small"); Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.iconSize, L"small") != 0 &&
@@ -3447,6 +3583,7 @@ static void LoadSettings() {
     if (g_settings.rowWidth < 0) g_settings.rowWidth = 0;
     g_settings.stretchThumbnailsToTaskWidth = Wh_GetIntSetting(L"Dimensions.stretchThumbnailsToTaskWidth");
     g_settings.showThumbnails = Wh_GetIntSetting(L"Appearance.Thumbnails.showThumbnails");
+    g_settings.showHoverBorder = Wh_GetIntSetting(L"Appearance.Thumbnails.showHoverBorder");
     g_settings.showTitle = Wh_GetIntSetting(L"Appearance.HeaderContent.showTitle");
     g_settings.showIcon = Wh_GetIntSetting(L"Appearance.HeaderContent.showIcon");
     if (!g_settings.showThumbnails && !g_settings.showTitle && !g_settings.showIcon) {
