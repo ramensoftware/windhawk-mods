@@ -17,6 +17,8 @@ This mod prevents the classic menubar text (File, Edit, View, etc.) in folder wi
 under the Classic theme from appearing greyed out when the window loses focus, 
 the way it was in Windows 95, before Windows 98.
 
+![screenshot](https://i.imgur.com/FCEXTyt.png)
+
 */
 // ==/WindhawkModReadme==
 
