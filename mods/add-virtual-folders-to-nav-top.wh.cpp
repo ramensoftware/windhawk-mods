@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.7
+// @version         1.1.8
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -217,6 +217,7 @@ enum PendingWork : uint8_t {
     WORK_HG_CLEANUP   = 0x08,
     WORK_DUP_COLLAPSE = 0x10,
     WORK_EXPAND       = 0x20,
+    WORK_HOME_SPACER  = 0x40,
 };
 
 // Per-tree state: one entry per SysTreeView32 that we've injected items into.
@@ -226,11 +227,13 @@ struct TreeState {
     IShellItemFilter *pFilter = nullptr;
     HTREEITEM hItems[NAV_COUNT] = {};
     HTREEITEM hiddenDuplicate = nullptr;
+    HTREEITEM homeSpacerItem = nullptr;
     HTREEITEM boundaryItem = nullptr;
     HTREEITEM belowQAItem = nullptr;
     uint8_t pendingWork = 0;   // bitmask of PendingWork flags
     bool qaEverCleaned = false;
     bool ownsNscRef = false;
+    bool triedHomeSpacer = false;
     HIMAGELIST savedStateImageList = nullptr;
 };
 static std::unordered_map<HWND, TreeState> g_trees;
@@ -257,8 +260,15 @@ static bool IsNavPaneHost(HWND hTree)
     return false;
 }
 
+static HTREEITEM GetHiddenItem(const TreeState& ts)
+{
+    return ts.hiddenDuplicate ? ts.hiddenDuplicate : ts.homeSpacerItem;
+}
+
 static bool IsOurSection(const TreeState& ts, HTREEITEM h)
 {
+    if (ts.homeSpacerItem && h == ts.homeSpacerItem)
+        return true;
     for (int i = 0; i < NAV_COUNT; i++)
         if (ts.hItems[i] && h == ts.hItems[i])
             return true;
@@ -288,8 +298,10 @@ static void GetPidlDisplayName(PIDLIST_ABSOLUTE pidl, WCHAR *buf, int len)
 static void ResetTreeCleanup(TreeState& ts)
 {
     ts.hiddenDuplicate = nullptr;
+    ts.homeSpacerItem = nullptr;
     ts.boundaryItem = nullptr;
     ts.belowQAItem = nullptr;
+    ts.triedHomeSpacer = false;
     ts.pendingWork = WORK_QA_CLEANUP | WORK_HG_CLEANUP | WORK_DUP_COLLAPSE;
     ts.qaEverCleaned = false;
 }
@@ -315,6 +327,7 @@ static HWND g_insertingForTree = nullptr;
 // corrupted if a second tree's deferred op runs while the first is
 // in progress (AppendRoot_orig pumps messages internally).
 static bool g_deferredOpInProgress = false;
+static HWND g_mutatingTree = nullptr;
 static std::unordered_set<HWND> g_pendingRebuildTrees;
 
 #define WM_DEFERRED_REBUILD  (WM_APP + 0x101)
@@ -322,6 +335,7 @@ static std::unordered_set<HWND> g_pendingRebuildTrees;
 static void DrainPendingRebuilds()
 {
     g_deferredOpInProgress = false;
+    g_mutatingTree = nullptr;
     while (!g_pendingRebuildTrees.empty())
     {
         HWND hNext = *g_pendingRebuildTrees.begin();
@@ -335,15 +349,14 @@ static TreeState* RunDeferredWork(HWND hWnd, TreeState* ts, uint8_t flag, void(*
 {
     if (!ts || !(ts->pendingWork & flag))
         return ts;
-    g_deferredOpInProgress = true;
     ts->pendingWork &= ~flag;
     op(hWnd);
     ts = GetTree(hWnd);
-    DrainPendingRebuilds();
     return ts;
 }
 
 static bool g_inCustomAppend = false;
+static HTREEITEM g_spacerInsertAfter = nullptr;
 
 struct InsertionScope {
     ComRef<INameSpaceTreeControl> pNsc;
@@ -447,7 +460,6 @@ static void ExpandStartExpandedItems(HWND hTree)
 {
     TreeState* ts = GetTree(hTree);
     if (!ts || !ts->pNscTree) return;
-    g_deferredOpInProgress = true;
     INameSpaceTreeControl *pNsc = (INameSpaceTreeControl *)ts->pNscTree;
     for (int i = 0; i < NAV_COUNT; i++)
     {
@@ -461,7 +473,6 @@ static void ExpandStartExpandedItems(HWND hTree)
             psi->Release();
         }
     }
-    DrainPendingRebuilds();
 }
 
 HRESULT THISCALL AppendRoot_hook(void *pThis, IShellItem *psiRoot, unsigned long grfEnumFlags, unsigned long grfRootStyle, IShellItemFilter *pFilter)
@@ -651,6 +662,15 @@ static void SetItemIntegral(HWND hTree, HTREEITEM h, int value)
     SendMessageW(hTree, TVM_SETITEMW, 0, (LPARAM)&tvi);
 }
 
+static int GetItemIntegral(HWND hTree, HTREEITEM h)
+{
+    TVITEMEXW tvi = {};
+    tvi.mask = TVIF_HANDLE | TVIF_INTEGRAL;
+    tvi.hItem = h;
+    SendMessageW(hTree, TVM_GETITEMW, 0, (LPARAM)&tvi);
+    return tvi.iIntegral;
+}
+
 static int GetBaseItemHeight(HWND hTree)
 {
     int baseHeight = 0;
@@ -732,6 +752,7 @@ static void RefreshNavPane(HWND hTree)
         NavItem items[2];
         BuildItemOrder(items);
         g_deferredOpInProgress = true;
+        g_mutatingTree = hTree;
         InsertItems(scope.pNscRaw, items, ts->enumFlags, scope.pFilter.get());
     }
     DrainPendingRebuilds();
@@ -778,7 +799,7 @@ static LRESULT CALLBACK TreeInteractionProc(
     UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
     TreeState* ts = GetTree(hWnd);
-    HTREEITEM hiddenDup = ts ? ts->hiddenDuplicate : nullptr;
+    HTREEITEM hiddenDup = ts ? GetHiddenItem(*ts) : nullptr;
 
     if (hiddenDup &&
         (uMsg == WM_RBUTTONDOWN || uMsg == WM_RBUTTONUP ||
@@ -811,6 +832,23 @@ static void RestoreTree(HWND hTree)
     ComRef<IShellItemFilter> pFilter(ts->pFilter);
     HIMAGELIST savedImgList = ts->savedStateImageList;
     bool ownsRef = ts->ownsNscRef;
+
+    if (ts->homeSpacerItem)
+    {
+        int spacerId = g_navItems[NAV_HOME].pidl ? NAV_HOME
+                     : (g_navItems[NAV_GALLERY].pidl ? NAV_GALLERY : -1);
+        if (spacerId >= 0)
+        {
+            IShellItem* raw = nullptr;
+            if (SUCCEEDED(SHCreateItemFromIDList(g_navItems[spacerId].pidl,
+                                                  IID_IShellItem, (void**)&raw)) && raw)
+            {
+                pNsc->RemoveRoot(raw);
+                raw->Release();
+            }
+        }
+        ts->homeSpacerItem = nullptr;
+    }
 
     // Remove our roots
     RootShellItems roots;
@@ -909,9 +947,67 @@ static void FullRebuildTree(HWND hTree)
     }
 }
 
+// Must use AppendRoot_orig (not raw TVM_INSERTITEM) so the item has namespace backing for Explorer's paint path.
+static void InsertHomeSpacer(HWND hTree)
+{
+    TreeState* ts = GetTree(hTree);
+    if (!ts) return;
+    ts->triedHomeSpacer = true;
+    if (!ts->pNscTree || !ts->hItems[NAV_DESKTOP]) return;
+
+    int spacerId = g_navItems[NAV_HOME].pidl ? NAV_HOME
+                 : (g_navItems[NAV_GALLERY].pidl ? NAV_GALLERY : -1);
+    if (spacerId < 0) return;
+
+    IShellItem* raw = nullptr;
+    if (FAILED(SHCreateItemFromIDList(g_navItems[spacerId].pidl,
+                                      IID_IShellItem, (void**)&raw)) || !raw)
+        return;
+    ComRef<IShellItem> spacer(raw, false);
+
+    void *pNsc = ts->pNscTree;
+    unsigned long enumFlags = ts->enumFlags;
+
+    g_spacerInsertAfter = ts->hItems[NAV_DESKTOP];
+    g_inCustomAppend = true;
+    AppendRoot_orig(pNsc, spacer.get(), enumFlags, 0, nullptr);
+    g_inCustomAppend = false;
+    g_spacerInsertAfter = nullptr;
+
+    ts = GetTree(hTree);
+    if (!ts) return;
+
+    HTREEITEM hSpacer = nullptr;
+    const WCHAR* spacerLabel = g_navItems[spacerId].label;
+    ForEachDepth1Item(hTree, [&](HTREEITEM h) -> bool {
+        if (h == ts->hItems[NAV_DESKTOP] || h == ts->hItems[NAV_THISPC])
+            return true;
+        WCHAR buf[256];
+        GetItemText(hTree, h, buf, 256);
+        if (wcscmp(buf, spacerLabel) == 0) {
+            hSpacer = h;
+            return false;
+        }
+        return true;
+    });
+
+    if (hSpacer)
+    {
+        ts->homeSpacerItem = hSpacer;
+        SetItemIntegral(hTree, hSpacer, 1);
+    }
+
+    Wh_Log(L"[HOME-SPACER] tree=%p %s spacer=%p afterDesktop=%p",
+           hTree, spacerLabel, hSpacer, ts->hItems[NAV_DESKTOP]);
+
+    InvalidateRect(hTree, nullptr, TRUE);
+}
+
 struct SectionLayout {
     HTREEITEM boundary;       // first non-section item after our items
     HTREEITEM belowQA;        // first tall non-section item after boundary
+    bool homePresent;         // a visible Home item exists among depth-1 siblings
+    bool galleryPresent;      // a visible Gallery item exists among depth-1 siblings
 };
 
 static SectionLayout FindSectionLayout(HWND hTree, TreeState& ts)
@@ -955,6 +1051,8 @@ static SectionLayout FindSectionLayout(HWND hTree, TreeState& ts)
                         if (!inheritedHidden[i])
                         {
                             ts.hItems[i] = h;
+                            if (i == NAV_HOME) layout.homePresent = true;
+                            else if (i == NAV_GALLERY) layout.galleryPresent = true;
                             Wh_Log(L"[CACHE] %s item=%p tree=%p (walk)", g_navItems[i].label, h, hTree);
                         }
                         isSection = true;
@@ -967,9 +1065,13 @@ static SectionLayout FindSectionLayout(HWND hTree, TreeState& ts)
 
         if (isSection)
         {
+            if (ts.hItems[NAV_HOME] && h == ts.hItems[NAV_HOME])
+                layout.homePresent = true;
+            else if (ts.hItems[NAV_GALLERY] && h == ts.hItems[NAV_GALLERY])
+                layout.galleryPresent = true;
             passedOurs = true;
         }
-        else if (passedOurs && h != ts.hiddenDuplicate)
+        else if (passedOurs && h != GetHiddenItem(ts))
         {
             if (!layout.boundary)
             {
@@ -1082,9 +1184,14 @@ static COLORREF SampleSeparatorColor(HWND hTree, HDC hdc)
 // At CDDS_POSTPAINT, all separators have been hidden by CDDS_PREPAINT
 // swallowing. Redraw separators for section boundaries we want to keep.
 
+static bool HasOurItemsInTree(const TreeState& ts)
+{
+    return ts.hItems[NAV_THISPC] || ts.hItems[NAV_DESKTOP];
+}
+
 static void RedrawOtherSeparators(HWND hTree, HDC hdc, TreeState& ts)
 {
-    if (!hdc || !IsWindow(hTree))
+    if (!hdc || !IsWindow(hTree) || !HasOurItemsInTree(ts))
         return;
 
     RECT client;
@@ -1130,7 +1237,7 @@ static void RedrawOtherSeparators(HWND hTree, HDC hdc, TreeState& ts)
                     walkLog[walkIdx++] = tag;
                 }
             }
-            else if (ts.hiddenDuplicate && h == ts.hiddenDuplicate)
+            else if (GetHiddenItem(ts) && h == GetHiddenItem(ts))
             {
                 if (g_logSepDraw && walkIdx < 60)
                     walkLog[walkIdx++] = L'D';
@@ -1146,7 +1253,7 @@ static void RedrawOtherSeparators(HWND hTree, HDC hdc, TreeState& ts)
                 {
                     foundBoundary = true;
                     tag = isTall ? L'B' : L'b';
-                    if (!g_settings.removeSepBelowNav && !ts.hiddenDuplicate)
+                    if (!g_settings.removeSepBelowNav && !GetHiddenItem(ts))
                     {
                         drawSep = true;
                         sepY = isTall ? rc.top + baseHeight / 2 : rc.top;
@@ -1197,8 +1304,7 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         LPNMHDR hdr = (LPNMHDR)lParam;
         if (hdr && hdr->hwndFrom == hTree)
         {
-            if (hdr->code == (UINT)NM_CUSTOMDRAW && !g_deferredOpInProgress &&
-                g_inSubclassProc == 0)
+            if (hdr->code == (UINT)NM_CUSTOMDRAW && hTree != g_mutatingTree)
             {
                 LPNMTVCUSTOMDRAW cd = (LPNMTVCUSTOMDRAW)lParam;
                 DWORD stage = cd->nmcd.dwDrawStage;
@@ -1242,10 +1348,11 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                         RedrawOtherSeparators(hTree, cd->nmcd.hdc, *ts);
 
                     ts = GetTree(hTree);
-                    if (ts && ts->hiddenDuplicate)
+                    HTREEITEM hHidden = (ts && HasOurItemsInTree(*ts)) ? GetHiddenItem(*ts) : nullptr;
+                    if (hHidden)
                     {
                         RECT rcHide = {};
-                        *(HTREEITEM*)&rcHide = ts->hiddenDuplicate;
+                        *(HTREEITEM*)&rcHide = hHidden;
                         if (SendMessageW(hTree, TVM_GETITEMRECT, FALSE, (LPARAM)&rcHide))
                         {
                             HDC hdc = cd->nmcd.hdc;
@@ -1262,8 +1369,13 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                             }
                             if (g_sepColor != CLR_INVALID)
                             {
-                                HTREEITEM hPrev = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_PREVIOUS, (LPARAM)ts->hiddenDuplicate);
-                                if (hPrev && IsOurSection(*ts, hPrev))
+                                bool drawSep = (hHidden == ts->homeSpacerItem);
+                                if (!drawSep)
+                                {
+                                    HTREEITEM hPrev = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_PREVIOUS, (LPARAM)hHidden);
+                                    drawSep = hPrev && IsOurSection(*ts, hPrev);
+                                }
+                                if (drawSep)
                                 {
                                     int h = rcHide.bottom - rcHide.top;
                                     DrawSeparatorLine(hdc, hTree, rcHide.top + h / 2);
@@ -1449,7 +1561,7 @@ static bool RemoveHiddenInheritedItems(HWND hTree, TreeState& ts)
     ForEachDepth1Item(hTree, [&](HTREEITEM h) -> bool {
         if (delCount >= targetCount)
             return false;
-        if (!IsOurSection(ts, h) && h != ts.hiddenDuplicate)
+        if (!IsOurSection(ts, h) && h != ts.hiddenDuplicate && h != ts.homeSpacerItem)
         {
             WCHAR text[64] = {};
             GetItemText(hTree, h, text, ARRAYSIZE(text));
@@ -1505,6 +1617,12 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         {
             TVINSERTSTRUCTW *pInsert = (TVINSERTSTRUCTW *)lParam;
             pInsert->hInsertAfter = TVI_FIRST;
+        }
+        else if (g_spacerInsertAfter && lParam)
+        {
+            TVINSERTSTRUCTW *pInsert = (TVINSERTSTRUCTW *)lParam;
+            pInsert->hInsertAfter = g_spacerInsertAfter;
+            g_spacerInsertAfter = nullptr;
         }
 
         LRESULT result = SubClassTreeWndProc_orig(hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData);
@@ -1608,7 +1726,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         if (tvi && (tvi->mask & TVIF_INTEGRAL))
         {
             TreeState* ts = GetTree(hWnd);
-            HTREEITEM hiddenDup = ts ? ts->hiddenDuplicate : nullptr;
+            HTREEITEM hiddenDup = ts ? GetHiddenItem(*ts) : nullptr;
             HTREEITEM boundaryIt = ts ? ts->boundaryItem : nullptr;
             HTREEITEM belowQAIt = ts ? ts->belowQAItem : nullptr;
 
@@ -1659,10 +1777,9 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         }
     }
 
-    // Block all interaction with hidden duplicate
     {
         TreeState* ts = GetTree(hWnd);
-        HTREEITEM hiddenDup = ts ? ts->hiddenDuplicate : nullptr;
+        HTREEITEM hiddenDup = ts ? GetHiddenItem(*ts) : nullptr;
 
         if (hiddenDup &&
             (uMsg == WM_LBUTTONDOWN || uMsg == WM_RBUTTONDOWN ||
@@ -1734,6 +1851,8 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         }
 
         g_inSubclassProc++;
+        g_deferredOpInProgress = true;
+        g_mutatingTree = hWnd;
 
         TreeState* ts = GetTree(hWnd);
         ts = RunDeferredWork(hWnd, ts, WORK_FULL_REBUILD, FullRebuildTree);
@@ -1780,7 +1899,11 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             ExpandStartExpandedItems(hWnd);
         }
 
+        ts = GetTree(hWnd);
+        ts = RunDeferredWork(hWnd, ts, WORK_HOME_SPACER, InsertHomeSpacer);
+
         g_inSubclassProc--;
+        DrainPendingRebuilds();
         return 0;
     }
 
@@ -1789,7 +1912,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         TreeState* ts = GetTree(hWnd);
 
         constexpr uint8_t DEFER_MASK = WORK_FULL_REBUILD | WORK_HOT_INSERT |
-            WORK_QA_CLEANUP | WORK_HG_CLEANUP | WORK_DUP_COLLAPSE;
+            WORK_QA_CLEANUP | WORK_HG_CLEANUP | WORK_DUP_COLLAPSE | WORK_HOME_SPACER;
         if (ts && (ts->pendingWork & DEFER_MASK))
             PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
 
@@ -1810,13 +1933,30 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             ts->boundaryItem = layout.boundary;
             ts->belowQAItem = nullptr;
 
-            if (layout.boundary && (g_settings.removeSepBelowNav || ts->hiddenDuplicate))
+            bool desktopOnly = ts->hItems[NAV_DESKTOP] && !ts->hItems[NAV_THISPC];
+            if (!ts->triedHomeSpacer && layout.boundary && desktopOnly
+                && !g_settings.removeSepBelowNav && !GetHiddenItem(*ts)
+                && !layout.homePresent && !layout.galleryPresent)
+            {
+                ts->pendingWork |= WORK_HOME_SPACER;
+                PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
+            }
+
+            if (layout.boundary && (g_settings.removeSepBelowNav || GetHiddenItem(*ts)))
                 CollapseItemIntegral(hWnd, layout.boundary);
             if (g_settings.removeSepBelowQA && layout.belowQA)
             {
                 CollapseItemIntegral(hWnd, layout.belowQA);
                 ts->belowQAItem = layout.belowQA;
             }
+
+            if (g_logSepDraw)
+                Wh_Log(L"[SEP-GAP] tree=%p boundary=%p int=%d home=%d gallery=%d rmNav=%d hidDup=%p spacer=%p tried=%d",
+                       hWnd, layout.boundary,
+                       layout.boundary ? GetItemIntegral(hWnd, layout.boundary) : -1,
+                       layout.homePresent, layout.galleryPresent,
+                       (int)g_settings.removeSepBelowNav, ts->hiddenDuplicate, ts->homeSpacerItem,
+                       (int)ts->triedHomeSpacer);
         }
 
         if (g_settings.hidePinButtons && ts)
@@ -1833,7 +1973,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         if (g_settings.hasItemsAtTop)
             EnsureParentSubclass(hWnd);
 
-        if (ts && ts->hiddenDuplicate)
+        if (ts && GetHiddenItem(*ts))
             SetWindowSubclass(hWnd, TreeInteractionProc, 0xAF01, 0);
 
         g_inTreePaint = true;
@@ -2293,6 +2433,7 @@ void Wh_ModSettingsChanged()
         if (tier == TIER_REBUILD)
         {
             g_deferredOpInProgress = true;
+            g_mutatingTree = hTree;
             FullRebuildTree(hTree);
             DrainPendingRebuilds();
         }
