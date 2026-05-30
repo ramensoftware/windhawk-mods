@@ -205,7 +205,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"ShellHost.exe is blocked, exiting process.");
             ExitProcess(0);
         }
-        return TRUE;
+        return FALSE;
     }
 
     // Kill running instances and set up the hook.
