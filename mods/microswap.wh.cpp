@@ -92,9 +92,6 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 - advancedMode: false
   $name: Advanced Mode
   $description: Shows the Device Priority panel in Mod Settings, letting you rank preferred microphones for automatic slot assignment.
-- _info: " "
-  $name: " "
-  $description: "Most settings live in the in-tray dashboard. Right-click the MicSwitch tray icon → Mod Settings."
 */
 // ==/WindhawkModSettings==
 
