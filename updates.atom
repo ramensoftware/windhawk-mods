@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-30T10:35:29.000Z</updated>
+    <updated>2026-05-30T10:43:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Island for Windows 1.0.2]]></title>
+        <id>https://windhawk.net/mods/dynamic-island-for-windows#63bfb7795abeb4c8d6067b2dccda957b38bfd34e</id>
+        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
+        <updated>2026-05-30T10:43:43.000Z</updated>
+        <content type="html"><![CDATA[<ol>
+<li>Native Windows 11 Fluent Style:** Adds a toggleable mode to render the island as a modern Windows 11 flyout (rounded rectangle with 8px corners and a 1px border highlight) with a new semi-translucent Fluent dark preset.</li>
+<li>Game Overlay DPI Scaling &amp; Alignment:** Refactored overlay cards, vector icons, and panels to scale proportionally with <code>settings.sizeScale</code> and centered the layout inside the expanded pill.</li>
+<li>Caps Lock &amp; Num Lock Hook:** Implemented a lightweight global hook (<code>WH_KEYBOARD_LL</code>) to show real-time lock-key indicator alerts.</li>
+<li>Dynamic Battery &amp; Power Alerts:** Hardware-polled alert triggers with a dynamic fluid vector battery icon that changes color based on charging state.</li>
+<li>USB &amp; Device Connection Alerts:** Added a system event listener (<code>WM_DEVICECHANGE</code>) to show beautiful plug status alerts with indicator lights.</li>
+<li>Tactile Asymmetric Spring Animations:** Upgraded motion curves with separate expansion and contraction physics properties for a more organic feel.</li>
+</ol>]]></content>
+        <author>
+            <name>Himanshu</name>
+            <uri>https://github.com/devcode90</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Block Start Menu and Hosts 1.4]]></title>
         <id>https://windhawk.net/mods/block-windows-startmenu-and-hosts#f6962b4427b7c68ab3af9d101986dffa5190d834</id>
@@ -561,17 +579,6 @@ display.</li>
         <author>
             <name>Husam-Abdulraheem</name>
             <uri>https://github.com/Husam-Abdulraheem</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Key Click 1.2]]></title>
-        <id>https://windhawk.net/mods/key-click#02cb5e875e7f8cf77d890eb3860cf6fafbf60a00</id>
-        <link href="https://windhawk.net/mods/key-click"/>
-        <updated>2026-05-25T10:43:57.000Z</updated>
-        <content type="html"><![CDATA[<p>Filter out injected events so to bypass keyboard redirectors, inject dwm.exe now so to work in elevated windows.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
