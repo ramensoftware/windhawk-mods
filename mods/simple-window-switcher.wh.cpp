@@ -164,7 +164,10 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           $description: Corner radius in pixels, used when Corner Preference is set to Custom. Applies to task borders, close buttons, and thumbnails.
         - taskRoundedCorners: false
           $name: Round Task Borders and Close Button
-          $description: Apply small rounded corners to the selected task border and close button.
+          $description: Apply rounded corners to the selected task border and close button.
+        - roundThumbnailCorners: false
+          $name: Round Thumbnail Corners
+          $description: Round the corners of window thumbnails. Uses the radius from Corner Preference.
       $name: Corners
     - Thumbnails:
         - thumbnailPosition: bottom
@@ -322,6 +325,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $options:
       - currentOnly: Show windows from current virtual desktop only
       - allDesktops: Show windows from all virtual desktops
+    - hideMinimizedWindows: false
+      $name: Hide Minimized Windows
+      $description: Hide minimized windows from the switcher. When "Group Windows by Application" is enabled, an application is only hidden if all of its windows are minimized.
   $name: Accessibility
 - ExcludedWindows:
     - excludeByTitle: ""
@@ -438,11 +444,12 @@ struct Settings {
     int maxWidthPercent;
     bool autoFitTasks;
     int maxHeightPercent; int showDelay;
-    bool perMonitorWindows; bool taskRoundedCorners; bool reverseScrollDirection;
+    bool perMonitorWindows; bool taskRoundedCorners; bool roundThumbnailCorners; bool reverseScrollDirection;
     bool centerTaskContent;
     bool showApplications;
     WCHAR showTitles[32];
     bool restoreAllWindows;
+    bool hideMinimizedWindows;
     int customCornerRadius;
     WCHAR switcherPosition[32];
     int switcherPositionMargin;
@@ -595,6 +602,18 @@ static bool UseTaskRoundedCorners() {
 
 static int GetTaskUiCornerRadiusPx() {
     if (!UseTaskRoundedCorners()) {
+        return 0;
+    }
+    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        return MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+    }
+    return MulDiv(4, g_dpiX, 96);
+}
+
+// Thumbnail corner rounding is controlled independently from the task border /
+// close button rounding, but shares the same radius from Corner Preference.
+static int GetThumbnailCornerRadiusPx() {
+    if (!g_settings.roundThumbnailCorners) {
         return 0;
     }
     if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
@@ -1354,6 +1373,21 @@ static void BuildWindowList() {
             }
         }
         g_windows = std::move(grouped);
+    }
+    // Optionally hide minimized windows. When grouping by application, an app
+    // entry is only hidden if every one of its windows is minimized; apps with
+    // at least one non-minimized window are kept.
+    if (g_settings.hideMinimizedWindows) {
+        g_windows.erase(std::remove_if(g_windows.begin(), g_windows.end(),
+            [](const WindowEntry& w) {
+                if (g_settings.showApplications) {
+                    for (HWND hw : w.groupWindows) {
+                        if (!IsIconic(hw)) return false;  // keep: has a visible window
+                    }
+                    return true;  // all windows minimized: hide
+                }
+                return IsIconic(w.hWnd) != FALSE;  // hide if minimized
+            }), g_windows.end());
     }
     std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
         return IsIconic(a.hWnd) < IsIconic(b.hWnd);
@@ -2280,7 +2314,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
     int padLeft    = DpiScale(SWS_PAD_LEFT, g_dpiX);
     int rowTitleH  = GetHeaderRowHeightPx();
     int iconSz     = GetHeaderIconSizePx();
-    int cornerRadius = GetTaskUiCornerRadiusPx();
+    int cornerRadius = GetThumbnailCornerRadiusPx();
 
     for (int i = 0; i < (int)g_windows.size(); i++) {
         auto& e = g_windows[i];
@@ -2406,7 +2440,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     if (g_windows.empty()) return;
 
     int rowTitleH = GetHeaderRowHeightPx();
-    int cornerRadius = GetTaskUiCornerRadiusPx();
+    int cornerRadius = GetThumbnailCornerRadiusPx();
 
     for (int idx = 0; idx < (int)g_windows.size(); idx++) {
         int i = (g_layoutStartIndex + idx) % g_windows.size();
@@ -3617,6 +3651,7 @@ static void LoadSettings() {
     if (g_settings.customCornerRadius < 0) g_settings.customCornerRadius = 0;
     if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
     g_settings.taskRoundedCorners = Wh_GetIntSetting(L"Appearance.Corners.taskRoundedCorners");
+    g_settings.roundThumbnailCorners = Wh_GetIntSetting(L"Appearance.Corners.roundThumbnailCorners");
     v = Wh_GetStringSetting(L"Accessibility.scrollWheelBehavior");
     wcscpy_s(g_settings.scrollWheelBehavior, v ? v : L"never"); Wh_FreeStringSetting(v);
     v = Wh_GetStringSetting(L"Appearance.Orientation.taskListOrientation");
@@ -3713,6 +3748,7 @@ static void LoadSettings() {
     g_settings.reverseScrollDirection = Wh_GetIntSetting(L"Accessibility.reverseScrollDirection");
     g_settings.showApplications = Wh_GetIntSetting(L"Grouping.showApplications");
     g_settings.restoreAllWindows = Wh_GetIntSetting(L"Grouping.restoreAllWindows");
+    g_settings.hideMinimizedWindows = Wh_GetIntSetting(L"Accessibility.hideMinimizedWindows");
     v = Wh_GetStringSetting(L"Grouping.showTitles");
     wcscpy_s(g_settings.showTitles, v ? v : L"windowTitle"); Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.showTitles, L"windowTitle") != 0 &&
