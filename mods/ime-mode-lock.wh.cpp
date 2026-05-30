@@ -14,7 +14,8 @@
 /*
 # IME Native Mode Lock
 
-Forces supported IMEs to stay in their native input mode.
+Forces supported IMEs to stay in their native input mode, blocking
+both system-initiated and user-initiated mode switches.
 
 By default, Windows automatically switches input modes when changing
 window focus or switching between applications. This mod blocks that
@@ -29,7 +30,7 @@ Caps Lock to switch input languages, long-press for Caps Lock.
 
 ---
 
-强制支持的输入法保持在原生输入模式。
+强制支持的输入法保持在原生输入模式，同时阻止系统自动切换和用户主动切换。
 
 默认情况下，Windows 在切换窗口焦点或应用程序时会自动切换输入模式。
 此 mod 阻止该行为，始终保持输入法在原生输入模式。
@@ -166,10 +167,6 @@ HWND GetInputTargetWindow() {
 }
 
 void ApplyNativeImeMode(HWND preferredTargetWindow = nullptr) {
-    if (!AnyProfileEnabled()) {
-        return;
-    }
-
     HWND targetWindow = preferredTargetWindow ? preferredTargetWindow
                                               : GetInputTargetWindow();
     if (!targetWindow) {
@@ -205,7 +202,7 @@ void ApplyNativeImeMode(HWND preferredTargetWindow = nullptr) {
 }
 
 bool ShouldApplyNativeMode(const MSG* msg) {
-    if (!msg || !AnyProfileEnabled()) {
+    if (!msg) {
         return false;
     }
 
@@ -243,10 +240,6 @@ LRESULT WINAPI DispatchMessageW_Hook(const MSG* msg) {
 }
 
 BOOL InstallHooks() {
-    if (!AnyProfileEnabled()) {
-        return TRUE;
-    }
-
     if (!Wh_SetFunctionHook(
             reinterpret_cast<void*>(DispatchMessageA),
             reinterpret_cast<void*>(DispatchMessageA_Hook),
@@ -274,12 +267,14 @@ BOOL Wh_ModInit() {
     }
 
     LoadSettings();
+
+    if (!AnyProfileEnabled()) {
+        return FALSE;
+    }
+
     return InstallHooks();
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    if (bReload) {
-        *bReload = TRUE;
-    }
-    return TRUE;
+void Wh_ModSettingsChanged() {
+    LoadSettings();
 }
