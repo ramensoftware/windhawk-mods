@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         1.3
+// @version         1.4
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -32,6 +32,15 @@ a dialog with four options for moving the selection into a new subfolder:
 
 Folders inside the selection are skipped for modes 2 and 3 (they only make
 sense for files); they are still moved for modes 1 and 4.
+
+This works in both Explorer folder windows and on the **desktop**.
+
+## Silent mode
+Enable **Silent mode (right-click menu)** in settings to skip the dialog
+entirely: choosing **Files 2 Folder...** from the right-click menu then moves
+the selection immediately, using the **Default selected mode** (and default
+subfolder name / date format) from settings. The hotkey workaround is
+unaffected and always shows the dialog.
 
 ## Fast vs. slow mode
 By default the mod uses `MoveFileExW` directly, which is essentially instant
@@ -67,9 +76,14 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 - defaultSubfolderName: "folder"
   $name: "Default subfolder name (mode 1)"
   $description: "Pre-filled name for the 'fixed name' option."
-- defaultMode: 1
+- defaultMode: fixed
   $name: "Default selected mode"
-  $description: "Which radio button is pre-selected (1-4)."
+  $description: "Which radio button is pre-selected when the dialog opens."
+  $options:
+  - fixed: "Fixed name"
+  - perName: "By file name"
+  - perExt: "By extension"
+  - date: "By date"
 - theme: auto
   $name: "Dialog theme"
   $description: "Light/dark appearance of the Files 2 Folder dialog."
@@ -77,6 +91,9 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
   - auto: "Auto (follow Windows app theme)"
   - light: "Light"
   - dark: "Dark"
+- silentMode: false
+  $name: "Silent mode (right-click menu)"
+  $description: "When ON, choosing 'Files 2 Folder...' from the right-click menu skips the dialog and immediately moves the selection using the Default selected mode (and Default subfolder name / Date format) from settings. The hotkey workaround is unaffected and always shows the dialog."
 - nearCutCopy: false
   $name: "Place menu item near Cut/Copy"
   $description: "When OFF (default), the 'Files 2 Folder...' entry appears at the top of the context menu. When ON, it appears just after Cut/Copy (between Copy and Paste)."
@@ -148,6 +165,32 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 #include <algorithm>
 
 // ============================================================
+//  The 4 modes. The string keys here MUST match the defaultMode $options
+//  keys in the settings block above — this table is the single mapping from
+//  the dropdown value to the mode used throughout the code.
+// ============================================================
+enum F2FMode {
+    MODE_FIXED_NAME       = 1,
+    MODE_PER_FILE_NAME    = 2,
+    MODE_PER_EXTENSION    = 3,
+    MODE_DATE_NAMED       = 4,
+};
+
+static const struct { const wchar_t* key; F2FMode mode; } kModeKeys[] = {
+    { L"fixed",   MODE_FIXED_NAME },
+    { L"perName", MODE_PER_FILE_NAME },
+    { L"perExt",  MODE_PER_EXTENSION },
+    { L"date",    MODE_DATE_NAMED },
+};
+
+static F2FMode ModeFromKey(const std::wstring& key) {
+    for (auto& e : kModeKeys)
+        if (key == e.key) return e.mode;
+    Wh_Log(L"Files2Folders: unknown defaultMode key '%s', using fixed", key.c_str());
+    return MODE_FIXED_NAME;
+}
+
+// ============================================================
 //  Settings
 // ============================================================
 struct ModSettings {
@@ -155,6 +198,7 @@ struct ModSettings {
     std::wstring dateFormat;
     int defaultMode;
     bool slowMode;
+    bool silentMode;
     bool nearCutCopy;
     std::wstring theme;
     bool hotkeyEnabled;
@@ -175,11 +219,15 @@ static void LoadSettings() {
     g_settings.dateFormat = (s && *s) ? s : L"yyyy-MM-dd-HH-mm";
     if (s) Wh_FreeStringSetting(s);
 
-    g_settings.defaultMode = (int)Wh_GetIntSetting(L"defaultMode");
-    if (g_settings.defaultMode < 1 || g_settings.defaultMode > 4)
-        g_settings.defaultMode = 1;
+    // defaultMode is a string dropdown; ModeFromKey maps it to F2FMode via the
+    // single kModeKeys table (unknown keys fall back to fixed, with a log line).
+    PCWSTR dm = Wh_GetStringSetting(L"defaultMode");
+    std::wstring dmStr = dm ? dm : L"";
+    if (dm) Wh_FreeStringSetting(dm);
+    g_settings.defaultMode = ModeFromKey(dmStr);
 
     g_settings.slowMode = Wh_GetIntSetting(L"slowMode") != 0;
+    g_settings.silentMode = Wh_GetIntSetting(L"silentMode") != 0;
     g_settings.nearCutCopy = Wh_GetIntSetting(L"nearCutCopy") != 0;
 
     PCWSTR th = Wh_GetStringSetting(L"theme");
@@ -290,6 +338,25 @@ static std::wstring FormatNow(const std::wstring& fmt) {
 // ============================================================
 //  Get current folder path + selected items from a shell view
 // ============================================================
+
+// Common tail for both the browser-window and desktop lookups: an
+// IShellWindows item (IDispatch) -> top-level IShellBrowser -> active view.
+// Caller releases the returned view.
+static IShellView* ShellViewFromDispatch(IDispatch* pDisp) {
+    IShellView* pSV = nullptr;
+    IServiceProvider* pSP = nullptr;
+    if (SUCCEEDED(pDisp->QueryInterface(IID_IServiceProvider, (void**)&pSP)) && pSP) {
+        IShellBrowser* pSB = nullptr;
+        if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser,
+                                        IID_IShellBrowser, (void**)&pSB)) && pSB) {
+            pSB->QueryActiveShellView(&pSV);
+            pSB->Release();
+        }
+        pSP->Release();
+    }
+    return pSV;
+}
+
 static IShellView* GetActiveShellViewForHwnd(HWND topLevel) {
     IShellWindows* pSW = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
@@ -311,17 +378,7 @@ static IShellView* GetActiveShellViewForHwnd(HWND topLevel) {
             HWND hwndItem = nullptr;
             pWBA->get_HWND((SHANDLE_PTR*)&hwndItem);
             if (hwndItem == topLevel) {
-                IServiceProvider* pSP = nullptr;
-                if (SUCCEEDED(pWBA->QueryInterface(IID_IServiceProvider, (void**)&pSP)) && pSP) {
-                    IShellBrowser* pSB = nullptr;
-                    if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser,
-                                                    IID_IShellBrowser,
-                                                    (void**)&pSB)) && pSB) {
-                        pSB->QueryActiveShellView(&pSVResult);
-                        pSB->Release();
-                    }
-                    pSP->Release();
-                }
+                pSVResult = ShellViewFromDispatch(pDisp);
             }
             pWBA->Release();
         }
@@ -331,17 +388,37 @@ static IShellView* GetActiveShellViewForHwnd(HWND topLevel) {
     return pSVResult;
 }
 
-static bool GetFolderAndSelectionForHwnd(HWND hwnd,
-                                         std::wstring& folderOut,
-                                         std::vector<std::wstring>& itemsOut)
+// Active shell view of the desktop, via IShellWindows::FindWindowSW with
+// SWC_DESKTOP. Caller releases. The desktop's SHELLDLL_DefView lives inside
+// Progman / WorkerW and is NOT in the IShellWindows browser collection, so
+// GetActiveShellViewForHwnd can't find it — this is the dedicated path.
+static IShellView* GetDesktopShellView() {
+    IShellWindows* pSW = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                IID_IShellWindows, (void**)&pSW)) || !pSW)
+        return nullptr;
+
+    IShellView* pSVResult = nullptr;
+    VARIANT vEmpty = {};
+    long lhwnd = 0;
+    IDispatch* pDisp = nullptr;
+    if (SUCCEEDED(pSW->FindWindowSW(&vEmpty, &vEmpty, SWC_DESKTOP, &lhwnd,
+                                    SWFO_NEEDDISPATCH, &pDisp)) && pDisp) {
+        pSVResult = ShellViewFromDispatch(pDisp);
+        pDisp->Release();
+    }
+    pSW->Release();
+    return pSVResult;
+}
+
+// Pull the current folder path + selected item paths out of a shell view.
+// Shared by the browser-window and desktop code paths.
+static bool ExtractFolderAndSelection(IShellView* pSV,
+                                      std::wstring& folderOut,
+                                      std::vector<std::wstring>& itemsOut)
 {
     folderOut.clear();
     itemsOut.clear();
-
-    HWND root = GetAncestor(hwnd, GA_ROOT);
-    if (!root) root = hwnd;
-
-    IShellView* pSV = GetActiveShellViewForHwnd(root);
     if (!pSV) return false;
 
     bool ok = false;
@@ -358,15 +435,6 @@ static bool GetFolderAndSelectionForHwnd(HWND hwnd,
                 CoTaskMemFree(pidlFolder);
             }
             pPF->Release();
-        }
-
-        // Selected items
-        IShellFolder* pSF = nullptr;
-        if (SUCCEEDED(pSV->GetItemObject(SVGIO_BACKGROUND,
-                                         IID_IShellFolder,
-                                         (void**)&pSF)) && pSF) {
-            // Not what we want — we want selection
-            pSF->Release();
         }
 
         IDataObject* pDO = nullptr;
@@ -406,8 +474,44 @@ static bool GetFolderAndSelectionForHwnd(HWND hwnd,
             pDO->Release();
         }
         pFV->Release();
+
+        // The container's own pidl may not resolve to a filesystem path
+        // (libraries, search results, namespace extensions), but the selected
+        // items are absolute filesystem paths. In that case derive the folder
+        // from the first item's parent so the operation can still proceed.
+        if (folderOut.empty() && !itemsOut.empty()) {
+            const std::wstring& first = itemsOut.front();
+            size_t slash = first.find_last_of(L"\\/");
+            if (slash != std::wstring::npos)
+                folderOut = first.substr(0, slash);
+        }
+
         ok = !folderOut.empty() && !itemsOut.empty();
     }
+    return ok;
+}
+
+// Extract folder + selection for the menu's window. Try the browser-window
+// lookup first; if that finds no view (the desktop is not in the IShellWindows
+// browser collection), fall back to the desktop view. Trying both — rather than
+// guessing desktop-vs-browser from window classes up front — avoids the two
+// heuristics disagreeing on unusual shell topologies (the desktop right-click
+// host is also a SHELLDLL_DefView, so a class-based guess is unreliable).
+static bool GetFolderAndSelectionForHwnd(HWND hwnd,
+                                         std::wstring& folderOut,
+                                         std::vector<std::wstring>& itemsOut)
+{
+    folderOut.clear();
+    itemsOut.clear();
+
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (!root) root = hwnd;
+
+    IShellView* pSV = GetActiveShellViewForHwnd(root);
+    if (!pSV) pSV = GetDesktopShellView();
+    if (!pSV) return false;
+
+    bool ok = ExtractFolderAndSelection(pSV, folderOut, itemsOut);
     pSV->Release();
     return ok;
 }
@@ -438,7 +542,8 @@ static std::wstring UniqueDest(const std::wstring& destDir,
 }
 
 static int MoveItemsFast(HWND owner,
-                         const std::vector<std::pair<std::wstring, std::wstring>>& moves)
+                         const std::vector<std::pair<std::wstring, std::wstring>>& moves,
+                         bool silent)
 {
     int moved = 0;
     int failed = 0;
@@ -476,7 +581,7 @@ static int MoveItemsFast(HWND owner,
         }
     }
 
-    if (failed > 0 && owner) {
+    if (failed > 0 && owner && !silent) {
         WCHAR msg[1024];
         LPWSTR sysMsg = nullptr;
         FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
@@ -543,22 +648,14 @@ static bool EnsureDir(const std::wstring& path) {
         || IsDirectoryPath(path);
 }
 
-// ============================================================
-//  The 4 modes
-// ============================================================
-enum F2FMode {
-    MODE_FIXED_NAME       = 1,
-    MODE_PER_FILE_NAME    = 2,
-    MODE_PER_EXTENSION    = 3,
-    MODE_DATE_NAMED       = 4,
-};
 
 static void DoFiles2Folder(HWND owner,
                            F2FMode mode,
                            const std::wstring& folder,
                            const std::vector<std::wstring>& items,
                            const std::wstring& fixedName,
-                           const std::wstring& dateText)
+                           const std::wstring& dateText,
+                           bool silent)
 {
     std::vector<std::pair<std::wstring, std::wstring>> moves;
 
@@ -566,15 +663,17 @@ static void DoFiles2Folder(HWND owner,
         std::wstring raw = (mode == MODE_FIXED_NAME) ? fixedName : dateText;
         std::wstring sub = SanitizeFolderName(raw);
         if (sub.empty() || sub == L"_") {
-            MessageBoxW(owner,
-                L"The subfolder name cannot be empty.",
-                L"Files 2 Folder", MB_ICONWARNING);
+            if (!silent)
+                MessageBoxW(owner,
+                    L"The subfolder name cannot be empty.",
+                    L"Files 2 Folder", MB_ICONWARNING);
             return;
         }
         std::wstring dest = folder + L"\\" + sub;
         if (!EnsureDir(dest)) {
-            MessageBoxW(owner, L"Could not create destination folder.",
-                        L"Files 2 Folder", MB_ICONERROR);
+            if (!silent)
+                MessageBoxW(owner, L"Could not create destination folder.",
+                            L"Files 2 Folder", MB_ICONERROR);
             return;
         }
         for (auto& item : items) moves.push_back({ item, dest });
@@ -606,7 +705,7 @@ static void DoFiles2Folder(HWND owner,
     if (g_settings.slowMode) {
         MoveItemsShell(owner, moves);
     } else {
-        MoveItemsFast(owner, moves);
+        MoveItemsFast(owner, moves, silent);
     }
 
     // One notification for the source folder, plus one per unique destination.
@@ -792,8 +891,14 @@ struct DlgState {
 static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
     static DlgState* s = nullptr;
     static DlgTheme theme = {};
+    // The auto-select-companion-radio behavior (EN_SETFOCUS below) must only
+    // react to user focus changes, not the initial focus the dialog manager
+    // assigns during/after WM_INITDIALOG — otherwise the default mode chosen
+    // here is immediately overwritten by whichever edit box gets first focus.
+    static bool ready = false;
     switch (msg) {
     case WM_INITDIALOG: {
+        ready = false;
         s = (DlgState*)lp;
         SetWindowTextW(hDlg, L"Files 2 Folder");
         SetDlgItemTextW(hDlg, IDC_ED_FIXED, s->fixedName.c_str());
@@ -827,7 +932,6 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
         // this thread foreground rights, so a plain SetForegroundWindow is
         // enough — no AttachThreadInput stealing needed.
         SetForegroundWindow(hDlg);
-        SetFocus(hDlg);
 
         int rb = IDC_RB_FIXED;
         switch (s->mode) {
@@ -837,7 +941,13 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
             case MODE_DATE_NAMED:    rb = IDC_RB_DATE; break;
         }
         CheckRadioButton(hDlg, IDC_RB_FIXED, IDC_RB_DATE, rb);
-        return TRUE;
+
+        // Focus the chosen radio so the BS_AUTORADIOBUTTON group settles on it
+        // and the dialog manager doesn't move the checkmark to the first radio.
+        // We set focus ourselves and return FALSE so the manager leaves it be.
+        ready = true;  // from now on, EN_SETFOCUS reflects real user focus
+        SetFocus(GetDlgItem(hDlg, rb));
+        return FALSE;  // we set focus; don't let the manager reset it
     }
     case WM_COMMAND: {
         WORD id   = LOWORD(wp);
@@ -845,7 +955,7 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
 
         // Clicking or tabbing into an edit box selects its companion radio,
         // so the mode the user is editing is the mode that runs on OK.
-        if (code == EN_SETFOCUS) {
+        if (code == EN_SETFOCUS && ready) {
             if (id == IDC_ED_FIXED)
                 CheckRadioButton(hDlg, IDC_RB_FIXED, IDC_RB_DATE, IDC_RB_FIXED);
             else if (id == IDC_ED_DATE)
@@ -1043,33 +1153,34 @@ static bool ShowF2FDialog(HWND owner, DlgState& state) {
 // ============================================================
 static void RunFiles2Folder(HWND owner,
                             const std::wstring& folder,
-                            const std::vector<std::wstring>& items)
+                            const std::vector<std::wstring>& items,
+                            bool silent)
 {
     if (folder.empty() || items.empty()) return;
 
-    // Session memory: remember the user's last choice across dialog opens
-    // (no persistence — resets on Explorer/Windhawk restart).
-    static bool s_haveLastChoice = false;
-    static F2FMode s_lastMode = MODE_FIXED_NAME;
-    static std::wstring s_lastFixedName;
+    // Silent mode (right-click menu only): skip the dialog and move using the
+    // configured defaults.
+    if (silent) {
+        F2FMode mode = (F2FMode)g_settings.defaultMode;
+        DoFiles2Folder(owner, mode, folder, items,
+                       g_settings.defaultSubfolderName,
+                       FormatNow(g_settings.dateFormat), /*silent=*/true);
+        return;
+    }
 
+    // The dialog always opens on the configured "Default selected mode" and
+    // "Default subfolder name" — no session memory of previous choices.
     DlgState state = {};
-    state.mode = s_haveLastChoice ? s_lastMode : (F2FMode)g_settings.defaultMode;
-    state.fixedName = s_haveLastChoice && !s_lastFixedName.empty()
-                          ? s_lastFixedName
-                          : g_settings.defaultSubfolderName;
+    state.mode = (F2FMode)g_settings.defaultMode;
+    state.fixedName = g_settings.defaultSubfolderName;
     state.dateText = FormatNow(g_settings.dateFormat);
     state.singleItem = (items.size() == 1);
     state.itemCount = items.size();
 
     if (!ShowF2FDialog(owner, state)) return;
 
-    s_haveLastChoice = true;
-    s_lastMode = state.mode;
-    s_lastFixedName = state.fixedName;
-
     DoFiles2Folder(owner, state.mode, folder, items,
-                   state.fixedName, state.dateText);
+                   state.fixedName, state.dateText, /*silent=*/false);
 }
 
 // ============================================================
@@ -1149,7 +1260,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
         g_currentSelection.clear();
         g_currentFolder.clear();
         g_currentMenuHwnd = nullptr;
-        RunFiles2Folder(owner, folder, items);
+        RunFiles2Folder(owner, folder, items, g_settings.silentMode);
         return 0;
     }
 
@@ -1180,7 +1291,7 @@ BOOL WINAPI PostMessageW_Hook(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp) {
         g_currentSelection.clear();
         g_currentFolder.clear();
         g_currentMenuHwnd = nullptr;
-        RunFiles2Folder(owner, folder, items);
+        RunFiles2Folder(owner, folder, items, g_settings.silentMode);
         return TRUE;
     }
     return PostMessageW_Orig(hWnd, Msg, wp, lp);
@@ -1258,7 +1369,7 @@ static void HandleHotkeyTriggered() {
                     L"Files 2 Folder", MB_ICONERROR);
         return;
     }
-    RunFiles2Folder(nullptr, folder, items);
+    RunFiles2Folder(nullptr, folder, items, /*silent=*/false);
 }
 
 static UINT BuildHotkeyModifiers() {
