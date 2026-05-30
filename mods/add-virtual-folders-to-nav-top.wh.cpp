@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.6
+// @version         1.1.7
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -2080,6 +2080,61 @@ struct DiscoveredTree {
     unsigned long enumFlags;
 };
 
+static void DiscoverTreeFromBrowser(HWND hTop, const WCHAR *cls,
+                                    IShellBrowser *pSB,
+                                    std::vector<DiscoveredTree> &out)
+{
+    IServiceProvider *pSP = nullptr;
+    if (FAILED(pSB->QueryInterface(IID_IServiceProvider, (void **)&pSP)))
+    {
+        Wh_Log(L"[DISCOVER] %s hwnd=%p — no IServiceProvider", cls, hTop);
+        return;
+    }
+
+    INameSpaceTreeControl *pNsc = nullptr;
+    HRESULT hr = pSP->QueryService(IID_INameSpaceTreeControl, IID_INameSpaceTreeControl, (void **)&pNsc);
+    pSP->Release();
+    if (FAILED(hr))
+    {
+        Wh_Log(L"[DISCOVER] %s hwnd=%p — no INameSpaceTreeControl (hr=0x%08X)", cls, hTop, hr);
+        return;
+    }
+
+    HWND hTree = nullptr;
+    IOleWindow *pOleWin = nullptr;
+    if (SUCCEEDED(pNsc->QueryInterface(IID_IOleWindow, (void **)&pOleWin)))
+    {
+        HWND hNscWnd = nullptr;
+        if (SUCCEEDED(pOleWin->GetWindow(&hNscWnd)) && hNscWnd)
+            hTree = FindWindowExW(hNscWnd, nullptr, L"SysTreeView32", nullptr);
+        pOleWin->Release();
+    }
+
+    if (!hTree)
+    {
+        Wh_Log(L"[DISCOVER] %s hwnd=%p — no SysTreeView32", cls, hTop);
+        pNsc->Release();
+        return;
+    }
+
+    // The active tab can resolve through more than one host; don't seed twice.
+    for (auto &d : out)
+    {
+        if (d.hTree == hTree)
+        {
+            pNsc->Release();
+            return;
+        }
+    }
+
+    unsigned long enumFlags = (unsigned long)(ULONG_PTR)GetPropW(hTree, L"WH_EnumFlags");
+    if (!enumFlags)
+        enumFlags = SHCONTF_FOLDERS;
+
+    Wh_Log(L"[DISCOVER] %s hwnd=%p tree=%p pNsc=%p — accepted", cls, hTop, hTree, pNsc);
+    out.push_back({ hTop, hTree, pNsc, enumFlags });
+}
+
 void Wh_ModAfterInit()
 {
     std::vector<DiscoveredTree> discovered;
@@ -2099,63 +2154,38 @@ void Wh_ModAfterInit()
         if (!isCabinet && !isDialog)
             return TRUE;
 
-        HWND hShellTab = FindWindowExW(hTop, nullptr, L"ShellTabWindowClass", nullptr);
-        IShellBrowser *pSB = nullptr;
-        if (hShellTab)
-            pSB = (IShellBrowser *)SendMessageW(hShellTab, WM_USER + 7, 0, 0);
-        if (!pSB)
-            pSB = (IShellBrowser *)SendMessageW(hTop, WM_USER + 7, 0, 0);
-        if (!pSB)
+        int found = 0;
+        HWND hShellTab = nullptr;
+        while ((hShellTab = FindWindowExW(hTop, hShellTab, L"ShellTabWindowClass", nullptr)) != nullptr)
         {
-            Wh_Log(L"[DISCOVER] %s hwnd=%p — no IShellBrowser", cls, hTop);
-            return TRUE;
+            IShellBrowser *pSB = (IShellBrowser *)SendMessageW(hShellTab, WM_USER + 7, 0, 0);
+            if (pSB)
+            {
+                size_t before = out.size();
+                DiscoverTreeFromBrowser(hTop, cls, pSB, out);
+                found += (int)(out.size() - before);
+            }
         }
 
-        IServiceProvider *pSP = nullptr;
-        if (FAILED(pSB->QueryInterface(IID_IServiceProvider, (void **)&pSP)))
+        if (found == 0)
         {
-            Wh_Log(L"[DISCOVER] %s hwnd=%p — no IServiceProvider", cls, hTop);
-            return TRUE;
+            IShellBrowser *pSB = (IShellBrowser *)SendMessageW(hTop, WM_USER + 7, 0, 0);
+            if (pSB)
+                DiscoverTreeFromBrowser(hTop, cls, pSB, out);
+            else
+                Wh_Log(L"[DISCOVER] %s hwnd=%p — no IShellBrowser", cls, hTop);
         }
-
-        INameSpaceTreeControl *pNsc = nullptr;
-        HRESULT hr = pSP->QueryService(IID_INameSpaceTreeControl, IID_INameSpaceTreeControl, (void **)&pNsc);
-        pSP->Release();
-        if (FAILED(hr))
-        {
-            Wh_Log(L"[DISCOVER] %s hwnd=%p — no INameSpaceTreeControl (hr=0x%08X)", cls, hTop, hr);
-            return TRUE;
-        }
-
-        HWND hTree = nullptr;
-        IOleWindow *pOleWin = nullptr;
-        if (SUCCEEDED(pNsc->QueryInterface(IID_IOleWindow, (void **)&pOleWin)))
-        {
-            HWND hNscWnd = nullptr;
-            if (SUCCEEDED(pOleWin->GetWindow(&hNscWnd)) && hNscWnd)
-                hTree = FindWindowExW(hNscWnd, nullptr, L"SysTreeView32", nullptr);
-            pOleWin->Release();
-        }
-
-        if (!hTree)
-        {
-            Wh_Log(L"[DISCOVER] %s hwnd=%p — no SysTreeView32", cls, hTop);
-            pNsc->Release();
-            return TRUE;
-        }
-
-        unsigned long enumFlags = 0;
-        enumFlags = (unsigned long)(ULONG_PTR)GetPropW(hTree, L"WH_EnumFlags");
-        if (!enumFlags)
-            enumFlags = SHCONTF_FOLDERS;
-
-        Wh_Log(L"[DISCOVER] %s hwnd=%p tree=%p pNsc=%p — accepted", cls, hTop, hTree, pNsc);
-        out.push_back({ hTop, hTree, pNsc, enumFlags });
         return TRUE;
     }, (LPARAM)&discovered);
 
     for (auto& d : discovered)
     {
+        // Release the ref we took; nothing else will.
+        if (!IsWindow(d.hTree))
+        {
+            d.pNsc->Release();
+            continue;
+        }
         TreeState& ts = g_trees[d.hTree];
         ts.pNscTree = (void *)d.pNsc;
         ts.enumFlags = d.enumFlags;
