@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-30T10:46:27.000Z</updated>
+    <updated>2026-05-30T12:05:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Console Quick Paste 1.0.0]]></title>
+        <id>https://windhawk.net/mods/console-quick-paste#490dfae0c155a142237630390237447d258de0d8</id>
+        <link href="https://windhawk.net/mods/console-quick-paste"/>
+        <updated>2026-05-30T12:05:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="consolequickpaste">Console Quick Paste</h1>
+<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/CQP.png" alt="Console Quick Paste" /></p>
+<p>Brings a "Quick Commands" submenu to Windows Terminal, giving you one-click access to your most-used PowerShell and Command Prompt snippets. To open it, right-click the empty space on the tab bar.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><code>Quick Commands Submenu</code>: Always pinned to the top of the context menu, separated from the built-in items by a divider.</li>
+<li><code>Configurable Command List</code>: Define as many commands as you like. Each entry has:</li>
+<li><code>Label</code>: The display name shown in the submenu. Falls back to the command itself when left blank.</li>
+<li><code>Command</code>: The string that will be pasted into the console.</li>
+<li><code>Auto-Enter</code>: When enabled, an <code>Enter</code> key is sent immediately after pasting so the command executes automatically.</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CrystalDiskInfo Smart Auto-Refresh 1.0.1]]></title>
         <id>https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh#295ce177a10c22634f41d589f715f5506a2a1d13</id>
@@ -540,41 +561,6 @@ display.</li>
         <author>
             <name>SilverAmd</name>
             <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MSHTML Tweaks 1.0]]></title>
-        <id>https://windhawk.net/mods/mshtml-native-controls#f7de3782e55d3abd9b6d97588c8116ac80e7e0b1</id>
-        <link href="https://windhawk.net/mods/mshtml-native-controls"/>
-        <updated>2026-05-25T14:10:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mshtmltweaks">MSHTML Tweaks</h1>
-<ul>
-<li>Various tweaks for Internet Explorer and all the other apps using its engine (Trident/MSHTML), such as HTML Help, HelpPane, MSHTA, MMC, etc.</li>
-<li>This mod can bring back old controls, customize the font smoothing type (disable the forced ClearType), and disable the DirectComposition rendering.</li>
-<li>Special thanks to @xalejandro for the ClearType disabler.</li>
-<li>Only works on Internet Explorer 11 engine running on Windows 10 or higher. Tested on 10 22H2 and 11 25H2. Never tested on Windows 8 or earlier Windows 10 builds. Won't work on Windows 7. (You'll need to remove hooks for some symbols that don't exist.)</li>
-<li>The first launch of an MSHTML application after enabling this mod will take a lot of time, due to the large size of the symbols needed. It may not show the symbols download progress dialog depending on your internet security settings.</li>
-</ul>
-<h2 id="notesregardingtheoldcontrolstyles">Notes regarding the old control styles</h2>
-<ul>
-<li>Note that this mod only restores IE11's built-in Windows 7 behavior for old control styling, which uses hardcoded/fake Aero styles that do not actually match the current system theme.</li>
-<li>Only the scrollbar will use actual bitmaps from the current visual style (or classic); however, they may look glitchy, especially on HiDPI displays.</li>
-<li>You may want to disable the visual styles for controls in Internet Options (<code>inetcpl.cpl</code>) -&gt; Advanced -&gt; <code>Enable visual styles on buttons and controls in web pages</code> to make them look better on older themes such as XP.
-<img src="https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/ie_fakeaero.png" alt="Comparison of fake and real control styles" /></li>
-</ul>
-<h2 id="ifinternetexplorerhangsonstartup">If Internet Explorer hangs on startup</h2>
-<ul>
-<li>Internet Explorer (<code>iexplore.exe</code>) uses a 32-bit subprocess by default, and the subprocess will fail to save its symbol downloaded from the Windhawk server.</li>
-<li>To fix this, please run the following in the run dialog (Win+R) to launch a 32-bit MSHTML as a main process to load the symbols:</li>
-<li><code>C:\Windows\SysWOW64\hh.exe http://www.ingan121.com/</code> (or any other <code>http</code> URL that isn't <code>https</code>)</li>
-</ul>
-<h2 id="knownissues">Known issues</h2>
-<ul>
-<li>Internet Explorer will crash when changing the settings or loading/unloading/updating the mod while it's running. This is not necessarily true for other apps using MSHTML.</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>

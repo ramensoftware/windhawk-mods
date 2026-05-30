@@ -2335,6 +2335,36 @@
                 "version": "1.0.0"
             }
         },
+        "console-quick-paste": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780142746000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780142746000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Armaninyow",
+                "compilerOptions": "-luser32 -lcomctl32",
+                "description": "Injects a \"Quick Commands\" submenu into the right-click context menu of Windows PowerShell and Command Prompt.",
+                "github": "https://github.com/armaninyow",
+                "include": [
+                    "WindowsTerminal.exe",
+                    "conhost.exe",
+                    "OpenConsole.exe"
+                ],
+                "name": "Console Quick Paste",
+                "version": "1.0.0"
+            }
+        },
         "context-menu-preloader": {
             "details": {
                 "defaultSorting": 5460,

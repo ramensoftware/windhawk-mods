@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-30T10:31:36.000Z</updated>
+    <updated>2026-05-30T12:05:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Console Quick Paste 1.0.0]]></title>
+        <id>https://windhawk.net/mods/console-quick-paste#490dfae0c155a142237630390237447d258de0d8</id>
+        <link href="https://windhawk.net/mods/console-quick-paste"/>
+        <updated>2026-05-30T12:05:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="consolequickpaste">Console Quick Paste</h1>
+<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/CQP.png" alt="Console Quick Paste" /></p>
+<p>Brings a "Quick Commands" submenu to Windows Terminal, giving you one-click access to your most-used PowerShell and Command Prompt snippets. To open it, right-click the empty space on the tab bar.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><code>Quick Commands Submenu</code>: Always pinned to the top of the context menu, separated from the built-in items by a divider.</li>
+<li><code>Configurable Command List</code>: Define as many commands as you like. Each entry has:</li>
+<li><code>Label</code>: The display name shown in the submenu. Falls back to the command itself when left blank.</li>
+<li><code>Command</code>: The string that will be pasted into the console.</li>
+<li><code>Auto-Enter</code>: When enabled, an <code>Enter</code> key is sent immediately after pasting so the command executes automatically.</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[URL Blocker 0.1]]></title>
         <id>https://windhawk.net/mods/url-blocker#9652ca93368edbfbd1274ae2ccc7524025adf302</id>
@@ -675,41 +696,6 @@ Win+V.</li>
         <author>
             <name>takattowo</name>
             <uri>https://github.com/takattowo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Monitor Sleep Button 1.0.0]]></title>
-        <id>https://windhawk.net/mods/monitor-sleep-button#bba2b04e3327bb83eb2c37a9725e0782be23fb4d</id>
-        <link href="https://windhawk.net/mods/monitor-sleep-button"/>
-        <updated>2026-05-14T17:39:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="monitorsleepbutton">Monitor Sleep Button</h1>
-<p>Adds a small tray icon for turning off the monitor.</p>
-<h2 id="usage">Usage</h2>
-<ul>
-<li>Left-click the tray icon.</li>
-<li>A countdown appears on the screen.</li>
-<li>After the countdown, the monitor turns off.</li>
-<li>Move the mouse or press any key to wake the monitor again.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<p>The countdown duration can be configured in the mod settings.</p>
-<p>Available values:</p>
-<ul>
-<li>1 second</li>
-<li>2 seconds</li>
-<li>3 seconds</li>
-<li>5 seconds</li>
-<li>10 seconds</li>
-<li>15 seconds</li>
-<li>30 seconds</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<p>This mod does not shut down, suspend, or lock the computer. It only sends the Windows monitor power-off command.</p>
-<p>Useful as a quick replacement for desktop shortcuts or batch files.</p>
-<p>This is useful when long-running downloads, renders, AI model installs, or other background tasks are running and the monitor should be turned off without putting the PC to sleep.</p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>
