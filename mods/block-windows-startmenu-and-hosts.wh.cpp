@@ -2,12 +2,13 @@
 // @id              block-windows-startmenu-and-hosts
 // @name            Block Start Menu and Hosts
 // @description     Kills existing selected UI components on mod init and blocks any future launches.
-// @version         1.2
+// @version         1.4
 // @author          Exiled Eye
 // @github          https://github.com/ExiledEye
 // @homepage        https://exiledeye.github.io/
 // @include         explorer.exe
 // @include         svchost.exe
+// @include         ShellHost.exe
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -20,13 +21,21 @@ This way the mod ensures that unused selected UI components and their process ar
  
 ## Features
 You can individually toggle the blocking of the following processes dynamically in the mod settings:
-*   **StartMenuExperienceHost.exe** -> The main Start Menu UI and process ("WIN" key)
-*   **SearchHost.exe**              -> The Search Menu UI and process ("WIN + S" shortcut) **Note**: _may_ cause issues within folder search.
-*   **TextInputHost.exe**           -> The emoji and clipboard UI and process ("WIN + ." shortcut)
-## How it Works
-The mod injects into `explorer.exe` and `svchost.exe`.  
+*   **StartMenuExperienceHost.exe**     -> The main Start Menu UI and process ("WIN" key).
+*   **SearchHost.exe**                  -> The Search Menu UI and process ("WIN + S" and "WIN+ Q" shortcut) **Note**: _may_ cause issues within folder search.
+*   **TextInputHost.exe**               -> The Emoji and Clipboard UI and process ("WIN + ." and "WIN + V" shortcuts).
+*   **ShellHost.exe**                   -> The Action Center UI and process ("WIN + A" shortcut).
+*   **ShellExperienceHost.exe**         -> The Calendar and Notifications UI and process ("WIN + N" shortcut).
+*   **MicrosoftStartFeedProvider.exe**  -> The Start Menu process, which provides news, weather, stock quotes, interest cards, recommended and etc.
+*   **WidgetBoard.exe**                 -> The Widgets board UI and process ("WIN + W" shortcut).
+*   **WidgetService.exe**               -> The Widgets board background data, content and service infrastructure process.
+
+## How it works
+The mod injects into `explorer.exe`, `svchost.exe`, and `ShellHost.exe`.  
 Upon init, it kills any active instances of the selected hosts.  
-It then places a hook on the `CreateProcessInternalW` function: If the system attempts to launch any of the blocked .exe (example: user press WIN key), the hook intercepts the request and returns an `ERROR_ACCESS_DENIED` flag, preventing the launch.
+It then places a hook on the `CreateProcessInternalW` function: If the system attempts to launch any of the blocked .exe (example: user press WIN key), the hook intercepts the request and returns an `ERROR_ACCESS_DENIED` flag, preventing the launch.  
+For `ShellHost.exe` specifically, the mod injects directly into it and calls `ExitProcess` on init if blocking is enabled, since ShellHost respawns itself and cannot be kept dead by the hook alone.
+
 */
 // ==/WindhawkModReadme==
 
@@ -41,6 +50,21 @@ It then places a hook on the `CreateProcessInternalW` function: If the system at
 - BlockTextInput: false
   $name: Block TextInputHost.exe
   $description: Kills existing instances and blocks future launches of the Text Input host.
+- BlockShellHost: false
+  $name: Block ShellHost.exe
+  $description: Kills existing instances and blocks future launches of Action Center host.
+- BlockShellExperienceHost: false
+  $name: Block ShellExperienceHost.exe
+  $description: Kills existing instances and blocks future launches of Calendar and Notifications host.
+- BlockMicrosoftStartFeedProvider: false
+  $name: Block MicrosoftStartFeedProvider.exe
+  $description: Kills existing instances and blocks future launches of Start Feed Provider host.
+- BlockWidgetBoard: false
+  $name: Block WidgetBoard.exe
+  $description: Kills existing instances and blocks future launches of Widgets host.
+- BlockWidgetService: false
+  $name: Block WidgetService.exe
+  $description: Kills existing instances and blocks future launches of Widgets Service host.
 */
 // ==/WindhawkModSettings==
 
@@ -52,25 +76,41 @@ It then places a hook on the `CreateProcessInternalW` function: If the system at
 bool g_blockStartMenu = true;
 bool g_blockSearch = true;
 bool g_blockTextInput = false;
+bool g_blockShellHost = false;
+bool g_blockShellExperienceHost = false;
+bool g_blockMicrosoftStartFeedProvider = false;
+bool g_blockWidgetBoard = false;
+bool g_blockWidgetService = false;
 
 // Settings Loader
 void LoadSettings() {
-    g_blockStartMenu = Wh_GetIntSetting(L"BlockStartMenu");
-    g_blockSearch = Wh_GetIntSetting(L"BlockSearch");
-    g_blockTextInput = Wh_GetIntSetting(L"BlockTextInput");
+    g_blockStartMenu                  = Wh_GetIntSetting(L"BlockStartMenu");
+    g_blockSearch                     = Wh_GetIntSetting(L"BlockSearch");
+    g_blockTextInput                  = Wh_GetIntSetting(L"BlockTextInput");
+    g_blockShellHost                  = Wh_GetIntSetting(L"BlockShellHost");
+    g_blockShellExperienceHost        = Wh_GetIntSetting(L"BlockShellExperienceHost");
+    g_blockMicrosoftStartFeedProvider = Wh_GetIntSetting(L"BlockMicrosoftStartFeedProvider");
+    g_blockWidgetBoard                = Wh_GetIntSetting(L"BlockWidgetBoard");
+    g_blockWidgetService              = Wh_GetIntSetting(L"BlockWidgetService");
+}
+
+// Returns just the filename part of the current process path
+const wchar_t* GetCurrentProcessName() {
+    static wchar_t path[MAX_PATH];
+    GetModuleFileNameW(NULL, path, MAX_PATH);
+    const wchar_t* name = wcsrchr(path, L'\\');
+    return name ? name + 1 : path;
 }
 
 // Helper for process killing
 void TerminateProcessByName(const wchar_t* filename) {
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnap == INVALID_HANDLE_VALUE) return;
-
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(pe);
-
     if (Process32FirstW(hSnap, &pe)) {
         do {
-            if (wcsicmp(pe.szExeFile, filename) == 0) {
+            if (_wcsicmp(pe.szExeFile, filename) == 0) {
                 HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
                 if (hProcess) {
                     TerminateProcess(hProcess, 0);
@@ -84,15 +124,14 @@ void TerminateProcessByName(const wchar_t* filename) {
 
 // Helper to kill currently targeted processes based on settings
 void TerminateConfiguredProcesses() {
-    if (g_blockStartMenu) {
-        TerminateProcessByName(L"StartMenuExperienceHost.exe");
-    }
-    if (g_blockSearch) {
-        TerminateProcessByName(L"SearchHost.exe");
-    }
-    if (g_blockTextInput) {
-        TerminateProcessByName(L"TextInputHost.exe");
-    }
+    if (g_blockStartMenu)                  TerminateProcessByName(L"StartMenuExperienceHost.exe");
+    if (g_blockSearch)                     TerminateProcessByName(L"SearchHost.exe");
+    if (g_blockTextInput)                  TerminateProcessByName(L"TextInputHost.exe");
+    if (g_blockShellHost)                  TerminateProcessByName(L"ShellHost.exe");
+    if (g_blockShellExperienceHost)        TerminateProcessByName(L"ShellExperienceHost.exe");
+    if (g_blockMicrosoftStartFeedProvider) TerminateProcessByName(L"MicrosoftStartFeedProvider.exe");
+    if (g_blockWidgetBoard)                TerminateProcessByName(L"WidgetBoard.exe");
+    if (g_blockWidgetService)              TerminateProcessByName(L"WidgetService.exe");
 }
 
 // Helper for case-insensitive substring search
@@ -115,7 +154,6 @@ typedef BOOL(WINAPI *CreateProcessInternalW_t)(
     LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
     LPPROCESS_INFORMATION lpProcessInformation, PHANDLE hNewToken
 );
-
 CreateProcessInternalW_t CreateProcessInternalW_Original;
 
 BOOL WINAPI CreateProcessInternalW_Hook(
@@ -123,31 +161,30 @@ BOOL WINAPI CreateProcessInternalW_Hook(
     LPSECURITY_ATTRIBUTES lpPA, LPSECURITY_ATTRIBUTES lpTA,
     BOOL bInherit, DWORD dwFlags, LPVOID lpEnv,
     LPCWSTR lpDir, LPSTARTUPINFOW lpSI,
-    LPPROCESS_INFORMATION lpPI, PHANDLE hNewToken) 
+    LPPROCESS_INFORMATION lpPI, PHANDLE hNewToken)
 {
-    bool block = false;
+    auto matches = [&](const wchar_t* target) {
+        return (lpCmdLine && wcsistr(lpCmdLine, target)) ||
+               (lpAppName && wcsistr(lpAppName, target));
+    };
 
-    if (g_blockStartMenu && ((lpCmdLine && wcsistr(lpCmdLine, L"StartMenuExperienceHost.exe")) || 
-                             (lpAppName && wcsistr(lpAppName, L"StartMenuExperienceHost.exe")))) {
-        block = true;
-    }
-    else if (g_blockSearch && ((lpCmdLine && wcsistr(lpCmdLine, L"SearchHost.exe")) || 
-                               (lpAppName && wcsistr(lpAppName, L"SearchHost.exe")))) {
-        block = true;
-    }
-    else if (g_blockTextInput && ((lpCmdLine && wcsistr(lpCmdLine, L"TextInputHost.exe")) || 
-                                  (lpAppName && wcsistr(lpAppName, L"TextInputHost.exe")))) {
-        block = true;
-    }
+    bool block =
+        (g_blockStartMenu                  && matches(L"StartMenuExperienceHost.exe"))     ||
+        (g_blockSearch                     && matches(L"SearchHost.exe"))                  ||
+        (g_blockTextInput                  && matches(L"TextInputHost.exe"))               ||
+        (g_blockShellHost                  && matches(L"ShellHost.exe"))                   ||
+        (g_blockShellExperienceHost        && matches(L"ShellExperienceHost.exe"))         ||
+        (g_blockMicrosoftStartFeedProvider && matches(L"MicrosoftStartFeedProvider.exe")) ||
+        (g_blockWidgetBoard                && matches(L"WidgetBoard.exe"))                 ||
+        (g_blockWidgetService              && matches(L"WidgetService.exe"));
 
-    if (block) { // Logs if process is being blocked on keypress (if logging is enabled)
-        Wh_Log(L"Blocked launch: AppName=%ls, CmdLine=%ls", 
-            lpAppName ? lpAppName : L"NULL", 
+    if (block) {
+        Wh_Log(L"Blocked launch: AppName=%ls, CmdLine=%ls",
+            lpAppName ? lpAppName : L"NULL",
             lpCmdLine ? lpCmdLine : L"NULL");
         SetLastError(ERROR_ACCESS_DENIED);
         return FALSE;
     }
-
     return CreateProcessInternalW_Original(hToken, lpAppName, lpCmdLine, lpPA, lpTA, bInherit, dwFlags, lpEnv, lpDir, lpSI, lpPI, hNewToken);
 }
 
@@ -157,12 +194,23 @@ void Wh_ModSettingsChanged() {
     TerminateConfiguredProcesses();
 }
 
+void Wh_ModUninit() {}
+
 BOOL Wh_ModInit() {
-    // 1. Load initial settings and kill running configured processes
     LoadSettings();
+
+    // ShellHost respawn block
+    if (_wcsicmp(GetCurrentProcessName(), L"ShellHost.exe") == 0) {
+        if (g_blockShellHost) {
+            Wh_Log(L"ShellHost.exe is blocked, exiting process.");
+            ExitProcess(0);
+        }
+        return FALSE;
+    }
+
+    // Kill running instances and set up the hook.
     TerminateConfiguredProcesses();
 
-    // 2. Set up the hook to prevent them from ever starting again
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
         void* pCreateProcessInternalW = (void*)GetProcAddress(hKernelBase, "CreateProcessInternalW");
