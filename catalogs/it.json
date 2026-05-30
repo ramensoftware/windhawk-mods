@@ -11735,6 +11735,31 @@
                 "version": "1.0.0"
             }
         },
+        "url-blocker": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780137096000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780137096000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "CrazyTim71",
+                "description": "Blocks selected applications from opening web URLs via ShellExecute. Useful for suppressing post-update pages, promo links, and similar browser popups",
+                "github": "https://github.com/CrazyTim71",
+                "license": "MIT",
+                "name": "URL Blocker",
+                "version": "0.1"
+            }
+        },
         "uwp-assets-redirect": {
             "details": {
                 "defaultSorting": 700,

@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-29T13:01:54.000Z</updated>
+    <updated>2026-05-30T10:31:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[URL Blocker 0.1]]></title>
+        <id>https://windhawk.net/mods/url-blocker#9652ca93368edbfbd1274ae2ccc7524025adf302</id>
+        <link href="https://windhawk.net/mods/url-blocker"/>
+        <updated>2026-05-30T10:31:36.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="whatitdoes">What it does</h2>
+<p>This mod prevents selected applications from opening web links in your default browser. It is mainly intended for cases where programs open unnecessary pages such as post-update "thank you" screens, release notes, promotional pages, or similar unwanted redirects.</p>
+<p>The mod works by intercepting <code>ShellExecuteW</code> and <code>ShellExecuteA</code> calls and ignoring calls that try to open URLs (starting with <code>http</code>). Regular file paths are left alone, so opening local files will continue to work as usual.</p>
+<h2 id="configuration">Configuration</h2>
+<p>This mod doesn't automatically target any processes. Add the programs for which you want to block URL calls under:</p>
+<p><code>Details</code> -&gt; <code>Advanced</code> -&gt; <code>Custom process inclusion list</code></p>
+<p>Only the processes in that list will have URL calls blocked.</p>
+<p><strong><em>No guarantee that it will work on all programs!</em></strong></p>
+<h2 id="notesandlimitations">Notes and limitations</h2>
+<ul>
+<li>The mod only blocks URL launches that go through <code>ShellExecuteW</code> or <code>ShellExecuteA</code>.</li>
+<li>Programs that use another API or an embedded browser may still be able to open web pages.</li>
+<li>The mod is not intended for system-wide URL filtering.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Inspired by the <code>F1 Blocker</code> mod from <a href="https://github.com/d0gkiller87">d0gkiller87</a>.</p>
+<h2 id="bugreportfeaturerequest">Bug Report / Feature Request</h2>
+<p>Open an issue / discussion on https://github.com/ramensoftware/windhawk-mods and tag <code>@CrazyTim71</code></p>]]></content>
+        <author>
+            <name>CrazyTim71</name>
+            <uri>https://github.com/CrazyTim71</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Status Bar Metadata 1.4.0]]></title>
         <id>https://windhawk.net/mods/explorer-status-metadata#531762a55d231b40dc5f3a6e374ea8ac8135ecfb</id>
@@ -556,20 +584,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>erisune</name>
             <uri>https://github.com/erisune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Simple Window Switcher 1.1]]></title>
-        <id>https://windhawk.net/mods/simple-window-switcher#666743da4e145c838ffbbf89db8f15aa8c7915da</id>
-        <link href="https://windhawk.net/mods/simple-window-switcher"/>
-        <updated>2026-05-24T17:59:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Refactor Explorer Restart Prompt logic</li>
-<li>Fixed an issue where the Show Delay setting is broken, <a href="https://github.com/Louis047/windhawk-mods/blob/c0b6582ad2161f8406e294b2a74639851923cfac/mods/simple-window-switcher.wh.cpp#L1510">as it just freezes the switcher thread and blocks the message loop</a> Fix by <a href="https://github.com/zhilemann">@zhilemann</a></li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
