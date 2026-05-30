@@ -68,31 +68,96 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - none: None (Transparent)
       - backdrop: Acrylic (Windows 10+)
       - mica: Mica Blur (Windows 11 only)
-    - opacity: 100
-      $name: Background Opacity
-      $description: Background opacity percentage (0-100), applies to None and Acrylic themes. Set value to '80' for Acrylic to see the effect.
     - colorScheme: system
       $name: Color Scheme
       $options:
       - system: Follow system setting
       - light: Light
       - dark: Dark
-    - highlightStyle: border
-      $name: Selected Task Highlight Style
-      $description: Style used for the selected task row/tile.
-      $options:
-      - border: Border only
-      - fillAndBorder: Background fill and border
-      - fillOnly: Background fill only
-    - borderColorDark: "#FFFFFF"
-      $name: Dark Mode Border Color
-      $description: Border color in HEX format for dark mode.
-    - borderColorLight: "#000000"
-      $name: Light Mode Border Color
-      $description: Border color in HEX format for light mode.
-    - useAccentColor: false
-      $name: Use Accent Color for Borders and Background Fill
-      $description: Use Windows accent color for selection and hover borders. 
+    - DarkMode:
+        - highlightStyle: border
+          $name: Task Highlight Style
+          $description: Style used for the selected task row/tile.
+          $options:
+          - border: Border only
+          - fillAndBorder: Background fill and border
+          - fillOnly: Background fill only
+        - opacity: 100
+          $name: Background Opacity
+          $description: Background opacity percentage (0-100), applies to None and Acrylic themes. Set value to '80' for Acrylic to see the effect.
+        - borderColorMode: default
+          $name: Border Color
+          $description: Color source for the selected/hovered task border in dark mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - highlightFillColorMode: default
+          $name: Task Highlight Background Fill Color
+          $description: Color source for the selected task background fill in dark mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - bgColorMode: default
+          $name: Switcher Background Color
+          $description: Color source for the switcher window background in dark mode. Applies to None and Acrylic themes.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customBorderColor: "#FFFFFF"
+          $name: Custom Border Color
+          $description: HEX color value, used when Border Color is set to Custom.
+        - customHighlightFillColor: "#FFFFFF"
+          $name: Custom Task Highlight Background Fill Color
+          $description: HEX color value, used when Task Highlight Background Fill Color is set to Custom.
+        - customBgColor: "#202020"
+          $name: Custom Switcher Background Color
+          $description: HEX color value, used when Switcher Background Color is set to Custom.
+      $name: Dark Mode
+    - LightMode:
+        - highlightStyle: border
+          $name: Task Highlight Style
+          $description: Style used for the selected task row/tile.
+          $options:
+          - border: Border only
+          - fillAndBorder: Background fill and border
+          - fillOnly: Background fill only
+        - opacity: 100
+          $name: Background Opacity
+          $description: Background opacity percentage (0-100), applies to None and Acrylic themes. Set value to '80' for Acrylic to see the effect.
+        - borderColorMode: default
+          $name: Border Color
+          $description: Color source for the selected/hovered task border in light mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - highlightFillColorMode: default
+          $name: Task Highlight Background Fill Color
+          $description: Color source for the selected task background fill in light mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - bgColorMode: default
+          $name: Switcher Background Color
+          $description: Color source for the switcher window background in light mode. Applies to None and Acrylic themes.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customBorderColor: "#000000"
+          $name: Custom Border Color
+          $description: HEX color value, used when Border Color is set to Custom.
+        - customHighlightFillColor: "#000000"
+          $name: Custom Task Highlight Background Fill Color
+          $description: HEX color value, used when Task Highlight Background Fill Color is set to Custom.
+        - customBgColor: "#F3F3F3"
+          $name: Custom Switcher Background Color
+          $description: HEX color value, used when Switcher Background Color is set to Custom.
+      $name: Light Mode
   $name: Theme
 - Appearance:
     - Corners:
@@ -241,15 +306,12 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - allDesktops: Show windows from all virtual desktops
   $name: Accessibility
 - ExcludedWindows:
-  - - Method: title
-      $name: Exclusion Method
-      $description: Exclude by window title or executable name
-      $options:
-      - title: Window Title
-      - exe: Executable Name
-    - Value: ""
-      $name: Pattern
-      $description: "The pattern to exclude (wildcards supported: * matches any characters, ? matches one). Separate multiple entries with a comma. Example: *chrome*, msedge.exe"
+    - excludeByTitle: ""
+      $name: Exclude by Window Title
+      $description: "Window title patterns to exclude, separated by ';' (wildcards supported: * matches any characters, ? matches one). Example: *Notepad*;*Chrome*"
+    - excludeByExe: ""
+      $name: Exclude by Executable Name
+      $description: "Executable name patterns to exclude, separated by ';' (wildcards supported: * matches any characters, ? matches one). Example: notepad.exe;chrome.exe"
   $name: Excluded Windows
   $description: Exclude specific windows from appearing in the switcher.
 
@@ -326,12 +388,17 @@ struct WindowEntry {
 };
 struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
-    WCHAR highlightStyle[32]; WCHAR virtualDesktopBehavior[32];
-    WCHAR borderColorDark[16];
-    WCHAR borderColorLight[16];
+    WCHAR virtualDesktopBehavior[32];
+    // Dark Mode color settings
+    WCHAR highlightStyleDark[32]; int opacityDark;
+    WCHAR borderColorModeDark[16]; WCHAR highlightFillColorModeDark[16]; WCHAR bgColorModeDark[16];
+    WCHAR customBorderColorDark[16]; WCHAR customHighlightFillColorDark[16]; WCHAR customBgColorDark[16];
+    // Light Mode color settings
+    WCHAR highlightStyleLight[32]; int opacityLight;
+    WCHAR borderColorModeLight[16]; WCHAR highlightFillColorModeLight[16]; WCHAR bgColorModeLight[16];
+    WCHAR customBorderColorLight[16]; WCHAR customHighlightFillColorLight[16]; WCHAR customBgColorLight[16];
     WCHAR fontFamily[64]; WCHAR fontStyle[32];
     int fontSize;
-    int opacity;
     int rowHeight;
     int rowWidth;
     bool stretchThumbnailsToTaskWidth;
@@ -340,7 +407,7 @@ struct Settings {
     bool showIcon;
     int maxWidthPercent;
     int maxHeightPercent; int showDelay;
-    bool useAccentColor; bool perMonitorWindows; bool taskRoundedCorners; bool reverseScrollDirection;
+    bool perMonitorWindows; bool taskRoundedCorners; bool reverseScrollDirection;
     bool centerTaskContent;
     bool showApplications;
     WCHAR showTitles[32];
@@ -401,7 +468,9 @@ static bool HeaderOrientationIs(const WCHAR* v) { return wcscmp(g_settings.heade
 static bool IconSizeIs(const WCHAR* v) { return wcscmp(g_settings.iconSize, v) == 0; }
 static bool BackwardShortcutIs(const WCHAR* v) { return wcscmp(g_settings.backwardShortcut, v) == 0; }
 static bool ThumbnailPositionIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailPosition, v) == 0; }
-static bool HighlightStyleIs(const WCHAR* v) { return wcscmp(g_settings.highlightStyle, v) == 0; }
+static bool HighlightStyleIs(const WCHAR* v) {
+    return wcscmp(g_isDarkMode ? g_settings.highlightStyleDark : g_settings.highlightStyleLight, v) == 0;
+}
 static bool UseAltShiftTabBackward() { return BackwardShortcutIs(L"altShiftTab"); }
 static bool UseAltShiftBackward() { return BackwardShortcutIs(L"altShift"); }
 static bool UseAltBacktickBackward() { return BackwardShortcutIs(L"altBacktick"); }
@@ -1760,17 +1829,46 @@ static void UnregisterThumbnails() {
 
 // Drawing Helpers
 
-static COLORREF GetContourColor() {
-    if (g_settings.useAccentColor) return GetAccentColor();
-
-    COLORREF parsed;
-    if (g_isDarkMode) {
-        if (ParseHexColor(g_settings.borderColorDark, &parsed)) return parsed;
-    } else {
-        if (ParseHexColor(g_settings.borderColorLight, &parsed)) return parsed;
+static COLORREF ResolveColor(const WCHAR* mode, const WCHAR* customHex, COLORREF defaultColor) {
+    if (wcscmp(mode, L"accent") == 0) return GetAccentColor();
+    if (wcscmp(mode, L"custom") == 0) {
+        COLORREF parsed;
+        if (ParseHexColor(customHex, &parsed)) return parsed;
     }
+    return defaultColor;
+}
 
-    return g_isDarkMode ? SWS_CONTOUR_DARK : SWS_CONTOUR_LIGHT;
+static COLORREF GetContourColor() {
+    if (g_isDarkMode) {
+        return ResolveColor(g_settings.borderColorModeDark,
+                            g_settings.customBorderColorDark,
+                            SWS_CONTOUR_DARK);
+    }
+    return ResolveColor(g_settings.borderColorModeLight,
+                        g_settings.customBorderColorLight,
+                        SWS_CONTOUR_LIGHT);
+}
+
+static COLORREF GetHighlightFillColor() {
+    if (g_isDarkMode) {
+        return ResolveColor(g_settings.highlightFillColorModeDark,
+                            g_settings.customHighlightFillColorDark,
+                            SWS_CONTOUR_DARK);
+    }
+    return ResolveColor(g_settings.highlightFillColorModeLight,
+                        g_settings.customHighlightFillColorLight,
+                        SWS_CONTOUR_LIGHT);
+}
+
+static COLORREF GetBgColor() {
+    if (g_isDarkMode) {
+        return ResolveColor(g_settings.bgColorModeDark,
+                            g_settings.customBgColorDark,
+                            SWS_BG_DARK);
+    }
+    return ResolveColor(g_settings.bgColorModeLight,
+                        g_settings.customBgColorLight,
+                        SWS_BG_LIGHT);
 }
 
 static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx) {
@@ -1791,7 +1889,7 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx) {
         return;
     }
 
-    COLORREF bg = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
+    COLORREF bg = GetBgColor();
     // In layered mode, punch fully transparent corners to force thumbnail clipping.
     BYTE alpha = ThemeIs(L"none") ? 0 : 255;
 
@@ -1873,25 +1971,33 @@ static void DrawContour(HDC hdc, RECT rc, int contourSize, int direction) {
         return;
     }
 
-    HBRUSH hBrush = CreateSolidBrush(RGB(r, g, b));
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+    Gdiplus::SolidBrush solidBrush(Gdiplus::Color(255, r, g, b));
+
     if (direction < 0) {
         // Outer contour: DWM composites thumbnails on top of GDI and renders
         // inclusively at rcDestination's right/bottom edges. Inflate by i+2
-        // so FrameRect's border pixels land 1px beyond DWM's last column/row.
+        // so border pixels land 1px beyond DWM's last column/row.
         for (int i = 0; i < contourSize; i++) {
             RECT r_rect = rc;
             InflateRect(&r_rect, i + 2, i + 2);
-            FrameRect(hdc, &r_rect, hBrush);
+            graphics.FillRectangle(&solidBrush, r_rect.left, r_rect.top, (r_rect.right - r_rect.left), 1);
+            graphics.FillRectangle(&solidBrush, r_rect.left, r_rect.bottom - 1, (r_rect.right - r_rect.left), 1);
+            graphics.FillRectangle(&solidBrush, r_rect.left, r_rect.top + 1, 1, (r_rect.bottom - r_rect.top) - 2);
+            graphics.FillRectangle(&solidBrush, r_rect.right - 1, r_rect.top + 1, 1, (r_rect.bottom - r_rect.top) - 2);
         }
     } else {
         // Inner contour
         for (int i = 0; i < contourSize; i++) {
             RECT r_rect = rc;
             InflateRect(&r_rect, -i, -i);
-            FrameRect(hdc, &r_rect, hBrush);
+            graphics.FillRectangle(&solidBrush, r_rect.left, r_rect.top, (r_rect.right - r_rect.left), 1);
+            graphics.FillRectangle(&solidBrush, r_rect.left, r_rect.bottom - 1, (r_rect.right - r_rect.left), 1);
+            graphics.FillRectangle(&solidBrush, r_rect.left, r_rect.top + 1, 1, (r_rect.bottom - r_rect.top) - 2);
+            graphics.FillRectangle(&solidBrush, r_rect.right - 1, r_rect.top + 1, 1, (r_rect.bottom - r_rect.top) - 2);
         }
     }
-    DeleteObject(hBrush);
 }
 
 static void DrawSelectionFill(HDC hdc, RECT rc) {
@@ -1903,7 +2009,7 @@ static void DrawSelectionFill(HDC hdc, RECT rc) {
         return;
     }
 
-    COLORREF c = GetContourColor();
+    COLORREF c = GetHighlightFillColor();
     BYTE r = GetRValue(c);
     BYTE g = GetGValue(c);
     BYTE b = GetBValue(c);
@@ -2003,9 +2109,9 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
     int w = rcClient.right, h = rcClient.bottom;
 
     if (fillBg) {
-        BYTE bgA = (BYTE)(g_settings.opacity * 255 / 100);
+        BYTE bgA = (BYTE)((g_isDarkMode ? g_settings.opacityDark : g_settings.opacityLight) * 255 / 100);
         if (bgA == 0) bgA = 1; // Prevent full transparency click-through
-        COLORREF bgC = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
+        COLORREF bgC = GetBgColor();
         BYTE bgR = GetRValue(bgC), bgG = GetGValue(bgC), bgB = GetBValue(bgC);
         RGBQUAD bgPx = { (BYTE)(bgB*bgA/255), (BYTE)(bgG*bgA/255), (BYTE)(bgR*bgA/255), bgA };
         BITMAPINFO bgBi = {}; bgBi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -2413,7 +2519,7 @@ static void ApplyThemeToWindow(HWND hWnd) {
                 // Unfocused mirror windows drop to solid grey with native Mica.
                 // We use SetWindowCompositionAttribute (Acrylic Blur) to force a translucent effect.
                 DWORD blur = 200; // Fixed opacity (~78%) to closely simulate Mica blur
-                COLORREF bg = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
+                COLORREF bg = GetBgColor();
                 ACCENT_POLICY accent = {};
                 accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
                 accent.AccentFlags = 0;
@@ -2423,8 +2529,8 @@ static void ApplyThemeToWindow(HWND hWnd) {
             }
         }
         if (ThemeIs(L"backdrop") && g_SetWindowCompositionAttribute) {
-            DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
-            COLORREF bg = g_isDarkMode ? SWS_BG_DARK : SWS_BG_LIGHT;
+            DWORD blur = (DWORD)(((g_isDarkMode ? g_settings.opacityDark : g_settings.opacityLight) / 100.0) * 255);
+            COLORREF bg = GetBgColor();
             ACCENT_POLICY accent = {};
             accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
             accent.AccentFlags = 0;
@@ -3327,15 +3433,6 @@ static void LoadSettings() {
         wcscpy_s(g_settings.backwardShortcut, L"altShiftTab");
     }
 
-    v = Wh_GetStringSetting(L"Style.highlightStyle");
-    wcscpy_s(g_settings.highlightStyle, v ? v : L"border");
-    Wh_FreeStringSetting(v);
-    if (wcscmp(g_settings.highlightStyle, L"border") != 0 &&
-        wcscmp(g_settings.highlightStyle, L"fillAndBorder") != 0 &&
-        wcscmp(g_settings.highlightStyle, L"fillOnly") != 0) {
-        wcscpy_s(g_settings.highlightStyle, L"border");
-    }
-
     v = Wh_GetStringSetting(L"Accessibility.virtualDesktopBehavior");
     wcscpy_s(g_settings.virtualDesktopBehavior, v ? v : L"currentOnly");
     Wh_FreeStringSetting(v);
@@ -3344,9 +3441,6 @@ static void LoadSettings() {
         wcscpy_s(g_settings.virtualDesktopBehavior, L"currentOnly");
     }
 
-    g_settings.opacity = Wh_GetIntSetting(L"Style.opacity");
-    if (g_settings.opacity < 0) g_settings.opacity = 0;
-    if (g_settings.opacity > 100) g_settings.opacity = 100;
     g_settings.rowHeight = Wh_GetIntSetting(L"Dimensions.rowHeight");
     if (g_settings.rowHeight <= 0) g_settings.rowHeight = 230;
     g_settings.rowWidth = Wh_GetIntSetting(L"Dimensions.rowWidth");
@@ -3365,7 +3459,6 @@ static void LoadSettings() {
 
     g_settings.showDelay = Wh_GetIntSetting(L"Accessibility.showDelay");
     if (g_settings.showDelay < 0) g_settings.showDelay = 0;
-    g_settings.useAccentColor = Wh_GetIntSetting(L"Style.useAccentColor");
     g_settings.perMonitorWindows = Wh_GetIntSetting(L"Accessibility.perMonitorWindows");
     g_settings.reverseScrollDirection = Wh_GetIntSetting(L"Accessibility.reverseScrollDirection");
     g_settings.showApplications = Wh_GetIntSetting(L"Grouping.showApplications");
@@ -3380,17 +3473,55 @@ static void LoadSettings() {
     g_settings.centerTaskContent = Wh_GetIntSetting(L"Appearance.HeaderContent.centerTaskContent");
 
 
-    v = Wh_GetStringSetting(L"Style.borderColorDark");
-    wcscpy_s(g_settings.borderColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
-    if (!ParseHexColor(g_settings.borderColorDark, nullptr)) {
-        wcscpy_s(g_settings.borderColorDark, L"#FFFFFF");
+    // Dark Mode color settings
+    v = Wh_GetStringSetting(L"Style.DarkMode.highlightStyle");
+    wcscpy_s(g_settings.highlightStyleDark, v ? v : L"border"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.highlightStyleDark, L"border") != 0 &&
+        wcscmp(g_settings.highlightStyleDark, L"fillAndBorder") != 0 &&
+        wcscmp(g_settings.highlightStyleDark, L"fillOnly") != 0) {
+        wcscpy_s(g_settings.highlightStyleDark, L"border");
     }
+    g_settings.opacityDark = Wh_GetIntSetting(L"Style.DarkMode.opacity");
+    if (g_settings.opacityDark < 0) g_settings.opacityDark = 0;
+    if (g_settings.opacityDark > 100) g_settings.opacityDark = 100;
 
-    v = Wh_GetStringSetting(L"Style.borderColorLight");
-    wcscpy_s(g_settings.borderColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
-    if (!ParseHexColor(g_settings.borderColorLight, nullptr)) {
-        wcscpy_s(g_settings.borderColorLight, L"#000000");
+    v = Wh_GetStringSetting(L"Style.DarkMode.borderColorMode");
+    wcscpy_s(g_settings.borderColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.DarkMode.highlightFillColorMode");
+    wcscpy_s(g_settings.highlightFillColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.DarkMode.bgColorMode");
+    wcscpy_s(g_settings.bgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.DarkMode.customBorderColor");
+    wcscpy_s(g_settings.customBorderColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.DarkMode.customHighlightFillColor");
+    wcscpy_s(g_settings.customHighlightFillColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.DarkMode.customBgColor");
+    wcscpy_s(g_settings.customBgColorDark, v ? v : L"#202020"); Wh_FreeStringSetting(v);
+
+    // Light Mode color settings
+    v = Wh_GetStringSetting(L"Style.LightMode.highlightStyle");
+    wcscpy_s(g_settings.highlightStyleLight, v ? v : L"border"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.highlightStyleLight, L"border") != 0 &&
+        wcscmp(g_settings.highlightStyleLight, L"fillAndBorder") != 0 &&
+        wcscmp(g_settings.highlightStyleLight, L"fillOnly") != 0) {
+        wcscpy_s(g_settings.highlightStyleLight, L"border");
     }
+    g_settings.opacityLight = Wh_GetIntSetting(L"Style.LightMode.opacity");
+    if (g_settings.opacityLight < 0) g_settings.opacityLight = 0;
+    if (g_settings.opacityLight > 100) g_settings.opacityLight = 100;
+
+    v = Wh_GetStringSetting(L"Style.LightMode.borderColorMode");
+    wcscpy_s(g_settings.borderColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.LightMode.highlightFillColorMode");
+    wcscpy_s(g_settings.highlightFillColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.LightMode.bgColorMode");
+    wcscpy_s(g_settings.bgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.LightMode.customBorderColor");
+    wcscpy_s(g_settings.customBorderColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.LightMode.customHighlightFillColor");
+    wcscpy_s(g_settings.customHighlightFillColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.LightMode.customBgColor");
+    wcscpy_s(g_settings.customBgColorLight, v ? v : L"#F3F3F3"); Wh_FreeStringSetting(v);
 
     v = Wh_GetStringSetting(L"Appearance.Font.fontFamily");
     wcscpy_s(g_settings.fontFamily, v ? v : L"Segoe UI"); Wh_FreeStringSetting(v);
@@ -3404,45 +3535,49 @@ static void LoadSettings() {
     v = Wh_GetStringSetting(L"Accessibility.switcherDisplayBehavior");
     wcscpy_s(g_settings.switcherDisplayBehavior, v ? v : L"cursorMonitor"); Wh_FreeStringSetting(v);
 
+    // Exclusion patterns (newline-delimited text fields)
     g_excludeTitlePatterns.clear();
     g_excludeExePatterns.clear();
-    for (int i = 0; ; i++) {
-        PCWSTR method = Wh_GetStringSetting(L"ExcludedWindows[%d].Method", i);
-        bool done = !method || !*method;
-        
-        if (done) {
-            if (method) Wh_FreeStringSetting(method);
-            break;
-        }
-        
-        PCWSTR value = Wh_GetStringSetting(L"ExcludedWindows[%d].Value", i);
-        if (value && *value) {
-            std::wstring valStr(value);
-            size_t start = 0;
-            while (start < valStr.length()) {
-                size_t end = valStr.find(L',', start);
-                if (end == std::wstring::npos) end = valStr.length();
-                
-                std::wstring token = valStr.substr(start, end - start);
-                size_t first = token.find_first_not_of(L" \t");
-                if (first != std::wstring::npos) {
-                    token = token.substr(first);
-                    size_t last = token.find_last_not_of(L" \t");
-                    token = token.substr(0, last + 1);
-                    
-                    if (wcscmp(method, L"title") == 0) {
-                        g_excludeTitlePatterns.push_back(token);
-                    } else if (wcscmp(method, L"exe") == 0) {
-                        g_excludeExePatterns.push_back(token);
-                    }
-                }
-                start = end + 1;
+
+    v = Wh_GetStringSetting(L"ExcludedWindows.excludeByTitle");
+    if (v && *v) {
+        std::wstring valStr(v);
+        size_t start = 0;
+        while (start < valStr.length()) {
+            size_t end = valStr.find(L';', start);
+            if (end == std::wstring::npos) end = valStr.length();
+            std::wstring token = valStr.substr(start, end - start);
+            size_t first = token.find_first_not_of(L" \t\r\n");
+            if (first != std::wstring::npos) {
+                token = token.substr(first);
+                size_t last = token.find_last_not_of(L" \t\r\n");
+                token = token.substr(0, last + 1);
+                if (!token.empty()) g_excludeTitlePatterns.push_back(token);
             }
+            start = end + 1;
         }
-        
-        Wh_FreeStringSetting(method);
-        if (value) Wh_FreeStringSetting(value);
     }
+    if (v) Wh_FreeStringSetting(v);
+
+    v = Wh_GetStringSetting(L"ExcludedWindows.excludeByExe");
+    if (v && *v) {
+        std::wstring valStr(v);
+        size_t start = 0;
+        while (start < valStr.length()) {
+            size_t end = valStr.find(L';', start);
+            if (end == std::wstring::npos) end = valStr.length();
+            std::wstring token = valStr.substr(start, end - start);
+            size_t first = token.find_first_not_of(L" \t\r\n");
+            if (first != std::wstring::npos) {
+                token = token.substr(first);
+                size_t last = token.find_last_not_of(L" \t\r\n");
+                token = token.substr(0, last + 1);
+                if (!token.empty()) g_excludeExePatterns.push_back(token);
+            }
+            start = end + 1;
+        }
+    }
+    if (v) Wh_FreeStringSetting(v);
 }
 
 
