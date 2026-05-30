@@ -5884,6 +5884,35 @@
                 "version": "1.0.0"
             }
         },
+        "ime-mode-lock": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780167415000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780167415000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ZeonXr",
+                "compilerOptions": "-limm32",
+                "description": "Forces supported IMEs to stay in their native input mode, preventing accidental mode switches.",
+                "github": "https://github.com/ZeonXr",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "IME Native Mode Lock",
+                "version": "0.1"
+            }
+        },
         "internet-status-indicator": {
             "details": {
                 "defaultSorting": 15471,

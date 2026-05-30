@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-30T18:43:10.000Z</updated>
+    <updated>2026-05-30T18:56:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[IME Native Mode Lock 0.1]]></title>
+        <id>https://windhawk.net/mods/ime-mode-lock#6f1478f3ddcca4a45d5a1930a2d500db8738a386</id>
+        <link href="https://windhawk.net/mods/ime-mode-lock"/>
+        <updated>2026-05-30T18:56:55.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="imenativemodelock">IME Native Mode Lock</h1>
+<p>Forces supported IMEs to stay in their native input mode, blocking
+both system-initiated and user-initiated mode switches.</p>
+<p>By default, Windows automatically switches input modes when changing
+window focus or switching between applications. This mod blocks that
+behavior, keeping your IME in its native mode at all times.</p>
+<h2 id="supportedimes">Supported IMEs</h2>
+<ul>
+<li><strong>Simplified Chinese</strong> (Microsoft Pinyin, etc.) — always stays in Chinese mode</li>
+<li>More languages can be added in future updates</li>
+</ul>
+<p><strong>Pair with</strong> Caps IME Switcher (<code>caps-ime-switcher</code>) — short-press
+Caps Lock to switch input languages, long-press for Caps Lock.</p>
+<hr />
+<p>强制支持的输入法保持在原生输入模式，同时阻止系统自动切换和用户主动切换。</p>
+<p>默认情况下，Windows 在切换窗口焦点或应用程序时会自动切换输入模式。
+此 mod 阻止该行为，始终保持输入法在原生输入模式。</p>
+<h2 id="">支持的输入法</h2>
+<ul>
+<li><strong>简体中文</strong>（微软拼音等）— 始终保持中文模式</li>
+<li>未来可添加更多语言支持</li>
+</ul>
+<p><strong>推荐搭配</strong> Caps IME Switcher (<code>caps-ime-switcher</code>) — 可使用 Caps Lock
+短按切换输入语言，长按触发大小写锁定，配合本 mod 体验更佳。</p>]]></content>
+        <author>
+            <name>ZeonXr</name>
+            <uri>https://github.com/ZeonXr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Caps IME Switcher 0.7]]></title>
         <id>https://windhawk.net/mods/caps-ime-switcher#8877ffddffed29cd23d442cb2a803d65cdfea9e3</id>
@@ -431,40 +465,6 @@ tl;dr: Clicking on subfolder name box or date will choose that mod now.</li>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smooth Scroll for Win32 1.0.3]]></title>
-        <id>https://windhawk.net/mods/smooth-scroll-win32#8a4b44b30b8e194e4e7d7e4651ef8a21fecc57db</id>
-        <link href="https://windhawk.net/mods/smooth-scroll-win32"/>
-        <updated>2026-05-26T08:15:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Consistent scroll speed across folder sizes</strong> — the UIA percent-per-line
-estimate now uses a multi-range curve (quadratic for view sizes 25–70,
-power-5 for 70–92, power-20 for 92–100) that keeps scroll distance
-consistent regardless of how many items a folder contains.
-Credit: <strong>@JTFA</strong> (github.com/JTFA).</li>
-<li><strong>Smooth-only mode</strong> — a new setting disables spring physics entirely.
-Scrolling uses linear easing like a touchscreen: no bounce, no overshoot,
-just a clean deceleration. Tune the speed with <strong>Smooth Speed</strong>.</li>
-<li><strong>Improved spring physics</strong> — progressive damping near the target
-eliminates micro-oscillation at rest without affecting the feel of
-the main animation.</li>
-<li><strong>Control Panel scroll no longer blocked</strong> — legacy <code>DirectUIHWND</code> containers
-(Control Panel) are now correctly identified via the root window's WndProc
-module and passed through to the native scroll handler. Detection is stable
-from the first scroll, eliminating the intermittent first-open failure.</li>
-<li><strong>Overshoot</strong> — new setting that underdamps the spring for a subtle
-mobile-like bounce. The progressive near-target damping still prevents
-endless oscillation. No effect in Smooth-only mode.</li>
-<li><strong>Automatic refresh rate</strong> — Animation Interval and V-Sync settings removed.
-The timer interval is now detected per window from the actual monitor's
-refresh rate and updates automatically when the window moves to another
-display.</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>
