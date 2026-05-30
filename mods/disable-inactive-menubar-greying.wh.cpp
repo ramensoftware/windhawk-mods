@@ -19,6 +19,8 @@ the way it was in Windows 95, before Windows 98.
 
 ![screenshot](https://i.imgur.com/FCEXTyt.png)
 
+![screenshot](https://i.imgur.com/XBVNN0v.png)
+
 */
 // ==/WindhawkModReadme==
 
