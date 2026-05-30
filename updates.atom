@@ -2,12 +2,55 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-05-30T12:05:46.000Z</updated>
+    <updated>2026-05-30T14:11:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Block SMB Quick Access 1.2]]></title>
+        <id>https://windhawk.net/mods/block-smb-quick-access#ab9754b6038bca2df2ffd75fc3f8f13e3ac15359</id>
+        <link href="https://windhawk.net/mods/block-smb-quick-access"/>
+        <updated>2026-05-30T14:11:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="blocksmbquickaccess">Block SMB Quick Access</h1>
+<p>Prevents SMB/UNC network paths (<code>\\server\share</code>) from being added to Quick Access
+in Windows Explorer. Local paths continue to work normally.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Selective blocking</strong>: Only blocks SMB/UNC network paths, local paths work normally</li>
+<li><strong>Comprehensive SHARD support</strong>: Handles all SHARD types (PATHA, PATHW, PIDL, SHELLITEM, LINK, APPIDINFO, APPIDINFOIDLIST, APPIDINFOLINK)</li>
+<li><strong>UNC priority</strong>: Uses <code>SLGP_UNCPRIORITY</code> to correctly detect mapped drive letters</li>
+<li><strong>Silent operation</strong>: Runs in background without UI</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks the <code>SHAddToRecentDocs</code> function in <code>shell32.dll</code>. When Explorer calls
+this function to add a file to Quick Access, the hook checks if the path is a UNC
+network path (starts with <code>\\</code>). If it is, the call is silently dropped. Otherwise,
+the original function is called normally.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 or Windows 11 (64-bit)</li>
+<li>Windhawk 1.4 or newer</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Does not block paths added via other mechanisms (e.g., registry manipulation)</li>
+<li>Some virtual folder PIDLs may not resolve to paths and will be allowed through</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>If the mod doesn't seem to work:</p>
+<ol>
+<li>Enable debug logging in Windhawk settings (Settings &gt; Advanced &gt; Debug logging)</li>
+<li>Check Windhawk debug logs for <code>[NOSMB]</code> entries</li>
+<li>Verify the mod is enabled for explorer.exe in Windhawk settings</li>
+<li>Restart Explorer or log out/in after enabling the mod</li>
+</ol>]]></content>
+        <author>
+            <name>Townrain</name>
+            <uri>https://github.com/Townrain</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Console Quick Paste 1.0.0]]></title>
         <id>https://windhawk.net/mods/console-quick-paste#490dfae0c155a142237630390237447d258de0d8</id>
@@ -413,154 +456,6 @@ display.</li>
         <author>
             <name>winui64</name>
             <uri>https://github.com/winui64</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Calendar Live Overlay 0.0.1]]></title>
-        <id>https://windhawk.net/mods/calendar-live-overlay#8422b6be0bd211cdb967c20f14a6e171cf629499</id>
-        <link href="https://windhawk.net/mods/calendar-live-overlay"/>
-        <updated>2026-05-25T21:35:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="calendarliveoverlay">Calendar Live Overlay</h1>
-<p>Displays a customizable monthly calendar directly on the desktop behind the desktop icons.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/A3gcKe0.png" alt="Calendar Live Overlay preview 1" /></p>
-<p><img src="https://i.imgur.com/AuCGcoP.png" alt="Calendar Live Overlay preview 2" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Shows the current month as a clean desktop overlay</li>
-<li>Runs behind desktop icons, based on the Desktop Live Overlay method</li>
-<li>Designed to visually match Desktop Live Overlay Mod https://windhawk.net/mods/desktop-live-overlay</li>
-<li>Custom absolute X/Y positioning</li>
-<li>Optional percentage-based positioning</li>
-<li>Multi-monitor support</li>
-<li>Adjustable font size, font family, font weight and font style</li>
-<li>Custom text color with alpha transparency</li>
-<li>Optional German or English month/day names</li>
-<li>Optional Monday or Sunday week start</li>
-<li>Optional month header</li>
-<li>Optional week numbers</li>
-<li>Optional leading zero day numbers</li>
-<li>Optional box drawing border</li>
-<li>Adjustable border content offset</li>
-<li>Highlight today's date with custom color</li>
-<li>Optional bold style for today's date</li>
-<li>Optional underline for today's date</li>
-<li>Highlight weekends with custom color and opacity</li>
-<li>Optional custom color for week numbers</li>
-<li>Optional custom color for weekday names</li>
-<li>Adjustable column and row spacing</li>
-<li>Header alignment: left, center or right</li>
-<li>Optional background with color, padding, rounded corners, border and blur</li>
-<li>Optional background border with custom color and size</li>
-<li>Automatic refresh shortly after each minute change</li>
-</ul>
-<h2 id="usage">Usage</h2>
-<p>Enable the mod and adjust the position and appearance in the mod settings.</p>
-<p>For best alignment, use a monospaced font such as Cascadia Mono, Consolas, JetBrains Mono, or Courier New.</p>
-<h2 id="colorformat">Color Format</h2>
-<p>Colors use hexadecimal format:</p>
-<ul>
-<li><code>#RRGGBB</code></li>
-<li><code>#AARRGGBB</code></li>
-</ul>
-<p>Examples:</p>
-<ul>
-<li><code>#FFFFFFFF</code> = white, fully visible</li>
-<li><code>#80FFFFFF</code> = white, 50% transparent</li>
-<li><code>#FFFF6060</code> = red, fully visible</li>
-<li><code>#FFFFB060</code> = orange, fully visible</li>
-<li><code>#30000000</code> = black, very transparent</li>
-</ul>
-<p>In <code>#AARRGGBB</code>:</p>
-<ul>
-<li><code>AA</code> = alpha / transparency</li>
-<li><code>RR</code> = red</li>
-<li><code>GG</code> = green</li>
-<li><code>BB</code> = blue</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<h3 id="calendar">Calendar</h3>
-<ul>
-<li>Show week numbers</li>
-<li>Week starts on Monday or Sunday</li>
-<li>Use German names</li>
-<li>Show month header</li>
-<li>Leading zero day numbers</li>
-<li>Use box drawing border</li>
-<li>Border content offset</li>
-<li>Column spacing</li>
-<li>Row spacing</li>
-<li>Header alignment</li>
-</ul>
-<h3 id="highlighting">Highlighting</h3>
-<ul>
-<li>Highlight today</li>
-<li>Today color</li>
-<li>Today bold</li>
-<li>Today underline</li>
-<li>Highlight weekends</li>
-<li>Weekend color</li>
-<li>Weekend opacity</li>
-<li>Highlight week numbers</li>
-<li>Week number color</li>
-<li>Highlight weekday names</li>
-<li>Weekday name color</li>
-</ul>
-<h3 id="position">Position</h3>
-<ul>
-<li>Use absolute X/Y position</li>
-<li>X-Position</li>
-<li>Y-Position</li>
-<li>Vertical position percent</li>
-<li>Horizontal position percent</li>
-<li>Monitor</li>
-</ul>
-<h3 id="font">Font</h3>
-<ul>
-<li>Font size</li>
-<li>Text color</li>
-<li>Font family</li>
-<li>Font weight</li>
-<li>Font style</li>
-</ul>
-<p>For best alignment, use a monospaced font.</p>
-<p>Recommended:</p>
-<ul>
-<li>Cascadia Mono</li>
-<li>Consolas</li>
-<li>JetBrains Mono</li>
-<li>Courier New</li>
-</ul>
-<p>Proportional fonts such as Arial, Calibri or Verdana can distort the calendar layout because the calendar uses fixed-width text alignment.</p>
-<h3 id="background">Background</h3>
-<ul>
-<li>Enable background</li>
-<li>Background color</li>
-<li>Background padding</li>
-<li>Background corner radius</li>
-<li>Background blur</li>
-<li>Background border size</li>
-<li>Background border color</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Based on and inspired by Desktop Live Overlay by m417z.</p>
-<p>Special thanks to m417z for the original overlay implementation and the Windhawk ecosystem.</p>
-<p>Additional development help and debugging guidance: ChatGPT by OpenAI.</p>
-<h2 id="notes">Notes</h2>
-<p>This mod is injected into <code>explorer.exe</code> and creates the calendar overlay as part of the desktop window structure.</p>
-<p>If the desktop does not refresh correctly after changing settings, restart Explorer or disable and re-enable the mod.</p>
-<p>The calendar refreshes automatically shortly after each minute change, which is enough to update the highlighted day after midnight.</p>
-<p>For best alignment, use a monospaced font such as:</p>
-<ul>
-<li>Cascadia Mono</li>
-<li>Consolas</li>
-<li>JetBrains Mono</li>
-<li>Courier New</li>
-</ul>
-<p>The mod does not open a normal application window and does not appear in the taskbar.</p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>

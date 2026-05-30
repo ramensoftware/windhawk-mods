@@ -2,12 +2,55 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-30T12:05:46.000Z</updated>
+    <updated>2026-05-30T14:11:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Block SMB Quick Access 1.2]]></title>
+        <id>https://windhawk.net/mods/block-smb-quick-access#ab9754b6038bca2df2ffd75fc3f8f13e3ac15359</id>
+        <link href="https://windhawk.net/mods/block-smb-quick-access"/>
+        <updated>2026-05-30T14:11:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="blocksmbquickaccess">Block SMB Quick Access</h1>
+<p>Prevents SMB/UNC network paths (<code>\\server\share</code>) from being added to Quick Access
+in Windows Explorer. Local paths continue to work normally.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Selective blocking</strong>: Only blocks SMB/UNC network paths, local paths work normally</li>
+<li><strong>Comprehensive SHARD support</strong>: Handles all SHARD types (PATHA, PATHW, PIDL, SHELLITEM, LINK, APPIDINFO, APPIDINFOIDLIST, APPIDINFOLINK)</li>
+<li><strong>UNC priority</strong>: Uses <code>SLGP_UNCPRIORITY</code> to correctly detect mapped drive letters</li>
+<li><strong>Silent operation</strong>: Runs in background without UI</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks the <code>SHAddToRecentDocs</code> function in <code>shell32.dll</code>. When Explorer calls
+this function to add a file to Quick Access, the hook checks if the path is a UNC
+network path (starts with <code>\\</code>). If it is, the call is silently dropped. Otherwise,
+the original function is called normally.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 or Windows 11 (64-bit)</li>
+<li>Windhawk 1.4 or newer</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Does not block paths added via other mechanisms (e.g., registry manipulation)</li>
+<li>Some virtual folder PIDLs may not resolve to paths and will be allowed through</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>If the mod doesn't seem to work:</p>
+<ol>
+<li>Enable debug logging in Windhawk settings (Settings &gt; Advanced &gt; Debug logging)</li>
+<li>Check Windhawk debug logs for <code>[NOSMB]</code> entries</li>
+<li>Verify the mod is enabled for explorer.exe in Windhawk settings</li>
+<li>Restart Explorer or log out/in after enabling the mod</li>
+</ol>]]></content>
+        <author>
+            <name>Townrain</name>
+            <uri>https://github.com/Townrain</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Console Quick Paste 1.0.0]]></title>
         <id>https://windhawk.net/mods/console-quick-paste#490dfae0c155a142237630390237447d258de0d8</id>
@@ -660,42 +703,6 @@ Click the tray icon to instantly toggle between Dark and Light mode.</p>]]></con
         <author>
             <name>Husam-Abdulraheem</name>
             <uri>https://github.com/Husam-Abdulraheem</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Expanded Clipboard (Win+V) 0.7.1]]></title>
-        <id>https://windhawk.net/mods/expanded-clipboard#baa1a76097e8116eb1d7582a91ef90e80058227a</id>
-        <link href="https://windhawk.net/mods/expanded-clipboard"/>
-        <updated>2026-05-14T19:08:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="expandedclipboardwinv">Expanded Clipboard (Win+V)</h1>
-<p>Raises the 25-entry cap on Windows 11 clipboard history (the list shown by
-<strong>Win+V</strong>) and lifts the per-item size cap so large image entries are kept.</p>
-<h2 id="hooktargets">Hook targets</h2>
-<p>Hosted in <code>cbdhsvc.dll</code> (per-user <code>svchost.exe</code>, service group
-<code>UnistackSvcGroup</code>). All hooks are virtual COM methods on <code>ClipboardSettingsImpl</code>
-plus one static helper:</p>
-<ul>
-<li><code>get_ClipboardHistoryMaxItemsCount</code>: entry-count cap (default 25).</li>
-<li><code>get_ClipboardHistoryMaxItemSizeInBytes</code>: per-item byte cap (default 4 MiB).</li>
-<li><code>get_ClipboardHistoryMaxSizeInBytes</code>: total in-memory buffer cap. Empirically
-this is the gate the inner add path checks first.</li>
-<li><code>DataPackageHelper::CanIncludeInClipboardHistory</code>: opt-in override of the
-per-item allow check.</li>
-</ul>
-<h2 id="configuration">Configuration</h2>
-<ul>
-<li><code>maxItems</code> (default 100, range 25..5000): entry cap.</li>
-<li><code>maxItemSizeMB</code> (default 256, range 4..4096): per-item and total buffer byte
-cap, in MB. Both caps share this value.</li>
-<li><code>forceIncludeAll</code> (default off): when on, force the allow check to true so
-items marked "do not include in history" by their source app still land in
-Win+V.</li>
-</ul>
-<h2 id="logs">Logs</h2>
-<p>Open Windhawk Logs. Filter <code>[ExpandedClipboard]</code>.</p>]]></content>
-        <author>
-            <name>takattowo</name>
-            <uri>https://github.com/takattowo</uri>
         </author>
     </entry>
 </feed>
