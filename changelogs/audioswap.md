@@ -1,3 +1,9 @@
+## 2.2.0 ([May 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6f265d52a641c9f32788bd2d34dda07a02428882/mods/audioswap.wh.cpp))
+
+- New: Right-click → **Sound Settings...** opens Windows Sound dialog directly on the Playback tab.
+- New: Middle-click tray icon → compact volume slider popup with a custom dark design. Drag to adjust output volume live; click outside or press Escape to close.
+- New: Scroll wheel over the tray icon (Click to Swap mode) adjusts output volume, matching native Windows sound icon behaviour.
+
 ## 2.1.0 ([May 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7f641c526280f213a15d2e9098f5c4e847729990/mods/audioswap.wh.cpp))
 
 - New: Device Priority panel — rank your preferred devices; the highest-priority connected device is assigned to a swap slot automatically.

@@ -384,12 +384,12 @@
                     32
                 ],
                 "ratingUsers": 37,
-                "updated": 1779570949000,
+                "updated": 1780168839000,
                 "users": 388
             },
             "metadata": {
                 "author": "BlackPaw",
-                "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32",
+                "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32 -lcomctl32",
                 "description": "Tray icon to cycle between multiple preferred audio outputs. Supports up to 6 devices with click or scroll to swap.",
                 "donateUrl": "https://ko-fi.com/blackpaw21",
                 "github": "https://github.com/BlackPaw21",
@@ -397,7 +397,7 @@
                     "windhawk.exe"
                 ],
                 "name": "AudioSwap",
-                "version": "2.1.0"
+                "version": "2.2.0"
             }
         },
         "auto-custom-titlebar-colors": {
