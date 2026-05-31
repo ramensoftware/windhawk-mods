@@ -595,6 +595,8 @@ static void DrawChevron(HDC hdc, const RECT *r, int partId, int stateId)
 
 static thread_local bool g_inTreePaint = false;
 static thread_local int g_inSubclassProc = 0;
+static thread_local int g_lastSepY = -1;
+static thread_local int g_sepRetries = 0;
 
 static bool AreWeMutating()
 {
@@ -1187,6 +1189,7 @@ static void DrawSeparatorLine(HDC hdc, HWND hTree, int sepY)
     {
         FillRect(hdc, &sepRect, brush);
         DeleteObject(brush);
+        g_lastSepY = sepY;
     }
 }
 
@@ -1903,11 +1906,35 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         if (ts && GetHiddenItem(*ts))
             SetWindowSubclass(hWnd, TreeInteractionProc, 0xAF01, 0);
 
+        g_lastSepY = -1;
         g_inTreePaint = true;
 
         LRESULT result = SubClassTreeWndProc_orig(hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData);
 
         g_inTreePaint = false;
+
+        if (g_lastSepY >= 0 && g_sepColor != CLR_INVALID && g_sepRetries < 3)
+        {
+            HDC hdc = GetDC(hWnd);
+            if (hdc)
+            {
+                RECT client;
+                GetClientRect(hWnd, &client);
+                int sampleX = client.right / 2;
+                COLORREF pixel = GetPixel(hdc, sampleX, g_lastSepY);
+                ReleaseDC(hWnd, hdc);
+                if (pixel != CLR_INVALID && pixel != g_sepColor)
+                {
+                    g_sepRetries++;
+                    Wh_Log(L"[SEP-VERIFY] separator redrawn at (%d,%d): "
+                           L"expected=0x%06X got=0x%06X, retry %d",
+                           sampleX, g_lastSepY, g_sepColor, pixel, g_sepRetries);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
+                else
+                    g_sepRetries = 0;
+            }
+        }
 
         return result;
     }
@@ -2325,6 +2352,8 @@ void Wh_ModSettingsChanged()
     ChangeTier tier = ClassifySettingsChange(prev, g_settings);
     if (tier == TIER_NONE)
         return;
+
+    g_sepRetries = 0;
 
     // Snapshot HWNDs: FullRebuildTree pumps messages, which can rehash g_trees mid-iteration.
     std::vector<HWND> treeList;
