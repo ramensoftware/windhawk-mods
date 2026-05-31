@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         1.6
+// @version         1.6.1
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -17,8 +17,9 @@ Inspired by [Files 2 Folder](https://www.dcmembers.com/skwire/download/files-2-f
 by Jody Holmes (Skwire Empire).
 
 When one or more items are selected in an Explorer window, adds a
-**Files 2 Folder...** entry to the right-click context menu. Choosing it opens
-a dialog with four options for moving the selection into a new subfolder:
+**Move to a folder...** entry to the right-click context menu (using your
+Windows language's own "Move to a folder" string). Choosing it opens a dialog
+with four options for moving the selection into a new subfolder:
 
 1. Move the selection into a subfolder with a fixed name (defaults to the
    localized Windows "New folder" name; e.g. `New folder`). If a folder of
@@ -38,15 +39,17 @@ sense for files); they are still moved for modes 1 and 4.
 
 This works in both Explorer folder windows and on the **desktop**. The entry
 also appears in the classic menu bar's **Edit** dropdown (just after Cut/Copy)
-when the menu bar is shown.
+when the menu bar is shown — there it's labelled **Move to a folder... (F2F)**,
+with the `(F2F)` tag added to set it apart from Explorer's own built-in
+"Move to a folder..." command in the same menu.
 
 The menu entry and the default subfolder name use Windows' own localized
 strings, so they appear in your OS language automatically.
 
 ## Silent mode
 Enable **Silent mode (right-click menu)** in settings to skip the dialog
-entirely: choosing **Files 2 Folder...** from the right-click menu then moves
-the selection immediately, using the **Default selected mode** (and default
+entirely: choosing **Move to a folder...** from the right-click menu then
+moves the selection immediately, using the **Default selected mode** (and default
 subfolder name / date format) from settings. The hotkey workaround is
 unaffected and always shows the dialog.
 
@@ -114,13 +117,13 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 - silentMode: false
   $name: "Silent mode (right-click menu)"
   $description: |-
-    On: choosing "Files 2 Folder" from the right-click menu skips the dialog and immediately moves the selection, using the "Default selected mode" (with the default subfolder name / date format) from these settings.
+    On: choosing "Move to a folder..." from the right-click menu skips the dialog and immediately moves the selection, using the "Default selected mode" (with the default subfolder name / date format) from these settings.
     Off (default): the dialog is shown first.
     The hotkey workaround is unaffected — it always shows the dialog.
 - nearCutCopy: false
   $name: "Place menu item near Cut/Copy"
   $description: |-
-    On: the "Files 2 Folder" entry appears just after Cut/Copy (between Copy and Paste).
+    On: the "Move to a folder..." entry appears just after Cut/Copy (between Copy and Paste).
     Off (default): it appears at the top of the menu.
 - slowMode: false
   $name: "Slow mode (safer, with undo)"
@@ -204,7 +207,11 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 //    16859 -> "New folder"        (default subfolder name)
 //    30305 -> "Move to a folder"  (context-menu entry; ships with a '&'
 //                                   accelerator and a trailing "..." in some
-//                                   builds, which is exactly what we want)
+//                                   builds, which is exactly what we want. In
+//                                   the menu-bar Edit dropdown we append
+//                                   " (F2F)" so our item is distinct from
+//                                   Explorer's identically-named built-in
+//                                   command, which lives there too)
 //  If a resource is missing (very old/odd builds) we fall back to an English
 //  literal supplied by the caller.
 // ============================================================
@@ -1305,13 +1312,22 @@ static int MenuPosAfterCutCopy(HMENU hmenu) {
 // the classic menu-bar Edit dropdown (WM_INITMENUPOPUP) path.
 //   nearCutCopy off: top of menu + separator below.
 //   nearCutCopy on : just after the Cut/Copy block.
-static void InsertF2FMenuItem(HMENU hmenu, bool nearCutCopy) {
+//
+// addSuffix appends " (F2F)" to the label. Pass true ONLY for the menu-bar Edit
+// dropdown, where Explorer has its own built-in "Move to a folder..." command
+// sharing this exact string (resource 30305) — without the suffix the two are
+// indistinguishable and users click the native one, which opens a folder-picker
+// instead of our dialog. The right-click context menu has no such built-in
+// twin, so it passes false and keeps the clean localized label.
+static void InsertF2FMenuItem(HMENU hmenu, bool nearCutCopy, bool addSuffix) {
     if (MenuHasF2FItem(hmenu)) return;
 
     // Localized label from shell32 ("Move to a folder..."), English fallback.
-    // Locale-fixed for the process, so resolve it once.
-    static const std::wstring label =
+    // Locale-fixed for the process, so resolve each variant once.
+    static const std::wstring baseLabel =
         LoadShell32String(30305, L"Files 2 &Folder...");
+    static const std::wstring suffixLabel = baseLabel + L" (F2F)";
+    const std::wstring& label = addSuffix ? suffixLabel : baseLabel;
     if (nearCutCopy) {
         int insertPos = MenuPosAfterCutCopy(hmenu);
         if (insertPos < 0) insertPos = 0;  // no Cut/Copy found — top of menu
@@ -1350,7 +1366,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
         std::wstring folder;
         std::vector<std::wstring> items;
         if (GetFolderAndSelectionForHwnd(hwnd, folder, items) && items.size() >= 1) {
-            InsertF2FMenuItem(hmenu, g_settings.nearCutCopy);
+            InsertF2FMenuItem(hmenu, g_settings.nearCutCopy, /*addSuffix=*/false);
             injected = true;
             g_currentMenuEligible = true;
             g_currentSelection = std::move(items);
@@ -1464,7 +1480,7 @@ static LRESULT CALLBACK FrameSubclassProc(HWND hwnd, UINT uMsg,
                 if (GetFolderAndSelectionForHwnd(hwnd, folder, items) &&
                     !items.empty())
                 {
-                    InsertF2FMenuItem(popup, /*nearCutCopy=*/true);
+                    InsertF2FMenuItem(popup, /*nearCutCopy=*/true, /*addSuffix=*/true);
                 }
             } else if (!hasCutCopy && !g_loggedMenuIds) {
                 // Diagnostic (once per process): the Cut/Copy command ids in the
