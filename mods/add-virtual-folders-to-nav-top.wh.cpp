@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.14
+// @version         1.1.15
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -470,6 +470,18 @@ static void ExpandStartExpandedItems(HWND hTree)
 
 HRESULT THISCALL AppendRoot_hook(void *pThis, IShellItem *psiRoot, unsigned long grfEnumFlags, unsigned long grfRootStyle, IShellItemFilter *pFilter)
 {
+    HWND hForTree = nullptr;
+    {
+        IOleWindow* pOle = nullptr;
+        if (SUCCEEDED(((INameSpaceTreeControl*)pThis)->QueryInterface(IID_IOleWindow, (void**)&pOle)))
+        {
+            HWND hNsc = nullptr;
+            if (SUCCEEDED(pOle->GetWindow(&hNsc)) && hNsc)
+                hForTree = FindWindowExW(hNsc, nullptr, L"SysTreeView32", nullptr);
+            pOle->Release();
+        }
+    }
+
     // Must run before g_inCustomAppend check so Home/Gallery get cached.
     {
         PIDLIST_ABSOLUTE pidlRoot = nullptr;
@@ -491,9 +503,11 @@ HRESULT THISCALL AppendRoot_hook(void *pThis, IShellItem *psiRoot, unsigned long
                     Wh_Log(L"[HOOK] Suppressing '%s' root", g_navItems[matchId].label);
                     return S_OK;
                 }
+                g_ins.forTree = hForTree;
                 g_ins.item = matchId;
                 HRESULT hr = AppendRoot_orig(pThis, psiRoot, grfEnumFlags, grfRootStyle, pFilter);
                 g_ins.item = -1;
+                g_ins.forTree = nullptr;
                 return hr;
             }
         }
@@ -518,6 +532,7 @@ HRESULT THISCALL AppendRoot_hook(void *pThis, IShellItem *psiRoot, unsigned long
             if (g_ins.filter) g_ins.filter->AddRef();
         }
 
+        g_ins.forTree = hForTree;
         g_inCustomAppend = true;
 
         NavItem items[2];
@@ -525,6 +540,7 @@ HRESULT THISCALL AppendRoot_hook(void *pThis, IShellItem *psiRoot, unsigned long
         InsertItems(pThis, items, grfEnumFlags, pFilter);
 
         g_inCustomAppend = false;
+        g_ins.forTree = nullptr;
     }
 
     return hr;
@@ -640,6 +656,7 @@ static bool CollapseItemIntegral(HWND hTree, HTREEITEM h)
     SendMessageW(hTree, TVM_GETITEMW, 0, (LPARAM)&tvi);
     if (tvi.iIntegral >= 2)
     {
+        Wh_Log(L"[COLLAPSE] tree=%p item=%p int=%d->1", hTree, h, tvi.iIntegral);
         tvi.iIntegral = 1;
         SendMessageW(hTree, TVM_SETITEMW, 0, (LPARAM)&tvi);
         return true;
@@ -996,9 +1013,9 @@ static void FullRebuildTree(HWND hTree)
     if (!roots.Create()) return;
     roots.RemoveInsertableRoots(pNsc.get());
 
-    if (roots.items[NAV_HOME] && g_settings.items[NAV_HOME].hide)
+    if (roots.items[NAV_HOME])
         pNsc->RemoveRoot(roots.items[NAV_HOME].get());
-    if (roots.items[NAV_GALLERY] && g_settings.items[NAV_GALLERY].hide)
+    if (roots.items[NAV_GALLERY])
         pNsc->RemoveRoot(roots.items[NAV_GALLERY].get());
 
     if (roots.items[NAV_DESKTOP])
@@ -1237,7 +1254,7 @@ static void RedrawOtherSeparators(HWND hTree, HDC hdc, TreeState& ts)
     bool foundBelowQA = false;
     int sepCount = 0;
 
-    // Walk log tags: O=ours, H=home, G=gallery, B/b=boundary, Q=belowQA, S=sep, .=other
+    // Walk log tags: O=ours, H=home, G=gallery, P=spacer, B/b=boundary, Q=belowQA, S=sep, .=other
     WCHAR walkLog[64] = {};
     int walkIdx = 0;
 
@@ -1256,7 +1273,8 @@ static void RedrawOtherSeparators(HWND hTree, HDC hdc, TreeState& ts)
                 if (g_logSepDraw && walkIdx < 60)
                 {
                     WCHAR tag = L'O';
-                    if (ts.hItems[NAV_HOME] && h == ts.hItems[NAV_HOME]) tag = L'H';
+                    if (ts.homeSpacerItem && h == ts.homeSpacerItem) tag = L'P';
+                    else if (ts.hItems[NAV_HOME] && h == ts.hItems[NAV_HOME]) tag = L'H';
                     else if (ts.hItems[NAV_GALLERY] && h == ts.hItems[NAV_GALLERY]) tag = L'G';
                     walkLog[walkIdx++] = tag;
                 }
@@ -1681,7 +1699,8 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                     for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
                         if (ts->hItems[i]) { hasOurItems = true; break; }
 
-                    if (hasOurItems && !AreWeMutating() && !g_inTreePaint)
+                    if (hasOurItems && !AreWeMutating() && !g_inTreePaint &&
+                        !(ts->pendingWork & WORK_FULL_REBUILD))
                     {
                         ts->pendingWork |= WORK_FULL_REBUILD;
                         PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
@@ -1850,11 +1869,8 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         if (ts && (ts->pendingWork & DEFER_MASK))
             PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
 
-        // Skip paint-time mutations when another tree is being rebuilt; items may be stale from cross-tree side effects.
-        bool safeForMutations = !(g_deferredOpInProgress && hWnd != g_mutatingTree);
-
         // Paint-time mutations must be idempotent (no-op when already in target state) to avoid relayout loops.
-        if (safeForMutations && ts && g_settings.hasItemsAtTop)
+        if (ts && g_settings.hasItemsAtTop)
         {
             for (int i = NAV_HOME; i < NAV_COUNT; i++)
             {
@@ -1862,7 +1878,6 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 if (!g_settings.items[i].hide)
                     CollapseItemIntegral(hWnd, ts->hItems[i]);
             }
-            // TVM_SETITEMW's rect check can fail before layout; catch it here.
             if (ShouldRemoveInternalSep() && ts->hItems[NAV_THISPC] && ts->hItems[NAV_DESKTOP])
             {
                 RECT rcA = {}, rcB = {};
@@ -1875,13 +1890,13 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             }
         }
 
-        if (safeForMutations && g_settings.hasItemsAtTop && g_sepColor != CLR_INVALID && ts)
+        SectionLayout layout = {};
+        if (g_settings.hasItemsAtTop && ts)
         {
-            SectionLayout layout = FindSectionLayout(hWnd, *ts);
+            layout = FindSectionLayout(hWnd, *ts);
             ts->boundaryItem = layout.boundary;
             ts->belowQAItem = nullptr;
 
-            // Desktop is the bottom item of our section when alone or below This PC.
             bool desktopAtBottom = ts->hItems[NAV_DESKTOP] &&
                 (!ts->hItems[NAV_THISPC] || !g_settings.desktopAboveThisPC);
             if (!ts->triedHomeSpacer && layout.boundary && desktopAtBottom
@@ -1892,14 +1907,6 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
             }
 
-            if (layout.boundary && (g_settings.removeSepBelowNav || GetHiddenItem(*ts)))
-                CollapseItemIntegral(hWnd, layout.boundary);
-            if (g_settings.removeSepBelowQA && layout.belowQA)
-            {
-                CollapseItemIntegral(hWnd, layout.belowQA);
-                ts->belowQAItem = layout.belowQA;
-            }
-
             if (g_logSepDraw)
                 Wh_Log(L"[SEP-GAP] tree=%p boundary=%p int=%d home=%d gallery=%d rmNav=%d hidDup=%p spacer=%p tried=%d",
                        hWnd, layout.boundary,
@@ -1907,6 +1914,17 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                        layout.homePresent, layout.galleryPresent,
                        (int)g_settings.removeSepBelowNav, ts->hiddenDuplicate, ts->homeSpacerItem,
                        (int)ts->triedHomeSpacer);
+        }
+
+        if (g_settings.hasItemsAtTop && g_sepColor != CLR_INVALID && ts)
+        {
+            if (layout.boundary && (g_settings.removeSepBelowNav || GetHiddenItem(*ts)))
+                CollapseItemIntegral(hWnd, layout.boundary);
+            if (g_settings.removeSepBelowQA && layout.belowQA)
+            {
+                CollapseItemIntegral(hWnd, layout.belowQA);
+                ts->belowQAItem = layout.belowQA;
+            }
         }
 
         if (g_settings.hidePinButtons && ts)
@@ -1933,6 +1951,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
         g_inTreePaint = false;
 
+        ts = GetTree(hWnd);
         if (g_lastSepY >= 0 && g_sepColor != CLR_INVALID && g_sepRetries < 3)
         {
             HDC hdc = GetDC(hWnd);
@@ -1946,14 +1965,23 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 if (pixel != CLR_INVALID && pixel != g_sepColor)
                 {
                     g_sepRetries++;
-                    Wh_Log(L"[SEP-VERIFY] separator redrawn at (%d,%d): "
+                    Wh_Log(L"[SEP-VERIFY] tree=%p at (%d,%d): "
                            L"expected=0x%06X got=0x%06X, retry %d",
-                           sampleX, g_lastSepY, g_sepColor, pixel, g_sepRetries);
+                           hWnd, sampleX, g_lastSepY, g_sepColor, pixel, g_sepRetries);
                     InvalidateRect(hWnd, nullptr, FALSE);
                 }
                 else
                     g_sepRetries = 0;
             }
+        }
+        else if (g_lastSepY == -1 && g_sepColor != CLR_INVALID && g_sepRetries < 3
+                 && ts && !ts->pendingWork && HasOurItemsInTree(*ts) && ts->boundaryItem
+                 && !g_settings.removeSepBelowNav && !GetHiddenItem(*ts))
+        {
+            g_sepRetries++;
+            Wh_Log(L"[SEP-VERIFY] tree=%p boundary=%p: expected separator but none drawn, retry %d",
+                   hWnd, ts->boundaryItem, g_sepRetries);
+            InvalidateRect(hWnd, nullptr, FALSE);
         }
 
         return result;
@@ -1992,11 +2020,11 @@ HRESULT WINAPI DrawThemeBackground_hook(HTHEME hTheme, HDC hdc, int iPartId, int
 {
     if (iPartId == TVP_GLYPH || iPartId == TVP_HOTGLYPH)
     {
-        if (!g_chevronLogged)
+        if (!g_chevronLogged && g_inTreePaint)
         {
             g_chevronLogged = true;
-            Wh_Log(L"[CHEVRON] DTB hook active, inPaint=%d fixEnabled=%d",
-                (int)g_inTreePaint, (int)g_settings.fixChevronDrawing);
+            Wh_Log(L"[CHEVRON] DTB hook active, fixEnabled=%d",
+                (int)g_settings.fixChevronDrawing);
         }
         if (g_inTreePaint && g_settings.fixChevronDrawing)
         {
@@ -2173,7 +2201,7 @@ BOOL Wh_ModInit()
     else
         Wh_Log(L"[CHEVRON] uxtheme.dll not loaded");
 
-    Wh_Log(L"Mod initialized successfully");
+    Wh_Log(L"Mod initialized, hasItemsAtTop=%d", (int)g_settings.hasItemsAtTop);
     return TRUE;
 }
 
@@ -2314,10 +2342,8 @@ ChangeTier ClassifySettingsChange(const Settings& prev, const Settings& cur)
         auto& p = prev.items[i];
         auto& c = cur.items[i];
 
-        // hide: hidden->visible needs rebuild (children of hidden root)
         if (p.hide && !c.hide)
             tier = std::max(tier, TIER_REBUILD);
-        // hide: visible->hidden is repaint (WM_PAINT handles removal)
         if (!p.hide && c.hide)
             tier = std::max(tier, TIER_REPAINT);
 
@@ -2347,6 +2373,17 @@ ChangeTier ClassifySettingsChange(const Settings& prev, const Settings& cur)
         if (prev.desktopAboveThisPC != cur.desktopAboveThisPC)
             tier = std::max(tier, TIER_REFRESH);
     }
+
+    // Spacer lifecycle: rebuild when desktopAtBottom changes (spacer collapsed boundary iIntegral)
+    bool prevBottom = prev.items[NAV_DESKTOP].showAtTop &&
+        (!prev.items[NAV_THISPC].showAtTop || !prev.desktopAboveThisPC);
+    bool curBottom = cur.items[NAV_DESKTOP].showAtTop &&
+        (!cur.items[NAV_THISPC].showAtTop || !cur.desktopAboveThisPC);
+    if (prevBottom != curBottom)
+        tier = std::max(tier, TIER_REBUILD);
+
+    if (prev.hasItemsAtTop && !cur.hasItemsAtTop)
+        tier = std::max(tier, TIER_REBUILD);
 
     // Non-item settings
     if (prev.removeSepBelowNav != cur.removeSepBelowNav)
@@ -2437,6 +2474,9 @@ void Wh_ModSettingsChanged()
             InvalidateRect(hTree, nullptr, TRUE);
         }
     }
+
+    if (!prev.hasItemsAtTop && g_settings.hasItemsAtTop)
+        Wh_ModAfterInit();
 }
 
 void Wh_ModUninit()
