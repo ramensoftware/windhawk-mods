@@ -2,11 +2,11 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         1.6.1
+// @version         1.6
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lcomctl32 -lcomdlg32 -lgdi32 -luser32
+// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lcomdlg32 -lgdi32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -37,11 +37,7 @@ with four options for moving the selection into a new subfolder:
 Folders inside the selection are skipped for modes 2 and 3 (they only make
 sense for files); they are still moved for modes 1 and 4.
 
-This works in both Explorer folder windows and on the **desktop**. The entry
-also appears in the classic menu bar's **Edit** dropdown (just after Cut/Copy)
-when the menu bar is shown — there it's labelled **Move to a folder... (F2F)**,
-with the `(F2F)` tag added to set it apart from Explorer's own built-in
-"Move to a folder..." command in the same menu.
+This works in both Explorer folder windows and on the **desktop**.
 
 The menu entry and the default subfolder name use Windows' own localized
 strings, so they appear in your OS language automatically.
@@ -120,11 +116,6 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
     On: choosing "Move to a folder..." from the right-click menu skips the dialog and immediately moves the selection, using the "Default selected mode" (with the default subfolder name / date format) from these settings.
     Off (default): the dialog is shown first.
     The hotkey workaround is unaffected — it always shows the dialog.
-- nearCutCopy: false
-  $name: "Place menu item near Cut/Copy"
-  $description: |-
-    On: the "Move to a folder..." entry appears just after Cut/Copy (between Copy and Paste).
-    Off (default): it appears at the top of the menu.
 - slowMode: false
   $name: "Slow mode (safer, with undo)"
   $description: |-
@@ -192,8 +183,6 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <shlwapi.h>
-#include <commctrl.h>
-#include <windhawk_utils.h>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -207,11 +196,7 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 //    16859 -> "New folder"        (default subfolder name)
 //    30305 -> "Move to a folder"  (context-menu entry; ships with a '&'
 //                                   accelerator and a trailing "..." in some
-//                                   builds, which is exactly what we want. In
-//                                   the menu-bar Edit dropdown we append
-//                                   " (F2F)" so our item is distinct from
-//                                   Explorer's identically-named built-in
-//                                   command, which lives there too)
+//                                   builds, which is exactly what we want)
 //  If a resource is missing (very old/odd builds) we fall back to an English
 //  literal supplied by the caller.
 // ============================================================
@@ -264,7 +249,6 @@ struct ModSettings {
     int defaultMode;
     bool slowMode;
     bool silentMode;
-    bool nearCutCopy;
     std::wstring theme;
     bool hotkeyEnabled;
     std::wstring hotkeyChar;
@@ -297,7 +281,6 @@ static void LoadSettings() {
 
     g_settings.slowMode = Wh_GetIntSetting(L"slowMode") != 0;
     g_settings.silentMode = Wh_GetIntSetting(L"silentMode") != 0;
-    g_settings.nearCutCopy = Wh_GetIntSetting(L"nearCutCopy") != 0;
 
     PCWSTR th = Wh_GetStringSetting(L"theme");
     g_settings.theme = (th && *th) ? th : L"auto";
@@ -324,13 +307,6 @@ void Wh_ModSettingsChanged() {
 //  Custom command id we inject into the shell context menu
 // ============================================================
 static const UINT F2F_MENU_CMD = 0xBF20;  // unlikely to clash with shell ids
-
-// The Cut/Copy command ids vary by menu surface: FCIDM_SHVIEW_CUT/COPY =
-// 31001/31002 in the shell view's own menu, or 25/26 in some legacy menus.
-// One source of truth so the right-click and menu-bar paths agree.
-static bool IsCutCopyId(UINT id) {
-    return id == 31001 || id == 31002 || id == 25 || id == 26;
-}
 
 // State for the currently-tracked menu. thread_local because TrackPopupMenuEx
 // and the matching PostMessageW(WM_COMMAND) always run on the same UI thread,
@@ -1288,7 +1264,7 @@ static bool IsShellViewWindow(HWND hwnd) {
 }
 
 // Is our command already present in this menu? Guards against re-inserting
-// when WM_INITMENUPOPUP fires repeatedly for the same popup.
+// if the context menu is rebuilt for the same selection.
 static bool MenuHasF2FItem(HMENU hmenu) {
     int count = GetMenuItemCount(hmenu);
     for (int i = 0; i < count; ++i)
@@ -1296,61 +1272,18 @@ static bool MenuHasF2FItem(HMENU hmenu) {
     return false;
 }
 
-// Index just past the last Cut/Copy item, or -1 if the menu has neither.
-// Used both to decide whether a menu is "the Edit/clipboard menu" and to find
-// the insert position for the nearCutCopy layout.
-static int MenuPosAfterCutCopy(HMENU hmenu) {
-    int pos = -1;
-    int count = GetMenuItemCount(hmenu);
-    for (int i = 0; i < count; ++i)
-        if (IsCutCopyId(GetMenuItemID(hmenu, i))) pos = i + 1;
-    return pos;
-}
-
-// Insert the "Files 2 Folder" command into a menu, positioned per the
-// nearCutCopy setting. Shared by the right-click (TrackPopupMenuEx) path and
-// the classic menu-bar Edit dropdown (WM_INITMENUPOPUP) path.
-//   nearCutCopy off: top of menu + separator below.
-//   nearCutCopy on : just after the Cut/Copy block.
-//
-// addSuffix appends " (F2F)" to the label. Pass true ONLY for the menu-bar Edit
-// dropdown, where Explorer has its own built-in "Move to a folder..." command
-// sharing this exact string (resource 30305) — without the suffix the two are
-// indistinguishable and users click the native one, which opens a folder-picker
-// instead of our dialog. The right-click context menu has no such built-in
-// twin, so it passes false and keeps the clean localized label.
-static void InsertF2FMenuItem(HMENU hmenu, bool nearCutCopy, bool addSuffix) {
+// Insert the "Files 2 Folder" command at the top of the right-click context
+// menu, followed by a separator.
+static void InsertF2FMenuItem(HMENU hmenu) {
     if (MenuHasF2FItem(hmenu)) return;
 
     // Localized label from shell32 ("Move to a folder..."), English fallback.
-    // Locale-fixed for the process, so resolve each variant once.
-    static const std::wstring baseLabel =
+    // Locale-fixed for the process, so resolve it once.
+    static const std::wstring label =
         LoadShell32String(30305, L"Files 2 &Folder...");
-    static const std::wstring suffixLabel = baseLabel + L" (F2F)";
-    const std::wstring& label = addSuffix ? suffixLabel : baseLabel;
-    if (nearCutCopy) {
-        int insertPos = MenuPosAfterCutCopy(hmenu);
-        if (insertPos < 0) insertPos = 0;  // no Cut/Copy found — top of menu
-        InsertMenuW(hmenu, insertPos, MF_BYPOSITION | MF_STRING,
-                    F2F_MENU_CMD, label.c_str());
-        // Only add a trailing separator if the item we're pushing down isn't
-        // already one — Explorer normally has a separator after the
-        // Cut/Copy/Paste block, and inserting ours next to it would produce a
-        // doubled separator.
-        bool nextIsSeparator = false;
-        if (insertPos + 1 < GetMenuItemCount(hmenu)) {
-            MENUITEMINFOW mii = { sizeof(mii) };
-            mii.fMask = MIIM_FTYPE;
-            if (GetMenuItemInfoW(hmenu, insertPos + 1, TRUE, &mii))
-                nextIsSeparator = (mii.fType & MFT_SEPARATOR) != 0;
-        }
-        if (!nextIsSeparator)
-            InsertMenuW(hmenu, insertPos + 1, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
-    } else {
-        InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
-        InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_STRING,
-                    F2F_MENU_CMD, label.c_str());
-    }
+    InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+    InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_STRING,
+                F2F_MENU_CMD, label.c_str());
 }
 
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
@@ -1366,7 +1299,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
         std::wstring folder;
         std::vector<std::wstring> items;
         if (GetFolderAndSelectionForHwnd(hwnd, folder, items) && items.size() >= 1) {
-            InsertF2FMenuItem(hmenu, g_settings.nearCutCopy, /*addSuffix=*/false);
+            InsertF2FMenuItem(hmenu);
             injected = true;
             g_currentMenuEligible = true;
             g_currentSelection = std::move(items);
@@ -1419,170 +1352,6 @@ BOOL WINAPI PostMessageW_Hook(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp) {
         return TRUE;
     }
     return PostMessageW_Orig(hWnd, Msg, wp, lp);
-}
-
-// ============================================================
-//  Classic menu-bar "Edit" dropdown (File / Edit / View / Tools)
-//
-//  The classic Explorer menu bar is the frame window's own Win32 menu; its
-//  dropdowns are tracked by the system, not via TrackPopupMenuEx, so the hook
-//  above never sees them. To add our entry there we subclass the Explorer
-//  frame window (CabinetWClass / ExploreWClass) and:
-//    - WM_INITMENUPOPUP: when the popup about to open is the Edit menu (we
-//      detect it by the presence of the Cut/Copy command ids) and the view
-//      has a selection, insert our item right after Cut/Copy.
-//    - WM_COMMAND for our id: resolve the current selection and run the flow.
-//  We always place it after Cut/Copy in this menu (the "top of menu" layout
-//  used by the context menu doesn't make sense for the Edit dropdown).
-// ============================================================
-static bool IsExplorerFrameClass(HWND hwnd) {
-    WCHAR cls[64] = {};
-    GetClassNameW(hwnd, cls, 64);
-    return !_wcsicmp(cls, L"CabinetWClass") || !_wcsicmp(cls, L"ExploreWClass");
-}
-
-// Does this frame currently host a shell view? A direct child-window walk for
-// SHELLDLL_DefView — far cheaper than the COM IShellWindows enumeration, so we
-// use it as a fast gate in WM_INITMENUPOPUP before paying for selection lookup.
-static BOOL CALLBACK FindShellViewChildProc(HWND child, LPARAM lp) {
-    WCHAR cls[64] = {};
-    GetClassNameW(child, cls, 64);
-    if (!_wcsicmp(cls, L"SHELLDLL_DefView")) {
-        *(HWND*)lp = child;
-        return FALSE;  // stop
-    }
-    return TRUE;
-}
-static bool FrameHasShellView(HWND frame) {
-    HWND sv = nullptr;
-    EnumChildWindows(frame, FindShellViewChildProc, (LPARAM)&sv);
-    return sv != nullptr;
-}
-
-// One-shot latch for the menu-id diagnostic below (logs a single sample).
-static bool g_loggedMenuIds = false;
-
-static LRESULT CALLBACK FrameSubclassProc(HWND hwnd, UINT uMsg,
-                                          WPARAM wParam, LPARAM lParam,
-                                          DWORD_PTR /*dwRefData*/)
-{
-    switch (uMsg) {
-    case WM_INITMENUPOPUP: {
-        HMENU popup = (HMENU)wParam;
-        // HIWORD(lParam) is TRUE for the window (system) menu — skip those.
-        // Cheap gates first (menu has Cut/Copy; frame hosts a shell view), so
-        // the COM selection lookup only runs for the actual Edit dropdown.
-        if (popup && !HIWORD(lParam)) {
-            bool hasCutCopy = MenuPosAfterCutCopy(popup) >= 0;
-            if (hasCutCopy && FrameHasShellView(hwnd)) {
-                std::wstring folder;
-                std::vector<std::wstring> items;
-                if (GetFolderAndSelectionForHwnd(hwnd, folder, items) &&
-                    !items.empty())
-                {
-                    InsertF2FMenuItem(popup, /*nearCutCopy=*/true, /*addSuffix=*/true);
-                }
-            } else if (!hasCutCopy && !g_loggedMenuIds) {
-                // Diagnostic (once per process): the Cut/Copy command ids in the
-                // classic menu-bar Edit dropdown are build/shell-dependent. If
-                // our entry never shows up there, enable mod logging and look
-                // for this line — it lists a popup's command ids so the right
-                // ids can be added to IsCutCopyId().
-                g_loggedMenuIds = true;
-                int count = GetMenuItemCount(popup);
-                std::wstring ids;
-                for (int i = 0; i < count; ++i)
-                    ids += std::to_wstring((int)GetMenuItemID(popup, i)) + L" ";
-                Wh_Log(L"Files2Folders: sample menu popup ids: %s", ids.c_str());
-            }
-        }
-        break;
-    }
-    case WM_COMMAND:
-        if (LOWORD(wParam) == F2F_MENU_CMD && HIWORD(wParam) == 0) {
-            std::wstring folder;
-            std::vector<std::wstring> items;
-            if (GetFolderAndSelectionForHwnd(hwnd, folder, items) &&
-                !items.empty())
-            {
-                RunFiles2Folder(hwnd, folder, items, g_settings.silentMode);
-            }
-            return 0;  // handled
-        }
-        break;
-    case WM_NCDESTROY:
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, FrameSubclassProc);
-        break;
-    }
-    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-}
-
-// Subclass any Explorer frame window in this process that we haven't already.
-// We mark handled frames with a window property so repeated attach passes
-// (and the polling thread below) don't double-subclass.
-static const wchar_t* kF2FSubclassProp = L"Files2FolderFrameSubclassed";
-
-static BOOL CALLBACK AttachFrameProc(HWND hwnd, LPARAM) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != GetCurrentProcessId()) return TRUE;  // only our own windows
-    if (!IsExplorerFrameClass(hwnd)) return TRUE;
-    if (GetPropW(hwnd, kF2FSubclassProp)) return TRUE;  // already done
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, FrameSubclassProc, 0))
-        SetPropW(hwnd, kF2FSubclassProp, (HANDLE)1);
-    return TRUE;
-}
-
-static void AttachAllFrames() {
-    EnumWindows(AttachFrameProc, 0);
-}
-
-static BOOL CALLBACK DetachFrameProc(HWND hwnd, LPARAM) {
-    if (GetPropW(hwnd, kF2FSubclassProp)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, FrameSubclassProc);
-        RemovePropW(hwnd, kF2FSubclassProp);
-    }
-    return TRUE;
-}
-
-static void DetachAllFrames() {
-    EnumWindows(DetachFrameProc, 0);
-}
-
-// New Explorer windows open after the mod loads, so a one-shot attach isn't
-// enough. A lightweight thread re-runs the attach pass every ~1s; the property
-// guard makes re-attaching a no-op for frames already handled. Shutdown is
-// signalled via an event so the thread wakes immediately instead of polling a
-// flag.
-static HANDLE g_frameWatchThread = nullptr;
-static HANDLE g_frameWatchStopEvent = nullptr;
-
-static DWORD WINAPI FrameWatchThreadProc(LPVOID) {
-    do {
-        AttachAllFrames();
-    } while (WaitForSingleObject(g_frameWatchStopEvent, 1000) == WAIT_TIMEOUT);
-    return 0;
-}
-
-static void StartFrameWatch() {
-    if (g_frameWatchThread) return;
-    g_frameWatchStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_frameWatchThread = CreateThread(nullptr, 0, FrameWatchThreadProc,
-                                      nullptr, 0, nullptr);
-}
-
-static void StopFrameWatch() {
-    if (g_frameWatchThread) {
-        SetEvent(g_frameWatchStopEvent);
-        WaitForSingleObject(g_frameWatchThread, 2000);
-        CloseHandle(g_frameWatchThread);
-        g_frameWatchThread = nullptr;
-    }
-    if (g_frameWatchStopEvent) {
-        CloseHandle(g_frameWatchStopEvent);
-        g_frameWatchStopEvent = nullptr;
-    }
-    DetachAllFrames();
 }
 
 // ============================================================
@@ -1869,12 +1638,10 @@ BOOL Wh_ModInit() {
                        (void**)&PostMessageW_Orig);
 
     StartHotkeyThread();
-    StartFrameWatch();
     return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Files2Folders: Uninit");
     StopHotkeyThread();
-    StopFrameWatch();
 }
