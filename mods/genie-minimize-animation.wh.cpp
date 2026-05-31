@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              genie-minimize-animation
-// @name            Genie Animation Mod 
-// @description     macOS-style genie minimize animation (enhanced with Direct2D mesh warp)
+// @name            Genie Animation Mod v2
+// @description     macOS-style genie minimize animation with Direct2D mesh warp.
 // @version         2.0.0
-// @author          drgutman (after an idea by lolstijl)
+// @author          drgutman, (originally lolstijl)
+// @homepage        https://www.instagram.com/drgutman
 // @github          https://github.com/drgutman
 // @include         *
 // @compilerOptions -ldwmapi -lgdi32 -ld2d1
@@ -12,39 +13,73 @@
 // ==WindhawkModReadme==
 /*
 # Genie Animation Mod v2
-A macOS-inspired genie minimize/restore animation with true asymmetric stretch.
+A macOS-inspired genie minimize/restore animation with true asymmetric stretch and smooth anti-aliasing (plus variants).
 
-Since I don't know C++ either, this mod was written in opencode by MiMo v2.5 and fixed by Gemini 3.1 Pro in aistudio.
 
-I tried to get it as close as possible to the MacOS version, but there's still room for improvement. 
+**Demonstration**: Genie animation at speed 500
 
-There's still some flicker sometimes, especially at very high or very low speeds, but tbh, I'm kinda' done with it (I spent half a day fixing some really bad flickering that I got when you minimized a window, only for it to start flickering when you restored it; it was a pain in the behind). 
+![Demonstration: *Genie animation at speed 500](https://i.imgur.com/xj4q5Dj.gif)
 
-It still doesn't have all the controls that I wanted to add (speed control for each part of the animation).
 
-Pretty much every time, when you first minimise a program, it will minimise to the middle of the taskbar.
+Since I don't know C++ either, this mod was written in opencode with MiMo v2.5 and Gemini 3.1 Pro in aistudio.
 
-Sometimes it even refuses to work at all, I have no idea why.
+I tried to get it as close as possible to the MacOS version, but there's still room for improvement.
+Also added the Linux 
 
-I wanted to add a gif to show how it works, but my desktop is a total mess and I'm too ashamed to record it LOL
+Pretty much every time you first minimise a program, it will minimise to the middle of the taskbar. Getting the exact coordinates of a specific app's taskbar icon from outside the explorer.exe process is notoriously difficult in Windows.
 
-P.S. - I can't seem to be able to add a second github link, but "https://github.com/lolstijl" is the page of the original author
+The original author used a clever hack: If you minimise a window by clicking its icon on the taskbar, your mouse cursor is obviously hovering over the icon. The code checks where your mouse is, and if it's over the taskbar, it saves that X-coordinate and says, "Ah, that must be where the icon is!"However, if you click the - minimise button on the window's title bar, your mouse is not over the taskbar. The code panics, doesn't know where the icon is, and defaults to the centre of the screen. Once you restore it from the taskbar later, it finally learns the location.
+This is hard to solve, at least for me, right now, because it adds a significant amount of COM overhead and complexity, it might add a tiny bit of latency to the start of the animation while it searches the taskbar for the icon.
+
+There's still some flicker, sometimes, especially with Brave or other Chromium-based browsers, because they use heavily customised, GPU-accelerated window frames. They actively fight Windows' native Desktop Window Manager (DWM). 
+Sometimes it happens with other windows too, but tbh, I'm kinda' done with it (I spent half a day fixing some really bad flickering that I got when you minimised a window, only for it to start flickering when you restored it; then I changed the way it calculates the deformation and a new series of flickers were introduced, it was a pain in the behind). 
+
+Sometimes it even refuses to work at all, and I have no idea why. 
+
+There are several edge cases that I'm not sure exactly how to fix:
+ - When you use show desktop, and it tries to minimise all the windows at once, it captures the desktop instead of the windows and it "shimmers"
+ - When you change the size of a window and then use show desktop, the animation looks like it tries to restore to the previous window size.
+
+P.S. - I can't seem to be able to add a second GitHub link, but https://github.com/lolstijl is the page of the original author. 
 
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- duration_ms: 450
+- animation_type: Genie
+  $name: Animation Style
+  $description: Choose the shape of the window warp.
+  $options:
+  - Genie: Genie (Classic macOS bell-curve)
+  - Linear: Linear (Straight trapezoid)
+  - Suck: Suck (Sharp convex pull)
+- duration_ms: 700
   $name: Animation duration (ms)
-  $description: >-
-    How long the genie animation takes, in milliseconds.
-    Clamped to 50-2000.
+  $description: How long the genie animation takes. Clamped to 50-2000.
 - bottom_width: 42
   $name: Bottom width (px)
+  $description: How narrow the bottom gets when it reaches the taskbar icon.
+- max_slices: 300
+  $name: Max render slices
   $description: >-
-    How narrow the bottom of the window gets when it reaches the taskbar icon.
-    Clamped to 4-200.
+    Controls the anti-aliasing / smoothness of the window contents.
+    Higher = smoother text, but uses more CPU. Recommended: ~300.
+- phase_split: 50
+  $name: Phase timing split (%)
+  $description: >-
+    At what percentage of the animation should the top edge start falling?
+    (Values: 10 - 90)
+- fade_start: 85
+  $name: Fade start (%)
+  $description: >-
+    At what percentage of the animation should the window begin to fade out?
+    Default: 85%. (Values: 0 - 100)
+- fade_opacity: 20
+  $name: Final opacity (%)
+  $description: >-
+    How transparent the window should be at the very end.
+    (Values: 0 - 100)
 */
 // ==/WindhawkModSettings==
 
@@ -55,6 +90,7 @@ P.S. - I can't seem to be able to add a second github link, but "https://github.
 #include <atomic>
 #include <unordered_map>
 #include <mutex>
+#include <vector>
 
 // ============================================================================
 // Types & Hooks
@@ -100,8 +136,13 @@ std::unordered_map<HWND, int> g_IconPositions;
 std::unordered_map<HWND, RECT> g_RectCache;
 std::mutex g_CacheMutex;
 
+std::atomic<int> g_animType{0};
 std::atomic<int> g_durationMs{450};
 std::atomic<int> g_bottomWidth{42};
+std::atomic<int> g_maxSlices{300};
+std::atomic<int> g_phaseSplit{60};
+std::atomic<int> g_fadeStart{85};
+std::atomic<int> g_fadeOpacity{0};
 
 ID2D1Factory* g_d2dFactory = nullptr;
 
@@ -110,15 +151,33 @@ ID2D1Factory* g_d2dFactory = nullptr;
 // ============================================================================
 
 void LoadSettings() {
+    PCWSTR animTypeStr = Wh_GetStringSetting(L"animation_type");
+    int aType = 0; // Default to Genie
+    if (animTypeStr) {
+        if (wcscmp(animTypeStr, L"Linear") == 0) aType = 1;
+        else if (wcscmp(animTypeStr, L"Suck") == 0) aType = 2;
+        Wh_FreeStringSetting(animTypeStr);
+    }
+    g_animType.store(aType, std::memory_order_relaxed);
+
     int ms = Wh_GetIntSetting(L"duration_ms");
-    if (ms < 50) ms = 50;
-    if (ms > 2000) ms = 2000;
-    g_durationMs.store(ms, std::memory_order_relaxed);
+    g_durationMs.store(ms >= 50 && ms <= 2000 ? ms : 450, std::memory_order_relaxed);
     
     int bw = Wh_GetIntSetting(L"bottom_width");
-    if (bw < 4) bw = 4;
-    if (bw > 200) bw = 200;
-    g_bottomWidth.store(bw, std::memory_order_relaxed);
+    g_bottomWidth.store(bw >= 4 && bw <= 200 ? bw : 42, std::memory_order_relaxed);
+
+    int slices = Wh_GetIntSetting(L"max_slices");
+    // I bumped the cap to 4000 here just for you, since your i7 can handle it!
+    g_maxSlices.store(slices >= 10 && slices <= 4000 ? slices : 300, std::memory_order_relaxed);
+
+    int split = Wh_GetIntSetting(L"phase_split");
+    g_phaseSplit.store(split >= 10 && split <= 90 ? split : 60, std::memory_order_relaxed);
+
+    int fStart = Wh_GetIntSetting(L"fade_start");
+    g_fadeStart.store(fStart >= 0 && fStart <= 100 ? fStart : 85, std::memory_order_relaxed);
+
+    int fOpac = Wh_GetIntSetting(L"fade_opacity");
+    g_fadeOpacity.store(fOpac >= 0 && fOpac <= 100 ? fOpac : 0, std::memory_order_relaxed);
 }
 
 void SetDwmTransitions(HWND hWnd, BOOL enable) {
@@ -126,13 +185,25 @@ void SetDwmTransitions(HWND hWnd, BOOL enable) {
     DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disable, sizeof(disable));
 }
 
-static inline float curve(float f) {
+// Calculate the funnel pinch based on the selected animation style
+static inline float curve(float f, int type) {
     if (f < 0.0f) f = 0.0f;
     if (f > 1.0f) f = 1.0f;
-    return (1.0f - cosf(f * 3.14159265f)) / 2.0f;
+    
+    if (type == 1) {
+        // Linear Trapezoid
+        return f; 
+    } else if (type == 2) {
+        // Suck (Concave hole)
+        return f * f * f * f; 
+    } else {
+        // Genie (Smooth convex bell)
+        return (1.0f - cosf(f * 3.14159265f)) / 2.0f; 
+    }
 }
 
 struct MeshVertex { float x, y; };
+struct VertexPair { MeshVertex v[2]; };
 
 static ID2D1PathGeometry* CreateQuadGeo(
     ID2D1Factory* factory,
@@ -162,7 +233,12 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GhostAnimData* data = (GhostAnimData*)lpParam;
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
-    const int MESH_ROWS_HD = 120; 
+    int maxSlices = g_maxSlices.load(std::memory_order_relaxed);
+    int mesh_rows = data->h;
+    if (mesh_rows > maxSlices) mesh_rows = maxSlices;
+    if (mesh_rows < 10) mesh_rows = 10;
+
+    int animType = g_animType.load(std::memory_order_relaxed);
 
     HWND hGhost = data->hGhost;
     HDC hScreenDC = GetDC(NULL);
@@ -188,7 +264,7 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
             if (snapshotBmp) {
                 D2D1_BITMAP_BRUSH_PROPERTIES brushProps = D2D1::BitmapBrushProperties(
                     D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
-                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR 
                 );
                 rt->CreateBitmapBrush(snapshotBmp, &brushProps, nullptr, &bmpBrush);
             }
@@ -196,13 +272,17 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     }
 
     const double totalMs = (double)g_durationMs.load(std::memory_order_relaxed);
-    MeshVertex verts[MESH_ROWS_HD + 1][2];
+    std::vector<VertexPair> verts(mesh_rows + 1);
 
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
     QueryPerformanceFrequency(&qpcFreq);
     QueryPerformanceCounter(&qpcStart);
 
     bool firstFrameRendered = false;
+    
+    float phaseSplitF = g_phaseSplit.load(std::memory_order_relaxed) / 100.0f;
+    float fadeStartF = g_fadeStart.load(std::memory_order_relaxed) / 100.0f;
+    float finalOpacF = g_fadeOpacity.load(std::memory_order_relaxed) / 100.0f;
 
     for (;;) {
         QueryPerformanceCounter(&qpcNow);
@@ -212,19 +292,18 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
         
         float t = data->isRising ? (1.0f - progress) : progress;
 
-        float phase1End = 0.60f;
         float topY, bottomY;
         float squeeze = 0.0f; 
 
-        if (t < phase1End) {
-            float p1 = t / phase1End;
+        if (t < phaseSplitF) {
+            float p1 = t / phaseSplitF;
             float easeDrop = p1 * p1 * p1; 
             bottomY = (float)data->h + (float)(data->localDockY - data->h) * easeDrop;
             topY = 0.0f;
             
             squeeze = p1 * p1 * p1 * p1; 
         } else {
-            float p2 = (t - phase1End) / (1.0f - phase1End);
+            float p2 = (t - phaseSplitF) / (1.0f - phaseSplitF);
             float easeGravity = p2 * p2 * p2; 
             bottomY = (float)data->localDockY;
             topY = (float)data->localDockY * easeGravity;
@@ -234,18 +313,21 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
         if (topY > bottomY) topY = bottomY;
 
         float alphaF = 1.0f;
-        if (t > 0.85f) alphaF = 1.0f - ((t - 0.85f) / 0.15f);
+        if (fadeStartF < 1.0f && t > fadeStartF) {
+            float fadeProgress = (t - fadeStartF) / (1.0f - fadeStartF);
+            alphaF = 1.0f - (fadeProgress * (1.0f - finalOpacF));
+        }
         if (alphaF < 0.0f) alphaF = 0.0f;
 
         float bottomWidth = (float)g_bottomWidth.load(std::memory_order_relaxed);
         float localH = bottomY - topY;
         
-        for (int i = 0; i <= MESH_ROWS_HD; i++) {
-            float rowRatio = (float)i / (float)MESH_ROWS_HD;
+        for (int i = 0; i <= mesh_rows; i++) {
+            float rowRatio = (float)i / (float)mesh_rows;
             float rowY_local = topY + rowRatio * localH; 
             
             float funnelDist = rowY_local / (float)data->localDockY;
-            float c = curve(funnelDist); 
+            float c = curve(funnelDist, animType); 
             
             float funnelW = (float)data->w + (bottomWidth - (float)data->w) * c;
             float funnelCX = ((float)data->localStartX + (float)data->w / 2.0f) + 
@@ -257,8 +339,8 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
             float curW = rectW + (funnelW - rectW) * squeeze;
             float curCX = rectCX + (funnelCX - rectCX) * squeeze;
             
-            verts[i][0] = { curCX - curW / 2.0f, rowY_local };
-            verts[i][1] = { curCX + curW / 2.0f, rowY_local };
+            verts[i].v[0] = { curCX - curW / 2.0f, rowY_local };
+            verts[i].v[1] = { curCX + curW / 2.0f, rowY_local };
         }
 
         if (rt && bmpBrush && localH > 0.5f) {
@@ -273,12 +355,12 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
             if (outlineGeo) {
                 ID2D1GeometrySink* sink = nullptr;
                 outlineGeo->Open(&sink);
-                sink->BeginFigure(D2D1::Point2F(verts[0][0].x, verts[0][0].y), D2D1_FIGURE_BEGIN_FILLED);
-                for (int i = 1; i <= MESH_ROWS_HD; i++) {
-                    sink->AddLine(D2D1::Point2F(verts[i][0].x, verts[i][0].y));
+                sink->BeginFigure(D2D1::Point2F(verts[0].v[0].x, verts[0].v[0].y), D2D1_FIGURE_BEGIN_FILLED);
+                for (int i = 1; i <= mesh_rows; i++) {
+                    sink->AddLine(D2D1::Point2F(verts[i].v[0].x, verts[i].v[0].y));
                 }
-                for (int i = MESH_ROWS_HD; i >= 0; i--) {
-                    sink->AddLine(D2D1::Point2F(verts[i][1].x, verts[i][1].y));
+                for (int i = mesh_rows; i >= 0; i--) {
+                    sink->AddLine(D2D1::Point2F(verts[i].v[1].x, verts[i].v[1].y));
                 }
                 sink->EndFigure(D2D1_FIGURE_END_CLOSED);
                 sink->Close();
@@ -291,17 +373,17 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
                 
                 rt->PushLayer(&layerParams, layer);
 
-                for (int i = 0; i < MESH_ROWS_HD; i++) {
-                    float tlx = verts[i][0].x, tly = verts[i][0].y;
-                    float trx = verts[i][1].x, try_ = verts[i][1].y;
-                    float blx = verts[i+1][0].x, bly = verts[i+1][0].y;
-                    float brx = verts[i+1][1].x, bry = verts[i+1][1].y;
+                for (int i = 0; i < mesh_rows; i++) {
+                    float tlx = verts[i].v[0].x, tly = verts[i].v[0].y;
+                    float trx = verts[i].v[1].x, try_ = verts[i].v[1].y;
+                    float blx = verts[i+1].v[0].x, bly = verts[i+1].v[0].y;
+                    float brx = verts[i+1].v[1].x, bry = verts[i+1].v[1].y;
 
                     ID2D1PathGeometry* qg = CreateQuadGeo(g_d2dFactory, tlx, tly - 0.5f, trx, try_ - 0.5f, brx, bry + 0.5f, blx, bly + 0.5f);
                     if (!qg) continue;
 
-                    float srcY1 = (float)i / MESH_ROWS_HD * (float)data->h;
-                    float srcY2 = (float)(i + 1) / MESH_ROWS_HD * (float)data->h;
+                    float srcY1 = (float)i / mesh_rows * (float)data->h;
+                    float srcY2 = (float)(i + 1) / mesh_rows * (float)data->h;
                     float stripH = srcY2 - srcY1; if (stripH < 0.001f) stripH = 0.001f;
 
                     float avgL = (tlx + blx) / 2.0f;
@@ -362,14 +444,21 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     DeleteObject(data->hGhostDIB);
 
     if (data->isRising) {
-        SetLayeredWindowAttributes(data->hRealWnd, 0, 0, LWA_ALPHA);
         ShowWindow_Original(data->hRealWnd, SW_RESTORE);
-        SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
+        if (!(data->originalExStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+        }
+        SetDwmTransitions(data->hRealWnd, TRUE);
+
+        DwmFlush();
+        Sleep(20); 
+        DwmFlush();
+    } else {
+        if (!(data->originalExStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+        }
+        SetDwmTransitions(data->hRealWnd, TRUE);
     }
-    
-    if (!(data->originalExStyle & WS_EX_LAYERED))
-        SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
-    SetDwmTransitions(data->hRealWnd, TRUE);
 
     ShowWindow(hGhost, SW_HIDE);
     PostMessage(hGhost, WM_CLOSE, 0, 0);
@@ -392,7 +481,6 @@ static void ShowGhost(GhostAnimData* data) {
     HDC hSnapDC = CreateCompatibleDC(hScreenDC);
     HBITMAP hOldSnap = (HBITMAP)SelectObject(hSnapDC, data->hSnapDIB);
 
-    // Blit the window snapshot into the exact physical location on the blank canvas
     BitBlt(hFrameDC, data->localStartX, 0, data->w, data->h, hSnapDC, 0, 0, SRCCOPY);
 
     SelectObject(hSnapDC, hOldSnap);
@@ -406,7 +494,6 @@ static void ShowGhost(GhostAnimData* data) {
     bf.SourceConstantAlpha = 255;
     bf.AlphaFormat = AC_SRC_ALPHA;
 
-    // Push frame 0 to DWM instantly
     UpdateLayeredWindow(hGhost, NULL, &ptDst, &sz, hFrameDC, &ptSrc, 0, &bf, ULW_ALPHA);
     ShowWindow(hGhost, SW_SHOWNOACTIVATE);
 
@@ -422,7 +509,10 @@ static void ShowGhost(GhostAnimData* data) {
 
 static GhostAnimData* Prepare(HWND hWnd, BOOL rising) {
     RECT rect;
-    GetWindowRect(hWnd, &rect);
+    HRESULT hr = DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rect, sizeof(rect));
+    if (FAILED(hr)) {
+        GetWindowRect(hWnd, &rect);
+    }
 
     if (rising) {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
@@ -576,7 +666,6 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
             SetDwmTransitions(hWnd, FALSE);
             GhostAnimData* data = Prepare(hWnd, FALSE);
             if (data) {
-                // MINIMIZE ONLY: Push Frame 0 immediately on main thread to kill flicker!
                 ShowGhost(data);
                 
                 LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
@@ -592,7 +681,6 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
             SetDwmTransitions(hWnd, FALSE);
             GhostAnimData* data = Prepare(hWnd, TRUE);
             if (data) {
-                // RESTORE ONLY: Skip ShowGhost entirely. Let thread handle the popup!
                 StartThread(data);
             }
             return TRUE;
@@ -614,7 +702,6 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             SetDwmTransitions(hWnd, FALSE);
             GhostAnimData* data = Prepare(hWnd, FALSE);
             if (data) {
-                // MINIMIZE ONLY: Push Frame 0 immediately on main thread to kill flicker!
                 ShowGhost(data);
                 
                 LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
@@ -628,7 +715,6 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             SetDwmTransitions(hWnd, FALSE);
             GhostAnimData* data = Prepare(hWnd, TRUE);
             if (data) {
-                // RESTORE ONLY: Skip ShowGhost entirely. Let thread handle the popup!
                 StartThread(data);
             }
             return 0;
