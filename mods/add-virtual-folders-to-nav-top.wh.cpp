@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.17
+// @version         1.1.18
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -236,6 +236,7 @@ struct TreeState {
     HTREEITEM boundaryItem = nullptr;
     HTREEITEM belowQAItem = nullptr;
     uint8_t pendingWork = 0;   // bitmask of PendingWork flags
+    int sepRetries = 0;
     bool ownsNscRef = false;
     bool triedHomeSpacer = false;
     HIMAGELIST savedStateImageList = nullptr;
@@ -632,7 +633,7 @@ static void DrawChevron(HDC hdc, const RECT *r, int partId, int stateId)
 static thread_local bool g_inTreePaint = false;
 static thread_local int g_inSubclassProc = 0;
 static thread_local int g_lastSepY = -1;
-static thread_local int g_sepRetries = 0;
+static thread_local int g_firstSepY = -1;
 
 static bool AreWeMutating()
 {
@@ -953,6 +954,7 @@ static void RestoreTree(HWND hTree)
     void *pNscRaw = ts->pNscTree;
     unsigned long enumFlags = ts->enumFlags;
     IShellItemFilter *pFilterRaw = ts->pFilter;
+    ts->pFilter = nullptr;
     if (pFilterRaw)
         pFilterRaw->AddRef();
     HIMAGELIST savedImgList = ts->savedStateImageList;
@@ -1001,11 +1003,6 @@ static void RestoreTree(HWND hTree)
         if (ownsRef)
             ts->ownsNscRef = false;
         ts->pNscTree = nullptr;
-        if (ts->pFilter)
-        {
-            ts->pFilter->Release();
-            ts->pFilter = nullptr;
-        }
     }
 
     if (ownsRef)
@@ -1023,6 +1020,12 @@ static void FullRebuildTree(HWND hTree)
     ComRef<INameSpaceTreeControl> pNsc((INameSpaceTreeControl *)ts->pNscTree);
     void *pNscRaw = ts->pNscTree;
     unsigned long enumFlags = ts->enumFlags;
+
+    if (ts->pFilter)
+    {
+        ts->pFilter->Release();
+        ts->pFilter = nullptr;
+    }
 
     // Remove HomeSpacer before roots — it's a separate namespace item.
     RemoveHomeSpacer(*ts, pNsc.get());
@@ -1112,10 +1115,8 @@ static void InsertHomeSpacer(HWND hTree)
     HTREEITEM hSpacer = nullptr;
     WCHAR spacerNames[1][64] = {};
     wcsncpy_s(spacerNames[0], 64, g_navItems[spacerId].label, _TRUNCATE);
-    ForEachLabeledSibling(hTree,
-        [&](HTREEITEM h) { return h == ts->hItems[NAV_DESKTOP] || h == ts->hItems[NAV_THISPC]; },
-        spacerNames, 1,
-        [&](HTREEITEM h, int) -> bool { hSpacer = h; return false; });
+    ForEachLabeledSibling(hTree, [&](HTREEITEM h) { return h == ts->hItems[NAV_DESKTOP] || h == ts->hItems[NAV_THISPC]; },
+        spacerNames, 1, [&](HTREEITEM h, int) -> bool { hSpacer = h; return false; });
 
     if (hSpacer)
     {
@@ -1235,6 +1236,8 @@ static void DrawSeparatorLine(HDC hdc, HWND hTree, int sepY)
     {
         FillRect(hdc, &sepRect, brush);
         DeleteObject(brush);
+        if (g_firstSepY == -1)
+            g_firstSepY = sepY;
         g_lastSepY = sepY;
     }
 }
@@ -1481,15 +1484,11 @@ static bool CleanupDups(HWND hTree, TreeState& ts)
     int childlessCount = 0;
     int sectionCount = 0;
 
-    ForEachLabeledSibling(hTree,
-        [&](HTREEITEM h) { return IsOurSection(ts, h); },
-        matchNames, expectedCount,
+    ForEachLabeledSibling(hTree, [&](HTREEITEM h) { return IsOurSection(ts, h); }, matchNames, expectedCount,
         [&](HTREEITEM h, int) -> bool {
             HTREEITEM hChild = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)h);
-            if (!hChild)
-            { if (childlessCount < 8) toDeleteChildless[childlessCount++] = h; }
-            else
-            { if (sectionCount < 4) toDeleteSections[sectionCount++] = h; }
+            if (!hChild) { if (childlessCount < 8) toDeleteChildless[childlessCount++] = h; }
+            else { if (sectionCount < 4) toDeleteSections[sectionCount++] = h; }
             return true;
         });
 
@@ -1558,12 +1557,8 @@ static bool RemoveInherited(HWND hTree, TreeState& ts)
     for (int i = 0; i < targetCount; i++)
         wcsncpy_s(targetNames[i], 64, targets[i].name, _TRUNCATE);
 
-    ForEachLabeledSibling(hTree,
-        [&](HTREEITEM h) {
-            return IsOurSection(ts, h) || h == ts.hiddenDuplicate || h == ts.homeSpacerItem;
-        },
-        targetNames, targetCount,
-        [&](HTREEITEM h, int j) -> bool {
+    ForEachLabeledSibling(hTree, [&](HTREEITEM h) { return IsOurSection(ts, h) || h == ts.hiddenDuplicate || h == ts.homeSpacerItem; },
+        targetNames, targetCount, [&](HTREEITEM h, int j) -> bool {
             toDelete[delCount++] = { h, targets[j].id };
             return delCount < targetCount;
         });
@@ -1916,6 +1911,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             SetWindowSubclass(hWnd, TreeInteractionProc, 0xAF01, 0);
 
         g_lastSepY = -1;
+        g_firstSepY = -1;
         g_inTreePaint = true;
 
         LRESULT result = SubClassTreeWndProc_orig(hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData);
@@ -1923,7 +1919,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         g_inTreePaint = false;
 
         ts = GetTree(hWnd);
-        if (g_lastSepY >= 0 && g_sepColor != CLR_INVALID && g_sepRetries < 3)
+        if (g_lastSepY >= 0 && g_sepColor != CLR_INVALID && ts && ts->sepRetries < 3)
         {
             HDC hdc = GetDC(hWnd);
             if (hdc)
@@ -1931,28 +1927,37 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 RECT client;
                 GetClientRect(hWnd, &client);
                 int sampleX = client.right / 2;
-                COLORREF pixel = GetPixel(hdc, sampleX, g_lastSepY);
-                ReleaseDC(hWnd, hdc);
-                if (pixel != CLR_INVALID && pixel != g_sepColor)
+                bool mismatch = false;
+                int failY = g_lastSepY;
+                int checkYs[] = { g_firstSepY, g_lastSepY };
+                for (int y : checkYs)
                 {
-                    g_sepRetries++;
+                    if (y < 0) continue;
+                    COLORREF pixel = GetPixel(hdc, sampleX, y);
+                    if (pixel != CLR_INVALID && pixel != g_sepColor)
+                        { mismatch = true; failY = y; break; }
+                }
+                ReleaseDC(hWnd, hdc);
+                if (mismatch)
+                {
+                    ts->sepRetries++;
                     Wh_Log(L"[SEP-VERIFY] tree=%04X at (%d,%d): "
-                           L"expected=0x%06X got=0x%06X, retry %d",
-                           PTR4(hWnd), sampleX, g_lastSepY, g_sepColor, pixel, g_sepRetries);
-                    InvalidateRect(hWnd, nullptr, FALSE);
+                           L"expected=0x%06X, retry %d",
+                           PTR4(hWnd), sampleX, failY, g_sepColor, ts->sepRetries);
+                    RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
                 }
                 else
-                    g_sepRetries = 0;
+                    ts->sepRetries = 0;
             }
         }
-        else if (g_lastSepY == -1 && g_sepColor != CLR_INVALID && g_sepRetries < 3
-                 && ts && !ts->pendingWork && HasOurItemsInTree(*ts) && ts->boundaryItem
-                 && !g_settings.removeSepBelowNav && !GetHiddenItem(*ts))
+        else if (g_lastSepY == -1 && g_sepColor != CLR_INVALID
+                 && ts && ts->sepRetries < 3 && !ts->pendingWork && HasOurItemsInTree(*ts)
+                 && ts->boundaryItem && !g_settings.removeSepBelowNav && !GetHiddenItem(*ts))
         {
-            g_sepRetries++;
+            ts->sepRetries++;
             Wh_Log(L"[SEP-VERIFY] tree=%04X boundary=%04X: expected separator but none drawn, retry %d",
-                   PTR4(hWnd), PTR4(ts->boundaryItem), g_sepRetries);
-            InvalidateRect(hWnd, nullptr, FALSE);
+                   PTR4(hWnd), PTR4(ts->boundaryItem), ts->sepRetries);
+            RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
         }
 
         return result;
@@ -2374,80 +2379,91 @@ ChangeTier ClassifySettingsChange(const Settings& prev, const Settings& cur)
 
 void Wh_ModSettingsChanged()
 {
-    auto prev = g_settings;
-    LoadSettings();
+    static bool inProgress = false, rerunNeeded = false;
+    if (inProgress) { rerunNeeded = true; return; }
+    inProgress = true;
 
-    ChangeTier tier = ClassifySettingsChange(prev, g_settings);
-    if (tier == TIER_NONE)
-        return;
+    do {
+        rerunNeeded = false;
 
-    g_sepRetries = 0;
+        auto prev = g_settings;
+        LoadSettings();
 
-    // Snapshot HWNDs: FullRebuildTree pumps messages, which can rehash g_trees mid-iteration.
-    std::vector<HWND> treeList;
-    treeList.reserve(g_trees.size());
-    for (auto& [hTree, ts] : g_trees)
-        treeList.push_back(hTree);
-    int treeCount = (int)treeList.size();
+        ChangeTier tier = ClassifySettingsChange(prev, g_settings);
+        if (tier == TIER_NONE)
+            break;
 
-    bool sepChanged = (prev.removeSepBelowNav != g_settings.removeSepBelowNav ||
-                       prev.removeSepBelowQA  != g_settings.removeSepBelowQA);
-    if (sepChanged)
-        ResetSepColor();
-
-    for (int i = 0; i < treeCount; i++)
-    {
-        HWND hTree = treeList[i];
-        TreeState* ts = GetTree(hTree);
-        if (!ts || !IsWindow(hTree) || !ts->pNscTree)
-            continue;
-
-        if (tier == TIER_REBUILD)
+        // Snapshot HWNDs: FullRebuildTree pumps messages, which can rehash g_trees mid-iteration.
+        std::vector<HWND> treeList;
+        treeList.reserve(g_trees.size());
+        for (auto& [hTree, ts] : g_trees)
         {
-            g_deferredOpInProgress = true;
-            g_mutatingTree = hTree;
-            FullRebuildTree(hTree);
-            DrainPendingRebuilds();
+            ts.sepRetries = 0;
+            treeList.push_back(hTree);
         }
-        else if (tier == TIER_REFRESH)
-        {
-            ts->boundaryItem = nullptr;
-            ts->belowQAItem = nullptr;
-            ts->pendingWork |= WORK_QA_CLEANUP;
-            RefreshNavPane(hTree);
-        }
-        else // TIER_REPAINT
-        {
-            bool homeGalleryChanged = (prev.items[NAV_HOME].hide    != g_settings.items[NAV_HOME].hide ||
-                                       prev.items[NAV_GALLERY].hide != g_settings.items[NAV_GALLERY].hide);
-            bool dedupChanged = false;
-            for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
-                if (g_settings.items[i].showAtTop && prev.items[i].hideFromQA != g_settings.items[i].hideFromQA)
-                    dedupChanged = true;
+        int treeCount = (int)treeList.size();
 
-            if (homeGalleryChanged)
+        bool sepChanged = (prev.removeSepBelowNav != g_settings.removeSepBelowNav ||
+                           prev.removeSepBelowQA  != g_settings.removeSepBelowQA);
+        if (sepChanged)
+            ResetSepColor();
+
+        for (int i = 0; i < treeCount; i++)
+        {
+            HWND hTree = treeList[i];
+            TreeState* ts = GetTree(hTree);
+            if (!ts || !IsWindow(hTree) || !ts->pNscTree)
+                continue;
+
+            if (tier == TIER_REBUILD)
             {
-                for (int j = NAV_HOME; j < NAV_COUNT; j++)
-                    if (g_settings.items[j].hide)
-                        ts->hItems[j] = nullptr;
-                ts->pendingWork |= WORK_HG_CLEANUP;
+                g_deferredOpInProgress = true;
+                g_mutatingTree = hTree;
+                FullRebuildTree(hTree);
+                DrainPendingRebuilds();
             }
-            if (dedupChanged)
-            {
-                ts->pendingWork |= WORK_QA_CLEANUP;
-            }
-            if (sepChanged || dedupChanged)
+            else if (tier == TIER_REFRESH)
             {
                 ts->boundaryItem = nullptr;
                 ts->belowQAItem = nullptr;
+                ts->pendingWork |= WORK_QA_CLEANUP;
+                RefreshNavPane(hTree);
             }
+            else // TIER_REPAINT
+            {
+                bool homeGalleryChanged = (prev.items[NAV_HOME].hide    != g_settings.items[NAV_HOME].hide ||
+                                           prev.items[NAV_GALLERY].hide != g_settings.items[NAV_GALLERY].hide);
+                bool dedupChanged = false;
+                for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
+                    if (g_settings.items[i].showAtTop && prev.items[i].hideFromQA != g_settings.items[i].hideFromQA)
+                        dedupChanged = true;
 
-            InvalidateRect(hTree, nullptr, TRUE);
+                if (homeGalleryChanged)
+                {
+                    for (int j = NAV_HOME; j < NAV_COUNT; j++)
+                        if (g_settings.items[j].hide)
+                            ts->hItems[j] = nullptr;
+                    ts->pendingWork |= WORK_HG_CLEANUP;
+                }
+                if (dedupChanged)
+                {
+                    ts->pendingWork |= WORK_QA_CLEANUP;
+                }
+                if (sepChanged || dedupChanged)
+                {
+                    ts->boundaryItem = nullptr;
+                    ts->belowQAItem = nullptr;
+                }
+
+                InvalidateRect(hTree, nullptr, TRUE);
+            }
         }
-    }
 
-    if (!prev.hasItemsAtTop && g_settings.hasItemsAtTop)
-        Wh_ModAfterInit();
+        if (!prev.hasItemsAtTop && g_settings.hasItemsAtTop)
+            Wh_ModAfterInit();
+    } while (rerunNeeded);
+
+    inProgress = false;
 }
 
 void Wh_ModUninit()
