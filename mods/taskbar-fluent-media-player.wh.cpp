@@ -36,7 +36,6 @@
 If you encounter any issues, bugs, or have suggestions for new features, please report them on the project's GitHub page:
 👉 **[Report an Issue on GitHub](https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues)**
 
-![img](https://i.imgur.com/dTcEZ9G.png)
 */
 // ==/WindhawkModReadme==
 
