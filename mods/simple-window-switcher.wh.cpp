@@ -115,6 +115,42 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
         - customBgColor: "#202020"
           $name: Custom Switcher Background Color
           $description: HEX color value, used when Switcher Background Color is set to Custom.
+        - iconBgColorMode: default
+          $name: Badge Icon Background Color
+          $description: Color source for the badge icon background pill in dark mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customIconBgColor: "#000000"
+          $name: Custom Badge Icon Background Color
+          $description: HEX color value, used when Badge Icon Background Color is set to Custom.
+        - iconBgOpacity: 55
+          $name: Badge Icon Background Opacity
+          $description: Opacity percentage (0-100) for the badge icon background in dark mode.
+        - indicatorBgColorMode: default
+          $name: Group Indicator Background Color
+          $description: Color source for the group indicator background pill in dark mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customIndicatorBgColor: "#333333"
+          $name: Custom Group Indicator Background Color
+          $description: HEX color value, used when Group Indicator Background Color is set to Custom.
+        - indicatorBgOpacity: 85
+          $name: Group Indicator Background Opacity
+          $description: Opacity percentage (0-100) for the group indicator background in dark mode.
+        - indicatorTextColorMode: default
+          $name: Group Indicator Text Color
+          $description: Color source for the group indicator text in dark mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customIndicatorTextColor: "#FFFFFF"
+          $name: Custom Group Indicator Text Color
+          $description: HEX color value, used when Group Indicator Text Color is set to Custom.
       $name: Dark Mode
     - LightMode:
         - borderColorMode: default
@@ -147,6 +183,42 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
         - customBgColor: "#F3F3F3"
           $name: Custom Switcher Background Color
           $description: HEX color value, used when Switcher Background Color is set to Custom.
+        - iconBgColorMode: default
+          $name: Badge Icon Background Color
+          $description: Color source for the badge icon background pill in light mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customIconBgColor: "#FFFFFF"
+          $name: Custom Badge Icon Background Color
+          $description: HEX color value, used when Badge Icon Background Color is set to Custom.
+        - iconBgOpacity: 55
+          $name: Badge Icon Background Opacity
+          $description: Opacity percentage (0-100) for the badge icon background in light mode.
+        - indicatorBgColorMode: default
+          $name: Group Indicator Background Color
+          $description: Color source for the group indicator background pill in light mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customIndicatorBgColor: "#EAEAEA"
+          $name: Custom Group Indicator Background Color
+          $description: HEX color value, used when Group Indicator Background Color is set to Custom.
+        - indicatorBgOpacity: 85
+          $name: Group Indicator Background Opacity
+          $description: Opacity percentage (0-100) for the group indicator background in light mode.
+        - indicatorTextColorMode: default
+          $name: Group Indicator Text Color
+          $description: Color source for the group indicator text in light mode.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customIndicatorTextColor: "#000000"
+          $name: Custom Group Indicator Text Color
+          $description: HEX color value, used when Group Indicator Text Color is set to Custom.
       $name: Light Mode
   $name: Theme
 - Appearance:
@@ -168,6 +240,12 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
         - roundThumbnailCorners: false
           $name: Round Thumbnail Corners
           $description: Round the corners of window thumbnails. Uses the radius from Corner Preference.
+        - roundGroupIndicator: false
+          $name: Round Group Indicator
+          $description: Round the corners of the group indicator. Uses the radius from Corner Preference.
+        - roundBadgeIconBackground: false
+          $name: Round Icon Background (only for badge-layout)
+          $description: Round the corners of the badge icon background pill. Uses the radius from Corner Preference.
       $name: Corners
     - Thumbnails:
         - thumbnailPosition: bottom
@@ -241,6 +319,45 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           $name: Switcher Position Margin (px)
           $description: Offset from the screen edges when using non-centered positions.
       $name: Position
+    - BadgeLayout:
+        - enableBadgeLayout: false
+          $name: Enable Badge Layout (macOS-style)
+          $description: Overlay the icon on top of the thumbnail and place the title outside. Overrides normal header positioning when enabled. Requires Show Thumbnails to be on.
+        - badgeIconPosition: bottomCenter
+          $name: Badge Icon Position
+          $description: Where to place the icon overlay on the thumbnail.
+          $options:
+          - topLeft: Top Left
+          - topCenter: Top Center
+          - topRight: Top Right
+          - centerLeft: Center Left
+          - center: Center
+          - centerRight: Center Right
+          - bottomLeft: Bottom Left
+          - bottomCenter: Bottom Center
+          - bottomRight: Bottom Right
+        - badgeTitlePosition: bottom
+          $name: Badge Title Position
+          $description: Where to place the title label relative to the thumbnail.
+          $options:
+          - top: Above Thumbnail
+          - bottom: Below Thumbnail
+        - showBadgeIconBackground: true
+          $name: Show Badge Icon Background
+          $description: Draw a backdrop shape behind the badge icon. If off, a drop shadow is drawn instead.
+        - showBadgeIconBackgroundShadow: false
+          $name: Show Badge Icon Background Shadow
+          $description: Draw a soft drop shadow under the badge icon background pill.
+        - badgeIconPadding: 4
+          $name: Badge Icon Padding (px)
+          $description: Extra space between the icon and the edge of its background.
+        - badgeIconOffsetX: 0
+          $name: Badge Icon Offset X (px)
+          $description: Nudge the icon horizontally from its default position.
+        - badgeIconOffsetY: 0
+          $name: Badge Icon Offset Y (px)
+          $description: Nudge the icon vertically from its default position.
+      $name: Badge Layout
     - Font:
         - fontFamily: Segoe UI
           $name: Font Family
@@ -257,6 +374,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           - bold: Bold
           - italic: Italic
           - boldItalic: Bold Italic
+        - applyToGroupIndicator: false
+          $name: Apply to Group Indicator
+          $description: Use these custom font settings for the grouped window count indicator badge.
       $name: Font
   $name: Appearance
 - Dimensions:
@@ -291,6 +411,18 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
     - restoreAllWindows: false
       $name: Restore All Windows
       $description: When switching to an application, restore all of its minimized windows to their previous state. Only applies when "Group Windows by Application" is enabled. Tip - to act on a single window instead, tap Ctrl while the application is selected to show all of its windows and pick one.
+    - showGroupIndicator: true
+      $name: Show Group Indicator
+      $description: Show a count badge on grouped application entries indicating how many windows are in the group. Only visible when Group Windows by Application is enabled.
+    - showGroupIndicatorShadow: false
+      $name: Show Group Indicator Shadow
+      $description: Show a soft drop shadow behind the group indicator badge.
+    - groupCloseBehavior: closeRecent
+      $name: Group Close Button Behavior
+      $description: Action when closing a grouped application entry.
+      $options:
+      - closeRecent: Close Most Recent Window
+      - closeAll: Close All Windows
   $name: Grouping
 - Accessibility:
     - showDelay: 0
@@ -421,6 +553,9 @@ struct WindowEntry {
     RECT rcSourceCrop;         // Source crop rect for DWM_TNP_RECTSOURCE
     SIZE effectiveSourceSize;  // Source size after cropping invisible frame
     std::vector<HWND> groupWindows;  // All app windows when grouping by application
+    int drawnIconX;            // X coordinate where the icon is drawn
+    int drawnIconY;            // Y coordinate where the icon is drawn
+    int drawnIconSz;           // Size of the drawn icon
 };
 struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
@@ -428,13 +563,20 @@ struct Settings {
     // Global theme settings (apply to both light and dark)
     WCHAR highlightStyle[32]; int opacity;
     // Dark Mode color settings
-    WCHAR borderColorModeDark[16]; WCHAR highlightFillColorModeDark[16]; WCHAR bgColorModeDark[16];
-    WCHAR customBorderColorDark[16]; WCHAR customHighlightFillColorDark[16]; WCHAR customBgColorDark[16];
+    WCHAR borderColorModeDark[16]; WCHAR highlightFillColorModeDark[16]; WCHAR bgColorModeDark[16]; WCHAR iconBgColorModeDark[16];
+    WCHAR customBorderColorDark[16]; WCHAR customHighlightFillColorDark[16]; WCHAR customBgColorDark[16]; WCHAR customIconBgColorDark[16];
+    int iconBgOpacityDark;
+    WCHAR indicatorBgColorModeDark[16]; WCHAR customIndicatorBgColorDark[16]; int indicatorBgOpacityDark;
+    WCHAR indicatorTextColorModeDark[16]; WCHAR customIndicatorTextColorDark[16];
     // Light Mode color settings
-    WCHAR borderColorModeLight[16]; WCHAR highlightFillColorModeLight[16]; WCHAR bgColorModeLight[16];
-    WCHAR customBorderColorLight[16]; WCHAR customHighlightFillColorLight[16]; WCHAR customBgColorLight[16];
+    WCHAR borderColorModeLight[16]; WCHAR highlightFillColorModeLight[16]; WCHAR bgColorModeLight[16]; WCHAR iconBgColorModeLight[16];
+    WCHAR customBorderColorLight[16]; WCHAR customHighlightFillColorLight[16]; WCHAR customBgColorLight[16]; WCHAR customIconBgColorLight[16];
+    int iconBgOpacityLight;
+    WCHAR indicatorBgColorModeLight[16]; WCHAR customIndicatorBgColorLight[16]; int indicatorBgOpacityLight;
+    WCHAR indicatorTextColorModeLight[16]; WCHAR customIndicatorTextColorLight[16];
     WCHAR fontFamily[64]; WCHAR fontStyle[32];
     int fontSize;
+    bool applyToGroupIndicator;
     int rowHeight;
     int rowWidth;
     bool stretchThumbnailsToTaskWidth;
@@ -444,7 +586,7 @@ struct Settings {
     int maxWidthPercent;
     bool autoFitTasks;
     int maxHeightPercent; int showDelay;
-    bool perMonitorWindows; bool taskRoundedCorners; bool roundThumbnailCorners; bool reverseScrollDirection;
+    bool perMonitorWindows; bool taskRoundedCorners; bool roundThumbnailCorners; bool roundGroupIndicator; bool roundBadgeIconBackground; bool reverseScrollDirection;
     bool centerTaskContent;
     bool showApplications;
     WCHAR showTitles[32];
@@ -454,6 +596,18 @@ struct Settings {
     WCHAR switcherPosition[32];
     int switcherPositionMargin;
     bool showHoverBorder;
+    // Badge layout (macOS-style)
+    bool enableBadgeLayout;
+    WCHAR badgeIconPosition[32];
+    WCHAR badgeTitlePosition[16];
+    bool showBadgeIconBackground; bool showBadgeIconBackgroundShadow;
+    int badgeIconPadding;
+    int badgeIconOffsetX;
+    int badgeIconOffsetY;
+    // Grouped indicator
+    bool showGroupIndicator;
+    bool showGroupIndicatorShadow;
+    WCHAR groupCloseBehavior[16];
 };
 
 static std::vector<std::wstring> g_excludeTitlePatterns;
@@ -486,6 +640,7 @@ static int g_dpiX = 96, g_dpiY = 96;
 // visible task count when the setting is enabled.
 static int g_autoFitScalePct = 100;
 static int g_winW = 0, g_winH = 0;
+static int g_activePadDivider = 0;
 static bool g_hotkeysRegistered = false;
 static HMONITOR g_hCurrentMonitor = NULL;
 static Settings g_settings;
@@ -540,6 +695,11 @@ static bool StretchThumbsToTaskWidth() {
 static bool HeaderIsVertical() {
     return HeaderOrientationIs(L"vertical");
 }
+static bool BadgeLayoutActive() {
+    return g_settings.enableBadgeLayout && g_settings.showThumbnails;
+}
+static bool BadgeIconPositionIs(const WCHAR* v) { return wcscmp(g_settings.badgeIconPosition, v) == 0; }
+static bool BadgeTitleIsTop() { return wcscmp(g_settings.badgeTitlePosition, L"top") == 0; }
 static int GetHeaderIconSizeBase() {
     if (IconSizeIs(L"xlarge")) return 64;
     if (IconSizeIs(L"large")) return 48;
@@ -620,6 +780,32 @@ static int GetThumbnailCornerRadiusPx() {
         return MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
     }
     return MulDiv(4, g_dpiX, 96);
+}
+
+static int GetGroupIndicatorCornerRadiusPx(int maxRadius) {
+    if (!g_settings.roundGroupIndicator) {
+        return 0;
+    }
+    int radius = 0;
+    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+    } else {
+        radius = MulDiv(4, g_dpiX, 96);
+    }
+    return (radius > maxRadius) ? maxRadius : radius;
+}
+
+static int GetBadgeIconBackgroundCornerRadiusPx(int maxRadius) {
+    if (!g_settings.roundBadgeIconBackground) {
+        return 0;
+    }
+    int radius = 0;
+    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+    } else {
+        radius = MulDiv(4, g_dpiX, 96);
+    }
+    return (radius > maxRadius) ? maxRadius : radius;
 }
 
 static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY) {
@@ -1532,6 +1718,13 @@ static void ComputeLayout(HMONITOR hMon) {
     int padDivider   = DpiScale(SWS_PAD_DIVIDER, dpiY);
     int rowTitleH    = GetHeaderRowHeightPx();
 
+    // Badge layout override: the icon overlays the thumbnail, so the header
+    // row only needs to account for the title text, not the icon.  Also force
+    // the thumbnail position so the title band sits above or below.
+    if (BadgeLayoutActive()) {
+        rowTitleH = g_settings.showTitle ? GetHeaderTitleHeightPx() : 0;
+    }
+
     // EP: cbThumbnailAvailableHeight = cbRowHeight - cbRowTitleHeight - cbTopPadding - 2 * cbBottomPadding
     // All values are DPI-scaled at this point (matching EP lines 826-844)
     int scaledRowH = DpiScale(g_settings.rowHeight, dpiY);
@@ -1541,6 +1734,7 @@ static void ComputeLayout(HMONITOR hMon) {
         if (scaledRowH < floorH) scaledRowH = floorH;
     }
     bool sidePlacement = ThumbnailIsSide() && g_settings.showThumbnails;
+    if (BadgeLayoutActive()) sidePlacement = false;  // badge mode never uses side placement
     int thumbH = 0;
     if (g_settings.showThumbnails) {
         thumbH = scaledRowH - (sidePlacement ? 0 : rowTitleH) - padTop - 2 * padBot;
@@ -1560,8 +1754,63 @@ static void ComputeLayout(HMONITOR hMon) {
     bool thumbBottom = showThumbs ? ThumbnailIsBottom() : true;
     bool thumbTop = showThumbs ? ThumbnailIsTop() : false;
     bool thumbSide = showThumbs ? ThumbnailIsSide() : false;
-    
+
+    // Badge layout: override thumbnail position semantics.
+    // "title on top" → title band above, thumbnail below → thumbBottom = true
+    // "title on bottom" → title band below, thumbnail above → thumbTop = true
     int activePadDivider = (showThumbs && rowTitleH > 0) ? padDivider : 0;
+    
+    if (BadgeLayoutActive()) {
+        thumbSide = false;
+        thumbBottom = BadgeTitleIsTop();
+        thumbTop = !BadgeTitleIsTop();
+
+        // Calculate icon overlap due to offsets to dynamically resize borders & push title away
+        bool isTop = BadgeIconPositionIs(L"topLeft") || BadgeIconPositionIs(L"topCenter") || BadgeIconPositionIs(L"topRight");
+        bool isBottom = BadgeIconPositionIs(L"bottomLeft") || BadgeIconPositionIs(L"bottomCenter") || BadgeIconPositionIs(L"bottomRight");
+        bool isLeft = BadgeIconPositionIs(L"topLeft") || BadgeIconPositionIs(L"centerLeft") || BadgeIconPositionIs(L"bottomLeft");
+        bool isRight = BadgeIconPositionIs(L"topRight") || BadgeIconPositionIs(L"centerRight") || BadgeIconPositionIs(L"bottomRight");
+
+        int shadowPad = g_settings.showBadgeIconBackgroundShadow ? DpiScale(6, dpiY) : 0;
+        int shadowPadX = g_settings.showBadgeIconBackgroundShadow ? DpiScale(6, dpiX) : 0;
+
+        int bIconOffY = DpiScale(g_settings.badgeIconOffsetY, dpiY) + shadowPad;
+        int bIconOffX = DpiScale(g_settings.badgeIconOffsetX, dpiX) + shadowPadX;
+        
+        int bIconOffYNeg = DpiScale(g_settings.badgeIconOffsetY, dpiY) - shadowPad;
+        int bIconOffXNeg = DpiScale(g_settings.badgeIconOffsetX, dpiX) - shadowPadX;
+        
+        int minGapY = DpiScale(8, dpiY);
+        int minGapX = DpiScale(8, dpiX);
+        
+        if (bIconOffY > 0 && isBottom && thumbTop) {
+            int extra = bIconOffY + minGapY - activePadDivider;
+            if (extra > 0) activePadDivider += extra;
+        } else if (bIconOffY > 0 && isBottom && !thumbTop) {
+            int extra = bIconOffY + minGapY - padBot;
+            if (extra > 0) padBot += extra;
+        }
+        
+        if (bIconOffYNeg < 0 && isTop && thumbBottom) {
+            int extra = abs(bIconOffYNeg) + minGapY - activePadDivider;
+            if (extra > 0) activePadDivider += extra;
+        } else if (bIconOffYNeg < 0 && isTop && !thumbBottom) {
+            int extra = abs(bIconOffYNeg) + minGapY - padTop;
+            if (extra > 0) padTop += extra;
+        }
+
+        if (bIconOffX > 0 && isRight) {
+            int extra = bIconOffX + minGapX - padRight;
+            if (extra > 0) padRight += extra;
+        }
+        if (bIconOffXNeg < 0 && isLeft) {
+            int extra = abs(bIconOffXNeg) + minGapX - padLeft;
+            if (extra > 0) padLeft += extra;
+        }
+    }
+    
+    g_activePadDivider = activePadDivider;
+    
     int headerAndDividerH = rowTitleH + activePadDivider;
     int thumbTopOffset = padTop + (thumbBottom ? headerAndDividerH : 0);
     int initialTop  = elemPadTop + thumbTopOffset;
@@ -2053,6 +2302,115 @@ static COLORREF GetBgColor() {
                         SWS_BG_LIGHT);
 }
 
+static COLORREF GetIconBackgroundColor() {
+    if (g_isDarkMode) {
+        return ResolveColor(g_settings.iconBgColorModeDark,
+                            g_settings.customIconBgColorDark,
+                            RGB(0, 0, 0));
+    }
+    return ResolveColor(g_settings.iconBgColorModeLight,
+                        g_settings.customIconBgColorLight,
+                        RGB(255, 255, 255));
+}
+
+static COLORREF GetIndicatorBackgroundColor() {
+    if (g_isDarkMode) {
+        return ResolveColor(g_settings.indicatorBgColorModeDark,
+                            g_settings.customIndicatorBgColorDark,
+                            RGB(51, 51, 51)); // #333333
+    }
+    return ResolveColor(g_settings.indicatorBgColorModeLight,
+                        g_settings.customIndicatorBgColorLight,
+                        RGB(234, 234, 234)); // #EAEAEA
+}
+
+static COLORREF GetIndicatorTextColor() {
+    if (g_isDarkMode) {
+        return ResolveColor(g_settings.indicatorTextColorModeDark,
+                            g_settings.customIndicatorTextColorDark,
+                            RGB(255, 255, 255)); // #FFFFFF
+    }
+    return ResolveColor(g_settings.indicatorTextColorModeLight,
+                        g_settings.customIndicatorTextColorLight,
+                        RGB(0, 0, 0)); // #000000
+}
+
+static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int height, float shadowAlphaMult) {
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    
+    void* pBlackBits = nullptr;
+    void* pWhiteBits = nullptr;
+    HDC hdc = GetDC(NULL);
+    HBITMAP hBmpBlack = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &pBlackBits, NULL, 0);
+    HBITMAP hBmpWhite = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &pWhiteBits, NULL, 0);
+    
+    if (!hBmpBlack || !hBmpWhite) {
+        if (hBmpBlack) DeleteObject(hBmpBlack);
+        if (hBmpWhite) DeleteObject(hBmpWhite);
+        ReleaseDC(NULL, hdc);
+        return nullptr;
+    }
+    
+    HDC hdcMem = CreateCompatibleDC(hdc);
+    
+    // Draw on black
+    HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmpBlack);
+    RECT rc = {0, 0, width, height};
+    HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
+    FillRect(hdcMem, &rc, blackBrush);
+    DrawIconEx(hdcMem, 0, 0, hIcon, width, height, 0, NULL, DI_NORMAL);
+    DeleteObject(blackBrush);
+    
+    // Draw on white
+    SelectObject(hdcMem, hBmpWhite);
+    HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
+    FillRect(hdcMem, &rc, whiteBrush);
+    DrawIconEx(hdcMem, 0, 0, hIcon, width, height, 0, NULL, DI_NORMAL);
+    DeleteObject(whiteBrush);
+    
+    SelectObject(hdcMem, hOld);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdc);
+    
+    // Compute alpha and create shadow bitmap
+    BYTE* shadowBits = new BYTE[width * height * 4];
+    BYTE* blackPtr = (BYTE*)pBlackBits;
+    BYTE* whitePtr = (BYTE*)pWhiteBits;
+    
+    for (int i = 0; i < width * height; ++i) {
+        int idx = i * 4;
+        int whiteB = whitePtr[idx];
+        int blackB = blackPtr[idx];
+        
+        int a = 255 - (whiteB - blackB);
+        if (a < 0) a = 0;
+        if (a > 255) a = 255;
+        
+        int finalAlpha = (int)(a * shadowAlphaMult);
+        if (finalAlpha > 255) finalAlpha = 255;
+        
+        shadowBits[idx] = 0;     // B
+        shadowBits[idx+1] = 0;   // G
+        shadowBits[idx+2] = 0;   // R
+        shadowBits[idx+3] = (BYTE)finalAlpha; // A
+    }
+    
+    Gdiplus::Bitmap* shadowBmp = new Gdiplus::Bitmap(width, height, width * 4, PixelFormat32bppARGB, shadowBits);
+    Gdiplus::Bitmap* shadowBmpCopy = shadowBmp->Clone(0, 0, width, height, PixelFormat32bppARGB);
+    delete shadowBmp;
+    delete[] shadowBits;
+    DeleteObject(hBmpBlack);
+    DeleteObject(hBmpWhite);
+    
+    return shadowBmpCopy;
+}
+
 static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
     if (radiusPx <= 0) {
         return;
@@ -2255,13 +2613,18 @@ static RECT GetHeaderContentRectForEntry(const WindowEntry& e) {
                                     ? e.rcThumbSlot
                                     : e.rcThumbActual;
 
-    if (ThumbnailIsTop()) {
-        int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiY);
-        rc.top = rcHeaderSplit.bottom + divider;
-    } else if (ThumbnailIsBottom()) {
-        int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiY);
-        rc.bottom = rcHeaderSplit.top - divider;
-    } else if (ThumbnailIsSide()) {
+    // In badge mode the title position is controlled by badgeTitlePosition, not thumbnailPosition.
+    // "title on top" → thumb on bottom → header rect is above the thumb (ThumbnailIsBottom semantics)
+    // "title on bottom" → thumb on top → header rect is below the thumb (ThumbnailIsTop semantics)
+    bool effectiveThumbTop = BadgeLayoutActive() ? !BadgeTitleIsTop() : ThumbnailIsTop();
+    bool effectiveThumbBottom = BadgeLayoutActive() ? BadgeTitleIsTop() : ThumbnailIsBottom();
+    bool effectiveThumbSide = BadgeLayoutActive() ? false : ThumbnailIsSide();
+
+    if (effectiveThumbTop) {
+        rc.top = rcHeaderSplit.bottom + g_activePadDivider;
+    } else if (effectiveThumbBottom) {
+        rc.bottom = rcHeaderSplit.top - g_activePadDivider;
+    } else if (effectiveThumbSide) {
         int divider = DpiScale(SWS_PAD_DIVIDER, g_dpiX);
         if (ThumbnailIsLeft()) {
             rc.left = rcHeaderSplit.right + divider;
@@ -2278,6 +2641,9 @@ static RECT GetHeaderContentRectForEntry(const WindowEntry& e) {
 static int GetHeaderTopForEntry(const WindowEntry& e) {
     RECT rcHeader = GetHeaderContentRectForEntry(e);
     int rowTitleH = GetHeaderRowHeightPx();
+    if (BadgeLayoutActive()) {
+        rowTitleH = g_settings.showTitle ? GetHeaderTitleHeightPx() : 0;
+    }
     if (rowTitleH <= 0) {
         return rcHeader.top;
     }
@@ -2343,6 +2709,34 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
         }
 
         int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
+
+        // ---- Badge layout rendering path ----
+        if (BadgeLayoutActive()) {
+            // Badge title: draw centered in the header content rect
+            if (g_settings.showTitle && e.title[0]) {
+                RECT rcHeaderContent = GetHeaderContentRectForEntry(e);
+                int titleH = GetHeaderTitleHeightPx();
+                int headerTop = GetHeaderTopForEntry(e);
+                RECT rcText = { rcHeaderContent.left, headerTop, rcHeaderContent.right, headerTop + titleH };
+                if (g_hTheme) {
+                    DTTOPTS opts = { sizeof(DTTOPTS) };
+                    opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
+                    opts.crText = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+                    DrawThemeTextEx(g_hTheme, hdc, 0, 0, e.title, -1,
+                        DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX, &rcText, &opts);
+                } else {
+                    SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
+                    DrawTextW(hdc, e.title, -1, &rcText,
+                              DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+                }
+            }
+
+            // Badge icon is drawn in DrawSwitcherOverlay so it appears
+            // above the DWM thumbnail (which composites on top of window content).
+            continue;  // Skip normal header content rendering
+        }
+
+        // ---- Normal (non-badge) header content rendering ----
         // Keep centered header content stable: reserve close-button space consistently.
         // In vertical mode, never reserve space - close button overlays without displacement.
         int btnReserve = 0;
@@ -2409,8 +2803,16 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
         }
 
         // Icon
-        if (g_settings.showIcon && e.hIcon) DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
-
+        if (g_settings.showIcon && e.hIcon) {
+            e.drawnIconX = iconX;
+            e.drawnIconY = iconY;
+            e.drawnIconSz = iconSz;
+            DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        } else {
+            e.drawnIconX = contentLeft;
+            e.drawnIconY = headerTop;
+            e.drawnIconSz = 0;
+        }
         // Title text
         if (g_settings.showTitle) {
             RECT rcText = { textLeft, textTop, textRight, textBottom };
@@ -2465,11 +2867,115 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             DrawContour(hdc, e.rcThumbActual, 1, -1, cornerRadius);
         }
 
+        // Badge layout: draw icon overlay on thumbnail (must be in overlay layer
+        // because DWM thumbnails composite on top of window content)
+        if (BadgeLayoutActive() && g_settings.showIcon && e.hIcon) {
+            int iconSz = GetHeaderIconSizePx();
+            int thumbW = e.rcThumbActual.right - e.rcThumbActual.left;
+            int thumbHt = e.rcThumbActual.bottom - e.rcThumbActual.top;
+            if (thumbW > 0 && thumbHt > 0) {
+                int badgePad = DpiScale(g_settings.badgeIconPadding, g_dpiX);
+                int bIconX = 0, bIconY = 0;
+
+                // Horizontal positioning
+                if (BadgeIconPositionIs(L"topLeft") || BadgeIconPositionIs(L"centerLeft") || BadgeIconPositionIs(L"bottomLeft")) {
+                    bIconX = e.rcThumbActual.left + badgePad;
+                } else if (BadgeIconPositionIs(L"topRight") || BadgeIconPositionIs(L"centerRight") || BadgeIconPositionIs(L"bottomRight")) {
+                    bIconX = e.rcThumbActual.right - iconSz - badgePad;
+                } else {
+                    bIconX = e.rcThumbActual.left + (thumbW - iconSz) / 2;
+                }
+                // Vertical positioning
+                if (BadgeIconPositionIs(L"topLeft") || BadgeIconPositionIs(L"topCenter") || BadgeIconPositionIs(L"topRight")) {
+                    bIconY = e.rcThumbActual.top + badgePad;
+                } else if (BadgeIconPositionIs(L"bottomLeft") || BadgeIconPositionIs(L"bottomCenter") || BadgeIconPositionIs(L"bottomRight")) {
+                    bIconY = e.rcThumbActual.bottom - iconSz - badgePad;
+                } else {
+                    bIconY = e.rcThumbActual.top + (thumbHt - iconSz) / 2;
+                }
+
+                bIconX += DpiScale(g_settings.badgeIconOffsetX, g_dpiX);
+                bIconY += DpiScale(g_settings.badgeIconOffsetY, g_dpiY);
+
+                e.drawnIconX = bIconX;
+                e.drawnIconY = bIconY;
+                e.drawnIconSz = iconSz;
+
+                Gdiplus::Graphics gfx(hdc);
+                gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+
+                if (g_settings.showBadgeIconBackground) {
+                    int bgSize = iconSz + badgePad * 2;
+                    int bgX = bIconX - badgePad;
+                    int bgY = bIconY - badgePad;
+                    
+                    COLORREF bgC = GetIconBackgroundColor();
+                    int op = g_isDarkMode ? g_settings.iconBgOpacityDark : g_settings.iconBgOpacityLight;
+                    int alpha = (op * 255) / 100;
+                    Gdiplus::SolidBrush bgBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+                    
+                    Gdiplus::REAL r = (Gdiplus::REAL)GetBadgeIconBackgroundCornerRadiusPx(bgSize / 2);
+                    
+                    if (g_settings.showBadgeIconBackgroundShadow) {
+                        for (int pass = 5; pass > 0; --pass) {
+                            int shadowAlpha = 15 - (pass * 2);
+                            if (shadowAlpha < 1) shadowAlpha = 1;
+                            Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
+                            int sp = pass;
+                            if (r > 0) {
+                                Gdiplus::GraphicsPath sPath;
+                                Gdiplus::REAL sw = (Gdiplus::REAL)(bgSize + sp * 2), sh = sw;
+                                Gdiplus::REAL sx = (Gdiplus::REAL)(bgX - sp), sy = (Gdiplus::REAL)(bgY - sp + 1);
+                                Gdiplus::REAL sd = r * 2 + sp * 2;
+                                if (sd > sw) sd = sw; if (sd > sh) sd = sh;
+                                sPath.AddArc(sx, sy, sd, sd, 180, 90);
+                                sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
+                                sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
+                                sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
+                                sPath.CloseFigure();
+                                gfx.FillPath(&shadowBrush, &sPath);
+                            } else {
+                                gfx.FillRectangle(&shadowBrush, bgX - sp, bgY - sp + 1, bgSize + sp * 2, bgSize + sp * 2);
+                            }
+                        }
+                    }
+
+                    if (r > 0) {
+                        Gdiplus::GraphicsPath path;
+                        Gdiplus::REAL w = (Gdiplus::REAL)bgSize, h = (Gdiplus::REAL)bgSize;
+                        Gdiplus::REAL x = (Gdiplus::REAL)bgX, y = (Gdiplus::REAL)bgY;
+                        Gdiplus::REAL d = r * 2;
+                        if (d > w) d = w; if (d > h) d = h;
+                        path.AddArc(x, y, d, d, 180, 90);
+                        path.AddArc(x + w - d, y, d, d, 270, 90);
+                        path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+                        path.AddArc(x, y + h - d, d, d, 90, 90);
+                        path.CloseFigure();
+                        gfx.FillPath(&bgBrush, &path);
+                    } else {
+                        gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
+                    }
+                    DrawIconEx(hdc, bIconX, bIconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+                } else {
+                    Gdiplus::Bitmap* pBmp = CreateIconShadowBitmap(e.hIcon, iconSz, iconSz, 0.08f);
+                    if (pBmp) {
+                        int dx[] = { 0, 1, 0, -1, 1 };
+                        int dy[] = { 1, 0, -1, 0, 1 };
+                        for (int p = 0; p < 5; ++p) {
+                            gfx.DrawImage(pBmp, bIconX + DpiScale(dx[p], g_dpiX), bIconY + DpiScale(dy[p] + 2, g_dpiY), iconSz, iconSz);
+                        }
+                        delete pBmp;
+                    }
+                    DrawIconEx(hdc, bIconX, bIconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+                }
+            }
+        }
+
         // Close button (positioned at top-right of the cell, in title area)
         if (i == g_hoverIndex && g_hoverWnd == hWnd) {
             int btnSz = DpiScale(24, g_dpiX);
             int bx, by;
-            if (rowTitleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide())) {
+            if (rowTitleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide()) || BadgeLayoutActive()) {
                 int btnPadding = DpiScale(4, g_dpiX);
                 bx = e.rcThumbActual.right - btnSz - btnPadding;
                 by = e.rcThumbActual.top + btnPadding;
@@ -2540,6 +3046,114 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             int p = (btnSz == DpiScale(16, g_dpiX)) ? DpiScale(4, g_dpiX) : DpiScale(7, g_dpiX);
             graphics.DrawLine(&xPen, bx + p, by + p, bx + btnSz - p, by + btnSz - p);
             graphics.DrawLine(&xPen, bx + btnSz - p, by + p, bx + p, by + btnSz - p);
+        }
+
+        // Grouped window count badge
+        if (g_settings.showGroupIndicator && g_settings.showApplications &&
+            e.groupWindows.size() > 1) {
+            Gdiplus::Graphics gfx(hdc);
+            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+
+            // Badge text
+            WCHAR countText[8];
+            _snwprintf_s(countText, ARRAYSIZE(countText), _TRUNCATE, L"%d", (int)e.groupWindows.size());
+
+            // Badge font
+            int badgeFontSz = DpiScale(10, g_dpiX);
+            int fontStyle = Gdiplus::FontStyleBold;
+            LPCWSTR family = L"Segoe UI";
+            if (g_settings.applyToGroupIndicator && g_settings.fontFamily[0]) {
+                family = g_settings.fontFamily;
+                badgeFontSz = MulDiv(g_settings.fontSize, g_dpiY, 72);
+                if (wcscmp(g_settings.fontStyle, L"regular") == 0 || wcscmp(g_settings.fontStyle, L"light") == 0) fontStyle = Gdiplus::FontStyleRegular;
+                else if (wcscmp(g_settings.fontStyle, L"semibold") == 0 || wcscmp(g_settings.fontStyle, L"bold") == 0) fontStyle = Gdiplus::FontStyleBold;
+                else if (wcscmp(g_settings.fontStyle, L"italic") == 0) fontStyle = Gdiplus::FontStyleItalic;
+                else if (wcscmp(g_settings.fontStyle, L"boldItalic") == 0) fontStyle = Gdiplus::FontStyleBoldItalic;
+            }
+            Gdiplus::Font badgeFont(family, (Gdiplus::REAL)badgeFontSz, fontStyle, Gdiplus::UnitPixel);
+
+            // Measure text
+            Gdiplus::StringFormat sf;
+            sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+            sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+            Gdiplus::RectF measureRect(0, 0, 100, 100);
+            Gdiplus::RectF textBounds;
+            gfx.MeasureString(countText, -1, &badgeFont, measureRect, &sf, &textBounds);
+
+            int badgePadX = DpiScale(4, g_dpiX);
+            int badgePadY = DpiScale(2, g_dpiY);
+            int badgeW = (int)(textBounds.Width + badgePadX * 2);
+            int badgeH = (int)(textBounds.Height + badgePadY * 2);
+            int minW = badgeH;  // pill shape: at least as wide as tall
+            if (badgeW < minW) badgeW = minW;
+
+            // Position: top-right area of the icon
+            int badgeX, badgeY;
+            if (e.drawnIconSz > 0) {
+                badgeX = e.drawnIconX + e.drawnIconSz - (badgeW / 2);
+                badgeY = e.drawnIconY - (badgeH / 2);
+            } else {
+                int cellPad = DpiScale(4, g_dpiX);
+                badgeX = e.rcCell.right - badgeW - cellPad;
+                badgeY = e.rcCell.top + cellPad;
+            }
+
+            // Background pill
+            COLORREF bgC = GetIndicatorBackgroundColor();
+            int op = g_isDarkMode ? g_settings.indicatorBgOpacityDark : g_settings.indicatorBgOpacityLight;
+            int alpha = (op * 255) / 100;
+            Gdiplus::SolidBrush pillBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+            Gdiplus::REAL pillRadius = (Gdiplus::REAL)GetGroupIndicatorCornerRadiusPx(badgeH / 2);
+            
+            if (g_settings.showGroupIndicatorShadow) {
+                for (int pass = 5; pass > 0; --pass) {
+                    int shadowAlpha = 15 - (pass * 2);
+                    if (shadowAlpha < 1) shadowAlpha = 1;
+                    Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
+                    int sp = pass;
+                    Gdiplus::REAL sx = (Gdiplus::REAL)(badgeX - sp);
+                    Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp + 1);
+                    Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
+                    Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
+                    Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
+                    if (sd > sw) sd = sw; if (sd > sh) sd = sh;
+                    
+                    if (pillRadius > 0) {
+                        Gdiplus::GraphicsPath sPath;
+                        sPath.AddArc(sx, sy, sd, sd, 180, 90);
+                        sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
+                        sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
+                        sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
+                        sPath.CloseFigure();
+                        gfx.FillPath(&shadowBrush, &sPath);
+                    } else {
+                        gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
+                    }
+                }
+            }
+
+            if (pillRadius > 0) {
+                Gdiplus::GraphicsPath pillPath;
+                Gdiplus::REAL d = pillRadius * 2.0f;
+                Gdiplus::REAL px = (Gdiplus::REAL)badgeX, py = (Gdiplus::REAL)badgeY;
+                Gdiplus::REAL pw = (Gdiplus::REAL)badgeW, ph = (Gdiplus::REAL)badgeH;
+                pillPath.AddArc(px, py, d, d, 180, 90);
+                pillPath.AddArc(px + pw - d, py, d, d, 270, 90);
+                pillPath.AddArc(px + pw - d, py + ph - d, d, d, 0, 90);
+                pillPath.AddArc(px, py + ph - d, d, d, 90, 90);
+                pillPath.CloseFigure();
+                gfx.FillPath(&pillBrush, &pillPath);
+            } else {
+                gfx.FillRectangle(&pillBrush, badgeX, badgeY, badgeW, badgeH);
+            }
+
+            // Badge text
+            COLORREF txtC = GetIndicatorTextColor();
+            Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, GetRValue(txtC), GetGValue(txtC), GetBValue(txtC)));
+            Gdiplus::RectF pillRect((Gdiplus::REAL)badgeX, (Gdiplus::REAL)badgeY,
+                                    (Gdiplus::REAL)badgeW, (Gdiplus::REAL)badgeH);
+            gfx.DrawString(countText, -1, &badgeFont, pillRect, &sf, &textBrush);
         }
     }
 }
@@ -3234,13 +3848,72 @@ static int HitTestThumb(int x, int y) {
 
 static void SWS_RegisterHotkeys();
 
+static void UpdateEntryForWindow(WindowEntry& e) {
+    InternalGetWindowText(e.hWnd, e.title, 256);
+    if (!e.title[0]) GetWindowTextW(e.hWnd, e.title, 256);
+    e.hIcon = LoadWindowIcon(e.hWnd);
+
+    if (g_settings.showApplications && wcscmp(g_settings.showTitles, L"windowTitle") != 0) {
+        WCHAR appName[256] = {0};
+        GetAppName(e.hWnd, appName, ARRAYSIZE(appName));
+        if (appName[0]) {
+            if (_wcsicmp(appName, L"Application Frame Host") == 0 && e.title[0]) {
+                wcscpy_s(appName, e.title);
+            }
+            if (wcscmp(g_settings.showTitles, L"appName") == 0) {
+                wcscpy_s(e.title, appName);
+            } else {  // appNameWindowTitle
+                if (e.title[0]) {
+                    WCHAR combined[256];
+                    _snwprintf_s(combined, ARRAYSIZE(combined), _TRUNCATE,
+                                 L"%s - %s", appName, e.title);
+                    wcscpy_s(e.title, combined);
+                } else {
+                    wcscpy_s(e.title, appName);
+                }
+            }
+        }
+    }
+}
+
 // Close the window for the entry at idx (graceful WM_CLOSE, same as the close
 // button), remove it from the list and relayout. Shared by the close button,
 // middle-click and the Q key.
 static void CloseSwitcherEntry(int idx) {
     if (idx < 0 || idx >= (int)g_windows.size()) return;
-    PostMessage(g_windows[idx].hWnd, WM_CLOSE, 0, 0);
-    g_windows.erase(g_windows.begin() + idx);
+    
+    bool eraseEntry = true;
+    if (g_settings.showApplications && g_windows[idx].groupWindows.size() > 1) {
+        if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") == 0) {
+            for (HWND hw : g_windows[idx].groupWindows) {
+                PostMessage(hw, WM_CLOSE, 0, 0);
+            }
+        } else {
+            // closeRecent (Default)
+            HWND closedHwnd = g_windows[idx].hWnd;
+            PostMessage(closedHwnd, WM_CLOSE, 0, 0);
+            
+            auto& group = g_windows[idx].groupWindows;
+            group.erase(std::remove(group.begin(), group.end(), closedHwnd), group.end());
+            
+            if (!group.empty()) {
+                eraseEntry = false;
+                g_windows[idx].hWnd = group[0];
+                UpdateEntryForWindow(g_windows[idx]);
+                for (const auto& kv : g_windows[idx].hThumbs) {
+                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                }
+                g_windows[idx].hThumbs.clear();
+            }
+        }
+    } else {
+        PostMessage(g_windows[idx].hWnd, WM_CLOSE, 0, 0);
+    }
+
+    if (eraseEntry) {
+        g_windows.erase(g_windows.begin() + idx);
+    }
+
     if (g_windows.empty()) { HideSwitcher(); return; }
     if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
     UnregisterThumbnails();
@@ -3498,7 +4171,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             int titleH = GetHeaderRowHeightPx();
             int btnSz = DpiScale(24, g_dpiX);
             int bx, by;
-            if (titleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide())) {
+            if (titleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide()) || BadgeLayoutActive()) {
                 int btnPadding = DpiScale(4, g_dpiX);
                 bx = e.rcThumbActual.right - btnSz - btnPadding;
                 by = e.rcThumbActual.top + btnPadding;
@@ -3675,6 +4348,8 @@ static void LoadSettings() {
     if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
     g_settings.taskRoundedCorners = Wh_GetIntSetting(L"Appearance.Corners.taskRoundedCorners");
     g_settings.roundThumbnailCorners = Wh_GetIntSetting(L"Appearance.Corners.roundThumbnailCorners");
+    g_settings.roundGroupIndicator = Wh_GetIntSetting(L"Appearance.Corners.roundGroupIndicator");
+    g_settings.roundBadgeIconBackground = Wh_GetIntSetting(L"Appearance.Corners.roundBadgeIconBackground");
     v = Wh_GetStringSetting(L"Accessibility.scrollWheelBehavior");
     wcscpy_s(g_settings.scrollWheelBehavior, v ? v : L"never"); Wh_FreeStringSetting(v);
     v = Wh_GetStringSetting(L"Appearance.Orientation.taskListOrientation");
@@ -3781,6 +4456,42 @@ static void LoadSettings() {
     }
     g_settings.centerTaskContent = Wh_GetIntSetting(L"Appearance.HeaderContent.centerTaskContent");
 
+    // Badge layout settings
+    g_settings.enableBadgeLayout = Wh_GetIntSetting(L"Appearance.BadgeLayout.enableBadgeLayout");
+    v = Wh_GetStringSetting(L"Appearance.BadgeLayout.badgeIconPosition");
+    wcscpy_s(g_settings.badgeIconPosition, v ? v : L"bottomCenter"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.badgeIconPosition, L"topLeft") != 0 &&
+        wcscmp(g_settings.badgeIconPosition, L"topCenter") != 0 &&
+        wcscmp(g_settings.badgeIconPosition, L"topRight") != 0 &&
+        wcscmp(g_settings.badgeIconPosition, L"centerLeft") != 0 &&
+        wcscmp(g_settings.badgeIconPosition, L"center") != 0 &&
+        wcscmp(g_settings.badgeIconPosition, L"centerRight") != 0 &&
+        wcscmp(g_settings.badgeIconPosition, L"bottomLeft") != 0 &&
+        wcscmp(g_settings.badgeIconPosition, L"bottomCenter") != 0 &&
+        wcscmp(g_settings.badgeIconPosition, L"bottomRight") != 0) {
+        wcscpy_s(g_settings.badgeIconPosition, L"bottomCenter");
+    }
+    v = Wh_GetStringSetting(L"Appearance.BadgeLayout.badgeTitlePosition");
+    wcscpy_s(g_settings.badgeTitlePosition, v ? v : L"bottom"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.badgeTitlePosition, L"top") != 0 &&
+        wcscmp(g_settings.badgeTitlePosition, L"bottom") != 0) {
+        wcscpy_s(g_settings.badgeTitlePosition, L"bottom");
+    }
+    g_settings.showBadgeIconBackground = Wh_GetIntSetting(L"Appearance.BadgeLayout.showBadgeIconBackground");
+    g_settings.showBadgeIconBackgroundShadow = Wh_GetIntSetting(L"Appearance.BadgeLayout.showBadgeIconBackgroundShadow");
+    g_settings.badgeIconPadding = Wh_GetIntSetting(L"Appearance.BadgeLayout.badgeIconPadding");
+    g_settings.badgeIconOffsetX = Wh_GetIntSetting(L"Appearance.BadgeLayout.badgeIconOffsetX");
+    g_settings.badgeIconOffsetY = Wh_GetIntSetting(L"Appearance.BadgeLayout.badgeIconOffsetY");
+
+    // Grouped indicator
+    g_settings.showGroupIndicator = Wh_GetIntSetting(L"Grouping.showGroupIndicator");
+    g_settings.showGroupIndicatorShadow = Wh_GetIntSetting(L"Grouping.showGroupIndicatorShadow");
+    v = Wh_GetStringSetting(L"Grouping.groupCloseBehavior");
+    wcscpy_s(g_settings.groupCloseBehavior, v ? v : L"closeRecent"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") != 0 &&
+        wcscmp(g_settings.groupCloseBehavior, L"closeRecent") != 0) {
+        wcscpy_s(g_settings.groupCloseBehavior, L"closeRecent");
+    }
 
     // Global theme settings (apply to both light and dark)
     v = Wh_GetStringSetting(L"Style.highlightStyle");
@@ -3807,6 +4518,27 @@ static void LoadSettings() {
     wcscpy_s(g_settings.customHighlightFillColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
     v = Wh_GetStringSetting(L"Style.DarkMode.customBgColor");
     wcscpy_s(g_settings.customBgColorDark, v ? v : L"#202020"); Wh_FreeStringSetting(v);
+    
+    v = Wh_GetStringSetting(L"Style.DarkMode.iconBgColorMode");
+    wcscpy_s(g_settings.iconBgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.DarkMode.customIconBgColor");
+    wcscpy_s(g_settings.customIconBgColorDark, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+    g_settings.iconBgOpacityDark = Wh_GetIntSetting(L"Style.DarkMode.iconBgOpacity");
+    if (g_settings.iconBgOpacityDark < 0) g_settings.iconBgOpacityDark = 0;
+    if (g_settings.iconBgOpacityDark > 100) g_settings.iconBgOpacityDark = 100;
+
+    v = Wh_GetStringSetting(L"Style.DarkMode.indicatorBgColorMode");
+    wcscpy_s(g_settings.indicatorBgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.DarkMode.customIndicatorBgColor");
+    wcscpy_s(g_settings.customIndicatorBgColorDark, v ? v : L"#333333"); Wh_FreeStringSetting(v);
+    g_settings.indicatorBgOpacityDark = Wh_GetIntSetting(L"Style.DarkMode.indicatorBgOpacity");
+    if (g_settings.indicatorBgOpacityDark < 0) g_settings.indicatorBgOpacityDark = 0;
+    if (g_settings.indicatorBgOpacityDark > 100) g_settings.indicatorBgOpacityDark = 100;
+    
+    v = Wh_GetStringSetting(L"Style.DarkMode.indicatorTextColorMode");
+    wcscpy_s(g_settings.indicatorTextColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.DarkMode.customIndicatorTextColor");
+    wcscpy_s(g_settings.customIndicatorTextColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
 
     // Light Mode color settings
     v = Wh_GetStringSetting(L"Style.LightMode.borderColorMode");
@@ -3822,6 +4554,27 @@ static void LoadSettings() {
     v = Wh_GetStringSetting(L"Style.LightMode.customBgColor");
     wcscpy_s(g_settings.customBgColorLight, v ? v : L"#F3F3F3"); Wh_FreeStringSetting(v);
 
+    v = Wh_GetStringSetting(L"Style.LightMode.iconBgColorMode");
+    wcscpy_s(g_settings.iconBgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.LightMode.customIconBgColor");
+    wcscpy_s(g_settings.customIconBgColorLight, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
+    g_settings.iconBgOpacityLight = Wh_GetIntSetting(L"Style.LightMode.iconBgOpacity");
+    if (g_settings.iconBgOpacityLight < 0) g_settings.iconBgOpacityLight = 0;
+    if (g_settings.iconBgOpacityLight > 100) g_settings.iconBgOpacityLight = 100;
+
+    v = Wh_GetStringSetting(L"Style.LightMode.indicatorBgColorMode");
+    wcscpy_s(g_settings.indicatorBgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.LightMode.customIndicatorBgColor");
+    wcscpy_s(g_settings.customIndicatorBgColorLight, v ? v : L"#EAEAEA"); Wh_FreeStringSetting(v);
+    g_settings.indicatorBgOpacityLight = Wh_GetIntSetting(L"Style.LightMode.indicatorBgOpacity");
+    if (g_settings.indicatorBgOpacityLight < 0) g_settings.indicatorBgOpacityLight = 0;
+    if (g_settings.indicatorBgOpacityLight > 100) g_settings.indicatorBgOpacityLight = 100;
+    
+    v = Wh_GetStringSetting(L"Style.LightMode.indicatorTextColorMode");
+    wcscpy_s(g_settings.indicatorTextColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
+    v = Wh_GetStringSetting(L"Style.LightMode.customIndicatorTextColor");
+    wcscpy_s(g_settings.customIndicatorTextColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+
     v = Wh_GetStringSetting(L"Appearance.Font.fontFamily");
     wcscpy_s(g_settings.fontFamily, v ? v : L"Segoe UI"); Wh_FreeStringSetting(v);
     
@@ -3830,6 +4583,8 @@ static void LoadSettings() {
 
     v = Wh_GetStringSetting(L"Appearance.Font.fontStyle");
     wcscpy_s(g_settings.fontStyle, v ? v : L"regular"); Wh_FreeStringSetting(v);
+
+    g_settings.applyToGroupIndicator = Wh_GetIntSetting(L"Appearance.Font.applyToGroupIndicator");
 
     v = Wh_GetStringSetting(L"Accessibility.switcherDisplayBehavior");
     wcscpy_s(g_settings.switcherDisplayBehavior, v ? v : L"cursorMonitor"); Wh_FreeStringSetting(v);
