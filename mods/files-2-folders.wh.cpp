@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         1.4
+// @version         1.6
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -20,7 +20,10 @@ When one or more items are selected in an Explorer window, adds a
 **Files 2 Folder...** entry to the right-click context menu. Choosing it opens
 a dialog with four options for moving the selection into a new subfolder:
 
-1. Move the selection into a subfolder with a fixed name (e.g. `folder`).
+1. Move the selection into a subfolder with a fixed name (defaults to the
+   localized Windows "New folder" name; e.g. `New folder`). If a folder of
+   that name already exists, the new one is numbered `New folder (2)`,
+   `New folder (3)`, etc. — the same way Explorer numbers duplicates.
 2. Move each file into a subfolder named after the file (without extension):
    `Good.bat` -> `.\Good\Good.bat`. With a single file selected, this just
    creates one folder around that file.
@@ -33,7 +36,12 @@ a dialog with four options for moving the selection into a new subfolder:
 Folders inside the selection are skipped for modes 2 and 3 (they only make
 sense for files); they are still moved for modes 1 and 4.
 
-This works in both Explorer folder windows and on the **desktop**.
+This works in both Explorer folder windows and on the **desktop**. The entry
+also appears in the classic menu bar's **Edit** dropdown (just after Cut/Copy)
+when the menu bar is shown.
+
+The menu entry and the default subfolder name use Windows' own localized
+strings, so they appear in your OS language automatically.
 
 ## Silent mode
 Enable **Silent mode (right-click menu)** in settings to skip the dialog
@@ -62,6 +70,18 @@ Q-Dir, etc.):
 
 Toggle **Silent** to suppress the help popup when the clipboard is empty.
 
+Ctrl/Alt-based combos use a normal global hotkey. Enabling the **Win** modifier
+switches the workaround to a low-level keyboard hook (the technique PowerToys
+uses) and suppresses the OS default for that combo.
+
+**Important:** bare `Win`+`<letter>` shortcuts (Win+F, Win+E, Win+R, Win+L,
+Win+G, …) are handled by Windows itself, *below* the hook, and **cannot be
+intercepted** — they won't work even with the hook (PowerToys can't remap them
+either). To use the Win key, **pair it with another modifier**: enable Win
+together with Ctrl, Alt, or Shift (e.g. **Win+Shift+F** or **Win+Alt+F**). If
+you don't need a Win-based shortcut, leave Win off and use a Ctrl/Alt combo —
+the hook watches all keystrokes while active and is slightly heavier.
+
 ## Date format
 Uses the same tokens as Win32 `GetDateFormat` / `GetTimeFormat`:
 `yyyy MM dd HH mm ss` etc. Example: `yyyy-MM-dd-HH-mm`.
@@ -73,9 +93,9 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 
 // ==WindhawkModSettings==
 /*
-- defaultSubfolderName: "folder"
+- defaultSubfolderName: ""
   $name: "Default subfolder name (mode 1)"
-  $description: "Pre-filled name for the 'fixed name' option."
+  $description: "Pre-filled name for the \"Fixed name\" option. Leave empty to use Windows' own localized \"New folder\" name (matches your OS language)."
 - defaultMode: fixed
   $name: "Default selected mode"
   $description: "Which radio button is pre-selected when the dialog opens."
@@ -86,31 +106,40 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
   - date: "By date"
 - theme: auto
   $name: "Dialog theme"
-  $description: "Light/dark appearance of the Files 2 Folder dialog."
+  $description: "Light/dark appearance of the \"Files 2 Folder\" dialog."
   $options:
   - auto: "Auto (follow Windows app theme)"
   - light: "Light"
   - dark: "Dark"
 - silentMode: false
   $name: "Silent mode (right-click menu)"
-  $description: "When ON, choosing 'Files 2 Folder...' from the right-click menu skips the dialog and immediately moves the selection using the Default selected mode (and Default subfolder name / Date format) from settings. The hotkey workaround is unaffected and always shows the dialog."
+  $description: |-
+    On: choosing "Files 2 Folder" from the right-click menu skips the dialog and immediately moves the selection, using the "Default selected mode" (with the default subfolder name / date format) from these settings.
+    Off (default): the dialog is shown first.
+    The hotkey workaround is unaffected — it always shows the dialog.
 - nearCutCopy: false
   $name: "Place menu item near Cut/Copy"
-  $description: "When OFF (default), the 'Files 2 Folder...' entry appears at the top of the context menu. When ON, it appears just after Cut/Copy (between Copy and Paste)."
+  $description: |-
+    On: the "Files 2 Folder" entry appears just after Cut/Copy (between Copy and Paste).
+    Off (default): it appears at the top of the menu.
 - slowMode: false
   $name: "Slow mode (safer, with undo)"
   $description: |-
+    On: moves go through the standard Windows file-operation system, so you get the familiar progress dialog, Ctrl+Z undo, the "Replace or skip files?" prompt for conflicts, and a UAC prompt when needed. The trade-off is that it's noticeably slower, especially with hundreds of files.
     Off (default): moves are instant — but there's no Ctrl+Z to undo, no progress bar, and no prompt if a destination needs admin rights (it just fails).
-    On: moves go through the standard Windows file-operation system, so you get the familiar progress dialog, Ctrl+Z undo, the 'Replace or skip files?' prompt for conflicts, and a UAC prompt when needed. The trade-off is that it's noticeably slower, especially with hundreds of files.
 - hotkeyEnabled: true
   $name: "Workaround for other programs"
-  $description: "Registers a global hotkey that works in any file manager (Total Commander, Directory Opus, Files, etc.). Usage: select files in the other program, press Ctrl+C (or Ctrl+X) to copy/cut them, then press the hotkey. The mod reads the file paths from the clipboard, asks where to move them, and performs the operation. The destination is the parent folder of the first selected file. Disable this if it conflicts with another program's shortcut."
+  $description: |-
+    On (default): registers a global hotkey that works in any file manager (Total Commander, Directory Opus, Files, etc.). Usage: select files in the other program, press Ctrl+C (or Ctrl+X) to copy/cut them, then press the hotkey — the mod reads the file paths from the clipboard, asks where to move them, and moves them into the parent folder of the first selected file.
+    Off: disables the hotkey. Turn it off if it conflicts with another program's shortcut.
 - hotkeySilent: false
   $name: "Silent"
-  $description: "When ON, the hotkey does nothing if the clipboard does not currently hold 2+ file paths (no popup, no sound). Useful if you've reassigned the hotkey to a key combo you press often. When OFF (default), a help popup is shown explaining how to use the workaround."
+  $description: |-
+    On: the hotkey does nothing if the clipboard doesn't hold 2+ file paths (no popup, no sound). Useful if you've reassigned the hotkey to a key combo you press often.
+    Off (default): a help popup explains how to use the workaround.
 - hotkeyChar: "F"
   $name: "Workaround hotkey: key"
-  $description: "Main key (single character A-Z or 0-9)."
+  $description: "Main key (single character A–Z or 0–9)."
 - hotkeyCtrl: true
   $name: "Workaround hotkey: Ctrl"
 - hotkeyAlt: true
@@ -119,6 +148,7 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
   $name: "Workaround hotkey: Shift"
 - hotkeyWin: false
   $name: "Workaround hotkey: Win"
+  $description: "IMPORTANT: bare Win+<letter> shortcuts (Win+F, Win+E, Win+R, Win+L, Win+G, etc.) are handled by Windows itself and CANNOT be intercepted — they will not work even with the keyboard hook. To use the Win key, you MUST combine it with another modifier: enable Win together with Ctrl, Alt, or Shift (e.g. Win+Shift+F or Win+Alt+F). Enabling any Win combo switches the workaround to a low-level keyboard hook (the technique PowerToys uses), which watches all keystrokes while active and is slightly heavier than a plain hotkey — leave Win off and use Ctrl/Alt if you don't need it."
 - dateFormat: "yyyy-MM-dd-HH-mm"
   $name: "Date format (mode 4)"
   $description: |-
@@ -160,9 +190,37 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 #include <shobjidl.h>
 #include <shlwapi.h>
 #include <commctrl.h>
+#include <windhawk_utils.h>
 #include <string>
 #include <vector>
 #include <algorithm>
+
+// ============================================================
+//  Localized strings from shell32.dll
+//
+//  shell32 ships string resources that the shell uses for its own UI, so
+//  pulling them out gives us text that's already translated into the user's
+//  Windows language. We use:
+//    16859 -> "New folder"        (default subfolder name)
+//    30305 -> "Move to a folder"  (context-menu entry; ships with a '&'
+//                                   accelerator and a trailing "..." in some
+//                                   builds, which is exactly what we want)
+//  If a resource is missing (very old/odd builds) we fall back to an English
+//  literal supplied by the caller.
+// ============================================================
+static std::wstring LoadShell32String(UINT id, const wchar_t* fallback) {
+    static HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr,
+                                             LOAD_LIBRARY_AS_DATAFILE);
+    if (hShell32) {
+        // LoadStringW with cchBufferMax == 0 returns a read-only pointer to the
+        // resource and its length, avoiding a guess at the buffer size.
+        LPCWSTR p = nullptr;
+        int len = LoadStringW(hShell32, id, (LPWSTR)&p, 0);
+        if (len > 0 && p)
+            return std::wstring(p, len);
+    }
+    return fallback ? fallback : L"";
+}
 
 // ============================================================
 //  The 4 modes. The string keys here MUST match the defaultMode $options
@@ -211,8 +269,12 @@ struct ModSettings {
 } g_settings;
 
 static void LoadSettings() {
+    // Empty default in the schema means "use the shell's own localized
+    // 'New folder' string" — so the pre-filled name matches the language of
+    // the OS without the user configuring anything.
     PCWSTR s = Wh_GetStringSetting(L"defaultSubfolderName");
-    g_settings.defaultSubfolderName = (s && *s) ? s : L"folder";
+    g_settings.defaultSubfolderName =
+        (s && *s) ? s : LoadShell32String(16859, L"New folder");
     if (s) Wh_FreeStringSetting(s);
 
     s = Wh_GetStringSetting(L"dateFormat");
@@ -255,6 +317,13 @@ void Wh_ModSettingsChanged() {
 //  Custom command id we inject into the shell context menu
 // ============================================================
 static const UINT F2F_MENU_CMD = 0xBF20;  // unlikely to clash with shell ids
+
+// The Cut/Copy command ids vary by menu surface: FCIDM_SHVIEW_CUT/COPY =
+// 31001/31002 in the shell view's own menu, or 25/26 in some legacy menus.
+// One source of truth so the right-click and menu-bar paths agree.
+static bool IsCutCopyId(UINT id) {
+    return id == 31001 || id == 31002 || id == 25 || id == 26;
+}
 
 // State for the currently-tracked menu. thread_local because TrackPopupMenuEx
 // and the matching PostMessageW(WM_COMMAND) always run on the same UI thread,
@@ -520,17 +589,24 @@ static bool GetFolderAndSelectionForHwnd(HWND hwnd,
 //  Direct Win32 move — same-volume = instant rename, no shell UI.
 //  Returns number of successfully moved items.
 // ============================================================
+// Pick a "destDir\leaf" path that doesn't collide with anything already there,
+// numbering duplicates the way Explorer does: "leaf", "leaf (2)", "leaf (3)"...
+// When splitExtension is true (files), the number goes before the extension
+// ("name (2).txt"); when false (folders, which have no extension) it's appended
+// to the whole name ("New folder (2)").
 static std::wstring UniqueDest(const std::wstring& destDir,
-                               const std::wstring& leaf)
+                               const std::wstring& leaf,
+                               bool splitExtension)
 {
-    std::wstring base = leaf;
-    std::wstring ext;
-    size_t dot = leaf.find_last_of(L'.');
-    if (dot != std::wstring::npos && dot != 0) {
-        base = leaf.substr(0, dot);
-        ext  = leaf.substr(dot);
+    std::wstring base = leaf, ext;
+    if (splitExtension) {
+        size_t dot = leaf.find_last_of(L'.');
+        if (dot != std::wstring::npos && dot != 0) {
+            base = leaf.substr(0, dot);
+            ext  = leaf.substr(dot);
+        }
     }
-    std::wstring p = destDir + L"\\" + leaf;
+    std::wstring p = destDir + L"\\" + base + ext;
     if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES)
         return p;
     for (int n = 2; n < 100000; ++n) {
@@ -538,7 +614,7 @@ static std::wstring UniqueDest(const std::wstring& destDir,
         if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES)
             return p;
     }
-    return destDir + L"\\" + leaf;
+    return destDir + L"\\" + base + ext;
 }
 
 static int MoveItemsFast(HWND owner,
@@ -561,7 +637,7 @@ static int MoveItemsFast(HWND owner,
         bool ok = false;
         DWORD lastErr = 0;
         for (int attempt = 0; attempt < 2 && !ok; ++attempt) {
-            std::wstring dst = UniqueDest(destDir, leaf);
+            std::wstring dst = UniqueDest(destDir, leaf, /*splitExtension=*/true);
             if (MoveFileExW(src.c_str(), dst.c_str(), MOVEFILE_COPY_ALLOWED)) {
                 ok = true;
             } else {
@@ -648,7 +724,6 @@ static bool EnsureDir(const std::wstring& path) {
         || IsDirectoryPath(path);
 }
 
-
 static void DoFiles2Folder(HWND owner,
                            F2FMode mode,
                            const std::wstring& folder,
@@ -669,7 +744,10 @@ static void DoFiles2Folder(HWND owner,
                     L"Files 2 Folder", MB_ICONWARNING);
             return;
         }
-        std::wstring dest = folder + L"\\" + sub;
+        // Don't reuse an existing folder of this name — number it like
+        // Explorer does ("New folder", "New folder (2)", ...). Folders have no
+        // extension, so don't split one off.
+        std::wstring dest = UniqueDest(folder, sub, /*splitExtension=*/false);
         if (!EnsureDir(dest)) {
             if (!silent)
                 MessageBoxW(owner, L"Could not create destination folder.",
@@ -1202,6 +1280,63 @@ static bool IsShellViewWindow(HWND hwnd) {
     return false;
 }
 
+// Is our command already present in this menu? Guards against re-inserting
+// when WM_INITMENUPOPUP fires repeatedly for the same popup.
+static bool MenuHasF2FItem(HMENU hmenu) {
+    int count = GetMenuItemCount(hmenu);
+    for (int i = 0; i < count; ++i)
+        if (GetMenuItemID(hmenu, i) == F2F_MENU_CMD) return true;
+    return false;
+}
+
+// Index just past the last Cut/Copy item, or -1 if the menu has neither.
+// Used both to decide whether a menu is "the Edit/clipboard menu" and to find
+// the insert position for the nearCutCopy layout.
+static int MenuPosAfterCutCopy(HMENU hmenu) {
+    int pos = -1;
+    int count = GetMenuItemCount(hmenu);
+    for (int i = 0; i < count; ++i)
+        if (IsCutCopyId(GetMenuItemID(hmenu, i))) pos = i + 1;
+    return pos;
+}
+
+// Insert the "Files 2 Folder" command into a menu, positioned per the
+// nearCutCopy setting. Shared by the right-click (TrackPopupMenuEx) path and
+// the classic menu-bar Edit dropdown (WM_INITMENUPOPUP) path.
+//   nearCutCopy off: top of menu + separator below.
+//   nearCutCopy on : just after the Cut/Copy block.
+static void InsertF2FMenuItem(HMENU hmenu, bool nearCutCopy) {
+    if (MenuHasF2FItem(hmenu)) return;
+
+    // Localized label from shell32 ("Move to a folder..."), English fallback.
+    // Locale-fixed for the process, so resolve it once.
+    static const std::wstring label =
+        LoadShell32String(30305, L"Files 2 &Folder...");
+    if (nearCutCopy) {
+        int insertPos = MenuPosAfterCutCopy(hmenu);
+        if (insertPos < 0) insertPos = 0;  // no Cut/Copy found — top of menu
+        InsertMenuW(hmenu, insertPos, MF_BYPOSITION | MF_STRING,
+                    F2F_MENU_CMD, label.c_str());
+        // Only add a trailing separator if the item we're pushing down isn't
+        // already one — Explorer normally has a separator after the
+        // Cut/Copy/Paste block, and inserting ours next to it would produce a
+        // doubled separator.
+        bool nextIsSeparator = false;
+        if (insertPos + 1 < GetMenuItemCount(hmenu)) {
+            MENUITEMINFOW mii = { sizeof(mii) };
+            mii.fMask = MIIM_FTYPE;
+            if (GetMenuItemInfoW(hmenu, insertPos + 1, TRUE, &mii))
+                nextIsSeparator = (mii.fType & MFT_SEPARATOR) != 0;
+        }
+        if (!nextIsSeparator)
+            InsertMenuW(hmenu, insertPos + 1, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+    } else {
+        InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+        InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_STRING,
+                    F2F_MENU_CMD, label.c_str());
+    }
+}
+
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
                                   int x, int y, HWND hwnd, LPTPMPARAMS lptpm)
 {
@@ -1215,34 +1350,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
         std::wstring folder;
         std::vector<std::wstring> items;
         if (GetFolderAndSelectionForHwnd(hwnd, folder, items) && items.size() >= 1) {
-            // Find the Cut/Copy block and insert just after it.
-            // Explorer's shell context menu uses a small fixed range of
-            // command ids for the built-in clipboard verbs:
-            //   Cut = 25, Copy = 26, Paste = 27, (Paste shortcut = 28).
-            // We walk all items and remember the position after the last id
-            // in {Cut, Copy} we see, so we land between Copy and Paste.
-            // Position depends on the nearCutCopy setting:
-            //   off (default): top of menu, with a separator below.
-            //   on: just after Cut/Copy. Cut/Copy ids vary by shell view —
-            //       FCIDM_SHVIEW_CUT/COPY = 31001/31002 in the shell view's
-            //       own menu, or 25/26 in some legacy menus.
-            if (g_settings.nearCutCopy) {
-                int insertPos = 0;
-                int count = GetMenuItemCount(hmenu);
-                for (int i = 0; i < count; ++i) {
-                    UINT id = GetMenuItemID(hmenu, i);
-                    if (id == 31001 || id == 31002 || id == 25 || id == 26) {
-                        insertPos = i + 1;
-                    }
-                }
-                InsertMenuW(hmenu, insertPos, MF_BYPOSITION | MF_STRING,
-                            F2F_MENU_CMD, L"Files 2 &Folder...");
-                InsertMenuW(hmenu, insertPos + 1, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
-            } else {
-                InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
-                InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_STRING,
-                            F2F_MENU_CMD, L"Files 2 &Folder...");
-            }
+            InsertF2FMenuItem(hmenu, g_settings.nearCutCopy);
             injected = true;
             g_currentMenuEligible = true;
             g_currentSelection = std::move(items);
@@ -1298,6 +1406,170 @@ BOOL WINAPI PostMessageW_Hook(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp) {
 }
 
 // ============================================================
+//  Classic menu-bar "Edit" dropdown (File / Edit / View / Tools)
+//
+//  The classic Explorer menu bar is the frame window's own Win32 menu; its
+//  dropdowns are tracked by the system, not via TrackPopupMenuEx, so the hook
+//  above never sees them. To add our entry there we subclass the Explorer
+//  frame window (CabinetWClass / ExploreWClass) and:
+//    - WM_INITMENUPOPUP: when the popup about to open is the Edit menu (we
+//      detect it by the presence of the Cut/Copy command ids) and the view
+//      has a selection, insert our item right after Cut/Copy.
+//    - WM_COMMAND for our id: resolve the current selection and run the flow.
+//  We always place it after Cut/Copy in this menu (the "top of menu" layout
+//  used by the context menu doesn't make sense for the Edit dropdown).
+// ============================================================
+static bool IsExplorerFrameClass(HWND hwnd) {
+    WCHAR cls[64] = {};
+    GetClassNameW(hwnd, cls, 64);
+    return !_wcsicmp(cls, L"CabinetWClass") || !_wcsicmp(cls, L"ExploreWClass");
+}
+
+// Does this frame currently host a shell view? A direct child-window walk for
+// SHELLDLL_DefView — far cheaper than the COM IShellWindows enumeration, so we
+// use it as a fast gate in WM_INITMENUPOPUP before paying for selection lookup.
+static BOOL CALLBACK FindShellViewChildProc(HWND child, LPARAM lp) {
+    WCHAR cls[64] = {};
+    GetClassNameW(child, cls, 64);
+    if (!_wcsicmp(cls, L"SHELLDLL_DefView")) {
+        *(HWND*)lp = child;
+        return FALSE;  // stop
+    }
+    return TRUE;
+}
+static bool FrameHasShellView(HWND frame) {
+    HWND sv = nullptr;
+    EnumChildWindows(frame, FindShellViewChildProc, (LPARAM)&sv);
+    return sv != nullptr;
+}
+
+// One-shot latch for the menu-id diagnostic below (logs a single sample).
+static bool g_loggedMenuIds = false;
+
+static LRESULT CALLBACK FrameSubclassProc(HWND hwnd, UINT uMsg,
+                                          WPARAM wParam, LPARAM lParam,
+                                          DWORD_PTR /*dwRefData*/)
+{
+    switch (uMsg) {
+    case WM_INITMENUPOPUP: {
+        HMENU popup = (HMENU)wParam;
+        // HIWORD(lParam) is TRUE for the window (system) menu — skip those.
+        // Cheap gates first (menu has Cut/Copy; frame hosts a shell view), so
+        // the COM selection lookup only runs for the actual Edit dropdown.
+        if (popup && !HIWORD(lParam)) {
+            bool hasCutCopy = MenuPosAfterCutCopy(popup) >= 0;
+            if (hasCutCopy && FrameHasShellView(hwnd)) {
+                std::wstring folder;
+                std::vector<std::wstring> items;
+                if (GetFolderAndSelectionForHwnd(hwnd, folder, items) &&
+                    !items.empty())
+                {
+                    InsertF2FMenuItem(popup, /*nearCutCopy=*/true);
+                }
+            } else if (!hasCutCopy && !g_loggedMenuIds) {
+                // Diagnostic (once per process): the Cut/Copy command ids in the
+                // classic menu-bar Edit dropdown are build/shell-dependent. If
+                // our entry never shows up there, enable mod logging and look
+                // for this line — it lists a popup's command ids so the right
+                // ids can be added to IsCutCopyId().
+                g_loggedMenuIds = true;
+                int count = GetMenuItemCount(popup);
+                std::wstring ids;
+                for (int i = 0; i < count; ++i)
+                    ids += std::to_wstring((int)GetMenuItemID(popup, i)) + L" ";
+                Wh_Log(L"Files2Folders: sample menu popup ids: %s", ids.c_str());
+            }
+        }
+        break;
+    }
+    case WM_COMMAND:
+        if (LOWORD(wParam) == F2F_MENU_CMD && HIWORD(wParam) == 0) {
+            std::wstring folder;
+            std::vector<std::wstring> items;
+            if (GetFolderAndSelectionForHwnd(hwnd, folder, items) &&
+                !items.empty())
+            {
+                RunFiles2Folder(hwnd, folder, items, g_settings.silentMode);
+            }
+            return 0;  // handled
+        }
+        break;
+    case WM_NCDESTROY:
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, FrameSubclassProc);
+        break;
+    }
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+// Subclass any Explorer frame window in this process that we haven't already.
+// We mark handled frames with a window property so repeated attach passes
+// (and the polling thread below) don't double-subclass.
+static const wchar_t* kF2FSubclassProp = L"Files2FolderFrameSubclassed";
+
+static BOOL CALLBACK AttachFrameProc(HWND hwnd, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;  // only our own windows
+    if (!IsExplorerFrameClass(hwnd)) return TRUE;
+    if (GetPropW(hwnd, kF2FSubclassProp)) return TRUE;  // already done
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, FrameSubclassProc, 0))
+        SetPropW(hwnd, kF2FSubclassProp, (HANDLE)1);
+    return TRUE;
+}
+
+static void AttachAllFrames() {
+    EnumWindows(AttachFrameProc, 0);
+}
+
+static BOOL CALLBACK DetachFrameProc(HWND hwnd, LPARAM) {
+    if (GetPropW(hwnd, kF2FSubclassProp)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, FrameSubclassProc);
+        RemovePropW(hwnd, kF2FSubclassProp);
+    }
+    return TRUE;
+}
+
+static void DetachAllFrames() {
+    EnumWindows(DetachFrameProc, 0);
+}
+
+// New Explorer windows open after the mod loads, so a one-shot attach isn't
+// enough. A lightweight thread re-runs the attach pass every ~1s; the property
+// guard makes re-attaching a no-op for frames already handled. Shutdown is
+// signalled via an event so the thread wakes immediately instead of polling a
+// flag.
+static HANDLE g_frameWatchThread = nullptr;
+static HANDLE g_frameWatchStopEvent = nullptr;
+
+static DWORD WINAPI FrameWatchThreadProc(LPVOID) {
+    do {
+        AttachAllFrames();
+    } while (WaitForSingleObject(g_frameWatchStopEvent, 1000) == WAIT_TIMEOUT);
+    return 0;
+}
+
+static void StartFrameWatch() {
+    if (g_frameWatchThread) return;
+    g_frameWatchStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_frameWatchThread = CreateThread(nullptr, 0, FrameWatchThreadProc,
+                                      nullptr, 0, nullptr);
+}
+
+static void StopFrameWatch() {
+    if (g_frameWatchThread) {
+        SetEvent(g_frameWatchStopEvent);
+        WaitForSingleObject(g_frameWatchThread, 2000);
+        CloseHandle(g_frameWatchThread);
+        g_frameWatchThread = nullptr;
+    }
+    if (g_frameWatchStopEvent) {
+        CloseHandle(g_frameWatchStopEvent);
+        g_frameWatchStopEvent = nullptr;
+    }
+    DetachAllFrames();
+}
+
+// ============================================================
 //  Workaround for other programs (Total Commander, Directory
 //  Opus, Files, etc.):
 //  A global hotkey reads file paths from the clipboard
@@ -1313,6 +1585,7 @@ BOOL WINAPI PostMessageW_Hook(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp) {
 static HANDLE  g_hotkeyThread = nullptr;
 static DWORD   g_hotkeyThreadId = 0;
 static HWND    g_hotkeyWnd = nullptr;
+static HHOOK   g_llKeyHook = nullptr;   // only used for Win-based combos
 static const UINT WM_F2F_TRIGGER  = WM_APP + 1;
 static const UINT WM_F2F_SHUTDOWN = WM_APP + 2;
 static const int  HOTKEY_ID = 0xF2F0;
@@ -1392,8 +1665,21 @@ static UINT BuildHotkeyVk() {
     return (UINT)c;
 }
 
+// Human-readable combo (e.g. "Ctrl+Alt+F") for failure messages.
+static std::wstring DescribeHotkey() {
+    std::wstring s;
+    if (g_settings.hotkeyCtrl)  s += L"Ctrl+";
+    if (g_settings.hotkeyAlt)   s += L"Alt+";
+    if (g_settings.hotkeyShift) s += L"Shift+";
+    if (g_settings.hotkeyWin)   s += L"Win+";
+    s += (wchar_t)BuildHotkeyVk();
+    return s;
+}
+
 static LRESULT CALLBACK HotkeyWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_HOTKEY && (int)wp == HOTKEY_ID) {
+    // WM_HOTKEY (RegisterHotKey path) and WM_F2F_TRIGGER (low-level-hook path)
+    // both mean "the combo fired" — the real work runs here, off the hook.
+    if ((msg == WM_HOTKEY && (int)wp == HOTKEY_ID) || msg == WM_F2F_TRIGGER) {
         HandleHotkeyTriggered();
         return 0;
     }
@@ -1408,6 +1694,44 @@ static LRESULT CALLBACK HotkeyWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProcW(hWnd, msg, wp, lp);
 }
 
+// Low-level keyboard hook — used ONLY for Win-based combos, which Windows
+// reserves so RegisterHotKey can't claim them (Win+F, Win+E, …). See
+// keyboardhook.md for the full risk write-up. The callback must do the
+// absolute minimum and return fast (Windows silently uninstalls a hook whose
+// callback exceeds LowLevelHooksTimeout, ~300 ms): we detect the combo, post a
+// message to the worker window, and return — all real work happens there.
+static bool ModifiersMatchForLLHook() {
+    auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    bool ctrl  = down(VK_CONTROL);
+    bool alt   = down(VK_MENU);
+    bool shift = down(VK_SHIFT);
+    bool win   = down(VK_LWIN) || down(VK_RWIN);
+    // Require exactly the configured modifier set so e.g. Win+Shift+F doesn't
+    // fire a Win+F binding.
+    return ctrl  == g_settings.hotkeyCtrl
+        && alt   == g_settings.hotkeyAlt
+        && shift == g_settings.hotkeyShift
+        && win   == g_settings.hotkeyWin;
+}
+
+static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        KBDLLHOOKSTRUCT* k = (KBDLLHOOKSTRUCT*)lParam;
+        UINT vk = BuildHotkeyVk();
+        if (k && k->vkCode == vk &&
+            (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) &&
+            ModifiersMatchForLLHook())
+        {
+            // Fire once per press (ignore auto-repeat is unnecessary: a fresh
+            // KEYDOWN with matching modifiers is the user re-pressing). Post and
+            // swallow so the OS default (e.g. Win+F -> Feedback Hub) doesn't run.
+            if (g_hotkeyWnd) PostMessageW(g_hotkeyWnd, WM_F2F_TRIGGER, 0, 0);
+            return 1;  // consume the keystroke
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
 static DWORD WINAPI HotkeyThreadProc(LPVOID) {
     WNDCLASSW wc = {};
     wc.lpfnWndProc   = HotkeyWndProc;
@@ -1420,11 +1744,58 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID) {
                                   wc.hInstance, nullptr);
     if (!g_hotkeyWnd) return 1;
 
-    if (!RegisterHotKey(g_hotkeyWnd, HOTKEY_ID,
-                        BuildHotkeyModifiers() | MOD_NOREPEAT,
-                        BuildHotkeyVk()))
+    // Win-based combos can't be claimed by RegisterHotKey, so use a low-level
+    // keyboard hook for those (what PowerToys uses). Ctrl/Alt-only combos keep
+    // the clean, zero-overhead RegisterHotKey path.
+    //
+    // Caveat: bare Win+<letter> shortcuts (Win+F, Win+L, Win+E, …) are handled
+    // by Windows below the hook and CANNOT be intercepted — the user must pair
+    // Win with another modifier (Win+Shift+F, Win+Alt+F, …). Warn if they
+    // selected Win alone.
+    if (g_settings.hotkeyWin) {
+        bool hasOtherMod = g_settings.hotkeyCtrl || g_settings.hotkeyAlt ||
+                           g_settings.hotkeyShift;
+        if (!hasOtherMod && !g_settings.hotkeySilent) {
+            std::wstring combo = DescribeHotkey();
+            Wh_Log(L"Files2Folders: bare Win combo (%s) can't be intercepted",
+                   combo.c_str());
+            MessageBoxW(nullptr,
+                (L"Files 2 Folder: the hotkey \"" + combo + L"\" will not work.\n\n"
+                 L"Bare Win+<key> shortcuts are handled by Windows itself and "
+                 L"cannot be intercepted, even with a keyboard hook.\n\n"
+                 L"Combine the Win key with another modifier — enable Ctrl, Alt, "
+                 L"or Shift as well (e.g. Win+Shift+F).").c_str(),
+                L"Files 2 Folder", MB_ICONWARNING | MB_OK);
+        }
+        g_llKeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc,
+                                        (HINSTANCE)GetModuleHandleW(nullptr), 0);
+        if (!g_llKeyHook) {
+            Wh_Log(L"Files2Folders: SetWindowsHookEx(WH_KEYBOARD_LL) failed");
+            if (!g_settings.hotkeySilent)
+                MessageBoxW(nullptr,
+                    L"Files 2 Folder could not install the keyboard hook needed "
+                    L"for a Win-based hotkey.\n\nTry a Ctrl/Alt combination "
+                    L"instead.",
+                    L"Files 2 Folder", MB_ICONWARNING | MB_OK);
+        }
+    } else if (!RegisterHotKey(g_hotkeyWnd, HOTKEY_ID,
+                               BuildHotkeyModifiers() | MOD_NOREPEAT,
+                               BuildHotkeyVk()))
     {
-        Wh_Log(L"Files2Folders: RegisterHotKey failed (already in use?)");
+        std::wstring combo = DescribeHotkey();
+        Wh_Log(L"Files2Folders: RegisterHotKey(%s) failed (reserved or in use?)",
+               combo.c_str());
+        // Make the failure visible — otherwise the workaround just silently
+        // "doesn't work". Suppressed in Silent mode.
+        if (!g_settings.hotkeySilent) {
+            std::wstring msg =
+                L"Files 2 Folder could not register the workaround hotkey:\n\n    "
+                + combo +
+                L"\n\nThe combination is already in use by another program.\n\n"
+                L"Pick a different key or modifier in the mod's settings.";
+            MessageBoxW(nullptr, msg.c_str(), L"Files 2 Folder",
+                        MB_ICONWARNING | MB_OK);
+        }
     }
 
     MSG msg;
@@ -1433,6 +1804,10 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
+    if (g_llKeyHook) {
+        UnhookWindowsHookEx(g_llKeyHook);
+        g_llKeyHook = nullptr;
+    }
     if (g_hotkeyWnd) {
         UnregisterHotKey(g_hotkeyWnd, HOTKEY_ID);
         g_hotkeyWnd = nullptr;
@@ -1478,10 +1853,12 @@ BOOL Wh_ModInit() {
                        (void**)&PostMessageW_Orig);
 
     StartHotkeyThread();
+    StartFrameWatch();
     return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Files2Folders: Uninit");
     StopHotkeyThread();
+    StopFrameWatch();
 }
