@@ -2083,7 +2083,6 @@ static void ExecuteMediaAction(const std::wstring& action) {
                 }
             }
 
-            // Try to find and focus window containing track title (ideal for browser playing YouTube/Spotify)
             if (!title.empty()) {
                 struct WindowSearch {
                     std::wstring targetTitle;
@@ -2102,7 +2101,6 @@ static void ExecuteMediaAction(const std::wstring& action) {
                     if (GetWindowTextW(hwnd, windowTitle, ARRAYSIZE(windowTitle)) > 0) {
                         auto* search = reinterpret_cast<WindowSearch*>(lParam);
                         std::wstring wTitle(windowTitle);
-                        // Case-insensitive check if window title contains currently playing media title
                         auto it = std::search(
                             wTitle.begin(), wTitle.end(),
                             search->targetTitle.begin(), search->targetTitle.end(),
@@ -2111,7 +2109,7 @@ static void ExecuteMediaAction(const std::wstring& action) {
 
                         if (it != wTitle.end()) {
                             search->foundHwnd = hwnd;
-                            return FALSE; // found, stop enumerating
+                            return FALSE;
                         }
                     }
                     return TRUE;
@@ -2126,7 +2124,6 @@ static void ExecuteMediaAction(const std::wstring& action) {
                 }
             }
 
-            // Fallback: Launch or focus via AppUserModelId
             if (!app.empty()) {
                 std::wstring shellPath = L"shell:AppsFolder\\" + app;
                 ShellExecuteW(nullptr, L"open", shellPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
