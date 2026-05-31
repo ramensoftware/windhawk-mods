@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.12
+// @version         1.1.13
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -29,17 +29,11 @@ Both virtual folders have a toggle for whether they are expandable or not. Their
 
 - **Fix chevron drawing:** Replaces the pixelated and clipped chevron with a smooth anti-aliased versions. The size (which matches other UI elements by default) is configurable.
 
-This mod injects only in processes that have ExplorerFrame.dll, so the include is set to `*` but it will not touch most processes. You can set it to `explorer.exe` only, if you don't want the nav in Open/Save dialogs changed (only modern dialogs are affected.)
+This mod injects only in processes that use `ExplorerFrame.dll`, so the include is set to `*` but it will not touch most processes. You can set it to `explorer.exe` only, if you don't want the nav in Open/Save dialogs changed. Only "modern" dialogs are affected.
 
-Before:
+Before/after:
 
-![Before](https://i.imgur.com/eWSQRJb.png)
-
-After:
-
-![After](https://i.imgur.com/6IaHifm.png)
-
-The screenshots show the normal Desktop pinned to Quick Access in the before, and the mod with defaults set in the after.
+![](https://i.imgur.com/LZuqzMx.png)
 */
 // ==/WindhawkModReadme==
 
@@ -912,24 +906,22 @@ static void RestoreTree(HWND hTree)
 
     // Remove our roots
     RootShellItems roots;
-    if (roots.Create())
+    if (!roots.Create()) return;
+    roots.RemoveInsertableRoots(pNsc.get());
+
+    if (roots.items[NAV_DESKTOP] && pNscRaw)
     {
-        roots.RemoveInsertableRoots(pNsc.get());
+        g_inCustomAppend = true;
+        AppendRoot_orig(pNscRaw, roots.items[NAV_DESKTOP].get(), enumFlags, 0x1, pFilter.get());
+        g_inCustomAppend = false;
 
-        if (roots.items[NAV_DESKTOP] && pNscRaw)
-        {
-            g_inCustomAppend = true;
-            AppendRoot_orig(pNscRaw, roots.items[NAV_DESKTOP].get(), enumFlags, 0x1, pFilter.get());
-            g_inCustomAppend = false;
-
-            WCHAR collapseNames[NAV_COUNT][64] = {};
-            int collapseCount = BuildMatchList(collapseNames, NAV_COUNT,
-                [](int id, const NavItemSettings&) {
-                    return IsInsertableItem(id) && g_navItems[id].label[0];
-                });
-            if (collapseCount > 0)
-                CollapseMatchingItems(hTree, nullptr, collapseNames, collapseCount);
-        }
+        WCHAR collapseNames[NAV_COUNT][64] = {};
+        int collapseCount = BuildMatchList(collapseNames, NAV_COUNT,
+            [](int id, const NavItemSettings&) {
+                return IsInsertableItem(id) && g_navItems[id].label[0];
+            });
+        if (collapseCount > 0)
+            CollapseMatchingItems(hTree, nullptr, collapseNames, collapseCount);
     }
 
     RemoveWindowSubclass(hTree, TreeInteractionProc, 0xAF01);
