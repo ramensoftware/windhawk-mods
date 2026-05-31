@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.13
+// @version         1.1.14
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -667,6 +667,8 @@ static int GetItemIntegral(HWND hTree, HTREEITEM h)
 
 static bool GetItemRect(HWND hTree, HTREEITEM h, RECT *rc)
 {
+    if (!SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_FIRSTVISIBLE, 0))
+        return false;
     *(HTREEITEM *)rc = h;
     return SendMessageW(hTree, TVM_GETITEMRECT, FALSE, (LPARAM)rc) != 0;
 }
@@ -882,10 +884,11 @@ static void RestoreTree(HWND hTree)
     if (!ts || !IsWindow(hTree) || !ts->pNscTree)
         return;
 
-    ComRef<INameSpaceTreeControl> pNsc((INameSpaceTreeControl *)ts->pNscTree);
     void *pNscRaw = ts->pNscTree;
     unsigned long enumFlags = ts->enumFlags;
-    ComRef<IShellItemFilter> pFilter(ts->pFilter);
+    IShellItemFilter *pFilterRaw = ts->pFilter;
+    if (pFilterRaw)
+        pFilterRaw->AddRef();
     HIMAGELIST savedImgList = ts->savedStateImageList;
     bool ownsRef = ts->ownsNscRef;
 
@@ -899,7 +902,7 @@ static void RestoreTree(HWND hTree)
             if (SUCCEEDED(SHCreateItemFromIDList(g_navItems[spacerId].pidl,
                                                   IID_IShellItem, (void**)&raw)) && raw)
             {
-                pNsc->RemoveRoot(raw);
+                ((INameSpaceTreeControl *)pNscRaw)->RemoveRoot(raw);
                 raw->Release();
             }
         }
@@ -909,13 +912,17 @@ static void RestoreTree(HWND hTree)
     // Remove our roots
     RootShellItems roots;
     if (!roots.Create()) return;
-    roots.RemoveInsertableRoots(pNsc.get());
+    roots.RemoveInsertableRoots((INameSpaceTreeControl *)pNscRaw);
 
     if (roots.items[NAV_DESKTOP] && pNscRaw)
     {
+        roots.items[NAV_THISPC] = {};
+
+        g_ins.forTree = hTree;
         g_inCustomAppend = true;
-        AppendRoot_orig(pNscRaw, roots.items[NAV_DESKTOP].get(), enumFlags, 0x1, pFilter.get());
+        AppendRoot_orig(pNscRaw, roots.items[NAV_DESKTOP].get(), enumFlags, 0x1, pFilterRaw);
         g_inCustomAppend = false;
+        g_ins.forTree = nullptr;
 
         WCHAR collapseNames[NAV_COUNT][64] = {};
         int collapseCount = BuildMatchList(collapseNames, NAV_COUNT,
@@ -925,6 +932,9 @@ static void RestoreTree(HWND hTree)
         if (collapseCount > 0)
             CollapseMatchingItems(hTree, nullptr, collapseNames, collapseCount);
     }
+
+    if (pFilterRaw)
+        pFilterRaw->Release();
 
     RemoveWindowSubclass(hTree, TreeInteractionProc, 0xAF01);
 
@@ -949,7 +959,7 @@ static void RestoreTree(HWND hTree)
     }
 
     if (ownsRef)
-        pNsc.p->Release();
+        ((INameSpaceTreeControl *)pNscRaw)->Release();
 
     Wh_Log(L"[DISABLE] Cleaned up tree=%p", hTree);
 }
@@ -993,6 +1003,11 @@ static void FullRebuildTree(HWND hTree)
 
     if (roots.items[NAV_DESKTOP])
     {
+        roots.items[NAV_THISPC] = {};
+        roots.items[NAV_HOME] = {};
+        roots.items[NAV_GALLERY] = {};
+        pNsc = {};
+
         ts = GetTree(hTree);
         if (ts)
         {
@@ -1004,9 +1019,11 @@ static void FullRebuildTree(HWND hTree)
         g_ins.pNsc = pNscRaw;
         g_ins.enumFlags = enumFlags;
 
+        g_ins.forTree = hTree;
         g_inCustomAppend = true;
         AppendRoot_orig(pNscRaw, roots.items[NAV_DESKTOP].get(), enumFlags, 0x1, nullptr);
         g_inCustomAppend = false;
+        g_ins.forTree = nullptr;
 
         ts = GetTree(hTree);
         if (ts)
@@ -1833,8 +1850,11 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         if (ts && (ts->pendingWork & DEFER_MASK))
             PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
 
+        // Skip paint-time mutations when another tree is being rebuilt; items may be stale from cross-tree side effects.
+        bool safeForMutations = !(g_deferredOpInProgress && hWnd != g_mutatingTree);
+
         // Paint-time mutations must be idempotent (no-op when already in target state) to avoid relayout loops.
-        if (ts && g_settings.hasItemsAtTop)
+        if (safeForMutations && ts && g_settings.hasItemsAtTop)
         {
             for (int i = NAV_HOME; i < NAV_COUNT; i++)
             {
@@ -1855,7 +1875,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             }
         }
 
-        if (g_settings.hasItemsAtTop && g_sepColor != CLR_INVALID && ts)
+        if (safeForMutations && g_settings.hasItemsAtTop && g_sepColor != CLR_INVALID && ts)
         {
             SectionLayout layout = FindSectionLayout(hWnd, *ts);
             ts->boundaryItem = layout.boundary;
