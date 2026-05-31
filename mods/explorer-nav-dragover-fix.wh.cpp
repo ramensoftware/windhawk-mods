@@ -410,10 +410,6 @@ BOOL CALLBACK FindDescendantClassEnumProc(HWND hwnd, LPARAM lParam) {
         ctx->found = hwnd;
         return FALSE;
     }
-    EnumChildWindows(hwnd, FindDescendantClassEnumProc, lParam);
-    if (ctx->found) {
-        return FALSE;
-    }
     return TRUE;
 }
 
@@ -440,7 +436,10 @@ struct CabinetAtPointContext {
 
 BOOL CALLBACK CabinetAtPointEnumProc(HWND hwnd, LPARAM lParam) {
     auto* ctx = reinterpret_cast<CabinetAtPointContext*>(lParam);
-    if (!IsWindowVisible(hwnd) || !IsExplorerCabinetRoot(hwnd)) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(hwnd) ||
+        !IsExplorerCabinetRoot(hwnd)) {
         return TRUE;
     }
     RECT rc = {};
@@ -460,6 +459,10 @@ HWND GetExplorerCabinetAtPoint(POINT pt) {
         }
     }
 
+    // During DoDragDrop, WindowFromPoint often hits a drag-feedback layer whose
+    // root is not CabinetWClass even though the cursor is still over an open
+    // Explorer frame. Fall back to a same-process, geometry-based cabinet hit
+    // test so file-pane wheel forwarding still works mid-drag.
     CabinetAtPointContext ctx{pt};
     EnumWindows(CabinetAtPointEnumProc, reinterpret_cast<LPARAM>(&ctx));
     return ctx.found;
@@ -562,7 +565,6 @@ BOOL CALLBACK ContentHostAtPointEnumProc(HWND hwnd, LPARAM lParam) {
             }
         }
     }
-    EnumChildWindows(hwnd, ContentHostAtPointEnumProc, lParam);
     return TRUE;
 }
 
@@ -1666,28 +1668,12 @@ void Wh_ModSettingsChanged() {
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    // Reset lifecycle flags. They are zero-initialised at first DLL load,
-    // but Windhawk also reuses the loaded image when a user toggles the
-    // mod off and on again without a host restart -- in that path the
-    // values left over from the previous Wh_ModUninit run (true/true) would
-    // make every TrySubclassTree call no-op and the mod would silently do
-    // nothing. Reset them here before any code that reads them runs.
+    // Belt-and-suspenders for a failed/partial init where Wh_ModUninit may not
+    // run. Windhawk unloads the module on disable, so a normal off/on toggle
+    // already gets zero-initialised globals on the next load.
     g_uninitInProgress.store(false, std::memory_order_relaxed);
     g_helperStopping.store(false, std::memory_order_relaxed);
     g_dragLoopDepth.store(0, std::memory_order_relaxed);
-    // Monotonic bump rather than reset to zero. If Windhawk keeps the image
-    // mapped across toggle (the same model the flag resets above account
-    // for), thread_local g_protectedHover entries on long-lived Explorer
-    // threads can survive with a generation value from the previous
-    // lifecycle. Resetting g_dragGeneration to 0 and then bumping to 1 on
-    // the next drag would alias a stale TLS entry whose generation also
-    // happens to be 1, defeating the whole point of the counter. fetch_add
-    // here guarantees the new lifecycle starts strictly above every
-    // generation value any pre-existing TLS could hold.
-    g_dragGeneration.fetch_add(1, std::memory_order_acq_rel);
-    // Drain any phantom in-flight subclass-op counters from a prior aborted
-    // init. Wh_ModUninit owns the wait that keeps this honest during normal
-    // teardown; this is belt-and-suspenders for re-init after a failed init.
     g_subclassOpsInFlight.store(0, std::memory_order_relaxed);
 
     LoadSettings();
