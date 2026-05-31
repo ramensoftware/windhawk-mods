@@ -2,7 +2,7 @@
 // @id              taskbar-fluent-media-player
 // @name            Taskbar Fluent Media Player
 // @description     Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Salyts
 // @github          https://github.com/Salyts
 // @include         explorer.exe
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Fluent Media Player 1.0.0
+# Taskbar Fluent Media Player 1.0.1
 
 **Taskbar Fluent Media Player —** is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
 
@@ -2068,97 +2068,69 @@ static void ExecuteMediaAction(const std::wstring& action) {
     } else if (action == L"open_app") {
         std::thread([]() {
             if (g_unloading) return;
+            std::wstring title;
             std::wstring app;
             {
                 std::lock_guard<std::mutex> lk(g_sessionMtx);
                 if (g_currentSession) {
                     try {
                         app = std::wstring(g_currentSession.SourceAppUserModelId());
+                        auto props = g_currentSession.TryGetMediaPropertiesAsync().get();
+                        if (props) {
+                            title = std::wstring(props.Title());
+                        }
                     } catch (...) {}
                 }
             }
-            if (!app.empty()) {
-                HWND foundWindow = nullptr;
 
-                struct FindData {
-                    const std::wstring* aumid;
-                    HWND hwnd;
+            // Try to find and focus window containing track title (ideal for browser playing YouTube/Spotify)
+            if (!title.empty()) {
+                struct WindowSearch {
+                    std::wstring targetTitle;
+                    HWND foundHwnd = nullptr;
                 };
-                FindData fd{&app, nullptr};
 
-                EnumWindows([](HWND hWnd, LPARAM lParam) -> BOOL {
-                    auto* fd2 = reinterpret_cast<FindData*>(lParam);
-                    if (!IsWindowVisible(hWnd)) return TRUE;
+                WindowSearch search;
+                search.targetTitle = title;
 
-                    wchar_t title[256] = {};
-                    GetWindowTextW(hWnd, title, 256);
-                    if (wcslen(title) == 0) return TRUE;
-
-                    DWORD pid = 0;
-                    GetWindowThreadProcessId(hWnd, &pid);
-                    if (!pid) return TRUE;
-
-                    wchar_t procPath[MAX_PATH] = {};
-                    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-                    if (hProc) {
-                        DWORD sz = MAX_PATH;
-                        QueryFullProcessImageNameW(hProc, 0, procPath, &sz);
-                        CloseHandle(hProc);
+                EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+                    if (!IsWindowVisible(hwnd)) {
+                        return TRUE;
                     }
 
-                    std::wstring procName = procPath;
-                    auto slash = procName.rfind(L'\\');
-                    if (slash != std::wstring::npos) procName = procName.substr(slash + 1);
+                    wchar_t windowTitle[512];
+                    if (GetWindowTextW(hwnd, windowTitle, ARRAYSIZE(windowTitle)) > 0) {
+                        auto* search = reinterpret_cast<WindowSearch*>(lParam);
+                        std::wstring wTitle(windowTitle);
+                        // Case-insensitive check if window title contains currently playing media title
+                        auto it = std::search(
+                            wTitle.begin(), wTitle.end(),
+                            search->targetTitle.begin(), search->targetTitle.end(),
+                            [](wchar_t ch1, wchar_t ch2) { return towlower(ch1) == towlower(ch2); }
+                        );
 
-                    auto dot = procName.rfind(L'.');
-                    if (dot != std::wstring::npos) procName = procName.substr(0, dot);
-
-                    const std::wstring& aumid = *fd2->aumid;
-                    std::wstring aumidLower = aumid;
-                    std::wstring procLower = procName;
-                    for (auto& c : aumidLower) c = towlower(c);
-                    for (auto& c : procLower) c = towlower(c);
-
-                    if (aumidLower.find(procLower) != std::wstring::npos ||
-                        procLower.find(aumidLower) != std::wstring::npos) {
-                        fd2->hwnd = hWnd;
-                        return FALSE;
+                        if (it != wTitle.end()) {
+                            search->foundHwnd = hwnd;
+                            return FALSE; // found, stop enumerating
+                        }
                     }
                     return TRUE;
-                }, reinterpret_cast<LPARAM>(&fd));
+                }, reinterpret_cast<LPARAM>(&search));
 
-                foundWindow = fd.hwnd;
-
-                if (foundWindow) {
-                    if (IsIconic(foundWindow)) {
-                        ShowWindow(foundWindow, SW_RESTORE);
+                if (search.foundHwnd) {
+                    if (IsIconic(search.foundHwnd)) {
+                        ShowWindow(search.foundHwnd, SW_RESTORE);
                     }
-
-                    DWORD currentThreadId = GetCurrentThreadId();
-                    DWORD windowThreadId = GetWindowThreadProcessId(foundWindow, nullptr);
-
-                    if (currentThreadId != windowThreadId) {
-                        AttachThreadInput(currentThreadId, windowThreadId, TRUE);
-                        BringWindowToTop(foundWindow);
-                        ShowWindow(foundWindow, SW_SHOW);
-                        AttachThreadInput(currentThreadId, windowThreadId, FALSE);
-                    }
-
-                    SetForegroundWindow(foundWindow);
-                    SetFocus(foundWindow);
-                } else {
-                    std::wstring appLower = app;
-                    for (auto& c : appLower) c = towlower(c);
-
-                    bool isUnsupported = (appLower.find(L"windows.") == 0 ||
-                                         appLower.find(L"microsoft.windows.") == 0 ||
-                                         appLower.find(L"systemsettings") != std::wstring::npos);
-
-                    if (!isUnsupported) {
-                        std::wstring shellPath = L"shell:AppsFolder\\" + app;
-                        ShellExecuteW(nullptr, L"open", shellPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-                    }
+                    SetForegroundWindow(search.foundHwnd);
+                    return;
                 }
+            }
+
+            // Fallback: Launch or focus via AppUserModelId
+            if (!app.empty()) {
+                std::wstring shellPath = L"shell:AppsFolder\\" + app;
+                ShellExecuteW(nullptr, L"open", shellPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                return;
             }
         }).detach();
     }
@@ -5834,7 +5806,10 @@ static void StartRetryThread() {
 
                 Sleep(200);
 
-                if (g_playerGrid) break;
+                if (g_playerGrid) {
+                    if (g_retryStopEvent) SetEvent(g_retryStopEvent);
+                    break;
+                }
             }
             ++attempt;
         }
@@ -5909,8 +5884,10 @@ void Wh_ModAfterInit() {
         Wh_Log(L"Wh_ModAfterInit: No taskbar window found");
     }
 
-    StartRetryThread();
-    Wh_Log(L"Wh_ModAfterInit: Retry thread started");
+    if (!g_playerGrid) {
+        StartRetryThread();
+        Wh_Log(L"Wh_ModAfterInit: Retry thread started");
+    }
 }
 
 void Wh_ModUninit() {
