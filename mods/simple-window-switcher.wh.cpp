@@ -2533,10 +2533,9 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             }
 
             // Draw X with GDI+ for smooth diagonal lines only.
-            // Always white, regardless of the (custom/accent) border color.
             Gdiplus::Graphics graphics(hdc);
             graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            COLORREF xc = RGB(255, 255, 255);
+            COLORREF xc = (g_isCloseHovered || g_isDarkMode) ? RGB(255, 255, 255) : RGB(0, 0, 0);
             Gdiplus::Pen xPen(Gdiplus::Color(255, GetRValue(xc), GetGValue(xc), GetBValue(xc)), 1.5f * g_dpiX / 96.0f);
             int p = (btnSz == DpiScale(16, g_dpiX)) ? DpiScale(4, g_dpiX) : DpiScale(7, g_dpiX);
             graphics.DrawLine(&xPen, bx + p, by + p, bx + btnSz - p, by + btnSz - p);
@@ -2547,10 +2546,11 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
 
 static void PaintSwitcherOverlay() {
     if (!g_hCloseBtnWnd || !g_isVisible) return;
-    RECT rc; GetClientRect(g_hSwitcher, &rc);
+    HWND targetWnd = g_hoverWnd ? g_hoverWnd : g_hSwitcher;
+    RECT rc; GetClientRect(targetWnd, &rc);
     int w = rc.right, h = rc.bottom;
     if (w <= 0 || h <= 0) return;
-    HDC hdcScreen = GetDC(g_hCloseBtnWnd);
+    HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
     BITMAPINFO bmi = {}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
@@ -2569,15 +2569,27 @@ static void PaintSwitcherOverlay() {
         HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
         SelectClipRgn(hdcMem, hClip);
         DeleteObject(hClip);
+    } else if (cp == 2) {
+        int radius = MulDiv(8, g_dpiX, 96);
+        HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+        SelectClipRgn(hdcMem, hClip);
+        DeleteObject(hClip);
+    } else if (cp == 3) {
+        int radius = MulDiv(4, g_dpiX, 96);
+        HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+        SelectClipRgn(hdcMem, hClip);
+        DeleteObject(hClip);
     }
 
-    DrawSwitcherOverlay(hdcMem, g_hSwitcher);
+    DrawSwitcherOverlay(hdcMem, targetWnd);
 
     POINT ptSrc = {0,0}; SIZE sz = {w, h};
+    RECT wr; GetWindowRect(targetWnd, &wr);
+    POINT ptDst = { wr.left, wr.top };
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    UpdateLayeredWindow(g_hCloseBtnWnd, hdcScreen, NULL, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
+    UpdateLayeredWindow(g_hCloseBtnWnd, hdcScreen, &ptDst, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
     SelectObject(hdcMem, hOld); DeleteObject(hBmp); DeleteDC(hdcMem);
-    ReleaseDC(g_hCloseBtnWnd, hdcScreen);
+    ReleaseDC(NULL, hdcScreen);
 }
 
 static void PaintSwitcher() {
@@ -2720,29 +2732,17 @@ static void ApplyThemeToWindow(HWND hWnd) {
         BOOL dark = g_isDarkMode;
         DwmSetWindowAttribute(hWnd, 20, &dark, sizeof(dark));
         if (ThemeIs(L"mica")) {
-            if (hWnd == g_hSwitcher) {
-                // Native Mica for the primary active window
-                int micaVal = 2; // DWMSBT_MAINWINDOW
-                HRESULT hr = DwmSetWindowAttribute(hWnd, 38, &micaVal, sizeof(micaVal));
-                if (FAILED(hr)) {
-                    int oldMicaVal = 1;
-                    hr = DwmSetWindowAttribute(hWnd, 1029, &oldMicaVal, sizeof(oldMicaVal));
-                }
-                if (FAILED(hr)) {
-                    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
-                }
-            } else if (g_SetWindowCompositionAttribute) {
-                // Unfocused mirror windows drop to solid grey with native Mica.
-                // We use SetWindowCompositionAttribute (Acrylic Blur) to force a translucent effect.
-                DWORD blur = 200; // Fixed opacity (~78%) to closely simulate Mica blur
-                COLORREF bg = GetBgColor();
-                ACCENT_POLICY accent = {};
-                accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
-                accent.AccentFlags = 0;
-                accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
-                WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
-                g_SetWindowCompositionAttribute(hWnd, &data);
+            int micaVal = 2; // DWMSBT_MAINWINDOW
+            HRESULT hr = DwmSetWindowAttribute(hWnd, 38, &micaVal, sizeof(micaVal));
+            if (FAILED(hr)) {
+                int oldMicaVal = 1;
+                hr = DwmSetWindowAttribute(hWnd, 1029, &oldMicaVal, sizeof(oldMicaVal));
             }
+            if (FAILED(hr)) {
+                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
+            }
+            // Force the window to evaluate its NCACTIVATE state so Mica stays active
+            SendMessage(hWnd, WM_NCACTIVATE, TRUE, 0);
         }
         if (ThemeIs(L"backdrop") && g_SetWindowCompositionAttribute) {
             DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
@@ -2786,6 +2786,7 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
             g_hMirrorSwitchers.push_back(hMirror);
             SetWindowPos(hMirror, HWND_TOPMOST, mx, my, g_winW, g_winH, SWP_NOACTIVATE);
             ShowWindow(hMirror, SW_SHOWNA);
+            SetActiveWindow(hMirror);
         }
     }
     return TRUE;
@@ -2865,15 +2866,16 @@ static void ShowSwitcher(bool sticky) {
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
-    SetForegroundWindow(g_hSwitcher);
+    if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
+        EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
+    }
+    
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
     }
 
-    if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
-        EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
-    }
+    SetForegroundWindow(g_hSwitcher);
 
     RegisterThumbnails();
     PaintSwitcher();
@@ -3259,6 +3261,15 @@ static void CloseSwitcherEntry(int idx) {
     PaintSwitcher();
 }
 
+static bool IsSwitcherWindow(HWND hWnd) {
+    if (!hWnd) return false;
+    if (hWnd == g_hSwitcher) return true;
+    for (HWND h : g_hMirrorSwitchers) {
+        if (hWnd == h) return true;
+    }
+    return false;
+}
+
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_NCCALCSIZE && wParam == TRUE) {
         return 0; // Remove standard frame for WS_OVERLAPPED
@@ -3532,7 +3543,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
         }
         
-        if (idx != g_hoverIndex || closeHovered != g_isCloseHovered) {
+        if (idx != g_hoverIndex || closeHovered != g_isCloseHovered || g_hoverWnd != hWnd) {
             g_hoverIndex = idx;
             g_hoverWnd = hWnd;
             g_isCloseHovered = closeHovered;
@@ -3564,10 +3575,22 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return 0;
     }
     case WM_ACTIVATE:
-        if (wParam == WA_INACTIVE && g_isVisible) { HideSwitcher(); return 0; }
+        if (wParam == WA_INACTIVE && g_isVisible) {
+            HWND hNewActive = (HWND)lParam;
+            if (!IsSwitcherWindow(hNewActive)) {
+                HideSwitcher();
+            }
+            return 0;
+        }
         break;
     case WM_KILLFOCUS:
-        if (g_isVisible) { HideSwitcher(); return 0; }
+        if (g_isVisible) {
+            HWND hNewFocus = (HWND)wParam;
+            if (!IsSwitcherWindow(hNewFocus)) {
+                HideSwitcher();
+            }
+            return 0;
+        }
         break;
     case WM_ERASEBKGND: return 1;
     case WM_DESTROY: UnregisterThumbnails(); return 0;
