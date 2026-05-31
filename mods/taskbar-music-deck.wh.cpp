@@ -1,4 +1,4 @@
-﻿// ==WindhawkMod==
+// ==WindhawkMod==
 // @id              taskbar-music-deck
 // @name            Taskbar Music Deck
 // @description     Event-driven taskbar music panel with GSMTC controls and per-app volume.
