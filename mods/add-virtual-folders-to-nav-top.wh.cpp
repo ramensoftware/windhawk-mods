@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.16
+// @version         1.1.17
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -284,6 +284,13 @@ static bool IsInsertableItem(int id)
     return id == NAV_THISPC || id == NAV_DESKTOP;
 }
 
+// Settings determine visual order; no rect measurement needed.
+static HTREEITEM LowerInsertableItem(const TreeState& ts)
+{
+    int lower = g_settings.desktopAboveThisPC ? NAV_THISPC : NAV_DESKTOP;
+    return ts.hItems[lower];
+}
+
 static void GetPidlDisplayName(PIDLIST_ABSOLUTE pidl, WCHAR *buf, int len)
 {
     IShellItem *psi = nullptr;
@@ -346,6 +353,18 @@ static TreeState* RunDeferredWork(HWND hWnd, TreeState* ts, uint8_t flag, void(*
     ts->pendingWork &= ~flag;
     op(hWnd);
     ts = GetTree(hWnd);
+    return ts;
+}
+
+static TreeState* RunDeferredWorkIf(HWND hWnd, TreeState* ts, uint8_t flag,
+                                    bool pre, bool(*op)(HWND, TreeState&))
+{
+    if (!ts || !(ts->pendingWork & flag) || !pre)
+        return ts;
+    bool done = op(hWnd, *ts);
+    ts = GetTree(hWnd);
+    if (done && ts)
+        ts->pendingWork &= ~flag;
     return ts;
 }
 
@@ -649,6 +668,31 @@ static void ForEachDepth1Item(HWND hTree, F&& visitor)
     }
 }
 
+static void GetItemText(HWND hTree, HTREEITEM h, WCHAR *buf, int len)
+{
+    TVITEMEXW tvi = {};
+    tvi.mask = TVIF_HANDLE | TVIF_TEXT;
+    tvi.hItem = h;
+    tvi.pszText = buf;
+    tvi.cchTextMax = len;
+    SendMessageW(hTree, TVM_GETITEMW, 0, (LPARAM)&tvi);
+}
+
+template<typename Skip, typename OnMatch>
+static void ForEachLabeledSibling(HWND hTree, Skip&& skip,
+                                  const WCHAR names[][64], int count, OnMatch&& onMatch)
+{
+    ForEachDepth1Item(hTree, [&](HTREEITEM h) -> bool {
+        if (skip(h)) return true;
+        WCHAR text[64] = {};
+        GetItemText(hTree, h, text, ARRAYSIZE(text));
+        for (int j = 0; j < count; j++)
+            if (names[j][0] && wcscmp(text, names[j]) == 0)
+                return onMatch(h, j);
+        return true;
+    });
+}
+
 static bool CollapseItemIntegral(HWND hTree, HTREEITEM h)
 {
     TVITEMEXW tvi = {};
@@ -720,13 +764,9 @@ static bool ShouldBeUnitHeight(const TreeState& ts, HWND hTree, HTREEITEM h)
         HTREEITEM hB = ts.hItems[NAV_DESKTOP];
         if (hA && hB && (h == hA || h == hB))
         {
-            RECT rcA = {}, rcB = {};
-            if (GetItemRect(hTree, hA, &rcA) && GetItemRect(hTree, hB, &rcB))
-            {
-                HTREEITEM hLower = (rcA.top > rcB.top) ? hA : hB;
-                if (h == hLower)
-                    return true;
-            }
+            HTREEITEM hLower = LowerInsertableItem(ts);
+            if (h == hLower)
+                return true;
         }
     }
 
@@ -751,16 +791,6 @@ static int GetBaseItemHeight(HWND hTree)
         h = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_NEXTVISIBLE, (LPARAM)h);
     }
     return baseHeight;
-}
-
-static void GetItemText(HWND hTree, HTREEITEM h, WCHAR *buf, int len)
-{
-    TVITEMEXW tvi = {};
-    tvi.mask = TVIF_HANDLE | TVIF_TEXT;
-    tvi.hItem = h;
-    tvi.pszText = buf;
-    tvi.cchTextMax = len;
-    SendMessageW(hTree, TVM_GETITEMW, 0, (LPARAM)&tvi);
 }
 
 static void CollapseMatchingItems(HWND hTree, const TreeState *ts,
@@ -896,6 +926,24 @@ static LRESULT CALLBACK TreeInteractionProc(
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+static void RemoveHomeSpacer(TreeState& ts, INameSpaceTreeControl* pNsc)
+{
+    if (!ts.homeSpacerItem) return;
+    int spacerId = g_navItems[NAV_HOME].pidl ? NAV_HOME
+                 : (g_navItems[NAV_GALLERY].pidl ? NAV_GALLERY : -1);
+    if (spacerId >= 0)
+    {
+        IShellItem* raw = nullptr;
+        if (SUCCEEDED(SHCreateItemFromIDList(g_navItems[spacerId].pidl,
+                                              IID_IShellItem, (void**)&raw)) && raw)
+        {
+            pNsc->RemoveRoot(raw);
+            raw->Release();
+        }
+    }
+    ts.homeSpacerItem = nullptr;
+}
+
 static void RestoreTree(HWND hTree)
 {
     TreeState* ts = GetTree(hTree);
@@ -910,22 +958,7 @@ static void RestoreTree(HWND hTree)
     HIMAGELIST savedImgList = ts->savedStateImageList;
     bool ownsRef = ts->ownsNscRef;
 
-    if (ts->homeSpacerItem)
-    {
-        int spacerId = g_navItems[NAV_HOME].pidl ? NAV_HOME
-                     : (g_navItems[NAV_GALLERY].pidl ? NAV_GALLERY : -1);
-        if (spacerId >= 0)
-        {
-            IShellItem* raw = nullptr;
-            if (SUCCEEDED(SHCreateItemFromIDList(g_navItems[spacerId].pidl,
-                                                  IID_IShellItem, (void**)&raw)) && raw)
-            {
-                ((INameSpaceTreeControl *)pNscRaw)->RemoveRoot(raw);
-                raw->Release();
-            }
-        }
-        ts->homeSpacerItem = nullptr;
-    }
+    RemoveHomeSpacer(*ts, (INameSpaceTreeControl *)pNscRaw);
 
     // Remove our roots
     RootShellItems roots;
@@ -992,22 +1025,7 @@ static void FullRebuildTree(HWND hTree)
     unsigned long enumFlags = ts->enumFlags;
 
     // Remove HomeSpacer before roots — it's a separate namespace item.
-    if (ts->homeSpacerItem)
-    {
-        int spacerId = g_navItems[NAV_HOME].pidl ? NAV_HOME
-                     : (g_navItems[NAV_GALLERY].pidl ? NAV_GALLERY : -1);
-        if (spacerId >= 0)
-        {
-            IShellItem* raw = nullptr;
-            if (SUCCEEDED(SHCreateItemFromIDList(g_navItems[spacerId].pidl,
-                                                  IID_IShellItem, (void**)&raw)) && raw)
-            {
-                pNsc->RemoveRoot(raw);
-                raw->Release();
-            }
-        }
-        ts->homeSpacerItem = nullptr;
-    }
+    RemoveHomeSpacer(*ts, pNsc.get());
 
     RootShellItems roots;
     if (!roots.Create()) return;
@@ -1092,18 +1110,12 @@ static void InsertHomeSpacer(HWND hTree)
     if (!ts) return;
 
     HTREEITEM hSpacer = nullptr;
-    const WCHAR* spacerLabel = g_navItems[spacerId].label;
-    ForEachDepth1Item(hTree, [&](HTREEITEM h) -> bool {
-        if (h == ts->hItems[NAV_DESKTOP] || h == ts->hItems[NAV_THISPC])
-            return true;
-        WCHAR buf[256];
-        GetItemText(hTree, h, buf, 256);
-        if (wcscmp(buf, spacerLabel) == 0) {
-            hSpacer = h;
-            return false;
-        }
-        return true;
-    });
+    WCHAR spacerNames[1][64] = {};
+    wcsncpy_s(spacerNames[0], 64, g_navItems[spacerId].label, _TRUNCATE);
+    ForEachLabeledSibling(hTree,
+        [&](HTREEITEM h) { return h == ts->hItems[NAV_DESKTOP] || h == ts->hItems[NAV_THISPC]; },
+        spacerNames, 1,
+        [&](HTREEITEM h, int) -> bool { hSpacer = h; return false; });
 
     if (hSpacer)
     {
@@ -1112,7 +1124,7 @@ static void InsertHomeSpacer(HWND hTree)
     }
 
     Wh_Log(L"[SPACER] tree=%04X %s h=%04X after=%04X",
-           PTR4(hTree), spacerLabel, PTR4(hSpacer), PTR4(ts->hItems[NAV_DESKTOP]));
+           PTR4(hTree), g_navItems[spacerId].label, PTR4(hSpacer), PTR4(ts->hItems[NAV_DESKTOP]));
 
     InvalidateRect(hTree, nullptr, TRUE);
 }
@@ -1469,34 +1481,17 @@ static bool CleanupDups(HWND hTree, TreeState& ts)
     int childlessCount = 0;
     int sectionCount = 0;
 
-    ForEachDepth1Item(hTree, [&](HTREEITEM h) -> bool {
-        if (!IsOurSection(ts, h))
-        {
-            WCHAR text[64] = {};
-            GetItemText(hTree, h, text, ARRAYSIZE(text));
-
-            bool match = false;
-            for (int i = 0; i < expectedCount; i++)
-                if (matchNames[i][0] && wcscmp(text, matchNames[i]) == 0)
-                    { match = true; break; }
-
-            if (match)
-            {
-                HTREEITEM hChild = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)h);
-                if (!hChild)
-                {
-                    if (childlessCount < 8)
-                        toDeleteChildless[childlessCount++] = h;
-                }
-                else
-                {
-                    if (sectionCount < 4)
-                        toDeleteSections[sectionCount++] = h;
-                }
-            }
-        }
-        return true;
-    });
+    ForEachLabeledSibling(hTree,
+        [&](HTREEITEM h) { return IsOurSection(ts, h); },
+        matchNames, expectedCount,
+        [&](HTREEITEM h, int) -> bool {
+            HTREEITEM hChild = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)h);
+            if (!hChild)
+            { if (childlessCount < 8) toDeleteChildless[childlessCount++] = h; }
+            else
+            { if (sectionCount < 4) toDeleteSections[sectionCount++] = h; }
+            return true;
+        });
 
     // Redraw freeze prevents Explorer from synchronously re-inserting during deletion.
     bool needDelete = (sectionCount > 0 || childlessCount > 0);
@@ -1559,21 +1554,19 @@ static bool RemoveInherited(HWND hTree, TreeState& ts)
     struct { HTREEITEM h; int id; } toDelete[NAV_COUNT] = {};
     int delCount = 0;
 
-    ForEachDepth1Item(hTree, [&](HTREEITEM h) -> bool {
-        if (delCount >= targetCount)
-            return false;
-        if (!IsOurSection(ts, h) && h != ts.hiddenDuplicate && h != ts.homeSpacerItem)
-        {
-            WCHAR text[64] = {};
-            GetItemText(hTree, h, text, ARRAYSIZE(text));
-            for (int j = 0; j < targetCount; j++)
-            {
-                if (wcscmp(text, targets[j].name) == 0)
-                { toDelete[delCount++] = { h, targets[j].id }; break; }
-            }
-        }
-        return true;
-    });
+    WCHAR targetNames[NAV_COUNT][64] = {};
+    for (int i = 0; i < targetCount; i++)
+        wcsncpy_s(targetNames[i], 64, targets[i].name, _TRUNCATE);
+
+    ForEachLabeledSibling(hTree,
+        [&](HTREEITEM h) {
+            return IsOurSection(ts, h) || h == ts.hiddenDuplicate || h == ts.homeSpacerItem;
+        },
+        targetNames, targetCount,
+        [&](HTREEITEM h, int j) -> bool {
+            toDelete[delCount++] = { h, targets[j].id };
+            return delCount < targetCount;
+        });
 
     if (delCount > 0)
     {
@@ -1587,6 +1580,23 @@ static bool RemoveInherited(HWND hTree, TreeState& ts)
         }
     }
     return true;
+}
+
+static bool QaCleanupStep(HWND h, TreeState& ts) { return CleanupDups(h, ts); }
+static bool HgCleanupStep(HWND h, TreeState& ts) { return RemoveInherited(h, ts); }
+
+// Pre-clear: TVE_COLLAPSE re-sets WORK_DUP_COLLAPSE, so clearing before lets that survive.
+static void DupCollapse(HWND h)
+{
+    TreeState* ts = GetTree(h);
+    if (!ts) return;
+    WCHAR collapseText[NAV_COUNT][64] = {};
+    int collapseCount = BuildMatchList(collapseText, NAV_COUNT,
+        [](int id, const NavItemSettings& s) {
+            return IsInsertableItem(id) && s.showAtTop && !s.hideFromQA;
+        });
+    if (collapseCount > 0)
+        CollapseMatchingItems(h, ts, collapseText, collapseCount);
 }
 
 // --- SubClassTreeWndProc ---
@@ -1810,49 +1820,18 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
         TreeState* ts = GetTree(hWnd);
         ts = RunDeferredWork(hWnd, ts, WORK_FULL_REBUILD, FullRebuildTree);
-        ts = RunDeferredWork(hWnd, ts, WORK_HOT_INSERT, HotEnableInsert);
-
-        if (ts && (ts->pendingWork & WORK_QA_CLEANUP) &&
-            ((g_settings.items[NAV_THISPC].showAtTop && g_settings.items[NAV_THISPC].hideFromQA) ||
-             (g_settings.items[NAV_DESKTOP].showAtTop && g_settings.items[NAV_DESKTOP].hideFromQA)))
-        {
-            if (CleanupDups(hWnd, *ts))
-            {
-                ts->pendingWork &= ~WORK_QA_CLEANUP;
-            }
-            ts = GetTree(hWnd);
-        }
-
-        if (ts && (ts->pendingWork & WORK_HG_CLEANUP) && ts->pNscTree &&
+        ts = RunDeferredWork(hWnd, ts, WORK_HOT_INSERT,   HotEnableInsert);
+        ts = RunDeferredWorkIf(hWnd, ts, WORK_QA_CLEANUP,
+            (g_settings.items[NAV_THISPC].showAtTop && g_settings.items[NAV_THISPC].hideFromQA) ||
+            (g_settings.items[NAV_DESKTOP].showAtTop && g_settings.items[NAV_DESKTOP].hideFromQA),
+            QaCleanupStep);
+        ts = RunDeferredWorkIf(hWnd, ts, WORK_HG_CLEANUP,
+            ts && ts->pNscTree &&
             (g_navItems[NAV_HOME].pidl || g_navItems[NAV_GALLERY].pidl) &&
-            (g_settings.items[NAV_HOME].hide || g_settings.items[NAV_GALLERY].hide))
-        {
-            if (RemoveInherited(hWnd, *ts))
-                ts->pendingWork &= ~WORK_HG_CLEANUP;
-        }
-
-        ts = GetTree(hWnd);
-        if (ts && (ts->pendingWork & WORK_DUP_COLLAPSE))
-        {
-            WCHAR collapseText[NAV_COUNT][64] = {};
-            int collapseCount = BuildMatchList(collapseText, NAV_COUNT,
-                [](int id, const NavItemSettings& s) {
-                    return IsInsertableItem(id) && s.showAtTop && !s.hideFromQA;
-                });
-
-            ts->pendingWork &= ~WORK_DUP_COLLAPSE;
-            if (collapseCount > 0)
-                CollapseMatchingItems(hWnd, ts, collapseText, collapseCount);
-        }
-
-        ts = GetTree(hWnd);
-        if (ts && (ts->pendingWork & WORK_EXPAND))
-        {
-            ts->pendingWork &= ~WORK_EXPAND;
-            ExpandStartExpandedItems(hWnd);
-        }
-
-        ts = GetTree(hWnd);
+            (g_settings.items[NAV_HOME].hide || g_settings.items[NAV_GALLERY].hide),
+            HgCleanupStep);
+        ts = RunDeferredWork(hWnd, ts, WORK_DUP_COLLAPSE, DupCollapse);
+        ts = RunDeferredWork(hWnd, ts, WORK_EXPAND, ExpandStartExpandedItems);
         ts = RunDeferredWork(hWnd, ts, WORK_HOME_SPACER, InsertHomeSpacer);
 
         g_inSubclassProc--;
@@ -1879,15 +1858,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                     CollapseItemIntegral(hWnd, ts->hItems[i]);
             }
             if (ShouldRemoveInternalSep() && ts->hItems[NAV_THISPC] && ts->hItems[NAV_DESKTOP])
-            {
-                RECT rcA = {}, rcB = {};
-                if (GetItemRect(hWnd, ts->hItems[NAV_THISPC], &rcA) &&
-                    GetItemRect(hWnd, ts->hItems[NAV_DESKTOP], &rcB))
-                {
-                    HTREEITEM hLower = (rcA.top > rcB.top) ? ts->hItems[NAV_THISPC] : ts->hItems[NAV_DESKTOP];
-                    CollapseItemIntegral(hWnd, hLower);
-                }
-            }
+                CollapseItemIntegral(hWnd, LowerInsertableItem(*ts));
         }
 
         SectionLayout layout = {};
