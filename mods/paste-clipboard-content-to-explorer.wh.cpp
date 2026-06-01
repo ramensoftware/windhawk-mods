@@ -2,7 +2,7 @@
 // @id              paste-clipboard-content-to-explorer
 // @name            Paste Clipboard Content to Explorer
 // @description     Paste text and images from clipboard as files in Explorer and in file dialogs
-// @version         1.6
+// @version         1.7
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -603,9 +603,7 @@ static HWND GetShellViewWindowAtCursor()
 // ============================================================
 static bool IsPasteCmd(UINT id)
 {
-    return id == 26
-        || id == 30979
-        || (id >= 28690 && id <= 28720);
+    return id == 28698;
 }
 
 // ============================================================
