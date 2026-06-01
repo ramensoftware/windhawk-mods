@@ -4944,6 +4944,34 @@
                 "version": "1.1.1"
             }
         },
+        "file-explorer-reopen-closed-tab": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780342787000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780342787000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Armaninyow",
+                "compilerOptions": "-lshlwapi -lole32 -loleaut32 -lshell32 -luuid",
+                "description": "Reopens the last closed Explorer tab when Ctrl+Shift+T is pressed in an active Explorer window",
+                "github": "https://github.com/armaninyow",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "File Explorer Reopen Closed Tab",
+                "version": "1.0.0"
+            }
+        },
         "files-2-folders": {
             "details": {
                 "defaultSorting": 650,

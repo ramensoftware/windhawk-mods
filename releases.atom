@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-01T19:16:56.000Z</updated>
+    <updated>2026-06-01T19:39:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Reopen Closed Tab 1.0.0]]></title>
+        <id>https://windhawk.net/mods/file-explorer-reopen-closed-tab#29156016482a79a1c251b5e211ebbd1f0ec8d5dc</id>
+        <link href="https://windhawk.net/mods/file-explorer-reopen-closed-tab"/>
+        <updated>2026-06-01T19:39:47.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fileexplorerreopenclosedtab">File Explorer Reopen Closed Tab</h1>
+<p>Press <code>Ctrl+Shift+T</code> in any active File Explorer window to reopen the last closed tab — just like in a browser.</p>
+<ul>
+<li>Restored tabs open directly in the existing Explorer window, not as a new window.</li>
+<li>If no Explorer window is open, nothing happens.</li>
+<li>Up to 50 tabs are remembered per session.</li>
+<li>History clears when all Explorer windows are closed.</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.0]]></title>
         <id>https://windhawk.net/mods/disable-inactive-menubar-greying#56be4620179f43168964f39cd82179339b6bf8fe</id>
@@ -685,32 +703,6 @@ open a separate window instead.</li>
         <author>
             <name>ALMAS CP</name>
             <uri>https://github.com/almas-cp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Search Bing Redirector 1.0.0]]></title>
-        <id>https://windhawk.net/mods/start-search-bing-redirector#a6800ed0793157681e68ef726fcb595b16a4b3d9</id>
-        <link href="https://windhawk.net/mods/start-search-bing-redirector"/>
-        <updated>2026-05-16T16:25:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startsearchbingredirector">Start Search Bing Redirector</h1>
-<p>When you click a web result in the Windows Start menu search, Windows forces
-the URL through <code>microsoft-edge:?url=https://www.bing.com/search?q=...</code> so it
-always opens in Edge with Bing.</p>
-<p>This mod intercepts that hand-off, extracts the search query, and redirects
-it to your chosen engine. The <code>microsoft-edge:</code> wrapper is dropped so the
-URL opens in your <strong>default browser</strong>.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Hooks <code>WindowsCreateString</code> in <code>combase.dll</code> inside <code>SearchHost.exe</code>. When the
-HSTRING being constructed is the click activation URL, the URL is rewritten
-in place before it reaches the WinRT URI launcher.</p>
-<p>The in-flyout result previews (the right panel) are <strong>not</strong> changed. Those
-are rendered from Bing's JSON API and would need a full API proxy to swap.
-Only the click hand-off is redirected.</p>
-<h2 id="logs">Logs</h2>
-<p>Open Windhawk's log viewer and filter for <code>[BingRedirector]</code>.</p>]]></content>
-        <author>
-            <name>takattowo</name>
-            <uri>https://github.com/takattowo</uri>
         </author>
     </entry>
 </feed>
