@@ -22,6 +22,8 @@
 
 This mod allows you to toggle the visibility of hidden files in Windows Explorer using the Ctrl+H keyboard shortcut.
 
+![toggle-hidden-files-gif](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/toggle-hidden-files/toggle-hidden-files.gif)
+
 ## Features
 - Ctrl+H hotkey that works only when Explorer windows are focused
 - Toggles the "Show hidden files" setting
