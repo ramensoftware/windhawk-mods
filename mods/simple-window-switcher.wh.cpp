@@ -2756,6 +2756,15 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
         int headerTop = GetHeaderTopForEntry(e);
         int iconX = contentLeft;
         int iconY = headerTop + (rowTitleH - iconSz) / 2;
+
+        if (!HeaderIsVertical() && g_settings.showTitle && g_settings.showIcon) {
+            // Font rendering and icon boundaries scale slightly differently at higher DPIs.
+            // At 100% (96 DPI), mathematical centering is visually perfect (shift = 0).
+            // At >100% (e.g. 144 DPI), a small nudge downwards perfectly aligns their visual centers.
+            int shift = (g_dpiY - 96) / 24;
+            if (shift > 0) iconY += shift;
+        }
+
         int textLeft = contentLeft;
         if (g_settings.showIcon) textLeft += iconSz + padLeft;
         int textRight = contentRight;
