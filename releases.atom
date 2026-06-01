@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-05-30T18:56:55.000Z</updated>
+    <updated>2026-06-01T19:16:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.0]]></title>
+        <id>https://windhawk.net/mods/disable-inactive-menubar-greying#56be4620179f43168964f39cd82179339b6bf8fe</id>
+        <link href="https://windhawk.net/mods/disable-inactive-menubar-greying"/>
+        <updated>2026-06-01T19:16:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disableinactivemenubargreying">Disable Inactive Menubar Greying</h1>
+<p>This mod prevents the classic menubar text (File, Edit, View, etc.) in folder windows
+under the Classic theme from appearing greyed out when the window loses focus, 
+the way it was in Windows 95, before Windows 98.</p>
+<p><img src="https://i.imgur.com/FCEXTyt.png" alt="screenshot" /></p>
+<p><img src="https://i.imgur.com/XBVNN0v.png" alt="screenshot" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[IME Native Mode Lock 0.1]]></title>
         <id>https://windhawk.net/mods/ime-mode-lock#6f1478f3ddcca4a45d5a1930a2d500db8738a386</id>
@@ -695,27 +711,6 @@ Only the click hand-off is redirected.</p>
         <author>
             <name>takattowo</name>
             <uri>https://github.com/takattowo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ExplorerPatcher Taskbar Button Width 1.0.0]]></title>
-        <id>https://windhawk.net/mods/ep-taskbar-button-width#7036416753c22f8b60d43cedd65848fd88c77a15</id>
-        <link href="https://windhawk.net/mods/ep-taskbar-button-width"/>
-        <updated>2026-05-16T15:31:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerpatchertaskbarbuttonwidth">ExplorerPatcher Taskbar Button Width</h1>
-<p>This mod lets you change the width of taskbar items when using ExplorerPatcher's Windows 10 taskbar on Windows 11.</p>
-<p>Before:</p>
-<p><img src="https://i.imgur.com/r82ISo3.png" alt="Before" /></p>
-<p>After (120%):</p>
-<p><img src="https://i.imgur.com/qHaRdVt.png" alt="After" /></p>
-<p>The item scales as a percentage from a pre-computed base value not exposed by EP.</p>
-<p>(The registry hack at
-<code>HKCU\Control Panel\Desktop\WindowMetrics\MinWidth</code> doesn't work with
-ExplorerPatcher.)</p>
-<p><strong>Requirements:</strong> Windows 11 with ExplorerPatcher, using the Windows 10 taskbar.</p>]]></content>
-        <author>
-            <name>Rod Boev</name>
-            <uri>https://github.com/rodboev</uri>
         </author>
     </entry>
 </feed>
