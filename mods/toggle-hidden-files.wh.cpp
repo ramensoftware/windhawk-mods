@@ -26,7 +26,7 @@ This mod allows you to toggle the visibility of hidden files in Windows Explorer
 - Ctrl+H hotkey that works only when Explorer windows are focused
 - Toggles the "Show hidden files" setting
 - Optional: Also toggle protected OS files
-- Automatically refreshes Explorer windows
+- Applies changes immediately to Explorer windows
 - Works with all Windows Explorer windows
 
 ## Usage
@@ -39,10 +39,10 @@ This mod allows you to toggle the visibility of hidden files in Windows Explorer
 
 ## Technical Details
 - Only activates when Windows Explorer windows are in focus
-- Modifies the standard registry settings for showing hidden files
-- Sends refresh messages to all Explorer windows
+- Queues toggle work to a worker thread to keep input handling responsive
+- Uses Windows shell APIs to update hidden-file visibility live
+- Notifies the shell to refresh views after toggling
 - Handles proper cleanup when the mod is unloaded
-- Explorer process must be restarted for changes to take effect
 */
 // ==/WindhawkModReadme==
 
@@ -58,37 +58,27 @@ struct {
 
 // Global variables
 HHOOK g_hKeyboardHook = nullptr;
-bool g_modEnabled = false;
+HANDLE g_hookThread = nullptr;
+DWORD g_hookThreadId = 0;
+HANDLE g_hookThreadReadyEvent = nullptr;
+bool g_hookInstallSucceeded = false;
 
-// Registry keys and values for hidden files settings
-const wchar_t* EXPLORER_ADVANCED_KEY = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
-const wchar_t* HIDDEN_FILES_VALUE = L"Hidden";
-const wchar_t* SUPER_HIDDEN_VALUE = L"ShowSuperHidden";
+constexpr UINT WM_APP_TOGGLE_HIDDEN_FILES = WM_APP + 1;
 
-const DWORD SHOW_HIDDEN = 1;
-const DWORD HIDE_HIDDEN = 2;
-const DWORD SHOW_SUPER_HIDDEN = 1;
-const DWORD HIDE_SUPER_HIDDEN = 0;
 
 // Window context enumeration
 enum WindowContext {
     CONTEXT_UNKNOWN = 0,
-    CONTEXT_EXPLORER = 1,
-    CONTEXT_DESKTOP = 2
+    CONTEXT_EXPLORER = 1
 };
 
 // Function declarations
 LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam);
-bool ToggleHiddenFiles();
-bool ToggleProtectedFiles();
-void RefreshAllExplorerWindows();
+DWORD WINAPI HookThreadProc(LPVOID lpParameter);
+bool ToggleHiddenFilesInShellState();
 bool IsCtrlHPressed(WPARAM wParam, LPARAM lParam);
 void LoadSettings();
 WindowContext GetCurrentWindowContext();
-DWORD GetHiddenFilesSetting();
-bool SetHiddenFilesSetting(DWORD dwValue);
-DWORD GetProtectedFilesSetting();
-bool SetProtectedFilesSetting(DWORD dwValue);
 
 // Get current window context based on focused window
 WindowContext GetCurrentWindowContext() {
@@ -108,123 +98,33 @@ WindowContext GetCurrentWindowContext() {
         return CONTEXT_EXPLORER;
     }
     
-    // Check for Desktop
-    if (wcscmp(className, L"Progman") == 0 || 
-        wcscmp(className, L"WorkerW") == 0) {
-        return CONTEXT_DESKTOP;
-    }
-    
-    // Also check if it's a desktop child window
-    HWND hDesktop = GetShellWindow();
-    if (hDesktop && (hForeground == hDesktop || IsChild(hDesktop, hForeground))) {
-        return CONTEXT_DESKTOP;
-    }
-    
     return CONTEXT_UNKNOWN;
 }
 
-// Get current hidden files setting from registry
-DWORD GetHiddenFilesSetting() {
-    HKEY hKey;
-    DWORD dwValue = HIDE_HIDDEN; // Default to hidden
-    DWORD dwSize = sizeof(DWORD);
-    
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, EXPLORER_ADVANCED_KEY, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        RegQueryValueExW(hKey, HIDDEN_FILES_VALUE, nullptr, nullptr, (LPBYTE)&dwValue, &dwSize);
-        RegCloseKey(hKey);
+// Toggle hidden files visibility using the shell state API.
+bool ToggleHiddenFilesInShellState() {
+    SHELLSTATE shellState{};
+    constexpr DWORD kReadMask = SSF_SHOWALLOBJECTS | SSF_SHOWSUPERHIDDEN;
+
+    SHGetSetSettings(&shellState, kReadMask, FALSE);
+
+    shellState.fShowAllObjects = !shellState.fShowAllObjects;
+
+    DWORD writeMask = SSF_SHOWALLOBJECTS;
+    if (g_settings.toggleProtectedFiles) {
+        shellState.fShowSuperHidden = !shellState.fShowSuperHidden;
+        writeMask |= SSF_SHOWSUPERHIDDEN;
     }
-    
-    return dwValue;
-}
 
-// Set hidden files setting in registry
-bool SetHiddenFilesSetting(DWORD dwValue) {
-    HKEY hKey;
-    bool success = false;
-    
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, EXPLORER_ADVANCED_KEY, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
-        if (RegSetValueExW(hKey, HIDDEN_FILES_VALUE, 0, REG_DWORD, (LPBYTE)&dwValue, sizeof(DWORD)) == ERROR_SUCCESS) {
-            success = true;
-        }
-        RegCloseKey(hKey);
-    }
-    
-    return success;
-}
-
-// Get current protected files setting from registry
-DWORD GetProtectedFilesSetting() {
-    HKEY hKey;
-    DWORD dwValue = HIDE_SUPER_HIDDEN; // Default to hidden
-    DWORD dwSize = sizeof(DWORD);
-    
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, EXPLORER_ADVANCED_KEY, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        RegQueryValueExW(hKey, SUPER_HIDDEN_VALUE, nullptr, nullptr, (LPBYTE)&dwValue, &dwSize);
-        RegCloseKey(hKey);
-    }
-    
-    return dwValue;
-}
-
-// Set protected files setting in registry
-bool SetProtectedFilesSetting(DWORD dwValue) {
-    HKEY hKey;
-    bool success = false;
-    
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, EXPLORER_ADVANCED_KEY, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
-        if (RegSetValueExW(hKey, SUPER_HIDDEN_VALUE, 0, REG_DWORD, (LPBYTE)&dwValue, sizeof(DWORD)) == ERROR_SUCCESS) {
-            success = true;
-        }
-        RegCloseKey(hKey);
-    }
-    
-    return success;
-}
-
-// Toggle hidden files setting
-bool ToggleHiddenFiles() {
-    DWORD currentSetting = GetHiddenFilesSetting();
-    DWORD newSetting = (currentSetting == SHOW_HIDDEN) ? HIDE_HIDDEN : SHOW_HIDDEN;
-    
-    return SetHiddenFilesSetting(newSetting);
-}
-
-// Toggle protected files setting
-bool ToggleProtectedFiles() {
-    DWORD currentSetting = GetProtectedFilesSetting();
-    DWORD newSetting = (currentSetting == SHOW_SUPER_HIDDEN) ? HIDE_SUPER_HIDDEN : SHOW_SUPER_HIDDEN;
-    
-    return SetProtectedFilesSetting(newSetting);
+    SHGetSetSettings(&shellState, writeMask, TRUE);
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    return true;
 }
 
 // Load settings from Windhawk configuration
 void LoadSettings() {
-    // Default values
-    g_settings.toggleProtectedFiles = true;
-}
-
-// Refresh all Explorer windows
-void RefreshAllExplorerWindows() {
-    // Send a message to all windows to refresh their view
-    SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ShellState");
-    
-    // Also try to refresh specifically Explorer windows
-    HWND hWnd = nullptr;
-    while ((hWnd = FindWindowExW(nullptr, hWnd, L"CabinetWClass", nullptr)) != nullptr) {
-        SendNotifyMessageW(hWnd, WM_COMMAND, 41504, 0); // Refresh command
-    }
-    
-    // Also check ExploreWClass windows
-    hWnd = nullptr;
-    while ((hWnd = FindWindowExW(nullptr, hWnd, L"ExploreWClass", nullptr)) != nullptr) {
-        SendNotifyMessageW(hWnd, WM_COMMAND, 41504, 0);
-    }
-    
-    // Refresh desktop as well
-    HWND hDesktop = GetShellWindow();
-    if (hDesktop) {
-        SendNotifyMessageW(hDesktop, WM_COMMAND, 41504, 0);
-    }
+    g_settings.toggleProtectedFiles =
+        Wh_GetIntSetting(L"toggleProtectedFiles") != 0;
 }
 
 // Check if Ctrl+H is pressed
@@ -240,27 +140,56 @@ bool IsCtrlHPressed(WPARAM wParam, LPARAM lParam) {
         return false;
     }
     
-    // Check if Ctrl is pressed
-    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    const bool ctrlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    const bool shiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    const bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    const bool winPressed = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
+                            (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+
+    // Require Ctrl-only to avoid clobbering combinations like Ctrl+Shift+H.
+    return ctrlPressed && !shiftPressed && !altPressed && !winPressed;
+}
+
+DWORD WINAPI HookThreadProc(LPVOID) {
+    MSG msg;
+
+    // Ensure the message queue exists before hooks/messages are used.
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc,
+                                        nullptr, 0);
+    g_hookInstallSucceeded = g_hKeyboardHook != nullptr;
+
+    if (g_hookThreadReadyEvent) {
+        SetEvent(g_hookThreadReadyEvent);
+    }
+
+    if (!g_hookInstallSucceeded) {
+        return 0;
+    }
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_APP_TOGGLE_HIDDEN_FILES) {
+            ToggleHiddenFilesInShellState();
+        }
+    }
+
+    UnhookWindowsHookEx(g_hKeyboardHook);
+    g_hKeyboardHook = nullptr;
+
+    return 0;
 }
 
 // Keyboard hook procedure
 LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && g_modEnabled) {
+    if (nCode >= 0) {
         WindowContext context = GetCurrentWindowContext();
         
         // Only process if we're in Explorer windows
         if (context == CONTEXT_EXPLORER && IsCtrlHPressed(wParam, lParam)) {
-            // Toggle hidden files
-            bool success = ToggleHiddenFiles();
-            
-            // Also toggle protected files if setting is enabled
-            if (g_settings.toggleProtectedFiles) {
-                success = ToggleProtectedFiles() && success;
-            }
-            
-            if (success) {
-                RefreshAllExplorerWindows();
+            if (g_hookThreadId != 0) {
+                PostThreadMessageW(g_hookThreadId, WM_APP_TOGGLE_HIDDEN_FILES,
+                                   0, 0);
             }
             
             // Consume the key press
@@ -275,15 +204,39 @@ LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
 BOOL WhTool_ModInit() {
     // Load settings
     LoadSettings();
-    
-    // Install keyboard hook
-    g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(nullptr), 0);
-    
-    if (!g_hKeyboardHook) {
+
+    g_hookThreadReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hookThreadReadyEvent) {
         return FALSE;
     }
-    
-    g_modEnabled = true;
+
+    g_hookInstallSucceeded = false;
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0,
+                                &g_hookThreadId);
+    if (!g_hookThread) {
+        CloseHandle(g_hookThreadReadyEvent);
+        g_hookThreadReadyEvent = nullptr;
+        g_hookThreadId = 0;
+        return FALSE;
+    }
+
+    if (WaitForSingleObject(g_hookThreadReadyEvent, 5000) != WAIT_OBJECT_0 ||
+        !g_hookInstallSucceeded) {
+        if (g_hookThreadId != 0) {
+            PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        }
+        WaitForSingleObject(g_hookThread, 5000);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        g_hookThreadId = 0;
+        CloseHandle(g_hookThreadReadyEvent);
+        g_hookThreadReadyEvent = nullptr;
+        return FALSE;
+    }
+
+    CloseHandle(g_hookThreadReadyEvent);
+    g_hookThreadReadyEvent = nullptr;
+
     return TRUE;
 }
 
@@ -294,12 +247,21 @@ void WhTool_ModSettingsChanged() {
 
 // Mod cleanup
 void WhTool_ModUninit() {
-    g_modEnabled = false;
+    if (g_hookThreadId != 0) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+    }
 
-    // Remove keyboard hook
-    if (g_hKeyboardHook) {
-        UnhookWindowsHookEx(g_hKeyboardHook);
-        g_hKeyboardHook = nullptr;
+    if (g_hookThread) {
+        WaitForSingleObject(g_hookThread, 5000);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+    }
+
+    g_hookThreadId = 0;
+
+    if (g_hookThreadReadyEvent) {
+        CloseHandle(g_hookThreadReadyEvent);
+        g_hookThreadReadyEvent = nullptr;
     }
 }
 
@@ -436,7 +398,7 @@ void Wh_ModAfterInit() {
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
