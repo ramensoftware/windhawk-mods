@@ -7078,7 +7078,7 @@
                     5
                 ],
                 "ratingUsers": 6,
-                "updated": 1779573707000,
+                "updated": 1780306905000,
                 "users": 125
             },
             "metadata": {
@@ -7090,7 +7090,7 @@
                     "*"
                 ],
                 "name": "Never Auto-Expand Explorer Tree Items",
-                "version": "1.0.1"
+                "version": "1.1"
             }
         },
         "nilesoft-shell-animator": {
