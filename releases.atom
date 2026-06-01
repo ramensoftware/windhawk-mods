@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-01T20:34:09.000Z</updated>
+    <updated>2026-06-01T21:37:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Toggle Hidden Files 1.0.0]]></title>
+        <id>https://windhawk.net/mods/toggle-hidden-files#72576e59a6cee399c10d601d49cc36b666c26191</id>
+        <link href="https://windhawk.net/mods/toggle-hidden-files"/>
+        <updated>2026-06-01T21:37:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="togglehiddenfiles">Toggle Hidden Files</h1>
+<p>This mod allows you to toggle the visibility of hidden files in Windows Explorer using the Ctrl+H keyboard shortcut.</p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/toggle-hidden-files/toggle-hidden-files.gif" alt="toggle-hidden-files-gif" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Ctrl+H hotkey that works only when Explorer windows are focused</li>
+<li>Toggles the "Show hidden files" setting</li>
+<li>Optional: Also toggle protected OS files</li>
+<li>Applies changes immediately to Explorer windows</li>
+<li>Works with all Windows Explorer windows</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<ol>
+<li><strong>Focus an Explorer window</strong> - Click on or open any File Explorer window</li>
+<li><strong>Press Ctrl+H</strong> - Use the keyboard shortcut to toggle hidden files visibility</li>
+<li><strong>The setting will be applied immediately</strong> to all Explorer windows</li>
+</ol>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Also toggle protected OS files</strong>: When enabled, Ctrl+H will also show/hide protected operating system files</li>
+</ul>
+<h2 id="technicaldetails">Technical Details</h2>
+<ul>
+<li>Only activates when Windows Explorer windows are in focus</li>
+<li>Queues toggle work to a worker thread to keep input handling responsive</li>
+<li>Uses Windows shell APIs to update hidden-file visibility live</li>
+<li>Notifies the shell to refresh views after toggling</li>
+<li>Handles proper cleanup when the mod is unloaded</li>
+</ul>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Nav DragOver Fix 1.1.9]]></title>
         <id>https://windhawk.net/mods/explorer-nav-dragover-fix#e10c123d95f10be617ff01eb586b41851294c2fb</id>
@@ -709,28 +748,6 @@ width and height. With this mod you can resize Explorer windows to any size.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.0]]></title>
-        <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#95a7912335a7140e3c46fb5826c1b2a1cd04a3aa</id>
-        <link href="https://windhawk.net/mods/never-auto-expand-explorer-tree-items"/>
-        <updated>2026-05-22T13:57:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="neverautoexpandexplorertreeitems">Never Auto-Expand Explorer Tree Items</h1>
-<p>File Explorer automatically expands navigation pane items (such as "This PC")
-even if the "Expand to current folder" option is off, specifically when:</p>
-<ul>
-<li>Opening any folder inside an external drive in a new tab or window.</li>
-<li>Navigating to any drive after manually expanding and collapsing "This PC".</li>
-</ul>
-<p>This mod prevents this unwanted auto-expansion behavior, keeping the navigation
-pane tidy.</p>
-<p>| Before | After |
-| :----: | :---: |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_before.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_after.png" alt="" /> |</p>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
