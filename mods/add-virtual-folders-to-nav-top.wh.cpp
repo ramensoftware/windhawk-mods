@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.18
+// @version         1.1.19
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -103,6 +103,7 @@ Before/after:
 #include <windowsx.h>
 #include <uxtheme.h>
 #include <gdiplus.h>
+#include <atomic>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -326,6 +327,10 @@ struct InsertionCtx {
     HWND forTree = nullptr; // scopes item to a specific tree; null = any
 };
 static InsertionCtx g_ins;
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_orig;
+static std::atomic<bool> g_explorerFrameLoaded{false};
 
 // Guards are static (not thread_local) because Wh_ModInit runs on the loader thread but hooks fire on the UI thread.
 static bool g_deferredOpInProgress = false;
@@ -903,7 +908,7 @@ static void HotEnableInsert(HWND hWnd)
 
 static LRESULT CALLBACK TreeInteractionProc(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
-    UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+    DWORD_PTR dwRefData)
 {
     TreeState* ts = GetTree(hWnd);
     HTREEITEM hiddenDup = ts ? GetHiddenItem(*ts) : nullptr;
@@ -920,9 +925,6 @@ static LRESULT CALLBACK TreeInteractionProc(
         if (hHit == hiddenDup)
             return 0;
     }
-
-    if (uMsg == WM_NCDESTROY)
-        RemoveWindowSubclass(hWnd, TreeInteractionProc, uIdSubclass);
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -989,7 +991,7 @@ static void RestoreTree(HWND hTree)
     if (pFilterRaw)
         pFilterRaw->Release();
 
-    RemoveWindowSubclass(hTree, TreeInteractionProc, 0xAF01);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hTree, TreeInteractionProc);
 
     // Restore pin icons
     if (savedImgList)
@@ -1004,6 +1006,9 @@ static void RestoreTree(HWND hTree)
             ts->ownsNscRef = false;
         ts->pNscTree = nullptr;
     }
+
+    RemovePropW(hTree, L"WH_NscTree");
+    RemovePropW(hTree, L"WH_EnumFlags");
 
     if (ownsRef)
         ((INameSpaceTreeControl *)pNscRaw)->Release();
@@ -1908,7 +1913,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             EnsureParentSubclass(hWnd);
 
         if (ts && GetHiddenItem(*ts))
-            SetWindowSubclass(hWnd, TreeInteractionProc, 0xAF01, 0);
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TreeInteractionProc, 0);
 
         g_lastSepY = -1;
         g_firstSepY = -1;
@@ -1965,7 +1970,8 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
     if (uMsg == WM_NCDESTROY)
     {
-        RemoveWindowSubclass(hWnd, TreeInteractionProc, 0xAF01);
+        RemovePropW(hWnd, L"WH_NscTree");
+        RemovePropW(hWnd, L"WH_EnumFlags");
         auto it = g_trees.find(hWnd);
         if (it != g_trees.end())
         {
@@ -2082,12 +2088,8 @@ void LoadSettings()
             g_settings.removeSepBelowNav, g_settings.removeSepBelowQA);
 }
 
-BOOL Wh_ModInit()
+static bool InitializeModCore(HMODULE hExplorerFrame)
 {
-    HMODULE hExplorerFrame = GetModuleHandleW(L"ExplorerFrame.dll");
-    if (!hExplorerFrame)
-        return FALSE;
-
     LoadSettings();
 
     auto cleanupOnFail = []() {
@@ -2107,7 +2109,7 @@ BOOL Wh_ModInit()
     {
         Wh_Log(L"Failed to get This PC PIDL");
         cleanupOnFail();
-        return FALSE;
+        return false;
     }
 
     SHGetSpecialFolderLocation(nullptr, CSIDL_DESKTOP, &g_navItems[NAV_DESKTOP].pidl);
@@ -2159,16 +2161,16 @@ BOOL Wh_ModInit()
     {
         Wh_Log(L"Failed to hook symbols");
         cleanupOnFail();
-        return FALSE;
+        return false;
     }
 
     HMODULE hUxTheme = GetModuleHandleW(L"uxtheme.dll");
     if (hUxTheme)
     {
-        FARPROC pDTB = GetProcAddress(hUxTheme, "DrawThemeBackground");
+        auto pDTB = (DrawThemeBackground_t)GetProcAddress(hUxTheme, "DrawThemeBackground");
         if (pDTB)
         {
-            Wh_SetFunctionHook((void *)pDTB, (void *)DrawThemeBackground_hook, (void **)&DrawThemeBackground_orig);
+            WindhawkUtils::SetFunctionHook(pDTB, DrawThemeBackground_hook, &DrawThemeBackground_orig);
             Wh_Log(L"[CHEVRON] at=%04X orig=%04X", PTR4(pDTB), PTR4(DrawThemeBackground_orig));
         }
         else
@@ -2178,7 +2180,47 @@ BOOL Wh_ModInit()
         Wh_Log(L"[CHEVRON] uxtheme.dll not loaded");
 
     Wh_Log(L"Mod initialized, hasItemsAtTop=%d", (int)g_settings.hasItemsAtTop);
-    return TRUE;
+    return true;
+}
+
+void Wh_ModAfterInit();
+
+static HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags)
+{
+    HMODULE hModule = LoadLibraryExW_orig(lpLibFileName, hFile, dwFlags);
+    if (hModule && lpLibFileName && !(dwFlags & LOAD_LIBRARY_AS_DATAFILE) &&
+        !g_explorerFrameLoaded.load(std::memory_order_relaxed))
+    {
+        LPCWSTR name = wcsrchr(lpLibFileName, L'\\');
+        name = name ? name + 1 : lpLibFileName;
+        if (_wcsicmp(name, L"ExplorerFrame.dll") == 0 &&
+            !g_explorerFrameLoaded.exchange(true, std::memory_order_acq_rel))
+        {
+            Wh_Log(L"ExplorerFrame.dll loaded late, installing hooks");
+            if (!InitializeModCore(hModule))
+            {
+                Wh_Log(L"Late-load InitializeModCore failed");
+                g_explorerFrameLoaded.store(false, std::memory_order_release);
+                return hModule;
+            }
+            Wh_Log(L"Late-load hooks installed, running discovery");
+            Wh_ModAfterInit();
+        }
+    }
+    return hModule;
+}
+
+BOOL Wh_ModInit()
+{
+    HMODULE hExplorerFrame = GetModuleHandleW(L"ExplorerFrame.dll");
+    if (!hExplorerFrame)
+    {
+        // Wh_Log(L"ExplorerFrame.dll not loaded, hooking LoadLibraryExW for late detection");
+        Wh_SetFunctionHook((void *)LoadLibraryExW, (void *)LoadLibraryExW_hook, (void **)&LoadLibraryExW_orig);
+        return TRUE;
+    }
+    g_explorerFrameLoaded.store(true, std::memory_order_relaxed);
+    return InitializeModCore(hExplorerFrame) ? TRUE : FALSE;
 }
 
 struct DiscoveredTree {
@@ -2495,13 +2537,19 @@ void Wh_ModUninit()
     }
     g_subclassedParents.clear();
 
-    // Release straggler filters from trees never processed
+    // Release straggler refs from trees that RestoreTree didn't fully process
     for (auto& [h, ts] : g_trees)
     {
         if (ts.pFilter)
         {
             ts.pFilter->Release();
             ts.pFilter = nullptr;
+        }
+        if (ts.ownsNscRef && ts.pNscTree)
+        {
+            ((INameSpaceTreeControl *)ts.pNscTree)->Release();
+            ts.pNscTree = nullptr;
+            ts.ownsNscRef = false;
         }
     }
     g_trees.clear();
