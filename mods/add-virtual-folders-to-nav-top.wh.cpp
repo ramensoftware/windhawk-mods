@@ -1944,6 +1944,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         g_mutatingTree = hWnd;
         RestoreTree(hWnd);
         g_mutatingTree = nullptr;
+        if (g_ins.filter) { g_ins.filter->Release(); g_ins.filter = nullptr; }
         if (IsWindow(hWnd))
             RedrawWindow(hWnd, nullptr, nullptr,
                          RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
@@ -2407,6 +2408,16 @@ static void DiscoverTreeFromBrowser(HWND hTop, const WCHAR *cls,
 
 void Wh_ModAfterInit()
 {
+#ifdef _WIN64
+    const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
+#else
+    const size_t OFFSET_SAME_TEB_FLAGS = 0x0FCA;
+#endif
+    bool isInitialThread = *(USHORT *)((BYTE *)NtCurrentTeb() +
+        OFFSET_SAME_TEB_FLAGS) & 0x0400;
+    if (isInitialThread)
+        return;
+
     std::vector<DiscoveredTree> discovered;
 
     EnumWindows([](HWND hTop, LPARAM lParam) -> BOOL {
@@ -2633,7 +2644,6 @@ void Wh_ModUninit()
                 ts.ownsNscRef = false;
             }
         }
-        g_trees.clear();
     }
 
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
