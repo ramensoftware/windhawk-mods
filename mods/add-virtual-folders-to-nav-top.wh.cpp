@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.20
+// @version         1.1.21
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -335,9 +335,10 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_orig;
 static std::atomic<bool> g_explorerFrameLoaded{false};
 
-static std::atomic<bool> g_deferredOpInProgress{false};
-static std::atomic<HWND> g_mutatingTree{nullptr};
-static std::unordered_set<HWND> g_pendingRebuildTrees;
+static thread_local bool g_deferredOpInProgress = false;
+static thread_local HWND g_mutatingTree = nullptr;
+static std::atomic<bool> g_uninitInProgress{false};
+static thread_local std::unordered_set<HWND> g_pendingRebuildTrees;
 
 #define WM_DEFERRED_REBUILD  (WM_APP + 0x101)
 
@@ -1407,7 +1408,7 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         if (hdr && hdr->hwndFrom == hTree)
         {
             if ((hdr->code == TVN_SELCHANGEDW || hdr->code == TVN_SELCHANGEDA) &&
-                hTree == g_mutatingTree)
+                (hTree == g_mutatingTree || g_uninitInProgress.load(std::memory_order_relaxed)))
                 return 0;
 
             if (hdr->code == (UINT)NM_CUSTOMDRAW && hTree != g_mutatingTree)
@@ -2588,15 +2589,15 @@ void Wh_ModUninit()
             uninitList.push_back(hTree);
     }
 
+    g_uninitInProgress.store(true, std::memory_order_release);
     for (HWND hTree : uninitList)
     {
-        g_mutatingTree = hTree;
         RestoreTree(hTree);
-        g_mutatingTree = nullptr;
         if (IsWindow(hTree))
             RedrawWindow(hTree, nullptr, nullptr,
                          RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
     }
+    g_uninitInProgress.store(false, std::memory_order_release);
 
     for (HWND parent : g_subclassedParents)
     {
@@ -2622,7 +2623,6 @@ void Wh_ModUninit()
             }
         }
         g_trees.clear();
-        g_pendingRebuildTrees.clear();
     }
 
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
