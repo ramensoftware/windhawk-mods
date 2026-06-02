@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-01T21:37:42.000Z</updated>
+    <updated>2026-06-02T16:39:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Transparent Desktop Icons with Spotlight 1.0]]></title>
+        <id>https://windhawk.net/mods/transparent-desktop-icons-spotlight#7de4fff6bbaa2bbc92512039e8bc39c61480c7bf</id>
+        <link href="https://windhawk.net/mods/transparent-desktop-icons-spotlight"/>
+        <updated>2026-06-02T16:39:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="transparentdesktopiconswithspotlight">Transparent Desktop Icons with Spotlight</h1>
+<p>Makes desktop icons semi-transparent when idle, revealing the wallpaper beneath.
+When you move your mouse over the desktop, a customizable spotlight effect
+illuminates the area around your cursor, revealing icons with full clarity.</p>
+<p>As the cursor leaves the desktop or remains idle, the spotlight fades and icons
+gradually become transparent again. Selected icons remain opaque with their own 
+customizable independent timeouts, blurs, and fade durations.</p>
+<p><strong>Demonstration</strong>: in this case the selected icons have a timeout (set it to 0 to keep them active)</p>
+<p><img src="https://i.imgur.com/7cTTHTN.gif" alt="Demonstration:" /></p>
+<p><strong>Note:</strong> This mod captures the static Windows wallpaper for performance reasons. 
+It does not currently support live/animated wallpapers (e.g., Wallpaper Engine, Lively).</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Dedicated render thread for flawless, vsync-matched 60/144+ FPS performance.</li>
+<li>0% background GPU/CPU usage when the desktop is idle.</li>
+<li>Independent Dual-GPU Blur processing for both the cursor spotlight and selected icons.</li>
+<li>Customizable shapes (square to circle) for both the spotlight and selected areas.</li>
+<li>Click-through architecture using WS<em>EX</em>TRANSPARENT ensures no interference with native OS interaction.</li>
+</ul>]]></content>
+        <author>
+            <name>drgutman</name>
+            <uri>https://github.com/drgutman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Toggle Hidden Files 1.0.0]]></title>
         <id>https://windhawk.net/mods/toggle-hidden-files#72576e59a6cee399c10d601d49cc36b666c26191</id>
@@ -733,21 +762,6 @@ Additional improvements made by <a href="https://github.com/Asteski">Asteski</a>
         <author>
             <name>Lanbo</name>
             <uri>https://github.com/Liset999</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer No Minimum Window Size 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-no-min-size#737fe5ca2c253eee455e5ca74c678a8f56db33c1</id>
-        <link href="https://windhawk.net/mods/explorer-no-min-size"/>
-        <updated>2026-05-22T14:52:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorernominimumwindowsize">Explorer No Minimum Window Size</h1>
-<p>Removes the minimum window size restriction in Windows File Explorer.
-By default, Explorer prevents windows from being resized below a certain
-width and height. With this mod you can resize Explorer windows to any size.</p>
-<p><img src="https://i.imgur.com/eE0Hmr8.png" alt="screenshot" /></p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
