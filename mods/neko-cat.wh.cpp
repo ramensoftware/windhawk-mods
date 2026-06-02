@@ -103,8 +103,8 @@ Enjoy your new friends!
           - neko-cat: Neko Cat
           - sakura-icon: Sakura
           - tomoyo-icon: Tomoyo
-    $name: Choose Characters From list.
-    $description: "You can choose different characters for each slot. The more you add, the more it will show on the screen. (Max recommended: 10 characters.)"
+    $name: Custom Character List
+    $description: "Choose the characters you want to appear. The total number on screen is controlled by 'Number of Characters' below. It will cycle through this list to fill the count."
   - scale: 2
     $name: Character Size
     $description: Changes how big the character is on your screen.
@@ -195,9 +195,7 @@ struct PetConfig {
 std::vector<PetConfig> g_customPets;
 const std::vector<std::wstring> g_officialThemes = { L"neko-cat", L"sakura-icon", L"tomoyo-icon" };
 
-std::wstring g_assetPath = L"";
 std::wstring g_storagePath = L"";
-std::wstring g_theme = L"neko-cat";
 bool g_randomThemes = true;
 int g_scale = 2;
 int g_speed = 24;
@@ -207,6 +205,9 @@ bool g_sleepSoundRepeat = true;
 int g_fps = 60;
 int g_catCount = 1;
 static bool g_modExit = false;
+
+// Forward declaration
+void LoadSettings();
 
 std::wstring g_nekoKeyStr = L"Ctrl+Alt+N";
 bool g_isHidden = false;
@@ -351,14 +352,14 @@ bool EnsureThemeDownloaded(const std::wstring& themeName) {
 }
 
 void DownloadMissingAssets() {
-    Wh_Log(L"Checking for missing assets in: %s", g_assetPath.c_str());
+    Wh_Log(L"Checking for missing assets in: %s", g_storagePath.c_str());
     
-    // Download active pet theme only when missing
-    EnsureThemeDownloaded(g_theme);
+    // Always ensure the default theme is downloaded for fallback
+    EnsureThemeDownloaded(L"neko-cat");
 }
 
 std::wstring GetRandomAvailableTheme() {
-    if (g_storagePath.empty()) return g_assetPath;
+    if (g_storagePath.empty()) return L"";
 
     std::vector<std::wstring> themes;
     WIN32_FIND_DATAW fd;
@@ -391,7 +392,7 @@ std::wstring GetThemePathForPet(int index) {
     }
 
     if (g_customPets.empty()) {
-        return g_assetPath;
+        return g_storagePath + L"\\neko-cat";
     }
     
     std::wstring chosenTheme = g_customPets[index % g_customPets.size()].theme;
@@ -1340,7 +1341,7 @@ DWORD WINAPI NekoProcessThread(LPVOID param) {
         }
     }
 
-    int targetCount = g_randomThemes ? g_catCount : (g_customPets.empty() ? g_catCount : (int)g_customPets.size());
+    int targetCount = g_catCount;
 
     for (int i = 0; i < targetCount; ++i) {
         Neko* pNeko = new Neko();
@@ -1388,6 +1389,8 @@ DWORD WINAPI NekoProcessThread(LPVOID param) {
     MSG msg;
     while (!g_modExit && GetMessage(&msg, NULL, 0, 0) > 0) {
         if (msg.message == WM_UPDATE_SETTINGS) {
+            LoadSettings();
+            
             intervalMs = 1000 / (g_fps > 0 ? g_fps : 60);
             KillTimer(NULL, timerId);
             timerId = SetTimer(NULL, 1, intervalMs, UpdateAllCatsTimer);
@@ -1408,7 +1411,7 @@ DWORD WINAPI NekoProcessThread(LPVOID param) {
                 }
             }
 
-            int currentTargetCount = g_randomThemes ? g_catCount : (g_customPets.empty() ? g_catCount : (int)g_customPets.size());
+            int currentTargetCount = g_catCount;
 
             // Sync themes for existing Nekos if needed
             for (size_t i = 0; i < g_Nekos.size() && i < (size_t)currentTargetCount; ++i) {
@@ -1484,18 +1487,9 @@ DWORD WINAPI NekoProcessThread(LPVOID param) {
 //  Tool mod implementation
 // ─────────────────────────────────────────────
 void LoadSettings() {
-    PCWSTR themeStr = Wh_GetStringSetting(L"AppearanceGroup.theme");
-    if (themeStr) {
-        g_theme = themeStr;
-        Wh_FreeStringSetting(themeStr);
-    } else {
-        g_theme = L"neko-cat";
-    }
-
     WCHAR storagePath[MAX_PATH];
     if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
         g_storagePath = storagePath;
-        g_assetPath = g_storagePath + L"\\" + g_theme;
     }
 
     g_randomThemes = Wh_GetIntSetting(L"AppearanceGroup.random_themes") != 0;
@@ -1522,18 +1516,19 @@ void LoadSettings() {
     }
 
     PCWSTR nekoKeyStr = Wh_GetStringSetting(L"AdvancedGroup.neko_key");
-    if (nekoKeyStr) {
+    if (nekoKeyStr && nekoKeyStr[0] != L'\0') {
         g_nekoKeyStr = nekoKeyStr;
-        Wh_FreeStringSetting(nekoKeyStr);
     } else {
         g_nekoKeyStr = L"";
     }
+    if (nekoKeyStr) Wh_FreeStringSetting(nekoKeyStr);
 }
 
 BOOL WhTool_ModInit()
 {
     Wh_Log(L"WhTool_ModInit called");
 
+    srand(GetTickCount());
     LoadSettings();
 
     g_hThread = CreateThread(nullptr, 0, NekoProcessThread, nullptr, 0, nullptr);
@@ -1547,8 +1542,6 @@ BOOL WhTool_ModInit()
 
 void WhTool_ModSettingsChanged()
 {
-    LoadSettings();
-
     if (g_hThread) {
         PostThreadMessage(GetThreadId(g_hThread), WM_UPDATE_SETTINGS, 0, 0);
     }
