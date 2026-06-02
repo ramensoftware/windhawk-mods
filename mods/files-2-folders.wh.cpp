@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         1.6
+// @version         2.0
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -22,9 +22,12 @@ Windows language's own "Move to a folder" string). Choosing it opens a dialog
 with four options for moving the selection into a new subfolder:
 
 1. Move the selection into a subfolder with a fixed name (defaults to the
-   localized Windows "New folder" name; e.g. `New folder`). If a folder of
-   that name already exists, the new one is numbered `New folder (2)`,
-   `New folder (3)`, etc. — the same way Explorer numbers duplicates.
+   localized Windows "New folder" name; e.g. `New folder`). By default, if a
+   folder of that name already exists the selection is moved **into** it (so
+   repeated runs accumulate in, e.g., `archive`). Turn off **Fixed name: reuse
+   an existing folder** in settings to instead create a fresh numbered folder
+   each time (`archive`, `archive (2)`, `archive (3)`, … — the way Explorer
+   numbers duplicates).
 2. Move each file into a subfolder named after the file (without extension):
    `Good.bat` -> `.\Good\Good.bat`. With a single file selected, this just
    creates one folder around that file.
@@ -73,6 +76,11 @@ Ctrl/Alt-based combos use a normal global hotkey. Enabling the **Win** modifier
 switches the workaround to a low-level keyboard hook (the technique PowerToys
 uses) and suppresses the OS default for that combo.
 
+The hotkey is owned by a single Explorer instance per session, so running
+multiple Explorer windows in separate processes doesn't multiply the hook or
+the registration. If that one instance closes, the hotkey resumes after an
+Explorer restart.
+
 **Important:** bare `Win`+`<letter>` shortcuts (Win+F, Win+E, Win+R, Win+L,
 Win+G, …) are handled by Windows itself, *below* the hook, and **cannot be
 intercepted** — they won't work even with the hook (PowerToys can't remap them
@@ -95,6 +103,12 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 - defaultSubfolderName: ""
   $name: "Default subfolder name (mode 1)"
   $description: "Pre-filled name for the \"Fixed name\" option. Leave empty to use Windows' own localized \"New folder\" name (matches your OS language)."
+- fixedNameReuse: true
+  $name: "Fixed name: reuse an existing folder"
+  $description: |-
+    On (default): in "Fixed name" mode, if a folder of that name already exists, files are moved into it (e.g. everything goes into "archive").
+    Off: a new numbered folder is created instead ("archive", "archive (2)", "archive (3)"…), the way Explorer numbers duplicates.
+    Only affects the "Fixed name" mode. "By date" always creates a new numbered folder; "by name"/"by extension" always reuse.
 - defaultMode: fixed
   $name: "Default selected mode"
   $description: "Which radio button is pre-selected when the dialog opens."
@@ -245,6 +259,7 @@ static F2FMode ModeFromKey(const std::wstring& key) {
 // ============================================================
 struct ModSettings {
     std::wstring defaultSubfolderName;
+    bool fixedNameReuse;
     std::wstring dateFormat;
     int defaultMode;
     bool slowMode;
@@ -267,6 +282,8 @@ static void LoadSettings() {
     g_settings.defaultSubfolderName =
         (s && *s) ? s : LoadShell32String(16859, L"New folder");
     if (s) Wh_FreeStringSetting(s);
+
+    g_settings.fixedNameReuse = Wh_GetIntSetting(L"fixedNameReuse") != 0;
 
     s = Wh_GetStringSetting(L"dateFormat");
     g_settings.dateFormat = (s && *s) ? s : L"yyyy-MM-dd-HH-mm";
@@ -727,10 +744,19 @@ static void DoFiles2Folder(HWND owner,
                     L"Files 2 Folder", MB_ICONWARNING);
             return;
         }
-        // Don't reuse an existing folder of this name — number it like
-        // Explorer does ("New folder", "New folder (2)", ...). Folders have no
-        // extension, so don't split one off.
-        std::wstring dest = UniqueDest(folder, sub, /*splitExtension=*/false);
+        // Pick the destination folder. Fixed-name mode reuses an existing
+        // folder when the "Fixed name: reuse an existing folder" setting is on
+        // (the default) — so repeated runs accumulate in e.g. "archive". With
+        // it off, and always for date mode, number duplicates like Explorer
+        // ("archive", "archive (2)", ...). Folders have no extension, so don't
+        // split one off. (EnsureDir returns the existing folder when reusing;
+        // same-named files inside it are still de-duplicated by the move step.)
+        std::wstring dest;
+        if (mode == MODE_FIXED_NAME && g_settings.fixedNameReuse) {
+            dest = folder + L"\\" + sub;
+        } else {
+            dest = UniqueDest(folder, sub, /*splitExtension=*/false);
+        }
         if (!EnsureDir(dest)) {
             if (!silent)
                 MessageBoxW(owner, L"Could not create destination folder.",
@@ -949,25 +975,43 @@ struct DlgState {
 #define IDC_ED_DATE    1014
 #define IDC_HEADER     1020
 
-static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
-    static DlgState* s = nullptr;
-    static DlgTheme theme = {};
+// Per-dialog runtime state. Stored on the heap and reached via
+// GWLP_USERDATA so two dialogs open at once on different threads (a
+// context-menu dialog on Explorer's UI thread and a hotkey dialog on the
+// hotkey thread) can't clobber each other — function-local statics in DlgProc
+// would be shared process-wide.
+struct DlgContext {
+    DlgState* result = nullptr;        // caller's stack struct (the lParam)
+    DlgTheme  theme = {};              // incl. bgBrush
     // The auto-select-companion-radio behavior (EN_SETFOCUS below) must only
     // react to user focus changes, not the initial focus the dialog manager
     // assigns during/after WM_INITDIALOG — otherwise the default mode chosen
     // here is immediately overwritten by whichever edit box gets first focus.
-    static bool ready = false;
+    bool      ready = false;
+    HBRUSH    editBrush = nullptr;     // WM_CTLCOLOREDIT background, lazily made
+    COLORREF  editBrushColor = 0;
+};
+
+static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
+    auto* ctx = (DlgContext*)GetWindowLongPtrW(hDlg, GWLP_USERDATA);
+    // Before WM_INITDIALOG runs (and on any stray late message) the context is
+    // null — the dialog manager may send WM_CTLCOLOR* etc. first. Fall through
+    // to the system default in that window, exactly as the old zero-initialized
+    // static theme did.
+    if (!ctx && msg != WM_INITDIALOG) return FALSE;
     switch (msg) {
     case WM_INITDIALOG: {
-        ready = false;
-        s = (DlgState*)lp;
+        ctx = new DlgContext{};
+        ctx->result = (DlgState*)lp;
+        SetWindowLongPtrW(hDlg, GWLP_USERDATA, (LONG_PTR)ctx);
+        DlgState* s = ctx->result;
         SetWindowTextW(hDlg, L"Files 2 Folder");
         SetDlgItemTextW(hDlg, IDC_ED_FIXED, s->fixedName.c_str());
         SetDlgItemTextW(hDlg, IDC_ED_DATE, s->dateText.c_str());
 
         // Apply theme: title bar + child controls + cached brushes for body.
         bool dark = ResolveDarkMode();
-        InitDlgTheme(theme, dark);
+        InitDlgTheme(ctx->theme, dark);
         ApplyDarkTitleBar(hDlg, dark);
         if (dark) ApplyDarkChildTheme(hDlg);
         if (s->singleItem) {
@@ -1006,17 +1050,18 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
         // Focus the chosen radio so the BS_AUTORADIOBUTTON group settles on it
         // and the dialog manager doesn't move the checkmark to the first radio.
         // We set focus ourselves and return FALSE so the manager leaves it be.
-        ready = true;  // from now on, EN_SETFOCUS reflects real user focus
+        ctx->ready = true;  // from now on, EN_SETFOCUS reflects real user focus
         SetFocus(GetDlgItem(hDlg, rb));
         return FALSE;  // we set focus; don't let the manager reset it
     }
     case WM_COMMAND: {
+        DlgState* s = ctx->result;
         WORD id   = LOWORD(wp);
         WORD code = HIWORD(wp);
 
         // Clicking or tabbing into an edit box selects its companion radio,
         // so the mode the user is editing is the mode that runs on OK.
-        if (code == EN_SETFOCUS && ready) {
+        if (code == EN_SETFOCUS && ctx->ready) {
             if (id == IDC_ED_FIXED)
                 CheckRadioButton(hDlg, IDC_RB_FIXED, IDC_RB_DATE, IDC_RB_FIXED);
             else if (id == IDC_ED_DATE)
@@ -1048,34 +1093,37 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLORBTN: {
-        if (!theme.dark) return FALSE;  // let system default apply
+        if (!ctx->theme.dark) return FALSE;  // let system default apply
         HDC hdc = (HDC)wp;
-        SetTextColor(hdc, theme.textColor);
-        SetBkColor(hdc, theme.bgColor);
-        return (INT_PTR)theme.bgBrush;
+        SetTextColor(hdc, ctx->theme.textColor);
+        SetBkColor(hdc, ctx->theme.bgColor);
+        return (INT_PTR)ctx->theme.bgBrush;
     }
     case WM_CTLCOLOREDIT: {
-        if (!theme.dark) return FALSE;
+        if (!ctx->theme.dark) return FALSE;
         HDC hdc = (HDC)wp;
-        SetTextColor(hdc, theme.textColor);
-        SetBkColor(hdc, theme.editBgColor);
-        // Reuse a static brush for edit background.
-        static HBRUSH editBrush = nullptr;
-        static COLORREF editBrushColor = 0;
-        if (!editBrush || editBrushColor != theme.editBgColor) {
-            if (editBrush) DeleteObject(editBrush);
-            editBrush = CreateSolidBrush(theme.editBgColor);
-            editBrushColor = theme.editBgColor;
+        SetTextColor(hdc, ctx->theme.textColor);
+        SetBkColor(hdc, ctx->theme.editBgColor);
+        // Lazily create the edit-background brush, kept in the per-dialog
+        // context (re-made only if the color changes).
+        if (!ctx->editBrush || ctx->editBrushColor != ctx->theme.editBgColor) {
+            if (ctx->editBrush) DeleteObject(ctx->editBrush);
+            ctx->editBrush = CreateSolidBrush(ctx->theme.editBgColor);
+            ctx->editBrushColor = ctx->theme.editBgColor;
         }
-        return (INT_PTR)editBrush;
+        return (INT_PTR)ctx->editBrush;
     }
-    case WM_DESTROY:
-        DestroyDlgTheme(theme);
-        return FALSE;
     case WM_CLOSE:
-        s->ok = false;
+        ctx->result->ok = false;
         EndDialog(hDlg, IDCANCEL);
         return TRUE;
+    case WM_NCDESTROY:
+        // Last message the window receives — free GDI objects and the context.
+        DestroyDlgTheme(ctx->theme);
+        if (ctx->editBrush) DeleteObject(ctx->editBrush);
+        SetWindowLongPtrW(hDlg, GWLP_USERDATA, 0);
+        delete ctx;
+        return FALSE;
     }
     return FALSE;
 }
@@ -1277,10 +1325,30 @@ static bool MenuHasF2FItem(HMENU hmenu) {
 static void InsertF2FMenuItem(HMENU hmenu) {
     if (MenuHasF2FItem(hmenu)) return;
 
-    // Localized label from shell32 ("Move to a folder..."), English fallback.
-    // Locale-fixed for the process, so resolve it once.
-    static const std::wstring label =
-        LoadShell32String(30305, L"Files 2 &Folder...");
+    // Localized label from shell32 ("Move to a folder..."), English fallback,
+    // with a " (F2F)" tag so the mod's entry is distinguishable from the
+    // built-in shell verb of the same name. The base text is localized to the
+    // OS language; "F2F" is a product abbreviation (a proper noun), so it
+    // intentionally stays as-is in every language.
+    //
+    // The tag goes *before* any trailing ellipsis ("Move to a folder (F2F)..."
+    // reads better than "...(F2F)"). shell32's string may end in a literal
+    // "..." or a real ellipsis char (U+2026, "…") or neither, so strip a
+    // trailing ellipsis + spaces, insert the tag, then re-append what we
+    // removed. Locale-fixed for the process, so resolve it once.
+    static const std::wstring label = []() -> std::wstring {
+        std::wstring base = LoadShell32String(30305, L"Files 2 &Folder...");
+        std::wstring ellipsis;
+        if (base.size() >= 3 && base.compare(base.size() - 3, 3, L"...") == 0) {
+            ellipsis = L"...";
+            base.erase(base.size() - 3);
+        } else if (!base.empty() && base.back() == L'\x2026') {
+            ellipsis = L"\x2026";
+            base.pop_back();
+        }
+        while (!base.empty() && base.back() == L' ') base.pop_back();
+        return base + L" (F2F)" + ellipsis;
+    }();
     InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
     InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_STRING,
                 F2F_MENU_CMD, label.c_str());
@@ -1371,6 +1439,18 @@ static HANDLE  g_hotkeyThread = nullptr;
 static DWORD   g_hotkeyThreadId = 0;
 static HWND    g_hotkeyWnd = nullptr;
 static HHOOK   g_llKeyHook = nullptr;   // only used for Win-based combos
+// Single-owner guard: the mod loads into every explorer.exe in the session, but
+// a global hotkey / LL keyboard hook only needs to exist once. A per-session
+// named mutex elects the first instance as the owner; later instances stand
+// down. First-come, no handoff — if the owner exits, the hotkey stays dormant
+// until some instance restarts (the primary shell explorer.exe is effectively
+// always present, and the redundant instances are the transient ones).
+static HANDLE  g_hotkeyOwnerMutex = nullptr;
+static bool    g_isHotkeyOwner = false;
+// Set by StopHotkeyThread before it tears the thread down. Read on the hotkey
+// thread so HandleHotkeyTriggered won't open a fresh modal while teardown is
+// dismissing modals — otherwise StopHotkeyThread could race a new dialog.
+static volatile LONG g_hotkeyShuttingDown = 0;
 static const UINT WM_F2F_TRIGGER  = WM_APP + 1;
 static const UINT WM_F2F_SHUTDOWN = WM_APP + 2;
 static const int  HOTKEY_ID = 0xF2F0;
@@ -1410,6 +1490,11 @@ static std::wstring ParentDir(const std::wstring& path) {
 }
 
 static void HandleHotkeyTriggered() {
+    // Teardown has started — don't open a modal it would have to chase down.
+    // Checked once here because every modal below follows this point; the only
+    // thing before it (ReadClipboardFiles) is fast and non-modal.
+    if (g_hotkeyShuttingDown) return;
+
     std::vector<std::wstring> items;
     if (!ReadClipboardFiles(items) || items.empty()) {
         if (g_settings.hotkeySilent) return;
@@ -1480,11 +1565,11 @@ static LRESULT CALLBACK HotkeyWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 // Low-level keyboard hook — used ONLY for Win-based combos, which Windows
-// reserves so RegisterHotKey can't claim them (Win+F, Win+E, …). See
-// keyboardhook.md for the full risk write-up. The callback must do the
-// absolute minimum and return fast (Windows silently uninstalls a hook whose
-// callback exceeds LowLevelHooksTimeout, ~300 ms): we detect the combo, post a
-// message to the worker window, and return — all real work happens there.
+// reserves so RegisterHotKey can't claim them (Win+F, Win+E, …). The callback
+// must do the absolute minimum and return fast (Windows silently uninstalls a
+// hook whose callback exceeds LowLevelHooksTimeout, ~300 ms): we detect the
+// combo, post a message to the worker window, and return — all real work
+// happens there.
 static bool ModifiersMatchForLLHook() {
     auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
     bool ctrl  = down(VK_CONTROL);
@@ -1540,47 +1625,33 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID) {
     if (g_settings.hotkeyWin) {
         bool hasOtherMod = g_settings.hotkeyCtrl || g_settings.hotkeyAlt ||
                            g_settings.hotkeyShift;
-        if (!hasOtherMod && !g_settings.hotkeySilent) {
+        if (!hasOtherMod) {
+            // Log only — never a modal. This thread is re-created on every
+            // settings change (Wh_ModSettingsChanged -> RestartHotkeyThread),
+            // and the mod runs in every explorer.exe, so a popup here spams the
+            // user on each settings touch and once per extra Explorer instance.
             std::wstring combo = DescribeHotkey();
             Wh_Log(L"Files2Folders: bare Win combo (%s) can't be intercepted",
                    combo.c_str());
-            MessageBoxW(nullptr,
-                (L"Files 2 Folder: the hotkey \"" + combo + L"\" will not work.\n\n"
-                 L"Bare Win+<key> shortcuts are handled by Windows itself and "
-                 L"cannot be intercepted, even with a keyboard hook.\n\n"
-                 L"Combine the Win key with another modifier — enable Ctrl, Alt, "
-                 L"or Shift as well (e.g. Win+Shift+F).").c_str(),
-                L"Files 2 Folder", MB_ICONWARNING | MB_OK);
         }
         g_llKeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc,
                                         (HINSTANCE)GetModuleHandleW(nullptr), 0);
         if (!g_llKeyHook) {
             Wh_Log(L"Files2Folders: SetWindowsHookEx(WH_KEYBOARD_LL) failed");
-            if (!g_settings.hotkeySilent)
-                MessageBoxW(nullptr,
-                    L"Files 2 Folder could not install the keyboard hook needed "
-                    L"for a Win-based hotkey.\n\nTry a Ctrl/Alt combination "
-                    L"instead.",
-                    L"Files 2 Folder", MB_ICONWARNING | MB_OK);
         }
     } else if (!RegisterHotKey(g_hotkeyWnd, HOTKEY_ID,
                                BuildHotkeyModifiers() | MOD_NOREPEAT,
                                BuildHotkeyVk()))
     {
         std::wstring combo = DescribeHotkey();
+        // Log only — never a modal. A global hotkey is system-wide unique, but
+        // this mod runs in every explorer.exe, so every instance after the first
+        // fails here (separate-process folder windows, special folders, and
+        // transiently during an Explorer restart). The thread is also re-created
+        // on every settings change. A popup here would spam the user in both
+        // cases; the log line is the right place to surface a real conflict.
         Wh_Log(L"Files2Folders: RegisterHotKey(%s) failed (reserved or in use?)",
                combo.c_str());
-        // Make the failure visible — otherwise the workaround just silently
-        // "doesn't work". Suppressed in Silent mode.
-        if (!g_settings.hotkeySilent) {
-            std::wstring msg =
-                L"Files 2 Folder could not register the workaround hotkey:\n\n    "
-                + combo +
-                L"\n\nThe combination is already in use by another program.\n\n"
-                L"Pick a different key or modifier in the mod's settings.";
-            MessageBoxW(nullptr, msg.c_str(), L"Files 2 Folder",
-                        MB_ICONWARNING | MB_OK);
-        }
     }
 
     MSG msg;
@@ -1601,20 +1672,78 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID) {
     return 0;
 }
 
+// Elect this instance as the session's hotkey owner. True only for the first
+// instance to reach here. The mutex is used purely as a named existence token
+// (we key on ERROR_ALREADY_EXISTS), not as a lock — bInitialOwner is FALSE, so
+// there are no wait or abandoned-mutex semantics to handle.
+static bool AcquireHotkeyOwnership() {
+    if (g_isHotkeyOwner) return true;
+    if (g_hotkeyOwnerMutex) return false;  // already tried and stood down
+
+    HANDLE h = CreateMutexW(nullptr, FALSE, L"Local\\Files2Folders-Hotkey-Owner");
+    if (h && GetLastError() == ERROR_ALREADY_EXISTS) {
+        // CreateMutexW returns a handle to the existing object even when it
+        // already exists; close it so we don't keep the name alive (which would
+        // block the true owner's name from disappearing) and so a later call
+        // here stays a no-op via the g_hotkeyOwnerMutex guard above.
+        if (h) CloseHandle(h);
+        // Park a sentinel so repeated calls (e.g. on settings change) don't
+        // re-probe and accidentally promote this non-owner to owner.
+        g_hotkeyOwnerMutex = INVALID_HANDLE_VALUE;
+        Wh_Log(L"Files2Folders: another instance owns the hotkey; standing down");
+        return false;
+    }
+
+    g_hotkeyOwnerMutex = h;                 // we created it first — we own it
+    g_isHotkeyOwner = (h != nullptr);
+    return g_isHotkeyOwner;
+}
+
 static void StartHotkeyThread() {
     if (g_hotkeyThread || !g_settings.hotkeyEnabled) return;
+    if (!AcquireHotkeyOwnership()) return;  // a sibling instance owns the hotkey
     g_hotkeyThread = CreateThread(nullptr, 0, HotkeyThreadProc, nullptr,
                                   0, &g_hotkeyThreadId);
 }
 
+// Posted cross-thread to dismiss any modal the hotkey thread owns (F2F dialog
+// or MessageBox). Both cancel cleanly on WM_CLOSE.
+static BOOL CALLBACK CloseThreadPopupsProc(HWND hWnd, LPARAM) {
+    if (IsWindowVisible(hWnd))
+        PostMessageW(hWnd, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+
 static void StopHotkeyThread() {
     if (!g_hotkeyThread) return;
+
+    // Signal first so HandleHotkeyTriggered won't open a new modal once we
+    // start closing the current one.
+    InterlockedExchange(&g_hotkeyShuttingDown, 1);
+
     if (g_hotkeyWnd) PostMessageW(g_hotkeyWnd, WM_F2F_SHUTDOWN, 0, 0);
     else if (g_hotkeyThreadId) PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
-    WaitForSingleObject(g_hotkeyThread, 2000);
+
+    // The thread may be parked in a modal loop (F2F dialog / MessageBox), where
+    // WM_F2F_SHUTDOWN won't be seen until the modal closes. Dismiss any popup it
+    // owns and re-check each 100 ms slice — this handles a modal that isn't up
+    // yet, one that reappears, or nested modals. Unbounded by design: every
+    // slice re-closes whatever is up, and g_hotkeyShuttingDown blocks new
+    // dialogs, so the thread always progresses to exit. We never CloseHandle and
+    // let Windhawk unmap the DLL while the thread is still alive — that would
+    // run unmapped code when the dialog finally returned.
+    for (;;) {
+        if (g_hotkeyThreadId)
+            EnumThreadWindows(g_hotkeyThreadId, CloseThreadPopupsProc, 0);
+        if (WaitForSingleObject(g_hotkeyThread, 100) == WAIT_OBJECT_0)
+            break;
+    }
+
     CloseHandle(g_hotkeyThread);
     g_hotkeyThread = nullptr;
     g_hotkeyThreadId = 0;
+    // Reset for the next StartHotkeyThread (RestartHotkeyThread = Stop + Start).
+    InterlockedExchange(&g_hotkeyShuttingDown, 0);
 }
 
 // Re-register the hotkey when settings change (key/modifiers/enabled).
@@ -1644,4 +1773,15 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Files2Folders: Uninit");
     StopHotkeyThread();
+
+    // Release ownership. Only the owner holds a real handle (non-owners parked
+    // the INVALID_HANDLE_VALUE sentinel and already closed their probe handle).
+    // Closing the owner's handle lets the named object disappear so a future
+    // instance (e.g. the next Explorer restart) can become owner.
+    if (g_isHotkeyOwner && g_hotkeyOwnerMutex &&
+        g_hotkeyOwnerMutex != INVALID_HANDLE_VALUE) {
+        CloseHandle(g_hotkeyOwnerMutex);
+    }
+    g_hotkeyOwnerMutex = nullptr;
+    g_isHotkeyOwner = false;
 }
