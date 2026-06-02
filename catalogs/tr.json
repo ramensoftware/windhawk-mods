@@ -9300,12 +9300,12 @@
                     4
                 ],
                 "ratingUsers": 5,
-                "updated": 1779645575000,
+                "updated": 1780382183000,
                 "users": 155
             },
             "metadata": {
                 "author": "Lone",
-                "compilerOptions": "-ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus",
+                "compilerOptions": "-ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion",
                 "description": "Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher",
                 "github": "https://github.com/Louis047",
                 "include": [
@@ -9313,7 +9313,7 @@
                     "explorer.exe"
                 ],
                 "name": "Simple Window Switcher",
-                "version": "1.1"
+                "version": "2.0"
             }
         },
         "slick-window-arrangement": {

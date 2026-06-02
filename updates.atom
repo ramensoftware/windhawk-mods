@@ -2,12 +2,74 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-01T21:37:42.000Z</updated>
+    <updated>2026-06-02T06:36:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Simple Window Switcher 2.0]]></title>
+        <id>https://windhawk.net/mods/simple-window-switcher#e5909b71ad7f7fa9b7abdafe7c1008f801efed41</id>
+        <link href="https://windhawk.net/mods/simple-window-switcher"/>
+        <updated>2026-06-02T06:36:23.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="fixes">Fixes</h3>
+<ul>
+<li>Fixed centering for elements. Now elements like Title and Label are correctly centered when DWM Thumbnails is disabled</li>
+<li>Fixed UWP Icons display for Windows 10 and older builds (Credits to @Asteski)</li>
+<li>Fixed Background Opacity fallback issue where setting it to 0 or above 100 falls back to 90. Now they follow the range correctly</li>
+<li>Fixed layout issues for icon-only setup</li>
+<li>Fixed scroll navigation issue where it doesn't navigate when the cursor is out of the alt tab menu</li>
+<li>Fixed an issue where special apps that uses overlays like Raycast, WindowSill etc were caught in the alt tab menu. </li>
+<li>Fixed an issue with vertical alignment configuration where wide thumbnails "cut-through" the space. </li>
+<li>Fixed an edge case with <code>Display Windows Only From the Monitor Containing the Cursor</code> option (Credits to @zhilemann)</li>
+<li>Fixed minor thumbnail issues. Now it correctly follows the DWM state for the windows</li>
+<li>Fixed row width to correctly follow the layout (Credits to @Asteski)</li>
+<li>Fixed Mica theme multi-monitor bug</li>
+</ul>
+<h3 id="updates">Updates</h3>
+<ul>
+<li>Updated Explorer Restart Prompt logic using a new mutex check</li>
+<li>Updated Settings Layout to be more structured</li>
+<li>Updated Switcher Display options into a drop-down menu</li>
+<li>Updated Icons Size configuration, has four options: (Credits to @Asteski)</li>
+<li>Small</li>
+<li>Medium</li>
+<li>Large</li>
+<li>Extra Large</li>
+<li>Update Theme Mode Settings to allow a modular configuration separate for both light and dark modes</li>
+<li>Updated close button glyph to stay in static color (Credits to @Asteski)</li>
+</ul>
+<h3 id="additions">Additions</h3>
+<ul>
+<li>Added new options: </li>
+<li>Show Title </li>
+<li>Show Label </li>
+<li>Reverse Scroll Direction</li>
+<li>Switcher Background Color</li>
+<li>Added Virtual Desktop Support</li>
+<li>Added Font Customizations</li>
+<li>Added four new features (Credits to @Asteski) </li>
+<li>Thumbnail Position</li>
+<li>Thumbnail Alignment</li>
+<li>Task Highlight Style</li>
+<li>Thumbnails to Task Width</li>
+<li>Grouping Applications</li>
+<li>Added a new theme: Mica (Only Supported for Windows 11)</li>
+<li>Added Exclude Windows support</li>
+<li>Added Custom Border Radius support</li>
+<li>Added Switcher Positioning support</li>
+<li>Added Automatic Icon Size depending on the switcher dimensions (Credits to @Asteski)</li>
+<li>Added middle-mouse button task close (Credits to @Asteski)</li>
+<li>Added a new layout: Bagde, inspired from macOS with a set of customization options</li>
+<li>Added Grouper Window Indicator to show the number of windows of the related process</li>
+<li>Added Thumbnail Shadow Support (Credits to @Asteski)</li>
+</ul>]]></content>
+        <author>
+            <name>Lone</name>
+            <uri>https://github.com/Louis047</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Toggle Hidden Files 1.0.0]]></title>
         <id>https://windhawk.net/mods/toggle-hidden-files#72576e59a6cee399c10d601d49cc36b666c26191</id>
@@ -469,19 +531,6 @@ Keep in mind that these animation can use a lot of cpu power but from my experie
         <author>
             <name>bbmaster123</name>
             <uri>https://github.com/bbmaster123</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Border Customizer 1.0.1]]></title>
-        <id>https://windhawk.net/mods/window-border-customizer#2ccc12f1169deec32560f6d0fcd3a903a8d9cd72</id>
-        <link href="https://windhawk.net/mods/window-border-customizer"/>
-        <updated>2026-05-29T11:42:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed custom borders being randomly disabled in certain windows until they are either minimized/restored or the mod is toggled off and on again.</li>
-</ul>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>
