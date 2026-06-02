@@ -329,7 +329,7 @@ struct InsertionCtx {
     IShellItemFilter *filter = nullptr;
     HWND forTree = nullptr; // scopes item to a specific tree; null = any
 };
-static InsertionCtx g_ins;
+static thread_local InsertionCtx g_ins;
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_orig;
@@ -385,8 +385,8 @@ static TreeState* RunDeferredWorkIf(HWND hWnd, TreeState* ts, uint8_t flag,
     return ts;
 }
 
-static bool g_inCustomAppend = false;
-static HTREEITEM g_spacerInsertAfter = nullptr;
+static thread_local bool g_inCustomAppend = false;
+static thread_local HTREEITEM g_spacerInsertAfter = nullptr;
 
 struct InsertionScope {
     ComRef<INameSpaceTreeControl> pNsc;
@@ -2628,9 +2628,6 @@ void Wh_ModUninit()
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
     for (int i = 0; i < NAV_COUNT; i++)
         if (g_navItems[i].pidl) { CoTaskMemFree(g_navItems[i].pidl); g_navItems[i].pidl = nullptr; }
-    g_ins.pNsc = nullptr;
-    g_ins.enumFlags = 0;
-    if (g_ins.filter) { g_ins.filter->Release(); g_ins.filter = nullptr; }
     if (g_explorerFrameLoaded.load(std::memory_order_relaxed))
         Wh_Log(L"Mod uninitialized");
 }
