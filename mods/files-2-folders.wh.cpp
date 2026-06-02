@@ -13,6 +13,8 @@
 /*
 # Files 2 Folders
 
+![Files 2 Folders demo](https://raw.githubusercontent.com/triatomic/windhawk-mods-assets/main/files-2-folders.gif)
+
 Inspired by [Files 2 Folder](https://www.dcmembers.com/skwire/download/files-2-folder/)
 by Jody Holmes (Skwire Empire).
 
