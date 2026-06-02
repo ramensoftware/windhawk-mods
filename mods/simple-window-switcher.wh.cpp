@@ -545,6 +545,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 #define SWS_TEXT_LIGHT        RGB(0, 0, 0)
 #define SWS_SHOW_DELAY_TIMER_ID 101
 #define SWS_ALT_POLL_TIMER_ID   102
+// Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
+// wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
+#define WM_SWS_SCROLL           (WM_APP + 1)
 
 typedef BOOL (WINAPI *IsShellWindow_t)(HWND);
 typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
@@ -3374,8 +3377,6 @@ static void ShowPendingOffscreenWindow() {
     SetForegroundWindow(g_hSwitcher);
 }
 
-static void CycleLinear(int delta);
-
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && g_isVisible && wParam == WM_MOUSEWHEEL) {
         MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
@@ -3383,7 +3384,10 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
         if (ok) {
             int dir = (short)HIWORD(pMouseStruct->mouseData) > 0 ? -1 : 1;
             if (g_settings.reverseScrollDirection) dir = -dir;
-            CycleLinear(dir);
+            // Defer the heavy CycleLinear work to the wndproc; low-level hook
+            // callbacks run synchronously on the raw-input path and must stay
+            // trivial or Windows will silently drop the hook.
+            PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)dir, 0);
             return 1;
         }
     }
@@ -4239,17 +4243,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         break;
     // (Removed duplicate combined case for WM_SYSKEYUP and WM_KEYUP)
-    case WM_MOUSEWHEEL:
+    case WM_SWS_SCROLL:
         if (g_isVisible) {
-            bool ok = ScrollIs(L"always") || (ScrollIs(L"stickyOnly") && g_isSticky);
-            if (ok) {
-                int dir = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1;
-                if (g_settings.reverseScrollDirection) dir = -dir;
-                CycleLinear(dir); 
-                return 0; 
-            }
+            CycleLinear((int)wParam);
         }
-        break;
+        return 0;
     case WM_SETCURSOR:
         SetCursor(LoadCursor(NULL, IDC_ARROW));
         return TRUE;
@@ -4783,6 +4781,11 @@ static BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT
 static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     Wh_Log(L"SwitcherThread starting");
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    // Create the virtual desktop manager on this thread so it lives in the same
+    // apartment that uses it (EnumWindowsProc runs here). An STA interface
+    // pointer is only valid in the apartment that created it.
+    CoCreateInstance(CLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER,
+                     IID_IVirtualDesktopManager, (void**)&g_pVirtualDesktopManager);
     ResolveAPIs();
     LoadSettings();
     g_isDarkMode = ShouldUseDarkMode();
@@ -4847,6 +4850,10 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
         g_gdiplusToken = 0;
     }
 
+    if (g_pVirtualDesktopManager) {
+        g_pVirtualDesktopManager->Release();
+        g_pVirtualDesktopManager = NULL;
+    }
     CoUninitialize();
     Wh_Log(L"SwitcherThread exiting");
     return 0;
@@ -5029,9 +5036,6 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        CoInitialize(NULL);
-        CoCreateInstance(CLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER, IID_IVirtualDesktopManager, (void**)&g_pVirtualDesktopManager);
-
         IMAGE_DOS_HEADER* dosHeader =
             (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
@@ -5170,10 +5174,9 @@ void Wh_ModUninit() {
         return;
     }
 
-    if (g_pVirtualDesktopManager) {
-        g_pVirtualDesktopManager->Release();
-        g_pVirtualDesktopManager = NULL;
-    }
+    // g_pVirtualDesktopManager is created, used, and released on the switcher
+    // thread (see SwitcherThread); WhTool_ModUninit joins that thread, which
+    // releases it before CoUninitialize.
     WhTool_ModUninit();
     ExitProcess(0);
 }
