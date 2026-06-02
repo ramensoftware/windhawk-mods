@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-02T06:36:23.000Z</updated>
+    <updated>2026-06-02T07:55:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Companions 1.3.0]]></title>
+        <id>https://windhawk.net/mods/neko-cat#7afddcbd4e0e0300474719100693301b898f1be3</id>
+        <link href="https://windhawk.net/mods/neko-cat"/>
+        <updated>2026-06-02T07:55:19.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="newfeatures">✨ New Features</h2>
+<ul>
+<li><strong>Renamed Mod:</strong> From <em>Neko Cat</em> → <em>Desktop Companions</em>  </li>
+<li><strong>New Characters:</strong> Sakura and Tomoyo join the lineup 🎉  </li>
+<li><strong>Diverse Litters:</strong> Option to spawn a randomized mix of all downloaded characters at once  </li>
+</ul>
+<h2 id="performanceimprovements">⚡ Performance Improvements</h2>
+<ul>
+<li><strong>High-Performance Texture Slicing:</strong><br />
+Replaced 38 separate PNG downloads with a single spritesheet → disk &amp; network checks are <strong>97% faster</strong>!  </li>
+<li><strong>Dynamic RAM Cloning:</strong><br />
+Spritesheets are sliced in memory at startup for smooth, lag-free performance  </li>
+</ul>
+<h2 id="fixesenhancements">🛠 Fixes &amp; Enhancements</h2>
+<ul>
+<li><strong>Leak-Free Switcher:</strong> Fixed memory leak when dynamically switching characters in settings  </li>
+<li><strong>Organized Settings:</strong> Categories are now clean and user-friendly:  </li>
+<li>Appearance  </li>
+<li>Behavior  </li>
+<li>Audio  </li>
+<li>Advanced  </li>
+<li><strong>Window Behavior:</strong> Prevent accidental maximization when double-clicking on a desktop companion  </li>
+</ul>
+<h2 id="importantnote">⚠️ Important Note</h2>
+<p>Due to the reorganized settings layout, you may need to <strong>reset or reconfigure your preferences</strong> in the Windhawk settings panel after updating.</p>
+<hr />
+<h3 id="specialthanks">💖 Special Thanks</h3>
+<p>Big thanks to <strong>@zkyhzxf (quantum)</strong> on Discord for contributing the beautiful Sakura and Tomoyo icons!</p>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Simple Window Switcher 2.0]]></title>
         <id>https://windhawk.net/mods/simple-window-switcher#e5909b71ad7f7fa9b7abdafe7c1008f801efed41</id>
@@ -519,18 +557,6 @@ Keep in mind that these animation can use a lot of cpu power but from my experie
         <author>
             <name>lolstijl</name>
             <uri>https://github.com/lolstijl</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enhanced Disk Usage 1.1.0]]></title>
-        <id>https://windhawk.net/mods/enhanced-disk-usage#87147b198c32a43877d51a7803c3afc9d4a0712e</id>
-        <link href="https://windhawk.net/mods/enhanced-disk-usage"/>
-        <updated>2026-05-29T11:51:00.000Z</updated>
-        <content type="html"><![CDATA[<p>middle click to open new file explorer windows wasn't working when "launch folder windows in a separate process" was not enabled. I usually have it enabled so I hadn't caught it until now. This update changes the way windows are refreshed, which avoids a deadlock in that situation.</p>
-<p>I've also reordered the settings to flow better/grouped together which I think makes it a bit better overall.</p>]]></content>
-        <author>
-            <name>bbmaster123</name>
-            <uri>https://github.com/bbmaster123</uri>
         </author>
     </entry>
 </feed>

@@ -7111,19 +7111,19 @@
                     8
                 ],
                 "ratingUsers": 11,
-                "updated": 1779877611000,
+                "updated": 1780386919000,
                 "users": 41
             },
             "metadata": {
                 "author": "ciizerr",
                 "compilerOptions": "-lgdiplus -lwinmm -lgdi32 -lshell32",
-                "description": "Adds a desktop pet cat that runs around and follows your mouse",
+                "description": "Spawn multiple animated characters (neko cat, sakura, and tomoyo) on your screen that interact with your windows and follow your cursor.",
                 "github": "https://github.com/ciizerr",
                 "include": [
                     "windhawk.exe"
                 ],
-                "name": "Neko Cat",
-                "version": "1.2.1"
+                "name": "Desktop Companions",
+                "version": "1.3.0"
             }
         },
         "net-toggle": {
