@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.19
+// @version         1.1.20
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -104,6 +104,7 @@ Before/after:
 #include <uxtheme.h>
 #include <gdiplus.h>
 #include <atomic>
+#include <mutex>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -243,8 +244,10 @@ struct TreeState {
     HIMAGELIST savedStateImageList = nullptr;
 };
 static std::unordered_map<HWND, TreeState> g_trees;
+static std::recursive_mutex g_treesMutex;
 
 static TreeState* GetTree(HWND hWnd) {
+    std::lock_guard<std::recursive_mutex> lock(g_treesMutex);
     auto it = g_trees.find(hWnd);
     return (it != g_trees.end()) ? &it->second : nullptr;
 }
@@ -332,12 +335,20 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_orig;
 static std::atomic<bool> g_explorerFrameLoaded{false};
 
-// Guards are static (not thread_local) because Wh_ModInit runs on the loader thread but hooks fire on the UI thread.
-static bool g_deferredOpInProgress = false;
-static HWND g_mutatingTree = nullptr;
+static std::atomic<bool> g_deferredOpInProgress{false};
+static std::atomic<HWND> g_mutatingTree{nullptr};
 static std::unordered_set<HWND> g_pendingRebuildTrees;
 
 #define WM_DEFERRED_REBUILD  (WM_APP + 0x101)
+
+#define WM_SETTINGS_CHANGED  (WM_APP + 0x102)
+#define WM_RESTORE_TREE      (WM_APP + 0x103)
+
+struct SettingsChangeInfo {
+    ChangeTier tier;
+    Settings prev;
+    bool sepChanged;
+};
 
 static void DrainPendingRebuilds()
 {
@@ -540,10 +551,16 @@ HRESULT THISCALL AppendRoot_hook(void *pThis, IShellItem *psiRoot, unsigned long
     }
 
     if (g_inCustomAppend)
+    {
+        Wh_Log(L"[APPEND] passthrough (g_inCustomAppend) tree=%04X style=%lX thread=%u",
+               PTR4(hForTree), grfRootStyle, GetCurrentThreadId());
         return AppendRoot_orig(pThis, psiRoot, grfEnumFlags, grfRootStyle, pFilter);
+    }
 
     bool isHiddenRoot = (grfRootStyle & 0x1) != 0;
     bool wantItems = isHiddenRoot && g_settings.hasItemsAtTop;
+    Wh_Log(L"[APPEND] tree=%04X hidden=%d wantItems=%d style=%lX thread=%u",
+           PTR4(hForTree), (int)isHiddenRoot, (int)wantItems, grfRootStyle, GetCurrentThreadId());
 
     HRESULT hr = AppendRoot_orig(pThis, psiRoot, grfEnumFlags, grfRootStyle, pFilter);
 
@@ -947,11 +964,30 @@ static void RemoveHomeSpacer(TreeState& ts, INameSpaceTreeControl* pNsc)
     ts.homeSpacerItem = nullptr;
 }
 
+static LRESULT CALLBACK SepParentSubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
+
+static void EnsureParentSubclass(HWND hTree)
+{
+    HWND parent = GetParent(hTree);
+    if (!parent)
+        return;
+    if (g_subclassedParents.count(parent))
+        return;
+    bool ok = WindhawkUtils::SetWindowSubclassFromAnyThread(parent, SepParentSubclassProc, (DWORD_PTR)hTree);
+    Wh_Log(L"[SEP-PARENT] parent=%04X tree=%04X ok=%d", PTR4(parent), PTR4(hTree), ok);
+    if (ok)
+        g_subclassedParents.insert(parent);
+}
+
 static void RestoreTree(HWND hTree)
 {
+    Wh_Log(L"[RESTORE] tree=%04X thread=%u", PTR4(hTree), GetCurrentThreadId());
     TreeState* ts = GetTree(hTree);
     if (!ts || !IsWindow(hTree) || !ts->pNscTree)
+    {
+        Wh_Log(L"[RESTORE] bail: ts=%p isWindow=%d pNsc=%p", ts, IsWindow(hTree), ts ? ts->pNscTree : nullptr);
         return;
+    }
 
     void *pNscRaw = ts->pNscTree;
     unsigned long enumFlags = ts->enumFlags;
@@ -1022,6 +1058,11 @@ static void FullRebuildTree(HWND hTree)
     if (!ts || !ts->pNscTree || !IsWindow(hTree))
         return;
 
+    EnsureParentSubclass(hTree);
+
+    HTREEITEM hSelBefore = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+    Wh_Log(L"[REBUILD-START] tree=%04X sel=%04X thread=%u", PTR4(hTree), PTR4(hSelBefore), GetCurrentThreadId());
+
     ComRef<INameSpaceTreeControl> pNsc((INameSpaceTreeControl *)ts->pNscTree);
     void *pNscRaw = ts->pNscTree;
     unsigned long enumFlags = ts->enumFlags;
@@ -1075,9 +1116,11 @@ static void FullRebuildTree(HWND hTree)
         }
         ResetSepColor();
 
+        HTREEITEM hSelAfter = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
         InvalidateRect(hTree, nullptr, TRUE);
-        Wh_Log(L"[REBUILD] tree=%04X hHome=%04X hGallery=%04X",
-               PTR4(hTree), PTR4(ts ? ts->hItems[NAV_HOME] : nullptr), PTR4(ts ? ts->hItems[NAV_GALLERY] : nullptr));
+        Wh_Log(L"[REBUILD-END] tree=%04X sel=%04X→%04X hHome=%04X hGallery=%04X",
+               PTR4(hTree), PTR4(hSelBefore), PTR4(hSelAfter),
+               PTR4(ts ? ts->hItems[NAV_HOME] : nullptr), PTR4(ts ? ts->hItems[NAV_GALLERY] : nullptr));
     }
 }
 
@@ -1363,6 +1406,10 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         LPNMHDR hdr = (LPNMHDR)lParam;
         if (hdr && hdr->hwndFrom == hTree)
         {
+            if ((hdr->code == TVN_SELCHANGEDW || hdr->code == TVN_SELCHANGEDA) &&
+                hTree == g_mutatingTree)
+                return 0;
+
             if (hdr->code == (UINT)NM_CUSTOMDRAW && hTree != g_mutatingTree)
             {
                 LPNMTVCUSTOMDRAW cd = (LPNMTVCUSTOMDRAW)lParam;
@@ -1451,19 +1498,6 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         g_subclassedParents.erase(hWnd);
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-static void EnsureParentSubclass(HWND hTree)
-{
-    HWND parent = GetParent(hTree);
-    if (!parent)
-        return;
-    if (g_subclassedParents.count(parent))
-        return;
-    bool ok = WindhawkUtils::SetWindowSubclassFromAnyThread(parent, SepParentSubclassProc, (DWORD_PTR)hTree);
-    Wh_Log(L"[SEP-PARENT] parent=%04X tree=%04X ok=%d", PTR4(parent), PTR4(hTree), ok);
-    if (ok)
-        g_subclassedParents.insert(parent);
 }
 
 // Returns false if expected dups are missing (async population race).
@@ -1640,6 +1674,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             {
                 int id = g_ins.item;
                 g_ins.item = -1;
+                std::lock_guard<std::recursive_mutex> lock(g_treesMutex);
                 if (!GetTree(hWnd) && !IsNavPaneHost(hWnd))
                     return result;
                 auto [it, _] = g_trees.try_emplace(hWnd);
@@ -1839,6 +1874,73 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         return 0;
     }
 
+    if (uMsg == WM_SETTINGS_CHANGED)
+    {
+        auto* info = reinterpret_cast<SettingsChangeInfo*>(lParam);
+        HTREEITEM hSel = (HTREEITEM)SendMessageW(hWnd, TVM_GETNEXTITEM, TVGN_CARET, 0);
+        Wh_Log(L"[SETTINGS-MSG] tree=%04X tier=%d sel=%04X thread=%u",
+               PTR4(hWnd), (int)info->tier, PTR4(hSel), GetCurrentThreadId());
+        TreeState* ts = GetTree(hWnd);
+        if (!ts || !IsWindow(hWnd) || !ts->pNscTree)
+            return 0;
+
+        ts->sepRetries = 0;
+
+        if (info->tier == TIER_REBUILD)
+        {
+            g_deferredOpInProgress = true;
+            g_mutatingTree = hWnd;
+            FullRebuildTree(hWnd);
+            DrainPendingRebuilds();
+        }
+        else if (info->tier == TIER_REFRESH)
+        {
+            ts->boundaryItem = nullptr;
+            ts->belowQAItem = nullptr;
+            ts->pendingWork |= WORK_QA_CLEANUP;
+            RefreshNavPane(hWnd);
+        }
+        else // TIER_REPAINT
+        {
+            bool homeGalleryChanged = (info->prev.items[NAV_HOME].hide    != g_settings.items[NAV_HOME].hide ||
+                                       info->prev.items[NAV_GALLERY].hide != g_settings.items[NAV_GALLERY].hide);
+            bool dedupChanged = false;
+            for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
+                if (g_settings.items[i].showAtTop && info->prev.items[i].hideFromQA != g_settings.items[i].hideFromQA)
+                    dedupChanged = true;
+
+            if (homeGalleryChanged)
+            {
+                for (int j = NAV_HOME; j < NAV_COUNT; j++)
+                    if (g_settings.items[j].hide)
+                        ts->hItems[j] = nullptr;
+                ts->pendingWork |= WORK_HG_CLEANUP;
+            }
+            if (dedupChanged)
+                ts->pendingWork |= WORK_QA_CLEANUP;
+            if (info->sepChanged || dedupChanged)
+            {
+                ts->boundaryItem = nullptr;
+                ts->belowQAItem = nullptr;
+            }
+
+            InvalidateRect(hWnd, nullptr, TRUE);
+        }
+        return 0;
+    }
+
+    if (uMsg == WM_RESTORE_TREE)
+    {
+        Wh_Log(L"[RESTORE-MSG] tree=%04X thread=%u", PTR4(hWnd), GetCurrentThreadId());
+        g_mutatingTree = hWnd;
+        RestoreTree(hWnd);
+        g_mutatingTree = nullptr;
+        if (IsWindow(hWnd))
+            RedrawWindow(hWnd, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        return 0;
+    }
+
     if (uMsg == WM_PAINT)
     {
         TreeState* ts = GetTree(hWnd);
@@ -1972,16 +2074,23 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     {
         RemovePropW(hWnd, L"WH_NscTree");
         RemovePropW(hWnd, L"WH_EnumFlags");
-        auto it = g_trees.find(hWnd);
-        if (it != g_trees.end())
+        IShellItemFilter *pf = nullptr;
+        INameSpaceTreeControl *pNsc = nullptr;
         {
-            IShellItemFilter *pf = it->second.pFilter;
-            it->second.pFilter = nullptr;
-            INameSpaceTreeControl *pNsc = nullptr;
-            if (it->second.ownsNscRef && it->second.pNscTree)
-                pNsc = (INameSpaceTreeControl *)it->second.pNscTree;
-            it->second.pNscTree = nullptr;
-            g_trees.erase(it);
+            std::lock_guard<std::recursive_mutex> lock(g_treesMutex);
+            auto it = g_trees.find(hWnd);
+            if (it != g_trees.end())
+            {
+                pf = it->second.pFilter;
+                it->second.pFilter = nullptr;
+                if (it->second.ownsNscRef && it->second.pNscTree)
+                    pNsc = (INameSpaceTreeControl *)it->second.pNscTree;
+                it->second.pNscTree = nullptr;
+                g_trees.erase(it);
+            }
+        }
+        if (pf || pNsc)
+        {
             if (pf)
                 pf->Release();
             if (pNsc)
@@ -2330,19 +2439,22 @@ void Wh_ModAfterInit()
 
     for (auto& d : discovered)
     {
-        // Release the ref we took; nothing else will.
         if (!IsWindow(d.hTree))
         {
             d.pNsc->Release();
             continue;
         }
-        TreeState& ts = g_trees[d.hTree];
-        ts.pNscTree = (void *)d.pNsc;
-        ts.enumFlags = d.enumFlags;
-        ts.pendingWork |= WORK_FULL_REBUILD;
-        ts.ownsNscRef = true;
 
-        SetPropW(d.hTree, L"WH_NscTree", (HANDLE)ts.pNscTree);
+        {
+            std::lock_guard<std::recursive_mutex> lock(g_treesMutex);
+            TreeState& ts = g_trees[d.hTree];
+            ts.pNscTree = (void *)d.pNsc;
+            ts.enumFlags = d.enumFlags;
+            ts.pendingWork |= WORK_FULL_REBUILD;
+            ts.ownsNscRef = true;
+        }
+
+        SetPropW(d.hTree, L"WH_NscTree", (HANDLE)d.pNsc);
         SetPropW(d.hTree, L"WH_EnumFlags", (HANDLE)(ULONG_PTR)d.enumFlags);
 
         PostMessage(d.hTree, WM_DEFERRED_REBUILD, 0, 0);
@@ -2435,70 +2547,25 @@ void Wh_ModSettingsChanged()
         if (tier == TIER_NONE)
             break;
 
-        // Snapshot HWNDs: FullRebuildTree pumps messages, which can rehash g_trees mid-iteration.
-        std::vector<HWND> treeList;
-        treeList.reserve(g_trees.size());
-        for (auto& [hTree, ts] : g_trees)
-        {
-            ts.sepRetries = 0;
-            treeList.push_back(hTree);
-        }
-        int treeCount = (int)treeList.size();
-
         bool sepChanged = (prev.removeSepBelowNav != g_settings.removeSepBelowNav ||
                            prev.removeSepBelowQA  != g_settings.removeSepBelowQA);
         if (sepChanged)
             ResetSepColor();
 
-        for (int i = 0; i < treeCount; i++)
+        SettingsChangeInfo info = { tier, prev, sepChanged };
+
+        std::vector<HWND> treeList;
         {
-            HWND hTree = treeList[i];
-            TreeState* ts = GetTree(hTree);
-            if (!ts || !IsWindow(hTree) || !ts->pNscTree)
-                continue;
+            std::lock_guard<std::recursive_mutex> lock(g_treesMutex);
+            treeList.reserve(g_trees.size());
+            for (auto& [hTree, ts] : g_trees)
+                treeList.push_back(hTree);
+        }
 
-            if (tier == TIER_REBUILD)
-            {
-                g_deferredOpInProgress = true;
-                g_mutatingTree = hTree;
-                FullRebuildTree(hTree);
-                DrainPendingRebuilds();
-            }
-            else if (tier == TIER_REFRESH)
-            {
-                ts->boundaryItem = nullptr;
-                ts->belowQAItem = nullptr;
-                ts->pendingWork |= WORK_QA_CLEANUP;
-                RefreshNavPane(hTree);
-            }
-            else // TIER_REPAINT
-            {
-                bool homeGalleryChanged = (prev.items[NAV_HOME].hide    != g_settings.items[NAV_HOME].hide ||
-                                           prev.items[NAV_GALLERY].hide != g_settings.items[NAV_GALLERY].hide);
-                bool dedupChanged = false;
-                for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
-                    if (g_settings.items[i].showAtTop && prev.items[i].hideFromQA != g_settings.items[i].hideFromQA)
-                        dedupChanged = true;
-
-                if (homeGalleryChanged)
-                {
-                    for (int j = NAV_HOME; j < NAV_COUNT; j++)
-                        if (g_settings.items[j].hide)
-                            ts->hItems[j] = nullptr;
-                    ts->pendingWork |= WORK_HG_CLEANUP;
-                }
-                if (dedupChanged)
-                {
-                    ts->pendingWork |= WORK_QA_CLEANUP;
-                }
-                if (sepChanged || dedupChanged)
-                {
-                    ts->boundaryItem = nullptr;
-                    ts->belowQAItem = nullptr;
-                }
-
-                InvalidateRect(hTree, nullptr, TRUE);
-            }
+        for (HWND hTree : treeList)
+        {
+            if (IsWindow(hTree))
+                SendMessage(hTree, WM_SETTINGS_CHANGED, 0, (LPARAM)&info);
         }
 
         if (!prev.hasItemsAtTop && g_settings.hasItemsAtTop)
@@ -2510,26 +2577,27 @@ void Wh_ModSettingsChanged()
 
 void Wh_ModUninit()
 {
-    // Clear state so hooks become no-ops
     g_settings = {};
     ResetSepColor();
 
-    // Snapshot HWNDs: AppendRoot_orig pumps messages, which can rehash g_trees mid-iteration.
     std::vector<HWND> uninitList;
-    uninitList.reserve(g_trees.size());
-    for (auto& [hTree, ts] : g_trees)
-        uninitList.push_back(hTree);
-
-    for (int i = 0; i < (int)uninitList.size(); i++)
     {
-        HWND hTree = uninitList[i];
+        std::lock_guard<std::recursive_mutex> lock(g_treesMutex);
+        uninitList.reserve(g_trees.size());
+        for (auto& [hTree, ts] : g_trees)
+            uninitList.push_back(hTree);
+    }
+
+    for (HWND hTree : uninitList)
+    {
+        g_mutatingTree = hTree;
         RestoreTree(hTree);
+        g_mutatingTree = nullptr;
         if (IsWindow(hTree))
             RedrawWindow(hTree, nullptr, nullptr,
                          RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
     }
 
-    // Remove all parent subclasses
     for (HWND parent : g_subclassedParents)
     {
         if (IsWindow(parent))
@@ -2537,23 +2605,25 @@ void Wh_ModUninit()
     }
     g_subclassedParents.clear();
 
-    // Release straggler refs from trees that RestoreTree didn't fully process
-    for (auto& [h, ts] : g_trees)
     {
-        if (ts.pFilter)
+        std::lock_guard<std::recursive_mutex> lock(g_treesMutex);
+        for (auto& [h, ts] : g_trees)
         {
-            ts.pFilter->Release();
-            ts.pFilter = nullptr;
+            if (ts.pFilter)
+            {
+                ts.pFilter->Release();
+                ts.pFilter = nullptr;
+            }
+            if (ts.ownsNscRef && ts.pNscTree)
+            {
+                ((INameSpaceTreeControl *)ts.pNscTree)->Release();
+                ts.pNscTree = nullptr;
+                ts.ownsNscRef = false;
+            }
         }
-        if (ts.ownsNscRef && ts.pNscTree)
-        {
-            ((INameSpaceTreeControl *)ts.pNscTree)->Release();
-            ts.pNscTree = nullptr;
-            ts.ownsNscRef = false;
-        }
+        g_trees.clear();
+        g_pendingRebuildTrees.clear();
     }
-    g_trees.clear();
-    g_pendingRebuildTrees.clear();
 
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
     for (int i = 0; i < NAV_COUNT; i++)
@@ -2561,5 +2631,6 @@ void Wh_ModUninit()
     g_ins.pNsc = nullptr;
     g_ins.enumFlags = 0;
     if (g_ins.filter) { g_ins.filter->Release(); g_ins.filter = nullptr; }
-    Wh_Log(L"Mod uninitialized");
+    if (g_explorerFrameLoaded.load(std::memory_order_relaxed))
+        Wh_Log(L"Mod uninitialized");
 }
