@@ -65,6 +65,10 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
         'void Wh_ModSettingsChanged()',
         'BOOL Wh_ModSettingsChanged(BOOL* bReload)',
     ],
+    'WhTool_ModInit': ['BOOL WhTool_ModInit()'],
+    'WhTool_ModUninit': ['void WhTool_ModUninit()'],
+    'WhTool_ModSettingsChanged': ['void WhTool_ModSettingsChanged()'],
+    'WhTool_ModEntryPoint': ['void WhTool_ModEntryPoint()'],
 }
 
 
