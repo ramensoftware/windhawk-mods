@@ -4899,7 +4899,7 @@
                     86
                 ],
                 "ratingUsers": 103,
-                "updated": 1772586728000,
+                "updated": 1780405609000,
                 "users": 7806
             },
             "metadata": {
@@ -4907,15 +4907,15 @@
                     "x86-64"
                 ],
                 "author": "crazyboyybs",
-                "compilerOptions": "-ldwmapi",
-                "description": "Animación suave de deslizamiento inspirada en WinUI para el área de contenido del Explorador de Archivos.",
+                "compilerOptions": "-lgdi32 -lole32 -lshell32 -lcomctl32 -ld3d11 -ldxgi",
+                "description": "Animaciones suaves de transición de página inspiradas en WinUI para el área de contenido del Explorador de Archivos.",
                 "github": "https://github.com/crazyboyybs",
                 "include": [
                     "explorer.exe"
                 ],
                 "license": "MIT",
                 "name": "Animación de Contenido del Explorador de Archivos estilo WinUI",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "file-explorer-details-autofit-columns": {

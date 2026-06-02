@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-02T07:55:19.000Z</updated>
+    <updated>2026-06-02T13:06:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer WinUI-Like Content Animation 1.0.1]]></title>
+        <id>https://windhawk.net/mods/file-explorer-content-animation#ff269b026fa0e4628a625cbfb59da891642bb872</id>
+        <link href="https://windhawk.net/mods/file-explorer-content-animation"/>
+        <updated>2026-06-02T13:06:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>GPU-accelerated fade - The fade effect now uses a DirectComposition overlay capturing the previous folder's content (including Mica/Acrylic). The overlay fades out on the GPU compositor thread, fully independent of CPU load from thumbnail rendering.</li>
+<li>Page transitions - Detects the navigation type and applies a different animation for each context:
+Entrance (slide up) - Opening Explorer, new tabs, and general navigation.
+Enter folder (short fast slide from right) - Navigating into subfolders.
+Back slide (slide from left) - Going back via button, breadcrumb, or Up arrow.
+Forward slide (slide from right) - Going forward after going back.
+Reverse direction - Content can slide down instead of up.</li>
+<li>Navigation pane animation - The nav pane tree slides in from the left when opening Explorer or a new tab.</li>
+<li>Property page animation - Animates tab switching in folder and file Properties windows.</li>
+<li>Requires symbol resolution on explorerframe.dll (handled automatically by Windhawk).</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Companions 1.3.0]]></title>
         <id>https://windhawk.net/mods/neko-cat#7afddcbd4e0e0300474719100693301b898f1be3</id>
@@ -541,22 +563,6 @@ scoped to the root window identified by GetGUIThreadInfo / GetForegroundWindow
         <author>
             <name>VitalS</name>
             <uri>https://github.com/VitalSkib</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Genie Animation Mod 1.0.0]]></title>
-        <id>https://windhawk.net/mods/genie-minimize-animation#4e24d3c633491a476404255c01c4b49194e9847b</id>
-        <link href="https://windhawk.net/mods/genie-minimize-animation"/>
-        <updated>2026-05-29T12:07:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="genieanimationmod">Genie Animation Mod</h1>
-<p>This is a mod that adds a genie like minimize animation.
-Since I don't know C++ yet, this mode was written by gemini and claude.
-This mod isn't perfect but windows isn't giving me a lot to work with. (windows animation api is almost 20 years old)
-Keep in mind that these animation can use a lot of cpu power but from my experience this only spikes when you spam the animations.</p>
-<p>I'll try to add settings for this mod later.</p>]]></content>
-        <author>
-            <name>lolstijl</name>
-            <uri>https://github.com/lolstijl</uri>
         </author>
     </entry>
 </feed>
