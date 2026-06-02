@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-02T16:39:45.000Z</updated>
+    <updated>2026-06-02T21:28:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Files 2 Folders 2.0]]></title>
+        <id>https://windhawk.net/mods/files-2-folders#ad19ef246bb802bc953cbd0d171ca2f8eeba204d</id>
+        <link href="https://windhawk.net/mods/files-2-folders"/>
+        <updated>2026-06-02T21:28:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed: the "Files 2 Folder…" menu entry now appears and works on the desktop (previously only inside Explorer folder windows).</li>
+<li>Added Silent mode (right-click menu): skips the dialog and immediately moves the selection using the default mode; suppresses the mod's own dialogs/error popups. The hotkey workaround is unaffected.</li>
+<li>"Default selected mode" is now a dropdown showing the actual mode names instead of a raw 1-4 number box.</li>
+<li>Fixed: the dialog now correctly pre-selects the configured "Default selected mode" (it was always reverting to the first option).</li>
+<li>Also handles selections in library/search views by deriving the destination from the selected items.</li>
+<li>Fixed: no longer inserts a doubled separator when "Place menu item near Cut/Copy" is on and Explorer already has a separator there.</li>
+<li>The menu entry and default subfolder name now use Windows' own localized strings (shell32: "Move to a folder…", "New folder"), so they appear in the OS language.</li>
+<li>Fixed-name / date modes no longer silently reuse an existing folder of that name — they number duplicates like Explorer ("New folder (2)", "(3)", …).</li>
+<li>The "Files 2 Folder…" entry now also appears in the classic menu bar's Edit dropdown (after Cut/Copy).</li>
+<li>Settings descriptions rewritten for consistency (On/Off states on their own lines, unified quoting/terminology).</li>
+<li>Workaround hotkey: Win-based combos now work via a low-level keyboard hook (the technique PowerToys uses) and suppress the OS default, instead of failing to register. Note: bare Win+<letter> shortcuts (Win+F, Win+L, …) are reserved by Windows and cannot be intercepted by any hook — pair Win with another modifier (e.g. Win+Shift+F); the mod now warns when a bare Win combo is selected.</li>
+</ul>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Transparent Desktop Icons with Spotlight 1.0]]></title>
         <id>https://windhawk.net/mods/transparent-desktop-icons-spotlight#7de4fff6bbaa2bbc92512039e8bc39c61480c7bf</id>
@@ -499,34 +522,6 @@ Additionally I've also updated description for some of the existing processes, s
         <author>
             <name>Exiled Eye</name>
             <uri>https://github.com/ExiledEye</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[URL Blocker 0.1]]></title>
-        <id>https://windhawk.net/mods/url-blocker#9652ca93368edbfbd1274ae2ccc7524025adf302</id>
-        <link href="https://windhawk.net/mods/url-blocker"/>
-        <updated>2026-05-30T10:31:36.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="whatitdoes">What it does</h2>
-<p>This mod prevents selected applications from opening web links in your default browser. It is mainly intended for cases where programs open unnecessary pages such as post-update "thank you" screens, release notes, promotional pages, or similar unwanted redirects.</p>
-<p>The mod works by intercepting <code>ShellExecuteW</code> and <code>ShellExecuteA</code> calls and ignoring calls that try to open URLs (starting with <code>http</code>). Regular file paths are left alone, so opening local files will continue to work as usual.</p>
-<h2 id="configuration">Configuration</h2>
-<p>This mod doesn't automatically target any processes. Add the programs for which you want to block URL calls under:</p>
-<p><code>Details</code> -&gt; <code>Advanced</code> -&gt; <code>Custom process inclusion list</code></p>
-<p>Only the processes in that list will have URL calls blocked.</p>
-<p><strong><em>No guarantee that it will work on all programs!</em></strong></p>
-<h2 id="notesandlimitations">Notes and limitations</h2>
-<ul>
-<li>The mod only blocks URL launches that go through <code>ShellExecuteW</code> or <code>ShellExecuteA</code>.</li>
-<li>Programs that use another API or an embedded browser may still be able to open web pages.</li>
-<li>The mod is not intended for system-wide URL filtering.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Inspired by the <code>F1 Blocker</code> mod from <a href="https://github.com/d0gkiller87">d0gkiller87</a>.</p>
-<h2 id="bugreportfeaturerequest">Bug Report / Feature Request</h2>
-<p>Open an issue / discussion on https://github.com/ramensoftware/windhawk-mods and tag <code>@CrazyTim71</code></p>]]></content>
-        <author>
-            <name>CrazyTim71</name>
-            <uri>https://github.com/CrazyTim71</uri>
         </author>
     </entry>
 </feed>

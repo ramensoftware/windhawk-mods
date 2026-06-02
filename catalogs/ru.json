@@ -5018,19 +5018,19 @@
                     3
                 ],
                 "ratingUsers": 4,
-                "updated": 1780052905000,
+                "updated": 1780435704000,
                 "users": 62
             },
             "metadata": {
                 "author": "tria",
-                "compilerOptions": "-lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lcomctl32 -lcomdlg32 -lgdi32 -luser32",
+                "compilerOptions": "-lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lcomdlg32 -lgdi32 -luser32",
                 "description": "Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers",
                 "github": "https://github.com/triatomic",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Files 2 Folders",
-                "version": "1.3"
+                "version": "2.0"
             }
         },
         "firefox-border-fix": {
