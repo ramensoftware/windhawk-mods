@@ -1,17 +1,17 @@
 // ==WindhawkMod==
-// @id              window-manager
-// @name            Window Manager
+// @id              snap-commander
+// @name            Snap Commander
 // @description     Move the active window to screen halves and corners with keyboard shortcuts (inspired by Rectangle on macOS)
-// @version         1.0.0
+// @version         1.0
 // @author          Asteski
 // @github          https://github.com/Asteski
-// @include         windhawk.exe
+// @include         dwm.exe
 // @compilerOptions -luser32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Window Manager
+# Snap Commander
 
 Move the active window to specific screen areas using keyboard shortcuts, just like
 the [Rectangle](https://rectangleapp.com/) app on macOS.
@@ -48,18 +48,19 @@ returns the window to where it was before its first snap.
 
 ## How it works
 
-The mod installs a system-wide low-level keyboard hook. Each action is bound to a
-shortcut you type as text. When you press it, the focused window is resized and moved to
-the matching region of the monitor it is on, and the key press is swallowed so it never
-reaches the focused application.
+Each action is bound to a keyboard shortcut you type as text. The mod registers these as
+global hotkeys (via `RegisterHotKey`), so when you press one, the focused window is
+resized and moved to the matching region of the monitor it is on. The whole combination
+is consumed cleanly, so it never reaches the focused application and leaves no stray
+modifier behind (no menu-bar or Start-menu flicker).
 
 ## Shortcuts
 
 Each action's shortcut is free text in the form `[modifier+]...key`, for example:
 
-- `q` — just the `Q` key
-- `ctrl+q` — `Ctrl` + `Q`
-- `ctrl+shift+left` — `Ctrl` + `Shift` + `Left arrow`
+- `q` ÔÇö just the `Q` key
+- `ctrl+q` ÔÇö `Ctrl` + `Q`
+- `ctrl+shift+left` ÔÇö `Ctrl` + `Shift` + `Left arrow`
 
 Recognised modifier words are `alt`, `ctrl`, `shift`, and `win`; the key may be a letter
 `a`-`z`, a digit `0`-`9`, an arrow `left`/`right`/`up`/`down`, or one of the punctuation
@@ -68,12 +69,16 @@ the separator, the `=`/`+` key must be written as `plus` (or `=`).
 
 The **Modifier key** setting adds a modifier (or two) on top of whatever you type for
 every action. So with Modifier = `Alt` and Left half = `q`, the shortcut is `Alt+Q`. Set
-Modifier = `None` to use only the modifiers written in each shortcut — letting you give
+Modifier = `None` to use only the modifiers written in each shortcut ÔÇö letting you give
 different actions different modifiers (e.g. `q`, `ctrl+w`, `ctrl+shift+e`).
 
 The modifier combination must match exactly: an action bound to `Alt+Q` will *not* fire
 on `Ctrl+Alt+Q`. Note that binding a bare key (e.g. `q` with Modifier = `None`) means
-that key is swallowed system-wide and can no longer be typed normally.
+that key is claimed system-wide and can no longer be typed normally.
+
+Each shortcut can have only one global owner, so a combination already claimed by another
+app (or a reserved one such as `Win`+`L`) can't be registered. When that happens it is
+noted in the mod's log and the shortcut is simply skipped.
 
 ## Other configuration
 
@@ -82,7 +87,7 @@ that key is swallowed system-wide and can no longer be typed normally.
 - **Gap distribution**: controls how the gap is shared between adjacent windows.
   *Even spacing* (default) puts the full gap on sides touching a screen edge and half the
   gap on shared edges, so two windows placed side by side show the same gap between them
-  as a single window shows against the screen edge — no doubling. *Full gap on every side*
+  as a single window shows against the screen edge ÔÇö no doubling. *Full gap on every side*
   applies the whole gap to each side (adjacent windows then show a doubled gap). *Screen
   edges only* gaps just the sides that touch a screen edge, so adjacent windows meet flush.
 - **Center size**: optional width/height (in pixels) for the Center action. Leave either
@@ -103,7 +108,7 @@ actions are the same region actions as the shortcuts (Maximize, halves, corners,
 restore to.
 
 Enable a rule's **Don't resize** toggle to move the window into the chosen region while
-keeping its current size — the unresized window is anchored to the matching corner or
+keeping its current size ÔÇö the unresized window is anchored to the matching corner or
 side of the region (e.g. *top-right* pins it to the region's top-right). This is ignored
 by the Minimize action.
 */
@@ -299,8 +304,8 @@ constexpr UINT MOD_F_WIN = 0x8;
 
 constexpr int ACTION_COUNT = 18;
 
-// Mask of modifiers that must be held (and only those) for an action to fire.
-static UINT g_modifierMask = MOD_F_ALT;
+// Posted to the hook thread to (re)register the global hotkeys after settings load.
+constexpr UINT WM_APP_REGISTER_HOTKEYS = WM_APP + 1;
 
 // Gaps (in pixels) left on each side of a snapped window.
 static int g_gapTop = 0;
@@ -326,7 +331,9 @@ static int g_centerHeight = 0;
 static int g_resizeStepPercent = 5;
 
 // Per-action trigger key and required modifier mask; both indexes line up with
-// g_actionByIndex below. A key of 0 means the action is unbound.
+// g_actionByIndex below. A key of 0 means the action is unbound. The mask uses the
+// MOD_F_* bits, which deliberately match RegisterHotKey's MOD_ALT/CONTROL/SHIFT/WIN
+// values, so it can be passed straight to RegisterHotKey as the fsModifiers.
 static UINT g_actionKeys[ACTION_COUNT] = {};
 static UINT g_actionMods[ACTION_COUNT] = {};
 static const Action g_actionByIndex[ACTION_COUNT] = {
@@ -337,6 +344,23 @@ static const Action g_actionByIndex[ACTION_COUNT] = {
     Action::Minimize,    Action::NextDisplay,    Action::PreviousDisplay,
     Action::MakeSmaller, Action::MakeLarger,     Action::RestorePrevious,
 };
+
+// Setting names for each action's shortcut, lined up with g_actionByIndex. Used both
+// to read the bindings and to name a binding in the log when it can't be registered.
+static const PCWSTR g_keyNames[ACTION_COUNT] = {
+    L"shortcuts.keyLeftHalf",       L"shortcuts.keyRightHalf",
+    L"shortcuts.keyTopHalf",        L"shortcuts.keyBottomHalf",
+    L"shortcuts.keyCenterHalf",     L"shortcuts.keyTopLeft",
+    L"shortcuts.keyTopRight",       L"shortcuts.keyBottomLeft",
+    L"shortcuts.keyBottomRight",    L"shortcuts.keyMaximize",
+    L"shortcuts.keyAlmostMaximize", L"shortcuts.keyCenter",
+    L"shortcuts.keyMinimize",       L"shortcuts.keyNextDisplay",
+    L"shortcuts.keyPrevDisplay",    L"shortcuts.keySmaller",
+    L"shortcuts.keyLarger",         L"shortcuts.keyRestore",
+};
+
+// Which hotkey ids are currently registered. Touched only on the hook thread.
+static bool g_hotkeyRegistered[ACTION_COUNT] = {};
 
 // Window placement captured before the first snap, so RestorePrevious can revert.
 // Accessed only from the worker thread, so no synchronization is needed.
@@ -357,18 +381,19 @@ static std::mutex g_appRulesMutex;
 static std::unordered_set<HWND> g_ruleHandledWindows;
 static std::mutex g_ruleHandledMutex;
 
-static HHOOK g_keyboardHook = nullptr;
 static HWINEVENTHOOK g_winEventHook = nullptr;
 static HANDLE g_hookThread = nullptr;
 static DWORD g_hookThreadId = 0;
 static HANDLE g_hookReadyEvent = nullptr;
 
-// Work queue drained by the worker thread; producers are the keyboard hook and
-// the window-event hook, so it is guarded by a mutex.
+// Work queue drained by the worker thread; producers are the hotkey/window-event
+// hooks, so it is guarded by a mutex. A "cleanup" item carries no action and just
+// tells the worker (the sole owner of g_savedPlacements) to drop a destroyed window.
 struct WorkItem {
     HWND hWnd;
     Action action;
     bool noResize;
+    bool cleanup;
 };
 static std::deque<WorkItem> g_workQueue;
 static std::mutex g_workQueueMutex;
@@ -383,18 +408,23 @@ static void EnqueueWork(HWND hWnd, Action action, bool noResize = false) {
     }
     {
         std::lock_guard<std::mutex> lock(g_workQueueMutex);
-        g_workQueue.push_back({hWnd, action, noResize});
+        g_workQueue.push_back({hWnd, action, noResize, false});
     }
     SetEvent(g_workEvent);
 }
 
-static HMODULE GetThisModule() {
-    HMODULE module = nullptr;
-    GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<LPCWSTR>(&GetThisModule), &module);
-    return module;
+// Ask the worker thread to forget a window's saved placement once it's destroyed,
+// so the map doesn't grow without bound and a recycled HWND can't inherit a stale
+// placement.
+static void EnqueueCleanup(HWND hWnd) {
+    if (!hWnd) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_workQueueMutex);
+        g_workQueue.push_back({hWnd, Action::None, false, true});
+    }
+    SetEvent(g_workEvent);
 }
 
 static std::wstring ToLower(std::wstring s) {
@@ -656,34 +686,6 @@ static Action FindRuleAction(const std::wstring& exeName, bool* outNoResize) {
                 *outNoResize = rule.noResize;
                 return rule.action;
             }
-        }
-    }
-    return Action::None;
-}
-
-static UINT GetCurrentModifierMask() {
-    UINT mask = 0;
-    if (GetAsyncKeyState(VK_MENU) & 0x8000) {
-        mask |= MOD_F_ALT;
-    }
-    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
-        mask |= MOD_F_CTRL;
-    }
-    if (GetAsyncKeyState(VK_SHIFT) & 0x8000) {
-        mask |= MOD_F_SHIFT;
-    }
-    if ((GetAsyncKeyState(VK_LWIN) & 0x8000) ||
-        (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
-        mask |= MOD_F_WIN;
-    }
-    return mask;
-}
-
-static Action MatchAction(UINT vkCode, UINT currentMods) {
-    for (int i = 0; i < ACTION_COUNT; i++) {
-        if (g_actionKeys[i] != 0 && g_actionKeys[i] == vkCode &&
-            g_actionMods[i] == currentMods) {
-            return g_actionByIndex[i];
         }
     }
     return Action::None;
@@ -1084,19 +1086,36 @@ static void SnapWindow(HWND hWnd, Action action, bool noResize) {
     ApplyVisibleRect(hWnd, x, y, w, h);
 }
 
-LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION &&
-        (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
-        KBDLLHOOKSTRUCT* kbd = (KBDLLHOOKSTRUCT*)lParam;
-
-        Action action = MatchAction(kbd->vkCode, GetCurrentModifierMask());
-        if (action != Action::None) {
-            EnqueueWork(GetForegroundWindow(), action);
-            return 1;  // Swallow the key so the focused app never sees it.
+// Drops every currently-registered hotkey. Must run on the hook thread (the thread
+// that called RegisterHotKey owns the hotkeys and receives their WM_HOTKEY messages).
+static void UnregisterHotkeys() {
+    for (int i = 0; i < ACTION_COUNT; i++) {
+        if (g_hotkeyRegistered[i]) {
+            UnregisterHotKey(nullptr, i);
+            g_hotkeyRegistered[i] = false;
         }
     }
+}
 
-    return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+// (Re)registers a thread-global hotkey per bound action, using the action index as the
+// hotkey id. Consuming the whole combo avoids the stray-modifier side effects of a
+// low-level keyboard hook. Must run on the hook thread.
+static void RegisterHotkeys() {
+    UnregisterHotkeys();
+    for (int i = 0; i < ACTION_COUNT; i++) {
+        if (g_actionKeys[i] == 0) {
+            continue;
+        }
+        // MOD_NOREPEAT: one action per physical press, not once per auto-repeat.
+        if (RegisterHotKey(nullptr, i, g_actionMods[i] | MOD_NOREPEAT,
+                           g_actionKeys[i])) {
+            g_hotkeyRegistered[i] = true;
+        } else {
+            Wh_Log(L"'%s' could not be registered (error %lu); the combination may "
+                   L"be reserved or already claimed by another app",
+                   g_keyNames[i], GetLastError());
+        }
+    }
 }
 
 // Applies the matching rule's action to a window the first time we see it shown.
@@ -1142,8 +1161,11 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd, LONG idObject,
     }
 
     if (event == EVENT_OBJECT_DESTROY) {
-        std::lock_guard<std::mutex> lock(g_ruleHandledMutex);
-        g_ruleHandledWindows.erase(hWnd);
+        {
+            std::lock_guard<std::mutex> lock(g_ruleHandledMutex);
+            g_ruleHandledWindows.erase(hWnd);
+        }
+        EnqueueCleanup(hWnd);  // Drop any saved placement for this window.
         return;
     }
 
@@ -1171,22 +1193,18 @@ static void ApplyRulesToExistingWindows() {
 }
 
 static void LoadSettings() {
-    PCWSTR modifier = Wh_GetStringSetting(L"modifier");
-    g_modifierMask = ParseModifierMask(modifier ? modifier : L"alt");
-    if (modifier) {
-        Wh_FreeStringSetting(modifier);
-    }
+    // Wh_GetStringSetting never returns NULL (an unset value comes back as L""),
+    // and WindhawkUtils::StringSetting frees the string for us on scope exit.
+    UINT modifierMask =
+        ParseModifierMask(WindhawkUtils::StringSetting::make(L"modifier").get());
 
     g_gapTop = Wh_GetIntSetting(L"dimensions.gapTop");
     g_gapBottom = Wh_GetIntSetting(L"dimensions.gapBottom");
     g_gapLeft = Wh_GetIntSetting(L"dimensions.gapLeft");
     g_gapRight = Wh_GetIntSetting(L"dimensions.gapRight");
 
-    PCWSTR gapMode = Wh_GetStringSetting(L"dimensions.gapMode");
-    std::wstring gapModeValue = gapMode ? gapMode : L"even";
-    if (gapMode) {
-        Wh_FreeStringSetting(gapMode);
-    }
+    std::wstring gapModeValue =
+        WindhawkUtils::StringSetting::make(L"dimensions.gapMode").get();
     if (gapModeValue == L"full") {
         g_gapMode = GapMode::Full;
     } else if (gapModeValue == L"screen") {
@@ -1195,17 +1213,10 @@ static void LoadSettings() {
         g_gapMode = GapMode::Even;
     }
 
-    PCWSTR centerWidth = Wh_GetStringSetting(L"dimensions.centerWidth");
-    g_centerWidth = centerWidth ? _wtoi(centerWidth) : 0;
-    if (centerWidth) {
-        Wh_FreeStringSetting(centerWidth);
-    }
-
-    PCWSTR centerHeight = Wh_GetStringSetting(L"dimensions.centerHeight");
-    g_centerHeight = centerHeight ? _wtoi(centerHeight) : 0;
-    if (centerHeight) {
-        Wh_FreeStringSetting(centerHeight);
-    }
+    g_centerWidth =
+        _wtoi(WindhawkUtils::StringSetting::make(L"dimensions.centerWidth").get());
+    g_centerHeight =
+        _wtoi(WindhawkUtils::StringSetting::make(L"dimensions.centerHeight").get());
 
     g_resizeStepPercent = Wh_GetIntSetting(L"dimensions.resizeStep");
     if (g_resizeStepPercent < 1) {
@@ -1215,38 +1226,23 @@ static void LoadSettings() {
         g_resizeStepPercent = 50;
     }
 
-    static const PCWSTR keyNames[ACTION_COUNT] = {
-        L"shortcuts.keyLeftHalf",   L"shortcuts.keyRightHalf",
-        L"shortcuts.keyTopHalf",    L"shortcuts.keyBottomHalf",
-        L"shortcuts.keyCenterHalf", L"shortcuts.keyTopLeft",
-        L"shortcuts.keyTopRight",   L"shortcuts.keyBottomLeft",
-        L"shortcuts.keyBottomRight", L"shortcuts.keyMaximize",
-        L"shortcuts.keyAlmostMaximize", L"shortcuts.keyCenter",
-        L"shortcuts.keyMinimize",   L"shortcuts.keyNextDisplay",
-        L"shortcuts.keyPrevDisplay", L"shortcuts.keySmaller",
-        L"shortcuts.keyLarger",     L"shortcuts.keyRestore",
-    };
-
     for (int i = 0; i < ACTION_COUNT; i++) {
-        PCWSTR value = Wh_GetStringSetting(keyNames[i]);
+        WindhawkUtils::StringSetting value =
+            WindhawkUtils::StringSetting::make(g_keyNames[i]);
 
         UINT vk = 0, textMods = 0;
-        if (value && ParseShortcut(value, &vk, &textMods)) {
+        if (ParseShortcut(value.get(), &vk, &textMods)) {
             g_actionKeys[i] = vk;
             // The global modifier is required on top of whatever the shortcut typed.
-            g_actionMods[i] = g_modifierMask | textMods;
+            g_actionMods[i] = modifierMask | textMods;
         } else {
             g_actionKeys[i] = 0;  // Unbound or invalid.
             g_actionMods[i] = 0;
         }
-
-        if (value) {
-            Wh_FreeStringSetting(value);
-        }
     }
 
     // De-duplicate bindings: if two actions resolve to the same key+modifier
-    // combination, only the first one (in keyNames order) stays bound. Later
+    // combination, only the first one (in g_keyNames order) stays bound. Later
     // duplicates are disabled so a single keypress doesn't fire two actions.
     for (int i = 0; i < ACTION_COUNT; i++) {
         if (g_actionKeys[i] == 0) {
@@ -1255,9 +1251,8 @@ static void LoadSettings() {
         for (int j = 0; j < i; j++) {
             if (g_actionKeys[j] == g_actionKeys[i] &&
                 g_actionMods[j] == g_actionMods[i]) {
-                Wh_Log(L"Rectangle: '%s' duplicates '%s' (same key+modifier); "
-                       L"disabling '%s'",
-                       keyNames[i], keyNames[j], keyNames[i]);
+                Wh_Log(L"'%s' duplicates '%s' (same key+modifier); disabling '%s'",
+                       g_keyNames[i], g_keyNames[j], g_keyNames[i]);
                 g_actionKeys[i] = 0;
                 g_actionMods[i] = 0;
                 break;
@@ -1271,18 +1266,10 @@ static void LoadSettings() {
         wchar_t key[256] = {};
 
         swprintf_s(key, L"rules[%d].executable_names", i);
-        PCWSTR pExec = Wh_GetStringSetting(key);
-        std::wstring execNames = pExec ? pExec : L"";
-        if (pExec) {
-            Wh_FreeStringSetting(pExec);
-        }
+        std::wstring execNames = WindhawkUtils::StringSetting::make(key).get();
 
         swprintf_s(key, L"rules[%d].action", i);
-        PCWSTR pAction = Wh_GetStringSetting(key);
-        std::wstring actionValue = pAction ? pAction : L"";
-        if (pAction) {
-            Wh_FreeStringSetting(pAction);
-        }
+        std::wstring actionValue = WindhawkUtils::StringSetting::make(key).get();
 
         swprintf_s(key, L"rules[%d].no_resize", i);
         bool noResize = Wh_GetIntSetting(key) != 0;
@@ -1328,7 +1315,11 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
                 item = g_workQueue.front();
                 g_workQueue.pop_front();
             }
-            SnapWindow(item.hWnd, item.action, item.noResize);
+            if (item.cleanup) {
+                g_savedPlacements.erase(item.hWnd);
+            } else {
+                SnapWindow(item.hWnd, item.action, item.noResize);
+            }
         }
 
         if (g_quit.load()) {
@@ -1339,24 +1330,18 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
 }
 
 static DWORD WINAPI HookThreadProc(LPVOID) {
-    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc,
-                                       GetThisModule(), 0);
-    if (!g_keyboardHook) {
-        Wh_Log(L"Rectangle: SetWindowsHookEx failed, error=%lu", GetLastError());
-        SetEvent(g_hookReadyEvent);
-        return 0;
-    }
-
-    Wh_Log(L"Rectangle: keyboard hook installed");
+    // Register the shortcut hotkeys on this thread; WM_HOTKEY (for a NULL window)
+    // is posted to the queue of the thread that called RegisterHotKey.
+    RegisterHotkeys();
 
     // Out-of-context window-event hook used to auto-snap matching apps. Events
     // are delivered to this thread's message queue, so it must be installed
-    // here. WINEVENT_SKIPOWNPROCESS keeps windhawk.exe's own windows untouched.
+    // here. WINEVENT_SKIPOWNPROCESS keeps dwm.exe's own windows untouched.
     g_winEventHook = SetWinEventHook(
         EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, nullptr, WinEventProc, 0, 0,
         WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     if (!g_winEventHook) {
-        Wh_Log(L"Rectangle: SetWinEventHook failed, error=%lu", GetLastError());
+        Wh_Log(L"SetWinEventHook failed, error=%lu", GetLastError());
     }
 
     SetEvent(g_hookReadyEvent);
@@ -1367,17 +1352,29 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
         if (gm == 0 || gm == -1) {
             break;
         }
+        // WM_HOTKEY and our re-register signal are thread messages (no window), so
+        // handle them here rather than via DispatchMessage.
+        if (msg.hwnd == nullptr) {
+            if (msg.message == WM_HOTKEY) {
+                int idx = (int)msg.wParam;
+                if (idx >= 0 && idx < ACTION_COUNT) {
+                    EnqueueWork(GetForegroundWindow(), g_actionByIndex[idx]);
+                }
+                continue;
+            }
+            if (msg.message == WM_APP_REGISTER_HOTKEYS) {
+                RegisterHotkeys();
+                continue;
+            }
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
+    UnregisterHotkeys();
     if (g_winEventHook) {
         UnhookWinEvent(g_winEventHook);
         g_winEventHook = nullptr;
-    }
-    if (g_keyboardHook) {
-        UnhookWindowsHookEx(g_keyboardHook);
-        g_keyboardHook = nullptr;
     }
     return 0;
 }
@@ -1389,13 +1386,13 @@ BOOL Wh_ModInit() {
 
     g_workEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_workEvent) {
-        Wh_Log(L"Rectangle: CreateEvent (work) failed");
+        Wh_Log(L"CreateEvent (work) failed");
         return FALSE;
     }
 
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
     if (!g_workerThread) {
-        Wh_Log(L"Rectangle: CreateThread (worker) failed");
+        Wh_Log(L"CreateThread (worker) failed");
         CloseHandle(g_workEvent);
         g_workEvent = nullptr;
         return FALSE;
@@ -1403,7 +1400,7 @@ BOOL Wh_ModInit() {
 
     g_hookReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hookReadyEvent) {
-        Wh_Log(L"Rectangle: CreateEvent (hook ready) failed");
+        Wh_Log(L"CreateEvent (hook ready) failed");
         g_quit = true;
         SetEvent(g_workEvent);
         WaitForSingleObject(g_workerThread, 2000);
@@ -1417,7 +1414,7 @@ BOOL Wh_ModInit() {
     g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0,
                                &g_hookThreadId);
     if (!g_hookThread) {
-        Wh_Log(L"Rectangle: CreateThread (hook) failed");
+        Wh_Log(L"CreateThread (hook) failed");
         CloseHandle(g_hookReadyEvent);
         g_hookReadyEvent = nullptr;
         g_quit = true;
@@ -1441,6 +1438,10 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    // Re-register hotkeys on the hook thread to reflect the new bindings.
+    if (g_hookThreadId) {
+        PostThreadMessageW(g_hookThreadId, WM_APP_REGISTER_HOTKEYS, 0, 0);
+    }
     ApplyRulesToExistingWindows();
 }
 
@@ -1473,10 +1474,6 @@ void Wh_ModUninit() {
     if (g_winEventHook) {
         UnhookWinEvent(g_winEventHook);
         g_winEventHook = nullptr;
-    }
-    if (g_keyboardHook) {
-        UnhookWindowsHookEx(g_keyboardHook);
-        g_keyboardHook = nullptr;
     }
 
     g_savedPlacements.clear();
