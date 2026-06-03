@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-03T07:34:30.000Z</updated>
+    <updated>2026-06-03T08:07:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Context Menu Items 1.11.0]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#5183328f1bd44e572e823ad342b948a2025c253e</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-06-03T08:07:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added Japanese language support (thanks to <a href="https://github.com/haru612">haru612</a>)</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Add This PC and Desktop to Nav Top 1.2.1]]></title>
         <id>https://windhawk.net/mods/add-virtual-folders-to-nav-top#da0605c6e036ab19f40fecfa7a367a1084daa6e4</id>
@@ -534,27 +547,6 @@ the original function is called normally.</p>
         <author>
             <name>Townrain</name>
             <uri>https://github.com/Townrain</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Console Quick Paste 1.0.0]]></title>
-        <id>https://windhawk.net/mods/console-quick-paste#490dfae0c155a142237630390237447d258de0d8</id>
-        <link href="https://windhawk.net/mods/console-quick-paste"/>
-        <updated>2026-05-30T12:05:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="consolequickpaste">Console Quick Paste</h1>
-<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/CQP.png" alt="Console Quick Paste" /></p>
-<p>Brings a "Quick Commands" submenu to Windows Terminal, giving you one-click access to your most-used PowerShell and Command Prompt snippets. To open it, right-click the empty space on the tab bar.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><code>Quick Commands Submenu</code>: Always pinned to the top of the context menu, separated from the built-in items by a divider.</li>
-<li><code>Configurable Command List</code>: Define as many commands as you like. Each entry has:</li>
-<li><code>Label</code>: The display name shown in the submenu. Falls back to the command itself when left blank.</li>
-<li><code>Command</code>: The string that will be pasted into the console.</li>
-<li><code>Auto-Enter</code>: When enabled, an <code>Enter</code> key is sent immediately after pasting so the command executes automatically.</li>
-</ul>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>
