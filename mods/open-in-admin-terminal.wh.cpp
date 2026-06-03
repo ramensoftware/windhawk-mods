@@ -40,24 +40,13 @@
 
 Screenshots may show earlier builds, but current releases use runtime classic-menu injection. The mod does not write Explorer context menu entries to the registry.
 
-## Files
-
-- `open-in-admin-terminal.wh.cpp` — Windhawk mod source
-
-## How to use
-
-1. Open Windhawk.
-2. Create a new mod.
-3. Paste in `open-in-admin-terminal.wh.cpp`.
-4. Compile and enable it.
-
 ## Notes
 
 - On Windows 11, Explorer may place this entry under `Show more options` depending on your context menu setup.
 - The entry is injected only while Explorer's classic menu is open; disabling the mod leaves no registry cleanup behind.
 - The mod intentionally targets filesystem folders and drive roots only, including optional navigation pane and Quick access support.
 - Auto chooses Windows Terminal, PowerShell 7, Windows PowerShell, then Command Prompt. If another built-in preset is unavailable, the mod falls back to Auto instead of hiding the entry.
-- Routine diagnostics are quiet by default. Enable debug logging in the settings when troubleshooting target detection or launch behavior.
+- Diagnostics use Windhawk's built-in logging controls.
 
 ## Version log
 - 1.15: Added optional navigation pane and Quick access support for filesystem folders and drives.
@@ -93,7 +82,7 @@ Screenshots may show earlier builds, but current releases use runtime classic-me
     - custom: Custom command
 - customTerminalCommand: wt.exe
   $name: Custom terminal command
-  $description: Used only when Terminal type is set to Custom command.
+  $description: Used only when Terminal type is set to Custom command. Use %V or %1 in arguments to insert the selected folder.
 - showOnFolderBackground: true
   $name: Show on folder background
   $description: Add the entry when right-clicking empty space inside a folder.
@@ -116,9 +105,6 @@ Screenshots may show earlier builds, but current releases use runtime classic-me
 - appendTerminalName: false
   $name: Append terminal name
   $description: When Menu text is set, append the selected terminal name in parentheses.
-- debugLogging: false
-  $name: Debug logging
-  $description: Log target detection, injection decisions, and successful launches.
 */
 // ==/WindhawkModSettings==
 
@@ -147,7 +133,6 @@ struct Settings {
     bool showOnDriveItem;
     bool showOnNavigationPane;
     std::wstring position;
-    bool debugLogging;
 };
 
 enum class TargetKind {
@@ -160,6 +145,12 @@ enum class TargetKind {
 struct MenuTarget {
     TargetKind kind = TargetKind::None;
     std::wstring path;
+};
+
+struct LaunchSpec {
+    std::wstring executable;
+    std::wstring parameters;
+    std::wstring workingDirectory;
 };
 
 static Settings g_settings;
@@ -206,13 +197,6 @@ static std::wstring GetSettingString(PCWSTR name, const wchar_t* fallback) {
 static bool GetSettingBool(PCWSTR name) {
     return Wh_GetIntSetting(name) != 0;
 }
-
-#define DEBUG_LOG(settings, ...) \
-    do {                         \
-        if ((settings).debugLogging) { \
-            Wh_Log(__VA_ARGS__); \
-        }                        \
-    } while (false)
 
 static std::wstring TrimString(const std::wstring& v) {
     auto first = v.find_first_not_of(L" \t\r\n");
@@ -501,7 +485,6 @@ static Settings LoadSettings() {
     s.showOnDriveItem = GetSettingBool(L"showOnDriveItem");
     s.showOnNavigationPane = GetSettingBool(L"showOnNavigationPane");
     s.position = GetSettingString(L"position", L"Top");
-    s.debugLogging = GetSettingBool(L"debugLogging");
 
     ResolveSettingsTerminal(s);
 
@@ -549,24 +532,7 @@ static bool IsDriveRootPath(const std::wstring& path) {
     return PathIsRootW(path.c_str()) != FALSE;
 }
 
-static std::wstring EscapePS(const std::wstring& s) {
-    std::wstring out;
-    out.reserve(s.size());
-    for (wchar_t c : s) {
-        if (c == L'\'') {
-            out += L"''";
-        } else {
-            out += c;
-        }
-    }
-    return out;
-}
-
-static std::wstring BuildPSStringLiteral(const std::wstring& value) {
-    return L"'" + EscapePS(value) + L"'";
-}
-
-static std::wstring QuoteProcessArgument(const std::wstring& arg) {
+static std::wstring QuoteCommandLineArgument(const std::wstring& arg) {
     if (arg.empty()) {
         return L"\"\"";
     }
@@ -607,107 +573,146 @@ static std::wstring QuoteProcessArgument(const std::wstring& arg) {
     return result;
 }
 
-static std::wstring BuildPSArgumentArray(const std::vector<std::wstring>& args) {
-    std::wstring result = L"@(";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (i > 0) {
-            result += L",";
-        }
-        result += BuildPSStringLiteral(QuoteProcessArgument(args[i]));
-    }
-    result += L")";
-    return result;
-}
-
-static std::wstring Base64Encode(const BYTE* bytes, size_t size) {
-    static constexpr wchar_t kBase64[] =
-        L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
+static std::wstring JoinCommandLineArguments(
+    const std::vector<std::wstring>& args) {
     std::wstring result;
-    result.reserve(((size + 2) / 3) * 4);
-
-    for (size_t i = 0; i < size; i += 3) {
-        BYTE b0 = bytes[i];
-        BYTE b1 = i + 1 < size ? bytes[i + 1] : 0;
-        BYTE b2 = i + 2 < size ? bytes[i + 2] : 0;
-
-        result += kBase64[b0 >> 2];
-        result += kBase64[((b0 & 0x03) << 4) | (b1 >> 4)];
-        result += i + 1 < size ? kBase64[((b1 & 0x0F) << 2) | (b2 >> 6)]
-                               : L'=';
-        result += i + 2 < size ? kBase64[b2 & 0x3F] : L'=';
+    for (const auto& arg : args) {
+        if (!result.empty()) {
+            result += L' ';
+        }
+        result += QuoteCommandLineArgument(arg);
     }
-
     return result;
 }
 
-static std::wstring EncodePowerShellCommand(const std::wstring& script) {
-    return Base64Encode(reinterpret_cast<const BYTE*>(script.data()),
-                        script.size() * sizeof(wchar_t));
+static std::wstring EscapePowerShellSingleQuotedString(const std::wstring& s) {
+    std::wstring out;
+    out.reserve(s.size());
+    for (wchar_t c : s) {
+        if (c == L'\'') {
+            out += L"''";
+        } else {
+            out += c;
+        }
+    }
+    return out;
 }
 
 static std::wstring BuildSetLocationCommand(const std::wstring& target) {
-    return L"Set-Location -LiteralPath '" + EscapePS(target) + L"'";
+    return L"Set-Location -LiteralPath '" +
+           EscapePowerShellSingleQuotedString(target) + L"'";
 }
 
-static std::wstring BuildStartProcess(const std::wstring& exe,
-                                      const std::vector<std::wstring>& args,
-                                      const std::wstring& workingDirectory) {
-    std::wstring script =
-        L"Start-Process -FilePath " + BuildPSStringLiteral(exe) + L" -Verb RunAs";
-    if (!workingDirectory.empty()) {
-        script += L" -WorkingDirectory " + BuildPSStringLiteral(workingDirectory);
-    }
-    if (!args.empty()) {
-        script += L" -ArgumentList " + BuildPSArgumentArray(args);
+static bool SplitCustomCommand(const std::wstring& command,
+                               std::wstring& executable,
+                               std::wstring& parameters) {
+    executable.clear();
+    parameters.clear();
+
+    std::wstring trimmed = TrimString(command);
+    if (trimmed.empty()) {
+        return false;
     }
 
-    return L"powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand " +
-           EncodePowerShellCommand(script);
+    if (trimmed.front() == L'"') {
+        size_t endQuote = trimmed.find(L'"', 1);
+        if (endQuote == std::wstring::npos) {
+            executable = TrimString(trimmed.substr(1));
+        } else {
+            executable = trimmed.substr(1, endQuote - 1);
+            parameters = TrimString(trimmed.substr(endQuote + 1));
+        }
+    } else {
+        size_t split = trimmed.find_first_of(L" \t\r\n");
+        if (split == std::wstring::npos) {
+            executable = trimmed;
+        } else {
+            executable = trimmed.substr(0, split);
+            parameters = TrimString(trimmed.substr(split + 1));
+        }
+    }
+
+    executable = TrimString(executable);
+    return !executable.empty();
 }
 
-static std::wstring BuildCommand(const Settings& s, const std::wstring& target) {
+static void ReplaceAll(std::wstring& value,
+                       const std::wstring& placeholder,
+                       const std::wstring& replacement) {
+    size_t pos = 0;
+    while ((pos = value.find(placeholder, pos)) != std::wstring::npos) {
+        value.replace(pos, placeholder.size(), replacement);
+        pos += replacement.size();
+    }
+}
+
+static std::wstring ExpandCustomParameters(const std::wstring& parameters,
+                                           const std::wstring& target) {
+    std::wstring result = parameters;
+    ReplaceAll(result, L"%V", target);
+    ReplaceAll(result, L"%1", target);
+    return result;
+}
+
+static LaunchSpec BuildLaunchSpec(const Settings& s, const std::wstring& target) {
     const std::wstring& choice = s.terminalEffectiveChoice.empty()
                                      ? s.terminalChoice
                                      : s.terminalEffectiveChoice;
-    const std::wstring exe =
+    LaunchSpec spec;
+    spec.executable =
         s.terminalDisplayCommand.empty() ? L"cmd.exe" : s.terminalDisplayCommand;
+    spec.workingDirectory = target;
+
+    if (choice == L"custom") {
+        std::wstring executable;
+        std::wstring parameters;
+        if (SplitCustomCommand(s.customTerminalCommand, executable, parameters)) {
+            spec.executable = executable;
+            spec.parameters = ExpandCustomParameters(parameters, target);
+        }
+        return spec;
+    }
 
     if (choice == L"wt") {
-        return BuildStartProcess(exe, {L"-d", target}, {});
+        spec.parameters = JoinCommandLineArguments({L"-d", target});
+        return spec;
     }
     if (choice == L"pwsh") {
-        return BuildStartProcess(exe,
-                                 {L"-NoExit", L"-Command",
-                                  BuildSetLocationCommand(target)},
-                                 {});
+        spec.parameters = JoinCommandLineArguments(
+            {L"-NoExit", L"-Command", BuildSetLocationCommand(target)});
+        return spec;
     }
     if (choice == L"powershell") {
-        return BuildStartProcess(exe,
-                                 {L"-NoExit", L"-Command",
-                                  BuildSetLocationCommand(target)},
-                                 {});
+        spec.parameters = JoinCommandLineArguments(
+            {L"-NoExit", L"-Command", BuildSetLocationCommand(target)});
+        return spec;
     }
     if (choice == L"cmd") {
-        return BuildStartProcess(exe, {L"/k", L"cd /d \"" + target + L"\""}, {});
+        spec.parameters = L"/k cd /d " + QuoteCommandLineArgument(target);
+        return spec;
     }
     if (choice == L"wsl") {
-        return BuildStartProcess(exe, {L"--cd", target}, {});
+        spec.parameters = JoinCommandLineArguments({L"--cd", target});
+        return spec;
     }
     if (choice == L"gitbash") {
-        return BuildStartProcess(exe, {}, target);
+        return spec;
     }
     if (choice == L"wezterm") {
-        return BuildStartProcess(exe, {L"start", L"--cwd", target}, {});
+        spec.parameters = JoinCommandLineArguments({L"start", L"--cwd", target});
+        return spec;
     }
     if (choice == L"alacritty") {
-        return BuildStartProcess(exe, {L"--working-directory", target}, {});
+        spec.parameters =
+            JoinCommandLineArguments({L"--working-directory", target});
+        return spec;
     }
     if (choice == L"conemu") {
-        return BuildStartProcess(exe, {L"-Dir", target}, {});
+        spec.parameters = JoinCommandLineArguments({L"-Dir", target});
+        return spec;
     }
 
-    return BuildStartProcess(exe, {}, {});
+    return spec;
 }
 
 static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND topLevel) {
@@ -1434,35 +1439,47 @@ static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings) {
         itemInfo.fMask = MIIM_BITMAP;
         itemInfo.hbmpItem = menuBitmap;
         if (!SetMenuItemInfoW(menu, kMenuCommandId, FALSE, &itemInfo)) {
-            DEBUG_LOG(settings, L"Menu icon assignment failed");
+            Wh_Log(L"Menu icon assignment failed");
         } else {
-            DEBUG_LOG(settings, L"Menu icon assigned");
+            Wh_Log(L"Menu icon assigned");
         }
     } else {
-        DEBUG_LOG(settings, L"Menu icon unavailable");
+        Wh_Log(L"Menu icon unavailable");
     }
 }
 
 static void LaunchAdminTerminal(const MenuTarget& target) {
     Settings settings = GetSettingsSnapshot();
-    std::wstring command = BuildCommand(settings, target.path);
-    std::vector<wchar_t> mutableCommand(command.begin(), command.end());
-    mutableCommand.push_back(L'\0');
+    LaunchSpec launch = BuildLaunchSpec(settings, target.path);
 
-    STARTUPINFOW startupInfo = {};
-    startupInfo.cb = sizeof(startupInfo);
-    PROCESS_INFORMATION processInfo = {};
+    SHELLEXECUTEINFOW executeInfo = {};
+    executeInfo.cbSize = sizeof(executeInfo);
+    executeInfo.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    executeInfo.lpVerb = L"runas";
+    executeInfo.lpFile = launch.executable.c_str();
+    executeInfo.lpParameters =
+        launch.parameters.empty() ? nullptr : launch.parameters.c_str();
+    executeInfo.lpDirectory =
+        launch.workingDirectory.empty() ? nullptr : launch.workingDirectory.c_str();
+    executeInfo.nShow = SW_SHOWNORMAL;
 
-    BOOL ok = CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, FALSE,
-                             0, nullptr, nullptr, &startupInfo, &processInfo);
-    if (ok) {
-        DEBUG_LOG(settings, L"Launch succeeded: target=%ls command=%ls",
-                  target.path.c_str(), command.c_str());
-        CloseHandle(processInfo.hThread);
-        CloseHandle(processInfo.hProcess);
+    POINT cursorPos;
+    if (GetCursorPos(&cursorPos)) {
+        executeInfo.fMask |= SEE_MASK_HMONITOR;
+        executeInfo.hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+    }
+
+    if (ShellExecuteExW(&executeInfo)) {
+        Wh_Log(L"Launch succeeded: target=%ls executable=%ls parameters=%ls",
+               target.path.c_str(), launch.executable.c_str(),
+               launch.parameters.c_str());
     } else {
-        Wh_Log(L"Launch failed: error=%lu target=%ls command=%ls",
-               GetLastError(), target.path.c_str(), command.c_str());
+        DWORD error = GetLastError();
+        if (error != ERROR_CANCELLED) {
+            Wh_Log(L"Launch failed: error=%lu target=%ls executable=%ls parameters=%ls",
+                   error, target.path.c_str(), launch.executable.c_str(),
+                   launch.parameters.c_str());
+        }
     }
 }
 
@@ -1480,24 +1497,22 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
         MenuTarget target;
         Settings settings = GetSettingsSnapshot();
         if (!ResolveMenuTarget(hwnd, settings.showOnNavigationPane, target)) {
-            DEBUG_LOG(settings, L"Injection skipped: no eligible filesystem directory target");
+            Wh_Log(L"Injection skipped: no eligible filesystem directory target");
         } else if (!IsTargetEnabled(settings, target.kind)) {
-            DEBUG_LOG(settings,
-                      L"Injection skipped: target kind disabled kind=%ls path=%ls",
-                      TargetKindName(target.kind), target.path.c_str());
+            Wh_Log(L"Injection skipped: target kind disabled kind=%ls path=%ls",
+                   TargetKindName(target.kind), target.path.c_str());
         } else {
             if (settings.terminalUsedFallback) {
-                DEBUG_LOG(settings,
-                          L"Terminal fallback: requested=%ls effective=%ls command=%ls",
-                          settings.terminalChoice.c_str(),
-                          settings.terminalEffectiveChoice.c_str(),
-                          settings.terminalDisplayCommand.c_str());
+                Wh_Log(L"Terminal fallback: requested=%ls effective=%ls command=%ls",
+                       settings.terminalChoice.c_str(),
+                       settings.terminalEffectiveChoice.c_str(),
+                       settings.terminalDisplayCommand.c_str());
             }
-            DEBUG_LOG(settings, L"Injection target: kind=%ls path=%ls",
-                      TargetKindName(target.kind), target.path.c_str());
+            Wh_Log(L"Injection target: kind=%ls path=%ls",
+                   TargetKindName(target.kind), target.path.c_str());
             InsertAdminTerminalMenuItem(menu, settings);
-            DEBUG_LOG(settings, L"Injection inserted: position=%ls text=%ls",
-                      settings.position.c_str(), settings.menuText.c_str());
+            Wh_Log(L"Injection inserted: position=%ls text=%ls",
+                   settings.position.c_str(), settings.menuText.c_str());
             injected = true;
             g_currentMenuHwnd = hwnd;
             g_currentMenuEligible = true;
@@ -1539,17 +1554,16 @@ BOOL Wh_ModInit() {
 
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = LoadSettings();
-    DEBUG_LOG(g_settings,
-              L"Settings: background=%d folder=%d drive=%d nav=%d terminal=%ls effective=%ls command=%ls fallback=%d position=%ls",
-              static_cast<int>(g_settings.showOnFolderBackground),
-              static_cast<int>(g_settings.showOnFolderItem),
-              static_cast<int>(g_settings.showOnDriveItem),
-              static_cast<int>(g_settings.showOnNavigationPane),
-              g_settings.terminalChoice.c_str(),
-              g_settings.terminalEffectiveChoice.c_str(),
-              g_settings.terminalDisplayCommand.c_str(),
-              static_cast<int>(g_settings.terminalUsedFallback),
-              g_settings.position.c_str());
+    Wh_Log(L"Settings: background=%d folder=%d drive=%d nav=%d terminal=%ls effective=%ls command=%ls fallback=%d position=%ls",
+           static_cast<int>(g_settings.showOnFolderBackground),
+           static_cast<int>(g_settings.showOnFolderItem),
+           static_cast<int>(g_settings.showOnDriveItem),
+           static_cast<int>(g_settings.showOnNavigationPane),
+           g_settings.terminalChoice.c_str(),
+           g_settings.terminalEffectiveChoice.c_str(),
+           g_settings.terminalDisplayCommand.c_str(),
+           static_cast<int>(g_settings.terminalUsedFallback),
+           g_settings.position.c_str());
     ReleaseSRWLockExclusive(&g_settingsLock);
 
     if (!Wh_SetFunctionHook(reinterpret_cast<void*>(TrackPopupMenuEx),
@@ -1570,8 +1584,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    Settings settings = GetSettingsSnapshot();
-    DEBUG_LOG(settings, L"Uninit");
+    Wh_Log(L"Uninit");
     ClearMenuBitmapCache();
 }
 
