@@ -13702,7 +13702,7 @@
                     16
                 ],
                 "ratingUsers": 16,
-                "updated": 1779551699000,
+                "updated": 1780471572000,
                 "users": 340
             },
             "metadata": {
@@ -13710,14 +13710,14 @@
                     "x86-64"
                 ],
                 "author": "Lanbo",
-                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
-                "description": "A high-performance, native C++ Windhawk mod that lets you double-click empty desktop space to hide/show desktop icons. Zero lag, zero UI overhead.",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshell32",
+                "description": "Native C++ Windhawk mod to hide/show desktop icons by double-clicking, with optional inactivity-based auto-hide and restore.",
                 "github": "https://github.com/Liset999",
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "ZenDesktop: Double Click to Hide Icons",
-                "version": "1.2.0"
+                "name": "ZenDesktop: Desktop Icon Toggle and Auto-Hide",
+                "version": "3.4.0"
             }
         }
     }

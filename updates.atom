@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-03T07:13:47.000Z</updated>
+    <updated>2026-06-03T07:26:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[ZenDesktop: Desktop Icon Toggle and Auto-Hide 3.4.0]]></title>
+        <id>https://windhawk.net/mods/zen-desktop-toggle-icons#59c9161f0f38faf7e4f88414e0f35d428d4dd61b</id>
+        <link href="https://windhawk.net/mods/zen-desktop-toggle-icons"/>
+        <updated>2026-06-03T07:26:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Asynchronous Execution Pipeline (<code>PostMessageW</code>)</strong>: Replaced all synchronous <code>ShowWindow</code> calls in subclass procedures with asynchronous custom messages to avoid message queue deadlocks and Explorer crashes.</li>
+<li><strong>Full-Screen Application Guard</strong>: Added automatic active window monitoring. Prevents auto-hiding icons when a full-screen application (video playback, PPT slide presentation, or game) is active.</li>
+<li><strong>Zero-Latency Physical Coordinate Guard</strong>: Replaced the laggy 100ms timer guard with a precise, zero-latency mouse coordinate comparison to filter out synthetic window-layout movements immediately while enabling absolute 0ms physical mouse-move restore.</li>
+<li><strong>Dynamic <code>CS_DBLCLKS</code> Support</strong>: Queries GCL_STYLE dynamically to support both native double-click inputs and manual interval-distance tracking fallback for windows lacking double-click style (like <code>SHELLDLL_DefView</code>).</li>
+<li><strong>Type Safety & Process Check</strong>: Standardized custom properties using <code>UlongToHandle</code> / <code>HandleToUlong</code> to prevent 64-bit truncation, and added PID checks before modifying window states on subclass cleanup.</li>
+</ul>]]></content>
+        <author>
+            <name>Lanbo</name>
+            <uri>https://github.com/Liset999</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dynamic Island for Windows 1.1.0]]></title>
         <id>https://windhawk.net/mods/dynamic-island-for-windows#55338f1accb10a333568251590275cc3b0e1a77f</id>
@@ -524,24 +541,6 @@ the original function is called normally.</p>
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Island for Windows 1.0.2]]></title>
-        <id>https://windhawk.net/mods/dynamic-island-for-windows#63bfb7795abeb4c8d6067b2dccda957b38bfd34e</id>
-        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
-        <updated>2026-05-30T10:43:43.000Z</updated>
-        <content type="html"><![CDATA[<ol>
-<li>Native Windows 11 Fluent Style:** Adds a toggleable mode to render the island as a modern Windows 11 flyout (rounded rectangle with 8px corners and a 1px border highlight) with a new semi-translucent Fluent dark preset.</li>
-<li>Game Overlay DPI Scaling &amp; Alignment:** Refactored overlay cards, vector icons, and panels to scale proportionally with <code>settings.sizeScale</code> and centered the layout inside the expanded pill.</li>
-<li>Caps Lock &amp; Num Lock Hook:** Implemented a lightweight global hook (<code>WH_KEYBOARD_LL</code>) to show real-time lock-key indicator alerts.</li>
-<li>Dynamic Battery &amp; Power Alerts:** Hardware-polled alert triggers with a dynamic fluid vector battery icon that changes color based on charging state.</li>
-<li>USB &amp; Device Connection Alerts:** Added a system event listener (<code>WM_DEVICECHANGE</code>) to show beautiful plug status alerts with indicator lights.</li>
-<li>Tactile Asymmetric Spring Animations:** Upgraded motion curves with separate expansion and contraction physics properties for a more organic feel.</li>
-</ol>]]></content>
-        <author>
-            <name>Himanshu</name>
-            <uri>https://github.com/devcode90</uri>
         </author>
     </entry>
 </feed>
