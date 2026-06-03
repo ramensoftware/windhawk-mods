@@ -94,6 +94,35 @@
                 "version": "1.1.0"
             }
         },
+        "add-virtual-folders-to-nav-top": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780472070000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780472070000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Rod Boev",
+                "compilerOptions": "-lole32 -lshell32 -luuid -luxtheme -lgdi32 -lgdiplus -lcomctl32",
+                "description": "Adds This PC and Desktop to the top of Explorer's nav",
+                "github": "https://github.com/rodboev",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "Add This PC and Desktop to Nav Top",
+                "version": "1.2.1"
+            }
+        },
         "aerexplorer": {
             "details": {
                 "defaultSorting": 27832,

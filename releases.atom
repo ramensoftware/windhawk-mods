@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-02T16:39:45.000Z</updated>
+    <updated>2026-06-03T07:34:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Add This PC and Desktop to Nav Top 1.2.1]]></title>
+        <id>https://windhawk.net/mods/add-virtual-folders-to-nav-top#da0605c6e036ab19f40fecfa7a367a1084daa6e4</id>
+        <link href="https://windhawk.net/mods/add-virtual-folders-to-nav-top"/>
+        <updated>2026-06-03T07:34:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="addthispcanddesktoptonavtop">Add This PC and Desktop to Nav Top</h1>
+<p>This mod adds two virtual folders to the top of File Explorer's navigation pane and fixes the chevron rendering.</p>
+<ul>
+<li><p><strong>Show This PC at top:</strong> Adds an expandable This PC entry with drives. (Expandable This PC can't be pinned to the top without this mod.)</p></li>
+<li><p><strong>Show Desktop at top:</strong> Adds a Desktop entry for the root namespace object. This includes Recycle Bin, Control Panel, etc. instead of just the items on the desktop. (This target can't be pinned without this mod.)</p></li>
+</ul>
+<p>Both virtual folders have a toggle for whether they are expandable or not. Their position can be swapped. Duplicate entries of Desktop or This PC can be removed from other parts of the nav. Also:</p>
+<ul>
+<li><p><strong>Hide Home/Gallery:</strong> Optional, default-enabled toggles to hide the native Explorer entries. They don't affect Quick Access.</p></li>
+<li><p><strong>Remove separators:</strong> Optionally remove each separator individually.</p></li>
+<li><p><strong>Fix chevron drawing:</strong> Replaces the pixelated and clipped chevron with a smooth anti-aliased versions. The size (which matches other UI elements by default) is configurable.</p></li>
+</ul>
+<p>This mod injects only in processes that use <code>ExplorerFrame.dll</code>, so the include is set to <code>*</code> but it will not touch most processes. You can set it to <code>explorer.exe</code> only, if you don't want the nav in Open/Save dialogs changed. Only "modern" dialogs are affected.</p>
+<p>Before/after:</p>
+<p><img src="https://i.imgur.com/LZuqzMx.png" alt="" /></p>]]></content>
+        <author>
+            <name>Rod Boev</name>
+            <uri>https://github.com/rodboev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Transparent Desktop Icons with Spotlight 1.0]]></title>
         <id>https://windhawk.net/mods/transparent-desktop-icons-spotlight#7de4fff6bbaa2bbc92512039e8bc39c61480c7bf</id>
@@ -742,26 +767,6 @@ Additional improvements made by <a href="https://github.com/Asteski">Asteski</a>
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ZenDesktop: Double Click to Hide Icons 1.2.0]]></title>
-        <id>https://windhawk.net/mods/zen-desktop-toggle-icons#130894a9b78c9429b22e05420e865d51b9f448b7</id>
-        <link href="https://windhawk.net/mods/zen-desktop-toggle-icons"/>
-        <updated>2026-05-23T15:54:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="zendesktopdoubleclicktohideicons">ZenDesktop: Double Click to Hide Icons</h1>
-<p>Have you ever wanted a clean, clutter-free desktop but found it annoying to right-click -&gt; View -&gt; Show desktop icons every time? </p>
-<p><strong>ZenDesktop</strong> brings the ultimate native solution to Windows. It allows you to <strong>double-click empty space on your desktop</strong> to instantly hide or show your icons.</p>
-<h3 id="keyfeatures">🌟 Key Features:</h3>
-<ul>
-<li><strong>Zero UI Overhead</strong>: Embedded natively inside <code>explorer.exe</code> process space. No background EXE running, no taskbar/tray icons, 0% CPU and virtually 0MB extra RAM.</li>
-<li><strong>Process-Native Hit-Testing</strong>: When you double-click, it performs a real-time ListView hit-test. If you double-click a file, folder, or shortcut, the default "open" action is triggered normally. If you double-click empty space, it toggles your desktop icons.</li>
-<li><strong>Dynamic Hooking</strong>: Automatically subclasses the shell views, meaning even if your Explorer crashes, restarts, or you plug/unplug monitors, the mod remains fully active and stable.</li>
-<li><strong>Completely Safe</strong>: Uses native Windows <code>0x7402</code> (WM_COMMAND) toggle signals, ensuring Windows handles the fade animations and desktop state natively without breaking icon grid arrangements.</li>
-</ul>]]></content>
-        <author>
-            <name>Lanbo</name>
-            <uri>https://github.com/Liset999</uri>
         </author>
     </entry>
 </feed>

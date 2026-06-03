@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-03T07:26:12.000Z</updated>
+    <updated>2026-06-03T07:34:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Add This PC and Desktop to Nav Top 1.2.1]]></title>
+        <id>https://windhawk.net/mods/add-virtual-folders-to-nav-top#da0605c6e036ab19f40fecfa7a367a1084daa6e4</id>
+        <link href="https://windhawk.net/mods/add-virtual-folders-to-nav-top"/>
+        <updated>2026-06-03T07:34:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="addthispcanddesktoptonavtop">Add This PC and Desktop to Nav Top</h1>
+<p>This mod adds two virtual folders to the top of File Explorer's navigation pane and fixes the chevron rendering.</p>
+<ul>
+<li><p><strong>Show This PC at top:</strong> Adds an expandable This PC entry with drives. (Expandable This PC can't be pinned to the top without this mod.)</p></li>
+<li><p><strong>Show Desktop at top:</strong> Adds a Desktop entry for the root namespace object. This includes Recycle Bin, Control Panel, etc. instead of just the items on the desktop. (This target can't be pinned without this mod.)</p></li>
+</ul>
+<p>Both virtual folders have a toggle for whether they are expandable or not. Their position can be swapped. Duplicate entries of Desktop or This PC can be removed from other parts of the nav. Also:</p>
+<ul>
+<li><p><strong>Hide Home/Gallery:</strong> Optional, default-enabled toggles to hide the native Explorer entries. They don't affect Quick Access.</p></li>
+<li><p><strong>Remove separators:</strong> Optionally remove each separator individually.</p></li>
+<li><p><strong>Fix chevron drawing:</strong> Replaces the pixelated and clipped chevron with a smooth anti-aliased versions. The size (which matches other UI elements by default) is configurable.</p></li>
+</ul>
+<p>This mod injects only in processes that use <code>ExplorerFrame.dll</code>, so the include is set to <code>*</code> but it will not touch most processes. You can set it to <code>explorer.exe</code> only, if you don't want the nav in Open/Save dialogs changed. Only "modern" dialogs are affected.</p>
+<p>Before/after:</p>
+<p><img src="https://i.imgur.com/LZuqzMx.png" alt="" /></p>]]></content>
+        <author>
+            <name>Rod Boev</name>
+            <uri>https://github.com/rodboev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[ZenDesktop: Desktop Icon Toggle and Auto-Hide 3.4.0]]></title>
         <id>https://windhawk.net/mods/zen-desktop-toggle-icons#59c9161f0f38faf7e4f88414e0f35d428d4dd61b</id>
@@ -530,17 +555,6 @@ the original function is called normally.</p>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CrystalDiskInfo Smart Auto-Refresh 1.0.1]]></title>
-        <id>https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh#295ce177a10c22634f41d589f715f5506a2a1d13</id>
-        <link href="https://windhawk.net/mods/crystaldiskinfo-smart-auto-refresh"/>
-        <updated>2026-05-30T10:46:27.000Z</updated>
-        <content type="html"><![CDATA[<p>Optimized multi-threading performance and eliminated memory leaks caused by dangling timers.</p>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
