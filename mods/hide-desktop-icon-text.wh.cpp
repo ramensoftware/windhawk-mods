@@ -1,30 +1,26 @@
 // ==WindhawkMod==
 // @id              hide-desktop-icon-text
-// @name            Ultimate Desktop Minimizer (No Text, No Arrows)
-// @description     Hides icon names AND shortcut arrow overlays on the desktop. Keeps names for folders.
-// @version         1.4.0
+// @name            Hide Desktop Icon Text and Shortcut Arrows
+// @description     Provides options to hide icon text labels (keeping folder names) and remove shortcut arrow overlays on the desktop.
+// @version         1.5.0
 // @author          kivsak
 // @github          https://github.com/kivsak
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -luxtheme -lole32 -luuid -lshlwapi -lgdi32
+// @compilerOptions -lole32 -lshlwapi -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-Hides desktop icon labels (keeping folder names) and removes the shortcut arrow overlay.
+Provides options to hide desktop icon labels (keeping folder names) and remove the shortcut arrow overlay.
 
 ### Features
-* Hides text labels for files and shortcuts on the desktop; keeps folder names.
-* Removes the shortcut arrow overlay by retargeting its image-list slot to a
-  transparent image (no registry edit, no admin rights, applies live).
-* Text hiding affects only the Desktop.
+* **Hide Icon Text**: Hides text labels for files and shortcuts on the desktop while preserving folder names.
+* **Hide Shortcut Arrows**: Removes the standard shortcut arrow overlay live without requiring registry edits or administrator rights.
 
 ### Notes
-* The shortcut arrow is removed for the whole running Explorer session, not just
-  the desktop, because the overlay lives in the shared system image list.
-* Disabling the mod restores the arrow only after Explorer is restarted or its
-  icon cache refreshes — there is no API to read back the original overlay image.
+* The shortcut arrow removal affects the entire running Explorer session because the overlay resides in the shared system image list.
+* Disabling the shortcut arrow feature (or the mod itself) restores the arrows only after Explorer restarts or the icon cache refreshes.
 
 ### Known limitation
 Folder detection matches the drawn text against actual desktop folder names. If a *file* has
@@ -32,12 +28,22 @@ exactly the same name as a *folder* on the desktop, that file's label will also 
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- hide_text: true
+  $name: Hide desktop icon text
+  $description: Hides text labels for files and shortcuts on the desktop (keeps folder names).
+- hide_arrows: true
+  $name: Remove shortcut arrows
+  $description: Removes the shortcut arrow overlay from icons (applies to the whole Explorer session).
+*/
+// ==/WindhawkModSettings==
+
 #include <windhawk_utils.h>
 
 #include <windows.h>
 #include <commctrl.h>
 #include <commoncontrols.h>
-#include <uxtheme.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <objbase.h>
@@ -47,14 +53,18 @@ exactly the same name as a *folder* on the desktop, that file's label will also 
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// State
+// Settings & State
 // ---------------------------------------------------------------------------
+
+struct {
+    bool hide_text;
+    bool hide_arrows;
+} g_settings;
 
 // Set only while the desktop SysListView32 is painting (per-thread).
 thread_local bool g_isDrawingDesktop = false;
 
-// Cache of folder display names on the desktop. Touched only by the desktop
-// UI thread, so no extra locking is required.
+// Cache of folder display names on the desktop.
 std::unordered_set<std::wstring> g_folderNames;
 DWORD g_lastUpdateTick = 0;
 
@@ -67,7 +77,6 @@ static HWND FindChild(HWND parent, LPCWSTR cls, LPCWSTR win) {
     return FindWindowEx(parent, nullptr, cls, win);
 }
 
-// True if hWnd is the desktop's "FolderView" SysListView32 in this process.
 static bool IsDesktopFolderView(HWND hWnd) {
     WCHAR buf[64];
 
@@ -87,7 +96,6 @@ static bool IsDesktopFolderView(HWND hWnd) {
     return true;
 }
 
-// Returns the desktop FolderView belonging to the current process, or null.
 static HWND GetDesktopFolderView() {
     HWND lv = FindChild(FindChild(GetShellWindow(), L"SHELLDLL_DefView", L""),
                         L"SysListView32", L"FolderView");
@@ -99,7 +107,7 @@ static HWND GetDesktopFolderView() {
 }
 
 // ---------------------------------------------------------------------------
-// Folder name cache (so folder labels stay visible)
+// Folder name cache
 // ---------------------------------------------------------------------------
 
 static void UpdateFolderCache() {
@@ -112,13 +120,11 @@ static void UpdateFolderCache() {
     IShellFolder* pDesktop = nullptr;
     if (SUCCEEDED(SHGetDesktopFolder(&pDesktop))) {
         IEnumIDList* pEnum = nullptr;
-        if (SUCCEEDED(pDesktop->EnumObjects(
-                nullptr, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, &pEnum))) {
+        if (SUCCEEDED(pDesktop->EnumObjects(nullptr, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, &pEnum))) {
             LPITEMIDLIST pidl = nullptr;
             while (pEnum->Next(1, &pidl, nullptr) == S_OK) {
                 SFGAOF attr = SFGAO_FOLDER | SFGAO_STREAM;
-                if (SUCCEEDED(pDesktop->GetAttributesOf(
-                        1, (LPCITEMIDLIST*)&pidl, &attr)) &&
+                if (SUCCEEDED(pDesktop->GetAttributesOf(1, (LPCITEMIDLIST*)&pidl, &attr)) &&
                     (attr & SFGAO_FOLDER) && !(attr & SFGAO_STREAM)) {
                     STRRET str;
                     if (SUCCEEDED(pDesktop->GetDisplayNameOf(pidl, SHGDN_NORMAL, &str))) {
@@ -139,18 +145,19 @@ static void UpdateFolderCache() {
 }
 
 static inline bool ShouldHideLabel(LPCWSTR text, int cch) {
+    if (!g_settings.hide_text) return false;
     std::wstring s(text, cch == -1 ? wcslen(text) : cch);
-    return g_folderNames.count(s) == 0;  // hide everything that is not a folder
+    return g_folderNames.count(s) == 0;
 }
 
 // ---------------------------------------------------------------------------
-// Subclass: marks the WM_PAINT window of the desktop listview
+// Subclass
 // ---------------------------------------------------------------------------
 
 LRESULT CALLBACK DesktopListSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
                                      LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_PAINT) {
-        UpdateFolderCache();          // refresh once per paint, not per label
+    if (uMsg == WM_PAINT && g_settings.hide_text) {
+        UpdateFolderCache();
         g_isDrawingDesktop = true;
         LRESULT res = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         g_isDrawingDesktop = false;
@@ -164,7 +171,6 @@ LRESULT CALLBACK DesktopListSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
 // Hooks
 // ---------------------------------------------------------------------------
 
-// --- text (classic) ---
 using DrawTextW_t = decltype(&DrawTextW);
 DrawTextW_t DrawTextW_Original;
 int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format) {
@@ -174,12 +180,11 @@ int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, U
     return DrawTextW_Original(hdc, lpchText, cchText, lprc, format);
 }
 
-// --- text (themed, with shadow) ---
-using DrawThemeTextEx_t = decltype(&DrawThemeTextEx);
+using DrawThemeTextEx_t = HRESULT (WINAPI*)(HTHEME, HDC, int, int, LPCWSTR, int, DWORD, LPRECT, const void*);
 DrawThemeTextEx_t DrawThemeTextEx_Original;
 HRESULT WINAPI DrawThemeTextEx_Hook(HTHEME hTheme, HDC hdc, int iPartId, int iStateId,
                                     LPCWSTR pszText, int cchText, DWORD dwTextFlags,
-                                    LPRECT pRect, const DTTOPTS* pOptions) {
+                                    LPRECT pRect, const void* pOptions) {
     if (g_isDrawingDesktop && pszText && ShouldHideLabel(pszText, cchText)) {
         return DrawThemeTextEx_Original(hTheme, hdc, iPartId, iStateId, L"", 0,
                                         dwTextFlags, pRect, pOptions);
@@ -190,19 +195,12 @@ HRESULT WINAPI DrawThemeTextEx_Hook(HTHEME hTheme, HDC hdc, int iPartId, int iSt
 
 // ---------------------------------------------------------------------------
 // Shortcut arrow removal
-//
-// The shortcut arrow is a standard icon overlay living in the system image
-// list. Instead of fighting the draw path, we point the link-overlay slot at a
-// fully transparent image, so every shortcut renders with an invisible arrow.
-// This is in-process only (reverts when Explorer next restarts) and needs no
-// registry write or admin rights.
 // ---------------------------------------------------------------------------
 
 #ifndef IDO_SHGIOI_LINK
 #define IDO_SHGIOI_LINK 0x0FFFFFFE
 #endif
 
-// Builds a fully transparent 32-bpp icon of the given size.
 static HICON CreateTransparentIcon(int cx, int cy) {
     if (cx <= 0 || cy <= 0) return nullptr;
 
@@ -225,11 +223,9 @@ static HICON CreateTransparentIcon(int cx, int cy) {
     if (!hColor) return nullptr;
 
     if (bits) {
-        memset(bits, 0, (size_t)cx * cy * 4);   // alpha = 0 everywhere => transparent
+        memset(bits, 0, (size_t)cx * cy * 4);
     }
 
-    // The overlay is composited via the AND mask, so it must be all 1s
-    // (fully transparent) — an all-0 mask renders as an opaque black square.
     int rowBytes = ((cx + 15) / 16) * 2;
     std::vector<BYTE> maskBits((size_t)rowBytes * cy, 0xFF);
     HBITMAP hMask = CreateBitmap(cx, cy, 1, 1, maskBits.data());
@@ -245,8 +241,6 @@ static HICON CreateTransparentIcon(int cx, int cy) {
     return hIcon;
 }
 
-// Reassigns the shortcut overlay slot to a transparent image in every system
-// image list size, so shortcut arrows become invisible live.
 static void HideShortcutOverlay() {
     HMODULE hShell32 = GetModuleHandle(L"shell32.dll");
     if (!hShell32) return;
@@ -258,17 +252,12 @@ static void HideShortcutOverlay() {
     if (!pSHGetImageList || !pSHGetIconOverlayIndex) return;
 
     int linkOverlay = pSHGetIconOverlayIndex(nullptr, IDO_SHGIOI_LINK);
-    if (linkOverlay <= 0) {
-        Wh_Log(L"Could not resolve link overlay index (%d).", linkOverlay);
-        return;
-    }
+    if (linkOverlay <= 0) return;
 
-    // IID_IImageList {46EB5926-582E-4017-9FDF-E8998DAA0950} — defined locally so we
-    // don't depend on uuid.lib, which this toolchain doesn't link by default.
     static const GUID iidImageList =
         {0x46eb5926, 0x582e, 0x4017, {0x9f, 0xdf, 0xe8, 0x99, 0x8d, 0xaa, 0x09, 0x50}};
 
-    const int sizes[] = { SHIL_SMALL, SHIL_LARGE, SHIL_EXTRALARGE, SHIL_SYSSMALL, SHIL_JUMBO };
+    const int sizes[] = { 1, 0, 2, 3, 4 }; // SHIL_LARGE, SHIL_SMALL, SHIL_EXTRALARGE, SHIL_SYSSMALL, SHIL_JUMBO
     for (int shil : sizes) {
         IImageList* piml = nullptr;
         if (FAILED(pSHGetImageList(shil, iidImageList, (void**)&piml)) || !piml) {
@@ -290,7 +279,7 @@ static void HideShortcutOverlay() {
 }
 
 // ---------------------------------------------------------------------------
-// Hook to catch the desktop listview when it (re)appears (for text hiding)
+// Main Hooks
 // ---------------------------------------------------------------------------
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -307,13 +296,19 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     return hWnd;
 }
 
+void LoadSettings() {
+    g_settings.hide_text = Wh_GetIntSetting(L"hide_text") != 0;
+    g_settings.hide_arrows = Wh_GetIntSetting(L"hide_arrows") != 0;
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
-                                   &CreateWindowExW_Original);
+    LoadSettings();
+
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
 
     if (HMODULE hUser32 = GetModuleHandle(L"user32.dll")) {
         if (auto p = (DrawTextW_t)GetProcAddress(hUser32, "DrawTextW"))
@@ -325,25 +320,20 @@ BOOL Wh_ModInit() {
             WindhawkUtils::SetFunctionHook(p, DrawThemeTextEx_Hook, &DrawThemeTextEx_Original);
     }
 
-    // Make shortcut arrows invisible by retargeting the link-overlay slot.
-    HideShortcutOverlay();
+    if (g_settings.hide_arrows) {
+        HideShortcutOverlay();
+    }
 
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    // Flush the icon cache so icons that were already composited with the arrow
-    // get re-composited with the now-transparent overlay — no Explorer restart.
-    // This does NOT re-read the registry, so it won't bring the arrow back.
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    if (g_settings.hide_arrows) {
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    }
 
     if (HWND hDesktop = GetDesktopFolderView()) {
-        // ModAfterInit runs on a Windhawk thread, so the cross-thread-safe variant
-        // is required — this is what makes the mod apply WITHOUT restarting Explorer.
         WindhawkUtils::SetWindowSubclassFromAnyThread(hDesktop, DesktopListSubclass, 0);
-
-        // Force a full repaint so hidden labels and the now-transparent shortcut
-        // overlay take effect immediately, without restarting Explorer.
         int count = ListView_GetItemCount(hDesktop);
         if (count > 0) {
             ListView_RedrawItems(hDesktop, 0, count - 1);
@@ -355,10 +345,13 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     if (HWND hDesktop = GetDesktopFolderView()) {
-        // Cross-thread-safe removal, so we never leave a dangling subclass
-        // pointing into the about-to-be-unloaded mod DLL.
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hDesktop, DesktopListSubclass);
         InvalidateRect(hDesktop, nullptr, TRUE);
         UpdateWindow(hDesktop);
     }
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    *bReload = TRUE;
+    return TRUE;
 }
