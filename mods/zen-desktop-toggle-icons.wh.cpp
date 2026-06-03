@@ -1,18 +1,18 @@
 // ==WindhawkMod==
 // @id              zen-desktop-toggle-icons
-// @name            ZenDesktop: Double Click to Hide Icons
-// @description     Native C++ Windhawk mod to hide/show desktop icons by double-clicking. Auto-hides on system-wide inactivity and restores on any user input.
-// @version         3.2.0
+// @name            ZenDesktop: Desktop Icon Toggle and Auto-Hide
+// @description     Native C++ Windhawk mod to hide/show desktop icons by double-clicking, with optional inactivity-based auto-hide and restore.
+// @version         3.4.0
 // @author          Lanbo
 // @github          https://github.com/Liset999
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# ZenDesktop: Double Click to Hide Icons
+# ZenDesktop: Desktop Icon Toggle and Auto-Hide
 
 Have you ever wanted a clean, clutter-free desktop but found it annoying to right-click -> View -> Show desktop icons every time? 
 
@@ -25,33 +25,45 @@ Have you ever wanted a clean, clutter-free desktop but found it annoying to righ
 * **Smart Auto-Restore**: When icons are auto-hidden, any user input (mouse or keyboard anywhere) instantly restores them. Manually hidden icons are never auto-restored.
 * **Dynamic Hooking**: Automatically subclasses the shell views, meaning even if your Explorer crashes, restarts, or you plug/unplug monitors, the mod remains fully active and stable.
 * **Completely Safe**: Uses native Windows `0x7402` (WM_COMMAND) toggle signals, ensuring Windows handles the fade animations and desktop state natively without breaking icon grid arrangements.
+
+This mod focuses on desktop icons. If you want a similar inactivity effect for the taskbar, see the Taskbar Fade mod.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - enableAutoHide: true
-  $name: "Auto-Hide Icons on Inactivity (自动隐藏)"
+  $name: Auto-Hide Icons on Inactivity
+  $name:zh-CN: 自动隐藏空闲桌面图标
   $description: "Automatically hides desktop icons after the system has been idle for the specified duration."
+  $description:zh-CN: "系统空闲达到指定时长后自动隐藏桌面图标。"
 - autoHideDelay: 5
-  $name: "Auto-Hide Delay in Seconds (延迟秒数)"
+  $name: Auto-Hide Delay in Seconds
+  $name:zh-CN: 自动隐藏延迟秒数
   $description: "Seconds of system-wide inactivity before icons are hidden. Range: 3–60 seconds."
+  $description:zh-CN: "桌面图标自动隐藏前的全局空闲秒数，范围为 3 到 60 秒。"
 - showIconsOnAnyInput: true
-  $name: "Restore Icons on Any Input (任意输入恢复)"
+  $name: Restore Icons on Any Input
+  $name:zh-CN: 任意输入时恢复图标
   $description: "When icons were auto-hidden, any mouse or keyboard input instantly restores them. Does NOT affect manually hidden icons."
+  $description:zh-CN: "图标由自动隐藏触发时，任意鼠标或键盘输入都会恢复图标；不影响手动隐藏的图标。"
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <shellapi.h>
 #include <windhawk_utils.h>
 
-#define TIMER_AUTOHIDE   1001
-#define WM_REFRESH_TIMER (WM_USER + 5001)
-#define WM_MANUAL_TOGGLE (WM_USER + 5002)
-#define WM_AUTO_HIDE     (WM_USER + 5003)
-#define WM_AUTO_RESTORE  (WM_USER + 5004)
+#define TIMER_AUTOHIDE             1001
+#define TIMER_RESTORE_POLL_MS       500
+#define TIMER_FULLSCREEN_RECHECK_MS 1000
+
+static UINT g_msgRefreshTimer = 0;
+static UINT g_msgManualToggle = 0;
+static UINT g_msgAutoHide = 0;
+static UINT g_msgAutoRestore = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Forward declarations
@@ -88,13 +100,71 @@ static void LoadSettings()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Timer management — post WM_REFRESH_TIMER to SHELLDLL_DefView so the timer
+// Timer management — post a registered refresh message to SHELLDLL_DefView so the timer
 // is always created/destroyed on the window-owning thread.
 // ─────────────────────────────────────────────────────────────────────────────
+static void ClearAutoHideTimer(HWND hwndShell)
+{
+    KillTimer(hwndShell, TIMER_AUTOHIDE);
+    RemovePropW(hwndShell, L"ZenTimerInit");
+}
+
+static bool SetAutoHideTimer(HWND hwndShell, UINT intervalMs)
+{
+    if (intervalMs == 0)
+        intervalMs = 1;
+
+    if (SetTimer(hwndShell, TIMER_AUTOHIDE, intervalMs, NULL)) {
+        SetPropW(hwndShell, L"ZenTimerInit", UlongToHandle(1));
+        return true;
+    }
+
+    ClearAutoHideTimer(hwndShell);
+    return false;
+}
+
+static void ScheduleAutoHideTimer(HWND hwndShell)
+{
+    if (!hwndShell || !g_settings.enableAutoHide) {
+        if (hwndShell)
+            ClearAutoHideTimer(hwndShell);
+        return;
+    }
+
+    HWND hwndListView = FindWindowExW(hwndShell, NULL, L"SysListView32", NULL);
+    if (!hwndListView) {
+        ClearAutoHideTimer(hwndShell);
+        return;
+    }
+
+    bool isVisible = IsWindowVisible(hwndListView) != 0;
+    if (isVisible) {
+        LASTINPUTINFO lii = { sizeof(LASTINPUTINFO) };
+        if (!GetLastInputInfo(&lii)) {
+            SetAutoHideTimer(hwndShell, TIMER_FULLSCREEN_RECHECK_MS);
+            return;
+        }
+
+        DWORD now = GetTickCount();
+        DWORD idleMs = now - lii.dwTime;
+        DWORD thresholdMs = (DWORD)g_settings.autoHideDelay * 1000;
+        DWORD intervalMs = idleMs >= thresholdMs ? 1 : thresholdMs - idleMs;
+        SetAutoHideTimer(hwndShell, intervalMs);
+        return;
+    }
+
+    DWORD autoHiddenAt = HandleToUlong(GetPropW(hwndShell, L"ZenAutoHiddenAt"));
+    if (autoHiddenAt != 0 && g_settings.showIconsOnAnyInput) {
+        SetAutoHideTimer(hwndShell, TIMER_RESTORE_POLL_MS);
+    } else {
+        ClearAutoHideTimer(hwndShell);
+    }
+}
+
 static void UpdateTimerState(HWND hwndShell)
 {
-    if (hwndShell)
-        PostMessageW(hwndShell, WM_REFRESH_TIMER, 0, 0);
+    if (hwndShell && g_msgRefreshTimer)
+        PostMessageW(hwndShell, g_msgRefreshTimer, 0, 0);
 }
 
 static void UpdateAllTimers()
@@ -116,23 +186,18 @@ static void UpdateAllTimers()
 // ─────────────────────────────────────────────────────────────────────────────
 static bool IsFullscreenWindowActive()
 {
-    HWND hwndForeground = GetForegroundWindow();
-    if (hwndForeground && hwndForeground != GetDesktopWindow()) {
-        WCHAR className[256] = {};
-        if (GetClassNameW(hwndForeground, className, 256)) {
-            // Exclude desktop manager windows
-            if (wcscmp(className, L"Progman") != 0 && wcscmp(className, L"WorkerW") != 0) {
-                RECT rect;
-                if (GetWindowRect(hwndForeground, &rect)) {
-                    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-                    if (rect.left <= 0 && rect.top <= 0 && rect.right >= screenWidth && rect.bottom >= screenHeight) {
-                        return true;
-                    }
-                }
-            }
-        }
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (FAILED(SHQueryUserNotificationState(&state))) {
+        return false;
     }
+
+    switch (state) {
+        case QUNS_NOT_PRESENT:
+        case QUNS_BUSY:
+        case QUNS_RUNNING_D3D_FULL_SCREEN:
+            return true;
+    }
+
     return false;
 }
 
@@ -162,6 +227,7 @@ static void ManualToggleIcons(HWND hwndShellView)
     RemovePropW(hwndShellView, L"ZenAutoHiddenAt");
     RemovePropW(hwndShellView, L"ZenMouseX");
     RemovePropW(hwndShellView, L"ZenMouseY");
+    ScheduleAutoHideTimer(hwndShellView);
 }
 
 static void AutoHideIcons(HWND hwndShellView)
@@ -182,6 +248,7 @@ static void AutoHideIcons(HWND hwndShellView)
 
         Wh_Log(L"[ZenDesktop] AutoHide: icons hidden at tick=%u, mouse=(%d,%d)", now, pt.x, pt.y);
     }
+    ScheduleAutoHideTimer(hwndShellView);
 }
 
 static void AutoRestoreIcons(HWND hwndShellView)
@@ -194,6 +261,7 @@ static void AutoRestoreIcons(HWND hwndShellView)
     RemovePropW(hwndShellView, L"ZenAutoHiddenAt");
     RemovePropW(hwndShellView, L"ZenMouseX");
     RemovePropW(hwndShellView, L"ZenMouseY");
+    ScheduleAutoHideTimer(hwndShellView);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -334,7 +402,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
                 // Empty space — post manual toggle command asynchronously
                 HWND hwndParent = GetParent(hWnd);
                 if (hwndParent) {
-                    PostMessageW(hwndParent, WM_MANUAL_TOGGLE, 0, 0);
+                    PostMessageW(hwndParent, g_msgManualToggle, 0, 0);
                 }
                 return 0; // suppress default double-click action
             }
@@ -348,7 +416,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
 // Subclass Proc: SHELLDLL_DefView
 //   Receives events when icons are HIDDEN (ListView hidden → DefView is hit).
 //   Responsibilities:
-//     • Run the 500 ms auto-hide/restore polling timer.
+//     • Run the dynamically scheduled auto-hide/restore timer.
 //     • Immediate restore on mouse move over desktop (when icons are auto-hidden).
 //     • Immediate restore on click on desktop (when icons are auto-hidden).
 //     • Double-click restore (always works, including manually hidden icons).
@@ -359,52 +427,50 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
     // ── One-time timer bootstrap ─────────────────────────────────────────────
     bool timerInitialized = GetPropW(hWnd, L"ZenTimerInit") != NULL;
     if (!timerInitialized && g_settings.enableAutoHide) {
-        if (SetTimer(hWnd, TIMER_AUTOHIDE, 500, NULL)) {
-            SetPropW(hWnd, L"ZenTimerInit", (HANDLE)1);
-            Wh_Log(L"[ZenDesktop] Timer bootstrapped for ShellView=%p", hWnd);
-        }
+        ScheduleAutoHideTimer(hWnd);
     }
 
     // ── Cross-thread timer refresh (settings change / new window subclassed) ──
-    if (uMsg == WM_REFRESH_TIMER) {
-        if (g_settings.enableAutoHide) {
-            if (SetTimer(hWnd, TIMER_AUTOHIDE, 500, NULL)) {
-                SetPropW(hWnd, L"ZenTimerInit", (HANDLE)1);
-                Wh_Log(L"[ZenDesktop] Timer refreshed (ON) for ShellView=%p", hWnd);
-            }
-        } else {
-            KillTimer(hWnd, TIMER_AUTOHIDE);
-            RemovePropW(hWnd, L"ZenTimerInit");
-            Wh_Log(L"[ZenDesktop] Timer killed (OFF) for ShellView=%p", hWnd);
-        }
+    if (uMsg == g_msgRefreshTimer) {
+        ScheduleAutoHideTimer(hWnd);
+        Wh_Log(L"[ZenDesktop] Timer refreshed for ShellView=%p", hWnd);
         return 0;
     }
 
     // ── Async Operations execution ───────────────────────────────────────────
-    if (uMsg == WM_MANUAL_TOGGLE) {
+    if (uMsg == g_msgManualToggle) {
         ManualToggleIcons(hWnd);
         return 0;
     }
-    if (uMsg == WM_AUTO_HIDE) {
+    if (uMsg == g_msgAutoHide) {
         AutoHideIcons(hWnd);
         return 0;
     }
-    if (uMsg == WM_AUTO_RESTORE) {
+    if (uMsg == g_msgAutoRestore) {
         AutoRestoreIcons(hWnd);
         return 0;
     }
 
-    // ── Auto-hide / auto-restore timer tick (every 500 ms) ───────────────────
+    // ── Auto-hide / auto-restore timer tick ──────────────────────────────────
     if (uMsg == WM_TIMER && wParam == TIMER_AUTOHIDE) {
-        if (!g_settings.enableAutoHide) return 0;
+        if (!g_settings.enableAutoHide) {
+            ScheduleAutoHideTimer(hWnd);
+            return 0;
+        }
 
         HWND hwndListView = FindWindowExW(hWnd, NULL, L"SysListView32", NULL);
-        if (!hwndListView) return 0;
+        if (!hwndListView) {
+            ScheduleAutoHideTimer(hWnd);
+            return 0;
+        }
 
         bool isVis = IsWindowVisible(hwndListView) != 0;
 
         LASTINPUTINFO lii = { sizeof(LASTINPUTINFO) };
-        if (!GetLastInputInfo(&lii)) return 0;
+        if (!GetLastInputInfo(&lii)) {
+            ScheduleAutoHideTimer(hWnd);
+            return 0;
+        }
         DWORD now = GetTickCount();
 
         DWORD autoHiddenAt = HandleToUlong(GetPropW(hWnd, L"ZenAutoHiddenAt"));
@@ -412,23 +478,27 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
         if (isVis) {
             // Check full screen guard
             if (IsFullscreenWindowActive()) {
+                SetAutoHideTimer(hWnd, TIMER_FULLSCREEN_RECHECK_MS);
                 return 0; // Skip auto-hide if a full-screen window is active (video/game/PPT)
             }
             DWORD idleMs = now - lii.dwTime;
             if (idleMs >= (DWORD)g_settings.autoHideDelay * 1000) {
                 Wh_Log(L"[ZenDesktop] Timer: idle %ums >= %us threshold -> AutoHide",
                        idleMs, g_settings.autoHideDelay);
-                PostMessageW(hWnd, WM_AUTO_HIDE, 0, 0);
+                PostMessageW(hWnd, g_msgAutoHide, 0, 0);
+                return 0;
             }
         }
         else if (autoHiddenAt != 0 && g_settings.showIconsOnAnyInput) {
             // Check system-wide physical input
             if (lii.dwTime > autoHiddenAt) {
                 Wh_Log(L"[ZenDesktop] Timer: new system-wide input detected -> AutoRestore");
-                PostMessageW(hWnd, WM_AUTO_RESTORE, 0, 0);
+                PostMessageW(hWnd, g_msgAutoRestore, 0, 0);
+                return 0;
             }
         }
 
+        ScheduleAutoHideTimer(hWnd);
         return 0;
     }
 
@@ -439,7 +509,7 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
         if (autoHiddenAt != 0 && g_settings.showIconsOnAnyInput) {
             if (uMsg == WM_LBUTTONDOWN || uMsg == WM_RBUTTONDOWN) {
                 Wh_Log(L"[ZenDesktop] Immediate click restore on DefView (uMsg=%u)", uMsg);
-                PostMessageW(hWnd, WM_AUTO_RESTORE, 0, 0);
+                PostMessageW(hWnd, g_msgAutoRestore, 0, 0);
             }
             else if (uMsg == WM_MOUSEMOVE) {
                 POINT ptCurrent = {};
@@ -450,7 +520,7 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
                 if (ptCurrent.x != (int)savedX || ptCurrent.y != (int)savedY) {
                     Wh_Log(L"[ZenDesktop] Physical mouse move detected: (%d,%d) vs (%d,%d) -> AutoRestore",
                            ptCurrent.x, ptCurrent.y, (int)savedX, (int)savedY);
-                    PostMessageW(hWnd, WM_AUTO_RESTORE, 0, 0);
+                    PostMessageW(hWnd, g_msgAutoRestore, 0, 0);
                 }
             }
         }
@@ -486,7 +556,7 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
         }
 
         if (isDblClick) {
-            PostMessageW(hWnd, WM_MANUAL_TOGGLE, 0, 0);
+            PostMessageW(hWnd, g_msgManualToggle, 0, 0);
             return 0;
         }
     }
@@ -499,7 +569,16 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
 // ─────────────────────────────────────────────────────────────────────────────
 BOOL Wh_ModInit()
 {
-    Wh_Log(L"[ZenDesktop] === Wh_ModInit v3.2.0 ===");
+    Wh_Log(L"[ZenDesktop] === Wh_ModInit v3.4.0 ===");
+    g_msgRefreshTimer = RegisterWindowMessageW(L"Windhawk.ZenDesktop.DesktopIconToggle.RefreshTimer");
+    g_msgManualToggle = RegisterWindowMessageW(L"Windhawk.ZenDesktop.DesktopIconToggle.ManualToggle");
+    g_msgAutoHide = RegisterWindowMessageW(L"Windhawk.ZenDesktop.DesktopIconToggle.AutoHide");
+    g_msgAutoRestore = RegisterWindowMessageW(L"Windhawk.ZenDesktop.DesktopIconToggle.AutoRestore");
+    if (!g_msgRefreshTimer || !g_msgManualToggle || !g_msgAutoHide || !g_msgAutoRestore) {
+        Wh_Log(L"[ZenDesktop] FAILED to register private window messages");
+        return FALSE;
+    }
+
     LoadSettings();
 
     if (!Wh_SetFunctionHook(
