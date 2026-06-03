@@ -1,3 +1,33 @@
+## 1.1.0 ([Jun 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/55338f1accb10a333568251590275cc3b0e1a77f/mods/dynamic-island-for-windows.wh.cpp))
+
+This release is a big step forward from v1.0.2 — we’ve gone through the code top to bottom and added a ton of polish. Below is the full breakdown of what’s new, what’s improved, and what’s fixed.
+
+---
+
+## ✨ What's New
+- **Complete Weather & Calendar UI Overhaul:** A new interactive calendar and a rebuilt weather engine powered by `wttr.in`. Weather now shows detailed info like temperature, wind speed, humidity, and “feels like” values.
+- **True GPU Tracking:** The Game Overlay now tracks GPU usage in real time using Windows Performance Counters (PDH) for smooth and accurate metrics.
+- **Rich Notification Scraping:** Notifications now display rich text using Windows UI Automation (`uiautomation.h`), not just app icons.
+- **Custom Positioning Offsets:** Added `Offset X` and `Offset Y` settings so you can fine‑tune the island’s position to match your setup.
+- **Multi‑Monitor & Follow Mouse Mode:** Implemented multi‑monitor support along with a “follow mouse” mode, so the island can adapt seamlessly across different displays.
+
+## 🛠️ Improvements
+- **Privacy Indicators:** Replaced old polling logic with native queries to Windows `CapabilityAccessManager` Registry for instant, accurate detection.
+- **Smart Alignment:** Media waveform and pagination dots shift automatically when privacy icons appear, keeping the layout clean.
+- **Security First:** Even with “Always Show” disabled, the island pops up with clock/battery and privacy dots when your camera or mic is used.
+- **UI Polish:** Calendar and weather modules got a full visual refresh — sharper typography, centered layouts, and sleek pagination dots.
+- **Docs & Community:** The Readme and setup guides were rewritten to be clearer and more user‑friendly, with a new Feedback section and credits to contributors.
+
+## 🐛 Fixes
+- **Media Controls:** Improved spacing and hit‑testing for playback buttons, now responsive across all DPI settings.
+- **Direct2D Crashes:** Fixed rendering bugs that caused crashes or flickering during fast expansions or hover states.
+- **Hover Logic:** Adjusted idle hover behavior so expansions only trigger when the island is visible, preventing phantom triggers.
+
+---
+
+## 🙌 Special Thanks
+Big thanks to **[@ciizerr](https://github.com/ciizerr)** for the layout refinements and bug fixes.
+
 ## 1.0.2 ([May 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/63bfb7795abeb4c8d6067b2dccda957b38bfd34e/mods/dynamic-island-for-windows.wh.cpp))
 
 1. Native Windows 11 Fluent Style:** Adds a toggleable mode to render the island as a modern Windows 11 flyout (rounded rectangle with 8px corners and a 1px border highlight) with a new semi-translucent Fluent dark preset.

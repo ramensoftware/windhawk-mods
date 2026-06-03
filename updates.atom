@@ -2,12 +2,49 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-02T21:28:24.000Z</updated>
+    <updated>2026-06-03T07:13:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Island for Windows 1.1.0]]></title>
+        <id>https://windhawk.net/mods/dynamic-island-for-windows#55338f1accb10a333568251590275cc3b0e1a77f</id>
+        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
+        <updated>2026-06-03T07:13:47.000Z</updated>
+        <content type="html"><![CDATA[<p>This release is a big step forward from v1.0.2 — we’ve gone through the code top to bottom and added a ton of polish. Below is the full breakdown of what’s new, what’s improved, and what’s fixed.</p>
+<hr />
+<h2 id="whatsnew">✨ What's New</h2>
+<ul>
+<li><strong>Complete Weather & Calendar UI Overhaul:</strong> A new interactive calendar and a rebuilt weather engine powered by <code>wttr.in</code>. Weather now shows detailed info like temperature, wind speed, humidity, and “feels like” values.</li>
+<li><strong>True GPU Tracking:</strong> The Game Overlay now tracks GPU usage in real time using Windows Performance Counters (PDH) for smooth and accurate metrics.</li>
+<li><strong>Rich Notification Scraping:</strong> Notifications now display rich text using Windows UI Automation (<code>uiautomation.h</code>), not just app icons.</li>
+<li><strong>Custom Positioning Offsets:</strong> Added <code>Offset X</code> and <code>Offset Y</code> settings so you can fine‑tune the island’s position to match your setup.</li>
+<li><strong>Multi‑Monitor & Follow Mouse Mode:</strong> Implemented multi‑monitor support along with a “follow mouse” mode, so the island can adapt seamlessly across different displays.</li>
+</ul>
+<h2 id="improvements">🛠️ Improvements</h2>
+<ul>
+<li><strong>Privacy Indicators:</strong> Replaced old polling logic with native queries to Windows <code>CapabilityAccessManager</code> Registry for instant, accurate detection.</li>
+<li><strong>Smart Alignment:</strong> Media waveform and pagination dots shift automatically when privacy icons appear, keeping the layout clean.</li>
+<li><strong>Security First:</strong> Even with “Always Show” disabled, the island pops up with clock/battery and privacy dots when your camera or mic is used.</li>
+<li><strong>UI Polish:</strong> Calendar and weather modules got a full visual refresh — sharper typography, centered layouts, and sleek pagination dots.</li>
+<li><strong>Docs & Community:</strong> The Readme and setup guides were rewritten to be clearer and more user‑friendly, with a new Feedback section and credits to contributors.</li>
+</ul>
+<h2 id="fixes">🐛 Fixes</h2>
+<ul>
+<li><strong>Media Controls:</strong> Improved spacing and hit‑testing for playback buttons, now responsive across all DPI settings.</li>
+<li><strong>Direct2D Crashes:</strong> Fixed rendering bugs that caused crashes or flickering during fast expansions or hover states.</li>
+<li><strong>Hover Logic:</strong> Adjusted idle hover behavior so expansions only trigger when the island is visible, preventing phantom triggers.</li>
+</ul>
+<hr />
+<h2 id="specialthanks">🙌 Special Thanks</h2>
+<p>Big thanks to <strong><a href="https://github.com/ciizerr">@ciizerr</a></strong> for the layout refinements and bug fixes.</p>]]></content>
+        <author>
+            <name>Himanshu</name>
+            <uri>https://github.com/devcode90</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Files 2 Folders 2.0]]></title>
         <id>https://windhawk.net/mods/files-2-folders#ad19ef246bb802bc953cbd0d171ca2f8eeba204d</id>
@@ -505,23 +542,6 @@ the original function is called normally.</p>
         <author>
             <name>Himanshu</name>
             <uri>https://github.com/devcode90</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Block Start Menu and Hosts 1.4]]></title>
-        <id>https://windhawk.net/mods/block-windows-startmenu-and-hosts#f6962b4427b7c68ab3af9d101986dffa5190d834</id>
-        <link href="https://windhawk.net/mods/block-windows-startmenu-and-hosts"/>
-        <updated>2026-05-30T10:35:29.000Z</updated>
-        <content type="html"><![CDATA[<p>I've added additional processes to block:</p>
-<p>ShellHost.exe -&gt; The Action Center UI and process ("WIN + A" shortcut).
-ShellExperienceHost.exe -&gt; The Calendar and Notifications UI and process ("WIN + N" key).
-MicrosoftStartFeedProvider.exe -&gt; The Start Menu process, which provides news, weather, stock quotes, interest cards, recommended and etc.
-WidgetBoard.exe -&gt; The Widgets board UI and process ("WIN + W" shortcut).
-WidgetService.exe -&gt; The Widgets board background data, content and service infrastructure process.
-Additionally I've also updated description for some of the existing processes, specifically hotkey combinations with which they're triggered.</p>]]></content>
-        <author>
-            <name>Exiled Eye</name>
-            <uri>https://github.com/ExiledEye</uri>
         </author>
     </entry>
 </feed>
