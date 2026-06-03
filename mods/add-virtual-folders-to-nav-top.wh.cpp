@@ -2,11 +2,10 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.1.22
+// @version         1.2.0
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
-// @architecture    x86-64
 // @compilerOptions -lole32 -lshell32 -luuid -luxtheme -lgdi32 -lgdiplus -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
@@ -113,7 +112,7 @@ Before/after:
 #ifdef _WIN64
 #define THISCALL __cdecl
 #else
-#define THISCALL __thiscall
+#define THISCALL __stdcall
 #endif
 
 template<typename T>
@@ -299,7 +298,8 @@ static HTREEITEM LowerInsertableItem(const TreeState& ts)
 static void GetPidlDisplayName(PIDLIST_ABSOLUTE pidl, WCHAR *buf, int len)
 {
     IShellItem *psi = nullptr;
-    if (SUCCEEDED(SHCreateItemFromIDList(pidl, IID_IShellItem, (void **)&psi)) && psi)
+    HRESULT hr = SHCreateItemFromIDList(pidl, IID_IShellItem, (void **)&psi);
+    if (SUCCEEDED(hr) && psi)
     {
         LPWSTR name = nullptr;
         if (SUCCEEDED(psi->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) && name)
@@ -308,6 +308,27 @@ static void GetPidlDisplayName(PIDLIST_ABSOLUTE pidl, WCHAR *buf, int len)
             CoTaskMemFree(name);
         }
         psi->Release();
+    }
+    if (!buf[0])
+    {
+        IShellFolder *pDesktop = nullptr;
+        if (SUCCEEDED(SHGetDesktopFolder(&pDesktop)) && pDesktop)
+        {
+            STRRET str = {};
+            if (SUCCEEDED(pDesktop->GetDisplayNameOf((PCUITEMID_CHILD)pidl, SHGDN_NORMAL, &str)))
+            {
+                if (str.uType == STRRET_WSTR && str.pOleStr)
+                {
+                    wcsncpy_s(buf, len, str.pOleStr, _TRUNCATE);
+                    CoTaskMemFree(str.pOleStr);
+                }
+                else if (str.uType == STRRET_CSTR)
+                {
+                    MultiByteToWideChar(CP_ACP, 0, str.cStr, -1, buf, len);
+                }
+            }
+            pDesktop->Release();
+        }
     }
 }
 
@@ -1058,6 +1079,27 @@ static void RestoreTree(HWND hTree)
     Wh_Log(L"[DISABLE] tree=%04X imglist=%04X", PTR4(hTree), PTR4(savedImgList));
 }
 
+static LRESULT CALLBACK RestoreSubclassProc(
+    HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_RESTORE_TREE)
+    {
+        Wh_Log(L"[RESTORE-SC] tree=%04X thread=%u", PTR4(hWnd), GetCurrentThreadId());
+        g_mutatingTree = hWnd;
+        RestoreTree(hWnd);
+        g_mutatingTree = nullptr;
+        if (g_ins.filter) { g_ins.filter->Release(); g_ins.filter = nullptr; }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, RestoreSubclassProc);
+        if (IsWindow(hWnd))
+            RedrawWindow(hWnd, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        return 0x5748;
+    }
+    if (uMsg == WM_NCDESTROY)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, RestoreSubclassProc);
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
 static void FullRebuildTree(HWND hTree)
 {
     TreeState* ts = GetTree(hTree);
@@ -1189,6 +1231,7 @@ struct SectionLayout {
     HTREEITEM belowQA;        // first tall non-section item after boundary
     bool homePresent;         // a visible Home item exists among depth-1 siblings
     bool galleryPresent;      // a visible Gallery item exists among depth-1 siblings
+    bool needsHgCleanup;      // hidden inherited items found that need removal
 };
 
 static SectionLayout FindSectionLayout(HWND hTree, TreeState& ts)
@@ -1234,6 +1277,10 @@ static SectionLayout FindSectionLayout(HWND hTree, TreeState& ts)
                             if (i == NAV_HOME) layout.homePresent = true;
                             else if (i == NAV_GALLERY) layout.galleryPresent = true;
                             Wh_Log(L"[CACHE] %s=%04X tree=%04X (walk)", g_navItems[i].label, PTR4(h), PTR4(hTree));
+                        }
+                        else
+                        {
+                            layout.needsHgCleanup = true;
                         }
                         isSection = true;
                         inheritedNames[i][0] = L'\0';
@@ -1323,6 +1370,13 @@ static void RedrawSeps(HWND hTree, HDC hdc, TreeState& ts)
     bool foundBelowQA = false;
     int sepCount = 0;
 
+    if (ts.boundaryItem)
+    {
+        RECT rcBoundary = {};
+        if (GetItemRect(hTree, ts.boundaryItem, &rcBoundary) && rcBoundary.bottom <= 0)
+            foundBoundary = true;
+    }
+
     // Walk log tags: O=ours, H=home, G=gallery, P=spacer, B/b=boundary, Q=belowQA, S=sep, .=other
     WCHAR walkLog[64] = {};
     int walkIdx = 0;
@@ -1350,6 +1404,8 @@ static void RedrawSeps(HWND hTree, HDC hdc, TreeState& ts)
             }
             else if (GetHiddenItem(ts) && h == GetHiddenItem(ts))
             {
+                if (ts.boundaryItem && h == ts.boundaryItem)
+                    foundBoundary = true;
                 if (g_logSepDraw && walkIdx < 60)
                     walkLog[walkIdx++] = L'D';
             }
@@ -1439,8 +1495,13 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                         Wh_Log(L"[SEP] 0x%06X tree=%04X", g_sepColor, PTR4(hTree));
                     }
 
+                    HDC hdc = cd->nmcd.hdc;
+                    HRGN hOldClip = CreateRectRgn(0, 0, 0, 0);
+                    int clipState = GetClipRgn(hdc, hOldClip);
+                    SelectClipRgn(hdc, nullptr);
+
                     if (g_settings.hasItemsAtTop && g_sepColor != CLR_INVALID && ts)
-                        RedrawSeps(hTree, cd->nmcd.hdc, *ts);
+                        RedrawSeps(hTree, hdc, *ts);
 
                     ts = GetTree(hTree);
                     HTREEITEM hHidden = (ts && HasOurItemsInTree(*ts)) ? GetHiddenItem(*ts) : nullptr;
@@ -1477,6 +1538,9 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                             }
                         }
                     }
+
+                    SelectClipRgn(hdc, clipState == 1 ? hOldClip : nullptr);
+                    DeleteObject(hOldClip);
 
                     g_logSepDraw = false;
                 }
@@ -1706,6 +1770,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                     }
                     SetPropW(hWnd, L"WH_NscTree", (HANDLE)ts.pNscTree);
                     SetPropW(hWnd, L"WH_EnumFlags", (HANDLE)(ULONG_PTR)ts.enumFlags);
+                    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, RestoreSubclassProc, 0);
                 }
                 else if (g_settings.hasItemsAtTop && !g_settings.items[id].hide)
                 {
@@ -1938,19 +2003,6 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         return 0;
     }
 
-    if (uMsg == WM_RESTORE_TREE)
-    {
-        Wh_Log(L"[RESTORE-MSG] tree=%04X thread=%u", PTR4(hWnd), GetCurrentThreadId());
-        g_mutatingTree = hWnd;
-        RestoreTree(hWnd);
-        g_mutatingTree = nullptr;
-        if (g_ins.filter) { g_ins.filter->Release(); g_ins.filter = nullptr; }
-        if (IsWindow(hWnd))
-            RedrawWindow(hWnd, nullptr, nullptr,
-                         RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
-        return 0;
-    }
-
     if (uMsg == WM_PAINT)
     {
         TreeState* ts = GetTree(hWnd);
@@ -1987,6 +2039,12 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 && !layout.homePresent && !layout.galleryPresent)
             {
                 ts->pendingWork |= WORK_HOME_SPACER;
+                PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
+            }
+
+            if (layout.needsHgCleanup && !(ts->pendingWork & WORK_HG_CLEANUP))
+            {
+                ts->pendingWork |= WORK_HG_CLEANUP;
                 PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
             }
 
@@ -2188,23 +2246,6 @@ void LoadSettings()
     for (int i = 0; i < NAV_COUNT; i++)
         if (g_settings.items[i].showAtTop) { g_settings.hasItemsAtTop = true; break; }
 
-    Wh_Log(L"Settings: thisPCAtTop=%d (expand=%d, startExp=%d, hideQA=%d) "
-            L"desktopAtTop=%d (above=%d, expand=%d, hideQA=%d) "
-            L"hideHome=%d hideGallery=%d fixChevron=%d chevronScale=%d "
-            L"hidePins=%d rmSepNav=%d rmSepQA=%d",
-            g_settings.items[NAV_THISPC].showAtTop,
-            g_settings.items[NAV_THISPC].expandable,
-            g_settings.items[NAV_THISPC].startExpanded,
-            g_settings.items[NAV_THISPC].hideFromQA,
-            g_settings.items[NAV_DESKTOP].showAtTop,
-            g_settings.desktopAboveThisPC,
-            g_settings.items[NAV_DESKTOP].expandable,
-            g_settings.items[NAV_DESKTOP].hideFromQA,
-            g_settings.items[NAV_HOME].hide,
-            g_settings.items[NAV_GALLERY].hide,
-            g_settings.fixChevronDrawing, g_settings.chevronScale,
-            g_settings.hidePinButtons,
-            g_settings.removeSepBelowNav, g_settings.removeSepBelowQA);
 }
 
 static bool InitializeModCore(HMODULE hExplorerFrame)
@@ -2239,8 +2280,6 @@ static bool InitializeModCore(HMODULE hExplorerFrame)
                        nullptr, &g_navItems[NAV_HOME].pidl, 0, nullptr);
     SHParseDisplayName(L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}",
                        nullptr, &g_navItems[NAV_GALLERY].pidl, 0, nullptr);
-    Wh_Log(L"PIDLs: Home=%04X Gallery=%04X", PTR4(g_navItems[NAV_HOME].pidl), PTR4(g_navItems[NAV_GALLERY].pidl));
-
     for (int i = 0; i < NAV_COUNT; i++)
         if (g_navItems[i].pidl)
             GetPidlDisplayName(g_navItems[i].pidl, g_navItems[i].label, ARRAYSIZE(g_navItems[i].label));
@@ -2248,12 +2287,21 @@ static bool InitializeModCore(HMODULE hExplorerFrame)
     WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
         {
             {
+#ifdef _WIN64
                 L"public: virtual long __cdecl"
                 L" CNscTree::AppendRoot("
                 L"struct IShellItem *,"
                 L"unsigned long,"
                 L"unsigned long,"
                 L"struct IShellItemFilter *)"
+#else
+                L"public: virtual long __stdcall"
+                L" CNscTree::AppendRoot("
+                L"struct IShellItem *,"
+                L"unsigned long,"
+                L"unsigned long,"
+                L"struct IShellItemFilter *)"
+#endif
             },
             &AppendRoot_orig,
             AppendRoot_hook,
@@ -2261,6 +2309,7 @@ static bool InitializeModCore(HMODULE hExplorerFrame)
         },
         {
             {
+#ifdef _WIN64
                 L"private: static __int64 __cdecl"
                 L" CNscTree::s_SubClassTreeWndProc("
                 L"struct HWND__ *,"
@@ -2269,6 +2318,16 @@ static bool InitializeModCore(HMODULE hExplorerFrame)
                 L"__int64,"
                 L"unsigned __int64,"
                 L"unsigned __int64)"
+#else
+                L"private: static long __stdcall"
+                L" CNscTree::s_SubClassTreeWndProc("
+                L"struct HWND__ *,"
+                L"unsigned int,"
+                L"unsigned int,"
+                L"long,"
+                L"unsigned int,"
+                L"unsigned long)"
+#endif
             },
             &SubClassTreeWndProc_orig,
             SubClassTreeWndProc_hook,
@@ -2290,7 +2349,6 @@ static bool InitializeModCore(HMODULE hExplorerFrame)
         if (pDTB)
         {
             WindhawkUtils::SetFunctionHook(pDTB, DrawThemeBackground_hook, &DrawThemeBackground_orig);
-            Wh_Log(L"[CHEVRON] at=%04X orig=%04X", PTR4(pDTB), PTR4(DrawThemeBackground_orig));
         }
         else
             Wh_Log(L"[CHEVRON] GetProcAddress(DrawThemeBackground) failed");
@@ -2298,43 +2356,48 @@ static bool InitializeModCore(HMODULE hExplorerFrame)
     else
         Wh_Log(L"[CHEVRON] uxtheme.dll not loaded");
 
-    Wh_Log(L"Mod initialized, hasItemsAtTop=%d", (int)g_settings.hasItemsAtTop);
     return true;
 }
 
 void Wh_ModAfterInit();
+
+static void CheckLateLoadExplorerFrame(LPCWSTR lpLibFileName, HMODULE hModule)
+{
+    if (!hModule || !lpLibFileName ||
+        g_explorerFrameLoaded.load(std::memory_order_relaxed))
+        return;
+    LPCWSTR name = wcsrchr(lpLibFileName, L'\\');
+    name = name ? name + 1 : lpLibFileName;
+    if (_wcsicmp(name, L"ExplorerFrame.dll") != 0 ||
+        g_explorerFrameLoaded.exchange(true, std::memory_order_acq_rel))
+        return;
+    Wh_Log(L"ExplorerFrame.dll loaded late, installing hooks");
+    if (!InitializeModCore(hModule))
+    {
+        Wh_Log(L"Late-load InitializeModCore failed");
+        g_explorerFrameLoaded.store(false, std::memory_order_release);
+        return;
+    }
+    Wh_ApplyHookOperations();
+    Wh_Log(L"Late-load hooks installed, running discovery");
+    Wh_ModAfterInit();
+}
 
 static HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags)
 {
     HMODULE hModule = LoadLibraryExW_orig(lpLibFileName, hFile, dwFlags);
     constexpr DWORD DATA_ONLY = LOAD_LIBRARY_AS_DATAFILE |
         LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE;
-    if (hModule && lpLibFileName && !(dwFlags & DATA_ONLY) &&
-        !g_explorerFrameLoaded.load(std::memory_order_relaxed))
-    {
-        LPCWSTR name = wcsrchr(lpLibFileName, L'\\');
-        name = name ? name + 1 : lpLibFileName;
-        if (_wcsicmp(name, L"ExplorerFrame.dll") == 0 &&
-            !g_explorerFrameLoaded.exchange(true, std::memory_order_acq_rel))
-        {
-            Wh_Log(L"ExplorerFrame.dll loaded late, installing hooks");
-            if (!InitializeModCore(hModule))
-            {
-                Wh_Log(L"Late-load InitializeModCore failed");
-                g_explorerFrameLoaded.store(false, std::memory_order_release);
-                return hModule;
-            }
-            Wh_ApplyHookOperations();
-            Wh_Log(L"Late-load hooks installed, running discovery");
-            Wh_ModAfterInit();
-        }
-    }
+    if (!(dwFlags & DATA_ONLY))
+        CheckLateLoadExplorerFrame(lpLibFileName, hModule);
     return hModule;
 }
 
 BOOL Wh_ModInit()
 {
     HMODULE hExplorerFrame = GetModuleHandleW(L"ExplorerFrame.dll");
+    if (!hExplorerFrame)
+        hExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hExplorerFrame)
     {
         WindhawkUtils::SetFunctionHook(LoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
@@ -2406,6 +2469,46 @@ static void DiscoverTreeFromBrowser(HWND hTop, const WCHAR *cls,
     out.push_back({ hTop, hTree, pNsc, enumFlags });
 }
 
+static BOOL CALLBACK EnumWindowsForTrees(HWND hTop, LPARAM lParam)
+{
+    auto& out = *reinterpret_cast<std::vector<DiscoveredTree>*>(lParam);
+
+    DWORD wndPid = 0;
+    GetWindowThreadProcessId(hTop, &wndPid);
+    if (wndPid != GetCurrentProcessId())
+        return TRUE;
+    WCHAR cls[64];
+    GetClassNameW(hTop, cls, ARRAYSIZE(cls));
+
+    bool isCabinet = (wcscmp(cls, L"CabinetWClass") == 0);
+    bool isDialog = (wcscmp(cls, L"#32770") == 0);
+    if (!isCabinet && !isDialog)
+        return TRUE;
+
+    int found = 0;
+    HWND hShellTab = nullptr;
+    while ((hShellTab = FindWindowExW(hTop, hShellTab, L"ShellTabWindowClass", nullptr)) != nullptr)
+    {
+        IShellBrowser *pSB = (IShellBrowser *)SendMessageW(hShellTab, WM_USER + 7, 0, 0);
+        if (pSB)
+        {
+            size_t before = out.size();
+            DiscoverTreeFromBrowser(hTop, cls, pSB, out);
+            found += (int)(out.size() - before);
+        }
+    }
+
+    if (found == 0)
+    {
+        IShellBrowser *pSB = (IShellBrowser *)SendMessageW(hTop, WM_USER + 7, 0, 0);
+        if (pSB)
+            DiscoverTreeFromBrowser(hTop, cls, pSB, out);
+        else
+            Wh_Log(L"[TREE] %s hwnd=%04X no IShellBrowser", cls, PTR4(hTop));
+    }
+    return TRUE;
+}
+
 void Wh_ModAfterInit()
 {
 #ifdef _WIN64
@@ -2420,44 +2523,7 @@ void Wh_ModAfterInit()
 
     std::vector<DiscoveredTree> discovered;
 
-    EnumWindows([](HWND hTop, LPARAM lParam) -> BOOL {
-        auto& out = *reinterpret_cast<std::vector<DiscoveredTree>*>(lParam);
-
-        DWORD wndPid = 0;
-        GetWindowThreadProcessId(hTop, &wndPid);
-        if (wndPid != GetCurrentProcessId())
-            return TRUE;
-        WCHAR cls[64];
-        GetClassNameW(hTop, cls, ARRAYSIZE(cls));
-
-        bool isCabinet = (wcscmp(cls, L"CabinetWClass") == 0);
-        bool isDialog = (wcscmp(cls, L"#32770") == 0);
-        if (!isCabinet && !isDialog)
-            return TRUE;
-
-        int found = 0;
-        HWND hShellTab = nullptr;
-        while ((hShellTab = FindWindowExW(hTop, hShellTab, L"ShellTabWindowClass", nullptr)) != nullptr)
-        {
-            IShellBrowser *pSB = (IShellBrowser *)SendMessageW(hShellTab, WM_USER + 7, 0, 0);
-            if (pSB)
-            {
-                size_t before = out.size();
-                DiscoverTreeFromBrowser(hTop, cls, pSB, out);
-                found += (int)(out.size() - before);
-            }
-        }
-
-        if (found == 0)
-        {
-            IShellBrowser *pSB = (IShellBrowser *)SendMessageW(hTop, WM_USER + 7, 0, 0);
-            if (pSB)
-                DiscoverTreeFromBrowser(hTop, cls, pSB, out);
-            else
-                Wh_Log(L"[TREE] %s hwnd=%04X no IShellBrowser", cls, PTR4(hTop));
-        }
-        return TRUE;
-    }, (LPARAM)&discovered);
+    EnumWindows(EnumWindowsForTrees, (LPARAM)&discovered);
 
     for (auto& d : discovered)
     {
@@ -2478,6 +2544,7 @@ void Wh_ModAfterInit()
 
         SetPropW(d.hTree, L"WH_NscTree", (HANDLE)d.pNsc);
         SetPropW(d.hTree, L"WH_EnumFlags", (HANDLE)(ULONG_PTR)d.enumFlags);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(d.hTree, RestoreSubclassProc, 0);
 
         PostMessage(d.hTree, WM_DEFERRED_REBUILD, 0, 0);
         Wh_Log(L"[ENABLE] window=%04X tree=%04X nsc=%04X", PTR4(d.hTop), PTR4(d.hTree), PTR4(d.pNsc));
@@ -2612,8 +2679,28 @@ void Wh_ModUninit()
 
     for (HWND hTree : uninitList)
     {
-        if (IsWindow(hTree))
-            SendMessage(hTree, WM_RESTORE_TREE, 0, 0);
+        if (!IsWindow(hTree))
+            continue;
+
+        DWORD treeThread = GetWindowThreadProcessId(hTree, nullptr);
+        if (treeThread != GetCurrentThreadId())
+        {
+            LRESULT lr = SendMessage(hTree, WM_RESTORE_TREE, 0, 0);
+            if (lr != 0x5748)
+            {
+                Wh_Log(L"[UNINIT] tree=%04X restore subclass missing, direct fallback", PTR4(hTree));
+                g_mutatingTree = hTree;
+                RestoreTree(hTree);
+                g_mutatingTree = nullptr;
+            }
+        }
+        else
+        {
+            g_mutatingTree = hTree;
+            RestoreTree(hTree);
+            g_mutatingTree = nullptr;
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hTree, RestoreSubclassProc);
+        }
     }
 
     std::vector<HWND> parents;
@@ -2644,6 +2731,7 @@ void Wh_ModUninit()
                 ts.ownsNscRef = false;
             }
         }
+        g_trees.clear();
     }
 
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
