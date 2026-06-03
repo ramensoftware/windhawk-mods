@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.0
+// @version         1.2.1
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -2245,7 +2245,27 @@ void LoadSettings()
     g_settings.hasItemsAtTop = false;
     for (int i = 0; i < NAV_COUNT; i++)
         if (g_settings.items[i].showAtTop) { g_settings.hasItemsAtTop = true; break; }
+}
 
+static void LogSettings()
+{
+    Wh_Log(L"Settings: thisPCAtTop=%d (expand=%d, startExp=%d, hideQA=%d) "
+            L"desktopAtTop=%d (above=%d, expand=%d, hideQA=%d) "
+            L"hideHome=%d hideGallery=%d fixChevron=%d chevronScale=%d "
+            L"hidePins=%d rmSepNav=%d rmSepQA=%d",
+            g_settings.items[NAV_THISPC].showAtTop,
+            g_settings.items[NAV_THISPC].expandable,
+            g_settings.items[NAV_THISPC].startExpanded,
+            g_settings.items[NAV_THISPC].hideFromQA,
+            g_settings.items[NAV_DESKTOP].showAtTop,
+            g_settings.desktopAboveThisPC,
+            g_settings.items[NAV_DESKTOP].expandable,
+            g_settings.items[NAV_DESKTOP].hideFromQA,
+            g_settings.items[NAV_HOME].hide,
+            g_settings.items[NAV_GALLERY].hide,
+            g_settings.fixChevronDrawing, g_settings.chevronScale,
+            g_settings.hidePinButtons,
+            g_settings.removeSepBelowNav, g_settings.removeSepBelowQA);
 }
 
 static bool InitializeModCore(HMODULE hExplorerFrame)
@@ -2273,8 +2293,6 @@ static bool InitializeModCore(HMODULE hExplorerFrame)
     }
 
     SHGetSpecialFolderLocation(nullptr, CSIDL_DESKTOP, &g_navItems[NAV_DESKTOP].pidl);
-    if (!g_navItems[NAV_DESKTOP].pidl)
-        Wh_Log(L"Warning: failed to get Desktop PIDL");
 
     SHParseDisplayName(L"::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}",
                        nullptr, &g_navItems[NAV_HOME].pidl, 0, nullptr);
@@ -2503,8 +2521,6 @@ static BOOL CALLBACK EnumWindowsForTrees(HWND hTop, LPARAM lParam)
         IShellBrowser *pSB = (IShellBrowser *)SendMessageW(hTop, WM_USER + 7, 0, 0);
         if (pSB)
             DiscoverTreeFromBrowser(hTop, cls, pSB, out);
-        else
-            Wh_Log(L"[TREE] %s hwnd=%04X no IShellBrowser", cls, PTR4(hTop));
     }
     return TRUE;
 }
@@ -2549,6 +2565,9 @@ void Wh_ModAfterInit()
         PostMessage(d.hTree, WM_DEFERRED_REBUILD, 0, 0);
         Wh_Log(L"[ENABLE] window=%04X tree=%04X nsc=%04X", PTR4(d.hTop), PTR4(d.hTree), PTR4(d.pNsc));
     }
+
+    if (!discovered.empty())
+        LogSettings();
 }
 
 ChangeTier ClassifySettingsChange(const Settings& prev, const Settings& cur)
@@ -2631,6 +2650,7 @@ void Wh_ModSettingsChanged()
 
         auto prev = g_settings;
         LoadSettings();
+        LogSettings();
 
         ChangeTier tier = ClassifySettingsChange(prev, g_settings);
         if (tier == TIER_NONE)
@@ -2737,6 +2757,4 @@ void Wh_ModUninit()
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
     for (int i = 0; i < NAV_COUNT; i++)
         if (g_navItems[i].pidl) { CoTaskMemFree(g_navItems[i].pidl); g_navItems[i].pidl = nullptr; }
-    if (g_explorerFrameLoaded.load(std::memory_order_relaxed))
-        Wh_Log(L"Mod uninitialized");
 }
