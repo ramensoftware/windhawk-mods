@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.1
+// @version         1.2.3
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -2415,10 +2415,15 @@ BOOL Wh_ModInit()
 {
     HMODULE hExplorerFrame = GetModuleHandleW(L"ExplorerFrame.dll");
     if (!hExplorerFrame)
-        hExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hExplorerFrame)
     {
-        WindhawkUtils::SetFunctionHook(LoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
+        HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+        auto pLoadLibraryExW = hKernelBase
+            ? (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW")
+            : nullptr;
+        if (pLoadLibraryExW)
+            WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
+        else
+            WindhawkUtils::SetFunctionHook(LoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
         return TRUE;
     }
     g_explorerFrameLoaded.store(true, std::memory_order_relaxed);
@@ -2751,7 +2756,6 @@ void Wh_ModUninit()
                 ts.ownsNscRef = false;
             }
         }
-        g_trees.clear();
     }
 
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
