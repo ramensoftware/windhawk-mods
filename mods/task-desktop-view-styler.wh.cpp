@@ -4,7 +4,7 @@
 // @description     Restyles the native Windows 11 Task View (Desktop View) — rounded corners, cleaner backdrop, transparent desktops bar — by editing its live XAML tree, no overlay, non-invasive
 // @version         4.5.0
 // @author          mahtab-ali
-// @github          https://github.com/mahtab-ali/taskview-clean-styler
+// @github          https://github.com/mahtab-ali
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -loleacc
 // ==/WindhawkMod==
