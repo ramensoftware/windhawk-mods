@@ -16,6 +16,8 @@
 Move the active window to specific screen areas using keyboard shortcuts, just like
 the [Rectangle](https://rectangleapp.com/) app on macOS.
 
+![snap-commander](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/snap-commander/snap-commander.gif)
+
 ## Default shortcuts
 
 | Action          | Shortcut    |
