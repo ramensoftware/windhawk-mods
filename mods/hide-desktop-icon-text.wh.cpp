@@ -3,8 +3,8 @@
 // @name            Ultimate Desktop Minimizer (No Text, No Arrows)
 // @description     Hides icon names AND shortcut arrow overlays on the desktop. Keeps names for folders.
 // @version         1.4.0
-// @author          Твоє ім'я
-// @github          https://github.com/твій_профіль
+// @author          kivsak
+// @github          https://github.com/kivsak
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -luxtheme -lole32 -luuid -lshlwapi -lgdi32
