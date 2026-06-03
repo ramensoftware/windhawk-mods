@@ -54,7 +54,7 @@ This mod intercepts modern `ms-settings:` URI protocols and forces Windows to op
   - "2": Pass through to ms-settings
 - Win11CompatibilityMode: false
   $name: Windows 11 Compatibility Mode
-  $description: "On Windows 11, replaces legacy shortcuts that no longer work with a plain Control Panel open instead."
+  $description: "On Windows 11, replaces legacy shortcuts that no longer work with a plain Control Panel open instead when possible."
 */
 // ==/WindhawkModSettings==
 
