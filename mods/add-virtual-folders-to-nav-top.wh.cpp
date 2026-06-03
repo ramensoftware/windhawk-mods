@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.3
+// @version         1.2.4
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -1783,42 +1783,38 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 TreeState* ts = GetTree(hWnd);
                 if (ts && IsDepth1Item(hWnd, hNew))
                 {
-                    if (g_settings.items[NAV_HOME].hide || g_settings.items[NAV_GALLERY].hide)
+                    WCHAR itemText[64] = {};
+                    GetItemText(hWnd, hNew, itemText, ARRAYSIZE(itemText));
+                    bool isHome = g_navItems[NAV_HOME].label[0] &&
+                                  wcscmp(itemText, g_navItems[NAV_HOME].label) == 0;
+                    bool isGallery = g_navItems[NAV_GALLERY].label[0] &&
+                                     wcscmp(itemText, g_navItems[NAV_GALLERY].label) == 0;
+                    if ((isHome && g_settings.items[NAV_HOME].hide) ||
+                        (isGallery && g_settings.items[NAV_GALLERY].hide))
                     {
-                        WCHAR itemText[64] = {};
-                        GetItemText(hWnd, hNew, itemText, ARRAYSIZE(itemText));
-                        bool isHome = g_settings.items[NAV_HOME].hide &&
-                                      g_navItems[NAV_HOME].label[0] &&
-                                      wcscmp(itemText, g_navItems[NAV_HOME].label) == 0;
-                        bool isGallery = g_settings.items[NAV_GALLERY].hide &&
-                                         g_navItems[NAV_GALLERY].label[0] &&
-                                         wcscmp(itemText, g_navItems[NAV_GALLERY].label) == 0;
-                        if (isHome || isGallery)
+                        bool nearOurSection = false;
+                        HTREEITEM hPrev = hNew;
+                        for (int walk = 0; walk < 6 && hPrev; walk++)
                         {
-                            bool nearOurSection = false;
-                            HTREEITEM hPrev = hNew;
-                            for (int walk = 0; walk < 6 && hPrev; walk++)
+                            hPrev = (HTREEITEM)SendMessageW(hWnd, TVM_GETNEXTITEM, TVGN_PREVIOUS, (LPARAM)hPrev);
+                            if (hPrev && IsOurSection(*ts, hPrev))
                             {
-                                hPrev = (HTREEITEM)SendMessageW(hWnd, TVM_GETNEXTITEM, TVGN_PREVIOUS, (LPARAM)hPrev);
-                                if (hPrev && IsOurSection(*ts, hPrev))
-                                {
-                                    nearOurSection = true;
-                                    break;
-                                }
+                                nearOurSection = true;
+                                break;
                             }
-                            if (nearOurSection)
-                            {
-                                ts->pendingWork |= WORK_HG_CLEANUP;
-                                Wh_Log(L"[INSERT] '%s' item=%04X tree=%04X",
-                                       itemText, PTR4(hNew), PTR4(hWnd));
-                            }
+                        }
+                        if (nearOurSection)
+                        {
+                            ts->pendingWork |= WORK_HG_CLEANUP;
+                            Wh_Log(L"[INSERT] '%s' item=%04X tree=%04X",
+                                   itemText, PTR4(hNew), PTR4(hWnd));
                         }
                     }
                     bool hasOurItems = false;
                     for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
                         if (ts->hItems[i]) { hasOurItems = true; break; }
 
-                    if (hasOurItems && !AreWeMutating() && !g_inTreePaint &&
+                    if (hasOurItems && !(isHome || isGallery) && !AreWeMutating() && !g_inTreePaint &&
                         !(ts->pendingWork & WORK_FULL_REBUILD))
                     {
                         ts->pendingWork |= WORK_FULL_REBUILD;
