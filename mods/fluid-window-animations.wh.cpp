@@ -4,7 +4,7 @@
 // @description    Bring ultra-smooth, artifact-free macOS and Linux-style minimize/restore animations to your application windows. Includes Genie, Scale, and CRT effects with elastic bounce physics.
 // @version        1.0.0
 // @author         kivsak
-// @github         kivsak
+// @github         https://github.com/kivsak
 // @include        *
 // @compilerOptions -ldwmapi -lgdi32 -lmsimg32 -luser32
 // ==/WindhawkMod==
