@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.8
+// @version         1.2.9
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -243,6 +243,7 @@ struct TreeState {
     HTREEITEM boundaryItem = nullptr;
     HTREEITEM belowQAItem = nullptr;
     bool belowQADiscovered = false;
+    bool freshFromAppend = false;
     uint8_t pendingWork = 0;   // bitmask of PendingWork flags
     int sepRetries = 0;
     bool ownsNscRef = false;
@@ -346,6 +347,7 @@ static void ResetTreeCleanup(TreeState& ts)
     ts.boundaryItem = nullptr;
     ts.belowQAItem = nullptr;
     ts.belowQADiscovered = false;
+    ts.freshFromAppend = false;
     ts.triedHomeSpacer = false;
     ts.pendingWork = WORK_QA_CLEANUP | WORK_HG_CLEANUP | WORK_DUP_COLLAPSE;
 }
@@ -613,6 +615,18 @@ HRESULT THISCALL AppendRoot_hook(void *pThis, IShellItem *psiRoot, unsigned long
 
         g_inCustomAppend = false;
         g_ins.forTree = nullptr;
+
+        TreeState* tsPost = GetTree(hForTree);
+        if (tsPost)
+        {
+            tsPost->freshFromAppend = true;
+            tsPost->belowQAItem = nullptr;
+            tsPost->belowQADiscovered = false;
+            tsPost->boundaryItem = nullptr;
+            tsPost->hiddenDuplicate = nullptr;
+            tsPost->pendingWork |= WORK_QA_CLEANUP | WORK_HG_CLEANUP | WORK_DUP_COLLAPSE;
+            PostMessage(hForTree, WM_DEFERRED_REBUILD, 0, 0);
+        }
     }
 
     return hr;
@@ -1820,7 +1834,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                         if (ts->hItems[i]) { hasOurItems = true; break; }
 
                     if (hasOurItems && !(isHome || isGallery) && !AreWeMutating() && !g_inTreePaint &&
-                        !(ts->pendingWork & WORK_FULL_REBUILD))
+                        !(ts->pendingWork & WORK_FULL_REBUILD) && !ts->freshFromAppend)
                     {
                         ts->pendingWork |= WORK_FULL_REBUILD;
                         PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
@@ -1944,6 +1958,11 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         ts = RunDeferredWork(hWnd, ts, WORK_EXPAND, ExpandStartExpandedItems);
         ts = RunDeferredWork(hWnd, ts, WORK_HOME_SPACER, InsertHomeSpacer);
 
+        if (ts)
+        {
+            ts->freshFromAppend = false;
+            ts->sepRetries = 0;
+        }
         g_inSubclassProc--;
         DrainPendingRebuilds();
         return 0;
@@ -2065,18 +2084,20 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                        (int)ts->triedHomeSpacer);
         }
 
-        if (g_settings.hasItemsAtTop && g_sepColor != CLR_INVALID && ts)
+        if (g_settings.hasItemsAtTop && ts)
         {
             if (layout.boundary && (g_settings.removeSepBelowNav || GetHiddenItem(*ts)))
                 CollapseItemIntegral(hWnd, layout.boundary);
+            bool treeSettled = !g_deferredOpInProgress && !ts->freshFromAppend && !ts->pendingWork;
             if (layout.belowQA)
             {
-                bool isStray = ts->belowQADiscovered &&
-                               layout.belowQA != ts->belowQAItem;
-                if (isStray || g_settings.removeSepBelowQA)
+                if (g_settings.removeSepBelowQA)
+                    CollapseItemIntegral(hWnd, layout.belowQA);
+                else if (treeSettled && ts->belowQADiscovered &&
+                         layout.belowQA != ts->belowQAItem)
                     CollapseItemIntegral(hWnd, layout.belowQA);
             }
-            if (!ts->belowQADiscovered)
+            if (!ts->belowQADiscovered && treeSettled)
             {
                 ts->belowQAItem = layout.belowQA;
                 ts->belowQADiscovered = true;
