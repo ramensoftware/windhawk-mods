@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-04T19:36:41.000Z</updated>
+    <updated>2026-06-04T21:48:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Nav DragOver Fix 1.2.6]]></title>
+        <id>https://windhawk.net/mods/explorer-nav-dragover-fix#e7fac19e6a1d29ee72e53d93318a4de19250769a</id>
+        <link href="https://windhawk.net/mods/explorer-nav-dragover-fix"/>
+        <updated>2026-06-04T21:48:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix transient collapse skipped after nav wheel scroll (drag session id vs generation).</li>
+<li>Fix preserve-on-drop ancestor check for successful drops.</li>
+<li>Edge-scroll acceleration during drag.</li>
+<li>Transient expansion tracking, staggered collapse, reconcile pass, <code>lParam</code> re-resolution.</li>
+</ul>]]></content>
+        <author>
+            <name>tonythethompson</name>
+            <uri>https://github.com/tonythethompson</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Add This PC and Desktop to Nav Top 1.3.0]]></title>
         <id>https://windhawk.net/mods/add-virtual-folders-to-nav-top#ca3145f0cb1e292fead3f7c74c2eda168c686799</id>
@@ -513,21 +529,6 @@ the way it was in Windows 95, before Windows 98.</p>
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 2.2.0]]></title>
-        <id>https://windhawk.net/mods/audioswap#6f265d52a641c9f32788bd2d34dda07a02428882</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-05-30T19:20:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New: Right-click → <strong>Sound Settings…</strong> opens Windows Sound dialog directly on the Playback tab.</li>
-<li>New: Middle-click tray icon → compact volume slider popup with a custom dark design. Drag to adjust output volume live; click outside or press Escape to close.</li>
-<li>New: Scroll wheel over the tray icon (Click to Swap mode) adjusts output volume, matching native Windows sound icon behaviour.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>
