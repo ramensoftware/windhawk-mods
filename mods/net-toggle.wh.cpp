@@ -1,76 +1,136 @@
 // ==WindhawkMod==
 // @id              net-toggle
-// @name            Network Toggle
-// @description     Adds a network toggle to the system tray - click the icon to enable/disable network adapters
-// @version         1.0
+// @name            Net-Toggle
+// @description     Network toggle + DNS reachability monitor in your system tray
+// @version         2.0.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
+// @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32
 // ==/WindhawkMod==
+
+// ==WindhawkModSettings==
+/*
+- dnsServer: "8.8.8.8"
+  $name: DNS Server IP
+  $description: IP address to ping for DNS reachability (leave blank to disable DNS monitoring)
+
+- pingInterval: 10
+  $name: Ping Interval (seconds)
+  $description: How often to check DNS reachability
+*/
+// ==/WindhawkModSettings==
 
 // ==WindhawkModReadme==
 /*
-# Network Toggle
+# Net-Toggle
 
-A lightning-fast internet kill switch right in your taskbar! ⚡
+A lightning-fast internet kill switch with DNS reachability monitoring — right in your taskbar!
 
-Ever needed to quickly disconnect from the web without digging through Windows settings or ripping the ethernet cable out of the wall? Network Toggle adds a clean, native-looking button directly to your system tray. 
+Ever needed to quickly disconnect from the web without digging through Windows settings or ripping the ethernet cable out of the wall? Net-Toggle adds a clean, native-looking button directly to your system tray.
 
 One click drops your connection. Click it again, and you're back online.
 
-## 📖 How to Use It
-Using the toggle is incredibly simple:
-1. 🔍 **Find the Icon:** 
-    > **Look in your system tray (bottom right of your screen, next to the clock) for the little `^` arrow. hit it and look for the network icon.**
-2. 🎯 **Click to Toggle:**
-    > **Give the icon a single click.**
-3. ✅ **Approve the Prompt:**
-    > **Windows will pop up a quick UAC screen asking for permission. Click **Yes**.**
-4. 🕒 **Wait a Sec:** 
-    > **The tray icon will update instantly, but give Windows just a few seconds to actually power your network adapters down or back up in the background.** 
+## Dot Legend (Tray Icon)
 
-**Why do I need to accept the UAC?** 
-   > Windows requires admin permission to physically turn off your network hardware. 
+| Dot  | Meaning |
+|------|---------|
+| 🔴 Red | Network is OFF |
+| 🟡 Yellow | Network toggle or reset is in progress |
+| 🔵 Blue | Network is ON, no DNS server configured |
+| 🟢 Green | Network is ON, DNS is reachable |
+| ⚪ Grey | Network is ON, DNS is unreachable |
+
+## How to Use It
+
+1. **Find the Icon:** Look in your system tray (bottom right of your screen, next to the clock) for the little `^` arrow. Hit it and look for the network icon.
+2. **Left-click to Toggle:** Give the icon a single click.
+3. **Middle-click for Full Reset:** Middle-click the icon to run a full network reset (flush DNS, release, renew, winsock reset, IP reset).
+4. **Right-click for Menu:** Disable/Enable network, open Network Settings, or exit.
+5. **Approve the Prompt (on toggle/reset):** Windows will pop up a quick UAC screen asking for permission. Click **Yes**.
+
+   > **Why do I need to accept the UAC?**
    >
-   > This is a built-in security feature to stop rogue background apps from disconnecting you secretly.
+   > Windows requires admin permission to physically turn off your network hardware or reset your connection.
+   >
+   > This is a built-in security feature to stop rogue background apps from doing this secretly.
 
-## ✨ Why You'll Love It
-- **Instant Access:** Your network power switch is always exactly one click away.
-- **Native Look & Feel:** Uses official Windows system icons, so it blends perfectly into your taskbar.
-- **Smart & Safe:** Only toggles your actual, physical hardware. It completely ignores virtual networks (like WSL or VMs), so your local environments stay perfectly intact!
+6. **Configure DNS Monitoring:** In Windhawk mod settings, enter a DNS server IP (e.g. `8.8.8.8`) to enable reachability monitoring. The dot turns green when reachable, grey when not.
 
-## ⚠️ Known Issues
-- **The UAC Popup:** You will get a User Account Control prompt *every time* you use the toggle. While it adds an extra click, it's an unavoidable Windows security rule for turning physical hardware on and off.
-- **Icon Grouping on the Taskbar:** If you try to manually drag the icon out of the hidden `^` menu to drop it onto your main taskbar, Windows might get confused and group it with the main Windhawk app icon. this is still fully functional but showing 2 icons instead of 1.
+## Changelog
+
+### v2.0.0
+- **Complete rebuild.** Mod renamed to Net-Toggle.
+- New: **DNS Monitoring** — The icon monitors your connection and changes color if your internet drops out (configurable in Mod Settings).
+- New: **WiFi-style tray icon** with 5 color states (Red / Yellow / Blue / Green / Grey).
+- New: Middle-click → **Full Network Reset** (flush DNS, release/renew, winsock + IP reset).
+- New: Right-click context menu — toggle network, open Network Settings, or exit.
+- New: Donate button on the mod page.
+- Improved: Tray icon is now independent from the Windhawk app and no longer groups with it in the taskbar.
+- Improved: Tray icon persists reliably across Explorer restarts.
+- Improved: Icon stays in sync even if you disable your adapter directly in Windows Settings.
+- Fixed: Occasional hangs during network toggles or timeouts.
+- Fixed: Tray icon could show the wrong state if a toggle failed.
+
+### v1.0
+- Initial release.
 */
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <shobjidl.h>
+#include <propkey.h>
+#include <propidl.h>
+#include <iphlpapi.h>
+#include <ws2tcpip.h>
+#include <math.h>
 
 #define TRAY_ICON_ID 1
 #define WM_TRAY_CALLBACK (WM_USER + 1)
 #define WM_UPDATE_TRAY_STATE (WM_USER + 2)
+#define WM_UPDATE_DNS_STATE (WM_USER + 3)
+#define WM_SETTINGS_CHANGED (WM_USER + 4)
+#define WM_TRIGGER_PING (WM_USER + 5)
+#define DNS_PING_TIMER_ID 2
+#define DNS_RECOVERY_TIMER_ID 3
+
+// Stable GUID that gives our tray icon a process-independent identity.
+static const GUID NETTOGGLE_TRAY_GUID =
+    {0x246764CF, 0xF857, 0x4399, {0x8D, 0x3D, 0x22, 0x76, 0x1A, 0x6A, 0xBD, 0x95}};
 
 const DWORD CLICK_DEBOUNCE_MS = 2000;
 
 static volatile LONG g_isProcessingClick = 0;
 static volatile LONG g_trayIconInstalled = 0;
-static volatile LONG g_networkIsUp = 1; // 1 = ON, 0 = OFF
+static volatile LONG g_networkIsUp = 1;
 static HANDLE g_trayThread = nullptr;
-static HWND g_trayHwnd = nullptr;
+static volatile HWND g_trayHwnd = nullptr;
 static HINSTANCE g_hInstance = nullptr;
-static HICON g_iconEnabled = nullptr;
-static HICON g_iconDisabled = nullptr;
-static DWORD g_lastClickTime = 0;
+static volatile DWORD g_lastClickTime = 0;
 static UINT g_taskbarCreatedMsg = 0;
+static HANDLE g_activeWorkerThread = nullptr;
+
+// DNS monitoring
+static volatile DWORD g_dnsServerIp = 0;
+static DWORD g_pingIntervalMs = 30000;
+static volatile LONG g_dnsIsReachable = 0;
+
+// Network watch thread
+static HANDLE g_netWatchThread = nullptr;
+static HANDLE g_shutdownEvent = nullptr;
+
+// Current tray icon handle (destroy before replace)
+static HICON g_currentIcon = nullptr;
+
+// helpers
 
 void LogLastError(LPCWSTR context) {
     DWORD error = GetLastError();
     if (error == 0) return;
-    
+
     LPWSTR errorMsg = nullptr;
     if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                        nullptr, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
@@ -96,17 +156,16 @@ BOOL CheckActualNetworkState() {
     si.hStdError = stdoutWrite;
 
     BOOL isUp = TRUE;
-
-    // Use a mutable array for CreateProcessW to prevent Access Violations
     WCHAR cmdLine[] = L"powershell.exe -NoProfile -NonInteractive -Command \"(Get-NetAdapter -Physical | Where-Object Status -ne 'Disabled').Count\"";
 
-    if (CreateProcessW(L"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", 
+    if (CreateProcessW(nullptr,
                        cmdLine,
                        nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
         CloseHandle(stdoutWrite);
-        char buffer[128] = {0};
+        char buffer[128] = {};
         DWORD bytesRead;
         if (ReadFile(stdoutRead, buffer, sizeof(buffer) - 1, &bytesRead, nullptr) && bytesRead > 0) {
+            buffer[bytesRead] = 0;
             int count = atoi(buffer);
             isUp = (count > 0);
         }
@@ -118,7 +177,7 @@ BOOL CheckActualNetworkState() {
         CloseHandle(stdoutRead);
         CloseHandle(stdoutWrite);
     }
-    
+
     return isUp;
 }
 
@@ -160,7 +219,7 @@ BOOL RunPowerShellCommand(LPCWSTR psCommand, BOOL targetState) {
         return FALSE;
     }
 
-    DWORD waitResult = WaitForSingleObject(sei.hProcess, 20000);
+    DWORD waitResult = WaitForSingleObject(sei.hProcess, 60000);
     if (waitResult == WAIT_TIMEOUT) {
         Wh_Log(L"Process timed out, terminating");
         TerminateProcess(sei.hProcess, 1);
@@ -177,53 +236,394 @@ BOOL RunPowerShellCommand(LPCWSTR psCommand, BOOL targetState) {
 
     CloseHandle(sei.hProcess);
     Wh_Log(L"Process exited with code: %d", exitCode);
+    if (exitCode != 0) {
+        LONG revertState = targetState ? 0 : 1;
+        InterlockedExchange(&g_networkIsUp, revertState);
+        if (g_trayHwnd)
+            PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(revertState == 1), 0);
+    }
     return exitCode == 0;
 }
 
+// ==============================================================================
+// Feature B — ICMP DNS Ping
+// ==============================================================================
+
+BOOL PingIp(DWORD ipAddr) {
+    // Uses a TCP connect to port 53 instead of IcmpSendEcho.
+    // IcmpCreateFile fails with ERROR_INVALID_HANDLE (6) inside this process
+    // after Disable-NetAdapter removes all adapters from the IP stack — the ICMP
+    // kernel device path doesn't recover until the process restarts. Winsock TCP
+    // sockets are not affected by adapter disable/enable cycles.
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock == INVALID_SOCKET) {
+        Wh_Log(L"PingIp: socket() failed (%d)", WSAGetLastError());
+        return FALSE;
+    }
+
+    u_long nonBlocking = 1;
+    ioctlsocket(sock, FIONBIO, &nonBlocking);
+
+    sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = ipAddr;  // network byte order from InetPtonW
+    addr.sin_port = htons(53);
+
+    int connectResult = connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+    int connectErr = (connectResult == SOCKET_ERROR) ? WSAGetLastError() : 0;
+
+    BOOL reachable = FALSE;
+    if (connectResult == 0) {
+        reachable = TRUE;
+    } else if (connectErr == WSAEWOULDBLOCK || connectErr == WSAEINPROGRESS) {
+        fd_set writeSet, exceptSet;
+        FD_ZERO(&writeSet);
+        FD_ZERO(&exceptSet);
+        FD_SET(sock, &writeSet);
+        FD_SET(sock, &exceptSet);
+        TIMEVAL tv = {2, 500000};  // 2.5s
+        int sel = select(0, nullptr, &writeSet, &exceptSet, &tv);
+        if (sel > 0 && FD_ISSET(sock, &writeSet)) {
+            int sockErr = 0;
+            int optLen = sizeof(sockErr);
+            getsockopt(sock, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&sockErr), &optLen);
+            // CONNREFUSED means the host is up but port 53 closed (extremely unlikely for 8.8.8.8)
+            reachable = (sockErr == 0 || sockErr == WSAECONNREFUSED);
+        } else {
+            Wh_Log(L"PingIp: TCP:53 timed out or select error (%d)", WSAGetLastError());
+        }
+    } else {
+        Wh_Log(L"PingIp: connect() failed immediately (%d)", connectErr);
+    }
+
+    closesocket(sock);
+    return reachable;
+}
+
+// ==============================================================================
+// Feature C — Wifi-Shape Icon
+// ==============================================================================
+
+// Draws a wifi fan (3 arc bands + center dot) into a 32-bit pre-multiplied-alpha
+// DIB.  We work at 2× resolution then down-sample 2×2 → 1 for cheap anti-aliasing.
+//
+// Arc geometry: the fan is centred at the bottom-centre of the icon, spanning
+// ±65° either side of straight-up (i.e. the sweep covers 130° of arc).
+// Three rings at outer/mid/inner radii with a proportional pen width, plus a
+// small filled dot at the origin.
+
+static void DrawWifiIcon(DWORD* px, int W, int H, BYTE r, BYTE g, BYTE b) {
+    // Arc parameters (in icon-pixel units)
+    float cx = W * 0.5f;
+    float cy = H * 0.88f - 3.0f;   // origin sits near the bottom
+
+    float outerR = W * 0.598f;
+    float midR   = W * 0.403f;
+    float innerR = W * 0.221f;
+    float dotR   = W * 0.098f;
+    float penW   = W * 0.143f;  // arc stroke width
+
+    // Arc spans ±65° from straight-up (270° in standard coords)
+    const float PI = 3.14159265f;
+    float halfSweep = 65.0f * PI / 180.0f;
+    float baseAngle = 270.0f * PI / 180.0f;    // pointing up
+    float a0 = baseAngle - halfSweep;
+    float a1 = baseAngle + halfSweep;
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            float dx = x + 0.5f - cx;
+            float dy = y + 0.5f - cy;
+            float dist = sqrtf(dx * dx + dy * dy);
+
+            // Determine if pixel centre is on one of the three arc bands
+            bool onArc = false;
+            if (dist > dotR) {
+                float radii[3] = { outerR, midR, innerR };
+                for (int i = 0; i < 3; i++) {
+                    if (fabsf(dist - radii[i]) <= penW * 0.5f) {
+                        // Check angular range
+                        float angle = atan2f(dy, dx);
+                        // Normalise to [0, 2π)
+                        if (angle < 0) angle += 2.0f * PI;
+                        float a0n = a0, a1n = a1;
+                        if (a0n < 0) a0n += 2.0f * PI;
+                        if (a1n < 0) a1n += 2.0f * PI;
+                        bool inSweep = (a0n <= a1n)
+                            ? (angle >= a0n && angle <= a1n)
+                            : (angle >= a0n || angle <= a1n);
+                        if (inSweep) { onArc = true; break; }
+                    }
+                }
+            }
+
+            // Determine if pixel is in the centre dot
+            bool onDot = (dist <= dotR);
+
+            if (onArc || onDot) {
+                // Simple coverage fraction for the outermost ring edge (cheap AA)
+                float alpha = 1.0f;
+                if (onArc) {
+                    // Edge softening: ramp alpha over 1px at outer boundary
+                    float nearestR = 0;
+                    float radii[3] = { outerR, midR, innerR };
+                    float minDelta = 1e9f;
+                    for (int i = 0; i < 3; i++) {
+                        float d = fabsf(dist - radii[i]);
+                        if (d < minDelta) { minDelta = d; nearestR = radii[i]; }
+                    }
+                    float edge = fabsf(dist - nearestR) - (penW * 0.5f - 1.0f);
+                    if (edge > 0) alpha = 1.0f - edge;
+                    if (alpha < 0) alpha = 0;
+                }
+                DWORD a8 = (DWORD)(alpha * 255.0f + 0.5f);
+                if (a8 > 255) a8 = 255;
+                px[y * W + x] = (a8 << 24) | ((DWORD)r << 16) | ((DWORD)g << 8) | b;
+            }
+        }
+    }
+}
+
+HICON CreateColoredDotIcon(BOOL netUp, BOOL dnsUp, BOOL hasDns, BOOL pending) {
+    int cx = GetSystemMetrics(SM_CXSMICON);
+    int cy = GetSystemMetrics(SM_CYSMICON);
+
+    COLORREF iconColor;
+    if (pending)         iconColor = RGB(240, 180, 0);   // Yellow
+    else if (!netUp)     iconColor = RGB(220, 50,  50);  // Red
+    else if (!hasDns)    iconColor = RGB(70,  130, 255); // Blue
+    else if (dnsUp)      iconColor = RGB(60,  220, 60);  // Green
+    else                 iconColor = RGB(160, 160, 160); // Grey
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth       = cx;
+    bmi.bmiHeader.biHeight      = -cy;
+    bmi.bmiHeader.biPlanes      = 1;
+    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    HDC hdcScreen = GetDC(nullptr);
+    void* bits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, hdcScreen);
+    if (!hBmp) return nullptr;
+
+    if (bits) {
+        DWORD* pixels = (DWORD*)bits;
+        memset(pixels, 0, (size_t)cx * cy * 4);
+        DrawWifiIcon(pixels, cx, cy,
+                     GetRValue(iconColor), GetGValue(iconColor), GetBValue(iconColor));
+    }
+
+    HBITMAP hMask = CreateBitmap(cx, cy, 1, 1, nullptr);
+    if (hMask) {
+        HDC hdcMask = CreateCompatibleDC(nullptr);
+        HGDIOBJ hOld = SelectObject(hdcMask, hMask);
+        PatBlt(hdcMask, 0, 0, cx, cy, WHITENESS);
+        SelectObject(hdcMask, hOld);
+        DeleteDC(hdcMask);
+    }
+
+    ICONINFO ii = {};
+    ii.fIcon    = TRUE;
+    ii.hbmColor = hBmp;
+    ii.hbmMask  = hMask ? hMask : hBmp;
+    HICON hResult = CreateIconIndirect(&ii);
+
+    DeleteObject(hBmp);
+    if (hMask) DeleteObject(hMask);
+
+    return hResult;
+}
+
+// ==============================================================================
+// Tray Icon
+// ==============================================================================
+
+void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
+    BOOL dnsUp = (g_dnsIsReachable == 1);
+    BOOL hasDns = (g_dnsServerIp != 0);
+    BOOL pending = (g_isProcessingClick != 0);
+
+    HICON hNewIcon = CreateColoredDotIcon(enabled, dnsUp, hasDns, pending);
+    if (!hNewIcon) return;
+
+    // Destroy old icon to prevent handle leak
+    if (g_currentIcon) {
+        DestroyIcon(g_currentIcon);
+        g_currentIcon = nullptr;
+    }
+
+    NOTIFYICONDATAW nid = {sizeof(nid)};
+    nid.hWnd = hWnd;
+    nid.uID = TRAY_ICON_ID;
+    nid.uFlags = NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP | NIF_ICON;
+    nid.uCallbackMessage = WM_TRAY_CALLBACK;
+
+    if (g_isProcessingClick == 1) {
+        wsprintfW(nid.szTip, L"Net-Toggle: toggling\u2026");
+    } else if (g_isProcessingClick == 2) {
+        wsprintfW(nid.szTip, L"Net-Toggle: resetting\u2026");
+    } else if (enabled) {
+        if (!hasDns)
+            wsprintfW(nid.szTip, L"Net-Toggle: ON");
+        else if (dnsUp)
+            wsprintfW(nid.szTip, L"Net-Toggle: ON | DNS reachable");
+        else
+            wsprintfW(nid.szTip, L"Net-Toggle: ON | DNS unreachable");
+    } else {
+        wsprintfW(nid.szTip, L"Net-Toggle: OFF (click to enable)");
+    }
+
+    nid.hIcon = hNewIcon;
+    nid.uFlags |= NIF_GUID;
+    nid.guidItem = NETTOGGLE_TRAY_GUID;
+
+    if (isAdd) {
+        if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
+            LogLastError(L"Shell_NotifyIcon NIM_ADD");
+            DestroyIcon(hNewIcon);
+            return;
+        }
+        InterlockedExchange(&g_trayIconInstalled, 1);
+        NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
+        nidVer.hWnd = hWnd;
+        nidVer.uID = TRAY_ICON_ID;
+        nidVer.uFlags = NIF_GUID;
+        nidVer.guidItem = NETTOGGLE_TRAY_GUID;
+        nidVer.uVersion = NOTIFYICON_VERSION_4;
+        Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
+    } else {
+        if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+            LogLastError(L"Shell_NotifyIcon NIM_MODIFY");
+            DestroyIcon(hNewIcon);
+            return;
+        }
+    }
+
+    g_currentIcon = hNewIcon;
+}
+
+// ==============================================================================
+// Toggle Logic
+// ==============================================================================
+
 DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
+    CoInitialize(nullptr);
     BOOL enable = (BOOL)(UINT_PTR)lpParam;
-    
+
     Wh_Log(L"Toggling network adapters: %s", enable ? L"ENABLE" : L"DISABLE");
-    LPCWSTR command = enable 
+    LPCWSTR command = enable
         ? L"Get-NetAdapter -Physical | Enable-NetAdapter -Confirm:$false"
         : L"Get-NetAdapter -Physical | Disable-NetAdapter -Confirm:$false";
 
     BOOL success = RunPowerShellCommand(command, enable);
-    
+
     if (success) {
+        success = TRUE;
         Wh_Log(L"Network %s operation completed successfully", enable ? L"enable" : L"disable");
     } else {
         Wh_Log(L"Network toggle operation failed or cancelled");
+        success = FALSE;
     }
 
     InterlockedExchange(&g_isProcessingClick, 0);
+
+    if (g_trayHwnd) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(g_networkIsUp == 1), 0);
+        // After a successful enable the NetWatch poll fallback may miss the state
+        // change (g_networkIsUp was already pre-set to 1 by RunPowerShellCommand).
+        // Trigger a recovery ping explicitly so DNS state updates promptly.
+        if (success && enable && g_networkIsUp) {
+            PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
+        }
+    }
+    CoUninitialize();
     return 0;
 }
 
-void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
-    NOTIFYICONDATAW nid = {sizeof(nid)};
-    nid.hWnd = hWnd;
-    nid.uID = TRAY_ICON_ID;
-    nid.uFlags = NIF_MESSAGE | NIF_TIP | NIF_ICON;
-    nid.uCallbackMessage = WM_TRAY_CALLBACK;
-    wsprintfW(nid.szTip, enabled ? L"Network Toggle: ON (Click to disable)" : L"Network Toggle: OFF (Click to enable)");
-    nid.hIcon = enabled ? g_iconEnabled : g_iconDisabled;
-    
-    if (isAdd) {
-        if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
-            LogLastError(L"Shell_NotifyIcon NIM_ADD");
-        } else {
-            InterlockedExchange(&g_trayIconInstalled, 1);
+DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
+    CoInitialize(nullptr);
+    Wh_Log(L"Executing full network reset");
+
+    // Destructive ops run FIRST so that ipconfig /renew is the last action.
+    // This ensures the final addr-change notification (and recovery ping) fires
+    // after the adapter has a fresh DHCP lease, not after the stack reset.
+    WCHAR cmdArgs[] = L"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"netsh winsock reset; netsh int ip reset; ipconfig /flushdns; ipconfig /release; ipconfig /renew; ipconfig /registerdns\"";
+
+    SHELLEXECUTEINFOW sei = {sizeof(sei)};
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NO_CONSOLE;
+    sei.hwnd = nullptr;
+    sei.lpVerb = L"runas";
+    sei.lpFile = L"powershell.exe";
+    sei.lpParameters = cmdArgs;
+    sei.nShow = SW_HIDE;
+
+    BOOL resetOk = FALSE;
+    if (ShellExecuteExW(&sei)) {
+        if (sei.hProcess) {
+            WaitForSingleObject(sei.hProcess, 60000);
+            CloseHandle(sei.hProcess);
         }
+        Wh_Log(L"Network reset completed");
+        resetOk = TRUE;
     } else {
-        if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
-            LogLastError(L"Shell_NotifyIcon NIM_MODIFY");
+        Wh_Log(L"Network reset failed to start or was cancelled");
+    }
+
+    InterlockedExchange(&g_isProcessingClick, 0);
+    if (g_trayHwnd) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(g_networkIsUp == 1), 0);
+        if (resetOk && g_networkIsUp) {
+            // Belt-and-suspenders: directly trigger a post-reset recovery ping
+            // with wParam=1 so the handler uses a 12s settle (longer than the
+            // normal 6s used for a simple re-enable) to let DHCP and routing
+            // fully stabilise before we ping.
+            PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 1, 0);
         }
+    }
+    CoUninitialize();
+    return 0;
+}
+
+void ProcessNetworkReset() {
+    LONG prev = InterlockedCompareExchange(&g_isProcessingClick, 2, 0);
+    if (prev != 0) {
+        Wh_Log(L"Already processing a click, ignoring reset request");
+        return;
+    }
+
+    DWORD now = GetTickCount();
+    if (now - g_lastClickTime < CLICK_DEBOUNCE_MS) {
+        Wh_Log(L"Click debounced (cooldown active)");
+        InterlockedExchange(&g_isProcessingClick, 0);
+        return;
+    }
+    g_lastClickTime = now;
+
+    Wh_Log(L"Processing network reset (Middle Click)");
+
+    // Show yellow immediately
+    if (g_trayHwnd) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)g_networkIsUp, 0);
+    }
+
+    if (g_activeWorkerThread) {
+        CloseHandle(g_activeWorkerThread);
+        g_activeWorkerThread = nullptr;
+    }
+    
+    DWORD threadId;
+    g_activeWorkerThread = CreateThread(nullptr, 0, ResetWorkerThreadProc, nullptr, 0, &threadId);
+    if (!g_activeWorkerThread) {
+        InterlockedExchange(&g_isProcessingClick, 0);
     }
 }
 
 void ProcessTrayClick() {
-    if (InterlockedExchange(&g_isProcessingClick, 1) != 0) {
+    LONG prev = InterlockedCompareExchange(&g_isProcessingClick, 1, 0);
+    if (prev != 0) {
         Wh_Log(L"Already processing a click, ignoring");
         return;
     }
@@ -236,32 +636,146 @@ void ProcessTrayClick() {
     }
     g_lastClickTime = now;
 
-    BOOL targetState = (g_networkIsUp == 0); 
+    BOOL targetState = (g_networkIsUp == 0);
     Wh_Log(L"Processing network toggle click. Target state: %s", targetState ? L"ON" : L"OFF");
 
+    // Show yellow immediately
+    if (g_trayHwnd) {
+        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)g_networkIsUp, 0);
+    }
+
+    if (g_activeWorkerThread) {
+        CloseHandle(g_activeWorkerThread);
+        g_activeWorkerThread = nullptr;
+    }
+
     DWORD threadId;
-    HANDLE hWorker = CreateThread(nullptr, 0, WorkerThreadProc, (LPVOID)(UINT_PTR)targetState, 0, &threadId);
-    if (hWorker) {
-        CloseHandle(hWorker); 
-    } else {
-        InterlockedExchange(&g_isProcessingClick, 0); 
+    g_activeWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, (LPVOID)(UINT_PTR)targetState, 0, &threadId);
+    if (!g_activeWorkerThread) {
+        InterlockedExchange(&g_isProcessingClick, 0);
     }
 }
 
+// ==============================================================================
+// DNS Ping Handler
+// ==============================================================================
+
+void OnDnsPingTimer(HWND hWnd) {
+    if (g_dnsServerIp == 0) return;
+    
+    // Skip pings if we know the network is OFF
+    if (g_networkIsUp == 0) {
+        Wh_Log(L"Network is OFF, skipping DNS ping");
+        InterlockedExchange(&g_dnsIsReachable, 0);
+        PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+        return;
+    }
+    
+    Wh_Log(L"Triggering DNS reachability check...");
+    BOOL reachable = PingIp(g_dnsServerIp);
+    InterlockedExchange(&g_dnsIsReachable, reachable ? 1 : 0);
+    
+    PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, (WPARAM)g_networkIsUp, 0);
+}
+
+// ==============================================================================
+// Feature D — Right-Click Context Menu
+// ==============================================================================
+
+void ShowContextMenu(HWND hWnd) {
+    POINT pt;
+    GetCursorPos(&pt);
+    SetForegroundWindow(hWnd);
+    HMENU hMenu = CreatePopupMenu();
+    BOOL netUp = (g_networkIsUp == 1);
+    AppendMenuW(hMenu, MF_STRING, 1, netUp ? L"Disable Network" : L"Enable Network");
+    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(hMenu, MF_STRING, 2, L"Open Network Settings");
+    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(hMenu, MF_STRING, 3, L"Exit");
+    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                             pt.x, pt.y, 0, hWnd, nullptr);
+    DestroyMenu(hMenu);
+    PostMessageW(hWnd, WM_NULL, 0, 0);
+    switch (cmd) {
+        case 1: ProcessTrayClick(); break;
+        case 2: ShellExecuteW(nullptr, L"open", L"ms-settings:network",
+                              nullptr, nullptr, SW_SHOW); break;
+        case 3: PostMessageW(hWnd, WM_CLOSE, 0, 0); break;
+    }
+}
+
+// ==============================================================================
+// Tray Window
+// ==============================================================================
+
 LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_TRAY_CALLBACK) {
-        if (lParam == WM_LBUTTONUP) {
+        if (LOWORD(lParam) == WM_LBUTTONUP) {
             ProcessTrayClick();
+        } else if (LOWORD(lParam) == WM_RBUTTONUP) {
+            ShowContextMenu(hWnd);
+        } else if (LOWORD(lParam) == WM_MBUTTONUP) {
+            ProcessNetworkReset();
         }
         return 0;
     } else if (msg == WM_UPDATE_TRAY_STATE) {
         AddOrUpdateTrayIcon(hWnd, (BOOL)wParam, FALSE);
         return 0;
+    } else if (msg == WM_UPDATE_DNS_STATE) {
+        AddOrUpdateTrayIcon(hWnd, (BOOL)wParam, FALSE);
+        return 0;
+    } else if (msg == WM_TRIGGER_PING) {
+        // wParam=0: normal re-enable — 6s settle for DHCP/init.
+        // wParam=1: post-full-reset — 12s settle; stack + routing need more time.
+        UINT settleMs = (wParam == 1) ? 12000 : 6000;
+        SetTimer(hWnd, DNS_RECOVERY_TIMER_ID, settleMs, nullptr);
+        return 0;
+    } else if (msg == WM_SETTINGS_CHANGED) {
+        // Re-read settings on the tray thread
+        PCWSTR pDnsIp = Wh_GetStringSetting(L"dnsServer");
+        DWORD newIp = 0;
+        if (pDnsIp && pDnsIp[0]) {
+            InetPtonW(AF_INET, pDnsIp, &newIp);
+        }
+        if (pDnsIp) Wh_FreeStringSetting(pDnsIp);
+        
+        InterlockedExchange(&g_dnsServerIp, newIp);
+        int intervalSec = Wh_GetIntSetting(L"pingInterval");
+        if (intervalSec < 5) intervalSec = 5;
+        g_pingIntervalMs = (DWORD)intervalSec * 1000;
+
+        KillTimer(hWnd, DNS_PING_TIMER_ID);
+        if (newIp != 0) {
+            SetTimer(hWnd, DNS_PING_TIMER_ID, g_pingIntervalMs, nullptr);
+            // Immediate first ping
+            OnDnsPingTimer(hWnd);
+        }
+        AddOrUpdateTrayIcon(hWnd, (BOOL)(g_networkIsUp == 1), FALSE);
+        return 0;
+    } else if (msg == WM_TIMER) {
+        if (wParam == DNS_PING_TIMER_ID) {
+            OnDnsPingTimer(hWnd);
+        } else if (wParam == DNS_RECOVERY_TIMER_ID) {
+            KillTimer(hWnd, DNS_RECOVERY_TIMER_ID);
+            OnDnsPingTimer(hWnd);
+        }
+        return 0;
+    } else if (msg == WM_CLOSE) {
+        KillTimer(hWnd, DNS_PING_TIMER_ID);
+        KillTimer(hWnd, DNS_RECOVERY_TIMER_ID);
+        NOTIFYICONDATAW nid = {sizeof(nid)};
+        nid.hWnd = hWnd;
+        nid.uID = TRAY_ICON_ID;
+        nid.uFlags = NIF_GUID;
+        nid.guidItem = NETTOGGLE_TRAY_GUID;
+        Shell_NotifyIconW(NIM_DELETE, &nid);
+        DestroyWindow(hWnd);
+        return 0;
     } else if (msg == WM_DESTROY) {
         PostQuitMessage(0);
         return 0;
     } else if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
-        // Explorer restarted! Re-add the tray icon automatically.
         Wh_Log(L"Explorer restarted. Re-adding tray icon.");
         AddOrUpdateTrayIcon(hWnd, g_networkIsUp, TRUE);
         return 0;
@@ -269,30 +783,109 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
+// ==============================================================================
+// Feature G — Event-Driven Adapter Watch Thread
+// ==============================================================================
+
+DWORD WINAPI NetWatchThreadProc(LPVOID) {
+    Wh_Log(L"NetWatch thread started");
+    HANDLE hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!hEvent) {
+        Wh_Log(L"NetWatch: CreateEvent failed");
+        return 1;
+    }
+
+    while (true) {
+        HANDLE notifyHandle = nullptr;
+        OVERLAPPED ov = {};
+        ov.hEvent = hEvent;
+
+        DWORD nacRet = NotifyAddrChange(&notifyHandle, &ov);
+        if (nacRet != ERROR_IO_PENDING && nacRet != NO_ERROR) {
+            Wh_Log(L"NetWatch: NotifyAddrChange failed (%d)", nacRet);
+            // Fallback: poll every 15 seconds instead
+            while (true) {
+                DWORD pollWait = WaitForSingleObject(g_shutdownEvent, 15000);
+                if (pollWait == WAIT_OBJECT_0) {
+                    CloseHandle(hEvent);
+                    return 0;
+                }
+                // Skip poll while a toggle/reset is in flight — CheckActualNetworkState
+                // can catch adapters in a transitional state and overwrite g_networkIsUp,
+                // causing Yellow → Red flicker when the adapters are still coming up.
+                if (g_isProcessingClick != 0) continue;
+                // Poll adapter state
+                BOOL newState = CheckActualNetworkState();
+                LONG oldState = g_networkIsUp;
+                InterlockedExchange(&g_networkIsUp, newState ? 1 : 0);
+                if (newState != (oldState == 1) && g_trayHwnd) {
+                    PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)newState, 0);
+                    if (newState) {
+                        PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
+                    }
+                }
+            }
+        }
+
+        HANDLE waits[2] = { hEvent, g_shutdownEvent };
+        DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+
+        if (r == WAIT_OBJECT_0) {
+            // Adapter state changed externally
+            CloseHandle(notifyHandle);
+            BOOL newState = CheckActualNetworkState();
+            InterlockedExchange(&g_networkIsUp, newState ? 1 : 0);
+            if (g_trayHwnd) {
+                PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)newState, 0);
+                if (newState) {
+                    // Send message to trigger a recovery ping
+                    PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
+                }
+            }
+        } else {
+            // Shutdown signal
+            if (notifyHandle) {
+                CancelIPChangeNotify(&ov);
+                // The handle is automatically closed by the system, no need to CloseHandle
+            }
+            break;
+        }
+    }
+
+    CloseHandle(hEvent);
+    Wh_Log(L"NetWatch thread exiting");
+    return 0;
+}
+
+// ==============================================================================
+// Tray Thread
+// ==============================================================================
+
 DWORD WINAPI TrayThreadProc(LPVOID) {
     Wh_Log(L"Tray thread started");
 
+    CoInitialize(nullptr);
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 
     BOOL initialState = CheckActualNetworkState();
     InterlockedExchange(&g_networkIsUp, initialState ? 1 : 0);
 
-    WNDCLASSW wc = {0};
+    WNDCLASSW wc = {};
     wc.lpfnWndProc = TrayWndProc;
     wc.hInstance = g_hInstance;
-    wc.lpszClassName = L"NetworkToggleWindowClass";
-    wc.hIcon = initialState ? g_iconEnabled : g_iconDisabled;
+    wc.lpszClassName = L"NetToggleWindowClass";
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
 
     if (!RegisterClassW(&wc)) {
         LogLastError(L"RegisterClassW");
+        CoUninitialize();
         return 1;
     }
 
     HWND hWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName,
-        L"Network Toggle",
+        L"Net-Toggle",
         WS_POPUP,
         0, 0, 1, 1,
         nullptr, nullptr, g_hInstance, nullptr
@@ -301,13 +894,37 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     if (!hWnd) {
         LogLastError(L"CreateWindowExW");
         UnregisterClassW(wc.lpszClassName, g_hInstance);
+        CoUninitialize();
         return 1;
     }
 
     g_trayHwnd = hWnd;
 
+    // Unique AUMID so the OS doesn't group this icon with Windhawk's main window.
+    IPropertyStore* pps = nullptr;
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&pps)))) {
+        PROPVARIANT var;
+        PropVariantInit(&var);
+        var.vt = VT_LPWSTR;
+        var.pwszVal = (LPWSTR)CoTaskMemAlloc(MAX_PATH * sizeof(WCHAR));
+        if (var.pwszVal) {
+            lstrcpyW(var.pwszVal, L"BlackPaw.NetToggle");
+            pps->SetValue(PKEY_AppUserModel_ID, var);
+            CoTaskMemFree(var.pwszVal);
+        }
+        pps->Commit();
+        pps->Release();
+    }
+
     AddOrUpdateTrayIcon(hWnd, initialState, TRUE);
-    Wh_Log(L"Tray icon installed successfully. Initial state: %s", initialState ? L"ON" : L"OFF");
+    Wh_Log(L"Tray icon installed. Initial state: %s", initialState ? L"ON" : L"OFF");
+
+    // Start DNS ping timer if configured
+    if (g_dnsServerIp != 0) {
+        SetTimer(hWnd, DNS_PING_TIMER_ID, g_pingIntervalMs, nullptr);
+        // Immediate first ping
+        OnDnsPingTimer(hWnd);
+    }
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -317,26 +934,31 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     Wh_Log(L"Tray message loop ending");
 
-    NOTIFYICONDATAW nid = {sizeof(nid)};
-    nid.hWnd = hWnd;
-    nid.uID = TRAY_ICON_ID;
-    Shell_NotifyIconW(NIM_DELETE, &nid);
-    
-    DestroyWindow(hWnd);
+    HICON oldIcon = (HICON)InterlockedExchangePointer((PVOID*)&g_currentIcon, nullptr);
+    if (oldIcon) {
+        DestroyIcon(oldIcon);
+    }
+
     UnregisterClassW(wc.lpszClassName, g_hInstance);
     InterlockedExchange(&g_trayIconInstalled, 0);
     g_trayHwnd = nullptr;
+    CoUninitialize();
 
     return 0;
 }
 
-
 // ==============================================================================
-// TOOL MOD IMPLEMENTATION 
+// TOOL MOD IMPLEMENTATION
 // ==============================================================================
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Network Toggle Mod Init");
+    Wh_Log(L"Net-Toggle Mod Init");
+
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        Wh_Log(L"WSAStartup failed");
+        return FALSE;
+    }
 
     g_hInstance = GetModuleHandle(nullptr);
     if (!g_hInstance) {
@@ -344,76 +966,118 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
 
-    ExtractIconExW(L"pnidui.dll", 4, nullptr, &g_iconEnabled, 1);  
-    ExtractIconExW(L"pnidui.dll", 5, nullptr, &g_iconDisabled, 1); 
+    Wh_Log(L"No system icon extraction needed — using colored dot icons");
 
-    if (!g_iconEnabled) ExtractIconExW(L"shell32.dll", 9, nullptr, &g_iconEnabled, 1);
-    if (!g_iconDisabled) ExtractIconExW(L"shell32.dll", 131, nullptr, &g_iconDisabled, 1);
+    // Read initial settings
+    PCWSTR pDnsIp = Wh_GetStringSetting(L"dnsServer");
+    if (pDnsIp && pDnsIp[0]) {
+        DWORD newIp = 0;
+        InetPtonW(AF_INET, pDnsIp, &newIp);
+        InterlockedExchange(&g_dnsServerIp, newIp);
+        Wh_Log(L"DNS server configured: %s", pDnsIp);
+    } else {
+        g_dnsServerIp = 0;
+        Wh_Log(L"No DNS server configured — DNS monitoring disabled");
+    }
+    if (pDnsIp) Wh_FreeStringSetting(pDnsIp);
 
-    Wh_Log(L"Icons loaded successfully.");
+    int intervalSec = Wh_GetIntSetting(L"pingInterval");
+    if (intervalSec < 5) intervalSec = 5;
+    g_pingIntervalMs = (DWORD)intervalSec * 1000;
 
-    DWORD threadId = 0;
-    // Removed CREATE_SUSPENDED and SetThreadPriority per developer feedback
-    g_trayThread = CreateThread(nullptr, 0, TrayThreadProc, nullptr, 0, &threadId);
-
-    if (!g_trayThread) {
-        LogLastError(L"CreateThread");
+    // Create shutdown event (manual-reset, initially non-signalled)
+    g_shutdownEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_shutdownEvent) {
+        LogLastError(L"CreateEvent(shutdownEvent)");
         return FALSE;
+    }
+
+    // Start tray thread
+    DWORD threadId = 0;
+    g_trayThread = CreateThread(nullptr, 0, TrayThreadProc, nullptr, 0, &threadId);
+    if (!g_trayThread) {
+        LogLastError(L"CreateThread(tray)");
+        CloseHandle(g_shutdownEvent);
+        g_shutdownEvent = nullptr;
+        return FALSE;
+    }
+
+    // Start net watch thread
+    g_netWatchThread = CreateThread(nullptr, 0, NetWatchThreadProc, nullptr, 0, &threadId);
+    if (!g_netWatchThread) {
+        LogLastError(L"CreateThread(netWatch)");
+        // Non-fatal — notify watch is a best-effort feature
+        g_netWatchThread = nullptr;
     }
 
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
-    // Empty, but required to exist for the boilerplate compiler.
+    if (g_trayHwnd) {
+        PostMessageW(g_trayHwnd, WM_SETTINGS_CHANGED, 0, 0);
+    }
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"Network Toggle Mod Uninit");
+    Wh_Log(L"Net-Toggle Mod Uninit");
 
-    if (g_trayHwnd) {
-        PostMessageW(g_trayHwnd, WM_DESTROY, 0, 0);
+    // Step 1: signal shutdown
+    if (g_shutdownEvent) {
+        SetEvent(g_shutdownEvent);
     }
 
-    if (g_trayThread) {
-        Wh_Log(L"Waiting for tray thread to exit...");
-        
-        DWORD waitResult = WaitForSingleObject(g_trayThread, 5000);
-        if (waitResult == WAIT_TIMEOUT) {
-            Wh_Log(L"Thread didn't exit in time, terminating");
-            TerminateThread(g_trayThread, 1);
-        }
+    // Step 2: close tray window (triggers PostQuitMessage)
+    if (g_trayHwnd) {
+        PostMessageW(g_trayHwnd, WM_CLOSE, 0, 0);
+    }
 
+    // Step 3: wait for threads
+    HANDLE waitThreads[3] = {};
+    DWORD waitCount = 0;
+    if (g_trayThread) waitThreads[waitCount++] = g_trayThread;
+    if (g_netWatchThread) waitThreads[waitCount++] = g_netWatchThread;
+    if (g_activeWorkerThread) waitThreads[waitCount++] = g_activeWorkerThread;
+
+    if (waitCount > 0) {
+        Wh_Log(L"Waiting for %d threads to exit...", waitCount);
+        DWORD waitResult = WaitForMultipleObjects(waitCount, waitThreads, TRUE, 5000);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"Threads did not exit in time; ExitProcess will clean up");
+        }
+    }
+
+    // Step 4: cleanup handles
+    if (g_trayThread) {
         CloseHandle(g_trayThread);
         g_trayThread = nullptr;
     }
-
-    if (g_iconEnabled) {
-        DestroyIcon(g_iconEnabled);
-        g_iconEnabled = nullptr;
+    if (g_netWatchThread) {
+        CloseHandle(g_netWatchThread);
+        g_netWatchThread = nullptr;
     }
-    if (g_iconDisabled) {
-        DestroyIcon(g_iconDisabled);
-        g_iconDisabled = nullptr;
+    if (g_shutdownEvent) {
+        CloseHandle(g_shutdownEvent);
+        g_shutdownEvent = nullptr;
+    }
+    if (g_activeWorkerThread) {
+        CloseHandle(g_activeWorkerThread);
+        g_activeWorkerThread = nullptr;
     }
 
-    Wh_Log(L"Network Toggle Mod Uninit complete");
+    // Step 5: destroy current icon safely
+    HICON oldIcon = (HICON)InterlockedExchangePointer((PVOID*)&g_currentIcon, nullptr);
+    if (oldIcon) {
+        DestroyIcon(oldIcon);
+    }
+
+    WSACleanup();
+    Wh_Log(L"Net-Toggle Mod Uninit complete");
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
+// ==============================================================================
+// Windhawk tool mod boilerplate
+// ==============================================================================
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -434,7 +1098,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -467,7 +1131,7 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -508,8 +1172,8 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileNameW(nullptr, currentProcessPath,
+                               ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -522,9 +1186,9 @@ void Wh_ModAfterInit() {
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
+        kernelModule = GetModuleHandleW(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
@@ -547,8 +1211,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
+    STARTUPINFOW si{
+        .cb = sizeof(STARTUPINFOW),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
