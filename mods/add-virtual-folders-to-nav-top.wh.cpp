@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.6
+// @version         1.2.7
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -1796,23 +1796,9 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                     if ((isHome && g_settings.items[NAV_HOME].hide) ||
                         (isGallery && g_settings.items[NAV_GALLERY].hide))
                     {
-                        bool nearOurSection = false;
-                        HTREEITEM hPrev = hNew;
-                        for (int walk = 0; walk < 6 && hPrev; walk++)
-                        {
-                            hPrev = (HTREEITEM)SendMessageW(hWnd, TVM_GETNEXTITEM, TVGN_PREVIOUS, (LPARAM)hPrev);
-                            if (hPrev && IsOurSection(*ts, hPrev))
-                            {
-                                nearOurSection = true;
-                                break;
-                            }
-                        }
-                        if (nearOurSection)
-                        {
-                            ts->pendingWork |= WORK_HG_CLEANUP;
-                            Wh_Log(L"[INSERT] '%s' item=%04X tree=%04X",
-                                   itemText, PTR4(hNew), PTR4(hWnd));
-                        }
+                        ts->pendingWork |= WORK_HG_CLEANUP;
+                        Wh_Log(L"[INSERT] '%s' item=%04X tree=%04X",
+                               itemText, PTR4(hNew), PTR4(hWnd));
                     }
                     bool hasOurItems = false;
                     for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
