@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-03T08:07:39.000Z</updated>
+    <updated>2026-06-04T11:19:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Open in Admin Terminal 1.15]]></title>
+        <id>https://windhawk.net/mods/open-in-admin-terminal#e2b57e7a9131fffb4338dce9a9fb61daae8c85d6</id>
+        <link href="https://windhawk.net/mods/open-in-admin-terminal"/>
+        <updated>2026-06-04T11:19:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="openinadminterminal">Open in Admin Terminal</h1>
+<p><strong>TL;DR:</strong> Right-click any folder or drive in File Explorer and open an elevated terminal there — no more navigating after the fact.</p>
+<h2 id="withthismodyoucan">With this mod you can:</h2>
+<ul>
+<li>Right-click a folder background and open an admin terminal in that location</li>
+<li>Right-click a folder item and open an admin terminal inside it</li>
+<li>Right-click a drive and open an admin terminal at its root</li>
+<li>Optionally show the entry when right-clicking filesystem folders and drives in the navigation pane and Quick access</li>
+<li>Choose your preferred terminal: Auto, Windows Terminal, PowerShell 7, Windows PowerShell, Command Prompt, WSL, Git Bash, WezTerm, Alacritty, ConEmu, or a custom command</li>
+<li>Customize the context menu label, or let the mod use a smart default based on your terminal choice</li>
+<li>Optionally append the terminal name to a custom label (e.g. "Open elevated (Windows Terminal)")</li>
+</ul>
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/qEgGpvc.gif" alt="Normal usage — right-click folder background or folder item to open elevated Windows Terminal" /></p>
+<p><em>Right-clicking a folder item to open an elevated terminal in that location (Windows Terminal)</em></p>
+<p><img src="https://i.imgur.com/HziEs16.png" alt="Context menu with Windows Terminal option" /> <img src="https://i.imgur.com/CCE3vlP.png" alt="Context menu with PowerShell 7 option" /></p>
+<p><img src="https://i.imgur.com/8KgCdju.gif" alt="Mod settings showcase" /></p>
+<p><em>Settings panel — choose terminal, customize label, toggle terminal name appending</em></p>
+<p>Screenshots may show earlier builds, but current releases use runtime classic-menu injection. The mod does not write Explorer context menu entries to the registry.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>On Windows 11, Explorer may place this entry under <code>Show more options</code> depending on your context menu setup.</li>
+<li>The entry is injected only while Explorer's classic menu is open; disabling the mod leaves no registry cleanup behind.</li>
+<li>The mod intentionally targets filesystem folders and drive roots only, including optional navigation pane and Quick access support.</li>
+<li>Auto chooses Windows Terminal, PowerShell 7, Windows PowerShell, then Command Prompt. If another built-in preset is unavailable, the mod falls back to Auto instead of hiding the entry.</li>
+<li>Diagnostics use Windhawk's built-in logging controls.</li>
+</ul>
+<h2 id="versionlog">Version log</h2>
+<ul>
+<li>1.15: Added optional navigation pane and Quick access support for filesystem folders and drives.</li>
+<li>1.14: Added support for Desktop context menu targets.</li>
+<li>1.13: Fixed elevated terminal launches for folder paths containing spaces.</li>
+<li>1.12: Added Auto fallback and WSL, Git Bash, WezTerm, Alacritty, and ConEmu terminal presets.</li>
+<li>1.11: Fixed Windows Terminal menu icon lookup when wt.exe is an app execution alias.</li>
+<li>1.10: Reduced Explorer menu-open work by limiting selection path reads and caching terminal icon lookup successes and failures.</li>
+<li>1.9: Added quiet-by-default debug logging, improved menu placement, tightened filesystem target eligibility, and refreshed docs for classic-menu runtime injection.</li>
+<li>1.8: Switched to direct Explorer classic-menu injection with no persistent registry writes.</li>
+</ul>]]></content>
+        <author>
+            <name>aimagist</name>
+            <uri>https://github.com/aimagist</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Context Menu Items 1.11.0]]></title>
         <id>https://windhawk.net/mods/remove-context-menu-items#5183328f1bd44e572e823ad342b948a2025c253e</id>
@@ -504,49 +552,6 @@ IMEs to their native mode. Best experience when used together.</p>
         <author>
             <name>ZeonXr</name>
             <uri>https://github.com/ZeonXr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Block SMB Quick Access 1.2]]></title>
-        <id>https://windhawk.net/mods/block-smb-quick-access#ab9754b6038bca2df2ffd75fc3f8f13e3ac15359</id>
-        <link href="https://windhawk.net/mods/block-smb-quick-access"/>
-        <updated>2026-05-30T14:11:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="blocksmbquickaccess">Block SMB Quick Access</h1>
-<p>Prevents SMB/UNC network paths (<code>\\server\share</code>) from being added to Quick Access
-in Windows Explorer. Local paths continue to work normally.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Selective blocking</strong>: Only blocks SMB/UNC network paths, local paths work normally</li>
-<li><strong>Comprehensive SHARD support</strong>: Handles all SHARD types (PATHA, PATHW, PIDL, SHELLITEM, LINK, APPIDINFO, APPIDINFOIDLIST, APPIDINFOLINK)</li>
-<li><strong>UNC priority</strong>: Uses <code>SLGP_UNCPRIORITY</code> to correctly detect mapped drive letters</li>
-<li><strong>Silent operation</strong>: Runs in background without UI</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks the <code>SHAddToRecentDocs</code> function in <code>shell32.dll</code>. When Explorer calls
-this function to add a file to Quick Access, the hook checks if the path is a UNC
-network path (starts with <code>\\</code>). If it is, the call is silently dropped. Otherwise,
-the original function is called normally.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 10 or Windows 11 (64-bit)</li>
-<li>Windhawk 1.4 or newer</li>
-</ul>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Does not block paths added via other mechanisms (e.g., registry manipulation)</li>
-<li>Some virtual folder PIDLs may not resolve to paths and will be allowed through</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If the mod doesn't seem to work:</p>
-<ol>
-<li>Enable debug logging in Windhawk settings (Settings &gt; Advanced &gt; Debug logging)</li>
-<li>Check Windhawk debug logs for <code>[NOSMB]</code> entries</li>
-<li>Verify the mod is enabled for explorer.exe in Windhawk settings</li>
-<li>Restart Explorer or log out/in after enabling the mod</li>
-</ol>]]></content>
-        <author>
-            <name>Townrain</name>
-            <uri>https://github.com/Townrain</uri>
         </author>
     </entry>
 </feed>

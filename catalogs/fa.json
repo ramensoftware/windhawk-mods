@@ -8006,6 +8006,35 @@
                 "version": "2.0"
             }
         },
+        "open-in-admin-terminal": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780571943000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780571943000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aimagist",
+                "compilerOptions": "-lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lgdi32",
+                "description": "Adds an Explorer classic context menu entry to open an elevated terminal in the current or selected folder.",
+                "github": "https://github.com/aimagist",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "MIT",
+                "name": "Open in Admin Terminal",
+                "version": "1.15"
+            }
+        },
         "osu-tray-profile": {
             "details": {
                 "defaultSorting": 315,

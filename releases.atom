@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-03T07:34:30.000Z</updated>
+    <updated>2026-06-04T11:19:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Open in Admin Terminal 1.15]]></title>
+        <id>https://windhawk.net/mods/open-in-admin-terminal#e2b57e7a9131fffb4338dce9a9fb61daae8c85d6</id>
+        <link href="https://windhawk.net/mods/open-in-admin-terminal"/>
+        <updated>2026-06-04T11:19:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="openinadminterminal">Open in Admin Terminal</h1>
+<p><strong>TL;DR:</strong> Right-click any folder or drive in File Explorer and open an elevated terminal there — no more navigating after the fact.</p>
+<h2 id="withthismodyoucan">With this mod you can:</h2>
+<ul>
+<li>Right-click a folder background and open an admin terminal in that location</li>
+<li>Right-click a folder item and open an admin terminal inside it</li>
+<li>Right-click a drive and open an admin terminal at its root</li>
+<li>Optionally show the entry when right-clicking filesystem folders and drives in the navigation pane and Quick access</li>
+<li>Choose your preferred terminal: Auto, Windows Terminal, PowerShell 7, Windows PowerShell, Command Prompt, WSL, Git Bash, WezTerm, Alacritty, ConEmu, or a custom command</li>
+<li>Customize the context menu label, or let the mod use a smart default based on your terminal choice</li>
+<li>Optionally append the terminal name to a custom label (e.g. "Open elevated (Windows Terminal)")</li>
+</ul>
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/qEgGpvc.gif" alt="Normal usage — right-click folder background or folder item to open elevated Windows Terminal" /></p>
+<p><em>Right-clicking a folder item to open an elevated terminal in that location (Windows Terminal)</em></p>
+<p><img src="https://i.imgur.com/HziEs16.png" alt="Context menu with Windows Terminal option" /> <img src="https://i.imgur.com/CCE3vlP.png" alt="Context menu with PowerShell 7 option" /></p>
+<p><img src="https://i.imgur.com/8KgCdju.gif" alt="Mod settings showcase" /></p>
+<p><em>Settings panel — choose terminal, customize label, toggle terminal name appending</em></p>
+<p>Screenshots may show earlier builds, but current releases use runtime classic-menu injection. The mod does not write Explorer context menu entries to the registry.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>On Windows 11, Explorer may place this entry under <code>Show more options</code> depending on your context menu setup.</li>
+<li>The entry is injected only while Explorer's classic menu is open; disabling the mod leaves no registry cleanup behind.</li>
+<li>The mod intentionally targets filesystem folders and drive roots only, including optional navigation pane and Quick access support.</li>
+<li>Auto chooses Windows Terminal, PowerShell 7, Windows PowerShell, then Command Prompt. If another built-in preset is unavailable, the mod falls back to Auto instead of hiding the entry.</li>
+<li>Diagnostics use Windhawk's built-in logging controls.</li>
+</ul>
+<h2 id="versionlog">Version log</h2>
+<ul>
+<li>1.15: Added optional navigation pane and Quick access support for filesystem folders and drives.</li>
+<li>1.14: Added support for Desktop context menu targets.</li>
+<li>1.13: Fixed elevated terminal launches for folder paths containing spaces.</li>
+<li>1.12: Added Auto fallback and WSL, Git Bash, WezTerm, Alacritty, and ConEmu terminal presets.</li>
+<li>1.11: Fixed Windows Terminal menu icon lookup when wt.exe is an app execution alias.</li>
+<li>1.10: Reduced Explorer menu-open work by limiting selection path reads and caching terminal icon lookup successes and failures.</li>
+<li>1.9: Added quiet-by-default debug logging, improved menu placement, tightened filesystem target eligibility, and refreshed docs for classic-menu runtime injection.</li>
+<li>1.8: Switched to direct Explorer classic-menu injection with no persistent registry writes.</li>
+</ul>]]></content>
+        <author>
+            <name>aimagist</name>
+            <uri>https://github.com/aimagist</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Add This PC and Desktop to Nav Top 1.2.1]]></title>
         <id>https://windhawk.net/mods/add-virtual-folders-to-nav-top#da0605c6e036ab19f40fecfa7a367a1084daa6e4</id>
@@ -726,47 +774,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>Himanshu</name>
             <uri>https://github.com/devcode90</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Simple Window Switcher 1.0]]></title>
-        <id>https://windhawk.net/mods/simple-window-switcher#2da6ee87b56eb42c1802b43f0c201e5e5d3149aa</id>
-        <link href="https://windhawk.net/mods/simple-window-switcher"/>
-        <updated>2026-05-23T16:50:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="simplewindowswitcher">Simple Window Switcher</h1>
-<p>A lightweight Alt+Tab replacement for Windows, ported from the
-<a href="https://github.com/valinet/sws">Simple Window Switcher</a> project.
-Additional improvements made by <a href="https://github.com/Asteski">Asteski</a>.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Grid layout with live DWM thumbnail previews</li>
-<li>Different Task List and Header Content layouts</li>
-<li>Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)</li>
-<li>Mouse click to select, scroll wheel to cycle</li>
-<li>Alt+Ctrl+Tab sticky mode</li>
-<li>Theme support (None/Backdrop Acrylic)</li>
-<li>Works with elevated/admin applications</li>
-<li>Dark/light mode auto-detection</li>
-<li>Custom border colors with optional Windows accent color</li>
-<li>DPI-aware, multi-monitor aware</li>
-<li>Rounded corners for switcher and task thumbnails (optional)</li>
-</ul>
-<h2 id="screenshots">Screenshots</h2>
-<p><em>Horizontal squared (default)</em></p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png" alt="Horizontal default" /></p>
-<p><em>Horizontal squared without thumbnails</em></p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png" alt="Horizontal without thumbnails" /></p>
-<p><em>Vertical small rounded</em></p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/58449dc268347949193f2c67b0b042d287c20bd5/img/simple-window-switcher/1.png" alt="Vertical small" /></p>
-<p><em>Vertical large rounded</em></p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/2.png" alt="Vertical large" /></p>
-<p><em>Vertical rounded with centered task icons and titles</em></p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/6.png" alt="Vertical centered" /></p>
-<p><em>Vertical squared with thumbnails</em></p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/5.png" alt="Vertical squared with thumbnails" /></p>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
