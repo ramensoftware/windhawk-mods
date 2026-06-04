@@ -18,6 +18,12 @@
 
 Adds a small tray icon for quickly turning off the monitor after a configurable countdown.
 
+## Preview
+
+![Monitor Sleep Button preview 1](https://i.imgur.com/sztL2TK.png)
+
+![Monitor Sleep Button preview 2](https://i.imgur.com/euxiJiQ.png)
+
 ## Features
 
 - Tray icon for quick monitor power-off
@@ -667,9 +673,9 @@ void RefreshTrayIconRect();
 bool IsPointNearTrayIcon(POINT pt) {
     RECT rect = g_trayIconRect;
 
-    // Tray icon rect can be slightly off because of DPI/taskbar scaling.
-    // Expand it a bit so mouse wheel over the visible icon is still detected.
-    InflateRect(&rect, 32, 48);
+    if (IsRectEmpty(&rect)) {
+        return false;
+    }
 
     return PtInRect(&rect, pt) != FALSE;
 }
@@ -775,6 +781,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         short delta = static_cast<short>(HIWORD(ms->mouseData));
         int direction = (delta > 0) ? 1 : -1;
 
+        RefreshTrayIconRect();
         BOOL inside = IsPointNearTrayIcon(ms->pt);
 
         if (inside && g_hwnd) {
