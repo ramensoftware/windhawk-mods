@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-04T11:19:03.000Z</updated>
+    <updated>2026-06-04T11:32:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Desktop Icon Text and Shortcut Arrows 1.5.0]]></title>
+        <id>https://windhawk.net/mods/hide-desktop-icon-text#01fbe027ae353a48edeb7cb6c0b74643429f57d6</id>
+        <link href="https://windhawk.net/mods/hide-desktop-icon-text"/>
+        <updated>2026-06-04T11:32:41.000Z</updated>
+        <content type="html"><![CDATA[<p>Provides options to hide desktop icon labels (keeping folder names) and remove the shortcut arrow overlay.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Hide Icon Text</strong>: Hides text labels for files and shortcuts on the desktop while preserving folder names.</li>
+<li><strong>Hide Shortcut Arrows</strong>: Removes the standard shortcut arrow overlay live without requiring registry edits or administrator rights.</li>
+</ul>
+<h3 id="notes">Notes</h3>
+<ul>
+<li>The shortcut arrow removal affects the entire running Explorer session because the overlay resides in the shared system image list.</li>
+<li>Disabling the shortcut arrow feature (or the mod itself) restores the arrows only after Explorer restarts or the icon cache refreshes.</li>
+</ul>
+<h3 id="knownlimitation">Known limitation</h3>
+<p>Folder detection matches the drawn text against actual desktop folder names. If a <em>file</em> has
+exactly the same name as a <em>folder</em> on the desktop, that file's label will also be kept.</p>]]></content>
+        <author>
+            <name>kivsak</name>
+            <uri>https://github.com/kivsak</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Open in Admin Terminal 1.15]]></title>
         <id>https://windhawk.net/mods/open-in-admin-terminal#e2b57e7a9131fffb4338dce9a9fb61daae8c85d6</id>
@@ -744,36 +768,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>erisune</name>
             <uri>https://github.com/erisune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Island for Windows 1.0.0]]></title>
-        <id>https://windhawk.net/mods/dynamic-island-for-windows#c0b6582ad2161f8406e294b2a74639851923cfac</id>
-        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
-        <updated>2026-05-23T16:50:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dynamicislandforwindows">Dynamic Island for Windows</h1>
-<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-18%20193649.png" alt="Screenshot 1" /></p>
-<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225602.png" alt="Screenshot 2" /></p>
-<p><img src="https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225634.png" alt="Screenshot 3" /></p>
-<p>A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.</p>
-<h3 id="features">Features ✨</h3>
-<ul>
-<li><strong>Hardware Privacy Indicators:</strong> A pulsing orange dot appears when your microphone is active, and a green dot when your camera is in use. Rate-limited polling ensures absolutely no CPU drain.</li>
-<li><strong>Rich Media Integration:</strong> Shows album art, song info, a live audio waveform, and playback controls.</li>
-<li><strong>High-Res Clipboard & Notifications:</strong> Instantly see what you copied or your latest Windows notifications, featuring crisp, high-fidelity 64px app icons extracted directly from system executables.</li>
-<li><strong>Customizable Aesthetics:</strong> Switch between sleek OLED Black, Dark Gray, Midnight Blue, and Deep Purple themes from the right-click menu, or use the settings to dial in your exact hex colors.</li>
-<li><strong>Dynamic Fluid Animations:</strong> Fully smooth resizing and splitting when multiple events happen at once (e.g., media playing while you copy text or receive a notification).</li>
-<li><strong>Battery & Clock:</strong> Low battery alerts and an optional minimal clock dashboard for when the island is idle.</li>
-</ul>
-<h3 id="usagesettings">Usage &amp; Settings</h3>
-<ul>
-<li><strong>Hover</strong> over the island to seamlessly expand it.</li>
-<li><strong>Right-click</strong> the island to access Theme presets, Transparency settings, and to pin the island open.</li>
-<li>Visit the <strong>Settings tab</strong> to change the island's Position (Top, Bottom, Left, Right), Size Scale, Animation Speed, and toggle specific modules on or off.</li>
-</ul>]]></content>
-        <author>
-            <name>Himanshu</name>
-            <uri>https://github.com/devcode90</uri>
         </author>
     </entry>
 </feed>

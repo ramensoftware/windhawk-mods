@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-04T11:19:03.000Z</updated>
+    <updated>2026-06-04T11:32:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Desktop Icon Text and Shortcut Arrows 1.5.0]]></title>
+        <id>https://windhawk.net/mods/hide-desktop-icon-text#01fbe027ae353a48edeb7cb6c0b74643429f57d6</id>
+        <link href="https://windhawk.net/mods/hide-desktop-icon-text"/>
+        <updated>2026-06-04T11:32:41.000Z</updated>
+        <content type="html"><![CDATA[<p>Provides options to hide desktop icon labels (keeping folder names) and remove the shortcut arrow overlay.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Hide Icon Text</strong>: Hides text labels for files and shortcuts on the desktop while preserving folder names.</li>
+<li><strong>Hide Shortcut Arrows</strong>: Removes the standard shortcut arrow overlay live without requiring registry edits or administrator rights.</li>
+</ul>
+<h3 id="notes">Notes</h3>
+<ul>
+<li>The shortcut arrow removal affects the entire running Explorer session because the overlay resides in the shared system image list.</li>
+<li>Disabling the shortcut arrow feature (or the mod itself) restores the arrows only after Explorer restarts or the icon cache refreshes.</li>
+</ul>
+<h3 id="knownlimitation">Known limitation</h3>
+<p>Folder detection matches the drawn text against actual desktop folder names. If a <em>file</em> has
+exactly the same name as a <em>folder</em> on the desktop, that file's label will also be kept.</p>]]></content>
+        <author>
+            <name>kivsak</name>
+            <uri>https://github.com/kivsak</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Open in Admin Terminal 1.15]]></title>
         <id>https://windhawk.net/mods/open-in-admin-terminal#e2b57e7a9131fffb4338dce9a9fb61daae8c85d6</id>
@@ -528,27 +552,6 @@ Caps Lock to switch input languages, long-press for Caps Lock.</p>
 </ul>
 <p><strong>推荐搭配</strong> Caps IME Switcher (<code>caps-ime-switcher</code>) — 可使用 Caps Lock
 短按切换输入语言，长按触发大小写锁定，配合本 mod 体验更佳。</p>]]></content>
-        <author>
-            <name>ZeonXr</name>
-            <uri>https://github.com/ZeonXr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Caps IME Switcher 0.7]]></title>
-        <id>https://windhawk.net/mods/caps-ime-switcher#8877ffddffed29cd23d442cb2a803d65cdfea9e3</id>
-        <link href="https://windhawk.net/mods/caps-ime-switcher"/>
-        <updated>2026-05-30T18:43:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="capsimeswitcher">Caps IME Switcher</h1>
-<p>Brings the macOS Caps Lock input source switching behavior to Windows.</p>
-<p>Short-press Caps Lock to switch to the next input language.
-Long-press Caps Lock to toggle Caps Lock on/off.</p>
-<p><strong>Pair with</strong> IME Native Mode Lock (<code>ime-mode-lock</code>) — auto-locks
-IMEs to their native mode. Best experience when used together.</p>
-<hr />
-<p>将 macOS 的 Caps Lock 输入法切换方式带到 Windows。</p>
-<p>短按 Caps Lock 切换下一个输入语言，长按触发大小写锁定。</p>
-<p><strong>推荐搭配</strong> IME Native Mode Lock (<code>ime-mode-lock</code>) — 可在切换输入法时
-自动锁定中文模式，两个 mod 配合使用体验最佳。</p>]]></content>
         <author>
             <name>ZeonXr</name>
             <uri>https://github.com/ZeonXr</uri>

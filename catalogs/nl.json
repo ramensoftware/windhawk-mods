@@ -5545,6 +5545,37 @@
                 "version": "1.0.1"
             }
         },
+        "hide-desktop-icon-text": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780572761000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780572761000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "kivsak",
+                "compilerOptions": "-lole32 -lshlwapi -lgdi32 -lcomctl32",
+                "description": "Provides options to hide icon text labels (keeping folder names) and remove shortcut arrow overlays on the desktop.",
+                "github": "https://github.com/kivsak",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Hide Desktop Icon Text and Shortcut Arrows",
+                "version": "1.5.0"
+            }
+        },
         "hide-dotfiles-explorer": {
             "details": {
                 "defaultSorting": 2030,
