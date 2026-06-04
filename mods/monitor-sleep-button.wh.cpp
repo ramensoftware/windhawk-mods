@@ -781,7 +781,6 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         short delta = static_cast<short>(HIWORD(ms->mouseData));
         int direction = (delta > 0) ? 1 : -1;
 
-        RefreshTrayIconRect();
         BOOL inside = IsPointNearTrayIcon(ms->pt);
 
         if (inside && g_hwnd) {
