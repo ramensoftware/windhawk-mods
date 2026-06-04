@@ -7,7 +7,7 @@
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -78,6 +78,7 @@ One click drops your connection. Click it again, and you're back online.
 */
 // ==/WindhawkModReadme==
 
+#define WIN32_LEAN_AND_MEAN
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
@@ -91,7 +92,6 @@ One click drops your connection. Click it again, and you're back online.
 #define TRAY_ICON_ID 1
 #define WM_TRAY_CALLBACK (WM_USER + 1)
 #define WM_UPDATE_TRAY_STATE (WM_USER + 2)
-#define WM_UPDATE_DNS_STATE (WM_USER + 3)
 #define WM_SETTINGS_CHANGED (WM_USER + 4)
 #define WM_TRIGGER_PING (WM_USER + 5)
 #define DNS_PING_TIMER_ID 2
@@ -117,6 +117,7 @@ static HANDLE g_activeWorkerThread = nullptr;
 static volatile DWORD g_dnsServerIp = 0;
 static DWORD g_pingIntervalMs = 30000;
 static volatile LONG g_dnsIsReachable = 0;
+static volatile LONG g_dnsWorkerRunning = 0;
 
 // Network watch thread
 static HANDLE g_netWatchThread = nullptr;
@@ -510,7 +511,11 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
 // ==============================================================================
 
 DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
-    CoInitialize(nullptr);
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
+        Wh_Log(L"WorkerThread: CoInitializeEx failed (0x%X)", hrCo);
+        return 1;
+    }
     BOOL enable = (BOOL)(UINT_PTR)lpParam;
 
     Wh_Log(L"Toggling network adapters: %s", enable ? L"ENABLE" : L"DISABLE");
@@ -539,12 +544,16 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
             PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
         }
     }
-    CoUninitialize();
+    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
     return 0;
 }
 
 DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
-    CoInitialize(nullptr);
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
+        Wh_Log(L"ResetWorkerThread: CoInitializeEx failed (0x%X)", hrCo);
+        return 1;
+    }
     Wh_Log(L"Executing full network reset");
 
     // Destructive ops run FIRST so that ipconfig /renew is the last action.
@@ -583,7 +592,7 @@ DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
             PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 1, 0);
         }
     }
-    CoUninitialize();
+    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
     return 0;
 }
 
@@ -636,7 +645,7 @@ void ProcessTrayClick() {
     }
     g_lastClickTime = now;
 
-    BOOL targetState = (g_networkIsUp == 0);
+    BOOL targetState = (InterlockedOr(&g_networkIsUp, 0) == 0);
     Wh_Log(L"Processing network toggle click. Target state: %s", targetState ? L"ON" : L"OFF");
 
     // Show yellow immediately
@@ -660,22 +669,43 @@ void ProcessTrayClick() {
 // DNS Ping Handler
 // ==============================================================================
 
+DWORD WINAPI DnsPingWorkerProc(LPVOID lpParam) {
+    DWORD ipAddr = (DWORD)(UINT_PTR)lpParam;
+    BOOL reachable = PingIp(ipAddr);
+    InterlockedExchange(&g_dnsIsReachable, reachable ? 1 : 0);
+    HWND hwnd = g_trayHwnd;
+    if (hwnd) {
+        PostMessageW(hwnd, WM_UPDATE_TRAY_STATE,
+                     (WPARAM)(InterlockedOr(&g_networkIsUp, 0) == 1), 0);
+    }
+    InterlockedExchange(&g_dnsWorkerRunning, 0);
+    return 0;
+}
+
 void OnDnsPingTimer(HWND hWnd) {
     if (g_dnsServerIp == 0) return;
-    
-    // Skip pings if we know the network is OFF
-    if (g_networkIsUp == 0) {
+
+    if (InterlockedOr(&g_networkIsUp, 0) == 0) {
         Wh_Log(L"Network is OFF, skipping DNS ping");
         InterlockedExchange(&g_dnsIsReachable, 0);
         PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
         return;
     }
-    
+
+    if (InterlockedCompareExchange(&g_dnsWorkerRunning, 1, 0) != 0) {
+        Wh_Log(L"DNS ping already in progress, skipping");
+        return;
+    }
+
     Wh_Log(L"Triggering DNS reachability check...");
-    BOOL reachable = PingIp(g_dnsServerIp);
-    InterlockedExchange(&g_dnsIsReachable, reachable ? 1 : 0);
-    
-    PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, (WPARAM)g_networkIsUp, 0);
+    DWORD ipAddr = g_dnsServerIp;
+    HANDLE hThread = CreateThread(nullptr, 0, DnsPingWorkerProc,
+                                  (LPVOID)(UINT_PTR)ipAddr, 0, nullptr);
+    if (!hThread) {
+        InterlockedExchange(&g_dnsWorkerRunning, 0);
+    } else {
+        CloseHandle(hThread);
+    }
 }
 
 // ==============================================================================
@@ -720,9 +750,6 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
     } else if (msg == WM_UPDATE_TRAY_STATE) {
-        AddOrUpdateTrayIcon(hWnd, (BOOL)wParam, FALSE);
-        return 0;
-    } else if (msg == WM_UPDATE_DNS_STATE) {
         AddOrUpdateTrayIcon(hWnd, (BOOL)wParam, FALSE);
         return 0;
     } else if (msg == WM_TRIGGER_PING) {
@@ -864,7 +891,11 @@ DWORD WINAPI NetWatchThreadProc(LPVOID) {
 DWORD WINAPI TrayThreadProc(LPVOID) {
     Wh_Log(L"Tray thread started");
 
-    CoInitialize(nullptr);
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
+        Wh_Log(L"TrayThread: CoInitializeEx failed (0x%X)", hrCo);
+        return 1;
+    }
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 
     BOOL initialState = CheckActualNetworkState();
@@ -878,7 +909,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     if (!RegisterClassW(&wc)) {
         LogLastError(L"RegisterClassW");
-        CoUninitialize();
+        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
         return 1;
     }
 
@@ -894,7 +925,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     if (!hWnd) {
         LogLastError(L"CreateWindowExW");
         UnregisterClassW(wc.lpszClassName, g_hInstance);
-        CoUninitialize();
+        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
         return 1;
     }
 
@@ -908,7 +939,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         var.vt = VT_LPWSTR;
         var.pwszVal = (LPWSTR)CoTaskMemAlloc(MAX_PATH * sizeof(WCHAR));
         if (var.pwszVal) {
-            lstrcpyW(var.pwszVal, L"BlackPaw.NetToggle");
+            wcscpy_s(var.pwszVal, MAX_PATH, L"BlackPaw.NetToggle");
             pps->SetValue(PKEY_AppUserModel_ID, var);
             CoTaskMemFree(var.pwszVal);
         }
@@ -942,7 +973,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     UnregisterClassW(wc.lpszClassName, g_hInstance);
     InterlockedExchange(&g_trayIconInstalled, 0);
     g_trayHwnd = nullptr;
-    CoUninitialize();
+    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
 
     return 0;
 }
@@ -960,13 +991,13 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
 
-    g_hInstance = GetModuleHandle(nullptr);
+    g_hInstance = GetModuleHandleW(nullptr);
     if (!g_hInstance) {
         Wh_Log(L"Failed to get module handle");
         return FALSE;
     }
 
-    Wh_Log(L"No system icon extraction needed — using colored dot icons");
+    Wh_Log(L"Using WiFi-style arc icon");
 
     // Read initial settings
     PCWSTR pDnsIp = Wh_GetStringSetting(L"dnsServer");
