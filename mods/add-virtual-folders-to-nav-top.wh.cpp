@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.7
+// @version         1.2.8
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -242,6 +242,7 @@ struct TreeState {
     HTREEITEM homeSpacerItem = nullptr;
     HTREEITEM boundaryItem = nullptr;
     HTREEITEM belowQAItem = nullptr;
+    bool belowQADiscovered = false;
     uint8_t pendingWork = 0;   // bitmask of PendingWork flags
     int sepRetries = 0;
     bool ownsNscRef = false;
@@ -344,6 +345,7 @@ static void ResetTreeCleanup(TreeState& ts)
     ts.homeSpacerItem = nullptr;
     ts.boundaryItem = nullptr;
     ts.belowQAItem = nullptr;
+    ts.belowQADiscovered = false;
     ts.triedHomeSpacer = false;
     ts.pendingWork = WORK_QA_CLEANUP | WORK_HG_CLEANUP | WORK_DUP_COLLAPSE;
 }
@@ -1435,7 +1437,14 @@ static void RedrawSeps(HWND hTree, HDC hdc, TreeState& ts)
                 else if (ts.belowQAItem && h == ts.belowQAItem)
                 {
                     foundBelowQA = true;
-                    tag = L'Q';
+                    if (isTall && !g_settings.removeSepBelowQA)
+                    {
+                        drawSep = true;
+                        sepY = rc.top + baseHeight / 2;
+                        tag = L'S';
+                    }
+                    else
+                        tag = L'Q';
                 }
                 else if (foundBoundary && isTall && !foundBelowQA)
                 {
@@ -1474,9 +1483,15 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         LPNMHDR hdr = (LPNMHDR)lParam;
         if (hdr && hdr->hwndFrom == hTree)
         {
-            if ((hdr->code == TVN_SELCHANGEDW || hdr->code == TVN_SELCHANGEDA) &&
-                hTree == g_mutatingTree)
-                return 0;
+            if (hdr->code == TVN_SELCHANGEDW || hdr->code == TVN_SELCHANGEDA)
+            {
+                if (hTree == g_mutatingTree)
+                    return 0;
+                LPNMTREEVIEWW nm = (LPNMTREEVIEWW)lParam;
+                if (nm->action != TVC_BYMOUSE && nm->action != TVC_BYKEYBOARD &&
+                    nm->itemNew.hItem && IsDepth1Item(hTree, nm->itemNew.hItem))
+                    return 0;
+            }
 
             if (hdr->code == (UINT)NM_CUSTOMDRAW && hTree != g_mutatingTree)
             {
@@ -1957,6 +1972,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         {
             ts->boundaryItem = nullptr;
             ts->belowQAItem = nullptr;
+            ts->belowQADiscovered = false;
             ts->pendingWork |= WORK_QA_CLEANUP;
             RefreshNavPane(hWnd);
         }
@@ -1982,6 +1998,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             {
                 ts->boundaryItem = nullptr;
                 ts->belowQAItem = nullptr;
+                ts->belowQADiscovered = false;
             }
 
             InvalidateRect(hWnd, nullptr, TRUE);
@@ -2014,9 +2031,14 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         SectionLayout layout = {};
         if (g_settings.hasItemsAtTop && ts)
         {
+            if (ts->belowQAItem)
+            {
+                RECT rcCheck = {};
+                if (!GetItemRect(hWnd, ts->belowQAItem, &rcCheck))
+                    ts->belowQAItem = nullptr;
+            }
             layout = FindSectionLayout(hWnd, *ts);
             ts->boundaryItem = layout.boundary;
-            ts->belowQAItem = nullptr;
 
             bool desktopAtBottom = ts->hItems[NAV_DESKTOP] &&
                 (!ts->hItems[NAV_THISPC] || !g_settings.desktopAboveThisPC);
@@ -2047,10 +2069,17 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         {
             if (layout.boundary && (g_settings.removeSepBelowNav || GetHiddenItem(*ts)))
                 CollapseItemIntegral(hWnd, layout.boundary);
-            if (g_settings.removeSepBelowQA && layout.belowQA)
+            if (layout.belowQA)
             {
-                CollapseItemIntegral(hWnd, layout.belowQA);
+                bool isStray = ts->belowQADiscovered &&
+                               layout.belowQA != ts->belowQAItem;
+                if (isStray || g_settings.removeSepBelowQA)
+                    CollapseItemIntegral(hWnd, layout.belowQA);
+            }
+            if (!ts->belowQADiscovered)
+            {
                 ts->belowQAItem = layout.belowQA;
+                ts->belowQADiscovered = true;
             }
         }
 
