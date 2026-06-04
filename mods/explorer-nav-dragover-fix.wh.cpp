@@ -2,7 +2,7 @@
 // @id           explorer-nav-dragover-fix
 // @name         Explorer Nav DragOver Fix
 // @description  Stops File Explorer's nav pane from jumping when a folder auto-expands during a drag, restores mouse-wheel scrolling during drag, accelerates edge-scroll, and optionally collapses drag-opened folders when the drag ends
-// @version      1.2.4
+// @version      1.2.5
 // @author       tonythethompson
 // @github       https://github.com/tonythethompson
 // @include      explorer.exe
@@ -209,7 +209,7 @@ namespace {
 // read and store site -- we just need atomicity per field, not cross-field
 // ordering.
 struct Settings {
-    std::atomic<int> protectedMaxDepth{2};
+    std::atomic<int> protectedMaxDepth{3};
     std::atomic<int> releaseMoveY{6};
     std::atomic<int> capturedRowMarginX{8};
     std::atomic<int> capturedRowMarginY{3};
@@ -409,6 +409,7 @@ void PurgeStaleDragTreeStateNotInSession(uint64_t activeSession);
 void PurgeDragTreeStateForWindow(HWND hwndTree);
 void FlushDragTreeState(DWORD dropEffect);
 void CancelStaggeredCollapseForWindow(HWND hwndTree);
+void CancelAllPendingStaggeredCollapses();
 void DrainStaggeredCollapseForWindow(HWND hwndTree);
 
 bool IsDragLoopActive() {
@@ -1627,6 +1628,23 @@ void CancelStaggeredCollapseForWindow(HWND hwndTree) {
     g_staggeredCollapseSessions.erase(hwndTree);
 }
 
+void CancelAllPendingStaggeredCollapses() {
+    std::vector<HWND> trees;
+    {
+        std::lock_guard<std::mutex> lock(g_staggeredCollapseMutex);
+        trees.reserve(g_staggeredCollapseSessions.size());
+        for (const auto& kv : g_staggeredCollapseSessions) {
+            trees.push_back(kv.first);
+        }
+        g_staggeredCollapseSessions.clear();
+    }
+    for (HWND hwndTree : trees) {
+        if (hwndTree) {
+            KillTimer(hwndTree, kTransientCollapseTimerId);
+        }
+    }
+}
+
 void DrainStaggeredCollapseForWindow(HWND hwndTree) {
     if (!hwndTree) {
         return;
@@ -1896,7 +1914,7 @@ void FlushDragTreeState(DWORD dropEffect) {
             continue;
         }
         if (successfulDrop && entry.hwndTree == preserveTree && preserveItem &&
-            IsSameOrDescendant(entry.hwndTree, entry.hItem, preserveItem)) {
+            IsSameOrDescendant(entry.hwndTree, preserveItem, entry.hItem)) {
             continue;
         }
         TransientCollapseTarget target{};
@@ -2304,6 +2322,7 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* pDataObj, IDropSource* pDropSource,
         const uint64_t sessionId =
             g_dragSessionId.fetch_add(1, std::memory_order_acq_rel) + 1;
         PurgeStaleDragTreeStateNotInSession(sessionId);
+        CancelAllPendingStaggeredCollapses();
     }
 
     // Install the per-thread mouse hook for the duration of the modal drag
@@ -2588,17 +2607,7 @@ void Wh_ModUninit() {
         UnhookWindowsHookEx(h);
     }
 
-    std::vector<HWND> treesWithPendingCollapse;
-    {
-        std::lock_guard<std::mutex> lock(g_staggeredCollapseMutex);
-        treesWithPendingCollapse.reserve(g_staggeredCollapseSessions.size());
-        for (const auto& kv : g_staggeredCollapseSessions) {
-            treesWithPendingCollapse.push_back(kv.first);
-        }
-    }
-    for (HWND hwnd : treesWithPendingCollapse) {
-        DrainStaggeredCollapseForWindow(hwnd);
-    }
+    CancelAllPendingStaggeredCollapses();
 
     // Track whether the helper actually exited. If it leaks (10s timeout), it
     // may still be inside MsgWaitForMultipleObjectsEx on g_helperStopEvent,
