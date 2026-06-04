@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-perf-widget-standalone
 // @name            Taskbar Performance Widget
-// @description     Módulo avanzado con renderizado Acrílico, centrado perfecto y cursor nativo.
+// @description     Advanced module with Acrylic rendering, perfect centering and native cursor.
 // @version         9.3
 // @author          Agarciao10
 // @include         explorer.exe
@@ -12,66 +12,66 @@
 /*
 # Taskbar Performance Widget
 
-Un widget de monitorización de rendimiento de alta precisión, diseñado para
-integrarse de forma nativa y simétrica en la barra de tareas de Windows 11.
+A high-precision performance monitoring widget, designed to integrate
+natively and symmetrically into the Windows 11 taskbar.
 
-## Características principales
-- **Monitorización en tiempo real:** Visualización instantánea de CPU, Memoria
-(RAM), Red (Bajada/Subida) y GPU.
-- **Arquitectura Aislada:** Utiliza un proceso independiente para garantizar la
-estabilidad total del explorador (`explorer.exe`).
-- **Diseño Nativo:** Integración visual mediante los materiales oficiales de
-Windows 11 (Acrílico y Mica).
-- **Altamente Personalizable:** Ajusta la geometría, materiales de fondo y
-visibilidad de indicadores desde la interfaz de usuario.
-- **Centrado Geométrico:** Algoritmo avanzado de renderizado vectorial que
-garantiza una disposición simétrica y elegante.
+## Key Features
+- **Real-time monitoring:** Instant display of CPU, Memory (RAM),
+Network (Down/Up), and GPU.
+- **Isolated Architecture:** Uses an independent process to guarantee
+the full stability of the Explorer (`explorer.exe`).
+- **Native Design:** Visual integration using official Windows 11
+materials (Acrylic and Mica).
+- **Highly Customizable:** Adjust geometry, background materials, and
+indicator visibility from the settings UI.
+- **Geometric Centering:** Advanced vector rendering algorithm that
+guarantees a symmetric and elegant layout.
 
-## Configuración
-- **Material de Fondo:** Elige entre el efecto transparente para una integración
-invisible, o aplica materiales nativos para un aspecto tipo Fluent Design.
-- **Geometría:** Ajusta la altura y el ancho por columna para adaptar el widget
-a cualquier escala de interfaz o densidad de barra de tareas.
-- **Visibilidad:** Activa solo los indicadores necesarios para optimizar el
-espacio disponible.
+## Configuration
+- **Background Material:** Choose between a transparent effect for invisible
+integration, or apply native materials for a Fluent Design look.
+- **Geometry:** Adjust the height and column width to fit the widget to
+any UI scale or taskbar density.
+- **Visibility:** Enable only the necessary indicators to optimize
+available space.
 
-## Notas Técnicas
-- El widget utiliza la interfaz de datos de rendimiento (PDH) para obtener
-telemetría de hardware de bajo impacto.
-- El renderizado vectorial está optimizado mediante GDI+ para eliminar el
-parpadeo visual y mantener la nitidez en monitores de alta densidad (HiDPI).
+## Technical Notes
+- The widget uses the Performance Data Helper (PDH) interface to obtain
+low-impact hardware telemetry.
+- Vector rendering is optimized via GDI+ to eliminate visual flickering
+and maintain sharpness on high-density (HiDPI) displays.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - showCpu: true
-  $name: "Mostrar CPU"
+  $name: "Show CPU"
 - showRam: true
-  $name: "Mostrar Memoria (RAM)"
+  $name: "Show Memory (RAM)"
 - showNetRecv: true
-  $name: "Mostrar Red (Descarga)"
+  $name: "Show Network (Download)"
 - showNetSend: true
-  $name: "Mostrar Red (Subida)"
+  $name: "Show Network (Upload)"
 - showGpu: true
-  $name: "Mostrar GPU"
+  $name: "Show GPU"
 - offsetRight: 150
-  $name: "Desplazamiento Horizontal (Offset)"
-  $description: "Distancia en píxeles desde el borde derecho."
+  $name: "Horizontal Offset"
+  $description: "Distance in pixels from the right edge."
 - height: 48
-  $name: "Altura del Módulo"
-  $description: "Altura total en píxeles del recuadro."
+  $name: "Widget Height"
+  $description: "Total height in pixels of the widget."
 - colWidth: 84
-  $name: "Ancho por Indicador"
-  $description: "Espacio horizontal asignado a cada métrica activa."
+  $name: "Width per Indicator"
+  $description: "Horizontal space allocated to each active metric."
 - bgOpacity: 64
-  $name: "Opacidad del Acrílico (Tinte)"
-  $description: "Controla la densidad del fondo cuando el Tema Automático está
-desactivado."
+  $name: "Acrylic Opacity (Tint)"
+  $description: "Controls the background density when Auto Theme is
+disabled."
 - autoTheme: true
-  $name: "Tema Automático"
-  $description: "Adapta el color de la tipografía y el tinte del fondo al modo
-del sistema."
+  $name: "Auto Theme"
+  $description: "Adapts the font color and background tint to the
+system mode."
 */
 // ==/WindhawkModSettings==
 
@@ -88,7 +88,7 @@ del sistema."
 
 using namespace Gdiplus;
 
-// --- DWM y Materiales No Documentados ---
+// --- DWM and Undocumented Materials ---
 typedef enum _WINDOWCOMPOSITIONATTRIB {
     WCA_ACCENT_POLICY = 19
 } WINDOWCOMPOSITIONATTRIB;
@@ -119,7 +119,7 @@ typedef BOOL(
 #define DWMWA_WINDOW_CORNER_PREFERENCE 33
 #endif
 
-// --- Parámetros Estructurales Dinámicos ---
+// --- Dynamic Structural Parameters ---
 struct ModSettings {
     int colWidth = 84;
     int height = 48;
@@ -133,7 +133,7 @@ struct ModSettings {
     bool autoTheme = true;
 } g_Settings;
 
-// --- Estado Global ---
+// --- Global State ---
 HWND g_hWidgetWnd = NULL;
 bool g_Running = true;
 HWINEVENTHOOK g_TaskbarHook = nullptr;
@@ -152,7 +152,7 @@ double currentNetRecv = 0.0;
 double currentNetSend = 0.0;
 double currentGpu = 0.0;
 
-// --- Detección de Tema ---
+// --- Theme Detection ---
 bool IsSystemLightMode() {
     DWORD value = 0;
     DWORD size = sizeof(value);
@@ -166,7 +166,7 @@ bool IsSystemLightMode() {
     return false;
 }
 
-// --- Integración Exacta del Material Multimedia ---
+// --- Acrylic Material Integration ---
 void UpdateAppearance(HWND hwnd) {
     if (!hwnd)
         return;
@@ -195,7 +195,7 @@ void UpdateAppearance(HWND hwnd) {
     }
 }
 
-// --- Lógica Matemática PDH ---
+// --- PDH Settings and Metrics ---
 void LoadSettings() {
     g_Settings.showCpu = Wh_GetIntSetting(L"showCpu") != 0;
     g_Settings.showRam = Wh_GetIntSetting(L"showRam") != 0;
@@ -298,7 +298,7 @@ void FormatNetSpeed(double bytesSec, wchar_t* buffer, size_t maxLen) {
         swprintf(buffer, maxLen, L"%.1f Kbps", kbps);
 }
 
-// --- Renderizado Vectorial GDI+ Centrado ---
+// --- Centered GDI+ Vector Rendering ---
 void DrawPerformancePanel(HDC hdc, int width, int height) {
     Graphics graphics(hdc);
     graphics.SetSmoothingMode(SmoothingModeAntiAlias);
@@ -376,7 +376,7 @@ void DrawPerformancePanel(HDC hdc, int width, int height) {
     }
 }
 
-// --- Subsistemas de Ventana e Interceptación ---
+// --- Window and Hook Subsystems ---
 bool IsTaskbarWindow(HWND hwnd) {
     WCHAR cls[64];
     if (!hwnd)
@@ -517,7 +517,7 @@ void WidgetThread() {
     WNDCLASS wc = {0};
     wc.lpfnWndProc = WidgetWndProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);  // <-- Cursor estándar asignado
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.lpszClassName = TEXT("PsiNetStandalonePerfWidget");
     RegisterClass(&wc);
 
@@ -567,7 +567,7 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
-// Subsistema de Proceso Aislado de Windhawk
+// Windhawk Isolated Process Subsystem
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 void WINAPI EntryPoint_Hook() {
@@ -627,9 +627,8 @@ void Wh_ModAfterInit() {
                           ARRAYSIZE(currentProcessPath)) == 0)
         return;
     WCHAR
-        commandLine[MAX_PATH + 2 +
-                    (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
-                    1];
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
