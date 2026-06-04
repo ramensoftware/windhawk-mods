@@ -1,12 +1,14 @@
 // ==WindhawkMod==
 // @id              unlock-office-file-upload
 // @name            Unlock Office Files for Upload
-// @description     Transparently copies locked Office files (docx, xlsx, pptx, etc.) to a temp location when an upload or send is attempted while they're open in Word/Excel/PowerPoint. The copy is silently deleted after use.
-// @version         0.1
+// @description     Transparently copies locked Office files (docx, xlsx, pptx, etc.) to a temp location when an upload or send is attempted while they're open in Word/Excel/PowerPoint. The OS deletes the copy automatically via FILE_FLAG_DELETE_ON_CLOSE.
+// @version         0.2
 // @author          Loerei
 // @github          https://github.com/loerei
 // @homepage        https://github.com/loerei/windhawk-unlock-office-file-upload
 // @include         *
+// @exclude         SearchIndexer.exe
+// @exclude         explorer.exe
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -22,8 +24,9 @@ variants) while the file is open in Word/Excel/PowerPoint, you get:
 
 This mod silently intercepts that failure in the uploading process (Chrome,
 Edge, Outlook, Teams, Discord, etc.), makes a temporary copy of the file, and
-redirects the open call to the copy. The copy is automatically deleted once the
-handle is closed.
+redirects the open call to the copy. The OS deletes the copy automatically when
+the caller closes the handle (`FILE_FLAG_DELETE_ON_CLOSE`) — even on process
+crash or abnormal exit.
 
 **What you get:** The uploader receives the last-saved version of the file with
 no prompts and no need to close Word first.
@@ -31,6 +34,12 @@ no prompts and no need to close Word first.
 **Limitation:** The copy reflects the last *saved* state. Unsaved in-memory
 edits in Word are not included — this is inherent to how Windows file locking
 works.
+
+**Scope note:** The mod injects into all processes (required since the uploader
+can be any app). `SearchIndexer.exe` and `explorer.exe` are excluded via
+`@exclude`. Session 0 (system service) processes are skipped at init time. The
+`CreateFileW` hook has near-zero overhead on the success path — it returns
+immediately when the original call succeeds.
 */
 // ==/WindhawkModReadme==
 
@@ -52,73 +61,61 @@ works.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <cwctype>
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <unordered_map>
-#include <mutex>
-
+#include <shared_mutex>
 
 // ---------------------------------------------------------------------------
-// Settings
+// Settings — guarded by a shared_mutex so LoadSettings (unique/writer lock)
+// and IsTrackedExtension (shared/reader lock, called from the CreateFileW
+// hook on arbitrary threads) don't race.
 // ---------------------------------------------------------------------------
 
 std::vector<std::wstring> g_extensions;
+std::shared_mutex g_extensionsMutex;
 
 void LoadSettings() {
-    g_extensions.clear();
+    std::vector<std::wstring> fresh;
 
     int count = 0;
     while (true) {
         auto key = std::wstring(L"extensions[") + std::to_wstring(count) + L"]";
         PCWSTR val = Wh_GetStringSetting(key.c_str());
-        if (!val || val[0] == L'\0') {
+        // Wh_GetStringSetting never returns NULL; it returns L"" when unset.
+        if (val[0] == L'\0') {
             Wh_FreeStringSetting(val);
             break;
         }
         std::wstring ext(val);
         Wh_FreeStringSetting(val);
-        // Normalise to lowercase
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        g_extensions.push_back(std::move(ext));
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
+        fresh.push_back(std::move(ext));
         ++count;
     }
 
-    // Fallback defaults if settings are empty (first run / no settings file)
-    if (g_extensions.empty()) {
+    // Fallback defaults if settings are empty (first run / no settings file).
+    if (fresh.empty()) {
         for (auto* e : {L".docx", L".docm", L".doc",
                         L".xlsx", L".xlsm", L".xls",
                         L".pptx", L".pptm", L".ppt"}) {
-            g_extensions.push_back(e);
+            fresh.push_back(e);
         }
     }
+
+    std::unique_lock lock(g_extensionsMutex);
+    g_extensions = std::move(fresh);
 }
 
-// ---------------------------------------------------------------------------
-// Temp handle tracking
-// ---------------------------------------------------------------------------
-
-struct TempEntry {
-    std::wstring tempPath;
-};
-
-std::unordered_map<HANDLE, TempEntry> g_tempHandles;
-std::mutex g_mutex;
-
-void TrackHandle(HANDLE h, std::wstring tempPath) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_tempHandles[h] = {std::move(tempPath)};
-}
-
-// Returns temp path if handle was tracked, empty string otherwise.
-std::wstring UntrackHandle(HANDLE h) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    auto it = g_tempHandles.find(h);
-    if (it == g_tempHandles.end())
-        return {};
-    std::wstring path = std::move(it->second.tempPath);
-    g_tempHandles.erase(it);
-    return path;
+static bool IsTrackedExtension(const std::wstring& ext) {
+    std::shared_lock lock(g_extensionsMutex);
+    for (const auto& e : g_extensions) {
+        if (e == ext)
+            return true;
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,42 +129,26 @@ static std::wstring GetExtension(LPCWSTR path) {
     LPCWSTR dot = wcsrchr(path, L'.');
     if (!dot)
         return {};
-    // Make sure the dot is after the last separator
+    // Ensure the dot comes after the last path separator.
     LPCWSTR sep = wcsrchr(path, L'\\');
     if (!sep) sep = wcsrchr(path, L'/');
     if (sep && dot < sep)
         return {};
     std::wstring ext(dot);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
     return ext;
 }
 
-static bool IsTrackedExtension(const std::wstring& ext) {
-    for (const auto& e : g_extensions) {
-        if (e == ext)
-            return true;
-    }
-    return false;
-}
-
-// Build a unique temp path in %TEMP%, e.g. C:\Users\...\AppData\Local\Temp\~ul_12345_filename.docx
-static std::wstring MakeTempPath(LPCWSTR originalPath) {
+// Produces a guaranteed-unique temp path via GetTempFileNameW (uUnique=0).
+// GetTempFileNameW creates an empty placeholder file; CopyFileW with
+// bFailIfExists=FALSE overwrites it safely.
+static bool MakeTempPath(wchar_t (&out)[MAX_PATH]) {
     wchar_t tempDir[MAX_PATH];
     if (!GetTempPathW(MAX_PATH, tempDir))
-        return {};
-
-    // Extract just the filename (without path)
-    LPCWSTR sep = wcsrchr(originalPath, L'\\');
-    if (!sep) sep = wcsrchr(originalPath, L'/');
-    LPCWSTR fname = sep ? sep + 1 : originalPath;
-
-    wchar_t result[MAX_PATH];
-    // Use tick count + thread id for uniqueness; good enough for temp files
-    DWORD uid = GetTickCount() ^ (GetCurrentThreadId() << 16);
-    if (swprintf_s(result, MAX_PATH, L"%s~ul_%08X_%s", tempDir, uid, fname) < 0)
-        return {};
-
-    return result;
+        return false;
+    // Prefix is capped at 3 characters; "ul_" fits exactly.
+    return GetTempFileNameW(tempDir, L"ul_", 0, out) != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,95 +167,75 @@ HANDLE WINAPI CreateFileW_Hook(
     DWORD                 dwFlagsAndAttributes,
     HANDLE                hTemplateFile)
 {
-    // Fast path: let everything through first.
+    // Fast path: let everything through first. Zero cost on success.
     HANDLE h = CreateFileW_Original(
         lpFileName, dwDesiredAccess, dwShareMode,
         lpSecurityAttributes, dwCreationDisposition,
         dwFlagsAndAttributes, hTemplateFile);
 
-    // If the call succeeded, nothing to do.
     if (h != INVALID_HANDLE_VALUE)
         return h;
 
-    // Only intercept sharing violations on read/existing-file opens.
     if (GetLastError() != ERROR_SHARING_VIOLATION)
         return h;
 
-    // Only intercept opens for reading (uploads/sends never need GENERIC_WRITE).
-    if (dwDesiredAccess & GENERIC_WRITE)
+    // Only redirect read-only opens. Guard against write-intent opens that
+    // use specific bits instead of the GENERIC_WRITE alias to avoid silent
+    // write loss on a temp copy that disappears.
+    constexpr DWORD kWriteBits = GENERIC_WRITE  | FILE_WRITE_DATA |
+                                 FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA |
+                                 FILE_APPEND_DATA;
+    if (dwDesiredAccess & kWriteBits)
         return h;
 
-    // Only intercept tracked extensions.
     std::wstring ext = GetExtension(lpFileName);
     if (ext.empty() || !IsTrackedExtension(ext))
         return h;
 
     // --- Sharing violation on a tracked Office file ---
-    Wh_Log(L"Sharing violation on tracked file: %s \u2014 attempting temp copy", lpFileName);
+    Wh_Log(L"Sharing violation on: %s — attempting temp copy", lpFileName);
 
-    std::wstring tempPath = MakeTempPath(lpFileName);
-    if (tempPath.empty()) {
+    wchar_t tempPath[MAX_PATH];
+    if (!MakeTempPath(tempPath)) {
         Wh_Log(L"Failed to build temp path for: %s", lpFileName);
         SetLastError(ERROR_SHARING_VIOLATION);
         return INVALID_HANDLE_VALUE;
     }
 
-    // CopyFile opens the source with FILE_SHARE_READ | FILE_SHARE_WRITE |
-    // FILE_SHARE_DELETE internally, which is compatible with Word's handle.
-    if (!CopyFileW(lpFileName, tempPath.c_str(), /*bFailIfExists=*/FALSE)) {
+    // CopyFileW opens the source with permissive share flags that are
+    // compatible with Word's lock (FILE_SHARE_READ).
+    // bFailIfExists=FALSE overwrites the empty placeholder from GetTempFileNameW.
+    if (!CopyFileW(lpFileName, tempPath, /*bFailIfExists=*/FALSE)) {
         DWORD err = GetLastError();
         Wh_Log(L"CopyFileW failed for %s (err=%u)", lpFileName, err);
+        DeleteFileW(tempPath);
         SetLastError(ERROR_SHARING_VIOLATION);
         return INVALID_HANDLE_VALUE;
     }
 
-    // Open the temp copy; this will always succeed (no other process has it).
+    // FILE_FLAG_DELETE_ON_CLOSE: the OS deletes the temp file when the last
+    // handle to it is closed — including forced closes at process teardown,
+    // so there is no leak on crash or abnormal exit.
+    // No CloseHandle hook or handle-tracking map is needed.
     HANDLE hTemp = CreateFileW_Original(
-        tempPath.c_str(), dwDesiredAccess,
+        tempPath, dwDesiredAccess,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         lpSecurityAttributes, dwCreationDisposition,
-        dwFlagsAndAttributes, hTemplateFile);
+        dwFlagsAndAttributes | FILE_FLAG_DELETE_ON_CLOSE,
+        hTemplateFile);
 
     if (hTemp == INVALID_HANDLE_VALUE) {
         DWORD err = GetLastError();
-        Wh_Log(L"Failed to open temp copy %s (err=%u)", tempPath.c_str(), err);
-        DeleteFileW(tempPath.c_str());
+        Wh_Log(L"Failed to open temp copy %s (err=%u)", tempPath, err);
+        DeleteFileW(tempPath);
         SetLastError(ERROR_SHARING_VIOLATION);
         return INVALID_HANDLE_VALUE;
     }
 
-    Wh_Log(L"Redirected %s -> %s", lpFileName, tempPath.c_str());
+    Wh_Log(L"Redirected %s -> %s (delete-on-close)", lpFileName, tempPath);
 
-    // Track so we can delete the temp file when the handle is closed.
-    TrackHandle(hTemp, std::move(tempPath));
-
-    // Clear the sharing violation error; caller sees success.
     SetLastError(ERROR_SUCCESS);
     return hTemp;
-}
-
-// ---------------------------------------------------------------------------
-// CloseHandle hook — delete temp copy when the uploader is done
-// ---------------------------------------------------------------------------
-
-using CloseHandle_t = decltype(&CloseHandle);
-CloseHandle_t CloseHandle_Original;
-
-BOOL WINAPI CloseHandle_Hook(HANDLE hObject) {
-    std::wstring tempPath = UntrackHandle(hObject);
-
-    BOOL result = CloseHandle_Original(hObject);
-
-    if (!tempPath.empty()) {
-        // Handle is now closed; safe to delete the temp file.
-        if (DeleteFileW(tempPath.c_str())) {
-            Wh_Log(L"Deleted temp copy: %s", tempPath.c_str());
-        } else {
-            Wh_Log(L"Failed to delete temp copy: %s (err=%u)", tempPath.c_str(), GetLastError());
-        }
-    }
-
-    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +244,15 @@ BOOL WINAPI CloseHandle_Hook(HANDLE hObject) {
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
+
+    // Skip session 0 processes (system services, SYSTEM-context indexers,
+    // etc.). They don't upload files and shouldn't be affected.
+    DWORD sessionId = 0;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) ||
+        sessionId == 0) {
+        Wh_Log(L"Skipping: session 0 process");
+        return FALSE;
+    }
 
     LoadSettings();
 
@@ -293,29 +263,21 @@ BOOL Wh_ModInit() {
     }
 
     auto* pfnCreateFileW = (void*)GetProcAddress(kernel32, "CreateFileW");
-    auto* pfnCloseHandle = (void*)GetProcAddress(kernel32, "CloseHandle");
-
-    if (!pfnCreateFileW || !pfnCloseHandle) {
-        Wh_Log(L"Failed to locate CreateFileW or CloseHandle");
+    if (!pfnCreateFileW) {
+        Wh_Log(L"Failed to locate CreateFileW");
         return FALSE;
     }
 
     Wh_SetFunctionHook(pfnCreateFileW, (void*)CreateFileW_Hook,
                        (void**)&CreateFileW_Original);
-    Wh_SetFunctionHook(pfnCloseHandle, (void*)CloseHandle_Hook,
-                       (void**)&CloseHandle_Original);
 
     return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
-    // Unhooking is handled by Windhawk. Clean up any leftover temp files.
-    std::lock_guard<std::mutex> lock(g_mutex);
-    for (auto& [h, entry] : g_tempHandles) {
-        DeleteFileW(entry.tempPath.c_str());
-    }
-    g_tempHandles.clear();
+    // No temp-file cleanup needed: FILE_FLAG_DELETE_ON_CLOSE handles it,
+    // including on process crash or abnormal exit.
 }
 
 void Wh_ModSettingsChanged() {
