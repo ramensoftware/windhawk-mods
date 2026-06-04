@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.9
+// @version         1.3.0
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -2425,6 +2425,8 @@ static void CheckLateLoadExplorerFrame(LPCWSTR lpLibFileName, HMODULE hModule)
     if (_wcsicmp(name, L"ExplorerFrame.dll") != 0 ||
         g_explorerFrameLoaded.exchange(true, std::memory_order_acq_rel))
         return;
+    HMODULE pin = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN, L"ExplorerFrame.dll", &pin);
     Wh_Log(L"ExplorerFrame.dll loaded late, installing hooks");
     if (!InitializeModCore(hModule))
     {
@@ -2452,16 +2454,13 @@ BOOL Wh_ModInit()
     HMODULE hExplorerFrame = GetModuleHandleW(L"ExplorerFrame.dll");
     if (!hExplorerFrame)
     {
-        HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-        auto pLoadLibraryExW = hKernelBase
-            ? (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW")
-            : nullptr;
-        if (pLoadLibraryExW)
-            WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
-        else
-            WindhawkUtils::SetFunctionHook(LoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
+        auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(
+            GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW");
+        WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
         return TRUE;
     }
+    HMODULE pin = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN, L"ExplorerFrame.dll", &pin);
     g_explorerFrameLoaded.store(true, std::memory_order_relaxed);
     return InitializeModCore(hExplorerFrame) ? TRUE : FALSE;
 }
