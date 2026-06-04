@@ -2,7 +2,7 @@
 // @id              monitor-sleep-button
 // @name            Monitor Sleep Button
 // @description     Tray icon to turn off the monitor after a configurable countdown.
-// @version         1.1.0
+// @version         1.1.1
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
 // @homepage        https://github.com/SilverAmd
