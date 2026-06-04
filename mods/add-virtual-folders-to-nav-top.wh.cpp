@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.4
+// @version         1.2.5
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -2752,6 +2752,7 @@ void Wh_ModUninit()
                 ts.ownsNscRef = false;
             }
         }
+        g_trees.clear();
     }
 
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
