@@ -2,7 +2,7 @@
 // @id           explorer-nav-dragover-fix
 // @name         Explorer Nav DragOver Fix
 // @description  Stops File Explorer's nav pane from jumping when a folder auto-expands during a drag, restores mouse-wheel scrolling during drag, accelerates edge-scroll, and optionally collapses drag-opened folders when the drag ends
-// @version      1.2.5
+// @version      1.2.6
 // @author       tonythethompson
 // @github       https://github.com/tonythethompson
 // @include      explorer.exe
@@ -43,10 +43,9 @@ Two fixes for File Explorer's drag-over behavior:
    the edge (instead of Explorer's slow one-line-at-a-time crawl).
 
 4. **Optional transient-folder cleanup.** Folders that auto-expand only
-   because you dragged over them can be collapsed again when the drag ends
-   (cancel, or drop outside that branch). A successful drop keeps the branch
-   that contained the last nav-pane drop target expanded. Stagger delay
-   collapses them one step at a time for a smoother fold-up (configurable).
+   because you dragged over them are collapsed again when the drag ends
+   (cancel, or drop outside that branch). A successful drop keeps ancestors
+   on the path to the last nav-pane drop target expanded.
 
 ## Demo
 
@@ -143,14 +142,6 @@ normal use.
     when the drag ends, unless you dropped into that branch. Cancelled drags
     collapse all such folders. Disable to leave the nav pane as Explorer
     left it.
-- transientCollapseStaggerMs: 140
-  $name: Collapse stagger delay (milliseconds)
-  $description: >-
-    Base delay between each folder collapse when cleaning up drag-opened
-    items. Higher values look calmer (try 180-250 if steps still feel like a
-    blur). When several folders need collapsing, the mod adds a short lead-in
-    and slightly longer gaps for deeper items. 0 collapses everything
-    instantly. (0-800)
 */
 // ==/WindhawkModSettings==
 
@@ -218,7 +209,6 @@ struct Settings {
     std::atomic<int> edgeScrollBandPx{48};
     std::atomic<int> edgeScrollMaxLines{6};
     std::atomic<bool> collapseTransientExpansions{true};
-    std::atomic<int> transientCollapseStaggerMs{140};
 };
 
 Settings g_settings;
@@ -265,12 +255,6 @@ struct TransientCollapseTarget {
     LPARAM itemLParam = 0;
 };
 
-struct StaggeredCollapseSession {
-    std::vector<TransientCollapseTarget> remaining;
-    // Full target set for a final reconcile pass (handles stale HTREEITEM).
-    std::vector<TransientCollapseTarget> reconcile;
-};
-
 struct NavDropTargetRecord {
     HWND hwndTree = nullptr;
     HTREEITEM hItem = nullptr;
@@ -281,14 +265,9 @@ std::mutex g_dragTreeStateMutex;
 std::vector<TransientExpansionRecord> g_transientExpansions;
 NavDropTargetRecord g_lastNavDropTarget;
 
-// Staggered post-drag collapse (one TVM_EXPAND collapse per timer tick).
-constexpr UINT_PTR kTransientCollapseTimerId = 0xE0D1;
 // During drag the cursor is often clipped to the screen edge and maps slightly
 // outside the tree client rect, especially at the bottom.
 constexpr int kEdgeScrollOutsideSlackPx = 16;
-
-std::mutex g_staggeredCollapseMutex;
-std::unordered_map<HWND, StaggeredCollapseSession> g_staggeredCollapseSessions;
 
 // While protection is active we suppress Explorer-initiated jumps
 // (TVM_EXPAND restoration, TVM_SELECTITEM/TVGN_FIRSTVISIBLE,
@@ -408,9 +387,6 @@ void RecordNavDropTarget(HWND hwndTree, HTREEITEM hItem);
 void PurgeStaleDragTreeStateNotInSession(uint64_t activeSession);
 void PurgeDragTreeStateForWindow(HWND hwndTree);
 void FlushDragTreeState(DWORD dropEffect);
-void CancelStaggeredCollapseForWindow(HWND hwndTree);
-void CancelAllPendingStaggeredCollapses();
-void DrainStaggeredCollapseForWindow(HWND hwndTree);
 
 bool IsDragLoopActive() {
     return g_dragLoopDepth.load(std::memory_order_relaxed) > 0;
@@ -1430,7 +1406,6 @@ void RecordDragTransientExpansion(HWND hwndTree, HTREEITEM hItem,
 }
 
 void PurgeDragTreeStateForWindow(HWND hwndTree) {
-    CancelStaggeredCollapseForWindow(hwndTree);
     std::lock_guard<std::mutex> lock(g_dragTreeStateMutex);
     auto eraseMatching = [hwndTree](auto& container) {
         container.erase(
@@ -1527,36 +1502,6 @@ int ComputeEdgeScrollLines(const TreeEdgeScrollGeometry& geo) {
     return ClampInt(scaled, 1, maxLines);
 }
 
-int GetTransientCollapseStaggerBaseMs() {
-    return ClampInt(
-        g_settings.transientCollapseStaggerMs.load(std::memory_order_relaxed),
-        0, 800);
-}
-
-// First timer tick after a drag ends (slightly longer when many items queued).
-int ComputeInitialCollapseTimerMs(size_t queueSize) {
-    const int base = GetTransientCollapseStaggerBaseMs();
-    if (base <= 0) {
-        return 0;
-    }
-    if (queueSize <= 1) {
-        return base;
-    }
-    return ClampInt(base + 80, 20, 800);
-}
-
-// Delay before the next collapse; grows with remaining depth so rapid
-// multi-level fold-ups read as separate steps instead of one blur.
-int ComputeNextCollapseTimerMs(size_t itemsRemaining) {
-    const int base = GetTransientCollapseStaggerBaseMs();
-    if (base <= 0) {
-        return 0;
-    }
-    const int depthBonus =
-        ClampInt(static_cast<int>(itemsRemaining) * 12, 0, 280);
-    return ClampInt(base + depthBonus, 20, 800);
-}
-
 void CollapseOneTreeItem(HWND hwndTree, HTREEITEM item) {
     if (!hwndTree || !item || !IsTreeItemExpanded(hwndTree, item)) {
         return;
@@ -1620,136 +1565,14 @@ void ReconcileTransientCollapses(
     }
 }
 
-void CancelStaggeredCollapseForWindow(HWND hwndTree) {
-    if (hwndTree) {
-        KillTimer(hwndTree, kTransientCollapseTimerId);
-    }
-    std::lock_guard<std::mutex> lock(g_staggeredCollapseMutex);
-    g_staggeredCollapseSessions.erase(hwndTree);
-}
-
-void CancelAllPendingStaggeredCollapses() {
-    std::vector<HWND> trees;
-    {
-        std::lock_guard<std::mutex> lock(g_staggeredCollapseMutex);
-        trees.reserve(g_staggeredCollapseSessions.size());
-        for (const auto& kv : g_staggeredCollapseSessions) {
-            trees.push_back(kv.first);
-        }
-        g_staggeredCollapseSessions.clear();
-    }
-    for (HWND hwndTree : trees) {
-        if (hwndTree) {
-            KillTimer(hwndTree, kTransientCollapseTimerId);
-        }
-    }
-}
-
-void DrainStaggeredCollapseForWindow(HWND hwndTree) {
-    if (!hwndTree) {
-        return;
-    }
-    KillTimer(hwndTree, kTransientCollapseTimerId);
-
-    StaggeredCollapseSession session;
-    {
-        std::lock_guard<std::mutex> lock(g_staggeredCollapseMutex);
-        auto it = g_staggeredCollapseSessions.find(hwndTree);
-        if (it == g_staggeredCollapseSessions.end()) {
-            return;
-        }
-        session = std::move(it->second);
-        g_staggeredCollapseSessions.erase(it);
-    }
-
-    if (!IsWindow(hwndTree)) {
-        return;
-    }
-    CollapseTargetsNow(hwndTree, std::move(session.remaining));
-    ReconcileTransientCollapses(hwndTree, session.reconcile);
-}
-
-void StartStaggeredCollapseForWindow(
+void RunTransientCollapseForWindow(
     HWND hwndTree, std::vector<TransientCollapseTarget> targets) {
     if (!hwndTree || targets.empty() || !IsWindow(hwndTree)) {
         return;
     }
-    if (GetTransientCollapseStaggerBaseMs() <= 0) {
-        const std::vector<TransientCollapseTarget> reconcile = targets;
-        CollapseTargetsNow(hwndTree, std::move(targets));
-        ReconcileTransientCollapses(hwndTree, reconcile);
-        return;
-    }
-
-    // Finish any in-flight stagger for this tree instead of dropping it.
-    DrainStaggeredCollapseForWindow(hwndTree);
-
-    StaggeredCollapseSession session;
-    session.remaining = targets;
-    session.reconcile = targets;
-
-    const size_t queueSize = session.remaining.size();
-    {
-        std::lock_guard<std::mutex> lock(g_staggeredCollapseMutex);
-        g_staggeredCollapseSessions[hwndTree] = std::move(session);
-    }
-    SetTimer(hwndTree, kTransientCollapseTimerId,
-             static_cast<UINT>(ComputeInitialCollapseTimerMs(queueSize)),
-             nullptr);
-}
-
-LRESULT HandleTransientCollapseTimer(HWND hwndTree) {
-    StaggeredCollapseSession session;
-    {
-        std::lock_guard<std::mutex> lock(g_staggeredCollapseMutex);
-        const auto it = g_staggeredCollapseSessions.find(hwndTree);
-        if (it == g_staggeredCollapseSessions.end()) {
-            KillTimer(hwndTree, kTransientCollapseTimerId);
-            return 0;
-        }
-        session = std::move(it->second);
-        g_staggeredCollapseSessions.erase(it);
-    }
-
-    if (!IsWindow(hwndTree)) {
-        KillTimer(hwndTree, kTransientCollapseTimerId);
-        return 0;
-    }
-
-    bool collapsedOne = false;
-    while (!session.remaining.empty() && !collapsedOne) {
-        const TransientCollapseTarget target = session.remaining.back();
-        session.remaining.pop_back();
-
-        HTREEITEM item = ResolveCollapseTarget(hwndTree, target);
-        if (!item) {
-            continue;
-        }
-        if (!IsTreeItemExpanded(hwndTree, item)) {
-            continue;
-        }
-        CollapseOneTreeItem(hwndTree, item);
-        collapsedOne = true;
-    }
-
-    if (!session.remaining.empty()) {
-        {
-            std::lock_guard<std::mutex> lock(g_staggeredCollapseMutex);
-            g_staggeredCollapseSessions[hwndTree] = std::move(session);
-        }
-        const UINT delay = static_cast<UINT>(
-            ComputeNextCollapseTimerMs(session.remaining.size()));
-        if (delay == 0) {
-            DrainStaggeredCollapseForWindow(hwndTree);
-            return 0;
-        }
-        SetTimer(hwndTree, kTransientCollapseTimerId, delay, nullptr);
-        return 0;
-    }
-
-    ReconcileTransientCollapses(hwndTree, session.reconcile);
-    KillTimer(hwndTree, kTransientCollapseTimerId);
-    return 0;
+    const std::vector<TransientCollapseTarget> reconcile = targets;
+    CollapseTargetsNow(hwndTree, std::move(targets));
+    ReconcileTransientCollapses(hwndTree, reconcile);
 }
 
 OptionalSubclassResult HandleDragTreeScroll(HWND hwndTree, WPARAM wParam,
@@ -1903,10 +1726,6 @@ void FlushDragTreeState(DWORD dropEffect) {
         return;
     }
 
-    // Collapse deepest items first so parent collapse does not invalidate
-    // child handles mid-pass.
-    const int staggerMs = GetTransientCollapseStaggerBaseMs();
-
     std::unordered_map<HWND, std::vector<TransientCollapseTarget>> byTree;
 
     for (const auto& entry : toCollapse) {
@@ -1927,15 +1746,7 @@ void FlushDragTreeState(DWORD dropEffect) {
     }
 
     for (auto& pair : byTree) {
-        HWND hwndTree = pair.first;
-        std::vector<TransientCollapseTarget>& targets = pair.second;
-        if (staggerMs <= 0) {
-            const std::vector<TransientCollapseTarget> reconcile = targets;
-            CollapseTargetsNow(hwndTree, std::move(targets));
-            ReconcileTransientCollapses(hwndTree, reconcile);
-        } else {
-            StartStaggeredCollapseForWindow(hwndTree, std::move(targets));
-        }
+        RunTransientCollapseForWindow(pair.first, std::move(pair.second));
     }
 }
 
@@ -1944,10 +1755,6 @@ void FlushDragTreeState(DWORD dropEffect) {
 // dwRefData through.
 LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                   LPARAM lParam, DWORD_PTR /*dwRefData*/) {
-    if (uMsg == WM_TIMER && wParam == kTransientCollapseTimerId) {
-        return HandleTransientCollapseTimer(hWnd);
-    }
-
     if (uMsg == WM_NCDESTROY) {
         PurgeDragTreeStateForWindow(hWnd);
         {
@@ -2322,7 +2129,6 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* pDataObj, IDropSource* pDropSource,
         const uint64_t sessionId =
             g_dragSessionId.fetch_add(1, std::memory_order_acq_rel) + 1;
         PurgeStaleDragTreeStateNotInSession(sessionId);
-        CancelAllPendingStaggeredCollapses();
     }
 
     // Install the per-thread mouse hook for the duration of the modal drag
@@ -2422,10 +2228,6 @@ void LoadSettings() {
     g_settings.collapseTransientExpansions.store(
         Wh_GetIntSetting(L"collapseTransientExpansions") != 0,
         std::memory_order_relaxed);
-    g_settings.transientCollapseStaggerMs.store(
-        ClampInt(static_cast<int>(Wh_GetIntSetting(L"transientCollapseStaggerMs")),
-                 0, 800),
-        std::memory_order_relaxed);
 }
 
 }  // namespace
@@ -2434,7 +2236,7 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
     Wh_Log(L"Settings reloaded: depth=%d releaseY=%d marginX=%d marginY=%d "
            L"wheelDuringDrag=%d edgeAccel=%d edgeBand=%d edgeMaxLines=%d "
-           L"collapseTransient=%d collapseStaggerMs=%d",
+           L"collapseTransient=%d",
            g_settings.protectedMaxDepth.load(std::memory_order_relaxed),
            g_settings.releaseMoveY.load(std::memory_order_relaxed),
            g_settings.capturedRowMarginX.load(std::memory_order_relaxed),
@@ -2452,9 +2254,7 @@ void Wh_ModSettingsChanged() {
            g_settings.collapseTransientExpansions.load(
                std::memory_order_relaxed)
                ? 1
-               : 0,
-           g_settings.transientCollapseStaggerMs.load(
-               std::memory_order_relaxed));
+               : 0);
 }
 
 BOOL Wh_ModInit() {
@@ -2606,8 +2406,6 @@ void Wh_ModUninit() {
     for (HHOOK h : dragHooksToUnhook) {
         UnhookWindowsHookEx(h);
     }
-
-    CancelAllPendingStaggeredCollapses();
 
     // Track whether the helper actually exited. If it leaks (10s timeout), it
     // may still be inside MsgWaitForMultipleObjectsEx on g_helperStopEvent,
