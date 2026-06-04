@@ -6932,7 +6932,7 @@
                     5
                 ],
                 "ratingUsers": 6,
-                "updated": 1779318740000,
+                "updated": 1780601368000,
                 "users": 97
             },
             "metadata": {
@@ -6946,7 +6946,7 @@
                 ],
                 "license": "MIT",
                 "name": "Monitor Sleep Button",
-                "version": "1.1.0"
+                "version": "1.1.1"
             }
         },
         "more-space-in-language-indicator": {

@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-04T11:32:41.000Z</updated>
+    <updated>2026-06-04T19:29:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Monitor Sleep Button 1.1.1]]></title>
+        <id>https://windhawk.net/mods/monitor-sleep-button#7911f2ed2e772be13cb019231beb8a2d397dc15b</id>
+        <link href="https://windhawk.net/mods/monitor-sleep-button"/>
+        <updated>2026-06-04T19:29:28.000Z</updated>
+        <content type="html"><![CDATA[<p>Monitor Sleep Button now uses the actual Shell_NotifyIconGetRect rectangle for mouse wheel hit testing instead of expanding the tray icon rectangle. The rectangle is refreshed before handling mouse wheel events.</p>
+<p>Tested with an adjacent tray icon. Monitor Sleep Button now only changes the countdown when scrolling over its own tray icon.</p>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Desktop Icon Text and Shortcut Arrows 1.5.0]]></title>
         <id>https://windhawk.net/mods/hide-desktop-icon-text#01fbe027ae353a48edeb7cb6c0b74643429f57d6</id>
@@ -521,40 +533,6 @@ the way it was in Windows 95, before Windows 98.</p>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[IME Native Mode Lock 0.1]]></title>
-        <id>https://windhawk.net/mods/ime-mode-lock#6f1478f3ddcca4a45d5a1930a2d500db8738a386</id>
-        <link href="https://windhawk.net/mods/ime-mode-lock"/>
-        <updated>2026-05-30T18:56:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="imenativemodelock">IME Native Mode Lock</h1>
-<p>Forces supported IMEs to stay in their native input mode, blocking
-both system-initiated and user-initiated mode switches.</p>
-<p>By default, Windows automatically switches input modes when changing
-window focus or switching between applications. This mod blocks that
-behavior, keeping your IME in its native mode at all times.</p>
-<h2 id="supportedimes">Supported IMEs</h2>
-<ul>
-<li><strong>Simplified Chinese</strong> (Microsoft Pinyin, etc.) — always stays in Chinese mode</li>
-<li>More languages can be added in future updates</li>
-</ul>
-<p><strong>Pair with</strong> Caps IME Switcher (<code>caps-ime-switcher</code>) — short-press
-Caps Lock to switch input languages, long-press for Caps Lock.</p>
-<hr />
-<p>强制支持的输入法保持在原生输入模式，同时阻止系统自动切换和用户主动切换。</p>
-<p>默认情况下，Windows 在切换窗口焦点或应用程序时会自动切换输入模式。
-此 mod 阻止该行为，始终保持输入法在原生输入模式。</p>
-<h2 id="">支持的输入法</h2>
-<ul>
-<li><strong>简体中文</strong>（微软拼音等）— 始终保持中文模式</li>
-<li>未来可添加更多语言支持</li>
-</ul>
-<p><strong>推荐搭配</strong> Caps IME Switcher (<code>caps-ime-switcher</code>) — 可使用 Caps Lock
-短按切换输入语言，长按触发大小写锁定，配合本 mod 体验更佳。</p>]]></content>
-        <author>
-            <name>ZeonXr</name>
-            <uri>https://github.com/ZeonXr</uri>
         </author>
     </entry>
 </feed>

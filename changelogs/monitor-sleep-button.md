@@ -1,3 +1,9 @@
+## 1.1.1 ([Jun 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7911f2ed2e772be13cb019231beb8a2d397dc15b/mods/monitor-sleep-button.wh.cpp))
+
+Monitor Sleep Button now uses the actual Shell_NotifyIconGetRect rectangle for mouse wheel hit testing instead of expanding the tray icon rectangle. The rectangle is refreshed before handling mouse wheel events.
+
+Tested with an adjacent tray icon. Monitor Sleep Button now only changes the countdown when scrolling over its own tray icon.
+
 ## 1.1.0 ([May 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6da1e2166b9f1d3ea9c073170de375ff2d8e8d91/mods/monitor-sleep-button.wh.cpp))
 
 - Configurable global hotkey
