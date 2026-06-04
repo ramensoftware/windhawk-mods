@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.5
+// @version         1.2.6
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -205,11 +205,17 @@ static void ResetSepColor() {
     g_logSepDraw = true;
 }
 
-static COLORREF DeriveSepColor(HWND hTree)
+static COLORREF GetTreeBgColor(HWND hTree)
 {
     COLORREF bg = (COLORREF)SendMessageW(hTree, TVM_GETBKCOLOR, 0, 0);
     if (bg == CLR_INVALID || (int)bg == -1)
         bg = GetSysColor(COLOR_WINDOW);
+    return bg;
+}
+
+static COLORREF DeriveSepColor(HWND hTree)
+{
+    COLORREF bg = GetTreeBgColor(hTree);
     int sum = GetRValue(bg) + GetGValue(bg) + GetBValue(bg);
     int d = (sum < 384) ? 56 : -41;
     auto cl = [](int v) { return (BYTE)(v < 0 ? 0 : (v > 255 ? 255 : v)); };
@@ -1513,9 +1519,7 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                             HDC hdc = cd->nmcd.hdc;
                             RECT client;
                             GetClientRect(hTree, &client);
-                            COLORREF bg = GetPixel(hdc, 1, rcHide.top + 2);
-                            if (bg == CLR_INVALID)
-                                bg = GetSysColor(COLOR_WINDOW);
+                            COLORREF bg = GetTreeBgColor(hTree);
                             HBRUSH bgBrush = CreateSolidBrush(bg);
                             if (bgBrush)
                             {
