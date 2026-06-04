@@ -2,7 +2,7 @@
 // @id              remove-context-menu-items
 // @name            Remove Context Menu Items
 // @description     Removes unwanted items from file context menus with configurable options and context-aware filtering
-// @version         1.10.0
+// @version         1.11.0
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -96,6 +96,7 @@ Add an asterisk (*) at the end to match items that start with the given text:
 - `pt-BR`, `pt-PT`
 - `ru-RU` (added by [VitalityV1nT](https://github.com/VitalityV1nT))
 - `tr-TR` (added by [bcrtvkcs](https://github.com/bcrtvkcs))
+- `jp-JP` (added by [haru612](https://github.com/haru612))
 
 If you find a mistake and for additional details, please click [here](https://github.com/armaninyow/Remove-Unwanted-Context-Menu-Items).
 */
@@ -741,6 +742,7 @@ void InitializeMenuItems() {
     g_menuItems = {
         // Bloatware Items
         {L"Move to OneDrive", &g_settings.bloatwareItems.removeOneDrive, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"OneDrive に移動", &g_settings.bloatwareItems.removeOneDrive, false, nullptr, false}, // jp-JP
         {L"Mover para o OneDrive", &g_settings.bloatwareItems.removeOneDrive, false, nullptr, false}, // pt-BR, pt-PT
         {L"Mover a OneDrive", &g_settings.bloatwareItems.removeOneDrive, false, nullptr, false}, // es-MX
         {L"Přesunout na OneDrive", &g_settings.bloatwareItems.removeOneDrive, false, nullptr, false}, // cs-CZ
@@ -748,6 +750,7 @@ void InitializeMenuItems() {
         {L"OneDrive'a taşı", &g_settings.bloatwareItems.removeOneDrive, false, nullptr, false}, // tr-TR
         
         {L"Always keep on this device", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"このデバイス上に常に保持する", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr, false}, // jp-JP
         {L"Sempre manter neste dispositivo", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr, false}, // pt-BR
         {L"Manter sempre neste dispositivo", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr, false}, // pt-PT
         {L"Mantener siempre en este dispositivo", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr, false}, // es-MX
@@ -756,6 +759,7 @@ void InitializeMenuItems() {
         {L"Her zaman bu cihazda tut", &g_settings.appSpecificItems.removeAlwaysKeepOnThisDevice, false, nullptr, false}, // tr-TR
         
         {L"Free up space", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"空き領域を増やす", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr, false}, // jp-JP
         {L"Liberar espaço", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr, false}, // pt-BR
         {L"Libertar espaço", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr, false}, // pt-PT
         {L"Liberar espacio", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr, false}, // es-MX
@@ -764,6 +768,7 @@ void InitializeMenuItems() {
         {L"Alan boşalt", &g_settings.appSpecificItems.removeFreeUpSpace, false, nullptr, false}, // tr-TR
         
         {L"Ask Copilot", &g_settings.bloatwareItems.removeCopilot, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"Copilot とチャットする", &g_settings.bloatwareItems.removeCopilot, false, nullptr, false}, // jp-JP
         {L"Perguntar ao Copilot", &g_settings.bloatwareItems.removeCopilot, false, nullptr, false}, // pt-BR, pt-PT
         {L"Preguntar a Copilot", &g_settings.bloatwareItems.removeCopilot, false, nullptr, false}, // es-MX
         {L"Zeptat se Copilota", &g_settings.bloatwareItems.removeCopilot, false, nullptr, false}, // cs-CZ
@@ -771,6 +776,7 @@ void InitializeMenuItems() {
         {L"Copilot'a sor", &g_settings.bloatwareItems.removeCopilot, false, nullptr, false}, // tr-TR
         
         {L"Scan with Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"Microsoft Defenderでスキャンする...", &g_settings.bloatwareItems.removeDefender, false, nullptr, false}, // jp-JP
         {L"Verificar com o Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr, false}, // pt-BR
         {L"Analisar com o Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr, false}, // pt-PT
         {L"Analizar con Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr, false}, // es-MX
@@ -780,6 +786,7 @@ void InitializeMenuItems() {
         {L"Проверка с использованием Microsoft Defender...", &g_settings.bloatwareItems.removeDefender, false, nullptr, false}, // ru-RU
         
         {L"Create with Designer", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"Designeで作成", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // jp-JP
         {L"Criar com o Designer", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // pt-BR, pt-PT
         {L"Crear con Designer", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // es-MX
         {L"Vytvořit pomocí Designeru", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // cs-CZ
@@ -787,6 +794,7 @@ void InitializeMenuItems() {
         {L"Designer ile oluştur", &g_settings.bloatwareItems.removeDesigner, false, nullptr, false}, // tr-TR
         
         {L"Edit with Clipchamp", &g_settings.bloatwareItems.removeClipchamp, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"Clipchampで編集", &g_settings.bloatwareItems.removeClipchamp, false, nullptr, false}, // jp-JP
         {L"Editar com o Clipchamp", &g_settings.bloatwareItems.removeClipchamp, false, nullptr, false}, // pt-BR, pt-PT
         {L"Editar con Clipchamp", &g_settings.bloatwareItems.removeClipchamp, false, nullptr, false}, // es-MX
         {L"Upravit pomocí Clipchampu", &g_settings.bloatwareItems.removeClipchamp, false, nullptr, false}, // cs-CZ
@@ -794,7 +802,7 @@ void InitializeMenuItems() {
         {L"Clipchamp ile düzenle", &g_settings.bloatwareItems.removeClipchamp, false, nullptr, false}, // tr-TR
         {L"Редактировать в Clipchamp", &g_settings.bloatwareItems.removeClipchamp, false, nullptr, false}, // ru-RU
         
-        {L"Ask Microsoft 365 Copilot", &g_settings.bloatwareItems.removeMicrosoft365Copilot, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"Ask Microsoft 365 Copilot", &g_settings.bloatwareItems.removeMicrosoft365Copilot, false, nullptr, false}, // en-US, en-GB, en-AU, jp-JP
         {L"Perguntar ao Microsoft 365 Copilot", &g_settings.bloatwareItems.removeMicrosoft365Copilot, false, nullptr, false}, // pt-BR, pt-PT
         {L"Preguntar a Microsoft 365 Copilot", &g_settings.bloatwareItems.removeMicrosoft365Copilot, false, nullptr, false}, // es-MX
         {L"Zeptat se Microsoft 365 Copilota", &g_settings.bloatwareItems.removeMicrosoft365Copilot, false, nullptr, false}, // cs-CZ
@@ -803,6 +811,7 @@ void InitializeMenuItems() {
         
         // Basic Items
         {L"Open", &g_settings.basicItems.removeOpen, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"開く", &g_settings.basicItems.removeOpen, false, nullptr, false}, // jp-JP
         {L"Abrir", &g_settings.basicItems.removeOpen, false, nullptr, false}, // pt-BR, pt-PT, es-MX
         {L"Otevřít", &g_settings.basicItems.removeOpen, false, nullptr, false}, // cs-CZ
         {L"Öffnen", &g_settings.basicItems.removeOpen, false, nullptr, false}, // de-DE
@@ -810,6 +819,7 @@ void InitializeMenuItems() {
         {L"Открыть", &g_settings.basicItems.removeOpen, false, nullptr, false}, // ru-RU
         
         {L"Open with", &g_settings.basicItems.removeOpenWith, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"プログラムから開く", &g_settings.basicItems.removeOpenWith, false, nullptr, false}, // jp-JP
         {L"Abrir com", &g_settings.basicItems.removeOpenWith, false, nullptr, false}, // pt-BR, pt-PT
         {L"Abrir con", &g_settings.basicItems.removeOpenWith, false, nullptr, false}, // es-MX
         {L"Otevřít v aplikaci", &g_settings.basicItems.removeOpenWith, false, nullptr, false}, // cs-CZ
@@ -818,6 +828,7 @@ void InitializeMenuItems() {
         {L"Открыть с помощью", &g_settings.basicItems.removeOpenWith, false, nullptr, false}, // ru-RU
         
         {L"Cut", &g_settings.basicItems.removeCut, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"切り取り", &g_settings.basicItems.removeCut, false, nullptr, false}, // jp-JP
         {L"Recortar", &g_settings.basicItems.removeCut, false, nullptr, false}, // pt-BR
         {L"Cortar", &g_settings.basicItems.removeCut, false, nullptr, false}, // pt-PT, es-MX
         {L"Vyjmout", &g_settings.basicItems.removeCut, false, nullptr, false}, // cs-CZ
@@ -826,6 +837,7 @@ void InitializeMenuItems() {
         {L"Вырезать", &g_settings.basicItems.removeCut, false, nullptr, false}, // ru-RU
         
         {L"Copy", &g_settings.basicItems.removeCopy, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"コピー", &g_settings.basicItems.removeCopy, false, nullptr, false}, // jp-JP
         {L"Copiar", &g_settings.basicItems.removeCopy, false, nullptr, false}, // pt-BR, pt-PT, es-MX
         {L"Kopírovat", &g_settings.basicItems.removeCopy, false, nullptr, false}, // cs-CZ
         {L"Kopieren", &g_settings.basicItems.removeCopy, false, nullptr, false}, // de-DE
@@ -833,6 +845,7 @@ void InitializeMenuItems() {
         {L"Копировать", &g_settings.basicItems.removeCopy, false, nullptr, false}, // ru-RU
         
         {L"Create shortcut", &g_settings.basicItems.removeCreateShortcut, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"ショートカットの作成", &g_settings.basicItems.removeCreateShortcut, false, nullptr, false}, // jp-JP
         {L"Criar atalho", &g_settings.basicItems.removeCreateShortcut, false, nullptr, false}, // pt-BR, pt-PT
         {L"Crear acceso directo", &g_settings.basicItems.removeCreateShortcut, false, nullptr, false}, // es-MX
         {L"Vytvořit zástupce", &g_settings.basicItems.removeCreateShortcut, false, nullptr, false}, // cs-CZ
@@ -841,6 +854,7 @@ void InitializeMenuItems() {
         {L"Создать ярлык", &g_settings.basicItems.removeCreateShortcut, false, nullptr, false}, // ru-RU
         
         {L"Delete", &g_settings.basicItems.removeDelete, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"削除", &g_settings.basicItems.removeDelete, false, nullptr, false}, // jp-JP
         {L"Excluir", &g_settings.basicItems.removeDelete, false, nullptr, false}, // pt-BR
         {L"Eliminar", &g_settings.basicItems.removeDelete, false, nullptr, false}, // pt-PT, es-MX
         {L"Odstranit", &g_settings.basicItems.removeDelete, false, nullptr, false}, // cs-CZ
@@ -849,6 +863,7 @@ void InitializeMenuItems() {
         {L"Удалить", &g_settings.basicItems.removeDelete, false, nullptr, false}, // ru-RU
         
         {L"Rename", &g_settings.basicItems.removeRename, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"名前の変更", &g_settings.basicItems.removeRename, false, nullptr, false}, // jp-JP
         {L"Renomear", &g_settings.basicItems.removeRename, false, nullptr, false}, // pt-BR
         {L"Mudar o nome", &g_settings.basicItems.removeRename, false, nullptr, false}, // pt-PT
         {L"Cambiar nombre", &g_settings.basicItems.removeRename, false, nullptr, false}, // es-MX
@@ -858,6 +873,7 @@ void InitializeMenuItems() {
         {L"Переименовать", &g_settings.basicItems.removeRename, false, nullptr, false}, // ru-RU
         
         {L"Send to", &g_settings.basicItems.removeSendTo, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"送る", &g_settings.basicItems.removeSendTo, false, nullptr, false}, // jp-JP
         {L"Enviar para", &g_settings.basicItems.removeSendTo, false, nullptr, false}, // pt-BR, pt-PT
         {L"Enviar a", &g_settings.basicItems.removeSendTo, false, nullptr, false}, // es-MX
         {L"Odeslat do", &g_settings.basicItems.removeSendTo, false, nullptr, false}, // cs-CZ
@@ -866,6 +882,7 @@ void InitializeMenuItems() {
         {L"Отправить", &g_settings.basicItems.removeSendTo, false, nullptr, false}, // ru-RU
         
         {L"Open in new tab", &g_settings.basicItems.removeOpenInNewTab, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"新しいタブで開く", &g_settings.basicItems.removeOpenInNewTab, false, nullptr, false}, // jp-JP
         {L"Abrir em uma nova guia", &g_settings.basicItems.removeOpenInNewTab, false, nullptr, false}, // pt-BR
         {L"Abrir num novo separador", &g_settings.basicItems.removeOpenInNewTab, false, nullptr, false}, // pt-PT
         {L"Abrir en nueva pestaña", &g_settings.basicItems.removeOpenInNewTab, false, nullptr, false}, // es-MX
@@ -875,6 +892,7 @@ void InitializeMenuItems() {
         {L"Открыть в новой вкладке", &g_settings.basicItems.removeOpenInNewTab, false, nullptr, false}, // ru-RU
         
         {L"Open in new window", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"新しいウィンドウで開く", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr, false}, // jp-JP
         {L"Abrir em uma nova janela", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr, false}, // pt-BR
         {L"Abrir numa nova janela", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr, false}, // pt-PT
         {L"Abrir en nueva ventana", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr, false}, // es-MX
@@ -884,6 +902,7 @@ void InitializeMenuItems() {
         {L"Открыть в новом окне", &g_settings.basicItems.removeOpenInNewWindow, false, nullptr, false}, // ru-RU
         
         {L"Edit", &g_settings.basicItems.removeEdit, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"編集", &g_settings.basicItems.removeEdit, false, nullptr, false}, // jp-JP
         {L"Editar", &g_settings.basicItems.removeEdit, false, nullptr, false}, // pt-BR, pt-PT, es-MX
         {L"Upravit", &g_settings.basicItems.removeEdit, false, nullptr, false}, // cs-CZ
         {L"Bearbeiten", &g_settings.basicItems.removeEdit, false, nullptr, false}, // de-DE
@@ -891,6 +910,7 @@ void InitializeMenuItems() {
         {L"Изменить", &g_settings.basicItems.removeEdit, false, nullptr, false}, // ru-RU
         
         {L"Play", &g_settings.basicItems.removePlay, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"再生", &g_settings.basicItems.removePlay, false, nullptr, false}, // jp-JP
         {L"Reproduzir", &g_settings.basicItems.removePlay, false, nullptr, false}, // pt-BR, pt-PT
         {L"Reproducir", &g_settings.basicItems.removePlay, false, nullptr, false}, // es-MX
         {L"Přehrát", &g_settings.basicItems.removePlay, false, nullptr, false}, // cs-CZ
@@ -899,6 +919,7 @@ void InitializeMenuItems() {
         {L"Воспроизвести", &g_settings.basicItems.removePlay, false, nullptr, false}, // ru-RU
         
         {L"Preview", &g_settings.basicItems.removePreview, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"プレビュー", &g_settings.basicItems.removePreview, false, nullptr, false}, // jp-JP
         {L"Visualizar", &g_settings.basicItems.removePreview, false, nullptr, false}, // pt-BR
         {L"Pré-visualizar", &g_settings.basicItems.removePreview, false, nullptr, false}, // pt-PT
         {L"Vista previa", &g_settings.basicItems.removePreview, false, nullptr, false}, // es-MX
@@ -907,6 +928,7 @@ void InitializeMenuItems() {
         {L"Önizleme", &g_settings.basicItems.removePreview, false, nullptr, false}, // tr-TR
         
         {L"Print", &g_settings.basicItems.removePrint, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"印刷", &g_settings.basicItems.removePrint, false, nullptr, false}, // jp-JP
         {L"Imprimir", &g_settings.basicItems.removePrint, false, nullptr, false}, // pt-BR, pt-PT, es-MX
         {L"Tisk", &g_settings.basicItems.removePrint, false, nullptr, false}, // cs-CZ
         {L"Drucken", &g_settings.basicItems.removePrint, false, nullptr, false}, // de-DE
@@ -914,6 +936,7 @@ void InitializeMenuItems() {
         {L"Печать", &g_settings.basicItems.removePrint, false, nullptr, false}, // ru-RU
         
         {L"Share", &g_settings.basicItems.removeShare, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"共有", &g_settings.basicItems.removeShare, false, nullptr, false}, // jp-JP
         {L"Compartilhar", &g_settings.basicItems.removeShare, false, nullptr, false}, // pt-BR
         {L"Partilhar", &g_settings.basicItems.removeShare, false, nullptr, false}, // pt-PT
         {L"Compartir", &g_settings.basicItems.removeShare, false, nullptr, false}, // es-MX
@@ -923,6 +946,7 @@ void InitializeMenuItems() {
         {L"Поделиться", &g_settings.basicItems.removeShare, false, nullptr, false}, // ru-RU
         
         {L"Send with Quick Share", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"共有", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr, false}, // jp-JP
         {L"Enviar com o Compartilhamento Rápido", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr, false}, // pt-BR
         {L"Enviar com Partilha Rápida", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr, false}, // pt-PT
         {L"Enviar con Quick Share", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr, false}, // es-MX
@@ -931,6 +955,7 @@ void InitializeMenuItems() {
         {L"Quick Share ile gönder", &g_settings.appSpecificItems.removeSendWithQuickShare, false, nullptr, false}, // tr-TR
         
         {L"Refresh", &g_settings.basicItems.removeRefresh, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"最新の情報に更新", &g_settings.basicItems.removeRefresh, false, nullptr, false}, // jp-JP
         {L"Atualizar", &g_settings.basicItems.removeRefresh, false, nullptr, false}, // pt-BR, pt-PT
         {L"Actualizar", &g_settings.basicItems.removeRefresh, false, nullptr, false}, // es-MX
         {L"Aktualizovat", &g_settings.basicItems.removeRefresh, false, nullptr, false}, // cs-CZ
@@ -939,6 +964,7 @@ void InitializeMenuItems() {
         {L"Обновить", &g_settings.basicItems.removeRefresh, false, nullptr, false}, // ru-RU
         
         {L"Copy as path", &g_settings.basicItems.removeCopyAsPath, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"パスのコピー", &g_settings.basicItems.removeCopyAsPath, false, nullptr, false}, // jp-JP
         {L"Copiar como caminho", &g_settings.basicItems.removeCopyAsPath, false, nullptr, false}, // pt-BR, pt-PT
         {L"Copiar como ruta de acceso", &g_settings.basicItems.removeCopyAsPath, false, nullptr, false}, // es-MX
         {L"Kopírovat jako cestu", &g_settings.basicItems.removeCopyAsPath, false, nullptr, false}, // cs-CZ
@@ -947,6 +973,7 @@ void InitializeMenuItems() {
         {L"Копировать как путь", &g_settings.basicItems.removeCopyAsPath, false, nullptr, false}, // ru-RU
         
         {L"Customize this folder...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr, false}, // en-US
+        {L"このフォルダーのカスタマイズ...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr, false}, // jp-JP
         {L"Customise this folder...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr, false}, // en-GB, en-AU
         {L"Personalizar esta pasta...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr, false}, // pt-BR, pt-PT
         {L"Personalizar esta carpeta...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr, false}, // es-MX
@@ -956,6 +983,7 @@ void InitializeMenuItems() {
         {L"Настроить папку...", &g_settings.basicItems.removeCustomizeFolder, false, nullptr, false}, // ru-RU
         
         {L"Add to Favorites", &g_settings.basicItems.removeFavorites, false, nullptr, false}, // en-US
+        {L"お気に入りに追加", &g_settings.basicItems.removeFavorites, false, nullptr, false}, // jp-JP
         {L"Add to Favourites", &g_settings.basicItems.removeFavorites, false, nullptr, false}, // en-GB, en-AU
         {L"Adicionar aos Favoritos", &g_settings.basicItems.removeFavorites, false, nullptr, false}, // pt-BR, pt-PT
         {L"Agregar a favoritos", &g_settings.basicItems.removeFavorites, false, nullptr, false}, // es-MX
@@ -965,6 +993,7 @@ void InitializeMenuItems() {
         {L"Добавить в избранное", &g_settings.basicItems.removeFavorites, false, nullptr, false}, // ru-RU
         
         {L"Pin to Quick access", &g_settings.basicItems.removePinToQuickAccess, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"クイック アクセスにピン留めする", &g_settings.basicItems.removePinToQuickAccess, false, nullptr, false}, // jp-JP
         {L"Fixar no Acesso Rápido", &g_settings.basicItems.removePinToQuickAccess, false, nullptr, false}, // pt-BR
         {L"Afixar no Acesso rápido", &g_settings.basicItems.removePinToQuickAccess, false, nullptr, false}, // pt-PT
         {L"Anclar a Acceso rápido", &g_settings.basicItems.removePinToQuickAccess, false, nullptr, false}, // es-MX
@@ -974,6 +1003,7 @@ void InitializeMenuItems() {
         {L"Закрепить на панели быстрого доступа", &g_settings.basicItems.removePinToQuickAccess, false, nullptr, false}, // ru-RU
         
         {L"Pin to Start", &g_settings.basicItems.removePinToStart, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"スタートにピン留めする", &g_settings.basicItems.removePinToStart, false, nullptr, false}, // jp-JP
         {L"Fixar em Iniciar", &g_settings.basicItems.removePinToStart, false, nullptr, false}, // pt-BR
         {L"Afixar no Iniciar", &g_settings.basicItems.removePinToStart, false, nullptr, false}, // pt-PT
         {L"Anclar a Inicio", &g_settings.basicItems.removePinToStart, false, nullptr, false}, // es-MX
@@ -983,6 +1013,7 @@ void InitializeMenuItems() {
         {L"Закрепить в меню \"Пуск\"", &g_settings.basicItems.removePinToStart, false, nullptr, false}, // ru-RU
         
         {L"Cast to Device", &g_settings.basicItems.removeCast, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"デバイス キャスト", &g_settings.basicItems.removeCast, false, nullptr, false}, // jp-JP
         {L"Transmitir para Dispositivo", &g_settings.basicItems.removeCast, false, nullptr, false}, // pt-BR
         {L"Transmitir para o Dispositivo", &g_settings.basicItems.removeCast, false, nullptr, false}, // pt-PT
         {L"Transmitir en dispositivo", &g_settings.basicItems.removeCast, false, nullptr, false}, // es-MX
@@ -992,6 +1023,7 @@ void InitializeMenuItems() {
         {L"Передать на устройство", &g_settings.basicItems.removeCast, false, nullptr, false}, // ru-RU
         
         {L"Give access to", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"アクセスを許可する", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // jp-JP
         {L"Conceder acesso a", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // pt-BR, pt-PT
         {L"Dar acceso a", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // es-MX
         {L"Poskytnout přístup k", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // cs-CZ
@@ -1000,6 +1032,7 @@ void InitializeMenuItems() {
         {L"Предоставить доступ к", &g_settings.basicItems.removeGiveAccess, false, nullptr, false}, // ru-RU
         
         {L"Restore previous versions", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"以前のバージョンの復元", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // jp-JP
         {L"Restaurar versões anteriores", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // pt-BR, pt-PT
         {L"Restaurar versiones anteriores", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // es-MX
         {L"Obnovit předchozí verze", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // cs-CZ
@@ -1008,6 +1041,7 @@ void InitializeMenuItems() {
         {L"Восстановить прежнюю версию", &g_settings.basicItems.removeRestoreVersions, false, nullptr, false}, // ru-RU
         
         {L"Include in library", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"ライブラリに追加", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false}, // jp-JP
         {L"Incluir na biblioteca", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false}, // pt-BR, pt-PT
         {L"Incluir en biblioteca", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false}, // es-MX
         {L"Zahrnout do knihovny", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false}, // cs-CZ
@@ -1016,6 +1050,7 @@ void InitializeMenuItems() {
         {L"Добавить в библиотеку", &g_settings.basicItems.removeIncludeInLibrary, false, nullptr, false}, // ru-RU
         
         {L"Rotate right", &g_settings.basicItems.removeRotate, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"右に回転", &g_settings.basicItems.removeRotate, false, nullptr, false}, // jp-JP
         {L"Girar para a direita", &g_settings.basicItems.removeRotate, false, nullptr, false}, // pt-BR
         {L"Rodar para a direita", &g_settings.basicItems.removeRotate, false, nullptr, false}, // pt-PT
         {L"Girar a la derecha", &g_settings.basicItems.removeRotate, false, nullptr, false}, // es-MX
@@ -1025,6 +1060,7 @@ void InitializeMenuItems() {
         {L"Повернуть вправо", &g_settings.basicItems.removeRotate, false, nullptr, false}, // ru-RU
         
         {L"Rotate left", &g_settings.basicItems.removeRotate, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"左に回転", &g_settings.basicItems.removeRotate, false, nullptr, false}, // jp-JP
         {L"Girar para a esquerda", &g_settings.basicItems.removeRotate, false, nullptr, false}, // pt-BR
         {L"Rodar para a esquerda", &g_settings.basicItems.removeRotate, false, nullptr, false}, // pt-PT
         {L"Girar a la izquierda", &g_settings.basicItems.removeRotate, false, nullptr, false}, // es-MX
@@ -1034,6 +1070,7 @@ void InitializeMenuItems() {
         {L"Повернуть влево", &g_settings.basicItems.removeRotate, false, nullptr, false}, // ru-RU
         
         {L"Display settings", &g_settings.basicItems.removeDisplaySettings, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"ディスプレイ設定", &g_settings.basicItems.removeDisplaySettings, false, nullptr, false}, // jp-JP
         {L"Configurações de vídeo", &g_settings.basicItems.removeDisplaySettings, false, nullptr, false}, // pt-BR
         {L"Definições do ecrã", &g_settings.basicItems.removeDisplaySettings, false, nullptr, false}, // pt-PT
         {L"Configuración de pantalla", &g_settings.basicItems.removeDisplaySettings, false, nullptr, false}, // es-MX
@@ -1043,6 +1080,7 @@ void InitializeMenuItems() {
         {L"Параметры экрана", &g_settings.basicItems.removeDisplaySettings, false, nullptr, false}, // ru-RU
         
         {L"Personalize", &g_settings.basicItems.removePersonalize, false, nullptr, false}, // en-US
+        {L"個人用設定", &g_settings.basicItems.removePersonalize, false, nullptr, false}, // jp-JP
         {L"Personalise", &g_settings.basicItems.removePersonalize, false, nullptr, false}, // en-GB, en-AU
         {L"Personalizar", &g_settings.basicItems.removePersonalize, false, nullptr, false}, // pt-BR, pt-PT, es-MX
         {L"Přizpůsobit", &g_settings.basicItems.removePersonalize, false, nullptr, false}, // cs-CZ
@@ -1051,6 +1089,7 @@ void InitializeMenuItems() {
         {L"Персонализация", &g_settings.basicItems.removePersonalize, false, nullptr, false}, // ru-RU
         
         {L"Set as desktop background", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"デスクトップの背景として設定", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr, false}, // jp-JP
         {L"Definir como plano de fundo da área de trabalho", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr, false}, // pt-BR
         {L"Definir como fundo do ambiente de trabalho", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr, false}, // pt-PT
         {L"Establecer como fondo de escritorio", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr, false}, // es-MX
@@ -1060,6 +1099,7 @@ void InitializeMenuItems() {
         {L"Сделать фоном рабочего стола", &g_settings.basicItems.removeSetAsDesktopBackground, false, nullptr, false}, // ru-RU
         
         {L"View", &g_settings.basicItems.removeView, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"表示", &g_settings.basicItems.removeView, false, nullptr, false}, // jp-JP
         {L"Exibir", &g_settings.basicItems.removeView, false, nullptr, false}, // pt-BR
         {L"Ver", &g_settings.basicItems.removeView, false, nullptr, false}, // pt-PT, es-MX
         {L"Zobrazení", &g_settings.basicItems.removeView, false, nullptr, false}, // cs-CZ
@@ -1068,6 +1108,7 @@ void InitializeMenuItems() {
         {L"Вид", &g_settings.basicItems.removeView, false, nullptr, false}, // ru-RU
         
         {L"Sort by", &g_settings.basicItems.removeSortBy, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"並べ替え", &g_settings.basicItems.removeSortBy, false, nullptr, false}, // jp-JP
         {L"Classificar por", &g_settings.basicItems.removeSortBy, false, nullptr, false}, // pt-BR
         {L"Ordenar por", &g_settings.basicItems.removeSortBy, false, nullptr, false}, // pt-PT, es-MX
         {L"Seřadit podle", &g_settings.basicItems.removeSortBy, false, nullptr, false}, // cs-CZ
@@ -1076,6 +1117,7 @@ void InitializeMenuItems() {
         {L"Сортировка", &g_settings.basicItems.removeSortBy, false, nullptr, false}, // ru-RU
         
         {L"Group by", &g_settings.basicItems.removeGroupBy, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"グループで表示", &g_settings.basicItems.removeGroupBy, false, nullptr, false}, // jp-JP
         {L"Agrupar por", &g_settings.basicItems.removeGroupBy, false, nullptr, false}, // pt-BR, pt-PT, es-MX
         {L"Seskupit podle", &g_settings.basicItems.removeGroupBy, false, nullptr, false}, // cs-CZ
         {L"Gruppieren nach", &g_settings.basicItems.removeGroupBy, false, nullptr, false}, // de-DE
@@ -1083,6 +1125,7 @@ void InitializeMenuItems() {
         {L"Группировка", &g_settings.basicItems.removeGroupBy, false, nullptr, false}, // ru-RU
         
         {L"New", &g_settings.basicItems.removeNew, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"新規作成", &g_settings.basicItems.removeNew, false, nullptr, false}, // jp-JP
         {L"Novo", &g_settings.basicItems.removeNew, false, nullptr, false}, // pt-BR, pt-PT
         {L"Nuevo", &g_settings.basicItems.removeNew, false, nullptr, false}, // es-MX
         {L"Nový", &g_settings.basicItems.removeNew, false, nullptr, false}, // cs-CZ
@@ -1091,6 +1134,7 @@ void InitializeMenuItems() {
         {L"Создать", &g_settings.basicItems.removeNew, false, nullptr, false}, // ru-RU
         
         {L"Properties", &g_settings.basicItems.removeProperties, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"プロパティ", &g_settings.basicItems.removeProperties, false, nullptr, false}, // jp-JP
         {L"Propriedades", &g_settings.basicItems.removeProperties, false, nullptr, false}, // pt-BR, pt-PT
         {L"Propiedades", &g_settings.basicItems.removeProperties, false, nullptr, false}, // es-MX
         {L"Vlastnosti", &g_settings.basicItems.removeProperties, false, nullptr, false}, // cs-CZ
@@ -1099,6 +1143,7 @@ void InitializeMenuItems() {
         {L"Свойства", &g_settings.basicItems.removeProperties, false, nullptr, false}, // ru-RU
         
         {L"Paste", &g_settings.basicItems.removePaste, false, nullptr, true}, // en-US, en-GB, en-AU
+        {L"貼り付け", &g_settings.basicItems.removePaste, false, nullptr, true}, // jp-JP
         {L"Colar", &g_settings.basicItems.removePaste, false, nullptr, true}, // pt-BR, pt-PT
         {L"Pegar", &g_settings.basicItems.removePaste, false, nullptr, true}, // es-MX
         {L"Vložit", &g_settings.basicItems.removePaste, false, nullptr, true}, // cs-CZ
@@ -1107,6 +1152,7 @@ void InitializeMenuItems() {
         {L"Вставить", &g_settings.basicItems.removePaste, false, nullptr, true}, // ru-RU
         
         {L"Extract All...", &g_settings.basicItems.removeExtractAll, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"すべて展開...", &g_settings.basicItems.removeExtractAll, false, nullptr, false}, // jp-JP
         {L"Extrair Tudo...", &g_settings.basicItems.removeExtractAll, false, nullptr, false}, // pt-BR
         {L"Extrair Todos...", &g_settings.basicItems.removeExtractAll, false, nullptr, false}, // pt-PT
         {L"Extraer todo...", &g_settings.basicItems.removeExtractAll, false, nullptr, false}, // es-MX
@@ -1117,6 +1163,7 @@ void InitializeMenuItems() {
         
         // App-specific Items
         {L"Add to VLC media player's Playlist", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"VLCメディアプレイヤーのプレイリストに追加", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr, false}, // jp-JP
         {L"Adicionar à lista de reprodução do VLC media player", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr, false}, // pt-BR, pt-PT
         {L"Agregar a la lista de reproducción de VLC media player", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr, false}, // es-MX
         {L"Přidat do seznamu stop přehrávače médií VLC", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr, false}, // cs-CZ
@@ -1125,6 +1172,7 @@ void InitializeMenuItems() {
         {L"Добавить в плейлист VLC", &g_settings.appSpecificItems.removeVLCPlaylist, false, nullptr, false}, // ru-RU
         
         {L"Play with VLC media player", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"VLCメディアプレイヤーで再生", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr, false}, // jp-JP
         {L"Reproduzir com o VLC media player", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr, false}, // pt-BR, pt-PT
         {L"Reproducir con VLC media player", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr, false}, // es-MX
         {L"Přehrát přehrávačem médií VLC", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr, false}, // cs-CZ
@@ -1133,6 +1181,7 @@ void InitializeMenuItems() {
         {L"Воспроизвести в VLC", &g_settings.appSpecificItems.removeVLCPlay, false, nullptr, false}, // ru-RU
         
         {L"Add to Media Player play queue", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"メディアプレイヤーの再生キューに追加", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr, false}, // jp-JP
         {L"Adicionar à fila de reprodução do Media Player", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr, false}, // pt-BR, pt-PT
         {L"Agregar a la cola de reproducción del Reproductor multimedia", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr, false}, // es-MX
         {L"Přidat do fronty přehrávání přehrávače médií", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr, false}, // cs-CZ
@@ -1140,6 +1189,7 @@ void InitializeMenuItems() {
         {L"Media Player oynatma kuyruğuna ekle", &g_settings.appSpecificItems.removeAddToMediaPlayerQueue, false, nullptr, false}, // tr-TR
         
         {L"Play with Media Player", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"メディアプレイヤーで再生", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr, false}, // jp-JP
         {L"Reproduzir com o Media Player", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr, false}, // pt-BR, pt-PT
         {L"Reproducir con el Reproductor de Windows Media", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr, false}, // es-MX
         {L"Přehrát přehrávačem médií", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr, false}, // cs-CZ
@@ -1147,6 +1197,7 @@ void InitializeMenuItems() {
         {L"Media Player ile oynat", &g_settings.appSpecificItems.removePlayWithMediaPlayer, false, nullptr, false}, // tr-TR
         
         {L"Edit in Notepad", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions, false}, // en-US, en-GB, en-AU
+        {L"メモ帳で編集", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions, false}, // jp-JP
         {L"Editar no Bloco de Notas", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions, false}, // pt-BR, pt-PT
         {L"Editar en el Bloc de notas", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions, false}, // es-MX
         {L"Upravit v Poznámkovém bloku", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions, false}, // cs-CZ
@@ -1154,7 +1205,7 @@ void InitializeMenuItems() {
         {L"Not Defteri'nde düzenle", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions, false}, // tr-TR
         {L"Изменить в Блокноте", &g_settings.appSpecificItems.removeEditInNotepad, true, &g_settings.extensionFiltering.notepadExtensions, false}, // ru-RU
         
-        {L"Edit with Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions, false}, // en-US, en-GB, en-AU
+        {L"Edit with Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions, false}, // en-US, en-GB, en-AU, jp-JP
         {L"Editar no Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions, false}, // pt-BR, pt-PT
         {L"Editar con Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions, false}, // es-MX
         {L"Upravit v aplikaci Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions, false}, // cs-CZ
@@ -1163,6 +1214,7 @@ void InitializeMenuItems() {
         {L"Редактировать в Notepad++", &g_settings.appSpecificItems.removeEditInNotepadPlusPlus, true, &g_settings.extensionFiltering.notepadExtensions, false}, // ru-RU
         
         {L"Edit with Photos", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"フォトで編集", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr, false}, // jp-JP
         {L"Editar com Fotos", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr, false}, // pt-BR
         {L"Editar com Fotografias", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr, false}, // pt-PT
         {L"Editar con Fotos", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr, false}, // es-MX
@@ -1172,6 +1224,7 @@ void InitializeMenuItems() {
         {L"Изменить с помощью приложения \"Фотографии\"", &g_settings.appSpecificItems.removeEditWithPhotos, false, nullptr, false}, // ru-RU
         
         {L"Edit with Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"ペイントで編集する", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // jp-JP
         {L"Editar com o Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // pt-BR, pt-PT
         {L"Editar con Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // es-MX
         {L"Upravit pomocí Malování", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // cs-CZ
@@ -1180,6 +1233,7 @@ void InitializeMenuItems() {
         {L"Редактирование с помощью  приложения Paint", &g_settings.appSpecificItems.removeEditWithPaint, false, nullptr, false}, // ru-RU
         
         {L"NVIDIA Control Panel", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"NVIDIA コントロールパネル", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // jp-JP
         {L"Painel de Controle NVIDIA", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // pt-BR
         {L"Painel de Controlo da NVIDIA", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // pt-PT
         {L"Panel de control de NVIDIA", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // es-MX
@@ -1188,7 +1242,7 @@ void InitializeMenuItems() {
         {L"NVIDIA Denetim Masası", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // tr-TR
         {L"Панель управления NVIDIA", &g_settings.appSpecificItems.removeNvidiaControlPanel, false, nullptr, false}, // ru-RU
         
-        {L"Open in Terminal", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr, false}, // en-US, en-GB, en-AU
+        {L"Open in Terminal", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr, false}, // en-US, en-GB, en-AU, jp-JP
         {L"Abrir no Terminal", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr, false}, // pt-BR, pt-PT
         {L"Abrir en Terminal", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr, false}, // es-MX
         {L"Otevřít v terminálu", &g_settings.appSpecificItems.removeOpenInTerminal, false, nullptr, false}, // cs-CZ
