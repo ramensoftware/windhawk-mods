@@ -11,21 +11,21 @@
 
 // ==WindhawkModReadme==
 /*
-# Fluid Window Animations ✨
+# Fluid Window Animations
 
 Tired of the stiff, boring default animations for your applications? Inspired by the fluid desktop environments of **macOS and Linux**, this mod completely overhauls how your app windows move. 
 
 Unlike older, buggy alternatives, this mod features a completely rewritten timeline engine that guarantees **zero visual artifacts**, perfectly preserving drop shadows, modern rounded corners, and transparency.
 
-### 🌟 Features
+###Features
 - **Multiple Animation Styles**:
-  - 🧞‍♂️ **Genie**: The iconic fluid, organic liquid deformation that pulls app windows perfectly into your taskbar.
-  - 🪟 **Scale**: A clean, modern, and snappy zoom-to-icon transition.
-  - 📺 **CRT**: A nostalgic retro cathode-ray tube screen-off sequence.
+  -  **Genie**: The iconic fluid, organic liquid deformation that pulls app windows perfectly into your taskbar.
+  -  **Scale**: A clean, modern, and snappy zoom-to-icon transition.
+  -  **CRT**: A nostalgic retro cathode-ray tube screen-off sequence.
 - **Advanced Physics**: Built-in kinematic rebound (elastic bounce) makes application windows feel natural and heavy when they restore.
 - **Crystal Clear Quality**: Features up to 3x Supersampling for the Genie effect, entirely eliminating jagged, pixelated edges on High-DPI monitors.
 
-### 🚀 Roadmap
+###  Roadmap
 This is currently focused on Minimize/Restore animations for apps. **Close and Open animations are planned for future updates!** Stay tuned.
 */
 // ==/WindhawkModReadme==
@@ -33,44 +33,44 @@ This is currently focused on Minimize/Restore animations for apps. **Close and O
 // ==WindhawkModSettings==
 /*
 - mode: genie
-  $name: "⚙️ Animation Style"
+  $name: " Animation Style"
   $description: "Choose the visual effect for minimizing and restoring app windows."
   $options:
     - genie: "Genie (macOS-style fluid pull-down)"
     - vanilla: "Scale (Smooth shrink to icon)"
     - crt: "CRT (Retro TV turn-off effect)"
 - minimizeDuration: 400
-  $name: "⏱️ Minimize Duration (ms)"
+  $name: " Minimize Duration (ms)"
   $description: "How long the minimize animation takes (Recommended: 400)."
 - restoreDuration: 350
-  $name: "⏱️ Restore Duration (ms)"
+  $name: " Restore Duration (ms)"
   $description: "How long the restore animation takes (Recommended: 350)."
 - bounceOnRestore: true
-  $name: "🏀 Elastic Bounce on Restore"
+  $name: " Elastic Bounce on Restore"
   $description: "Enable a natural, spring-like bounce effect at the end of the restore animation."
 - bounceStrength: 30
-  $name: "🏀 Bounce Strength (0–100)"
+  $name: " Bounce Strength (0–100)"
   $description: "How intense the elastic rebound is."
 - bounceDuration: 300
-  $name: "🏀 Bounce Duration (ms)"
+  $name: " Bounce Duration (ms)"
   $description: "How long the bounce physics play out after the window is restored."
 - genieTailWidth: 12
-  $name: "🧞‍♂️ Genie: Tail End Width (px)"
+  $name: " Genie: Tail End Width (px)"
   $description: "Width of the window tail at the exact point it touches the taskbar."
 - genieTailOpacity: 5
-  $name: "🧞‍♂️ Genie: Tail End Opacity (%)"
+  $name: " Genie: Tail End Opacity (%)"
   $description: "Transparency of the tail tip. Lower means it blends seamlessly into the taskbar (5% recommended)."
 - genieTailLength: 40
-  $name: "🧞‍♂️ Genie: Tail Fade Zone (%)"
+  $name: " Genie: Tail Fade Zone (%)"
   $description: "How much of the window's tail smoothly fades into transparency."
 - genieQuality: 2
-  $name: "🧞‍♂️ Genie: Supersampling Quality"
+  $name: " Genie: Supersampling Quality"
   $description: "Anti-aliasing to fix jagged edges. 1 = Fast(Recommended), 2 = 2x Quality , 3 = 3x Ultra Quality."
 - minimizeIconSize: 48
-  $name: "🪟 Scale: Target Icon Size (px)"
+  $name: " Scale: Target Icon Size (px)"
   $description: "The physical size the window shrinks down to in the Scale mode."
 - vanillaFadeStart: 30
-  $name: "🪟 Scale: Fade Start Point (%)"
+  $name: " Scale: Fade Start Point (%)"
   $description: "When the window starts turning transparent. 30 = stays solid for the first 30% of the animation."
 */
 // ==/WindhawkModSettings==
