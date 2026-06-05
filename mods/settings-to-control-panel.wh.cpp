@@ -2,14 +2,14 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        9.8.7
+// @version        9.8.8
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-# Redirect Settings → Control Panel (v9.8.7)
+# Redirect Settings → Control Panel (v9.8.8)
 
 This Windhawk mod intercepts modern `ms-settings:` URIs and redirects them to
 their corresponding classic Control Panel applets, relying exclusively on native
@@ -470,18 +470,8 @@ static void InitMappings() {
             L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:network-ethernet",
             L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-vpn",
-            L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-airplanemode",
-            L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-mobilehotspot",
-            L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-cellular",
-            L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:datausage",
-            L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:network-proxy",                       L"inetcpl.cpl,,4"},
-        {L"settings:network-status", 
+        {L"ms-settings:network-status", 
             L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
         {L"ms-settings:network-status",
             L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
@@ -520,9 +510,14 @@ static void InitMappings() {
         {L"ms-settings:regionformatting",                    L"intl.cpl"},
         {L"ms-settings:language",                            L"intl.cpl"},
 
-        // ── Ease of Access ────────────────────────────────────────────────────
-        {L"ms-settings:easeofaccess",
-            L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"},
+        // ── Ease of Access ────────────────────────────────────────────────────,
+        // Ease Of Access entries
+        {L"ms-settings:easeofaccess", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"},
+        {L"ms-settings:easeofaccess-narrator", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}\\pageNoVisual"},
+        {L"ms-settings:easeofaccess-magnifier", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}\\pageEasierToSee"},
+        {L"ms-settings:easeofaccess-speech", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A"},
+        {L"ms-settings:easeofaccess-colorfilter", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}\\pageEasierToSee"},
+        {L"ms-settings:easeofaccess-display", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}\\pageEasierToSee"},
 
         // ── Recovery / Backup ─────────────────────────────────────────────────
         {L"ms-settings:backup",
@@ -753,8 +748,13 @@ static bool IsPersonalizationWindow(HWND hwnd) {
             return false;
         }
         if (c == L"cabinetwclass") {
-            Wh_Log(L"HWND: CabinetWClass -> inside Personalization");
-            return true;
+            if (t.find(L"personaliz") != std::wstring::npos) {
+                Wh_Log(L"HWND: CabinetWClass personalization confirmed");
+                return true;
+        }
+
+            Wh_Log(L"HWND: CabinetWClass but not personalization");
+            return false;
         }
         if (t.find(L"personaliz") != std::wstring::npos) {
             Wh_Log(L"HWND: title match 'personaliz' -> Personalization window");
@@ -802,6 +802,18 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
         return {t, true};
     }
 
+    // ─── EDIT FOR EASE OF ACCESS IN PERSONALIZATION ───
+
+    if (g_settings.smartPersonalizationDetect && IsPersonalizationWindow(hwnd)) {
+        if (uri.find(L"ms-settings:easeofaccess") == 0) {
+            Wh_Log(L"SmartPersonalization: Accesso da finestra Personalizzazione, forzo radice Centro Accessibilità");
+            std::wstring t = ApplyWin11Filter(L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}");
+            BounceGuardRecord(uri);
+            return {t, true};
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     auto it = g_mappings.find(uri);
     if (it != g_mappings.end()) {
         if (BounceGuardIsBounce(uri)) {
@@ -839,7 +851,6 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     Wh_Log(L"Unmapped, passing through: %s", uri.c_str());
     return {L"", false};
 }
-
 // ── Precise control system detection ─────────────────────────────────────────
 
 static std::wstring BaseNameLower(const std::wstring& path) {
@@ -1064,7 +1075,7 @@ BOOL WINAPI CreateProcessW_hook(
 // ── Windhawk entry points ─────────────────────────────────────────────────────
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v9.8.7 init");
+    Wh_Log(L"Redirect Settings to Control Panel v9.8.8 init");
 
     DetectWindowsVersion();
     LoadSettings();
