@@ -7,7 +7,7 @@
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32 -ladvapi32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32 -ladvapi32 -DWIN32_LEAN_AND_MEAN
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -76,12 +76,10 @@ One click drops your connection. Click it again, and you're back online.
 */
 // ==/WindhawkModReadme==
 
-#define WIN32_LEAN_AND_MEAN
-// winsock2.h + ws2tcpip.h MUST come before windows.h (pulled in by
-// windhawk_utils.h). iphlpapi.h only declares the netioapi APIs
+// iphlpapi.h only declares the netioapi APIs
 // (GetIfTable2 / MIB_IF_TABLE2 / FreeMibTable) when the winsock2 types are
-// already in scope; including ws2tcpip.h after windows.h leaves them hidden
-// and clang falls back to the legacy MIB_IFTABLE.
+// already in scope. -DWIN32_LEAN_AND_MEAN in compiler options prevents windows.h
+// from including the legacy winsock.h.
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windhawk_utils.h>
