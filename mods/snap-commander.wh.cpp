@@ -116,11 +116,17 @@ by the Minimize action.
 
 ## ⚠ Important usage note ⚠
 
-In order to use this mod with elevated processes, you must allow Windhawk to inject 
-into the **dwm.exe** system process and replace windhawk.exe as @included with dwm.exe.
-To do so, add it to the process inclusion list in the advanced settings, and modify 
-the mod code by forking it, and replacing "windhawk.exe" with "dwm.exe" in line 8.
-If you do not do this, it will silently fail to inject to elevated processes.
+In order to use this mod with elevated processes, it can be configured to target
+`dwm.exe`.
+
+First, navigate to Windhawk's Settings > Advanced settings > More advanced
+settings > Process inclusion list, and make sure that `dwm.exe` is in the list.
+
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
+
+Next, go to the mod's advanced tab, enable this option: "Ignore mod
+inclusion/exclusion lists", then add `dwm.exe` to the custom process inclusion
+list.
 
 */
 // ==/WindhawkModReadme==
