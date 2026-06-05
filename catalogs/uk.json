@@ -11902,7 +11902,7 @@
                     8
                 ],
                 "ratingUsers": 10,
-                "updated": 1780418385000,
+                "updated": 1780660891000,
                 "users": 51
             },
             "metadata": {
@@ -11918,7 +11918,7 @@
                     "explorer.exe"
                 ],
                 "name": "Transparent Desktop Icons with Spotlight",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "transparent-screensaver-fix": {
