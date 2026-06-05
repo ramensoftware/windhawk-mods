@@ -7,7 +7,7 @@
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -46,7 +46,7 @@ One click drops your connection. Click it again, and you're back online.
 
 1. **Find the Icon:** Look in your system tray (bottom right of your screen, next to the clock) for the little `^` arrow. Hit it and look for the network icon.
 2. **Left-click to Toggle:** Give the icon a single click.
-3. **Middle-click for Full Reset:** Middle-click the icon to run a full network reset (flush DNS, release, renew, winsock reset, IP reset).
+3. **Middle-click for Full Reset:** Middle-click the icon to run a full network cycle reset — disables all adapters, flushes DNS, then re-enables them. This cuts all active connections.
 4. **Right-click for Menu:** Disable/Enable network, open Network Settings, or exit.
 5. **Approve the Prompt (on toggle/reset):** Windows will pop up a quick UAC screen asking for permission. Click **Yes**.
 
@@ -64,14 +64,12 @@ One click drops your connection. Click it again, and you're back online.
 - **Complete rebuild.** Mod renamed to Net-Toggle.
 - New: **DNS Monitoring** — The icon monitors your connection and changes color if your internet drops out (configurable in Mod Settings).
 - New: **WiFi-style tray icon** with 5 color states (Red / Yellow / Blue / Green / Grey).
-- New: Middle-click → **Full Network Reset** (flush DNS, release/renew, winsock + IP reset).
+- New: Middle-click → **Full Network Reset** — disables all adapters, flushes DNS, re-enables them. Cuts all active connections.
 - New: Right-click context menu — toggle network, open Network Settings, or exit.
 - New: Donate button on the mod page.
 - Improved: Tray icon is now independent from the Windhawk app and no longer groups with it in the taskbar.
 - Improved: Tray icon persists reliably across Explorer restarts.
 - Improved: Icon stays in sync even if you disable your adapter directly in Windows Settings.
-- Fixed: Occasional hangs during network toggles or timeouts.
-- Fixed: Tray icon could show the wrong state if a toggle failed.
 
 ### v1.0
 - Initial release.
@@ -97,11 +95,22 @@ One click drops your connection. Click it again, and you're back online.
 #define DNS_PING_TIMER_ID 2
 #define DNS_RECOVERY_TIMER_ID 3
 
+#define MENU_TOGGLE_NET    1
+#define MENU_NET_SETTINGS  2
+#define MENU_OPEN_WINDHAWK 9000
+
 // Stable GUID that gives our tray icon a process-independent identity.
 static const GUID NETTOGGLE_TRAY_GUID =
     {0x246764CF, 0xF857, 0x4399, {0x8D, 0x3D, 0x22, 0x76, 0x1A, 0x6A, 0xBD, 0x95}};
 
 const DWORD CLICK_DEBOUNCE_MS = 2000;
+
+static const DWORD POWERSHELL_TIMEOUT_MS  = 60000;  // 60s max for any PS command
+static const DWORD NETWATCH_POLL_INTERVAL = 15000;  // 15s per fallback poll tick
+static const DWORD NETWATCH_POLL_RETRIES  = 4;      // 4 × 15s = 60s then retry NotifyAddrChange
+static const int   MIN_PING_INTERVAL_SEC  = 5;
+static const int   DNS_TCP_TIMEOUT_SEC    = 2;
+static const int   DNS_TCP_TIMEOUT_USEC   = 500000; // 0.5s (total 2.5s)
 
 static volatile LONG g_isProcessingClick = 0;
 static volatile LONG g_trayIconInstalled = 0;
@@ -115,7 +124,7 @@ static HANDLE g_activeWorkerThread = nullptr;
 
 // DNS monitoring
 static volatile DWORD g_dnsServerIp = 0;
-static DWORD g_pingIntervalMs = 30000;
+static DWORD g_pingIntervalMs = 10000;
 static volatile LONG g_dnsIsReachable = 0;
 static volatile LONG g_dnsWorkerRunning = 0;
 
@@ -125,6 +134,11 @@ static HANDLE g_shutdownEvent = nullptr;
 
 // Current tray icon handle (destroy before replace)
 static HICON g_currentIcon = nullptr;
+
+static WCHAR   g_windhawkPath[MAX_PATH]  = {};
+static WCHAR   g_ddoresDllPath[MAX_PATH] = {};
+static HICON   g_hWindHawkIcon = nullptr;
+static HBITMAP g_hWindHawkBmp  = nullptr;
 
 // helpers
 
@@ -209,18 +223,14 @@ BOOL RunPowerShellCommand(LPCWSTR psCommand, BOOL targetState) {
         return FALSE;
     }
 
-    Wh_Log(L"UAC cleared. Updating UI to target state: %d", targetState);
-    InterlockedExchange(&g_networkIsUp, targetState ? 1 : 0);
-    if (g_trayHwnd) {
-        PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)targetState, 0);
-    }
+    Wh_Log(L"UAC cleared. Waiting for PowerShell to complete...");
 
     if (!sei.hProcess) {
         Wh_Log(L"No process handle returned");
         return FALSE;
     }
 
-    DWORD waitResult = WaitForSingleObject(sei.hProcess, 60000);
+    DWORD waitResult = WaitForSingleObject(sei.hProcess, POWERSHELL_TIMEOUT_MS);
     if (waitResult == WAIT_TIMEOUT) {
         Wh_Log(L"Process timed out, terminating");
         TerminateProcess(sei.hProcess, 1);
@@ -237,13 +247,13 @@ BOOL RunPowerShellCommand(LPCWSTR psCommand, BOOL targetState) {
 
     CloseHandle(sei.hProcess);
     Wh_Log(L"Process exited with code: %d", exitCode);
-    if (exitCode != 0) {
-        LONG revertState = targetState ? 0 : 1;
-        InterlockedExchange(&g_networkIsUp, revertState);
-        if (g_trayHwnd)
-            PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(revertState == 1), 0);
+    if (exitCode == 0) {
+        InterlockedExchange(&g_networkIsUp, targetState ? 1 : 0);
+        return TRUE;
+    } else {
+        Wh_Log(L"PowerShell command failed (exit %d) — network state unchanged", exitCode);
+        return FALSE;
     }
-    return exitCode == 0;
 }
 
 // ==============================================================================
@@ -282,7 +292,7 @@ BOOL PingIp(DWORD ipAddr) {
         FD_ZERO(&exceptSet);
         FD_SET(sock, &writeSet);
         FD_SET(sock, &exceptSet);
-        TIMEVAL tv = {2, 500000};  // 2.5s
+        TIMEVAL tv = {DNS_TCP_TIMEOUT_SEC, DNS_TCP_TIMEOUT_USEC};
         int sel = select(0, nullptr, &writeSet, &exceptSet, &tv);
         if (sel > 0 && FD_ISSET(sock, &writeSet)) {
             int sockErr = 0;
@@ -448,7 +458,10 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
     BOOL pending = (g_isProcessingClick != 0);
 
     HICON hNewIcon = CreateColoredDotIcon(enabled, dnsUp, hasDns, pending);
-    if (!hNewIcon) return;
+    if (!hNewIcon) {
+        Wh_Log(L"AddOrUpdateTrayIcon: CreateColoredDotIcon failed");
+        return;
+    }
 
     // Destroy old icon to prevent handle leak
     if (g_currentIcon) {
@@ -465,7 +478,7 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
     if (g_isProcessingClick == 1) {
         wsprintfW(nid.szTip, L"Net-Toggle: toggling\u2026");
     } else if (g_isProcessingClick == 2) {
-        wsprintfW(nid.szTip, L"Net-Toggle: resetting\u2026");
+        wsprintfW(nid.szTip, L"Net-Toggle: refreshing\u2026");
     } else if (enabled) {
         if (!hasDns)
             wsprintfW(nid.szTip, L"Net-Toggle: ON");
@@ -554,12 +567,17 @@ DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
         Wh_Log(L"ResetWorkerThread: CoInitializeEx failed (0x%X)", hrCo);
         return 1;
     }
-    Wh_Log(L"Executing full network reset");
+    Wh_Log(L"Executing network blackout reset (disable adapters → flush DNS → re-enable)");
 
-    // Destructive ops run FIRST so that ipconfig /renew is the last action.
-    // This ensures the final addr-change notification (and recovery ping) fires
-    // after the adapter has a fresh DHCP lease, not after the stack reset.
-    WCHAR cmdArgs[] = L"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"netsh winsock reset; netsh int ip reset; ipconfig /flushdns; ipconfig /release; ipconfig /renew; ipconfig /registerdns\"";
+    // Full adapter cycle: kills all active connections, flushes DNS, restores adapters.
+    // ipconfig /release+renew omitted — adapter disable/enable already resets DHCP state.
+    // netsh winsock/ip reset excluded — they require a reboot to take effect.
+    WCHAR cmdArgs[] =
+        L"-NoProfile -NonInteractive -WindowStyle Hidden -Command \""
+        L"Get-NetAdapter -Physical | Disable-NetAdapter -Confirm:$false; "
+        L"Start-Sleep -Seconds 2; "
+        L"ipconfig /flushdns; "
+        L"Get-NetAdapter -Physical | Enable-NetAdapter -Confirm:$false\"";
 
     SHELLEXECUTEINFOW sei = {sizeof(sei)};
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NO_CONSOLE;
@@ -572,7 +590,7 @@ DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
     BOOL resetOk = FALSE;
     if (ShellExecuteExW(&sei)) {
         if (sei.hProcess) {
-            WaitForSingleObject(sei.hProcess, 60000);
+            WaitForSingleObject(sei.hProcess, POWERSHELL_TIMEOUT_MS);
             CloseHandle(sei.hProcess);
         }
         Wh_Log(L"Network reset completed");
@@ -585,10 +603,8 @@ DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
     if (g_trayHwnd) {
         PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(g_networkIsUp == 1), 0);
         if (resetOk && g_networkIsUp) {
-            // Belt-and-suspenders: directly trigger a post-reset recovery ping
-            // with wParam=1 so the handler uses a 12s settle (longer than the
-            // normal 6s used for a simple re-enable) to let DHCP and routing
-            // fully stabilise before we ping.
+            // Use 12s settle (wParam=1) to give DHCP/routing time to stabilise
+            // after the release/renew before we attempt the DNS ping.
             PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 1, 0);
         }
     }
@@ -712,26 +728,66 @@ void OnDnsPingTimer(HWND hWnd) {
 // Feature D — Right-Click Context Menu
 // ==============================================================================
 
+static bool IsSystemDarkMode() {
+    DWORD value = 1, size = sizeof(value);
+    RegGetValueW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return value == 0;
+}
+
+static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
+    HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+    if (!ux) return;
+    using Fn135 = int(WINAPI*)(int);
+    using Fn133 = bool(WINAPI*)(HWND, bool);
+    using Fn136 = void(WINAPI*)();
+    if (auto f = (Fn135)GetProcAddress(ux, MAKEINTRESOURCEA(135))) f(dark ? 2 : 0);
+    if (auto f = (Fn133)GetProcAddress(ux, MAKEINTRESOURCEA(133))) f(hWnd, dark);
+    if (auto f = (Fn136)GetProcAddress(ux, MAKEINTRESOURCEA(136))) f();
+}
+
 void ShowContextMenu(HWND hWnd) {
-    POINT pt;
-    GetCursorPos(&pt);
-    SetForegroundWindow(hWnd);
     HMENU hMenu = CreatePopupMenu();
     BOOL netUp = (g_networkIsUp == 1);
-    AppendMenuW(hMenu, MF_STRING, 1, netUp ? L"Disable Network" : L"Enable Network");
+    AppendMenuW(hMenu, MF_STRING, MENU_TOGGLE_NET,
+                netUp ? L"Disable Network" : L"Enable Network");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, 2, L"Open Network Settings");
+    AppendMenuW(hMenu, MF_STRING, MENU_NET_SETTINGS, L"Open Network Settings");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, 3, L"Exit");
-    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
-                             pt.x, pt.y, 0, hWnd, nullptr);
-    DestroyMenu(hMenu);
+
+    MENUITEMINFOW miiWH = {sizeof(miiWH)};
+    miiWH.fMask      = MIIM_ID | MIIM_STRING | MIIM_BITMAP;
+    miiWH.wID        = MENU_OPEN_WINDHAWK;
+    miiWH.dwTypeData = (LPWSTR)L"Open Windhawk";
+    miiWH.hbmpItem   = g_hWindHawkBmp;
+    InsertMenuItemW(hMenu, (UINT)-1, TRUE, &miiWH);
+
+    POINT pt; GetCursorPos(&pt);
+    bool dark = IsSystemDarkMode();
+    ApplyContextMenuTheme(hWnd, dark);
+    SetForegroundWindow(hWnd);
+    int cmd = TrackPopupMenu(hMenu,
+        TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
+        pt.x, pt.y, 0, hWnd, nullptr);
     PostMessageW(hWnd, WM_NULL, 0, 0);
+    DestroyMenu(hMenu);
+
     switch (cmd) {
-        case 1: ProcessTrayClick(); break;
-        case 2: ShellExecuteW(nullptr, L"open", L"ms-settings:network",
-                              nullptr, nullptr, SW_SHOW); break;
-        case 3: PostMessageW(hWnd, WM_CLOSE, 0, 0); break;
+        case MENU_TOGGLE_NET:
+            ProcessTrayClick();
+            break;
+        case MENU_NET_SETTINGS:
+            ShellExecuteW(nullptr, L"open", L"ms-settings:network",
+                          nullptr, nullptr, SW_SHOW);
+            break;
+        case MENU_OPEN_WINDHAWK: {
+            SHELLEXECUTEINFOW sei = {sizeof(sei)};
+            sei.lpFile = g_windhawkPath;
+            sei.nShow  = SW_SHOWNORMAL;
+            ShellExecuteExW(&sei);
+            break;
+        }
     }
 }
 
@@ -754,22 +810,26 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         return 0;
     } else if (msg == WM_TRIGGER_PING) {
         // wParam=0: normal re-enable — 6s settle for DHCP/init.
-        // wParam=1: post-full-reset — 12s settle; stack + routing need more time.
-        UINT settleMs = (wParam == 1) ? 12000 : 6000;
+        // wParam=1: post-blackout-reset — 15s settle; adapter cycle + DHCP needs more time.
+        UINT settleMs = (wParam == 1) ? 15000 : 6000;
         SetTimer(hWnd, DNS_RECOVERY_TIMER_ID, settleMs, nullptr);
         return 0;
     } else if (msg == WM_SETTINGS_CHANGED) {
         // Re-read settings on the tray thread
-        PCWSTR pDnsIp = Wh_GetStringSetting(L"dnsServer");
         DWORD newIp = 0;
-        if (pDnsIp && pDnsIp[0]) {
-            InetPtonW(AF_INET, pDnsIp, &newIp);
+        {
+            auto dnsIp = WindhawkUtils::StringSetting::make(L"dnsServer");
+            if (dnsIp.get()[0]) {
+                if (InetPtonW(AF_INET, dnsIp.get(), &newIp) != 1) {
+                    Wh_Log(L"Invalid DNS server IP '%s' — DNS monitoring disabled", dnsIp.get());
+                    newIp = 0;
+                }
+            }
         }
-        if (pDnsIp) Wh_FreeStringSetting(pDnsIp);
         
         InterlockedExchange(&g_dnsServerIp, newIp);
         int intervalSec = Wh_GetIntSetting(L"pingInterval");
-        if (intervalSec < 5) intervalSec = 5;
+        if (intervalSec < MIN_PING_INTERVAL_SEC) intervalSec = MIN_PING_INTERVAL_SEC;
         g_pingIntervalMs = (DWORD)intervalSec * 1000;
 
         KillTimer(hWnd, DNS_PING_TIMER_ID);
@@ -803,8 +863,9 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         PostQuitMessage(0);
         return 0;
     } else if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
-        Wh_Log(L"Explorer restarted. Re-adding tray icon.");
-        AddOrUpdateTrayIcon(hWnd, g_networkIsUp, TRUE);
+        Wh_Log(L"Explorer restarted — re-adding tray icon");
+        AddOrUpdateTrayIcon(hWnd, (BOOL)(g_networkIsUp == 1), TRUE);
+        if (g_dnsServerIp != 0) OnDnsPingTimer(hWnd);  // verify state asynchronously
         return 0;
     }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -829,29 +890,30 @@ DWORD WINAPI NetWatchThreadProc(LPVOID) {
 
         DWORD nacRet = NotifyAddrChange(&notifyHandle, &ov);
         if (nacRet != ERROR_IO_PENDING && nacRet != NO_ERROR) {
-            Wh_Log(L"NetWatch: NotifyAddrChange failed (%d)", nacRet);
-            // Fallback: poll every 15 seconds instead
-            while (true) {
-                DWORD pollWait = WaitForSingleObject(g_shutdownEvent, 15000);
-                if (pollWait == WAIT_OBJECT_0) {
-                    CloseHandle(hEvent);
-                    return 0;
-                }
-                // Skip poll while a toggle/reset is in flight — CheckActualNetworkState
-                // can catch adapters in a transitional state and overwrite g_networkIsUp,
-                // causing Yellow → Red flicker when the adapters are still coming up.
+            Wh_Log(L"NetWatch: NotifyAddrChange failed (%d) — polling for %ds then retrying",
+                   nacRet, (NETWATCH_POLL_RETRIES * NETWATCH_POLL_INTERVAL) / 1000);
+            // Bounded fallback: poll NETWATCH_POLL_RETRIES × NETWATCH_POLL_INTERVAL,
+            // then retry NotifyAddrChange so event-driven mode is restored after adapters recover.
+            // Skip polls while a toggle/reset is in flight to avoid Yellow→Red flicker.
+            bool shutdown = false;
+            for (DWORD i = 0; i < NETWATCH_POLL_RETRIES; i++) {
+                DWORD r = WaitForSingleObject(g_shutdownEvent, NETWATCH_POLL_INTERVAL);
+                if (r == WAIT_OBJECT_0) { shutdown = true; break; }
                 if (g_isProcessingClick != 0) continue;
-                // Poll adapter state
                 BOOL newState = CheckActualNetworkState();
                 LONG oldState = g_networkIsUp;
                 InterlockedExchange(&g_networkIsUp, newState ? 1 : 0);
                 if (newState != (oldState == 1) && g_trayHwnd) {
                     PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)newState, 0);
-                    if (newState) {
-                        PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
-                    }
+                    if (newState) PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
                 }
             }
+            if (shutdown) {
+                CloseHandle(hEvent);
+                return 0;
+            }
+            Wh_Log(L"NetWatch: retrying NotifyAddrChange after polling fallback");
+            continue;
         }
 
         HANDLE waits[2] = { hEvent, g_shutdownEvent };
@@ -999,21 +1061,61 @@ BOOL WhTool_ModInit() {
 
     Wh_Log(L"Using WiFi-style arc icon");
 
-    // Read initial settings
-    PCWSTR pDnsIp = Wh_GetStringSetting(L"dnsServer");
-    if (pDnsIp && pDnsIp[0]) {
-        DWORD newIp = 0;
-        InetPtonW(AF_INET, pDnsIp, &newIp);
-        InterlockedExchange(&g_dnsServerIp, newIp);
-        Wh_Log(L"DNS server configured: %s", pDnsIp);
-    } else {
-        g_dnsServerIp = 0;
-        Wh_Log(L"No DNS server configured — DNS monitoring disabled");
+    // Enable dark mode for context menus app-wide
+    {
+        HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+        if (ux) {
+            using FnSetMode = void(WINAPI*)(int);
+            using FnAllow   = bool(WINAPI*)(bool);
+            if (auto f = (FnSetMode)GetProcAddress(ux, MAKEINTRESOURCEA(135)))
+                f(1);
+            else if (auto f = (FnAllow)GetProcAddress(ux, MAKEINTRESOURCEA(132)))
+                f(true);
+        }
     }
-    if (pDnsIp) Wh_FreeStringSetting(pDnsIp);
+
+    // Windhawk executable path (for "Open Windhawk" menu item)
+    GetModuleFileNameW(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath));
+
+    // Load Windhawk icon from ddores.dll for the context menu
+    UINT sysLen = GetSystemDirectoryW(g_ddoresDllPath, MAX_PATH);
+    if (sysLen > 0 && sysLen < MAX_PATH - 12)
+        lstrcatW(g_ddoresDllPath, L"\\ddores.dll");
+    else
+        lstrcpyW(g_ddoresDllPath, L"ddores.dll");
+
+    int whIconIndices[] = {98, 94, 95, 6};
+    for (int idx : whIconIndices) {
+        ExtractIconExW(g_ddoresDllPath, idx, nullptr, &g_hWindHawkIcon, 1);
+        if (g_hWindHawkIcon) break;
+    }
+    if (g_hWindHawkIcon) {
+        ICONINFO ii = {};
+        if (GetIconInfo(g_hWindHawkIcon, &ii)) {
+            g_hWindHawkBmp = ii.hbmColor ? ii.hbmColor : ii.hbmMask;
+            if (ii.hbmColor && ii.hbmMask) DeleteObject(ii.hbmMask);
+        }
+    }
+
+    // Read initial settings
+    {
+        DWORD newIp = 0;
+        auto dnsIp = WindhawkUtils::StringSetting::make(L"dnsServer");
+        if (dnsIp.get()[0]) {
+            if (InetPtonW(AF_INET, dnsIp.get(), &newIp) != 1) {
+                Wh_Log(L"Invalid DNS server IP '%s' — DNS monitoring disabled", dnsIp.get());
+                newIp = 0;
+            } else {
+                Wh_Log(L"DNS server configured: %s", dnsIp.get());
+            }
+        } else {
+            Wh_Log(L"No DNS server configured — DNS monitoring disabled");
+        }
+        InterlockedExchange(&g_dnsServerIp, newIp);
+    }
 
     int intervalSec = Wh_GetIntSetting(L"pingInterval");
-    if (intervalSec < 5) intervalSec = 5;
+    if (intervalSec < MIN_PING_INTERVAL_SEC) intervalSec = MIN_PING_INTERVAL_SEC;
     g_pingIntervalMs = (DWORD)intervalSec * 1000;
 
     // Create shutdown event (manual-reset, initially non-signalled)
@@ -1102,13 +1204,26 @@ void WhTool_ModUninit() {
         DestroyIcon(oldIcon);
     }
 
+    if (g_hWindHawkBmp)  { DeleteObject(g_hWindHawkBmp);  g_hWindHawkBmp  = nullptr; }
+    if (g_hWindHawkIcon) { DestroyIcon(g_hWindHawkIcon);  g_hWindHawkIcon = nullptr; }
+
     WSACleanup();
     Wh_Log(L"Net-Toggle Mod Uninit complete");
 }
 
-// ==============================================================================
-// Windhawk tool mod boilerplate
-// ==============================================================================
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
