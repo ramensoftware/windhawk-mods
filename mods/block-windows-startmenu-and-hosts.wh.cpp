@@ -6,6 +6,7 @@
 // @author          Exiled Eye
 // @github          https://github.com/ExiledEye
 // @homepage        https://exiledeye.github.io/
+// @donateUrl       https://ko-fi.com/exiled_eye
 // @include         explorer.exe
 // @include         svchost.exe
 // @include         ShellHost.exe
