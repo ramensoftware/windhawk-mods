@@ -7,7 +7,7 @@
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32 -ladvapi32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32 -ladvapi32 -DWIN32_LEAN_AND_MEAN
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -32,15 +32,27 @@ Ever needed to quickly disconnect from the web without digging through Windows s
 
 One click drops your connection. Click it again, and you're back online.
 
-## Dot Legend (Tray Icon)
+## Colors Legend (Tray Icon)
 
-| Dot  | Meaning |
-|------|---------|
-| 🔴 Red | Network is OFF |
-| 🟡 Yellow | Network toggle or reset is in progress |
-| 🔵 Blue | Network is ON, no DNS server configured |
-| 🟢 Green | Network is ON, DNS is reachable |
-| ⚪ Grey | Network is ON, DNS is unreachable |
+**🔴 Red** — Network is OFF
+
+![Red](https://i.imgur.com/ilyJM0R.png)
+
+**🟡 Yellow** — Network toggle or reset is in progress
+
+![Yellow](https://i.imgur.com/jBnpNRK.png)
+
+**🔵 Blue** — Network is ON, no DNS server configured
+
+![Blue](https://i.imgur.com/hMRbXyu.png)
+
+**🟢 Green** — Network is ON, DNS is reachable
+
+![Green](https://i.imgur.com/4KACqME.png)
+
+**⚪ Grey** — Network is ON, DNS is unreachable
+
+![Grey](https://i.imgur.com/xoZgdiH.png)
 
 ## How to Use It
 
@@ -107,7 +119,7 @@ One click drops your connection. Click it again, and you're back online.
 static const GUID NETTOGGLE_TRAY_GUID =
     {0x246764CF, 0xF857, 0x4399, {0x8D, 0x3D, 0x22, 0x76, 0x1A, 0x6A, 0xBD, 0x95}};
 
-const DWORD CLICK_DEBOUNCE_MS = 2000;
+const DWORD CLICK_DEBOUNCE_MS = 10000;
 
 static const DWORD POWERSHELL_TIMEOUT_MS  = 60000;  // 60s max for any PS command
 static const DWORD NETWATCH_POLL_INTERVAL = 15000;  // 15s per fallback poll tick
@@ -162,15 +174,18 @@ void LogLastError(LPCWSTR context) {
 }
 
 BOOL CheckActualNetworkState() {
-    // GAA_FLAG_INCLUDE_ALL_INTERFACES includes disabled adapters so we can
-    // distinguish IfOperStatusNotPresent (disabled) from IfOperStatusDown
-    // (enabled but disconnected). GetAdaptersAddresses uses a separate internal
-    // code path from NotifyAddrChange/GetIfTable2, avoiding an iphlpapi.dll
-    // shared-handle contamination that causes GetIfTable2 to return
-    // ERROR_INVALID_HANDLE after NotifyAddrChange fails in injected contexts.
+    // Without GAA_FLAG_INCLUDE_ALL_INTERFACES, GetAdaptersAddresses only returns
+    // adapters that have at least one IP address assigned. Disabled adapters have
+    // no IP address and therefore do not appear — they return a count of 0.
+    // (Disabled-NetAdapter sets IfOperStatusDown, not IfOperStatusNotPresent, so
+    // filtering on OperStatus is unreliable for detecting administratively disabled
+    // adapters. Relying on the OS to exclude address-less entries is cleaner.)
+    // GetAdaptersAddresses uses a separate internal code path from
+    // NotifyAddrChange/GetIfTable2, avoiding an iphlpapi.dll shared-handle
+    // contamination that causes GetIfTable2 to return ERROR_INVALID_HANDLE after
+    // NotifyAddrChange fails in injected contexts.
     ULONG flags = GAA_FLAG_SKIP_UNICAST | GAA_FLAG_SKIP_ANYCAST |
-                  GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER |
-                  GAA_FLAG_INCLUDE_ALL_INTERFACES;
+                  GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
     ULONG size = 16384;
     BYTE* buf = (BYTE*)HeapAlloc(GetProcessHeap(), 0, size);
     if (!buf) return TRUE;
@@ -195,7 +210,6 @@ BOOL CheckActualNetworkState() {
         if (aa->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
         if (aa->IfType == IF_TYPE_TUNNEL) continue;
         if (aa->PhysicalAddressLength == 0) continue;
-        if (aa->OperStatus == IfOperStatusNotPresent) continue;
         count++;
     }
     HeapFree(GetProcessHeap(), 0, buf);
@@ -929,15 +943,18 @@ DWORD WINAPI NetWatchThreadProc(LPVOID) {
         DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
 
         if (r == WAIT_OBJECT_0) {
-            // Adapter state changed externally
+            // Adapter state changed externally.
+            // Skip while a toggle/reset is in flight — the worker owns g_networkIsUp
+            // during that window and will post the definitive state when done.
             CloseHandle(notifyHandle);
-            BOOL newState = CheckActualNetworkState();
-            InterlockedExchange(&g_networkIsUp, newState ? 1 : 0);
-            if (g_trayHwnd) {
-                PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)newState, 0);
-                if (newState) {
-                    // Send message to trigger a recovery ping
-                    PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
+            if (g_isProcessingClick == 0) {
+                BOOL newState = CheckActualNetworkState();
+                InterlockedExchange(&g_networkIsUp, newState ? 1 : 0);
+                if (g_trayHwnd) {
+                    PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)newState, 0);
+                    if (newState) {
+                        PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
+                    }
                 }
             }
         } else {
