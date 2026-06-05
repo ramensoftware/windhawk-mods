@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-05T08:54:48.000Z</updated>
+    <updated>2026-06-05T11:47:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Block Start Menu and Hosts 1.4.1]]></title>
+        <id>https://windhawk.net/mods/block-windows-startmenu-and-hosts#5c7702161bb4db9c42a7cc83ffa969695e026942</id>
+        <link href="https://windhawk.net/mods/block-windows-startmenu-and-hosts"/>
+        <updated>2026-06-05T11:47:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added donateUrl.</li>
+</ul>]]></content>
+        <author>
+            <name>Exiled Eye</name>
+            <uri>https://github.com/ExiledEye</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.4.1]]></title>
         <id>https://windhawk.net/mods/taskbar-content-presenter-injector#cdca30ff8a2baff54b2e2685c996d73b0e82471b</id>
@@ -515,22 +528,6 @@ normal use.</p>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.0]]></title>
-        <id>https://windhawk.net/mods/disable-inactive-menubar-greying#56be4620179f43168964f39cd82179339b6bf8fe</id>
-        <link href="https://windhawk.net/mods/disable-inactive-menubar-greying"/>
-        <updated>2026-06-01T19:16:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disableinactivemenubargreying">Disable Inactive Menubar Greying</h1>
-<p>This mod prevents the classic menubar text (File, Edit, View, etc.) in folder windows
-under the Classic theme from appearing greyed out when the window loses focus, 
-the way it was in Windows 95, before Windows 98.</p>
-<p><img src="https://i.imgur.com/FCEXTyt.png" alt="screenshot" /></p>
-<p><img src="https://i.imgur.com/XBVNN0v.png" alt="screenshot" /></p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

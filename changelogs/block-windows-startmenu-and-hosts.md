@@ -1,3 +1,7 @@
+## 1.4.1 ([Jun 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5c7702161bb4db9c42a7cc83ffa969695e026942/mods/block-windows-startmenu-and-hosts.wh.cpp))
+
+* Added donateUrl.
+
 ## 1.4 ([May 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f6962b4427b7c68ab3af9d101986dffa5190d834/mods/block-windows-startmenu-and-hosts.wh.cpp))
 
 I've added additional processes to block:
