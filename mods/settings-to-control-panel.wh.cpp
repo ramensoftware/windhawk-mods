@@ -28,7 +28,6 @@ right-click menus) using XAML/UWP technology. The modern taskbar uses
 `ShellExecute`, which means:
 
 - **Control Panel navigation** works on both OSes (with Windows 10 being more compatible)
-- **System tray redirection works on Windows 10 only** (or Windows 11 with the classic Win32 taskbar restored via ExplorerPatcher)
 - Some Control Panel components have been **deprecated or removed** by Microsoft on Windows 11
 - Some CLSIDs still exist in the registry but open **empty panels**
 - **Desktop right-click → Personalize** uses a different code path on Win11 (Could be fixed in future)
@@ -50,7 +49,6 @@ configuration (see Settings section).
 - Troubleshooting → MSDT on Win11 (`msdt.exe`)
 
 ### 🟡 Redirected on Windows 10 only
-- System tray icon clicks (audio, network) — uses Win32 taskbar
 - Desktop right-click → Personalize
 - Taskbar notification area settings
 
@@ -58,10 +56,9 @@ configuration (see Settings section).
 - Modern Windows 11 taskbar tray (uses `DelegateExecute` COM activation)
 - Start Menu search results (excluded to avoid breaking search)
 - Internal Settings app navigation
-
-**Note for Windows 11 users:** To get full tray icon redirection, use a tool
-like **ExplorerPatcher** to restore the classic Win32 taskbar, which uses
-`explorer.exe` and `ms-settings:` URIs like Windows 10.
+**Note:** System tray icon clicks (audio, network) are NOT redirected on either OS.
+The tray uses DCOM activation which bypasses ShellExecute hooks. This is an
+architectural limitation documented above. (Could be fixed soon)
 
 ---
 
@@ -83,22 +80,6 @@ transparently redirected to the equivalent classic Control Panel interface.
 - Safe fallback handling for unmapped settings
 - Anti-loop protection (cross-process, in-process, bounce-back detection)
 - Lightweight implementation using native Windows APIs only
-
----
-
-## Testing
-
-### On Windows 10
-1. **Right-click speaker icon** → "Sounds" → should open `mmsys.cpl`
-2. **Right-click network icon** → "Network settings" → should open Network Connections
-3. **Right-click desktop** → "Personalize" → should open classic Personalization
-4. **Control Panel** → System → should stay in classic Control Panel
-
-### On Windows 11
-1. **Win+R** → `ms-settings:about` → should open System Properties (`sysdm.cpl`)
-2. **Win+R** → `explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}` → classic Personalization
-3. **Control Panel** → System → should stay in classic Control Panel
-4. **Control Panel** → Troubleshooting → should open MSDT
 
 ---
 
