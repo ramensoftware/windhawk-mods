@@ -8051,7 +8051,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1780571943000,
+                "updated": 1780671974000,
                 "users": 10
             },
             "metadata": {
@@ -8064,7 +8064,7 @@
                 ],
                 "license": "MIT",
                 "name": "Open in Admin Terminal",
-                "version": "1.15"
+                "version": "1.16"
             }
         },
         "osu-tray-profile": {

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-05T12:01:31.000Z</updated>
+    <updated>2026-06-05T15:06:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Open in Admin Terminal 1.16]]></title>
+        <id>https://windhawk.net/mods/open-in-admin-terminal#122fdce29f3e4e6aca8b07b62ab278139fb9228a</id>
+        <link href="https://windhawk.net/mods/open-in-admin-terminal"/>
+        <updated>2026-06-05T15:06:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added native UAC shield overlay composition on the terminal menu icon using <code>SHGetStockIconInfo(SIID_SHIELD)</code>.</li>
+</ul>]]></content>
+        <author>
+            <name>aimagist</name>
+            <uri>https://github.com/aimagist</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Transparent Desktop Icons with Spotlight 1.0.1]]></title>
         <id>https://windhawk.net/mods/transparent-desktop-icons-spotlight#7b8cbb03327c369d4eb77030b8dd7c0a9c7ee242</id>
@@ -481,56 +494,6 @@ Spritesheets are sliced in memory at startup for smooth, lag-free performance  <
         <author>
             <name>Asteski</name>
             <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Nav DragOver Fix 1.1.9]]></title>
-        <id>https://windhawk.net/mods/explorer-nav-dragover-fix#e10c123d95f10be617ff01eb586b41851294c2fb</id>
-        <link href="https://windhawk.net/mods/explorer-nav-dragover-fix"/>
-        <updated>2026-06-01T20:34:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorernavdragoverfix">Explorer Nav DragOver Fix</h1>
-<p>Two fixes for File Explorer's drag-over behavior:</p>
-<ol>
-<li><p><strong>Stops the jump.</strong> When you drag a file or folder onto a root-level entry
-in the nav pane (drives, pinned folders, the "This PC" grouping), Explorer
-auto-expands that entry after a short hover delay -- and the auto-expand
-often scrolls the pane, sending the row you were aiming at off-screen.
-This mod pins the TreeView's first-visible item to its pre-expand position
-and keeps the drop highlight on the original parent row. Protection
-releases as soon as the cursor leaves the captured row, so deeper folders
-continue to behave normally.</p></li>
-<li><p><strong>Re-enables the mouse wheel.</strong> Windows normally swallows wheel input
-during drag-and-drop. This mod intercepts the wheel and forwards it to
-the Explorer navigation pane (left tree) and the main file list on the
-right (Details / ItemsView on Win11 25H2, and classic Large icons / List
-views via SysListView32). Scrolling prefers UI Automation so wheel messages
-are not sent to SHELLDLL_DefView during a drag. Disable the corresponding
-setting to fall back to native behavior.</p></li>
-</ol>
-<h2 id="demo">Demo</h2>
-<p><img src="https://raw.githubusercontent.com/tonythethompson/windhawk-mods/main/mods_assets/explorer-nav-dragover-fix-demo.gif" alt="Without Mod vs With Mod" /></p>
-<p>Left: default Explorer behavior. Right: with this mod enabled (stable hover
-expand and mouse-wheel scrolling during drag).</p>
-<p>The mod hooks <code>DoDragDrop</code> (to track drag generations across threads),
-subclasses each nav-pane <code>SysTreeView32</code>, and watches <code>EVENT_OBJECT_CREATE</code>
-on a dedicated helper thread to pick up new Explorer windows. No state is
-persisted between drags; everything is scoped to the active drag loop.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If you disable the mod and see a log line like <strong>"WinEvent helper thread did
-not exit within 10s"</strong>, an Explorer thread was wedged mid-callback (for
-example while subclassing a nav tree). The mod intentionally leaks that
-helper handle rather than calling <code>TerminateThread</code>, which would be unsafe.
-<strong>Restart File Explorer</strong> (or sign out) to clear the state. This is rare in
-normal use.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>File Explorer (<code>explorer.exe</code>) on Windows 11 (tested on 23H2 / 24H2).</li>
-<li>Architectures: x64, arm64.</li>
-<li>No effect on any other process.</li>
-</ul>]]></content>
-        <author>
-            <name>tonythethompson</name>
-            <uri>https://github.com/tonythethompson</uri>
         </author>
     </entry>
 </feed>
