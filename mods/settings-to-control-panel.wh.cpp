@@ -22,19 +22,29 @@ Windows components (no external binaries or dependencies).
 **This mod is primarily designed for Windows 10**, where the classic Control Panel
 infrastructure is fully intact and most user interactions go through `explorer.exe`.
 
-**On Windows 11**, Microsoft rewrote the shell (taskbar, system tray, desktop
-right-click menus) using XAML/UWP technology. The modern taskbar uses
-`DelegateExecute` COM activation and `ms-contact-support://` protocol instead of
-`ShellExecute`, which means:
+**On Windows 11**, Microsoft rewrote the shell using XAML/UWP technology. The
+modern taskbar and some UI elements use COM activation that bypasses standard
+ShellExecute hooks. This means:
 
-- **Control Panel navigation** works on both OSes (with Windows 10 being more compatible)
-- Some Control Panel components have been **deprecated or removed** by Microsoft on Windows 11
-- Some CLSIDs still exist in the registry but open **empty panels**
-- **Desktop right-click → Personalize** uses a different code path on Win11 (Could be fixed in future)
-- **Start Menu search results** are not intercepted (to avoid breaking search)
+- **Windows 10**: Full support — all redirects work as expected ✅
+- **Windows 11**: Partial support — most redirects work, but some specific cases
+  (like clicking "Ease of Access" or "Display" links inside the classic
+  Personalization window) may not be interceptable via API hooks alone.
+  A WinEventHook workaround attempts to catch and redirect these cases.
 
-When no valid classic equivalent exists, behavior is controlled via fallback
-configuration (see Settings section).
+### Known Windows 11 Limitations
+- **Desktop right-click → Personalize**: May open modern Settings on some builds
+- **Ease of Access / Display links inside Personalization window**: Uses internal
+  COM/XAML activation that cannot be hooked directly. The mod uses a WinEventHook
+  to detect and close the modern window, then launch the classic panel.
+  Effectiveness may vary by build.
+- **Start Menu search results**: Not intercepted (to avoid breaking search)
+- **System tray icon clicks**: Use DCOM activation, cannot be hooked
+
+**In short**: On Windows 10 this mod works fully. On Windows 11 it works in most
+cases but some edge cases depend on your specific build and configuration.
+
+Credits to Anixx and m417z for the reviews and testing to enhance the mod.
 
 ---
 
@@ -44,54 +54,40 @@ configuration (see Settings section).
 - Control Panel navigation (System, Network, Sound, Accounts, Devices, etc.)
 - `Win+R` → `ms-settings:*` commands
 - `explorer shell:::*` protocol
-- Classic Personalization CPL — including Colors and Background sub-pages
+- Classic Personalization CPL — Colors and Background sub-pages
 - Right-click "This PC" → Properties
 - Troubleshooting → MSDT on Win11 (`msdt.exe`)
+- Display settings → `desk.cpl`
+- Ease of Access → `access.cpl`
 
-### 🟡 Redirected on Windows 10 only
+### 🟡 Partially Redirected (works on Win10, Win11 depends on build)
 - Desktop right-click → Personalize
-- Taskbar notification area settings
+- Ease of Access / Display links from inside Personalization window
 
 ### 🔴 Not Redirected (architectural limitation)
-- Modern Windows 11 taskbar tray (uses `DelegateExecute` COM activation)
+- Modern Windows 11 taskbar tray (uses DCOM activation)
 - Start Menu search results (excluded to avoid breaking search)
 - Internal Settings app navigation
-**Note:** System tray icon clicks (audio, network) are NOT redirected on either OS.
-The tray uses DCOM activation which bypasses ShellExecute hooks. This is an
-architectural limitation documented above. (Could be fixed soon)
-
----
-
-## Overview
-
-This mod restores access to the legacy Control Panel experience. When a system
-setting link is opened (typically triggering the modern Settings app), it is
-transparently redirected to the equivalent classic Control Panel interface.
 
 ---
 
 ## Features
 
-- Over 90 URI-to-applet mappings covering:
-  System, Network, Personalization, Sound, Devices, Accounts, Fonts, and more
-- Smart Personalization detection (desktop right-click vs in-window navigation)
-- Classic Personalization CPL with working Colors and Background sub-pages
-- MSDT troubleshooting on Windows 11
+- Over 90 URI-to-applet mappings
+- Smart Personalization detection (desktop vs in-window navigation)
+- WinEventHook workaround for Windows 11 modern windows
 - Safe fallback handling for unmapped settings
 - Anti-loop protection (cross-process, in-process, bounce-back detection)
-- Lightweight implementation using native Windows APIs only
+- No external dependencies — uses only native Windows APIs
 
 ---
 
 ## Configuration Options
 
-- **EnableRedirects**: Master switch — turn the mod on or off
-- **UIOnlyRedirects**: Only intercept ShellExecute* calls (leaves CreateProcessW alone)
-- **SmartPersonalizationDetection**: Differentiate desktop vs in-window personalization
-- **FallbackMode**: Behavior when no classic equivalent exists
-  - `0` — Ignore (silent fail)
-  - `1` — Open Control Panel root (`control.exe`)
-  - `2` — Pass through to modern Settings app (default)
+- **EnableRedirects**: Master switch
+- **UIOnlyRedirects**: Only intercept ShellExecute* calls
+- **SmartPersonalizationDetection**: Desktop right-click vs in-window navigation
+- **FallbackMode**: Behavior when no classic equivalent exists (0=Ignore, 1=Control Panel root, 2=Pass through)
 - **Win11CompatibilityMode**: Additional Win11 safeguards for unverified CLSIDs
 - **MaxLaunchesPerUri**: Anti-loop safety valve (max launches per URI in 5 seconds)
 */
@@ -387,7 +383,14 @@ static void InitMappings() {
         // ── Color Management ─────────────────────────────────────────────────
         {L"ms-settings:display-advanced-color",              L"colorcpl.exe"},
         {L"ms-settings:colorcpl",                            L"colorcpl.exe"},
-
+        {L"ms-settings:display",                             L"desk.cpl"},
+        {L"ms-settings:display-advanced",                    L"desk.cpl"},
+        {L"ms-settings:display-resolution",                  L"desk.cpl"},
+        {L"ms-settings:screenrotation",                      L"desk.cpl"},
+        // ── Graphics Adapter Properties ──────────────────── suggested by Anixx
+        {L"ms-settings:display-advanced-graphics",           L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+        {L"ms-settings:graphics-settings",                   L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+        {L"ms-settings:display-adapter-properties",          L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         // ── System / About ───────────────────────────────────────────────────
         {L"ms-settings:about",
             w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
@@ -512,12 +515,12 @@ static void InitMappings() {
 
         // ── Ease of Access ────────────────────────────────────────────────────,
         // Ease Of Access entries
-        {L"ms-settings:easeofaccess", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"},
-        {L"ms-settings:easeofaccess-narrator", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}\\pageNoVisual"},
-        {L"ms-settings:easeofaccess-magnifier", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}\\pageEasierToSee"},
-        {L"ms-settings:easeofaccess-speech", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A"},
-        {L"ms-settings:easeofaccess-colorfilter", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}\\pageEasierToSee"},
-        {L"ms-settings:easeofaccess-display", L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}\\pageEasierToSee"},
+        {L"ms-settings:easeofaccess", L"access.cpl"},
+        {L"ms-settings:easeofaccess-narrator", L"access.cpl"},
+        {L"ms-settings:easeofaccess-magnifier", L"access.cpl"},
+        {L"ms-settings:easeofaccess-speech", L"access.cpl"},
+        {L"ms-settings:easeofaccess-colorfilter", L"access.cpl"},
+        {L"ms-settings:easeofaccess-display", L"access.cpl"},
 
         // ── Recovery / Backup ─────────────────────────────────────────────────
         {L"ms-settings:backup",
@@ -642,7 +645,21 @@ static void LaunchTarget(const std::wstring& command) {
 
     {
         std::wstring lower = ToLower(command);
-        
+            // rundll32.exe needs special handling (commas in arguments)
+    if (command.find(L"rundll32.exe") != std::wstring::npos) {
+        std::wstring mutable_cmd = command;
+        STARTUPINFOW si = {}; si.cb = sizeof(si);
+        PROCESS_INFORMATION pi = {};
+        if (!CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr,
+                                 FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            Wh_Log(L"rundll32 CreateProcess failed for '%s' (%lu)",
+                   command.c_str(), GetLastError());
+        } else {
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+        }
+        return;
+    }
         // Gestisci "explorer shell:::" separatamente
         if (lower.find(L"explorer shell:::") != std::wstring::npos) {
             std::wstring clsid = command.substr(command.find(L"shell:::"));
@@ -728,9 +745,14 @@ static void LaunchTarget(const std::wstring& command) {
 // ── Personalization hwnd detection ───────────────────────────────────────────
 
 static bool IsPersonalizationWindow(HWND hwnd) {
+    // Se HWND è NULL, prova con la finestra in primo piano
     if (!hwnd) {
-        Wh_Log(L"HWND null -> desktop context menu path");
-        return false;
+        hwnd = GetForegroundWindow();
+        Wh_Log(L"IsPersonalizationWindow: HWND null, trying GetForegroundWindow=%p", hwnd);
+        if (!hwnd) {
+            Wh_Log(L"IsPersonalizationWindow: GetForegroundWindow returned null -> false");
+            return false;
+        }
     }
 
     HWND h = hwnd;
@@ -743,21 +765,22 @@ static bool IsPersonalizationWindow(HWND hwnd) {
         std::wstring c = ToLower(cls);
         std::wstring t = ToLower(title);
 
+        Wh_Log(L"IsPersonalizationWindow: hwnd=%p class='%s' title='%s'", h, cls, title);
+
         if (c == L"progman" || c == L"workerw" || c == L"shelldll_defview") {
-            Wh_Log(L"HWND: desktop class '%s' -> context menu", cls);
+            Wh_Log(L"IsPersonalizationWindow: desktop class -> false");
             return false;
         }
         if (c == L"cabinetwclass") {
             if (t.find(L"personaliz") != std::wstring::npos) {
-                Wh_Log(L"HWND: CabinetWClass personalization confirmed");
+                Wh_Log(L"IsPersonalizationWindow: CabinetWClass personalization -> true");
                 return true;
-        }
-
-            Wh_Log(L"HWND: CabinetWClass but not personalization");
+            }
+            Wh_Log(L"IsPersonalizationWindow: CabinetWClass but not personalization -> false");
             return false;
         }
         if (t.find(L"personaliz") != std::wstring::npos) {
-            Wh_Log(L"HWND: title match 'personaliz' -> Personalization window");
+            Wh_Log(L"IsPersonalizationWindow: title match -> true");
             return true;
         }
 
@@ -766,7 +789,7 @@ static bool IsPersonalizationWindow(HWND hwnd) {
         h = parent;
     }
 
-    Wh_Log(L"HWND: no personalization window found -> context menu");
+    Wh_Log(L"IsPersonalizationWindow: no match found -> false");
     return false;
 }
 
@@ -802,17 +825,48 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
         return {t, true};
     }
 
-    // ─── EDIT FOR EASE OF ACCESS IN PERSONALIZATION ───
+    if (uri.find(L"shell:::{d555645e-d4f8-4c29-a827-d93c859c4f2a}") == 0) {
+        Wh_Log(L"Win11 hardcode: forcing classic ease of access target for shell CLSID '%s'", uri.c_str());
+        return {L"access.cpl", true};
+    }
 
-    if (g_settings.smartPersonalizationDetect && IsPersonalizationWindow(hwnd)) {
-        if (uri.find(L"ms-settings:easeofaccess") == 0) {
-            Wh_Log(L"SmartPersonalization: Accesso da finestra Personalizzazione, forzo radice Centro Accessibilità");
-            std::wstring t = ApplyWin11Filter(L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}");
-            BounceGuardRecord(uri);
-            return {t, true};
+    if (uri.find(L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}") == 0) {
+        if (uri.find(L"pagewallpaper") != std::wstring::npos) {
+            Wh_Log(L"Win11 hardcode: forcing classic personalization wallpaper target for '%s'", uri.c_str());
+            return {PERS_WALLPAPER, true};
+        }
+        if (uri.find(L"pagecolorization") != std::wstring::npos) {
+            Wh_Log(L"Win11 hardcode: forcing classic personalization colors target for '%s'", uri.c_str());
+            return {PERS_COLORS, true};
+        }
+        Wh_Log(L"Win11 hardcode: forcing classic personalization root for '%s'", uri.c_str());
+        return {PERS_ROOT, true};
+    }
+
+    // ─── Win11 hardcoded classic target overrides ───
+    // Force Win11 to open the classic display and ease of access panels instead
+    // of letting modern Settings choose a different or unsupported path.
+    if (g_isWin11) {
+        if (uri == L"ms-settings:display" ||
+            uri == L"ms-settings:display-advanced" ||
+            uri == L"ms-settings:display-resolution" ||
+            uri == L"ms-settings:screenrotation")
+        {
+            Wh_Log(L"Win11 hardcode: forcing classic display target for '%s'", uri.c_str());
+            return {L"desk.cpl", true};
+        }
+
+        if (uri == L"ms-settings:easeofaccess" ||
+            uri == L"ms-settings:easeofaccess-narrator" ||
+            uri == L"ms-settings:easeofaccess-magnifier" ||
+            uri == L"ms-settings:easeofaccess-speech" ||
+            uri == L"ms-settings:easeofaccess-colorfilter" ||
+            uri == L"ms-settings:easeofaccess-display")
+        {
+            Wh_Log(L"Win11 hardcode: forcing classic ease of access target for '%s'", uri.c_str());
+            return {L"access.cpl", true};
         }
     }
-    // ─────────────────────────────────────────────────────────────────
 
     auto it = g_mappings.find(uri);
     if (it != g_mappings.end()) {
@@ -932,14 +986,10 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     else if (IsMsSettings(pei->lpParameters))
         uri = NormalizeUri(pei->lpParameters);
     else if (IsShellClsid(pei->lpFile)) {
-        std::wstring lower = ToLower(pei->lpFile);
-        if (g_isWin11 && IsClsidLoopOnWin11(lower))
-            uri = lower;
+        uri = ToLower(pei->lpFile);
     }
     else if (IsShellClsid(pei->lpParameters)) {
-        std::wstring lower = ToLower(pei->lpParameters);
-        if (g_isWin11 && IsClsidLoopOnWin11(lower))
-            uri = lower;
+        uri = ToLower(pei->lpParameters);
     }
 
     if (!uri.empty()) {
@@ -971,10 +1021,16 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file,
     if (!g_settings.enableRedirects)
         return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
 
-    Wh_Log(L"ShellExecuteW: hwnd=%p  file=%s  params=%s",
+    // LOG TEMPORANEO - CATTURA TUTTO
+    Wh_Log(L"ShellExecuteW: hwnd=%p file='%s' params='%s' op='%s'",
            hwnd,
-           file   ? file   : L"(null)",
-           params ? params : L"(null)");
+           file ? file : L"NULL",
+           params ? params : L"NULL",
+           op ? op : L"NULL");
+    
+    if (IsPersonalizationWindow(hwnd)) {
+        Wh_Log(L"^^^ CHIAMATA DA PERSONALIZZAZIONE! ^^^");
+    }
 
     if (IsControlSystemParams(file, params)) {
         Wh_Log(L"ShellExecuteW: intercepted control system");
@@ -988,14 +1044,10 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file,
     else if (IsMsSettings(params))
         uri = NormalizeUri(params);
     else if (IsShellClsid(file)) {
-        std::wstring lower = ToLower(file);
-        if (g_isWin11 && IsClsidLoopOnWin11(lower))
-            uri = lower;
+        uri = ToLower(file);
     }
     else if (IsShellClsid(params)) {
-        std::wstring lower = ToLower(params);
-        if (g_isWin11 && IsClsidLoopOnWin11(lower))
-            uri = lower;
+        uri = ToLower(params);
     }
 
     if (!uri.empty()) {
@@ -1007,6 +1059,57 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file,
         }
     }
     return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
+}
+// ── WinEventHook for Modern Settings Windows (Win11 workaround) ──────────────
+
+static HWINEVENTHOOK g_hModernWindowHook = nullptr;
+
+// Intercetta quando si apre una nuova finestra (Display, Ease of Access moderna)
+static void CALLBACK ModernWindowEventHook(
+    HWINEVENTHOOK hWinEventHook,
+    DWORD event,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
+    DWORD dwEventThread,
+    DWORD dwmsEventTime)
+{
+    if (event != EVENT_OBJECT_CREATE && event != EVENT_OBJECT_SHOW)
+        return;
+    if (!g_isWin11) return;
+    if (!hwnd || idObject != OBJID_WINDOW) return;
+    if (!IsWindow(hwnd)) return;
+
+    wchar_t cls[256] = {};
+    wchar_t title[512] = {};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+    std::wstring classLower = ToLower(cls);
+    std::wstring titleLower = ToLower(title);
+
+    Wh_Log(L"ModernWindowEventHook: event=%u hwnd=%p class='%s' title='%s'", event, hwnd, cls, title);
+
+    // Controlli su qualsiasi finestra che contiene display, settings, o access nel titolo
+    if ((titleLower.find(L"display") != std::wstring::npos ||
+         titleLower.find(L"scheda") != std::wstring::npos) &&
+        classLower.find(L"applicationframewindow") != std::wstring::npos) {
+        Wh_Log(L"ModernWindowEventHook: Display-related window detected, closing and launching classic");
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        Sleep(100);  // Breve pausa per assicurare la chiusura
+        LaunchTarget(L"desk.cpl");
+        return;
+    }
+
+    if ((titleLower.find(L"ease") != std::wstring::npos ||
+         titleLower.find(L"access") != std::wstring::npos ||
+         titleLower.find(L"accessib") != std::wstring::npos) &&
+        classLower.find(L"applicationframewindow") != std::wstring::npos) {
+        Wh_Log(L"ModernWindowEventHook: Ease of Access window detected, closing and launching classic");
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        Sleep(100);
+        LaunchTarget(L"access.cpl");
+        return;
+    }
 }
 
 // ── Hook: CreateProcessW ──────────────────────────────────────────────────────
@@ -1118,6 +1221,26 @@ BOOL Wh_ModInit() {
             Wh_Log(L"CreateProcessW hook=%d", ok3);
         }
     }
+
+    // Install WinEventHook for modern window creation on Windows 11
+    // This intercepts when Display Settings or Ease of Access windows open from Personalizzazione
+    if (g_isWin11) {
+        g_hModernWindowHook = SetWinEventHook(
+            EVENT_OBJECT_CREATE,
+            EVENT_OBJECT_SHOW,
+            nullptr,
+            ModernWindowEventHook,
+            0,      // dwProcessId = 0 means all processes
+            0,      // dwThreadId = 0 means all threads
+            WINEVENT_OUTOFCONTEXT
+        );
+        if (g_hModernWindowHook) {
+            Wh_Log(L"ModernWindowEventHook installed for Win11");
+        } else {
+            Wh_Log(L"Failed to install ModernWindowEventHook");
+        }
+    }
+
     Wh_Log(L"Ready — EnableRedirects=%d UIOnly=%d SmartPers=%d Fallback=%d Win11Compat=%d MaxLaunches=%d",
         (int)g_settings.enableRedirects,
         (int)g_settings.uiOnlyRedirects,
@@ -1129,6 +1252,11 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    if (g_hModernWindowHook) {
+        UnhookWinEvent(g_hModernWindowHook);
+        g_hModernWindowHook = nullptr;
+        Wh_Log(L"ModernWindowEventHook uninstalled");
+    }
     Wh_Log(L"Unloaded.");
 }
 
