@@ -340,7 +340,8 @@ void WINAPI ExperienceToggleButton_UpdateVisualStates_Hook(void* pThis) {
 // Init / Uninit
 // -------------------------------------------------------------------------
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
@@ -359,7 +360,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         }
     };
 
-    if (!HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
         return false;
     }
