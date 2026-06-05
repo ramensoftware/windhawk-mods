@@ -2,18 +2,20 @@
 // @id              audioswap
 // @name            AudioSwap
 // @description     Tray icon to cycle between multiple preferred audio outputs. Supports up to 6 devices with click or scroll to swap.
-// @version         2.1.0
+// @version         2.2.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # AudioSwap
 Instantly cycle between multiple audio output devices from your system tray — no diving into Sound settings.
+
+> Works great alongside **[MicSwitch](https://windhawk.net/mods/microswap)** — the companion mod that brings the same tray experience to microphone input control.
 
 ---
 
@@ -25,6 +27,11 @@ Instantly cycle between multiple audio output devices from your system tray — 
 4. **Choose Mode** — Pick **Click to Swap** (left-click cycles devices) or **Scroll to Swap** (mouse wheel cycles; left-click mutes).
 5. **Set Device Count** — Choose how many slots to cycle through (2–6).
 6. Click **Save and Apply** — the tray icon updates immediately, no restart needed.
+
+### Volume Control
+
+- **Scroll wheel** over the tray icon (in Click to Swap mode) adjusts output volume — just like the native Windows sound icon.
+- **Middle-click** the tray icon to open a compact volume slider. Drag or use the arrow keys to adjust output volume live — click anywhere outside or press Escape to close.
 
 ### Scroll to Swap mode extras
 
@@ -51,6 +58,11 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 ---
 
 ## Changelog
+
+### v2.2.0
+- New: Right-click → **Sound Settings...** opens Windows Sound dialog directly on the Playback tab.
+- New: Middle-click tray icon → compact volume slider popup with a custom dark design. Drag to adjust output volume live; click outside or press Escape to close.
+- New: Scroll wheel over the tray icon (Click to Swap mode) adjusts output volume, matching native Windows sound icon behaviour.
 
 ### v2.1.0
 - New: Device Priority panel — rank your preferred devices; the highest-priority connected device is assigned to a swap slot automatically.
@@ -108,17 +120,21 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 // The advancedMode flag above uses Wh_GetIntSetting, which reads from Windhawk's
 // separate YAML store — no conflict with dashboard keys.
 
+#define NOMINMAX
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <endpointvolume.h>
+#include <commctrl.h>
+#include <dwmapi.h>
 
 #include <propkey.h>
 #include <mmdeviceapi.h>
 #include <propidl.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <commdlg.h>
+#include <algorithm>
 #include <vector>
 #include <string>
 
@@ -136,11 +152,19 @@ static const GUID AUDIOSWAP_TRAY_GUID =
 #define WM_RELOAD_ICONS      (WM_USER + 6)  // reload icons on tray thread (eliminates cross-thread handle race)
 #define WM_RELOAD_ALL              (WM_USER + 7)  // full reload after dashboard save
 #define WM_PRIORITY_DEVICE_ACTIVE  (WM_USER + 8)  // lParam = heap-alloc'd WCHAR* device ID
+#define WM_REBIND_VOLUME_CALLBACK  (WM_USER + 9)  // rebind IAudioEndpointVolumeCallback after default-device change
 #define TRAY_RECT_INIT_TIMER 99   // one-shot retry timer for Shell_NotifyIconGetRect
+
+// Sentinel context GUID — distinguishes volume changes triggered by our own
+// VolumePopup slider from external (volume keys / Action Center / other apps)
+// when IAudioEndpointVolumeCallback::OnNotify fires.
+static const GUID kVolumeChangeCtx =
+    {0x9F2A1D8E, 0xC7B4, 0x4E63, {0x8A, 0x1F, 0x2D, 0x5B, 0x6E, 0x7C, 0x8D, 0x9F}};
 
 #define MENU_OPEN_SETTINGS   9001
 #define MENU_OPEN_WINDHAWK   9000
 #define IDC_BTN_KOFI         9002
+#define MENU_SOUND_SETTINGS  9003
 
 // With NOTIFYICON_VERSION_4 active Windows changes the tray notifications:
 //   left-click  → NIN_SELECT       (instead of / alongside WM_LBUTTONUP)
@@ -204,8 +228,11 @@ static volatile LONG  g_scrollToSwap = 0;  // 1 = scroll mode
 
 // IMMNotificationClient registration
 class AudioDeviceNotifier;
-static IMMDeviceEnumerator* g_notifEnum      = nullptr;
-static AudioDeviceNotifier* g_deviceNotifier = nullptr;
+class VolNotifier;
+static IMMDeviceEnumerator*  g_notifEnum      = nullptr;
+static AudioDeviceNotifier*  g_deviceNotifier = nullptr;
+static IAudioEndpointVolume*  g_pEndpointVol  = nullptr;  // tray-thread owned; current default endpoint
+static VolNotifier*           g_pVolNotifier  = nullptr;  // registered on g_pEndpointVol
 
 // Dashboard GUI thread — written only from the tray thread (BuildAndShowContextMenu)
 // and read only from the main thread (WhTool_ModUninit), which runs after the
@@ -1376,7 +1403,13 @@ public:
         if (flow == eRender && role == eMultimedia) {
             HWND hwnd = (HWND)InterlockedCompareExchangePointer(
                 (volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
-            if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            if (hwnd) {
+                // Rebind the IAudioEndpointVolumeCallback before refreshing the
+                // tooltip — the live dB readout depends on tracking the *current*
+                // default endpoint, not the previous one.
+                PostMessageW(hwnd, WM_REBIND_VOLUME_CALLBACK, 0, 0);
+                PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+            }
         }
         return S_OK;
     }
@@ -1419,6 +1452,67 @@ public:
     HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(
         LPCWSTR, const PROPERTYKEY) override { return S_OK; }
 };
+
+// IAudioEndpointVolumeCallback — fires on volume / mute changes from ANY source
+// (volume keys, slider popup, Action Center, other apps). Posts WM_UPDATE_TRAY_STATE
+// to refresh the tooltip's live dB readout. Self-triggered changes (slider popup)
+// carry the kVolumeChangeCtx sentinel; we still refresh on those — the tooltip
+// should reflect the new value regardless of who moved the slider.
+class VolNotifier : public IAudioEndpointVolumeCallback {
+    volatile LONG m_ref;
+public:
+    VolNotifier() : m_ref(1) {}
+    virtual ~VolNotifier() = default;
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IAudioEndpointVolumeCallback)) {
+            *ppv = static_cast<IAudioEndpointVolumeCallback*>(this);
+            AddRef(); return S_OK;
+        }
+        *ppv = nullptr; return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&m_ref));
+    }
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG r = InterlockedDecrement(&m_ref);
+        if (r == 0) delete this;
+        return static_cast<ULONG>(r);
+    }
+
+    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
+        HWND hwnd = (HWND)InterlockedCompareExchangePointer(
+            (volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
+        if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+        return S_OK;
+    }
+};
+
+// Acquire IAudioEndpointVolume on the current default render endpoint and register
+// VolNotifier. Idempotent — caller is responsible for first releasing the previous
+// binding via UnbindEndpointVolume(). Tray-thread only.
+static void BindEndpointVolume() {
+    if (!g_notifEnum) return;
+    IMMDevice* pDev = nullptr;
+    if (FAILED(g_notifEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDev)) || !pDev)
+        return;
+    IAudioEndpointVolume* pVol = nullptr;
+    if (SUCCEEDED(pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                                 nullptr, (void**)&pVol)) && pVol) {
+        g_pEndpointVol = pVol;
+        if (!g_pVolNotifier) g_pVolNotifier = new VolNotifier();
+        g_pEndpointVol->RegisterControlChangeNotify(g_pVolNotifier);
+    }
+    pDev->Release();
+}
+
+static void UnbindEndpointVolume() {
+    if (g_pEndpointVol && g_pVolNotifier) {
+        g_pEndpointVol->UnregisterControlChangeNotify(g_pVolNotifier);
+    }
+    if (g_pVolNotifier) { g_pVolNotifier->Release(); g_pVolNotifier = nullptr; }
+    if (g_pEndpointVol) { g_pEndpointVol->Release(); g_pEndpointVol = nullptr; }
+}
 
 // Scroll-to-swap uses Raw Input (RegisterRawInputDevices + WM_INPUT in TrayWndProc)
 // instead of WH_MOUSE_LL. Raw Input is delivered outside the hook chain, so no
@@ -1519,6 +1613,7 @@ static HICON CreateMutedOverlayIcon(HICON hBase) {
 static WCHAR s_lastDev[256]  = {};
 static HICON s_lastIcon      = nullptr;
 static bool  s_lastMuted     = false;
+static int   s_lastVolume    = -1;
 
 void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     // Snapshot shared state under lock (no COM inside the lock).
@@ -1535,7 +1630,21 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
 
     WCHAR currentDev[256] = L"Unknown Device";
     WCHAR currentId[512]  = {};
+    int   currentVolume   = -1;     // -1 sentinel = query failed; omit from tooltip
 
+    // Fast path: read scalar + dB from the cached endpoint pointer without re-doing
+    // CoCreateInstance + Activate. Falls back to the slow per-call path if the
+    // tray thread hasn't bound an endpoint yet (e.g., startup race).
+    if (g_pEndpointVol) {
+        float scalar = 0.0f;
+        if (SUCCEEDED(g_pEndpointVol->GetMasterVolumeLevelScalar(&scalar))) {
+            currentVolume = (int)(scalar * 100.0f + 0.5f);
+            if (currentVolume < 0)   currentVolume = 0;
+            if (currentVolume > 100) currentVolume = 100;
+        }
+    }
+
+    // Slow path: still needed for the device name + ID. Always run this block.
     IMMDeviceEnumerator* pEnum = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                    __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
@@ -1553,6 +1662,20 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
                     lstrcpynW(currentDev, v.pwszVal, 256);
                 PropVariantClear(&v);
                 pStore->Release();
+            }
+            // Fallback: if the cached endpoint wasn't bound yet, query volume inline.
+            if (currentVolume < 0) {
+                IAudioEndpointVolume* pVol = nullptr;
+                if (SUCCEEDED(pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                                             nullptr, (void**)&pVol))) {
+                    float scalar = 0.0f;
+                    if (SUCCEEDED(pVol->GetMasterVolumeLevelScalar(&scalar))) {
+                        currentVolume = (int)(scalar * 100.0f + 0.5f);
+                        if (currentVolume < 0)   currentVolume = 0;
+                        if (currentVolume > 100) currentVolume = 100;
+                    }
+                    pVol->Release();
+                }
             }
             pDev->Release();
         }
@@ -1572,30 +1695,40 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     for (int i = 0; i < localSlotCount; i++)
         if (localDevIds[i][0] != L'\0') configuredCount++;
 
-    // s_lastDev / s_lastIcon / s_lastMuted are file-scope to allow external reset.
+    // s_lastDev / s_lastIcon / s_lastMuted / s_lastVolume are file-scope to allow external reset.
     if (!isAdd &&
         wcscmp(currentDev, s_lastDev) == 0 &&
         currentIcon == s_lastIcon &&
-        s_lastMuted == localMuted)
+        s_lastMuted == localMuted &&
+        s_lastVolume == currentVolume)
     {
         RefreshTrayIconRect();
         return;
     }
     lstrcpyW(s_lastDev, currentDev);
-    s_lastIcon  = currentIcon;
-    s_lastMuted = localMuted;
+    s_lastIcon   = currentIcon;
+    s_lastMuted  = localMuted;
+    s_lastVolume = currentVolume;
 
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd             = hWnd;
     nid.uID              = TRAY_ICON_ID;
-    nid.uFlags           = NIF_MESSAGE | NIF_TIP | NIF_ICON | NIF_GUID;
+    // NIF_SHOWTIP is required under NOTIFYICON_VERSION_4 — without it the shell
+    // assumes the app draws its own tooltip and the standard one never appears on hover.
+    nid.uFlags           = NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP | NIF_ICON | NIF_GUID;
     nid.guidItem         = AUDIOSWAP_TRAY_GUID;
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
 
     if (configuredCount < 2)
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"AudioSwap: Right-click to configure");
+    else if (localMuted && currentVolume >= 0)
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.80s (%d%%, Muted)",
+                   currentDev, currentVolume);
     else if (localMuted)
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.100s (Muted)", currentDev);
+    else if (currentVolume >= 0)
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.90s (%d%%)",
+                   currentDev, currentVolume);
     else
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Audio: %.110s", currentDev);
 
@@ -1615,6 +1748,58 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     }
 
     RefreshTrayIconRect();
+}
+
+// ─── Volume helpers ───────────────────────────────────────────────────────────
+
+static int GetCurrentVolumePct() {
+    int result = -1;
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr) && hr != S_FALSE) return result;
+    IMMDeviceEnumerator* pEnum = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                   __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
+        IMMDevice* pDev = nullptr;
+        if (SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDev))) {
+            IAudioEndpointVolume* pVol = nullptr;
+            if (SUCCEEDED(pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                                         nullptr, (void**)&pVol))) {
+                float scalar = 0.0f;
+                if (SUCCEEDED(pVol->GetMasterVolumeLevelScalar(&scalar))) {
+                    result = (int)(scalar * 100.0f + 0.5f);
+                    if (result < 0)   result = 0;
+                    if (result > 100) result = 100;
+                }
+                pVol->Release();
+            }
+            pDev->Release();
+        }
+        pEnum->Release();
+    }
+    CoUninitialize();
+    return result;
+}
+
+static void SetCurrentDeviceVolume(float scalar) {
+    scalar = std::max(0.0f, std::min(1.0f, scalar));
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr) && hr != S_FALSE) return;
+    IMMDeviceEnumerator* pEnum = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                   __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
+        IMMDevice* pDev = nullptr;
+        if (SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDev))) {
+            IAudioEndpointVolume* pVol = nullptr;
+            if (SUCCEEDED(pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                                         nullptr, (void**)&pVol))) {
+                pVol->SetMasterVolumeLevelScalar(scalar, nullptr);
+                pVol->Release();
+            }
+            pDev->Release();
+        }
+        pEnum->Release();
+    }
+    CoUninitialize();
 }
 
 // ─── Audio cycling ────────────────────────────────────────────────────────────
@@ -1720,7 +1905,8 @@ static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
 void BuildAndShowContextMenu(HWND hWnd) {
     HMENU hMenu = CreatePopupMenu();
 
-    AppendMenuW(hMenu, MF_STRING, MENU_OPEN_SETTINGS, L"Mod Settings...");
+    AppendMenuW(hMenu, MF_STRING, MENU_OPEN_SETTINGS,  L"Mod Settings...");
+    AppendMenuW(hMenu, MF_STRING, MENU_SOUND_SETTINGS, L"Playback Settings...");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
     MENUITEMINFOW miiWH = {sizeof(miiWH)};
@@ -1746,6 +1932,8 @@ void BuildAndShowContextMenu(HWND hWnd) {
             if (g_guiThread) CloseHandle(g_guiThread);
             g_guiThread = h;
         }
+    } else if (cmd == MENU_SOUND_SETTINGS) {
+        ShellExecuteW(nullptr, L"open", L"control.exe", L"mmsys.cpl,,0", nullptr, SW_SHOWNORMAL);
     } else if (cmd == MENU_OPEN_WINDHAWK) {
         SHELLEXECUTEINFOW sei = {sizeof(sei)};
         sei.lpFile = g_windhawkPath;
@@ -1753,6 +1941,338 @@ void BuildAndShowContextMenu(HWND hWnd) {
         ShellExecuteExW(&sei);
     }
 }
+
+// ─── Volume slider popup ──────────────────────────────────────────────────────
+
+namespace VolumePopup {
+
+static constexpr WCHAR    kClass[]    = L"AudioSwapVolumePopup";
+static constexpr WCHAR    kLabel[]    = L"Output Volume";
+static constexpr int      kW         = 240;
+static constexpr int      kH         = 72;
+static constexpr int      kPadX      = 16;   // left/right padding
+static constexpr int      kTitleY    = 12;   // title row top Y
+static constexpr int      kTitleH    = 18;   // title row height
+static constexpr int      kTrackY    = 52;   // track center Y
+static constexpr int      kTrackH    = 6;    // track height in px
+static constexpr int      kThumbR    = 9;    // thumb radius (normal)
+static constexpr int      kThumbRHov = 10;   // thumb radius (hover / drag)
+static constexpr UINT     kVolTimerId  = 102;  // throttled audio commit
+static constexpr COLORREF kBg        = RGB(28,  28,  28 );
+static constexpr COLORREF kBorder    = RGB(50,  50,  50 );
+static constexpr COLORREF kTrackBg   = RGB(58,  58,  58 );
+static constexpr COLORREF kTrackFill = RGB(0,   120, 215);
+static constexpr COLORREF kThumbCol  = RGB(255, 255, 255);
+static constexpr COLORREF kTextPri   = RGB(235, 235, 235);
+static constexpr COLORREF kTextSec   = RGB(130, 130, 130);
+
+static HWND   g_hwnd     = nullptr;
+static bool   g_volumeDirty = false;
+static HWND   g_trayWnd  = nullptr;
+static int    g_value    = 0;
+static bool   g_dragging = false;
+static bool   g_hover    = false;
+static HFONT  g_font     = nullptr;
+
+static int ValueToThumbX() {
+    return kPadX + (g_value * (kW - 2 * kPadX)) / 100;
+}
+
+static int XToValue(int x) {
+    int v = ((x - kPadX) * 100 + (kW - 2 * kPadX) / 2) / (kW - 2 * kPadX);
+    return v < 0 ? 0 : (v > 100 ? 100 : v);
+}
+
+static bool IsOverThumb(int mx, int my) {
+    int dx = mx - ValueToThumbX(), dy = my - kTrackY;
+    int r  = kThumbRHov + 4;
+    return dx * dx + dy * dy <= r * r;
+}
+
+static void ApplyVolume() {
+    float scalar = g_value / 100.0f;
+    if (g_pEndpointVol) {
+        g_pEndpointVol->SetMasterVolumeLevelScalar(scalar, &kVolumeChangeCtx);
+    } else {
+        SetCurrentDeviceVolume(scalar);
+    }
+}
+
+static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+
+    case WM_CREATE: {
+        int vol    = (int)(INT_PTR)((CREATESTRUCTW*)lParam)->lpCreateParams;
+        g_value    = vol < 0 ? 0 : (vol > 100 ? 100 : vol);
+        g_dragging = false;
+        g_hover    = false;
+        g_font     = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                  CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        // Win11 rounded corners (DWMWA_WINDOW_CORNER_PREFERENCE=33, DWMWCP_ROUNDSMALL=3).
+        // GetModuleHandleW — dwmapi is already loaded; LoadLibraryW would leak a refcount.
+        {
+            using PFN = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
+            HMODULE hDwm = GetModuleHandleW(L"dwmapi.dll");
+            if (hDwm) {
+                if (auto pfn = (PFN)GetProcAddress(hDwm, "DwmSetWindowAttribute")) {
+                    UINT pref = 3;
+                    pfn(hWnd, 33, &pref, sizeof(pref));
+                }
+            }
+        }
+        SetTimer(hWnd, kVolTimerId, 16, nullptr);
+        return 0;
+    }
+
+    case WM_ERASEBKGND:
+        return 1;   // suppress default erase — WM_PAINT covers the full client rect
+
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc  = BeginPaint(hWnd, &ps);
+
+        // Double-buffer to eliminate flicker
+        HDC     hMem    = CreateCompatibleDC(hdc);
+        HBITMAP hBmp    = CreateCompatibleBitmap(hdc, kW, kH);
+        auto    hOldBmp = (HBITMAP)SelectObject(hMem, hBmp);
+
+        // ── Background ────────────────────────────────────────────────
+        RECT rcAll = {0, 0, kW, kH};
+        HBRUSH hbBg = CreateSolidBrush(kBg);
+        FillRect(hMem, &rcAll, hbBg);
+        DeleteObject(hbBg);
+
+        // Border (1 px)
+        HBRUSH hbBdr = CreateSolidBrush(kBorder);
+        FrameRect(hMem, &rcAll, hbBdr);
+        DeleteObject(hbBdr);
+
+        // ── Title row ─────────────────────────────────────────────────
+        HFONT hOldFont = (HFONT)SelectObject(hMem, g_font ? g_font
+                                                           : GetStockObject(DEFAULT_GUI_FONT));
+        SetBkMode(hMem, TRANSPARENT);
+
+        RECT rcL = {kPadX, kTitleY, kW - kPadX, kTitleY + kTitleH};
+        SetTextColor(hMem, kTextSec);
+        DrawTextW(hMem, kLabel, -1, &rcL,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+        WCHAR valBuf[8];
+        swprintf_s(valBuf, ARRAYSIZE(valBuf), L"%d%%", g_value);
+        RECT rcR = {kPadX, kTitleY, kW - kPadX, kTitleY + kTitleH};
+        SetTextColor(hMem, kTextPri);
+        DrawTextW(hMem, valBuf, -1, &rcR,
+                  DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+        SelectObject(hMem, hOldFont);
+
+        // ── Track ─────────────────────────────────────────────────────
+        int tLeft  = kPadX;
+        int tRight = kW - kPadX;
+        int tTop   = kTrackY - kTrackH / 2;
+        int tBot   = kTrackY + kTrackH / 2;
+        int tX     = ValueToThumbX();
+
+        SelectObject(hMem, GetStockObject(NULL_PEN));
+
+        // Unfilled portion
+        HBRUSH hbTrack = CreateSolidBrush(kTrackBg);
+        SelectObject(hMem, hbTrack);
+        RoundRect(hMem, tLeft, tTop, tRight, tBot, kTrackH, kTrackH);
+        DeleteObject(hbTrack);
+
+        // Accent-filled (left of thumb)
+        if (tX > tLeft) {
+            HBRUSH hbFill = CreateSolidBrush(kTrackFill);
+            SelectObject(hMem, hbFill);
+            RoundRect(hMem, tLeft, tTop, tX, tBot, kTrackH, kTrackH);
+            DeleteObject(hbFill);
+        }
+
+        // Thumb
+        int r = (g_dragging || g_hover) ? kThumbRHov : kThumbR;
+        HBRUSH hbThumb = CreateSolidBrush(kThumbCol);
+        SelectObject(hMem, hbThumb);
+        Ellipse(hMem, tX - r, kTrackY - r, tX + r, kTrackY + r);
+        DeleteObject(hbThumb);
+
+        // ── Blit ──────────────────────────────────────────────────────
+        BitBlt(hdc, 0, 0, kW, kH, hMem, 0, 0, SRCCOPY);
+        SelectObject(hMem, hOldBmp);
+        DeleteObject(hBmp);
+        DeleteDC(hMem);
+
+        EndPaint(hWnd, &ps);
+        return 0;
+    }
+
+    case WM_SETCURSOR: {
+        POINT pt;
+        GetCursorPos(&pt);
+        ScreenToClient(hWnd, &pt);
+        bool overTrack = (pt.y >= kTrackY - kThumbRHov * 2 &&
+                          pt.y <= kTrackY + kThumbRHov * 2 &&
+                          pt.x >= kPadX && pt.x <= kW - kPadX);
+        SetCursor(LoadCursor(nullptr, overTrack ? IDC_HAND : IDC_ARROW));
+        return TRUE;
+    }
+
+    case WM_LBUTTONDOWN: {
+        int mx = (short)LOWORD(lParam), my = (short)HIWORD(lParam);
+        bool onTrack = (my >= kTrackY - kThumbRHov * 2 &&
+                        my <= kTrackY + kThumbRHov * 2 &&
+                        mx >= kPadX && mx <= kW - kPadX);
+        if (onTrack || IsOverThumb(mx, my)) {
+            g_value    = XToValue(mx);
+            g_dragging = true;
+            g_hover    = true;
+            SetCapture(hWnd);
+            ApplyVolume();
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return 0;
+    }
+
+    case WM_MOUSEMOVE: {
+        int mx = (short)LOWORD(lParam), my = (short)HIWORD(lParam);
+        // Re-register for WM_MOUSELEAVE each time (TME_LEAVE is one-shot)
+        TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hWnd, 0};
+        TrackMouseEvent(&tme);
+        if (g_dragging) {
+            int newVal = XToValue(mx);
+            if (newVal != g_value) {
+                g_value = newVal;
+                g_volumeDirty = true;   // throttled — kVolTimerId commits to audio
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+        } else {
+            bool wasHover = g_hover;
+            g_hover = IsOverThumb(mx, my);
+            if (g_hover != wasHover)
+                InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return 0;
+    }
+
+    case WM_LBUTTONUP:
+        if (g_dragging) {
+            g_dragging = false;
+            ReleaseCapture();
+            g_value       = XToValue((short)LOWORD(lParam));
+            g_volumeDirty = false;
+            ApplyVolume();          // force-commit final drag position
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return 0;
+
+    case WM_MOUSELEAVE:
+        if (!g_dragging && g_hover) {
+            g_hover = false;
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return 0;
+
+    case WM_MOUSEWHEEL: {
+        int step = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 3 : -3;
+        int newVal = std::max(0, std::min(100, g_value + step));
+        if (newVal != g_value) {
+            g_value = newVal;
+            ApplyVolume();
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return 0;
+    }
+
+    case WM_ACTIVATE:
+        if (LOWORD(wParam) == WA_INACTIVE)
+            DestroyWindow(hWnd);
+        return 0;
+
+    case WM_TIMER:
+        if (wParam == kVolTimerId) {
+            if (g_volumeDirty) { g_volumeDirty = false; ApplyVolume(); }
+        }
+        return 0;
+
+    case WM_KEYDOWN: {
+        int v = g_value;
+        switch (wParam) {
+        case VK_LEFT:   v = std::max(0,   v - 1); break;
+        case VK_RIGHT:  v = std::min(100, v + 1); break;
+        case VK_HOME:   v = 0;   break;
+        case VK_END:    v = 100; break;
+        case VK_ESCAPE:
+            DestroyWindow(hWnd);
+            return 0;
+        default: return 0;
+        }
+        if (v != g_value) {
+            g_value = v;
+            ApplyVolume();
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return 0;
+    }
+
+    case WM_DESTROY:
+        KillTimer(hWnd, kVolTimerId);
+        if (g_volumeDirty) { g_volumeDirty = false; ApplyVolume(); }
+        if (g_font) { DeleteObject(g_font); g_font = nullptr; }
+        g_hwnd        = nullptr;
+        g_trayWnd     = nullptr;
+        g_dragging    = false;
+        g_hover       = false;
+        return 0;
+
+    } // switch
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+static void RegisterClass() {
+    WNDCLASSEXW wc   = {sizeof(wc)};
+    wc.lpfnWndProc   = WndProc;
+    wc.hInstance     = g_hInstance;
+    wc.lpszClassName = kClass;
+    wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+    RegisterClassExW(&wc);
+}
+
+static void UnregisterClass() {
+    ::UnregisterClassW(kClass, g_hInstance);
+}
+
+static void Show(HWND hTrayWnd, int volPct) {
+    if (g_hwnd) { SetForegroundWindow(g_hwnd); return; }
+
+    int x = (g_trayIconRect.left + g_trayIconRect.right) / 2 - kW / 2;
+    int y =  g_trayIconRect.top - kH - 8;
+
+    POINT pt    = { (g_trayIconRect.left + g_trayIconRect.right) / 2, g_trayIconRect.top };
+    HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (GetMonitorInfo(hm, &mi)) {
+        RECT& wa = mi.rcWork;
+        if (x < wa.left)       x = wa.left;
+        if (x + kW > wa.right) x = wa.right - kW;
+        if (y < wa.top)        y = g_trayIconRect.bottom + 8;
+    }
+
+    g_trayWnd = hTrayWnd;
+    g_hwnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        kClass, nullptr,
+        WS_POPUP,
+        x, y, kW, kH,
+        hTrayWnd, nullptr, g_hInstance, (LPVOID)(INT_PTR)volPct);
+
+    if (g_hwnd) {
+        ShowWindow(g_hwnd, SW_SHOWNOACTIVATE);
+        SetForegroundWindow(g_hwnd);
+    }
+}
+
+} // namespace VolumePopup
 
 // ─── Worker thread ────────────────────────────────────────────────────────────
 
@@ -1880,25 +2400,34 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 }
                 InterlockedExchange(&g_isProcessingClick, 0);
             }
+        } else if (event == WM_MBUTTONUP) {
+            VolumePopup::Show(hWnd, GetCurrentVolumePct());
         }
 
     } else if (msg == WM_INPUT) {
-        if (InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1) {
-            UINT sz = 0;
-            GetRawInputData((HRAWINPUT)lParam, RID_INPUT, nullptr, &sz, sizeof(RAWINPUTHEADER));
-            if (sz > 0) {
-                std::vector<BYTE> buf(sz);
-                if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, buf.data(), &sz,
-                                    sizeof(RAWINPUTHEADER)) == sz) {
-                    auto* raw = reinterpret_cast<RAWINPUT*>(buf.data());
-                    if (raw->header.dwType == RIM_TYPEMOUSE &&
-                        (raw->data.mouse.usButtonFlags & RI_MOUSE_WHEEL)) {
-                        POINT pt; GetCursorPos(&pt);
-                        if (PtInRect(&g_trayIconRect, pt)) {
-                            short delta = (short)raw->data.mouse.usButtonData;
-                            int dir = (delta > 0) ? 1 : -1;
+        UINT sz = 0;
+        GetRawInputData((HRAWINPUT)lParam, RID_INPUT, nullptr, &sz, sizeof(RAWINPUTHEADER));
+        if (sz > 0) {
+            std::vector<BYTE> buf(sz);
+            if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, buf.data(), &sz,
+                                sizeof(RAWINPUTHEADER)) == sz) {
+                auto* raw = reinterpret_cast<RAWINPUT*>(buf.data());
+                if (raw->header.dwType == RIM_TYPEMOUSE &&
+                    (raw->data.mouse.usButtonFlags & RI_MOUSE_WHEEL)) {
+                    POINT pt; GetCursorPos(&pt);
+                    if (PtInRect(&g_trayIconRect, pt)) {
+                        short delta = (short)raw->data.mouse.usButtonData;
+                        int dir = (delta > 0) ? 1 : -1;
+                        if (InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1) {
                             PostMessageW(hWnd, WM_TRAY_SCROLL,
                                          (WPARAM)(LONG_PTR)dir, 0);
+                        } else if (g_pEndpointVol) {
+                            float scalar = 0.0f;
+                            if (SUCCEEDED(g_pEndpointVol->GetMasterVolumeLevelScalar(&scalar))) {
+                                scalar = std::max(0.0f, std::min(1.0f, scalar + dir * 0.02f));
+                                g_pEndpointVol->SetMasterVolumeLevelScalar(scalar, nullptr);
+                                PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+                            }
                         }
                     }
                 }
@@ -1927,14 +2456,8 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         UpdateTrayTip(hWnd, FALSE);
 
     } else if (msg == WM_UPDATE_HOOK_STATE) {
-        LONG isScroll = InterlockedCompareExchange(&g_scrollToSwap, 0, 0);
-        if (isScroll) {
-            RAWINPUTDEVICE rid = { 1, 2, RIDEV_INPUTSINK, hWnd };
-            RegisterRawInputDevices(&rid, 1, sizeof(rid));
-        } else {
-            RAWINPUTDEVICE rid = { 1, 2, RIDEV_REMOVE, nullptr };
-            RegisterRawInputDevices(&rid, 1, sizeof(rid));
-        }
+        RAWINPUTDEVICE rid = { 1, 2, RIDEV_INPUTSINK, hWnd };
+        RegisterRawInputDevices(&rid, 1, sizeof(rid));
 
     } else if (msg == WM_RELOAD_ICONS) {
         // Run icon reload on tray thread to eliminate cross-thread handle race.
@@ -1994,6 +2517,11 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         UpdateTrayTip(hWnd, TRUE);  // re-add icon after explorer restart
         RefreshTrayIconRect();      // re-acquire icon screen rect after explorer restart
 
+    } else if (msg == WM_REBIND_VOLUME_CALLBACK) {
+        // Default device changed — re-bind to new endpoint.
+        UnbindEndpointVolume();
+        BindEndpointVolume();
+
     } else if (msg == WM_RELOAD_ALL) {
         // Full reload triggered by the settings dashboard after Save and Apply.
         // Picks up new device assignments, icon choices, device count, swap mode, and priority list.
@@ -2012,6 +2540,7 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         nid.uFlags   = NIF_GUID;
         nid.guidItem = AUDIOSWAP_TRAY_GUID;
         Shell_NotifyIconW(NIM_DELETE, &nid);
+        if (VolumePopup::g_hwnd) DestroyWindow(VolumePopup::g_hwnd);
         DestroyWindow(hWnd);
         return 0;
 
@@ -2033,6 +2562,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     wc.hInstance     = g_hInstance;
     wc.lpszClassName = L"AudioSwitcherWindowClass";
     RegisterClassW(&wc);
+    VolumePopup::RegisterClass();
 
     // WS_EX_TOOLWINDOW: hidden popup window that Shell_NotifyIconW can track properly.
     // AudioSwap used HWND_MESSAGE originally, but message-only windows can lose their
@@ -2055,10 +2585,11 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
                                    __uuidof(IMMDeviceEnumerator), (void**)&g_notifEnum))) {
         g_deviceNotifier = new AudioDeviceNotifier();
         g_notifEnum->RegisterEndpointNotificationCallback(g_deviceNotifier);
+        BindEndpointVolume();
     }
-
-    // Register Raw Input for scroll-to-swap (bypasses WH_MOUSE_LL hook chain).
-    if (InterlockedCompareExchange(&g_scrollToSwap, 0, 0) == 1) {
+    // Register Raw Input for scroll over the tray icon (bypasses WH_MOUSE_LL hook chain).
+    // Always active: scroll-to-swap mode cycles devices; click mode adjusts volume.
+    {
         RAWINPUTDEVICE rid = { 1, 2, RIDEV_INPUTSINK, g_trayHwnd };
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
@@ -2068,6 +2599,9 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) { DispatchMessageW(&msg); }
 
+    // Unbind volume callback BEFORE unregistering the device-enumerator notifications,
+    // so OnNotify cannot fire against a half-torn-down object.
+    UnbindEndpointVolume();
     // Unregister notifications before releasing the enumerator.
     if (g_notifEnum && g_deviceNotifier) {
         g_notifEnum->UnregisterEndpointNotificationCallback(g_deviceNotifier);
@@ -2079,6 +2613,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         RAWINPUTDEVICE rid = { 1, 2, RIDEV_REMOVE, nullptr };
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
+    VolumePopup::UnregisterClass();
     CoUninitialize();
     return 0;
 }
@@ -2088,6 +2623,23 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     Wh_Log(L"AudioSwap Mod Init");
     InitializeCriticalSection(&g_stateLock);
+
+    // Enable dark mode app-wide via uxtheme ordinal 135 (SetPreferredAppMode), with a
+    // fall-back to ordinal 132 (AllowDarkModeForApp) on Win10 builds pre-1903. Graceful
+    // no-op when neither ordinal exists. Affects context menus, dialogs, and STATIC
+    // controls in the dashboard.
+    {
+        HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+        if (ux) {
+            using FnSetMode = void(WINAPI*)(int);
+            using FnAllow   = bool(WINAPI*)(bool);
+            if (auto f = (FnSetMode)GetProcAddress(ux, MAKEINTRESOURCEA(135))) {
+                f(1);  // PreferredAppMode::AllowDark
+            } else if (auto f = (FnAllow)GetProcAddress(ux, MAKEINTRESOURCEA(132))) {
+                f(true);
+            }
+        }
+    }
 
     g_hInstance = GetModuleHandleW(nullptr);
     switch (GetModuleFileNameW(nullptr, g_windhawkPath, ARRAYSIZE(g_windhawkPath))) {
@@ -2159,8 +2711,12 @@ void WhTool_ModUninit() {
     HWND hwnd = g_trayHwnd;
     if (hwnd) PostMessageW(hwnd, WM_CLOSE, 0, 0);
     if (g_trayThread) {
-        WaitForSingleObject(g_trayThread, 3000);
-        CloseHandle(g_trayThread);
+        DWORD wr = WaitForSingleObject(g_trayThread, 3000);
+        if (wr == WAIT_TIMEOUT) {
+            Wh_Log(L"AudioSwap: tray thread did not exit within 3 s — leaking handle to avoid race");
+        } else {
+            CloseHandle(g_trayThread);
+        }
         g_trayThread = nullptr;
     }
     if (g_guiThread) {
@@ -2169,13 +2725,21 @@ void WhTool_ModUninit() {
         // exiting the loop regardless of IsDialogMessageW.
         DWORD guiId = GetThreadId(g_guiThread);
         if (guiId) PostThreadMessageW(guiId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_guiThread, 2000);
-        CloseHandle(g_guiThread);
+        DWORD wr = WaitForSingleObject(g_guiThread, 2000);
+        if (wr == WAIT_TIMEOUT) {
+            Wh_Log(L"AudioSwap: GUI thread did not exit within 2 s — leaking handle to avoid race");
+        } else {
+            CloseHandle(g_guiThread);
+        }
         g_guiThread = nullptr;
     }
     if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 2000);
-        CloseHandle(g_workerThread);
+        DWORD wr = WaitForSingleObject(g_workerThread, 2000);
+        if (wr == WAIT_TIMEOUT) {
+            Wh_Log(L"AudioSwap: worker thread did not exit within 2 s — leaking handle to avoid race");
+        } else {
+            CloseHandle(g_workerThread);
+        }
         g_workerThread = nullptr;
     }
     if (g_notifEnum && g_deviceNotifier) {
