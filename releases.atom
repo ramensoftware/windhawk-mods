@@ -2,12 +2,117 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-04T11:32:41.000Z</updated>
+    <updated>2026-06-05T18:10:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Snap Commander 1.0.0]]></title>
+        <id>https://windhawk.net/mods/snap-commander#b41f04fdb59386dddaa75f1e522d7403eb00877f</id>
+        <link href="https://windhawk.net/mods/snap-commander"/>
+        <updated>2026-06-05T18:10:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="snapcommander">Snap Commander</h1>
+<p>Move the active window to specific screen areas using keyboard shortcuts, just like
+the <a href="https://rectangleapp.com/">Rectangle</a> app on macOS.</p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/snap-commander/snap-commander.gif" alt="snap-commander" /></p>
+<h2 id="defaultshortcuts">Default shortcuts</h2>
+<p>| Action          | Shortcut    |
+| --------------- | ----------- |
+| Left half       | <code>Alt</code> + <code>Q</code> |
+| Right half      | <code>Alt</code> + <code>W</code> |
+| Top half        | <code>Alt</code> + <code>E</code> |
+| Bottom half     | <code>Alt</code> + <code>R</code> |
+| Center half     | <code>Alt</code> + <code>T</code> |
+| Top-left        | <code>Alt</code> + <code>U</code> |
+| Top-right       | <code>Alt</code> + <code>I</code> |
+| Bottom-left     | <code>Alt</code> + <code>J</code> |
+| Bottom-right    | <code>Alt</code> + <code>K</code> |
+| Maximize        | <code>Alt</code> + <code>H</code> |
+| Almost maximize | <code>Alt</code> + <code>Y</code> |
+| Center          | <code>Alt</code> + <code>G</code> |
+| Minimize        | <code>Alt</code> + <code>M</code> |
+| Next display    | <code>Alt</code> + <code>]</code> |
+| Previous display| <code>Alt</code> + <code>[</code> |
+| Make smaller    | <code>Alt</code> + <code>-</code> |
+| Make larger     | <code>Alt</code> + <code>+</code> |
+| Restore         | <code>Alt</code> + <code>Z</code> |</p>
+<p><em>Maximize</em> fills the work area ignoring gaps; <em>almost maximize</em> fills it while keeping
+the configured gaps. <em>Center</em> re-centers the active window without resizing it (unless a
+center width/height is set). <em>Next/previous display</em> move the window to the adjacent
+monitor (keeping its relative size and position, wrapping around). <em>Make smaller/larger</em>
+shrink or grow the window about its center by the configured resize step. <em>Restore</em>
+returns the window to where it was before its first snap.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Each action is bound to a keyboard shortcut you type as text. The mod registers these as
+global hotkeys (via <code>RegisterHotKey</code>), so when you press one, the focused window is
+resized and moved to the matching region of the monitor it is on. The whole combination
+is consumed cleanly, so it never reaches the focused application and leaves no stray
+modifier behind (no menu-bar or Start-menu flicker).</p>
+<h2 id="shortcuts">Shortcuts</h2>
+<p>Each action's shortcut is free text in the form <code>[modifier+]...key</code>, for example:</p>
+<ul>
+<li><code>q</code> - just the <code>Q</code> key</li>
+<li><code>ctrl+q</code> - <code>Ctrl</code> + <code>Q</code></li>
+<li><code>ctrl+shift+left</code> - <code>Ctrl</code> + <code>Shift</code> + <code>Left arrow</code></li>
+</ul>
+<p>Recognised modifier words are <code>alt</code>, <code>ctrl</code>, <code>shift</code>, and <code>win</code>; the key may be a letter
+<code>a</code>-<code>z</code>, a digit <code>0</code>-<code>9</code>, an arrow <code>left</code>/<code>right</code>/<code>up</code>/<code>down</code>, or one of the punctuation
+keys <code>[</code>, <code>]</code>, <code>-</code>. Tokens are separated by <code>+</code> and are case-insensitive. Because <code>+</code> is
+the separator, the <code>=</code>/<code>+</code> key must be written as <code>plus</code> (or <code>=</code>).</p>
+<p>The <strong>Modifier key</strong> setting adds a modifier (or two) on top of whatever you type for
+every action. So with Modifier = <code>Alt</code> and Left half = <code>q</code>, the shortcut is <code>Alt+Q</code>. Set
+Modifier = <code>None</code> to use only the modifiers written in each shortcut - letting you give
+different actions different modifiers (e.g. <code>q</code>, <code>ctrl+w</code>, <code>ctrl+shift+e</code>).</p>
+<p>The modifier combination must match exactly: an action bound to <code>Alt+Q</code> will <em>not</em> fire
+on <code>Ctrl+Alt+Q</code>. Note that binding a bare key (e.g. <code>q</code> with Modifier = <code>None</code>) means
+that key is claimed system-wide and can no longer be typed normally.</p>
+<p>Each shortcut can have only one global owner, so a combination already claimed by another
+app (or a reserved one such as <code>Win</code>+<code>L</code>) can't be registered. When that happens it is
+noted in the mod's log and the shortcut is simply skipped.</p>
+<h2 id="otherconfiguration">Other configuration</h2>
+<ul>
+<li><strong>Gaps</strong>: optional space (in pixels) applied to each side of the snapped window
+(top, bottom, left, right). All default to <code>0</code>, so windows sit flush by default.</li>
+<li><strong>Gap distribution</strong>: controls how the gap is shared between adjacent windows.
+<em>Even spacing</em> (default) puts the full gap on sides touching a screen edge and half the
+gap on shared edges, so two windows placed side by side show the same gap between them
+as a single window shows against the screen edge - no doubling. <em>Full gap on every side</em>
+applies the whole gap to each side (adjacent windows then show a doubled gap). <em>Screen
+edges only</em> gaps just the sides that touch a screen edge, so adjacent windows meet flush.</li>
+<li><strong>Center size</strong>: optional width/height (in pixels) for the Center action. Leave either
+empty to keep the window's current width or height.</li>
+</ul>
+<h2 id="autosnaprules">Auto-snap rules</h2>
+<p>Beyond keyboard shortcuts, you can have the mod snap certain apps automatically. Each
+<strong>Auto-snap rule</strong> pairs one or more executable names with an action: when a window of a
+matching process is shown, that action is applied to it. Rules also run against
+already-open windows when you save settings, so adding a rule snaps matching windows that
+are already on screen.</p>
+<p>Executable names are case-insensitive and the <code>.exe</code> suffix is optional; list several in
+one field separated by <code>,</code>, <code>;</code>, or <code>|</code> (e.g. <code>notepad; calc.exe</code>). The available
+actions are the same region actions as the shortcuts (Maximize, halves, corners, etc.);
+<em>Restore</em> is intentionally not offered, since a freshly opened window has nothing to
+restore to.</p>
+<p>Enable a rule's <strong>Don't resize</strong> toggle to move the window into the chosen region while
+keeping its current size - the unresized window is anchored to the matching corner or
+side of the region (e.g. <em>top-right</em> pins it to the region's top-right). This is ignored
+by the Minimize action.</p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>In order to use this mod with elevated processes, it can be configured to target
+<code>dwm.exe</code>.</p>
+<p>First, navigate to Windhawk's Settings &gt; Advanced settings &gt; More advanced
+settings &gt; Process inclusion list, and make sure that <code>dwm.exe</code> is in the list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<p>Next, go to the mod's advanced tab, enable this option: "Ignore mod
+inclusion/exclusion lists", then add <code>dwm.exe</code> to the custom process inclusion
+list.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Desktop Icon Text and Shortcut Arrows 1.5.0]]></title>
         <id>https://windhawk.net/mods/hide-desktop-icon-text#01fbe027ae353a48edeb7cb6c0b74643429f57d6</id>
@@ -739,35 +844,6 @@ Keep in mind that these animation can use a lot of cpu power but from my experie
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DWM Custom Projection Border 1.0.0]]></title>
-        <id>https://windhawk.net/mods/dwm-custom-projection-border#eefcd95278ff79bf6a79f81175c0eacd6cf2efb7</id>
-        <link href="https://windhawk.net/mods/dwm-custom-projection-border"/>
-        <updated>2026-05-24T20:01:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dwmcustomprojectionborder">DWM Custom Projection Border</h1>
-<p>This mod allows you to customize or disable the screen capture indicator, typically a yellow border,
-that is drawn by DWM on top of a window or display that is being captured using WinRT, specifically <code>Windows.Graphics.Capture</code>.
-This mod is particularly useful on Windows 10, which doesn't have a toggle to disable this border.</p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>In order to use this mod, you must allow Windhawk to inject into the <strong>dwm.exe</strong>
-system process. To do so, add it to the process inclusion list in the advanced
-settings. If you do not do this, it will silently fail to inject.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
-<h2 id="examples">Examples</h2>
-<p><strong>Pink border on Windows 11 26H1</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/erisune/misc/refs/heads/images/dwm-custom-projection-border/win11-pink-projection-border-visual.png" alt="Pink border on Windows 11 26H1" /></p>
-<p><strong>Disabled border on Windows 10 21H2</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/erisune/misc/refs/heads/images/dwm-custom-projection-border/win10-disabled-projection-border-visual.png" alt="Disabled border on Windows 10 21H2" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>To update an active border after you change the settings, move the window or ultimately, try restarting the capture.</li>
-<li>To show the border on Windows 11 you may need to prevent other applications from turning it off, this toggle is in <strong>Settings > Privacy and Security > Screenshot borders</strong>.</li>
-</ul>]]></content>
-        <author>
-            <name>erisune</name>
-            <uri>https://github.com/erisune</uri>
         </author>
     </entry>
 </feed>

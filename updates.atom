@@ -2,12 +2,117 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-05T17:19:58.000Z</updated>
+    <updated>2026-06-05T18:10:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Snap Commander 1.0.0]]></title>
+        <id>https://windhawk.net/mods/snap-commander#b41f04fdb59386dddaa75f1e522d7403eb00877f</id>
+        <link href="https://windhawk.net/mods/snap-commander"/>
+        <updated>2026-06-05T18:10:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="snapcommander">Snap Commander</h1>
+<p>Move the active window to specific screen areas using keyboard shortcuts, just like
+the <a href="https://rectangleapp.com/">Rectangle</a> app on macOS.</p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/snap-commander/snap-commander.gif" alt="snap-commander" /></p>
+<h2 id="defaultshortcuts">Default shortcuts</h2>
+<p>| Action          | Shortcut    |
+| --------------- | ----------- |
+| Left half       | <code>Alt</code> + <code>Q</code> |
+| Right half      | <code>Alt</code> + <code>W</code> |
+| Top half        | <code>Alt</code> + <code>E</code> |
+| Bottom half     | <code>Alt</code> + <code>R</code> |
+| Center half     | <code>Alt</code> + <code>T</code> |
+| Top-left        | <code>Alt</code> + <code>U</code> |
+| Top-right       | <code>Alt</code> + <code>I</code> |
+| Bottom-left     | <code>Alt</code> + <code>J</code> |
+| Bottom-right    | <code>Alt</code> + <code>K</code> |
+| Maximize        | <code>Alt</code> + <code>H</code> |
+| Almost maximize | <code>Alt</code> + <code>Y</code> |
+| Center          | <code>Alt</code> + <code>G</code> |
+| Minimize        | <code>Alt</code> + <code>M</code> |
+| Next display    | <code>Alt</code> + <code>]</code> |
+| Previous display| <code>Alt</code> + <code>[</code> |
+| Make smaller    | <code>Alt</code> + <code>-</code> |
+| Make larger     | <code>Alt</code> + <code>+</code> |
+| Restore         | <code>Alt</code> + <code>Z</code> |</p>
+<p><em>Maximize</em> fills the work area ignoring gaps; <em>almost maximize</em> fills it while keeping
+the configured gaps. <em>Center</em> re-centers the active window without resizing it (unless a
+center width/height is set). <em>Next/previous display</em> move the window to the adjacent
+monitor (keeping its relative size and position, wrapping around). <em>Make smaller/larger</em>
+shrink or grow the window about its center by the configured resize step. <em>Restore</em>
+returns the window to where it was before its first snap.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Each action is bound to a keyboard shortcut you type as text. The mod registers these as
+global hotkeys (via <code>RegisterHotKey</code>), so when you press one, the focused window is
+resized and moved to the matching region of the monitor it is on. The whole combination
+is consumed cleanly, so it never reaches the focused application and leaves no stray
+modifier behind (no menu-bar or Start-menu flicker).</p>
+<h2 id="shortcuts">Shortcuts</h2>
+<p>Each action's shortcut is free text in the form <code>[modifier+]...key</code>, for example:</p>
+<ul>
+<li><code>q</code> - just the <code>Q</code> key</li>
+<li><code>ctrl+q</code> - <code>Ctrl</code> + <code>Q</code></li>
+<li><code>ctrl+shift+left</code> - <code>Ctrl</code> + <code>Shift</code> + <code>Left arrow</code></li>
+</ul>
+<p>Recognised modifier words are <code>alt</code>, <code>ctrl</code>, <code>shift</code>, and <code>win</code>; the key may be a letter
+<code>a</code>-<code>z</code>, a digit <code>0</code>-<code>9</code>, an arrow <code>left</code>/<code>right</code>/<code>up</code>/<code>down</code>, or one of the punctuation
+keys <code>[</code>, <code>]</code>, <code>-</code>. Tokens are separated by <code>+</code> and are case-insensitive. Because <code>+</code> is
+the separator, the <code>=</code>/<code>+</code> key must be written as <code>plus</code> (or <code>=</code>).</p>
+<p>The <strong>Modifier key</strong> setting adds a modifier (or two) on top of whatever you type for
+every action. So with Modifier = <code>Alt</code> and Left half = <code>q</code>, the shortcut is <code>Alt+Q</code>. Set
+Modifier = <code>None</code> to use only the modifiers written in each shortcut - letting you give
+different actions different modifiers (e.g. <code>q</code>, <code>ctrl+w</code>, <code>ctrl+shift+e</code>).</p>
+<p>The modifier combination must match exactly: an action bound to <code>Alt+Q</code> will <em>not</em> fire
+on <code>Ctrl+Alt+Q</code>. Note that binding a bare key (e.g. <code>q</code> with Modifier = <code>None</code>) means
+that key is claimed system-wide and can no longer be typed normally.</p>
+<p>Each shortcut can have only one global owner, so a combination already claimed by another
+app (or a reserved one such as <code>Win</code>+<code>L</code>) can't be registered. When that happens it is
+noted in the mod's log and the shortcut is simply skipped.</p>
+<h2 id="otherconfiguration">Other configuration</h2>
+<ul>
+<li><strong>Gaps</strong>: optional space (in pixels) applied to each side of the snapped window
+(top, bottom, left, right). All default to <code>0</code>, so windows sit flush by default.</li>
+<li><strong>Gap distribution</strong>: controls how the gap is shared between adjacent windows.
+<em>Even spacing</em> (default) puts the full gap on sides touching a screen edge and half the
+gap on shared edges, so two windows placed side by side show the same gap between them
+as a single window shows against the screen edge - no doubling. <em>Full gap on every side</em>
+applies the whole gap to each side (adjacent windows then show a doubled gap). <em>Screen
+edges only</em> gaps just the sides that touch a screen edge, so adjacent windows meet flush.</li>
+<li><strong>Center size</strong>: optional width/height (in pixels) for the Center action. Leave either
+empty to keep the window's current width or height.</li>
+</ul>
+<h2 id="autosnaprules">Auto-snap rules</h2>
+<p>Beyond keyboard shortcuts, you can have the mod snap certain apps automatically. Each
+<strong>Auto-snap rule</strong> pairs one or more executable names with an action: when a window of a
+matching process is shown, that action is applied to it. Rules also run against
+already-open windows when you save settings, so adding a rule snaps matching windows that
+are already on screen.</p>
+<p>Executable names are case-insensitive and the <code>.exe</code> suffix is optional; list several in
+one field separated by <code>,</code>, <code>;</code>, or <code>|</code> (e.g. <code>notepad; calc.exe</code>). The available
+actions are the same region actions as the shortcuts (Maximize, halves, corners, etc.);
+<em>Restore</em> is intentionally not offered, since a freshly opened window has nothing to
+restore to.</p>
+<p>Enable a rule's <strong>Don't resize</strong> toggle to move the window into the chosen region while
+keeping its current size - the unresized window is anchored to the matching corner or
+side of the region (e.g. <em>top-right</em> pins it to the region's top-right). This is ignored
+by the Minimize action.</p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>In order to use this mod with elevated processes, it can be configured to target
+<code>dwm.exe</code>.</p>
+<p>First, navigate to Windhawk's Settings &gt; Advanced settings &gt; More advanced
+settings &gt; Process inclusion list, and make sure that <code>dwm.exe</code> is in the list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<p>Next, go to the mod's advanced tab, enable this option: "Ignore mod
+inclusion/exclusion lists", then add <code>dwm.exe</code> to the custom process inclusion
+list.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Net-Toggle 2.0.0]]></title>
         <id>https://windhawk.net/mods/net-toggle#c750ebdd82eef330bdfe48831fa1b5fda89c2192</id>
@@ -416,68 +521,6 @@ Spritesheets are sliced in memory at startup for smooth, lag-free performance  <
         <author>
             <name>ciizerr</name>
             <uri>https://github.com/ciizerr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Simple Window Switcher 2.0]]></title>
-        <id>https://windhawk.net/mods/simple-window-switcher#e5909b71ad7f7fa9b7abdafe7c1008f801efed41</id>
-        <link href="https://windhawk.net/mods/simple-window-switcher"/>
-        <updated>2026-06-02T06:36:23.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="fixes">Fixes</h3>
-<ul>
-<li>Fixed centering for elements. Now elements like Title and Label are correctly centered when DWM Thumbnails is disabled</li>
-<li>Fixed UWP Icons display for Windows 10 and older builds (Credits to @Asteski)</li>
-<li>Fixed Background Opacity fallback issue where setting it to 0 or above 100 falls back to 90. Now they follow the range correctly</li>
-<li>Fixed layout issues for icon-only setup</li>
-<li>Fixed scroll navigation issue where it doesn't navigate when the cursor is out of the alt tab menu</li>
-<li>Fixed an issue where special apps that uses overlays like Raycast, WindowSill etc were caught in the alt tab menu. </li>
-<li>Fixed an issue with vertical alignment configuration where wide thumbnails "cut-through" the space. </li>
-<li>Fixed an edge case with <code>Display Windows Only From the Monitor Containing the Cursor</code> option (Credits to @zhilemann)</li>
-<li>Fixed minor thumbnail issues. Now it correctly follows the DWM state for the windows</li>
-<li>Fixed row width to correctly follow the layout (Credits to @Asteski)</li>
-<li>Fixed Mica theme multi-monitor bug</li>
-</ul>
-<h3 id="updates">Updates</h3>
-<ul>
-<li>Updated Explorer Restart Prompt logic using a new mutex check</li>
-<li>Updated Settings Layout to be more structured</li>
-<li>Updated Switcher Display options into a drop-down menu</li>
-<li>Updated Icons Size configuration, has four options: (Credits to @Asteski)</li>
-<li>Small</li>
-<li>Medium</li>
-<li>Large</li>
-<li>Extra Large</li>
-<li>Update Theme Mode Settings to allow a modular configuration separate for both light and dark modes</li>
-<li>Updated close button glyph to stay in static color (Credits to @Asteski)</li>
-</ul>
-<h3 id="additions">Additions</h3>
-<ul>
-<li>Added new options: </li>
-<li>Show Title </li>
-<li>Show Label </li>
-<li>Reverse Scroll Direction</li>
-<li>Switcher Background Color</li>
-<li>Added Virtual Desktop Support</li>
-<li>Added Font Customizations</li>
-<li>Added four new features (Credits to @Asteski) </li>
-<li>Thumbnail Position</li>
-<li>Thumbnail Alignment</li>
-<li>Task Highlight Style</li>
-<li>Thumbnails to Task Width</li>
-<li>Grouping Applications</li>
-<li>Added a new theme: Mica (Only Supported for Windows 11)</li>
-<li>Added Exclude Windows support</li>
-<li>Added Custom Border Radius support</li>
-<li>Added Switcher Positioning support</li>
-<li>Added Automatic Icon Size depending on the switcher dimensions (Credits to @Asteski)</li>
-<li>Added middle-mouse button task close (Credits to @Asteski)</li>
-<li>Added a new layout: Bagde, inspired from macOS with a set of customization options</li>
-<li>Added Grouper Window Indicator to show the number of windows of the related process</li>
-<li>Added Thumbnail Shadow Support (Credits to @Asteski)</li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>

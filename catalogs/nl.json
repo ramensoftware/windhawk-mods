@@ -9498,6 +9498,34 @@
                 "version": "1.0.3"
             }
         },
+        "snap-commander": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1780683010000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1780683010000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Asteski",
+                "compilerOptions": "-luser32 -ldwmapi",
+                "description": "Move the active window to screen halves and corners with keyboard shortcuts (inspired by Rectangle on macOS)",
+                "github": "https://github.com/Asteski",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Snap Commander",
+                "version": "1.0.0"
+            }
+        },
         "spoof-light-dark-theme": {
             "details": {
                 "defaultSorting": 3997,
