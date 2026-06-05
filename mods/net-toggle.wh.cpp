@@ -77,6 +77,13 @@ One click drops your connection. Click it again, and you're back online.
 // ==/WindhawkModReadme==
 
 #define WIN32_LEAN_AND_MEAN
+// winsock2.h + ws2tcpip.h MUST come before windows.h (pulled in by
+// windhawk_utils.h). iphlpapi.h only declares the netioapi APIs
+// (GetIfTable2 / MIB_IF_TABLE2 / FreeMibTable) when the winsock2 types are
+// already in scope; including ws2tcpip.h after windows.h leaves them hidden
+// and clang falls back to the legacy MIB_IFTABLE.
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
@@ -84,7 +91,6 @@ One click drops your connection. Click it again, and you're back online.
 #include <propkey.h>
 #include <propidl.h>
 #include <iphlpapi.h>
-#include <ws2tcpip.h>
 #include <math.h>
 
 #define TRAY_ICON_ID 1
@@ -158,42 +164,44 @@ void LogLastError(LPCWSTR context) {
 }
 
 BOOL CheckActualNetworkState() {
-    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
-    HANDLE stdoutRead, stdoutWrite;
-    if (!CreatePipe(&stdoutRead, &stdoutWrite, &sa, 0)) return TRUE;
-    SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0);
+    // GAA_FLAG_INCLUDE_ALL_INTERFACES includes disabled adapters so we can
+    // distinguish IfOperStatusNotPresent (disabled) from IfOperStatusDown
+    // (enabled but disconnected). GetAdaptersAddresses uses a separate internal
+    // code path from NotifyAddrChange/GetIfTable2, avoiding an iphlpapi.dll
+    // shared-handle contamination that causes GetIfTable2 to return
+    // ERROR_INVALID_HANDLE after NotifyAddrChange fails in injected contexts.
+    ULONG flags = GAA_FLAG_SKIP_UNICAST | GAA_FLAG_SKIP_ANYCAST |
+                  GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER |
+                  GAA_FLAG_INCLUDE_ALL_INTERFACES;
+    ULONG size = 16384;
+    BYTE* buf = (BYTE*)HeapAlloc(GetProcessHeap(), 0, size);
+    if (!buf) return TRUE;
 
-    PROCESS_INFORMATION pi = {};
-    STARTUPINFOW si = {sizeof(si)};
-    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
-    si.hStdOutput = stdoutWrite;
-    si.hStdError = stdoutWrite;
-
-    BOOL isUp = TRUE;
-    WCHAR cmdLine[] = L"powershell.exe -NoProfile -NonInteractive -Command \"(Get-NetAdapter -Physical | Where-Object Status -ne 'Disabled').Count\"";
-
-    if (CreateProcessW(nullptr,
-                       cmdLine,
-                       nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-        CloseHandle(stdoutWrite);
-        char buffer[128] = {};
-        DWORD bytesRead;
-        if (ReadFile(stdoutRead, buffer, sizeof(buffer) - 1, &bytesRead, nullptr) && bytesRead > 0) {
-            buffer[bytesRead] = 0;
-            int count = atoi(buffer);
-            isUp = (count > 0);
-        }
-        CloseHandle(stdoutRead);
-        WaitForSingleObject(pi.hProcess, 5000);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    } else {
-        CloseHandle(stdoutRead);
-        CloseHandle(stdoutWrite);
+    ULONG ret = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr,
+                                     (IP_ADAPTER_ADDRESSES*)buf, &size);
+    if (ret == ERROR_BUFFER_OVERFLOW) {
+        HeapFree(GetProcessHeap(), 0, buf);
+        buf = (BYTE*)HeapAlloc(GetProcessHeap(), 0, size);
+        if (!buf) return TRUE;
+        ret = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr,
+                                   (IP_ADAPTER_ADDRESSES*)buf, &size);
+    }
+    if (ret != NO_ERROR) {
+        Wh_Log(L"GetAdaptersAddresses failed (%lu), assuming ON", ret);
+        HeapFree(GetProcessHeap(), 0, buf);
+        return TRUE;
     }
 
-    return isUp;
+    int count = 0;
+    for (IP_ADAPTER_ADDRESSES* aa = (IP_ADAPTER_ADDRESSES*)buf; aa; aa = aa->Next) {
+        if (aa->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+        if (aa->IfType == IF_TYPE_TUNNEL) continue;
+        if (aa->PhysicalAddressLength == 0) continue;
+        if (aa->OperStatus == IfOperStatusNotPresent) continue;
+        count++;
+    }
+    HeapFree(GetProcessHeap(), 0, buf);
+    return count > 0;
 }
 
 BOOL RunPowerShellCommand(LPCWSTR psCommand, BOOL targetState) {
@@ -389,7 +397,10 @@ static void DrawWifiIcon(DWORD* px, int W, int H, BYTE r, BYTE g, BYTE b) {
                 }
                 DWORD a8 = (DWORD)(alpha * 255.0f + 0.5f);
                 if (a8 > 255) a8 = 255;
-                px[y * W + x] = (a8 << 24) | ((DWORD)r << 16) | ((DWORD)g << 8) | b;
+                DWORD pr = (r * a8 + 127) / 255;
+                DWORD pg = (g * a8 + 127) / 255;
+                DWORD pb = (b * a8 + 127) / 255;
+                px[y * W + x] = (a8 << 24) | (pr << 16) | (pg << 8) | pb;
             }
         }
     }
@@ -603,7 +614,7 @@ DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
     if (g_trayHwnd) {
         PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)(g_networkIsUp == 1), 0);
         if (resetOk && g_networkIsUp) {
-            // Use 12s settle (wParam=1) to give DHCP/routing time to stabilise
+            // Use 15s settle (wParam=1) to give DHCP/routing time to stabilise
             // after the release/renew before we attempt the DNS ping.
             PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 1, 0);
         }
