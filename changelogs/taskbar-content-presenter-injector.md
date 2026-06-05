@@ -1,3 +1,7 @@
+## 1.4.1 ([Jun 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cdca30ff8a2baff54b2e2685c996d73b0e82471b/mods/taskbar-content-presenter-injector.wh.cpp))
+
+* Fixed multi-monitor support. Previously, having this mod enabled with more than 1 monitor connected would cause `explorer.exe` to loop crash.
+
 ## 1.4 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e33b63fbaf11e119f003ae9e8a165c68a14b305b/mods/taskbar-content-presenter-injector.wh.cpp))
 
 * The mod now injects into `SearchUx.SearchUI.SearchButtonRootGrid`.

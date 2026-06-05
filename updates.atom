@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-04T21:48:59.000Z</updated>
+    <updated>2026-06-05T08:54:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.4.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-content-presenter-injector#cdca30ff8a2baff54b2e2685c996d73b0e82471b</id>
+        <link href="https://windhawk.net/mods/taskbar-content-presenter-injector"/>
+        <updated>2026-06-05T08:54:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed multi-monitor support. Previously, having this mod enabled with more than 1 monitor connected would cause <code>explorer.exe</code> to loop crash.</li>
+</ul>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Nav DragOver Fix 1.2.6]]></title>
         <id>https://windhawk.net/mods/explorer-nav-dragover-fix#e7fac19e6a1d29ee72e53d93318a4de19250769a</id>
@@ -518,17 +531,6 @@ the way it was in Windows 95, before Windows 98.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Never Auto-Expand Explorer Tree Items 1.1]]></title>
-        <id>https://windhawk.net/mods/never-auto-expand-explorer-tree-items#459e076ea0a9793e5353e9696ee7e7dc45abdff3</id>
-        <link href="https://windhawk.net/mods/never-auto-expand-explorer-tree-items"/>
-        <updated>2026-06-01T09:41:45.000Z</updated>
-        <content type="html"><![CDATA[<p>Added an option to allow top-level items to auto-expand while keeping their nested items collapsed.</p>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
