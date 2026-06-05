@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.3.0
+// @version         1.3.1
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -697,6 +697,7 @@ static void DrawChevron(HDC hdc, const RECT *r, int partId, int stateId)
 
 static thread_local bool g_inTreePaint = false;
 static thread_local int g_inSubclassProc = 0;
+static thread_local bool g_inOurSelect = false;
 static thread_local int g_lastSepY = -1;
 static thread_local int g_firstSepY = -1;
 
@@ -1497,6 +1498,20 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         LPNMHDR hdr = (LPNMHDR)lParam;
         if (hdr && hdr->hwndFrom == hTree)
         {
+            if (hdr->code == TVN_SELCHANGINGW || hdr->code == TVN_SELCHANGINGA)
+            {
+                if (hTree == g_mutatingTree || g_inOurSelect || AreWeMutating())
+                    return 0;
+                LPNMTREEVIEWW nm = (LPNMTREEVIEWW)lParam;
+                if (nm->action != TVC_BYMOUSE && nm->action != TVC_BYKEYBOARD &&
+                    nm->itemNew.hItem && IsDepth1Item(hTree, nm->itemNew.hItem))
+                {
+                    Wh_Log(L"[SEL-BLOCK] tree=%04X item=%04X action=%d",
+                           PTR4(hTree), PTR4(nm->itemNew.hItem), nm->action);
+                    return TRUE;
+                }
+            }
+
             if (hdr->code == TVN_SELCHANGEDW || hdr->code == TVN_SELCHANGEDA)
             {
                 if (hTree == g_mutatingTree)
@@ -1924,7 +1939,11 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 HTREEITEM hNext = (HTREEITEM)SendMessageW(hWnd, TVM_GETNEXTITEM,
                                                             dir, (LPARAM)hSel);
                 if (hNext)
+                {
+                    g_inOurSelect = true;
                     SendMessageW(hWnd, TVM_SELECTITEM, TVGN_CARET, (LPARAM)hNext);
+                    g_inOurSelect = false;
+                }
             }
             return r;
         }
