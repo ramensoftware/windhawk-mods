@@ -2,7 +2,7 @@
 // @id              open-in-admin-terminal
 // @name            Open in Admin Terminal
 // @description     Adds an Explorer classic context menu entry to open an elevated terminal in the current or selected folder.
-// @version         1.15
+// @version         1.16
 // @author          aimagist
 // @github          https://github.com/aimagist
 // @include         explorer.exe
@@ -49,6 +49,7 @@ Screenshots may show earlier builds, but current releases use runtime classic-me
 - Diagnostics use Windhawk's built-in logging controls.
 
 ## Version log
+- 1.16: Added native UAC shield overlay composition on the terminal menu icon using `SHGetStockIconInfo(SIID_SHIELD)`.
 - 1.15: Added optional navigation pane and Quick access support for filesystem folders and drives.
 - 1.14: Added support for Desktop context menu targets.
 - 1.13: Fixed elevated terminal launches for folder paths containing spaces.
@@ -1272,7 +1273,18 @@ static bool ResolveExecutablePathForIcon(const Settings& settings, std::wstring&
     return true;
 }
 
-static HBITMAP CreateMenuBitmapFromIcon(HICON icon) {
+static HICON TryLoadShieldIcon() {
+    SHSTOCKICONINFO stockIconInfo = {};
+    stockIconInfo.cbSize = sizeof(stockIconInfo);
+    if (SUCCEEDED(SHGetStockIconInfo(SIID_SHIELD, SHGSI_ICON | SHGSI_SMALLICON,
+                                     &stockIconInfo))) {
+        return stockIconInfo.hIcon;
+    }
+
+    return nullptr;
+}
+
+static HBITMAP CreateMenuBitmapFromIcon(HICON icon, HICON overlayIcon = nullptr) {
     if (!icon) {
         return nullptr;
     }
@@ -1313,6 +1325,23 @@ static HBITMAP CreateMenuBitmapFromIcon(HICON icon) {
     }
     HGDIOBJ oldBitmap = SelectObject(memDc, bitmap);
     DrawIconEx(memDc, 0, 0, icon, size, size, 0, nullptr, DI_NORMAL);
+    if (overlayIcon) {
+        int overlaySize = MulDiv(size, 5, 8);
+        const int minOverlaySize = 10;
+        const int maxOverlaySize = size - 2;
+        if (overlaySize < minOverlaySize) {
+            overlaySize = minOverlaySize;
+        }
+        if (overlaySize > maxOverlaySize) {
+            overlaySize = maxOverlaySize;
+        }
+        if (overlaySize > 0) {
+            const int overlayX = size - overlaySize;
+            const int overlayY = size - overlaySize;
+            DrawIconEx(memDc, overlayX, overlayY, overlayIcon, overlaySize, overlaySize, 0,
+                       nullptr, DI_NORMAL);
+        }
+    }
     SelectObject(memDc, oldBitmap);
 
     DeleteDC(memDc);
@@ -1332,8 +1361,14 @@ static HBITMAP TryCreateMenuBitmapForTerminal(const Settings& settings) {
         return nullptr;
     }
 
-    HBITMAP bitmap = CreateMenuBitmapFromIcon(shfi.hIcon);
-    DestroyIcon(shfi.hIcon);
+    HICON shieldIcon = TryLoadShieldIcon();
+    HBITMAP bitmap = CreateMenuBitmapFromIcon(shfi.hIcon, shieldIcon);
+    if (shieldIcon) {
+        DestroyIcon(shieldIcon);
+    }
+    if (shfi.hIcon) {
+        DestroyIcon(shfi.hIcon);
+    }
     return bitmap;
 }
 
@@ -1548,7 +1583,7 @@ BOOL WINAPI PostMessageW_Hook(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init v1.15-classic");
+    Wh_Log(L"Init v1.16-classic");
 
     g_shellIdListClipboardFormat = RegisterClipboardFormatW(L"Shell IDList Array");
 
