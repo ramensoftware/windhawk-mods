@@ -18,6 +18,8 @@ from io import StringIO
 from pathlib import Path
 from typing import Callable, Optional, TextIO, Tuple
 
+import yaml
+
 from extract_mod_symbols import get_mod_symbols
 
 DISALLOWED_AUTHORS = [
@@ -65,6 +67,10 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
         'void Wh_ModSettingsChanged()',
         'BOOL Wh_ModSettingsChanged(BOOL* bReload)',
     ],
+    'WhTool_ModInit': ['BOOL WhTool_ModInit()'],
+    'WhTool_ModUninit': ['void WhTool_ModUninit()'],
+    'WhTool_ModSettingsChanged': ['void WhTool_ModSettingsChanged()'],
+    'WhTool_ModEntryPoint': ['void WhTool_ModEntryPoint()'],
 }
 
 
@@ -783,9 +789,69 @@ def validate_readme(path: Path, mod_source: str) -> int:
 
 def validate_settings(path: Path, mod_source: str) -> int:
     """Validate the mod's settings block, if present."""
-    return validate_marker_block(
+    warnings = validate_marker_block(
         path, mod_source, 'WindhawkModSettings', 'Settings', required=False
     )
+    warnings += validate_settings_yaml(path, mod_source)
+    return warnings
+
+
+def validate_settings_yaml(path: Path, mod_source: str) -> int:
+    """Validate that the settings block parses as the structure Windhawk expects.
+
+    Mirrors the engine's extraction (windhawk-utils mod-source settings.rs): the
+    block body must be valid YAML, a non-empty array, with every item a non-empty
+    object. The structural integrity of the comment block itself (markers, /* */
+    placement, etc.) is reported separately by validate_marker_block, so a block
+    that doesn't match the pattern below is simply skipped here.
+    """
+    # Use the same extraction the engine uses. The surrounding \s* consumes the
+    # whitespace around the body, so we parse exactly the text Windhawk feeds to
+    # its YAML parser.
+    block_re = re.compile(
+        r'^//[ \t]+==WindhawkModSettings==[ \t]*$'
+        r'\s*/\*\s*([\s\S]+?)\s*\*/\s*'
+        r'^//[ \t]+==/WindhawkModSettings==[ \t]*$',
+        re.MULTILINE,
+    )
+    match = block_re.search(mod_source)
+    if match is None:
+        return 0
+
+    body = match.group(1)
+    body_start_line = mod_source.count('\n', 0, match.start(1)) + 1
+
+    try:
+        settings = yaml.safe_load(body)
+    except yaml.YAMLError as e:
+        line = body_start_line
+        mark = getattr(e, 'problem_mark', None)
+        if mark is not None:
+            # problem_mark.line is 0-based and relative to the parsed body.
+            line = body_start_line + mark.line
+        return add_warning(path, line, f'Settings block is not valid YAML: {e}')
+
+    if not isinstance(settings, list):
+        return add_warning(path, body_start_line, 'Settings block must be a YAML array')
+
+    if len(settings) == 0:
+        return add_warning(
+            path, body_start_line, 'Settings block array must have at least one item'
+        )
+
+    for item in settings:
+        if not isinstance(item, dict):
+            return add_warning(
+                path, body_start_line, 'Settings block array items must be objects'
+            )
+        if len(item) == 0:
+            return add_warning(
+                path,
+                body_start_line,
+                'Settings block objects must have at least one property',
+            )
+
+    return 0
 
 
 @cache

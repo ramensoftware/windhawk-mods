@@ -2,11 +2,11 @@
 // @id              dynamic-island-for-windows
 // @name            Dynamic Island for Windows
 // @description     A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.
-// @version         1.0.1
+// @version         1.1.0
 // @author          Himanshu
 // @github          https://github.com/devcode90
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi
+// @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi -lwinhttp -lpdh
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -14,86 +14,168 @@
 /*
 # Dynamic Island for Windows
 
-![Screenshot 1](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-18%20193649.png)
+A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built natively with hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience.
 
-![Screenshot 2](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225602.png)
+![Dynamic Island Preview](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/Full-preview.png)
 
-![Screenshot 3](https://raw.githubusercontent.com/devcode90/TIME-TRAVEL-CHRONO/main/Screenshot%202026-05-22%20225634.png)
+---
 
-A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built from the ground up using native Windows APIs and hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience with virtually zero impact on your system resources.
+## 🚀 Modules & Dashboards
 
-### Features ✨
+The Dynamic Island intelligently expands to display context-aware dashboards. You can easily navigate between different views using your mouse scroll wheel.
+
+| Module | Description | Preview |
+| :--- | :--- | :--- |
+| **Media Player** | Shows live album art, track details, audio waveforms, and full playback controls. | ![Media](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/media.png) |
+| **Calendar** | A sleek, perfectly aligned monthly calendar that highlights the current date. | ![Calendar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/calender.png) |
+| **Weather** | Real-time weather stats powered by wttr.in, including wind speed, humidity, and "feels like" temperature. | ![Weather](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/weather.png) |
+| **Game Overlay** | Real-time FPS, CPU, GPU, and RAM utilization overlays tailored for gamers. | ![Gamebar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/gamebar.png) |
+| **Idle View** | A minimal dashboard with your battery status, digital clock, and sleek pagination dots. | ![Idle](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/idle.png) |
+| **Camera Privacy** | Shows a green dot when an app is actively using your webcam. | ![Camera](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/camera-detected.png) |
+| **Mic Privacy** | Shows an orange dot when an app is actively using your microphone. | ![Mic](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/mic-detected.png) |
+
+---
+
+## ✨ Core Features
+
 - **Hardware Privacy Indicators:** A pulsing orange dot appears when your microphone is active, and a green dot when your camera is in use. Rate-limited polling ensures absolutely no CPU drain.
-- **Rich Media Integration:** Shows album art, song info, a live audio waveform, and playback controls.
 - **High-Res Clipboard & Notifications:** Instantly see what you copied or your latest Windows notifications, featuring crisp, high-fidelity 64px app icons extracted directly from system executables.
-- **Customizable Aesthetics:** Switch between sleek OLED Black, Dark Gray, Midnight Blue, and Deep Purple themes from the right-click menu, or use the settings to dial in your exact hex colors.
 - **Dynamic Fluid Animations:** Fully smooth resizing and splitting when multiple events happen at once (e.g., media playing while you copy text or receive a notification).
-- **Battery & Clock:** Low battery alerts and an optional minimal clock dashboard for when the island is idle.
+- **Customizable Aesthetics:** Switch between sleek OLED Black, Dark Gray, Midnight Blue, and Deep Purple themes from the right-click menu, or use the settings to dial in your exact hex colors.
 
-### Usage & Settings
-- **Hover** over the island to seamlessly expand it.
-- **Right-click** the island to access Theme presets, Transparency settings, and to pin the island open.
-- Visit the **Settings tab** to change the island's Position (Top, Bottom, Left, Right), Size Scale, Animation Speed, and toggle specific modules on or off.
+---
+
+## ⚙️ Usage & Settings
+
+- **Hover & Scroll:** Hover over the island to seamlessly expand it. Use your mouse scroll wheel to swipe between the Media, Calendar, and Weather tabs.
+- **Right-Click Menu:** Right-click the island to access Theme presets, Transparency settings, and to pin the island open.
+- **Windhawk Settings:** Visit the Mod Settings tab to change the island's Position, Size Scale, Animation Speed, and toggle specific modules. You can also perfectly align the island using the new `Offset X` and `Offset Y` settings, and even select exactly which monitor the island should appear on (including a brand new "Follow Mouse" mode!).
+- **Notifications:** To use the notification module, you need to add `explorer.exe` to the process inclusion list in the Advanced tab of the mod settings and restart the mod.
+
+---
+
+## 📝 Feedback & Credits
+
+### Feedback / Support / Bug Reports
+- Please use [Windhawk Mods Issues](https://github.com/ramensoftware/windhawk-mods/issues) or [dynamic-island-for-windows issues](https://github.com/devcode90/dynamic-island-for-windows/issues) to report bugs, request features, or share feedback.  
+- Clear descriptions, screenshots, or steps to reproduce help improve fixes and updates.  
+- Suggestions for UI/UX or new integrations are always welcome.
+
+### Credits
+- **[ciizerr @GitHub](https://github.com/ciizerr)**: Improved the UI by refining layout alignment, fixing dashboard scaling, and enhancing calendar and weather module integration.
+
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- Position: top-center
-  $name: Position
-  $options:
-    - top-center: Top Center
-    - top-left: Top Left
-    - top-right: Top Right
-    - bottom-center: Bottom Center
-- SizeScale: '1.0'
-  $name: Size scale
-  $options:
-    - '0.8': 0.8x
-    - '1.0': 1.0x
-    - '1.2': 1.2x
-- AccentColorMode: auto
-  $name: Accent color mode
-  $options:
-    - auto: Auto, from album art
-    - system: System
-    - custom: Custom hex
-- CustomAccentHex: "#4cc9f0"
-  $name: Custom accent hex
-- AnimationSpeed: normal
-  $name: Animation speed
-  $options:
-    - slow: Slow
-    - normal: Normal
-    - fast: Fast
-- Media: true
-  $name: Media module
-- Clipboard: true
-  $name: Clipboard module
-- Battery: true
-  $name: Battery module
-- Progress: true
-  $name: Progress module
-- BlurIntensity: 72
-  $name: Blur intensity
-  $description: 0 to 100. Used as the D2D dark tint opacity percentage.
-- PillOpacity: 96
-  $name: Pill transparency
-  $description: 35 to 100. Lower values make the island more transparent.
-- GameOverlay: false
-  $name: Enable game overlay mode
-  $description: Shows FPS, CPU, RAM, GPU placeholder, disk, and foreground app.
-- AlwaysShowClock: true
-  $name: Always show clock
-- PillBgColor: "#0D0D0F"
-  $name: Pill background color
-  $description: "Hex color for pill background. Presets: #0D0D0F (OLED Black), #1C1C1E (Dark Gray), #0A0A1A (Midnight Blue), #12001E (Deep Purple)"
-- TextPrimaryColor: "#F7F7F7"
-  $name: Primary text color
-  $description: "Hex color for titles and main text."
-- TextSecondaryColor: "#888888"
-  $name: Secondary text color
-  $description: "Hex color for artist, app name, muted labels."
+- Appearance:
+  - Position: top-center
+    $name: Position
+    $description: Where the island should appear on your screen.
+    $options:
+      - top-center: Top Center
+      - top-left: Top Left
+      - top-right: Top Right
+      - bottom-center: Bottom Center
+  - TargetMonitor: primary
+    $name: Target Monitor
+    $description: Select the screen to display the island. If a display isn't found, it safely falls back to the Primary Monitor.(Extra Displays are given even if they don't exist because windhawk settings are static)
+    $options:
+      - 'primary': Primary Monitor
+      - '1': Display 1
+      - '2': Display 2
+      - '3': Display 3
+      - '4': Display 4
+      - '5': Display 5
+      - 'follow': Follow Mouse (Active Monitor)
+  - OffsetX: 0
+    $name: Offset X
+    $description: Adjust the horizontal position (in pixels). Positive values move it right, negative values move it left.
+  - OffsetY: 0
+    $name: Offset Y
+    $description: Adjust the vertical position (in pixels). Positive values move it down, negative values move it up.
+  - SizeScale: '1.0'
+    $name: Size scale
+    $description: Makes the entire island and its contents larger or smaller.
+    $options:
+      - '0.8': 0.8x
+      - '1.0': 1.0x
+      - '1.2': 1.2x
+      - '1.5': 1.5x
+      - '1.8': 1.8x
+      - '2.0': 2.0x
+      - '2.5': 2.5x
+  - AutoDpiScale: true
+    $name: Auto DPI scaling
+    $description: Automatically scales the island to match your monitor's DPI. Recommended for 4K screens.
+  - W11Style: false
+    $name: Native Windows 11 style
+    $description: Changes the shape from an Apple pill to a Windows 11 rounded box.
+  - AlwaysOnTop: true
+    $name: Always on top
+    $description: Keeps the island above all other windows. Turn this off if it blocks other apps.
+  - AnimationSpeed: normal
+    $name: Animation speed
+    $description: How fast the island expands and collapses.
+    $options:
+      - slow: Slow
+      - normal: Normal
+      - fast: Fast
+  $name: Appearance & Behavior
+- Themes:
+  - AccentColorMode: auto
+    $name: Accent color mode
+    $description: How the glowing accent color is chosen. Auto extracts it from album art.
+    $options:
+      - auto: Auto, from album art
+      - system: System
+      - custom: Custom hex
+  - CustomAccentHex: "#4cc9f0"
+    $name: Custom accent hex
+    $description: The hex color to use when the accent mode is set to Custom.
+  - PillBgColor: "#0D0D0F"
+    $name: Pill background color
+    $description: Hex color for the background. Presets are available in the right-click menu.
+  - TextPrimaryColor: "#F7F7F7"
+    $name: Primary text color
+    $description: Hex color for titles and main text.
+  - TextSecondaryColor: "#888888"
+    $name: Secondary text color
+    $description: Hex color for artist names and muted labels.
+  - TintIntensity: 72
+    $name: Background tint intensity
+    $description: 0 to 100. Controls how dark the background tint behind the island is.
+  - PillOpacity: 96
+    $name: Pill transparency
+    $description: 35 to 100. Lower values make the island more see-through.
+  $name: Colors & Theming
+- Modules:
+  - Media: true
+    $name: Media module
+    $description: Shows album art, song info, and playback controls when music is playing.
+  - Clipboard: true
+    $name: Clipboard module
+    $description: Shows a quick preview of the text or images you just copied.
+  - Battery: true
+    $name: Battery module
+    $description: Shows an alert when your laptop battery is running low.
+  - Progress: true
+    $name: Progress module
+    $description: Shows a progress ring around the island for downloads or file copies.
+  - AlwaysShowClock: true
+    $name: Always show dynamic island
+    $description: Shows a minimal clock and system stats when nothing else is happening.
+  - GameOverlay: false
+    $name: Enable game overlay mode
+    $description: Replaces the clock with live stats like FPS, CPU, and RAM usage.
+  - ShowMetricText: false
+    $name: Show labels in metric chips
+    $description: Adds text labels (like "CPU") inside the game overlay bars.
+  - WeatherCity: ""
+    $name: Weather City (Optional)
+    $description: Enter your city (e.g. London). Leave blank to use auto IP geolocation.
+  $name: Modules & Features
 */
 // ==/WindhawkModSettings==
 
@@ -111,6 +193,7 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <setupapi.h>
+#include <dbt.h>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <wincodec.h>
@@ -123,6 +206,12 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 #include <mmreg.h>
 #include <objbase.h>
 #include <wrl/client.h>
+#include <uiautomation.h>
+#include <winhttp.h>
+#pragma comment(lib, "winhttp.lib")
+#include <pdh.h>
+#include <pdhmsg.h>
+#pragma comment(lib, "pdh.lib")
 
 #include <algorithm>
 #include <array>
@@ -174,6 +263,8 @@ enum class IslandKind {
     Notification,
     Volume,
     BatteryLow,
+    CapsLock,
+    Device,
     Split,
 };
 
@@ -192,6 +283,9 @@ enum class AccentMode {
 
 struct Settings {
     Position position = Position::TopCenter;
+    int targetMonitor = 0;
+    int offsetX = 0;
+    int offsetY = 0;
     float sizeScale = 1.0f;
     AccentMode accentMode = AccentMode::Auto;
     D2D1_COLOR_F customAccent = D2D1::ColorF(0x4cc9f0);
@@ -200,10 +294,15 @@ struct Settings {
     bool clipboard = true;
     bool battery = true;
     bool progress = true;
-    float blurOpacity = 0.72f;
+    float tintOpacity = 0.72f;
     float pillOpacity = 0.96f;
     bool gameOverlay = false;
+    bool showMetricText = true;
+    std::wstring weatherCity;
     bool alwaysShowClock = true;
+    bool alwaysOnTop = true;
+    bool autoDpiScale = true;
+    bool w11Style = false;
     // Color customization
     D2D1_COLOR_F pillBgColor = D2D1::ColorF(0.051f, 0.051f, 0.059f, 1.0f); // #0D0D0F
     D2D1_COLOR_F textPrimaryColor = D2D1::ColorF(0.969f, 0.969f, 0.969f, 1.0f); // #F7F7F7
@@ -231,6 +330,9 @@ struct MediaSnapshot {
     uint64_t artGeneration = 0;
     uint64_t sourceIconGeneration = 0;
     double artChangedAt = 0.0;
+    int64_t positionTicks = 0;
+    int64_t endTicks = 0;
+    int64_t lastUpdatedTicks = 0;
 };
 
 struct ClipboardSnapshot {
@@ -243,9 +345,12 @@ struct ClipboardSnapshot {
 };
 
 struct BatterySnapshot {
+    bool active = false;
     bool low = false;
+    bool charging = false;
     int percent = 100;
     DWORD secondsRemaining = BATTERY_LIFE_UNKNOWN;
+    double expiresAt = 0.0;
 };
 
 struct ProgressSnapshot {
@@ -270,6 +375,27 @@ struct VolumeSnapshot {
     double expiresAt = 0.0;
 };
 
+struct CapsLockSnapshot {
+    bool active = false;
+    bool capsOn = false;
+    bool numOn = false;
+    bool isNumEvent = false;
+    double expiresAt = 0.0;
+};
+
+enum class DeviceEventType {
+    Connected,
+    Disconnected,
+};
+
+struct DeviceSnapshot {
+    bool active = false;
+    DeviceEventType eventType = DeviceEventType::Connected;
+    std::wstring deviceName;  // e.g. "USB Drive" or "Bluetooth Device"
+    bool isBluetoothLike = false;
+    double expiresAt = 0.0;
+};
+
 struct SystemSnapshot {
     int volumePercent = 0;
     bool volumeMuted = false;
@@ -290,14 +416,30 @@ struct Activity {
     float height = 36.0f;
 };
 
+struct WeatherSnapshot {
+    bool hasData = false;
+    float temperature = 0.0f;
+    int weatherCode = 0;
+    std::wstring city;
+    std::wstring weatherDesc;
+    std::wstring windSpeed;
+    std::wstring windDir;
+    std::wstring humidity;
+    std::wstring feelsLike;
+    double lastUpdated = 0.0;
+};
+
 struct SharedState {
     MediaSnapshot media;
     ClipboardSnapshot clipboard;
     NotificationSnapshot notification;
     VolumeSnapshot volume;
+    CapsLockSnapshot capsLock;
+    DeviceSnapshot device;
     BatterySnapshot battery;
     ProgressSnapshot progress;
     SystemSnapshot system;
+    WeatherSnapshot weather;
     std::array<float, 48> waveform{};
     size_t waveformWrite = 0;
     bool muted = false;
@@ -333,11 +475,14 @@ std::atomic<uint64_t> g_artGenerationCounter = 0;
 
 HWND g_hwnd = nullptr;
 HANDLE g_stopEvent = nullptr;
+HANDLE g_settingsChangedEvent = nullptr;
 HANDLE g_renderThread = nullptr;
 HANDLE g_mediaThread = nullptr;
 HANDLE g_audioThread = nullptr;
+HANDLE g_weatherThread = nullptr;
 HANDLE g_notificationThread = nullptr;
 std::atomic<bool> g_running = false;
+std::atomic<int> g_idleTab = 0;
 std::atomic<bool> g_layoutDirty = true;
 FILETIME g_prevIdleTime = {};
 FILETIME g_prevKernelTime = {};
@@ -412,6 +557,20 @@ D2D1_COLOR_F ColorFromHex(std::wstring text, D2D1_COLOR_F fallback) {
         1.0f);
 }
 
+// Returns the DPI scale factor for the primary monitor (1.0 = 96 DPI = 100%)
+float GetPrimaryMonitorDpiScale() {
+    POINT pt = {0, 0};
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    UINT dpiX = 96, dpiY = 96;
+    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+    static auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
+        GetProcAddress(GetModuleHandleW(L"shcore.dll"), "GetDpiForMonitor"));
+    if (pGetDpiForMonitor) {
+        pGetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY);
+    }
+    return static_cast<float>(dpiX) / 96.0f;
+}
+
 D2D1_COLOR_F GetSystemAccentColor() {
     DWORD color = 0;
     BOOL opaque = FALSE;
@@ -433,7 +592,7 @@ D2D1_COLOR_F GetSystemAccentColor() {
 void LoadSettings() {
     Settings next;
 
-    const std::wstring position = GetStringSettingCopy(L"Position");
+    const std::wstring position = GetStringSettingCopy(L"Appearance.Position");
     if (EqualsNoCase(position, L"top-left")) {
         next.position = Position::TopLeft;
     } else if (EqualsNoCase(position, L"top-right")) {
@@ -442,40 +601,62 @@ void LoadSettings() {
         next.position = Position::BottomCenter;
     }
 
-    const std::wstring scale = GetStringSettingCopy(L"SizeScale");
-    if (scale == L"0.8") {
-        next.sizeScale = 0.8f;
-    } else if (scale == L"1.2") {
-        next.sizeScale = 1.2f;
+    const std::wstring scale = GetStringSettingCopy(L"Appearance.SizeScale");
+    if (!scale.empty()) {
+        wchar_t* end;
+        float parsedScale = wcstof(scale.c_str(), &end);
+        if (end != scale.c_str() && parsedScale > 0.1f && parsedScale < 10.0f) {
+            next.sizeScale = parsedScale;
+        }
     }
 
-    const std::wstring accentMode = GetStringSettingCopy(L"AccentColorMode");
+    // Auto DPI scaling: multiply sizeScale by monitor DPI factor.
+    // On a 4K 200% display this doubles the island to the right physical size.
+    if (Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0) {
+        next.sizeScale *= GetPrimaryMonitorDpiScale();
+    }
+
+    const std::wstring accentMode = GetStringSettingCopy(L"Themes.AccentColorMode");
     if (EqualsNoCase(accentMode, L"system")) {
         next.accentMode = AccentMode::System;
     } else if (EqualsNoCase(accentMode, L"custom")) {
         next.accentMode = AccentMode::Custom;
     }
 
-    next.customAccent = ColorFromHex(GetStringSettingCopy(L"CustomAccentHex"), next.customAccent);
+    next.customAccent = ColorFromHex(GetStringSettingCopy(L"Themes.CustomAccentHex"), next.customAccent);
 
-    const std::wstring speed = GetStringSettingCopy(L"AnimationSpeed");
+    const std::wstring speed = GetStringSettingCopy(L"Appearance.AnimationSpeed");
     if (EqualsNoCase(speed, L"slow")) {
         next.animationSpeed = 0.75f;
     } else if (EqualsNoCase(speed, L"fast")) {
         next.animationSpeed = 1.35f;
     }
 
-    next.media = Wh_GetIntSetting(L"Media") != 0;
-    next.clipboard = Wh_GetIntSetting(L"Clipboard") != 0;
-    next.battery = Wh_GetIntSetting(L"Battery") != 0;
-    next.progress = Wh_GetIntSetting(L"Progress") != 0;
-    next.blurOpacity = Clamp(Wh_GetIntSetting(L"BlurIntensity") / 100.0f, 0.0f, 1.0f);
-    const int settingOpacity = Wh_GetIntSetting(L"PillOpacity");
+    next.media = Wh_GetIntSetting(L"Modules.Media") != 0;
+    next.clipboard = Wh_GetIntSetting(L"Modules.Clipboard") != 0;
+    next.battery = Wh_GetIntSetting(L"Modules.Battery") != 0;
+    next.progress = Wh_GetIntSetting(L"Modules.Progress") != 0;
+    next.tintOpacity = Clamp(Wh_GetIntSetting(L"Themes.TintIntensity") / 100.0f, 0.0f, 1.0f);
+    const int settingOpacity = Wh_GetIntSetting(L"Themes.PillOpacity");
     const int localOpacity = Wh_GetIntValue(L"PillOpacityOverride", -1);
     next.pillOpacity = Clamp((localOpacity >= 0 ? localOpacity : settingOpacity) / 100.0f,
                              0.35f, 1.0f);
-    next.gameOverlay = Wh_GetIntSetting(L"GameOverlay") != 0;
-    next.alwaysShowClock = Wh_GetIntSetting(L"AlwaysShowClock") != 0;
+    next.gameOverlay = Wh_GetIntSetting(L"Modules.GameOverlay") != 0;
+    next.showMetricText = Wh_GetIntSetting(L"Modules.ShowMetricText") != 0;
+    next.weatherCity = GetStringSettingCopy(L"Modules.WeatherCity");
+    next.alwaysShowClock = Wh_GetIntSetting(L"Modules.AlwaysShowClock") != 0;
+    next.alwaysOnTop = Wh_GetIntSetting(L"Appearance.AlwaysOnTop") != 0;
+    next.autoDpiScale = Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0;
+    next.offsetX = Wh_GetIntSetting(L"Appearance.OffsetX");
+    next.offsetY = Wh_GetIntSetting(L"Appearance.OffsetY");
+
+    std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
+    if (mon == L"primary") next.targetMonitor = 0;
+    else if (mon == L"follow") next.targetMonitor = -1;
+    else next.targetMonitor = _wtoi(mon.c_str());
+
+    const int localW11Style = Wh_GetIntValue(L"W11StyleOverride", -1);
+    next.w11Style = localW11Style >= 0 ? (localW11Style != 0) : (Wh_GetIntSetting(L"Appearance.W11Style") != 0);
 
     // Color settings — check local theme override first, then settings YAML.
     struct ThemeColors { const wchar_t* bg; const wchar_t* fg; const wchar_t* sec; };
@@ -484,6 +665,7 @@ void LoadSettings() {
         {L"#1C1C1E", L"#FFFFFF", L"#999999"},  // 1: Dark Gray
         {L"#050D1A", L"#E8F0FF", L"#7090BB"},  // 2: Midnight Blue
         {L"#0E0014", L"#F0E8FF", L"#9060BB"},  // 3: Deep Purple
+        {L"#1F1F1F", L"#FFFFFF", L"#A0A0A0"},  // 4: Fluent Design
     };
     const int theme = Wh_GetIntValue(L"ColorTheme", -1);
     if (theme >= 0 && theme < static_cast<int>(ARRAYSIZE(kThemes))) {
@@ -494,16 +676,20 @@ void LoadSettings() {
         next.textSecondaryColor = ColorFromHex(kThemes[theme].sec,
                                                D2D1::ColorF(0.533f, 0.533f, 0.533f, 1.0f));
     } else {
-        next.pillBgColor = ColorFromHex(GetStringSettingCopy(L"PillBgColor"),
+        next.pillBgColor = ColorFromHex(GetStringSettingCopy(L"Themes.PillBgColor"),
                                         D2D1::ColorF(0.051f, 0.051f, 0.059f, 1.0f));
-        next.textPrimaryColor = ColorFromHex(GetStringSettingCopy(L"TextPrimaryColor"),
+        next.textPrimaryColor = ColorFromHex(GetStringSettingCopy(L"Themes.TextPrimaryColor"),
                                              D2D1::ColorF(0.969f, 0.969f, 0.969f, 1.0f));
-        next.textSecondaryColor = ColorFromHex(GetStringSettingCopy(L"TextSecondaryColor"),
+        next.textSecondaryColor = ColorFromHex(GetStringSettingCopy(L"Themes.TextSecondaryColor"),
                                                D2D1::ColorF(0.533f, 0.533f, 0.533f, 1.0f));
     }
 
+    bool cityChanged = next.weatherCity != g_settings.weatherCity;
     g_settings = next;
     g_layoutDirty = true;
+    if (cityChanged && g_settingsChangedEvent) {
+        SetEvent(g_settingsChangedEvent);
+    }
 }
 
 void EnableBlurBehind(HWND hwnd) {
@@ -513,11 +699,42 @@ void EnableBlurBehind(HWND hwnd) {
     DwmEnableBlurBehindWindow(hwnd, &blur);
 }
 
+
+
+struct MonitorEnumData {
+    std::vector<HMONITOR> monitors;
+};
+
+BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) {
+    auto* data = reinterpret_cast<MonitorEnumData*>(dwData);
+    data->monitors.push_back(hMonitor);
+    return TRUE;
+}
+
 RECT GetAnchorWorkRect() {
-    POINT pt = {0, 0};
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR selectedMonitor = nullptr;
+
+    if (g_settings.targetMonitor == -1) {
+        POINT pt = {0, 0};
+        GetCursorPos(&pt);
+        selectedMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    } else if (g_settings.targetMonitor > 0) {
+        MonitorEnumData data;
+        EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, reinterpret_cast<LPARAM>(&data));
+        
+        int index = g_settings.targetMonitor - 1;
+        if (index >= 0 && index < static_cast<int>(data.monitors.size())) {
+            selectedMonitor = data.monitors[index];
+        }
+    }
+
+    if (!selectedMonitor) {
+        POINT pt = {0, 0};
+        selectedMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    }
+
     MONITORINFO mi = {sizeof(mi)};
-    GetMonitorInfoW(monitor, &mi);
+    GetMonitorInfoW(selectedMonitor, &mi);
     return mi.rcWork;
 }
 
@@ -537,14 +754,17 @@ void PositionOverlayWindow(HWND hwnd, int width, int height) {
             break;
         case Position::BottomCenter:
             x = work.left + (work.right - work.left - width) / 2;
-            y = work.bottom - height - 8;
+            y = work.bottom - height - 40;
             break;
         case Position::TopCenter:
         default:
             break;
     }
 
-    SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height,
+    HWND zOrder = g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST;
+    x += g_settings.offsetX;
+    y += g_settings.offsetY;
+    SetWindowPos(hwnd, zOrder, x, y, width, height,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 }
 
@@ -1063,9 +1283,8 @@ std::wstring FindBrowserMediaSiteBadge(const std::wstring& sourceAppUserModelId)
 BitmapPixels FindMediaSourceIcon(const std::wstring& sourceAppUserModelId) {
     BitmapPixels pixels;
     if (IsBrowserMediaSource(sourceAppUserModelId)) {
-        // Windows media sessions don't expose browser tab favicons. Avoid
-        // showing the generic browser app icon as if it were the site icon.
-        return pixels;
+        // Continue searching for the browser window anyway to retrieve
+        // the browser's app icon or the PWA's app icon.
     }
 
     const std::wstring sourceLower = ToLowerCopy(sourceAppUserModelId);
@@ -1074,6 +1293,85 @@ BitmapPixels FindMediaSourceIcon(const std::wstring& sourceAppUserModelId) {
     EnumWindows(FindMediaSourceWindowProc, reinterpret_cast<LPARAM>(&data));
     if (found) {
         pixels = GetWindowIconPixels(found, 32);
+    }
+    return pixels;
+}
+
+struct FindAppIconData {
+    const std::wstring* targetName;
+    HWND bestHwnd = nullptr;
+    std::unordered_map<DWORD, std::wstring> pidToProcessName;
+};
+
+BOOL CALLBACK FindAppIconWindowProc(HWND hwnd, LPARAM lParam) {
+    auto* d = reinterpret_cast<FindAppIconData*>(lParam);
+    if (!IsWindowVisible(hwnd)) {
+        return TRUE;
+    }
+
+    if (hwnd == g_hwnd) {
+        return TRUE;
+    }
+
+    // 1. Fast path: Check window title first (lightweight check without opening process handles)
+    wchar_t title[128] = {};
+    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+    std::wstring titleLower = ToLowerCopy(title);
+    if (!titleLower.empty() && titleLower.find(*d->targetName) != std::wstring::npos) {
+        d->bestHwnd = hwnd;
+        return FALSE; // Found via title, stop enumeration
+    }
+
+    // 2. Slow path fallback: Check process executable name
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) {
+        return TRUE;
+    }
+
+    std::wstring baseNoExe;
+    auto it = d->pidToProcessName.find(pid);
+    if (it != d->pidToProcessName.end()) {
+        baseNoExe = it->second;
+    } else {
+        std::wstring image;
+        if (ProcessImageNameForPid(pid, &image)) {
+            std::wstring base = ToLowerCopy(BaseNameFromPath(image));
+            baseNoExe = base;
+            if (baseNoExe.size() > 4 && baseNoExe.substr(baseNoExe.size() - 4) == L".exe") {
+                baseNoExe = baseNoExe.substr(0, baseNoExe.size() - 4);
+            }
+            d->pidToProcessName[pid] = baseNoExe;
+        } else {
+            d->pidToProcessName[pid] = L"";
+        }
+    }
+
+    if (!baseNoExe.empty()) {
+        if (baseNoExe.find(*d->targetName) != std::wstring::npos ||
+            d->targetName->find(baseNoExe) != std::wstring::npos) {
+            d->bestHwnd = hwnd;
+            return FALSE; // Found via process name, stop enumeration
+        }
+    }
+
+    return TRUE;
+}
+
+BitmapPixels FindAppIconByName(const std::wstring& appName, UINT size) {
+    BitmapPixels pixels;
+    if (appName.empty()) {
+        return pixels;
+    }
+
+    const std::wstring appNameLower = ToLowerCopy(appName);
+    FindAppIconData data;
+    data.targetName = &appNameLower;
+
+    EnumWindows(FindAppIconWindowProc, reinterpret_cast<LPARAM>(&data));
+
+    if (data.bestHwnd) {
+        pixels = GetWindowIconPixels(data.bestHwnd, size);
     }
     return pixels;
 }
@@ -1138,19 +1436,66 @@ DWORD WINAPI MediaThreadProc(void*) {
                 if (session) {
                     auto properties = session.TryGetMediaPropertiesAsync().get();
                     auto playback = session.GetPlaybackInfo();
+                    auto timeline = session.GetTimelineProperties();
 
                     next.available = true;
                     next.playing = playback.PlaybackStatus() == PlaybackStatus::Playing;
                     next.title = properties.Title().c_str();
                     next.artist = properties.Artist().c_str();
+                    
+                    if (timeline) {
+                        int64_t np = timeline.Position().count();
+                        int64_t ne = timeline.EndTime().count();
+                        bool npP = (playback.PlaybackStatus() == PlaybackStatus::Playing);
+                        
+                        std::lock_guard lock(g_stateMutex);
+                        if (np != g_state.media.positionTicks ||
+                            ne != g_state.media.endTicks ||
+                            npP != g_state.media.playing) {
+                            next.positionTicks = np;
+                            next.endTicks = ne;
+                            next.lastUpdatedTicks = GetTickCount64();
+                        } else {
+                            next.positionTicks = g_state.media.positionTicks;
+                            next.endTicks = g_state.media.endTicks;
+                            next.lastUpdatedTicks = g_state.media.lastUpdatedTicks;
+                        }
+                    }
+
                     next.sourceAppUserModelId = session.SourceAppUserModelId().c_str();
                     next.sourceName = FriendlyMediaSourceName(next.sourceAppUserModelId);
-                    next.sourceBadge = MediaSourceBadge(next.sourceName);
-                    if (IsBrowserMediaSource(next.sourceAppUserModelId)) {
-                        next.sourceBadge = FindBrowserMediaSiteBadge(next.sourceAppUserModelId);
+                    
+                    std::wstring prevSourceAppUserModelId;
+                    bool hasPrevIcon = false;
+                    BitmapPixels prevIcon;
+                    uint64_t prevIconGeneration = 0;
+                    std::wstring prevBadge;
+                    {
+                        std::lock_guard lock(g_stateMutex);
+                        prevSourceAppUserModelId = g_state.media.sourceAppUserModelId;
+                        hasPrevIcon = !g_state.media.sourceIcon.bgra.empty();
+                        prevIcon = g_state.media.sourceIcon;
+                        prevIconGeneration = g_state.media.sourceIconGeneration;
+                        prevBadge = g_state.media.sourceBadge;
                     }
-                    next.sourceIcon = FindMediaSourceIcon(next.sourceAppUserModelId);
-                    next.sourceIconGeneration = next.sourceIcon.generation;
+
+                    if (next.sourceAppUserModelId == prevSourceAppUserModelId) {
+                        next.sourceBadge = prevBadge;
+                        next.sourceIcon = prevIcon;
+                        next.sourceIconGeneration = prevIconGeneration;
+                        
+                        if (!hasPrevIcon) {
+                            next.sourceIcon = FindMediaSourceIcon(next.sourceAppUserModelId);
+                            next.sourceIconGeneration = next.sourceIcon.generation;
+                        }
+                    } else {
+                        next.sourceBadge = MediaSourceBadge(next.sourceName);
+                        if (IsBrowserMediaSource(next.sourceAppUserModelId)) {
+                            next.sourceBadge = FindBrowserMediaSiteBadge(next.sourceAppUserModelId);
+                        }
+                        next.sourceIcon = FindMediaSourceIcon(next.sourceAppUserModelId);
+                        next.sourceIconGeneration = next.sourceIcon.generation;
+                    }
 
                     if (auto thumbnail = properties.Thumbnail()) {
                         std::vector<uint8_t> bytes = ReadWinRtStreamBytes(thumbnail);
@@ -1226,66 +1571,81 @@ DWORD WINAPI NotificationThreadProc(void*) {
         }
 
         while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
-            auto notifications = listener.GetNotificationsAsync(NotificationKinds::Toast).get();
-            for (uint32_t i = 0; i < notifications.Size(); ++i) {
-                auto userNotification = notifications.GetAt(i);
-                const uint32_t id = userNotification.Id();
-                if (id <= lastSeenId) {
-                    continue;
-                }
-
-                NotificationSnapshot snapshot;
-                snapshot.active = true;
-                snapshot.expiresAt = NowSeconds() + 4.0;
-                auto appInfo = userNotification.AppInfo();
-                auto displayInfo = appInfo.DisplayInfo();
-                snapshot.app = displayInfo.DisplayName().c_str();
-                try {
-                    auto logo = displayInfo.GetLogo({32.0f, 32.0f});
-                    std::vector<uint8_t> logoBytes = ReadWinRtStreamBytes(logo);
-                    if (!logoBytes.empty()) {
-                        DecodeImageBytesToPixels(logoBytes, &snapshot.icon);
+            try {
+                auto notifications = listener.GetNotificationsAsync(NotificationKinds::Toast).get();
+                for (uint32_t i = 0; i < notifications.Size(); ++i) {
+                    auto userNotification = notifications.GetAt(i);
+                    const uint32_t id = userNotification.Id();
+                    if (id <= lastSeenId) {
+                        continue;
                     }
-                } catch (...) {
-                }
 
-                auto notification = userNotification.Notification();
-                auto binding = notification.Visual().GetBinding(KnownNotificationBindings::ToastGeneric());
-                if (binding) {
-                    auto textElements = binding.GetTextElements();
-                    if (textElements.Size() > 0) {
-                        snapshot.title = textElements.GetAt(0).Text().c_str();
+                    NotificationSnapshot snapshot;
+                    snapshot.active = true;
+                    snapshot.expiresAt = NowSeconds() + 4.0;
+                    auto appInfo = userNotification.AppInfo();
+                    auto displayInfo = appInfo.DisplayInfo();
+                    snapshot.app = displayInfo.DisplayName().c_str();
+                    try {
+                        auto logo = displayInfo.GetLogo({32.0f, 32.0f});
+                        std::vector<uint8_t> logoBytes = ReadWinRtStreamBytes(logo);
+                        if (!logoBytes.empty()) {
+                            DecodeImageBytesToPixels(logoBytes, &snapshot.icon);
+                        }
+                    } catch (...) {
                     }
-                    if (textElements.Size() > 1) {
-                        snapshot.body = textElements.GetAt(1).Text().c_str();
+
+                    if (snapshot.icon.bgra.empty() && !snapshot.app.empty()) {
+                        snapshot.icon = FindAppIconByName(snapshot.app, 64);
                     }
-                }
 
-                if (snapshot.title.empty()) {
-                    snapshot.title = snapshot.app.empty() ? L"New notification" : snapshot.app;
-                }
-                if (!snapshot.body.empty()) {
-                    snapshot.title += L" - " + snapshot.body;
-                }
-                if (snapshot.title.size() > 120) {
-                    snapshot.title.resize(120);
-                    snapshot.title += L"...";
-                }
+                    auto notification = userNotification.Notification();
+                    auto binding = notification.Visual().GetBinding(KnownNotificationBindings::ToastGeneric());
+                    if (binding) {
+                        auto textElements = binding.GetTextElements();
+                        if (textElements.Size() > 0) {
+                            snapshot.title = textElements.GetAt(0).Text().c_str();
+                        }
+                        if (textElements.Size() > 1) {
+                            snapshot.body = textElements.GetAt(1).Text().c_str();
+                        }
+                    }
 
-                {
-                    std::lock_guard lock(g_stateMutex);
-                    g_state.notification = std::move(snapshot);
+                    if (snapshot.title.empty()) {
+                        snapshot.title = snapshot.app.empty() ? L"New notification" : snapshot.app;
+                    }
+                    if (!snapshot.body.empty()) {
+                        snapshot.title += L" - " + snapshot.body;
+                    }
+                    if (snapshot.title.size() > 120) {
+                        snapshot.title.resize(120);
+                        snapshot.title += L"...";
+                    }
+
+                    {
+                        std::lock_guard lock(g_stateMutex);
+                        g_state.notification = std::move(snapshot);
+                    }
+                    TriggerNudge();
+                    lastSeenId = id;
                 }
-                TriggerNudge();
-                lastSeenId = id;
+            } catch (const winrt::hresult_error& ex) {
+                const HRESULT hr = ex.to_abi();
+                Wh_Log(L"NotificationThreadProc loop WinRT error: %s (0x%08X)", ex.message().c_str(), hr);
+                if (hr == E_NOTIMPL || hr == E_ACCESSDENIED || hr == REGDB_E_CLASSNOTREG) {
+                    Wh_Log(L"NotificationThreadProc: Fatal/Unsupported WinRT context. Exiting WinRT notification listener thread.");
+                    break;
+                }
+            } catch (...) {
+                Wh_Log(L"NotificationThreadProc loop unknown exception.");
             }
 
             WaitForSingleObject(g_stopEvent, 1000);
         }
+    } catch (const winrt::hresult_error& ex) {
+        Wh_Log(L"NotificationThreadProc initialization WinRT error: %s (0x%08X). Falling back to shell hook.", ex.message().c_str(), ex.to_abi());
     } catch (...) {
-        if (!accessLogged) {
-            Wh_Log(L"WinRT notification listener failed; shell-hook notification fallback remains active.");
-        }
+        Wh_Log(L"NotificationThreadProc initialization unknown exception. Falling back to shell hook.");
     }
 
     winrt::uninit_apartment();
@@ -1324,8 +1684,22 @@ float SampleAudioAmplitude(BYTE* data, UINT32 frames, WAVEFORMATEX* format) {
 
 void PushWaveformSample(float amplitude) {
     std::lock_guard lock(g_stateMutex);
-    float& slot = g_state.waveform[g_state.waveformWrite % g_state.waveform.size()];
-    slot = std::max(amplitude, slot * 0.85f);
+    
+    float lastVal = 0.0f;
+    if (g_state.waveformWrite > 0) {
+        lastVal = g_state.waveform[(g_state.waveformWrite - 1) % g_state.waveform.size()];
+    }
+
+    // Apply an attack/release envelope (Exponential Moving Average)
+    // Quick snappy attack (0.7) for beats, buttery smooth release (0.85) for decay.
+    float smoothed;
+    if (amplitude > lastVal) {
+        smoothed = lastVal * 0.3f + amplitude * 0.7f;
+    } else {
+        smoothed = lastVal * 0.85f + amplitude * 0.15f;
+    }
+
+    g_state.waveform[g_state.waveformWrite % g_state.waveform.size()] = smoothed;
     ++g_state.waveformWrite;
 }
 
@@ -1372,6 +1746,200 @@ void PushAudioChunks(BYTE* data, UINT32 frames, WAVEFORMATEX* format) {
 
         PushWaveformSample(Clamp(static_cast<float>(std::sqrt(sum / samples) * 4.0), 0.0f, 1.0f));
     }
+}
+
+// --- Weather Fetching Helpers ---
+std::string HttpGet(const wchar_t* host, const wchar_t* path, bool https = true) {
+    std::string response;
+    HINTERNET hSession = WinHttpOpen(L"DynamicIsland/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) {
+        Wh_Log(L"Weather HttpGet: WinHttpOpen failed with error %lu", GetLastError());
+        return response;
+    }
+
+    HINTERNET hConnect = WinHttpConnect(hSession, host, https ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT, 0);
+    if (hConnect) {
+        HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, https ? WINHTTP_FLAG_SECURE : 0);
+        if (hRequest) {
+            if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+                WinHttpReceiveResponse(hRequest, nullptr)) {
+                DWORD size = 0;
+                DWORD downloaded = 0;
+                do {
+                    if (WinHttpQueryDataAvailable(hRequest, &size) && size > 0) {
+                        std::vector<char> buffer(size + 1);
+                        if (WinHttpReadData(hRequest, buffer.data(), size, &downloaded)) {
+                            buffer[downloaded] = '\0';
+                            response.append(buffer.data());
+                        } else {
+                            Wh_Log(L"Weather HttpGet: WinHttpReadData failed with error %lu", GetLastError());
+                        }
+                    }
+                } while (size > 0);
+            } else {
+                Wh_Log(L"Weather HttpGet: WinHttpSendRequest/ReceiveResponse failed with error %lu", GetLastError());
+            }
+            WinHttpCloseHandle(hRequest);
+        } else {
+            Wh_Log(L"Weather HttpGet: WinHttpOpenRequest failed with error %lu", GetLastError());
+        }
+        WinHttpCloseHandle(hConnect);
+    } else {
+        Wh_Log(L"Weather HttpGet: WinHttpConnect failed with error %lu", GetLastError());
+    }
+    WinHttpCloseHandle(hSession);
+    return response;
+}
+
+DWORD WINAPI WeatherThreadProc(void*) {
+    // Initial delay to avoid slowing down startup
+    WaitForSingleObject(g_stopEvent, 3000);
+
+    while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+        std::wstring cityOverride;
+        {
+            std::lock_guard lock(g_stateMutex);
+            cityOverride = g_settings.weatherCity;
+        }
+
+        std::wstring url = L"/?format=j1";
+        if (!cityOverride.empty()) {
+            std::wstring urlName = cityOverride;
+            size_t pos = 0;
+            while ((pos = urlName.find(L" ", pos)) != std::wstring::npos) {
+                urlName.replace(pos, 1, L"%20");
+                pos += 3;
+            }
+            url = L"/" + urlName + L"?format=j1";
+        }
+
+        Wh_Log(L"Weather: Requesting weather from wttr.in/host: wttr.in, path: %s", url.c_str());
+        std::string wRes = HttpGet(L"wttr.in", url.c_str(), true);
+        if (wRes.empty()) {
+            Wh_Log(L"Weather: HTTPS request failed, retrying over plain HTTP...");
+            wRes = HttpGet(L"wttr.in", url.c_str(), false);
+        }
+        
+        if (!wRes.empty()) {
+            Wh_Log(L"Weather: Received response from wttr.in (size: %zu bytes)", wRes.size());
+            float temp = 0.0f;
+            int code = 0;
+            std::wstring desc = L"";
+            std::wstring windSpeed = L"";
+            std::wstring windDir = L"";
+            std::wstring humidity = L"";
+            std::wstring feelsLike = L"";
+            std::wstring cityLabel = L"Local Weather";
+            
+            const char* areaStr = strstr(wRes.c_str(), "\"areaName\":");
+            if (areaStr) {
+                const char* valStr = strstr(areaStr, "\"value\":");
+                if (valStr) {
+                    valStr += 8;
+                    while (*valStr == ' ' || *valStr == '\"') valStr++;
+                    const char* end = strchr(valStr, '\"');
+                    if (end) {
+                        std::string cityA(valStr, end - valStr);
+                        int wchars_num = MultiByteToWideChar(CP_UTF8, 0, cityA.c_str(), -1, NULL, 0);
+                        if (wchars_num > 0) {
+                            std::vector<wchar_t> wstr(wchars_num);
+                            MultiByteToWideChar(CP_UTF8, 0, cityA.c_str(), -1, &wstr[0], wchars_num);
+                            cityLabel = wstr.data();
+                        }
+                    }
+                }
+            }
+            
+            const char* currentStr = strstr(wRes.c_str(), "\"current_condition\":");
+            if (currentStr) {
+                auto ParseStringField = [&](const char* key, std::wstring& out) {
+                    const char* kStr = strstr(currentStr, key);
+                    if (kStr) {
+                        kStr += strlen(key);
+                        while (*kStr == ' ' || *kStr == '\"' || *kStr == ':') kStr++;
+                        const char* end = strchr(kStr, '\"');
+                        if (end) {
+                            std::string valA(kStr, end - kStr);
+                            int wchars_num = MultiByteToWideChar(CP_UTF8, 0, valA.c_str(), -1, NULL, 0);
+                            if (wchars_num > 0) {
+                                std::vector<wchar_t> wstr(wchars_num);
+                                MultiByteToWideChar(CP_UTF8, 0, valA.c_str(), -1, &wstr[0], wchars_num);
+                                out = wstr.data();
+                            }
+                        }
+                    }
+                };
+
+                const char* tempStr = strstr(currentStr, "\"temp_C\":");
+                if (tempStr) {
+                    tempStr += 9;
+                    while (*tempStr == ' ' || *tempStr == '\"') tempStr++;
+                    sscanf(tempStr, "%f", &temp);
+                }
+                const char* codeStr = strstr(currentStr, "\"weatherCode\":");
+                if (codeStr) {
+                    codeStr += 14;
+                    while (*codeStr == ' ' || *codeStr == '\"') codeStr++;
+                    sscanf(codeStr, "%d", &code);
+                }
+                
+                const char* descStr = strstr(currentStr, "\"weatherDesc\":");
+                if (descStr) {
+                    const char* valStr = strstr(descStr, "\"value\":");
+                    if (valStr) {
+                        valStr += 8;
+                        while (*valStr == ' ' || *valStr == '\"') valStr++;
+                        const char* end = strchr(valStr, '\"');
+                        if (end) {
+                            std::string valA(valStr, end - valStr);
+                            int wchars_num = MultiByteToWideChar(CP_UTF8, 0, valA.c_str(), -1, NULL, 0);
+                            if (wchars_num > 0) {
+                                std::vector<wchar_t> wstr(wchars_num);
+                                MultiByteToWideChar(CP_UTF8, 0, valA.c_str(), -1, &wstr[0], wchars_num);
+                                desc = wstr.data();
+                                while(!desc.empty() && desc.back() == L' ') desc.pop_back();
+                            }
+                        }
+                    }
+                }
+                
+                ParseStringField("\"windspeedKmph\"", windSpeed);
+                ParseStringField("\"winddir16Point\"", windDir);
+                ParseStringField("\"humidity\"", humidity);
+                ParseStringField("\"FeelsLikeC\"", feelsLike);
+
+                std::wstring finalCity = cityOverride.empty() ? cityLabel : cityOverride;
+                Wh_Log(L"Weather parsed success: city=%s, temp=%.1fC, feelsLike=%sC, humidity=%s%%, desc=%s",
+                       finalCity.c_str(), temp, feelsLike.c_str(), humidity.c_str(), desc.c_str());
+            } else {
+                Wh_Log(L"Weather: Failed to find \"current_condition\" in response.");
+            }
+            
+            {
+                std::lock_guard lock(g_stateMutex);
+                g_state.weather.hasData = true;
+                g_state.weather.temperature = temp;
+                g_state.weather.weatherCode = code;
+                if (!cityOverride.empty()) g_state.weather.city = cityOverride;
+                else g_state.weather.city = cityLabel;
+                g_state.weather.weatherDesc = desc;
+                g_state.weather.windSpeed = windSpeed;
+                g_state.weather.windDir = windDir;
+                g_state.weather.humidity = humidity;
+                g_state.weather.feelsLike = feelsLike;
+                g_state.weather.lastUpdated = NowSeconds();
+            }
+        } else {
+            Wh_Log(L"Weather: HttpGet returned empty response.");
+        }
+
+        HANDLE events[] = {g_stopEvent, g_settingsChangedEvent};
+        DWORD waitResult = WaitForMultipleObjects(2, events, FALSE, 15 * 60 * 1000);
+        if (waitResult == WAIT_OBJECT_0) {
+            break;
+        }
+    }
+    return 0;
 }
 
 DWORD WINAPI AudioThreadProc(void*) {
@@ -1475,14 +2043,42 @@ void UpdateBatterySnapshot() {
         return;
     }
 
-    std::lock_guard lock(g_stateMutex);
-    g_state.battery.percent = status.BatteryLifePercent == 255 ? 100 : status.BatteryLifePercent;
-    g_state.battery.secondsRemaining = status.BatteryLifeTime;
-    g_state.battery.low =
-        status.ACLineStatus != 1 &&
-        status.BatteryLifePercent != 255 &&
-        status.BatteryLifePercent <= 15;
-    g_state.system.charging = status.ACLineStatus == 1;
+    bool newCharging = (status.ACLineStatus == 1);
+    int newPercent = status.BatteryLifePercent == 255 ? 100 : status.BatteryLifePercent;
+
+    bool triggerAlert = false;
+
+    {
+        std::lock_guard lock(g_stateMutex);
+        static bool s_batteryInit = false;
+        if (!s_batteryInit) {
+            g_state.battery.charging = newCharging;
+            g_state.battery.percent = newPercent;
+            s_batteryInit = true;
+        }
+
+        if (g_state.battery.charging != newCharging) {
+            triggerAlert = true;
+        }
+
+        if (!newCharging && newPercent < g_state.battery.percent && (newPercent == 20 || newPercent == 10)) {
+            triggerAlert = true;
+        }
+
+        g_state.battery.charging = newCharging;
+        g_state.battery.percent = newPercent;
+        g_state.battery.secondsRemaining = status.BatteryLifeTime;
+        g_state.battery.low = (!newCharging && newPercent <= 20);
+
+        if (triggerAlert) {
+            g_state.battery.active = true;
+            g_state.battery.expiresAt = NowSeconds() + 4.0;
+        }
+    }
+
+    if (triggerAlert) {
+        TriggerNudge();
+    }
 }
 
 ULONGLONG FileTimeToUInt64(FILETIME ft) {
@@ -1492,6 +2088,46 @@ ULONGLONG FileTimeToUInt64(FILETIME ft) {
     return value.QuadPart;
 }
 
+static PDH_HQUERY g_gpuQuery = NULL;
+static PDH_HCOUNTER g_gpuCounter = NULL;
+
+static void InitGpuQuery() {
+    if (g_gpuQuery == NULL) {
+        if (PdhOpenQueryW(NULL, 0, &g_gpuQuery) == ERROR_SUCCESS) {
+            PdhAddEnglishCounterW(g_gpuQuery, L"\\GPU Engine(*)\\Utilization Percentage", 0, &g_gpuCounter);
+            PdhCollectQueryData(g_gpuQuery);
+        }
+    }
+}
+
+static int GetGpuUsage() {
+    InitGpuQuery();
+    if (!g_gpuQuery || !g_gpuCounter) return 0;
+    
+    PdhCollectQueryData(g_gpuQuery);
+    
+    DWORD bufferSize = 0;
+    DWORD itemCount = 0;
+    PdhGetFormattedCounterArrayW(g_gpuCounter, PDH_FMT_DOUBLE, &bufferSize, &itemCount, NULL);
+    
+    if (bufferSize > 0) {
+        std::vector<BYTE> buffer(bufferSize);
+        PDH_FMT_COUNTERVALUE_ITEM_W* items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(buffer.data());
+        
+        if (PdhGetFormattedCounterArrayW(g_gpuCounter, PDH_FMT_DOUBLE, &bufferSize, &itemCount, items) == ERROR_SUCCESS) {
+            double total = 0;
+            for (DWORD i = 0; i < itemCount; i++) {
+                if (items[i].szName && wcsstr(items[i].szName, L"engtype_3D")) {
+                    total += items[i].FmtValue.doubleValue;
+                }
+            }
+            return ClampInt(static_cast<int>(total), 0, 100);
+        }
+    }
+    return 0;
+}
+
+
 void UpdateSystemSnapshot() {
     SystemSnapshot next;
     {
@@ -1499,6 +2135,8 @@ void UpdateSystemSnapshot() {
         next = g_state.system;
         next.charging = g_state.system.charging;
     }
+
+    next.gpuPercent = GetGpuUsage();
 
     MEMORYSTATUSEX memory = {};
     memory.dwLength = sizeof(memory);
@@ -1553,29 +2191,28 @@ void UpdateSystemSnapshot() {
         g_prevUserTime = user;
     }
 
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    ComPtr<IMMDeviceEnumerator> enumerator;
-    ComPtr<IMMDevice> device;
-    ComPtr<IAudioEndpointVolume> volume;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
-                                  CLSCTX_ALL, IID_PPV_ARGS(&enumerator));
-    if (SUCCEEDED(hr)) {
-        hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+    static ComPtr<IAudioEndpointVolume> s_volume;
+    if (!s_volume) {
+        ComPtr<IMMDeviceEnumerator> enumerator;
+        ComPtr<IMMDevice> device;
+        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator));
+        if (SUCCEEDED(hr)) {
+            hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+        }
+        if (SUCCEEDED(hr)) {
+            hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(s_volume.GetAddressOf()));
+        }
     }
-    if (SUCCEEDED(hr)) {
-        hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
-                              reinterpret_cast<void**>(volume.GetAddressOf()));
-    }
-    if (SUCCEEDED(hr)) {
+
+    if (s_volume) {
         float level = 0.0f;
         BOOL muted = FALSE;
-        volume->GetMasterVolumeLevelScalar(&level);
-        volume->GetMute(&muted);
-        next.volumePercent = ClampInt(static_cast<int>(level * 100.0f + 0.5f), 0, 100);
-        next.volumeMuted = muted != FALSE;
-    }
-    if (SUCCEEDED(hrCo)) {
-        CoUninitialize();
+        if (SUCCEEDED(s_volume->GetMasterVolumeLevelScalar(&level)) && SUCCEEDED(s_volume->GetMute(&muted))) {
+            next.volumePercent = ClampInt(static_cast<int>(level * 100.0f + 0.5f), 0, 100);
+            next.volumeMuted = muted != FALSE;
+        } else {
+            s_volume.Reset(); // Retry next time
+        }
     }
 
     std::lock_guard lock(g_stateMutex);
@@ -1597,102 +2234,79 @@ void UpdateSystemSnapshot() {
 }
 
 // ---- Privacy indicator helpers ----
-// Microphone: check if any app has an active capture audio session.
-bool IsMicrophoneActive() {
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    bool active = false;
-    ComPtr<IMMDeviceEnumerator> enumerator;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
-                                   CLSCTX_ALL, IID_PPV_ARGS(&enumerator)))) {
-        ComPtr<IMMDevice> capDevice;
-        if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &capDevice))) {
-            ComPtr<IAudioSessionManager2> mgr;
-            if (SUCCEEDED(capDevice->Activate(__uuidof(IAudioSessionManager2),
-                                              CLSCTX_ALL, nullptr,
-                                              reinterpret_cast<void**>(mgr.GetAddressOf())))) {
-                ComPtr<IAudioSessionEnumerator> sessEnum;
-                if (SUCCEEDED(mgr->GetSessionEnumerator(&sessEnum))) {
-                    int count = 0;
-                    sessEnum->GetCount(&count);
-                    for (int i = 0; i < count && !active; i++) {
-                        ComPtr<IAudioSessionControl> sess;
-                        if (SUCCEEDED(sessEnum->GetSession(i, &sess))) {
-                            AudioSessionState st;
-                            if (SUCCEEDED(sess->GetState(&st)) && st == AudioSessionStateActive) {
-                                active = true;
+bool IsDeviceActiveViaRegistry(const wchar_t* capability) {
+    bool isActive = false;
+    std::wstring basePath = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\";
+    basePath += capability;
+
+    auto CheckSubkeys = [](HKEY hKeyParent) -> bool {
+        DWORD index = 0;
+        wchar_t subKeyName[256];
+        DWORD nameLen = ARRAYSIZE(subKeyName);
+        while (RegEnumKeyExW(hKeyParent, index, subKeyName, &nameLen, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+            HKEY hSub;
+            if (RegOpenKeyExW(hKeyParent, subKeyName, 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
+                if (_wcsicmp(subKeyName, L"NonPackaged") == 0) {
+                    DWORD npIndex = 0;
+                    wchar_t npSubKeyName[256];
+                    DWORD npNameLen = ARRAYSIZE(npSubKeyName);
+                    while (RegEnumKeyExW(hSub, npIndex, npSubKeyName, &npNameLen, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+                        HKEY hNpSub;
+                        if (RegOpenKeyExW(hSub, npSubKeyName, 0, KEY_READ, &hNpSub) == ERROR_SUCCESS) {
+                            uint64_t stopTime = 1;
+                            DWORD dataSize = sizeof(stopTime);
+                            if (RegQueryValueExW(hNpSub, L"LastUsedTimeStop", nullptr, nullptr, reinterpret_cast<LPBYTE>(&stopTime), &dataSize) == ERROR_SUCCESS) {
+                                if (stopTime == 0) {
+                                    RegCloseKey(hNpSub);
+                                    RegCloseKey(hSub);
+                                    return true;
+                                }
                             }
+                            RegCloseKey(hNpSub);
+                        }
+                        npIndex++;
+                        npNameLen = ARRAYSIZE(npSubKeyName);
+                    }
+                } else {
+                    uint64_t stopTime = 1;
+                    DWORD dataSize = sizeof(stopTime);
+                    if (RegQueryValueExW(hSub, L"LastUsedTimeStop", nullptr, nullptr, reinterpret_cast<LPBYTE>(&stopTime), &dataSize) == ERROR_SUCCESS) {
+                        if (stopTime == 0) {
+                            RegCloseKey(hSub);
+                            return true;
                         }
                     }
                 }
+                RegCloseKey(hSub);
             }
+            index++;
+            nameLen = ARRAYSIZE(subKeyName);
+        }
+        return false;
+    };
+
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, basePath.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        isActive = CheckSubkeys(hKey);
+        RegCloseKey(hKey);
+    }
+    
+    if (!isActive) {
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, basePath.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            isActive = CheckSubkeys(hKey);
+            RegCloseKey(hKey);
         }
     }
-    if (SUCCEEDED(hrCo)) CoUninitialize();
-    return active;
+    
+    return isActive;
 }
 
-// Camera: try to open camera device exclusively; if SHARING_VIOLATION → another process has it.
+bool IsMicrophoneActive() {
+    return IsDeviceActiveViaRegistry(L"microphone");
+}
+
 bool IsCameraActive() {
-    // KSCATEGORY_VIDEO_CAMERA
-    static const GUID kVideoCam =
-        {0xE5323777,0xF976,0x4f5b,{0x9B,0x55,0xB9,0x46,0x99,0xC4,0x6E,0x44}};
-
-    using SetupDiGetClassDevs_t =
-        HDEVINFO(WINAPI*)(const GUID*, PCWSTR, HWND, DWORD);
-    using SetupDiEnumDeviceInterfaces_t =
-        BOOL(WINAPI*)(HDEVINFO, PSP_DEVINFO_DATA, const GUID*, DWORD,
-                      PSP_DEVICE_INTERFACE_DATA);
-    using SetupDiGetDeviceInterfaceDetail_t =
-        BOOL(WINAPI*)(HDEVINFO, PSP_DEVICE_INTERFACE_DATA,
-                      PSP_DEVICE_INTERFACE_DETAIL_DATA, DWORD, PDWORD,
-                      PSP_DEVINFO_DATA);
-    using SetupDiDestroyDeviceInfoList_t = BOOL(WINAPI*)(HDEVINFO);
-
-    HMODULE setupapi = LoadLibraryW(L"setupapi.dll");
-    if (!setupapi) return false;
-
-    auto pGetClassDevs = (SetupDiGetClassDevs_t)
-        GetProcAddress(setupapi, "SetupDiGetClassDevsW");
-    auto pEnumInterfaces = (SetupDiEnumDeviceInterfaces_t)
-        GetProcAddress(setupapi, "SetupDiEnumDeviceInterfaces");
-    auto pGetInterfaceDetail = (SetupDiGetDeviceInterfaceDetail_t)
-        GetProcAddress(setupapi, "SetupDiGetDeviceInterfaceDetailW");
-    auto pDestroyList = (SetupDiDestroyDeviceInfoList_t)
-        GetProcAddress(setupapi, "SetupDiDestroyDeviceInfoList");
-
-    bool active = false;
-    if (pGetClassDevs && pEnumInterfaces && pGetInterfaceDetail && pDestroyList) {
-        HDEVINFO devInfo = pGetClassDevs(&kVideoCam, nullptr, nullptr,
-                                         DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
-        if (devInfo != INVALID_HANDLE_VALUE) {
-            SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
-            for (DWORD i = 0;
-                 pEnumInterfaces(devInfo, nullptr, &kVideoCam, i, &iface) && !active;
-                 i++) {
-                DWORD needed = 0;
-                pGetInterfaceDetail(devInfo, &iface, nullptr, 0, &needed, nullptr);
-                if (needed > 0) {
-                    std::vector<BYTE> buf(needed);
-                    auto* detail = reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(buf.data());
-                    detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
-                    if (pGetInterfaceDetail(devInfo, &iface, detail, needed, nullptr, nullptr)) {
-                        // Try exclusive open — sharing violation = camera is in use.
-                        HANDLE h = CreateFileW(detail->DevicePath, GENERIC_READ,
-                                               0, nullptr, OPEN_EXISTING, 0, nullptr);
-                        if (h == INVALID_HANDLE_VALUE &&
-                            GetLastError() == ERROR_SHARING_VIOLATION) {
-                            active = true;
-                        } else if (h != INVALID_HANDLE_VALUE) {
-                            CloseHandle(h);
-                        }
-                    }
-                }
-            }
-            pDestroyList(devInfo);
-        }
-    }
-    FreeLibrary(setupapi);
-    return active;
+    return IsDeviceActiveViaRegistry(L"webcam");
 }
 
 void UpdateProgressSnapshot() {
@@ -1741,7 +2355,7 @@ bool ClipboardHasBitmap(HWND hwnd) {
 }
 
 bool IsLikelyToastWindow(HWND hwnd, const wchar_t* className, const wchar_t* title) {
-    if (!IsWindowVisible(hwnd) || hwnd == g_hwnd) {
+    if (hwnd == g_hwnd || !hwnd) {
         return false;
     }
 
@@ -1751,19 +2365,33 @@ bool IsLikelyToastWindow(HWND hwnd, const wchar_t* className, const wchar_t* tit
 
     const std::wstring cls = ToLowerCopy(className ? className : L"");
     const std::wstring text = ToLowerCopy(title ? title : L"");
-    if (text.empty()) {
-        return false;
+
+    // Classic Windows 10 toasts have clear class names
+    if (cls.find(L"notification") != std::wstring::npos ||
+        cls.find(L"toast") != std::wstring::npos ||
+        cls.find(L"windows.ui.notifications") != std::wstring::npos) {
+        return true;
     }
 
-    if (IsIgnorableForegroundWindow(hwnd, title ? title : L"")) {
-        return false;
+    // Windows 11 toasts use generic XAML or CoreWindow classes, usually hosted by
+    // explorer.exe, sihost.exe, or ShellExperienceHost.exe.
+    // Importantly, their title is often empty at the exact moment of creation!
+    if (cls.find(L"xaml_windowedpopupclass") != std::wstring::npos ||
+        cls.find(L"windows.ui.core.corewindow") != std::wstring::npos) {
+        
+        std::wstring image;
+        if (ProcessImageNameForWindow(hwnd, &image)) {
+            const std::wstring base = ToLowerCopy(BaseNameFromPath(image));
+            if (base == L"explorer.exe" || base == L"sihost.exe" || base == L"shellexperiencehost.exe") {
+                // Ensure it's not the start menu, search, or action center main panel
+                if (text != L"start" && text != L"action center" && text != L"search" && text != L"task view") {
+                    return true;
+                }
+            }
+        }
     }
 
-    // Match only on class name — title matching is too broad and catches
-    // system windows like Snipping Tool that contain "notification" in their title.
-    return cls.find(L"notification") != std::wstring::npos ||
-           cls.find(L"toast") != std::wstring::npos ||
-           cls.find(L"windows.ui.notifications") != std::wstring::npos;
+    return false;
 }
 
 void CaptureShellNotification(HWND hwnd) {
@@ -1802,6 +2430,84 @@ void CaptureShellNotification(HWND hwnd) {
         g_state.notification = std::move(notification);
     }
     TriggerNudge();
+
+    // Spawn a background thread to extract the full rich text body of the toast using UI Automation.
+    // Modern Windows Toasts often only provide the App Name via GetWindowTextW, leaving the body hidden in the XAML tree.
+    std::thread([hwnd]() {
+        Sleep(400); // Give the heavy UWP XAML tree enough time to fully construct the text nodes
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (SUCCEEDED(hr)) {
+            IUIAutomation* uia = nullptr;
+            hr = CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia);
+            if (SUCCEEDED(hr) && uia) {
+                IUIAutomation2* uia2 = nullptr;
+                if (SUCCEEDED(uia->QueryInterface(__uuidof(IUIAutomation2), (void**)&uia2)) && uia2) {
+                    uia2->put_TransactionTimeout(500);
+                    uia2->put_ConnectionTimeout(500);
+                    uia2->Release();
+                }
+                IUIAutomationElement* windowEl = nullptr;
+                if (SUCCEEDED(uia->ElementFromHandle(hwnd, &windowEl)) && windowEl) {
+                    IUIAutomationCondition* cond = nullptr;
+                    uia->CreateTrueCondition(&cond);
+                    IUIAutomationElementArray* elements = nullptr;
+                    if (SUCCEEDED(windowEl->FindAll(TreeScope_Descendants, cond, &elements)) && elements) {
+                        int count = 0;
+                        elements->get_Length(&count);
+                        std::wstring appName;
+                        std::wstring fullText;
+                        for (int i = 0; i < count; ++i) {
+                            IUIAutomationElement* el = nullptr;
+                            if (SUCCEEDED(elements->GetElement(i, &el)) && el) {
+                                BSTR name = nullptr;
+                                el->get_CurrentName(&name);
+                                if (name && wcslen(name) > 0) {
+                                    std::wstring chunk = name;
+                                    // Skip generic screen-reader labels often found in toasts
+                                    if (chunk != L"Notification" && chunk != L"New notification") {
+                                        if (appName.empty()) {
+                                            appName = chunk;
+                                        } else {
+                                            if (!fullText.empty()) fullText += L"  -  ";
+                                            fullText += chunk;
+                                        }
+                                    }
+                                }
+                                if (name) SysFreeString(name);
+                                el->Release();
+                            }
+                        }
+                        elements->Release();
+                        
+                        if (fullText.empty() && !appName.empty()) {
+                            fullText = appName;
+                            appName = L"Notification";
+                        }
+                        
+                        if (!fullText.empty()) {
+                            std::lock_guard lock(g_stateMutex);
+                            if (g_state.notification.active) {
+                                if (!appName.empty()) {
+                                    g_state.notification.app = appName;
+                                    if (appName != L"Notification") {
+                                        BitmapPixels resolvedIcon = FindAppIconByName(appName, 64);
+                                        if (!resolvedIcon.bgra.empty()) {
+                                            g_state.notification.icon = std::move(resolvedIcon);
+                                        }
+                                    }
+                                }
+                                g_state.notification.title = fullText;
+                            }
+                        }
+                    }
+                    if (cond) cond->Release();
+                    windowEl->Release();
+                }
+                uia->Release();
+            }
+            CoUninitialize();
+        }
+    }).detach();
 }
 
 void CaptureClipboard(HWND hwnd) {
@@ -1923,8 +2629,14 @@ void SendMediaCommandAtPoint(HWND hwnd, LPARAM lParam) {
     }
 }
 
+void ToggleEndpointMute();
+
+void HandleStatusClickAtPoint(HWND hwnd, LPARAM lParam) {
+    // Disabled click handlers for status chips as requested by the user
+    return;
+}
+
 void ToggleEndpointMute() {
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     ComPtr<IMMDeviceEnumerator> enumerator;
     ComPtr<IMMDevice> device;
     ComPtr<IAudioEndpointVolume> volume;
@@ -1945,19 +2657,62 @@ void ToggleEndpointMute() {
         std::lock_guard lock(g_stateMutex);
         g_state.muted = !muted;
     }
+}
 
-    if (SUCCEEDED(hrCo)) {
-        CoUninitialize();
+struct WindowSearch {
+    std::wstring targetTitle;
+    HWND foundHwnd = nullptr;
+};
+
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+    if (!IsWindowVisible(hwnd)) {
+        return TRUE;
     }
+
+    wchar_t title[512];
+    if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) > 0) {
+        auto* search = reinterpret_cast<WindowSearch*>(lParam);
+        std::wstring wTitle(title);
+        // Case-insensitive check if window title contains currently playing media title
+        auto it = std::search(
+            wTitle.begin(), wTitle.end(),
+            search->targetTitle.begin(), search->targetTitle.end(),
+            [](wchar_t ch1, wchar_t ch2) { return towlower(ch1) == towlower(ch2); }
+        );
+
+        if (it != wTitle.end()) {
+            search->foundHwnd = hwnd;
+            return FALSE; // found, stop enumerating
+        }
+    }
+    return TRUE;
 }
 
 void OpenRelevantApp() {
+    std::wstring title;
     std::wstring app;
     {
         std::lock_guard lock(g_stateMutex);
+        title = g_state.media.title;
         app = g_state.media.sourceAppUserModelId;
     }
 
+    // Try to find and focus window containing track title (ideal for browser playing YouTube/Spotify)
+    if (!title.empty()) {
+        WindowSearch search;
+        search.targetTitle = title;
+        EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&search));
+
+        if (search.foundHwnd) {
+            if (IsIconic(search.foundHwnd)) {
+                ShowWindow(search.foundHwnd, SW_RESTORE);
+            }
+            SetForegroundWindow(search.foundHwnd);
+            return;
+        }
+    }
+
+    // Fallback: Launch or focus via AppUserModelId
     if (!app.empty()) {
         std::wstring shellPath = L"shell:AppsFolder\\" + app;
         ShellExecuteW(nullptr, L"open", shellPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
@@ -1981,6 +2736,10 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING, 1, L"Dismiss");
     AppendMenuW(menu, MF_STRING, 2, L"Pin expanded");
     AppendMenuW(menu, MF_STRING, 3, Wh_GetIntValue(L"GameOverlayPinned", 0) ? L"Hide game overlay" : L"Show game overlay");
+    const int activeW11 = Wh_GetIntValue(L"W11StyleOverride", -1) >= 0
+                          ? Wh_GetIntValue(L"W11StyleOverride", 0)
+                          : Wh_GetIntSetting(L"Appearance.W11Style");
+    AppendMenuW(menu, MF_STRING, 10, activeW11 ? L"Use iPhone Pill Style" : L"Use Windows 11 Flyout Style");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 4, L"Transparency 100%");
     AppendMenuW(menu, MF_STRING, 5, L"Transparency 85%");
@@ -1993,6 +2752,7 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING, 21, L"Theme: Dark Gray");
     AppendMenuW(menu, MF_STRING, 22, L"Theme: Midnight Blue");
     AppendMenuW(menu, MF_STRING, 23, L"Theme: Deep Purple");
+    AppendMenuW(menu, MF_STRING, 24, L"Theme: Fluent Design");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 9, L"Open Windhawk settings");
 
@@ -2034,6 +2794,7 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
         case 9: {
             wchar_t currentProcessPath[MAX_PATH] = {};
             GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
+
             HINSTANCE result = ShellExecuteW(nullptr, L"open",
                                              currentProcessPath,
                                              nullptr,
@@ -2041,6 +2802,15 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             if (reinterpret_cast<INT_PTR>(result) <= 32) {
                 Wh_Log(L"Failed to open Windhawk settings.");
             }
+            break;
+        }
+        case 10: {
+            const int activeW11Val = Wh_GetIntValue(L"W11StyleOverride", -1) >= 0
+                                  ? Wh_GetIntValue(L"W11StyleOverride", 0)
+                                  : Wh_GetIntSetting(L"Appearance.W11Style");
+            Wh_SetIntValue(L"W11StyleOverride", activeW11Val ? 0 : 1);
+            LoadSettings();
+            g_layoutDirty = true;
             break;
         }
         // Color theme presets — stored as integer index in local mod storage.
@@ -2058,6 +2828,10 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             break;
         case 23:  // Deep Purple
             Wh_SetIntValue(L"ColorTheme", 3);
+            LoadSettings();
+            break;
+        case 24:  // Fluent Design
+            Wh_SetIntValue(L"ColorTheme", 4);
             LoadSettings();
             break;
     }
@@ -2107,7 +2881,11 @@ class Renderer {
                                          DWRITE_FONT_WEIGHT_BOLD,
                                          DWRITE_FONT_STYLE_NORMAL,
                                          DWRITE_FONT_STRETCH_NORMAL,
-                                         13.5f, L"", &clockFormat_);
+                                         18.0f, L"", &clockFormat_);
+        dwriteFactory_->CreateTextFormat(L"Segoe Fluent Icons", nullptr,
+                                         DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         16.0f, L"", &iconFormat_);
 
         if (textFormat_) {
             textFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -2116,8 +2894,12 @@ class Renderer {
             smallTextFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         }
         if (clockFormat_) {
+            clockFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             clockFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             clockFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+        if (iconFormat_) {
+            iconFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         }
 
         return CreateBackingBitmap(520, 140);
@@ -2126,6 +2908,7 @@ class Renderer {
     bool Render(const SharedState& state, const Settings& settings, const Activity& primary,
                 const std::optional<Activity>& secondary, float width, float height,
                 float nudge, bool hover, bool pinned, double now) {
+        EnsureTextFormats(settings.sizeScale);
         const int pixelWidth = std::max(1, static_cast<int>(std::ceil(width + kRenderPadX * 2.0f)));
         const int pixelHeight = std::max(1, static_cast<int>(std::ceil(height + kRenderPadY * 2.0f)));
 
@@ -2155,19 +2938,22 @@ class Renderer {
 
         const float top = kRenderPadY + nudge;
         const float left = kRenderPadX;
-        if (secondary) {
-            const float gap = 12.0f * settings.sizeScale;
-            DrawPill(state, settings, primary,
-                     D2D1::RectF(left, top, left + primary.width, top + primary.height),
-                     scale, now);
-            DrawPill(state, settings, *secondary,
-                     D2D1::RectF(left + primary.width + gap, top,
-                                  left + primary.width + gap + secondary->width,
-                                  top + secondary->height),
-                     scale, now);
-        } else {
-            DrawPill(state, settings, primary,
-                     D2D1::RectF(left, top, left + width, top + height), scale, now);
+        
+        if (width >= 2.0f && height >= 2.0f) {
+            if (secondary) {
+                const float gap = 12.0f * settings.sizeScale;
+                DrawPill(state, settings, primary,
+                         D2D1::RectF(left, top, left + primary.width, top + primary.height),
+                         scale, now);
+                DrawPill(state, settings, *secondary,
+                         D2D1::RectF(left + primary.width + gap, top,
+                                      left + primary.width + gap + secondary->width,
+                                      top + secondary->height),
+                         scale, now);
+            } else {
+                DrawPill(state, settings, primary,
+                         D2D1::RectF(left, top, left + width, top + height), scale, now);
+            }
         }
 
         hr = target_->EndDraw();
@@ -2206,7 +2992,10 @@ class Renderer {
         target_.Reset();
         textFormat_.Reset();
         smallTextFormat_.Reset();
+        boldTextFormat_.Reset();
+        hugeTextFormat_.Reset();
         clockFormat_.Reset();
+        iconFormat_.Reset();
         dwriteFactory_.Reset();
         d2dFactory_.Reset();
 
@@ -2263,6 +3052,73 @@ class Renderer {
         return true;
     }
 
+    float lastFontScale_ = 0.0f;
+    void EnsureTextFormats(float scale) {
+        if (std::abs(scale - lastFontScale_) < 0.001f) {
+            return;
+        }
+
+        textFormat_ = nullptr;
+        smallTextFormat_ = nullptr;
+        clockFormat_ = nullptr;
+        iconFormat_ = nullptr;
+
+        dwriteFactory_->CreateTextFormat(L"Segoe UI Variable Display", nullptr,
+                                         DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                                         DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         13.5f, L"", &textFormat_);
+        dwriteFactory_->CreateTextFormat(L"Segoe UI Variable Small", nullptr,
+                                         DWRITE_FONT_WEIGHT_NORMAL,
+                                         DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         11.0f, L"", &smallTextFormat_);
+        dwriteFactory_->CreateTextFormat(L"Segoe UI Variable Display", nullptr,
+                                         DWRITE_FONT_WEIGHT_BOLD,
+                                         DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         18.0f, L"", &clockFormat_);
+        dwriteFactory_->CreateTextFormat(L"Segoe UI Variable Display", nullptr,
+                                         DWRITE_FONT_WEIGHT_BOLD,
+                                         DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         12.0f, L"", &boldTextFormat_);
+        dwriteFactory_->CreateTextFormat(L"Segoe UI Variable Display", nullptr,
+                                         DWRITE_FONT_WEIGHT_BOLD,
+                                         DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         42.0f, L"", &hugeTextFormat_);
+        dwriteFactory_->CreateTextFormat(L"Segoe Fluent Icons", nullptr,
+                                         DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                                         DWRITE_FONT_STRETCH_NORMAL,
+                                         16.0f, L"", &iconFormat_);
+
+        if (textFormat_) {
+            textFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        }
+        if (smallTextFormat_) {
+            smallTextFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        }
+        if (boldTextFormat_) {
+            boldTextFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            boldTextFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        }
+        if (hugeTextFormat_) {
+            hugeTextFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            hugeTextFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        }
+        if (clockFormat_) {
+            clockFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            clockFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            clockFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+        if (iconFormat_) {
+            iconFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        }
+
+        lastFontScale_ = scale;
+    }
+
     void EnsureBrushes(const Settings& settings, const SharedState& state) {
         D2D1_COLOR_F accent = settings.customAccent;
         if (settings.accentMode == AccentMode::System) {
@@ -2291,7 +3147,7 @@ class Renderer {
         pillBgColor_ = settings.pillBgColor;
         pillBgColor_.a = 1.0f;
         
-        D2D1_COLOR_F tintColor = D2D1::ColorF(0.010f, 0.010f, 0.012f, settings.blurOpacity);
+        D2D1_COLOR_F tintColor = D2D1::ColorF(0.010f, 0.010f, 0.012f, settings.tintOpacity);
         if (!tintBrush_) target_->CreateSolidColorBrush(tintColor, &tintBrush_);
         else tintBrush_->SetColor(tintColor);
 
@@ -2306,11 +3162,14 @@ class Renderer {
         const float h = (rect.bottom - rect.top) * scale;
         rect = D2D1::RectF(cx - w * 0.5f, cy - h * 0.5f, cx + w * 0.5f, cy + h * 0.5f);
 
-        const float radius = (rect.bottom - rect.top) * 0.5f;
+        float radius = settings.w11Style ? 8.0f * settings.sizeScale : (rect.bottom - rect.top) * 0.5f;
+        if (!settings.w11Style) {
+            radius = std::min(radius, 44.0f * settings.sizeScale);
+        }
         DrawSoftShadow(rect, radius);
 
         D2D1_ROUNDED_RECT pill = D2D1::RoundedRect(rect, radius, radius);
-        DrawPillSurface(rect, radius, activity.kind);
+        DrawPillSurface(rect, radius, activity.kind, settings.w11Style);
 
         if (activity.kind == IslandKind::Progress) {
             DrawProgressRing(rect, state.progress.percent);
@@ -2327,43 +3186,63 @@ class Renderer {
             accentBrush_->SetOpacity(1.0f);
         }
 
-        ComPtr<ID2D1SolidColorBrush> highlight;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.10f * settingsOpacity_), &highlight);
-        target_->DrawRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(rect.left + 1, rect.top + 1, rect.right - 1,
-                                          rect.bottom - 1),
-                              radius - 1, radius - 1),
-            highlight.Get(), 1.0f);
+        if (!settings.w11Style) {
+            ComPtr<ID2D1SolidColorBrush> highlight;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.10f * settingsOpacity_), &highlight);
+            target_->DrawRoundedRectangle(
+                D2D1::RoundedRect(D2D1::RectF(rect.left + 1, rect.top + 1, rect.right - 1,
+                                              rect.bottom - 1),
+                                  radius - 1, radius - 1),
+                highlight.Get(), 1.0f);
+        }
+
+        D2D1_MATRIX_3X2_F oldTransform;
+        target_->GetTransform(&oldTransform);
+        D2D1_POINT_2F pillCenter = D2D1::Point2F((rect.left + rect.right) * 0.5f, (rect.top + rect.bottom) * 0.5f);
+        target_->SetTransform(D2D1::Matrix3x2F::Scale(settings.sizeScale, settings.sizeScale, pillCenter) * oldTransform);
+
+        float invScale = 1.0f / settings.sizeScale;
+        float unW = (rect.right - rect.left) * invScale;
+        float unH = (rect.bottom - rect.top) * invScale;
+        D2D1_RECT_F unscaledRect = D2D1::RectF(pillCenter.x - unW * 0.5f, pillCenter.y - unH * 0.5f, pillCenter.x + unW * 0.5f, pillCenter.y + unH * 0.5f);
 
         switch (activity.kind) {
             case IslandKind::Media:
-                DrawMedia(state, rect, now);
+                DrawMedia(state, unscaledRect, now);
                 break;
             case IslandKind::Clipboard:
-                DrawClipboard(state, rect);
+                DrawClipboard(state, unscaledRect);
                 break;
             case IslandKind::Notification:
-                DrawNotification(state, rect);
+                DrawNotification(state, unscaledRect);
                 break;
             case IslandKind::Volume:
-                DrawVolume(state, rect);
+                DrawVolume(state, unscaledRect);
+                break;
+            case IslandKind::CapsLock:
+                DrawCapsLock(state, unscaledRect);
+                break;
+            case IslandKind::Device:
+                DrawDevice(state, unscaledRect);
                 break;
             case IslandKind::BatteryLow:
-                DrawBattery(state, rect);
+                DrawBattery(state, unscaledRect);
                 break;
             case IslandKind::Progress:
-                DrawProgress(state, rect);
+                DrawProgress(state, unscaledRect);
                 break;
             case IslandKind::Idle:
             default:
-                DrawIdleDashboard(state, rect, settings, now);
+                DrawIdleDashboard(state, unscaledRect, settings, now);
                 break;
         }
 
         // ── Apple-style privacy indicator dots ───────────────────────────────
         // Green dot = camera in use, Orange dot = mic in use.
         // Drawn in top-right corner of pill, outside content area.
-        DrawPrivacyDots(state, rect, now);
+        DrawPrivacyDots(state, unscaledRect, now);
+
+        target_->SetTransform(oldTransform);
     }
 
     void DrawSoftShadow(D2D1_RECT_F rect, float radius) {
@@ -2429,8 +3308,14 @@ class Renderer {
         }
     }
 
-    void DrawPillSurface(D2D1_RECT_F rect, float radius, IslandKind kind) {
+    void DrawPillSurface(D2D1_RECT_F rect, float radius, IslandKind kind, bool w11Style) {
         UNREFERENCED_PARAMETER(kind);
+
+        if (tintBrush_) {
+            target_->FillRoundedRectangle(D2D1::RoundedRect(rect, radius, radius),
+                                          tintBrush_.Get());
+        }
+
         // User-defined pill background color.
         ComPtr<ID2D1SolidColorBrush> blackBrush;
         D2D1_COLOR_F bg = pillBgColor_;
@@ -2441,25 +3326,40 @@ class Renderer {
                                           blackBrush.Get());
         }
 
-        // Thin top-edge gloss: simulates iPhone notch glass shine.
-        ComPtr<ID2D1SolidColorBrush> gloss;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.055f * settingsOpacity_),
-                                       &gloss);
-        if (gloss) {
-            D2D1_RECT_F glossLine = D2D1::RectF(rect.left + radius, rect.top + 0.5f,
-                                                rect.right - radius, rect.top + 1.2f);
-            target_->FillRectangle(glossLine, gloss.Get());
-        }
+        if (w11Style) {
+            // In Windows 11 style, we draw a double-layer modern border.
+            // Windows 11 uses a very subtle 1px border. In dark mode, it's white with 15% opacity.
+            ComPtr<ID2D1SolidColorBrush> border;
+            target_->CreateSolidColorBrush(
+                D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.15f * settingsOpacity_), &border);
+            if (border) {
+                target_->DrawRoundedRectangle(
+                    D2D1::RoundedRect(D2D1::RectF(rect.left + 0.5f, rect.top + 0.5f,
+                                                  rect.right - 0.5f, rect.bottom - 0.5f),
+                                      radius, radius),
+                    border.Get(), 1.0f);
+            }
+        } else {
+            // Thin top-edge gloss: simulates iPhone notch glass shine.
+            ComPtr<ID2D1SolidColorBrush> gloss;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.055f * settingsOpacity_),
+                                           &gloss);
+            if (gloss) {
+                D2D1_RECT_F glossLine = D2D1::RectF(rect.left + radius, rect.top + 0.5f,
+                                                    rect.right - radius, rect.top + 1.2f);
+                target_->FillRectangle(glossLine, gloss.Get());
+            }
 
-        // Outer border: extremely subtle white rim like iPhone Dynamic Island edge.
-        ComPtr<ID2D1SolidColorBrush> border;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f * settingsOpacity_),
-                                       &border);
-        if (border) {
-            target_->DrawRoundedRectangle(D2D1::RoundedRect(
-                D2D1::RectF(rect.left + 0.5f, rect.top + 0.5f,
-                            rect.right - 0.5f, rect.bottom - 0.5f),
-                radius, radius), border.Get(), 0.8f);
+            // Outer border: extremely subtle white rim like iPhone Dynamic Island edge.
+            ComPtr<ID2D1SolidColorBrush> border;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f * settingsOpacity_),
+                                           &border);
+            if (border) {
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(
+                    D2D1::RectF(rect.left + 0.5f, rect.top + 0.5f,
+                                rect.right - 0.5f, rect.bottom - 0.5f),
+                    radius, radius), border.Get(), 0.8f);
+            }
         }
     }
 
@@ -2482,160 +3382,338 @@ class Renderer {
         accentBrush_->SetOpacity(1.0f);
     }
 
-    void DrawIdleDashboard(const SharedState& state, D2D1_RECT_F rect, const Settings& settings,
-                           double now) {
-        if (!settings.alwaysShowClock || !clockFormat_) {
-            return;
+    static void GetWeatherIconAndText(int code, std::wstring& icon, std::wstring& text) {
+        switch (code) {
+            case 113: icon = L"☀️"; break;
+            case 116: icon = L"⛅"; break;
+            case 119: case 122: icon = L"☁️"; break;
+            case 143: case 248: case 260: icon = L"🌫️"; break;
+            case 200: case 386: case 389: case 392: case 395: icon = L"⛈️"; break;
+            case 176: case 263: case 266: case 281: case 284: case 293: case 296: case 299: case 302: case 305: case 308: case 311: case 314: case 353: case 356: case 359: icon = L"🌧️"; break;
+            case 179: case 182: case 185: case 227: case 230: case 317: case 320: case 323: case 326: case 329: case 332: case 335: case 338: case 350: case 362: case 365: case 368: case 371: icon = L"❄️"; break;
+            default: icon = L"🌡️"; break;
+        }
+    }
+
+    static int GetDaysInMonth(int year, int month) {
+        if (month == 2) {
+            bool leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+            return leap ? 29 : 28;
+        }
+        if (month == 4 || month == 6 || month == 9 || month == 11) return 30;
+        return 31;
+    }
+
+    static int GetDayOfWeek(int year, int month, int day) {
+        if (month < 3) { month += 12; year -= 1; }
+        int k = year % 100;
+        int j = year / 100;
+        int h = (day + 13 * (month + 1) / 5 + k + k / 4 + j / 4 + 5 * j) % 7;
+        return (h + 6) % 7;
+    }
+
+
+
+    void DrawCalendarDashboard(const SharedState& state, D2D1_RECT_F rect, const Settings& settings, double now, float scale, SYSTEMTIME& local) {
+        ComPtr<ID2D1SolidColorBrush> calBg;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.04f * settingsOpacity_), &calBg);
+        D2D1_RECT_F leftBlock = D2D1::RectF(rect.left + 22.0f * scale, rect.top + 16.0f * scale,
+                                            rect.left + 115.0f * scale, rect.bottom - 22.0f * scale);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(leftBlock, 12.0f * scale, 12.0f * scale), calBg.Get());
+        
+        ComPtr<ID2D1SolidColorBrush> calHeader;
+        target_->CreateSolidColorBrush(D2D1::ColorF(0.85f, 0.25f, 0.20f, 0.9f * settingsOpacity_), &calHeader);
+        
+        wchar_t monthName[32] = {};
+        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"MMMM", monthName, ARRAYSIZE(monthName), nullptr);
+        for (int i = 0; monthName[i]; ++i) monthName[i] = towupper(monthName[i]);
+        
+        target_->DrawTextW(monthName, static_cast<UINT32>(wcslen(monthName)), boldTextFormat_.Get(),
+                           D2D1::RectF(leftBlock.left, leftBlock.top + 6.0f * scale, leftBlock.right, leftBlock.top + 24.0f * scale),
+                           calHeader.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+
+        wchar_t yearStr[16] = {};
+        swprintf_s(yearStr, L"%d", local.wYear);
+        mutedBrush_->SetOpacity(0.45f);
+        target_->DrawTextW(yearStr, static_cast<UINT32>(wcslen(yearStr)), boldTextFormat_.Get(),
+                           D2D1::RectF(leftBlock.left, leftBlock.top + 20.0f * scale, leftBlock.right, leftBlock.top + 38.0f * scale),
+                           mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+
+        wchar_t dayStr[16] = {};
+        swprintf_s(dayStr, L"%d", local.wDay);
+        textBrush_->SetOpacity(0.96f);
+        target_->DrawTextW(dayStr, static_cast<UINT32>(wcslen(dayStr)), hugeTextFormat_.Get(),
+                           D2D1::RectF(leftBlock.left, leftBlock.top + 30.0f * scale, leftBlock.right, leftBlock.top + 80.0f * scale),
+                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+
+        wchar_t weekdayName[32] = {};
+        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"dddd", weekdayName, ARRAYSIZE(weekdayName), nullptr);
+        mutedBrush_->SetOpacity(0.75f);
+        target_->DrawTextW(weekdayName, static_cast<UINT32>(wcslen(weekdayName)), boldTextFormat_.Get(),
+                           D2D1::RectF(leftBlock.left, leftBlock.bottom - 22.0f * scale, leftBlock.right, leftBlock.bottom),
+                           mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+
+        // Right Grid
+        const float gridStart = rect.left + 144.0f * scale;
+        const float gridTop = rect.top + 30.0f * scale;
+        const float colW = 31.0f * scale;
+        const float rowH = 18.0f * scale;
+        const wchar_t* days[] = {L"S", L"M", L"T", L"W", L"T", L"F", L"S"};
+        
+        for (int i = 0; i < 7; ++i) {
+            D2D1_RECT_F cell = D2D1::RectF(gridStart + i * colW, gridTop, gridStart + (i+1)*colW, gridTop + rowH);
+            ComPtr<ID2D1SolidColorBrush> brush = (i == 0 || i == 6) ? calHeader : mutedBrush_;
+            target_->DrawTextW(days[i], 1, boldTextFormat_.Get(), cell, brush.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
         }
 
+        int startDay = GetDayOfWeek(local.wYear, local.wMonth, 1);
+        int totalDays = GetDaysInMonth(local.wYear, local.wMonth);
+        
+        int row = 1;
+        int col = startDay;
+        textBrush_->SetOpacity(0.85f);
+        for (int d = 1; d <= totalDays; ++d) {
+            D2D1_RECT_F cell = D2D1::RectF(gridStart + col * colW, gridTop + row * rowH + 4.0f * scale, 
+                                           gridStart + (col+1)*colW, gridTop + (row+1)*rowH + 4.0f * scale);
+            
+            if (d == local.wDay) {
+                target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cell.left + colW*0.5f, cell.top + rowH*0.5f), 10.0f*scale, 10.0f*scale), calHeader.Get());
+                target_->DrawTextW(std::to_wstring(d).c_str(), static_cast<UINT32>(std::to_wstring(d).length()), boldTextFormat_.Get(), cell, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+            } else {
+                ComPtr<ID2D1SolidColorBrush> dBrush = (col == 0 || col == 6) ? calHeader : textBrush_;
+                if (col == 0 || col == 6) dBrush->SetOpacity(0.6f);
+                target_->DrawTextW(std::to_wstring(d).c_str(), static_cast<UINT32>(std::to_wstring(d).length()), boldTextFormat_.Get(), cell, dBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+            }
+            
+            col++;
+            if (col > 6) { col = 0; row++; }
+        }
+    }
+
+    void DrawWeatherDashboard(const SharedState& state, D2D1_RECT_F rect, const Settings& settings, double now, float scale, bool hasWeather, const std::wstring& wIcon, const std::wstring& wText) {
+        wchar_t wTemp[32] = {};
+        if (hasWeather) swprintf_s(wTemp, L"%.0f\x00B0", state.weather.temperature);
+        else wcscpy_s(wTemp, L"--\x00B0");
+
+        textBrush_->SetOpacity(0.96f);
+        target_->DrawTextW(wIcon.c_str(), static_cast<UINT32>(wIcon.length()), hugeTextFormat_.Get(),
+                           D2D1::RectF(rect.left + 20.0f * scale, rect.top + 34.0f * scale, rect.left + 100.0f * scale, rect.bottom),
+                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+                           
+        target_->DrawTextW(wTemp, static_cast<UINT32>(wcslen(wTemp)), hugeTextFormat_.Get(),
+                           D2D1::RectF(rect.left + 85.0f * scale, rect.top + 34.0f * scale, rect.left + 180.0f * scale, rect.bottom),
+                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+
+        ComPtr<ID2D1SolidColorBrush> divider;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.12f * settingsOpacity_), &divider);
+        target_->FillRoundedRectangle(
+            D2D1::RoundedRect(D2D1::RectF(rect.left + 185.0f * scale, rect.top + 20.0f * scale,
+                                           rect.left + 186.5f * scale, rect.bottom - 24.0f * scale),
+                              0.5f * scale, 0.5f * scale), divider.Get());
+
+        std::wstring city = hasWeather ? state.weather.city : L"Locating...";
+        std::wstring desc = wText;
+        
+        D2D1_RECT_F rightTop = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 28.0f * scale, rect.right, rect.bottom);
+        target_->DrawTextW(city.c_str(), static_cast<UINT32>(city.length()), boldTextFormat_.Get(),
+                           rightTop, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+                           
+        mutedBrush_->SetOpacity(0.70f);
+        D2D1_RECT_F rightMid = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 48.0f * scale, rect.right, rect.bottom);
+        target_->DrawTextW(desc.c_str(), static_cast<UINT32>(desc.length()), smallTextFormat_.Get(),
+                           rightMid, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+                           
+        std::wstring line3 = hasWeather ? L"Wind: " + state.weather.windSpeed + L" km/h " + state.weather.windDir : L"Updated recently";
+        std::wstring line4 = hasWeather ? L"Feels Like: " + state.weather.feelsLike + L"\x00B0" : L"";
+        std::wstring line5 = hasWeather ? L"Humidity: " + state.weather.humidity + L"%" : L"";
+
+        D2D1_RECT_F rightLine3 = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 68.0f * scale, rect.right, rect.bottom);
+        target_->DrawTextW(line3.c_str(), static_cast<UINT32>(line3.length()), smallTextFormat_.Get(),
+                           rightLine3, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+                           
+        D2D1_RECT_F rightLine4 = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 88.0f * scale, rect.right, rect.bottom);
+        target_->DrawTextW(line4.c_str(), static_cast<UINT32>(line4.length()), smallTextFormat_.Get(),
+                           rightLine4, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+                           
+        D2D1_RECT_F rightLine5 = D2D1::RectF(rect.left + 205.0f * scale, rect.top + 108.0f * scale, rect.right, rect.bottom);
+        target_->DrawTextW(line5.c_str(), static_cast<UINT32>(line5.length()), smallTextFormat_.Get(),
+                           rightLine5, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+    }
+
+    void DrawIdleDashboard(const SharedState& state, D2D1_RECT_F rect, const Settings& settings,
+                           double now) {
         if (settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0) {
-            DrawGameOverlay(state, rect);
+            DrawGameOverlay(state, rect, 1.0f);
             return;
         }
+        bool privacyActive = state.system.micActive || state.system.cameraActive;
+        if ((!settings.alwaysShowClock && !privacyActive) || !clockFormat_) return;
 
         SYSTEMTIME local = {};
         GetLocalTime(&local);
-        wchar_t buffer[32] = {};
-        GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &local, nullptr, buffer,
-                        ARRAYSIZE(buffer));
+        wchar_t timeBuf[32] = {};
+        GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &local, nullptr, timeBuf, ARRAYSIZE(timeBuf));
 
+        const float scale = 1.0f;
         const float width = rect.right - rect.left;
-        if (width < 190.0f) {
-            const int page = static_cast<int>(now / 4.0) % 6;
-            wchar_t label[64] = {};
-            switch (page) {
-                case 1:
-                    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd d",
-                                    label, ARRAYSIZE(label), nullptr);
-                    break;
-                case 2:
-                    swprintf_s(label, L"%s %d%%",
-                               state.system.volumeMuted ? L"Muted" : L"Vol",
-                               state.system.volumePercent);
-                    break;
-                case 3:
-                    swprintf_s(label, L"CPU %d%%", state.system.cpuPercent);
-                    break;
-                case 4:
-                    swprintf_s(label, L"RAM %d%%", state.system.memoryPercent);
-                    break;
-                case 5:
-                    swprintf_s(label, L"Disk %d%% free", state.system.diskFreePercent);
-                    break;
-                default:
-                    wcscpy_s(label, ARRAYSIZE(label), buffer);
-                    break;
-            }
+        
+        bool hasWeather = state.weather.hasData && (now - state.weather.lastUpdated < 3600.0);
+        std::wstring wIcon = L"🌡️";
+        std::wstring wText = L"Loading...";
+        if (hasWeather) {
+            wText = state.weather.weatherDesc;
+            GetWeatherIconAndText(state.weather.weatherCode, wIcon, wText);
+        }
 
-            mutedBrush_->SetOpacity(0.72f);
-            target_->DrawTextW(label, static_cast<UINT32>(wcslen(label)), clockFormat_.Get(), rect,
-                               mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-            mutedBrush_->SetOpacity(0.58f);
-            DrawPageDots(rect, page, 6);
+        if (width / scale < 220.0f) {
+            // Collapsed Mode
+            D2D1_RECT_F timeRect = D2D1::RectF(rect.left + 20.0f * scale, rect.top + 7.0f * scale,
+                                               rect.left + 80.0f * scale, rect.bottom - 7.0f * scale);
+            textBrush_->SetOpacity(0.96f);
+            target_->DrawTextW(timeBuf, static_cast<UINT32>(wcslen(timeBuf)), smallTextFormat_.Get(),
+                               timeRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+            
+            ComPtr<ID2D1SolidColorBrush> divider;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.12f * settingsOpacity_), &divider);
+            target_->FillRoundedRectangle(
+                D2D1::RoundedRect(D2D1::RectF(rect.left + 82.0f * scale, rect.top + 10.0f * scale,
+                                               rect.left + 83.5f * scale, rect.bottom - 10.0f * scale),
+                                  0.5f * scale, 0.5f * scale), divider.Get());
+
+            wchar_t weatherLabel[32] = {};
+            if (hasWeather) swprintf_s(weatherLabel, L"%s %.0f\x00B0", wIcon.c_str(), state.weather.temperature);
+            else wcscpy_s(weatherLabel, ARRAYSIZE(weatherLabel), L"🌡️ --\x00B0");
+
+            D2D1_RECT_F wRect = D2D1::RectF(rect.left + 94.0f * scale, rect.top + 7.0f * scale,
+                                            rect.right, rect.bottom - 7.0f * scale);
+            target_->DrawTextW(weatherLabel, static_cast<UINT32>(wcslen(weatherLabel)), smallTextFormat_.Get(),
+                               wRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+            textBrush_->SetOpacity(1.0f);
             return;
         }
 
-        D2D1_RECT_F timeRect = D2D1::RectF(rect.left + 18, rect.top + 10,
-                                          rect.left + 104, rect.top + 31);
-        textBrush_->SetOpacity(0.94f);
-        target_->DrawTextW(buffer, static_cast<UINT32>(wcslen(buffer)), clockFormat_.Get(),
-                           timeRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        textBrush_->SetOpacity(0.90f);
+        // Expanded Mode
+        int tab = g_idleTab % 2;
+        if (tab < 0) tab += 2;
 
-        wchar_t date[64] = {};
-        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &local, L"ddd, MMM d",
-                        date, ARRAYSIZE(date), nullptr);
-        D2D1_RECT_F dateRect = D2D1::RectF(rect.left + 20, rect.top + 31,
-                                          rect.left + 118, rect.bottom - 8);
-        mutedBrush_->SetOpacity(0.50f);
-        target_->DrawTextW(date, static_cast<UINT32>(wcslen(date)), smallTextFormat_.Get(),
-                           dateRect, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        if (tab == 0) DrawCalendarDashboard(state, rect, settings, now, scale, local);
+        else DrawWeatherDashboard(state, rect, settings, now, scale, hasWeather, wIcon, wText);
 
-        ComPtr<ID2D1SolidColorBrush> divider;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.075f * settingsOpacity_), &divider);
-        target_->FillRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(rect.left + 126, rect.top + 14,
-                                          rect.left + 127, rect.bottom - 14),
-                              0.5f, 0.5f),
-            divider.Get());
+        // Pagination dots (Vertical on the right edge)
+        float shiftX = 0.0f;
+        if (state.system.micActive && state.system.cameraActive) {
+            shiftX = 30.0f * scale;
+        } else if (state.system.micActive || state.system.cameraActive) {
+            shiftX = 16.0f * scale;
+        }
+        const float dotX = rect.right - 10.0f * scale - shiftX;
+        const float dotY = (rect.top + rect.bottom) * 0.5f;
+        const float spacing = 8.0f * scale;
+        const float r = 2.5f * scale;
+        
+        ComPtr<ID2D1SolidColorBrush> activeDot, inactiveDot;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.85f * settingsOpacity_), &activeDot);
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.25f * settingsOpacity_), &inactiveDot);
 
-        const float chipTop = rect.top + 11;
-        const float cardW = 58.0f;
-        const float gap = 7.0f;
-        const float start = rect.right - 18.0f - cardW * 3.0f - gap * 2.0f;
-        DrawMetricChip(D2D1::RectF(start, chipTop, start + cardW, rect.bottom - 10),
-                       state.system.charging ? L"\u26a1" : L"Bat", state.battery.percent,
-                       state.battery.low ? redBrush_.Get() : accentBrush_.Get(),
-                       state.system.charging ? L"\u26a1" : L"\u25b0");
-        DrawMetricChip(D2D1::RectF(start + cardW + gap, chipTop,
-                                   start + cardW * 2.0f + gap, rect.bottom - 10),
-                       state.system.volumeMuted ? L"Mut" : L"Vol", state.system.volumePercent,
-                       accentBrush_.Get(), state.system.volumeMuted ? L"\u00d7" : L"\u266b");
-        DrawMetricChip(D2D1::RectF(start + cardW * 2.0f + gap * 2.0f, chipTop,
-                                   start + cardW * 3.0f + gap * 2.0f, rect.bottom - 10),
-                       L"CPU", state.system.cpuPercent, accentBrush_.Get(), L"\u2699");
-
-        mutedBrush_->SetOpacity(0.58f);
+        target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY - spacing * 0.5f), r, r), tab == 0 ? activeDot.Get() : inactiveDot.Get());
+        target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY + spacing * 0.5f), r, r), tab == 1 ? activeDot.Get() : inactiveDot.Get());
     }
 
-    void DrawGameOverlay(const SharedState& state, D2D1_RECT_F rect) {
+    void DrawGameOverlay(const SharedState& state, D2D1_RECT_F rect, float unused_scale) {
+        const float scale = 1.0f;
         ComPtr<ID2D1SolidColorBrush> panelBrush;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.040f * settingsOpacity_), &panelBrush);
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.080f * settingsOpacity_), &panelBrush);
 
-        D2D1_RECT_F fpsPanel = D2D1::RectF(rect.left + 10, rect.top + 10,
-                                          rect.left + 84, rect.bottom - 10);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(fpsPanel, 15, 15), panelBrush.Get());
+        D2D1_RECT_F fpsPanel = D2D1::RectF(rect.left + 10.0f * scale, rect.top + 10.0f * scale,
+                                          rect.left + 84.0f * scale, rect.bottom - 10.0f * scale);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(fpsPanel, 15.0f * scale, 15.0f * scale), panelBrush.Get());
 
-        DrawGameIcon(D2D1::Point2F(fpsPanel.left + 18, fpsPanel.top + 17), 7.0f, 0);
-        mutedBrush_->SetOpacity(0.44f);
-        target_->DrawTextW(L"FPS", 3, smallTextFormat_.Get(),
-                           D2D1::RectF(fpsPanel.left + 31, fpsPanel.top + 6,
-                                       fpsPanel.right - 10, fpsPanel.top + 24),
-                           mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        ComPtr<ID2D1SolidColorBrush> fpsIconBrush;
+        target_->CreateSolidColorBrush(D2D1::ColorF(0.0f, 1.0f, 0.65f, 1.0f), &fpsIconBrush);
+        D2D1_POINT_2F fpsCenter = D2D1::Point2F(fpsPanel.left + 18.0f * scale, fpsPanel.top + 17.0f * scale);
+        DrawGameIcon(fpsCenter, 7.0f * scale, 0, fpsIconBrush.Get(), scale);
+
+        if (g_settings.showMetricText) {
+            mutedBrush_->SetOpacity(0.44f);
+            target_->DrawTextW(L"FPS", 3, smallTextFormat_.Get(),
+                               D2D1::RectF(fpsPanel.left + 31.0f * scale, fpsPanel.top + 6.0f * scale,
+                                           fpsPanel.right - 10.0f * scale, fpsPanel.top + 24.0f * scale),
+                               mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+        }
 
         wchar_t fpsValue[16] = {};
         swprintf_s(fpsValue, L"%d", state.system.renderFps);
         textBrush_->SetOpacity(0.96f);
-        target_->DrawTextW(fpsValue, static_cast<UINT32>(wcslen(fpsValue)), smallTextFormat_.Get(),
-                           D2D1::RectF(fpsPanel.left + 16, fpsPanel.top + 25,
-                                       fpsPanel.right - 10, fpsPanel.bottom - 5),
-                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        D2D1_RECT_F fpsValueRect = g_settings.showMetricText 
+            ? D2D1::RectF(fpsPanel.left + 16.0f * scale, fpsPanel.top + 23.0f * scale, fpsPanel.right - 10.0f * scale, fpsPanel.bottom - 4.0f * scale)
+            : D2D1::RectF(fpsPanel.left + 31.0f * scale, fpsPanel.top + 10.0f * scale, fpsPanel.right - 10.0f * scale, fpsPanel.bottom - 4.0f * scale);
+        target_->DrawTextW(fpsValue, static_cast<UINT32>(wcslen(fpsValue)), textFormat_.Get(),
+                           fpsValueRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
 
-        const float cardTop = rect.top + 10;
-        const float cardW = 62.0f;
-        const float gap = 6.0f;
-        const float start = fpsPanel.right + 8.0f;
-        DrawGameMetricCard(D2D1::RectF(start, cardTop, start + cardW, rect.bottom - 10),
-                           L"CPU", state.system.cpuPercent, 1);
+        const float cardTop = rect.top + 10.0f * scale;
+        const float cardW = 62.0f * scale;
+        const float gap = 6.0f * scale;
+        const float start = fpsPanel.right + 8.0f * scale;
+        DrawGameMetricCard(D2D1::RectF(start, cardTop, start + cardW, rect.bottom - 10.0f * scale),
+                           L"CPU", state.system.cpuPercent, 1, scale);
         DrawGameMetricCard(D2D1::RectF(start + cardW + gap, cardTop,
-                                       start + cardW * 2.0f + gap, rect.bottom - 10),
-                           L"RAM", state.system.memoryPercent, 2);
+                                       start + cardW * 2.0f + gap, rect.bottom - 10.0f * scale),
+                           L"RAM", state.system.memoryPercent, 2, scale);
         DrawGameMetricCard(D2D1::RectF(start + cardW * 2.0f + gap * 2.0f, cardTop,
-                                       start + cardW * 3.0f + gap * 2.0f, rect.bottom - 10),
-                           L"GPU", state.system.gpuPercent, 3);
+                                       start + cardW * 3.0f + gap * 2.0f, rect.bottom - 10.0f * scale),
+                           L"GPU", state.system.gpuPercent, 3, scale);
         DrawGameMetricCard(D2D1::RectF(start + cardW * 3.0f + gap * 3.0f, cardTop,
-                                       start + cardW * 4.0f + gap * 3.0f, rect.bottom - 10),
-                           L"DSK", 100 - state.system.diskFreePercent, 4);
+                                       start + cardW * 4.0f + gap * 3.0f, rect.bottom - 10.0f * scale),
+                           L"DSK", 100 - state.system.diskFreePercent, 4, scale);
 
         textBrush_->SetOpacity(0.90f);
         mutedBrush_->SetOpacity(0.58f);
     }
 
-    void DrawGameMetricCard(D2D1_RECT_F rect, const wchar_t* label, int percent, int iconKind) {
+    void DrawGameMetricCard(D2D1_RECT_F rect, const wchar_t* label, int percent, int iconKind, float unused_scale) {
+        const float scale = 1.0f;
+        D2D1_COLOR_F metricColor = D2D1::ColorF(0.0f, 0.82f, 1.0f, 1.0f);
+        switch (iconKind) {
+            case 1:
+                metricColor = D2D1::ColorF(0.0f, 0.82f, 1.0f, 1.0f);
+                break;
+            case 2:
+                metricColor = D2D1::ColorF(0.83f, 0.0f, 1.0f, 1.0f);
+                break;
+            case 3:
+                metricColor = D2D1::ColorF(0.0f, 1.0f, 0.60f, 1.0f);
+                break;
+            case 4:
+                metricColor = D2D1::ColorF(1.0f, 0.48f, 0.0f, 1.0f);
+                break;
+            default:
+                metricColor = D2D1::ColorF(0.0f, 1.0f, 0.65f, 1.0f);
+                break;
+        }
+
+        ComPtr<ID2D1SolidColorBrush> metricBrush;
+        target_->CreateSolidColorBrush(metricColor, &metricBrush);
+
         ComPtr<ID2D1SolidColorBrush> cardBrush;
         ComPtr<ID2D1SolidColorBrush> borderBrush;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.045f * settingsOpacity_), &cardBrush);
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.090f * settingsOpacity_), &borderBrush);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(rect, 16, 16), cardBrush.Get());
-        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 16, 16), borderBrush.Get(), 1.0f);
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.080f * settingsOpacity_), &cardBrush);
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.060f * settingsOpacity_), &borderBrush);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(rect, 16.0f * scale, 16.0f * scale), cardBrush.Get());
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 16.0f * scale, 16.0f * scale), borderBrush.Get(), 1.0f * scale);
 
-        DrawGameIcon(D2D1::Point2F(rect.left + 18, rect.top + 18), 8.0f, iconKind);
+        metricBrush->SetOpacity(0.24f * settingsOpacity_);
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 16.0f * scale, 16.0f * scale), metricBrush.Get(), 1.2f * scale);
+        metricBrush->SetOpacity(1.0f);
 
-        mutedBrush_->SetOpacity(0.56f);
-        target_->DrawTextW(label, static_cast<UINT32>(wcslen(label)), smallTextFormat_.Get(),
-                           D2D1::RectF(rect.left + 31, rect.top + 6,
-                                       rect.right - 5, rect.top + 23),
-                           mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        DrawGameIcon(D2D1::Point2F(rect.left + 18.0f * scale, rect.top + 18.0f * scale), 8.0f * scale, iconKind, metricBrush.Get(), scale);
+
+        if (g_settings.showMetricText) {
+            mutedBrush_->SetOpacity(0.56f);
+            target_->DrawTextW(label, static_cast<UINT32>(wcslen(label)), smallTextFormat_.Get(),
+                               D2D1::RectF(rect.left + 31.0f * scale, rect.top + 6.0f * scale,
+                                           rect.right - 5.0f * scale, rect.top + 24.0f * scale),
+                               mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+        }
 
         wchar_t value[16] = {};
         if (percent < 0) {
@@ -2644,136 +3722,345 @@ class Renderer {
             swprintf_s(value, L"%d%%", percent);
         }
         textBrush_->SetOpacity(0.90f);
-        target_->DrawTextW(value, static_cast<UINT32>(wcslen(value)), smallTextFormat_.Get(),
-                           D2D1::RectF(rect.left + 10, rect.top + 24,
-                                       rect.right - 8, rect.bottom - 9),
-                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        D2D1_RECT_F valueRect = g_settings.showMetricText 
+            ? D2D1::RectF(rect.left + 10.0f * scale, rect.top + 22.0f * scale, rect.right - 8.0f * scale, rect.bottom - 8.0f * scale)
+            : D2D1::RectF(rect.left + 31.0f * scale, rect.top + 10.0f * scale, rect.right - 5.0f * scale, rect.bottom - 8.0f * scale);
+        target_->DrawTextW(value, static_cast<UINT32>(wcslen(value)), textFormat_.Get(),
+                           valueRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
 
         const float pct = percent < 0 ? 0.0f : Clamp(percent / 100.0f, 0.0f, 1.0f);
-        D2D1_RECT_F track = D2D1::RectF(rect.left + 10, rect.bottom - 6,
-                                       rect.right - 10, rect.bottom - 3);
+        D2D1_RECT_F track = D2D1::RectF(rect.left + 10.0f * scale, rect.bottom - 6.0f * scale,
+                                       rect.right - 10.0f * scale, rect.bottom - 3.0f * scale);
         borderBrush->SetOpacity(0.12f * settingsOpacity_);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(track, 1.5f, 1.5f), borderBrush.Get());
+        target_->FillRoundedRectangle(D2D1::RoundedRect(track, 1.5f * scale, 1.5f * scale), borderBrush.Get());
         D2D1_RECT_F fillRect = D2D1::RectF(track.left, track.top,
                                           track.left + (track.right - track.left) * pct,
                                           track.bottom);
-        accentBrush_->SetOpacity(0.82f);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(fillRect, 1.5f, 1.5f), accentBrush_.Get());
-        accentBrush_->SetOpacity(1.0f);
+        metricBrush->SetOpacity(0.85f);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(fillRect, 1.5f * scale, 1.5f * scale), metricBrush.Get());
+        metricBrush->SetOpacity(1.0f);
     }
 
-    void DrawGameIcon(D2D1_POINT_2F center, float radius, int kind) {
-        accentBrush_->SetOpacity(0.88f);
+    void DrawGameIcon(D2D1_POINT_2F center, float radius, int kind, ID2D1SolidColorBrush* customBrush = nullptr, float unused_scale = 1.0f) {
+        const float scale = 1.0f;
+        ID2D1SolidColorBrush* brush = customBrush ? customBrush : accentBrush_.Get();
+        brush->SetOpacity(0.88f);
         switch (kind) {
-            case 1:  // CPU: chip.
-                target_->DrawRectangle(D2D1::RectF(center.x - radius, center.y - radius,
-                                                   center.x + radius, center.y + radius),
-                                       accentBrush_.Get(), 1.6f);
-                for (int i = -1; i <= 1; ++i) {
-                    const float off = i * radius * 0.55f;
-                    target_->DrawLine(D2D1::Point2F(center.x - radius - 3, center.y + off),
-                                      D2D1::Point2F(center.x - radius, center.y + off),
-                                      accentBrush_.Get(), 1.2f);
-                    target_->DrawLine(D2D1::Point2F(center.x + radius, center.y + off),
-                                      D2D1::Point2F(center.x + radius + 3, center.y + off),
-                                      accentBrush_.Get(), 1.2f);
+            case 1: {
+                const float size = radius * 0.82f;
+                D2D1_RECT_F outerRect = D2D1::RectF(center.x - size, center.y - size, center.x + size, center.y + size);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(outerRect, 2.0f * scale, 2.0f * scale), brush, 1.4f * scale);
+                const float dieSize = size * 0.45f;
+                D2D1_RECT_F dieRect = D2D1::RectF(center.x - dieSize, center.y - dieSize, center.x + dieSize, center.y + dieSize);
+                target_->FillRoundedRectangle(D2D1::RoundedRect(dieRect, 1.0f * scale, 1.0f * scale), brush);
+                const float pinLength = 2.0f * scale;
+                const float pinSpacing = size * 0.45f;
+                for (float offset = -pinSpacing; offset <= pinSpacing + 0.1f * scale; offset += pinSpacing) {
+                    target_->DrawLine(D2D1::Point2F(center.x + offset, center.y - size),
+                                      D2D1::Point2F(center.x + offset, center.y - size - pinLength),
+                                      brush, 1.0f * scale);
+                    target_->DrawLine(D2D1::Point2F(center.x + offset, center.y + size),
+                                      D2D1::Point2F(center.x + offset, center.y + size + pinLength),
+                                      brush, 1.0f * scale);
+                    target_->DrawLine(D2D1::Point2F(center.x - size, center.y + offset),
+                                      D2D1::Point2F(center.x - size - pinLength, center.y + offset),
+                                      brush, 1.0f * scale);
+                    target_->DrawLine(D2D1::Point2F(center.x + size, center.y + offset),
+                                      D2D1::Point2F(center.x + size + pinLength, center.y + offset),
+                                      brush, 1.0f * scale);
                 }
                 break;
-            case 2:  // RAM: stacked modules.
+            }
+            case 2: {
+                const float w = radius * 1.15f;
+                const float h = radius * 0.45f;
+                D2D1_RECT_F pcb = D2D1::RectF(center.x - w, center.y - h, center.x + w, center.y + h);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(pcb, 1.0f * scale, 1.0f * scale), brush, 1.3f * scale);
+                const float chipW = (w * 2.0f - 6.0f * scale) / 3.0f;
+                const float chipH = h * 0.65f;
                 for (int i = 0; i < 3; ++i) {
-                    const float y = center.y - radius + i * 5.0f;
-                    target_->DrawRoundedRectangle(
-                        D2D1::RoundedRect(D2D1::RectF(center.x - radius, y,
-                                                      center.x + radius, y + 3.2f),
-                                          1.5f, 1.5f),
-                        accentBrush_.Get(), 1.4f);
+                    float cx = center.x - w + 2.0f * scale + i * (chipW + 1.0f * scale);
+                    D2D1_RECT_F chip = D2D1::RectF(cx, center.y - chipH, cx + chipW, center.y + chipH);
+                    target_->FillRectangle(chip, brush);
+                }
+                const float pinY = center.y + h;
+                for (float px = center.x - w + 2.0f * scale; px <= center.x + w - 2.0f * scale; px += 2.2f * scale) {
+                    target_->DrawLine(D2D1::Point2F(px, pinY),
+                                      D2D1::Point2F(px, pinY + 1.2f * scale),
+                                      brush, 0.9f * scale);
                 }
                 break;
-            case 3:  // GPU: diamond.
-                target_->DrawLine(D2D1::Point2F(center.x, center.y - radius - 1),
-                                  D2D1::Point2F(center.x + radius + 1, center.y),
-                                  accentBrush_.Get(), 1.6f);
-                target_->DrawLine(D2D1::Point2F(center.x + radius + 1, center.y),
-                                  D2D1::Point2F(center.x, center.y + radius + 1),
-                                  accentBrush_.Get(), 1.6f);
-                target_->DrawLine(D2D1::Point2F(center.x, center.y + radius + 1),
-                                  D2D1::Point2F(center.x - radius - 1, center.y),
-                                  accentBrush_.Get(), 1.6f);
-                target_->DrawLine(D2D1::Point2F(center.x - radius - 1, center.y),
-                                  D2D1::Point2F(center.x, center.y - radius - 1),
-                                  accentBrush_.Get(), 1.6f);
+            }
+            case 3: {
+                const float w = radius * 1.1f;
+                const float h = radius * 0.7f;
+                D2D1_RECT_F shroud = D2D1::RectF(center.x - w, center.y - h, center.x + w, center.y + h);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(shroud, 1.5f * scale, 1.5f * scale), brush, 1.3f * scale);
+                target_->DrawLine(D2D1::Point2F(center.x - w - 1.5f * scale, center.y - h - 1.0f * scale),
+                                  D2D1::Point2F(center.x - w - 1.5f * scale, center.y + h + 1.0f * scale),
+                                  brush, 1.4f * scale);
+                const float fanR = h * 0.75f;
+                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y), fanR, fanR), brush, 1.2f * scale);
+                target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y), 1.5f * scale, 1.5f * scale), brush);
+                for (int i = 0; i < 4; ++i) {
+                    float angle = i * 3.14159f / 4.0f;
+                    float dx = std::cos(angle) * fanR;
+                    float dy = std::sin(angle) * fanR;
+                    target_->DrawLine(D2D1::Point2F(center.x - dx, center.y - dy),
+                                      D2D1::Point2F(center.x + dx, center.y + dy),
+                                      brush, 0.8f * scale);
+                }
+                target_->DrawLine(D2D1::Point2F(center.x - w + 3.0f * scale, center.y + h + 1.2f * scale),
+                                  D2D1::Point2F(center.x + w - 2.0f * scale, center.y + h + 1.2f * scale),
+                                  brush, 1.0f * scale);
                 break;
-            case 4:  // Disk: small drive.
-                target_->DrawRoundedRectangle(
-                    D2D1::RoundedRect(D2D1::RectF(center.x - radius - 1, center.y - radius * 0.65f,
-                                                  center.x + radius + 1, center.y + radius * 0.75f),
-                                      3.0f, 3.0f),
-                    accentBrush_.Get(), 1.5f);
-                target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(center.x + radius * 0.45f,
-                                                                 center.y + radius * 0.35f),
-                                                   1.5f, 1.5f), accentBrush_.Get());
+            }
+            case 4: {
+                const float w = radius * 0.85f;
+                const float h = radius * 1.05f;
+                D2D1_RECT_F enc = D2D1::RectF(center.x - w, center.y - h, center.x + w, center.y + h);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(enc, 2.0f * scale, 2.0f * scale), brush, 1.3f * scale);
+                const float platR = w * 0.82f;
+                const float platY = center.y + h - platR - 2.0f * scale;
+                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, platY), platR, platR), brush, 1.2f * scale);
+                target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, platY), 2.0f * scale, 2.0f * scale), brush, 1.0f * scale);
+                const float pivotX = center.x - w + 3.0f * scale;
+                const float pivotY = center.y - h + 3.5f * scale;
+                target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(pivotX, pivotY), 1.5f * scale, 1.5f * scale), brush);
+                target_->DrawLine(D2D1::Point2F(pivotX, pivotY),
+                                  D2D1::Point2F(center.x + 1.0f * scale, platY - 1.0f * scale),
+                                  brush, 1.1f * scale);
                 break;
+            }
             case 0:
-            default:  // FPS: pulse ring.
-                target_->DrawEllipse(D2D1::Ellipse(center, radius + 2, radius + 2),
-                                     accentBrush_.Get(), 1.5f);
-                target_->DrawLine(D2D1::Point2F(center.x, center.y),
-                                  D2D1::Point2F(center.x + radius * 0.7f, center.y - radius * 0.45f),
-                                  accentBrush_.Get(), 1.6f);
+            default: {
+                const float dialR = radius * 1.05f;
+                target_->DrawEllipse(D2D1::Ellipse(center, dialR, dialR), brush, 1.3f * scale);
+                for (int i = 0; i < 5; ++i) {
+                    float angle = -3.14159f * 0.8f + i * 3.14159f * 0.4f;
+                    float dx1 = std::cos(angle) * dialR;
+                    float dy1 = std::sin(angle) * dialR;
+                    float dx2 = std::cos(angle) * (dialR - 2.0f * scale);
+                    float dy2 = std::sin(angle) * (dialR - 2.0f * scale);
+                    target_->DrawLine(D2D1::Point2F(center.x + dx1, center.y + dy1),
+                                      D2D1::Point2F(center.x + dx2, center.y + dy2),
+                                      brush, 0.9f * scale);
+                }
+                target_->FillEllipse(D2D1::Ellipse(center, 1.6f * scale, 1.6f * scale), brush);
+                const float needleAngle = -3.14159f * 0.25f;
+                const float needleLen = dialR * 0.85f;
+                target_->DrawLine(center,
+                                  D2D1::Point2F(center.x + std::cos(needleAngle) * needleLen,
+                                                center.y + std::sin(needleAngle) * needleLen),
+                                  brush, 1.4f * scale);
                 break;
+            }
         }
-        accentBrush_->SetOpacity(1.0f);
+        brush->SetOpacity(1.0f);
     }
 
-    void DrawPageDots(D2D1_RECT_F rect, int active, int count) {
-        const float gap = 6.0f;
-        const float total = count * 3.0f + (count - 1) * gap;
+    void DrawPageDots(D2D1_RECT_F rect, int active, int count, float unused_scale) {
+        const float scale = 1.0f;
+        const float gap = 6.0f * scale;
+        const float total = count * 3.0f * scale + (count - 1) * gap;
         const float start = (rect.left + rect.right - total) * 0.5f;
-        const float y = rect.bottom - 7.0f;
+        const float y = rect.bottom - 7.0f * scale;
         for (int i = 0; i < count; ++i) {
             mutedBrush_->SetOpacity(i == active ? 0.45f : 0.16f);
-            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(start + i * (3.0f + gap), y),
-                                               i == active ? 2.0f : 1.5f,
-                                               i == active ? 2.0f : 1.5f),
+            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(start + i * (3.0f * scale + gap), y),
+                                               (i == active ? 2.0f : 1.5f) * scale,
+                                               (i == active ? 2.0f : 1.5f) * scale),
                                  mutedBrush_.Get());
         }
         mutedBrush_->SetOpacity(0.58f);
     }
 
-    void DrawMetricChip(D2D1_RECT_F rect, const wchar_t* label, int percent, ID2D1Brush* fill,
-                        const wchar_t* icon = nullptr) {
-        ComPtr<ID2D1SolidColorBrush> chipBg;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.050f * settingsOpacity_), &chipBg);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(rect, 11, 11), chipBg.Get());
-
-        ComPtr<ID2D1SolidColorBrush> chipBorder;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.09f * settingsOpacity_), &chipBorder);
-        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 11, 11), chipBorder.Get(), 1.0f);
-
-        const float clamped = percent < 0 ? 0.0f : Clamp(percent / 100.0f, 0.0f, 1.0f);
-        D2D1_RECT_F meterTrack = D2D1::RectF(rect.left + 8, rect.bottom - 6,
-                                            rect.right - 8, rect.bottom - 4);
-        chipBorder->SetOpacity(0.10f);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(meterTrack, 1, 1), chipBorder.Get());
-        D2D1_RECT_F meterFill = D2D1::RectF(meterTrack.left, meterTrack.top,
-                                           meterTrack.left + (meterTrack.right - meterTrack.left) * clamped,
-                                           meterTrack.bottom);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(meterFill, 1, 1), fill);
-
-        if (icon && *icon) {
-            D2D1_RECT_F iconRect = D2D1::RectF(rect.left + 7, rect.top + 4,
-                                              rect.left + 23, rect.top + 20);
-            accentBrush_->SetOpacity(0.82f);
-            target_->DrawTextW(icon, static_cast<UINT32>(wcslen(icon)), textFormat_.Get(),
-                               iconRect, accentBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-            accentBrush_->SetOpacity(1.0f);
+    void DrawMetricChip(const SharedState& state, D2D1_RECT_F rect, const wchar_t* label, int percent, int iconKind) {
+        const float scale = 1.0f;
+        D2D1_COLOR_F metricColor = D2D1::ColorF(0.0f, 0.82f, 1.0f, 1.0f);
+        switch (iconKind) {
+            case 1: {
+                if (state.battery.low) {
+                    metricColor = D2D1::ColorF(1.0f, 0.23f, 0.18f, 1.0f);
+                } else if (state.system.charging) {
+                    metricColor = D2D1::ColorF(1.0f, 0.80f, 0.0f, 1.0f);
+                } else {
+                    metricColor = D2D1::ColorF(0.0f, 0.90f, 0.50f, 1.0f);
+                }
+                break;
+            }
+            case 2:
+                metricColor = D2D1::ColorF(0.0f, 0.65f, 1.0f, 1.0f);
+                break;
+            case 3:
+            default:
+                metricColor = D2D1::ColorF(0.83f, 0.0f, 1.0f, 1.0f);
+                break;
         }
 
-        D2D1_RECT_F labelRect = D2D1::RectF(rect.left + (icon ? 24.0f : 8.0f), rect.top + 5,
-                                           rect.right - 6, rect.top + 18);
-        mutedBrush_->SetOpacity(0.48f);
-        target_->DrawTextW(label, static_cast<UINT32>(wcslen(label)), smallTextFormat_.Get(), labelRect,
-                           mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        ComPtr<ID2D1SolidColorBrush> metricBrush;
+        target_->CreateSolidColorBrush(metricColor, &metricBrush);
+
+        ComPtr<ID2D1SolidColorBrush> chipBg;
+        ComPtr<ID2D1SolidColorBrush> chipBorder;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.070f * settingsOpacity_), &chipBg);
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.060f * settingsOpacity_), &chipBorder);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(rect, 11.0f * scale, 11.0f * scale), chipBg.Get());
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 11.0f * scale, 11.0f * scale), chipBorder.Get(), 1.0f * scale);
+
+        metricBrush->SetOpacity(0.24f * settingsOpacity_);
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(rect, 11.0f * scale, 11.0f * scale), metricBrush.Get(), 1.2f * scale);
+        metricBrush->SetOpacity(1.0f);
+
+        D2D1_POINT_2F iconCenter = D2D1::Point2F(rect.left + 14.5f * scale, rect.top + 13.0f * scale);
+        const float radius = 5.5f * scale;
+        
+        switch (iconKind) {
+            case 1: {
+                const float w = 6.2f * scale;
+                const float h = 3.4f * scale;
+                D2D1_RECT_F batBody = D2D1::RectF(iconCenter.x - w, iconCenter.y - h, iconCenter.x + w - 1.2f * scale, iconCenter.y + h);
+                metricBrush->SetOpacity(0.85f);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(batBody, 0.8f * scale, 0.8f * scale), metricBrush.Get(), 1.1f * scale);
+                
+                D2D1_RECT_F batTip = D2D1::RectF(iconCenter.x + w - 1.2f * scale, iconCenter.y - h * 0.45f, iconCenter.x + w, iconCenter.y + h * 0.45f);
+                target_->FillRoundedRectangle(D2D1::RoundedRect(batTip, 0.4f * scale, 0.4f * scale), metricBrush.Get());
+                
+                const float fillPercent = percent < 0 ? 0.0f : Clamp(percent / 100.0f, 0.0f, 1.0f);
+                const float fillW = (batBody.right - batBody.left - 2.0f * scale) * fillPercent;
+                if (fillW > 0.5f * scale) {
+                    D2D1_RECT_F batFill = D2D1::RectF(batBody.left + 1.0f * scale, batBody.top + 1.0f * scale, batBody.left + 1.0f * scale + fillW, batBody.bottom - 1.0f * scale);
+                    target_->FillRoundedRectangle(D2D1::RoundedRect(batFill, 0.4f * scale, 0.4f * scale), metricBrush.Get());
+                }
+                
+                if (state.system.charging) {
+                    ComPtr<ID2D1SolidColorBrush> boltBrush;
+                    target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.85f, 0.0f, 1.0f), &boltBrush);
+                    D2D1_POINT_2F p1 = D2D1::Point2F(iconCenter.x - 0.8f * scale, iconCenter.y - 3.2f * scale);
+                    D2D1_POINT_2F p2 = D2D1::Point2F(iconCenter.x - 1.6f * scale, iconCenter.y + 0.3f * scale);
+                    D2D1_POINT_2F p3 = D2D1::Point2F(iconCenter.x - 0.4f * scale, iconCenter.y + 0.3f * scale);
+                    D2D1_POINT_2F p4 = D2D1::Point2F(iconCenter.x - 1.2f * scale, iconCenter.y + 3.6f * scale);
+                    D2D1_POINT_2F p5 = D2D1::Point2F(iconCenter.x + 0.6f * scale, iconCenter.y - 0.1f * scale);
+                    D2D1_POINT_2F p6 = D2D1::Point2F(iconCenter.x - 0.4f * scale, iconCenter.y - 0.1f * scale);
+                    ComPtr<ID2D1PathGeometry> boltGeom;
+                    d2dFactory_->CreatePathGeometry(&boltGeom);
+                    ComPtr<ID2D1GeometrySink> sink;
+                    if (SUCCEEDED(boltGeom->Open(&sink))) {
+                        sink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
+                        sink->AddLine(p2);
+                        sink->AddLine(p3);
+                        sink->AddLine(p4);
+                        sink->AddLine(p5);
+                        sink->AddLine(p6);
+                        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                        sink->Close();
+                        target_->FillGeometry(boltGeom.Get(), boltBrush.Get());
+                        ComPtr<ID2D1SolidColorBrush> outline;
+                        target_->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.8f), &outline);
+                        target_->DrawGeometry(boltGeom.Get(), outline.Get(), 0.5f * scale);
+                    }
+                }
+                break;
+            }
+            case 2: {
+                D2D1_RECT_F spkBox = D2D1::RectF(iconCenter.x - radius * 0.95f, iconCenter.y - radius * 0.45f, iconCenter.x - radius * 0.35f, iconCenter.y + radius * 0.45f);
+                target_->FillRoundedRectangle(D2D1::RoundedRect(spkBox, 0.5f * scale, 0.5f * scale), metricBrush.Get());
+                
+                ComPtr<ID2D1PathGeometry> coneGeom;
+                d2dFactory_->CreatePathGeometry(&coneGeom);
+                ComPtr<ID2D1GeometrySink> coneSink;
+                if (SUCCEEDED(coneGeom->Open(&coneSink))) {
+                    coneSink->BeginFigure(D2D1::Point2F(iconCenter.x - radius * 0.35f, iconCenter.y - radius * 0.45f), D2D1_FIGURE_BEGIN_FILLED);
+                    coneSink->AddLine(D2D1::Point2F(iconCenter.x + radius * 0.15f, iconCenter.y - radius * 0.85f));
+                    coneSink->AddLine(D2D1::Point2F(iconCenter.x + radius * 0.15f, iconCenter.y + radius * 0.85f));
+                    coneSink->AddLine(D2D1::Point2F(iconCenter.x - radius * 0.35f, iconCenter.y + radius * 0.45f));
+                    coneSink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                    coneSink->Close();
+                    target_->FillGeometry(coneGeom.Get(), metricBrush.Get());
+                }
+                
+                if (state.system.volumeMuted) {
+                    const float off = radius * 0.35f;
+                    const float xCenter = iconCenter.x + radius * 0.60f;
+                    target_->DrawLine(D2D1::Point2F(xCenter - off, iconCenter.y - off),
+                                      D2D1::Point2F(xCenter + off, iconCenter.y + off),
+                                      metricBrush.Get(), 1.2f * scale);
+                    target_->DrawLine(D2D1::Point2F(xCenter - off, iconCenter.y + off),
+                                      D2D1::Point2F(xCenter + off, iconCenter.y - off),
+                                      metricBrush.Get(), 1.2f * scale);
+                } else {
+                    const float xCenter = iconCenter.x + radius * 0.15f;
+                    if (percent > 0) {
+                        ComPtr<ID2D1PathGeometry> wave1;
+                        d2dFactory_->CreatePathGeometry(&wave1);
+                        ComPtr<ID2D1GeometrySink> sink1;
+                        if (SUCCEEDED(wave1->Open(&sink1))) {
+                            sink1->BeginFigure(D2D1::Point2F(xCenter + radius * 0.28f, iconCenter.y - radius * 0.38f), D2D1_FIGURE_BEGIN_HOLLOW);
+                            sink1->AddBezier(D2D1::BezierSegment(
+                                D2D1::Point2F(xCenter + radius * 0.5f, iconCenter.y - radius * 0.18f),
+                                D2D1::Point2F(xCenter + radius * 0.5f, iconCenter.y + radius * 0.18f),
+                                D2D1::Point2F(xCenter + radius * 0.28f, iconCenter.y + radius * 0.38f)
+                            ));
+                            sink1->EndFigure(D2D1_FIGURE_END_OPEN);
+                            sink1->Close();
+                            target_->DrawGeometry(wave1.Get(), metricBrush.Get(), 1.2f * scale);
+                        }
+                    }
+                    if (percent > 50) {
+                        ComPtr<ID2D1PathGeometry> wave2;
+                        d2dFactory_->CreatePathGeometry(&wave2);
+                        ComPtr<ID2D1GeometrySink> sink2;
+                        if (SUCCEEDED(wave2->Open(&sink2))) {
+                            sink2->BeginFigure(D2D1::Point2F(xCenter + radius * 0.55f, iconCenter.y - radius * 0.72f), D2D1_FIGURE_BEGIN_HOLLOW);
+                            sink2->AddBezier(D2D1::BezierSegment(
+                                D2D1::Point2F(xCenter + radius * 0.88f, iconCenter.y - radius * 0.35f),
+                                D2D1::Point2F(xCenter + radius * 0.88f, iconCenter.y + radius * 0.35f),
+                                D2D1::Point2F(xCenter + radius * 0.55f, iconCenter.y + radius * 0.72f)
+                            ));
+                            sink2->EndFigure(D2D1_FIGURE_END_OPEN);
+                            sink2->Close();
+                            target_->DrawGeometry(wave2.Get(), metricBrush.Get(), 1.2f * scale);
+                        }
+                    }
+                }
+                break;
+            }
+            case 3:
+            default: {
+                const float size = radius * 0.78f;
+                D2D1_RECT_F outerRect = D2D1::RectF(iconCenter.x - size, iconCenter.y - size, iconCenter.x + size, iconCenter.y + size);
+                target_->DrawRoundedRectangle(D2D1::RoundedRect(outerRect, 1.5f * scale, 1.5f * scale), metricBrush.Get(), 1.1f * scale);
+                
+                const float dieSize = size * 0.42f;
+                D2D1_RECT_F dieRect = D2D1::RectF(iconCenter.x - dieSize, iconCenter.y - dieSize, iconCenter.x + dieSize, iconCenter.y + dieSize);
+                target_->FillRoundedRectangle(D2D1::RoundedRect(dieRect, 0.5f * scale, 0.5f * scale), metricBrush.Get());
+                
+                const float pinLength = 1.6f * scale;
+                const float pinSpacing = size * 0.5f;
+                for (float offset = -pinSpacing; offset <= pinSpacing + 0.1f; offset += pinSpacing * 2.0f) {
+                    target_->DrawLine(D2D1::Point2F(iconCenter.x + offset, iconCenter.y - size),
+                                      D2D1::Point2F(iconCenter.x + offset, iconCenter.y - size - pinLength),
+                                      metricBrush.Get(), 0.9f * scale);
+                    target_->DrawLine(D2D1::Point2F(iconCenter.x + offset, iconCenter.y + size),
+                                      D2D1::Point2F(iconCenter.x + offset, iconCenter.y + size + pinLength),
+                                      metricBrush.Get(), 0.9f * scale);
+                    target_->DrawLine(D2D1::Point2F(iconCenter.x - size, iconCenter.y + offset),
+                                      D2D1::Point2F(iconCenter.x - size - pinLength, iconCenter.y + offset),
+                                      metricBrush.Get(), 0.9f * scale);
+                    target_->DrawLine(D2D1::Point2F(iconCenter.x + size, iconCenter.y + offset),
+                                      D2D1::Point2F(iconCenter.x + size + pinLength, iconCenter.y + offset),
+                                      metricBrush.Get(), 0.9f * scale);
+                }
+                break;
+            }
+        }
+
+        if (g_settings.showMetricText) {
+            D2D1_RECT_F labelRect = D2D1::RectF(rect.left + 23.0f * scale, rect.top + 3.0f * scale, rect.right - 2.0f * scale, rect.top + 20.0f * scale);
+            mutedBrush_->SetOpacity(0.48f);
+            target_->DrawTextW(label, static_cast<UINT32>(wcslen(label)), smallTextFormat_.Get(), labelRect,
+                               mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+        }
 
         wchar_t value[16] = {};
         if (percent < 0) {
@@ -2781,11 +4068,24 @@ class Renderer {
         } else {
             swprintf_s(value, L"%d%%", percent);
         }
-        textBrush_->SetOpacity(0.86f);
-        D2D1_RECT_F valueRect = D2D1::RectF(rect.left + 8, rect.top + 20, rect.right - 6,
-                                           rect.bottom - 7);
-        target_->DrawTextW(value, static_cast<UINT32>(wcslen(value)), smallTextFormat_.Get(),
-                           valueRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        textBrush_->SetOpacity(0.90f);
+        D2D1_RECT_F valueRect = g_settings.showMetricText
+            ? D2D1::RectF(rect.left + 7.5f * scale, rect.top + 14.5f * scale, rect.right - 2.0f * scale, rect.bottom - 8.0f * scale)
+            : D2D1::RectF(rect.left + 23.0f * scale, rect.top + 8.0f * scale, rect.right - 2.0f * scale, rect.bottom - 8.0f * scale);
+        target_->DrawTextW(value, static_cast<UINT32>(wcslen(value)), textFormat_.Get(),
+                           valueRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+
+        const float clamped = percent < 0 ? 0.0f : Clamp(percent / 100.0f, 0.0f, 1.0f);
+        D2D1_RECT_F meterTrack = D2D1::RectF(rect.left + 8.0f * scale, rect.bottom - 6.0f * scale, rect.right - 8.0f * scale, rect.bottom - 4.0f * scale);
+        chipBorder->SetOpacity(0.12f * settingsOpacity_);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(meterTrack, 1.0f * scale, 1.0f * scale), chipBorder.Get());
+        
+        D2D1_RECT_F meterFill = D2D1::RectF(meterTrack.left, meterTrack.top,
+                                           meterTrack.left + (meterTrack.right - meterTrack.left) * clamped,
+                                           meterTrack.bottom);
+        metricBrush->SetOpacity(0.85f);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(meterFill, 1.0f * scale, 1.0f * scale), metricBrush.Get());
+        
         textBrush_->SetOpacity(0.90f);
         mutedBrush_->SetOpacity(0.58f);
     }
@@ -2809,51 +4109,196 @@ class Renderer {
     }
 
     void DrawMedia(const SharedState& state, D2D1_RECT_F rect, double now) {
-        // Apple DI media: large square art on left, text center, controls right.
-        const float artSize = rect.bottom - rect.top - 10.0f;
-        D2D1_RECT_F artRect = D2D1::RectF(rect.left + 7, rect.top + 5,
-                                          rect.left + 7 + artSize, rect.bottom - 5);
-        DrawAlbumArt(state.media, artRect, now);
+        const float height = rect.bottom - rect.top;
 
-        const float textLeft = artRect.right + 12;
-        const float controlsWidth = 84.0f;
-        const float textRight = rect.right - controlsWidth - 8;
-        const float cy = (rect.top + rect.bottom) * 0.5f;
+        float radius = g_settings.w11Style ? 8.0f * g_settings.sizeScale : height * 0.5f;
+        if (!g_settings.w11Style) radius = std::min(radius, 44.0f * g_settings.sizeScale);
+        ComPtr<ID2D1RoundedRectangleGeometry> mask;
+        d2dFactory_->CreateRoundedRectangleGeometry(D2D1::RoundedRect(rect, radius, radius), &mask);
+        ComPtr<ID2D1Layer> layer;
+        target_->CreateLayer(&layer);
 
-        // Source name (app) — dim label above title.
-        D2D1_RECT_F sourceRect = D2D1::RectF(textLeft, cy - 24, textRight, cy - 10);
-        mutedBrush_->SetOpacity(0.38f);
-        const std::wstring& src = state.media.sourceName;
-        target_->DrawTextW(src.empty() ? L"Now Playing" : src.c_str(),
-                           static_cast<UINT32>(src.empty() ? 11 : src.size()),
-                           smallTextFormat_.Get(), sourceRect, mutedBrush_.Get(),
-                           D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        mutedBrush_->SetOpacity(0.50f);
+        float expandedAlpha = std::clamp((height - 60.0f) / 60.0f, 0.0f, 1.0f);
+        float collapsedAlpha = std::clamp((80.0f - height) / 30.0f, 0.0f, 1.0f);
 
-        // Title — bold, prominent.
-        D2D1_RECT_F titleRect = D2D1::RectF(textLeft, cy - 9, textRight, cy + 8);
-        DrawMarqueeText(state.media.title.empty() ? L"Unknown" : state.media.title,
-                        titleRect, textFormat_.Get(), textBrush_.Get(), now, 42.0f);
+        // Expanded UI
+        if (expandedAlpha > 0.01f && mask && layer) {
+            target_->PushLayer(D2D1::LayerParameters(rect, mask.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), expandedAlpha, nullptr, D2D1_LAYER_OPTIONS_NONE), layer.Get());
+            
+            int tab = g_idleTab % 3;
+            if (tab < 0) tab += 3;
 
-        // Artist — muted below title.
-        D2D1_RECT_F artistRect = D2D1::RectF(textLeft, cy + 10, textRight, cy + 25);
-        mutedBrush_->SetOpacity(0.55f);
-        DrawMarqueeText(state.media.artist.empty() ? L"" : state.media.artist,
-                        artistRect, smallTextFormat_.Get(), mutedBrush_.Get(), now, 30.0f);
-        mutedBrush_->SetOpacity(0.50f);
+            if (tab == 0) {
+                // Expanded Apple DI media: large square art on left, text center.
+                const float artSize = 64.0f;
+                D2D1_RECT_F artRect = D2D1::RectF(rect.left + 24.0f, rect.top + 20.0f,
+                                                  rect.left + 24.0f + artSize, rect.top + 20.0f + artSize);
+                DrawAlbumArt(state.media, artRect, now, 16.0f, true);
 
-        // Controls — stacked vertically centered on right side.
-        const float cx = rect.right - 42;
-        DrawMediaControls(state.media.playing,
-                          D2D1::Point2F(cx - 26, cy),
-                          D2D1::Point2F(cx,      cy),
-                          D2D1::Point2F(cx + 26, cy));
+                float shiftX = 0.0f;
+                if (state.system.micActive && state.system.cameraActive) {
+                    shiftX = 30.0f;
+                } else if (state.system.micActive || state.system.cameraActive) {
+                    shiftX = 16.0f;
+                }
+
+                const float waveW = 32.0f;
+                const float waveH = 20.0f;
+                D2D1_RECT_F waveRect = D2D1::RectF(rect.right - 24.0f - shiftX - waveW,
+                                                   rect.top + 20.0f + (artSize - waveH) * 0.5f,
+                                                   rect.right - 24.0f - shiftX,
+                                                   rect.top + 20.0f + (artSize + waveH) * 0.5f);
+
+                const float textLeft = artRect.right + 18.0f;
+                const float textRight = waveRect.left - 16.0f;
+                
+                // Title — bold, prominent.
+                D2D1_RECT_F titleRect = D2D1::RectF(textLeft, rect.top + 34.0f, textRight, rect.top + 54.0f);
+                DrawMarqueeText(state.media.title.empty() ? L"Unknown" : state.media.title,
+                                titleRect, textFormat_.Get(), textBrush_.Get(), now, 42.0f);
+
+                // Artist — muted below title.
+                D2D1_RECT_F artistRect = D2D1::RectF(textLeft, rect.top + 54.0f, textRight, rect.top + 74.0f);
+                mutedBrush_->SetOpacity(0.55f);
+                DrawMarqueeText(state.media.artist.empty() ? L"" : state.media.artist,
+                                artistRect, smallTextFormat_.Get(), mutedBrush_.Get(), now, 30.0f);
+                mutedBrush_->SetOpacity(0.50f);
+
+                if (state.media.playing) {
+                    DrawWaveform(state, waveRect);
+                } else {
+                    mutedBrush_->SetOpacity(0.5f);
+                    for (int i = 0; i < 4; ++i) {
+                        target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(waveRect.left + i * 4.0f + 2.0f, (waveRect.top + waveRect.bottom) * 0.5f), 1.2f, 1.2f), mutedBrush_.Get());
+                    }
+                }
+
+                // Timeline (Scrubber)
+                const float scrubberY = rect.top + 114.0f;
+                double currentPosition = state.media.positionTicks / 10000000.0;
+                double duration = state.media.endTicks / 10000000.0;
+                if (state.media.playing && state.media.lastUpdatedTicks > 0) {
+                    currentPosition += (GetTickCount64() - state.media.lastUpdatedTicks) / 1000.0;
+                }
+                currentPosition = std::max(0.0, std::min(currentPosition, duration));
+
+                auto FormatTime = [](double seconds) -> std::wstring {
+                    if (seconds <= 0.0 || _isnan(seconds)) return L"0:00";
+                    int m = static_cast<int>(seconds) / 60;
+                    int s = static_cast<int>(seconds) % 60;
+                    wchar_t buf[16];
+                    swprintf_s(buf, L"%d:%02d", m, s);
+                    return buf;
+                };
+
+                std::wstring elapsedStr = FormatTime(currentPosition);
+                std::wstring remainStr = L"-" + FormatTime(duration - currentPosition);
+
+                const float scrubLeft = rect.left + 24.0f;
+                const float scrubRight = rect.right - 24.0f;
+                
+                mutedBrush_->SetOpacity(0.8f);
+                D2D1_RECT_F elRect = D2D1::RectF(scrubLeft, scrubberY - 8.0f, scrubLeft + 40.0f, scrubberY + 8.0f);
+                target_->DrawTextW(elapsedStr.c_str(), static_cast<UINT32>(elapsedStr.size()), smallTextFormat_.Get(), elRect, mutedBrush_.Get());
+                
+                D2D1_RECT_F remRect = D2D1::RectF(scrubRight - 36.0f, scrubberY - 8.0f, scrubRight, scrubberY + 8.0f);
+                target_->DrawTextW(remainStr.c_str(), static_cast<UINT32>(remainStr.size()), smallTextFormat_.Get(), remRect, mutedBrush_.Get());
+
+                const float barLeft = scrubLeft + 36.0f;
+                const float barRight = scrubRight - 38.0f;
+                const float progress = duration > 0.0 ? static_cast<float>(currentPosition / duration) : 0.0f;
+
+                ComPtr<ID2D1SolidColorBrush> scrubBg;
+                target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.15f), &scrubBg);
+                target_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(barLeft, scrubberY - 2.5f, barRight, scrubberY + 2.5f), 2.5f, 2.5f), scrubBg.Get());
+
+                ComPtr<ID2D1SolidColorBrush> scrubFg;
+                target_->CreateSolidColorBrush(state.media.art.bgra.empty() ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.9f) : state.media.art.sampledAccent, &scrubFg);
+                const float scrubW = (barRight - barLeft) * progress;
+                target_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(barLeft, scrubberY - 2.5f, barLeft + scrubW, scrubberY + 2.5f), 2.5f, 2.5f), scrubFg.Get());
+
+                // Controls
+                const float cy = rect.top + 148.0f;
+                const float cx = (rect.left + rect.right) * 0.5f;
+                DrawMediaControls(state.media.playing, 
+                                  D2D1::Point2F(cx - 64.0f, cy),
+                                  D2D1::Point2F(cx, cy),
+                                  D2D1::Point2F(cx + 64.0f, cy));
+            } else if (tab == 1) {
+                SYSTEMTIME local = {}; GetLocalTime(&local);
+                DrawCalendarDashboard(state, rect, g_settings, now, 1.0f, local);
+            } else if (tab == 2) {
+                bool hasWeather = state.weather.hasData && (now - state.weather.lastUpdated < 3600.0);
+                std::wstring wIcon = L"🌡️"; std::wstring wText = L"Loading...";
+                if (hasWeather) {
+                    wText = state.weather.weatherDesc;
+                    GetWeatherIconAndText(state.weather.weatherCode, wIcon, wText);
+                }
+                DrawWeatherDashboard(state, rect, g_settings, now, 1.0f, hasWeather, wIcon, wText);
+            }
+
+            // Pagination dots (Vertical on the right edge)
+            const float scale = 1.0f;
+            float shiftX = 0.0f;
+            if (state.system.micActive && state.system.cameraActive) {
+                shiftX = 30.0f * scale;
+            } else if (state.system.micActive || state.system.cameraActive) {
+                shiftX = 16.0f * scale;
+            }
+            const float dotX = rect.right - 10.0f * scale - shiftX;
+            const float dotY = (rect.top + rect.bottom) * 0.5f;
+            const float spacing = 8.0f * scale;
+            const float r = 2.5f * scale;
+            
+            ComPtr<ID2D1SolidColorBrush> activeDot, inactiveDot;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.85f * settingsOpacity_), &activeDot);
+            target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.25f * settingsOpacity_), &inactiveDot);
+
+            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY - spacing), r, r), tab == 0 ? activeDot.Get() : inactiveDot.Get());
+            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY), r, r), tab == 1 ? activeDot.Get() : inactiveDot.Get());
+            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY + spacing), r, r), tab == 2 ? activeDot.Get() : inactiveDot.Get());
+
+            target_->PopLayer();
+        }
+
+        // Collapsed UI
+        if (collapsedAlpha > 0.01f && mask && layer) {
+            target_->PushLayer(D2D1::LayerParameters(rect, mask.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), collapsedAlpha, nullptr, D2D1_LAYER_OPTIONS_NONE), layer.Get());
+            
+            const float cy = (rect.top + rect.bottom) * 0.5f;
+            const float artPadding = 6.0f;
+            const float artSize = height - artPadding * 2.0f;
+            
+            D2D1_RECT_F artRect = D2D1::RectF(rect.left + 8.0f, cy - artSize * 0.5f,
+                                              rect.left + 8.0f + artSize, cy + artSize * 0.5f);
+            DrawAlbumArt(state.media, artRect, now, artSize * 0.5f, false);
+
+            float shiftX = 0.0f;
+            if (state.system.micActive && state.system.cameraActive) {
+                shiftX = 30.0f;
+            } else if (state.system.micActive || state.system.cameraActive) {
+                shiftX = 16.0f;
+            }
+
+            D2D1_RECT_F waveRect = D2D1::RectF(rect.right - 42.0f - shiftX, cy - 10.0f,
+                                               rect.right - 14.0f - shiftX, cy + 10.0f);
+            if (state.media.playing) {
+                DrawWaveform(state, waveRect);
+            } else {
+                mutedBrush_->SetOpacity(0.5f);
+                for (int i = 0; i < 4; ++i) {
+                    target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(waveRect.left + i * 6.0f + 3.0f, cy), 1.5f, 1.5f), mutedBrush_.Get());
+                }
+            }
+
+            target_->PopLayer();
+        }
     }
 
     void DrawMediaControls(bool playing, D2D1_POINT_2F prev, D2D1_POINT_2F play, D2D1_POINT_2F next) {
-        DrawMediaButton(prev, 10.0f, 0, false);
-        DrawMediaButton(play, 13.0f, playing ? 1 : 2, true);
-        DrawMediaButton(next, 10.0f, 3, false);
+        DrawMediaButton(prev, 16.0f, 0, false);
+        DrawMediaButton(play, 22.0f, playing ? 1 : 2, true);
+        DrawMediaButton(next, 16.0f, 3, false);
     }
 
     void DrawMediaButton(D2D1_POINT_2F center, float radius, int kind, bool primary) {
@@ -2902,8 +4347,7 @@ class Renderer {
         accentBrush_->SetOpacity(1.0f);
     }
 
-    void DrawAlbumArt(const MediaSnapshot& media, D2D1_RECT_F rect, double now) {
-        const float radius = 9.0f;
+    void DrawAlbumArt(const MediaSnapshot& media, D2D1_RECT_F rect, double now, float radius = 9.0f, bool drawBadge = true) {
         ComPtr<ID2D1RoundedRectangleGeometry> mask;
         HRESULT hrMask = d2dFactory_->CreateRoundedRectangleGeometry(
             D2D1::RoundedRect(rect, radius, radius), &mask);
@@ -2945,29 +4389,14 @@ class Renderer {
             }
         }
 
-        if (!media.sourceIcon.bgra.empty() || !media.sourceBadge.empty()) {
+        if (drawBadge && !media.sourceIcon.bgra.empty()) {
             D2D1_RECT_F badge = D2D1::RectF(rect.right - 24, rect.bottom - 22,
                                            rect.right - 3, rect.bottom - 3);
-            if (!media.sourceIcon.bgra.empty()) {
-                DrawCircularBitmapPixels(media.sourceIcon,
-                                         D2D1::Point2F((badge.left + badge.right) * 0.5f,
-                                                       (badge.top + badge.bottom) * 0.5f),
-                                         9.5f, mediaSourceIconBitmap_,
-                                         mediaSourceIconGeneration_, 0.98f);
-            } else {
-                ComPtr<ID2D1SolidColorBrush> siteBg;
-                target_->CreateSolidColorBrush(D2D1::ColorF(0.02f, 0.025f, 0.030f, 0.88f), &siteBg);
-                target_->FillRoundedRectangle(D2D1::RoundedRect(badge, 7, 7), siteBg.Get());
-                accentBrush_->SetOpacity(0.55f);
-                target_->DrawRoundedRectangle(D2D1::RoundedRect(badge, 7, 7), accentBrush_.Get(), 1.0f);
-                accentBrush_->SetOpacity(1.0f);
-                D2D1_RECT_F badgeText = D2D1::RectF(badge.left + 2, badge.top + 2,
-                                                    badge.right - 2, badge.bottom - 2);
-                target_->DrawTextW(media.sourceBadge.c_str(),
-                                   static_cast<UINT32>(media.sourceBadge.size()),
-                                   smallTextFormat_.Get(), badgeText, textBrush_.Get(),
-                                   D2D1_DRAW_TEXT_OPTIONS_CLIP);
-            }
+            DrawCircularBitmapPixels(media.sourceIcon,
+                                     D2D1::Point2F((badge.left + badge.right) * 0.5f,
+                                                   (badge.top + badge.bottom) * 0.5f),
+                                     9.5f, mediaSourceIconBitmap_,
+                                     mediaSourceIconGeneration_, 0.98f);
         }
 
         if (roundedClip) {
@@ -3074,30 +4503,45 @@ class Renderer {
         }
 
         const float available = rect.right - rect.left;
-        target_->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        
+        // We only want to clip horizontally so we don't bleed out of the pill.
+        // We expand the vertical bounds so descenders/ascenders aren't cut off.
+        D2D1_RECT_F clipRect = rect;
+        clipRect.top -= 10.0f;
+        clipRect.bottom += 10.0f;
+        target_->PushAxisAlignedClip(clipRect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+
         if (metrics.widthIncludingTrailingWhitespace <= available) {
             target_->DrawTextLayout(D2D1::Point2F(rect.left, rect.top), layout.Get(), brush,
-                                    D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                                    D2D1_DRAW_TEXT_OPTIONS_NONE);
         } else {
             const float cycle = metrics.widthIncludingTrailingWhitespace + 38.0f;
             const float offset = std::fmod(static_cast<float>(now) * speed, cycle);
             target_->DrawTextLayout(D2D1::Point2F(rect.left - offset, rect.top), layout.Get(),
-                                    brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                                    brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
             target_->DrawTextLayout(D2D1::Point2F(rect.left - offset + cycle, rect.top),
-                                    layout.Get(), brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                                    layout.Get(), brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
         }
         target_->PopAxisAlignedClip();
     }
 
     void DrawWaveform(const SharedState& state, D2D1_RECT_F rect) {
-        const size_t count = 18;
-        const float gap = 3.0f;
-        const float barWidth = ((rect.right - rect.left) - gap * (count - 1)) / count;
+        const float gap = 2.5f;
+        const float minBarWidth = 2.0f;
+        const float availableW = rect.right - rect.left;
+        size_t count = std::max<size_t>(1, static_cast<size_t>((availableW + gap) / (minBarWidth + gap)));
+        count = std::min<size_t>(count, 32);
+
+        const float barWidth = (availableW - gap * (count - 1)) / count;
         const float centerY = (rect.top + rect.bottom) * 0.5f;
         const float maxH = (rect.bottom - rect.top) * 0.86f;
 
+        // Use a step size of 4 samples (approx 40ms) so bars aren't identical
+        const size_t step = 4;
+
         for (size_t i = 0; i < count; ++i) {
-            const size_t source = (state.waveformWrite + state.waveform.size() - count + i) %
+            const size_t offset = (count - i) * step;
+            const size_t source = (state.waveformWrite + state.waveform.size() - offset) %
                                   state.waveform.size();
             const float amp = Clamp(state.waveform[source], 0.03f, 1.0f);
             const float h = std::max(3.0f, amp * maxH);
@@ -3111,6 +4555,7 @@ class Renderer {
     }
 
     void DrawClipboard(const SharedState& state, D2D1_RECT_F rect) {
+        if (rect.bottom - rect.top < 40.0f || rect.right - rect.left < 100.0f) return;
         const double now = NowSeconds();
         const float ttl = 2.5f;
         const float remaining = Clamp(static_cast<float>(state.clipboard.expiresAt - now), 0.0f, ttl);
@@ -3130,8 +4575,8 @@ class Renderer {
                                     clipboardIconGeneration_, 0.96f);
         } else {
             // Fallback icon when no app icon is available.
-            // Use a camera glyph for images, clipboard glyph for text.
-            const wchar_t* glyph = state.clipboard.image ? L"\U0001F4F7" : L"\u2398";
+            // Use Segoe Fluent Icons for a native Windows 11 look.
+            const wchar_t* glyph = state.clipboard.image ? L"\uE114" : L"\uE8C8";
             // For image: show a bright gradient-style photo icon placeholder.
             ComPtr<ID2D1SolidColorBrush> iconBg;
             const D2D1_COLOR_F iconColor = state.clipboard.image
@@ -3140,10 +4585,18 @@ class Renderer {
             target_->CreateSolidColorBrush(iconColor, &iconBg);
             target_->FillRoundedRectangle(D2D1::RoundedRect(badge, 13, 13), iconBg.Get());
             textBrush_->SetOpacity(0.95f);
-            // Draw glyph centered in badge; use smallTextFormat for emoji fallback.
-            target_->DrawTextW(glyph,
-                               static_cast<UINT32>(wcslen(glyph)), textFormat_.Get(), badge,
-                               textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            
+            // Draw glyph perfectly centered in the badge rectangle.
+            if (iconFormat_) {
+                iconFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                iconFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                target_->DrawTextW(glyph,
+                                   static_cast<UINT32>(wcslen(glyph)), iconFormat_.Get(), badge,
+                                   textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                iconFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+                iconFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            }
+            
             textBrush_->SetOpacity(0.90f);
         }
 
@@ -3178,6 +4631,7 @@ class Renderer {
     }
 
     void DrawNotification(const SharedState& state, D2D1_RECT_F rect) {
+        if (rect.bottom - rect.top < 48.0f || rect.right - rect.left < 120.0f) return;
         const double now = NowSeconds();
         const float ttl = 4.0f;
         const float remaining = Clamp(static_cast<float>(state.notification.expiresAt - now), 0.0f, ttl);
@@ -3185,19 +4639,33 @@ class Renderer {
 
         const float cy = (rect.top + rect.bottom) * 0.5f;
         // Apple DI: app icon is a large iOS-style rounded square.
-        const float iconSz = (rect.bottom - rect.top) - 14.0f;
-        D2D1_RECT_F badge = D2D1::RectF(rect.left + 10, cy - iconSz * 0.5f,
-                                        rect.left + 10 + iconSz, cy + iconSz * 0.5f);
-        const float br = iconSz * 0.28f;  // iOS superellipse-like corner.
+        const float iconSz = (rect.bottom - rect.top) - 16.0f;
+        D2D1_RECT_F badge = D2D1::RectF(rect.left + 14, cy - iconSz * 0.5f,
+                                        rect.left + 14 + iconSz, cy + iconSz * 0.5f);
+        const float br = iconSz * 0.35f;  // Softer iOS superellipse-like squircle.
 
         // Icon background plate.
         ComPtr<ID2D1SolidColorBrush> plateBrush;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.08f), &plateBrush);
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.12f), &plateBrush);
         target_->FillRoundedRectangle(D2D1::RoundedRect(badge, br, br), plateBrush.Get());
 
         if (!state.notification.icon.bgra.empty()) {
             DrawRoundedBitmapPixels(state.notification.icon, badge, br,
-                                    notificationIconBitmap_, notificationIconGeneration_, 0.97f);
+                                    notificationIconBitmap_, notificationIconGeneration_, 1.0f);
+
+            // Draw a red dot (badge) at the top-right of the app icon
+            ComPtr<ID2D1SolidColorBrush> badgeColor;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.23f, 0.18f, 1.0f), &badgeColor);
+            
+            const float dotR = iconSz * 0.13f;
+            const float dotX = badge.right - dotR * 0.5f;
+            const float dotY = badge.top + dotR * 0.5f;
+            
+            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY), dotR, dotR), badgeColor.Get());
+
+            ComPtr<ID2D1SolidColorBrush> badgeBorder;
+            target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &badgeBorder);
+            target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, dotY), dotR, dotR), badgeBorder.Get(), 0.9f);
         } else {
             DrawNotificationFallbackIcon(
                 D2D1::Point2F((badge.left + badge.right) * 0.5f, cy), iconSz * 0.38f);
@@ -3205,48 +4673,63 @@ class Renderer {
 
         const float tx = badge.right + 14;
         // App name — small dim label.
-        D2D1_RECT_F appRect = D2D1::RectF(tx, cy - 20, rect.right - 14, cy - 5);
-        mutedBrush_->SetOpacity(0.42f);
+        D2D1_RECT_F appRect = D2D1::RectF(tx, cy - 22, rect.right - 14, cy - 6);
+        mutedBrush_->SetOpacity(0.50f);
         target_->DrawTextW(state.notification.app.c_str(),
                            static_cast<UINT32>(state.notification.app.size()),
                            smallTextFormat_.Get(), appRect, mutedBrush_.Get(),
                            D2D1_DRAW_TEXT_OPTIONS_CLIP);
 
         // Title — bold white.
-        D2D1_RECT_F titleRect = D2D1::RectF(tx, cy - 3, rect.right - 14, cy + 16);
+        D2D1_RECT_F titleRect = D2D1::RectF(tx, cy - 4, rect.right - 14, cy + 17);
+        textBrush_->SetOpacity(0.95f);
         DrawMarqueeText(state.notification.title.empty() ? L"Notification" : state.notification.title,
                         titleRect, textFormat_.Get(), textBrush_.Get(), now, 28.0f);
+        textBrush_->SetOpacity(0.90f);
 
-        // Thin progress bar at very bottom of pill.
-        D2D1_RECT_F track = D2D1::RectF(tx, rect.bottom - 5, rect.right - 14, rect.bottom - 3);
+        // Thicker, softer progress bar at bottom.
+        D2D1_RECT_F track = D2D1::RectF(tx, rect.bottom - 7, rect.right - 14, rect.bottom - 3);
         ComPtr<ID2D1SolidColorBrush> trackBrush;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.07f), &trackBrush);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(track, 1, 1), trackBrush.Get());
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.08f), &trackBrush);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(track, 2, 2), trackBrush.Get());
         D2D1_RECT_F fill = D2D1::RectF(track.left, track.top,
                                        track.left + (track.right - track.left) * progress, track.bottom);
-        accentBrush_->SetOpacity(0.60f);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(fill, 1, 1), accentBrush_.Get());
+        accentBrush_->SetOpacity(0.75f);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(fill, 2, 2), accentBrush_.Get());
         accentBrush_->SetOpacity(1.0f);
         mutedBrush_->SetOpacity(0.50f);
     }
 
     void DrawVolume(const SharedState& state, D2D1_RECT_F rect) {
+        if (rect.bottom - rect.top < 24.0f || rect.right - rect.left < 140.0f) return;
         const bool muted = state.volume.muted || state.volume.percent == 0;
-        D2D1_RECT_F badge = D2D1::RectF(rect.left + 14, rect.top + 12,
-                                       rect.left + 46, rect.bottom - 12);
+        const float cy = (rect.top + rect.bottom) * 0.5f;
+        const float badgeSz = (rect.bottom - rect.top) - 16.0f;
+        D2D1_RECT_F badge = D2D1::RectF(rect.left + 14, cy - badgeSz * 0.5f,
+                                        rect.left + 14 + badgeSz, cy + badgeSz * 0.5f);
+        const float br = badgeSz * 0.35f; // Softer squircle corners
+
         ComPtr<ID2D1SolidColorBrush> badgeBg;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.060f), &badgeBg);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(badge, 11, 11), badgeBg.Get());
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.12f), &badgeBg);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(badge, br, br), badgeBg.Get());
 
-        const wchar_t* glyph = muted ? L"\u00d7" : L"\u266b";
-        textBrush_->SetOpacity(0.88f);
-        target_->DrawTextW(glyph, static_cast<UINT32>(wcslen(glyph)), textFormat_.Get(), badge,
-                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        textBrush_->SetOpacity(0.90f);
+        const wchar_t* glyph = muted ? L"\uE74F" : L"\uE993"; // Mute and Volume2 from Segoe Fluent Icons
+        textBrush_->SetOpacity(0.95f);
+        
+        if (iconFormat_) {
+            iconFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            iconFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            
+            target_->DrawTextW(glyph, static_cast<UINT32>(wcslen(glyph)), iconFormat_.Get(), badge,
+                               textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                               
+            iconFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            iconFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+        }
 
-        D2D1_RECT_F labelRect = D2D1::RectF(badge.right + 12, rect.top + 10,
-                                           rect.right - 58, rect.top + 26);
-        mutedBrush_->SetOpacity(0.48f);
+        const float tx = badge.right + 14;
+        D2D1_RECT_F labelRect = D2D1::RectF(tx, cy - 22, rect.right - 58, cy - 6);
+        mutedBrush_->SetOpacity(0.50f);
         const std::wstring deviceLabel =
             state.volume.deviceName.empty() ? std::wstring(L"Volume") : state.volume.deviceName;
         target_->DrawTextW(deviceLabel.c_str(), static_cast<UINT32>(deviceLabel.size()),
@@ -3259,25 +4742,152 @@ class Renderer {
         } else {
             swprintf_s(value, L"%d%%", state.volume.percent);
         }
-        D2D1_RECT_F valueRect = D2D1::RectF(rect.right - 58, rect.top + 11,
-                                           rect.right - 16, rect.top + 27);
-        textBrush_->SetOpacity(0.86f);
+        D2D1_RECT_F valueRect = D2D1::RectF(rect.right - 58, cy - 22, rect.right - 14, cy - 6);
         target_->DrawTextW(value, static_cast<UINT32>(wcslen(value)), smallTextFormat_.Get(),
                            valueRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
         textBrush_->SetOpacity(0.90f);
 
-        D2D1_RECT_F track = D2D1::RectF(badge.right + 12, rect.top + 33,
-                                       rect.right - 18, rect.top + 39);
+        D2D1_RECT_F track = D2D1::RectF(tx, cy + 2, rect.right - 14, cy + 6);
         ComPtr<ID2D1SolidColorBrush> trackBrush;
-        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.09f), &trackBrush);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(track, 3, 3), trackBrush.Get());
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.08f), &trackBrush);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(track, 2, 2), trackBrush.Get());
         const float pct = Clamp(state.volume.percent / 100.0f, 0.0f, 1.0f);
         D2D1_RECT_F fill = D2D1::RectF(track.left, track.top,
-                                      track.left + (track.right - track.left) * pct,
-                                      track.bottom);
-        accentBrush_->SetOpacity(muted ? 0.24f : 0.72f);
-        target_->FillRoundedRectangle(D2D1::RoundedRect(fill, 3, 3), accentBrush_.Get());
+                                       track.left + (track.right - track.left) * pct,
+                                       track.bottom);
+        accentBrush_->SetOpacity(muted ? 0.24f : 0.85f);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(fill, 2, 2), accentBrush_.Get());
         accentBrush_->SetOpacity(1.0f);
+        mutedBrush_->SetOpacity(0.58f);
+    }
+
+    void DrawCapsLock(const SharedState& state, D2D1_RECT_F rect) {
+        if (rect.bottom - rect.top < 24.0f || rect.right - rect.left < 110.0f) return;
+        const float cy = (rect.top + rect.bottom) * 0.5f;
+        const float badgeSz = (rect.bottom - rect.top) - 16.0f;
+        D2D1_RECT_F badge = D2D1::RectF(rect.left + 14, cy - badgeSz * 0.5f,
+                                        rect.left + 14 + badgeSz, cy + badgeSz * 0.5f);
+        const float br = badgeSz * 0.35f;
+
+        // Badge Background (translucent physical keycap base)
+        ComPtr<ID2D1SolidColorBrush> badgeBg;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.08f), &badgeBg);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(badge, br, br), badgeBg.Get());
+
+        // Keycap Border for 3D visual depth
+        ComPtr<ID2D1SolidColorBrush> badgeBorder;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.16f), &badgeBorder);
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(badge, br, br), badgeBorder.Get(), 1.0f);
+
+        const wchar_t* glyph = nullptr;
+        std::wstring label;
+        bool isOn = false;
+
+        if (state.capsLock.isNumEvent) {
+            glyph = L"1";
+            label = L"Num Lock";
+            isOn = state.capsLock.numOn;
+        } else {
+            glyph = L"A";
+            label = L"Caps Lock";
+            isOn = state.capsLock.capsOn;
+        }
+
+        // Draw central bold keycap glyph, vertically and horizontally centered
+        textBrush_->SetOpacity(0.95f);
+        target_->DrawTextW(glyph, static_cast<UINT32>(wcslen(glyph)), clockFormat_.Get(), badge,
+                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+
+        // Draw physical glowing status LED inside the keycap
+        ComPtr<ID2D1SolidColorBrush> ledBrush;
+        D2D1_COLOR_F ledColor = isOn
+            ? D2D1::ColorF(0.19f, 0.83f, 0.38f, 1.0f)   // Green glowing LED for ON
+            : D2D1::ColorF(1.0f,  1.0f,  1.0f,  0.22f);  // Dim white for OFF
+        target_->CreateSolidColorBrush(ledColor, &ledBrush);
+
+        D2D1_POINT_2F ledCenter = D2D1::Point2F(badge.right - 5.0f, badge.bottom - 5.0f);
+        target_->FillEllipse(D2D1::Ellipse(ledCenter, 3.0f, 3.0f), ledBrush.Get());
+
+        // Draw label text
+        const float tx = badge.right + 14;
+        D2D1_RECT_F labelRect = D2D1::RectF(tx, cy - 10, rect.right - 40, cy + 10);
+        target_->DrawTextW(label.c_str(), static_cast<UINT32>(label.size()),
+                           smallTextFormat_.Get(), labelRect, textBrush_.Get(),
+                           D2D1_DRAW_TEXT_OPTIONS_CLIP);
+
+        // Draw status string (ON/OFF)
+        std::wstring status = isOn ? L"ON" : L"OFF";
+        D2D1_RECT_F statusRect = D2D1::RectF(rect.right - 40, cy - 10, rect.right - 14, cy + 10);
+        mutedBrush_->SetOpacity(0.80f);
+        target_->DrawTextW(status.c_str(), static_cast<UINT32>(status.size()), smallTextFormat_.Get(),
+                           statusRect, mutedBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+
+    void DrawDevice(const SharedState& state, D2D1_RECT_F rect) {
+        if (rect.bottom - rect.top < 24.0f || rect.right - rect.left < 100.0f) return;
+        const float cy = (rect.top + rect.bottom) * 0.5f;
+        const bool connected = (state.device.eventType == DeviceEventType::Connected);
+
+        // Badge circle with colored dot
+        const float badgeSz = (rect.bottom - rect.top) - 16.0f;
+        D2D1_RECT_F badge = D2D1::RectF(rect.left + 14, cy - badgeSz * 0.5f,
+                                        rect.left + 14 + badgeSz, cy + badgeSz * 0.5f);
+        const float br = badgeSz * 0.35f;
+
+        ComPtr<ID2D1SolidColorBrush> badgeBg;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.10f), &badgeBg);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(badge, br, br), badgeBg.Get());
+
+        // Small colored status dot inside badge
+        ComPtr<ID2D1SolidColorBrush> dotBrush;
+        D2D1_COLOR_F dotColor = connected
+            ? D2D1::ColorF(0.19f, 0.83f, 0.38f, 1.0f)   // green
+            : D2D1::ColorF(1.0f,  0.27f, 0.22f, 1.0f);  // red
+        target_->CreateSolidColorBrush(dotColor, &dotBrush);
+
+        // Draw USB plug icon using simple rects
+        const float px = (badge.left + badge.right) * 0.5f;
+        const float py = (badge.top + badge.bottom) * 0.5f;
+        const float ps = badgeSz * 0.28f;
+
+        ComPtr<ID2D1SolidColorBrush> iconBrush;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.90f), &iconBrush);
+
+        // Plug body
+        D2D1_RECT_F plug = D2D1::RectF(px - ps * 0.4f, py - ps * 0.8f, px + ps * 0.4f, py + ps * 0.6f);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(plug, 1.5f, 1.5f), iconBrush.Get());
+        // Plug prong left
+        D2D1_RECT_F pl = D2D1::RectF(px - ps * 0.35f, py - ps * 1.2f, px - ps * 0.12f, py - ps * 0.8f);
+        target_->FillRectangle(pl, iconBrush.Get());
+        // Plug prong right
+        D2D1_RECT_F pr = D2D1::RectF(px + ps * 0.12f, py - ps * 1.2f, px + ps * 0.35f, py - ps * 0.8f);
+        target_->FillRectangle(pr, iconBrush.Get());
+        // Plug cord
+        D2D1_RECT_F cord = D2D1::RectF(px - ps * 0.1f, py + ps * 0.6f, px + ps * 0.1f, py + ps * 1.0f);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(cord, 1.0f, 1.0f), iconBrush.Get());
+
+        // Status dot (bottom-right of badge)
+        D2D1_POINT_2F dotCenter = D2D1::Point2F(badge.right - 4.5f, badge.bottom - 4.5f);
+        target_->FillEllipse(D2D1::Ellipse(dotCenter, 4.5f, 4.5f), dotBrush.Get());
+
+        // Text block
+        const float tx = badge.right + 14;
+        mutedBrush_->SetOpacity(0.50f);
+        std::wstring label = connected ? L"Device Connected" : L"Device Removed";
+        D2D1_RECT_F labelRect = D2D1::RectF(tx, cy - 22, rect.right - 14, cy - 5);
+        target_->DrawTextW(label.c_str(), static_cast<UINT32>(label.size()),
+                           smallTextFormat_.Get(), labelRect, mutedBrush_.Get(),
+                           D2D1_DRAW_TEXT_OPTIONS_CLIP);
+
+        textBrush_->SetOpacity(0.95f);
+        const std::wstring& name = state.device.deviceName.empty()
+            ? (state.device.isBluetoothLike ? std::wstring(L"Bluetooth") : std::wstring(L"USB Device"))
+            : state.device.deviceName;
+        D2D1_RECT_F nameRect = D2D1::RectF(tx, cy - 3, rect.right - 14, cy + 17);
+        target_->DrawTextW(name.c_str(), static_cast<UINT32>(name.size()),
+                           textFormat_.Get(), nameRect, textBrush_.Get(),
+                           D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        textBrush_->SetOpacity(0.90f);
         mutedBrush_->SetOpacity(0.58f);
     }
 
@@ -3287,39 +4897,121 @@ class Renderer {
         target_->FillEllipse(D2D1::Ellipse(center, radius, radius), bg.Get());
 
         accentBrush_->SetOpacity(0.92f);
-        const float bellW = radius * 0.95f;
-        const float bellH = radius * 0.92f;
-        D2D1_RECT_F dome = D2D1::RectF(center.x - bellW * 0.55f,
-                                       center.y - bellH * 0.52f,
-                                       center.x + bellW * 0.55f,
-                                       center.y + bellH * 0.34f);
-        target_->DrawRoundedRectangle(D2D1::RoundedRect(dome, 7.0f, 7.0f),
-                                      accentBrush_.Get(), 1.8f);
-        target_->DrawLine(D2D1::Point2F(center.x - bellW * 0.68f, center.y + bellH * 0.32f),
-                          D2D1::Point2F(center.x + bellW * 0.68f, center.y + bellH * 0.32f),
-                          accentBrush_.Get(), 1.8f);
-        target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y + bellH * 0.53f),
-                                           2.2f, 2.2f), accentBrush_.Get());
-        target_->DrawLine(D2D1::Point2F(center.x, center.y - bellH * 0.66f),
-                          D2D1::Point2F(center.x, center.y - bellH * 0.48f),
-                          accentBrush_.Get(), 1.5f);
+        
+        ComPtr<ID2D1PathGeometry> bellGeom;
+        d2dFactory_->CreatePathGeometry(&bellGeom);
+        ComPtr<ID2D1GeometrySink> sink;
+        if (SUCCEEDED(bellGeom->Open(&sink))) {
+            const float r = radius;
+            sink->BeginFigure(D2D1::Point2F(center.x - r * 0.15f, center.y - r * 0.7f), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddBezier(D2D1::BezierSegment(
+                D2D1::Point2F(center.x - r * 0.4f, center.y - r * 0.7f),
+                D2D1::Point2F(center.x - r * 0.5f, center.y - r * 0.2f),
+                D2D1::Point2F(center.x - r * 0.55f, center.y + r * 0.2f)
+            ));
+            sink->AddBezier(D2D1::BezierSegment(
+                D2D1::Point2F(center.x - r * 0.6f, center.y + r * 0.45f),
+                D2D1::Point2F(center.x - r * 0.85f, center.y + r * 0.55f),
+                D2D1::Point2F(center.x - r * 0.85f, center.y + r * 0.6f)
+            ));
+            sink->AddLine(D2D1::Point2F(center.x + r * 0.85f, center.y + r * 0.6f));
+            sink->AddBezier(D2D1::BezierSegment(
+                D2D1::Point2F(center.x + r * 0.85f, center.y + r * 0.55f),
+                D2D1::Point2F(center.x + r * 0.6f, center.y + r * 0.45f),
+                D2D1::Point2F(center.x + r * 0.55f, center.y + r * 0.2f)
+            ));
+            sink->AddBezier(D2D1::BezierSegment(
+                D2D1::Point2F(center.x + r * 0.5f, center.y - r * 0.2f),
+                D2D1::Point2F(center.x + r * 0.4f, center.y - r * 0.7f),
+                D2D1::Point2F(center.x + r * 0.15f, center.y - r * 0.7f)
+            ));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink->Close();
+
+            target_->FillGeometry(bellGeom.Get(), accentBrush_.Get());
+            target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y + r * 0.7f), r * 0.22f, r * 0.22f), accentBrush_.Get());
+            target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y - r * 0.75f), r * 0.18f, r * 0.18f), accentBrush_.Get(), 1.4f);
+        }
+
+        ComPtr<ID2D1SolidColorBrush> badgeColor;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.23f, 0.18f, 1.0f), &badgeColor);
+        const float badgeR = radius * 0.28f;
+        const float badgeX = center.x + radius * 0.65f;
+        const float badgeY = center.y - radius * 0.5f;
+        target_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(badgeX, badgeY), badgeR, badgeR), badgeColor.Get());
+
+        ComPtr<ID2D1SolidColorBrush> badgeBorder;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &badgeBorder);
+        target_->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(badgeX, badgeY), badgeR, badgeR), badgeBorder.Get(), 0.9f);
+
         accentBrush_->SetOpacity(1.0f);
     }
 
     void DrawBattery(const SharedState& state, D2D1_RECT_F rect) {
-        wchar_t buffer[128] = {};
-        if (state.battery.secondsRemaining != BATTERY_LIFE_UNKNOWN) {
+        if (rect.bottom - rect.top < 24.0f || rect.right - rect.left < 140.0f) return;
+        const float cy = (rect.top + rect.bottom) * 0.5f;
+        const float badgeSz = (rect.bottom - rect.top) - 16.0f;
+        D2D1_RECT_F badge = D2D1::RectF(rect.left + 14, cy - badgeSz * 0.5f,
+                                        rect.left + 14 + badgeSz, cy + badgeSz * 0.5f);
+        const float br = badgeSz * 0.35f;
+
+        ComPtr<ID2D1SolidColorBrush> badgeBg;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.12f), &badgeBg);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(badge, br, br), badgeBg.Get());
+
+        // Draw battery vector icon
+        const float bx = badge.left + badgeSz * 0.25f;
+        const float by = cy - badgeSz * 0.22f;
+        const float bw = badgeSz * 0.45f;
+        const float bh = badgeSz * 0.44f;
+        D2D1_RECT_F batRect = D2D1::RectF(bx, by, bx + bw, by + bh);
+        
+        ComPtr<ID2D1SolidColorBrush> batBorder;
+        target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.85f), &batBorder);
+        target_->DrawRoundedRectangle(D2D1::RoundedRect(batRect, 2, 2), batBorder.Get(), 1.5f);
+        
+        // Battery Terminal (Nub)
+        D2D1_RECT_F nubRect = D2D1::RectF(batRect.right, cy - 3, batRect.right + 2.5f, cy + 3);
+        target_->FillRectangle(nubRect, batBorder.Get());
+
+        // Battery Fill
+        const float pct = Clamp(state.battery.percent / 100.0f, 0.0f, 1.0f);
+        D2D1_RECT_F fillRect = D2D1::RectF(batRect.left + 2, batRect.top + 2,
+                                           batRect.left + 2 + (bw - 4) * pct, batRect.bottom - 2);
+        
+        ComPtr<ID2D1SolidColorBrush> batFill;
+        if (state.battery.low) {
+            target_->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.23f, 0.18f, 1.0f), &batFill); // Red
+        } else if (state.battery.charging) {
+            target_->CreateSolidColorBrush(D2D1::ColorF(0.19f, 0.83f, 0.38f, 1.0f), &batFill); // Green
+        } else {
+            target_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.95f), &batFill); // White
+        }
+        target_->FillRoundedRectangle(D2D1::RoundedRect(fillRect, 1, 1), batFill.Get());
+
+        // Text Labels
+        const float tx = badge.right + 14;
+        D2D1_RECT_F labelRect = D2D1::RectF(tx, cy - 22, rect.right - 14, cy - 6);
+        mutedBrush_->SetOpacity(0.50f);
+        std::wstring label = state.battery.charging ? L"Power Connected" : L"Battery Alert";
+        target_->DrawTextW(label.c_str(), static_cast<UINT32>(label.size()),
+                           smallTextFormat_.Get(), labelRect, mutedBrush_.Get(),
+                           D2D1_DRAW_TEXT_OPTIONS_CLIP);
+
+        wchar_t value[128] = {};
+        if (state.battery.secondsRemaining != BATTERY_LIFE_UNKNOWN && !state.battery.charging) {
             const DWORD minutes = state.battery.secondsRemaining / 60;
-            swprintf_s(buffer, L"Battery %d%%  %luh %02lum left",
+            swprintf_s(value, ARRAYSIZE(value), L"%d%% \u2022 %luh %02lum left", 
                        state.battery.percent, minutes / 60, minutes % 60);
         } else {
-            swprintf_s(buffer, L"Battery %d%%", state.battery.percent);
+            swprintf_s(value, ARRAYSIZE(value), L"%d%%", state.battery.percent);
         }
 
-        D2D1_RECT_F textRect = D2D1::RectF(rect.left + 16, rect.top + 14, rect.right - 16,
-                                           rect.bottom - 10);
-        target_->DrawTextW(buffer, static_cast<UINT32>(wcslen(buffer)), textFormat_.Get(), textRect,
-                           textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        D2D1_RECT_F valueRect = D2D1::RectF(tx, cy - 4, rect.right - 14, cy + 17);
+        textBrush_->SetOpacity(0.95f);
+        target_->DrawTextW(value, static_cast<UINT32>(wcslen(value)), textFormat_.Get(),
+                           valueRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        textBrush_->SetOpacity(0.90f);
     }
 
     void DrawProgress(const SharedState& state, D2D1_RECT_F rect) {
@@ -3374,7 +5066,10 @@ class Renderer {
     ComPtr<IDWriteFactory> dwriteFactory_;
     ComPtr<IDWriteTextFormat> textFormat_;
     ComPtr<IDWriteTextFormat> smallTextFormat_;
+    ComPtr<IDWriteTextFormat> boldTextFormat_;
+    ComPtr<IDWriteTextFormat> hugeTextFormat_;
     ComPtr<IDWriteTextFormat> clockFormat_;
+    ComPtr<IDWriteTextFormat> iconFormat_;
     ComPtr<ID2D1SolidColorBrush> accentBrush_;
     ComPtr<ID2D1SolidColorBrush> redBrush_;
     ComPtr<ID2D1SolidColorBrush> textBrush_;
@@ -3393,14 +5088,14 @@ class Renderer {
     D2D1_COLOR_F pillBgColor_ = D2D1::ColorF(0.051f, 0.051f, 0.059f, 1.0f);
 };
 
-Activity ActivityForKind(IslandKind kind, const Settings& settings) {
+Activity ActivityForKind(IslandKind kind, const Settings& settings, const SharedState& state) {
     Activity activity;
     activity.kind = kind;
 
     switch (kind) {
         case IslandKind::Media:
-            activity.width = 320.0f;
-            activity.height = 58.0f;
+            activity.width = 150.0f;
+            activity.height = 44.0f;
             break;
         case IslandKind::Progress:
             activity.width = 230.0f;
@@ -3422,13 +5117,21 @@ Activity ActivityForKind(IslandKind kind, const Settings& settings) {
             activity.width = 290.0f;
             activity.height = 52.0f;
             break;
+        case IslandKind::CapsLock:
+            activity.width = 180.0f;
+            activity.height = 42.0f;
+            break;
+        case IslandKind::Device:
+            activity.width = 240.0f;
+            activity.height = 50.0f;
+            break;
         case IslandKind::Idle:
         default:
-            if (!settings.alwaysShowClock) {
+            if (!settings.alwaysShowClock && !state.system.micActive && !state.system.cameraActive) {
                 activity.width = 0.0f;
                 activity.height = 0.0f;
             } else {
-                activity.width = 120.0f;
+                activity.width = 170.0f;
                 activity.height = 36.0f;
             }
             break;
@@ -3442,8 +5145,14 @@ Activity ActivityForKind(IslandKind kind, const Settings& settings) {
 std::vector<IslandKind> ChooseActivities(const SharedState& state, const Settings& settings, double now) {
     std::vector<IslandKind> activities;
 
-    if (settings.clipboard && state.clipboard.active && now < state.clipboard.expiresAt) {
+    if (state.clipboard.active && now < state.clipboard.expiresAt) {
         activities.push_back(IslandKind::Clipboard);
+    }
+    if (state.capsLock.active && now < state.capsLock.expiresAt) {
+        activities.push_back(IslandKind::CapsLock);
+    }
+    if (state.device.active && now < state.device.expiresAt) {
+        activities.push_back(IslandKind::Device);
     }
     if (state.volume.active && now < state.volume.expiresAt) {
         activities.push_back(IslandKind::Volume);
@@ -3451,7 +5160,7 @@ std::vector<IslandKind> ChooseActivities(const SharedState& state, const Setting
     if (state.notification.active && now < state.notification.expiresAt) {
         activities.push_back(IslandKind::Notification);
     }
-    if (settings.battery && state.battery.low) {
+    if (settings.battery && state.battery.active && now < state.battery.expiresAt) {
         activities.push_back(IslandKind::BatteryLow);
     }
     if (settings.progress && state.progress.active) {
@@ -3468,6 +5177,37 @@ std::vector<IslandKind> ChooseActivities(const SharedState& state, const Setting
     return activities;
 }
 
+constexpr UINT WM_APP_CAPSLOCK = WM_APP + 0x444;
+HHOOK g_keyboardHook = nullptr;
+HANDLE g_keyboardThread = nullptr;
+DWORD g_keyboardThreadId = 0;
+
+LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+            auto* kbd = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+            if (kbd->vkCode == VK_CAPITAL || kbd->vkCode == VK_NUMLOCK) {
+                PostMessageW(g_hwnd, WM_APP_CAPSLOCK, kbd->vkCode, 0);
+            }
+        }
+    }
+    return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+}
+
+DWORD WINAPI KeyboardThreadProc(void*) {
+    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    if (g_keyboardHook) {
+        UnhookWindowsHookEx(g_keyboardHook);
+        g_keyboardHook = nullptr;
+    }
+    return 0;
+}
+
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE:
@@ -3479,6 +5219,56 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             RemoveClipboardFormatListener(hwnd);
             DeregisterShellHookWindow(hwnd);
             return 0;
+
+        case WM_APP_CAPSLOCK: {
+            bool isNum = (wParam == VK_NUMLOCK);
+            bool capsOn = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
+            bool numOn = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
+            {
+                std::lock_guard lock(g_stateMutex);
+                g_state.capsLock.active = true;
+                g_state.capsLock.capsOn = capsOn;
+                g_state.capsLock.numOn = numOn;
+                g_state.capsLock.isNumEvent = isNum;
+                g_state.capsLock.expiresAt = NowSeconds() + 2.5;
+            }
+            TriggerNudge();
+            return 0;
+        }
+
+        case WM_DEVICECHANGE: {
+            // DBT_DEVICEARRIVAL = 0x8000, DBT_DEVICEREMOVECOMPLETE = 0x8004
+            if (wParam == 0x8000 || wParam == 0x8004) {
+                bool arrived = (wParam == 0x8000);
+                std::wstring devName;
+                bool isBt = false;
+
+                if (lParam) {
+                    auto* hdr = reinterpret_cast<DEV_BROADCAST_HDR*>(lParam);
+                    if (hdr->dbch_devicetype == DBT_DEVTYP_VOLUME) {
+                        devName = L"USB Drive";
+                    } else if (hdr->dbch_devicetype == DBT_DEVTYP_PORT) {
+                        devName = L"COM Device";
+                    } else {
+                        // Generic/Bluetooth OEM
+                        isBt = true;
+                        devName = L"Bluetooth Device";
+                    }
+                }
+
+                {
+                    std::lock_guard lock(g_stateMutex);
+                    g_state.device.active = true;
+                    g_state.device.eventType = arrived ? DeviceEventType::Connected
+                                                       : DeviceEventType::Disconnected;
+                    g_state.device.deviceName = devName;
+                    g_state.device.isBluetoothLike = isBt;
+                    g_state.device.expiresAt = NowSeconds() + 3.0;
+                }
+                TriggerNudge();
+            }
+            return 0;
+        }
 
         case WM_CLIPBOARDUPDATE:
             if (g_settings.clipboard) {
@@ -3492,13 +5282,85 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         case WM_LBUTTONUP:
             {
+                int xPos = GET_X_LPARAM(lParam);
+                int yPos = GET_Y_LPARAM(lParam);
                 bool mediaActive = false;
+                std::vector<IslandKind> kinds;
                 {
                     std::lock_guard lock(g_stateMutex);
-                    mediaActive = g_settings.media && g_state.media.available && g_state.media.playing;
+                    mediaActive = g_settings.media && g_state.media.available;
+                    kinds = ChooseActivities(g_state, g_settings, NowSeconds());
                 }
+
+                RECT clientRect;
+                GetClientRect(hwnd, &clientRect);
+                const float height = static_cast<float>(clientRect.bottom - clientRect.top);
+                const float width = static_cast<float>(clientRect.right - clientRect.left);
+
+                if (mediaActive && height > 60.0f && (g_idleTab % 3) == 0) {
+                    float totalScale = (GetDpiForWindow(hwnd) / 96.0f) * g_settings.sizeScale;
+                    float cx = width / 2.0f;
+                    float cy = height / 2.0f;
+                    
+                    float unX = (xPos - cx) / totalScale;
+                    float unY = (yPos - cy) / totalScale;
+
+                    if (unY > 56.0f - 30.0f && unY < 56.0f + 30.0f) {
+                        // Check button clicks in expanded media view
+                        int cmd = -1;
+                        if (unX > -84.0f && unX < -44.0f) cmd = 0; // Prev
+                        else if (unX > -24.0f && unX < 24.0f) cmd = 1; // Play/Pause
+                        else if (unX > 44.0f && unX < 84.0f) cmd = 2; // Next
+
+                        if (cmd != -1) {
+                            std::thread([cmd]() {
+                                winrt::init_apartment(winrt::apartment_type::multi_threaded);
+                                try {
+                                    using Manager = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
+                                    auto manager = Manager::RequestAsync().get();
+                                    if (manager) {
+                                        auto sessions = manager.GetSessions();
+                                        std::wstring currentAumid;
+                                        {
+                                            std::lock_guard lock(g_stateMutex);
+                                            currentAumid = g_state.media.sourceAppUserModelId;
+                                        }
+                                        winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
+                                        for (auto const& s : sessions) {
+                                            if (s.SourceAppUserModelId().c_str() == currentAumid) {
+                                                session = s;
+                                                break;
+                                            }
+                                        }
+                                        if (!session) session = manager.GetCurrentSession();
+
+                                        if (session) {
+                                            if (cmd == 0) session.TrySkipPreviousAsync().get();
+                                            else if (cmd == 1) session.TryTogglePlayPauseAsync().get();
+                                            else if (cmd == 2) session.TrySkipNextAsync().get();
+                                        }
+                                    }
+                                } catch (...) {}
+                            }).detach();
+                            return 0;
+                        }
+                    }
+                }
+
                 if (mediaActive) {
-                    SendMediaCommandAtPoint(hwnd, lParam);
+                    if (height > 45.0f && xPos > width - 30.0f) {
+                        // Clicked on the right edge scroll area in Media
+                        g_idleTab = (g_idleTab + 1) % 3;
+                    } else {
+                        OpenRelevantApp();
+                    }
+                } else {
+                    if (!kinds.empty() && kinds[0] == IslandKind::Idle && height > 45.0f) {
+                        if (xPos < width / 2.0f) g_idleTab = (g_idleTab - 1 + 2) % 2;
+                        else g_idleTab = (g_idleTab + 1) % 2;
+                    } else {
+                        HandleStatusClickAtPoint(hwnd, lParam);
+                    }
                 }
             }
             return 0;
@@ -3510,6 +5372,24 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_LBUTTONDBLCLK:
             Wh_SetIntValue(L"PinnedExpanded", Wh_GetIntValue(L"PinnedExpanded", 0) ? 0 : 1);
             return 0;
+
+        case WM_MOUSEWHEEL: {
+            static ULONGLONG lastScrollTime = 0;
+            ULONGLONG now = GetTickCount64();
+            if (now - lastScrollTime < 300) return 0; // 300ms debounce
+            lastScrollTime = now;
+
+            bool mediaActive = false;
+            {
+                std::lock_guard lock(g_stateMutex);
+                mediaActive = g_settings.media && g_state.media.available;
+            }
+            int tabCount = mediaActive ? 3 : 2;
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            if (delta > 0) g_idleTab = (g_idleTab - 1 + tabCount) % tabCount;
+            else if (delta < 0) g_idleTab = (g_idleTab + 1) % tabCount;
+            return 0;
+        }
 
         case WM_RBUTTONUP: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
@@ -3629,13 +5509,25 @@ DWORD WINAPI RenderThreadProc(void*) {
                 g_state.volume.active = false;
                 snapshot.volume.active = false;
             }
+            if (g_state.capsLock.active && now >= g_state.capsLock.expiresAt) {
+                g_state.capsLock.active = false;
+                snapshot.capsLock.active = false;
+            }
+            if (g_state.battery.active && now >= g_state.battery.expiresAt) {
+                g_state.battery.active = false;
+                snapshot.battery.active = false;
+            }
+            if (g_state.device.active && now >= g_state.device.expiresAt) {
+                g_state.device.active = false;
+                snapshot.device.active = false;
+            }
         }
 
         const std::vector<IslandKind> kinds = ChooseActivities(snapshot, g_settings, now);
-        Activity primary = ActivityForKind(kinds[0], g_settings);
+        Activity primary = ActivityForKind(kinds[0], g_settings, snapshot);
         std::optional<Activity> secondary;
         if (kinds.size() >= 2) {
-            secondary = ActivityForKind(kinds[1], g_settings);
+            secondary = ActivityForKind(kinds[1], g_settings, snapshot);
         }
 
         const bool pinned = Wh_GetIntValue(L"PinnedExpanded", 0) != 0;
@@ -3653,14 +5545,22 @@ DWORD WINAPI RenderThreadProc(void*) {
         GetCursorPos(&cursor);
         const bool hover = PtInRect(&windowRect, cursor) != FALSE;
 
-        if (primary.kind == IslandKind::Idle && (hover || pinned)) {
-            primary.width = 336.0f * g_settings.sizeScale;
-            primary.height = 58.0f * g_settings.sizeScale;
+        bool privacyActive = snapshot.system.micActive || snapshot.system.cameraActive;
+        if (primary.kind == IslandKind::Idle && (pinned || (hover && (g_settings.alwaysShowClock || privacyActive)))) {
+            primary.width = 380.0f * g_settings.sizeScale;
+            primary.height = 184.0f * g_settings.sizeScale;
         }
         if (primary.kind == IslandKind::Idle &&
             (g_settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0)) {
             primary.width = 372.0f * g_settings.sizeScale;
             primary.height = 64.0f * g_settings.sizeScale;
+        }
+        if (primary.kind == IslandKind::Media) {
+            bool recentArtChange = (NowSeconds() - g_state.media.artChangedAt) < 4.0;
+            if (hover || pinned || recentArtChange) {
+                primary.width = 380.0f * g_settings.sizeScale;
+                primary.height = 184.0f * g_settings.sizeScale;
+            }
         }
 
         float targetWidth = primary.width;
@@ -3683,9 +5583,39 @@ DWORD WINAPI RenderThreadProc(void*) {
         dt = Clamp(dt, 0.001f, 0.050f);
 
         const float speed = g_settings.animationSpeed;
-        widthSpring.Step(dt, 280.0f * speed, 24.0f * speed);
-        heightSpring.Step(dt, 280.0f * speed, 24.0f * speed);
-        nudgeSpring.Step(dt, 280.0f * speed, 24.0f * speed);
+        float widthStiffness = 280.0f;
+        float widthDamping = 24.0f;
+        if (targetWidth > widthSpring.value) {
+            widthStiffness = 380.0f;
+            widthDamping = 26.0f;
+        } else if (targetWidth < widthSpring.value) {
+            widthStiffness = 200.0f;
+            widthDamping = 28.0f;
+        }
+
+        float heightStiffness = 280.0f;
+        float heightDamping = 24.0f;
+        if (targetHeight > heightSpring.value) {
+            heightStiffness = 380.0f;
+            heightDamping = 26.0f;
+        } else if (targetHeight < heightSpring.value) {
+            heightStiffness = 200.0f;
+            heightDamping = 28.0f;
+        }
+
+        widthSpring.Step(dt * speed, widthStiffness, widthDamping);
+        if (widthSpring.value < 0.0f) {
+            widthSpring.value = 0.0f;
+            widthSpring.velocity = 0.0f;
+        }
+
+        heightSpring.Step(dt * speed, heightStiffness, heightDamping);
+        if (heightSpring.value < 0.0f) {
+            heightSpring.value = 0.0f;
+            heightSpring.velocity = 0.0f;
+        }
+
+        nudgeSpring.Step(dt * speed, 280.0f, 24.0f);
 
         {
             std::lock_guard lock(g_stateMutex);
@@ -3694,9 +5624,112 @@ DWORD WINAPI RenderThreadProc(void*) {
 
         SetClickThrough(hwnd, primary.kind == IslandKind::Idle && !hover && !pinned);
 
-        renderer.Render(snapshot, g_settings, primary, secondary,
-                        widthSpring.value, heightSpring.value, nudgeSpring.value,
-                        hover, pinned, now);
+        bool needsRender = false;
+
+        // Check if animating structurally
+        if (std::abs(widthSpring.velocity) > 0.01f || std::abs(widthSpring.target - widthSpring.value) > 0.01f ||
+            std::abs(heightSpring.velocity) > 0.01f || std::abs(heightSpring.target - heightSpring.value) > 0.01f ||
+            std::abs(nudgeSpring.velocity) > 0.01f || std::abs(nudgeSpring.target - nudgeSpring.value) > 0.01f) {
+            needsRender = true;
+        }
+
+        // Active Monitor Tracking (Follow Mouse)
+        if (g_settings.targetMonitor == -1) {
+            static HMONITOR s_lastMonitor = nullptr;
+            POINT pt;
+            GetCursorPos(&pt);
+            HMONITOR currentMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            if (currentMonitor != s_lastMonitor) {
+                s_lastMonitor = currentMonitor;
+                g_layoutDirty = true;
+            }
+        }
+
+        // Check if layout was explicitly invalidated
+        if (g_layoutDirty.load()) {
+            needsRender = true;
+        }
+
+        // Hover or pinned state changes visual elements slightly
+        static bool prevHover = false;
+        static bool prevPinned = false;
+        if (hover != prevHover || pinned != prevPinned) {
+            needsRender = true;
+            prevHover = hover;
+            prevPinned = pinned;
+        }
+
+        // Animated activities that require continuous rendering
+        if (primary.kind == IslandKind::Media || primary.kind == IslandKind::BatteryLow ||
+            primary.kind == IslandKind::Clipboard || primary.kind == IslandKind::Notification) {
+            needsRender = true;
+        }
+
+        // Privacy dots
+        if (snapshot.system.micActive || snapshot.system.cameraActive) {
+            needsRender = true;
+        }
+        
+        // Idle dashboard clock changes once a minute
+        static SYSTEMTIME prevTime = {};
+        if (primary.kind == IslandKind::Idle && g_settings.alwaysShowClock) {
+            SYSTEMTIME local = {};
+            GetLocalTime(&local);
+            if (local.wMinute != prevTime.wMinute) {
+                needsRender = true;
+                prevTime = local;
+            }
+        }
+
+        // Compare data snapshot to detect changes
+        static uint64_t prevArtGen = 0;
+        static uint64_t prevSrcIconGen = 0;
+        static uint64_t prevNotifIconGen = 0;
+        static uint64_t prevClipIconGen = 0;
+        static int prevCpu = -1;
+        static int prevRam = -1;
+        static int prevDisk = -1;
+        static int prevVol = -1;
+        static bool prevMuted = false;
+        static int prevBat = -1;
+        static bool prevCharging = false;
+        static int prevProg = -1;
+        static std::wstring prevMediaTitle;
+        
+        if (snapshot.media.artGeneration != prevArtGen ||
+            snapshot.media.sourceIconGeneration != prevSrcIconGen ||
+            snapshot.media.title != prevMediaTitle ||
+            snapshot.notification.icon.generation != prevNotifIconGen ||
+            snapshot.clipboard.appIcon.generation != prevClipIconGen ||
+            snapshot.system.cpuPercent != prevCpu ||
+            snapshot.system.memoryPercent != prevRam ||
+            snapshot.system.diskFreePercent != prevDisk ||
+            snapshot.system.volumePercent != prevVol ||
+            snapshot.system.volumeMuted != prevMuted ||
+            snapshot.battery.percent != prevBat ||
+            snapshot.battery.charging != prevCharging ||
+            snapshot.progress.percent != prevProg) {
+            needsRender = true;
+            prevArtGen = snapshot.media.artGeneration;
+            prevSrcIconGen = snapshot.media.sourceIconGeneration;
+            prevMediaTitle = snapshot.media.title;
+            prevNotifIconGen = snapshot.notification.icon.generation;
+            prevClipIconGen = snapshot.clipboard.appIcon.generation;
+            prevCpu = snapshot.system.cpuPercent;
+            prevRam = snapshot.system.memoryPercent;
+            prevDisk = snapshot.system.diskFreePercent;
+            prevVol = snapshot.system.volumePercent;
+            prevMuted = snapshot.system.volumeMuted;
+            prevBat = snapshot.battery.percent;
+            prevCharging = snapshot.battery.charging;
+            prevProg = snapshot.progress.percent;
+        }
+
+        if (needsRender) {
+            renderer.Render(snapshot, g_settings, primary, secondary,
+                            widthSpring.value, heightSpring.value, nudgeSpring.value,
+                            hover, pinned, now);
+        }
 
         WaitForSingleObject(g_stopEvent, 16);
     }
@@ -3717,7 +5750,8 @@ DWORD WINAPI RenderThreadProc(void*) {
 
 bool StartThreads() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
+    g_settingsChangedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_settingsChangedEvent) {
         return false;
     }
 
@@ -3729,6 +5763,8 @@ bool StartThreads() {
 
     g_mediaThread = CreateThread(nullptr, 0, MediaThreadProc, nullptr, 0, nullptr);
     g_audioThread = CreateThread(nullptr, 0, AudioThreadProc, nullptr, 0, nullptr);
+    g_weatherThread = CreateThread(nullptr, 0, WeatherThreadProc, nullptr, 0, nullptr);
+    g_keyboardThread = CreateThread(nullptr, 0, KeyboardThreadProc, nullptr, 0, &g_keyboardThreadId);
 #if DYNAMIC_ISLAND_HAS_USER_NOTIFICATION_LISTENER
     g_notificationThread = CreateThread(nullptr, 0, NotificationThreadProc, nullptr, 0, nullptr);
 #endif
@@ -3737,11 +5773,14 @@ bool StartThreads() {
 }
 
 void StopThreads() {
+    if (g_keyboardThreadId != 0) {
+        PostThreadMessageW(g_keyboardThreadId, WM_QUIT, 0, 0);
+    }
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
 
-    HANDLE handles[] = {g_renderThread, g_mediaThread, g_audioThread, g_notificationThread};
+    HANDLE handles[] = {g_renderThread, g_mediaThread, g_audioThread, g_weatherThread, g_notificationThread, g_keyboardThread};
     for (HANDLE handle : handles) {
         if (handle) {
             WaitForSingleObject(handle, 3000);
@@ -3752,11 +5791,18 @@ void StopThreads() {
     g_renderThread = nullptr;
     g_mediaThread = nullptr;
     g_audioThread = nullptr;
+    g_weatherThread = nullptr;
     g_notificationThread = nullptr;
+    g_keyboardThread = nullptr;
+    g_keyboardThreadId = 0;
 
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
+    }
+    if (g_settingsChangedEvent) {
+        CloseHandle(g_settingsChangedEvent);
+        g_settingsChangedEvent = nullptr;
     }
 
     g_running = false;

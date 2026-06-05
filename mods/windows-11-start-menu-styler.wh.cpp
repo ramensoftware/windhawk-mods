@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     Customize the Start menu with themes contributed by others or create your own
-// @version         1.5.1
+// @version         1.5.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,7 +11,7 @@
 // @include         SearchHost.exe
 // @include         SearchApp.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -421,7 +421,7 @@ from the **TranslucentTB** project.
     themes.
   $options:
   - "": Windows default
-  - disableNewLayoutKeepPhoneLink: Classic layout
+  - disableNewLayoutKeepPhoneLink: Classic layout (removed in 26100.8524)
   - legacyClassicLayout: Legacy classic layout (removed in 26100.8328)
   - forceNewLayout: Force new layout (if available)
 - styleConstants: [""]
@@ -7053,7 +7053,7 @@ catch (...)
 }
 
 __declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllCanUnloadNow(void)
+_Use_decl_annotations_ STDAPI DllCanUnloadNow()
 {
     if (winrt::get_module_lock())
     {
@@ -7402,9 +7402,20 @@ struct StyleVariableConsumer {
     std::wstring fallbackClassName;
 };
 
-std::unordered_map<std::wstring, StyleVariableValue> g_styleVariables;
-std::unordered_map<std::wstring, std::vector<StyleVariableConsumer>>
-    g_styleVariableConsumers;
+// Mod-global style variable registry. The struct mirrors the per-XamlRoot state
+// used by the taskbar styler so the variable-resolution call paths stay aligned
+// across the styler mods, but here all elements share one registry.
+struct StyleVariableState {
+    std::unordered_map<std::wstring, StyleVariableValue> variables;
+    std::unordered_map<std::wstring, std::vector<StyleVariableConsumer>>
+        consumers;
+};
+
+StyleVariableState g_styleVariableState;
+
+StyleVariableState* GetStyleVariableState() {
+    return &g_styleVariableState;
+}
 
 std::wstring g_webContentCss;
 std::wstring g_webContentJs;
@@ -7489,6 +7500,60 @@ ResourceDictionary g_resourceVariablesThemeDict{nullptr};
 // For listening to theme color changes (per-thread).
 winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
 thread_local winrt::event_token g_colorValuesChangedToken;
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+bool IsMainModuleVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
+    static VS_FIXEDFILEINFO* fixedFileInfo =
+        GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo) {
+        return false;
+    }
+
+    WORD moduleMajor = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleMinor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleBuild = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD moduleQfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    if (moduleMajor != major) {
+        return moduleMajor > major;
+    }
+
+    if (moduleMinor != minor) {
+        return moduleMinor > minor;
+    }
+
+    if (moduleBuild != build) {
+        return moduleBuild > build;
+    }
+
+    return moduleQfe >= qfe;
+}
 
 winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     DependencyObject elementDo,
@@ -9258,14 +9323,16 @@ void SetOrClearValue(DependencyObject elementDo,
         property == UIElement::VisibilityProperty()) {
         if (value != DependencyProperty::UnsetValue() && initialApply &&
             !g_delayedAllAppsRootVisibilitySet) {
-            Wh_Log(L"Delaying SetValue for AllAppsRoot");
+            Wh_Log(L"Delaying SetValue for AllAppsRoot Visibility");
             g_delayedAllAppsRootVisibilitySet =
                 elementDo.Dispatcher().TryRunAsync(
                     winrt::Windows::UI::Core::CoreDispatcherPriority::High,
                     [elementDo = std::move(elementDo),
                      property = std::move(property),
                      value = std::move(value)]() {
-                        Wh_Log(L"Running delayed SetValue for AllAppsRoot");
+                        Wh_Log(
+                            L"Running delayed SetValue for AllAppsRoot "
+                            L"Visibility");
                         g_elementPropertyModifying = true;
                         try {
                             elementDo.SetValue(property, value);
@@ -9278,7 +9345,7 @@ void SetOrClearValue(DependencyObject elementDo,
                     });
             return;
         } else if (g_delayedAllAppsRootVisibilitySet) {
-            Wh_Log(L"Canceling delayed SetValue for AllAppsRoot");
+            Wh_Log(L"Canceling delayed SetValue for AllAppsRoot Visibility");
             g_delayedAllAppsRootVisibilitySet.Cancel();
             g_delayedAllAppsRootVisibilitySet = nullptr;
         }
@@ -10450,8 +10517,9 @@ bool IsValidStyleVariableIdentifier(std::wstring_view sv) {
 class StyleVariableExpressionEvaluator {
    public:
     StyleVariableExpressionEvaluator(std::wstring_view text,
-                                     std::vector<std::wstring>* outDeps)
-        : m_text(text), m_outDeps(outDeps) {}
+                                     std::vector<std::wstring>* outDeps,
+                                     StyleVariableState* state)
+        : m_text(text), m_outDeps(outDeps), m_state(state) {}
 
     // Returns the numeric result of the expression. Throws std::runtime_error
     // on parse / evaluation failure (including when an identifier resolves to a
@@ -10651,8 +10719,8 @@ class StyleVariableExpressionEvaluator {
         if (m_outDeps) {
             m_outDeps->push_back(name);
         }
-        auto it = g_styleVariables.find(name);
-        if (it == g_styleVariables.end()) {
+        auto it = m_state->variables.find(name);
+        if (it == m_state->variables.end()) {
             Wh_Log(L"Style variable '%s' not yet defined; treating as 0",
                    name.c_str());
             return 0.0;
@@ -10666,6 +10734,7 @@ class StyleVariableExpressionEvaluator {
 
     std::wstring_view m_text;
     std::vector<std::wstring>* m_outDeps;
+    StyleVariableState* m_state;
     size_t m_pos = 0;
 };
 
@@ -10679,7 +10748,8 @@ class StyleVariableExpressionEvaluator {
 // rather than substituting a value that won't parse.
 std::optional<std::wstring> EvaluateStyleVariableExpression(
     std::wstring_view exprText,
-    std::vector<std::wstring>* outDeps) {
+    std::vector<std::wstring>* outDeps,
+    StyleVariableState* state) {
     auto trimmed = TrimStringView(exprText);
     if (trimmed.empty()) {
         Wh_Log(L"Empty style variable expression");
@@ -10691,8 +10761,8 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
         if (outDeps) {
             outDeps->push_back(name);
         }
-        auto it = g_styleVariables.find(name);
-        if (it == g_styleVariables.end()) {
+        auto it = state->variables.find(name);
+        if (it == state->variables.end()) {
             Wh_Log(L"Style variable '%s' not yet defined; skipping style",
                    name.c_str());
             return std::nullopt;
@@ -10708,7 +10778,7 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
     }
 
     try {
-        StyleVariableExpressionEvaluator eval(trimmed, outDeps);
+        StyleVariableExpressionEvaluator eval(trimmed, outDeps, state);
         double v = eval.Evaluate();
         return FormatDoubleInvariant(v);
     } catch (std::exception const& ex) {
@@ -10728,7 +10798,8 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
 // substituted output) to keep behavior predictable.
 std::optional<std::wstring> ExpandStyleVariables(
     std::wstring_view input,
-    std::vector<std::wstring>* outDeps) {
+    std::vector<std::wstring>* outDeps,
+    StyleVariableState* state) {
     std::wstring result(input);
     size_t scanFrom = 0;
 
@@ -10766,7 +10837,8 @@ std::optional<std::wstring> ExpandStyleVariables(
 
         std::wstring_view exprText(result.data() + openPos + 2,
                                    closePos - openPos - 2);
-        auto expanded = EvaluateStyleVariableExpression(exprText, outDeps);
+        auto expanded =
+            EvaluateStyleVariableExpression(exprText, outDeps, state);
         if (!expanded) {
             return std::nullopt;
         }
@@ -10830,14 +10902,24 @@ StyleVariableValue ReadCapturedStyleVariableValue(FrameworkElement element,
 // `fallbackClassName` is stored on each newly-added consumer entry so the
 // per-consumer context is preserved across propagations; it is irrelevant when
 // newDeps is empty (pure-removal calls from the cleanup paths).
-void UpdateStyleVariableConsumers(InstanceHandle handle,
+void UpdateStyleVariableConsumers(StyleVariableState* state,
+                                  InstanceHandle handle,
                                   DependencyProperty property,
                                   PCWSTR fallbackClassName,
                                   const std::vector<std::wstring>& oldDeps,
                                   const std::vector<std::wstring>& newDeps) {
+    if (!state) {
+        // The element's XamlRoot has already been destroyed (or was never
+        // available); the StyleVariableState entry has been or will be reaped,
+        // and there is nothing to clean up. New registrations (newDeps) are
+        // also dropped on the floor: without a state we cannot route
+        // propagations anyway.
+        return;
+    }
+
     for (const auto& dep : oldDeps) {
-        auto it = g_styleVariableConsumers.find(dep);
-        if (it == g_styleVariableConsumers.end()) {
+        auto it = state->consumers.find(dep);
+        if (it == state->consumers.end()) {
             continue;
         }
         auto& consumers = it->second;
@@ -10845,14 +10927,14 @@ void UpdateStyleVariableConsumers(InstanceHandle handle,
             return c.elementHandle == handle && c.property == property;
         });
         if (consumers.empty()) {
-            g_styleVariableConsumers.erase(it);
+            state->consumers.erase(it);
         }
     }
 
     std::wstring fallbackClassNameStr =
         fallbackClassName ? fallbackClassName : L"";
     for (const auto& dep : newDeps) {
-        auto& consumers = g_styleVariableConsumers[dep];
+        auto& consumers = state->consumers[dep];
         bool already = std::any_of(consumers.begin(), consumers.end(),
                                    [&](const StyleVariableConsumer& c) {
                                        return c.elementHandle == handle &&
@@ -10866,8 +10948,8 @@ void UpdateStyleVariableConsumers(InstanceHandle handle,
 
 // Re-evaluate the dynamic template stored on `propertyCustomizationState` and
 // return the resolved IInspectable / XamlBlurBrushParams ready to be applied.
-// Updates the (handle, property) -> g_styleVariableConsumers registry to match
-// the freshly computed dependency set so future variable changes route to this
+// Updates the (handle, property) -> state->consumers registry to match the
+// freshly computed dependency set so future variable changes route to this
 // property. The dependency registry is committed *before* the final XAML
 // resolution attempt: ExpandStyleVariables records every variable name it scans
 // into newDeps even on partial parse failure, which lets a future change to any
@@ -10887,6 +10969,7 @@ void UpdateStyleVariableConsumers(InstanceHandle handle,
 // Returns std::nullopt if the state has no template, expansion failed, or XAML
 // resolution failed.
 std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
+    StyleVariableState* state,
     InstanceHandle handle,
     FrameworkElement element,
     DependencyProperty property,
@@ -10899,10 +10982,10 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
     const auto& tmpl = *propertyCustomizationState->dynamicTemplate;
 
     std::vector<std::wstring> newDeps;
-    auto expanded = ExpandStyleVariables(tmpl.rawValue, &newDeps);
+    auto expanded = ExpandStyleVariables(tmpl.rawValue, &newDeps, state);
 
     UpdateStyleVariableConsumers(
-        handle, property, fallbackClassName,
+        state, handle, property, fallbackClassName,
         propertyCustomizationState->variableDependencies, newDeps);
     propertyCustomizationState->variableDependencies = std::move(newDeps);
 
@@ -10931,9 +11014,10 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
 // (recorded when the consumer was registered), so propagation correctly uses
 // the consumer's own match-site context to re-parse the rule body, even when
 // the capturer was matched against a different type/fallback class.
-void PropagateStyleVariableChange(const std::wstring& varName) {
-    auto consumersIt = g_styleVariableConsumers.find(varName);
-    if (consumersIt == g_styleVariableConsumers.end()) {
+void PropagateStyleVariableChange(StyleVariableState* state,
+                                  const std::wstring& varName) {
+    auto consumersIt = state->consumers.find(varName);
+    if (consumersIt == state->consumers.end()) {
         return;
     }
 
@@ -10966,7 +11050,7 @@ void PropagateStyleVariableChange(const std::wstring& varName) {
             }
 
             auto resolved = ResolveDynamicStyleValue(
-                consumer.elementHandle, element, consumer.property,
+                state, consumer.elementHandle, element, consumer.property,
                 consumerFallbackClassName, &propState);
             if (!resolved) {
                 continue;
@@ -10987,17 +11071,18 @@ void PropagateStyleVariableChange(const std::wstring& varName) {
     }
 }
 
-// Compare a captured value to whatever's currently in g_styleVariables for the
+// Compare a captured value to whatever's currently in state->variables for the
 // same name; if different, store and notify dependents. Each consumer's own
 // fallbackClassName lives on the consumer entry, so this function does not need
 // to be told the capturer's context. Used by every path that wants to publish a
 // captured value -- the per-property capture callback, the SizeChanged
 // catch-all, and the initial seeding loop -- so the no-op fast path applies
 // uniformly.
-void SetStyleVariableIfChangedAndPropagate(const std::wstring& varName,
+void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
+                                           const std::wstring& varName,
                                            StyleVariableValue value) {
-    auto it = g_styleVariables.find(varName);
-    if (it != g_styleVariables.end() &&
+    auto it = state->variables.find(varName);
+    if (it != state->variables.end() &&
         it->second.stringForm == value.stringForm &&
         it->second.numeric == value.numeric &&
         it->second.substitutable == value.substitutable) {
@@ -11007,11 +11092,11 @@ void SetStyleVariableIfChangedAndPropagate(const std::wstring& varName,
     }
 
     Wh_Log(L"Style variable '%s' changed: '%s' -> '%s'", varName.c_str(),
-           it != g_styleVariables.end() ? it->second.stringForm.c_str()
+           it != state->variables.end() ? it->second.stringForm.c_str()
                                         : L"(unset)",
            value.stringForm.c_str());
-    g_styleVariables[varName] = std::move(value);
-    PropagateStyleVariableChange(varName);
+    state->variables[varName] = std::move(value);
+    PropagateStyleVariableChange(state, varName);
 }
 
 // True for layout-driven DPs whose updates do not fire
@@ -11029,7 +11114,7 @@ bool IsLayoutDrivenSizeProperty(DependencyProperty property) {
 // callbacks on layout -- subscribes to FrameworkElement.SizeChanged as a
 // catch-all that re-reads every active capture on resize.
 //
-// Seeding writes the captured values into g_styleVariables in a single batch
+// Seeding writes the captured values into state->variables in a single batch
 // (to avoid intermediate inconsistent states for consumers that depend on
 // multiple variables from this element) and then propagates only the variables
 // whose values actually changed -- the no-op fast path matches the one used by
@@ -11037,7 +11122,8 @@ bool IsLayoutDrivenSizeProperty(DependencyProperty property) {
 // fallbackClassName: each StyleVariableConsumer entry already carries its own
 // consumer-side fallback, so propagation routes through the right context per
 // consumer.
-void SetUpCapturesForElement(InstanceHandle handle,
+void SetUpCapturesForElement(StyleVariableState* state,
+                             InstanceHandle handle,
                              FrameworkElement element,
                              const std::vector<CaptureSpec>& captures,
                              ElementCustomizationState* elementState) {
@@ -11049,7 +11135,7 @@ void SetUpCapturesForElement(InstanceHandle handle,
     winrt::weak_ref<FrameworkElement> elementWeakRef = element;
 
     // Names of variables whose seeded value differs from whatever's already in
-    // g_styleVariables. Only these need a propagation pass at the end.
+    // state->variables. Only these need a propagation pass at the end.
     std::vector<std::wstring> changedVarNames;
     changedVarNames.reserve(captures.size());
 
@@ -11080,9 +11166,9 @@ void SetUpCapturesForElement(InstanceHandle handle,
 
         auto value = ReadCapturedStyleVariableValue(element, capture.property);
 
-        auto existingIt = g_styleVariables.find(capture.varName);
+        auto existingIt = state->variables.find(capture.varName);
         const bool changed =
-            existingIt == g_styleVariables.end() ||
+            existingIt == state->variables.end() ||
             existingIt->second.stringForm != value.stringForm ||
             existingIt->second.numeric != value.numeric ||
             existingIt->second.substitutable != value.substitutable;
@@ -11093,10 +11179,10 @@ void SetUpCapturesForElement(InstanceHandle handle,
                 L"(was: '%s')",
                 capture.varName.c_str(), winrt::get_class_name(element).c_str(),
                 value.stringForm.c_str(),
-                existingIt != g_styleVariables.end()
+                existingIt != state->variables.end()
                     ? existingIt->second.stringForm.c_str()
                     : L"(unset)");
-            g_styleVariables[capture.varName] = std::move(value);
+            state->variables[capture.varName] = std::move(value);
             changedVarNames.push_back(capture.varName);
         } else {
             Wh_Log(L"Capture variable '%s' from %s already at '%s'",
@@ -11116,22 +11202,22 @@ void SetUpCapturesForElement(InstanceHandle handle,
         captureState.propertyChangedToken =
             elementDo.RegisterPropertyChangedCallback(
                 capture.property,
-                [varName, elementWeakRef](DependencyObject sender,
-                                          DependencyProperty property) {
+                [state, varName, elementWeakRef](DependencyObject sender,
+                                                 DependencyProperty property) {
                     auto element = elementWeakRef.get();
                     if (!element) {
                         return;
                     }
                     auto value =
                         ReadCapturedStyleVariableValue(element, property);
-                    SetStyleVariableIfChangedAndPropagate(varName,
+                    SetStyleVariableIfChangedAndPropagate(state, varName,
                                                           std::move(value));
                 });
     }
 
     if (!sizeChangedCaptures.empty()) {
         elementState->captureSizeChangedToken = element.SizeChanged(
-            [elementWeakRef,
+            [state, elementWeakRef,
              sizeChangedCaptures = std::move(sizeChangedCaptures)](
                 winrt::Windows::Foundation::IInspectable const& sender,
                 SizeChangedEventArgs const& e) {
@@ -11145,7 +11231,7 @@ void SetUpCapturesForElement(InstanceHandle handle,
                 for (const auto& [property, varName] : sizeChangedCaptures) {
                     auto value =
                         ReadCapturedStyleVariableValue(element, property);
-                    SetStyleVariableIfChangedAndPropagate(varName,
+                    SetStyleVariableIfChangedAndPropagate(state, varName,
                                                           std::move(value));
                 }
             });
@@ -11155,7 +11241,7 @@ void SetUpCapturesForElement(InstanceHandle handle,
     // registered before this element was matched. Variables whose value did not
     // actually change are skipped, matching the per-callback fast path.
     for (const auto& varName : changedVarNames) {
-        PropagateStyleVariableChange(varName);
+        PropagateStyleVariableChange(state, varName);
     }
 }
 
@@ -11191,6 +11277,7 @@ void RestoreCapturesForElement(FrameworkElement element,
 }
 
 void ApplyCustomizationsForVisualStateGroup(
+    StyleVariableState* state,
     InstanceHandle handle,
     FrameworkElement element,
     VisualStateGroup visualStateGroup,
@@ -11228,7 +11315,7 @@ void ApplyCustomizationsForVisualStateGroup(
             if (auto* tmpl = std::get_if<DynamicStyleTemplate>(&it->second)) {
                 propertyCustomizationState.dynamicTemplate = *tmpl;
                 resolved = ResolveDynamicStyleValue(
-                    handle, element, property, fallbackClassName,
+                    state, handle, element, property, fallbackClassName,
                     &propertyCustomizationState);
             } else {
                 resolved = it->second;
@@ -11296,7 +11383,7 @@ void ApplyCustomizationsForVisualStateGroup(
         elementCustomizationStateForVisualStateGroup
             ->visualStateGroupCurrentStateChangedToken =
             visualStateGroup.CurrentStateChanged(
-                [elementWeakRef, propertyOverrides, handle,
+                [state, elementWeakRef, propertyOverrides, handle,
                  fallbackClassNameStr,
                  elementCustomizationStateForVisualStateGroup](
                     winrt::Windows::Foundation::IInspectable const& sender,
@@ -11349,7 +11436,7 @@ void ApplyCustomizationsForVisualStateGroup(
                                 propertyCustomizationState.dynamicTemplate =
                                     *tmpl;
                                 resolved = ResolveDynamicStyleValue(
-                                    handle, element, property,
+                                    state, handle, element, property,
                                     fallbackClassNamePtr,
                                     &propertyCustomizationState);
                             } else {
@@ -11359,7 +11446,7 @@ void ApplyCustomizationsForVisualStateGroup(
                                 if (propertyCustomizationState
                                         .dynamicTemplate) {
                                     UpdateStyleVariableConsumers(
-                                        handle, property,
+                                        state, handle, property,
                                         /*fallbackClassName=*/nullptr,
                                         propertyCustomizationState
                                             .variableDependencies,
@@ -11390,7 +11477,7 @@ void ApplyCustomizationsForVisualStateGroup(
                         } else {
                             if (propertyCustomizationState.dynamicTemplate) {
                                 UpdateStyleVariableConsumers(
-                                    handle, property,
+                                    state, handle, property,
                                     /*fallbackClassName=*/nullptr,
                                     propertyCustomizationState
                                         .variableDependencies,
@@ -11420,6 +11507,7 @@ void ApplyCustomizationsForVisualStateGroup(
 }
 
 void RestoreCustomizationsForVisualStateGroup(
+    StyleVariableState* state,
     InstanceHandle handle,
     FrameworkElement element,
     std::optional<winrt::weak_ref<VisualStateGroup>>
@@ -11427,36 +11515,38 @@ void RestoreCustomizationsForVisualStateGroup(
     const ElementCustomizationStateForVisualStateGroup&
         elementCustomizationStateForVisualStateGroup) {
     if (element) {
-        for (const auto& [property, state] :
+        for (const auto& [property, propState] :
              elementCustomizationStateForVisualStateGroup
                  .propertyCustomizationStates) {
             try {
                 element.UnregisterPropertyChangedCallback(
-                    property, state.propertyChangedToken);
+                    property, propState.propertyChangedToken);
             } catch (winrt::hresult_error const& ex) {
                 Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
             }
 
-            if (!state.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(handle, property,
+            if (!propState.variableDependencies.empty()) {
+                UpdateStyleVariableConsumers(state, handle, property,
                                              /*fallbackClassName=*/nullptr,
-                                             state.variableDependencies, {});
+                                             propState.variableDependencies,
+                                             {});
             }
 
-            if (state.originalValue) {
-                SetOrClearValue(element, property, *state.originalValue);
+            if (propState.originalValue) {
+                SetOrClearValue(element, property, *propState.originalValue);
             }
         }
     } else {
         // Element is gone; still clear consumer entries so a stale (handle,
         // property) pair isn't visited during PropagateStyleVariableChange.
-        for (const auto& [property, state] :
+        for (const auto& [property, propState] :
              elementCustomizationStateForVisualStateGroup
                  .propertyCustomizationStates) {
-            if (!state.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(handle, property,
+            if (!propState.variableDependencies.empty()) {
+                UpdateStyleVariableConsumers(state, handle, property,
                                              /*fallbackClassName=*/nullptr,
-                                             state.variableDependencies, {});
+                                             propState.variableDependencies,
+                                             {});
             }
         }
     }
@@ -11817,6 +11907,13 @@ void ApplyCustomizations(InstanceHandle handle,
         }
     }
 
+    auto* state = GetStyleVariableState();
+    if (!state) {
+        Wh_Log(L"No XamlRoot for %s, skipping",
+               winrt::get_class_name(element).c_str());
+        return;
+    }
+
     auto resolved = FindElementPropertyOverrides(element, fallbackClassName);
     if (resolved.overridesPerVSG.empty() && resolved.captures.empty()) {
         return;
@@ -11829,7 +11926,8 @@ void ApplyCustomizations(InstanceHandle handle,
     for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
          elementCustomizationState.perVisualStateGroup) {
         RestoreCustomizationsForVisualStateGroup(
-            handle, element, visualStateGroupOptionalWeakPtrIter, stateIter);
+            state, handle, element, visualStateGroupOptionalWeakPtrIter,
+            stateIter);
     }
 
     elementCustomizationState.element = element;
@@ -11839,7 +11937,7 @@ void ApplyCustomizations(InstanceHandle handle,
     // dynamic value-rules applied below. Note: SetUpCapturesForElement does not
     // need this element's fallbackClassName -- propagation routes through each
     // consumer's own stored fallback.
-    SetUpCapturesForElement(handle, element, resolved.captures,
+    SetUpCapturesForElement(state, handle, element, resolved.captures,
                             &elementCustomizationState);
 
     for (auto& [visualStateGroup, overridesForVisualStateGroup] :
@@ -11856,7 +11954,7 @@ void ApplyCustomizations(InstanceHandle handle,
             &elementCustomizationState.perVisualStateGroup.back().second;
 
         ApplyCustomizationsForVisualStateGroup(
-            handle, element, visualStateGroup, fallbackClassName,
+            state, handle, element, visualStateGroup, fallbackClassName,
             std::move(overridesForVisualStateGroup),
             elementCustomizationStateForVisualStateGroup);
     }
@@ -11868,13 +11966,14 @@ void CleanupCustomizations(InstanceHandle handle) {
         auto& elementCustomizationState = it->second;
 
         auto element = elementCustomizationState.element.get();
+        auto* state = GetStyleVariableState();
 
         RestoreCapturesForElement(element, elementCustomizationState);
 
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                handle, element, visualStateGroupOptionalWeakPtrIter,
+                state, handle, element, visualStateGroupOptionalWeakPtrIter,
                 stateIter);
         }
 
@@ -12866,20 +12965,20 @@ void UninitializeSettingsAndTap() {
     for (const auto& [handle, elementCustomizationState] :
          g_elementsCustomizationState) {
         auto element = elementCustomizationState.element.get();
+        auto* state = GetStyleVariableState();
 
         RestoreCapturesForElement(element, elementCustomizationState);
 
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                handle, element, visualStateGroupOptionalWeakPtrIter,
+                state, handle, element, visualStateGroupOptionalWeakPtrIter,
                 stateIter);
         }
     }
 
     g_elementsCustomizationState.clear();
-    g_styleVariables.clear();
-    g_styleVariableConsumers.clear();
+    g_styleVariableState = {};
 
     g_elementsCustomizationRules.clear();
 
@@ -13416,6 +13515,24 @@ DisableNewStartMenuLayout GetDisableNewStartMenuLayout() {
             DisableNewStartMenuLayout::disableNewLayoutKeepPhoneLink;
     }
     Wh_FreeStringSetting(disableNewStartMenuLayoutStr);
+
+    switch (disableNewStartMenuLayout) {
+        case DisableNewStartMenuLayout::windowsDefault:
+        case DisableNewStartMenuLayout::forceNewLayout:
+            break;
+
+        case DisableNewStartMenuLayout::disableNewLayoutKeepPhoneLink:
+        case DisableNewStartMenuLayout::disableNewLayoutAndPhoneLink:
+            if (IsMainModuleVersionAtLeast(10, 0, 26100, 8521)) {
+                // Classic Start Menu layout causes a crash in StartDocked.dll
+                // in newer builds, and as a result, the Start menu fails to
+                // launch. Disable the option in this case.
+                disableNewStartMenuLayout =
+                    DisableNewStartMenuLayout::windowsDefault;
+            }
+            break;
+    }
+
     return disableNewStartMenuLayout;
 }
 
