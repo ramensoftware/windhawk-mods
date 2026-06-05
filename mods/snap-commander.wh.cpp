@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          Asteski
 // @github          https://github.com/Asteski
-// @include         dwm.exe
+// @include         windhawk.exe
 // @compilerOptions -luser32 -ldwmapi
 // ==/WindhawkMod==
 
@@ -60,9 +60,9 @@ modifier behind (no menu-bar or Start-menu flicker).
 
 Each action's shortcut is free text in the form `[modifier+]...key`, for example:
 
-- `q` ÔÇö just the `Q` key
-- `ctrl+q` ÔÇö `Ctrl` + `Q`
-- `ctrl+shift+left` ÔÇö `Ctrl` + `Shift` + `Left arrow`
+- `q` - just the `Q` key
+- `ctrl+q` - `Ctrl` + `Q`
+- `ctrl+shift+left` - `Ctrl` + `Shift` + `Left arrow`
 
 Recognised modifier words are `alt`, `ctrl`, `shift`, and `win`; the key may be a letter
 `a`-`z`, a digit `0`-`9`, an arrow `left`/`right`/`up`/`down`, or one of the punctuation
@@ -71,7 +71,7 @@ the separator, the `=`/`+` key must be written as `plus` (or `=`).
 
 The **Modifier key** setting adds a modifier (or two) on top of whatever you type for
 every action. So with Modifier = `Alt` and Left half = `q`, the shortcut is `Alt+Q`. Set
-Modifier = `None` to use only the modifiers written in each shortcut ÔÇö letting you give
+Modifier = `None` to use only the modifiers written in each shortcut - letting you give
 different actions different modifiers (e.g. `q`, `ctrl+w`, `ctrl+shift+e`).
 
 The modifier combination must match exactly: an action bound to `Alt+Q` will *not* fire
@@ -89,7 +89,7 @@ noted in the mod's log and the shortcut is simply skipped.
 - **Gap distribution**: controls how the gap is shared between adjacent windows.
   *Even spacing* (default) puts the full gap on sides touching a screen edge and half the
   gap on shared edges, so two windows placed side by side show the same gap between them
-  as a single window shows against the screen edge ÔÇö no doubling. *Full gap on every side*
+  as a single window shows against the screen edge - no doubling. *Full gap on every side*
   applies the whole gap to each side (adjacent windows then show a doubled gap). *Screen
   edges only* gaps just the sides that touch a screen edge, so adjacent windows meet flush.
 - **Center size**: optional width/height (in pixels) for the Center action. Leave either
@@ -110,18 +110,9 @@ actions are the same region actions as the shortcuts (Maximize, halves, corners,
 restore to.
 
 Enable a rule's **Don't resize** toggle to move the window into the chosen region while
-keeping its current size ÔÇö the unresized window is anchored to the matching corner or
+keeping its current size - the unresized window is anchored to the matching corner or
 side of the region (e.g. *top-right* pins it to the region's top-right). This is ignored
 by the Minimize action.
-
-## ⚠ Important usage note ⚠
-
-In order to use this mod, you must allow Windhawk to inject into the **dwm.exe**
-system process. To do so, add it to the process inclusion list in the advanced
-settings. If you do not do this, it will silently fail to inject.
-
-![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
-
 */
 // ==/WindhawkModReadme==
 
@@ -315,8 +306,9 @@ constexpr UINT MOD_F_WIN = 0x8;
 
 constexpr int ACTION_COUNT = 18;
 
-// Posted to the hook thread to (re)register the global hotkeys after settings load.
-constexpr UINT WM_APP_REGISTER_HOTKEYS = WM_APP + 1;
+// Posted to the hook thread after settings load, so it can re-register the hotkeys
+// and install/remove the auto-snap WinEvent hook (both must run on that thread).
+constexpr UINT WM_APP_SETTINGS_CHANGED = WM_APP + 1;
 
 // Gaps (in pixels) left on each side of a snapped window.
 static int g_gapTop = 0;
@@ -1184,6 +1176,31 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd, LONG idObject,
     TryApplyRuleToWindow(hWnd);
 }
 
+// Installs the global show/destroy hook only while at least one auto-snap rule
+// exists, and removes it otherwise. EVENT_OBJECT_SHOW fires for every window shown
+// in every process, so the default (no-rules) configuration shouldn't pay for it.
+// Must run on the hook thread (the thread that owns the WinEvent hook). The
+// WINEVENT_SKIPOWNPROCESS flag keeps this tool process's own windows untouched.
+static void UpdateWinEventHook() {
+    bool wantHook;
+    {
+        std::lock_guard<std::mutex> lock(g_appRulesMutex);
+        wantHook = !g_appRules.empty();
+    }
+
+    if (wantHook && !g_winEventHook) {
+        g_winEventHook = SetWinEventHook(
+            EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, nullptr, WinEventProc, 0, 0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        if (!g_winEventHook) {
+            Wh_Log(L"SetWinEventHook failed, error=%lu", GetLastError());
+        }
+    } else if (!wantHook && g_winEventHook) {
+        UnhookWinEvent(g_winEventHook);
+        g_winEventHook = nullptr;
+    }
+}
+
 static BOOL CALLBACK EnumExistingWindowsProc(HWND hWnd, LPARAM) {
     if (IsWindowVisible(hWnd)) {
         TryApplyRuleToWindow(hWnd);
@@ -1342,18 +1359,10 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
 
 static DWORD WINAPI HookThreadProc(LPVOID) {
     // Register the shortcut hotkeys on this thread; WM_HOTKEY (for a NULL window)
-    // is posted to the queue of the thread that called RegisterHotKey.
+    // is posted to the queue of the thread that called RegisterHotKey. The auto-snap
+    // WinEvent hook is installed here too, but only if any rules are configured.
     RegisterHotkeys();
-
-    // Out-of-context window-event hook used to auto-snap matching apps. Events
-    // are delivered to this thread's message queue, so it must be installed
-    // here. WINEVENT_SKIPOWNPROCESS keeps dwm.exe's own windows untouched.
-    g_winEventHook = SetWinEventHook(
-        EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, nullptr, WinEventProc, 0, 0,
-        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    if (!g_winEventHook) {
-        Wh_Log(L"SetWinEventHook failed, error=%lu", GetLastError());
-    }
+    UpdateWinEventHook();
 
     SetEvent(g_hookReadyEvent);
 
@@ -1363,8 +1372,8 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
         if (gm == 0 || gm == -1) {
             break;
         }
-        // WM_HOTKEY and our re-register signal are thread messages (no window), so
-        // handle them here rather than via DispatchMessage.
+        // WM_HOTKEY and our settings-changed signal are thread messages (no window),
+        // so handle them here rather than via DispatchMessage.
         if (msg.hwnd == nullptr) {
             if (msg.message == WM_HOTKEY) {
                 int idx = (int)msg.wParam;
@@ -1373,8 +1382,9 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
                 }
                 continue;
             }
-            if (msg.message == WM_APP_REGISTER_HOTKEYS) {
+            if (msg.message == WM_APP_SETTINGS_CHANGED) {
                 RegisterHotkeys();
+                UpdateWinEventHook();
                 continue;
             }
         }
@@ -1390,7 +1400,7 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
 
     g_quit = false;
@@ -1447,16 +1457,17 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
-    // Re-register hotkeys on the hook thread to reflect the new bindings.
+    // Reflect the new bindings/rules on the hook thread (it owns the hotkeys and the
+    // WinEvent hook).
     if (g_hookThreadId) {
-        PostThreadMessageW(g_hookThreadId, WM_APP_REGISTER_HOTKEYS, 0, 0);
+        PostThreadMessageW(g_hookThreadId, WM_APP_SETTINGS_CHANGED, 0, 0);
     }
     ApplyRulesToExistingWindows();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_quit = true;
 
     if (g_hookThreadId) {
@@ -1496,4 +1507,173 @@ void Wh_ModUninit() {
         std::lock_guard<std::mutex> lock(g_ruleHandledMutex);
         g_ruleHandledWindows.clear();
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
