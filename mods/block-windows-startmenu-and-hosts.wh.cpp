@@ -2,7 +2,7 @@
 // @id              block-windows-startmenu-and-hosts
 // @name            Block Start Menu and Hosts
 // @description     Kills existing selected UI components on mod init and blocks any future launches.
-// @version         1.4
+// @version         1.4.1
 // @author          Exiled Eye
 // @github          https://github.com/ExiledEye
 // @homepage        https://exiledeye.github.io/
