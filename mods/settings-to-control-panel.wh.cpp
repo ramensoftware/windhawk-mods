@@ -2,48 +2,105 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components
-// @version        9.7.1
+// @version        9.8.4
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @license        MIT
 // @include        explorer.exe
 // ==/WindhawkMod==
-
 // ==WindhawkModReadme==
 /*
-# Redirect Settings → Control Panel (v9.7.1)
+# Redirect Settings → Control Panel (v9.8.4)
 
-This mod intercepts modern `ms-settings:` URI protocols and forces Windows to open their classic
-Control Panel equivalents when possible. It relies entirely on native Windows components and
-legacy CLSIDs without requiring any third-party external programs.
+This Windhawk mod intercepts modern `ms-settings:` URIs and redirects them to
+their corresponding classic Control Panel applets, relying exclusively on native
+Windows components (no external binaries or dependencies).
 
-**Scope:** This mod only intercepts calls made from within Explorer (explorer.exe).
-`ms-settings:` links opened from Start Menu, Search (StartMenuExperienceHost, SearchHost),
-or other applications will not be redirected.
+---
 
-### Compatibility & Limitations:
-- **Windows 10:** Effective for the mapped entries since most legacy control panels from the Windows 7/8/8.1 era are still intact
-  and accessible via standard shell hooks.
-- **Windows 11:** Limited. Microsoft has deprecated or hardcoded many legacy CLSIDs.
-  However, key elements like network properties (`ncpa.cpl`) and specific dialog mappings
-  still function. Unmapped pages pass through to the Settings app by default
-  (configurable via FallbackMode).
+## Overview
 
-### Key Features:
-- **Smart Desktop Personalization Hook:** Right-clicking the desktop opens the Personalization
-  window; clicking "Desktop Background" from inside it opens the wallpaper page.
-- **Precise command interception:** Only intercepts `control.exe system` (exact lone argument),
-  avoiding false positives from paths containing "System32".
+This mod restores access to the legacy Control Panel experience from older
+versions of Windows. When a system setting link is opened (typically triggering
+the modern Settings app), it is transparently redirected to the equivalent
+classic Control Panel interface whenever possible.
 
-### Settings (v9.7.1):
-- **EnableRedirects** — Turns the mod on or off completely.
-- **UIOnlyRedirects** — Safer mode: only intercepts ShellExecute calls, not CreateProcessW.
-- **SmartPersonalizationDetection** — Contextual awareness for the desktop right-click.
-- **FallbackMode** — What happens for unmapped `ms-settings:` URIs.
-- **Win11CompatibilityMode** — Skips CLSIDs known to be broken on Win11.
+This is particularly useful for users who prefer the Windows 7-style Control
+Panel workflow or want a faster, more direct navigation model compared to the
+modern Settings application.
+
+---
+
+## Scope of Interception
+
+Redirection is applied **only to ShellExecute calls originating from File Explorer**.
+This design choice minimizes side effects and avoids interfering with:
+
+- Start Menu behavior  
+- Windows Search results  
+- Third-party applications  
+
+All other invocation contexts remain unaffected.
+
+---
+
+## Compatibility
+
+### Windows 10
+Fully functional in most scenarios. The majority of Control Panel applets are
+still present and correctly mapped. Some legacy applets removed by Microsoft
+(e.g. Taskbar-related settings or legacy Display configuration pages) cannot be
+resolved and will fall back to the configured behavior.
+
+### Windows 11
+Partially supported due to the removal or migration of several Control Panel
+components into the Settings app.
+
+When no valid classic equivalent exists, behavior is controlled via fallback
+configuration (see Settings section). Options include:
+
+- Opening the root Control Panel
+- Allowing the modern Settings app to launch
+- Suppressing the action entirely
+
+Ongoing compatibility improvements target newer Windows 11 builds.
+
+---
+
+## Features
+
+- Over 90 URI-to-applet mappings covering:
+  System, Network, Personalization, Sound, Devices, Accounts, Fonts, and more
+- Enhanced desktop context handling:
+  - Right-click Desktop → opens classic Personalization
+  - Nested navigation support for wallpaper selection workflows
+- Safe fallback handling for unmapped settings
+- Anti-loop protection for recursive redirections on Windows 11
+- Lightweight implementation using native Windows APIs only
+
+---
+
+## Configuration Options
+
+- **EnableRedirects**  
+  Master switch enabling or disabling all redirections.
+
+- **UIOnlyRedirects**  
+  Restricts interception to ShellExecute/UI-level calls only, avoiding script-level execution paths for improved safety.
+
+- **SmartPersonalizationDetection**  
+  Differentiates between desktop context actions and in-window personalization navigation.
+
+- **FallbackMode**  
+  Defines behavior when no classic Control Panel equivalent exists.
+
+- **Win11CompatibilityMode**  
+  Enables additional safeguards for Windows 11, including blocking unverified CLSID targets.
+
+- **MaxLaunchesPerUri**  
+  Limits repeated redirection chains to prevent infinite loops or runaway execution.
 */
 // ==/WindhawkModReadme==
-
 // ==WindhawkModSettings==
 /*
 - EnableRedirects: true
@@ -64,7 +121,10 @@ or other applications will not be redirected.
   - "2": Pass through to the modern Settings application (ms-settings.exe)
 - Win11CompatibilityMode: false
   $name: Windows 11 Compatibility Mode
-  $description: "On Windows 11, replaces CLSIDs known to be broken with a plain Control Panel open."
+  $description: "On Windows 11, also replaces CLSIDs not confirmed safe (beyond the always-blocked known-loop CLSIDs)."
+- MaxLaunchesPerUri: 3
+  $name: Loop Guard — max launches per URI (per 5 s)
+  $description: "Safety valve: if the same redirect target fires more than this many times in 5 seconds the mod stops launching it. Set to 0 to disable."
 */
 // ==/WindhawkModSettings==
 
@@ -76,17 +136,27 @@ or other applications will not be redirected.
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <mutex>
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-// ShellExecuteW: any value > 32 signals success to the caller
 static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
 
 #define SYSTEM_PROPS_CLSID  L"shell:::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}"
 #define NOTIF_AREA_CLSID    L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}"
-#define PERS_ROOT_CLSID     L"shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
-#define PERS_WALLPAPER      PERS_ROOT_CLSID L"\\pageWallpaper"
-#define PERS_COLORS         PERS_ROOT_CLSID L"\\pageColorization"
+
+// Classic Personalization CPL opened via "explorer shell:::{ED834ED6} [-page]"
+// syntax. Explorer resolves the CLSID namespace directly, bypassing the
+// ShellExecuteEx/DelegateExecute path that redirects to ms-settings on Win11.
+// The "-Microsoft.Personalization\pageX" suffix navigates to a sub-page.
+// All four values are full command lines handled by LaunchTarget.
+#define PERS_ED_CLSID   L"shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
+#define PERS_ROOT       L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
+#define PERS_WALLPAPER  L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageWallpaper"
+#define PERS_COLORS     L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageColorization"
+
+// Sentinel: URI has no working CP equivalent on Win11; route straight to fallback.
+#define WIN11_PASSTHROUGH L"__PASSTHROUGH__"
 
 // ── Forward declarations ──────────────────────────────────────────────────────
 
@@ -98,6 +168,51 @@ static CreateProcessW_t CreateProcessW_orig = nullptr;
 using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
 static ShellExecuteW_t ShellExecuteW_orig = nullptr;
 
+// ── In-process reentry guard ──────────────────────────────────────────────────
+//
+// Prevents hooks from re-intercepting calls made by code that our mod itself
+// triggered (e.g. Control Panel subpages, Explorer internal navigation).
+// This is per-thread so concurrent Explorer threads don't block each other.
+//
+// Usage: create a HookGuard at the top of each hook function, then call
+// IsReentrant() to decide whether to pass through.
+
+static thread_local int g_hookDepth = 0;
+
+struct HookGuard {
+    HookGuard()  { ++g_hookDepth; }
+    ~HookGuard() { --g_hookDepth; }
+    bool IsReentrant() const { return g_hookDepth > 1; }
+};
+
+// ── Cross-process reentry guard ───────────────────────────────────────────────
+//
+// Child processes spawned by LaunchTarget receive WH_STC_NOREDIRECT=1 in their
+// environment. Hooks in the child check this flag and pass through without
+// re-intercepting, preventing cross-process redirect loops.
+
+static std::wstring g_childEnvBlock;
+
+static void BuildChildEnvironment() {
+    LPWCH curEnv = GetEnvironmentStringsW();
+    if (curEnv) {
+        LPWCH p = curEnv;
+        while (*p) {
+            std::wstring entry(p);
+            if (entry.find(L"WH_STC_NOREDIRECT=") != 0) {
+                g_childEnvBlock += entry + L'\0';
+            }
+            p += entry.length() + 1;
+        }
+        FreeEnvironmentStringsW(curEnv);
+    }
+    g_childEnvBlock += L"WH_STC_NOREDIRECT=1\0\0";
+}
+
+static bool IsChildProcess() {
+    return GetEnvironmentVariableW(L"WH_STC_NOREDIRECT", nullptr, 0) > 0;
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 struct ModSettings {
@@ -106,6 +221,7 @@ struct ModSettings {
     bool smartPersonalizationDetect = true;
     int  fallbackMode               = 2;
     bool win11CompatibilityMode     = false;
+    int  maxLaunchesPerUri          = 3;
 };
 
 static ModSettings g_settings;
@@ -116,12 +232,9 @@ static void LoadSettings() {
     g_settings.smartPersonalizationDetect = Wh_GetIntSetting(L"SmartPersonalizationDetection") != 0;
 
     PCWSTR fallbackStr = Wh_GetStringSetting(L"FallbackMode");
-    if (fallbackStr && fallbackStr[0] != L'\0') {
+    if (fallbackStr[0] != L'\0') {
         int mode = _wtoi(fallbackStr);
-        if (mode >= 0 && mode <= 2)
-            g_settings.fallbackMode = mode;
-        else
-            g_settings.fallbackMode = 2;
+        g_settings.fallbackMode = (mode >= 0 && mode <= 2) ? mode : 2;
     } else {
         g_settings.fallbackMode = 2;
     }
@@ -129,12 +242,16 @@ static void LoadSettings() {
 
     g_settings.win11CompatibilityMode = Wh_GetIntSetting(L"Win11CompatibilityMode") != 0;
 
-    Wh_Log(L"EnableRedirects=%d  UIOnly=%d  SmartPers=%d  Fallback=%d  Win11Compat=%d",
+    int ml = Wh_GetIntSetting(L"MaxLaunchesPerUri");
+    g_settings.maxLaunchesPerUri = (ml >= 0 && ml <= 20) ? ml : 3;
+
+    Wh_Log(L"EnableRedirects=%d  UIOnly=%d  SmartPers=%d  Fallback=%d  Win11Compat=%d  MaxLaunches=%d",
         (int)g_settings.enableRedirects,
         (int)g_settings.uiOnlyRedirects,
         (int)g_settings.smartPersonalizationDetect,
         g_settings.fallbackMode,
-        (int)g_settings.win11CompatibilityMode);
+        (int)g_settings.win11CompatibilityMode,
+        g_settings.maxLaunchesPerUri);
 }
 
 // ── Win11 detection ───────────────────────────────────────────────────────────
@@ -156,20 +273,126 @@ static void DetectWindowsVersion() {
     Wh_Log(L"Build %lu  IsWin11=%d", osvi.dwBuildNumber, (int)g_isWin11);
 }
 
+// ── Loop guard + Bounce-back detection ───────────────────────────────────────
+//
+// Two distinct protections:
+//
+// 1. LOOP GUARD (existing): caps total launches of a given *target* within 5 s.
+//
+// 2. BOUNCE-BACK DETECTOR (new): detects when a CP panel/CPL that we launched
+//    no longer exists on Win11 and silently re-fires the original ms-settings URI.
+//    Pattern: same URI seen again within BOUNCE_WINDOW_MS of a prior redirect.
+//    On detection the second call is routed to fallback instead of retrying.
+//    This is separate from the loop guard so it works even with MaxLaunches > 1.
+
+struct LaunchRecord {
+    int   count     = 0;
+    DWORD firstTick = 0;
+};
+
+// Bounce-back: records the tick at which we last redirected a given URI.
+struct BounceRecord {
+    DWORD lastRedirectTick = 0;
+};
+
+static std::mutex                                      g_loopGuardMtx;
+static std::unordered_map<std::wstring, LaunchRecord>  g_loopGuard;
+static std::unordered_map<std::wstring, BounceRecord>  g_bounceGuard;
+
+static constexpr DWORD LOOP_WINDOW_MS   = 5000;
+static constexpr DWORD BOUNCE_WINDOW_MS = 600;
+
+// Call this when we are about to redirect a URI (before LaunchTarget).
+// Records the redirect time for bounce-back detection.
+static void BounceGuardRecord(const std::wstring& uri) {
+    std::lock_guard<std::mutex> lk(g_loopGuardMtx);
+    g_bounceGuard[uri].lastRedirectTick = GetTickCount();
+}
+
+// Call this when a URI fires again. Returns true if it looks like a bounce-back
+// (the same URI came back too quickly after we redirected it → the target is dead).
+static bool BounceGuardIsBounce(const std::wstring& uri) {
+    std::lock_guard<std::mutex> lk(g_loopGuardMtx);
+    auto it = g_bounceGuard.find(uri);
+    if (it == g_bounceGuard.end()) return false;
+    DWORD elapsed = GetTickCount() - it->second.lastRedirectTick;
+    if (elapsed < BOUNCE_WINDOW_MS) {
+        Wh_Log(L"BOUNCE-BACK: '%s' returned %lu ms after redirect — target is dead, routing to fallback",
+               uri.c_str(), elapsed);
+        // Reset so the user can try again after the window expires
+        it->second.lastRedirectTick = 0;
+        return true;
+    }
+    return false;
+}
+
+static bool LoopGuardAllow(const std::wstring& target) {
+    if (g_settings.maxLaunchesPerUri <= 0) return true;
+
+    std::lock_guard<std::mutex> lk(g_loopGuardMtx);
+    DWORD now = GetTickCount();
+    auto& rec = g_loopGuard[target];
+
+    if (rec.count == 0 || (now - rec.firstTick) >= LOOP_WINDOW_MS) {
+        rec.count     = 1;
+        rec.firstTick = now;
+        return true;
+    }
+
+    if (rec.count < g_settings.maxLaunchesPerUri) {
+        rec.count++;
+        return true;
+    }
+
+    Wh_Log(L"LOOP GUARD: suppressing launch of '%s' (fired %d times in %lu ms)",
+           target.c_str(), rec.count, (now - rec.firstTick));
+    return false;
+}
+
+// ── CLSID classification ──────────────────────────────────────────────────────
+
 static const std::unordered_set<std::wstring> g_win11SafeClsids = {
     L"shell:::{8e908fc9-becc-40f6-915b-f4ca0e70d03d}",
     L"shell:::{7007acc7-3202-11d1-aad2-00805fc1270e}",
-    L"shell:::{a8a91a66-3a7d-4424-8d24-04e180695C7A}",
+    L"shell:::{a8a91a66-3a7d-4424-8d24-04e180695c7a}",
     L"shell:::{4026492f-2f69-46b8-b9bf-5654fc07e423}",
     L"shell:::{20d04fe0-3aea-1069-a2d8-08002b30309d}",
     L"shell:::{60632754-c523-4b62-b45c-4172da012619}",
     L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}",
+    L"shell:::{2227a280-3aea-1069-a2de-08002b30309d}",
+    L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}",
+    L"shell:::{9c60de1e-e5fc-40f4-a487-460851a8d915}",
+    L"shell:::{b98a2bea-7d42-4558-8bd1-832f41bac6fd}",
+    L"shell:::{bd84b380-8ca2-1069-ab1d-08000948f534}",
+    L"shell:::{d555645e-d4f8-4c29-a827-d93c859c4f2a}",
+    L"shell:::{d9ef8727-cac2-4e60-809e-86f80a666c91}",
 };
 
-static bool IsClsidSafeOnWin11(const std::wstring& target) {
-    std::wstring lower = target;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
-    return g_win11SafeClsids.count(lower) > 0;
+// CLSIDs that on Win11 trigger a redirect back to ms-settings when opened
+// via ShellExecuteEx (DelegateExecute path). ApplyWin11Filter intercepts these
+// and routes them to working alternatives before they are passed to Explorer.
+// Note: {ED834ED6} is handled specially -> PERS_ROOT / PERS_WALLPAPER.
+//       {BB06C0E4} is handled specially -> sysdm.cpl.
+//       The rest fall back to control.exe.
+static const std::unordered_set<std::wstring> g_win11LoopClsids = {
+    L"shell:::{bb06c0e4-d293-4f75-8a90-cb05b6477eee}",  // System Properties
+    L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}",  // Personalization CPL
+    L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}",  // Default Programs
+    L"shell:::{80f3f1d5-feca-45f3-bc32-752c152e456e}",  // Pen and Touch
+    L"shell:::{9fe63afd-59cf-4419-9775-abcc3849f861}",  // Recovery
+    L"shell:::{c58c4893-3be0-4b45-abb5-a63e4b8c8651}",  // Troubleshooting
+};
+
+static bool IsClsidSafeOnWin11(const std::wstring& lowerTarget) {
+    return g_win11SafeClsids.count(lowerTarget) > 0;
+}
+
+static bool IsClsidLoopOnWin11(const std::wstring& lowerTarget) {
+    std::wstring base = lowerTarget;
+    size_t brace = base.rfind(L'}');
+    if (brace != std::wstring::npos && brace + 1 < base.size())
+        base = base.substr(0, brace + 1);
+    return g_win11LoopClsids.count(base) > 0;
 }
 
 // ── String utilities ──────────────────────────────────────────────────────────
@@ -184,76 +407,86 @@ static std::wstring ToLower(std::wstring s) {
 static std::unordered_map<std::wstring, std::wstring> g_mappings;
 
 static void InitMappings() {
+    const bool w11 = g_isWin11;
+
     g_mappings = {
 
         // ── Personalization ──────────────────────────────────────────────────
-        {L"ms-settings:personalization",                    PERS_ROOT_CLSID},
-        {L"ms-settings:personalization-colors",             PERS_COLORS},
-        {L"ms-settings:colors",                             PERS_COLORS},
-        {L"ms-settings:themes",                             PERS_ROOT_CLSID},
-        {L"ms-settings:lockscreen",                         PERS_ROOT_CLSID},
-        {L"ms-settings:personalization-start",              PERS_ROOT_CLSID},
-        {L"ms-settings:personalization-start-places",       PERS_ROOT_CLSID},
-        {L"ms-settings:background",                         PERS_WALLPAPER},
-        {L"ms-settings:personalization-background-wallpaper",PERS_WALLPAPER},
-        {L"ms-settings:personalization-background-slideshow",PERS_WALLPAPER},
+        // PERS_ROOT and PERS_WALLPAPER use the "explorer shell:::{ED834ED6} [-page]"
+        // syntax, which works on both Win10 and Win11. Explorer opens the CLSID
+        // namespace directly without triggering the DelegateExecute redirect.
+        {L"ms-settings:personalization",             PERS_ROOT},
+        {L"ms-settings:personalization-colors",      PERS_COLORS},
+        {L"ms-settings:colors",                      PERS_COLORS},
+        {L"ms-settings:themes",                      PERS_ROOT},
+        {L"ms-settings:lockscreen",                  PERS_ROOT},
+        {L"ms-settings:personalization-start",       PERS_ROOT},
+        {L"ms-settings:personalization-start-places",PERS_ROOT},
+        {L"ms-settings:background",                  PERS_WALLPAPER},
+        {L"ms-settings:personalization-background-wallpaper",  PERS_WALLPAPER},
+        {L"ms-settings:personalization-background-slideshow",  PERS_WALLPAPER},
+
         {L"ms-settings:fonts",
             L"shell:::{BD84B380-8CA2-1069-AB1D-08000948F534}"},
 
         // ── Color Management ─────────────────────────────────────────────────
-        {L"ms-settings:display-advanced-color",             L"colorcpl.exe"},
-        {L"ms-settings:colorcpl",                           L"colorcpl.exe"},
+        {L"ms-settings:display-advanced-color",              L"colorcpl.exe"},
+        {L"ms-settings:colorcpl",                            L"colorcpl.exe"},
 
         // ── System / About ───────────────────────────────────────────────────
-        {L"ms-settings:about",                              SYSTEM_PROPS_CLSID},
-        {L"ms-settings:system",                             SYSTEM_PROPS_CLSID},
-        {L"ms-settings:sysinfo",                            SYSTEM_PROPS_CLSID},
-        {L"ms-settings:system-about",                       SYSTEM_PROPS_CLSID},
-        {L"ms-settings:system-protection",                  L"sysdm.cpl,,4"},
-        {L"ms-settings:system-remotedesktop",               L"sysdm.cpl,,5"},
-        {L"ms-settings:remotedesktop",                      L"sysdm.cpl,,5"},
-        {L"ms-settings:devicemanager",                      L"devmgmt.msc"},
-        {L"ms-settings:system-devicemanager",               L"devmgmt.msc"},
-        {L"ms-settings:computermanagement",                 L"compmgmt.msc"},
-        {L"ms-settings:activation",                         L"slui.exe"},
-        {L"ms-settings:appsfeatures",                       L"appwiz.cpl"},
-        {L"ms-settings:appsforwebsites",                    L"appwiz.cpl"},
-        {L"ms-settings:optionalfeatures",                   L"OptionalFeatures.exe"},
+        {L"ms-settings:about",
+            w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
+        {L"ms-settings:system",
+            w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
+        {L"ms-settings:sysinfo",
+            w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
+        {L"ms-settings:system-about",
+            w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
+        {L"ms-settings:system-protection",                   L"sysdm.cpl,,4"},
+        {L"ms-settings:system-remotedesktop",                L"sysdm.cpl,,5"},
+        {L"ms-settings:remotedesktop",                       L"sysdm.cpl,,5"},
+        {L"ms-settings:devicemanager",                       L"devmgmt.msc"},
+        {L"ms-settings:system-devicemanager",                L"devmgmt.msc"},
+        {L"ms-settings:computermanagement",                  L"compmgmt.msc"},
+        {L"ms-settings:activation",                          L"slui.exe"},
+        {L"ms-settings:appsfeatures",                        L"appwiz.cpl"},
+        {L"ms-settings:appsforwebsites",                     L"appwiz.cpl"},
+        {L"ms-settings:optionalfeatures",                    L"OptionalFeatures.exe"},
 
         // ── Power ────────────────────────────────────────────────────────────
-        {L"ms-settings:powersleep",                         L"powercfg.cpl"},
-        {L"ms-settings:battery",                            L"powercfg.cpl"},
-        {L"ms-settings:batterysaver",                       L"powercfg.cpl"},
-        {L"ms-settings:batterysaver-settings",              L"powercfg.cpl"},
-        {L"ms-settings:batterysaver-usagedetails",          L"powercfg.cpl"},
+        {L"ms-settings:powersleep",                          L"powercfg.cpl"},
+        {L"ms-settings:battery",                             L"powercfg.cpl"},
+        {L"ms-settings:batterysaver",                        L"powercfg.cpl"},
+        {L"ms-settings:batterysaver-settings",               L"powercfg.cpl"},
+        {L"ms-settings:batterysaver-usagedetails",           L"powercfg.cpl"},
 
         // ── Sound ────────────────────────────────────────────────────────────
-        {L"ms-settings:sound",                              L"mmsys.cpl"},
-        {L"ms-settings:sound-devices",                      L"mmsys.cpl"},
-        {L"ms-settings:audio",                              L"mmsys.cpl"},
-        {L"ms-settings:apps-volume",                        L"sndvol.exe"},
+        {L"ms-settings:sound",                               L"mmsys.cpl"},
+        {L"ms-settings:sound-devices",                       L"mmsys.cpl"},
+        {L"ms-settings:audio",                               L"mmsys.cpl"},
+        {L"ms-settings:apps-volume",                         L"sndvol.exe"},
 
         // ── Notifications / Taskbar ──────────────────────────────────────────
-        {L"ms-settings:notifications",                      NOTIF_AREA_CLSID},
-        {L"ms-settings:taskbar-notifications",              NOTIF_AREA_CLSID},
-        {L"ms-settings:taskbar-systemtray",                 NOTIF_AREA_CLSID},
-        {L"ms-settings:notifications-systemtray",           NOTIF_AREA_CLSID},
-        {L"ms-settings:systemtray",                         NOTIF_AREA_CLSID},
-        {L"ms-settings:notificationiconpreferences",        NOTIF_AREA_CLSID},
+        {L"ms-settings:notifications",                       NOTIF_AREA_CLSID},
+        {L"ms-settings:taskbar-notifications",               NOTIF_AREA_CLSID},
+        {L"ms-settings:taskbar-systemtray",                  NOTIF_AREA_CLSID},
+        {L"ms-settings:notifications-systemtray",            NOTIF_AREA_CLSID},
+        {L"ms-settings:systemtray",                          NOTIF_AREA_CLSID},
+        {L"ms-settings:notificationiconpreferences",         NOTIF_AREA_CLSID},
 
         // ── Input devices ────────────────────────────────────────────────────
-        {L"ms-settings:mousetouchpad",                      L"main.cpl"},
-        {L"ms-settings:devices-touchpad",                   L"main.cpl"},
-        {L"ms-settings:keyboard",                           L"main.cpl,,1"},
-        {L"ms-settings:typing",                             L"main.cpl,,1"},
+        {L"ms-settings:mousetouchpad",                       L"main.cpl"},
+        {L"ms-settings:devices-touchpad",                    L"main.cpl"},
+        {L"ms-settings:keyboard",                            L"main.cpl,,1"},
+        {L"ms-settings:typing",                              L"main.cpl,,1"},
         {L"ms-settings:pen",
-            L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
+            w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
         {L"ms-settings:pen-windowsink",
-            L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
+            w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
         {L"ms-settings:pen-windowsinksettings",
-            L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
+            w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
         {L"ms-settings:devices-touch",
-            L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
+            w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
         {L"ms-settings:autoplay",
             L"shell:::{9C60DE1E-E5FC-40f4-A487-460851A8D915}"},
 
@@ -292,7 +525,7 @@ static void InitMappings() {
             L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:datausage",
             L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-proxy",                      L"inetcpl.cpl,,4"},
+        {L"ms-settings:network-proxy",                       L"inetcpl.cpl,,4"},
         {L"ms-settings:network-status",
             L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
         {L"ms-settings:network-dialup",
@@ -315,31 +548,35 @@ static void InitMappings() {
             L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
         {L"ms-settings:accounts",
             L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
-        {L"ms-settings:startupapps",                        L"msconfig.exe"},
-
-        // ── Time & Language ───────────────────────────────────────────────────
-        {L"ms-settings:dateandtime",                        L"timedate.cpl"},
-        {L"ms-settings:dateandtime-region",                 L"timedate.cpl"},
-        {L"ms-settings:dateandtime-addclocks",              L"timedate.cpl,,1"},
-        {L"ms-settings:regionlanguage",                     L"intl.cpl"},
-        {L"ms-settings:regionformatting",                   L"intl.cpl"},
-        {L"ms-settings:language",                           L"intl.cpl"},
-
-        // ── Ease of Access (root only) ───────────────────────────────────────
-        {L"ms-settings:easeofaccess",
-            L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"},
+        {L"ms-settings:startupapps",                         L"msconfig.exe"},
 
         // ── Default Apps ──────────────────────────────────────────────────────
+        // Microsoft.DefaultPrograms panel was removed on Win11 24H2.
+        // The CPL would open briefly and re-fire ms-settings:defaultapps,
+        // causing a bounce-back loop. Route to passthrough (FallbackMode) instead.
         {L"ms-settings:defaultapps",
-            L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}"},
+            w11 ? WIN11_PASSTHROUGH
+                : L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}"},
+
+        // ── Time & Language ───────────────────────────────────────────────────
+        {L"ms-settings:dateandtime",                         L"timedate.cpl"},
+        {L"ms-settings:dateandtime-region",                  L"timedate.cpl"},
+        {L"ms-settings:dateandtime-addclocks",               L"timedate.cpl,,1"},
+        {L"ms-settings:regionlanguage",                      L"intl.cpl"},
+        {L"ms-settings:regionformatting",                    L"intl.cpl"},
+        {L"ms-settings:language",                            L"intl.cpl"},
+
+        // ── Ease of Access ────────────────────────────────────────────────────
+        {L"ms-settings:easeofaccess",
+            L"shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"},
 
         // ── Recovery / Backup ─────────────────────────────────────────────────
         {L"ms-settings:backup",
             L"shell:::{B98A2BEA-7D42-4558-8BD1-832F41BAC6FD}"},
         {L"ms-settings:recovery",
-            L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
+            w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
         {L"ms-settings:troubleshoot",
-            L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},
+            w11 ? L"control.exe" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},
         {L"ms-settings:deviceencryption",
             L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
     };
@@ -374,16 +611,41 @@ static bool IsShellClsid(const wchar_t* s) {
     return ToLower(s).find(L"shell:::") != std::wstring::npos;
 }
 
-// ── Win11 compat filter ───────────────────────────────────────────────────────
+// ── Win11 CLSID filter ────────────────────────────────────────────────────────
 
-static std::wstring ApplyWin11Compat(const std::wstring& target) {
-    if (!g_settings.win11CompatibilityMode || !g_isWin11) return target;
+static std::wstring ApplyWin11Filter(const std::wstring& target) {
+    if (!g_isWin11) return target;
 
     std::wstring lower = ToLower(target);
-    if (lower.find(L"shell:::") == 0 && !IsClsidSafeOnWin11(lower)) {
-        Wh_Log(L"Win11 compat: replacing unsafe CLSID '%s' with control.exe", target.c_str());
+
+    if (lower.find(L"shell:::") != 0) return target;
+
+    if (IsClsidLoopOnWin11(lower)) {
+        if (lower.find(L"ed834ed6") != std::wstring::npos) {
+            // Use the unified "explorer shell:::{ED834ED6} [-page]" syntax.
+            // This bypasses DelegateExecute and works on both Win10 and Win11.
+            if (lower.find(L"pagewallpaper") != std::wstring::npos) {
+                Wh_Log(L"Win11 loop-guard: {ED834ED6}\\pageWallpaper -> PERS_WALLPAPER");
+                return PERS_WALLPAPER;
+            }
+            Wh_Log(L"Win11 loop-guard: {ED834ED6} -> PERS_ROOT");
+            return PERS_ROOT;
+        }
+        if (lower.find(L"bb06c0e4") != std::wstring::npos) {
+            Wh_Log(L"Win11 loop-guard: {BB06C0E4} -> sysdm.cpl");
+            return L"sysdm.cpl";
+        }
+        Wh_Log(L"Win11 loop-guard: replacing loop CLSID '%s' with control.exe",
+               target.c_str());
         return L"control.exe";
     }
+
+    if (g_settings.win11CompatibilityMode && !IsClsidSafeOnWin11(lower)) {
+        Wh_Log(L"Win11 compat: replacing unconfirmed CLSID '%s' with control.exe",
+               target.c_str());
+        return L"control.exe";
+    }
+
     return target;
 }
 
@@ -421,21 +683,55 @@ static bool HandleFallback(const std::wstring& uri) {
 static void LaunchTarget(const std::wstring& command) {
     Wh_Log(L"Launching: %s", command.c_str());
 
-    // Use ShellExecuteW_orig for targets that need elevation / UAC
-    if (command == L"devmgmt.msc" ||
-    command == L"compmgmt.msc" ||
-    command == L"slui.exe" ||
-    command == L"C:\\Windows\\System32\\devmgmt.msc" ||
-    command == L"C:\\Windows\\System32\\compmgmt.msc" ||
-    command == L"C:\\Windows\\System32\\slui.exe" ||
-    command == L"OptionalFeatures.exe" ||
-    command == L"C:\\Windows\\System32\\OptionalFeatures.exe") {
-    ShellExecuteW_orig(nullptr, L"open", command.c_str(),
-                       nullptr, nullptr, SW_SHOWNORMAL);
-    return;
-}
+    if (!LoopGuardAllow(command)) {
+        Wh_Log(L"Launch suppressed by loop guard: %s", command.c_str());
+        return;
+    }
 
+    // Full command lines (exe + arguments)
+    {
+        std::wstring lower = ToLower(command);
+        bool isFullCmdLine =
+            (lower.find(L"rundll32.exe ")    != std::wstring::npos) ||
+            (lower.find(L"explorer.exe ")    != std::wstring::npos) ||
+            // "explorer shell:::{...}" — no .exe, but still a full command line
+            (lower.find(L"explorer shell:::") != std::wstring::npos) ||
+            (lower.find(L"control.exe /")    != std::wstring::npos);
 
+        if (isFullCmdLine) {
+            STARTUPINFOW si = {}; si.cb = sizeof(si);
+            si.dwFlags = STARTF_USESHOWWINDOW; si.wShowWindow = SW_SHOWNORMAL;
+            PROCESS_INFORMATION pi = {};
+            std::wstring mutable_cmd = command;
+            if (!CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr,
+                                     FALSE, CREATE_UNICODE_ENVIRONMENT,
+                                     (LPVOID)g_childEnvBlock.c_str(),
+                                     nullptr, &si, &pi)) {
+                Wh_Log(L"CreateProcess failed for '%s' (%lu)",
+                       command.c_str(), GetLastError());
+            } else {
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            }
+            return;
+        }
+    }
+
+    // ShellExecute passthrough for UAC targets
+    if (command == L"devmgmt.msc"                          ||
+        command == L"compmgmt.msc"                         ||
+        command == L"slui.exe"                             ||
+        command == L"OptionalFeatures.exe"                 ||
+        command == L"C:\\Windows\\System32\\devmgmt.msc"   ||
+        command == L"C:\\Windows\\System32\\compmgmt.msc"  ||
+        command == L"C:\\Windows\\System32\\slui.exe"      ||
+        command == L"C:\\Windows\\System32\\OptionalFeatures.exe") {
+        ShellExecuteW_orig(nullptr, L"open", command.c_str(),
+                           nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
+
+    // Generic router
     STARTUPINFOW si = {};
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
@@ -445,12 +741,10 @@ static void LaunchTarget(const std::wstring& command) {
 
     if (command.find(L".msc") != std::wstring::npos) {
         cmdLine = L"mmc.exe \"" + command + L"\"";
-    } else if (command.find(L".exe") != std::wstring::npos ||
-               command.find(L".cpl") != std::wstring::npos) {
-        if (command.find(L".cpl") != std::wstring::npos)
-            cmdLine = L"control.exe " + command;
-        else
-            cmdLine = command;
+    } else if (command.find(L".cpl") != std::wstring::npos) {
+        cmdLine = L"control.exe " + command;
+    } else if (command.find(L".exe") != std::wstring::npos) {
+        cmdLine = command;
     } else if (command.find(L"shell:::") == 0) {
         cmdLine = L"explorer.exe " + command;
     } else if (command.empty()) {
@@ -461,7 +755,9 @@ static void LaunchTarget(const std::wstring& command) {
 
     std::wstring mutableCmd = cmdLine;
     if (!CreateProcessW_orig(nullptr, mutableCmd.data(), nullptr, nullptr,
-                             FALSE, 0, nullptr, nullptr, &si, &pi)) {
+                             FALSE, CREATE_UNICODE_ENVIRONMENT,
+                             (LPVOID)g_childEnvBlock.c_str(),
+                             nullptr, &si, &pi)) {
         Wh_Log(L"CreateProcess failed for '%s' (error %lu)",
                cmdLine.c_str(), GetLastError());
         return;
@@ -513,14 +809,14 @@ static bool IsPersonalizationWindow(HWND hwnd) {
 static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
     if (!g_settings.smartPersonalizationDetect) {
         Wh_Log(L"SmartPersonalizationDetection OFF -> Personalization root");
-        return PERS_ROOT_CLSID;
+        return PERS_ROOT;
     }
     if (IsPersonalizationWindow(hwnd)) {
         Wh_Log(L"personalization-background -> wallpaper page");
         return PERS_WALLPAPER;
     }
     Wh_Log(L"personalization-background -> Personalization root");
-    return PERS_ROOT_CLSID;
+    return PERS_ROOT;
 }
 
 // ── Core resolve logic ────────────────────────────────────────────────────────
@@ -532,14 +828,39 @@ struct ResolveResult {
 
 static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     if (uri == L"ms-settings:personalization-background") {
-        std::wstring t = ApplyWin11Compat(ResolvePersonalizationBackground(hwnd));
+        // Bounce-back check: if this URI is returning quickly after our redirect,
+        // the target is dead — go straight to fallback.
+        if (BounceGuardIsBounce(uri)) {
+            Wh_Log(L"Bounce-back on personalization-background, routing to fallback");
+            bool handled = HandleFallback(uri);
+            return {L"", handled};
+        }
+        std::wstring t = ApplyWin11Filter(ResolvePersonalizationBackground(hwnd));
+        BounceGuardRecord(uri);
         return {t, true};
     }
 
     auto it = g_mappings.find(uri);
     if (it != g_mappings.end()) {
-        std::wstring t = ApplyWin11Compat(it->second);
+        // Bounce-back check before attempting the mapped target
+        if (BounceGuardIsBounce(uri)) {
+            Wh_Log(L"Bounce-back on '%s', routing to fallback", uri.c_str());
+            bool handled = HandleFallback(uri);
+            return {L"", handled};
+        }
+
+        std::wstring t = ApplyWin11Filter(it->second);
+
+        // PASSTHROUGH sentinel: this URI has no working CP equivalent on this OS.
+        // Route directly to fallback without spawning anything.
+        if (t == WIN11_PASSTHROUGH) {
+            Wh_Log(L"Passthrough sentinel for '%s', routing to fallback", uri.c_str());
+            bool handled = HandleFallback(uri);
+            return {L"", handled};
+        }
+
         Wh_Log(L"Mapped: %s -> %s", uri.c_str(), t.c_str());
+        BounceGuardRecord(uri);
         return {t, true};
     }
 
@@ -548,7 +869,19 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
         return {L"", handled};
     }
 
-    Wh_Log(L"Unmapped shell target, passing through: %s", uri.c_str());
+    // For direct shell::: CLSIDs: on Win11 only intercept known loop CLSIDs.
+    // On Win10, pass through — they were already explicitly passed by the caller
+    // as a CLSID, so no translation needed.
+    if (uri.find(L"shell:::") == 0) {
+        if (g_isWin11 && IsClsidLoopOnWin11(uri)) {
+            std::wstring t = ApplyWin11Filter(uri);
+            Wh_Log(L"Win11 loop-CLSID intercepted: %s -> %s", uri.c_str(), t.c_str());
+            return {t, true};
+        }
+        // Not a loop CLSID or not Win11: do not intercept
+    }
+
+    Wh_Log(L"Unmapped, passing through: %s", uri.c_str());
     return {L"", false};
 }
 
@@ -557,6 +890,14 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
 static std::wstring BaseNameLower(const std::wstring& path) {
     size_t pos = path.rfind(L'\\');
     return ToLower((pos != std::wstring::npos) ? path.substr(pos + 1) : path);
+}
+
+static bool IsControlSystemParams(const wchar_t* file, const wchar_t* params) {
+    if (!file || !params) return false;
+    std::wstring exe = BaseNameLower(file);
+    if (exe != L"control.exe" && exe != L"control") return false;
+    std::wstring arg = ToLower(params);
+    return (arg == L"system" || arg == L"microsoft.system");
 }
 
 static bool IsControlSystemCommand(const std::wstring& cmdLine) {
@@ -596,6 +937,15 @@ using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 ShellExecuteExW_t ShellExecuteExW_orig;
 
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
+    if (IsChildProcess())
+        return ShellExecuteExW_orig(pei);
+
+    HookGuard guard;
+    if (guard.IsReentrant()) {
+        Wh_Log(L"ShellExecuteExW: reentrant call, passing through");
+        return ShellExecuteExW_orig(pei);
+    }
+
     if (!g_settings.enableRedirects || !pei)
         return ShellExecuteExW_orig(pei);
 
@@ -604,15 +954,29 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
            pei->lpFile       ? pei->lpFile       : L"(null)",
            pei->lpParameters ? pei->lpParameters : L"(null)");
 
+    if (IsControlSystemParams(pei->lpFile, pei->lpParameters)) {
+        Wh_Log(L"ShellExecuteExW: intercepted control system");
+        LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
+        if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
+        return TRUE;
+    }
+
     std::wstring uri;
     if (IsMsSettings(pei->lpFile))
         uri = NormalizeUri(pei->lpFile);
     else if (IsMsSettings(pei->lpParameters))
         uri = NormalizeUri(pei->lpParameters);
-    else if (IsShellClsid(pei->lpFile))
-        uri = ToLower(pei->lpFile);
-    else if (IsShellClsid(pei->lpParameters))
-        uri = ToLower(pei->lpParameters);
+    else if (IsShellClsid(pei->lpFile)) {
+        std::wstring lower = ToLower(pei->lpFile);
+        // Only intercept shell::: CLSIDs that are known loop-causers on Win11
+        if (g_isWin11 && IsClsidLoopOnWin11(lower))
+            uri = lower;
+    }
+    else if (IsShellClsid(pei->lpParameters)) {
+        std::wstring lower = ToLower(pei->lpParameters);
+        if (g_isWin11 && IsClsidLoopOnWin11(lower))
+            uri = lower;
+    }
 
     if (!uri.empty()) {
         auto result = ResolveUri(uri, pei->hwnd);
@@ -631,6 +995,15 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
 
 HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file,
                                      LPCWSTR params, LPCWSTR dir, INT show) {
+    if (IsChildProcess())
+        return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
+
+    HookGuard guard;
+    if (guard.IsReentrant()) {
+        Wh_Log(L"ShellExecuteW: reentrant call, passing through");
+        return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
+    }
+
     if (!g_settings.enableRedirects)
         return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
 
@@ -639,15 +1012,27 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file,
            file   ? file   : L"(null)",
            params ? params : L"(null)");
 
+    if (IsControlSystemParams(file, params)) {
+        Wh_Log(L"ShellExecuteW: intercepted control system");
+        LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
+        return SHELL_EXECUTE_SUCCESS;
+    }
+
     std::wstring uri;
     if (IsMsSettings(file))
         uri = NormalizeUri(file);
     else if (IsMsSettings(params))
         uri = NormalizeUri(params);
-    else if (IsShellClsid(file))
-        uri = ToLower(file);
-    else if (IsShellClsid(params))
-        uri = ToLower(params);
+    else if (IsShellClsid(file)) {
+        std::wstring lower = ToLower(file);
+        if (g_isWin11 && IsClsidLoopOnWin11(lower))
+            uri = lower;
+    }
+    else if (IsShellClsid(params)) {
+        std::wstring lower = ToLower(params);
+        if (g_isWin11 && IsClsidLoopOnWin11(lower))
+            uri = lower;
+    }
 
     if (!uri.empty()) {
         auto result = ResolveUri(uri, hwnd);
@@ -674,6 +1059,25 @@ BOOL WINAPI CreateProcessW_hook(
     LPSTARTUPINFOW       lpStartupInfo,
     LPPROCESS_INFORMATION lpProcessInformation)
 {
+    if (IsChildProcess()) {
+        return CreateProcessW_orig(
+            lpApplicationName, lpCommandLine,
+            lpProcessAttributes, lpThreadAttributes,
+            bInheritHandles, dwCreationFlags,
+            lpEnvironment, lpCurrentDirectory,
+            lpStartupInfo, lpProcessInformation);
+    }
+
+    HookGuard guard;
+    if (guard.IsReentrant()) {
+        return CreateProcessW_orig(
+            lpApplicationName, lpCommandLine,
+            lpProcessAttributes, lpThreadAttributes,
+            bInheritHandles, dwCreationFlags,
+            lpEnvironment, lpCurrentDirectory,
+            lpStartupInfo, lpProcessInformation);
+    }
+
     if (!g_settings.enableRedirects || g_settings.uiOnlyRedirects) {
         return CreateProcessW_orig(
             lpApplicationName, lpCommandLine,
@@ -687,7 +1091,7 @@ BOOL WINAPI CreateProcessW_hook(
 
     if (IsControlSystemCommand(cmdLine)) {
         Wh_Log(L"CreateProcessW: intercepted 'control system': %s", lpCommandLine);
-        LaunchTarget(SYSTEM_PROPS_CLSID);
+        LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
 
         if (lpProcessInformation)
             ZeroMemory(lpProcessInformation, sizeof(PROCESS_INFORMATION));
@@ -707,10 +1111,11 @@ BOOL WINAPI CreateProcessW_hook(
 // ── Windhawk entry points ─────────────────────────────────────────────────────
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v9.7.1 init");
+    Wh_Log(L"Redirect Settings to Control Panel v9.8.4 init");
 
     DetectWindowsVersion();
     LoadSettings();
+    BuildChildEnvironment();
     InitMappings();
     Wh_Log(L"%zu URI mappings loaded", g_mappings.size());
 
@@ -750,12 +1155,13 @@ BOOL Wh_ModInit() {
         }
     }
 
-    Wh_Log(L"Ready (EnableRedirects=%d UIOnly=%d SmartPers=%d Fallback=%d Win11Compat=%d)",
+    Wh_Log(L"Ready — EnableRedirects=%d UIOnly=%d SmartPers=%d Fallback=%d Win11Compat=%d MaxLaunches=%d",
         (int)g_settings.enableRedirects,
         (int)g_settings.uiOnlyRedirects,
         (int)g_settings.smartPersonalizationDetect,
         g_settings.fallbackMode,
-        (int)g_settings.win11CompatibilityMode);
+        (int)g_settings.win11CompatibilityMode,
+        g_settings.maxLaunchesPerUri);
     return TRUE;
 }
 
@@ -766,4 +1172,5 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading");
     LoadSettings();
+    InitMappings();
 }
