@@ -2280,6 +2280,10 @@
                     "*"
                 ],
                 "name": "스마트 복사 & 붙여넣기",
+                "original": {
+                    "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
+                    "name": "Smart Copy & Paste"
+                },
                 "version": "1.3.2"
             }
         },
@@ -10349,6 +10353,10 @@
                     "explorer.exe"
                 ],
                 "name": "작업 표시줄 Dock 애니메이션",
+                "original": {
+                    "description": "Animates taskbar icons on mouse hover like in macOS",
+                    "name": "Taskbar Dock Animation"
+                },
                 "version": "1.9.2"
             }
         },
