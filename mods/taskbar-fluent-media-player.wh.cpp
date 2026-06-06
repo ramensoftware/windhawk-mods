@@ -2,17 +2,16 @@
 // @id              taskbar-fluent-media-player
 // @name            Taskbar Fluent Media Player
 // @description     Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Salyts
 // @github          https://github.com/Salyts
 // @include         explorer.exe
-// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Fluent Media Player 1.0.0
+# Taskbar Fluent Media Player 1.1.0
 
 **Taskbar Fluent Media Player —** is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
 
@@ -1009,8 +1008,6 @@ static void LoadSettings() {
 static HWND FindCurrentProcessTaskbarWnd();
 static void DispatchMediaUpdate();
 static void ApplySettings();
-static void StartRetryThread();
-static void StopRetryThread();
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_applyingSettings{false};
@@ -1076,7 +1073,7 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
     }
 
     HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC,
-        [](int code, WPARAM w, LPARAM l) -> LRESULT {
+        [](int code, WPARAM w, LPARAM l) CALLBACK -> LRESULT {
             if (code == HC_ACTION) {
                 auto* cwp = reinterpret_cast<const CWPSTRUCT*>(l);
                 static const UINT kM = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
@@ -1185,17 +1182,6 @@ static bool IsSystemLightTheme() {
 static bool IsLightTheme() {
     if (!g_settings.autoTheme) return false;
     return IsSystemLightTheme();
-}
-
-static winrt::Windows::UI::Color PanelBgColor() {
-    if (g_settings.backgroundType != L"solid" && g_settings.backgroundType != L"gradient") {
-        return winrt::Windows::UI::Color{0x00, 0x00, 0x00, 0x00};
-    }
-    if (IsLightTheme()) {
-        return winrt::Windows::UI::Color{0xCC, 0xF3, 0xF3, 0xF3};
-    } else {
-        return winrt::Windows::UI::Color{0xCC, 0x20, 0x20, 0x20};
-    }
 }
 
 static SolidColorBrush MakeBrush(winrt::Windows::UI::Color c) {
@@ -2209,6 +2195,7 @@ static void ChangeSystemVolume(bool increase) {
     }
 }
 
+[[maybe_unused]]
 static void ExecuteMediaAction(const std::wstring& action) {
     if (action == L"none") {
         return;
@@ -2273,7 +2260,7 @@ static void ExecuteMediaAction(const std::wstring& action) {
                 WindowSearch search;
                 search.targetTitle = title;
 
-                EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+                EnumWindows([](HWND hwnd, LPARAM lParam) CALLBACK -> BOOL {
                     if (!IsWindowVisible(hwnd)) {
                         return TRUE;
                     }
@@ -2428,7 +2415,7 @@ static std::vector<BYTE> FetchAppIconBytes(const std::wstring& appUserModelId, i
     struct FindData { const std::wstring* aumid; HICON icon; DWORD pid; std::wstring procPath; };
     FindData fd{&appUserModelId, nullptr, 0, L""};
 
-    EnumWindows([](HWND hWnd, LPARAM lParam) -> BOOL {
+    EnumWindows([](HWND hWnd, LPARAM lParam) CALLBACK -> BOOL {
         auto* fd2 = reinterpret_cast<FindData*>(lParam);
         if (!IsWindowVisible(hWnd)) return TRUE;
 
@@ -3019,20 +3006,12 @@ static void DispatchMediaUpdate() {
             Wh_Log(L"DispatchMediaUpdate: No dispatcher");
             g_playerGrid = nullptr;
             g_injectionParent = nullptr;
-            if (g_taskbarWnd) {
-                StopRetryThread();
-                StartRetryThread();
-            }
             return;
         }
     } catch (...) {
         Wh_Log(L"DispatchMediaUpdate: Exception getting dispatcher");
         g_playerGrid = nullptr;
         g_injectionParent = nullptr;
-        if (g_taskbarWnd) {
-            StopRetryThread();
-            StartRetryThread();
-        }
         return;
     }
 
@@ -3064,7 +3043,7 @@ static DWORD WINAPI TimerThreadProc(void*) {
 
     while (!g_unloading) {
         HANDLE handles[] = {g_timerStopEvent, hEvent, g_timerUpdateEvent};
-        DWORD wait = WaitForMultipleObjects(3, handles, FALSE, 500);
+        DWORD wait = WaitForMultipleObjects(3, handles, FALSE, INFINITE);
 
         if (wait == WAIT_OBJECT_0) break;
         if (g_applyingSettings) continue;
@@ -3170,12 +3149,12 @@ static DWORD WINAPI ThemeWatchThreadProc(void*) {
 
     MSG msg{};
     while (!g_unloading) {
-        if (WaitForSingleObject(g_themeWatchStop, 0) == WAIT_OBJECT_0) break;
+        DWORD result = MsgWaitForMultipleObjects(1, &g_themeWatchStop, FALSE, INFINITE, QS_ALLINPUT);
+        if (result == WAIT_OBJECT_0) break;
         while (PeekMessageW(&msg, g_themeWatchWnd, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
-        Sleep(50);
     }
 
     DestroyWindow(g_themeWatchWnd);
@@ -3270,7 +3249,7 @@ static void RefreshThemeColors() {
 
 static HWND FindCurrentProcessTaskbarWnd() {
     HWND result = nullptr;
-    EnumWindows([](HWND hWnd, LPARAM lp) -> BOOL {
+    EnumWindows([](HWND hWnd, LPARAM lp) CALLBACK -> BOOL {
         DWORD pid = 0; wchar_t cls[32] = {};
         if (GetWindowThreadProcessId(hWnd, &pid) && pid == GetCurrentProcessId() &&
             GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
@@ -3285,59 +3264,66 @@ static HWND FindCurrentProcessTaskbarWnd() {
 }
 
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    try {
-        HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
-        if (!hTaskSwWnd) return nullptr;
+    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd) return nullptr;
 
-        void* taskBand = (void*)GetWindowLongPtrW(hTaskSwWnd, 0);
-        if (!taskBand) return nullptr;
-
-        if (!CTaskBand_ITaskListWndSite_vftable) return nullptr;
-
-        void* tbfs = taskBand;
-        for (int i = 0; *(void**)tbfs != CTaskBand_ITaskListWndSite_vftable; ++i) {
-            if (i == 20) return nullptr;
-            tbfs = (void**)tbfs + 1;
-        }
-
-        void* tbhsp[2]{};
-        if (!CTaskBand_GetTaskbarHost_Original) return nullptr;
-        CTaskBand_GetTaskbarHost_Original(tbfs, tbhsp);
-        if (!tbhsp[0] && !tbhsp[1]) return nullptr;
-
-        size_t offset = 0x48;
-        if (TaskbarHost_FrameHeight_Original) {
-            const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
-#if defined(_M_X64)
-            if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
-                b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F)
-                offset = b[7];
-#elif defined(_M_ARM64)
-            // ARM64: ADD X0, X0, #offset
-            if ((*(DWORD*)b & 0xFFC003FF) == 0x91000000)
-                offset = ((*(DWORD*)b >> 10) & 0xFFF);
-#else  // _M_IX86
-            if (b[0] == 0x8B && b[1] == 0x81)
-                offset = *(DWORD*)(b + 2);
-#endif
-        }
-
-        auto* iunk = *(IUnknown**)((BYTE*)tbhsp[0] + offset);
-        if (!iunk) {
-            if (tbhsp[1] && Std_Ref_Decref_Original) Std_Ref_Decref_Original(tbhsp[1]);
-            return nullptr;
-        }
-
-        FrameworkElement taskbarElem{nullptr};
-        iunk->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(taskbarElem));
-        auto result = taskbarElem ? taskbarElem.XamlRoot() : nullptr;
-
-        if (tbhsp[1] && Std_Ref_Decref_Original) Std_Ref_Decref_Original(tbhsp[1]);
-        return result;
-    } catch (...) {
-        Wh_Log(L"GetTaskbarXamlRoot: Exception occurred");
-        return nullptr;
+    void* taskBand = (void*)GetWindowLongPtrW(hTaskSwWnd, 0);
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) return nullptr;
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
     }
+
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                      taskbarHostSharedPtr);
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) return nullptr;
+
+    size_t taskbarElementIUnknownOffset = 0x10;
+#if defined(_M_X64) || defined(__x86_64__)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern (x64)");
+        }
+    }
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp fp, lr, [sp, #-0x10]!
+        // fd030091 mov fp, sp
+        // 080c41f8 ldr x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern (arm64)");
+        }
+    }
+#else
+    Wh_Log(L"GetTaskbarXamlRoot: Unknown architecture, using default offset 0x10");
+#endif
+
+    auto* taskbarElementIUnknown =
+        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
+                      taskbarElementIUnknownOffset);
+
+    FrameworkElement taskbarElement{nullptr};
+    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(taskbarElement));
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original)
+        Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
+    return result;
 }
 
 static const wchar_t* GetGlyph(int cmd, bool isPlaying = false) {
@@ -4444,49 +4430,6 @@ static const wchar_t* const kStartButtonNames[] = {
     L"LaunchListButton",
 };
 
-static const wchar_t* const kSearchButtonNames[] = {
-    L"SearchBoxButton",
-    L"SearchButton",
-    L"TaskbarSearchBox",
-    L"SearchBoxControl",
-};
-
-static const wchar_t* const kAppIconsNames[] = {
-    L"TaskListView",
-    L"RunningAppsListView",
-    L"TaskListGrid",
-    L"IconContainer",
-    L"OverflowFlyoutList",
-    L"TaskListLargeView",
-};
-
-static Grid FindParentGrid(FrameworkElement const& elem, bool immediate = true) {
-    if (!elem) return nullptr;
-    DependencyObject cur = elem;
-    while (cur) {
-        auto par = VisualTreeHelper::GetParent(cur);
-        if (!par) break;
-        if (auto g = par.try_as<Grid>()) {
-            if (immediate) return g;
-        }
-        cur = par;
-    }
-    return nullptr;
-}
-
-static Grid FindRootGrid(FrameworkElement const& elem) {
-    if (!elem) return nullptr;
-    Grid last{nullptr};
-    DependencyObject cur = elem;
-    while (cur) {
-        auto par = VisualTreeHelper::GetParent(cur);
-        if (!par) break;
-        if (auto g = par.try_as<Grid>()) last = g;
-        cur = par;
-    }
-    return last;
-}
-
 static Grid FindTaskbarRootGrid(FrameworkElement const& root) {
     FrameworkElement taskbarFrame = nullptr;
     int count = VisualTreeHelper::GetChildrenCount(root);
@@ -4575,45 +4518,6 @@ static FrameworkElement FindNthElementByClassName(FrameworkElement const& parent
     }
 
     return nullptr;
-}
-
-static FrameworkElement FindFirstElementByClassName(FrameworkElement const& parent, const wchar_t* className) {
-    if (!parent) return nullptr;
-
-    int childCount = VisualTreeHelper::GetChildrenCount(parent);
-
-    for (int i = 0; i < childCount; i++) {
-        auto child = VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
-        if (!child) continue;
-
-        auto childClassName = winrt::get_class_name(child);
-
-        if (childClassName == className) {
-            return child;
-        }
-    }
-
-    return nullptr;
-}
-
-static FrameworkElement FindLastElementByClassName(FrameworkElement const& parent, const wchar_t* className) {
-    if (!parent) return nullptr;
-
-    FrameworkElement lastFound = nullptr;
-    int childCount = VisualTreeHelper::GetChildrenCount(parent);
-
-    for (int i = 0; i < childCount; i++) {
-        auto child = VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
-        if (!child) continue;
-
-        auto childClassName = winrt::get_class_name(child);
-
-        if (childClassName == className) {
-            lastFound = child;
-        }
-    }
-
-    return lastFound;
 }
 
 static FrameworkElement FindChildByClassName(FrameworkElement const& parent, const wchar_t* className, int depth = 32) {
@@ -5096,76 +5000,22 @@ static bool InjectPlayerGrid() {
 
         auto dispatcher = g_playerGrid.Dispatcher();
         if (dispatcher) {
-            std::thread([dispatcher]() {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                try {
-                    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [=]() {
-                        RefreshThemeColors();
-                    });
-                } catch (...) {}
-            }).detach();
+            try {
+                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [=]() {
+                    RefreshThemeColors();
+                });
+            } catch (...) {
+                Wh_Log(L"InjectPlayerGrid: Failed to dispatch RefreshThemeColors");
+            }
         }
 
         Canvas::SetZIndex(g_playerGrid, 1000);
-        bool needsExtraUpdates = (g_settings.position == L"taskbar_left_start" ||
-                                  g_settings.position == L"taskbar_right_start" ||
-                                  g_settings.position == L"taskbar_after_search_left" ||
-                                  g_settings.position == L"taskbar_after_search_right" ||
-                                  g_settings.position == L"taskbar_after_taskview_left" ||
-                                  g_settings.position == L"taskbar_after_taskview_right" ||
-                                  g_settings.position == L"taskbar_after_widgets_left" ||
-                                  g_settings.position == L"taskbar_after_widgets_right");
-
-        std::thread([playerGrid, targetGrid, needsExtraUpdates]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            try {
-                RunFromWindowThread(g_taskbarWnd, [](void* param) {
-                    try {
-                        if (g_playerGrid && g_injectionParent) {
-                            g_playerGrid.UpdateLayout();
-                            g_injectionParent.UpdateLayout();
-                            g_playerGrid.InvalidateArrange();
-                            g_injectionParent.InvalidateArrange();
-                        }
-                    } catch (...) {}
-                }, nullptr);
-            } catch (...) {}
-
-            if (needsExtraUpdates) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
-                try {
-                    RunFromWindowThread(g_taskbarWnd, [](void* param) {
-                        try {
-                            if (g_playerGrid && g_injectionParent) {
-                                g_playerGrid.UpdateLayout();
-                                g_injectionParent.UpdateLayout();
-                                g_playerGrid.InvalidateArrange();
-                                g_injectionParent.InvalidateArrange();
-                            }
-                        } catch (...) {}
-                    }, nullptr);
-                } catch (...) {}
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(300));
-                try {
-                    RunFromWindowThread(g_taskbarWnd, [](void* param) {
-                        try {
-                            if (g_playerGrid && g_injectionParent) {
-                                g_playerGrid.UpdateLayout();
-                                g_injectionParent.UpdateLayout();
-                                g_playerGrid.InvalidateArrange();
-                                g_injectionParent.InvalidateArrange();
-                            }
-                        } catch (...) {}
-                    }, nullptr);
-                } catch (...) {}
-            }
-        }).detach();
 
         OnSessionsChanged();
         g_needsUiUpdate = true;
         return true;
     } catch (...) {
+        Wh_Log(L"InjectPlayerGrid: Exception during injection");
         return false;
     }
 }
@@ -5262,20 +5112,12 @@ static void RefreshPlayerContents() {
             Wh_Log(L"RefreshPlayerContents: No dispatcher");
             g_playerGrid = nullptr;
             g_injectionParent = nullptr;
-            if (g_taskbarWnd) {
-                StopRetryThread();
-                StartRetryThread();
-            }
             return;
         }
     } catch (...) {
         Wh_Log(L"RefreshPlayerContents: Exception getting dispatcher");
         g_playerGrid = nullptr;
         g_injectionParent = nullptr;
-        if (g_taskbarWnd) {
-            StopRetryThread();
-            StartRetryThread();
-        }
         return;
     }
 
@@ -5899,8 +5741,13 @@ static void UpdateVisibility() {
                 auto now = std::chrono::steady_clock::now();
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_lastMediaTime).count();
 
-                if (elapsed > 1000) {
+                if (elapsed > 2500) {
                     hide = true;
+                } else {
+                    std::thread([]() {
+                        Sleep(300);
+                        if (!g_unloading && g_timerUpdateEvent) SetEvent(g_timerUpdateEvent);
+                    }).detach();
                 }
             }
         }
@@ -6013,12 +5860,8 @@ static void ApplySettings() {
     }
     Wh_Log(L"ApplySettings: Finished, g_playerGrid exists = %d", g_playerGrid ? 1 : 0);
 }
-
 using IconView_IconView_t = void*(WINAPI*)(void*);
 static IconView_IconView_t IconView_IconView_Original = nullptr;
-
-static void StartRetryThread();
-static void StopRetryThread();
 
 static void* WINAPI IconView_IconView_Hook(void* pThis) {
     auto r = IconView_IconView_Original(pThis);
@@ -6026,11 +5869,13 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
         HWND hWnd = FindCurrentProcessTaskbarWnd();
         if (hWnd) {
             g_taskbarWnd = hWnd;
-            StopRetryThread();
             RunFromWindowThread(hWnd, [](void*) {
-                if (!g_playerGrid && !g_unloading) ApplySettings();
+                if (!g_playerGrid && !g_unloading) {
+                    ApplySettings();
+                    if (g_playerGrid) ShowSuccessNotification();
+                    else Wh_Log(L"IconView_IconView_Hook: ApplySettings did not produce a player grid");
+                }
             }, nullptr);
-            StartRetryThread();
         }
     }
     return r;
@@ -6063,7 +5908,15 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags
 }
 
 static bool HookTaskbarDllSymbols() {
-    HMODULE h = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    static const wchar_t* const kCandidates[] = {
+        L"taskbar.dll",
+        L"twinui.pcshell.dll",
+    };
+    HMODULE h = nullptr;
+    for (auto* name : kCandidates) {
+        h = LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (h) break;
+    }
     if (!h) { return false; }
     // Taskbar.View.dll, SystemTray.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
@@ -6098,49 +5951,6 @@ static HMODULE GetTaskbarViewModule() {
     for (auto* n : {L"SystemTray.dll", L"Taskbar.View.dll", L"taskbar.view.dll", L"ExplorerExtensions.dll"})
         if (HMODULE h = GetModuleHandleW(n)) return h;
     return nullptr;
-}
-
-static HANDLE g_retryThread    = nullptr;
-static HANDLE g_retryStopEvent = nullptr;
-
-static void StartRetryThread() {
-    if (g_retryThread) return;
-    g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_retryThread = CreateThread(nullptr, 0, [](void*) -> DWORD {
-        const DWORD delays[] = {500, 1000, 1500, 2000, 3000, 4000, 5000, 8000, 10000};
-        int attempt = 0;
-        while (!g_unloading) {
-            DWORD delay = (attempt < 9) ? delays[attempt] : 15000;
-            if (WaitForSingleObject(g_retryStopEvent, delay) != WAIT_TIMEOUT) break;
-            if (g_playerGrid || g_unloading) break;
-
-            HWND hWnd = FindCurrentProcessTaskbarWnd();
-            if (hWnd) {
-                g_taskbarWnd = hWnd;
-                RunFromWindowThread(hWnd, [](void*) {
-                    if (!g_playerGrid && !g_unloading) {
-                        ApplySettings();
-                        if (g_playerGrid) {
-                            ShowSuccessNotification();
-                            StopRetryThread();
-                        }
-                    }
-                }, nullptr);
-
-                Sleep(200);
-
-                if (g_playerGrid) break;
-            }
-            ++attempt;
-        }
-        return 0;
-    }, nullptr, 0, nullptr);
-}
-
-static void StopRetryThread() {
-    if (g_retryStopEvent) SetEvent(g_retryStopEvent);
-    if (g_retryThread) { WaitForSingleObject(g_retryThread, 3000); CloseHandle(g_retryThread); g_retryThread = nullptr; }
-    if (g_retryStopEvent) { CloseHandle(g_retryStopEvent); g_retryStopEvent = nullptr; }
 }
 
 BOOL Wh_ModInit() {
@@ -6180,7 +5990,7 @@ void Wh_ModAfterInit() {
     Wh_Log(L"Wh_ModAfterInit: Timer thread started");
 
     StartIdleTimer();
-    // StartThemeWatcher();
+    StartThemeWatcher();
 
     if (g_taskbarWnd) {
         RunFromWindowThread(g_taskbarWnd, [](void*) {
@@ -6197,21 +6007,17 @@ void Wh_ModAfterInit() {
                     Wh_Log(L"Wh_ModAfterInit: Signaled timer update event");
                 }
             } else {
-                Wh_Log(L"Wh_ModAfterInit: Player grid is NULL after ApplySettings");
+                Wh_Log(L"Wh_ModAfterInit: Player grid is NULL after ApplySettings - will init via hook");
             }
         }, nullptr);
     } else {
-        Wh_Log(L"Wh_ModAfterInit: No taskbar window found");
+        Wh_Log(L"Wh_ModAfterInit: No taskbar window found - will init via hook when DLL loads");
     }
-
-    StartRetryThread();
-    Wh_Log(L"Wh_ModAfterInit: Retry thread started");
 }
 
 void Wh_ModUninit() {
     g_unloading = true;
 
-    StopRetryThread();
     StopTimerThread();
     StopIdleTimer();
     StopMediaThread();
@@ -6233,7 +6039,6 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     g_applyingSettings = true;
 
-    StopRetryThread();
     StopTimerThread();
     StopIdleTimer();
 
@@ -6244,7 +6049,6 @@ void Wh_ModSettingsChanged() {
         g_applyingSettings = false;
         StartTimerThread();
         StartIdleTimer();
-        StartRetryThread();
         return;
     }
     g_taskbarWnd = hWnd;
@@ -6254,13 +6058,14 @@ void Wh_ModSettingsChanged() {
         struct WorkData { HWND hWnd; };
         WorkData* data = new WorkData{hWnd};
 
-        HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
+        HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param) WINAPI -> DWORD {
             WorkData* data2 = (WorkData*)param;
             RunFromWindowThread(data2->hWnd, [](void*) {
                 try {
                     RemovePlayerGrid();
                     if (!g_unloading) InjectPlayerGrid();
                 } catch (...) {
+                    Wh_Log(L"Wh_ModSettingsChanged: Exception during RemovePlayerGrid/InjectPlayerGrid");
                     g_playerGrid = nullptr;
                     g_injectionParent = nullptr;
                 }
@@ -6278,6 +6083,7 @@ void Wh_ModSettingsChanged() {
             RemovePlayerGrid();
             if (!g_unloading) InjectPlayerGrid();
         } catch (...) {
+            Wh_Log(L"Wh_ModSettingsChanged: Exception during RemovePlayerGrid/InjectPlayerGrid (same thread)");
             g_playerGrid = nullptr;
             g_injectionParent = nullptr;
         }
@@ -6288,5 +6094,4 @@ void Wh_ModSettingsChanged() {
 
     StartTimerThread();
     StartIdleTimer();
-    StartRetryThread();
 }
