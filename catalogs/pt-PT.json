@@ -547,11 +547,11 @@
                     "explorer.exe"
                 ],
                 "name": "Rolagem Automatica Win32",
-                "original": {
-                    "description": "Enables browser-style middle-mouse autoscroll in Win32 applications. Compatible with Smooth Scroll Win32.",
-                    "name": "AutoScroll Win32"
-                },
                 "version": "1.0.1"
+            },
+            "metadataEnglish": {
+                "description": "Enables browser-style middle-mouse autoscroll in Win32 applications. Compatible with Smooth Scroll Win32.",
+                "name": "AutoScroll Win32"
             }
         },
         "balloon-sound-fix": {
@@ -946,11 +946,11 @@
                 ],
                 "license": "MIT",
                 "name": "Centralizar Novas Janelas Automaticamente",
-                "original": {
-                    "description": "Opens all new windows centered on the screen, including UWP and WinUI apps",
-                    "name": "Center New Windows"
-                },
                 "version": "1.0.1"
+            },
+            "metadataEnglish": {
+                "description": "Opens all new windows centered on the screen, including UWP and WinUI apps",
+                "name": "Center New Windows"
             }
         },
         "center-titlebar": {
@@ -2288,11 +2288,11 @@
                     "*"
                 ],
                 "name": "Copiar e Colar Inteligente",
-                "original": {
-                    "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
-                    "name": "Smart Copy & Paste"
-                },
                 "version": "1.3.2"
+            },
+            "metadataEnglish": {
+                "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
+                "name": "Smart Copy & Paste"
             }
         },
         "close-explorer-on-esc": {
@@ -3238,12 +3238,12 @@
                 ],
                 "license": "MIT",
                 "name": "Desativar tamanho mínimo de miniaturas",
-                "original": {
-                    "description": "Disables the cutoff size used to display thumbnails in File Explorer.",
-                    "name": "Disable Thumbnail Minimum Size"
-                },
                 "twitter": "https://twitter.com/Leym0naide",
                 "version": "1.3"
+            },
+            "metadataEnglish": {
+                "description": "Disables the cutoff size used to display thumbnails in File Explorer.",
+                "name": "Disable Thumbnail Minimum Size"
             }
         },
         "disable-tray-icons": {
@@ -4961,11 +4961,11 @@
                 ],
                 "license": "MIT",
                 "name": "Animação de Conteúdo do Explorador de Arquivos estilo WinUI",
-                "original": {
-                    "description": "Smooth WinUI-like page transition animations for the File Explorer content area.",
-                    "name": "File Explorer WinUI-Like Content Animation"
-                },
                 "version": "1.0.1"
+            },
+            "metadataEnglish": {
+                "description": "Smooth WinUI-like page transition animations for the File Explorer content area.",
+                "name": "File Explorer WinUI-Like Content Animation"
             }
         },
         "file-explorer-details-autofit-columns": {
@@ -9515,11 +9515,11 @@
                     "taskmgr.exe"
                 ],
                 "name": "Rolagem Suave para Win32",
-                "original": {
-                    "description": "Adds smooth scrolling with spring physics to legacy Win32 apps",
-                    "name": "Smooth Scroll for Win32"
-                },
                 "version": "1.0.3"
+            },
+            "metadataEnglish": {
+                "description": "Adds smooth scrolling with spring physics to legacy Win32 apps",
+                "name": "Smooth Scroll for Win32"
             }
         },
         "snap-commander": {
@@ -10373,11 +10373,11 @@
                     "explorer.exe"
                 ],
                 "name": "Animação Dock da Barra de Tarefas",
-                "original": {
-                    "description": "Animates taskbar icons on mouse hover like in macOS",
-                    "name": "Taskbar Dock Animation"
-                },
                 "version": "1.9.2"
+            },
+            "metadataEnglish": {
+                "description": "Animates taskbar icons on mouse hover like in macOS",
+                "name": "Taskbar Dock Animation"
             }
         },
         "taskbar-empty-space-clicks": {
@@ -13582,11 +13582,11 @@
                 ],
                 "license": "MIT",
                 "name": "Menus de Contexto com Animação WinUI",
-                "original": {
-                    "description": "Adds smooth WinUI-style vertical slide animations to classic Win32 context menus in Windows 11",
-                    "name": "WinUI Context Menu Animation"
-                },
                 "version": "1.0.1"
+            },
+            "metadataEnglish": {
+                "description": "Adds smooth WinUI-style vertical slide animations to classic Win32 context menus in Windows 11",
+                "name": "WinUI Context Menu Animation"
             }
         },
         "winver-custom-text": {

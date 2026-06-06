@@ -730,11 +730,11 @@
                     "explorer.exe"
                 ],
                 "name": "阻止 Win+V",
-                "original": {
-                    "description": "Blocks the Win+V keyboard shortcut (Clipboard History)",
-                    "name": "Block Win+V"
-                },
                 "version": "1.0.1"
+            },
+            "metadataEnglish": {
+                "description": "Blocks the Win+V keyboard shortcut (Clipboard History)",
+                "name": "Block Win+V"
             }
         },
         "block-windows-startmenu-and-hosts": {
@@ -2284,11 +2284,11 @@
                     "*"
                 ],
                 "name": "智能复制粘贴",
-                "original": {
-                    "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
-                    "name": "Smart Copy & Paste"
-                },
                 "version": "1.3.2"
+            },
+            "metadataEnglish": {
+                "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
+                "name": "Smart Copy & Paste"
             }
         },
         "close-explorer-on-esc": {
@@ -2922,11 +2922,11 @@
                     "explorer.exe"
                 ],
                 "name": "桌面图标矩形选择",
-                "original": {
-                    "description": "Bring 2D rectangular selection to desktop icons, similar to Excel.",
-                    "name": "2D Rectangular Selection for Desktop"
-                },
                 "version": "1.0"
+            },
+            "metadataEnglish": {
+                "description": "Bring 2D rectangular selection to desktop icons, similar to Excel.",
+                "name": "2D Rectangular Selection for Desktop"
             }
         },
         "desktop-watermark-tweaks": {
@@ -3998,10 +3998,10 @@
                     "explorer.exe"
                 ],
                 "name": "用 ctrl+n 创建新文件",
-                "original": {
-                    "name": "Explorer Ctrl+N to New File"
-                },
                 "version": "1.0"
+            },
+            "metadataEnglish": {
+                "name": "Explorer Ctrl+N to New File"
             }
         },
         "explorer-ctrlq-new-folder": {
@@ -7802,11 +7802,11 @@
                     "msaccess.exe"
                 ],
                 "name": "Office 修复右上角账户名显示",
-                "original": {
-                    "description": "Fixes the inverted First/Last name and the hardcoded space in Office apps. Supports custom display name override.",
-                    "name": "Office Fix Account Display Name"
-                },
                 "version": "1.0.0"
+            },
+            "metadataEnglish": {
+                "description": "Fixes the inverted First/Last name and the hardcoded space in Office apps. Supports custom display name override.",
+                "name": "Office Fix Account Display Name"
             }
         },
         "office-ui-reverter": {
@@ -7878,11 +7878,11 @@
                     "MSACCESS.EXE"
                 ],
                 "name": "Office 还原旧版 UI 界面（32/64 位通用）",
-                "original": {
-                    "description": "Reverts Office 2022+/365 UI to Office 2016/2019",
-                    "name": "Office UI Reverter (32/64-bit Universal)"
-                },
                 "version": "1.0.1"
+            },
+            "metadataEnglish": {
+                "description": "Reverts Office 2022+/365 UI to Office 2016/2019",
+                "name": "Office UI Reverter (32/64-bit Universal)"
             }
         },
         "old-auto-colorization": {
@@ -9123,11 +9123,11 @@
                     "explorer.exe"
                 ],
                 "name": "运行对话框自动关闭输入法",
-                "original": {
-                    "description": "Disable IME automatically when typing in the Run dialog, to prevent accidental input of non-English characters.",
-                    "name": "Disable IME in Run Dialog"
-                },
                 "version": "1.0"
+            },
+            "metadataEnglish": {
+                "description": "Disable IME automatically when typing in the Run dialog, to prevent accidental input of non-English characters.",
+                "name": "Disable IME in Run Dialog"
             }
         },
         "safediscshim": {
@@ -10020,10 +10020,10 @@
                     "explorer.exe"
                 ],
                 "name": "Better Taskbar Autohide",
-                "original": {
-                    "description": "Allow taskbar autohide when inactive window notified"
-                },
                 "version": "1.2"
+            },
+            "metadataEnglish": {
+                "description": "Allow taskbar autohide when inactive window notified"
             }
         },
         "taskbar-autohide-instant-show": {
@@ -10379,11 +10379,11 @@
                     "explorer.exe"
                 ],
                 "name": "任务栏 Dock 动画",
-                "original": {
-                    "description": "Animates taskbar icons on mouse hover like in macOS",
-                    "name": "Taskbar Dock Animation"
-                },
                 "version": "1.9.2"
+            },
+            "metadataEnglish": {
+                "description": "Animates taskbar icons on mouse hover like in macOS",
+                "name": "Taskbar Dock Animation"
             }
         },
         "taskbar-empty-space-clicks": {
@@ -11541,11 +11541,11 @@
                 ],
                 "license": "MIT",
                 "name": "ESC键退出任务管理器",
-                "original": {
-                    "description": "Press Esc to exit Task Manager",
-                    "name": "Press Esc to exit Task Manager"
-                },
                 "version": "1.0"
+            },
+            "metadataEnglish": {
+                "description": "Press Esc to exit Task Manager",
+                "name": "Press Esc to exit Task Manager"
             }
         },
         "taskmgr-link-speed": {
@@ -11577,11 +11577,11 @@
                     "Taskmgr10.exe"
                 ],
                 "name": "任务管理器显示链路速度",
-                "original": {
-                    "description": "Replace DNS names in Task Manager with realtime link speeds because we care more about it.",
-                    "name": "Task Manager Show Link Speed"
-                },
                 "version": "1.0.0"
+            },
+            "metadataEnglish": {
+                "description": "Replace DNS names in Task Manager with realtime link speeds because we care more about it.",
+                "name": "Task Manager Show Link Speed"
             }
         },
         "taskmgr-taller-tab": {
@@ -11608,11 +11608,11 @@
                     "Taskmgr.exe"
                 ],
                 "name": "增大任务管理器选项卡尺寸",
-                "original": {
-                    "description": "Windows 10 Task Manager tab labels are too small on high DPI screens, making them difficult to click, this mod makes them taller.",
-                    "name": "Make Task Manager Tabs Taller"
-                },
                 "version": "1.0"
+            },
+            "metadataEnglish": {
+                "description": "Windows 10 Task Manager tab labels are too small on high DPI screens, making them difficult to click, this mod makes them taller.",
+                "name": "Make Task Manager Tabs Taller"
             }
         },
         "text-replace": {
@@ -12436,11 +12436,11 @@
                     "visio.exe"
                 ],
                 "name": "Visio 缩略图高清修复",
-                "original": {
-                    "description": "Fix low-resolution thumbnails for Visio documents in File Explorer",
-                    "name": "Visio Thumbnail HD Fix"
-                },
                 "version": "1.0.0"
+            },
+            "metadataEnglish": {
+                "description": "Fix low-resolution thumbnails for Visio documents in File Explorer",
+                "name": "Visio Thumbnail HD Fix"
             }
         },
         "visio-pan-zoom": {
@@ -12468,11 +12468,11 @@
                     "VISIO.EXE"
                 ],
                 "name": "Visio 中键平移与智能缩放",
-                "original": {
-                    "description": "Brings modern CAD-like navigation to Visio: Middle-drag to pan, scroll wheel to zoom.",
-                    "name": "Visio: Middle Mouse Pan & Smart Zoom"
-                },
                 "version": "1.0"
+            },
+            "metadataEnglish": {
+                "description": "Brings modern CAD-like navigation to Visio: Middle-drag to pan, scroll wheel to zoom.",
+                "name": "Visio: Middle Mouse Pan & Smart Zoom"
             }
         },
         "visual-studio-anti-rich-header": {
@@ -12719,10 +12719,10 @@
                     "explorer.exe"
                 ],
                 "name": "Win+D per monitor(show desktop)",
-                "original": {
-                    "description": "Press Win+D to only manage the windows on the monitor where the mouse is located."
-                },
                 "version": "1.5.260416"
+            },
+            "metadataEnglish": {
+                "description": "Press Win+D to only manage the windows on the monitor where the mouse is located."
             }
         },
         "win10-colored-borders": {
@@ -12992,11 +12992,11 @@
                     "explorer.exe"
                 ],
                 "name": "Windows 11 开始菜单一键电源按钮",
-                "original": {
-                    "description": "Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.",
-                    "name": "Windows 11 Start Menu Power Buttons"
-                },
                 "version": "1.0.2"
+            },
+            "metadataEnglish": {
+                "description": "Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.",
+                "name": "Windows 11 Start Menu Power Buttons"
             }
         },
         "win11-start-power-text-renamer": {
@@ -13697,11 +13697,11 @@
                     "winword.exe"
                 ],
                 "name": "Word 图片调整大小时防翻转",
-                "original": {
-                    "description": "Prevents unintended flipping when dragging handles to resize images in Word.",
-                    "name": "Word Image Resize Anti-Flip"
-                },
                 "version": "1.0.0"
+            },
+            "metadataEnglish": {
+                "description": "Prevents unintended flipping when dragging handles to resize images in Word.",
+                "name": "Word Image Resize Anti-Flip"
             }
         },
         "word-local-autosave": {
@@ -13760,11 +13760,11 @@
                     "winword.exe"
                 ],
                 "name": "Word MathType 公式深色模式修复",
-                "original": {
-                    "description": "Fix the readability issue of MathType Equations in Word dark mode.",
-                    "name": "Word MathType Dark Mode Fix"
-                },
                 "version": "1.0.1"
+            },
+            "metadataEnglish": {
+                "description": "Fix the readability issue of MathType Equations in Word dark mode.",
+                "name": "Word MathType Dark Mode Fix"
             }
         },
         "word-omath-shade-fix": {
@@ -13792,11 +13792,11 @@
                     "winword.exe"
                 ],
                 "name": "Word OfficeMath 公式编辑框阴影修复",
-                "original": {
-                    "description": "Fix the shade color issue of OfficeMath equation edit boxes in Word dark mode.",
-                    "name": "Word OfficeMath EditBox Shade Fix"
-                },
                 "version": "1.0.0"
+            },
+            "metadataEnglish": {
+                "description": "Fix the shade color issue of OfficeMath equation edit boxes in Word dark mode.",
+                "name": "Word OfficeMath EditBox Shade Fix"
             }
         },
         "word-pdf-lossless-export": {
@@ -13823,11 +13823,11 @@
                     "winword.exe"
                 ],
                 "name": "Word 图像无损导出 PDF",
-                "original": {
-                    "description": "Forces Word to export PDFs with lossless image quality",
-                    "name": "Word PDF Lossless Export"
-                },
                 "version": "1.1.1"
+            },
+            "metadataEnglish": {
+                "description": "Forces Word to export PDFs with lossless image quality",
+                "name": "Word PDF Lossless Export"
             }
         },
         "xs-discord-control-registered-games": {

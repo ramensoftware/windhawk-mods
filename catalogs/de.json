@@ -2280,11 +2280,11 @@
                     "*"
                 ],
                 "name": "Intelligentes Kopieren & Einfügen",
-                "original": {
-                    "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
-                    "name": "Smart Copy & Paste"
-                },
                 "version": "1.3.2"
+            },
+            "metadataEnglish": {
+                "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
+                "name": "Smart Copy & Paste"
             }
         },
         "close-explorer-on-esc": {
@@ -2756,11 +2756,11 @@
                     "*"
                 ],
                 "name": "Dunkler Modus für Menüs",
-                "original": {
-                    "description": "Enables dark mode for all win32 menus.",
-                    "name": "Dark mode context menus"
-                },
                 "version": "1.4.2"
+            },
+            "metadataEnglish": {
+                "description": "Enables dark mode for all win32 menus.",
+                "name": "Dark mode context menus"
             }
         },
         "dark-theme-browser-colors-fix": {

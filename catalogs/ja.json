@@ -33,10 +33,10 @@
                     "explorer.exe"
                 ],
                 "name": "Accent Color Sync",
-                "original": {
-                    "description": "Restores Control Panel color opacity functionality"
-                },
                 "version": "1.6"
+            },
+            "metadataEnglish": {
+                "description": "Restores Control Panel color opacity functionality"
             }
         },
         "accent-hl-color": {
@@ -2283,11 +2283,11 @@
                     "*"
                 ],
                 "name": "スマートコピー＆ペースト",
-                "original": {
-                    "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
-                    "name": "Smart Copy & Paste"
-                },
                 "version": "1.3.2"
+            },
+            "metadataEnglish": {
+                "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
+                "name": "Smart Copy & Paste"
             }
         },
         "close-explorer-on-esc": {
@@ -3233,12 +3233,12 @@
                 ],
                 "license": "MIT",
                 "name": "サムネイルの最小サイズを無効化",
-                "original": {
-                    "description": "Disables the cutoff size used to display thumbnails in File Explorer.",
-                    "name": "Disable Thumbnail Minimum Size"
-                },
                 "twitter": "https://twitter.com/Leym0naide",
                 "version": "1.3"
+            },
+            "metadataEnglish": {
+                "description": "Disables the cutoff size used to display thumbnails in File Explorer.",
+                "name": "Disable Thumbnail Minimum Size"
             }
         },
         "disable-tray-icons": {
@@ -10360,11 +10360,11 @@
                     "explorer.exe"
                 ],
                 "name": "タスクバー Dock アニメーション",
-                "original": {
-                    "description": "Animates taskbar icons on mouse hover like in macOS",
-                    "name": "Taskbar Dock Animation"
-                },
                 "version": "1.9.2"
+            },
+            "metadataEnglish": {
+                "description": "Animates taskbar icons on mouse hover like in macOS",
+                "name": "Taskbar Dock Animation"
             }
         },
         "taskbar-empty-space-clicks": {

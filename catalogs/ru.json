@@ -2280,11 +2280,11 @@
                     "*"
                 ],
                 "name": "Умное Копирование и Вставка",
-                "original": {
-                    "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
-                    "name": "Smart Copy & Paste"
-                },
                 "version": "1.3.2"
+            },
+            "metadataEnglish": {
+                "description": "Automatically format, clean, and enrich text instantly as you copy it to the clipboard.",
+                "name": "Smart Copy & Paste"
             }
         },
         "close-explorer-on-esc": {
@@ -12096,10 +12096,10 @@
                 ],
                 "license": "MIT",
                 "name": "Ultimate Custom Tray",
-                "original": {
-                    "description": "This mod adds customizable system tray icons in Windows with configurable actions and context menus, support for image files and application icons, and automatic adaptation to the system theme."
-                },
                 "version": "2.1"
+            },
+            "metadataEnglish": {
+                "description": "This mod adds customizable system tray icons in Windows with configurable actions and context menus, support for image files and application icons, and automatic adaptation to the system theme."
             }
         },
         "unlock-taskmgr-server": {
@@ -13431,10 +13431,10 @@
                 ],
                 "license": "MIT",
                 "name": "Windows 11 Start Menu Buttons",
-                "original": {
-                    "description": "Customizable buttons for the Windows 11 Start menu."
-                },
                 "version": "2.1"
+            },
+            "metadataEnglish": {
+                "description": "Customizable buttons for the Windows 11 Start menu."
             }
         },
         "windows-11-start-menu-styler": {

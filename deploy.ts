@@ -657,15 +657,15 @@ async function generateModCatalogs(cache: GitCache) {
             }
             const metadata = mod.metadata;
             const englishMetadata = englishMod.metadata;
-            const original: { name?: string; description?: string } = {};
+            const englishPartial: { name?: string; description?: string } = {};
             if (metadata.name !== englishMetadata.name) {
-                original.name = englishMetadata.name;
+                englishPartial.name = englishMetadata.name;
             }
             if (metadata.description !== englishMetadata.description) {
-                original.description = englishMetadata.description;
+                englishPartial.description = englishMetadata.description;
             }
-            if (Object.keys(original).length > 0) {
-                metadata.original = original;
+            if (Object.keys(englishPartial).length > 0) {
+                mod.metadataEnglish = englishPartial;
             }
         }
 
