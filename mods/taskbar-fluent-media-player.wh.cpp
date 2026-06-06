@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              taskbar-fluent-media-player1
+// @id              taskbar-fluent-media-player
 // @name            Taskbar Fluent Media Player
 // @description     Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
 // @version         1.1.0
