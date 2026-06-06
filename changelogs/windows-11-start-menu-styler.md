@@ -1,3 +1,11 @@
+## 1.6 ([Jun 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f03c2a238bb19ba9f0a9481d7697b8ddf14e4be8/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added the new side by side layout for the redesigned Start menu which allows having pinned apps on one side and all apps on the other side. Both can be scrolled independently.
+* Updated the following themes to use the new side by side layout: SideBySide, SideBySide2, SideBySideMinimal.
+* Updated the following themes: NoRecommendedSection, Down Aero, RosePine, UniMenu, Command Center.
+* Added the FullScreen theme.
+* Added comparison and condition operations to style substitution expressions, for example: `{{x > 8 ? 1 : 3}}`.
+
 ## 1.5.2 ([May 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/49b5f6cd2e724208e8efb94951fd51f70f97c524/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Disabled the classic Start menu layout in the latest Windows 11 update. In the latest update, reverting to the classic layout (either with the mod or via ViVeTool flags) causes the Start menu to fail to open. At this point, it's unclear whether it's a temporary Windows issue, or if it's caused by the removal of the classic layout from Windows.
