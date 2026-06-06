@@ -1,3 +1,8 @@
+## 1.3.1 ([Jun 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/131f90d6611b96811af101f4b8177dd24e40ed13/mods/taskbar-volume-control.wh.cpp))
+
+* Fixed the "Middle click to mute" option in recent Windows 11 versions.
+* The Win and Alt modifier keys are now suppressed after scrolling. This fixes e.g. the Start menu opening after Win+scrolling to change the volume.
+
 ## 1.3 ([Feb 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7514df4a76170d6b3cd9075791227880f2068fb4/mods/taskbar-volume-control.wh.cpp))
 
 * Added an option to scroll anywhere on the screen while holding a configurable combination of modifier keys to change the system volume.

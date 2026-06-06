@@ -11393,13 +11393,13 @@
                     1136
                 ],
                 "ratingUsers": 1256,
-                "updated": 1771272851000,
+                "updated": 1780762241000,
                 "users": 120725
             },
             "featured": true,
             "metadata": {
                 "author": "m417z",
-                "compilerOptions": "-DWINVER=0x0A00 -lcomctl32 -ldwmapi -lgdi32 -lole32 -lversion",
+                "compilerOptions": "-lcomctl32 -ldwmapi -lgdi32 -lole32 -lversion",
                 "description": "Control the system volume by scrolling over the taskbar or anywhere with modifier keys",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -11410,7 +11410,7 @@
                 ],
                 "name": "Taskbar Volume Control",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3"
+                "version": "1.3.1"
             }
         },
         "taskbar-volume-control-per-app": {
