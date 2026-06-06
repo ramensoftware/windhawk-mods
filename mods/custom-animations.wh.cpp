@@ -2,7 +2,7 @@
 // @id            custom-animations
 // @name          Animation Mod
 // @description   Ultra-smooth Open/Close/Minimize/Maximize animation
-// @version       1.0.0
+// @version       1.1.0
 // @author        Shoaib Hassan
 // @github        https://github.com/shoaibhassan2
 // @include       *
@@ -10,31 +10,11 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*
-# Genie & Magic Lamp Animation Mod
-
-Replaces the default Windows minimize and restore animations with smooth geometry deformation effects.
-
-- KDE Magic Lamp: fluid 4-direction spatial bend
-- macOS Genie: cosine-eased suction effect to dock
-- MacSine: liquid wobble motion during animation
-*/
+/*...*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*
-- duration_ms: 450
-  $name: Animation Duration (ms)
-  $description: Time it takes for the animation to complete.
-
-- animation_style: KDE
-  $name: Animation Style
-  $description: Choose the visual style of the minimize effect.
-  $options:
-    - KDE: KDE Magic Lamp
-    - MacPinch: macOS Genie (Pinch Effect)
-    - MacSine: macOS Genie (Sine Wave Wobble)
-*/
+/*...*/
 // ==/WindhawkModSettings==
 
 #include <windows.h>
@@ -85,7 +65,7 @@ void InitGdiPlus() {
 
 // --- SETTINGS ---
 std::atomic<int> g_durationMs{450};
-std::atomic<int> g_animationStyle{0}; // 0 = KDE, 1 = Mac Pinch, 2 = Mac Sine
+std::atomic<int> g_animationStyle{0}; // 0 = KDE, 1 = Mac Pinch, 2 = Mac Sine, 3 = Squash
 
 void LoadSettings() {
     int ms = Wh_GetIntSetting(L"duration_ms");
@@ -94,14 +74,16 @@ void LoadSettings() {
     g_durationMs.store(ms, std::memory_order_relaxed);
 
     PCWSTR styleStr = Wh_GetStringSetting(L"animation_style");
-    int style = 0; // Default to KDE (0)
+    int style = 0; // Default to KDE
     if (styleStr) {
         if (wcscmp(styleStr, L"MacPinch") == 0) {
             style = 1;
         } else if (wcscmp(styleStr, L"MacSine") == 0) {
             style = 2;
+        } else if (wcscmp(styleStr, L"Squash") == 0) {
+            style = 3;
         }
-        Wh_FreeStringSetting(styleStr); // Free memory allocated by Windhawk
+        Wh_FreeStringSetting(styleStr);
     }
     g_animationStyle.store(style, std::memory_order_relaxed);
 }
@@ -112,7 +94,18 @@ void SetDwmTransitions(HWND hWnd, BOOL enable) {
 }
 
 // -------------------------------------------------------------------------
-// ENGINE 1: KDE Physics Logic
+// Easing functions for Squash animation
+// -------------------------------------------------------------------------
+static inline float CubicEaseIn(float t) {
+    return t * t * t;
+}
+static inline float CubicEaseOut(float t) {
+    float t1 = t - 1.0f;
+    return t1 * t1 * t1 + 1.0f;
+}
+
+// -------------------------------------------------------------------------
+// ENGINE 1: KDE Physics Logic (unchanged)
 // -------------------------------------------------------------------------
 static void CalculateLampVertexKDE(float tx, float ty, float p, const Geometry& w, const Geometry& i, int pos, float *outX, float *outY) {
     float quadX = tx * w.width;
@@ -193,7 +186,7 @@ static void CalculateLampVertexKDE(float tx, float ty, float p, const Geometry& 
 }
 
 // -------------------------------------------------------------------------
-// ENGINE 2: macOS Genie Physics Logic (Pinch & Sine variants)
+// ENGINE 2: macOS Genie Physics Logic (unchanged)
 // -------------------------------------------------------------------------
 static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry& w, const Geometry& i, int style, float *outX, float *outY) {
     float split = 0.3f;
@@ -212,10 +205,8 @@ static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry
 
     float effectX;
     if (style == 2) { 
-        // EFFECT_SINE: Liquid wobble effect
         effectX = sinf((height - y) / fullHeight * PI * 4.0f) * w.width / 14.0f * k;
     } else { 
-        // EFFECT_DEFAULT: Classic sharp pinch effect
         effectX = sinf(((height - y) / fullHeight) * 2.0f * PI + PI) * (w.x + w.width * tx - (i.x + i.width * tx)) / 7.0f * k;
     }
 
@@ -232,7 +223,7 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
     int style = g_animationStyle.load(std::memory_order_relaxed);
-    int xTiles = (style == 1 || style == 2) ? 60 : 40; 
+    int xTiles = (style == 1 || style == 2) ? 60 : 40;
     int yTiles = (style == 1 || style == 2) ? 60 : 40;
 
     int vLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -251,7 +242,7 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
     
-    BITMAPINFO bmi = {0};
+    BITMAPINFO bmi = {{0}};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = vWidth;
     bmi.bmiHeader.biHeight = -vHeight; 
@@ -267,8 +258,8 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     Bitmap targetBmp(vWidth, vHeight, vWidth * 4, PixelFormat32bppPARGB, (BYTE*)pTargetBits);
     Graphics gfx(&targetBmp);
     
-    gfx.SetInterpolationMode(InterpolationModeBilinear); 
-    gfx.SetSmoothingMode(SmoothingModeAntiAlias); 
+    gfx.SetInterpolationMode(InterpolationModeBilinear);
+    gfx.SetSmoothingMode(SmoothingModeAntiAlias);
 
     Geometry wGeom = { (float)data->targetRect.left, (float)data->targetRect.top, (float)data->width, (float)data->height };
     Geometry iGeom = { (float)data->targetDockX - 20.0f, (float)screenHeight - 40.0f, 40.0f, 40.0f };
@@ -278,6 +269,15 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     float dy = (iGeom.y + iGeom.height / 2.0f) - (wGeom.y + wGeom.height / 2.0f);
     if (fabsf(dx) > fabsf(dy)) position = (dx > 0) ? POS_RIGHT : POS_LEFT;
     else position = (dy > 0) ? POS_BOTTOM : POS_TOP;
+
+    // Precompute squash parameters
+    float targetScaleX = iGeom.width / wGeom.width;
+    float targetScaleY = iGeom.height / wGeom.height;
+    // Corrected translation: original top-left and icon top-left
+    float startX = wGeom.x - vLeft;
+    float startY = wGeom.y - vTop;
+    float endX = iGeom.x - vLeft;
+    float endY = iGeom.y - vTop;
 
     const double totalMs = (double)g_durationMs.load(std::memory_order_relaxed);
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
@@ -303,50 +303,89 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
         if (style == 1 || style == 2) { 
             float eased_p = 0.5f * (1.0f - cosf(raw_p * PI));
             t = data->isRising ? (1.0f - eased_p) : eased_p;
+        } else if (style == 3) {
+            if (data->isRising) {
+                t = CubicEaseOut(raw_p);
+            } else {
+                t = CubicEaseIn(raw_p);
+            }
         } else { 
             t = data->isRising ? (1.0f - raw_p) : raw_p;
         }
 
         gfx.Clear(Color(0, 0, 0, 0));
 
-        for (int y = 0; y < yTiles; y++) {
-            for (int x = 0; x < xTiles; x++) {
-                float tx1 = (float)x / xTiles, ty1 = (float)y / yTiles;
-                float tx2 = (float)(x + 1) / xTiles, ty2 = (float)(y + 1) / yTiles;
-                float x1, y1, x2, y2, x4, y4;
-                
-                if (style == 1 || style == 2) { 
-                    CalculateLampVertexMacOS(tx1, ty1, t, wGeom, iGeom, style, &x1, &y1);
-                    CalculateLampVertexMacOS(tx2, ty1, t, wGeom, iGeom, style, &x2, &y2);
-                    CalculateLampVertexMacOS(tx1, ty2, t, wGeom, iGeom, style, &x4, &y4);
-                } else { 
-                    CalculateLampVertexKDE(tx1, ty1, t, wGeom, iGeom, position, &x1, &y1);
-                    CalculateLampVertexKDE(tx2, ty1, t, wGeom, iGeom, position, &x2, &y2);
-                    CalculateLampVertexKDE(tx1, ty2, t, wGeom, iGeom, position, &x4, &y4);
-                }
-                
-                float padX = (x == xTiles - 1) ? 0.0f : 0.5f;
-                float padY = (y == yTiles - 1) ? 0.0f : 0.5f;
-                
-                PointF dest[3] = {
-                    PointF(x1 - vLeft, y1 - vTop), 
-                    PointF(x2 + padX - vLeft, y2 - vTop), 
-                    PointF(x4 - vLeft, y4 + padY - vTop)
-                };
-                
-                gfx.DrawImage(&srcBmp, dest, 3, 
-                    tx1 * wGeom.width, ty1 * wGeom.height, 
-                    (tx2 - tx1) * wGeom.width, (ty2 - ty1) * wGeom.height, 
-                    UnitPixel); 
+        if (style == 3) {
+            // ----- SQUASH ANIMATION (corrected) -----
+            float transX, transY, scaleX, scaleY, opacity;
+            if (data->isRising) {
+                // Restore: from icon to original position
+                transX = endX + (startX - endX) * t;
+                transY = endY + (startY - endY) * t;
+                scaleX = targetScaleX + (1.0f - targetScaleX) * t;
+                scaleY = targetScaleY + (1.0f - targetScaleY) * t;
+                opacity = t;
+            } else {
+                // Minimize: from original position to icon
+                transX = startX + (endX - startX) * t;
+                transY = startY + (endY - startY) * t;
+                scaleX = 1.0f + (targetScaleX - 1.0f) * t;
+                scaleY = 1.0f + (targetScaleY - 1.0f) * t;
+                opacity = 1.0f - t;
             }
+            
+            Matrix transform;
+            transform.Translate(transX, transY);
+            transform.Scale(scaleX, scaleY);
+            gfx.SetTransform(&transform);
+            gfx.DrawImage(&srcBmp, 0, 0, data->width, data->height);
+            gfx.ResetTransform();
+            
+            BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)(opacity * 255.0f), AC_SRC_ALPHA };
+            POINT ptDst = { vLeft, vTop };
+            SIZE sz = { vWidth, vHeight };
+            POINT ptSrc = { 0, 0 };
+            UpdateLayeredWindow(hGhost, NULL, &ptDst, &sz, hMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
+        } else {
+            // ----- ORIGINAL TILE-BASED DEFORMATION (KDE & macOS) -----
+            for (int y = 0; y < yTiles; y++) {
+                for (int x = 0; x < xTiles; x++) {
+                    float tx1 = (float)x / xTiles, ty1 = (float)y / yTiles;
+                    float tx2 = (float)(x + 1) / xTiles, ty2 = (float)(y + 1) / yTiles;
+                    float x1, y1, x2, y2, x4, y4;
+                    
+                    if (style == 1 || style == 2) { 
+                        CalculateLampVertexMacOS(tx1, ty1, t, wGeom, iGeom, style, &x1, &y1);
+                        CalculateLampVertexMacOS(tx2, ty1, t, wGeom, iGeom, style, &x2, &y2);
+                        CalculateLampVertexMacOS(tx1, ty2, t, wGeom, iGeom, style, &x4, &y4);
+                    } else { 
+                        CalculateLampVertexKDE(tx1, ty1, t, wGeom, iGeom, position, &x1, &y1);
+                        CalculateLampVertexKDE(tx2, ty1, t, wGeom, iGeom, position, &x2, &y2);
+                        CalculateLampVertexKDE(tx1, ty2, t, wGeom, iGeom, position, &x4, &y4);
+                    }
+                    
+                    float padX = (x == xTiles - 1) ? 0.0f : 0.5f;
+                    float padY = (y == yTiles - 1) ? 0.0f : 0.5f;
+                    
+                    PointF dest[3] = {
+                        PointF(x1 - vLeft, y1 - vTop), 
+                        PointF(x2 + padX - vLeft, y2 - vTop), 
+                        PointF(x4 - vLeft, y4 + padY - vTop)
+                    };
+                    
+                    gfx.DrawImage(&srcBmp, dest, 3, 
+                        tx1 * wGeom.width, ty1 * wGeom.height, 
+                        (tx2 - tx1) * wGeom.width, (ty2 - ty1) * wGeom.height, 
+                        UnitPixel); 
+                }
+            }
+            
+            POINT ptDst = { vLeft, vTop };
+            SIZE sz = { vWidth, vHeight };
+            POINT ptSrc = { 0, 0 };
+            BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+            UpdateLayeredWindow(hGhost, NULL, &ptDst, &sz, hMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
         }
-
-        POINT ptDst = { vLeft, vTop };
-        SIZE  sz    = { vWidth, vHeight };
-        POINT ptSrc = { 0, 0 };
-        BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-        
-        UpdateLayeredWindow(hGhost, NULL, &ptDst, &sz, hMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
 
         if (firstFrame) {
             ShowWindow(hGhost, SW_SHOWNOACTIVATE);
@@ -377,7 +416,7 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
 }
 
 // -------------------------------------------------------------------------
-// Core Setup Engine & Tracking Logic
+// Core Setup Engine & Tracking Logic (unchanged)
 // -------------------------------------------------------------------------
 void StartGenieAnim(HWND hWnd, BOOL rising) {
     std::call_once(g_gdiplusFlag, InitGdiPlus);
@@ -424,7 +463,7 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
 
     HDC hScreenDC = GetDC(NULL);
     
-    BITMAPINFO bmi = {0};
+    BITMAPINFO bmi = {{0}};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = w;
     bmi.bmiHeader.biHeight = -h; 
@@ -481,7 +520,7 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
 }
 
 // -------------------------------------------------------------------------
-// Hooks
+// Hooks (unchanged)
 // -------------------------------------------------------------------------
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (GetAncestor(hWnd, GA_ROOT) != hWnd) {
