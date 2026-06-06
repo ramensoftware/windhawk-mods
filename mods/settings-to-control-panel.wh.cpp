@@ -2,18 +2,72 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.0
+// @version        10.0.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
-// @include        SystemSettings.exe
-// @include        StartMenuExperienceHost.exe
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-# Redirect Settings → Control Panel (v10.0.0)
+# Redirect Settings → Control Panel
 
-Debug version - logging all ShellExecuteW calls to diagnose audio tray issues.
+This mod intercepts modern `ms-settings:` URIs and redirects them to their
+corresponding classic Control Panel applets using only native Windows components.
+
+---
+
+## Compatibility
+
+- **Windows 10** – Mostly complete support
+- **Windows 11** – Partial support (some redirects may vary by build)
+
+---
+
+## Features
+
+- Redirects numerous `ms-settings:` URIs to classic Control Panel
+- Smart personalization detection (desktop vs in-window)
+- Anti-loop protection
+- Configurable fallback modes
+
+---
+
+## Configuration
+
+- **EnableRedirects** – Turn the mod on or off
+- **UIOnlyRedirects** – Only redirect clicks (safer, may miss some)
+- **FallbackMode** – What to do when no classic page exists:
+  - `0` = ignore (do nothing)
+  - `1` = open Control Panel
+  - `2` = open modern Settings (default)
+- **Win11CompatibilityMode** – Extra safety for Windows 11
+- **MaxLaunchesPerUri** – Prevents infinite loops (default: 3 launches per 5 seconds)
+
+---
+## Limitations
+
+- System tray icons (audio/network) use DCOM activation and cannot be intercepted (This could change in future)
+- Windows 11 support is limited due to Microsoft's architectural changes and some redirects might change based on versions.
+
+---
+
+## How It Works
+
+The mod hooks:
+- `ShellExecuteExW` / `ShellExecuteW`
+- `CreateProcessW`
+- `IShellDispatch2::ShellExecute`
+
+When a `ms-settings:` URI is detected, it launches the corresponding classic
+Control Panel target instead of the modern Settings app.
+
+---
+
+## Credits
+
+- m417z – Code reviews and feedback
+- Anixx – Testing on Windows 11 23H2
+- dbilanoski – CLSID documentation
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -48,8 +102,7 @@ Debug version - logging all ShellExecuteW calls to diagnose audio tray issues.
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <mutex>
-#include <shobjidl.h>     
+#include <mutex>   
 #include <initguid.h>  
 
 // Dynamic COM handling - no linking required
@@ -61,18 +114,15 @@ static HMODULE g_hOle32 = nullptr;
 using IShellDispatch2_ShellExecute_t = HRESULT(WINAPI*)(void* pThis, BSTR File, void* vArgs, void* vDir, void* vOperation, void* vShow);
 static IShellDispatch2_ShellExecute_t IShellDispatch2_ShellExecute_orig = nullptr;
 
-// CLSID_Shell / IID_IShellDispatch2
-static const GUID CLSID_Shell_ = {0x13709620,0xC279,0x11CE,{0xA4,0x9E,0x44,0x45,0x53,0x54,0x00,0x00}};
-static const GUID IID_IShellDispatch2_ = {0xA4C6892C,0x3BA9,0x11D2,{0x9D,0xEA,0x00,0xC0,0x4F,0xB9,0x60,0x3F}};
-
 // Constants
 static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
-
-#define SYSTEM_PROPS_CLSID  L"shell:::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}"
-#define NOTIF_AREA_CLSID    L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}"
+#define PERS_ED_CLSID   L"shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
 #define PERS_ROOT       L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
 #define PERS_WALLPAPER  L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageWallpaper"
 #define PERS_COLORS     L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageColorization"
+
+#define SYSTEM_PROPS_CLSID  L"shell:::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}"
+#define NOTIF_AREA_CLSID    L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}"
 #define WIN11_PASSTHROUGH L"__PASSTHROUGH__"
 #define EASE_OF_ACCESS  L"explorer shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"
 
@@ -84,6 +134,12 @@ using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCW
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
 static ShellExecuteW_t ShellExecuteW_orig = nullptr;
+
+// Core resolve logic struct - MUST be defined before use
+struct ResolveResult {
+    std::wstring target;
+    bool intercept;
+};
 
 // Reentry guards
 static thread_local int g_hookDepth = 0;
@@ -121,7 +177,6 @@ static bool IsChildProcess() {
 struct ModSettings {
     bool enableRedirects = true;
     bool uiOnlyRedirects = false;
-    // SmartPersonalizationDetection è sempre attivo (rimosso dalle impostazioni utente)
     int fallbackMode = 2;
     bool win11CompatibilityMode = false;
     int maxLaunchesPerUri = 3;
@@ -132,7 +187,6 @@ static ModSettings g_settings;
 static void LoadSettings() {
     g_settings.enableRedirects = Wh_GetIntSetting(L"EnableRedirects") != 0;
     g_settings.uiOnlyRedirects = Wh_GetIntSetting(L"UIOnlyRedirects") != 0;
-    // SmartPersonalizationDetection è sempre attivo, non viene più letto dalle impostazioni
 
     PCWSTR fallbackStr = Wh_GetStringSetting(L"FallbackMode");
     if (fallbackStr[0] != L'\0') {
@@ -170,6 +224,35 @@ static void DetectWindowsVersion() {
     Wh_Log(L"Build %lu IsWin11=%d", osvi.dwBuildNumber, (int)g_isWin11);
 }
 
+// Bounce-back guard
+struct BounceRecord {
+    DWORD lastRedirectTick = 0;
+};
+
+static std::mutex g_bounceGuardMtx;
+static std::unordered_map<std::wstring, BounceRecord> g_bounceGuard;
+
+static constexpr DWORD BOUNCE_WINDOW_MS = 3000;
+
+static void BounceGuardRecord(const std::wstring& uri) {
+    std::lock_guard<std::mutex> lk(g_bounceGuardMtx);
+    g_bounceGuard[uri].lastRedirectTick = GetTickCount();
+}
+
+static bool BounceGuardIsBounce(const std::wstring& uri) {
+    std::lock_guard<std::mutex> lk(g_bounceGuardMtx);
+    auto it = g_bounceGuard.find(uri);
+    if (it == g_bounceGuard.end()) return false;
+    DWORD elapsed = GetTickCount() - it->second.lastRedirectTick;
+    if (elapsed < BOUNCE_WINDOW_MS) {
+        Wh_Log(L"BOUNCE-BACK: '%s' returned %lu ms after redirect — target is dead, routing to fallback",
+               uri.c_str(), elapsed);
+        it->second.lastRedirectTick = 0;
+        return true;
+    }
+    return false;
+}
+
 // Loop guard
 struct LaunchRecord {
     int count = 0;
@@ -179,7 +262,7 @@ struct LaunchRecord {
 static std::mutex g_loopGuardMtx;
 static std::unordered_map<std::wstring, LaunchRecord> g_loopGuard;
 
-static constexpr DWORD LOOP_WINDOW_MS = 3000;
+static constexpr DWORD LOOP_WINDOW_MS = 5000;
 
 static bool LoopGuardAllow(const std::wstring& target) {
     if (g_settings.maxLaunchesPerUri <= 0) return true;
@@ -219,6 +302,19 @@ static const std::unordered_set<std::wstring> g_win11SafeClsids = {
     L"shell:::{bd84b380-8ca2-1069-ab1d-08000948f534}",
     L"shell:::{d9ef8727-cac2-4e60-809e-86f80a666c91}",
     L"shell:::{c58c4893-3be0-4b45-abb5-a63e4b8c8651}",
+    L"shell:::{6dfd7c5c-2451-11d3-a299-00c04f8ef6af}",
+    L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}",
+    L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}",
+    L"shell:::{26ee0668-a00a-44d7-9371-beb064c98683}",
+    L"shell:::{725be8f7-668e-4c7b-8f90-46bdb0936430}",
+    L"shell:::{f02c1a0d-be21-4350-88b0-7367fc96ef3c}",
+    L"shell:::{bb64f8a7-bee7-4e1a-ab8d-7d8273f7fdb6}",
+    L"shell:::{025a5937-a6be-4686-a844-36fe4bec8b6d}",
+    L"shell:::{d17d1d6d-cc3f-4815-8fe3-607e7d5d10b3}",
+    L"shell:::{7a9d77bd-5403-11d2-8785-2e0420524153}",
+    L"shell:::{ecd0924-4208-451e-8ee0-373c0956de16}",
+    L"shell:::{ed7ba470-8e54-465e-825c-99712043e01c}",
+    L"shell:::{d555645e-d4f8-4c29-a827-d93c859c4f2a}",
 };
 
 static const std::unordered_set<std::wstring> g_win11LoopClsids = {
@@ -279,12 +375,14 @@ static void InitMappings() {
         {L"ms-settings:display-advanced-color", L"colorcpl.exe"},
         {L"ms-settings:colorcpl", L"colorcpl.exe"},
         
-        // Display (using rundll32 for advanced properties)
+        // Display
         {L"ms-settings:display", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-advanced", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-advanced-graphics", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:graphics-settings", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-adapter-properties", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+        {L"ms-settings:display-resolution", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+        {L"ms-settings:screenrotation", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         
         // System
         {L"ms-settings:about", w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
@@ -301,6 +399,7 @@ static void InitMappings() {
         {L"ms-settings:appsfeatures", L"appwiz.cpl"},
         {L"ms-settings:appsforwebsites", L"appwiz.cpl"},
         {L"ms-settings:optionalfeatures", L"OptionalFeatures.exe"},
+        {L"ms-settings:system-settings", L"shell:::{025A5937-A6BE-4686-A844-36FE4BEC8B6D}\\pageGlobalSettings"},
         
         // Power
         {L"ms-settings:powersleep", L"powercfg.cpl"},
@@ -355,13 +454,19 @@ static void InitMappings() {
         {L"ms-settings:network", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:network-wifi", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:network-ethernet", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+        {L"ms-settings:network-vpn", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+        {L"ms-settings:network-airplanemode", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+        {L"ms-settings:network-mobilehotspot", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+        {L"ms-settings:network-cellular", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+        {L"ms-settings:datausage", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:network-proxy", L"inetcpl.cpl,,4"},
         {L"ms-settings:network-status", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
         {L"ms-settings:network-dialup", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
-        {L"ms-settings:network-advancedsettings", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+        {L"ms-settings:network-advancedsettings", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
         {L"ms-settings:network-firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
         {L"ms-settings:windowsdefender", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
+        {L"ms-settings:network-places", L"shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
         
         // Accounts
         {L"ms-settings:yourinfo", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
@@ -369,6 +474,8 @@ static void InitMappings() {
         {L"ms-settings:emailandaccounts", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
         {L"ms-settings:accounts", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
         {L"ms-settings:startupapps", L"msconfig.exe"},
+        {L"ms-settings:netplwiz", L"shell:::{7A9D77BD-5403-11d2-8785-2E0420524153}"},
+        {L"ms-settings:workplace", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ECDB0924-4208-451E-8EE0-373C0956DE16}"},
         
         // Default Apps
         {L"ms-settings:defaultapps", w11 ? WIN11_PASSTHROUGH : L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}"},
@@ -400,7 +507,6 @@ static void InitMappings() {
         {L"ms-settings:recovery", w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
         {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},
         {L"ms-settings:deviceencryption", L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
-        // --- Redirections to classic panels (verified) --- source: https://gist.github.com/dbilanoski/3670be6d81b48cde29d40e48e41e0a48
         
         // Gaming
         {L"ms-settings:gaming-gamebar", L"joy.cpl"},
@@ -409,28 +515,19 @@ static void InitMappings() {
         {L"ms-settings:folders", L"shell:::{6DFD7C5C-2451-11d3-A299-00C04F8EF6AF}"},
         
         // Get Programs (modern: Apps & Features)
-        {L"ms-settings:appsfeatures", L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}"},
+        {L"ms-settings:appsfeatures-app", L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}"},
         
         // Installed Updates
         {L"ms-settings:windowsupdate-history", L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}"},
         
         // History (Troubleshooting)
-        {L"ms-settings:troubleshoot", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\historyPage"},
+        {L"ms-settings:troubleshoot-history", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\historyPage"},
         
         // Keyboard
-        {L"ms-settings:keyboard", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
+        {L"ms-settings:keyboard-advanced", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
         
         // Keyboard Properties
         {L"ms-settings:keyboard-properties", L"shell:::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
-        
-        // Network (Places)
-        {L"ms-settings:network-places", L"shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
-        
-        // Network and Internet
-        {L"ms-settings:network", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\3"},
-        
-        // Network and Sharing Centre (already in mappings, kept for clarity)
-        {L"ms-settings:network-advancedsettings", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         
         // Problem Details / Reports
         {L"ms-settings:privacy-feedback", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReportDetails"},
@@ -441,26 +538,14 @@ static void InitMappings() {
         // Problem Reports (list)
         {L"ms-settings:problem-reports", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageProblems"},
         
-        // Recovery (already in mappings, kept for clarity)
-        {L"ms-settings:recovery", w11 ? L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{9FE63AFD-59CF-4419-9775-ABCC3849F861}" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
-        
         // Reliability Monitor
         {L"ms-settings:reliability", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReliabilityView"},
-        
-        // System Settings
-        {L"ms-settings:system-settings", L"shell:::{025A5937-A6BE-4686-A844-36FE4BEC8B6D}\\pageGlobalSettings"},
         
         // Speech Properties
         {L"ms-settings:speech", L"shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}"},
         
         // Search Troubleshooting
         {L"ms-settings:search-diagnostics", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\searchPage"},
-        
-        // User Accounts (netplwiz)
-        {L"ms-settings:netplwiz", L"shell:::{7A9D77BD-5403-11d2-8785-2E0420524153}"},
-        
-        // Work Folders
-        {L"ms-settings:workplace", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ECDB0924-4208-451E-8EE0-373C0956DE16}"},
         
         // Control Panel All Tasks
         {L"ms-settings:controlpanel", L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}"},
@@ -476,6 +561,8 @@ static void InitMappings() {
         g_mappings[L"ms-settings:storage"] = L"control.exe";
         g_mappings[L"ms-settings:storagesense"] = L"control.exe";
         g_mappings[L"ms-settings:backup"] = L"control.exe /name Microsoft.BackupAndRestore";
+        g_mappings[L"ms-settings:network-advancedsettings"] = L"control.exe /name Microsoft.NetworkAndSharingCenter";
+        g_mappings[L"ms-settings:recovery"] = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{9FE63AFD-59CF-4419-9775-ABCC3849F861}";
     }
 }
 
@@ -565,7 +652,7 @@ static bool HandleFallback(const std::wstring& uri) {
     }
 }
 
-// LaunchTarget
+// LaunchTarget - VERSIONE CORRETTA
 static void LaunchTarget(const std::wstring& command) {
     Wh_Log(L"Launching: %s", command.c_str());
 
@@ -575,40 +662,27 @@ static void LaunchTarget(const std::wstring& command) {
     }
 
     std::wstring lower = ToLower(command);
-
-    // Handle rundll32.exe specially (needs comma in arguments)
-    if (command.find(L"rundll32.exe") != std::wstring::npos) {
-        std::wstring mutable_cmd = command;
-        STARTUPINFOW si = {};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi = {};
-        if (!CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-            Wh_Log(L"rundll32 CreateProcess failed for '%s' (%lu)", command.c_str(), GetLastError());
-        } else {
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-        }
-        return;
-    }
-
-    // Handle "explorer shell:::" directly
+    
+    // PER I COMANDI "explorer shell:::" USA ShellExecuteExW
     if (lower.find(L"explorer shell:::") != std::wstring::npos) {
-        std::wstring clsid = command.substr(command.find(L"shell:::"));
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_FLAG_NO_UI;
         sei.lpVerb = L"open";
-        sei.lpFile = clsid.c_str();
+        sei.lpFile = L"explorer.exe";
+        sei.lpParameters = command.c_str() + 9; // Salta "explorer " (9 caratteri)
         sei.nShow = SW_SHOWNORMAL;
+        
+        Wh_Log(L"Using ShellExecuteExW: explorer.exe params='%s'", sei.lpParameters);
         ShellExecuteExW_orig(&sei);
         return;
     }
-
-    // Full command line detection
-    bool isFullCmdLine = (lower.find(L"rundll32.exe ") != std::wstring::npos) ||
-                         (lower.find(L"explorer.exe ") != std::wstring::npos) ||
-                         (lower.find(L"msdt.exe ") != std::wstring::npos) ||
-                         (lower.find(L"control.exe /") != std::wstring::npos);
+    
+    // Comandi completi con percorso eseguibile
+    bool isFullCmdLine =
+        (lower.find(L"rundll32.exe ") != std::wstring::npos) ||
+        (lower.find(L"explorer.exe ") != std::wstring::npos) ||
+        (lower.find(L"control.exe /") != std::wstring::npos);
 
     if (isFullCmdLine) {
         STARTUPINFOW si = {};
@@ -617,13 +691,24 @@ static void LaunchTarget(const std::wstring& command) {
         si.wShowWindow = SW_SHOWNORMAL;
         PROCESS_INFORMATION pi = {};
         std::wstring mutable_cmd = command;
-        if (!CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr, FALSE, CREATE_UNICODE_ENVIRONMENT,
-                                 (LPVOID)g_childEnvBlock.c_str(), nullptr, &si, &pi)) {
-            Wh_Log(L"CreateProcess failed for '%s' (%lu)", command.c_str(), GetLastError());
+        if (!CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr,
+                                 FALSE, CREATE_UNICODE_ENVIRONMENT,
+                                 (LPVOID)g_childEnvBlock.c_str(),
+                                 nullptr, &si, &pi)) {
+            Wh_Log(L"CreateProcess failed for '%s' (%lu)",
+                   command.c_str(), GetLastError());
         } else {
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
         }
+        return;
+    }
+
+    // UAC targets
+    if (command == L"devmgmt.msc" || command == L"compmgmt.msc" ||
+        command == L"slui.exe" || command == L"OptionalFeatures.exe") {
+        ShellExecuteW_orig(nullptr, L"open", command.c_str(),
+                           nullptr, nullptr, SW_SHOWNORMAL);
         return;
     }
 
@@ -634,37 +719,21 @@ static void LaunchTarget(const std::wstring& command) {
     si.wShowWindow = SW_SHOWNORMAL;
     PROCESS_INFORMATION pi = {};
     std::wstring cmdLine;
-    // Special handling for control.exe with /name parameter
-if (command.find(L"control.exe /name") != std::wstring::npos) {
-    std::wstring mutable_cmd = command;
-    STARTUPINFOW si = {};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_SHOWNORMAL;
-    PROCESS_INFORMATION pi = {};
-    if (CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr, FALSE, 
-                            CREATE_UNICODE_ENVIRONMENT, (LPVOID)g_childEnvBlock.c_str(), 
-                            nullptr, &si, &pi)) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    } else {
-        Wh_Log(L"CreateProcess failed for '%s' (%lu)", command.c_str(), GetLastError());
-    }
-    return;
-}
+
     if (command.find(L".msc") != std::wstring::npos) {
         cmdLine = L"mmc.exe \"" + command + L"\"";
     } else if (command.find(L".cpl") != std::wstring::npos) {
         cmdLine = L"control.exe " + command;
-        
     } else if (command.find(L".exe") != std::wstring::npos) {
         cmdLine = command;
     } else if (command.find(L"shell:::") == 0) {
+        // CLSID puro - usa explorer.exe
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_FLAG_NO_UI;
         sei.lpVerb = L"open";
-        sei.lpFile = command.c_str();
+        sei.lpFile = L"explorer.exe";
+        sei.lpParameters = command.c_str();
         sei.nShow = SW_SHOWNORMAL;
         ShellExecuteExW_orig(&sei);
         return;
@@ -674,134 +743,25 @@ if (command.find(L"control.exe /name") != std::wstring::npos) {
         cmdLine = L"control.exe " + command;
     }
 
-    std::wstring mutableCmd = cmdLine;
-    if (!CreateProcessW_orig(nullptr, mutableCmd.data(), nullptr, nullptr, FALSE, CREATE_UNICODE_ENVIRONMENT,
-                             (LPVOID)g_childEnvBlock.c_str(), nullptr, &si, &pi)) {
-        Wh_Log(L"CreateProcess failed for '%s' (error %lu)", cmdLine.c_str(), GetLastError());
-        return;
-    }
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-}
-
-// Personalization detection - sempre attiva
-static bool IsPersonalizationWindow(HWND hwnd) {
-    if (!hwnd) {
-        hwnd = GetForegroundWindow();
-        if (!hwnd) return false;
-    }
-
-    HWND h = hwnd;
-    while (h) {
-        wchar_t cls[256] = {};
-        wchar_t title[512] = {};
-        GetClassNameW(h, cls, 256);
-        GetWindowTextW(h, title, 512);
-        std::wstring c = ToLower(cls);
-        std::wstring t = ToLower(title);
-
-        if (c == L"progman" || c == L"workerw" || c == L"shelldll_defview") return false;
-        if (c == L"cabinetwclass" && t.find(L"personaliz") != std::wstring::npos) return true;
-        if (t.find(L"personaliz") != std::wstring::npos) return true;
-
-        HWND parent = GetParent(h);
-        if (!parent || parent == h) break;
-        h = parent;
-    }
-    return false;
-}
-
-static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
-    // SmartPersonalizationDetection è sempre attivo
-    if (IsPersonalizationWindow(hwnd)) {
-        Wh_Log(L"personalization-background -> wallpaper page (smart detection always active)");
-        return PERS_WALLPAPER;
-    }
-    Wh_Log(L"personalization-background -> Personalization root (smart detection always active)");
-    return PERS_ROOT;
-}
-
-// Audio window closing (workaround for modern windows)
-static bool g_isClosingAudioWindow = false;
-
-static void CloseModernAudioWindow() {
-    if (g_isClosingAudioWindow) {
-        Wh_Log(L"CloseModernAudioWindow: already running, skipping");
-        return;
-    }
-    g_isClosingAudioWindow = true;
-    
-    Wh_Log(L"CloseModernAudioWindow: searching for modern audio windows");
-    
-    HWND hwnd = FindWindowW(L"ApplicationFrameWindow", nullptr);
-    bool found = false;
-    
-    while (hwnd && !found) {
-        if (IsWindowVisible(hwnd)) {
-            DWORD processId = 0;
-            GetWindowThreadProcessId(hwnd, &processId);
-            
-            HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
-            if (hProcess) {
-                wchar_t processPath[MAX_PATH] = {0};
-                DWORD size = MAX_PATH;
-                if (QueryFullProcessImageNameW(hProcess, 0, processPath, &size)) {
-                    std::wstring processName = ToLower(processPath);
-                    
-                    if (processName.find(L"systemsettings.exe") != std::wstring::npos ||
-                        processName.find(L"settings.exe") != std::wstring::npos ||
-                        processName.find(L"windows.immersivecontrolpanel") != std::wstring::npos) {
-                        
-                        HWND childHwnd = FindWindowExW(hwnd, nullptr, L"Windows.UI.Core.CoreWindow", nullptr);
-                        if (childHwnd) {
-                            wchar_t className[256] = {0};
-                            GetClassNameW(childHwnd, className, 256);
-                            std::wstring classNameStr = ToLower(className);
-                            
-                            if (classNameStr.find(L"audio") != std::wstring::npos ||
-                                classNameStr.find(L"sound") != std::wstring::npos) {
-                                
-                                Wh_Log(L"CloseModernAudioWindow: found audio window (process: %s, class: %s)", 
-                                       processPath, className);
-                                PostMessageW(hwnd, WM_CLOSE, 0, 0);
-                                found = true;
-                            }
-                        }
-                        
-                        if (!found) {
-                            wchar_t windowTitle[256] = {0};
-                            GetWindowTextW(hwnd, windowTitle, 256);
-                            std::wstring title = ToLower(windowTitle);
-                            
-                            if (title.find(L"audio") != std::wstring::npos ||
-                                title.find(L"sound") != std::wstring::npos ||
-                                title.find(L"suono") != std::wstring::npos) {
-                                
-                                Wh_Log(L"CloseModernAudioWindow: found audio window by title (process: %s, title: %s)", 
-                                       processPath, windowTitle);
-                                PostMessageW(hwnd, WM_CLOSE, 0, 0);
-                                found = true;
-                            }
-                        }
-                    }
-                }
-                CloseHandle(hProcess);
-            }
+    if (!cmdLine.empty()) {
+        std::wstring mutableCmd = cmdLine;
+        if (!CreateProcessW_orig(nullptr, mutableCmd.data(), nullptr, nullptr,
+                                 FALSE, CREATE_UNICODE_ENVIRONMENT,
+                                 (LPVOID)g_childEnvBlock.c_str(),
+                                 nullptr, &si, &pi)) {
+            Wh_Log(L"CreateProcess failed for '%s' (error %lu)",
+                   cmdLine.c_str(), GetLastError());
+            return;
         }
-        
-        if (!found) {
-            hwnd = FindWindowExW(nullptr, hwnd, L"ApplicationFrameWindow", nullptr);
-        } else {
-            break;
-        }
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
     }
-    
-    if (!found) {
-        Wh_Log(L"CloseModernAudioWindow: no modern audio window found");
-    }
-    
-    g_isClosingAudioWindow = false;
 }
+// Personalization detection
+
+
+
+
 
 // Helper function to open sound panel
 static bool OpenSoundPanel() {
@@ -810,92 +770,88 @@ static bool OpenSoundPanel() {
     return true;
 }
 
-// Core resolve logic
-struct ResolveResult {
-    std::wstring target;
-    bool intercept;
-};
+static bool IsPersonalizationWindow(HWND hwnd) {
+    if (!hwnd) {
+        Wh_Log(L"HWND null -> desktop context menu path");
+        return false;
+    }
 
+    HWND h = hwnd;
+    while (h) {
+        wchar_t cls[256]   = {};
+        wchar_t title[512] = {};
+        GetClassNameW(h, cls, 256);
+        GetWindowTextW(h, title, 512);
+
+        std::wstring c = ToLower(cls);
+        std::wstring t = ToLower(title);
+
+        if (c == L"progman" || c == L"workerw" || c == L"shelldll_defview") {
+            Wh_Log(L"HWND: desktop class '%s' -> context menu", cls);
+            return false;
+        }
+        if (c == L"cabinetwclass") {
+            return true;
+        }
+        if (t.find(L"personaliz") != std::wstring::npos) {
+            Wh_Log(L"HWND: title match 'personaliz' -> Personalization window");
+            return true;
+        }
+
+        HWND parent = GetParent(h);
+        if (!parent || parent == h) break;
+        h = parent;
+    }
+
+    Wh_Log(L"HWND: no personalization window found -> context menu");
+    return false;
+}
+
+static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
+    if (IsPersonalizationWindow(hwnd)) {
+        Wh_Log(L"personalization-background -> wallpaper page");
+        return PERS_WALLPAPER;
+    }
+    Wh_Log(L"personalization-background -> Personalization root");
+    return PERS_ROOT;
+}
 static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
-    // Win11: some URIs should not be forced
-    if (g_isWin11 && g_win11NoForceRedirect.count(uri) > 0) {
-        Wh_Log(L"Win11 whitelist: skipping redirect for %s (pass-through)", uri.c_str());
-        return {L"", false};
-    }
-    
-    // Audio URI detection with window closing
-    if (uri.find(L"ms-settings:sound") == 0 ||
-        uri.find(L"ms-settings:audio") == 0 ||
-        uri.find(L"ms-settings:apps-volume") == 0 ||
-        uri.find(L"ms-settings:sound-devices") == 0 ||
-        uri.find(L"ms-settings:sound-output") == 0 ||
-        uri.find(L"ms-settings:sound-input") == 0) {
-        Wh_Log(L"Audio URI detected, closing modern windows");
-        CloseModernAudioWindow();
-    }
-    
-    // Personalization Background (smart detection sempre attiva)
     if (uri == L"ms-settings:personalization-background") {
+        if (BounceGuardIsBounce(uri)) {
+            Wh_Log(L"Bounce-back on personalization-background - suppressing duplicate, target is opening");
+            return {L"", true};
+        }
         std::wstring t = ApplyWin11Filter(ResolvePersonalizationBackground(hwnd));
-        Wh_Log(L"personalization-background -> %s", t.c_str());
+        BounceGuardRecord(uri);
         return {t, true};
     }
 
-    // Display settings (use rundll32 for advanced properties)
-    if (uri == L"ms-settings:display" ||
-        uri == L"ms-settings:display-advanced" ||
-        uri == L"ms-settings:display-advanced-graphics" ||
-        uri == L"ms-settings:graphics-settings" ||
-        uri == L"ms-settings:display-adapter-properties" ||
-        uri == L"ms-settings:display-resolution" ||
-        uri == L"ms-settings:screenrotation") {
-        std::wstring t = L"rundll32.exe display.dll,ShowAdapterSettings 0";
-        Wh_Log(L"Display redirect: %s -> %s", uri.c_str(), t.c_str());
-        return {t, true};
-    }
-
-    // Ease of Access (use control.exe /name to avoid CLSID loops)
-    if (uri == L"ms-settings:easeofaccess" ||
-        uri.find(L"ms-settings:easeofaccess-") == 0) {
-        std::wstring t = EASE_OF_ACCESS;
-        Wh_Log(L"EaseOfAccess redirect: %s -> %s", uri.c_str(), t.c_str());
-        return {t, true};
-    }
-
-    // Personalization CLSID handling (from inside classic CPL)
-    if (uri.find(L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}") == 0) {
-        if (uri.find(L"pagewallpaper") != std::wstring::npos) {
-            Wh_Log(L"Personalization CLSID: forcing wallpaper for '%s'", uri.c_str());
-            return {PERS_WALLPAPER, true};
-        }
-        if (uri.find(L"pagecolorization") != std::wstring::npos) {
-            Wh_Log(L"Personalization CLSID: forcing colors for '%s'", uri.c_str());
-            return {PERS_COLORS, true};
-        }
-        Wh_Log(L"Personalization CLSID: forcing root for '%s'", uri.c_str());
-        return {PERS_ROOT, true};
-    }
-
-    // Check mappings table
     auto it = g_mappings.find(uri);
     if (it != g_mappings.end()) {
-        std::wstring t = ApplyWin11Filter(it->second);
-        if (t == WIN11_PASSTHROUGH) {
-            Wh_Log(L"Passthrough sentinel for '%s'", uri.c_str());
+        if (BounceGuardIsBounce(uri)) {
+            Wh_Log(L"Bounce-back on '%s', routing to fallback", uri.c_str());
             bool handled = HandleFallback(uri);
             return {L"", handled};
         }
+
+        std::wstring t = ApplyWin11Filter(it->second);
+
+        if (t == WIN11_PASSTHROUGH) {
+            Wh_Log(L"Passthrough sentinel for '%s', routing to fallback", uri.c_str());
+            bool handled = HandleFallback(uri);
+            return {L"", handled};
+        }
+
         Wh_Log(L"Mapped: %s -> %s", uri.c_str(), t.c_str());
+        BounceGuardRecord(uri);
         return {t, true};
     }
 
-    // Unmapped ms-settings: URI
     if (uri.find(L"ms-settings:") == 0) {
         bool handled = HandleFallback(uri);
         return {L"", handled};
     }
 
-    // Unmapped shell::: CLSID (only intercept known loop CLSIDs on Win11)
     if (uri.find(L"shell:::") == 0) {
         if (g_isWin11 && IsClsidLoopOnWin11(uri)) {
             std::wstring t = ApplyWin11Filter(uri);
@@ -907,7 +863,6 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     Wh_Log(L"Unmapped, passing through: %s", uri.c_str());
     return {L"", false};
 }
-
 // Control system detection helpers
 static std::wstring BaseNameLower(const std::wstring& path) {
     size_t pos = path.rfind(L'\\');
@@ -986,9 +941,7 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
         uri.find(L"ms-settings:sound-devices") == 0 ||
         uri.find(L"ms-settings:sound-output") == 0 ||
         uri.find(L"ms-settings:sound-input") == 0)) {
-        
-        Wh_Log(L"Audio URI detected in ShellExecuteExW: %s", uri.c_str());
-        CloseModernAudioWindow();
+
         
         if (OpenSoundPanel()) {
             if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
@@ -1019,13 +972,6 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
 
     if (!g_settings.enableRedirects) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
 
-    // DEBUG: Log everything that passes through ShellExecuteW
-    Wh_Log(L"DEBUG ShellExecuteW: hwnd=%p, op='%s', file='%s', params='%s', dir='%s'", 
-           hwnd, 
-           op ? op : L"(null)", 
-           file ? file : L"(null)", 
-           params ? params : L"(null)", 
-           dir ? dir : L"(null)");
 
     if (IsControlSystemParams(file, params)) {
         Wh_Log(L"ShellExecuteW: intercepted control system");
@@ -1043,11 +989,6 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
     else if (IsShellClsid(params))
         uri = ToLower(params);
 
-    // DEBUG: Log specifically for audio-related calls
-    if (file && (wcsstr(file, L"sound") || wcsstr(file, L"audio") || wcsstr(file, L"mmsys"))) {
-        Wh_Log(L"AUDIO DEBUG: file='%s', params='%s', uri='%s'", 
-               file, params ? params : L"(null)", uri.c_str());
-    }
 
     // Audio URI handling
     if (!uri.empty() && (uri.find(L"ms-settings:sound") == 0 ||
@@ -1057,9 +998,7 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
         uri.find(L"ms-settings:sound-output") == 0 ||
         uri.find(L"ms-settings:sound-input") == 0)) {
         
-        Wh_Log(L"Audio URI detected in ShellExecuteW: %s", uri.c_str());
-        CloseModernAudioWindow();
-        
+
         if (OpenSoundPanel()) {
             return SHELL_EXECUTE_SUCCESS;
         }
@@ -1115,7 +1054,7 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
                                lpStartupInfo, lpProcessInformation);
 }
 
-// Hook: IShellDispatch2::ShellExecute (for COM-based invocations)
+// Hook: IShellDispatch2::ShellExecute
 HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
     void* pThis, BSTR File, void* vArgs, void* vDir, void* vOperation, void* vShow)
 {
@@ -1141,7 +1080,14 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
         uri = ToLower(fileStr);
 
     if (!uri.empty()) {
-        Wh_Log(L"IShellDispatch2::ShellExecute intercepted: %s", uri.c_str());
+        
+        
+        // Audio URI handling in COM hook
+        if (uri.find(L"ms-settings:sound") == 0 ||
+            uri.find(L"ms-settings:audio") == 0 ||
+            uri.find(L"ms-settings:apps-volume") == 0) {
+        }
+        
         auto result = ResolveUri(uri, nullptr);
         if (result.intercept) {
             if (!result.target.empty()) LaunchTarget(result.target);
@@ -1152,46 +1098,13 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
     return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
 }
 
-static const GUID IID_IUnknown_Manual = {0x00000000,0x0000,0x0000,{0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
-#define IID_IUnknown IID_IUnknown_Manual
 
-// Install IShellDispatch2 COM hook (runs inside explorer.exe)
-static void InstallIShellDispatch2Hook() {
-    if (!dyn_CoCreateInstance) {
-        Wh_Log(L"IShellDispatch2 hook: COM not available");
-        return;
-    }
-    
-    IUnknown* pUnk = nullptr;
-    HRESULT hr = dyn_CoCreateInstance(&CLSID_Shell_, nullptr, 1, &IID_IUnknown, (void**)&pUnk);
-    if (FAILED(hr) || !pUnk) {
-        Wh_Log(L"IShellDispatch2 hook: CoCreateInstance failed hr=0x%08lX", hr);
-        return;
-    }
+// Install IShellDispatch2 COM hook
 
-    void* pDisp = nullptr;
-    hr = pUnk->QueryInterface(IID_IShellDispatch2_, &pDisp);
-    pUnk->Release();
-
-    if (FAILED(hr) || !pDisp) {
-        Wh_Log(L"IShellDispatch2 hook: QI failed hr=0x%08lX", hr);
-        return;
-    }
-
-    void** vtable = *reinterpret_cast<void***>(pDisp);
-    void* pShellExecute = vtable[37];
-
-    ((IUnknown*)pDisp)->Release();
-
-    bool ok = Wh_SetFunctionHook(pShellExecute,
-                                  (void*)IShellDispatch2_ShellExecute_hook,
-                                  (void**)&IShellDispatch2_ShellExecute_orig);
-    Wh_Log(L"IShellDispatch2::ShellExecute hook=%d addr=%p", ok, pShellExecute);
-}
 
 // Windhawk entry points
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.0");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.1");
     
     // Load COM dynamically for IShellDispatch2 hook
     g_hOle32 = LoadLibraryW(L"ole32.dll");
@@ -1243,8 +1156,7 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // Install COM hook for IShellDispatch2 (for deeper interception)
-    InstallIShellDispatch2Hook();
+
 
     Wh_Log(L"Ready — EnableRedirects=%d UIOnly=%d SmartPers=always_active Fallback=%d Win11Compat=%d MaxLaunches=%d",
         (int)g_settings.enableRedirects, (int)g_settings.uiOnlyRedirects,
@@ -1258,7 +1170,7 @@ void Wh_ModUninit() {
         FreeLibrary(g_hOle32);
         g_hOle32 = nullptr;
     }
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.0 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.1 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
