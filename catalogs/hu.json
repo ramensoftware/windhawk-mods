@@ -10711,7 +10711,7 @@
                     220
                 ],
                 "ratingUsers": 332,
-                "updated": 1774220790000,
+                "updated": 1780767350000,
                 "users": 5488
             },
             "metadata": {
@@ -10723,7 +10723,7 @@
                     "explorer.exe"
                 ],
                 "name": "Taskbar Music Lounge",
-                "version": "4.0.1"
+                "version": "4.0.2"
             }
         },
         "taskbar-no-minimize": {
