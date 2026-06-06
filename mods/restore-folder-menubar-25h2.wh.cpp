@@ -4,6 +4,7 @@
 // @description     Fixes explorer problems: menu bar, listview redraw, classic background color
 // @version         2.0.0
 // @author          Anixx
+// @github          https://github.com/Anixx
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lgdi32 -luxtheme
