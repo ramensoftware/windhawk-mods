@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        9.9.6
+// @version        10.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -11,7 +11,7 @@
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-# Redirect Settings → Control Panel (v9.9.6)
+# Redirect Settings → Control Panel (v10.0.0)
 
 Debug version - logging all ShellExecuteW calls to diagnose audio tray issues.
 */
@@ -24,9 +24,6 @@ Debug version - logging all ShellExecuteW calls to diagnose audio tray issues.
 - UIOnlyRedirects: false
   $name: Non-Invasive UI Mode
   $description: "Only intercepts ShellExecute* calls. Leaves CreateProcessW alone."
-- SmartPersonalizationDetection: true
-  $name: Smart Personalization Detection
-  $description: "Right-clicking the desktop opens Personalization; clicking Desktop Background from inside it opens the wallpaper picker."
 - FallbackMode: "2"
   $name: Fallback Mode (unmapped URIs)
   $description: "What to do when a Settings page has no classic equivalent."
@@ -77,7 +74,7 @@ static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
 #define PERS_WALLPAPER  L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageWallpaper"
 #define PERS_COLORS     L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageColorization"
 #define WIN11_PASSTHROUGH L"__PASSTHROUGH__"
-#define EASE_OF_ACCESS  L"control.exe /name Microsoft.EaseOfAccessCenter"
+#define EASE_OF_ACCESS  L"explorer shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"
 
 // Forward declarations
 using CreateProcessW_t = BOOL(WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
@@ -124,7 +121,7 @@ static bool IsChildProcess() {
 struct ModSettings {
     bool enableRedirects = true;
     bool uiOnlyRedirects = false;
-    bool smartPersonalizationDetect = true;
+    // SmartPersonalizationDetection è sempre attivo (rimosso dalle impostazioni utente)
     int fallbackMode = 2;
     bool win11CompatibilityMode = false;
     int maxLaunchesPerUri = 3;
@@ -135,7 +132,7 @@ static ModSettings g_settings;
 static void LoadSettings() {
     g_settings.enableRedirects = Wh_GetIntSetting(L"EnableRedirects") != 0;
     g_settings.uiOnlyRedirects = Wh_GetIntSetting(L"UIOnlyRedirects") != 0;
-    g_settings.smartPersonalizationDetect = Wh_GetIntSetting(L"SmartPersonalizationDetection") != 0;
+    // SmartPersonalizationDetection è sempre attivo, non viene più letto dalle impostazioni
 
     PCWSTR fallbackStr = Wh_GetStringSetting(L"FallbackMode");
     if (fallbackStr[0] != L'\0') {
@@ -151,9 +148,9 @@ static void LoadSettings() {
     int ml = Wh_GetIntSetting(L"MaxLaunchesPerUri");
     g_settings.maxLaunchesPerUri = (ml >= 0 && ml <= 20) ? ml : 3;
 
-    Wh_Log(L"EnableRedirects=%d UIOnly=%d SmartPers=%d Fallback=%d Win11Compat=%d MaxLaunches=%d",
+    Wh_Log(L"EnableRedirects=%d UIOnly=%d SmartPers=always_on Fallback=%d Win11Compat=%d MaxLaunches=%d",
         (int)g_settings.enableRedirects, (int)g_settings.uiOnlyRedirects,
-        (int)g_settings.smartPersonalizationDetect, g_settings.fallbackMode,
+        g_settings.fallbackMode,
         (int)g_settings.win11CompatibilityMode, g_settings.maxLaunchesPerUri);
 }
 
@@ -403,6 +400,70 @@ static void InitMappings() {
         {L"ms-settings:recovery", w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
         {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},
         {L"ms-settings:deviceencryption", L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
+        // --- Redirections to classic panels (verified) --- source: https://gist.github.com/dbilanoski/3670be6d81b48cde29d40e48e41e0a48
+        
+        // Gaming
+        {L"ms-settings:gaming-gamebar", L"joy.cpl"},
+        
+        // File Explorer Options
+        {L"ms-settings:folders", L"shell:::{6DFD7C5C-2451-11d3-A299-00C04F8EF6AF}"},
+        
+        // Get Programs (modern: Apps & Features)
+        {L"ms-settings:appsfeatures", L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}"},
+        
+        // Installed Updates
+        {L"ms-settings:windowsupdate-history", L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}"},
+        
+        // History (Troubleshooting)
+        {L"ms-settings:troubleshoot", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\historyPage"},
+        
+        // Keyboard
+        {L"ms-settings:keyboard", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
+        
+        // Keyboard Properties
+        {L"ms-settings:keyboard-properties", L"shell:::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
+        
+        // Network (Places)
+        {L"ms-settings:network-places", L"shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
+        
+        // Network and Internet
+        {L"ms-settings:network", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\3"},
+        
+        // Network and Sharing Centre (already in mappings, kept for clarity)
+        {L"ms-settings:network-advancedsettings", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+        
+        // Problem Details / Reports
+        {L"ms-settings:privacy-feedback", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReportDetails"},
+        
+        // Problem Reporting Settings
+        {L"ms-settings:problem-reporting-settings", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageSettings"},
+        
+        // Problem Reports (list)
+        {L"ms-settings:problem-reports", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageProblems"},
+        
+        // Recovery (already in mappings, kept for clarity)
+        {L"ms-settings:recovery", w11 ? L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{9FE63AFD-59CF-4419-9775-ABCC3849F861}" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
+        
+        // Reliability Monitor
+        {L"ms-settings:reliability", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReliabilityView"},
+        
+        // System Settings
+        {L"ms-settings:system-settings", L"shell:::{025A5937-A6BE-4686-A844-36FE4BEC8B6D}\\pageGlobalSettings"},
+        
+        // Speech Properties
+        {L"ms-settings:speech", L"shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}"},
+        
+        // Search Troubleshooting
+        {L"ms-settings:search-diagnostics", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\searchPage"},
+        
+        // User Accounts (netplwiz)
+        {L"ms-settings:netplwiz", L"shell:::{7A9D77BD-5403-11d2-8785-2E0420524153}"},
+        
+        // Work Folders
+        {L"ms-settings:workplace", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ECDB0924-4208-451E-8EE0-373C0956DE16}"},
+        
+        // Control Panel All Tasks
+        {L"ms-settings:controlpanel", L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}"},
     };
     
     // Additional Windows 11 24H2 specific mappings
@@ -415,7 +476,6 @@ static void InitMappings() {
         g_mappings[L"ms-settings:storage"] = L"control.exe";
         g_mappings[L"ms-settings:storagesense"] = L"control.exe";
         g_mappings[L"ms-settings:backup"] = L"control.exe /name Microsoft.BackupAndRestore";
-        g_mappings[L"ms-settings:windowsupdate"] = L"control.exe /name Microsoft.WindowsUpdate";
     }
 }
 
@@ -574,11 +634,29 @@ static void LaunchTarget(const std::wstring& command) {
     si.wShowWindow = SW_SHOWNORMAL;
     PROCESS_INFORMATION pi = {};
     std::wstring cmdLine;
-
+    // Special handling for control.exe with /name parameter
+if (command.find(L"control.exe /name") != std::wstring::npos) {
+    std::wstring mutable_cmd = command;
+    STARTUPINFOW si = {};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_SHOWNORMAL;
+    PROCESS_INFORMATION pi = {};
+    if (CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr, FALSE, 
+                            CREATE_UNICODE_ENVIRONMENT, (LPVOID)g_childEnvBlock.c_str(), 
+                            nullptr, &si, &pi)) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    } else {
+        Wh_Log(L"CreateProcess failed for '%s' (%lu)", command.c_str(), GetLastError());
+    }
+    return;
+}
     if (command.find(L".msc") != std::wstring::npos) {
         cmdLine = L"mmc.exe \"" + command + L"\"";
     } else if (command.find(L".cpl") != std::wstring::npos) {
         cmdLine = L"control.exe " + command;
+        
     } else if (command.find(L".exe") != std::wstring::npos) {
         cmdLine = command;
     } else if (command.find(L"shell:::") == 0) {
@@ -606,7 +684,7 @@ static void LaunchTarget(const std::wstring& command) {
     CloseHandle(pi.hThread);
 }
 
-// Personalization detection
+// Personalization detection - sempre attiva
 static bool IsPersonalizationWindow(HWND hwnd) {
     if (!hwnd) {
         hwnd = GetForegroundWindow();
@@ -634,15 +712,12 @@ static bool IsPersonalizationWindow(HWND hwnd) {
 }
 
 static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
-    if (!g_settings.smartPersonalizationDetect) {
-        Wh_Log(L"SmartPersonalizationDetection OFF -> Personalization root");
-        return PERS_ROOT;
-    }
+    // SmartPersonalizationDetection è sempre attivo
     if (IsPersonalizationWindow(hwnd)) {
-        Wh_Log(L"personalization-background -> wallpaper page");
+        Wh_Log(L"personalization-background -> wallpaper page (smart detection always active)");
         return PERS_WALLPAPER;
     }
-    Wh_Log(L"personalization-background -> Personalization root");
+    Wh_Log(L"personalization-background -> Personalization root (smart detection always active)");
     return PERS_ROOT;
 }
 
@@ -759,7 +834,7 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
         CloseModernAudioWindow();
     }
     
-    // Personalization Background (smart detection)
+    // Personalization Background (smart detection sempre attiva)
     if (uri == L"ms-settings:personalization-background") {
         std::wstring t = ApplyWin11Filter(ResolvePersonalizationBackground(hwnd));
         Wh_Log(L"personalization-background -> %s", t.c_str());
@@ -1116,7 +1191,7 @@ static void InstallIShellDispatch2Hook() {
 
 // Windhawk entry points
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v9.9.6");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.0");
     
     // Load COM dynamically for IShellDispatch2 hook
     g_hOle32 = LoadLibraryW(L"ole32.dll");
@@ -1171,8 +1246,8 @@ BOOL Wh_ModInit() {
     // Install COM hook for IShellDispatch2 (for deeper interception)
     InstallIShellDispatch2Hook();
 
-    Wh_Log(L"Ready — EnableRedirects=%d UIOnly=%d SmartPers=%d Fallback=%d Win11Compat=%d MaxLaunches=%d",
-        (int)g_settings.enableRedirects, (int)g_settings.uiOnlyRedirects, (int)g_settings.smartPersonalizationDetect,
+    Wh_Log(L"Ready — EnableRedirects=%d UIOnly=%d SmartPers=always_active Fallback=%d Win11Compat=%d MaxLaunches=%d",
+        (int)g_settings.enableRedirects, (int)g_settings.uiOnlyRedirects,
         g_settings.fallbackMode, (int)g_settings.win11CompatibilityMode, g_settings.maxLaunchesPerUri);
 
     return TRUE;
@@ -1183,7 +1258,7 @@ void Wh_ModUninit() {
         FreeLibrary(g_hOle32);
         g_hOle32 = nullptr;
     }
-    Wh_Log(L"Redirect Settings to Control Panel v9.9.6 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.0 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
