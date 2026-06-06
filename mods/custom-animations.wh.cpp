@@ -6,7 +6,7 @@
 // @author        Shoaib Hassan
 // @github        https://github.com/shoaibhassan2
 // @include       *
-# @compilerOptions -ldwmapi -lgdi32 -lgdiplus
+// @compilerOptions -ldwmapi -lgdi32 -lgdiplus
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
