@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     Customize the Start menu with themes contributed by others or create your own
-// @version         1.5.2
+// @version         1.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -146,6 +146,10 @@ Center](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-st
 Command
 Center](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/Command%20Center/README.md)
 
+[![FullScreen](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/FullScreen/screenshot-small.png)
+\
+FullScreen](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/FullScreen/README.md)
+
 More themes can be found in the **Themes** section of [The Windows 11 Start menu
 styling
 guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/README.md#themes).
@@ -256,6 +260,11 @@ Inside `{{ ... }}`, the supported expression syntax is:
 * Variable references (a previously captured `VarName`).
 * Binary operators `+`, `-`, `*`, `/`, with standard precedence.
 * Unary `+` and `-`.
+* Comparison operators `<`, `<=`, `==`, `>=`, `>`, `!=`, which evaluate to `1`
+  (true) or `0` (false).
+* The conditional operator `cond ? a : b`: evaluates to `a` when `cond` is
+  non-zero, otherwise `b`. For example, `{{x > 8 ? 1 : 3}}` gives `1` when `x`
+  is greater than `8`, else `3`.
 * Parentheses for grouping.
 * The two-argument functions `min(a, b)` and `max(a, b)`.
 
@@ -414,16 +423,19 @@ from the **TranslucentTB** project.
   - LayerMicaUI: LayerMicaUI (for the redesigned Start menu)
   - Borderless: Borderless
   - Command Center: Command Center (for the redesigned Start menu)
+  - FullScreen: FullScreen
 - disableNewStartMenuLayout: ""
   $name: Start menu layout
   $description: >-
-    Allows to disable the new Start menu layout which is incompatible with some
-    themes.
+    Allows to revert to the classic Start menu layout on supported Windows
+    versions, or to select an alternative layout.
   $options:
-  - "": Windows default
+  - "": Default for the selected theme
+  - default: Windows default
   - disableNewLayoutKeepPhoneLink: Classic layout (removed in 26100.8524)
   - legacyClassicLayout: Legacy classic layout (removed in 26100.8328)
   - forceNewLayout: Force new layout (if available)
+  - newLayoutSideBySide: New layout + side by side
 - styleConstants: [""]
   $name: Style constants
   $description: >-
@@ -471,11 +483,21 @@ struct ThemeTargetStyles {
     std::vector<PCWSTR> styles;
 };
 
+enum class DisableNewStartMenuLayout {
+    windowsDefault,
+    disableNewLayoutAndPhoneLink,
+    disableNewLayoutKeepPhoneLink,
+    forceNewLayout,
+    newLayoutSideBySide,
+};
+
 struct Theme {
     std::vector<ThemeTargetStyles> targetStyles;
     std::vector<PCWSTR> styleConstants;
     std::vector<PCWSTR> themeResourceVariables;
     std::vector<ThemeTargetStyles> webViewTargetStyles;
+    DisableNewStartMenuLayout startMenuLayout =
+        DisableNewStartMenuLayout::windowsDefault;
 };
 
 // clang-format off
@@ -679,28 +701,20 @@ const Theme g_themeTranslucentStartMenu_variant_ClassicStartMenu = {{
 }};
 
 const Theme g_themeNoRecommendedSection = {{
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsListHeader", {
-        L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#NoTopLevelSuggestionsText", {
-        L"Height=0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions", {
-        L"RenderTransform:=<TranslateTransform Y=\"8\"/>"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowMoreSuggestionsButton > Grid > Windows.UI.Xaml.Controls.ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.TextBlock", {
-        L"Text=Recommended"}},
-    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot > Grid[2]", {
-        L"MinHeight=0"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsListHeader", {
+        L"Height=0",
+        L"Visibility=>showMoreSuggestionsVisible"}},
     ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
-        L"Grid.Row=0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#RecommendedList", {
-        L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
-        L"RenderTransform:=<TranslateTransform Y=\"8\"/>"}},
-    ThemeTargetStyles{L"GridView", {
-        L"Margin=0,-8,0,0"}},
-    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton", {
-        L"RenderTransform:=<TranslateTransform Y=\"-5\" />"}},
+        L"Grid.Row=0",
+        L"MaxHeight=54",
+        L"RenderTransform:=<TranslateTransform Y=\"22\"/>"}},
+    ThemeTargetStyles{L"Grid#ShowMoreSuggestions", {
+        L"Visibility={{showMoreSuggestionsVisible}}",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Button#ShowMoreSuggestionsButton > Grid > ContentPresenter > StackPanel > TextBlock", {
+        L"Text=Recommended"}},
     ThemeTargetStyles{L"Grid#TopLevelHeader > Grid[2] > Button", {
-        L"RenderTransform:=<TranslateTransform X=\"-135\" />"}},
+        L"RenderTransform:=<TranslateTransform X=\"{{(1-showMoreSuggestionsVisible)*-135}}\"/>"}},
 }};
 
 const Theme g_themeNoRecommendedSection_variant_ClassicStartMenu = {{
@@ -719,82 +733,15 @@ const Theme g_themeNoRecommendedSection_variant_ClassicStartMenu = {{
 }};
 
 const Theme g_themeSideBySide = {{
-    ThemeTargetStyles{L"StartMenu.PinnedList", {
-        L"MinHeight=420",
-        L"MaxHeight=420"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Border", {
-        L"Margin=-40,0,40,0",
-        L"Width=325"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Grid", {
-        L"CornerRadius=8",
-        L"Margin=-85,0,0,0",
-        L"Width=350"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Grid > Microsoft.UI.Xaml.Controls.PipsPager#PinnedListPipsPager", {
-        L"Margin=-15,0,0,0"}},
-    ThemeTargetStyles{L"Grid#MainMenu", {
-        L"Width=825"}},
-    ThemeTargetStyles{L"Grid#FrameRoot", {
-        L"Height=825"}},
-    ThemeTargetStyles{L"Border#AcrylicOverlay", {
-        L"Margin=0,-70,0,0"}},
-    ThemeTargetStyles{L"GridView#PinnedList", {
-        L"MaxWidth=480",
-        L"RenderTransform:=<TranslateTransform X=\"-145\" Y=\"790\"/>",
-        L"MinHeight=420",
-        L"MaxHeight=420"}},
-    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
-        L"Width=280",
-        L"Margin=55,12,-55,0"}},
-    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter", {
-        L"RenderTransform:=<TranslateTransform Y=\"-795\"/>"}},
-    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton", {
-        L"Margin=-60,170,60,-170",
-        L"FontWeight=SemiBold",
-        L"Height=32",
-        L"Width=200",
-        L"Style:="}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListView#ZoomedOutListView", {
-        L"Margin=0,-35,0,35"}},
-    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
-        L"Visibility=Visible",
-        L"RenderTransform:=<TranslateTransform X=\"-4\" Y=\"788.5\"/>",
-        L"FontWeight=SemiBold"}},
-    ThemeTargetStyles{L"StartMenu.StartHome", {
-        L"RenderTransform:=<TranslateTransform Y=\"-1\"/>"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Frame > Windows.UI.Xaml.Controls.ContentPresenter", {
-        L"Margin=0,-15,0,0"}},
-    ThemeTargetStyles{L"DropDownButton > Grid > ContentPresenter > TextBlock", {
-        L"MaxLines=2",
-        L"TextLineBounds=0",
-        L"HorizontalAlignment=1"}},
-    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
-        L"RenderTransform:=<TranslateTransform X=\"-160\" Y=\"800\"/>",
-        L"Width=450",
-        L"MinHeight=129",
-        L"BorderThickness=0,1,0,0",
-        L"BorderBrush=#22BBBBBB"}},
-    ThemeTargetStyles{L"TextBlock#TopLevelSuggestionsListHeaderText", {
-        L"RenderTransform:=<TranslateTransform X=\"-50\" />"}},
-    ThemeTargetStyles{L"Button#ShowMoreSuggestionsButton", {
-        L"RenderTransform:=<TranslateTransform X=\"50\" />"}},
-    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
-        L"Margin=485,175,0,0"}},
-    ThemeTargetStyles{L"GridView#RecommendedList > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border", {
-        L"MaxWidth=185",
-        L"HorizontalAlignment=2"}},
-    ThemeTargetStyles{L"Grid#TopLevelSuggestionsContainer", {
-        L"Width=630",
-        L"Margin=-50,0,0,0"}},
-    ThemeTargetStyles{L"GridView#RecommendedList > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem", {
-        L"Margin=-25,0,-25,0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ScrollBar", {
-        L"Height=650",
-        L"RenderTransform:=<TranslateTransform Y=\"-50\" />"}},
-    ThemeTargetStyles{L"Grid#MainMenu > Grid#MainContent > Grid", {
-        L"Canvas.ZIndex=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#PinnedList > Border > Windows.UI.Xaml.Controls.ScrollViewer", {
-        L"ScrollViewer.VerticalScrollMode=2"}},
-}};
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper", {
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"540*\"/><ColumnDefinition Width=\"292*\"/></ColumnDefinitionCollection>"}},
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > ScrollViewer > Border#Root > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
+        L"Margin=32,0,32,14"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > TextBlock#AllListHeadingText", {
+        L"Margin=43,6,12,7"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton", {
+        L"Margin=0,0,32,0"}},
+}, {}, {}, {}, DisableNewStartMenuLayout::newLayoutSideBySide};
 
 const Theme g_themeSideBySide_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"Grid#UndockedRoot", {
@@ -860,86 +807,27 @@ const Theme g_themeSideBySide_variant_ClassicStartMenu = {{
 }};
 
 const Theme g_themeSideBySide2 = {{
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper", {
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"292*\"/><ColumnDefinition Width=\"540*\"/></ColumnDefinitionCollection>"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > Grid#SideBySidePinnedWrapper > ScrollViewer#ScrollViewer", {
+        L"Grid.Column=0"}},
+    ThemeTargetStyles{L"ScrollViewer#SideBySidePinnedScrollViewer", {
+        L"Grid.Column=1"}},
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > ScrollViewer > Border#Root > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
+        L"Margin=32,0,32,14"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > TextBlock#AllListHeadingText", {
+        L"Margin=43,6,12,7"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton", {
+        L"Margin=0,0,32,0"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Margin=32,0,32,0"}},
     ThemeTargetStyles{L"StartDocked.NavigationPaneView#UserControl > Grid#RootPanel", {
         L"FlowDirection=1"}},
-    ThemeTargetStyles{L"StartMenu.PinnedList", {
-        L"MinHeight=420",
-        L"MaxHeight=420"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Border", {
-        L"Margin=-40,0,40,0",
-        L"Width=325"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Grid", {
-        L"CornerRadius=8",
-        L"Margin=-85,0,0,0",
-        L"Width=350"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Grid > Microsoft.UI.Xaml.Controls.PipsPager#PinnedListPipsPager", {
-        L"Margin=-15,0,0,0"}},
-    ThemeTargetStyles{L"Grid#MainMenu", {
-        L"Width=825"}},
-    ThemeTargetStyles{L"Grid#FrameRoot", {
-        L"Height=825"}},
-    ThemeTargetStyles{L"Border#AcrylicOverlay", {
-        L"Margin=0,-70,0,0"}},
-    ThemeTargetStyles{L"GridView#PinnedList", {
-        L"MaxWidth=480",
-        L"RenderTransform:=<TranslateTransform X=\"345\" Y=\"752\"/>",
-        L"MinHeight=420",
-        L"MaxHeight=420"}},
-    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
-        L"Width=280",
-        L"Margin=-55,12,55,0"}},
-    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter", {
-        L"RenderTransform:=<TranslateTransform X=\"-200\" Y=\"-760\"/>"}},
-    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton", {
-        L"Margin=-390,132,390,-132",
-        L"FontWeight=SemiBold",
-        L"Height=32",
-        L"Width=200"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListView#ZoomedOutListView", {
-        L"Margin=0,-35,0,35"}},
-    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
-        L"Visibility=Visible",
-        L"RenderTransform:=<TranslateTransform X=\"485\" Y=\"753\"/>",
-        L"FontWeight=SemiBold"}},
-    ThemeTargetStyles{L"StartMenu.StartHome", {
-        L"RenderTransform:=<TranslateTransform Y=\"-1\"/>"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Frame > Windows.UI.Xaml.Controls.ContentPresenter", {
-        L"Margin=0,-15,0,0"}},
-    ThemeTargetStyles{L"DropDownButton > Grid > ContentPresenter > TextBlock", {
-        L"MaxLines=2",
-        L"TextLineBounds=0",
-        L"HorizontalAlignment=1"}},
-    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
-        L"RenderTransform:=<TranslateTransform X=\"360\" Y=\"784\"/>",
-        L"Width=450",
-        L"MinHeight=129",
-        L"BorderThickness=0,1,0,0",
-        L"BorderBrush=#22BBBBBB"}},
-    ThemeTargetStyles{L"TextBlock#TopLevelSuggestionsListHeaderText", {
-        L"RenderTransform:=<TranslateTransform X=\"-50\" />"}},
-    ThemeTargetStyles{L"Button#ShowMoreSuggestionsButton", {
-        L"RenderTransform:=<TranslateTransform X=\"50\" />"}},
-    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
-        L"RenderTransform:=<TranslateTransform X=\"-40\" />",
-        L"Margin=0,134,0,0"}},
-    ThemeTargetStyles{L"ScrollViewer", {
-        L"ScrollViewer.VerticalScrollMode=2"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ItemsWrapGrid", {
-        L"MaximumRowsOrColumns=5"}},
-    ThemeTargetStyles{L"GridView#RecommendedList > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border", {
-        L"MaxWidth=185",
-        L"HorizontalAlignment=2"}},
-    ThemeTargetStyles{L"Grid#TopLevelSuggestionsContainer", {
-        L"Width=630",
-        L"Margin=-50,0,0,0"}},
-    ThemeTargetStyles{L"GridView#RecommendedList > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem", {
-        L"Margin=-25,0,-25,0"}},
-    ThemeTargetStyles{L"Grid#MainMenu > Grid#MainContent > Grid", {
-        L"Canvas.ZIndex=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ScrollBar", {
-        L"Height=650",
-        L"RenderTransform:=<TranslateTransform Y=\"-50\" />"}},
-}};
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView#PowerButton", {
+        L"FlowDirection=0"}},
+    ThemeTargetStyles{L"ItemsStackPanel > ListViewItem", {
+        L"FlowDirection=0"}},
+}, {}, {}, {}, DisableNewStartMenuLayout::newLayoutSideBySide};
 
 const Theme g_themeSideBySide2_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#UndockedRoot", {
@@ -1049,77 +937,39 @@ const Theme g_themeSideBySide2_variant_ClassicStartMenu = {{
 }};
 
 const Theme g_themeSideBySideMinimal = {{
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions", {
-        L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#SuggestionsParentContainer", {
-        L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsListHeader", {
-        L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton", {
-        L"Height=0",
-        L"Width=0"}},
-    ThemeTargetStyles{L"StartDocked.PowerOptionsView", {
-        L"Margin=-528,2,0,0"}},
-    ThemeTargetStyles{L"StartDocked.UserTileView", {
-        L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"StartMenu.PinnedList", {
-        L"MinHeight=504",
-        L"MaxHeight=504"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Border", {
-        L"Margin=-40,0,40,0",
-        L"Width=325"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Grid", {
-        L"CornerRadius=8",
-        L"Margin=-85,0,0,0",
-        L"Width=350"}},
-    ThemeTargetStyles{L"StartMenu.ExpandedFolderList > Grid > Grid > Microsoft.UI.Xaml.Controls.PipsPager#PinnedListPipsPager", {
-        L"Margin=-15,0,0,0"}},
-    ThemeTargetStyles{L"Grid#TopLevelSuggestionsContainer", {
-        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Grid#MainMenu", {
         L"Width=600"}},
     ThemeTargetStyles{L"Grid#FrameRoot", {
         L"Height=710"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton", {
+        L"Height=0"}},
     ThemeTargetStyles{L"Border#AcrylicOverlay", {
-        L"Margin=0,-70,0,0"}},
-    ThemeTargetStyles{L"GridView#PinnedList", {
-        L"Margin=16,0,-16,0",
-        L"Width=300",
-        L"MinHeight=504",
-        L"RenderTransform:=<TranslateTransform X=\"270\" Y=\"585\"/>"}},
-    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
-        L"Width=250"}},
-    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter", {
-        L"RenderTransform:=<TranslateTransform X=\"-150\" Y=\"-600\"/>"}},
-    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton", {
-        L"Margin=-174,4,174,0",
-        L"FontWeight=SemiBold",
-        L"Height=32",
-        L"Width=250",
-        L"Style:="}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListView#ZoomedOutListView", {
-        L"Margin=0,-50,0,50"}},
-    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
-        L"Visibility=Visible",
-        L"RenderTransform:=<TranslateTransform X=\"400\" Y=\"580.5\"/>",
-        L"FontWeight=SemiBold"}},
-    ThemeTargetStyles{L"StartMenu.StartHome", {
-        L"RenderTransform:=<TranslateTransform Y=\"-1\"/>"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Frame > Windows.UI.Xaml.Controls.ContentPresenter", {
-        L"Margin=0,-35,0,0"}},
-    ThemeTargetStyles{L"DropDownButton > Grid > ContentPresenter > TextBlock", {
-        L"MaxLines=2",
-        L"TextLineBounds=0",
-        L"HorizontalAlignment=1"}},
-    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
+        L"Margin=0,-64,0,0"}},
+    ThemeTargetStyles{L"Frame#StartFrame", {
+        L"Margin=0,-64,0,0"}},
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper", {
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"250*\"/><ColumnDefinition Width=\"348*\"/></ColumnDefinitionCollection>"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > Grid#SideBySidePinnedWrapper > ScrollViewer#ScrollViewer", {
+        L"Grid.Column=0"}},
+    ThemeTargetStyles{L"ScrollViewer#SideBySidePinnedScrollViewer", {
+        L"Grid.Column=1"}},
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > ScrollViewer > Border#Root > Grid > ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
+        L"Margin=32,0,32,14"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > TextBlock#AllListHeadingText", {
+        L"Margin=43,6,12,7"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton", {
+        L"Margin=0,0,32,0"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Margin=32,0,32,0"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#UserControl > Grid#RootPanel", {
+        L"FlowDirection=1"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView#PowerButton", {
+        L"FlowDirection=0"}},
+    ThemeTargetStyles{L"ItemsStackPanel > ListViewItem", {
+        L"FlowDirection=0"}},
+    ThemeTargetStyles{L"StartDocked.UserTileView", {
         L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"StartMenu.CategoryControl", {
-        L"Margin=20,20,-20,-20"}},
-    ThemeTargetStyles{L"Grid#MainMenu > Grid#MainContent > Grid", {
-        L"Canvas.ZIndex=1"}},
-    ThemeTargetStyles{L"StartDocked.AppListView", {
-        L"Margin=25,0,-25,0"}},
-}};
+}, {}, {}, {}, DisableNewStartMenuLayout::newLayoutSideBySide};
 
 const Theme g_themeSideBySideMinimal_variant_ClassicStartMenu = {{
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#UndockedRoot", {
@@ -1171,9 +1021,10 @@ const Theme g_themeDown_Aero = {{
     ThemeTargetStyles{L"Grid#FrameRoot", {
         L"MaxHeight=520"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsListHeader", {
-        L"Visibility=Collapsed"}},
+        L"Height=0",
+        L"Visibility=>showMoreSuggestionsVisible"}},
     ThemeTargetStyles{L"Grid#ShowMoreSuggestions", {
-        L"Visibility=Visible"}},
+        L"Visibility={{showMoreSuggestionsVisible}}"}},
     ThemeTargetStyles{L"Button#ShowMoreSuggestionsButton", {
         L"Margin=0,-77,147,0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#NoTopLevelSuggestionsText", {
@@ -1183,8 +1034,6 @@ const Theme g_themeDown_Aero = {{
         L"Visibility=Visible"}},
     ThemeTargetStyles{L"Border#StartDropShadow", {
         L"CornerRadius=30"}},
-    ThemeTargetStyles{L"Rectangle", {
-        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#AcrylicBorder", {
@@ -1250,17 +1099,18 @@ const Theme g_themeDown_Aero = {{
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton > Grid@CommonStates", {
         L"BorderBrush:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\".8\"/>",
         L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemAltMediumLowColor}\" Opacity=\"1\" />",
-        L"BorderThickness=0,2,2,2",
-        L"CornerRadius=0,15,15,0",
+        L"BorderThickness={{showMoreSuggestionsVisible*2}},2,2,2",
+        L"CornerRadius={{showMoreSuggestionsVisible*15}},15,15,{{showMoreSuggestionsVisible*15}}",
         L"Height=32",
         L"BorderBrush@PointerOver:=<SolidColorBrush Color=\"{ThemeResource SystemBaseLowColor}\" Opacity=\"1\"/>",
         L"Background@PointerOver:=<SolidColorBrush Color=\"{ThemeResource SystemBaseLowColor}\" Opacity=\".7\" />"}},
     ThemeTargetStyles{L"StartMenu.PinnedList", {
-        L"Margin=0,20,-40,180"}},
+        L"Margin=0,20,12,180",
+        L"ActualHeight=>pinnedListHeight"}},
     ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
         L"Grid.Row=1"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton", {
-        L"Margin=-57,-422.5,57,422",
+        L"RenderTransform:=<TranslateTransform X=\"-5\" Y=\"{{-254 - pinnedListHeight}}\" />",
         L"MaxWidth=100"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton > Grid > ContentPresenter > TextBlock", {
         L"Margin=8,0,8,0",
@@ -1272,9 +1122,6 @@ const Theme g_themeDown_Aero = {{
         L"Height=32",
         L"CornerRadius=15",
         L"BorderThickness=0,2,2,2"}},
-    ThemeTargetStyles{L"GridView#PinnedList > Border > Windows.UI.Xaml.Controls.ScrollViewer", {
-        L"ScrollViewer.VerticalScrollMode=2",
-        L"Height=280"}},
     ThemeTargetStyles{L"Border#RightCompanionDropShadow", {
         L"CornerRadius=30"}},
     ThemeTargetStyles{L"Grid#CompanionRoot > Grid#MainContent > Border#AcrylicOverlay", {
@@ -2949,7 +2796,8 @@ const Theme g_themeRosePine = {{
         L"Background=#1f1d2e",
         L"BorderThickness=0"}},
     ThemeTargetStyles{L"StartMenu.PinnedList", {
-        L"Height=340",
+        L"Height=Auto",
+        L"MinHeight=340",
         L"Width=342"}},
     ThemeTargetStyles{L"StartDocked.NavigationPaneView#Margin", {
         L"Margin=210,0,210,0"}},
@@ -3792,8 +3640,7 @@ const Theme g_themeUniMenu = {{
         L"MaxHeight=520",
         L"Margin=-8,10,0,0"}},
     ThemeTargetStyles{L"StartMenu.PinnedList", {
-        L"Margin=42,25,42,0",
-        L"MaxHeight=380"}},
+        L"Margin=32,25,0,0"}},
     ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton", {
         L"Width=430",
         L"Height=40",
@@ -3812,7 +3659,8 @@ const Theme g_themeUniMenu = {{
     ThemeTargetStyles{L"StartMenu.PinnedList > Grid#Root", {
         L"Padding=0"}},
     ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
-        L"Visibility=Collapsed"}},
+        L"Height=27",
+        L"Text="}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock[Text=\uE76C]", {
         L"Text=\uEA37",
         L"FontSize=16"}},
@@ -5260,7 +5108,7 @@ const Theme g_themeLiquidGlass = {{
 }, {}, {
     ThemeTargetStyles{L"*", {
         L"transition: background-color 0.083s ease-in-out !important"}},
-}};
+}, DisableNewStartMenuLayout::forceNewLayout};
 
 const Theme g_themeWindows10X = {{
     ThemeTargetStyles{L"Grid#ShowMoreSuggestions", {
@@ -6466,230 +6314,249 @@ const Theme g_themeBorderless = {{
 }};
 
 const Theme g_themeCommand_Center = {{
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#RootPanel > Windows.UI.Xaml.Controls.Grid#RootGrid > Windows.UI.Xaml.Controls.Grid#RootContent", {
-        L"Margin=-20,-20,-20,0"}},
-    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
-        L"Width=860"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#RootGridDropShadow", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#RightCompanionDropShadow", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#StartDropShadow", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#DropShadowDismissTarget", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius",
-        L"Margin=2",
-        L"Padding=0",
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#RootContent > Windows.UI.Xaml.Controls.Border#AcrylicBorder", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius",
-        L"Margin=0,60,0,10",
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AcrylicOverlay", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton#StartMenuSearchBox", {
-        L"Width=650",
-        L"Height=50",
-        L"Margin=0,-15,0,0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsRoot", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton#StartMenuSearchBox > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#BorderElement", {
+    ThemeTargetStyles{L"StackPanel#TimeAndDatePanel", {
+        L"VerticalAlignment=Top",
+        L"HorizontalAlignment=Center",
+        L"RenderTransform:=<TranslateTransform X=\"0\" />"}},
+    ThemeTargetStyles{L"StackPanel#TimePanel > TextBlock#Time", {
+        L"HorizontalAlignment:=Center",
+        L"RenderTransform:=<TransformGroup><TranslateTransform X=\"-50\" Y=\"20\" /><ScaleTransform ScaleX=\"2.3\" ScaleY=\"4\" /></TransformGroup>",
+        L"FontFamily=Morganite SemiBold",
+        L"Foreground:=$ClockBG"}},
+    ThemeTargetStyles{L"StackPanel#TimeAndDatePanel > TextBlock#Date", {
+        L"HorizontalAlignment=Center",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"-110\" />",
+        L"FontFamily=vivo Sans EN VF",
+        L"Foreground:=$ClockBG"}},
+    ThemeTargetStyles{L"Grid#WidgetFrameGrid", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton#StartMenuSearchBox > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.TextBlock#PlaceholderText", {
-        L"Text=Search This PC"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelRoot > Windows.UI.Xaml.Controls.Grid", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"StartDocked.NavigationPaneView#NavigationPane", {
-        L"Width=550",
-        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"10\" />"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowAllAppsButton", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList", {
-        L"Margin=0",
-        L"Height=280"}},
-    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Windows.UI.Xaml.Controls.Grid#Root", {
+    ThemeTargetStyles{L"Grid#WidgetCanvasPanel", {
+        L"HorizontalAlignment=Center",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"50\" />"}},
+    ThemeTargetStyles{L"Grid#MediaTransportControls", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#UndockedRoot", {
+    ThemeTargetStyles{L"Grid#MediaControlsContainer", {
         L"Visibility=0",
-        L"Width=650",
-        L"Margin=0,-130,0,230",
-        L"Canvas.ZIndex=1",
-        L"MaxHeight:=340"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AllAppsRoot", {
-        L"Visibility=0",
-        L"Margin=-1600,190,115,-100",
-        L"MaxHeight=330",
-        L"Background:=$Background",
-        L"CornerRadius=$CornerRadius",
-        L"Width=650",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid > AllListHeading", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"StartDocked.AllAppsPane#AllAppsPanel", {
-        L"Margin=-20,-20,20,20"}},
-    ThemeTargetStyles{L"StartDocked.StartMenuCompanion#RightCompanion > Windows.UI.Xaml.Controls.Grid#CompanionRoot > Windows.UI.Xaml.Controls.Border#AcrylicBorder", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius:=$CornerRadius",
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#CompanionRoot > Windows.UI.Xaml.Controls.Grid#MainContent > Windows.UI.Xaml.Controls.Grid#ActionsBar > Windows.UI.Xaml.Controls.Button#PrimaryActionBarButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius",
-        L"Height=40"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ActionsBar > Windows.UI.Xaml.Controls.Button#ActionBarOverflowButton", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius",
-        L"Height=40"}},
-    ThemeTargetStyles{L"StartDocked.StartMenuCompanion#RightCompanion > Windows.UI.Xaml.Controls.Grid#CompanionRoot", {
-        L"Height=730",
-        L"Margin=0,-10,0,-10",
-        L"Padding=10,0,-2,0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#OverflowFlyoutBackgroundBorder", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"-250\" />",
+        L"Margin=0,0,0,0",
         L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.MenuFlyoutPresenter > Windows.UI.Xaml.Controls.Border", {
+    ThemeTargetStyles{L"FlyoutPresenter", {
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness:=$BorderThickness",
+        L"CornerRadius=$FlyoutCornerRadius",
+        L"Padding=-1"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter", {
+        L"CornerRadius=$FlyoutCornerRadius"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton > Grid#RootGrid", {
+        L"CornerRadius=$ElementCornerRadius",
+        L"Margin=-12,0,12,0"}},
+    ThemeTargetStyles{L"MenuFlyoutItem", {
+        L"CornerRadius=$FlyoutCornerRadius",
+        L"Margin=4,0,4,0"}},
+    ThemeTargetStyles{L"ToggleMenuFlyoutItem", {
+        L"CornerRadius=$FlyoutCornerRadius",
+        L"Margin=4,0,4,0"}},
+    ThemeTargetStyles{L"Border#OverflowFlyoutBackgroundBorder", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#HoverFlyoutGrid > Windows.UI.Xaml.Controls.Border#HoverFlyoutBackground", {
+        L"CornerRadius=$FlyoutCornerRadius"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter > Border", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Windows.UI.Xaml.Controls.Grid#RootGrid > Windows.UI.Xaml.Controls.Grid#OuterBorderGrid", {
+        L"CornerRadius=$FlyoutCornerRadius"}},
+    ThemeTargetStyles{L"Grid#HoverFlyoutGrid > Border#HoverFlyoutBackground", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AccentLayerBorder", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#DropShadow", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ToolTip > Windows.UI.Xaml.Controls.ContentPresenter#LayoutRoot", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=15"}},
-    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.PipsPager#PipsPager", {
-        L"Margin=-30,-10,0,10"}},
-    ThemeTargetStyles{L"StartMenu.FolderModal#StartFolderModal > Windows.UI.Xaml.Controls.Grid#Root", {
+        L"CornerRadius=$FlyoutCornerRadius"}},
+    ThemeTargetStyles{L"StartMenu.FolderModal#StartFolderModal > Grid#Root", {
         L"MaxHeight:=420",
         L"MaxWidth:=420",
         L"Height=Auto",
         L"Width=Auto"}},
-    ThemeTargetStyles{L"StartMenu.FolderModal#StartFolderModal > Windows.UI.Xaml.Controls.Grid#Root > Windows.UI.Xaml.Controls.ContentControl#ContentControl > Windows.UI.Xaml.Controls.ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Windows.UI.Xaml.Controls.Grid#GridViewContainer", {
+    ThemeTargetStyles{L"StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer", {
         L"Width=360",
         L"Height=400"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#Root > Windows.UI.Xaml.Controls.Border", {
+    ThemeTargetStyles{L"Grid#Root > Border", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=$CornerRadius"}},
     ThemeTargetStyles{L"StartMenu.ExpandedFolderList", {
         L"Margin=0,30,0,-120"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MainMenu > Windows.UI.Xaml.Controls.Border#AcrylicBorder", {
+    ThemeTargetStyles{L"ListViewItem > Grid@CommonStates > Border#BorderBackground", {
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush@PointerOver:=$BorderBrush",
+        L"BorderBrush@Pressed:=$BorderBrush",
+        L"CornerRadius=$ElementCornerRadius",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"Border#ContentBorder@CommonStates > Grid > Border#BackgroundBorder", {
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush@PointerOver:=$BorderBrush",
+        L"BorderBrush@Pressed:=$BorderBrush",
+        L"CornerRadius=$ElementCornerRadius",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"Button > Grid@CommonStates > Border#BackgroundBorder", {
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush@PointerOver:=$BorderBrush",
+        L"BorderBrush@Pressed:=$BorderBrush",
+        L"CornerRadius=$ElementCornerRadius",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Border#LayerBorder", {
         L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#AccentLayerBorder", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#dropshadow", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#AppBorder", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"ToolTip > ContentPresenter#LayoutRoot", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=$ElementCornerRadius"}},
+    ThemeTargetStyles{L"Grid#MainMenu > Border#AcrylicBorder", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#AcrylicOverlay", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
+        L"Width=750"}},
+    ThemeTargetStyles{L"Border#RootGridDropShadow", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#StartDropShadow", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#DropShadowDismissTarget", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#UndockedRoot", {
+        L"Visibility=0",
+        L"Width=650",
+        L"Margin=0,-130,0,230",
+        L"Canvas.ZIndex=1",
+        L"MaxHeight:=340"}},
+    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton#StartMenuSearchBox > Grid > ContentPresenter#ContentPresenter > TextBlock#PlaceholderText", {
+        L"Text=Search This Precision"}},
+    ThemeTargetStyles{L"Grid#AllListHeading", {
+        L"Margin=0,-10,0,0"}},
+    ThemeTargetStyles{L"Grid#AllListHeading > TextBlock#AllListHeadingText", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#TopLevelRoot > Grid", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#NavigationPane", {
+        L"Width=550",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"10\" />"}},
+    ThemeTargetStyles{L"Button#ShowAllAppsButton", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=$ElementCornerRadius"}},
     ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
         L"Height=50",
-        L"Margin=-20,20,-20,-20",
-        L"Width=340"}},
-    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#BorderElement", {
+        L"Margin=0,20,0,-20",
+        L"Width=360"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Border#BorderElement", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
-        L"CornerRadius:=$CornerRadius"}},
+        L"CornerRadius=$SearchBoxRadius"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion", {
-        L"Margin=-68,40,0,0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#PinnedListHeaderText", {
+        L"Margin=-70,40,0,0"}},
+    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AllListHeading", {
+    ThemeTargetStyles{L"Grid#AllListHeading", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"StartMenu.CategoryControl > Windows.UI.Xaml.Controls.Grid#RootGrid > Windows.UI.Xaml.Controls.Border", {
+    ThemeTargetStyles{L"Grid#AllListHeading > TextBlock#AllListHeadingText", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartMenu.CategoryControl > Grid#RootGrid > Border", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MainMenu", {
-        L"Width=460"}},
-    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList", {
-        L"Width=340",
-        L"MaxHeight=450",
-        L"Margin=0,0,0,30"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#PinnedList > Border > Windows.UI.Xaml.Controls.ScrollViewer", {
-        L"ScrollViewer.VerticalScrollMode=2",
-        L"MaxHeight:=336",
-        L"MinHeight:=100",
-        L"Width=300",
-        L"Margin=0,0,60,0"}},
-    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion", {
-        L"Height=810",
-        L"Margin=15,0,30,0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#CompanionRoot > Windows.UI.Xaml.Controls.Border#AcrylicBorder", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#AllAppsGrid > Windows.UI.Xaml.Controls.ItemsWrapGrid", {
-        L"Visibility=0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#AllAppsGrid", {
-        L"Margin=0,15,0,0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelHeader > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Button", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.FlyoutPresenter", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness:=$BorderThickness",
-        L"CornerRadius:=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.MenuFlyoutPresenter", {
-        L"CornerRadius:=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AllListHeading > Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton > Grid#RootGrid", {
-        L"CornerRadius=$CornerRadius",
-        L"Margin=-12,0,12,0"}},
-    ThemeTargetStyles{L"MenuFlyoutItem", {
-        L"CornerRadius:=$CornerRadius",
-        L"Margin=4,0,4,0"}},
-    ThemeTargetStyles{L"ToggleMenuFlyoutItem", {
-        L"CornerRadius:=$CornerRadius",
-        L"Margin=4,0,4,0"}},
+        L"CornerRadius=$ElementCornerRadius"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ScrollBar", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"StartDocked.UserTileView > StartDocked.NavigationPaneButton > Grid@CommonStates > Border", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius"}},
+        L"CornerRadius=$ElementCornerRadius"}},
     ThemeTargetStyles{L"StartDocked.PowerOptionsView > StartDocked.NavigationPaneButton > Grid@CommonStates > Border", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Grid > LogosContainer > ItemsControl > ItemsPresenter > ItemsWrapGrid", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=$ElementCornerRadius"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > ItemsWrapGrid", {
+        L"Visibility=0"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid > Button", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Button#SeeAllButton > Grid > Border#BackgroundBorder", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=$ElementCornerRadius",
+        L"Margin=18,4"}},
+    ThemeTargetStyles{L"Grid#MainMenu", {
+        L"Width=470",
+        L"Height=740"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList", {
+        L"Width=360",
+        L"MaxHeight=400",
+        L"MinHeight=200",
+        L"Height=Auto"}},
+    ThemeTargetStyles{L"GridView#PinnedList > Border > ScrollViewer", {
+        L"ScrollViewer.VerticalScrollMode=2",
+        L"MaxHeight:=336",
+        L"MinHeight:=100",
+        L"Width=300",
+        L"Padding=0,15",
+        L"Margin=-25,0,25,0"}},
+    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion", {
+        L"Height=700"}},
+    ThemeTargetStyles{L"Grid#CompanionRoot > Border#AcrylicBorder", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"StartDocked.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Border#AcrylicBorder", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#RightCompanionDropShadow", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"StartDocked.StartMenuCompanion#RightCompanion > Grid#CompanionRoot", {
+        L"Height=700",
+        L"Padding=10,0,-2,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ActionsBar > Windows.UI.Xaml.Controls.Button#ActionBarOverflowButton", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=$ElementCornerRadius",
+        L"Height=40"}},
     ThemeTargetStyles{L"Border@CommonStates > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter > Grid > Grid#LogoContainer > Image", {
         L"RenderTransform@Pressed:=<ScaleTransform ScaleX=\"0.8\" ScaleY=\"0.8\" />",
         L"RenderTransformOrigin=0.5,0.5"}},
@@ -6716,36 +6583,60 @@ const Theme g_themeCommand_Center = {{
         L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />"}},
     ThemeTargetStyles{L"StartMenu.CategoryControl > Grid > Border", {
         L"BackgroundSizing=InnerBorderEdge"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid > LogosContainer > Windows.UI.Xaml.Controls.ItemsControl > Windows.UI.Xaml.Controls.ItemsPresenter > Windows.UI.Xaml.Controls.ItemsWrapGrid", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Windows.UI.Xaml.Controls.Border", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ZoomOutButton", {
+    ThemeTargetStyles{L"Button#ZoomOutButton", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ZoomInButton", {
+    ThemeTargetStyles{L"Button#ZoomInButton", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsListHeader", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#SeeAllButton > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#BackgroundBorder", {
-        L"Background:=$Background",
-        L"BorderBrush:=$BorderBrush",
-        L"BorderThickness=$BorderThickness",
-        L"CornerRadius=12",
-        L"Margin=18,4"}},
 }, {
-    L"CornerRadius=20",
-    L"Background=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0\" TintLuminosityOpacity=\".5\" Opacity=\"1\"/>",
-    L"BorderThickness=0.3,1,0.3,1",
+    L"Translucent=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#10808080\"/>",
+    L"Glass=<WindhawkBlur BlurAmount=\"5\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.7\" />",
+    L"Frosted=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.7\" />",
+    L"Acrylic=<WindhawkBlur BlurAmount=\"30\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.8\" />",
+    L"Background=$Frosted",
     L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#60808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#40808080\" Offset=\"1\" /></LinearGradientBrush>",
+    L"BorderBrush2=<WindhawkBlur BlurAmount=\"10\" TintColor=\"#909090\" TintOpacity=\"0.3\"/>",
+    L"ClockBG=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\"1\"/>",
+    L"BorderThickness=0.3,1,0.3,1",
+    L"CornerRadius=35",
+    L"SearchBoxRadius=25",
+    L"ElementCornerRadius=10",
+    L"FlyoutCornerRadius=6",
+    L"HoverCornerRadius=15",
 }, {}, {
     ThemeTargetStyles{L"*", {
         L"transition: background-color 0.083s ease-in-out !important"}},
+}};
+
+const Theme g_themeFullScreen = {{
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame", {
+        L"ActualWidth=>frameWidth",
+        L"ActualHeight=>frameHeight"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"MinHeight={{frameHeight}}",
+        L"MaxHeight={{frameHeight}}",
+        L"Margin=0",
+        L"Padding=0"}},
+    ThemeTargetStyles{L"Grid#MainMenu", {
+        L"MinWidth={{frameWidth}}"}},
+    ThemeTargetStyles{L"Border#AcrylicBorder", {
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
+        L"MaximumRowsOrColumns:="}},
+}};
+
+const Theme g_themeFullScreen_variant_1 = {{
+    ThemeTargetStyles{L":root > Canvas", {
+        L"ActualWidth=>canvasWidth",
+        L"ActualHeight=>canvasHeight"}},
+    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
+        L"Canvas.Top=0",
+        L"Canvas.Left=0",
+        L"MinWidth={{canvasWidth}}",
+        L"MinHeight={{canvasHeight}}"}},
+    ThemeTargetStyles{L"Grid#RootGrid", {
+        L"MinWidth={{canvasWidth}}"}},
+    ThemeTargetStyles{L"Border#AcrylicBorder", {
+        L"CornerRadius=0"}},
 }};
 
 // clang-format on
@@ -7437,14 +7328,27 @@ winrt::Windows::Foundation::IAsyncOperation<bool>
 VisualStateGroup g_allAppsRootRenderTransformVsg{nullptr};
 winrt::event_token g_allAppsRootRenderTransformToken{};
 
-enum class DisableNewStartMenuLayout {
-    windowsDefault,
-    disableNewLayoutAndPhoneLink,
-    disableNewLayoutKeepPhoneLink,
-    forceNewLayout,
-};
+bool g_windowsDefaultIsNewLayout = false;
 
 DisableNewStartMenuLayout g_disableNewStartMenuLayout;
+
+// Returns true if the override's effect on the OS feature flags matches the
+// Windows default behavior, i.e. installing/removing this override doesn't
+// require the process to restart for the layout to come out right. Always
+// returns false for the classic layout regardless of the Windows default.
+bool DoesLayoutOverrideMatchWindowsDefault(DisableNewStartMenuLayout layout) {
+    switch (layout) {
+        case DisableNewStartMenuLayout::windowsDefault:
+            return true;
+        case DisableNewStartMenuLayout::forceNewLayout:
+        case DisableNewStartMenuLayout::newLayoutSideBySide:
+            return g_windowsDefaultIsNewLayout;
+        case DisableNewStartMenuLayout::disableNewLayoutAndPhoneLink:
+        case DisableNewStartMenuLayout::disableNewLayoutKeepPhoneLink:
+            return false;
+    }
+    return false;
+}
 
 // Global list to track ImageBrushes with failed loads for retry on network
 // reconnection.
@@ -7600,6 +7504,23 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
 
     auto value = getValueWorkaround ? elementDo.GetValue(property)
                                     : elementDo.ReadLocalValue(property);
+
+    // Workaround for ColumnDefinitions on our SideBySidePinnedWrapper Grid.
+    if (!getValueWorkaround && value == DependencyProperty::UnsetValue()) {
+        auto grid = elementDo.try_as<Controls::Grid>();
+        if (grid && grid.Name() == L"SideBySidePinnedWrapper") {
+            auto value2 = elementDo.GetValue(property);
+            if (value2 &&
+                winrt::get_class_name(value2) ==
+                    L"Windows.UI.Xaml.Controls.ColumnDefinitionCollection") {
+                Wh_Log(
+                    L"Using GetValue workaround for SideBySidePinnedWrapper "
+                    L"ColumnDefinitions");
+                value = std::move(value2);
+            }
+        }
+    }
+
     if (value) {
         auto className = winrt::get_class_name(value);
         if (className == L"Windows.UI.Xaml.Data.BindingExpressionBase" ||
@@ -10561,7 +10482,85 @@ class StyleVariableExpressionEvaluator {
         return false;
     }
 
-    double ParseExpression() {
+    // Tries to consume the multi-char operator `op` at the current position
+    // (after skipping leading whitespace). The operator must match exactly with
+    // no embedded whitespace; advances past it and returns true on success.
+    bool ConsumeOperator(std::wstring_view op) {
+        SkipWhitespace();
+        if (m_text.size() - m_pos >= op.size() &&
+            m_text.compare(m_pos, op.size(), op) == 0) {
+            m_pos += op.size();
+            return true;
+        }
+        return false;
+    }
+
+    double ParseExpression() { return ParseTernary(); }
+
+    // Conditional operator `cond ? thenVal : elseVal`, right-associative.
+    // Short-circuit: only the taken branch is evaluated. The untaken branch is
+    // still parsed (to advance the position and enforce syntax) with m_live
+    // cleared, which suppresses value-level errors (division by zero, a
+    // non-numeric / undefined variable, an unknown function) and dependency
+    // capture for that branch.
+    double ParseTernary() {
+        double cond = ParseEquality();
+        if (!ConsumeChar(L'?')) {
+            return cond;
+        }
+        bool condTrue = cond != 0.0;
+        bool prevLive = m_live;
+
+        m_live = prevLive && condTrue;
+        double thenVal = ParseExpression();
+        m_live = prevLive;
+
+        if (!ConsumeChar(L':')) {
+            throw std::runtime_error(
+                "Missing ':' for '?' in style variable expression");
+        }
+
+        m_live = prevLive && !condTrue;
+        double elseVal = ParseTernary();
+        m_live = prevLive;
+
+        return condTrue ? thenVal : elseVal;
+    }
+
+    double ParseEquality() {
+        double v = ParseRelational();
+        while (true) {
+            if (ConsumeOperator(L"==")) {
+                v = (v == ParseRelational()) ? 1.0 : 0.0;
+            } else if (ConsumeOperator(L"!=")) {
+                v = (v != ParseRelational()) ? 1.0 : 0.0;
+            } else {
+                break;
+            }
+        }
+        return v;
+    }
+
+    double ParseRelational() {
+        double v = ParseAdditive();
+        while (true) {
+            // Match the two-char operators before their single-char prefixes.
+            if (ConsumeOperator(L"<=")) {
+                v = (v <= ParseAdditive()) ? 1.0 : 0.0;
+            } else if (ConsumeOperator(L">=")) {
+                v = (v >= ParseAdditive()) ? 1.0 : 0.0;
+            } else if (ConsumeOperator(L"<")) {
+                v = (v < ParseAdditive()) ? 1.0 : 0.0;
+            } else if (ConsumeOperator(L">")) {
+                v = (v > ParseAdditive()) ? 1.0 : 0.0;
+            } else {
+                break;
+            }
+        }
+        return v;
+    }
+
+    double ParseAdditive() {
         double v = ParseTerm();
         while (true) {
             SkipWhitespace();
@@ -10585,10 +10584,15 @@ class StyleVariableExpressionEvaluator {
             } else if (ConsumeChar(L'/')) {
                 double rhs = ParseFactor();
                 if (rhs == 0.0) {
-                    throw std::runtime_error(
-                        "Division by zero in style variable expression");
+                    if (m_live) {
+                        throw std::runtime_error(
+                            "Division by zero in style variable expression");
+                    }
+                    // Dead ternary branch: the result is discarded, so skip the
+                    // divide instead of throwing or producing inf/nan.
+                } else {
+                    v /= rhs;
                 }
-                v /= rhs;
             } else {
                 break;
             }
@@ -10709,25 +10713,37 @@ class StyleVariableExpressionEvaluator {
             if (ident == L"max") {
                 return (a > b) ? a : b;
             }
-            throw std::runtime_error(
-                "Unknown function in style variable expression");
+            if (m_live) {
+                throw std::runtime_error(
+                    "Unknown function in style variable expression");
+            }
+            // Dead ternary branch: value discarded, don't fail on the name.
+            return 0.0;
         }
         return LookupVariableNumeric(std::wstring(ident));
     }
 
     double LookupVariableNumeric(const std::wstring& name) {
-        if (m_outDeps) {
+        // In a dead ternary branch (m_live == false) the value is discarded, so
+        // suppress dependency capture and the value-level errors below; the
+        // branch must not abort the whole expression.
+        if (m_live && m_outDeps) {
             m_outDeps->push_back(name);
         }
         auto it = m_state->variables.find(name);
         if (it == m_state->variables.end()) {
-            Wh_Log(L"Style variable '%s' not yet defined; treating as 0",
-                   name.c_str());
+            if (m_live) {
+                Wh_Log(L"Style variable '%s' not yet defined; treating as 0",
+                       name.c_str());
+            }
             return 0.0;
         }
         if (!it->second.numeric) {
-            throw std::runtime_error(
-                "Style variable used in arithmetic is not numeric");
+            if (m_live) {
+                throw std::runtime_error(
+                    "Style variable used in arithmetic is not numeric");
+            }
+            return 0.0;
         }
         return *it->second.numeric;
     }
@@ -10736,6 +10752,9 @@ class StyleVariableExpressionEvaluator {
     std::vector<std::wstring>* m_outDeps;
     StyleVariableState* m_state;
     size_t m_pos = 0;
+    // When false, we're parsing (but discarding) the untaken branch of a
+    // ternary; value-level errors and dependency capture are suppressed.
+    bool m_live = true;
 };
 
 // Evaluate a single expression body (the text between `{{` and `}}`). If the
@@ -11889,6 +11908,429 @@ void ClearWebViewCustomizations(
 
 void MergeResourceVariables();
 
+// === Separate pinned items scroll ===
+//
+// When the user selects the `newLayoutSideBySide` variant of
+// `disableNewStartMenuLayout`, the pinned items header, the show-more-pinned
+// button, the pinned tiles, and the recommended panel are reparented from
+// the apps list's ScrollViewer into a new ScrollViewer that lives as a
+// sibling of the apps ScrollViewer. Final structure under
+// `GridView#AllAppsGrid > Border`:
+//
+//   Border > Grid#SideBySidePinnedWrapper
+//              > ScrollViewer (original, scrolls the apps list)
+//              > ScrollViewer#SideBySidePinnedScrollViewer
+//                  > Grid#SideBySidePinnedContent
+//                      > Grid#PinnedListHeaderGrid (moved)
+//                      > Grid#ShowMorePinnedGrid (moved)
+//                      > StartMenu.PinnedList#StartMenuPinnedList (moved)
+//                      > Grid#TopLevelSuggestionsRoot (moved)
+//
+// The wrapper and the new ScrollViewer/content grid are named so users can
+// target them from yaml to position and size the pinned panel. The
+// reparenting is idempotent and deferred to the next dispatcher tick to
+// avoid re-entering the visual tree watcher mid-mutation.
+
+constexpr WCHAR kSeparatePinnedWrapperName[] = L"SideBySidePinnedWrapper";
+constexpr WCHAR kSeparatePinnedScrollName[] = L"SideBySidePinnedScrollViewer";
+constexpr WCHAR kSeparatePinnedContentName[] = L"SideBySidePinnedContent";
+
+// Tracking for dynamic enable/disable. We remember each restructured Border
+// (so we can revert it on toggle-off) and a weak ref to the source
+// TopLevelHeader (so revert can move the children back without re-walking
+// the visual tree to find it). Entries survive across Initialize/Uninitialize
+// cycles and are only cleared by `RevertAllSeparatePinnedScroll`. The
+// Wh_ModSettingsChanged path uses this to undo the tree mutation when the
+// user disables the setting at runtime.
+struct SeparatePinnedScrollEntry {
+    winrt::weak_ref<Controls::Border> border;
+    winrt::weak_ref<Controls::Grid> sourceTopLevelHeader;
+};
+std::vector<SeparatePinnedScrollEntry> g_separatePinnedScrollEntries;
+
+std::vector<winrt::Windows::Foundation::IAsyncOperation<bool>>
+    g_separatePinnedScrollPendingActions;
+
+bool IsSeparatePinnedScrollTargetName(winrt::hstring const& name) {
+    return name == L"PinnedListHeaderGrid" || name == L"ShowMorePinnedGrid" ||
+           name == L"StartMenuPinnedList" || name == L"TopLevelSuggestionsRoot";
+}
+
+// Walk the visual tree below `root` and return the first FrameworkElement
+// whose Name matches `name` and that casts to Grid. Used to (re-)locate the
+// original Grid#TopLevelHeader inside a restructured wrapper when we don't
+// have a live weak_ref for it (e.g. after re-init).
+Controls::Grid FindFirstGridDescendantNamed(DependencyObject root,
+                                            PCWSTR name) {
+    if (!root) {
+        return nullptr;
+    }
+    std::vector<DependencyObject> stack;
+    stack.push_back(root);
+    while (!stack.empty()) {
+        auto current = stack.back();
+        stack.pop_back();
+        if (auto fe = current.try_as<FrameworkElement>()) {
+            if (fe.Name() == name) {
+                if (auto grid = fe.try_as<Controls::Grid>()) {
+                    return grid;
+                }
+            }
+        }
+        int n = Media::VisualTreeHelper::GetChildrenCount(current);
+        for (int i = 0; i < n; i++) {
+            stack.push_back(Media::VisualTreeHelper::GetChild(current, i));
+        }
+    }
+    return nullptr;
+}
+
+// Copy the column/row definitions from the original Grid#TopLevelHeader to the
+// new content Grid so that each moved child's Grid.Row/Grid.Column/
+// Grid.ColumnSpan attached properties still resolve to the same logical layout
+// slot. Width is intentionally not set: the new ScrollViewer has
+// HorizontalScrollMode=Disabled, so its ScrollContentPresenter measures content
+// against its own viewport - meaning the content Grid stretches to the
+// ScrollViewer's actual width (which in turn is whatever yaml chose, e.g. via
+// Grid.Column placement in a star-sized wrapper). Forcing a width derived from
+// the original TopLevelHeader would tie the pinned content to the apps column's
+// width when both live inside the new column-split wrapper, breaking the
+// layout.
+void ConfigurePinnedContentFromSource(Controls::Grid target,
+                                      Controls::Grid source) {
+    target.ColumnDefinitions().Clear();
+    for (auto const& def : source.ColumnDefinitions()) {
+        Controls::ColumnDefinition newDef;
+        newDef.Width(def.Width());
+        newDef.MinWidth(def.MinWidth());
+        newDef.MaxWidth(def.MaxWidth());
+        target.ColumnDefinitions().Append(newDef);
+    }
+
+    target.RowDefinitions().Clear();
+    for (auto const& def : source.RowDefinitions()) {
+        Controls::RowDefinition newDef;
+        newDef.Height(def.Height());
+        newDef.MinHeight(def.MinHeight());
+        newDef.MaxHeight(def.MaxHeight());
+        target.RowDefinitions().Append(newDef);
+    }
+}
+
+// Undo `EnsureSeparatePinnedScrollViewer` for a single Border:
+// 1. Move each child back from SideBySidePinnedContent into TopLevelHeader.
+// 2. Detach the original ScrollViewer from the wrapper and reset Border.Child
+//    to it, releasing the wrapper for GC.
+//
+// Best-effort: silently skips parts that have already been disposed.
+void RevertSeparatePinnedScrollForBorder(Controls::Border border,
+                                         Controls::Grid sourceTopLevelHeader) {
+    if (!border) {
+        return;
+    }
+
+    auto wrapper = border.Child().try_as<Controls::Grid>();
+    if (!wrapper || wrapper.Name() != kSeparatePinnedWrapperName) {
+        return;
+    }
+
+    UIElement originalScrollViewer{nullptr};
+    Controls::Grid contentGrid{nullptr};
+    for (uint32_t i = 0; i < wrapper.Children().Size(); i++) {
+        auto child = wrapper.Children().GetAt(i);
+        auto sv = child.try_as<Controls::ScrollViewer>();
+        if (sv && sv.Name() == kSeparatePinnedScrollName) {
+            contentGrid = sv.Content().try_as<Controls::Grid>();
+        } else if (!originalScrollViewer) {
+            originalScrollViewer = child.try_as<UIElement>();
+        }
+    }
+
+    // If we lost the source ref (e.g. after a re-init), try to (re)find it
+    // by walking the original ScrollViewer's subtree.
+    if (!sourceTopLevelHeader && originalScrollViewer) {
+        sourceTopLevelHeader = FindFirstGridDescendantNamed(
+            originalScrollViewer.as<DependencyObject>(), L"TopLevelHeader");
+    }
+
+    if (sourceTopLevelHeader && contentGrid) {
+        while (contentGrid.Children().Size() > 0) {
+            auto child = contentGrid.Children().GetAt(0).try_as<UIElement>();
+            contentGrid.Children().RemoveAt(0);
+            if (child) {
+                sourceTopLevelHeader.Children().Append(child);
+            }
+        }
+    }
+
+    if (originalScrollViewer) {
+        uint32_t idx = 0;
+        if (wrapper.Children().IndexOf(originalScrollViewer, idx)) {
+            wrapper.Children().RemoveAt(idx);
+        }
+        border.Child(nullptr);
+        border.Child(originalScrollViewer);
+
+        // Note: the HorizontalScrollMode / HorizontalScrollBarVisibility that
+        // EnsureSeparatePinnedScrollViewer forced to Disabled on the original
+        // apps ScrollViewer are intentionally not restored here. The apps list
+        // never scrolls horizontally, so the values match the effective default
+        // anyway, and we don't capture the pre-override values to restore them.
+        // A toggle-off only happens when the override matches the Windows
+        // default (no process restart); otherwise the process restarts and the
+        // ScrollViewer is recreated fresh.
+    }
+}
+
+// Walk every tracked entry and revert the tree mutation. Called when the
+// user toggles the setting off at runtime and on Wh_ModUninit.
+void RevertAllSeparatePinnedScroll() {
+    for (auto const& entry : g_separatePinnedScrollEntries) {
+        try {
+            RevertSeparatePinnedScrollForBorder(
+                entry.border.get(), entry.sourceTopLevelHeader.get());
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error reverting separate pinned scroll %08X: %s",
+                   ex.code(), ex.message().c_str());
+        }
+    }
+    g_separatePinnedScrollEntries.clear();
+}
+
+// Wrap the inner ScrollViewer in a sibling-capable Grid the first time we see
+// the AllAppsGrid's Border, and create the new ScrollViewer + content Grid
+// for the moved elements. Idempotent: returns the existing content Grid if
+// the Border has already been restructured. `*outCreated` is set to true on
+// the call that performs the wrapping (so the caller can do one-time
+// configuration like copying layout definitions from the source Grid).
+Controls::Grid EnsureSeparatePinnedScrollViewer(Controls::Border border,
+                                                bool* outCreated) {
+    if (outCreated) {
+        *outCreated = false;
+    }
+
+    auto currentChild = border.Child();
+    if (!currentChild) {
+        return nullptr;
+    }
+
+    if (auto wrapper = currentChild.try_as<Controls::Grid>()) {
+        if (wrapper.Name() == kSeparatePinnedWrapperName) {
+            for (uint32_t i = 0; i < wrapper.Children().Size(); i++) {
+                auto sv = wrapper.Children()
+                              .GetAt(i)
+                              .try_as<Controls::ScrollViewer>();
+                if (sv && sv.Name() == kSeparatePinnedScrollName) {
+                    return sv.Content().try_as<Controls::Grid>();
+                }
+            }
+            return nullptr;
+        }
+    }
+
+    auto originalScrollViewer = currentChild.try_as<FrameworkElement>();
+    if (!originalScrollViewer) {
+        return nullptr;
+    }
+
+    Wh_Log(L"Restructuring AllAppsGrid Border for separate pinned scroll");
+
+    // Apply the same horizontal-no-scroll configuration to the original apps
+    // ScrollViewer that we use for the new pinned ScrollViewer below. Without
+    // this, once the apps ScrollViewer is placed inside a star-sized column
+    // of the wrapper Grid, its ScrollContentPresenter measures content with
+    // infinity width and the inner ItemsPresenter / ItemsWrapGrid grows
+    // unbounded instead of fitting the column.
+    if (auto originalSv =
+            originalScrollViewer.try_as<Controls::ScrollViewer>()) {
+        originalSv.HorizontalScrollMode(Controls::ScrollMode::Disabled);
+        originalSv.HorizontalScrollBarVisibility(
+            Controls::ScrollBarVisibility::Disabled);
+    }
+
+    Controls::ScrollViewer newScroll;
+    newScroll.Name(kSeparatePinnedScrollName);
+    newScroll.VerticalScrollMode(Controls::ScrollMode::Enabled);
+    newScroll.VerticalScrollBarVisibility(Controls::ScrollBarVisibility::Auto);
+    // Use ScrollBarVisibility::Disabled (not Hidden) for the horizontal axis
+    // so the ScrollContentPresenter's CanHorizontallyScroll evaluates to
+    // false and the content is measured against the ScrollViewer's viewport
+    // width instead of with infinity. Without this, a content Grid with
+    // star-sized column definitions cannot resolve its column widths and
+    // either collapses or grows unbounded.
+    newScroll.HorizontalScrollMode(Controls::ScrollMode::Disabled);
+    newScroll.HorizontalScrollBarVisibility(
+        Controls::ScrollBarVisibility::Disabled);
+    newScroll.Background(nullptr);
+
+    Controls::Grid contentGrid;
+    contentGrid.Name(kSeparatePinnedContentName);
+    newScroll.Content(contentGrid);
+
+    Controls::Grid wrapper;
+    wrapper.Name(kSeparatePinnedWrapperName);
+
+    // Default layout: pinned ScrollViewer pinned to the left at 540px wide,
+    // apps ScrollViewer filling the remaining width on the right.
+    auto cols = wrapper.ColumnDefinitions();
+    Controls::ColumnDefinition pinnedCol;
+    pinnedCol.Width(GridLength{540, GridUnitType::Pixel});
+    cols.Append(pinnedCol);
+    Controls::ColumnDefinition appsCol;
+    appsCol.Width(GridLength{1, GridUnitType::Star});
+    cols.Append(appsCol);
+
+    Controls::Grid::SetColumn(newScroll, 0);
+    Controls::Grid::SetColumn(originalScrollViewer, 1);
+
+    border.Child(nullptr);
+    wrapper.Children().Append(originalScrollViewer);
+    wrapper.Children().Append(newScroll);
+    border.Child(wrapper);
+
+    if (outCreated) {
+        *outCreated = true;
+    }
+    return contentGrid;
+}
+
+// Reparent `element` from its current Panel parent to `target`. No-op if it
+// is already there or if the current parent is not a Panel (e.g. a
+// ContentControl/ContentPresenter, which shouldn't happen for any of the
+// four target elements since they are direct children of Grid#TopLevelHeader).
+void MoveElementToPinnedContent(FrameworkElement element,
+                                Controls::Grid target) {
+    auto currentParent = Media::VisualTreeHelper::GetParent(element);
+    if (!currentParent) {
+        return;
+    }
+
+    if (currentParent == target.as<DependencyObject>()) {
+        return;
+    }
+
+    auto parentPanel = currentParent.try_as<Controls::Panel>();
+    if (!parentPanel) {
+        Wh_Log(L"SeparatePinnedScroll: parent of %s is not a Panel, skipping",
+               element.Name().c_str());
+        return;
+    }
+
+    auto uiElement = element.try_as<UIElement>();
+    if (!uiElement) {
+        return;
+    }
+
+    uint32_t index = 0;
+    if (!parentPanel.Children().IndexOf(uiElement, index)) {
+        Wh_Log(L"SeparatePinnedScroll: %s not found in its parent's children",
+               element.Name().c_str());
+        return;
+    }
+
+    parentPanel.Children().RemoveAt(index);
+    target.Children().Append(uiElement);
+}
+
+void HandleSeparatePinnedScroll(FrameworkElement element) {
+    if (g_disableNewStartMenuLayout !=
+        DisableNewStartMenuLayout::newLayoutSideBySide) {
+        return;
+    }
+
+    if (!IsSeparatePinnedScrollTargetName(element.Name())) {
+        return;
+    }
+
+    // Defer to the next dispatcher tick so we don't mutate the visual tree
+    // while the tree watcher is still delivering the Add event for `element`.
+    auto action = element.Dispatcher().TryRunAsync(
+        winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+        [weakElement = winrt::make_weak(element)]() {
+            auto element = weakElement.get();
+            if (!element) {
+                return;
+            }
+
+            try {
+                FrameworkElement allAppsGrid{nullptr};
+                Controls::Grid topLevelHeader{nullptr};
+                DependencyObject iter = element;
+                while (auto parent = Media::VisualTreeHelper::GetParent(iter)) {
+                    iter = parent;
+                    auto fe = iter.try_as<FrameworkElement>();
+                    if (!fe) {
+                        continue;
+                    }
+                    if (!topLevelHeader && fe.Name() == L"TopLevelHeader") {
+                        topLevelHeader = fe.try_as<Controls::Grid>();
+                    }
+                    if (fe.Name() == L"AllAppsGrid" &&
+                        winrt::get_class_name(fe) ==
+                            L"Windows.UI.Xaml.Controls.GridView") {
+                        allAppsGrid = fe;
+                        break;
+                    }
+                }
+                if (!allAppsGrid) {
+                    return;
+                }
+
+                if (Media::VisualTreeHelper::GetChildrenCount(allAppsGrid) ==
+                    0) {
+                    return;
+                }
+                auto firstChild =
+                    Media::VisualTreeHelper::GetChild(allAppsGrid, 0);
+                auto border = firstChild.try_as<Controls::Border>();
+                if (!border) {
+                    return;
+                }
+
+                bool created = false;
+                auto contentGrid =
+                    EnsureSeparatePinnedScrollViewer(border, &created);
+                if (!contentGrid) {
+                    return;
+                }
+
+                if (created && topLevelHeader) {
+                    ConfigurePinnedContentFromSource(contentGrid,
+                                                     topLevelHeader);
+                    // Prune entries whose Border has been destroyed (e.g.
+                    // Start menu instances opened in previous sessions of
+                    // the host process) before pushing the new one.
+                    std::erase_if(g_separatePinnedScrollEntries,
+                                  [](SeparatePinnedScrollEntry const& e) {
+                                      return !e.border.get();
+                                  });
+                    g_separatePinnedScrollEntries.push_back(
+                        {winrt::make_weak(border),
+                         winrt::make_weak(topLevelHeader)});
+                }
+
+                MoveElementToPinnedContent(element, contentGrid);
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"SeparatePinnedScroll error %08X: %s", ex.code(),
+                       ex.message().c_str());
+            }
+        });
+
+    // Track the pending callback so UninitializeSettingsAndTap can cancel it on
+    // teardown. Prune already-finished actions first to keep the list bounded
+    // (at most a handful are ever in flight - one per target element per Start
+    // menu instance).
+    std::erase_if(
+        g_separatePinnedScrollPendingActions,
+        [](winrt::Windows::Foundation::IAsyncOperation<bool> const& a) {
+            return !a || a.Status() !=
+                             winrt::Windows::Foundation::AsyncStatus::Started;
+        });
+    if (action) {
+        g_separatePinnedScrollPendingActions.push_back(std::move(action));
+    }
+}
+
 void ApplyCustomizations(InstanceHandle handle,
                          FrameworkElement element,
                          PCWSTR fallbackClassName) {
@@ -11898,6 +12340,8 @@ void ApplyCustomizations(InstanceHandle handle,
     if (!g_resourceVariablesThemeDict) {
         MergeResourceVariables();
     }
+
+    HandleSeparatePinnedScroll(element);
 
     if (!g_webContentCss.empty() || !g_webContentJs.empty()) {
         try {
@@ -12766,77 +13210,74 @@ void MergeResourceVariables() {
     }
 }
 
-void ProcessAllStylesFromSettings() {
+const Theme* GetSelectedTheme(bool useNewLayoutVariant) {
     PCWSTR themeName = Wh_GetStringSetting(L"theme");
     const Theme* theme = nullptr;
     if (wcscmp(themeName, L"TranslucentStartMenu") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeTranslucentStartMenu
                     : &g_themeTranslucentStartMenu_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"NoRecommendedSection") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeNoRecommendedSection
                     : &g_themeNoRecommendedSection_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"SideBySide") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeSideBySide
                     : &g_themeSideBySide_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"SideBySide2") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeSideBySide2
                     : &g_themeSideBySide2_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"SideBySideMinimal") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeSideBySideMinimal
                     : &g_themeSideBySideMinimal_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"Down Aero") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeDown_Aero
                     : &g_themeDown_Aero_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"Windows10") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeWindows10
                     : &g_themeWindows10_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"Windows10_variant_Minimal") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeWindows10_variant_Minimal
                     : &g_themeWindows10_variant_Minimal_ClassicStartMenu;
     } else if (wcscmp(themeName, L"Windows11_Metro10") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeWindows11_Metro10
                     : &g_themeWindows11_Metro10_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"Fluent2Inspired") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeFluent2Inspired
                     : &g_themeFluent2Inspired_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"RosePine") == 0) {
-        theme = g_isRedesignedStartMenu
-                    ? &g_themeRosePine
-                    : &g_themeRosePine_variant_ClassicStartMenu;
+        theme = useNewLayoutVariant ? &g_themeRosePine
+                                    : &g_themeRosePine_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"Windows11_Metro10Minimal") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeWindows11_Metro10Minimal
                     : &g_themeWindows11_Metro10Minimal_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"Everblush") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeEverblush
                     : &g_themeEverblush_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"SunValley") == 0) {
         theme = &g_themeSunValley;
     } else if (wcscmp(themeName, L"21996") == 0) {
-        theme = g_isRedesignedStartMenu
-                    ? &g_theme21996
-                    : &g_theme21996_variant_ClassicStartMenu;
+        theme = useNewLayoutVariant ? &g_theme21996
+                                    : &g_theme21996_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"UniMenu") == 0) {
-        theme = g_isRedesignedStartMenu
-                    ? &g_themeUniMenu
-                    : &g_themeUniMenu_variant_ClassicStartMenu;
+        theme = useNewLayoutVariant ? &g_themeUniMenu
+                                    : &g_themeUniMenu_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"LegacyFluent") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeLegacyFluent
                     : &g_themeLegacyFluent_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"OnlySearch") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeOnlySearch
                     : &g_themeOnlySearch_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"WindowGlass") == 0) {
@@ -12851,11 +13292,11 @@ void ProcessAllStylesFromSettings() {
     } else if (wcscmp(themeName, L"LiquidGlass") == 0) {
         theme = &g_themeLiquidGlass;
     } else if (wcscmp(themeName, L"Windows10X") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeWindows10X
                     : &g_themeWindows10X_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"TintedGlass") == 0) {
-        theme = g_isRedesignedStartMenu
+        theme = useNewLayoutVariant
                     ? &g_themeTintedGlass
                     : &g_themeTintedGlass_variant_ClassicStartMenu;
     } else if (wcscmp(themeName, L"LayerMicaUI") == 0) {
@@ -12864,8 +13305,16 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeBorderless;
     } else if (wcscmp(themeName, L"Command Center") == 0) {
         theme = &g_themeCommand_Center;
+    } else if (wcscmp(themeName, L"FullScreen") == 0) {
+        theme = useNewLayoutVariant ? &g_themeFullScreen
+                                    : &g_themeFullScreen_variant_1;
     }
     Wh_FreeStringSetting(themeName);
+    return theme;
+}
+
+void ProcessAllStylesFromSettings() {
+    const Theme* theme = GetSelectedTheme(g_isRedesignedStartMenu);
 
     StyleConstants styleConstants = LoadStyleConstants(
         theme ? theme->styleConstants : std::vector<PCWSTR>{});
@@ -12954,6 +13403,14 @@ void UninitializeSettingsAndTap() {
         g_delayedAllAppsRootVisibilitySet.Cancel();
         g_delayedAllAppsRootVisibilitySet = nullptr;
     }
+
+    for (auto const& action : g_separatePinnedScrollPendingActions) {
+        if (action && action.Status() ==
+                          winrt::Windows::Foundation::AsyncStatus::Started) {
+            action.Cancel();
+        }
+    }
+    g_separatePinnedScrollPendingActions.clear();
 
     if (g_allAppsRootRenderTransformVsg) {
         g_allAppsRootRenderTransformVsg.CurrentStateChanged(
@@ -13300,7 +13757,9 @@ int NTAPI RtlQueryFeatureConfiguration_Hook(UINT32 featureId,
         case 48697323:  // Removed in StartDocked.dll 10.0.26100.8328
             Wh_Log(L"%u", featureId);
             if (g_disableNewStartMenuLayout ==
-                DisableNewStartMenuLayout::forceNewLayout) {
+                    DisableNewStartMenuLayout::forceNewLayout ||
+                g_disableNewStartMenuLayout ==
+                    DisableNewStartMenuLayout::newLayoutSideBySide) {
                 config->enabledState = FEATURE_ENABLED_STATE_ENABLED;
             } else if (g_disableNewStartMenuLayout ==
                        DisableNewStartMenuLayout::
@@ -13316,9 +13775,15 @@ int NTAPI RtlQueryFeatureConfiguration_Hook(UINT32 featureId,
         case 49402389:
             Wh_Log(L"%u", featureId);
             if (g_disableNewStartMenuLayout ==
-                DisableNewStartMenuLayout::forceNewLayout) {
+                    DisableNewStartMenuLayout::forceNewLayout ||
+                g_disableNewStartMenuLayout ==
+                    DisableNewStartMenuLayout::newLayoutSideBySide) {
                 config->enabledState = FEATURE_ENABLED_STATE_ENABLED;
-            } else {
+            } else if (
+                g_disableNewStartMenuLayout ==
+                    DisableNewStartMenuLayout::disableNewLayoutKeepPhoneLink ||
+                g_disableNewStartMenuLayout ==
+                    DisableNewStartMenuLayout::disableNewLayoutAndPhoneLink) {
                 config->enabledState = FEATURE_ENABLED_STATE_DISABLED;
             }
             break;
@@ -13490,39 +13955,56 @@ void StopStatsTimer() {
     }
 }
 
-DisableNewStartMenuLayout GetDisableNewStartMenuLayout() {
+DisableNewStartMenuLayout GetDisableNewStartMenuLayout(
+    bool useNewLayoutVariant) {
     PCWSTR disableNewStartMenuLayoutStr =
         Wh_GetStringSetting(L"disableNewStartMenuLayout");
-    DisableNewStartMenuLayout disableNewStartMenuLayout =
-        DisableNewStartMenuLayout::windowsDefault;
-    if (wcscmp(disableNewStartMenuLayoutStr,
-               L"disableNewLayoutKeepPhoneLink") == 0) {
-        disableNewStartMenuLayout =
+    std::optional<DisableNewStartMenuLayout> explicitLayout;
+    if (wcscmp(disableNewStartMenuLayoutStr, L"default") == 0) {
+        explicitLayout = DisableNewStartMenuLayout::windowsDefault;
+    } else if (wcscmp(disableNewStartMenuLayoutStr,
+                      L"disableNewLayoutKeepPhoneLink") == 0) {
+        explicitLayout =
             DisableNewStartMenuLayout::disableNewLayoutKeepPhoneLink;
     } else if (wcscmp(disableNewStartMenuLayoutStr, L"legacyClassicLayout") ==
                0) {
-        disableNewStartMenuLayout =
+        explicitLayout =
             DisableNewStartMenuLayout::disableNewLayoutAndPhoneLink;
     } else if (wcscmp(disableNewStartMenuLayoutStr, L"forceNewLayout") == 0) {
-        disableNewStartMenuLayout = DisableNewStartMenuLayout::forceNewLayout;
+        explicitLayout = DisableNewStartMenuLayout::forceNewLayout;
+    } else if (wcscmp(disableNewStartMenuLayoutStr, L"newLayoutSideBySide") ==
+               0) {
+        explicitLayout = DisableNewStartMenuLayout::newLayoutSideBySide;
     } else if (wcscmp(disableNewStartMenuLayoutStr, L"1") == 0) {
         // "1" is kept for backward compatibility, previously it meant
         // disableNewLayoutAndPhoneLink, but now it means
         // disableNewLayoutKeepPhoneLink because disableNewLayoutAndPhoneLink is
         // removed in newer builds, and some themes were updated to only support
         // disableNewLayoutKeepPhoneLink.
-        disableNewStartMenuLayout =
+        explicitLayout =
             DisableNewStartMenuLayout::disableNewLayoutKeepPhoneLink;
     }
     Wh_FreeStringSetting(disableNewStartMenuLayoutStr);
 
+    DisableNewStartMenuLayout disableNewStartMenuLayout =
+        explicitLayout.value_or(DisableNewStartMenuLayout::windowsDefault);
+
+    if (!explicitLayout) {
+        if (const Theme* theme = GetSelectedTheme(useNewLayoutVariant)) {
+            disableNewStartMenuLayout = theme->startMenuLayout;
+        }
+    }
+
     switch (disableNewStartMenuLayout) {
         case DisableNewStartMenuLayout::windowsDefault:
         case DisableNewStartMenuLayout::forceNewLayout:
+        case DisableNewStartMenuLayout::newLayoutSideBySide:
             break;
 
         case DisableNewStartMenuLayout::disableNewLayoutKeepPhoneLink:
         case DisableNewStartMenuLayout::disableNewLayoutAndPhoneLink:
+            // StartMenuExperienceHost.exe 10.0.26100.8521 is part of Windows 11
+            // 26200.8524 and 26100.8524.
             if (IsMainModuleVersionAtLeast(10, 0, 26100, 8521)) {
                 // Classic Start Menu layout causes a crash in StartDocked.dll
                 // in newer builds, and as a result, the Start menu fails to
@@ -13563,10 +14045,14 @@ BOOL Wh_ModInit() {
             break;
     }
 
-    g_disableNewStartMenuLayout = GetDisableNewStartMenuLayout();
+    g_windowsDefaultIsNewLayout = IsOsFeatureEnabled(47205210).value_or(true) &&
+                                  IsOsFeatureEnabled(49221331).value_or(true) &&
+                                  IsOsFeatureEnabled(49402389).value_or(true);
 
-    if (g_disableNewStartMenuLayout !=
-        DisableNewStartMenuLayout::windowsDefault) {
+    g_disableNewStartMenuLayout =
+        GetDisableNewStartMenuLayout(g_windowsDefaultIsNewLayout);
+
+    if (!DoesLayoutOverrideMatchWindowsDefault(g_disableNewStartMenuLayout)) {
 #ifdef _WIN64
         const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
 #else
@@ -13591,13 +14077,14 @@ BOOL Wh_ModInit() {
         }
     }
 
-    g_isRedesignedStartMenu = g_disableNewStartMenuLayout ==
-                                  DisableNewStartMenuLayout::forceNewLayout ||
-                              (g_disableNewStartMenuLayout ==
-                                   DisableNewStartMenuLayout::windowsDefault &&
-                               IsOsFeatureEnabled(47205210).value_or(true) &&
-                               IsOsFeatureEnabled(49221331).value_or(true) &&
-                               IsOsFeatureEnabled(49402389).value_or(true));
+    g_isRedesignedStartMenu =
+        g_disableNewStartMenuLayout ==
+            DisableNewStartMenuLayout::forceNewLayout ||
+        g_disableNewStartMenuLayout ==
+            DisableNewStartMenuLayout::newLayoutSideBySide ||
+        (g_disableNewStartMenuLayout ==
+             DisableNewStartMenuLayout::windowsDefault &&
+         g_windowsDefaultIsNewLayout);
 
     HMODULE user32Module =
         LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -13619,8 +14106,7 @@ BOOL Wh_ModInit() {
         }
     }
 
-    if (g_disableNewStartMenuLayout !=
-        DisableNewStartMenuLayout::windowsDefault) {
+    if (!DoesLayoutOverrideMatchWindowsDefault(g_disableNewStartMenuLayout)) {
         HMODULE hNtDll = LoadLibraryW(L"ntdll.dll");
         RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration =
             (RtlQueryFeatureConfiguration_t)GetProcAddress(
@@ -13655,8 +14141,7 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (g_disableNewStartMenuLayout !=
-        DisableNewStartMenuLayout::windowsDefault) {
+    if (!DoesLayoutOverrideMatchWindowsDefault(g_disableNewStartMenuLayout)) {
         // Exit to have the new setting take effect. The process will be
         // relaunched automatically.
         ExitProcess(0);
@@ -13675,7 +14160,12 @@ void Wh_ModUninit() {
     if (hCoreWnd) {
         Wh_Log(L"Uninitializing - Found core window");
         RunFromWindowThread(
-            hCoreWnd, [](PVOID) { UninitializeSettingsAndTap(); }, nullptr);
+            hCoreWnd,
+            [](PVOID) {
+                RevertAllSeparatePinnedScroll();
+                UninitializeSettingsAndTap();
+            },
+            nullptr);
     }
 
     // Unregister global network status change handler.
@@ -13701,11 +14191,30 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    if (GetDisableNewStartMenuLayout() != g_disableNewStartMenuLayout) {
-        // Exit to have the new setting take effect. The process will be
-        // relaunched automatically.
-        ExitProcess(0);
+    auto oldLayout = g_disableNewStartMenuLayout;
+    auto newLayout = GetDisableNewStartMenuLayout(g_windowsDefaultIsNewLayout);
+
+    if (oldLayout != newLayout) {
+        bool oldIsNoOp = DoesLayoutOverrideMatchWindowsDefault(oldLayout);
+        bool newIsNoOp = DoesLayoutOverrideMatchWindowsDefault(newLayout);
+        if (!oldIsNoOp || !newIsNoOp) {
+            // Exit to have the new setting take effect. The process will be
+            // relaunched automatically.
+            ExitProcess(0);
+        }
+
+        // No restart - apply the new setting in-process.
+        g_disableNewStartMenuLayout = newLayout;
     }
+
+    // The tree-mutation side of newLayoutSideBySide needs to be undone when
+    // transitioning away from it; the toggle-on direction is covered by the
+    // post-init watcher re-Advise, which re-delivers Add events for the
+    // already-live target elements and routes them through
+    // HandleSeparatePinnedScroll.
+    bool needsRevert =
+        oldLayout == DisableNewStartMenuLayout::newLayoutSideBySide &&
+        newLayout != DisableNewStartMenuLayout::newLayoutSideBySide;
 
     if (g_visualTreeWatcher) {
         g_visualTreeWatcher->UnadviseVisualTreeChange();
@@ -13717,10 +14226,14 @@ void Wh_ModSettingsChanged() {
         Wh_Log(L"Reinitializing - Found core window");
         RunFromWindowThread(
             hCoreWnd,
-            [](PVOID) {
+            [](PVOID p) {
+                bool needsRevert = *(bool*)p;
+                if (needsRevert) {
+                    RevertAllSeparatePinnedScroll();
+                }
                 UninitializeSettingsAndTap();
                 InitializeSettingsAndTap();
             },
-            nullptr);
+            &needsRevert);
     }
 }
