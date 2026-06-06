@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              taskbar-vertical-fork
-// @name            Vertical Taskbar for Windows 11 - Fork
+// @id              taskbar-vertical
+// @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
 // @version         1.3.11
 // @author          m417z
