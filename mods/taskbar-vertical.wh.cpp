@@ -1872,12 +1872,25 @@ void ApplySystemTrayIconStyle(FrameworkElement systemTrayIconElement) {
             contentGrid, L"SystemTray.LanguageTextIconContent");
     }
 
+    // --- Modification: Added support for the IME indicator used in recent Windows 11 builds ---
     if (!iconContent) {
-        iconContent = FindChildByClassName(contentGrid,
-                                           L"SystemTray.DateTimeIconContent");
+        iconContent = FindChildByClassName(
+            contentGrid, L"SystemTray.InputIndicatorIconContent");
+    }
+
+    if (!iconContent) {
+        iconContent = FindChildByClassName(contentGrid, L"SystemTray.DateTimeIconContent");
         if (iconContent) {
             iconType = SystemTrayIconType::DateTime;
         }
+    }
+
+    // --- Modification: A generic fallback to handle future additions of unknown icon classes ---
+    if (!iconContent) {
+        iconContent = EnumChildElements(contentGrid, [](FrameworkElement child) {
+            auto className = winrt::get_class_name(child);
+            return wcsstr(className.c_str(), L"IconContent") != nullptr;
+        });
     }
 
     if (!iconContent) {
