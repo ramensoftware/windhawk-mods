@@ -1013,6 +1013,8 @@ static void ApplySettings();
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_applyingSettings{false};
+static std::atomic<bool> g_hookInjectionInProgress{false};
+static std::atomic<int>  g_hookFailCount{0};
 
 static IMMDeviceEnumerator* g_pDeviceEnumerator = nullptr;
 
@@ -3030,10 +3032,6 @@ static void RefreshThemeColors();
 
 static std::atomic<bool> g_themeRefreshPending{false};
 
-static bool ShouldRefreshForSystemThemeChange() {
-    return g_settings.autoTheme;
-}
-
 static DWORD WINAPI TimerThreadProc(void*) {
     static bool lastThemeWasLight = IsSystemLightTheme();
 
@@ -3045,7 +3043,7 @@ static DWORD WINAPI TimerThreadProc(void*) {
 
     while (!g_unloading) {
         HANDLE handles[] = {g_timerStopEvent, hEvent, g_timerUpdateEvent};
-        DWORD wait = WaitForMultipleObjects(3, handles, FALSE, INFINITE);
+        DWORD wait = WaitForMultipleObjects(3, handles, FALSE, 500);
 
         if (wait == WAIT_OBJECT_0) break;
         if (g_applyingSettings) continue;
@@ -3058,16 +3056,11 @@ static DWORD WINAPI TimerThreadProc(void*) {
         }
 
         if (wait == WAIT_OBJECT_0 + 1) {
-            if (ShouldRefreshForSystemThemeChange()) {
+            if (g_settings.autoTheme) {
                 bool currentThemeIsLight = IsSystemLightTheme();
                 if (currentThemeIsLight != lastThemeWasLight) {
                     lastThemeWasLight = currentThemeIsLight;
-                    RunFromWindowThread(hWnd, [](void*) {
-                        if (!g_unloading && !g_applyingSettings && g_playerGrid) {
-                            RefreshThemeColors();
-                            UpdateVisibility();
-                        }
-                    }, nullptr);
+                    g_needsUiUpdate = true;
                 }
             }
             if (hKey) {
@@ -5044,13 +5037,17 @@ static bool InjectPlayerGrid() {
             Wh_Log(L"InjectPlayerGrid: Called UpdateLayout on injectionParent");
         }
 
-        RefreshThemeColors();
+        if (g_playerGrid.ActualWidth() == 0.0 && g_playerGrid.ActualHeight() == 0.0) {
+            Wh_Log(L"InjectPlayerGrid: XAML not laid out yet, scheduling deferred update");
+            g_needsUiUpdate = true;
+            if (g_timerUpdateEvent) SetEvent(g_timerUpdateEvent);
+        }
 
         auto dispatcher = g_playerGrid.Dispatcher();
         if (dispatcher) {
             try {
                 dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [=]() {
-                    RefreshThemeColors();
+                    if (!g_unloading && g_playerGrid) RefreshThemeColors();
                 });
             } catch (...) {
                 Wh_Log(L"InjectPlayerGrid: Failed to dispatch RefreshThemeColors");
@@ -5912,19 +5909,49 @@ static IconView_IconView_t IconView_IconView_Original = nullptr;
 
 static void* WINAPI IconView_IconView_Hook(void* pThis) {
     auto r = IconView_IconView_Original(pThis);
-    if (!g_unloading && !g_playerGrid) {
-        HWND hWnd = FindCurrentProcessTaskbarWnd();
-        if (hWnd) {
-            g_taskbarWnd = hWnd;
-            RunFromWindowThread(hWnd, [](void*) {
-                if (!g_playerGrid && !g_unloading) {
-                    ApplySettings();
-                    if (g_playerGrid) ShowSuccessNotification();
-                    else Wh_Log(L"IconView_IconView_Hook: ApplySettings did not produce a player grid");
-                }
-            }, nullptr);
+
+    if (g_unloading || g_playerGrid || g_hookInjectionInProgress)
+        return r;
+    if (g_hookFailCount >= 3)
+        return r;
+
+    HWND hWnd = FindCurrentProcessTaskbarWnd();
+    if (!hWnd) return r;
+
+    DWORD wndPid = 0;
+    GetWindowThreadProcessId(hWnd, &wndPid);
+    if (wndPid != GetCurrentProcessId()) return r;
+
+    bool expected = false;
+    if (!g_hookInjectionInProgress.compare_exchange_strong(expected, true))
+        return r;
+
+    g_taskbarWnd = hWnd;
+
+    std::thread([hWnd]() {
+        Sleep(400);
+
+        if (g_unloading || g_playerGrid) {
+            g_hookInjectionInProgress = false;
+            return;
         }
-    }
+
+        RunFromWindowThread(hWnd, [](void*) {
+            if (!g_playerGrid && !g_unloading) {
+                ApplySettings();
+                if (g_playerGrid) {
+                    g_hookFailCount = 0;
+                    ShowSuccessNotification();
+                    Wh_Log(L"IconView_IconView_Hook: Injection successful");
+                } else {
+                    g_hookFailCount++;
+                    Wh_Log(L"IconView_IconView_Hook: ApplySettings failed, attempt %d/3", (int)g_hookFailCount);
+                }
+            }
+            g_hookInjectionInProgress = false;
+        }, nullptr);
+    }).detach();
+
     return r;
 }
 
@@ -6001,6 +6028,15 @@ static HMODULE GetTaskbarViewModule() {
 }
 
 BOOL Wh_ModInit() {
+    g_unloading = false;
+    g_applyingSettings = false;
+    g_hookInjectionInProgress = false;
+    g_hookFailCount = 0;
+    g_taskbarViewDllLoaded = false;
+    g_taskbarWnd = nullptr;
+    g_needsUiUpdate = false;
+    g_themeRefreshPending = false;
+
     LoadSettings();
 
     if (!HookTaskbarDllSymbols()) {
@@ -6064,6 +6100,8 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     g_unloading = true;
+    g_hookInjectionInProgress = false;
+    g_hookFailCount = 0;
 
     StopTimerThread();
     StopIdleTimer();
