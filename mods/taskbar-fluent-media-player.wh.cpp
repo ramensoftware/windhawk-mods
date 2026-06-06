@@ -983,12 +983,14 @@ static void LoadSettings() {
         }
     } catch (...) {
         Wh_Log(L"LoadSettings: Critical exception in media buttons parsing, using defaults");
-        std::lock_guard<std::mutex> lock(g_mediaButtonsMutex);
-        g_mediaButtons = {
-            {MediaButtonType::Previous, 1},
-            {MediaButtonType::PlayPause, 2},
-            {MediaButtonType::Next, 3}
-        };
+        try {
+            std::lock_guard<std::mutex> lock(g_mediaButtonsMutex);
+            g_mediaButtons = {
+                {MediaButtonType::Previous, 1},
+                {MediaButtonType::PlayPause, 2},
+                {MediaButtonType::Next, 3}
+            };
+        } catch (...) {}
     }
 
     if (g_settings.position == L"taskbar_left")
@@ -3103,7 +3105,30 @@ static void StartTimerThread() {
 }
 static void StopTimerThread() {
     if (g_timerStopEvent) SetEvent(g_timerStopEvent);
-    if (g_timerThread) { WaitForSingleObject(g_timerThread, 2000); CloseHandle(g_timerThread); g_timerThread = nullptr; }
+    if (g_timerThread) {
+        DWORD tid = GetCurrentThreadId();
+        HWND hTaskbar = g_taskbarWnd;
+        bool isUiThread = hTaskbar && (GetWindowThreadProcessId(hTaskbar, nullptr) == tid);
+        if (isUiThread) {
+            DWORD result = WAIT_TIMEOUT;
+            DWORD deadline = GetTickCount() + 2000;
+            while (result == WAIT_TIMEOUT && GetTickCount() < deadline) {
+                result = MsgWaitForMultipleObjects(1, &g_timerThread, FALSE, 50, QS_SENDMESSAGE);
+                if (result == WAIT_OBJECT_0 + 1) {
+                    MSG msg;
+                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                    result = WAIT_TIMEOUT;
+                }
+            }
+        } else {
+            WaitForSingleObject(g_timerThread, 2000);
+        }
+        CloseHandle(g_timerThread);
+        g_timerThread = nullptr;
+    }
     if (g_timerStopEvent) { CloseHandle(g_timerStopEvent); g_timerStopEvent = nullptr; }
     if (g_timerUpdateEvent) { CloseHandle(g_timerUpdateEvent); g_timerUpdateEvent = nullptr; }
 }
@@ -3127,7 +3152,30 @@ static void StartIdleTimer() {
 
 static void StopIdleTimer() {
     if (g_idleStopEvent) SetEvent(g_idleStopEvent);
-    if (g_idleThread) { WaitForSingleObject(g_idleThread, 2000); CloseHandle(g_idleThread); g_idleThread = nullptr; }
+    if (g_idleThread) {
+        DWORD tid = GetCurrentThreadId();
+        HWND hTaskbar = g_taskbarWnd;
+        bool isUiThread = hTaskbar && (GetWindowThreadProcessId(hTaskbar, nullptr) == tid);
+        if (isUiThread) {
+            DWORD result = WAIT_TIMEOUT;
+            DWORD deadline = GetTickCount() + 2000;
+            while (result == WAIT_TIMEOUT && GetTickCount() < deadline) {
+                result = MsgWaitForMultipleObjects(1, &g_idleThread, FALSE, 50, QS_SENDMESSAGE);
+                if (result == WAIT_OBJECT_0 + 1) {
+                    MSG msg;
+                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                    result = WAIT_TIMEOUT;
+                }
+            }
+        } else {
+            WaitForSingleObject(g_idleThread, 2000);
+        }
+        CloseHandle(g_idleThread);
+        g_idleThread = nullptr;
+    }
     if (g_idleStopEvent) { CloseHandle(g_idleStopEvent); g_idleStopEvent = nullptr; }
 }
 
@@ -5745,7 +5793,6 @@ static void UpdateVisibility() {
                     hide = true;
                 } else {
                     std::thread([]() {
-                        Sleep(300);
                         if (!g_unloading && g_timerUpdateEvent) SetEvent(g_timerUpdateEvent);
                     }).detach();
                 }
@@ -6064,7 +6111,10 @@ void Wh_ModSettingsChanged() {
                 try {
                     RemovePlayerGrid();
                     g_applyingSettings = false;
-                    if (!g_unloading) InjectPlayerGrid();
+                    if (!g_unloading) {
+                        InjectPlayerGrid();
+                        g_needsUiUpdate = true;
+                    }
                 } catch (...) {
                     Wh_Log(L"Wh_ModSettingsChanged: Exception during RemovePlayerGrid/InjectPlayerGrid");
                     g_applyingSettings = false;
@@ -6084,16 +6134,17 @@ void Wh_ModSettingsChanged() {
         try {
             RemovePlayerGrid();
             g_applyingSettings = false;
-            if (!g_unloading) InjectPlayerGrid();
+            if (!g_unloading) {
+                InjectPlayerGrid();
+                g_needsUiUpdate = true;
+            }
         } catch (...) {
-            Wh_Log(L"Wh_ModSettingsChanged: Exception ...");
+            Wh_Log(L"Wh_ModSettingsChanged: Exception during RemovePlayerGrid/InjectPlayerGrid (same thread)");
             g_applyingSettings = false;
             g_playerGrid = nullptr;
             g_injectionParent = nullptr;
         }
     }
-
-    g_needsUiUpdate = true;
 
     StartTimerThread();
     StartIdleTimer();
