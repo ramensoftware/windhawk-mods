@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              taskbar-vertical
-// @name            Vertical Taskbar for Windows 11
+// @id              taskbar-vertical-fork
+// @name            Vertical Taskbar for Windows 11 - Fork
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
 // @version         1.3.11
 // @author          m417z
@@ -1872,25 +1872,17 @@ void ApplySystemTrayIconStyle(FrameworkElement systemTrayIconElement) {
             contentGrid, L"SystemTray.LanguageTextIconContent");
     }
 
-    // --- Modification: Added support for the IME indicator used in recent Windows 11 builds ---
     if (!iconContent) {
-        iconContent = FindChildByClassName(
-            contentGrid, L"SystemTray.InputIndicatorIconContent");
+         iconContent = FindChildByClassName(
+             contentGrid, L"SystemTray.ImageIconContent");
     }
 
     if (!iconContent) {
-        iconContent = FindChildByClassName(contentGrid, L"SystemTray.DateTimeIconContent");
+        iconContent = FindChildByClassName(contentGrid,
+                                           L"SystemTray.DateTimeIconContent");
         if (iconContent) {
             iconType = SystemTrayIconType::DateTime;
         }
-    }
-
-    // --- Modification: A generic fallback to handle future additions of unknown icon classes ---
-    if (!iconContent) {
-        iconContent = EnumChildElements(contentGrid, [](FrameworkElement child) {
-            auto className = winrt::get_class_name(child);
-            return wcsstr(className.c_str(), L"IconContent") != nullptr;
-        });
     }
 
     if (!iconContent) {
