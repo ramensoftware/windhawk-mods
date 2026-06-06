@@ -3,7 +3,7 @@
 // @name           Fluid Window Engine Pro
 // @description    Cinema-grade window animations for Windows 10 / 11. 9 physics-based effects, language-independent taskbar targeting, multi-monitor, tunable per-effect — make every minimize, restore, and close beautiful.
 // @version        2.0.0
-// @author         kivsak (original engine) + Claude (refactor)
+// @author         kivsak
 // @github         https://github.com/kivsak
 // @include        *
 // @compilerOptions -ldwmapi -lgdi32 -lmsimg32 -luser32 -loleacc -loleaut32 -lole32 -luuid -lversion
