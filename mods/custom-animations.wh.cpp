@@ -6,22 +6,18 @@
 // @author        Shoaib Hassan
 // @github        https://github.com/shoaibhassan2
 // @include       *
-// @compilerOptions -ldwmapi -lgdi32 -lgdiplus
+# @compilerOptions -ldwmapi -lgdi32 -lgdiplus
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 # Genie & Magic Lamp Animation Mod
-Replaces the default Windows minimize and restore animations with smooth, high-fidelity geometry deformations.
-* **KDE Magic Lamp:** A fluid, 4-directional spatial bend.
-* **macOS Genie:** A high-pinching, bottom-dock cosine-eased suction effect.
-*/
-// ==WindhawkModReadme==
-/*
-# Genie & Magic Lamp Animation Mod
-Replaces the default Windows minimize and restore animations with smooth geometry deformations.
-* **KDE:** A fluid, 4-directional spatial bend.
-* **MacPinch:** A sharp, bottom-dock cosine-eased suction effect.
-* **MacSine:** A liquid-like wobbling effect as the window travels to the dock.
+
+Replaces the default Windows minimize and restore animations with smooth geometry deformation effects.
+
+- KDE Magic Lamp: fluid 4-direction spatial bend
+- macOS Genie: cosine-eased suction effect to dock
+- MacSine: liquid wobble motion during animation
 */
 // ==/WindhawkModReadme==
 
@@ -30,6 +26,7 @@ Replaces the default Windows minimize and restore animations with smooth geometr
 - duration_ms: 450
   $name: Animation Duration (ms)
   $description: Time it takes for the animation to complete.
+
 - animation_style: KDE
   $name: Animation Style
   $description: Choose the visual style of the minimize effect.
