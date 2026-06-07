@@ -3981,20 +3981,20 @@
                     7
                 ],
                 "ratingUsers": 8,
-                "updated": 1763900306000,
+                "updated": 1780845612000,
                 "users": 308
             },
             "metadata": {
                 "author": "lieyanbang",
-                "compilerOptions": "-lole32 -loleaut32 -lshlwapi -lshell32 -luuid -luser32",
-                "description": "Swallow Ctrl+N in Explorer and create a new file in-place, including desktop.",
+                "compilerOptions": "-lole32 -loleaut32 -lshlwapi -lshell32 -luuid -luser32 -luiautomationcore",
+                "description": "Use Ctrl+N in File Explorer to create a new file in the active folder or tab.",
                 "github": "https://github.com/lieyanbang",
                 "homepage": "https://lieyanbang.com/",
                 "include": [
-                    "explorer.exe"
+                    "windhawk.exe"
                 ],
                 "name": "Explorer Ctrl+N to New File",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "explorer-ctrlq-new-folder": {
