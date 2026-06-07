@@ -374,7 +374,7 @@ static void InitMappings() {
         {L"ms-settings:display-advanced-color", L"colorcpl.exe"},
         {L"ms-settings:colorcpl", L"colorcpl.exe"},
         
-        // Display
+        // Display - reindirizzamento a Impostazioni schermo classiche (rundll32)
         {L"ms-settings:display", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-advanced", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-advanced-graphics", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
@@ -651,7 +651,9 @@ static bool HandleFallback(const std::wstring& uri) {
     }
 }
 
-// LaunchTarget - VERSIONE CORRETTA
+
+
+// LaunchTarget - CORRETTA per rundll32
 static void LaunchTarget(const std::wstring& command) {
     Wh_Log(L"Launching: %s", command.c_str());
 
@@ -677,9 +679,44 @@ static void LaunchTarget(const std::wstring& command) {
         return;
     }
     
-    // Comandi completi con percorso eseguibile
+    // Gestione speciale per rundll32.exe e comandi con parametri
+    if (lower.find(L"rundll32.exe ") == 0 || 
+        (lower.find(L"rundll32.exe") == 0 && lower.length() > 12)) {
+        Wh_Log(L"Detected rundll32 command: %s", command.c_str());
+        
+        // Estrai il percorso completo di rundll32.exe
+        std::wstring rundll32Path;
+        wchar_t sysDir[MAX_PATH];
+        if (GetSystemDirectoryW(sysDir, MAX_PATH)) {
+            rundll32Path = std::wstring(sysDir) + L"\\rundll32.exe";
+        } else {
+            rundll32Path = L"rundll32.exe";
+        }
+        
+        // Estrai i parametri (tutto dopo "rundll32.exe ")
+        std::wstring params;
+        if (lower.find(L"rundll32.exe ") != std::wstring::npos) {
+            params = command.substr(13); // lunghezza di "rundll32.exe "
+        } else {
+            params = command.substr(12); // lunghezza di "rundll32.exe"
+        }
+        
+        // Usa ShellExecuteExW per eseguire rundll32 con i parametri
+        SHELLEXECUTEINFOW sei = {};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_FLAG_NO_UI;
+        sei.lpVerb = L"open";
+        sei.lpFile = rundll32Path.c_str();
+        sei.lpParameters = params.c_str();
+        sei.nShow = SW_SHOWNORMAL;
+        
+        Wh_Log(L"Using ShellExecuteExW: %s params='%s'", rundll32Path.c_str(), params.c_str());
+        ShellExecuteExW_orig(&sei);
+        return;
+    }
+    
+    // Comandi completi con percorso eseguibile (esploratore, control.exe, ecc.)
     bool isFullCmdLine =
-        (lower.find(L"rundll32.exe ") != std::wstring::npos) ||
         (lower.find(L"explorer.exe ") != std::wstring::npos) ||
         (lower.find(L"control.exe /") != std::wstring::npos);
 
@@ -756,19 +793,8 @@ static void LaunchTarget(const std::wstring& command) {
         CloseHandle(pi.hThread);
     }
 }
+
 // Personalization detection
-
-
-
-
-
-// Helper function to open sound panel
-static bool OpenSoundPanel() {
-    Wh_Log(L"Opening sound panel via LaunchTarget");
-    LaunchTarget(L"control.exe mmsys.cpl,,0");
-    return true;
-}
-
 static bool IsPersonalizationWindow(HWND hwnd) {
     if (!hwnd) {
         Wh_Log(L"HWND null -> desktop context menu path");
@@ -814,6 +840,7 @@ static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
     Wh_Log(L"personalization-background -> Personalization root");
     return PERS_ROOT;
 }
+
 static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     if (uri == L"ms-settings:personalization-background") {
         if (BounceGuardIsBounce(uri)) {
@@ -862,6 +889,7 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     Wh_Log(L"Unmapped, passing through: %s", uri.c_str());
     return {L"", false};
 }
+
 // Control system detection helpers
 static std::wstring BaseNameLower(const std::wstring& path) {
     size_t pos = path.rfind(L'\\');
@@ -904,6 +932,13 @@ static bool IsControlSystemCommand(const std::wstring& cmdLine) {
     return (arg == L"system" || arg == L"microsoft.system");
 }
 
+// Helper function to open sound panel
+static bool OpenSoundPanel() {
+    Wh_Log(L"Opening sound panel via LaunchTarget");
+    LaunchTarget(L"control.exe mmsys.cpl,,0");
+    return true;
+}
+
 // Hook: ShellExecuteExW
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     if (IsChildProcess()) return ShellExecuteExW_orig(pei);
@@ -933,19 +968,28 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     else if (IsShellClsid(pei->lpParameters))
         uri = ToLower(pei->lpParameters);
 
-    // Audio URI handling with debug log
+    // Audio URI handling
     if (!uri.empty() && (uri.find(L"ms-settings:sound") == 0 ||
         uri.find(L"ms-settings:audio") == 0 ||
         uri.find(L"ms-settings:apps-volume") == 0 ||
         uri.find(L"ms-settings:sound-devices") == 0 ||
         uri.find(L"ms-settings:sound-output") == 0 ||
         uri.find(L"ms-settings:sound-input") == 0)) {
-
         
         if (OpenSoundPanel()) {
             if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
             return TRUE;
         }
+    }
+
+    // Display URI handling - questo intercetta anche i clic dal menu contestuale del desktop
+    if (!uri.empty() && (uri.find(L"ms-settings:display") == 0 ||
+        uri.find(L"ms-settings:screenrotation") == 0 ||
+        uri.find(L"ms-settings:graphics-settings") == 0)) {
+        Wh_Log(L"ShellExecuteExW: intercepted display settings, launching classic Display Properties");
+        LaunchTarget(L"rundll32.exe display.dll,ShowAdapterSettings 0");
+        if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
+        return TRUE;
     }
 
     if (!uri.empty()) {
@@ -959,7 +1003,7 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     return ShellExecuteExW_orig(pei);
 }
 
-// Hook: ShellExecuteW with DEBUG logging
+// Hook: ShellExecuteW
 HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR params, LPCWSTR dir, INT show) {
     if (IsChildProcess()) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
 
@@ -970,7 +1014,6 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
     }
 
     if (!g_settings.enableRedirects) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
-
 
     if (IsControlSystemParams(file, params)) {
         Wh_Log(L"ShellExecuteW: intercepted control system");
@@ -988,7 +1031,6 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
     else if (IsShellClsid(params))
         uri = ToLower(params);
 
-
     // Audio URI handling
     if (!uri.empty() && (uri.find(L"ms-settings:sound") == 0 ||
         uri.find(L"ms-settings:audio") == 0 ||
@@ -997,10 +1039,18 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
         uri.find(L"ms-settings:sound-output") == 0 ||
         uri.find(L"ms-settings:sound-input") == 0)) {
         
-
         if (OpenSoundPanel()) {
             return SHELL_EXECUTE_SUCCESS;
         }
+    }
+
+    // Display URI handling - questo intercetta anche i clic dal menu contestuale del desktop
+    if (!uri.empty() && (uri.find(L"ms-settings:display") == 0 ||
+        uri.find(L"ms-settings:screenrotation") == 0 ||
+        uri.find(L"ms-settings:graphics-settings") == 0)) {
+        Wh_Log(L"ShellExecuteW: intercepted display settings, launching classic Display Properties");
+        LaunchTarget(L"rundll32.exe display.dll,ShowAdapterSettings 0");
+        return SHELL_EXECUTE_SUCCESS;
     }
 
     if (!uri.empty()) {
@@ -1079,14 +1129,6 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
         uri = ToLower(fileStr);
 
     if (!uri.empty()) {
-        
-        
-        // Audio URI handling in COM hook
-        if (uri.find(L"ms-settings:sound") == 0 ||
-            uri.find(L"ms-settings:audio") == 0 ||
-            uri.find(L"ms-settings:apps-volume") == 0) {
-        }
-        
         auto result = ResolveUri(uri, nullptr);
         if (result.intercept) {
             if (!result.target.empty()) LaunchTarget(result.target);
@@ -1096,10 +1138,6 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
 
     return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
 }
-
-
-// Install IShellDispatch2 COM hook
-
 
 // Windhawk entry points
 BOOL Wh_ModInit() {
@@ -1154,8 +1192,6 @@ BOOL Wh_ModInit() {
             Wh_Log(L"CreateProcessW hook=%d", ok3);
         }
     }
-
-
 
     Wh_Log(L"Ready — EnableRedirects=%d UIOnly=%d SmartPers=always_active Fallback=%d Win11Compat=%d MaxLaunches=%d",
         (int)g_settings.enableRedirects, (int)g_settings.uiOnlyRedirects,
