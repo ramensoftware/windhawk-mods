@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-06T17:35:50.000Z</updated>
+    <updated>2026-06-07T15:10:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.2]]></title>
+        <id>https://windhawk.net/mods/classic-theme-explorer-lite#55ef89214517d9be74807b9e1d38d00365155a14</id>
+        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
+        <updated>2026-06-07T15:10:51.000Z</updated>
+        <content type="html"><![CDATA[<p>Apply fixes only under Classic theme</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Music Lounge 4.0.2]]></title>
         <id>https://windhawk.net/mods/taskbar-music-lounge#5f8afab7b38a553578e8e963b7b30c62bf918d17</id>
@@ -453,29 +464,6 @@ exactly the same name as a <em>folder</em> on the desktop, that file's label wil
         <author>
             <name>Himanshu</name>
             <uri>https://github.com/devcode90</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Files 2 Folders 2.0]]></title>
-        <id>https://windhawk.net/mods/files-2-folders#ad19ef246bb802bc953cbd0d171ca2f8eeba204d</id>
-        <link href="https://windhawk.net/mods/files-2-folders"/>
-        <updated>2026-06-02T21:28:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed: the "Files 2 Folder…" menu entry now appears and works on the desktop (previously only inside Explorer folder windows).</li>
-<li>Added Silent mode (right-click menu): skips the dialog and immediately moves the selection using the default mode; suppresses the mod's own dialogs/error popups. The hotkey workaround is unaffected.</li>
-<li>"Default selected mode" is now a dropdown showing the actual mode names instead of a raw 1-4 number box.</li>
-<li>Fixed: the dialog now correctly pre-selects the configured "Default selected mode" (it was always reverting to the first option).</li>
-<li>Also handles selections in library/search views by deriving the destination from the selected items.</li>
-<li>Fixed: no longer inserts a doubled separator when "Place menu item near Cut/Copy" is on and Explorer already has a separator there.</li>
-<li>The menu entry and default subfolder name now use Windows' own localized strings (shell32: "Move to a folder…", "New folder"), so they appear in the OS language.</li>
-<li>Fixed-name / date modes no longer silently reuse an existing folder of that name — they number duplicates like Explorer ("New folder (2)", "(3)", …).</li>
-<li>The "Files 2 Folder…" entry now also appears in the classic menu bar's Edit dropdown (after Cut/Copy).</li>
-<li>Settings descriptions rewritten for consistency (On/Off states on their own lines, unified quoting/terminology).</li>
-<li>Workaround hotkey: Win-based combos now work via a low-level keyboard hook (the technique PowerToys uses) and suppress the OS default, instead of failing to register. Note: bare Win+<letter> shortcuts (Win+F, Win+L, …) are reserved by Windows and cannot be intercepted by any hook — pair Win with another modifier (e.g. Win+Shift+F); the mod now warns when a bare Win combo is selected.</li>
-</ul>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
         </author>
     </entry>
 </feed>

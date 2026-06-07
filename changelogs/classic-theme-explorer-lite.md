@@ -1,3 +1,7 @@
+## 1.2 ([Jun 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/55ef89214517d9be74807b9e1d38d00365155a14/mods/classic-theme-explorer-lite.wh.cpp))
+
+Apply fixes only under Classic theme
+
 ## 1.1.2 ([Oct 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4e8186fedde55e38422264383447bbb570fde161/mods/classic-theme-explorer-lite.wh.cpp))
 
 Add additional check to the ClientEdge adder at suggestion of @aubymori

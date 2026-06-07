@@ -2039,7 +2039,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1728198395000,
+                "updated": 1780845051000,
                 "users": 143
             },
             "metadata": {
@@ -2051,7 +2051,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Theme Explorer Lite",
-                "version": "1.1.2"
+                "version": "1.2"
             }
         },
         "classic-theme-explorer-search-fix": {
