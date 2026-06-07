@@ -29,7 +29,7 @@ Black artifacts briefly visible in new file explorer windows under Classic theme
 
 **Changes from the original**
 
-* This mod restores the menubar in recent builds of 24h2 and in 25h2 with which the original mod was not compatible. 
+* This mod restores the menubar in recent builds of 24H2 and in 25H2 with which the original mod was not compatible. 
 **!Important!** On newer releases of Windows 11 24H2 and later, you may need to use the [ViVeTool](https://github.com/thebookisclosed/ViVe/releases) utility
 with the following command so to enable the menu:
 
