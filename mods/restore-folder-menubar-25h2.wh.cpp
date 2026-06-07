@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              restore-folder-menubar-25h2
-// @name            ExplorerFrame fixes fork (and restore folder menubar)
+// @name            ExplorerFrame and menubar fixes fork
 // @description     Fixes explorer problems: menu bar, listview redraw, classic background color
 // @version         2.0.0
 // @author          Anixx
