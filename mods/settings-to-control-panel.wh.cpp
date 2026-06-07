@@ -652,8 +652,6 @@ static bool HandleFallback(const std::wstring& uri) {
 }
 
 
-
-// LaunchTarget - CORRETTA per rundll32
 static void LaunchTarget(const std::wstring& command) {
     Wh_Log(L"Launching: %s", command.c_str());
 
@@ -684,7 +682,6 @@ static void LaunchTarget(const std::wstring& command) {
         (lower.find(L"rundll32.exe") == 0 && lower.length() > 12)) {
         Wh_Log(L"Detected rundll32 command: %s", command.c_str());
         
-        // Estrai il percorso completo di rundll32.exe
         std::wstring rundll32Path;
         wchar_t sysDir[MAX_PATH];
         if (GetSystemDirectoryW(sysDir, MAX_PATH)) {
@@ -693,15 +690,13 @@ static void LaunchTarget(const std::wstring& command) {
             rundll32Path = L"rundll32.exe";
         }
         
-        // Estrai i parametri (tutto dopo "rundll32.exe ")
         std::wstring params;
         if (lower.find(L"rundll32.exe ") != std::wstring::npos) {
-            params = command.substr(13); // lunghezza di "rundll32.exe "
+            params = command.substr(13);
         } else {
-            params = command.substr(12); // lunghezza di "rundll32.exe"
+            params = command.substr(12);
         }
         
-        // Usa ShellExecuteExW per eseguire rundll32 con i parametri
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_FLAG_NO_UI;
@@ -715,7 +710,7 @@ static void LaunchTarget(const std::wstring& command) {
         return;
     }
     
-    // Comandi completi con percorso eseguibile (esploratore, control.exe, ecc.)
+    // Comandi completi con percorso eseguibile
     bool isFullCmdLine =
         (lower.find(L"explorer.exe ") != std::wstring::npos) ||
         (lower.find(L"control.exe /") != std::wstring::npos);
@@ -759,11 +754,13 @@ static void LaunchTarget(const std::wstring& command) {
     if (command.find(L".msc") != std::wstring::npos) {
         cmdLine = L"mmc.exe \"" + command + L"\"";
     } else if (command.find(L".cpl") != std::wstring::npos) {
-        cmdLine = L"control.exe " + command;
+        // Usa ShellExecuteW per i .cpl - molto più affidabile
+        Wh_Log(L"Using ShellExecuteW for .cpl: control.exe %s", command.c_str());
+        ShellExecuteW_orig(nullptr, L"open", L"control.exe", command.c_str(), nullptr, SW_SHOWNORMAL);
+        return;
     } else if (command.find(L".exe") != std::wstring::npos) {
         cmdLine = command;
     } else if (command.find(L"shell:::") == 0) {
-        // CLSID puro - usa explorer.exe
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_FLAG_NO_UI;
