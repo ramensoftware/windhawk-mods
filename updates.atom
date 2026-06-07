@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-07T15:20:12.000Z</updated>
+    <updated>2026-06-07T15:28:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 2.0.0]]></title>
+        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#d212cd2fcc4140d1f06f96e590548ddace6d455a</id>
+        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
+        <updated>2026-06-07T15:28:04.000Z</updated>
+        <content type="html"><![CDATA[<p>Seriously expand the mod and add compatibility fixes</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Ctrl+N to New File 1.1]]></title>
         <id>https://windhawk.net/mods/explorer-ctrln-newfile#8b1683a4ec3660d5dbc7340248764ee68d40c45b</id>
@@ -428,23 +439,6 @@ exactly the same name as a <em>folder</em> on the desktop, that file's label wil
         <author>
             <name>Rod Boev</name>
             <uri>https://github.com/rodboev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ZenDesktop: Desktop Icon Toggle and Auto-Hide 3.4.0]]></title>
-        <id>https://windhawk.net/mods/zen-desktop-toggle-icons#59c9161f0f38faf7e4f88414e0f35d428d4dd61b</id>
-        <link href="https://windhawk.net/mods/zen-desktop-toggle-icons"/>
-        <updated>2026-06-03T07:26:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Asynchronous Execution Pipeline (<code>PostMessageW</code>)</strong>: Replaced all synchronous <code>ShowWindow</code> calls in subclass procedures with asynchronous custom messages to avoid message queue deadlocks and Explorer crashes.</li>
-<li><strong>Full-Screen Application Guard</strong>: Added automatic active window monitoring. Prevents auto-hiding icons when a full-screen application (video playback, PPT slide presentation, or game) is active.</li>
-<li><strong>Zero-Latency Physical Coordinate Guard</strong>: Replaced the laggy 100ms timer guard with a precise, zero-latency mouse coordinate comparison to filter out synthetic window-layout movements immediately while enabling absolute 0ms physical mouse-move restore.</li>
-<li><strong>Dynamic <code>CS_DBLCLKS</code> Support</strong>: Queries GCL_STYLE dynamically to support both native double-click inputs and manual interval-distance tracking fallback for windows lacking double-click style (like <code>SHELLDLL_DefView</code>).</li>
-<li><strong>Type Safety & Process Check</strong>: Standardized custom properties using <code>UlongToHandle</code> / <code>HandleToUlong</code> to prevent 64-bit truncation, and added PID checks before modifying window states on subclass cleanup.</li>
-</ul>]]></content>
-        <author>
-            <name>Lanbo</name>
-            <uri>https://github.com/Liset999</uri>
         </author>
     </entry>
 </feed>
