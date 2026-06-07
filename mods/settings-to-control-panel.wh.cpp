@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.2
+// @version        10.0.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -26,7 +26,6 @@ corresponding classic Control Panel applets using only native Windows components
 ## Features
 
 - Redirects numerous `ms-settings:` URIs to classic Control Panel
-- Smart personalization detection (desktop vs in-window)
 - Anti-loop protection
 - Configurable fallback modes
 
@@ -67,7 +66,7 @@ Control Panel target instead of the modern Settings app.
 
 - m417z – Code reviews and feedback
 - Anixx – Testing on Windows 11 23H2
-- dbilanoski – CLSID documentation  
+- dbilanoski – CLSID documentation
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -104,8 +103,6 @@ Control Panel target instead of the modern Settings app.
 #include <vector>
 #include <mutex>   
 #include <initguid.h>  
-#include <chrono>
-#include <thread>
 
 // Dynamic COM handling - no linking required
 typedef HRESULT (WINAPI *CoCreateInstance_t)(const GUID* rclsid, IUnknown* pUnkOuter, DWORD dwClsContext, const GUID* riid, void** ppv);
@@ -136,10 +133,6 @@ using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCW
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
 static ShellExecuteW_t ShellExecuteW_orig = nullptr;
-
-// Pending redirects guard per evitare chiamate duplicate
-static std::unordered_set<std::wstring> g_pendingRedirects;
-static std::mutex g_pendingMtx;
 
 // Core resolve logic struct - MUST be defined before use
 struct ResolveResult {
@@ -331,6 +324,13 @@ static const std::unordered_set<std::wstring> g_win11LoopClsids = {
     L"shell:::{9fe63afd-59cf-4419-9775-abcc3849f861}",
 };
 
+static const std::unordered_set<std::wstring> g_win11NoForceRedirect = {
+    L"ms-settings:defaultapps",
+    L"ms-settings:appsfeatures",
+    L"ms-settings:network",
+    L"ms-settings:bluetooth",
+    L"ms-settings:printers",
+};
 
 static bool IsClsidSafeOnWin11(const std::wstring& lowerTarget) {
     return g_win11SafeClsids.count(lowerTarget) > 0;
@@ -651,7 +651,7 @@ static bool HandleFallback(const std::wstring& uri) {
     }
 }
 
-// LaunchTarget - VERSIONE CORRETTA CON PULIZIA PENDING REDIRECTS
+// LaunchTarget - VERSIONE CORRETTA
 static void LaunchTarget(const std::wstring& command) {
     Wh_Log(L"Launching: %s", command.c_str());
 
@@ -756,8 +756,11 @@ static void LaunchTarget(const std::wstring& command) {
         CloseHandle(pi.hThread);
     }
 }
-
 // Personalization detection
+
+
+
+
 
 // Helper function to open sound panel
 static bool OpenSoundPanel() {
@@ -811,17 +814,7 @@ static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
     Wh_Log(L"personalization-background -> Personalization root");
     return PERS_ROOT;
 }
-
 static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
-    // Controlla se questo URI è già in elaborazione
-    {
-        std::lock_guard<std::mutex> lk(g_pendingMtx);
-        if (g_pendingRedirects.find(uri) != g_pendingRedirects.end()) {
-            Wh_Log(L"URI already being processed, blocking duplicate: %s", uri.c_str());
-            return {L"", true}; // Blocca completamente
-        }
-    }
-    
     if (uri == L"ms-settings:personalization-background") {
         if (BounceGuardIsBounce(uri)) {
             Wh_Log(L"Bounce-back on personalization-background - suppressing duplicate, target is opening");
@@ -829,12 +822,6 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
         }
         std::wstring t = ApplyWin11Filter(ResolvePersonalizationBackground(hwnd));
         BounceGuardRecord(uri);
-        
-        // Marca come pendente
-        {
-            std::lock_guard<std::mutex> lk(g_pendingMtx);
-            g_pendingRedirects.insert(uri);
-        }
         return {t, true};
     }
 
@@ -856,12 +843,6 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
 
         Wh_Log(L"Mapped: %s -> %s", uri.c_str(), t.c_str());
         BounceGuardRecord(uri);
-        
-        // Marca come pendente
-        {
-            std::lock_guard<std::mutex> lk(g_pendingMtx);
-            g_pendingRedirects.insert(uri);
-        }
         return {t, true};
     }
 
@@ -874,12 +855,6 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
         if (g_isWin11 && IsClsidLoopOnWin11(uri)) {
             std::wstring t = ApplyWin11Filter(uri);
             Wh_Log(L"Win11 loop-CLSID intercepted: %s -> %s", uri.c_str(), t.c_str());
-            
-            // Marca come pendente
-            {
-                std::lock_guard<std::mutex> lk(g_pendingMtx);
-                g_pendingRedirects.insert(uri);
-            }
             return {t, true};
         }
     }
@@ -887,7 +862,6 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     Wh_Log(L"Unmapped, passing through: %s", uri.c_str());
     return {L"", false};
 }
-
 // Control system detection helpers
 static std::wstring BaseNameLower(const std::wstring& path) {
     size_t pos = path.rfind(L'\\');
@@ -928,14 +902,6 @@ static bool IsControlSystemCommand(const std::wstring& cmdLine) {
 
     std::wstring arg = ToLower(tokens[1]);
     return (arg == L"system" || arg == L"microsoft.system");
-}
-
-// Funzione per pulire i pending redirects dopo un delay
-static void CleanupPendingRedirect(const std::wstring& uri, DWORD delayMs) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
-    std::lock_guard<std::mutex> lk(g_pendingMtx);
-    g_pendingRedirects.erase(uri);
-    Wh_Log(L"Cleaned up pending redirect for: %s", uri.c_str());
 }
 
 // Hook: ShellExecuteExW
@@ -983,28 +949,9 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     }
 
     if (!uri.empty()) {
-        // Controllo extra per bloccare chiamate duplicate
-        {
-            std::lock_guard<std::mutex> lk(g_pendingMtx);
-            if (g_pendingRedirects.find(uri) != g_pendingRedirects.end()) {
-                Wh_Log(L"ShellExecuteExW: BLOCKED duplicate call for: %s", uri.c_str());
-                if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
-                return TRUE;
-            }
-        }
-        
         auto result = ResolveUri(uri, pei->hwnd);
         if (result.intercept) {
-            if (!result.target.empty()) {
-                LaunchTarget(result.target);
-                // Pulisci il pending redirect dopo 200ms
-                std::thread cleanupThread(CleanupPendingRedirect, uri, 200);
-                cleanupThread.detach();
-            } else {
-                // Pulisci subito se non c'è target
-                std::lock_guard<std::mutex> lk(g_pendingMtx);
-                g_pendingRedirects.erase(uri);
-            }
+            if (!result.target.empty()) LaunchTarget(result.target);
             if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
             return TRUE;
         }
@@ -1057,27 +1004,9 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
     }
 
     if (!uri.empty()) {
-        // Controllo per bloccare chiamate duplicate
-        {
-            std::lock_guard<std::mutex> lk(g_pendingMtx);
-            if (g_pendingRedirects.find(uri) != g_pendingRedirects.end()) {
-                Wh_Log(L"ShellExecuteW: BLOCKED duplicate call for: %s", uri.c_str());
-                return SHELL_EXECUTE_SUCCESS;
-            }
-        }
-        
         auto result = ResolveUri(uri, hwnd);
         if (result.intercept) {
-            if (!result.target.empty()) {
-                LaunchTarget(result.target);
-                // Pulisci il pending redirect dopo 200ms
-                std::thread cleanupThread(CleanupPendingRedirect, uri, 200);
-                cleanupThread.detach();
-            } else {
-                // Pulisci subito se non c'è target
-                std::lock_guard<std::mutex> lk(g_pendingMtx);
-                g_pendingRedirects.erase(uri);
-            }
+            if (!result.target.empty()) LaunchTarget(result.target);
             return SHELL_EXECUTE_SUCCESS;
         }
     }
@@ -1150,14 +1079,7 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
         uri = ToLower(fileStr);
 
     if (!uri.empty()) {
-        // Controllo per bloccare chiamate duplicate
-        {
-            std::lock_guard<std::mutex> lk(g_pendingMtx);
-            if (g_pendingRedirects.find(uri) != g_pendingRedirects.end()) {
-                Wh_Log(L"IShellDispatch2: BLOCKED duplicate call for: %s", uri.c_str());
-                return S_OK;
-            }
-        }
+        
         
         // Audio URI handling in COM hook
         if (uri.find(L"ms-settings:sound") == 0 ||
@@ -1167,16 +1089,7 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
         
         auto result = ResolveUri(uri, nullptr);
         if (result.intercept) {
-            if (!result.target.empty()) {
-                LaunchTarget(result.target);
-                // Pulisci il pending redirect dopo 200ms
-                std::thread cleanupThread(CleanupPendingRedirect, uri, 200);
-                cleanupThread.detach();
-            } else {
-                // Pulisci subito se non c'è target
-                std::lock_guard<std::mutex> lk(g_pendingMtx);
-                g_pendingRedirects.erase(uri);
-            }
+            if (!result.target.empty()) LaunchTarget(result.target);
             return S_OK;
         }
     }
@@ -1190,7 +1103,7 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
 
 // Windhawk entry points
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.2");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.1");
     
     // Load COM dynamically for IShellDispatch2 hook
     g_hOle32 = LoadLibraryW(L"ole32.dll");
@@ -1256,7 +1169,7 @@ void Wh_ModUninit() {
         FreeLibrary(g_hOle32);
         g_hOle32 = nullptr;
     }
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.2 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.1 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
