@@ -5,7 +5,7 @@
 // @description:en  An open extensibility framework providing isolated custom text fields to target native WinUI elements and inject multi-value option submenus independently into core Windows shell processes.
 // @version         1.0.0
 // @author          PhantomNimbi
-// @homepage        https://github.com
+// @homepage        https://github.com/PhantomNimbi
 // @include         StartMenuExperienceHost.exe
 // @include         SearchHost.exe
 // @include         SearchApp.exe
