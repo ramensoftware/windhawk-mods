@@ -1568,11 +1568,32 @@ static void EnsureHoverBrushes() {
 }
 
 static void UpdateHoverBrushColors() {
-    g_mediaHoverBrush    = nullptr;
-    g_mediaPressedBrush  = nullptr;
-    g_playerHoverBrush   = nullptr;
-    g_playerPressedBrush = nullptr;
-    g_playerBorderBrush  = nullptr;
+    if (g_mediaHoverBrush) {
+        try { g_mediaHoverBrush.Color(GetSystemButtonHoverColor(g_settings.mediaButtonsHoverEffectMode)); } catch (...) {}
+    } else {
+        try { g_mediaHoverBrush = SolidColorBrush(GetSystemButtonHoverColor(g_settings.mediaButtonsHoverEffectMode)); } catch (...) {}
+    }
+    if (g_mediaPressedBrush) {
+        try { g_mediaPressedBrush.Color(GetSystemButtonPressedColor(g_settings.mediaButtonsHoverEffectMode)); } catch (...) {}
+    } else {
+        try { g_mediaPressedBrush = SolidColorBrush(GetSystemButtonPressedColor(g_settings.mediaButtonsHoverEffectMode)); } catch (...) {}
+    }
+
+    if (g_playerHoverBrush) {
+        try { g_playerHoverBrush.Color(GetSystemButtonHoverColor(g_settings.playerHoverEffectMode)); } catch (...) {}
+    } else {
+        try { g_playerHoverBrush = SolidColorBrush(GetSystemButtonHoverColor(g_settings.playerHoverEffectMode)); } catch (...) {}
+    }
+    if (g_playerPressedBrush) {
+        try { g_playerPressedBrush.Color(GetSystemButtonPressedColor(g_settings.playerHoverEffectMode)); } catch (...) {}
+    } else {
+        try { g_playerPressedBrush = SolidColorBrush(GetSystemButtonPressedColor(g_settings.playerHoverEffectMode)); } catch (...) {}
+    }
+    if (g_playerBorderBrush) {
+        try { g_playerBorderBrush.Color(GetSystemButtonBorderColor(g_settings.playerHoverEffectMode)); } catch (...) {}
+    } else {
+        try { g_playerBorderBrush = SolidColorBrush(GetSystemButtonBorderColor(g_settings.playerHoverEffectMode)); } catch (...) {}
+    }
 }
 
 static ObjectAnimationUsingKeyFrames MakeDiscreteObjectAnimation(
@@ -1780,27 +1801,31 @@ static void SetupMediaButtonCommonStates(Button const& btn) {
         transparent, transparent, transparent, transparent);
 }
 
-static void SetupPlayerButtonCommonStates(Button const& btn, Brush const& normalBackground) {
-    auto transparent = MakeBrush({0x00, 0, 0, 0});
-    if (!IsHoverEffectEnabled(g_settings.playerHoverEffectMode)) {
-        Brush norm = normalBackground ? normalBackground : transparent;
-        SetupCommonStates(
-            btn,
-            norm, norm, norm, transparent,
-            transparent, transparent, transparent, transparent);
-        return;
-    }
-    EnsureHoverBrushes();
-    SetupCommonStates(
-        btn,
-        normalBackground,
-        g_playerHoverBrush,
-        g_playerPressedBrush,
-        transparent,
-        transparent,
-        g_playerBorderBrush,
-        g_playerBorderBrush,
-        transparent);
+static void ApplyPlayerButtonState(Button const& btn, Brush const& normalBg, bool hovered, bool pressed) {
+    if (!btn) return;
+    try {
+        auto root = GetButtonTemplateRoot(btn);
+        if (!root) return;
+
+        bool effectEnabled = IsHoverEffectEnabled(g_settings.playerHoverEffectMode);
+        if (!effectEnabled) {
+            root.Background(normalBg ? normalBg : MakeBrush({0x00,0,0,0}));
+            root.BorderBrush(MakeBrush({0x00,0,0,0}));
+            return;
+        }
+
+        EnsureHoverBrushes();
+        if (pressed) {
+            root.Background(g_playerPressedBrush);
+            root.BorderBrush(g_playerBorderBrush);
+        } else if (hovered) {
+            root.Background(g_playerHoverBrush);
+            root.BorderBrush(g_playerBorderBrush);
+        } else {
+            root.Background(normalBg ? normalBg : MakeBrush({0x00,0,0,0}));
+            root.BorderBrush(MakeBrush({0x00,0,0,0}));
+        }
+    } catch (...) {}
 }
 
 static bool DecodeImageToBGRA(const std::vector<BYTE>& imgBytes,
@@ -2566,67 +2591,39 @@ static void ExecuteMediaAction(const std::wstring& action) {
             struct WindowSearch {
                 std::wstring targetTitle;
                 std::wstring targetAumid;
-                std::wstring targetProcessName;
-                HWND foundHwnd = nullptr;
-                HWND fallbackHwnd = nullptr;
+                HWND aumidHwnd = nullptr;
+                HWND processHwnd = nullptr;
+                HWND titleHwnd = nullptr;
             };
             WindowSearch search;
 
             search.targetTitle = title;
             std::transform(search.targetTitle.begin(), search.targetTitle.end(), search.targetTitle.begin(), ::towlower);
-            
+
             search.targetAumid = appAumid;
             std::transform(search.targetAumid.begin(), search.targetAumid.end(), search.targetAumid.begin(), ::towlower);
 
-            if (!appAumid.empty()) {
-
-                std::wstring stem = appAumid;
-                auto bang = stem.rfind(L'!');
-                if (bang != std::wstring::npos) stem = stem.substr(0, bang);
-
-                auto us = stem.rfind(L'_');
-                if (us != std::wstring::npos) stem = stem.substr(0, us);
-
-                auto slash = stem.find_last_of(L"\\/");
-                if (slash != std::wstring::npos) stem = stem.substr(slash + 1);
-
-                if (stem.size() > 4) {
-                    std::wstring ext = stem.substr(stem.size() - 4);
-                    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
-                    if (ext == L".exe") stem = stem.substr(0, stem.size() - 4);
-                }
-                search.targetProcessName = stem;
-                std::transform(search.targetProcessName.begin(), search.targetProcessName.end(), search.targetProcessName.begin(), ::towlower);
-            }
-
             EnumWindows([](HWND hwnd, LPARAM lParam) CALLBACK -> BOOL {
                 if (!IsWindowVisible(hwnd)) return TRUE;
+                WINDOWINFO wi{};
+                wi.cbSize = sizeof(wi);
+                GetWindowInfo(hwnd, &wi);
+                if ((wi.dwStyle & WS_CHILD) != 0) return TRUE;
 
                 auto* s = reinterpret_cast<WindowSearch*>(lParam);
 
-                wchar_t windowTitle[512];
-                if (!s->targetTitle.empty() && GetWindowTextW(hwnd, windowTitle, 512) > 0) {
-                    std::wstring wTitle(windowTitle);
-                    std::transform(wTitle.begin(), wTitle.end(), wTitle.begin(), ::towlower);
-
-                    if (wTitle.find(s->targetTitle) != std::wstring::npos) {
-                        s->foundHwnd = hwnd;
-                        return FALSE;
-                    }
-                }
-
-                if (!s->fallbackHwnd && !s->targetAumid.empty()) {
+                if (!s->aumidHwnd && !s->targetAumid.empty()) {
                     IPropertyStore* pps = nullptr;
                     if (SUCCEEDED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(&pps)))) {
                         PROPVARIANT var;
                         PropVariantInit(&var);
-                        
                         if (SUCCEEDED(pps->GetValue(PKEY_AppUserModel_ID, &var)) && var.vt == VT_LPWSTR) {
                             std::wstring winAumid(var.pwszVal);
                             std::transform(winAumid.begin(), winAumid.end(), winAumid.begin(), ::towlower);
-                            
-                            if (winAumid == s->targetAumid) {
-                                s->fallbackHwnd = hwnd;
+                            if (winAumid == s->targetAumid ||
+                                winAumid.find(s->targetAumid) != std::wstring::npos ||
+                                s->targetAumid.find(winAumid) != std::wstring::npos) {
+                                s->aumidHwnd = hwnd;
                             }
                         }
                         PropVariantClear(&var);
@@ -2634,30 +2631,41 @@ static void ExecuteMediaAction(const std::wstring& action) {
                     }
                 }
 
-                if (!s->fallbackHwnd && !s->targetProcessName.empty()) {
+                if (!s->processHwnd && !s->targetAumid.empty()) {
                     DWORD pid = 0;
                     GetWindowThreadProcessId(hwnd, &pid);
                     if (pid) {
+                        wchar_t procPath[MAX_PATH]{};
                         HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
                         if (hProc) {
-                            wchar_t exePath[MAX_PATH] = {};
-                            DWORD len = MAX_PATH;
-                            if (QueryFullProcessImageNameW(hProc, 0, exePath, &len) && len > 0) {
-                                std::wstring exeName(exePath);
-                                auto sl = exeName.find_last_of(L"\\/");
-                                if (sl != std::wstring::npos) exeName = exeName.substr(sl + 1);
-
-                                if (exeName.size() > 4) {
-                                    std::wstring ext = exeName.substr(exeName.size() - 4);
-                                    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
-                                    if (ext == L".exe") exeName = exeName.substr(0, exeName.size() - 4);
-                                }
-                                std::transform(exeName.begin(), exeName.end(), exeName.begin(), ::towlower);
-                                if (exeName == s->targetProcessName) {
-                                    s->fallbackHwnd = hwnd;
-                                }
-                            }
+                            DWORD sz = MAX_PATH;
+                            QueryFullProcessImageNameW(hProc, 0, procPath, &sz);
                             CloseHandle(hProc);
+                        }
+                        if (procPath[0]) {
+                            std::wstring stem = procPath;
+                            auto slash = stem.find_last_of(L"\\/");
+                            if (slash != std::wstring::npos) stem = stem.substr(slash + 1);
+                            auto dot = stem.rfind(L'.');
+                            if (dot != std::wstring::npos) stem = stem.substr(0, dot);
+                            std::transform(stem.begin(), stem.end(), stem.begin(), ::towlower);
+
+                            if (!stem.empty() &&
+                                (s->targetAumid.find(stem) != std::wstring::npos ||
+                                 stem.find(s->targetAumid) != std::wstring::npos)) {
+                                s->processHwnd = hwnd;
+                            }
+                        }
+                    }
+                }
+
+                if (!s->titleHwnd && !s->targetTitle.empty()) {
+                    wchar_t windowTitle[512];
+                    if (GetWindowTextW(hwnd, windowTitle, 512) > 0) {
+                        std::wstring wTitle(windowTitle);
+                        std::transform(wTitle.begin(), wTitle.end(), wTitle.begin(), ::towlower);
+                        if (wTitle.find(s->targetTitle) != std::wstring::npos) {
+                            s->titleHwnd = hwnd;
                         }
                     }
                 }
@@ -2665,7 +2673,9 @@ static void ExecuteMediaAction(const std::wstring& action) {
                 return TRUE;
             }, reinterpret_cast<LPARAM>(&search));
 
-            HWND targetWindow = search.foundHwnd ? search.foundHwnd : search.fallbackHwnd;
+            HWND targetWindow = search.aumidHwnd
+                ? search.aumidHwnd
+                : (search.processHwnd ? search.processHwnd : search.titleHwnd);
 
             if (targetWindow) {
                 if (IsIconic(targetWindow)) {
@@ -3523,30 +3533,14 @@ static HANDLE g_timerUpdateEvent = nullptr;
 static void DispatchMediaUpdate() {
     bool unloading = g_unloading;
     bool applyingSettings = g_applyingSettings;
-    bool hasPlayerGrid = (g_playerGrid != nullptr);
 
-    if (unloading || applyingSettings || !g_playerGrid) {
-        Wh_Log(L"DispatchMediaUpdate: Skipped (unloading=%d, applyingSettings=%d, playerGrid=%d)",
-               unloading, applyingSettings, hasPlayerGrid);
+    if (unloading || applyingSettings) {
+        Wh_Log(L"DispatchMediaUpdate: Skipped (unloading=%d, applyingSettings=%d)",
+               unloading, applyingSettings);
         return;
     }
 
     Wh_Log(L"DispatchMediaUpdate: Called");
-
-    try {
-        auto dispatcher = g_playerGrid.Dispatcher();
-        if (!dispatcher) {
-            Wh_Log(L"DispatchMediaUpdate: No dispatcher");
-            g_playerGrid = nullptr;
-            g_injectionParent = nullptr;
-            return;
-        }
-    } catch (...) {
-        Wh_Log(L"DispatchMediaUpdate: Exception getting dispatcher");
-        g_playerGrid = nullptr;
-        g_injectionParent = nullptr;
-        return;
-    }
 
     g_needsUiUpdate = true;
     if (g_timerUpdateEvent) {
@@ -3559,6 +3553,8 @@ static void RefreshPlayerContents();
 static void UpdateVisibility();
 static void RefreshThemeColors();
 
+
+static std::atomic<bool> g_themeChangePending{false};
 
 static DWORD WINAPI TimerThreadProc(void*) {
     static bool lastThemeWasLight = IsSystemLightTheme();
@@ -3584,15 +3580,30 @@ static DWORD WINAPI TimerThreadProc(void*) {
         }
 
         if (wait == WAIT_OBJECT_0 + 1) {
-            if (g_settings.autoTheme) {
+            if (hKey) {
+                RegNotifyChangeKeyValue(hKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, hEvent, TRUE);
+            }
+            if (g_settings.autoTheme ||
+                g_settings.playerHoverEffectMode == L"auto" ||
+                g_settings.mediaButtonsHoverEffectMode == L"auto") {
                 bool currentThemeIsLight = IsSystemLightTheme();
                 if (currentThemeIsLight != lastThemeWasLight) {
                     lastThemeWasLight = currentThemeIsLight;
+                    g_themeChangePending = true;
                     g_needsUiUpdate = true;
+                    if (g_timerUpdateEvent) SetEvent(g_timerUpdateEvent);
                 }
             }
-            if (hKey) {
-                RegNotifyChangeKeyValue(hKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, hEvent, TRUE);
+        }
+
+        if (g_themeChangePending.exchange(false)) {
+            Sleep(150);
+            if (!g_unloading && !g_applyingSettings) {
+                RunFromWindowThread(hWnd, [](void*) {
+                    if (!g_unloading && !g_applyingSettings && g_playerGrid) {
+                        RefreshThemeColors();
+                    }
+                }, nullptr);
             }
         }
 
@@ -3695,10 +3706,13 @@ static void RefreshThemeColors() {
 
         if (auto fe = FindChildByName(g_playerGrid, L"FluentMedia_OuterBorder")) {
             if (auto btn = fe.try_as<Button>()) {
-                btn.ApplyTemplate();
-                auto normalBg = MakeBackgroundBrush();
-                SetupPlayerButtonCommonStates(btn, normalBg);
-                try { VisualStateManager::GoToState(btn, L"Normal", false); } catch (...) {}
+                try {
+                    if (auto root = GetButtonTemplateRoot(btn)) {
+                        auto normalBg = MakeBackgroundBrush();
+                        root.Background(normalBg ? normalBg : MakeBrush({0x00,0,0,0}));
+                        root.BorderBrush(MakeBrush({0x00,0,0,0}));
+                    }
+                } catch (...) {}
             }
         }
 
@@ -4657,19 +4671,25 @@ static Grid BuildPlayerGrid() {
 
         auto playerNormalBg = MakeBackgroundBrush();
 
-        auto updatePlayerVisualState = [playerButton, isPressed, isHovered]() {
-            GoToCommonState(playerButton, IsHoverEffectEnabled(g_settings.playerHoverEffectMode), *isPressed, *isHovered);
+        auto updatePlayerVisualState = [playerButton, playerNormalBg, isPressed, isHovered]() {
+            ApplyPlayerButtonState(playerButton, playerNormalBg, *isHovered, *isPressed);
         };
 
-        RunWhenButtonReady(playerButton, [playerButton, playerNormalBg, updatePlayerVisualState]() {
-            SetupPlayerButtonCommonStates(playerButton, playerNormalBg);
-            updatePlayerVisualState();
+        RunWhenButtonReady(playerButton, [playerButton, playerNormalBg]() {
+            try {
+                if (auto root = GetButtonTemplateRoot(playerButton)) {
+                    root.Background(playerNormalBg ? playerNormalBg : MakeBrush({0x00,0,0,0}));
+                    root.BorderBrush(MakeBrush({0x00,0,0,0}));
+                }
+            } catch (...) {}
         });
 
-        wrapper.Loaded([playerButton, playerNormalBg, updatePlayerVisualState](auto const&, auto const&) {
+        wrapper.Loaded([playerButton, playerNormalBg](auto const&, auto const&) {
             try {
-                SetupPlayerButtonCommonStates(playerButton, playerNormalBg);
-                updatePlayerVisualState();
+                if (auto root = GetButtonTemplateRoot(playerButton)) {
+                    root.Background(playerNormalBg ? playerNormalBg : MakeBrush({0x00,0,0,0}));
+                    root.BorderBrush(MakeBrush({0x00,0,0,0}));
+                }
             } catch (...) {}
         });
 
@@ -5576,22 +5596,6 @@ static void RefreshPlayerContents() {
     if (!g_playerGrid || g_unloading || g_applyingSettings) return;
 
     Wh_Log(L"RefreshPlayerContents: Starting");
-
-    try {
-        auto dispatcher = g_playerGrid.Dispatcher();
-        if (!dispatcher) {
-            Wh_Log(L"RefreshPlayerContents: No dispatcher");
-            g_playerGrid = nullptr;
-            g_injectionParent = nullptr;
-            return;
-        }
-    } catch (...) {
-        Wh_Log(L"RefreshPlayerContents: Exception getting dispatcher");
-        g_playerGrid = nullptr;
-        g_injectionParent = nullptr;
-        return;
-    }
-
     std::wstring      title, artist;
     bool              isPlaying = false, hasMedia = false;
     std::vector<BYTE> thumbBytes;
@@ -6375,14 +6379,27 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
+static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen);
+
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
     HMODULE h = LoadLibraryExW_Original(path, file, flags);
     if (h && path && !g_taskbarViewDllLoaded) {
         const wchar_t* base = wcsrchr(path, L'\\');
         base = base ? base + 1 : path;
-        if (_wcsicmp(base, L"Taskbar.View.dll") == 0 ||
-            _wcsicmp(base, L"SystemTray.dll") == 0 ||
+        bool isCandidate = false;
+        if (_wcsicmp(base, L"SystemTray.dll") == 0 ||
             _wcsicmp(base, L"ExplorerExtensions.dll") == 0) {
+            isCandidate = true;
+        } else if (_wcsicmp(base, L"Taskbar.View.dll") == 0) {
+            VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(h, nullptr);
+            WORD moduleMajor = fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor < 2604) {
+                isCandidate = true;
+            } else {
+                Wh_Log(L"LoadLibraryExW_Hook: Skipping Taskbar.View.dll version %d (symbols moved to SystemTray.dll)", moduleMajor);
+            }
+        }
+        if (isCandidate) {
             // Taskbar.View.dll, SystemTray.dll, ExplorerExtensions.dll
             WindhawkUtils::SYMBOL_HOOK hooks[] = {{
                 {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
@@ -6546,15 +6563,23 @@ void Wh_ModUninit() {
     StopMediaThread();
 
     if (g_taskbarWnd)
-        RunFromWindowThread(g_taskbarWnd, [](void*) { RemovePlayerGrid(); }, nullptr);
+        RunFromWindowThread(g_taskbarWnd, [](void*) {
+            RemovePlayerGrid();
+            g_mediaHoverBrush   = nullptr;
+            g_mediaPressedBrush = nullptr;
+            g_playerHoverBrush  = nullptr;
+            g_playerPressedBrush = nullptr;
+            g_playerBorderBrush  = nullptr;
+        }, nullptr);
+    else {
+        g_mediaHoverBrush   = nullptr;
+        g_mediaPressedBrush = nullptr;
+        g_playerHoverBrush  = nullptr;
+        g_playerPressedBrush = nullptr;
+        g_playerBorderBrush  = nullptr;
+    }
 
     CleanupAudioDeviceEnumerator();
-
-    g_mediaHoverBrush   = nullptr;
-    g_mediaPressedBrush = nullptr;
-    g_playerHoverBrush  = nullptr;
-    g_playerPressedBrush = nullptr;
-    g_playerBorderBrush  = nullptr;
 }
 
 void Wh_ModSettingsChanged() {
