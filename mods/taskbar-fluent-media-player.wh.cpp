@@ -6410,7 +6410,6 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags
                 g_taskbarViewDllLoaded = true;
                 Wh_ApplyHookOperations();
 
-                // TrayUI_StartTaskbar was already called, manually initialize
                 HWND hWnd = FindCurrentProcessTaskbarWnd();
                 if (hWnd && !g_playerGrid) {
                     Wh_Log(L"LoadLibraryExW_Hook: TrayUI_StartTaskbar already called, manually initializing");
