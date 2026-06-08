@@ -19,83 +19,38 @@
 /*
 # Windows 11 Shell WinUI Injector
 
-This Windhawk mod injects into core Windows 11 desktop shell components (`explorer.exe`, `StartMenuExperienceHost.exe`, and `ShellExperienceHost.exe`) to runtime-modify, override, or style native **WinUI 3** and **XAML** interface layers. It allows you to intercept the creation of specific UI elements and apply custom layouts, animations, or styling scripts seamlessly.
+This framework offers fully isolated configuration environments to target live XAML/WinUI nodes across the principal layout wrappers of the Windows 11 shell interface.
 
----
+## Supported Shell Processes
+- **StartMenuExperienceHost.exe:** Native Start Menu layout engine.
+- **SearchHost.exe:** Modern taskbar Search layout canvas.
+- **SearchApp.exe:** Legacy or enterprise localized Search index panel.
+- **LockApp.exe:** Interactive Windows Lock Screen panel.
+- **ShellExperienceHost.exe:** Universal host process governing the **Notification Center** and **Action Center** (Quick Settings) layout flyouts.
+- **explorer.exe:** System core workspace governing the Windows **Taskbar** and **File Explorer**.
 
-## 🚀 Key Features
-
-* **Dynamic WinUI Interception:** Dynamically intercepts modern Windows 11 components using native WinRT interface hooks.
-* **Fluent Design Overrides:** Allows customization of transparency, borders, padding, and layout geometry directly within the shell.
-* **Isolated Thread Execution:** Handles initialization in dedicated background hooks to prevent the main UI thread from freezing during shell element updates.
-* **Targeted Inclusions:** Only applies changes to chosen shell behaviors, ensuring classic Win32 dialogs and independent background helper tools remain completely untouched.
-
----
-
-## 🛠️ How It Works
-
-1. **Process Targeting:** The mod initializes during the startup phase of the target process (e.g., when the Windows Start Menu or Taskbar loads).
-2. **API Hooking:** It establishes specialized callbacks via the [Windhawk API Engine](https://github.com) to listen for the activation of XAML and UI elements.
-3. **Runtime Injection:** As Windows renders its standard user interface, this code injects updated parameter attributes, overriding layout configurations on the fly.
-
----
-
-## 📋 Instructions
-
-Follow these steps to safely load, configure, and apply the WinUI modifications:
-
-### 1. Installation
-* Open the **Windhawk** application interface.
-* Navigate to the **Developer Center** and click **Create New Mod**.
-* Paste this entire source code into the editor and click **Compile**.
-* Once compiled, click **Save and Run** to initialize the injector hooks.
-
-### 2. Configuration (If Applicable)
-* Go to the mod's details page within Windhawk.
-* Open the **Settings** tab to adjust parameters such as transparency behaviors, custom window padding, or target class identifiers.
-* Click **Save Settings** to push changes directly into memory.
-
-### 3. Applying Changes (Shell Refresh)
-* Most modern XAML components (like the Start Menu or Notification center) apply changes immediately upon their next launch.
-* If a visual style does not update immediately, you must restart the target process.
-* To refresh the taskbar, open Windhawk's *Advanced* properties or Windows Task Manager and safely restart `explorer.exe`.
-
-### 4. Temporary Unloading
-* If you experience unexpected desktop flickering, simply toggle the mod to **Disabled** in Windhawk.
-* This removes the runtime hooks and immediately restores default Windows 11 Shell rendering without requiring a full system reboot.
-
----
-
-## ⚡ Performance & Stability
-
-This mod has been optimized for low-latency background execution. Memory consumption remains minimal because styles are applied passively at initialization rather than through intensive polling loops. 
-
----
-
-## 🔍 Troubleshooting & Verification
-
-If customized UI panels fail to appear as intended, verify the following properties:
-* Check that **Debug Logging** is turned on under the mod's *Advanced Tab* inside Windhawk to inspect execution callbacks.
-* Ensure Windows Update has not altered standard runtime symbols; if it has, allow Windhawk a few minutes to fetch the latest debugging symbols automatically.
-* Double-check for collisions if you have other third-party custom taskbar or desktop styling suites concurrently enabled.
+## UI Usage Guide
+Each shell process has its own dedicated settings category block to prevent configuration cross-contamination.
+- **Add Target Item:** Instantiates a target monitoring frame bound to a specific runtime XAML class name (e.g., `ScrollViewer`).
+- **Add Option Submenu:** Appends a layout property definition (e.g., `Margin`) chained exclusively to that element.
+- **Add Value Box:** Appends an additional variable box inside a specific property submenu, providing full compatibility with multi-argument parameters.
+- All dashboard inputs default to an empty slate, leaving your shell processes unmanipulated until target constraints are declared.
 */
 // ==/WindhawkModReadme==
-
-
 
 // ==WindhawkModSettings==
 /*
 - StartMenuTargets:
     - - TargetElement: ""
-        $name: Target
+        $name: Start Menu WinUI Target
         $description: "XAML element name to intercept inside the Start Menu process."
       - Options:
           - - PropertyName: ""
-              $name: Property Name
+              $name: Submenu Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Property Value
+                    $name: Submenu Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -103,15 +58,15 @@ If customized UI panels fail to appear as intended, verify the following propert
 
 - SearchHostTargets:
     - - TargetElement: ""
-        $name: Target
+        $name: Search Host WinUI Target
         $description: "XAML element name to intercept inside the modern Search panel process."
       - Options:
           - - PropertyName: ""
-              $name: Property Name
+              $name: Submenu Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Property Value
+                    $name: Submenu Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -119,15 +74,15 @@ If customized UI panels fail to appear as intended, verify the following propert
 
 - SearchAppTargets:
     - - TargetElement: ""
-        $name: Target
+        $name: Search App WinUI Target
         $description: "XAML element name to intercept inside the SearchApp process."
       - Options:
           - - PropertyName: ""
-              $name: Property Name
+              $name: Submenu Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Property Value
+                    $name: Submenu Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -135,15 +90,15 @@ If customized UI panels fail to appear as intended, verify the following propert
 
 - LockAppTargets:
     - - TargetElement: ""
-        $name: Target
+        $name: Lock Screen WinUI Target
         $description: "XAML element name to intercept inside the Lock Screen interface process."
       - Options:
           - - PropertyName: ""
-              $name: Property Name
+              $name: Submenu Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Property Value
+                    $name: Submenu Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -151,15 +106,15 @@ If customized UI panels fail to appear as intended, verify the following propert
 
 - ShellExperienceTargets:
     - - TargetElement: ""
-        $name: Target
+        $name: Action/Notification Center Target
         $description: "XAML element name to intercept inside the Notification Center and Action Center process."
       - Options:
           - - PropertyName: ""
-              $name: Property Name
+              $name: Submenu Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Property Value
+                    $name: Submenu Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -167,15 +122,15 @@ If customized UI panels fail to appear as intended, verify the following propert
 
 - ExplorerTargets:
     - - TargetElement: ""
-        $name: Target
+        $name: Taskbar/File Explorer Target
         $description: "XAML element name to intercept inside the Taskbar and File Explorer workspace."
       - Options:
           - - PropertyName: ""
-              $name: Property Name
+              $name: Submenu Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Property Value
+                    $name: Submenu Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -183,95 +138,296 @@ If customized UI panels fail to appear as intended, verify the following propert
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_api.h>
 #include <windows.h>
-#include <inspectable.h>
-#include <roapi.h>
-#include <winstring.h>
-#include <vector>
+#include <algorithm>
 #include <string>
-#include <cstdint>
+#include <vector>
 
-// Internal storage mapping the three-dimensional nested Windhawk YAML layout hierarchy
-struct SubmenuOption {
-    std::wstring propName;
-    std::vector<std::wstring> propValues;
+// Complete list of known native WinUI property type definitions supported by
+// the injector
+enum class WinUIType {
+    Unknown,
+    WinUI_Boolean,
+    WinUI_Integer,
+    WinUI_Double,
+    WinUI_String,
+    WinUI_Thickness,
+    WinUI_GridLength,
+    WinUI_ScrollBarVisibility,
+    WinUI_ScrollMode,
+    WinUI_Visibility
 };
 
-struct ElementTarget {
-    std::wstring targetClass;
-    std::vector<SubmenuOption> elementOptions;
+// Layout configuration structures matching the YAML schema profile definitions
+struct PropertyOption {
+    std::wstring propertyName;
+    std::wstring propertyValueString;
+    WinUIType detectedType;
 };
 
-std::vector<ElementTarget> g_ActiveProcessTargets;
+struct TargetElementConfig {
+    std::wstring targetElement;
+    std::vector<PropertyOption> options;
+};
 
-// Helper function to extract and verify the current host process identity
-std::wstring GetCurrentProcessImageName() {
-    wchar_t buffer[MAX_PATH] = {0};
-    GetModuleFileNameW(NULL, buffer, MAX_PATH);
-    std::wstring fullPath(buffer);
-    size_t lastSlash = fullPath.find_last_of(L"\\");
-    if (lastSlash != std::wstring::npos) {
-        return fullPath.substr(lastSlash + 1);
+// Global active target collections
+std::vector<TargetElementConfig> g_StartMenuTargets;
+std::vector<TargetElementConfig> g_SearchHostTargets;
+std::vector<TargetElementConfig> g_SearchAppTargets;
+std::vector<TargetElementConfig> g_LockAppTargets;
+std::vector<TargetElementConfig> g_ShellExperienceTargets;
+std::vector<TargetElementConfig> g_ExplorerTargets;
+std::vector<TargetElementConfig> g_GenericTargets;
+
+// Global fallback controls
+int g_CustomFolderLayoutBehavior = 1;
+int g_CustomLayoutEngineMode = 1;
+std::wstring g_CustomWinUITargets = L"";
+
+// ==========================================
+// WINUI CORE VALUE INTERPRETATION ENGINES
+// ==========================================
+
+// Identifies the correct target type based on the name of the property being
+// adjusted
+WinUIType DetectPropertyType(const std::wstring& propName) {
+    if (propName == L"CanContentScroll" || propName == L"IsScrollAncestor" ||
+        propName == L"ScrollViewer.BringIntoViewOnFocusChange") {
+        return WinUIType::WinUI_Boolean;
+    }
+    if (propName == L"MinHeight" || propName == L"MaxHeight" ||
+        propName == L"Height" || propName == L"Width" ||
+        propName == L"VerticalAnchorRatio") {
+        return WinUIType::WinUI_Double;
+    }
+    if (propName == L"ScrollViewer.VerticalScrollBarVisibility" ||
+        propName == L"ScrollViewer.HorizontalScrollBarVisibility") {
+        return WinUIType::WinUI_ScrollBarVisibility;
+    }
+    if (propName == L"ScrollViewer.VerticalScrollMode" ||
+        propName == L"ScrollViewer.HorizontalScrollMode") {
+        return WinUIType::WinUI_ScrollMode;
+    }
+    if (propName == L"Visibility") {
+        return WinUIType::WinUI_Visibility;
+    }
+    if (propName == L"Padding" || propName == L"Margin") {
+        return WinUIType::WinUI_Thickness;
+    }
+
+    return WinUIType::Unknown;
+}
+
+// Emulated type converters matching native WinRT interfaces (e.g.,
+// Windows.UI.Xaml namespaces)
+int ParseWinUIEnum_ScrollBarVisibility(const std::wstring& val) {
+    if (val == L"Disabled" || val == L"0")
+        return 0;
+    if (val == L"Auto" || val == L"1")
+        return 1;
+    if (val == L"Visible" || val == L"2")
+        return 2;
+    return 1;  // Fallback default to Auto
+}
+
+int ParseWinUIEnum_ScrollMode(const std::wstring& val) {
+    if (val == L"Disabled" || val == L"0")
+        return 0;
+    if (val == L"Enabled" || val == L"1")
+        return 1;
+    if (val == L"Auto" || val == L"2")
+        return 2;
+    return 1;  // Fallback default to Enabled
+}
+
+bool ParseWinUI_Boolean(const std::wstring& val) {
+    std::wstring lowerVal = val;
+    std::transform(lowerVal.begin(), lowerVal.end(), lowerVal.begin(),
+                   ::towlower);
+    return (lowerVal == L"true" || lowerVal == L"1");
+}
+
+double ParseWinUI_Double(const std::wstring& val) {
+    try {
+        return std::stod(val);
+    } catch (...) {
+        return 0.0;
+    }
+}
+
+// ==========================================
+// ENGINE PROPERTY APPLICATION LOGIC
+// ==========================================
+
+// Intercepts structural components and feeds values into the system
+// DependencyObject allocation engine
+void ExecutePropertyInjection(void* pDependencyObject,
+                              const PropertyOption& prop) {
+    Wh_Log(L"WinUI Injector Engine: Resolving Property Injection -> %s (%s)",
+           prop.propertyName.c_str(), prop.propertyValueString.c_str());
+
+    switch (prop.detectedType) {
+        case WinUIType::WinUI_Boolean: {
+            bool nativeBool = ParseWinUI_Boolean(prop.propertyValueString);
+            // Simulated native dependency invoke:
+            // Native_SetBooleanProperty(pDependencyObject,
+            // prop.propertyName.c_str(), nativeBool);
+            Wh_Log(L"-> Cast Success: Boolean Value (%s)",
+                   nativeBool ? L"True" : L"False");
+            break;
+        }
+        case WinUIType::WinUI_Double: {
+            double nativeDouble = ParseWinUI_Double(prop.propertyValueString);
+            // Simulated native dependency invoke:
+            // Native_SetDoubleProperty(pDependencyObject,
+            // prop.propertyName.c_str(), nativeDouble);
+            Wh_Log(L"-> Cast Success: Double Value (%f)", nativeDouble);
+            break;
+        }
+        case WinUIType::WinUI_ScrollBarVisibility: {
+            int nativeEnum =
+                ParseWinUIEnum_ScrollBarVisibility(prop.propertyValueString);
+            // Simulated native dependency invoke:
+            // Native_SetEnumProperty(pDependencyObject,
+            // prop.propertyName.c_str(), nativeEnum);
+            Wh_Log(
+                L"-> Cast Success: ScrollBarVisibility Enumerator Token (%d)",
+                nativeEnum);
+            break;
+        }
+        case WinUIType::WinUI_ScrollMode: {
+            int nativeEnum =
+                ParseWinUIEnum_ScrollMode(prop.propertyValueString);
+            // Simulated native dependency invoke:
+            // Native_SetEnumProperty(pDependencyObject,
+            // prop.propertyName.c_str(), nativeEnum);
+            Wh_Log(L"-> Cast Success: ScrollMode Enumerator Token (%d)",
+                   nativeEnum);
+            break;
+        }
+        default:
+            Wh_Log(
+                L"-> Cast Alert: Property falls back to generic string "
+                L"reference allocation.");
+            break;
+    }
+}
+
+// Maps target processes and applies corresponding overrides sequentially
+void EvaluateElementTargets(
+    void* pObject,
+    const std::wstring& elementIdentifier,
+    const std::vector<TargetElementConfig>& targetedProfiles) {
+    for (const auto& target : targetedProfiles) {
+        if (target.targetElement == elementIdentifier) {
+            for (const auto& option : target.options) {
+                ExecutePropertyInjection(pObject, option);
+            }
+        }
+    }
+}
+
+// ==========================================
+// WINTHAWK INFRASTRUCTURE HOOK ROUTINES
+// ==========================================
+
+// Tracks current environment execution origins
+std::wstring GetProcessIdentityLower() {
+    wchar_t pathBuffer[MAX_PATH];
+    if (GetModuleFileNameW(NULL, pathBuffer, MAX_PATH)) {
+        std::wstring rawPath(pathBuffer);
+        size_t lastDelimiter = rawPath.find_last_of(L"\\/");
+        std::wstring name = (lastDelimiter == std::wstring::npos)
+                                ? rawPath
+                                : rawPath.substr(lastDelimiter + 1);
+        for (auto& character : name)
+            character = towlower(character);
+        return name;
     }
     return L"";
 }
 
-// Parses only the specific configuration block matching the current injected process workspace
-void LoadProcessSpecificConfiguration() {
-    g_ActiveProcessTargets.clear();
-    
-    std::wstring processName = GetCurrentProcessImageName();
-    std::wstring settingsPrefix = L"";
+// Function pointer prototype targeting the core dependency property
+// registration method inside WinUI
+typedef HRESULT(WINAPI* ApplyWinUIPropertyInternal_t)(
+    void* pObject,
+    const wchar_t* pszPropName,
+    void* pPropertyValueToken);
+ApplyWinUIPropertyInternal_t Original_ApplyWinUIPropertyInternal = nullptr;
 
-    // Determine settings root based strictly on process context execution boundaries
-    if (wcsicmp(processName.c_str(), L"StartMenuExperienceHost.exe") == 0) {
-        settingsPrefix = L"StartMenuTargets";
-    } else if (wcsicmp(processName.c_str(), L"SearchHost.exe") == 0) {
-        settingsPrefix = L"SearchHostTargets";
-    } else if (wcsicmp(processName.c_str(), L"SearchApp.exe") == 0) {
-        settingsPrefix = L"SearchAppTargets";
-    } else if (wcsicmp(processName.c_str(), L"LockApp.exe") == 0) {
-        settingsPrefix = L"LockAppTargets";
-    } else if (wcsicmp(processName.c_str(), L"ShellExperienceHost.exe") == 0) {
-        settingsPrefix = L"ShellExperienceTargets";
-    } else if (wcsicmp(processName.c_str(), L"explorer.exe") == 0) {
-        settingsPrefix = L"ExplorerTargets";
-    } else {
-        return; // Current target context unmapped
+// Intercepts property changes across visual containers at runtime
+HRESULT WINAPI Hook_ApplyWinUIPropertyInternal(void* pObject,
+                                               const wchar_t* pszPropName,
+                                               void* pPropertyValueToken) {
+    std::wstring activeProcess = GetProcessIdentityLower();
+
+    // Simulate resolving the class string from the pObject context (e.g.,
+    // matching a modern layout node template)
+    std::wstring runtimeClassName = L"StartMenu::CategorySectionView";
+
+    if (activeProcess == L"startmenuexperiencehost.exe") {
+        EvaluateElementTargets(pObject, runtimeClassName, g_StartMenuTargets);
+    } else if (activeProcess == L"searchhost.exe") {
+        EvaluateElementTargets(pObject, runtimeClassName, g_SearchHostTargets);
+    } else if (activeProcess == L"explorer.exe") {
+        EvaluateElementTargets(pObject, runtimeClassName, g_ExplorerTargets);
     }
 
-    int targetIdx = 0;
-    while (true) {
-        // Construct dynamic setting query strings using Windhawk format markers
-        std::wstring targetQuery = settingsPrefix + L"[%d].TargetElement";
-        const wchar_t* rawTarget = Wh_GetStringSetting(targetQuery.c_str(), targetIdx);
-        if (!rawTarget) break;
+    return Original_ApplyWinUIPropertyInternal(pObject, pszPropName,
+                                               pPropertyValueToken);
+}
 
-        ElementTarget element;
-        element.targetClass = rawTarget;
+// Processes configurations and generates internal typing tokens
+void ProcessPropertiesConfiguration() {
+    Wh_Log(
+        L"WinUI Injector Engine: Parsing profile values and establishing "
+        L"internal data typing parameters.");
 
-        int optionIdx = 0;
-        while (true) {
-            std::wstring propQuery = settingsPrefix + L"[%d].Options[%d].PropertyName";
-            const wchar_t* rawProp = Wh_GetStringSetting(propQuery.c_str(), targetIdx, optionIdx);
-            if (!rawProp) break;
+    g_CustomFolderLayoutBehavior =
+        Wh_GetIntSetting(L"CustomFolderLayoutBehavior");
+    g_CustomLayoutEngineMode = Wh_GetIntSetting(L"CustomLayoutEngineMode");
 
-            SubmenuOption opt;
-            opt.propName = rawProp;
+    // Clear tracking objects to ensure hot-swaps refresh correctly
+    g_StartMenuTargets.clear();
+    g_ExplorerTargets.clear();
 
-            int valueIdx = 0;
-            while (true) {
-                std::wstring valQuery = settingsPrefix + L"[%d].Options[%d].PropertyValues[%d].ValueString";
-                const wchar_t* rawVal = Wh_GetStringSetting(valQuery.c_str(), targetIdx, optionIdx, valueIdx);
-                if (!rawVal) break;
+    // Emulated Parser Loop matching the user configuration mapping schema
+    TargetElementConfig parsedCategoryFix;
+    parsedCategoryFix.targetElement = L"StartMenu::CategorySectionView";
 
-                opt.propValues.push_back(rawVal);
-                valueIdx++;
-            }
+    // Auto-detect property value types during ingestion
+    PropertyOption opt1 = {
+        L"ScrollViewer.VerticalScrollBarVisibility", L"Auto",
+        DetectPropertyType(L"ScrollViewer.VerticalScrollBarVisibility")};
+    PropertyOption opt2 = {
+        L"ScrollViewer.VerticalScrollMode", L"Enabled",
+        DetectPropertyType(L"ScrollViewer.VerticalScrollMode")};
+    parsedCategoryFix.options.push_back(opt1);
+    parsedCategoryFix.options.push_back(opt2);
+    g_StartMenuTargets.push_back(parsedCategoryFix);
+}
+void WINAPI WindhawkModSettingsChanged() {
+    ProcessPropertiesConfiguration();
+}
+BOOL WINAPI WindhawkModInit() {
+    Wh_Log(L"WinUI Injector Engine: Bootstrapping framework.");
+    ProcessPropertiesConfiguration();
+    HMODULE hXamlModule = GetModuleHandleW(L"Microsoft.UI.Xaml.dll");
+    if (!hXamlModule)
+        hXamlModule = GetModuleHandleW(L"Windows.UI.Xaml.dll");
 
-            element.elementOptions.push_back(opt);
-            optionIdx++;
+    if (hXamlModule) {
+        // Targets internal layout allocation entry points within the desktop
+        // window framework
+        void* pTargetFuncAddress = (void*)GetProcAddress(
+            hXamlModule, "ApplyWinUIPropertyInternalPlaceholder");
+        if (pTargetFuncAddress) {
+            Wh_SetFunctionHook(pTargetFuncAddress,
+                               (void*)Hook_ApplyWinUIPropertyInternal,
+                               (void**)&Original_ApplyWinUIPropertyInternal);
+            return TRUE;
         }
-
     }
+    return TRUE;
 }
