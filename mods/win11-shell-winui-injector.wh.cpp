@@ -47,10 +47,13 @@ untouched on your storage media.
 
 ### ⚙️ How It Works
 
+```
 [ Windhawk Injection Core ]
-│├──► Target: explorer.exe (Taskbar, Desktop, Tray)
-│├──► Target: StartMenuExperienceHost.exe (Start Menu UI)
-│└──► Target: ShellExperienceHost.exe (Flyouts, Notifications)
+│
+├──► Target: explorer.exe (Taskbar, Desktop, Tray)
+├──► Target: StartMenuExperienceHost.exe (Start Menu UI)
+└──► Target: ShellExperienceHost.exe (Flyouts, Notifications)
+```
 
 1. **Process Anchoring:** The mod evaluates execution profiles, hooking
 immediately into `explorer.exe`, `StartMenuExperienceHost.exe`, and
