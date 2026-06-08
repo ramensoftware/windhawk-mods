@@ -19,24 +19,69 @@
 /*
 # Windows 11 Shell WinUI Injector
 
-This framework offers fully isolated configuration environments to target live XAML/WinUI nodes across the principal layout wrappers of the Windows 11 shell interface.
+This Windhawk mod injects into core Windows 11 desktop shell components (`explorer.exe`, `StartMenuExperienceHost.exe`, and `ShellExperienceHost.exe`) to runtime-modify, override, or style native **WinUI 3** and **XAML** interface layers. It allows you to intercept the creation of specific UI elements and apply custom layouts, animations, or styling scripts seamlessly.
 
-## Supported Shell Processes
-- **StartMenuExperienceHost.exe:** Native Start Menu layout engine.
-- **SearchHost.exe:** Modern taskbar Search layout canvas.
-- **SearchApp.exe:** Legacy or enterprise localized Search index panel.
-- **LockApp.exe:** Interactive Windows Lock Screen panel.
-- **ShellExperienceHost.exe:** Universal host process governing the **Notification Center** and **Action Center** (Quick Settings) layout flyouts.
-- **explorer.exe:** System core workspace governing the Windows **Taskbar** and **File Explorer**.
+---
 
-## UI Usage Guide
-Each shell process has its own dedicated settings category block to prevent configuration cross-contamination.
-- **Add Target Item:** Instantiates a target monitoring frame bound to a specific runtime XAML class name (e.g., `ScrollViewer`).
-- **Add Option Submenu:** Appends a layout property definition (e.g., `Margin`) chained exclusively to that element.
-- **Add Value Box:** Appends an additional variable box inside a specific property submenu, providing full compatibility with multi-argument parameters.
-- All dashboard inputs default to an empty slate, leaving your shell processes unmanipulated until target constraints are declared.
+## 🚀 Key Features
+
+* **Dynamic WinUI Interception:** Dynamically intercepts modern Windows 11 components using native WinRT interface hooks.
+* **Fluent Design Overrides:** Allows customization of transparency, borders, padding, and layout geometry directly within the shell.
+* **Isolated Thread Execution:** Handles initialization in dedicated background hooks to prevent the main UI thread from freezing during shell element updates.
+* **Targeted Inclusions:** Only applies changes to chosen shell behaviors, ensuring classic Win32 dialogs and independent background helper tools remain completely untouched.
+
+---
+
+## 🛠️ How It Works
+
+1. **Process Targeting:** The mod initializes during the startup phase of the target process (e.g., when the Windows Start Menu or Taskbar loads).
+2. **API Hooking:** It establishes specialized callbacks via the [Windhawk API Engine](https://github.com) to listen for the activation of XAML and UI elements.
+3. **Runtime Injection:** As Windows renders its standard user interface, this code injects updated parameter attributes, overriding layout configurations on the fly.
+
+---
+
+## 📋 Instructions
+
+Follow these steps to safely load, configure, and apply the WinUI modifications:
+
+### 1. Installation
+* Open the **Windhawk** application interface.
+* Navigate to the **Developer Center** and click **Create New Mod**.
+* Paste this entire source code into the editor and click **Compile**.
+* Once compiled, click **Save and Run** to initialize the injector hooks.
+
+### 2. Configuration (If Applicable)
+* Go to the mod's details page within Windhawk.
+* Open the **Settings** tab to adjust parameters such as transparency behaviors, custom window padding, or target class identifiers.
+* Click **Save Settings** to push changes directly into memory.
+
+### 3. Applying Changes (Shell Refresh)
+* Most modern XAML components (like the Start Menu or Notification center) apply changes immediately upon their next launch.
+* If a visual style does not update immediately, you must restart the target process.
+* To refresh the taskbar, open Windhawk's *Advanced* properties or Windows Task Manager and safely restart `explorer.exe`.
+
+### 4. Temporary Unloading
+* If you experience unexpected desktop flickering, simply toggle the mod to **Disabled** in Windhawk.
+* This removes the runtime hooks and immediately restores default Windows 11 Shell rendering without requiring a full system reboot.
+
+---
+
+## ⚡ Performance & Stability
+
+This mod has been optimized for low-latency background execution. Memory consumption remains minimal because styles are applied passively at initialization rather than through intensive polling loops. 
+
+---
+
+## 🔍 Troubleshooting & Verification
+
+If customized UI panels fail to appear as intended, verify the following properties:
+* Check that **Debug Logging** is turned on under the mod's *Advanced Tab* inside Windhawk to inspect execution callbacks.
+* Ensure Windows Update has not altered standard runtime symbols; if it has, allow Windhawk a few minutes to fetch the latest debugging symbols automatically.
+* Double-check for collisions if you have other third-party custom taskbar or desktop styling suites concurrently enabled.
 */
 // ==/WindhawkModReadme==
+
+
 
 // ==WindhawkModSettings==
 /*
