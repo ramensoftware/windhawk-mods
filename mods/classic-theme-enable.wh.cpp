@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.2.4
+// @version         1.2.5
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -76,11 +76,7 @@ to mitigate this.
 9. Some windows will manifest the unwanted transparency. 
 To fix this, install the [*Classic theme transparency fix*](https://windhawk.net/mods/classic-theme-transparency-fix) mod.
 
-10. On Windows 11 22H2 and later it is recommended to install the mod 
-[*Explorerframe fixes for Win11 22H2+*](https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus) 
-and enable all options in its settings. The mod does not restore the menubar on Windows versions
-24H2 and later, so you have to install in addition the following mod:
-[*Restore folder menubar in 24h2, 25h2*](https://windhawk.net/mods/restore-folder-menubar-25h2).
+10. On Windows 11 22H2 and later it is recommended to install the mod [*ExplorerFrame and menubar fixes fork*](https://windhawk.net/mods/restore-folder-menubar-25h2).
 
 11. To fix the empty context menus in Explorer, install the mods
 [*Disable Immersive Context Menus*](https://windhawk.net/mods/disable-immersive-context-menus),
