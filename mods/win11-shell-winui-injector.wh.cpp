@@ -17,24 +17,89 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 11 Shell WinUI Injector
+# 🛠️ Windows 11 Shell WinUI Injector
 
-This framework offers fully isolated configuration environments to target live XAML/WinUI nodes across the principal layout wrappers of the Windows 11 shell interface.
+An advanced operational framework designed to provide low-friction, runtime
+memory overrides for modern XAML and WinUI elements inside core Windows 11
+system interface spaces.
 
-## Supported Shell Processes
-- **StartMenuExperienceHost.exe:** Native Start Menu layout engine.
-- **SearchHost.exe:** Modern taskbar Search layout canvas.
-- **SearchApp.exe:** Legacy or enterprise localized Search index panel.
-- **LockApp.exe:** Interactive Windows Lock Screen panel.
-- **ShellExperienceHost.exe:** Universal host process governing the **Notification Center** and **Action Center** (Quick Settings) layout flyouts.
-- **explorer.exe:** System core workspace governing the Windows **Taskbar** and **File Explorer**.
+---
 
-## UI Usage Guide
-Each shell process has its own dedicated settings category block to prevent configuration cross-contamination.
-- **Add Target Item:** Instantiates a target monitoring frame bound to a specific runtime XAML class name (e.g., `ScrollViewer`).
-- **Add Option Submenu:** Appends a layout property definition (e.g., `Margin`) chained exclusively to that element.
-- **Add Value Box:** Appends an additional variable box inside a specific property submenu, providing full compatibility with multi-argument parameters.
-- All dashboard inputs default to an empty slate, leaving your shell processes unmanipulated until target constraints are declared.
+### 📋 What the Mod Does
+
+Modern Windows 11 builds assemble critical desktop targets—such as the
+**Taskbar**, **Start Menu**, **Notification Center**, and **Quick Settings**
+flyouts—using the **Windows UI Library (WinUI)** engine interpreted via raw XAML
+parameters.
+
+This mod dynamically intercepts the instantiation path of these components to
+execute the following goals:
+* 🖌️ **Overwrites Layout Schemas:** Alters hardcoded sizing defaults, custom
+margins, dynamic padding configurations, and corner rounding.
+* 🌌 **Alters Alpha/Material Blending:** Overrides background opacity behaviors,
+Mica effects, and acrylic transparency limits.
+* 🎭 **Injects Dynamic Resources:** Weaves custom themes and programmatic
+definitions directly into the runtime active application visual trees.
+* 🛡️ **Preserves Original Files:** Leaves underlying system binaries entirely
+untouched on your storage media.
+
+---
+
+### ⚙️ How It Works
+
+[ Windhawk Injection Core ]
+│├──► Target: explorer.exe (Taskbar, Desktop, Tray)
+│├──► Target: StartMenuExperienceHost.exe (Start Menu UI)
+│└──► Target: ShellExperienceHost.exe (Flyouts, Notifications)
+
+1. **Process Anchoring:** The mod evaluates execution profiles, hooking
+immediately into `explorer.exe`, `StartMenuExperienceHost.exe`, and
+`ShellExperienceHost.exe` as they initialize workspace frames.
+2. **Resource Dictionary Interception:** The hook logic safely monitors standard
+asset loading events and mutates the incoming resource streaming queue to splice
+in modifications.
+3. **Volatile Memory Alteration:** Property changes update properties cleanly
+inside localized memory space without any permanent disk writes.
+4. **Clean Detachment Loop:** Terminating or pausing the script from the
+Windhawk manager cleanly updates UI targets back to native Windows
+configurations.
+
+---
+
+### 🚀 Usage Instructions
+
+#### 1️⃣ Environment Requirements
+* You must run a modern iteration of the Windows 11 Operating System.
+* Ensure you are running an authorized administrative deployment of the
+[Windhawk Engine](https://windhawk.net).
+
+#### 2️⃣ Installation Workflow
+1. Launch your primary **Windhawk** controller instance.
+2. Direct your viewport toward the **Explore** hub accessible from the primary
+task line.
+3. Locate the `Windows 11 Shell WinUI Injector` page.
+4. Select the **Details** menu node, then trigger the **Install** mechanism.
+
+#### 3️⃣ Configuring Visual Themes
+1. Shift your focus to the mod's explicit **Settings** configuration panel
+within Windhawk.
+2. Locate the designated configuration fields (such as entering structural
+layout parameters or enabling targeted feature parameters).
+3. Select **Save Changes** to commit parameters. The framework will signal
+target process threads to re-evaluate properties immediately.
+
+---
+
+### ⚠️ Recovery & Troubleshooting
+
+* 🛑 **Target Alignment Breakage:** Minor Windows Feature Experience Updates can
+change target internal string tags. If modifications drop unexpectedly, navigate
+to the **Advanced** control sub-tab in Windhawk and escalate **Debug logging**
+to *Detailed debug logs* to view resource identification errors.
+* 🔄 **Emergency Safe Start:** If structural errors result in a system
+environment crash loop, hold down the physical `Shift` key while initializing
+the Windhawk engine interface to bypass standard initialization loops and safely
+strip the broken layout definitions.
 */
 // ==/WindhawkModReadme==
 
