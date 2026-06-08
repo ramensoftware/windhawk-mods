@@ -6399,13 +6399,12 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags
             }
         }
         if (isCandidate) {
-            // Taskbar.View.dll, SystemTray.dll, ExplorerExtensions.dll
-            WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+            WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
                 {LR"(void __cdecl TrayUI_StartTaskbar(void *))"},
                 &TrayUI_StartTaskbar_Original,
                 TrayUI_StartTaskbar_Hook,
             }};
-            if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
+            if (WindhawkUtils::HookSymbols(h, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks))) {
                 g_taskbarViewDllLoaded = true;
                 Wh_ApplyHookOperations();
             }
