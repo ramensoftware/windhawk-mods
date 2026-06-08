@@ -66,7 +66,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
       - "tray_before_omni_left": "Tray - Left of Network/Volume button"
       - "tray_before_omni_right": "Tray - Right of Network/Volume button"
       - "tray_language_left": "Tray - Left of Language button"
-      - "tray_language_right": "Tray - Left of Language button"
+      - "tray_language_right": "Tray - Right of Language button"
       - "tray_icons_left": "Tray - Left of Tray Icons"
       - "tray_icons_right": "Tray - Right of Tray Icons"
       - "tray_hidden_icons_left": "Tray - Left of Hidden icons button"
