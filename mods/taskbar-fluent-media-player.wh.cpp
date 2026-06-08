@@ -6453,24 +6453,26 @@ static bool HookTaskbarViewDllSymbols(HMODULE h) {
     }
 
     Wh_Log(L"HookTaskbarViewDllSymbols: First signature failed, trying alternative");
-    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks2[] = {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{LR"(void __cdecl TrayUI_StartTaskbar(struct WINAPI *))"},
          &TrayUI_StartTaskbar_Original,
          TrayUI_StartTaskbar_Hook},
     };
-    if (WindhawkUtils::HookSymbols(h, systemTrayDllHooks2, ARRAYSIZE(systemTrayDllHooks2))) {
+    if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked TrayUI_StartTaskbar (alt signature)");
         g_taskbarViewDllLoaded = true;
         return true;
     }
 
     Wh_Log(L"HookTaskbarViewDllSymbols: All signatures failed, falling back to IconView hook");
-    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks3[] = {{
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK hooks2[] = {{
         {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
         &IconView_IconView_Original,
         IconView_IconView_Hook,
     }};
-    if (WindhawkUtils::HookSymbols(h, systemTrayDllHooks3, ARRAYSIZE(systemTrayDllHooks3))) {
+    if (WindhawkUtils::HookSymbols(h, hooks2, ARRAYSIZE(hooks2))) {
         Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked IconView::IconView as fallback");
         g_taskbarViewDllLoaded = true;
         return true;
