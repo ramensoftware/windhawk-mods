@@ -42,15 +42,15 @@ Each shell process has its own dedicated settings category block to prevent conf
 /*
 - StartMenuTargets:
     - - TargetElement: ""
-        $name: Start Menu WinUI Target
+        $name: Target
         $description: "XAML element name to intercept inside the Start Menu process."
       - Options:
           - - PropertyName: ""
-              $name: Submenu Property Name
+              $name: Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Submenu Property Value
+                    $name: Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -58,15 +58,15 @@ Each shell process has its own dedicated settings category block to prevent conf
 
 - SearchHostTargets:
     - - TargetElement: ""
-        $name: Search Host WinUI Target
+        $name: Target
         $description: "XAML element name to intercept inside the modern Search panel process."
       - Options:
           - - PropertyName: ""
-              $name: Submenu Property Name
+              $name: Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Submenu Property Value
+                    $name: Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -74,15 +74,15 @@ Each shell process has its own dedicated settings category block to prevent conf
 
 - SearchAppTargets:
     - - TargetElement: ""
-        $name: Search App WinUI Target
+        $name: Target
         $description: "XAML element name to intercept inside the SearchApp process."
       - Options:
           - - PropertyName: ""
-              $name: Submenu Property Name
+              $name: Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Submenu Property Value
+                    $name: Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -90,15 +90,15 @@ Each shell process has its own dedicated settings category block to prevent conf
 
 - LockAppTargets:
     - - TargetElement: ""
-        $name: Lock Screen WinUI Target
+        $name: Target
         $description: "XAML element name to intercept inside the Lock Screen interface process."
       - Options:
           - - PropertyName: ""
-              $name: Submenu Property Name
+              $name: Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Submenu Property Value
+                    $name: Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -106,15 +106,15 @@ Each shell process has its own dedicated settings category block to prevent conf
 
 - ShellExperienceTargets:
     - - TargetElement: ""
-        $name: Action/Notification Center Target
+        $name: Target
         $description: "XAML element name to intercept inside the Notification Center and Action Center process."
       - Options:
           - - PropertyName: ""
-              $name: Submenu Property Name
+              $name: Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Submenu Property Value
+                    $name: Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
@@ -122,15 +122,15 @@ Each shell process has its own dedicated settings category block to prevent conf
 
 - ExplorerTargets:
     - - TargetElement: ""
-        $name: Taskbar/File Explorer Target
+        $name: Target
         $description: "XAML element name to intercept inside the Taskbar and File Explorer workspace."
       - Options:
           - - PropertyName: ""
-              $name: Submenu Property Name
+              $name: Property Name
               $description: "The specific layout property handle to modify."
             - PropertyValues:
                 - - ValueString: ""
-                    $name: Submenu Property Value
+                    $name: Property Value
                     $description: "An individual value parameter bound to this property."
               $name: Property Values Array
         $name: Property Options Submenu
