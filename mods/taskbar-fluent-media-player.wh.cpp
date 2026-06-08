@@ -6399,14 +6399,39 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags
             }
         }
         if (isCandidate) {
+            Wh_Log(L"LoadLibraryExW_Hook: Found candidate module: %s", base);
             WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
                 {LR"(void __cdecl TrayUI_StartTaskbar(void *))"},
                 &TrayUI_StartTaskbar_Original,
                 TrayUI_StartTaskbar_Hook,
             }};
             if (WindhawkUtils::HookSymbols(h, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks))) {
+                Wh_Log(L"LoadLibraryExW_Hook: Successfully hooked TrayUI_StartTaskbar");
                 g_taskbarViewDllLoaded = true;
                 Wh_ApplyHookOperations();
+
+                // TrayUI_StartTaskbar was already called, manually initialize
+                HWND hWnd = FindCurrentProcessTaskbarWnd();
+                if (hWnd && !g_playerGrid) {
+                    Wh_Log(L"LoadLibraryExW_Hook: TrayUI_StartTaskbar already called, manually initializing");
+                    g_taskbarWnd = hWnd;
+                    RunFromWindowThread(hWnd, [](void*) {
+                        ApplySettings();
+                    }, nullptr);
+                }
+            } else {
+                Wh_Log(L"LoadLibraryExW_Hook: Failed to hook, trying fallback");
+                // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+                WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+                    {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
+                    &IconView_IconView_Original,
+                    IconView_IconView_Hook,
+                }};
+                if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
+                    Wh_Log(L"LoadLibraryExW_Hook: Successfully hooked IconView::IconView as fallback");
+                    g_taskbarViewDllLoaded = true;
+                    Wh_ApplyHookOperations();
+                }
             }
         }
     }
@@ -6558,9 +6583,14 @@ void Wh_ModAfterInit() {
 
     Wh_Log(L"Wh_ModAfterInit: Starting initialization");
 
-    if (!g_taskbarViewDllLoaded)
-        if (HMODULE h = GetTaskbarViewModule())
+    if (!g_taskbarViewDllLoaded) {
+        Wh_Log(L"Wh_ModAfterInit: TaskbarView not loaded yet, attempting to hook");
+        if (HMODULE h = GetTaskbarViewModule()) {
             HookTaskbarViewDllSymbols(h);
+        } else {
+            Wh_Log(L"Wh_ModAfterInit: TaskbarView module still not found");
+        }
+    }
 
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
     Wh_Log(L"Wh_ModAfterInit: Taskbar window = %p", g_taskbarWnd);
@@ -6572,6 +6602,7 @@ void Wh_ModAfterInit() {
     Wh_Log(L"Wh_ModAfterInit: Timer thread started");
 
     if (g_taskbarWnd) {
+        Wh_Log(L"Wh_ModAfterInit: Found taskbar window, running ApplySettings from window thread");
         RunFromWindowThread(g_taskbarWnd, [](void*) {
             Wh_Log(L"Wh_ModAfterInit: Inside window thread callback");
             ApplySettings();
