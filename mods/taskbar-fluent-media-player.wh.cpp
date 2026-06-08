@@ -2,7 +2,8 @@
 // @id              taskbar-fluent-media-player
 // @name            Taskbar Fluent Media Player
 // @description     Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
-// @version         1.1.0
+// @description:ru-RU Taskbar Fluent Media Player — это мод Windhawk, который интегрирует современный медиаплеер в стиле Fluent Design прямо в панель задач Windows 11. Он позволяет управлять музыкой и просматривать информацию о треке без прерывания работы.
+// @version         1.2.0
 // @author          Salyts
 // @github          https://github.com/Salyts
 // @include         explorer.exe
@@ -11,9 +12,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Fluent Media Player 1.1.0
+# Taskbar Fluent Media Player 1.2.0
 
 **Taskbar Fluent Media Player —** is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
+
+### [> Russian documentation <](https://github.com/Salyts/Taskbar-Fluent-Media-Player/blob/main/README_RU.md)
 
 ![img](https://i.imgur.com/S5vQyUa.png)
 
@@ -41,80 +44,132 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
 /*
 - MainSettings:
   - PlayerSetting:
-    - position: "taskbar_left_edge"
+    - position: "tray_left"
       $name: Media player position
+      $name:ru-RU: Расположение медиаплеера
       $options:
-      - "taskbar_left_edge": "Taskbar - far edge (Overlay) - Left"
-      - "taskbar_center_edge": "Taskbar - far edge (Overlay) - Center"
-      - "taskbar_right_edge": "Taskbar - far edge (Overlay) - Right"
-      - "taskbar_left_start": "Taskbar - Start button - Left"
-      - "taskbar_right_start": "Taskbar - Start button - Right"
-      - "taskbar_after_search_left": "Taskbar - Search button - Left"
-      - "taskbar_after_search_right": "Taskbar - Search button - Right"
-      - "taskbar_after_taskview_left": "Taskbar - Task View button - Left"
-      - "taskbar_after_taskview_right": "Taskbar - Task View button - Right"
-      - "taskbar_after_widgets_left": "Taskbar - Widgets button - Left"
-      - "taskbar_after_widgets_right": "Taskbar - Widgets button - Right"
-      - "tray_left": "Tray - Far edge - Left"
-      - "tray_right": "Tray - Far edge - Right"
-      - "tray_before_clock": "Tray - Clock - Left"
-      - "tray_after_clock": "Tray - Clock - Right"
-      - "tray_before_omni_left": "Tray - Network/volume - Left"
-      - "tray_before_omni_right": "Tray - Network/volume - Right"
-      - "tray_language_left": "Tray - Language button - Left"
-      - "tray_language_right": "Tray - Language button - Right"
-      - "tray_hidden_icons_left": "Tray - Hidden icons button - Left"
-      - "tray_hidden_icons_right": "Tray - Hidden icons button - Right"
-      - "tray_icons_left": "Tray - Icons - Left"
-      - "tray_icons_right": "Tray - Icons - Right"
-      - "tray_after_showdesktop_left": "Tray - Show Desktop - Left"
-      - "tray_after_showdesktop_right": "Tray - Show Desktop - Right"
+      - "taskbar_left_edge": "Taskbar - Left edge (Overlay)"
+      - "taskbar_center_edge": "Taskbar - Center (Overlay)"
+      - "taskbar_right_edge": "Taskbar - Right edge (Overlay)"
+      - "taskbar_left_start": "Taskbar - Left of Start button"
+      - "taskbar_right_start": "Taskbar - Right of Start button"
+      - "taskbar_after_search_left": "Taskbar - Left of Search button"
+      - "taskbar_after_search_right": "Taskbar - Right of Search button"
+      - "taskbar_after_taskview_left": "Taskbar - Left of Task View button"
+      - "taskbar_after_taskview_right": "Taskbar - Right of Task View button"
+      - "taskbar_after_widgets_left": "Taskbar - Left of Widgets button"
+      - "taskbar_after_widgets_right": "Taskbar - Right of Widgets button"
+      - "tray_left": "Tray - Far left"
+      - "tray_right": "Tray - Far right"
+      - "tray_before_clock": "Tray - Left of Clock"
+      - "tray_after_clock": "Tray - Right of Clock"
+      - "tray_before_omni_left": "Tray - Left of Network/Volume button"
+      - "tray_before_omni_right": "Tray - Right of Network/Volume button"
+      - "tray_language_left": "Tray - Left of Language button"
+      - "tray_language_right": "Tray - Left of Language button"
+      - "tray_icons_left": "Tray - Left of Tray Icons"
+      - "tray_icons_right": "Tray - Right of Tray Icons"
+      - "tray_hidden_icons_left": "Tray - Left of Hidden icons button"
+      - "tray_hidden_icons_right": "Tray - Right of Hidden icons button"
+      - "tray_after_showdesktop_left": "Tray - Left of Show Desktop"
+      - "tray_after_showdesktop_right": "Tray - Right of Show Desktop"
+      $options:ru-RU:
+      - "taskbar_left_edge": "Панель задач - Левый край (оверлей)"
+      - "taskbar_center_edge": "Панель задач - Центр (оверлей)"
+      - "taskbar_right_edge": "Панель задач - Правый край (оверлей)"
+      - "taskbar_left_start": "Панель задач - Слева от кнопки Пуск"
+      - "taskbar_right_start": "Панель задач - Справа от кнопки Пуск"
+      - "taskbar_after_search_left": "Панель задач - Слева от кнопки Поиск"
+      - "taskbar_after_search_right": "Панель задач - Справа от кнопки Поиск"
+      - "taskbar_after_taskview_left": "Панель задач - Слева от кнопки Представление задач"
+      - "taskbar_after_taskview_right": "Панель задач - Справа от кнопки Представление задач"
+      - "taskbar_after_widgets_left": "Панель задач - Слева от кнопки Мини-приложения"
+      - "taskbar_after_widgets_right": "Панель задач - Справа от кнопки Мини-приложения"
+      - "tray_left": "Трей - Край слева"
+      - "tray_right": "Трей - Край справа"
+      - "tray_before_clock": "Трей - Слева от часов"
+      - "tray_after_clock": "Трей - Справа от часов"
+      - "tray_before_omni_left": "Трей - Слева от кнопки Сеть/Громкость"
+      - "tray_before_omni_right": "Трей - Справа от кнопки Сеть/Громкость"
+      - "tray_language_left": "Трей - Слева от кнопки языка"
+      -  "tray_language_right": "Трей - Справа от кнопки языка"
+      - "tray_icons_left": "Трей - Слева от значков области уведомлений"
+      - "tray_icons_right": "Трей - Справа от значков области уведомлений"
+      - "tray_hidden_icons_left": "Трей - Слева от скрытых значков"
+      - "tray_hidden_icons_right": "Трей - Справа от скрытых значков"
+      - "tray_after_showdesktop_left": "Трей - Слева от кнопки Показать рабочий стол"
+      - "tray_after_showdesktop_right": "Трей - Справа от кнопки Показать рабочий стол"
     - playerWidth: "0 0"
-      $name: Media player width ↔ (min max, px, 0 = no limit)
+      $name: Media player width (min max)
+      $name:ru-RU: Ширина медиаплеера (min max)
+      $description: The first number is the minimum size, and the second is the maximum. You can also set it to 0, which means no limit.
+      $description:ru-RU: Первая цифра — это минимальный размер, а вторая — максимальный. Также можно указать 0 — это без лимита.
     - playerHeight: "40 40"
-      $name: Media player height ↕ (min max, px, 0 = no limit)
+      $name: Media player height (min max)
+      $name:ru-RU: Высота медиаплеера (min max)
     - playerMargin: "4 4"
-      $name: Media player margin ↔ (left right, px)
+      $name: Media player margin (left right)
+      $name:ru-RU: Отступ медиаплеера (left right)
+      $description: The first number is the distance to the left, and the second is to the right.
+      $description:ru-RU: Первая цифра — это расстояние влево, а вторая — вправо.
     - mirrorLayout: false
-      $name: Mirror layout (flip album art, text, and buttons to opposite sides)
+      $name: Mirror layout
+      $name:ru-RU: Зеркальное расположение
+      $description: Album art, text, and buttons will be displayed on the opposite side
+      $description:ru-RU: Обложка альбома, текст и кнопки будут отображаться с противоположной стороны
     $name: Media player
+    $name:ru-RU: Медиаплеер
 
   - AlbumArtSetting:
     - showAlbumArt: true
       $name: Show album art
+      $name:ru-RU: Отображать обложку альбома
     - albumArtWidth: "32 64"
-      $name: Album art width ↔ (min max, px)
+      $name: Album art width (min max)
+      $name:ru-RU: Ширина обложки альбома (min max)
     - albumArtHeight: "32 32"
-      $name: Album art height ↕ (min max, px)
+      $name: Album art height (min max)
+      $name:ru-RU: Высота обложки альбома (min max)
     - albumArtMargin: "0 0"
-      $name: Album art margin ↔ (left right, px)
+      $name: Album art margin (left right)
+      $name:ru-RU: Отступ обложки альбома (left right)
     $name: Album Art
+    $name:ru-RU: Обложка альбома
 
   - TextAreaSetting:
     - showTrackTitle: true
       $name: Show track title
+      $name:ru-RU: Отображать название трека
     - showTrackArtist: true
       $name: Show artist name
+      $name:ru-RU: Отображать имя исполнителя
     - swapTitleArtist: false
       $name: Swap artist name and track title
-      $description: >-
-        When enabled, the artist name is displayed above the track title instead of below it.
+      $name:ru-RU: Поменять местами название трека и имя исполнителя
     - textAreaWidth: "0 120"
-      $name: Text area width ↔ (min max, px, 0 = no limit)
+      $name: Text area width (min max)
+      $name:ru-RU: Ширина текстовой области (min max)
     - textAreaHeight: "0 0"
-      $name: Text area height ↕ (min max, px, 0 = no limit)
+      $name: Text area height (min max)
+      $name:ru-RU: Высота текстовой области (min max)
     - textAreaMargin: "5 5"
-      $name: Text area margin ↔ (left right, px)
+      $name: Text area margin (left right)
+      $name:ru-RU: Отступ текстовой области (left right)
     - textSpacing: 1
-      $name: Spacing between title and artist (px)
+      $name: Spacing between title and artist
+      $name:ru-RU: Отступ между названием и исполнителем
     $name: Text area
+    $name:ru-RU: Текстовая область
 
   - MediaButtonsSettings:
     - showMediaButtons: true
       $name: Show media buttons
+      $name:ru-RU: Отображать кнопки управления
     - mediaButtons: [prev, play, next]
       $name: Media buttons order
+      $name:ru-RU: Расположение кнопок управления
       $description: Select which media control buttons to display and their order. Duplicates are ignored.
+      $description:ru-RU: Выберите, какие кнопки управления воспроизведением отображать, а также их порядок. Дубликаты игнорируются.
       $options:
       - prev: Previous
       - play: Play/Pause
@@ -123,392 +178,678 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
       - forward: Forward 5s
       - shuffle: Shuffle
       - repeat: Repeat
+      $options:ru-RU:
+      - prev: Предыдущий
+      - play: Воспроизведение/Пауза
+      - next: Следующий
+      - rewind: Перемотка назад 5 сек
+      - forward: Перемотка вперёд 5 сек
+      - shuffle: Случайный порядок
+      - repeat: Повтор
     - mediaButtonsMargin: "2 2"
-      $name: Media buttons margin (left right, px)
+      $name: Media buttons margin (left right)
+      $name:ru-RU: Отступ кнопок управления (left right)
     - buttonSpacing: 0
-      $name: Spacing between media buttons (px)
+      $name: Spacing between media buttons
+      $name:ru-RU: Расстояние между кнопками управления
     - buttonSize: 28
-      $name: Button size (px)
+      $name: Button size
+      $name:ru-RU: Размер кнопок управления
     - buttonIconSize: 12
-      $name: Button icon size (px)
+      $name: Button icon size
+      $name:ru-RU: Размер иконок кнопок
     - hideUnsupportedButtons: false
       $name: Hide unsupported buttons
-      $description: >-
-        When enabled, buttons for actions not supported by the current media session
-        (Repeat, Shuffle, Next, Previous, Forward 5s, Rewind 5s) are completely hidden
-        instead of shown as disabled (greyed out). Disabled by default.
+      $name:ru-RU: Скрывать неподдерживаемые кнопки
+      $description: When enabled, buttons for actions not supported by the current media session are completely hidden instead of shown as disabled.
+      $description:ru-RU: Когда включено, кнопки действий, не поддерживаемых текущей медиа-сессией, полностью скрываются вместо отображения в неактивном состоянии.
     $name: Media Buttons
+    $name:ru-RU: Кнопки управления
   $name: Main Settings
+  $name:ru-RU: Основные настройки
 
 - AppearanceSettings:
   - BackgroundStyleSettings:
     - backgroundType: "none"
       $name: Background type
+      $name:ru-RU: Тип фона
       $options:
-      - "none":       "None (transparent)"
-      - "solid":      "Solid color"
-      - "gradient":   "Gradient"
-      - "acrylic":    "Acrylic"
-      - "mica":       "Mica"
-      - "mica_alt":   "Mica Alt"
-      - "album_art_blur": "Album art - Blur"
+      - "none":           "None (transparent)"
+      - "solid":          "Solid color"
+      - "gradient":       "Gradient"
+      - "acrylic":        "Acrylic"
+      - "mica":           "Mica"
+      - "mica_alt":       "Mica Alt"
+      - "album_art_blur": "Blurred album cover"
+      $options:ru-RU:
+      - "none":           "Нет (прозрачный)"
+      - "solid":          "Сплошной цвет"
+      - "gradient":       "Градиент"
+      - "acrylic":        "Акрил"
+      - "mica":           "Mica"
+      - "mica_alt":       "Mica Alt"
+      - "album_art_blur": "Размытая обложка альбома"
     - solidColor: "35 35 35"
-      $name: Primary color (R G B 0-255)
-      $description: "Use '-1 -1 -1' for system contrast color, '-2 -2 -2' for album art color"
+      $name: Primary color (RGB)
+      $name:ru-RU: Основной цвет (RGB)
+      $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color"
+      $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома."
     - solidColor2: "128 128 128"
-      $name: Secondary color for gradient (R G B 0-255)
-      $description: "Use '-1 -1 -1' for system contrast color, '-2 -2 -2' for album art color"
+      $name: Secondary color for gradient (RGB)
+      $name:ru-RU: Вторичный цвет для градиента (RGB)
+      $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color"
+      $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома."
     - solidOpacity: 100
       $name: Solid color opacity (0-100)
+      $name:ru-RU: Прозрачность сплошного цвета (0-100)
     - gradientAngle: 50
       $name: Gradient rotation angle (0-360)
+      $name:ru-RU: Угол поворота градиента (0-360)
     - gradientBalance: 50
       $name: Gradient color balance (0-100)
+      $name:ru-RU: Градиентный цветовой баланс (0-100)
     - acrylicTintOpacity: 50
       $name: Acrylic tint opacity (0-100)
+      $name:ru-RU: Прозрачность акрилового оттенка (0-100)
     - micaOpacity: 50
       $name: Mica/Mica Alt opacity (0-100)
+      $name:ru-RU: "'Mica/Mica Alt' прозрачность (0-100)"
     - blurOpacity: 65
       $name: Album art blur opacity (0-100)
+      $name:ru-RU: "'Размытая обложка альбома' прозрачность (0-100)"
     - blurRadius: 11
       $name: Album art blur strength (1-50)
+      $name:ru-RU: "'Размытая обложка альбома' Сила размытия (1-50)"
     - cornerRadius: 4
-      $name: Panel corner radius (px)
+      $name: Media player corner radius
+      $name:ru-RU: Радиус скругления медиаплеера
     - enablePlayerHoverEffect: "auto"
       $name: Player hover effect
+      $name:ru-RU: Эффект при наведении на плеер
       $options:
-      - "auto": "Auto (theme changes automatically)"
+      - "auto":  "Auto (theme changes automatically)"
       - "black": "Black"
       - "white": "White"
-      - "off": "Off"
+      - "off":   "Disable hover effect"
+      $options:ru-RU:
+      - "auto":  "Авто (тема изменяется автоматически)"
+      - "black": "Чёрный"
+      - "white": "Белый"
+      - "off":   "Выключить эффект наведения"
     - enableMediaButtonsHoverEffect: "auto"
       $name: Media buttons hover effect
+      $name:ru-RU: Эффект при наведении на кнопки управления
       $options:
-      - "auto": "Auto (theme changes automatically)"
+      - "auto":  "Auto (theme changes automatically)"
       - "black": "Black"
       - "white": "White"
-      - "off": "Off"
+      - "off":   "Disable hover effect"
+      $options:ru-RU:
+      - "auto":  "Авто (тема изменяется автоматически)"
+      - "black": "Чёрный"
+      - "white": "Белый"
+      - "off":   "Выключить эффект наведения"
     $name: Background Style
+    $name:ru-RU: Стиль фона
 
   - MediaButtonsStyleSettings:
     - autoTheme: true
-      $name: Enable auto theme
-      $description: >-
-        When enabled, the text color (track title, artist name) and button icon color
-        automatically switch between light and dark variants to match the current Windows
-        color theme. Has no effect on hover effects — those are controlled separately by
-        "Player hover effect" and "Media buttons hover effect".
+      $name: Auto theme
+      $name:ru-RU: Автоматическая тема
+      $description: "When enabled, the text color (track title, artist name) and button icon color automatically switch between light and dark variants to match the current Windows color theme."
+      $description:ru-RU: "Когда включено, цвет текста (название трека, имя исполнителя) и иконок кнопок автоматически переключается между светлым и тёмным вариантами в соответствии с текущей темой Windows."
     - iconStyle: "fluent_outline"
       $name: Icon style
+      $name:ru-RU: Вид иконок
       $options:
       - "fluent_outline": "Segoe Fluent Icons (Outline)"
-      - "fluent_filled": "Segoe Fluent Icons (Filled)"
-      - "mdl2_outline": "Segoe MDL2 Assets (Outline)"
-      - "mdl2_filled": "Segoe MDL2 Assets (Filled)"
+      - "fluent_filled":  "Segoe Fluent Icons (Filled)"
+      - "mdl2_outline":   "Segoe MDL2 Assets (Outline)"
+      - "mdl2_filled":    "Segoe MDL2 Assets (Filled)"
+      $options:ru-RU:
+      - "fluent_outline": "Segoe Fluent Icons (Контур)"
+      - "fluent_filled":  "Segoe Fluent Icons (Заполненный)"
+      - "mdl2_outline":   "Segoe MDL2 Assets (Контур)"
+      - "mdl2_filled":    "Segoe MDL2 Assets (Заполненный)"
     - buttonCornerRadius: 4
-      $name: Button corner radius (px)
+      $name: Media buttons corner radius
+      $name:ru-RU: Скругление кнопок управления
     - buttonColor: "255 255 255"
-      $name: Button icons color (R G B 0-255)
-      $description: "Use '-1 -1 -1' for system contrast color, '-2 -2 -2' for album art color"
+      $name: Media buttons icons color (RGB)
+      $name:ru-RU: Цвет иконок для кнопок управления (RGB)
+      $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color"
+      $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома."
     - buttonColorOpacity: 100
-      $name: Button icons opacity (0-100)
+      $name: Media buttons icons opacity (0-100)
+      $name:ru-RU: Прозрачность иконок для кнопок управления (0-100)
     $name: Media Buttons Style
+    $name:ru-RU: Стиль кнопок управления
 
   - TitleTextStyleSettings:
     - titleColor: "255 255 255"
-      $name: Title color (R G B 0-255)
-      $description: "Use '-1 -1 -1' for system contrast color, '-2 -2 -2' for album art color"
+      $name: Title color (RGB)
+      $name:ru-RU: Цвет заголовка (RGB)
+      $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color"
+      $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома."
     - titleColorOpacity: 100
       $name: Title opacity (0-100)
+      $name:ru-RU: Прозрачность заголовка (0-100)
     - titleFont: segoe_ui_variable
       $name: Title font
+      $name:ru-RU: Шрифт заголовка
       $options:
-        - segoe_ui_variable: Segoe UI Variable Display
-        - segoe_ui: Segoe UI
-        - aptos: Aptos
-        - calibri: Calibri
-        - cambria: Cambria
-        - candara: Candara
-        - consolas: Consolas
-        - corbel: Corbel
-        - arial: Arial
-        - trebuchet: Trebuchet MS
-        - verdana: Verdana
-        - tahoma: Tahoma
-        - georgia: Georgia
-        - times_new_roman: Times New Roman
-        - custom: Custom...
+      - segoe_ui_variable: Segoe UI Variable Display
+      - segoe_ui:          Segoe UI
+      - aptos:             Aptos
+      - calibri:           Calibri
+      - cambria:           Cambria
+      - candara:           Candara
+      - consolas:          Consolas
+      - corbel:            Corbel
+      - arial:             Arial
+      - trebuchet:         Trebuchet MS
+      - verdana:           Verdana
+      - tahoma:            Tahoma
+      - georgia:           Georgia
+      - times_new_roman:   Times New Roman
+      - custom:            Custom...
+      $options:ru-RU:
+      - segoe_ui_variable: Segoe UI Variable Display
+      - segoe_ui:          Segoe UI
+      - aptos:             Aptos
+      - calibri:           Calibri
+      - cambria:           Cambria
+      - candara:           Candara
+      - consolas:          Consolas
+      - corbel:            Corbel
+      - arial:             Arial
+      - trebuchet:         Trebuchet MS
+      - verdana:           Verdana
+      - tahoma:            Tahoma
+      - georgia:           Georgia
+      - times_new_roman:   Times New Roman
+      - custom:            Другой...
     - titleFontSize: 12
       $name: Title font size
+      $name:ru-RU: Размер шрифта заголовка
     - titleFontFamily: ""
       $name: Title font family (for Custom option)
+      $name:ru-RU: Семейство шрифтов заголовка (для варианта «Другой»)
       $description: >-
         For a list of fonts that are shipped with Windows 11, refer to the
         following page:
+        https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
+      $description:ru-RU: >-
+        Список шрифтов, поставляемых с Windows 11, можно найти на следующей странице:
         https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
     - titleFontWeight: ""
       $name: Title font weight
+      $name:ru-RU: Насыщенность шрифта заголовка
       $options:
-      - "": Default
-      - Thin: Thin
-      - ExtraLight: Extra light
-      - Light: Light
-      - SemiLight: Semi light
-      - Normal: Normal
-      - Medium: Medium
-      - SemiBold: Semi bold
-      - Bold: Bold
-      - ExtraBold: Extra bold
-      - Black: Black
-      - ExtraBlack: Extra black
+      - "":          Default
+      - Thin:        Thin
+      - ExtraLight:  Extra light
+      - Light:       Light
+      - SemiLight:   Semi light
+      - Normal:      Normal
+      - Medium:      Medium
+      - SemiBold:    Semi bold
+      - Bold:        Bold
+      - ExtraBold:   Extra bold
+      - Black:       Black
+      - ExtraBlack:  Extra black
+      $options:ru-RU:
+      - "":          По умолчанию
+      - Thin:        Тонкий
+      - ExtraLight:  Очень тонкий
+      - Light:       Тонкий
+      - SemiLight:   Полутонкий
+      - Normal:      Обычный
+      - Medium:      Средний
+      - SemiBold:    Полужирный
+      - Bold:        Жирный
+      - ExtraBold:   Очень жирный
+      - Black:       Чёрный
+      - ExtraBlack:  Сверхчёрный
     - titleFontStyle: ""
       $name: Title font style
+      $name:ru-RU: Стиль шрифта заголовка
       $options:
-      - "": Default
-      - Normal: Normal
-      - Oblique: Oblique
-      - Italic: Italic
+      - "":       Default
+      - Normal:   Normal
+      - Oblique:  Oblique
+      - Italic:   Italic
+      $options:ru-RU:
+      - "":       По умолчанию
+      - Normal:   Обычный
+      - Oblique:  Наклонный
+      - Italic:   Курсив
     - titleCharacterSpacing: 0
       $name: Title character spacing
+      $name:ru-RU: Межсимвольный интервал заголовка
       $description: Can be a positive or a negative number.
+      $description:ru-RU: Может быть положительным или отрицательным числом.
     $name: Title Text Style
+    $name:ru-RU: Стиль текста заголовка
 
   - ArtistTextStyleSettings:
     - artistColor: "255 255 255"
-      $name: Artist color (R G B 0-255)
+      $name: Artist color (RGB)
+      $name:ru-RU: Цвет имени исполнителя (RGB)
       $description: "Use '-1 -1 -1' for system contrast color, '-2 -2 -2' for album art color"
+      $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома."
     - artistColorOpacity: 80
       $name: Artist opacity (0-100)
+      $name:ru-RU: Прозрачность имени исполнителя (0-100)
     - artistFont: segoe_ui_variable
       $name: Artist font
+      $name:ru-RU: Шрифт имени исполнителя
       $options:
-        - segoe_ui_variable: Segoe UI Variable Display
-        - segoe_ui: Segoe UI
-        - aptos: Aptos
-        - calibri: Calibri
-        - cambria: Cambria
-        - candara: Candara
-        - consolas: Consolas
-        - corbel: Corbel
-        - arial: Arial
-        - trebuchet: Trebuchet MS
-        - verdana: Verdana
-        - tahoma: Tahoma
-        - georgia: Georgia
-        - times_new_roman: Times New Roman
-        - custom: Custom...
+      - segoe_ui_variable: Segoe UI Variable Display
+      - segoe_ui:          Segoe UI
+      - aptos:             Aptos
+      - calibri:           Calibri
+      - cambria:           Cambria
+      - candara:           Candara
+      - consolas:          Consolas
+      - corbel:            Corbel
+      - arial:             Arial
+      - trebuchet:         Trebuchet MS
+      - verdana:           Verdana
+      - tahoma:            Tahoma
+      - georgia:           Georgia
+      - times_new_roman:   Times New Roman
+      - custom:            Custom...
+      $options:ru-RU:
+      - segoe_ui_variable: Segoe UI Variable Display
+      - segoe_ui:          Segoe UI
+      - aptos:             Aptos
+      - calibri:           Calibri
+      - cambria:           Cambria
+      - candara:           Candara
+      - consolas:          Consolas
+      - corbel:            Corbel
+      - arial:             Arial
+      - trebuchet:         Trebuchet MS
+      - verdana:           Verdana
+      - tahoma:            Tahoma
+      - georgia:           Georgia
+      - times_new_roman:   Times New Roman
+      - custom:            Другой...
     - artistFontSize: 11
       $name: Artist font size
+      $name:ru-RU: Размер шрифта исполнителя
     - artistFontFamily: ""
       $name: Artist font family (for Custom option)
+      $name:ru-RU: Семейство шрифтов исполнителя (для варианта «Другой»)
       $description: >-
         For a list of fonts that are shipped with Windows 11, refer to the
         following page:
         https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
+      $description:ru-RU: >-
+        Список шрифтов, поставляемых с Windows 11, можно найти на следующей странице:
+        https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
     - artistFontWeight: ""
       $name: Artist font weight
+      $name:ru-RU: Насыщенность шрифта исполнителя
       $options:
-      - "": Default
-      - Thin: Thin
-      - ExtraLight: Extra light
-      - Light: Light
-      - SemiLight: Semi light
-      - Normal: Normal
-      - Medium: Medium
-      - SemiBold: Semi bold
-      - Bold: Bold
-      - ExtraBold: Extra bold
-      - Black: Black
-      - ExtraBlack: Extra black
+      - "":          Default
+      - Thin:        Thin
+      - ExtraLight:  Extra light
+      - Light:       Light
+      - SemiLight:   Semi light
+      - Normal:      Normal
+      - Medium:      Medium
+      - SemiBold:    Semi bold
+      - Bold:        Bold
+      - ExtraBold:   Extra bold
+      - Black:       Black
+      - ExtraBlack:  Extra black
+      $options:ru-RU:
+      - "":          По умолчанию
+      - Thin:        Тонкий
+      - ExtraLight:  Очень тонкий
+      - Light:       Тонкий
+      - SemiLight:   Полутонкий
+      - Normal:      Обычный
+      - Medium:      Средний
+      - SemiBold:    Полужирный
+      - Bold:        Жирный
+      - ExtraBold:   Очень жирный
+      - Black:       Чёрный
+      - ExtraBlack:  Сверхчёрный
     - artistFontStyle: ""
       $name: Artist font style
+      $name:ru-RU: Стиль шрифта исполнителя
       $options:
-      - "": Default
-      - Normal: Normal
-      - Oblique: Oblique
-      - Italic: Italic
+      - "":       Default
+      - Normal:   Normal
+      - Oblique:  Oblique
+      - Italic:   Italic
+      $options:ru-RU:
+      - "":       По умолчанию
+      - Normal:   Обычный
+      - Oblique:  Наклонный
+      - Italic:   Курсив
     - artistCharacterSpacing: 0
       $name: Artist character spacing
+      $name:ru-RU: Межсимвольный интервал исполнителя
       $description: Can be a positive or a negative number.
+      $description:ru-RU: Может быть положительным или отрицательным числом.
     $name: Artist Text Style
+    $name:ru-RU: Стиль текста исполнителя
 
   - AlbumArtDisplaySettings:
     - albumArtEmptyBehavior: "show"
       $name: Album art behavior when no cover available
+      $name:ru-RU: Поведение обложки при отсутствии изображения
       $options:
-      - "show": "Show area (default)"
-      - "hide": "Hide area"
+      - "show":          "Show area"
+      - "hide":          "Hide area"
       - "show_question": "Show area with question mark"
-      - "show_note": "Show area with music note"
+      - "show_note":     "Show area with music note"
+      $options:ru-RU:
+      - "show":          "Показать область"
+      - "hide":          "Скрыть область"
+      - "show_question": "Показать область с знаком вопроса"
+      - "show_note":     "Показать область с музыкальной нотой"
     - albumArtQuality: "medium"
       $name: Album art quality
+      $name:ru-RU: Качество обложки альбома
       $options:
-      - "low": "Low (faster, less memory)"
+      - "low":    "Low (faster, less memory)"
       - "medium": "Medium (default)"
-      - "high": "High (best quality)"
+      - "high":   "High (best quality)"
+      $options:ru-RU:
+      - "low":    "Низкое (быстрее, меньше памяти)"
+      - "medium": "Среднее (по умолчанию)"
+      - "high":   "Высокое (наилучшее качество)"
     - showPauseOverlay: true
       $name: Show pause icon overlay on album art when paused
+      $name:ru-RU: Показывать значок паузы на обложке при паузе
     - pauseOverlayOpacity: 60
       $name: Pause overlay background opacity (0-100)
+      $name:ru-RU: Прозрачность фона оверлея паузы (0-100)
     - albumArtOpacity: 100
       $name: Album art opacity (0-100)
+      $name:ru-RU: Прозрачность обложки альбома (0-100)
     - albumArtCornerRadius: 4
-      $name: Album art corner radius (px)
+      $name: Album art corner radius
+      $name:ru-RU: Радиус скругления обложки альбома
     - showAppIcon: false
       $name: Show media app icon overlay
+      $name:ru-RU: Показывать значок медиаприложения поверх обложки
     - appIconCorner: "bottom_right"
       $name: App icon corner
+      $name:ru-RU: Угол размещения значка приложения
       $options:
       - "top_left":     "Top left"
       - "top_right":    "Top right"
       - "bottom_left":  "Bottom left"
       - "bottom_right": "Bottom right"
+      $options:ru-RU:
+      - "top_left":     "Верхний левый"
+      - "top_right":    "Верхний правый"
+      - "bottom_left":  "Нижний левый"
+      - "bottom_right": "Нижний правый"
     - appIconSize: 12
-      $name: App icon size (px)
+      $name: App icon size
+      $name:ru-RU: Размер значка приложения
     $name: Album Art Display
+    $name:ru-RU: Отображение обложки альбома
   $name: Appearance Settings
+  $name:ru-RU: Настройки внешнего вида
 
 - BehaviorSettings:
   - disableAlbumArtClick: false
     $name: Disable album art click (click through to player)
+    $name:ru-RU: Отключить клик по обложке (сквозной клик на плеер)
     $description: When enabled, clicks on the album art will pass through to the player area underneath
+    $description:ru-RU: Когда включено, клики по обложке альбома будут передаваться в область плеера под ней
   - ClickActionSettings:
       - - object: player
           $name: Object
+          $name:ru-RU: Объект
           $options:
-          - none: Nothing
-          - player: Player area
-          - album_art: Album art area
+          - none:       Nothing
+          - player:     Player area
+          - album_art:  Album art area
+          $options:ru-RU:
+          - none:       Ничего
+          - player:     Область плеера
+          - album_art:  Область обложки альбома
         - click: left_click
           $name: Click type
+          $name:ru-RU: Тип клика
           $options:
-          - none: Nothing
-          - left_click: Left click
-          - left_double_click: Left double click
-          - right_click: Right click
-          - right_double_click: Right double click
-          - middle_click: Middle click
+          - none:                Nothing
+          - left_click:          Left click
+          - left_double_click:   Left double click
+          - right_click:         Right click
+          - right_double_click:  Right double click
+          - middle_click:        Middle click
           - middle_double_click: Middle double click
+          $options:ru-RU:
+          - none:                Ничего
+          - left_click:          Левый клик
+          - left_double_click:   Двойной левый клик
+          - right_click:         Правый клик
+          - right_double_click:  Двойной правый клик
+          - middle_click:        Клик средней кнопкой
+          - middle_double_click: Двойной клик средней кнопкой
         - action: play_pause
           $name: Action
+          $name:ru-RU: Действие
           $options:
-          - none: Nothing
-          - switch_session: Switch active media session
-          - play_pause: Play/Pause
-          - next_track: Next track
-          - prev_track: Previous track
-          - stop: Stop playback
-          - rewind_5s: Rewind 5s
-          - forward_5s: Forward 5s
-          - toggle_shuffle: Toggle Shuffle
-          - toggle_repeat: Toggle Repeat
-          - open_app: Open media app
+          - none:            Nothing
+          - switch_session:  Switch active media session
+          - play_pause:      Play/Pause
+          - next_track:      Next track
+          - prev_track:      Previous track
+          - stop:            Stop playback
+          - rewind_5s:       Rewind 5s
+          - forward_5s:      Forward 5s
+          - toggle_shuffle:  Toggle Shuffle
+          - toggle_repeat:   Toggle Repeat
+          - open_app:        Open media app
+          $options:ru-RU:
+          - none:            Ничего
+          - switch_session:  Переключить медиасессию
+          - play_pause:      Воспроизведение/Пауза
+          - next_track:      Следующий трек
+          - prev_track:      Предыдущий трек
+          - stop:            Остановить воспроизведение
+          - rewind_5s:       Перемотка назад 5 сек
+          - forward_5s:      Перемотка вперёд 5 сек
+          - toggle_shuffle:  Случайный порядок
+          - toggle_repeat:   Повтор
+          - open_app:        Открыть медиаприложение
       - - object: album_art
           $name: Object
+          $name:ru-RU: Объект
           $options:
-          - none: Nothing
-          - player: Player area
-          - album_art: Album art area
+          - none:       Nothing
+          - player:     Player area
+          - album_art:  Album art area
+          $options:ru-RU:
+          - none:       Ничего
+          - player:     Область медиаплеера
+          - album_art:  Область обложки альбома
         - click: left_double_click
           $name: Click type
+          $name:ru-RU: Тип клика
           $options:
-          - none: Nothing
-          - left_click: Left click
-          - left_double_click: Left double click
-          - right_click: Right click
-          - right_double_click: Right double click
-          - middle_click: Middle click
+          - none:                Nothing
+          - left_click:          Left click
+          - left_double_click:   Left double click
+          - right_click:         Right click
+          - right_double_click:  Right double click
+          - middle_click:        Middle click
           - middle_double_click: Middle double click
+          $options:ru-RU:
+          - none:                Ничего
+          - left_click:          Левый клик
+          - left_double_click:   Двойной левый клик
+          - right_click:         Правый клик
+          - right_double_click:  Двойной правый клик
+          - middle_click:        Клик средней кнопкой
+          - middle_double_click: Двойной клик средней кнопкой
         - action: open_app
           $name: Action
+          $name:ru-RU: Действие
           $options:
-          - none: Nothing
-          - switch_session: Switch active media session
-          - play_pause: Play/Pause
-          - next_track: Next track
-          - prev_track: Previous track
-          - stop: Stop playback
-          - rewind_5s: Rewind 5s
-          - forward_5s: Forward 5s
-          - toggle_shuffle: Toggle Shuffle
-          - toggle_repeat: Toggle Repeat
-          - open_app: Open media app
+          - none:            Nothing
+          - switch_session:  Switch active media session
+          - play_pause:      Play/Pause
+          - next_track:      Next track
+          - prev_track:      Previous track
+          - stop:            Stop playback
+          - rewind_5s:       Rewind 5s
+          - forward_5s:      Forward 5s
+          - toggle_shuffle:  Toggle Shuffle
+          - toggle_repeat:   Toggle Repeat
+          - open_app:        Open media app
+          $options:ru-RU:
+          - none:            Ничего
+          - switch_session:  Переключить медиасессию
+          - play_pause:      Воспроизведение/Пауза
+          - next_track:      Следующий трек
+          - prev_track:      Предыдущий трек
+          - stop:            Остановить воспроизведение
+          - rewind_5s:       Перемотка назад 5 сек
+          - forward_5s:      Перемотка вперёд 5 сек
+          - toggle_shuffle:  Случайный порядок
+          - toggle_repeat:   Повтор
+          - open_app:        Открыть медиаприложение
     $name: Click Actions
+    $name:ru-RU: Действия при клике
   - MouseWheelActionSettings:
       - - object: player
           $name: Object
+          $name:ru-RU: Объект
           $options:
-          - none: Nothing
-          - player: Player area
-          - album_art: Album art area
+          - none:       Nothing
+          - player:     Player area
+          - album_art:  Album art area
+          $options:ru-RU:
+          - none:       Ничего
+          - player:     Область плеера
+          - album_art:  Область обложки альбома
         - click: mouse_wheel
           $name: Mouse type
+          $name:ru-RU: Тип мыши
           $options:
-          - none: Nothing
-          - mouse_wheel: Mouse wheel
-          - mouse_wheel_up: Mouse wheel up
+          - none:             Nothing
+          - mouse_wheel:      Mouse wheel
+          - mouse_wheel_up:   Mouse wheel up
           - mouse_wheel_down: Mouse wheel down
+          $options:ru-RU:
+          - none:             Ничего
+          - mouse_wheel:      Колесо мыши
+          - mouse_wheel_up:   Колесо мыши вверх
+          - mouse_wheel_down: Колесо мыши вниз
         - action: switch_tracks
           $name: Action
+          $name:ru-RU: Действие
           $options:
-            - none: Nothing
-            - "switch_tracks": "Switch tracks (up=prev, down=next)"
-            - "switch_sessions": "Switch sessions (up/down)"
-            - "system_sound": "Change system sound volume (up/down)"
-            - "app_sound": "Change app sound volume (up/down)"
+          - none:              Nothing
+          - "switch_tracks":   "Switch tracks"
+          - "switch_sessions": "Switch sessions"
+          - "system_sound":    "Change system sound volume"
+          - "app_sound":       "Change app sound volume"
+          $options:ru-RU:
+          - none:              Ничего
+          - "switch_tracks":   "Переключить треки"
+          - "switch_sessions": "Переключить сессии"
+          - "system_sound":    "Изменить громкость системы"
+          - "app_sound":       "Изменить громкость приложения"
       - - object: album_art
           $name: Object
+          $name:ru-RU: Объект
           $options:
-          - none: Nothing
-          - player: Player area
-          - album_art: Album art area
+          - none:       Nothing
+          - player:     Player area
+          - album_art:  Album art area
+          $options:ru-RU:
+          - none:       Ничего
+          - player:     Область медиаплеера
+          - album_art:  Область обложки альбома
         - click: mouse_wheel
           $name: Mouse type
+          $name:ru-RU: Тип мыши
           $options:
-          - none: Nothing
-          - mouse_wheel: Mouse wheel
-          - mouse_wheel_up: Mouse wheel up
+          - none:             Nothing
+          - mouse_wheel:      Mouse wheel
+          - mouse_wheel_up:   Mouse wheel up
           - mouse_wheel_down: Mouse wheel down
+          $options:ru-RU:
+          - none:             Ничего
+          - mouse_wheel:      Колесо мыши
+          - mouse_wheel_up:   Колесо мыши вверх
+          - mouse_wheel_down: Колесо мыши вниз
         - action: switch_sessions
           $name: Action
+          $name:ru-RU: Действие
           $options:
-            - none: Nothing
-            - "switch_tracks": "Switch tracks (up=prev, down=next)"
-            - "switch_sessions": "Switch sessions (up/down)"
-            - "system_sound": "Change system sound volume (up/down)"
-            - "app_sound": "Change app sound volume (up/down)"
+          - none:              Nothing
+          - "switch_tracks":   "Switch tracks"
+          - "switch_sessions": "Switch sessions"
+          - "system_sound":    "Change system sound volume"
+          - "app_sound":       "Change app sound volume"
+          $options:ru-RU:
+          - none:              Ничего
+          - "switch_tracks":   "Переключить треки"
+          - "switch_sessions": "Переключить сессии"
+          - "system_sound":    "Изменить громкость"
+          - "app_sound":       "Изменить громкость"
     $name: Mouse wheel Actions
+    $name:ru-RU: Действия колеса мыши
   - hideWhenNoMedia: true
     $name: Hide when no media is playing
+    $name:ru-RU: Скрывать, когда ничего не воспроизводится
   - hideFullscreen: true
     $name: Hide when a fullscreen app is running
+    $name:ru-RU: Скрывать при запущенном полноэкранном приложении
   - idleHideSeconds: 0
     $name: Idle auto-hide timeout (seconds, 0 = disabled)
+    $name:ru-RU: Таймаут автоскрытия при бездействии (секунды, 0 = отключено)
   - showFullTitleOnHover: true
     $name: Show full track title on hover (tooltip)
+    $name:ru-RU: Показывать полное название трека при наведении (подсказка)
   $name: Behavior Settings
+  $name:ru-RU: Настройки поведения
 
 - AnimationSettings:
   - enableSmoothPositionAnimation: true
     $name: Enable smooth position animation
+    $name:ru-RU: Включить плавную анимацию позиции
   $name: Animation Settings
+  $name:ru-RU: Настройки анимации
 
 - NotificationSettings:
   - showSuccessNotification: false
     $name: Show notification on successful mod load
+    $name:ru-RU: Показывать уведомление при успешной загрузке мода
     $description: Display a Windows notification when the mod is successfully loaded or reloaded
+    $description:ru-RU: Отображать уведомление Windows при успешной загрузке или перезагрузке мода
   $name: Notification Settings
+  $name:ru-RU: Настройки уведомлений
 
 - DebugSettings:
   - ignoredProcesses: ""
-    $name: Ignore media from processes (separate with ;)
+    $name: Ignore media from processes (separate with ; )
+    $name:ru-RU: Игнорировать медиа от процессов (разделять через ; )
   - enableTreeDump: false
     $name: Dump XAML element names to log on inject
+    $name:ru-RU: Записывать имена XAML-элементов в лог при инъекции
   - showDebugBorders: false
-    $name: Show debug borders (hitboxes)
+    $name: Show debug borders
+    $name:ru-RU: Показывать отладочные границы
   - showLayoutAnchors: false
     $name: Show layout anchors and centers
+    $name:ru-RU: Показывать якоря и центры разметки
   $name: Debug Settings
+  $name:ru-RU: Настройки отладки
 */
 // ==/WindhawkModSettings==
 
@@ -542,6 +883,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
+#include <commoncontrols.h>
 #include <wincodec.h>
 #include <propsys.h>
 #include <dwmapi.h>
@@ -549,7 +891,9 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
 #include <audiopolicy.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
-#include <tlhelp32.h>
+
+#include <propsys.h>
+#include <propkey.h>
 
 #include <atomic>
 #include <functional>
@@ -576,15 +920,15 @@ struct ModSettings {
     std::wstring albumArtLeftClick    = L"none";
     std::wstring albumArtRightClick   = L"none";
     std::wstring albumArtMiddleClick  = L"none";
-    std::wstring albumArtLeftDoubleClick  = L"open_app";
+    std::wstring albumArtLeftDoubleClick  = L"none";
     std::wstring albumArtRightDoubleClick = L"none";
-    std::wstring albumArtWheelAction  = L"switch_sessions";
-    std::wstring playerLeftClick      = L"play_pause";
+    std::wstring albumArtWheelAction  = L"none";
+    std::wstring playerLeftClick      = L"none";
     std::wstring playerRightClick     = L"none";
     std::wstring playerMiddleClick    = L"none";
     std::wstring playerLeftDoubleClick  = L"none";
     std::wstring playerRightDoubleClick = L"none";
-    std::wstring playerWheelAction    = L"switch_tracks";
+    std::wstring playerWheelAction    = L"none";
     bool         mirrorLayout         = false;
     bool         showMediaButtons     = true;
     int          playerMinWidth       = 0;
@@ -615,8 +959,6 @@ struct ModSettings {
     std::wstring playerHoverEffectMode = L"auto";
     std::wstring mediaButtonsHoverEffectMode = L"auto";
     bool         enableSmoothPositionAnimation = true;
-    int          controlsMarginLeft   = 4;
-    int          controlsMarginRight  = 0;
     int          playerMarginLeft     = 4;
     int          playerMarginRight    = 4;
     int          mediaButtonsLeftMargin  = 2;
@@ -735,14 +1077,12 @@ static std::wstring MapFontName(const std::wstring& key) {
 static void LoadSettings() {
     auto Str = [](const wchar_t* key, const wchar_t* def) -> std::wstring {
         PCWSTR p = Wh_GetStringSetting(key);
-        std::wstring r = p ? p : def;
+        std::wstring r = (*p != L'\0') ? p : def;
         Wh_FreeStringSetting(p);
         return r;
     };
-    auto Int = [](const wchar_t* key, int lo, int hi, int def) -> int {
-        int v = Wh_GetIntSetting(key);
-        if (v == 0 && def != 0) v = def;
-        return std::clamp(v, lo, hi);
+    auto Int = [](const wchar_t* key, int lo, int hi, int /*def*/) -> int {
+        return std::clamp(Wh_GetIntSetting(key), lo, hi);
     };
     auto ParseMargin = [&Str](const wchar_t* key, const wchar_t* def, int& left, int& right) {
         std::wstring val = Str(key, def);
@@ -769,10 +1109,9 @@ static void LoadSettings() {
     };
     auto HoverMode = [&Str](const wchar_t* key) -> std::wstring {
         std::wstring mode = Str(key, L"auto");
-        if (mode == L"true" || mode == L"1" || mode == L"on") return L"auto";
-        if (mode == L"false" || mode == L"0" || mode == L"off") return L"off";
-        if (mode == L"black" || mode == L"dark") return L"black";
-        if (mode == L"white" || mode == L"light") return L"white";
+        if (mode == L"black") return L"black";
+        if (mode == L"white") return L"white";
+        if (mode == L"off")   return L"off";
         return L"auto";
     };
 
@@ -814,7 +1153,6 @@ static void LoadSettings() {
     g_settings.cornerRadius         = Int(L"AppearanceSettings.BackgroundStyleSettings.cornerRadius",          0,  24,   4);
     g_settings.albumArtOpacity      = Int(L"AppearanceSettings.AlbumArtDisplaySettings.albumArtOpacity",       0, 100, 100);
     g_settings.albumArtCornerRadius = Int(L"AppearanceSettings.AlbumArtDisplaySettings.albumArtCornerRadius",  0,  24,   4);
-    ParseMargin(L"AppearanceSettings.LayoutSettings.controlsMargin", L"4 0", g_settings.controlsMarginLeft, g_settings.controlsMarginRight);
     g_settings.buttonSpacing        = Wh_GetIntSetting(L"MainSettings.MediaButtonsSettings.buttonSpacing");
     g_settings.buttonSize           = Int(L"MainSettings.MediaButtonsSettings.buttonSize",          16,  48,  28);
     g_settings.buttonIconSize       = Int(L"MainSettings.MediaButtonsSettings.buttonIconSize",       8,  32,  12);
@@ -831,7 +1169,7 @@ static void LoadSettings() {
     g_settings.artistFontWeight     = Str(L"AppearanceSettings.ArtistTextStyleSettings.artistFontWeight", L"");
     g_settings.artistFontStyle      = Str(L"AppearanceSettings.ArtistTextStyleSettings.artistFontStyle", L"");
     g_settings.artistCharacterSpacing = Wh_GetIntSetting(L"AppearanceSettings.ArtistTextStyleSettings.artistCharacterSpacing");
-    g_settings.textSpacing          = Int(L"MainSettings.TextAreaSetting.textSpacing",           0,  20,   1);
+    g_settings.textSpacing          = Wh_GetIntSetting(L"MainSettings.TextAreaSetting.textSpacing");
     g_settings.solidColor           = Str(L"AppearanceSettings.BackgroundStyleSettings.solidColor", L"35 35 35");
     g_settings.solidColor2          = Str(L"AppearanceSettings.BackgroundStyleSettings.solidColor2", L"128 128 128");
     g_settings.solidOpacity         = Int(L"AppearanceSettings.BackgroundStyleSettings.solidOpacity", 0, 100, 100);
@@ -851,7 +1189,7 @@ static void LoadSettings() {
         PCWSTR clickStr = Wh_GetStringSetting(L"BehaviorSettings.ClickActionSettings[%d].click", i);
         PCWSTR actionStr = Wh_GetStringSetting(L"BehaviorSettings.ClickActionSettings[%d].action", i);
 
-        if (!objectStr || !clickStr || !actionStr) {
+        if (*objectStr == L'\0' || *clickStr == L'\0' || *actionStr == L'\0') {
             Wh_FreeStringSetting(objectStr);
             Wh_FreeStringSetting(clickStr);
             Wh_FreeStringSetting(actionStr);
@@ -894,7 +1232,7 @@ static void LoadSettings() {
         PCWSTR clickStr = Wh_GetStringSetting(L"BehaviorSettings.MouseWheelActionSettings[%d].click", i);
         PCWSTR actionStr = Wh_GetStringSetting(L"BehaviorSettings.MouseWheelActionSettings[%d].action", i);
 
-        if (!objectStr || !clickStr || !actionStr) {
+        if (*objectStr == L'\0' || *clickStr == L'\0' || *actionStr == L'\0') {
             Wh_FreeStringSetting(objectStr);
             Wh_FreeStringSetting(clickStr);
             Wh_FreeStringSetting(actionStr);
@@ -950,11 +1288,7 @@ static void LoadSettings() {
         for (int i = 0; i < 10; i++) {
             try {
                 PCWSTR itemStr = Wh_GetStringSetting(L"MainSettings.MediaButtonsSettings.mediaButtons[%d]", i);
-                if (!itemStr) {
-                    break;
-                }
-
-                if (!*itemStr) {
+                if (!itemStr || !*itemStr) {
                     Wh_FreeStringSetting(itemStr);
                     break;
                 }
@@ -974,12 +1308,7 @@ static void LoadSettings() {
         }
 
         if (g_mediaButtons.empty()) {
-            Wh_Log(L"LoadSettings: No media buttons configured, using defaults");
-            g_mediaButtons = {
-                {MediaButtonType::Previous, 1},
-                {MediaButtonType::PlayPause, 2},
-                {MediaButtonType::Next, 3}
-            };
+            Wh_Log(L"LoadSettings: No media buttons configured, showing none");
         }
     } catch (...) {
         Wh_Log(L"LoadSettings: Critical exception in media buttons parsing, using defaults");
@@ -1041,9 +1370,6 @@ static void ShowSuccessNotification() {
     );
 }
 
-static HWND  g_themeWatchWnd  = nullptr;
-static HANDLE g_themeWatchThread  = nullptr;
-static HANDLE g_themeWatchStop    = nullptr;
 
 static FrameworkElement g_trackedElement = nullptr;
 static Thickness g_trackedElementOriginalMargin{};
@@ -1415,43 +1741,6 @@ static void GoToCommonState(Button const& btn, bool effectEnabled, bool pressed,
     } catch (...) {}
 }
 
-static void ApplyCommonStateDirect(
-    Button const& btn,
-    std::wstring const& hoverMode,
-    bool pressed,
-    bool hovered,
-    bool playerButton,
-    Brush const& normalBackground)
-{
-    if (!btn) return;
-    try {
-        btn.ApplyTemplate();
-        auto root = GetButtonTemplateRoot(btn);
-        if (!root) {
-            GoToCommonState(btn, IsHoverEffectEnabled(hoverMode), pressed, hovered);
-            return;
-        }
-
-        auto transparent = MakeBrush({0x00, 0, 0, 0});
-        Brush background = normalBackground ? normalBackground : transparent;
-        Brush border = transparent;
-
-        if (IsHoverEffectEnabled(hoverMode)) {
-            if (pressed) {
-                background = MakeBrush(GetSystemButtonPressedColor(hoverMode));
-                if (playerButton) border = MakeBrush(GetSystemButtonBorderColor(hoverMode));
-            } else if (hovered) {
-                background = MakeBrush(GetSystemButtonHoverColor(hoverMode));
-                if (playerButton) border = MakeBrush(GetSystemButtonBorderColor(hoverMode));
-            }
-        }
-
-        root.Background(background);
-        root.BorderBrush(border);
-    } catch (...) {
-        GoToCommonState(btn, IsHoverEffectEnabled(hoverMode), pressed, hovered);
-    }
-}
 static void RunWhenButtonReady(Button const& btn, std::function<void()> const& action) {
     if (!btn || !action) return;
     auto run = std::make_shared<std::function<void()>>(action);
@@ -1473,8 +1762,15 @@ static void RunWhenButtonReady(Button const& btn, std::function<void()> const& a
 }
 
 static void SetupMediaButtonCommonStates(Button const& btn) {
-    EnsureHoverBrushes();
     auto transparent = MakeBrush({0x00, 0, 0, 0});
+    if (!IsHoverEffectEnabled(g_settings.mediaButtonsHoverEffectMode)) {
+        SetupCommonStates(
+            btn,
+            transparent, transparent, transparent, transparent,
+            transparent, transparent, transparent, transparent);
+        return;
+    }
+    EnsureHoverBrushes();
     SetupCommonStates(
         btn,
         transparent,
@@ -1485,8 +1781,16 @@ static void SetupMediaButtonCommonStates(Button const& btn) {
 }
 
 static void SetupPlayerButtonCommonStates(Button const& btn, Brush const& normalBackground) {
-    EnsureHoverBrushes();
     auto transparent = MakeBrush({0x00, 0, 0, 0});
+    if (!IsHoverEffectEnabled(g_settings.playerHoverEffectMode)) {
+        Brush norm = normalBackground ? normalBackground : transparent;
+        SetupCommonStates(
+            btn,
+            norm, norm, norm, transparent,
+            transparent, transparent, transparent, transparent);
+        return;
+    }
+    EnsureHoverBrushes();
     SetupCommonStates(
         btn,
         normalBackground,
@@ -2199,6 +2503,9 @@ static void ChangeSystemVolume(bool increase) {
     }
 }
 
+static std::wstring ToLowerCopy(std::wstring value);
+static std::wstring GetWindowAppUserModelId(HWND hWnd);
+
 [[maybe_unused]]
 static void ExecuteMediaAction(const std::wstring& action) {
     if (action == L"none") {
@@ -2240,9 +2547,9 @@ static void ExecuteMediaAction(const std::wstring& action) {
     } else if (action == L"toggle_repeat") {
         SendMediaCommandAsync(8);
         DispatchMediaUpdate();
-    } else if (action == L"open_app") {
+} else if (action == L"open_app") {
         std::thread([]() {
-            std::wstring title, app;
+            std::wstring title, appAumid;
             {
                 std::lock_guard<std::mutex> lk(g_mediaMtx);
                 title = g_media.title;
@@ -2251,56 +2558,140 @@ static void ExecuteMediaAction(const std::wstring& action) {
                 std::lock_guard<std::mutex> lk(g_sessionMtx);
                 if (g_currentSession) {
                     try {
-                        app = std::wstring(g_currentSession.SourceAppUserModelId());
+                        appAumid = std::wstring(g_currentSession.SourceAppUserModelId());
                     } catch (...) {}
                 }
             }
 
-            if (!title.empty()) {
-                struct WindowSearch {
-                    std::wstring targetTitle;
-                    HWND foundHwnd = nullptr;
-                };
-                WindowSearch search;
-                search.targetTitle = title;
+            struct WindowSearch {
+                std::wstring targetTitle;
+                std::wstring targetAumid;
+                std::wstring targetProcessName;
+                HWND foundHwnd = nullptr;
+                HWND fallbackHwnd = nullptr;
+            };
+            WindowSearch search;
 
-                EnumWindows([](HWND hwnd, LPARAM lParam) CALLBACK -> BOOL {
-                    if (!IsWindowVisible(hwnd)) {
-                        return TRUE;
+            search.targetTitle = title;
+            std::transform(search.targetTitle.begin(), search.targetTitle.end(), search.targetTitle.begin(), ::towlower);
+            
+            search.targetAumid = appAumid;
+            std::transform(search.targetAumid.begin(), search.targetAumid.end(), search.targetAumid.begin(), ::towlower);
+
+            if (!appAumid.empty()) {
+
+                std::wstring stem = appAumid;
+                auto bang = stem.rfind(L'!');
+                if (bang != std::wstring::npos) stem = stem.substr(0, bang);
+
+                auto us = stem.rfind(L'_');
+                if (us != std::wstring::npos) stem = stem.substr(0, us);
+
+                auto slash = stem.find_last_of(L"\\/");
+                if (slash != std::wstring::npos) stem = stem.substr(slash + 1);
+
+                if (stem.size() > 4) {
+                    std::wstring ext = stem.substr(stem.size() - 4);
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+                    if (ext == L".exe") stem = stem.substr(0, stem.size() - 4);
+                }
+                search.targetProcessName = stem;
+                std::transform(search.targetProcessName.begin(), search.targetProcessName.end(), search.targetProcessName.begin(), ::towlower);
+            }
+
+            EnumWindows([](HWND hwnd, LPARAM lParam) CALLBACK -> BOOL {
+                if (!IsWindowVisible(hwnd)) return TRUE;
+
+                auto* s = reinterpret_cast<WindowSearch*>(lParam);
+
+                wchar_t windowTitle[512];
+                if (!s->targetTitle.empty() && GetWindowTextW(hwnd, windowTitle, 512) > 0) {
+                    std::wstring wTitle(windowTitle);
+                    std::transform(wTitle.begin(), wTitle.end(), wTitle.begin(), ::towlower);
+
+                    if (wTitle.find(s->targetTitle) != std::wstring::npos) {
+                        s->foundHwnd = hwnd;
+                        return FALSE;
                     }
+                }
 
-                    wchar_t windowTitle[512];
-                    if (GetWindowTextW(hwnd, windowTitle, 512) > 0) {
-                        auto* search = reinterpret_cast<WindowSearch*>(lParam);
-                        std::wstring wTitle(windowTitle);
-                        auto it = std::search(
-                            wTitle.begin(), wTitle.end(),
-                            search->targetTitle.begin(), search->targetTitle.end(),
-                            [](wchar_t ch1, wchar_t ch2) { return towlower(ch1) == towlower(ch2); }
-                        );
+                if (!s->fallbackHwnd && !s->targetAumid.empty()) {
+                    IPropertyStore* pps = nullptr;
+                    if (SUCCEEDED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(&pps)))) {
+                        PROPVARIANT var;
+                        PropVariantInit(&var);
+                        
+                        if (SUCCEEDED(pps->GetValue(PKEY_AppUserModel_ID, &var)) && var.vt == VT_LPWSTR) {
+                            std::wstring winAumid(var.pwszVal);
+                            std::transform(winAumid.begin(), winAumid.end(), winAumid.begin(), ::towlower);
+                            
+                            if (winAumid == s->targetAumid) {
+                                s->fallbackHwnd = hwnd;
+                            }
+                        }
+                        PropVariantClear(&var);
+                        pps->Release();
+                    }
+                }
 
-                        if (it != wTitle.end()) {
-                            search->foundHwnd = hwnd;
-                            return FALSE;
+                if (!s->fallbackHwnd && !s->targetProcessName.empty()) {
+                    DWORD pid = 0;
+                    GetWindowThreadProcessId(hwnd, &pid);
+                    if (pid) {
+                        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                        if (hProc) {
+                            wchar_t exePath[MAX_PATH] = {};
+                            DWORD len = MAX_PATH;
+                            if (QueryFullProcessImageNameW(hProc, 0, exePath, &len) && len > 0) {
+                                std::wstring exeName(exePath);
+                                auto sl = exeName.find_last_of(L"\\/");
+                                if (sl != std::wstring::npos) exeName = exeName.substr(sl + 1);
+
+                                if (exeName.size() > 4) {
+                                    std::wstring ext = exeName.substr(exeName.size() - 4);
+                                    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+                                    if (ext == L".exe") exeName = exeName.substr(0, exeName.size() - 4);
+                                }
+                                std::transform(exeName.begin(), exeName.end(), exeName.begin(), ::towlower);
+                                if (exeName == s->targetProcessName) {
+                                    s->fallbackHwnd = hwnd;
+                                }
+                            }
+                            CloseHandle(hProc);
                         }
                     }
-                    return TRUE;
-                }, reinterpret_cast<LPARAM>(&search));
-
-                if (search.foundHwnd) {
-                    if (IsIconic(search.foundHwnd)) {
-                        ShowWindow(search.foundHwnd, SW_RESTORE);
-                    }
-                    SetForegroundWindow(search.foundHwnd);
-                    return;
                 }
-            }
 
-            if (!app.empty()) {
-                std::wstring shellPath = L"shell:AppsFolder\\" + app;
-                ShellExecuteW(nullptr, L"open", shellPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                return TRUE;
+            }, reinterpret_cast<LPARAM>(&search));
+
+            HWND targetWindow = search.foundHwnd ? search.foundHwnd : search.fallbackHwnd;
+
+            if (targetWindow) {
+                if (IsIconic(targetWindow)) {
+                    ShowWindow(targetWindow, SW_RESTORE);
+                }
+                
+                HWND hCurWnd = GetForegroundWindow();
+                if (hCurWnd && hCurWnd != targetWindow) {
+                    DWORD dwMyID = GetCurrentThreadId();
+                    DWORD dwCurID = GetWindowThreadProcessId(hCurWnd, NULL);
+                    AttachThreadInput(dwCurID, dwMyID, TRUE);
+                    SetForegroundWindow(targetWindow);
+                    BringWindowToTop(targetWindow);
+                    AttachThreadInput(dwCurID, dwMyID, FALSE);
+                } else {
+                    SetForegroundWindow(targetWindow);
+                    BringWindowToTop(targetWindow);
+                }
                 return;
             }
+
+            if (!appAumid.empty()) {
+                std::wstring shellPath = L"shell:AppsFolder\\" + appAumid;
+                ShellExecuteW(nullptr, L"open", shellPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            }
+
         }).detach();
     }
 }
@@ -2410,130 +2801,250 @@ static bool AppIdMatchesProcess(const std::wstring& appUserModelId, HWND hWnd, D
              procLower.find(windowAumidLower) != std::wstring::npos));
 }
 
-static std::vector<BYTE> FetchAppIconBytes(const std::wstring& appUserModelId, int iconSize) {
-    std::vector<BYTE> result;
-    if (appUserModelId.empty()) return result;
-
-    HICON hIcon = nullptr;
-
-    struct FindData { const std::wstring* aumid; HICON icon; DWORD pid; std::wstring procPath; };
-    FindData fd{&appUserModelId, nullptr, 0, L""};
-
-    EnumWindows([](HWND hWnd, LPARAM lParam) CALLBACK -> BOOL {
-        auto* fd2 = reinterpret_cast<FindData*>(lParam);
-        if (!IsWindowVisible(hWnd)) return TRUE;
-
-        DWORD pid = 0;
-        std::wstring procPath;
-        if (!AppIdMatchesProcess(*fd2->aumid, hWnd, &pid, &procPath))
-            return TRUE;
-
-        if (!fd2->pid) {
-            fd2->pid = pid;
-            fd2->procPath = procPath;
-        }
-
-        HICON icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
-        if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
-        if (!icon) icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0);
-        if (!icon) icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_BIG,   0);
-
-        if (icon) {
-            fd2->icon = icon;
-            fd2->pid  = pid;
-            fd2->procPath = procPath;
-            return FALSE;
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&fd));
-
-    hIcon = fd.icon;
-
-    if (!hIcon && fd.pid) {
-        if (fd.procPath.empty()) {
-            wchar_t procPath[MAX_PATH] = {};
-            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, fd.pid);
-            if (hProc) {
-                DWORD sz = MAX_PATH;
-                QueryFullProcessImageNameW(hProc, 0, procPath, &sz);
-                CloseHandle(hProc);
-            }
-            fd.procPath = procPath;
-        }
-        if (!fd.procPath.empty()) {
-            SHFILEINFOW sfi{};
-            if (SHGetFileInfoW(fd.procPath.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_SMALLICON))
-                hIcon = sfi.hIcon;
-        }
-    }
-
-    if (!hIcon && appUserModelId.find(L".exe") != std::wstring::npos) {
-        std::wstring exePath = appUserModelId;
-        if (exePath.size() >= 2 && exePath.front() == L'"' && exePath.back() == L'"')
-            exePath = exePath.substr(1, exePath.size() - 2);
-        SHFILEINFOW sfi{};
-        if (SHGetFileInfoW(exePath.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_SMALLICON))
-            hIcon = sfi.hIcon;
-    }
-
-    if (!hIcon) return result;
+static std::vector<BYTE> RenderIconToBytes(HICON hIcon, int iconSize) {
+    if (!hIcon || iconSize <= 0) return {};
 
     ICONINFO ii{};
-    if (!GetIconInfo(hIcon, &ii)) return result;
+    if (!GetIconInfo(hIcon, &ii)) return {};
 
     BITMAP bm{};
     GetObjectW(ii.hbmColor ? ii.hbmColor : ii.hbmMask, sizeof(bm), &bm);
+    if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    if (ii.hbmMask)  DeleteObject(ii.hbmMask);
 
-    int w = bm.bmWidth  ? bm.bmWidth  : iconSize;
-    int h = bm.bmHeight ? bm.bmHeight : iconSize;
+    int srcW = bm.bmWidth  > 0 ? bm.bmWidth  : iconSize;
+    int srcH = bm.bmHeight > 0 ? bm.bmHeight : iconSize;
 
-    HDC hdc = CreateCompatibleDC(nullptr);
+    HDC screenDC = GetDC(nullptr);
+    HDC hdc      = CreateCompatibleDC(screenDC);
+    HBITMAP hBmp = CreateCompatibleBitmap(screenDC, srcW, srcH);
+    ReleaseDC(nullptr, screenDC);
+    HBITMAP hOld = (HBITMAP)SelectObject(hdc, hBmp);
+
+    RECT rc{ 0, 0, srcW, srcH };
+    HBRUSH hBr = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    FillRect(hdc, &rc, hBr);
+    DrawIconEx(hdc, 0, 0, hIcon, srcW, srcH, 0, nullptr, DI_NORMAL);
+
     BITMAPINFO bi{};
     bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth       = w;
-    bi.bmiHeader.biHeight      = -h;
+    bi.bmiHeader.biWidth       = srcW;
+    bi.bmiHeader.biHeight      = -srcH;
     bi.bmiHeader.biPlanes      = 1;
     bi.bmiHeader.biBitCount    = 32;
     bi.bmiHeader.biCompression = BI_RGB;
 
-    std::vector<BYTE> pixels(w * h * 4, 0);
-    HBITMAP hBmp = CreateCompatibleBitmap(GetDC(nullptr), w, h);
-    HBITMAP hOld = (HBITMAP)SelectObject(hdc, hBmp);
-    DrawIconEx(hdc, 0, 0, hIcon, w, h, 0, nullptr, DI_NORMAL);
-    GetDIBits(hdc, hBmp, 0, h, pixels.data(), &bi, DIB_RGB_COLORS);
+    std::vector<BYTE> src(srcW * srcH * 4, 0);
+    GetDIBits(hdc, hBmp, 0, srcH, src.data(), &bi, DIB_RGB_COLORS);
     SelectObject(hdc, hOld);
     DeleteObject(hBmp);
     DeleteDC(hdc);
 
-    if (ii.hbmColor) DeleteObject(ii.hbmColor);
-    if (ii.hbmMask)  DeleteObject(ii.hbmMask);
+    for (int i = 0; i + 3 < (int)src.size(); i += 4)
+        std::swap(src[i], src[i + 2]);
 
-    for (int i = 0; i + 3 < (int)pixels.size(); i += 4) {
-        std::swap(pixels[i], pixels[i + 2]);
-    }
+    if (srcW == iconSize && srcH == iconSize)
+        return src;
 
-    if (w != iconSize || h != iconSize) {
-        std::vector<BYTE> scaled(iconSize * iconSize * 4, 0);
-        for (int dy = 0; dy < iconSize; ++dy) {
-            for (int dx = 0; dx < iconSize; ++dx) {
-                int sx = dx * w / iconSize;
-                int sy = dy * h / iconSize;
-                int si = (sy * w + sx) * 4;
-                int di = (dy * iconSize + dx) * 4;
-                scaled[di+0] = pixels[si+0];
-                scaled[di+1] = pixels[si+1];
-                scaled[di+2] = pixels[si+2];
-                scaled[di+3] = pixels[si+3];
+    std::vector<BYTE> dst(iconSize * iconSize * 4, 0);
+    float scaleX = (float)srcW / iconSize;
+    float scaleY = (float)srcH / iconSize;
+    for (int dy = 0; dy < iconSize; ++dy) {
+        for (int dx = 0; dx < iconSize; ++dx) {
+            float fx = (dx + 0.5f) * scaleX - 0.5f;
+            float fy = (dy + 0.5f) * scaleY - 0.5f;
+            int x0 = (int)fx; int y0 = (int)fy;
+            int x1 = x0 + 1;  int y1 = y0 + 1;
+            x0 = x0 < 0 ? 0 : (x0 > srcW - 1 ? srcW - 1 : x0);
+            y0 = y0 < 0 ? 0 : (y0 > srcH - 1 ? srcH - 1 : y0);
+            x1 = x1 < 0 ? 0 : (x1 > srcW - 1 ? srcW - 1 : x1);
+            y1 = y1 < 0 ? 0 : (y1 > srcH - 1 ? srcH - 1 : y1);
+            float wx = fx - (int)fx; float wy = fy - (int)fy;
+            int di = (dy * iconSize + dx) * 4;
+            for (int c = 0; c < 4; ++c) {
+                float v = src[(y0 * srcW + x0) * 4 + c] * (1-wx)*(1-wy)
+                        + src[(y0 * srcW + x1) * 4 + c] * wx    *(1-wy)
+                        + src[(y1 * srcW + x0) * 4 + c] * (1-wx)* wy
+                        + src[(y1 * srcW + x1) * 4 + c] * wx    * wy;
+                dst[di + c] = (BYTE)(v + 0.5f);
             }
         }
-        result = std::move(scaled);
-    } else {
-        result = std::move(pixels);
+    }
+    return dst;
+}
+
+static std::vector<BYTE> FetchAppIconBytes(const std::wstring& appUserModelId, int iconSize) {
+    std::vector<BYTE> result;
+    if (appUserModelId.empty()) return result;
+
+    auto Render = [&](HICON h, bool own) -> bool {
+        if (!h) return false;
+        result = RenderIconToBytes(h, iconSize);
+        if (own) DestroyIcon(h);
+        return !result.empty();
+    };
+
+    {
+        std::wstring shellPath = L"shell:AppsFolder\\" + appUserModelId;
+        PIDLIST_ABSOLUTE pidl = nullptr;
+        if (SUCCEEDED(SHParseDisplayName(shellPath.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
+            SHFILEINFOW sfi{};
+            DWORD flags = SHGFI_PIDL | SHGFI_ICON | SHGFI_LARGEICON;
+            if (SHGetFileInfoW(reinterpret_cast<LPCWSTR>(pidl), 0, &sfi, sizeof(sfi), flags) && sfi.hIcon) {
+                CoTaskMemFree(pidl);
+                if (Render(sfi.hIcon, true)) return result;
+            } else {
+                CoTaskMemFree(pidl);
+            }
+        }
+    }
+    {
+        struct EnumCtx {
+            const std::wstring* aumid;
+            HICON  exactIcon = nullptr;
+            HICON  fuzzyIcon = nullptr;
+            DWORD  exactPid  = 0;
+            DWORD  fuzzyPid  = 0;
+            std::wstring exactPath;
+            std::wstring fuzzyPath;
+        };
+        EnumCtx ctx{ &appUserModelId };
+
+        EnumWindows([](HWND hWnd, LPARAM lParam) CALLBACK -> BOOL {
+            if (!IsWindowVisible(hWnd)) return TRUE;
+            auto* c = reinterpret_cast<EnumCtx*>(lParam);
+
+            if (!c->exactIcon) {
+                IPropertyStore* pps = nullptr;
+                if (SUCCEEDED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&pps)))) {
+                    PROPVARIANT var;
+                    PropVariantInit(&var);
+                    if (SUCCEEDED(pps->GetValue(PKEY_AppUserModel_ID, &var)) && var.vt == VT_LPWSTR) {
+                        std::wstring winAumid  = ToLowerCopy(std::wstring(var.pwszVal));
+                        std::wstring wantAumid = ToLowerCopy(*c->aumid);
+                        if (winAumid == wantAumid) {
+                            HICON icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_BIG,   0);
+                            if (!icon) icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0);
+                            if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
+                            if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
+                            if (icon) {
+                                c->exactIcon = icon;
+                                GetWindowThreadProcessId(hWnd, &c->exactPid);
+                                wchar_t path[MAX_PATH]{};
+                                HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, c->exactPid);
+                                if (hProc) { DWORD sz = MAX_PATH; QueryFullProcessImageNameW(hProc, 0, path, &sz); CloseHandle(hProc); }
+                                c->exactPath = path;
+                                return FALSE;
+                            }
+                        }
+                    }
+                    PropVariantClear(&var);
+                    pps->Release();
+                }
+            }
+
+            if (!c->exactIcon && !c->fuzzyIcon) {
+                DWORD pid = 0;
+                std::wstring procPath;
+                if (AppIdMatchesProcess(*c->aumid, hWnd, &pid, &procPath)) {
+                    HICON icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_BIG,   0);
+                    if (!icon) icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0);
+                    if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
+                    if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
+                    if (icon) {
+                        c->fuzzyIcon = icon;
+                        c->fuzzyPid  = pid;
+                        c->fuzzyPath = procPath;
+                    } else if (!c->fuzzyPid) {
+                        c->fuzzyPid  = pid;
+                        c->fuzzyPath = procPath;
+                    }
+                }
+            }
+
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&ctx));
+
+        if (ctx.exactIcon && Render(ctx.exactIcon, false)) return result;
+
+        if (ctx.fuzzyIcon) {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, ctx.fuzzyPid);
+            if (hProc) {
+                DWORD exitCode = 0;
+                if (GetExitCodeProcess(hProc, &exitCode) && exitCode == STILL_ACTIVE) {
+                    CloseHandle(hProc);
+                    if (Render(ctx.fuzzyIcon, false)) return result;
+                } else {
+                    CloseHandle(hProc);
+                }
+            }
+        }
+
+        auto resolvePid = [](DWORD pid) -> std::wstring {
+            if (!pid) return {};
+            wchar_t path[MAX_PATH]{};
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc) { DWORD sz = MAX_PATH; QueryFullProcessImageNameW(hProc, 0, path, &sz); CloseHandle(hProc); }
+            return path;
+        };
+
+        auto tryExePath = [&](const std::wstring& path) -> bool {
+            if (path.empty()) return false;
+            SHFILEINFOW sfi{};
+            if (SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon)
+                return Render(sfi.hIcon, true);
+            if (SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_SMALLICON) && sfi.hIcon)
+                return Render(sfi.hIcon, true);
+            return false;
+        };
+
+        auto tryExtractIconEx = [&](const std::wstring& path) -> bool {
+            if (path.empty()) return false;
+            HICON hL = nullptr, hS = nullptr;
+            if (ExtractIconExW(path.c_str(), 0, &hL, &hS, 1)) {
+                HICON chosen = hL ? hL : hS;
+                if (chosen) {
+                    bool ok = Render(chosen, false);
+                    if (hL) DestroyIcon(hL);
+                    if (hS) DestroyIcon(hS);
+                    if (ok) return true;
+                }
+            }
+            return false;
+        };
+
+        std::wstring ep = ctx.exactPath.empty() ? resolvePid(ctx.exactPid) : ctx.exactPath;
+        std::wstring fp = ctx.fuzzyPath.empty() ? resolvePid(ctx.fuzzyPid) : ctx.fuzzyPath;
+
+        if (tryExePath(ep))        return result;
+        if (tryExePath(fp))        return result;
+        if (tryExtractIconEx(ep))  return result;
+        if (tryExtractIconEx(fp))  return result;
+    }
+
+    if (appUserModelId.find(L".exe") != std::wstring::npos) {
+        std::wstring exePath = appUserModelId;
+        if (exePath.size() >= 2 && exePath.front() == L'"' && exePath.back() == L'"')
+            exePath = exePath.substr(1, exePath.size() - 2);
+
+        SHFILEINFOW sfi{};
+        if (SHGetFileInfoW(exePath.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon)
+            if (Render(sfi.hIcon, true)) return result;
+
+        HICON hL = nullptr, hS = nullptr;
+        if (ExtractIconExW(exePath.c_str(), 0, &hL, &hS, 1)) {
+            HICON chosen = hL ? hL : hS;
+            if (chosen) {
+                Render(chosen, false);
+                if (hL) DestroyIcon(hL);
+                if (hS) DestroyIcon(hS);
+                if (!result.empty()) return result;
+            }
+        }
     }
 
     return result;
 }
-
 static void FetchMediaPropertiesAsync() {
     Wh_Log(L"FetchMediaPropertiesAsync: Called");
     std::thread([]() {
@@ -2589,12 +3100,17 @@ static void FetchMediaPropertiesAsync() {
 
                 std::vector<BYTE> appIconBytes;
                 std::wstring      appIconKey;
+                bool forceIconRefresh = false;
                 {
                     std::lock_guard<std::mutex> lk(g_mediaMtx);
                     appIconKey = g_media.appIconKey;
                     appIconBytes = g_media.appIconBytes;
                 }
-                if (g_settings.showAppIcon && (aumid != appIconKey || appIconBytes.empty())) {
+                {
+                    std::lock_guard<std::mutex> lk(g_sessionMtx);
+                    forceIconRefresh = g_userSwitchedSession;
+                }
+                if (g_settings.showAppIcon && (aumid != appIconKey || appIconBytes.empty() || forceIconRefresh || g_cachedAppIconSize != g_settings.appIconSize)) {
                     try {
                         appIconBytes = FetchAppIconBytes(aumid, g_settings.appIconSize);
                         appIconKey   = aumid;
@@ -2622,6 +3138,12 @@ static void FetchMediaPropertiesAsync() {
                     } catch (...) {
 
                     }
+                }
+
+                if (forceIconRefresh && !appIconBytes.empty()) {
+                    std::lock_guard<std::mutex> lk(g_sessionMtx);
+                    g_userSwitchedSession = false;
+                    Wh_Log(L"FetchMediaPropertiesAsync: Icon refreshed after session switch");
                 }
             } catch (...) {
 
@@ -2832,6 +3354,13 @@ static void AttachToSession(GlobalSystemMediaTransportControlsSession session) {
     }
 
     {
+        std::lock_guard<std::mutex> lk(g_mediaMtx);
+        g_media.appIconKey   = L"";
+        g_media.appIconBytes.clear();
+    }
+    g_cachedAppIconSize = -1;
+
+    {
         std::lock_guard<std::mutex> lk(g_sessionMtx);
         g_currentSession = session;
         try {
@@ -3030,7 +3559,6 @@ static void RefreshPlayerContents();
 static void UpdateVisibility();
 static void RefreshThemeColors();
 
-static std::atomic<bool> g_themeRefreshPending{false};
 
 static DWORD WINAPI TimerThreadProc(void*) {
     static bool lastThemeWasLight = IsSystemLightTheme();
@@ -3124,100 +3652,6 @@ static void StopTimerThread() {
     }
     if (g_timerStopEvent) { CloseHandle(g_timerStopEvent); g_timerStopEvent = nullptr; }
     if (g_timerUpdateEvent) { CloseHandle(g_timerUpdateEvent); g_timerUpdateEvent = nullptr; }
-}
-
-static HANDLE g_idleThread    = nullptr;
-static HANDLE g_idleStopEvent = nullptr;
-
-static DWORD WINAPI IdleThreadProc(void*) {
-    while (!g_unloading) {
-        if (WaitForSingleObject(g_idleStopEvent, 1000) == WAIT_OBJECT_0) break;
-        if (g_taskbarWnd) PostMessageW(g_taskbarWnd, WM_APP + 44, 0, 0);
-    }
-    return 0;
-}
-
-static void StartIdleTimer() {
-    if (g_idleThread) return;
-    g_idleStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_idleThread    = CreateThread(nullptr, 0, IdleThreadProc, nullptr, 0, nullptr);
-}
-
-static void StopIdleTimer() {
-    if (g_idleStopEvent) SetEvent(g_idleStopEvent);
-    if (g_idleThread) {
-        DWORD tid = GetCurrentThreadId();
-        HWND hTaskbar = g_taskbarWnd;
-        bool isUiThread = hTaskbar && (GetWindowThreadProcessId(hTaskbar, nullptr) == tid);
-        if (isUiThread) {
-            DWORD result = WAIT_TIMEOUT;
-            DWORD deadline = GetTickCount() + 2000;
-            while (result == WAIT_TIMEOUT && GetTickCount() < deadline) {
-                result = MsgWaitForMultipleObjects(1, &g_idleThread, FALSE, 50, QS_SENDMESSAGE);
-                if (result == WAIT_OBJECT_0 + 1) {
-                    MSG msg;
-                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
-                        TranslateMessage(&msg);
-                        DispatchMessageW(&msg);
-                    }
-                    result = WAIT_TIMEOUT;
-                }
-            }
-        } else {
-            WaitForSingleObject(g_idleThread, 2000);
-        }
-        CloseHandle(g_idleThread);
-        g_idleThread = nullptr;
-    }
-    if (g_idleStopEvent) { CloseHandle(g_idleStopEvent); g_idleStopEvent = nullptr; }
-}
-
-static LRESULT CALLBACK ThemeWatchWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    return DefWindowProcW(hWnd, msg, wParam, lParam);
-}
-
-static DWORD WINAPI ThemeWatchThreadProc(void*) {
-    WNDCLASSEXW wc{};
-    wc.cbSize        = sizeof(wc);
-    wc.lpfnWndProc   = ThemeWatchWndProc;
-    wc.hInstance     = GetModuleHandleW(nullptr);
-    wc.lpszClassName = L"Windhawk_FMP_ThemeWatch";
-    RegisterClassExW(&wc);
-
-    g_themeWatchWnd = CreateWindowExW(0, L"Windhawk_FMP_ThemeWatch", nullptr, 0,
-        0, 0, 0, 0, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);
-    if (!g_themeWatchWnd) return 1;
-
-    MSG msg{};
-    while (!g_unloading) {
-        DWORD result = MsgWaitForMultipleObjects(1, &g_themeWatchStop, FALSE, INFINITE, QS_ALLINPUT);
-        if (result == WAIT_OBJECT_0) break;
-        while (PeekMessageW(&msg, g_themeWatchWnd, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-    }
-
-    DestroyWindow(g_themeWatchWnd);
-    g_themeWatchWnd = nullptr;
-    UnregisterClassW(L"Windhawk_FMP_ThemeWatch", GetModuleHandleW(nullptr));
-    return 0;
-}
-
-static void StartThemeWatcher() {
-    if (g_themeWatchThread) return;
-    g_themeWatchStop   = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_themeWatchThread = CreateThread(nullptr, 0, ThemeWatchThreadProc, nullptr, 0, nullptr);
-}
-
-static void StopThemeWatcher() {
-    if (g_themeWatchStop) SetEvent(g_themeWatchStop);
-    if (g_themeWatchThread) {
-        WaitForSingleObject(g_themeWatchThread, 3000);
-        CloseHandle(g_themeWatchThread);
-        g_themeWatchThread = nullptr;
-    }
-    if (g_themeWatchStop) { CloseHandle(g_themeWatchStop); g_themeWatchStop = nullptr; }
 }
 
 static void RefreshThemeColors() {
@@ -3482,7 +3916,7 @@ static Button MakeControlButton(int cmd, bool isPlaying, winrt::Windows::UI::Col
 
         auto updateBtnVisualState = [btn, isPressed, isHovered]() {
             try {
-                ApplyCommonStateDirect(btn, g_settings.mediaButtonsHoverEffectMode, *isPressed, *isHovered, false, nullptr);
+                GoToCommonState(btn, IsHoverEffectEnabled(g_settings.mediaButtonsHoverEffectMode), *isPressed, *isHovered);
             } catch (...) {
 
             }
@@ -3515,10 +3949,8 @@ static Button MakeControlButton(int cmd, bool isPlaying, winrt::Windows::UI::Col
             updateBtnVisualState();
         });
 
-        btn.PointerReleased([isPressed, isHovered, updateBtnVisualState, cmd](auto const& sender, winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const& e) {
+        btn.PointerReleased([isPressed, isHovered, updateBtnVisualState](auto const& sender, winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const& e) {
             bool actuallyHovered = false;
-            auto prop = e.GetCurrentPoint(nullptr).Properties();
-            auto kind = prop.PointerUpdateKind();
 
             if (auto elem = sender.template try_as<UIElement>()) {
                 elem.ReleasePointerCapture(e.Pointer());
@@ -3532,12 +3964,6 @@ static Button MakeControlButton(int cmd, bool isPlaying, winrt::Windows::UI::Col
             *isHovered = actuallyHovered;
             updateBtnVisualState();
 
-            if (!g_unloading && actuallyHovered) {
-                if (kind == winrt::Windows::UI::Input::PointerUpdateKind::LeftButtonReleased) {
-                    SendMediaCommandAsync(cmd);
-                    DispatchMediaUpdate();
-                }
-            }
             e.Handled(true);
         });
 
@@ -4232,7 +4658,7 @@ static Grid BuildPlayerGrid() {
         auto playerNormalBg = MakeBackgroundBrush();
 
         auto updatePlayerVisualState = [playerButton, isPressed, isHovered]() {
-            ApplyCommonStateDirect(playerButton, g_settings.playerHoverEffectMode, *isPressed, *isHovered, true, MakeBackgroundBrush());
+            GoToCommonState(playerButton, IsHoverEffectEnabled(g_settings.playerHoverEffectMode), *isPressed, *isHovered);
         };
 
         RunWhenButtonReady(playerButton, [playerButton, playerNormalBg, updatePlayerVisualState]() {
@@ -5251,15 +5677,12 @@ static void RefreshPlayerContents() {
                 if (g_settings.hideUnsupportedButtons) {
                     btn.Visibility(supported ? Visibility::Visible : Visibility::Collapsed);
                 } else {
-                    btn.IsEnabled(supported);
                     btn.Visibility(Visibility::Visible);
                 }
                 if (auto ct = btn.Content().try_as<TextBlock>()) {
                     const wchar_t* glyph = GetGlyph(1);
                     ct.Text(winrt::hstring(glyph));
                     if (!supported && !g_settings.hideUnsupportedButtons) {
-                        ct.Foreground(MakeBrush({0x00, 0, 0, 0}));
-                        btn.Background(MakeBrush({0x00, 0, 0, 0}));
                         ct.Opacity(0.35);
                         ct.Foreground(MakeBrush(ButtonColor()));
                     } else {
@@ -5276,7 +5699,6 @@ static void RefreshPlayerContents() {
                 if (g_settings.hideUnsupportedButtons) {
                     btn.Visibility(supported ? Visibility::Visible : Visibility::Collapsed);
                 } else {
-                    btn.IsEnabled(supported);
                     btn.Visibility(Visibility::Visible);
                 }
                 if (auto ct = btn.Content().try_as<TextBlock>()) {
@@ -5294,7 +5716,6 @@ static void RefreshPlayerContents() {
                 if (g_settings.hideUnsupportedButtons) {
                     btn.Visibility(supported ? Visibility::Visible : Visibility::Collapsed);
                 } else {
-                    btn.IsEnabled(supported);
                     btn.Visibility(Visibility::Visible);
                 }
                 if (auto ct = btn.Content().try_as<TextBlock>()) {
@@ -5312,7 +5733,6 @@ static void RefreshPlayerContents() {
                 if (g_settings.hideUnsupportedButtons) {
                     btn.Visibility(supported ? Visibility::Visible : Visibility::Collapsed);
                 } else {
-                    btn.IsEnabled(supported);
                     btn.Visibility(Visibility::Visible);
                 }
                 if (auto ct = btn.Content().try_as<TextBlock>()) {
@@ -5330,7 +5750,6 @@ static void RefreshPlayerContents() {
                 if (g_settings.hideUnsupportedButtons) {
                     btn.Visibility(supported ? Visibility::Visible : Visibility::Collapsed);
                 } else {
-                    btn.IsEnabled(supported);
                     btn.Visibility(Visibility::Visible);
                 }
                 if (auto ct = btn.Content().try_as<TextBlock>()) {
@@ -5353,7 +5772,6 @@ static void RefreshPlayerContents() {
                 if (g_settings.hideUnsupportedButtons) {
                     btn.Visibility(supported ? Visibility::Visible : Visibility::Collapsed);
                 } else {
-                    btn.IsEnabled(supported);
                     btn.Visibility(Visibility::Visible);
                 }
                 if (auto ct = btn.Content().try_as<TextBlock>()) {
@@ -5929,7 +6347,6 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
     g_taskbarWnd = hWnd;
 
     std::thread([hWnd]() {
-        Sleep(400);
 
         if (g_unloading || g_playerGrid) {
             g_hookInjectionInProgress = false;
@@ -5984,7 +6401,6 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags
 static bool HookTaskbarDllSymbols() {
     static const wchar_t* const kCandidates[] = {
         L"taskbar.dll",
-        L"twinui.pcshell.dll",
     };
     HMODULE h = nullptr;
     for (auto* name : kCandidates) {
@@ -6021,9 +6437,36 @@ static bool HookTaskbarViewDllSymbols(HMODULE h) {
     return true;
 }
 
+static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pVersionData = nullptr;
+    HRSRC hResource = FindResourceW(hModule, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            pVersionData = LockResource(hGlobal);
+        }
+    }
+    if (!pVersionData) return nullptr;
+    VS_FIXEDFILEINFO* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+    if (!VerQueryValueW(pVersionData, L"\\", (LPVOID*)&pFixedFileInfo, &uPtrLen))
+        return nullptr;
+    if (puPtrLen) *puPtrLen = uPtrLen;
+    return pFixedFileInfo;
+}
+
 static HMODULE GetTaskbarViewModule() {
-    for (auto* n : {L"SystemTray.dll", L"Taskbar.View.dll", L"taskbar.view.dll", L"ExplorerExtensions.dll"})
-        if (HMODULE h = GetModuleHandleW(n)) return h;
+    if (HMODULE h = GetModuleHandleW(L"SystemTray.dll")) return h;
+    if (HMODULE h = GetModuleHandleW(L"Taskbar.View.dll")) {
+        VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(h, nullptr);
+        WORD moduleMajor = fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+        if (!moduleMajor || moduleMajor < 2604) {
+            return h;
+        }
+        Wh_Log(L"GetTaskbarViewModule: Skipping Taskbar.View.dll version %d (symbols moved to SystemTray.dll)", moduleMajor);
+    }
+
+    if (HMODULE h = GetModuleHandleW(L"ExplorerExtensions.dll")) return h;
     return nullptr;
 }
 
@@ -6035,7 +6478,6 @@ BOOL Wh_ModInit() {
     g_taskbarViewDllLoaded = false;
     g_taskbarWnd = nullptr;
     g_needsUiUpdate = false;
-    g_themeRefreshPending = false;
 
     LoadSettings();
 
@@ -6072,9 +6514,6 @@ void Wh_ModAfterInit() {
     StartTimerThread();
     Wh_Log(L"Wh_ModAfterInit: Timer thread started");
 
-    StartIdleTimer();
-    StartThemeWatcher();
-
     if (g_taskbarWnd) {
         RunFromWindowThread(g_taskbarWnd, [](void*) {
             Wh_Log(L"Wh_ModAfterInit: Inside window thread callback");
@@ -6104,9 +6543,7 @@ void Wh_ModUninit() {
     g_hookFailCount = 0;
 
     StopTimerThread();
-    StopIdleTimer();
     StopMediaThread();
-    StopThemeWatcher();
 
     if (g_taskbarWnd)
         RunFromWindowThread(g_taskbarWnd, [](void*) { RemovePlayerGrid(); }, nullptr);
@@ -6118,14 +6555,12 @@ void Wh_ModUninit() {
     g_playerHoverBrush  = nullptr;
     g_playerPressedBrush = nullptr;
     g_playerBorderBrush  = nullptr;
-    g_themeRefreshPending = false;
 }
 
 void Wh_ModSettingsChanged() {
     g_applyingSettings = true;
 
     StopTimerThread();
-    StopIdleTimer();
 
     LoadSettings();
 
@@ -6133,7 +6568,6 @@ void Wh_ModSettingsChanged() {
     if (!hWnd) {
         g_applyingSettings = false;
         StartTimerThread();
-        StartIdleTimer();
         return;
     }
     g_taskbarWnd = hWnd;
@@ -6185,5 +6619,4 @@ void Wh_ModSettingsChanged() {
     }
 
     StartTimerThread();
-    StartIdleTimer();
 }
