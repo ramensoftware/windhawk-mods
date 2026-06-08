@@ -6329,6 +6329,9 @@ static void ApplySettings() {
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
 static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
 
+using IconView_IconView_t = void*(WINAPI*)(void*);
+static IconView_IconView_t IconView_IconView_Original = nullptr;
+
 static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     Wh_Log(L"TrayUI_StartTaskbar_Hook: Called");
     TrayUI_StartTaskbar_Original(pThis);
@@ -6348,6 +6351,28 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     Wh_Log(L"TrayUI_StartTaskbar_Hook: Found taskbar window %p", hWnd);
 
     ApplySettings();
+}
+
+static void* WINAPI IconView_IconView_Hook(void* pThis) {
+    Wh_Log(L"IconView_IconView_Hook: Called (fallback)");
+    auto r = IconView_IconView_Original(pThis);
+
+    if (g_unloading || g_playerGrid) {
+        Wh_Log(L"IconView_IconView_Hook: Already initialized or unloading");
+        return r;
+    }
+
+    HWND hWnd = FindCurrentProcessTaskbarWnd();
+    if (!hWnd) {
+        Wh_Log(L"IconView_IconView_Hook: Taskbar window not found");
+        return r;
+    }
+
+    g_taskbarWnd = hWnd;
+    Wh_Log(L"IconView_IconView_Hook: Found taskbar window %p", hWnd);
+
+    ApplySettings();
+    return r;
 }
 
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
@@ -6417,17 +6442,45 @@ static bool HookTaskbarDllSymbols() {
 }
 
 static bool HookTaskbarViewDllSymbols(HMODULE h) {
+    Wh_Log(L"HookTaskbarViewDllSymbols: Attempting to hook TrayUI_StartTaskbar");
     // Taskbar.View.dll, SystemTray.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
-        {LR"(void __cdecl TrayUI_StartTaskbar(void *))"},
-        &TrayUI_StartTaskbar_Original,
-        TrayUI_StartTaskbar_Hook,
-    }};
-    if (!WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
-        return false;
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{LR"(void __cdecl TrayUI_StartTaskbar(void *))"},
+         &TrayUI_StartTaskbar_Original,
+         TrayUI_StartTaskbar_Hook},
+    };
+    if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked TrayUI_StartTaskbar");
+        g_taskbarViewDllLoaded = true;
+        return true;
     }
-    g_taskbarViewDllLoaded = true;
-    return true;
+
+    Wh_Log(L"HookTaskbarViewDllSymbols: First signature failed, trying alternative");
+    WindhawkUtils::SYMBOL_HOOK hooks2[] = {
+        {{LR"(void __cdecl TrayUI_StartTaskbar(struct WINAPI *))"},
+         &TrayUI_StartTaskbar_Original,
+         TrayUI_StartTaskbar_Hook},
+    };
+    if (WindhawkUtils::HookSymbols(h, hooks2, ARRAYSIZE(hooks2))) {
+        Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked TrayUI_StartTaskbar (alt signature)");
+        g_taskbarViewDllLoaded = true;
+        return true;
+    }
+
+    Wh_Log(L"HookTaskbarViewDllSymbols: All signatures failed, falling back to IconView hook");
+    WindhawkUtils::SYMBOL_HOOK hooks3[] = {{
+        {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
+        &IconView_IconView_Original,
+        IconView_IconView_Hook,
+    }};
+    if (WindhawkUtils::HookSymbols(h, hooks3, ARRAYSIZE(hooks3))) {
+        Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked IconView::IconView as fallback");
+        g_taskbarViewDllLoaded = true;
+        return true;
+    }
+
+    Wh_Log(L"HookTaskbarViewDllSymbols: Failed to hook any symbols");
+    return false;
 }
 
 static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -6464,6 +6517,7 @@ static HMODULE GetTaskbarViewModule() {
 }
 
 BOOL Wh_ModInit() {
+    Wh_Log(L"Wh_ModInit: Starting");
     g_unloading = false;
     g_applyingSettings = false;
     g_hookInjectionInProgress = false;
@@ -6474,11 +6528,22 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    HookTaskbarDllSymbols();
+    Wh_Log(L"Wh_ModInit: Calling HookTaskbarDllSymbols");
+    if (!HookTaskbarDllSymbols()) {
+        Wh_Log(L"Wh_ModInit: HookTaskbarDllSymbols failed");
+        return FALSE;
+    }
 
+    Wh_Log(L"Wh_ModInit: Checking for TaskbarView module");
     if (HMODULE h = GetTaskbarViewModule()) {
-        HookTaskbarViewDllSymbols(h);
+        Wh_Log(L"Wh_ModInit: TaskbarView module found, hooking symbols");
+        if (!HookTaskbarViewDllSymbols(h)) {
+            Wh_Log(L"Wh_ModInit: HookTaskbarViewDllSymbols failed");
+            return FALSE;
+        }
+        Wh_Log(L"Wh_ModInit: TaskbarView symbols hooked successfully");
     } else {
+        Wh_Log(L"Wh_ModInit: TaskbarView module not found, setting up LoadLibraryExW hook");
         HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
         auto pLLEW = kb ? (LoadLibraryExW_t)GetProcAddress(kb, "LoadLibraryExW") : nullptr;
         if (pLLEW)
@@ -6486,6 +6551,7 @@ BOOL Wh_ModInit() {
                                (void**)&LoadLibraryExW_Original);
     }
 
+    Wh_Log(L"Wh_ModInit: Completed successfully");
     return TRUE;
 }
 
