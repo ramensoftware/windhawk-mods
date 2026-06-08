@@ -2,18 +2,48 @@
 // @id              desktop-icons-toggle
 // @name            Desktop Icons Toggle
 // @description     Taskbar button to toggle desktop icons visibility
-// @version         7.5
+// @version         1.0.0
 // @author          ChamPoing
+// @github          https://github.com/ChamPoingYT
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+
+# Desktop Icons Toggle
+Adds a persistent button to your taskbar to show/hide desktop icons with a single click.
+
+If you right click on the icon : 
+
+- show a small menu with all the actions you can do.
+
+If you double-left click on the icon :
+
+- open your file explorer.
+
+## Settings
+- **X Offset / Y Offset**: Fine-tune position in pixels.
+
+## Important
+I dont know if i will provide update for this mod, if u want, or if you want to send feedback/somethgin else, 
+add chaisegamings on discord.
+
+(i accept everyone)
+
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*...*/
+/*
+- offsetX: 0
+  $name: Horizontal offset (pixels)
+  $description: Move the button horizontally
+- offsetY: 0
+  $name: Vertical offset (pixels)
+  $description: Move the button vertically
+*/
 // ==/WindhawkModSettings==
 
 #include <windows.h>
