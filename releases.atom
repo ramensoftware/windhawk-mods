@@ -2,12 +2,73 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-05T18:10:10.000Z</updated>
+    <updated>2026-06-09T20:31:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.1]]></title>
+        <id>https://windhawk.net/mods/settings-to-control-panel#1ac6e9fec2eed8fc9df2082f410e528b70dc1720</id>
+        <link href="https://windhawk.net/mods/settings-to-control-panel"/>
+        <updated>2026-06-09T20:31:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="redirectsettingscontrolpanel">Redirect Settings → Control Panel</h1>
+<p>This mod intercepts modern <code>ms-settings:</code> URIs and redirects them to their
+corresponding classic Control Panel applets using only native Windows components.</p>
+<hr />
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li><strong>Windows 10</strong> – Mostly complete support</li>
+<li><strong>Windows 11</strong> – Partial support (some redirects may vary by build)</li>
+</ul>
+<hr />
+<h2 id="features">Features</h2>
+<ul>
+<li>Redirects numerous <code>ms-settings:</code> URIs to classic Control Panel</li>
+<li>Anti-loop protection</li>
+<li>Configurable fallback modes</li>
+</ul>
+<hr />
+<h2 id="configuration">Configuration</h2>
+<ul>
+<li><strong>EnableRedirects</strong> – Turn the mod on or off</li>
+<li><strong>UIOnlyRedirects</strong> – Only redirect clicks (safer, may miss some)</li>
+<li><strong>FallbackMode</strong> – What to do when no classic page exists:</li>
+<li><code>0</code> = ignore (do nothing)</li>
+<li><code>1</code> = open Control Panel</li>
+<li><code>2</code> = open modern Settings (default)</li>
+<li><strong>Win11CompatibilityMode</strong> – Extra safety for Windows 11</li>
+<li><strong>MaxLaunchesPerUri</strong> – Prevents infinite loops (default: 3 launches per 5 seconds)</li>
+</ul>
+<hr />
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>System tray icons (audio/network) use DCOM activation and cannot be intercepted (This could change in future)</li>
+<li>Windows 11 support is limited due to Microsoft's architectural changes and some redirects might change based on versions.</li>
+</ul>
+<hr />
+<h2 id="howitworks">How It Works</h2>
+<p>The mod hooks:</p>
+<ul>
+<li><code>ShellExecuteExW</code> / <code>ShellExecuteW</code></li>
+<li><code>CreateProcessW</code></li>
+<li><code>IShellDispatch2::ShellExecute</code></li>
+</ul>
+<p>When a <code>ms-settings:</code> URI is detected, it launches the corresponding classic
+Control Panel target instead of the modern Settings app.</p>
+<hr />
+<h2 id="credits">Credits</h2>
+<ul>
+<li>m417z – Code reviews and feedback</li>
+<li>Anixx – Testing on Windows 11 23H2</li>
+<li>dbilanoski – CLSID documentation</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Snap Commander 1.0.0]]></title>
         <id>https://windhawk.net/mods/snap-commander#b41f04fdb59386dddaa75f1e522d7403eb00877f</id>
@@ -809,41 +870,6 @@ Keep in mind that these animation can use a lot of cpu power but from my experie
         <author>
             <name>SilverAmd</name>
             <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MSHTML Tweaks 1.0]]></title>
-        <id>https://windhawk.net/mods/mshtml-native-controls#f7de3782e55d3abd9b6d97588c8116ac80e7e0b1</id>
-        <link href="https://windhawk.net/mods/mshtml-native-controls"/>
-        <updated>2026-05-25T14:10:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mshtmltweaks">MSHTML Tweaks</h1>
-<ul>
-<li>Various tweaks for Internet Explorer and all the other apps using its engine (Trident/MSHTML), such as HTML Help, HelpPane, MSHTA, MMC, etc.</li>
-<li>This mod can bring back old controls, customize the font smoothing type (disable the forced ClearType), and disable the DirectComposition rendering.</li>
-<li>Special thanks to @xalejandro for the ClearType disabler.</li>
-<li>Only works on Internet Explorer 11 engine running on Windows 10 or higher. Tested on 10 22H2 and 11 25H2. Never tested on Windows 8 or earlier Windows 10 builds. Won't work on Windows 7. (You'll need to remove hooks for some symbols that don't exist.)</li>
-<li>The first launch of an MSHTML application after enabling this mod will take a lot of time, due to the large size of the symbols needed. It may not show the symbols download progress dialog depending on your internet security settings.</li>
-</ul>
-<h2 id="notesregardingtheoldcontrolstyles">Notes regarding the old control styles</h2>
-<ul>
-<li>Note that this mod only restores IE11's built-in Windows 7 behavior for old control styling, which uses hardcoded/fake Aero styles that do not actually match the current system theme.</li>
-<li>Only the scrollbar will use actual bitmaps from the current visual style (or classic); however, they may look glitchy, especially on HiDPI displays.</li>
-<li>You may want to disable the visual styles for controls in Internet Options (<code>inetcpl.cpl</code>) -&gt; Advanced -&gt; <code>Enable visual styles on buttons and controls in web pages</code> to make them look better on older themes such as XP.
-<img src="https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/ie_fakeaero.png" alt="Comparison of fake and real control styles" /></li>
-</ul>
-<h2 id="ifinternetexplorerhangsonstartup">If Internet Explorer hangs on startup</h2>
-<ul>
-<li>Internet Explorer (<code>iexplore.exe</code>) uses a 32-bit subprocess by default, and the subprocess will fail to save its symbol downloaded from the Windhawk server.</li>
-<li>To fix this, please run the following in the run dialog (Win+R) to launch a 32-bit MSHTML as a main process to load the symbols:</li>
-<li><code>C:\Windows\SysWOW64\hh.exe http://www.ingan121.com/</code> (or any other <code>http</code> URL that isn't <code>https</code>)</li>
-</ul>
-<h2 id="knownissues">Known issues</h2>
-<ul>
-<li>Internet Explorer will crash when changing the settings or loading/unloading/updating the mod while it's running. This is not necessarily true for other apps using MSHTML.</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>

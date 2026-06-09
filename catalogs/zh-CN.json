@@ -9225,6 +9225,33 @@
                 "version": "1.0"
             }
         },
+        "settings-to-control-panel": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781037077000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781037077000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "babamohammed",
+                "description": "Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.",
+                "github": "https://github.com/babamohammed2022",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Redirect Settings to Control Panel",
+                "version": "10.0.1"
+            }
+        },
         "shadowplay-do-not-disable": {
             "details": {
                 "defaultSorting": 64420,
