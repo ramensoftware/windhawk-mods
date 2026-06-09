@@ -1,21 +1,23 @@
 // ==WindhawkMod==
-// @id             fluid-window-engine-pro
-// @name           Fluid Window Engine Pro
-// @description    Cinema-grade window animations for Windows 10 / 11. 9 physics-based effects, language-independent taskbar targeting, multi-monitor, tunable per-effect — make every minimize, restore, and close beautiful.
-// @version        2.0.0
-// @author         kivsak
-// @github         https://github.com/kivsak
-// @include        *
+// @id        fluid-window-engine-pro
+// @name      Fluid Window Engine Pro
+// @description   Cinema-grade window animations for Windows 10 / 11. 9 physics-based effects, language-independent taskbar targeting, multi-monitor, tunable per-effect — make every minimize, restore, and close beautiful.
+// @version       2.0.1
+// @author        kivsak
+// @github        https://github.com/kivsak
+// @include       *
 // @compilerOptions -ldwmapi -lgdi32 -lmsimg32 -luser32 -loleacc -loleaut32 -lole32 -luuid -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Fluid Window Engine Pro — v2.0
+# Fluid Window Engine Pro — v2.0.1
 
-**Cinema-grade window animations for Windows 10 / 11.**
+👉 PLS GIB MONI FOR 2X SPEED BOOST: https://www.patreon.com/c/kivsak
 
-Transform mundane minimize/restore/close transitions into smooth, physics-based effects inspired by macOS, KDE Plasma, and Material Design — engineered specifically for Windows. Each animation is fully reversible and runs on the monitor where the window lives.
+Tired of the stiff, boring default animations for your applications? Inspired by macOS, KDE Plasma, and Material Design, this cinema-grade mod completely overhauls how your app windows minimize, restore, and close.
+
+Unlike older, buggy alternatives, this mod features a completely rewritten physics-based engine that guarantees zero visual artifacts, perfectly preserving drop shadows, modern rounded corners, and transparency.
 
 ## What you get
 
@@ -43,14 +45,13 @@ Click X, hit Win+Down, or minimize via the title bar — instead of the boring "
 - **Per-effect bounding box** rendering — no full-screen blits. Smooth 60 FPS even on 4K.
 - **Fully reversible** — minimize and restore use mirror-perfect physics.
 
-## What's new in v2.0
+## What's new in v2.0.1
 
-- **Total taskbar targeting rewrite** — multi-language alias map, FileDescription matching, similarity scoring. Picks the BEST candidate, not the first that matches.
+- **Fixed Double Close Animation** — robust timestamp validation prevents duplicate close animations if an app handles `WM_CLOSE` slowly.
+- **Optimized Memory Usage** — Snapshot cache safely tuned to prevent high RAM consumption on 4K multi-monitor setups.
+- **Total taskbar targeting rewrite** — multi-language alias map, FileDescription matching, similarity scoring.
 - **Fluid seam fix** — smooth body↔tail opacity blend. No more visible joint between droplet body and tail.
 - **Black Hole clean separation** — strict base→particles transition, no overlap artifacts on minimize.
-- **Glass FPS** — incremental edge functions, ~3× faster inner rasterizer.
-- **Sand** — true ballistic structure (restX, restY, vx, vy), upward kick for explosion mode.
-- **Adaptive particle resolution** — Black Hole auto-scales `bSize` for 1440p / 4K.
 
 ## Tuning tips
 
@@ -358,7 +359,8 @@ Click X, hit Win+Down, or minimize via the title bar — instead of the boring "
 
 #define PI 3.14159265358979323846f
 #define MAX_CONCURRENT_ANIMS 4
-#define MAX_SNAPSHOT_CACHE 16
+// Зменшено ліміт кешу з 16 до 8, щоб уникнути надмірного споживання оперативки (на 4K це економить ~250 МБ)
+#define MAX_SNAPSHOT_CACHE 8 
 
 // =============================================================================
 //   HOOK TYPES
@@ -399,7 +401,7 @@ struct EffectSettings {
 struct GhostAnimData {
     HWND     hRealWnd;
     HBITMAP  hBitmap;
-    void*    pBits;
+    void* pBits;
     RECT     targetRect;
     int      width, height;
     int      targetDockX, targetDockY;
@@ -415,8 +417,10 @@ static std::unordered_map<HWND, HBITMAP> g_SnapshotCache;
 static std::deque<HWND>                  g_SnapshotOrder;
 static std::unordered_map<HWND, int>     g_IconPositionsX;
 static std::unordered_map<HWND, int>     g_IconPositionsY;
-// Per-exe cache: once user reveals an app's icon via cursor hover, EVERY future
-// instance of that exe uses the same cached position (since Win11 groups them).
+
+// Fix для подвійної анімації закриття: запам'ятовуємо, коли було викликане закриття
+static std::unordered_map<HWND, DWORD>   g_closeTimestamps; 
+
 static std::unordered_map<std::wstring, POINT> g_ExeIconCache;
 static std::unordered_set<HWND>          g_animatingWindows;
 static std::mutex                        g_CacheMutex;
@@ -467,7 +471,7 @@ static void LoadSettings() {
     s_genie.ext2      = Wh_GetIntSetting(L"genie_tailOpacity");
     s_genie.ext3      = Wh_GetIntSetting(L"genie_quality");
 
-    // Fluid (was Jelly)
+    // Fluid
     s_fluid.minDur    = Wh_GetIntSetting(L"fluid_minDur");
     s_fluid.resDur    = Wh_GetIntSetting(L"fluid_resDur");
     s_fluid.bounceOn  = Wh_GetIntSetting(L"fluid_bounceOn") != 0;
@@ -481,12 +485,8 @@ static void LoadSettings() {
     s_fluid.ext6      = Wh_GetIntSetting(L"fluid_liquidity");
     s_fluid.ext7      = Wh_GetIntSetting(L"fluid_tailWidth");
     s_fluid.ext8      = Wh_GetIntSetting(L"fluid_dropProfile");
-    // Edge inset packed into spare slot (reuse minDur slot? no, keep clean):
-    // Need one more — pack via crt-style separate global
-    // We'll just add a small inline read in RunFluid:
-    // (kept clean: read via a helper)
 
-    // Scale (was Vanilla)
+    // Scale
     s_scale.minDur    = Wh_GetIntSetting(L"scale_minDur");
     s_scale.resDur    = Wh_GetIntSetting(L"scale_resDur");
     s_scale.bounceOn  = Wh_GetIntSetting(L"scale_bounceOn") != 0;
@@ -578,7 +578,6 @@ static void LoadSettings() {
     }
 }
 
-// Helper to read fluid_edgeInset on demand (kept outside ext-slots for clarity)
 static int GetFluidEdgeInset() {
     std::lock_guard<std::mutex> lock(g_SettingsMutex);
     int v = Wh_GetIntSetting(L"fluid_edgeInset");
@@ -603,12 +602,7 @@ static inline float easeOutQuart(float t)  { float f = t - 1.0f; return 1.0f - (
 static inline float easeInQuart(float t)   { return t*t*t*t; }
 static inline float easeInOutSine(float t) { return -0.5f * (cosf(PI * t) - 1.0f); }
 
-// Material-3 style accelerate/decelerate via power curve.
-// power = 1 → linear; 2 → standard Material; 4.5 → emphasized snap.
 static inline float materialEase(float t, bool isRising, float power) {
-    // Both directions use the same formula thanks to how t is pre-flipped per direction:
-    //   close   → t goes 0→1, easePos goes 0→1 with slow start (accelerate)
-    //   restore → t goes 1→0, easePos goes 1→0 with slow end   (decelerate)
     (void)isRising;
     return powf(t, power);
 }
@@ -626,7 +620,6 @@ static inline float FastRandFloat(uint32_t& s) {
     return (FastRand(s) & 0xFFFFFF) / (float)0x1000000;
 }
 
-// Premultiply RGBA by float alpha; promotes alpha=0 pixels with color (PrintWindow quirk).
 static inline uint32_t PremultiplyBlendFast(uint32_t px, float a) {
     if (a >= 0.997f) return px;
     if (a <= 0.003f) return 0;
@@ -640,14 +633,13 @@ static inline uint32_t PremultiplyBlendFast(uint32_t px, float a) {
     return (newA << 24) | (r << 16) | (g << 8) | b;
 }
 
-// Source-over compositing of two premultiplied pixels (additive overdraw for particles).
 static inline uint32_t AlphaBlendPixels(uint32_t dst, uint32_t src_premult) {
     if (dst == 0) return src_premult;
     uint32_t srcA = src_premult >> 24;
     if (srcA == 255) return src_premult;
     if (srcA == 0)   return dst;
     uint32_t invA = 255 - srcA;
-    uint32_t outA = srcA + ((((dst >> 24)       ) * invA) >> 8);
+    uint32_t outA = srcA + ((((dst >> 24)        ) * invA) >> 8);
     uint32_t outR = ((src_premult >> 16) & 0xFF) + ((((dst >> 16) & 0xFF) * invA) >> 8);
     uint32_t outG = ((src_premult >>  8) & 0xFF) + ((((dst >>  8) & 0xFF) * invA) >> 8);
     uint32_t outB = ( src_premult        & 0xFF) + ((( dst        & 0xFF) * invA) >> 8);
@@ -677,10 +669,6 @@ static HBITMAP CreateArgbDib(HDC hRefDC, int w, int h, void** outBits) {
     return CreateDIBSection(hRefDC, &bmi, DIB_RGB_COLORS, outBits, NULL, 0);
 }
 
-// Allow the animation bbox to extend N pixels beyond monitor edges.
-// Ghost windows can be positioned off-screen; the off-screen pixels are simply
-// not visible. This eliminates the "edge clipping" artifact when minimizing
-// or restoring a window near the screen edge.
 #define BBOX_OVERFLOW_PX 250
 
 static RECT ClipToMonitor(RECT r, const RECT& mon) {
@@ -733,7 +721,6 @@ static RECT ComputeAnimBBox(GhostAnimData* data) {
             break;
         }
         case MODE_BLACKHOLE: {
-            // Particles only travel toward window center → small margin sufficient
             int m = max_int(20, max_int(data->width, data->height) / 10);
             b.left -= m; b.top -= m; b.right += m; b.bottom += m;
             break;
@@ -750,7 +737,6 @@ static RECT ComputeAnimBBox(GhostAnimData* data) {
             break;
         }
         case MODE_GLASS: {
-            // Tighter bbox: actual ballistic reach ≈ 0.7 × scatter over animation
             int sX = (data->cfg.ext5 * 7) / 10 + 60;
             int sY = (data->cfg.ext6 * 7) / 10 + 60;
             int grav = data->cfg.ext2;
@@ -777,7 +763,7 @@ struct GhostBuf {
     HBITMAP hWork    = NULL;
     HBITMAP hOldWork = NULL;
     HDC     hWorkDC  = NULL;
-    void*   workBits = NULL;
+    void* workBits = NULL;
     int     x = 0, y = 0, w = 0, h = 0;
 
     bool Init(const RECT& bb, HDC hRefDC) {
@@ -831,8 +817,6 @@ static void RevealRealWindow(GhostAnimData* data) {
     if (!IsWindow(data->hRealWnd)) return;
 
     if (data->isClosing) {
-        // Close: if the window is STILL alive at the end of the animation, the close
-        // was cancelled (e.g., "Save changes?" dialog) — restore its visibility.
         SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
         if (!(data->originalExStyle & WS_EX_LAYERED)) {
             SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
@@ -874,7 +858,7 @@ static double GetBounceDuration(GhostAnimData* d) {
 }
 
 // =============================================================================
-//   EFFECT: 📐 SCALE  (default minimize, was Vanilla)
+//   EFFECT: 📐 SCALE
 // =============================================================================
 
 static void RunScale(GhostAnimData* data) {
@@ -1006,7 +990,7 @@ static void RunZoom(GhostAnimData* data) {
 }
 
 // =============================================================================
-//   EFFECT: 💨 SWIPE  (Material 3 easing)
+//   EFFECT: 💨 SWIPE
 // =============================================================================
 
 static void RunSwipe(GhostAnimData* data) {
@@ -1029,10 +1013,9 @@ static void RunSwipe(GhostAnimData* data) {
     float fadeStr = clampf(data->cfg.ext1 / 100.0f, 0.0f, 1.0f);
     int   dist    = data->cfg.ext2 > 0 ? data->cfg.ext2 : 500;
 
-    // smoothness 0..100 → power 1..4.5 (Material curves)
     float smoothness = clampf(data->cfg.ext3 / 100.0f, 0.0f, 1.0f);
     float power      = 1.0f + smoothness * 3.5f;
-    float alphaPower = power * 1.4f;   // alpha fades slightly later for cleaner exit
+    float alphaPower = power * 1.4f;
 
     uint32_t rng = (uint32_t)GetTickCount64() ^ (uint32_t)(uintptr_t)data->hRealWnd;
     int dir = g_swipeDir;
@@ -1046,8 +1029,6 @@ static void RunSwipe(GhostAnimData* data) {
         float p = clampf((float)(elapsed / animDur), 0.0f, 1.0f);
         float t = data->isRising ? (1.0f - p) : p;
 
-        // close (t: 0→1) → easePos: 0→1, slow start → accelerate
-        // rising (t: 1→0) → easePos: 1→0, derivative steepest at start of restore → decelerate
         float easePos   = materialEase(t, data->isRising != FALSE, power);
         float easeAlpha = materialEase(t, data->isRising != FALSE, alphaPower);
 
@@ -1167,7 +1148,7 @@ static void RunGenie(GhostAnimData* data) {
     float tailFlat = clampf(tailW * 1.5f, 8.0f, 80.0f);
     float neckLen  = clampf((float)(w - tailW) * 1.2f, (float)h * 0.2f, (float)bboxH * 0.85f);
 
-    void*   renderBits  = gb.workBits;
+    void* renderBits  = gb.workBits;
     HBITMAP hRender     = NULL;
     HDC     hRenderDC   = gb.hWorkDC;
     HBITMAP hOldRender  = NULL;
@@ -1323,7 +1304,7 @@ static void RunGenie(GhostAnimData* data) {
 }
 
 // =============================================================================
-//   EFFECT: 💧 FLUID  (renamed from Jelly, with fullscreen fix + liquidity)
+//   EFFECT: 💧 FLUID
 // =============================================================================
 
 static void RunFluid(GhostAnimData* data) {
@@ -1359,15 +1340,12 @@ static void RunFluid(GhostAnimData* data) {
     float profileExp        = clampf(data->cfg.ext8 / 10.0f, 0.1f, 5.0f);
     int   edgeInset         = clamp_int(GetFluidEdgeInset(), 0, 50);
 
-    // Liquidity-driven character modifiers (rubber → oil):
-    //   0   = stiff rubber: tight blends, sharp corners, narrow tail, quick morph back to square
-    //   100 = liquid oil:   soft blends, round corners, fat smooth tail, stays liquid longer, more wobble
-    float sminKMult     = 0.4f  + liquidity * 1.0f;   // smin smoothness:  0.4 → 1.4
-    float cornerMult    = 0.7f  + liquidity * 0.6f;   // corner radius:    0.7 → 1.3
-    float tailWMult     = 0.7f  + liquidity * 0.8f;   // tail thickness:   0.7 → 1.5
-    float profileMult   = 1.4f  - liquidity * 0.6f;   // taper steepness:  1.4 → 0.8 (smoother for oil)
-    float wobbleMult    = 0.6f  + liquidity * 0.9f;   // wobble strength:  0.6 → 1.5
-    float morphDelay    = liquidity * 0.15f;          // morph delay:      0   → +0.15 (oil stays liquid)
+    float sminKMult     = 0.4f  + liquidity * 1.0f;
+    float cornerMult    = 0.7f  + liquidity * 0.6f;
+    float tailWMult     = 0.7f  + liquidity * 0.8f;
+    float profileMult   = 1.4f  - liquidity * 0.6f;
+    float wobbleMult    = 0.6f  + liquidity * 0.9f;
+    float morphDelay    = liquidity * 0.15f;
 
     float tailW_eff           = tailW * tailWMult;
     float profileExp_eff      = profileExp * profileMult;
@@ -1375,7 +1353,6 @@ static void RunFluid(GhostAnimData* data) {
 
     float tailRadiusLUT[1024];
 
-    // Pre-compute path distance for fullscreen blob cap
     float pathDistY = fabsf(startCY - dockY);
     float pathDistX = fabsf(startCX - dockX);
     float pathDist  = sqrtf(pathDistX * pathDistX + pathDistY * pathDistY);
@@ -1424,9 +1401,6 @@ static void RunFluid(GhostAnimData* data) {
 
         float circleRadius = sqrtf(targetW * targetH) / 2.0f;
 
-        // FULLSCREEN FIX: dynamic cap that tightens near dock
-        //   headEase=1 (at window) → large blob allowed (window-shape morphing)
-        //   headEase=0 (at dock)   → tiny blob (≈30 px) so it fits in taskbar
         float maxR_static    = fminf((float)bW, (float)bH) * 0.18f;
         float maxR_proximity = 30.0f + headEase * fminf(pathDist * 0.20f, fminf((float)bW, (float)bH) * 0.16f);
         float maxR = fminf(maxR_static, maxR_proximity);
@@ -1448,24 +1422,11 @@ static void RunFluid(GhostAnimData* data) {
         float nx = 0.0f, ny = 0.0f;
         if (L > 0.001f) { nx = dxT / L; ny = dyT / L; }
 
-        // Tail BASE (at head connection) auto-syncs to the blob's perpendicular
-        // extent, slightly smaller (×0.9) so it visually fits INSIDE the blob
-        // edge instead of overlapping it — exactly as requested:
-        //   "основаніє хвоста шоб автоматично сінкувалось і було завжди трошки меньше"
-        // No separate setting needed for base width; only the TIP width
-        // (fluid_tailWidth) remains user-configurable.
-        //
-        //   vertical tail   (ny≈±1) → base diameter = curW × 0.9 (slightly < window width)
-        //   horizontal tail (nx≈±1) → base diameter = curH × 0.9 (slightly < window height)
-        //   diagonal               → smooth perpendicular projection
         float headR;
         if (L > 0.001f) {
             float perpExtent = curW * fabsf(ny) + curH * fabsf(nx);
-            // Cap so we never exceed the larger dimension (prevents diagonal blow-up)
             float maxDim = fmaxf(curW, curH);
             if (perpExtent > maxDim) perpExtent = maxDim;
-            // base diameter = perpExtent × 0.9 − 20 (extra 20 px so the tail
-            // visually fits INSIDE the blob edge with a small margin)
             headR = perpExtent * 0.5f * 0.9f - 10.0f;
             if (headR < 4.0f) headR = 4.0f;
         } else {
@@ -1488,9 +1449,6 @@ static void RunFluid(GhostAnimData* data) {
             tailRadiusLUT[i] = tailW_eff + (headR - tailW_eff) * powf(tp, profileExp_eff);
         }
 
-        // Smoother tail emergence: tail starts becoming visible at half of tailStartT,
-        // ramps to ~40% solid by tailStartT, then full solid via tailT.
-        // Fixes "tail doesn't always appear on first opening" issue.
         float earlyEmergence = 0.0f;
         if (t > tailStartT * 0.5f) {
             earlyEmergence = clampf((t - tailStartT * 0.5f) / (tailStartT * 0.5f + 0.001f), 0.0f, 1.0f) * 0.45f;
@@ -1552,9 +1510,6 @@ static void RunFluid(GhostAnimData* data) {
                     }
                 }
 
-                // h_blend = 1 means body fully dominates the shape, 0 means tail dominates.
-                // The smin already blends the SHAPE smoothly; we now also blend OPACITY
-                // along the same axis — otherwise the boundary shows a hard step (the "seam").
                 float h_blend = 1.0f;
                 float finalDist = distBody;
                 if (distTail < 999.0f) {
@@ -1563,8 +1518,6 @@ static void RunFluid(GhostAnimData* data) {
                 }
 
                 if (finalDist <= 1.0f) {
-                    // Smooth body↔tail opacity blend. Body side = full opacity (1.0),
-                    // tail side = the computed tail-fade. h_blend transitions between them.
                     float blendedOpacity = h_blend * 1.0f + (1.0f - h_blend) * opacityFactor;
 
                     float u = px * invCurW + 0.5f;
@@ -1620,14 +1573,12 @@ static void RunBlackHole(GhostAnimData* data) {
     if (maxR < 1.0f) maxR = 1.0f;
     float invMaxR = 1.0f / maxR;
 
-    // Adaptive block size: keep ~30K particles regardless of window size to maintain FPS
     int bSize = data->cfg.ext2 == 1 ? 12 : (data->cfg.ext2 == 3 ? 3 : 6);
     int pixels = data->width * data->height;
-    if      (pixels > 6000000) bSize = max_int(bSize, bSize * 2);     // 4K+
+    if      (pixels > 6000000) bSize = max_int(bSize, bSize * 2);      // 4K+
     else if (pixels > 2500000) bSize = max_int(bSize, (bSize * 3) / 2); // 1440p+
     else if (pixels > 1500000) bSize = max_int(bSize, bSize + 2);     // 1080p+
 
-    // Pre-compute (r0, a0) for each block — halves per-frame trig work.
     std::vector<BHBlock> blocks;
     blocks.reserve((size_t)((data->width / bSize + 1) * (data->height / bSize + 1)));
     float wcx = data->width / 2.0f, wcy = data->height / 2.0f;
@@ -1655,14 +1606,8 @@ static void RunBlackHole(GhostAnimData* data) {
             float blockAlpha = 1.0f;
             if (t > 0.7f) blockAlpha = 1.0f - (t - 0.7f) / 0.3f;
 
-            // PHASE SEPARATION — clean visual distinction prevents the "double-window" overlap:
-            //   t < 0.30           → PURE base (full window, no particles)
-            //   t in 0.30..0.55    → cross-fade (base out, particles in)
-            //   t > 0.55           → PURE particles (no base)
-            // By the time particles fade in, pull has displaced them enough (~0.10 r0) to
-            // look like genuine particle motion, not a duplicate of the base layer.
             float baseAlpha = 1.0f - clampf((t - 0.30f) / 0.25f, 0.0f, 1.0f);
-            baseAlpha = baseAlpha * baseAlpha;  // ease-out fade
+            baseAlpha = baseAlpha * baseAlpha;
 
             if (baseAlpha > 0.02f) {
                 BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)(baseAlpha * 255.0f), AC_SRC_ALPHA };
@@ -1672,19 +1617,17 @@ static void RunBlackHole(GhostAnimData* data) {
                     hSrcDC, 0, 0, data->width, data->height, bf);
             }
 
-            // Particle visibility ramps in 0.30..0.55, then full until fade-out at 0.70+.
             float particleVisibility = clampf((t - 0.30f) / 0.25f, 0.0f, 1.0f);
             float particleAlpha = blockAlpha * particleVisibility;
 
             if (pull > 0.05f && particleAlpha > 0.02f) {
                 BYTE pa255 = (BYTE)(particleAlpha * 255.0f);
-                bool fastPath = (pa255 == 255);   // skip per-pixel alpha math when fully opaque
+                bool fastPath = (pa255 == 255);
                 for (auto& blk : blocks) {
                     float r_new = blk.r0 * (1.0f - pull);
                     float a_new = blk.a0 + twistForce * pull * (1.5f - blk.r0 * invMaxR);
                     int destX = (int)(cx + cosf(a_new) * r_new) - bSize / 2;
                     int destY = (int)(cy + sinf(a_new) * r_new) - bSize / 2;
-                    // Early reject blocks completely off-buffer
                     if (destX + bSize <= 0 || destX >= bW ||
                         destY + bSize <= 0 || destY >= bH) continue;
                     for (int by = 0; by < bSize && blk.y + by < data->height; by++) {
@@ -1729,13 +1672,11 @@ static void RunBlackHole(GhostAnimData* data) {
 //   EFFECT: ⏳ SAND
 // =============================================================================
 
-// Sand grain: stores rest position + initial velocity directly (analytic ballistic).
-// Cleaner & more predictable than driftX/driftY accumulators.
 struct SandGrain {
     int   srcX, srcY;
-    float restX, restY;   // buffer-local rest position
-    float vx, vy;          // initial velocity (px per unit of fallT)
-    float speedMult;       // per-grain gravity scaling for variety
+    float restX, restY;
+    float vx, vy;
+    float speedMult;
     float delay;
 };
 
@@ -1794,19 +1735,13 @@ static void RunSand(GhostAnimData* data) {
             g.restY = (float)(winTop  + y);
             g.delay = delay;
             g.speedMult = 0.6f + r2 * 0.9f;
-            // Outward radial burst (×2.5) + per-grain jitter for organic variety
-            g.vx = vx_norm * scatterX * styleBlend * 2.5f
-                 + (r1 - 0.5f) * scatterX * 0.4f * styleBlend;
-            // Vertical: outward + jitter + upward kick → firework parabolas in explosion mode
-            g.vy = vy_norm * scatterY * styleBlend * 1.8f
-                 + (r2 - 0.5f) * scatterY * 0.2f * styleBlend
-                 - 90.0f * styleBlend;
+            g.vx = vx_norm * scatterX * styleBlend * 2.5f + (r1 - 0.5f) * scatterX * 0.4f * styleBlend;
+            g.vy = vy_norm * scatterY * styleBlend * 1.8f + (r2 - 0.5f) * scatterY * 0.2f * styleBlend - 90.0f * styleBlend;
             grains.push_back(g);
         }
     }
 
     float invFadeLen = 1.0f / (1.0f - fadeStartPct);
-    // Less gravity dampening in explosion so grains DO fall back down (parabolic arcs)
     float gravDampen = 1.0f - styleBlend * 0.55f;
 
     for (;;) {
@@ -1820,7 +1755,6 @@ static void RunSand(GhostAnimData* data) {
 
             for (auto& g : grains) {
                 if (t < g.delay) {
-                    // Resting: draw grain at its original position
                     int sx0 = (int)g.restX;
                     int sy0 = (int)g.restY;
                     for (int by = 0; by < blockSize && g.srcY + by < data->height; by++) {
@@ -1840,10 +1774,8 @@ static void RunSand(GhostAnimData* data) {
                     if (fallT > fadeStartPct) blockAlpha = 1.0f - (fallT - fadeStartPct) * invFadeLen;
                     if (blockAlpha <= 0) continue;
 
-                    // Analytic ballistic: pos = rest + (v + wind)*t + 0.5*g*t² (gravity only on Y)
                     int dispX = (int)((g.vx + windForce) * fallT);
-                    int dispY = (int)(g.vy * fallT
-                              + gravity * fallT * fallT * g.speedMult * gravDampen);
+                    int dispY = (int)(g.vy * fallT + gravity * fallT * fallT * g.speedMult * gravDampen);
                     int sx0 = (int)g.restX + dispX;
                     int sy0 = (int)g.restY + dispY;
 
@@ -2053,7 +1985,6 @@ static void RunGlass(GhostAnimData* data) {
                 float cosA = cosf(angle), sinA = sinf(angle);
                 float invScale = 1.0f / blockScale;
 
-                // Compute rotated vertices & bbox
                 float rx[6], ry[6];
                 float mnX = 99999, mxX = -99999, mnY = 99999, mxY = -99999;
                 for (int i = 0; i < s.count; i++) {
@@ -2068,10 +1999,6 @@ static void RunGlass(GhostAnimData* data) {
                 int iMnX = max_int(0, (int)mnX), iMxX = min_int(bW - 1, (int)(mxX + 1));
                 int iMnY = max_int(0, (int)mnY), iMxY = min_int(bH - 1, (int)(mxY + 1));
 
-                // Incremental edge functions:
-                //   cross[i](unX, unY) = A[i]*unX + B[i]*unY + C[i]
-                //   A[i]=-edy[i], B[i]=edx[i], C[i]=edy[i]*lx[i] - edx[i]*ly[i]
-                // Per x++: unX += cosA*invScale, unY += -sinA*invScale → cross[i] += dC[i]
                 float A[6], B[6], C[6], dC[6];
                 float dux = cosA * invScale, duy = -sinA * invScale;
                 for (int i = 0; i < s.count; i++) {
@@ -2093,7 +2020,6 @@ static void RunGlass(GhostAnimData* data) {
                     float unX = localX * invScale;
                     float unY = localY * invScale;
 
-                    // Initialize cross[] at first pixel of scanline
                     float cross[6];
                     for (int i = 0; i < s.count; i++) cross[i] = A[i] * unX + B[i] * unY + C[i];
 
@@ -2111,7 +2037,6 @@ static void RunGlass(GhostAnimData* data) {
                                     dstRow[x] = PremultiplyBlendFast(px, blockAlpha);
                             }
                         }
-                        // Advance to next pixel: just adds, no multiplies
                         for (int i = 0; i < s.count; i++) cross[i] += dC[i];
                         unX += dux;
                         unY += duy;
@@ -2180,7 +2105,7 @@ static void PruneSnapshotCache_NoLock() {
 }
 
 // =============================================================================
-//   SMART TASKBAR ICON TARGETING (multi-monitor, normalized matching)
+//   SMART TASKBAR ICON TARGETING
 // =============================================================================
 
 static std::wstring NormalizeForMatch(std::wstring s) {
@@ -2199,9 +2124,6 @@ static std::wstring NormalizeForMatch(std::wstring s) {
     return s;
 }
 
-// Multi-language ignore list — system taskbar items that aren't user apps.
-// Localized for English / Ukrainian / Russian (the three most common cases I
-// can verify). Extend as needed for other locales.
 static bool IsIgnoredTaskbarName(const std::wstring& n) {
     if (n.length() <= 2) return true;
     static const wchar_t* const kIgnore[] = {
@@ -2232,17 +2154,12 @@ static bool IsIgnoredTaskbarName(const std::wstring& n) {
     return false;
 }
 
-// Multi-language exe → known taskbar name fragments. Each row maps an exe
-// (without .exe, lowercased) to a list of name fragments any of which should
-// match the taskbar item. Localized variants for common system apps.
 static bool MatchByAlias(const std::wstring& exe, const std::wstring& candidate) {
     if (exe.empty()) return false;
-    // Direct substring match (cheap path)
     if (candidate.find(exe) != std::wstring::npos) return true;
 
     struct Alias { const wchar_t* exe; const wchar_t* names[8]; };
     static const Alias kAliases[] = {
-        // Console hosts
         { L"powershell",      { L"powershell", NULL } },
         { L"pwsh",            { L"powershell", L"pwsh", NULL } },
         { L"cmd",             { L"command prompt", L"командний рядок", L"командна оболонка",
@@ -2250,20 +2167,17 @@ static bool MatchByAlias(const std::wstring& exe, const std::wstring& candidate)
         { L"conhost",         { L"console host", L"console", L"консоль", NULL } },
         { L"windowsterminal", { L"terminal", L"windows terminal", L"термінал", L"терминал", NULL } },
         { L"wt",              { L"terminal", NULL } },
-        // Browsers
         { L"chrome",          { L"chrome", L"google chrome", NULL } },
         { L"firefox",         { L"firefox", L"mozilla firefox", NULL } },
         { L"msedge",          { L"edge", L"microsoft edge", NULL } },
         { L"opera",           { L"opera", NULL } },
         { L"brave",           { L"brave", NULL } },
-        // Dev
         { L"devenv",          { L"visual studio", NULL } },
         { L"code",            { L"visual studio code", L"vscode", L"code", NULL } },
         { L"rider64",         { L"rider", NULL } },
         { L"webstorm64",      { L"webstorm", NULL } },
         { L"pycharm64",       { L"pycharm", NULL } },
         { L"idea64",          { L"intellij", L"idea", NULL } },
-        // System
         { L"explorer",        { L"file explorer", L"провідник файлів", L"проводник",
                                 L"провідник", L"проводник файлов", L"explorer", NULL } },
         { L"notepad",         { L"notepad", L"блокнот", NULL } },
@@ -2274,12 +2188,10 @@ static bool MatchByAlias(const std::wstring& exe, const std::wstring& candidate)
         { L"wordpad",         { L"wordpad", NULL } },
         { L"snippingtool",    { L"snipping tool", L"ножиці", L"ножницы", NULL } },
         { L"screensketch",    { L"snip", L"набросок", NULL } },
-        // Office
         { L"winword",         { L"word", L"microsoft word", NULL } },
         { L"excel",           { L"excel", L"microsoft excel", NULL } },
         { L"powerpnt",        { L"powerpoint", L"microsoft powerpoint", NULL } },
         { L"outlook",         { L"outlook", L"microsoft outlook", NULL } },
-        // Chat
         { L"discord",         { L"discord", NULL } },
         { L"telegram",        { L"telegram", NULL } },
         { L"whatsapp",        { L"whatsapp", NULL } },
@@ -2296,9 +2208,6 @@ static bool MatchByAlias(const std::wstring& exe, const std::wstring& candidate)
     return false;
 }
 
-// Read the FileDescription string from the exe's version resource.
-// This is typically the developer-set app name in English — perfect for
-// matching even on localized Windows where the title is translated.
 static std::wstring GetExeFileDescription(const wchar_t* exeKey) {
     if (!exeKey || !*exeKey) return std::wstring();
     DWORD handle = 0;
@@ -2322,33 +2231,21 @@ static std::wstring GetExeFileDescription(const wchar_t* exeKey) {
     return std::wstring(desc);
 }
 
-// Score a candidate taskbar button name against a target window.
-// Higher = better match. 0 = no match at all.
 static int ScoreTaskbarMatch(const std::wstring& target, const std::wstring& exe,
                               const std::wstring& desc,   const std::wstring& candidate) {
     if (candidate.empty()) return 0;
-
-    // 1. Alias hit — highest confidence (exe + known localized name)
     if (!exe.empty() && MatchByAlias(exe, candidate)) return 100;
-
-    // 2. Direct title match (substring either way, full title)
     if (!target.empty()) {
         if (candidate.find(target) != std::wstring::npos) return 92;
         if (target.find(candidate) != std::wstring::npos && candidate.length() > 3) return 88;
     }
-
-    // 3. FileDescription substring (usually English, language-agnostic)
     if (!desc.empty() && desc.length() > 2) {
         if (candidate.find(desc) != std::wstring::npos) return 82;
         if (desc.find(candidate) != std::wstring::npos && candidate.length() > 3) return 78;
     }
-
-    // 4. Exe substring (often matches for 3rd-party apps)
     if (!exe.empty() && exe.length() > 3) {
         if (candidate.find(exe) != std::wstring::npos) return 65;
     }
-
-    // 5. Token-split: "Document - Notepad" → try "Document", "Notepad" separately
     if (!target.empty()) {
         size_t pos = 0;
         while (pos < target.length()) {
@@ -2362,7 +2259,6 @@ static int ScoreTaskbarMatch(const std::wstring& target, const std::wstring& exe
             pos = sep + 3;
         }
     }
-
     return 0;
 }
 
@@ -2378,12 +2274,8 @@ static HWND GetTaskbarForMonitor(HMONITOR hMon) {
     return hPrimary;
 }
 
-// Drill down to the actual icon container (MSTaskListWClass) inside a taskbar.
-// Skipping Start/Search/Widgets/SystemTray nodes makes MSAA matching way more
-// reliable for apps like PowerShell, Terminal, etc.
 static HWND FindTaskListInTaskbar(HWND hTb) {
     if (!hTb) return NULL;
-    // Win10 path: Shell_TrayWnd > ReBarWindow32 > MSTaskSwWClass > MSTaskListWClass
     HWND hReBar  = FindWindowExW(hTb, NULL, L"ReBarWindow32", NULL);
     HWND hTaskSw = NULL;
     if (hReBar)  hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL);
@@ -2394,7 +2286,6 @@ static HWND FindTaskListInTaskbar(HWND hTb) {
     return hList;
 }
 
-// Collect identifiers used to score taskbar matches against a target window.
 static void CollectTargetIdentifiers(HWND hWnd,
                                       std::wstring& title,
                                       std::wstring& exe,
@@ -2422,10 +2313,6 @@ static void CollectTargetIdentifiers(HWND hWnd,
     }
 }
 
-// Spatial probe — walks the taskbar geometrically with AccessibleObjectFromPoint
-// at regular intervals. Works on Win11 XAML taskbars where the MSAA tree from
-// Shell_TrayWnd often returns no usable buttons.
-// COM must be initialized by the caller.
 static void ProbeTaskbarSpatial(HWND hTb,
                                  const std::wstring& title,
                                  const std::wstring& exe,
@@ -2435,7 +2322,7 @@ static void ProbeTaskbarSpatial(HWND hTb,
     if (!GetWindowRect(hTb, &tb)) return;
     bool horizontal = (tb.right - tb.left) > (tb.bottom - tb.top);
     int span = horizontal ? (tb.right - tb.left) : (tb.bottom - tb.top);
-    int step = span / 60; if (step < 24) step = 24;     // ~60 probes max
+    int step = span / 60; if (step < 24) step = 24;
     long lastL = -99999, lastT = -99999;
     int virtW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
 
@@ -2445,7 +2332,6 @@ static void ProbeTaskbarSpatial(HWND hTb,
         bool perfect = false;
         if (SUCCEEDED(AccessibleObjectFromPoint(pt, &pAcc, &v))) {
             long l = 0, t = 0, w = 0, h = 0;
-            // Filter: valid rect, not whole-taskbar width, not the same button as last probe
             if (SUCCEEDED(pAcc->accLocation(&l, &t, &w, &h, v))
                 && w > 0 && h > 0 && w < virtW
                 && !(l == lastL && t == lastT)) {
@@ -2484,20 +2370,6 @@ static void ProbeTaskbarSpatial(HWND hTb,
     }
 }
 
-// v2.0 — Language-independent taskbar targeting.
-//
-// Two-stage strategy for maximum compatibility across Win10/11 + any locale:
-//   Stage A. MSAA tree walk from MSTaskListWClass (or Shell_TrayWnd fallback)
-//     - Works great on Win10 classic taskbar
-//     - Often returns NO usable buttons on Win11 XAML taskbar
-//   Stage B. Spatial probe — sweeps the taskbar with AccessibleObjectFromPoint
-//     - Works on BOTH Win10 (redundant if A worked) AND Win11 XAML
-//     - Slightly slower (~150ms worst case) but result is cached per-window
-//
-// Buttons are scored, not just matched. Highest-scoring candidate wins.
-// Matching uses: alias map (multi-locale) → window title → exe FileDescription
-// → exe name → title token-split. FileDescription is read from the exe's
-// version resource and is almost always English regardless of OS locale.
 static BOOL GetTaskbarIconCenterFast(HWND hWndTarget, int& outX, int& outY) {
     HMONITOR hMon = MonitorFromWindow(hWndTarget, MONITOR_DEFAULTTONEAREST);
     HWND hTaskbar = GetTaskbarForMonitor(hMon);
@@ -2512,7 +2384,6 @@ static BOOL GetTaskbarIconCenterFast(HWND hWndTarget, int& outX, int& outY) {
 
     HRESULT hrInit = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
-    // --- Stage A: MSAA tree walk ---------------------------------------------
     int bestScore = 0;
     int bestX = 0, bestY = 0;
     IAccessible* pAcc = NULL;
@@ -2553,7 +2424,6 @@ static BOOL GetTaskbarIconCenterFast(HWND hWndTarget, int& outX, int& outY) {
                                 std::wstring nameStr = NormalizeForMatch(bstrName);
                                 SysFreeString(bstrName);
 
-                                // Score this candidate (skip known shell items)
                                 if (!IsIgnoredTaskbarName(nameStr)) {
                                     int score = ScoreTaskbarMatch(targetStr, exeStr, descStr, nameStr);
                                     if (score > bestScore) {
@@ -2568,13 +2438,9 @@ static BOOL GetTaskbarIconCenterFast(HWND hWndTarget, int& outX, int& outY) {
                                     }
                                 }
                             }
-
-                            // Queue VT_DISPATCH children for deeper traversal — but only if
-                            // we haven't found a "perfect" alias hit yet (score 100).
                             if (bestScore < 100 && pVars[i].vt == VT_DISPATCH) queue.push_back(pChild);
                             else pChild->Release();
                         }
-
                         VariantClear(&pVars[i]);
                     }
                 }
@@ -2585,10 +2451,6 @@ static BOOL GetTaskbarIconCenterFast(HWND hWndTarget, int& outX, int& outY) {
         for (auto p : queue) p->Release();
     }
 
-    // --- Stage B: Spatial probe ----------------------------------------------
-    // Runs when MSAA tree gave us nothing solid. Critical for Win11 XAML
-    // taskbars where the tree often exposes no usable buttons. Skipped only
-    // when we already have a perfect (alias-hit) match from Stage A.
     if (bestScore < 100) {
         ProbeTaskbarSpatial(hTaskbar, targetStr, exeStr, descStr,
                             bestScore, bestX, bestY);
@@ -2622,6 +2484,21 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
     {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         if (g_animatingWindows.count(hWnd)) return;
+
+        // NEW FIX: Захист від подвійної анімації закриття
+        // Якщо додаток обробляє WM_CLOSE повільно, він може надіслати другий сигнал через ~1 секунду
+        // Ми блокуємо його на 1.5 секунди з моменту першого старту анімації закриття.
+        if (isClosing) {
+            DWORD now = GetTickCount();
+            auto it = g_closeTimestamps.find(hWnd);
+            if (it != g_closeTimestamps.end()) {
+                if (now - it->second < 1500) { // 1.5 сек кулдаун
+                    return; 
+                }
+            }
+            g_closeTimestamps[hWnd] = now;
+        }
+
         g_animatingWindows.insert(hWnd);
     }
 
@@ -2638,8 +2515,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
         mi.rcWork = mi.rcMonitor;
     }
 
-    // For maximized windows: if DWM gave us bounds clearly outside the monitor,
-    // fall back to work area. Otherwise trust DWM (it knows the true visual rect).
     if (IsZoomed(hWnd)) {
         bool dwmOutOfBounds = (visRect.left < mi.rcMonitor.left - 4) ||
                               (visRect.top  < mi.rcMonitor.top  - 4) ||
@@ -2663,11 +2538,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
     int learnedY = visRect.bottom;
 
     if (!isClosing) {
-        // --- Resolve the exe FILE NAME for the per-exe cache ---------------
-        // Key is filename only (lowercase, no path/extension): "powershell",
-        // "notepad", "chrome". This unifies multiple installations of the
-        // same app — e.g. PowerShell launched from a custom shortcut vs.
-        // System32 path. One taskbar interaction = remembered everywhere.
         std::wstring exeKey;
         DWORD pidT = 0;
         GetWindowThreadProcessId(hWnd, &pidT);
@@ -2686,12 +2556,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
             CloseHandle(hPr);
         }
 
-        // === A. CURSOR-HOVER CAPTURE =======================================
-        // If the cursor is on the taskbar at the moment of minimize/restore,
-        // remember WHERE on the taskbar — that's the icon for this app.
-        // This is the most reliable signal because the user just clicked or
-        // hovered the icon. We cache by BOTH hwnd AND exe path so future
-        // instances of the same app fly to the same icon too.
         POINT pt; GetCursorPos(&pt);
         HWND hHover = WindowFromPoint(pt);
         HWND hRoot  = GetAncestor(hHover, GA_ROOT);
@@ -2701,9 +2565,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
                           wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0);
 
         if (onTaskbar) {
-            // First try the accessible object under cursor — gives us the icon's
-            // actual rect (precise center). If that returns suspicious bounds
-            // (whole-taskbar), fall back to the raw cursor X (etalon-style).
             int hitX = pt.x;
             int hitY = pt.y;
             bool accGood = false;
@@ -2714,7 +2575,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
                 long l = 0, t = 0, ww = 0, hh = 0;
                 if (SUCCEEDED(pAcc->accLocation(&l, &t, &ww, &hh, varChild))
                     && ww > 8 && hh > 8 && ww < 200 && hh < 200) {
-                    // Looks like an icon-sized rect → trust it
                     hitX = l + ww / 2;
                     hitY = t + hh / 2;
                     accGood = true;
@@ -2724,7 +2584,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
             VariantClear(&varChild);
 
             if (!accGood) {
-                // Use cursor X + taskbar middle Y (etalon fallback)
                 RECT tbR;
                 if (hRoot && GetWindowRect(hRoot, &tbR)) {
                     hitY = (tbR.top + tbR.bottom) / 2;
@@ -2741,10 +2600,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
             }
         }
 
-        // === B. CACHE LOOKUP: HWND, then EXE ===============================
-        // HWND cache catches the same window across minimize/restore cycles.
-        // Exe cache catches FRESH instances of an app the user has used before
-        // — critical because Win11 groups instances under one icon.
         bool cacheHit = false;
         {
             std::lock_guard<std::mutex> lock(g_CacheMutex);
@@ -2759,14 +2614,12 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
                     learnedX = itEx->second.x;
                     learnedY = itEx->second.y;
                     cacheHit = true;
-                    // Promote into hwnd cache too so subsequent lookups are O(1)
                     g_IconPositionsX[hWnd] = learnedX;
                     g_IconPositionsY[hWnd] = learnedY;
                 }
             }
         }
 
-        // === C. MSAA + spatial probe =======================================
         if (!cacheHit) {
             int accX, accY;
             if (GetTaskbarIconCenterFast(hWnd, accX, accY)) {
@@ -2778,12 +2631,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
                     g_ExeIconCache[exeKey] = { accX, accY };
                 }
             } else {
-                // === D. Fallback ===========================================
-                // Aim for the middle of the actual taskbar strip — Y in the
-                // center of the bar, X in the center of the monitor. On Win11
-                // centered taskbar this hits the icon row; on Win10 left-
-                // aligned this is the icon column too (since they fill from
-                // the left of the strip).
                 HWND hTbFb = GetTaskbarForMonitor(hMon);
                 RECT tbR;
                 if (hTbFb && GetWindowRect(hTbFb, &tbR)) {
@@ -2795,12 +2642,10 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
             }
         }
 
-        // === E. User Y-offset (minimize only) ==============================
         learnedY += g_dockOffsetY.load();
     } else {
         learnedX = visRect.left + w / 2;
         learnedY = visRect.top  + h / 2;
-        // dock_offset_y intentionally NOT applied for close effects
     }
 
     int mode = isClosing ? g_closeMode.load() : g_minMode.load();
@@ -2874,11 +2719,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
             SetWindowOrgEx(hMemDC, 0, 0, NULL);
         }
     } else {
-        // Detect whether the window extends BEYOND the monitor edges. If it
-        // does, BitBlt from screen would capture BLACK for the off-screen
-        // portion (the screen only has visible pixels). Use PrintWindow
-        // instead — it renders the full window content regardless of which
-        // pixels are currently visible.
         bool offscreen = (visRect.left   < mi.rcMonitor.left)
                       || (visRect.top    < mi.rcMonitor.top)
                       || (visRect.right  > mi.rcMonitor.right)
@@ -2920,9 +2760,6 @@ static void StartAnimation(HWND hWnd, BOOL isRising, BOOL isClosing) {
     if (hThread) {
         if (!isRising || isClosing) {
             if (hEventMain) WaitForSingleObject(hEventMain, 150);
-            // Hide the real window for BOTH minimize and close to prevent the
-            // ghost+real "double window" overlap during the animation.
-            // RevealRealWindow() will restore it later if the close was cancelled.
             LONG_PTR ex = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
             SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
@@ -2948,9 +2785,6 @@ static BOOL IsValidAnimWindow(HWND hWnd) {
     if (g_closeMode.load() == MODE_OFF) return FALSE;
     HWND hParent = GetParent(hWnd);
     if (hParent != NULL && hParent != GetDesktopWindow()) return FALSE;
-    // UWP apps (Settings, Store, modern Calculator, ...) live inside
-    // ApplicationFrameWindow which technically HAS an owner — but we still
-    // want close animations for them. Allow these specific frame classes.
     if (GetWindow(hWnd, GW_OWNER) != NULL) {
         wchar_t ownedCls[256] = {0};
         if (!GetClassNameW(hWnd, ownedCls, 256) ||
@@ -3028,6 +2862,7 @@ static LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LP
         }
         g_IconPositionsX.erase(hWnd);
         g_IconPositionsY.erase(hWnd);
+        g_closeTimestamps.erase(hWnd); // Чистимо кулдаун закриття
     }
     if (g_shuttingDown.load()) return DefWindowProcW_Orig(hWnd, Msg, wParam, lParam);
 
@@ -3085,4 +2920,5 @@ void Wh_ModUninit() {
     g_IconPositionsY.clear();
     g_ExeIconCache.clear();
     g_animatingWindows.clear();
+    g_closeTimestamps.clear(); // Чистимо кулдаун
 }
