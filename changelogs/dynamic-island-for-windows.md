@@ -1,3 +1,27 @@
+## 1.1.1 ([Jun 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f9abdadf12d052e7120571bdf52f578ad98c4333/mods/dynamic-island-for-windows.wh.cpp))
+
+## Fixes
+
+* Fixed a browser error that could occur when clicking on the Dynamic Island widget.
+* Fixed mouse wheel scrolling issues, including delayed responses and unintended looping behavior.
+* Fixed an issue where widgets could disappear after clicking on the desktop or using Win + D.
+
+## Improvements
+
+### Weather
+
+* Improved the Weather UI.
+* Added support for Imperial units (°F, mph, etc.).
+* Added auto-hide functionality.
+* Added hover behavior settings.
+
+### Media Controls
+
+* Added click-to-expand functionality for the media widget.
+* Added a persistent media pill option.
+* Centered media playback controls for better alignment.
+* Added click animations to media control buttons for improved feedback.
+
 ## 1.1.0 ([Jun 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/55338f1accb10a333568251590275cc3b0e1a77f/mods/dynamic-island-for-windows.wh.cpp))
 
 This release is a big step forward from v1.0.2 — we’ve gone through the code top to bottom and added a ton of polish. Below is the full breakdown of what’s new, what’s improved, and what’s fixed.

@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-09T07:41:38.000Z</updated>
+    <updated>2026-06-09T07:51:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Island for Windows 1.1.1]]></title>
+        <id>https://windhawk.net/mods/dynamic-island-for-windows#f9abdadf12d052e7120571bdf52f578ad98c4333</id>
+        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
+        <updated>2026-06-09T07:51:07.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="fixes">Fixes</h2>
+<ul>
+<li>Fixed a browser error that could occur when clicking on the Dynamic Island widget.</li>
+<li>Fixed mouse wheel scrolling issues, including delayed responses and unintended looping behavior.</li>
+<li>Fixed an issue where widgets could disappear after clicking on the desktop or using Win + D.</li>
+</ul>
+<h2 id="improvements">Improvements</h2>
+<h3 id="weather">Weather</h3>
+<ul>
+<li>Improved the Weather UI.</li>
+<li>Added support for Imperial units (°F, mph, etc.).</li>
+<li>Added auto-hide functionality.</li>
+<li>Added hover behavior settings.</li>
+</ul>
+<h3 id="mediacontrols">Media Controls</h3>
+<ul>
+<li>Added click-to-expand functionality for the media widget.</li>
+<li>Added a persistent media pill option.</li>
+<li>Centered media playback controls for better alignment.</li>
+<li>Added click animations to media control buttons for improved feedback.</li>
+</ul>]]></content>
+        <author>
+            <name>Himanshu</name>
+            <uri>https://github.com/devcode90</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme 1.2.5]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#d86f12704aeb84ff7ed2e42838d3ad2bdbf44f10</id>
@@ -377,54 +408,6 @@ exactly the same name as a <em>folder</em> on the desktop, that file's label wil
         <author>
             <name>kivsak</name>
             <uri>https://github.com/kivsak</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Open in Admin Terminal 1.15]]></title>
-        <id>https://windhawk.net/mods/open-in-admin-terminal#e2b57e7a9131fffb4338dce9a9fb61daae8c85d6</id>
-        <link href="https://windhawk.net/mods/open-in-admin-terminal"/>
-        <updated>2026-06-04T11:19:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="openinadminterminal">Open in Admin Terminal</h1>
-<p><strong>TL;DR:</strong> Right-click any folder or drive in File Explorer and open an elevated terminal there — no more navigating after the fact.</p>
-<h2 id="withthismodyoucan">With this mod you can:</h2>
-<ul>
-<li>Right-click a folder background and open an admin terminal in that location</li>
-<li>Right-click a folder item and open an admin terminal inside it</li>
-<li>Right-click a drive and open an admin terminal at its root</li>
-<li>Optionally show the entry when right-clicking filesystem folders and drives in the navigation pane and Quick access</li>
-<li>Choose your preferred terminal: Auto, Windows Terminal, PowerShell 7, Windows PowerShell, Command Prompt, WSL, Git Bash, WezTerm, Alacritty, ConEmu, or a custom command</li>
-<li>Customize the context menu label, or let the mod use a smart default based on your terminal choice</li>
-<li>Optionally append the terminal name to a custom label (e.g. "Open elevated (Windows Terminal)")</li>
-</ul>
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/qEgGpvc.gif" alt="Normal usage — right-click folder background or folder item to open elevated Windows Terminal" /></p>
-<p><em>Right-clicking a folder item to open an elevated terminal in that location (Windows Terminal)</em></p>
-<p><img src="https://i.imgur.com/HziEs16.png" alt="Context menu with Windows Terminal option" /> <img src="https://i.imgur.com/CCE3vlP.png" alt="Context menu with PowerShell 7 option" /></p>
-<p><img src="https://i.imgur.com/8KgCdju.gif" alt="Mod settings showcase" /></p>
-<p><em>Settings panel — choose terminal, customize label, toggle terminal name appending</em></p>
-<p>Screenshots may show earlier builds, but current releases use runtime classic-menu injection. The mod does not write Explorer context menu entries to the registry.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>On Windows 11, Explorer may place this entry under <code>Show more options</code> depending on your context menu setup.</li>
-<li>The entry is injected only while Explorer's classic menu is open; disabling the mod leaves no registry cleanup behind.</li>
-<li>The mod intentionally targets filesystem folders and drive roots only, including optional navigation pane and Quick access support.</li>
-<li>Auto chooses Windows Terminal, PowerShell 7, Windows PowerShell, then Command Prompt. If another built-in preset is unavailable, the mod falls back to Auto instead of hiding the entry.</li>
-<li>Diagnostics use Windhawk's built-in logging controls.</li>
-</ul>
-<h2 id="versionlog">Version log</h2>
-<ul>
-<li>1.15: Added optional navigation pane and Quick access support for filesystem folders and drives.</li>
-<li>1.14: Added support for Desktop context menu targets.</li>
-<li>1.13: Fixed elevated terminal launches for folder paths containing spaces.</li>
-<li>1.12: Added Auto fallback and WSL, Git Bash, WezTerm, Alacritty, and ConEmu terminal presets.</li>
-<li>1.11: Fixed Windows Terminal menu icon lookup when wt.exe is an app execution alias.</li>
-<li>1.10: Reduced Explorer menu-open work by limiting selection path reads and caching terminal icon lookup successes and failures.</li>
-<li>1.9: Added quiet-by-default debug logging, improved menu placement, tightened filesystem target eligibility, and refreshed docs for classic-menu runtime injection.</li>
-<li>1.8: Switched to direct Explorer classic-menu injection with no persistent registry writes.</li>
-</ul>]]></content>
-        <author>
-            <name>aimagist</name>
-            <uri>https://github.com/aimagist</uri>
         </author>
     </entry>
 </feed>

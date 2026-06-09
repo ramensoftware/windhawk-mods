@@ -3655,7 +3655,7 @@
                     65
                 ],
                 "ratingUsers": 89,
-                "updated": 1780470827000,
+                "updated": 1780991467000,
                 "users": 1780
             },
             "metadata": {
@@ -3668,7 +3668,7 @@
                 ],
                 "license": "MIT",
                 "name": "Dynamic Island for Windows",
-                "version": "1.1.0"
+                "version": "1.1.1"
             }
         },
         "edge-hot-corner-desktop-switch": {
