@@ -236,7 +236,7 @@ strip the broken layout definitions.
 //                               Function Imports
 // ====================================================================================
 /*
-    Thi is where we import the functions of the existing variables so our hook knows
+    This is where we import the functions of the existing variables so our hook knows
     how to properly inject our custom properties and variables
 */
 
