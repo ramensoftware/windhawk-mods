@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              taskbar-fluent-media-player
+// @id              taskbar-fluent-media-player3
 // @name            Taskbar Fluent Media Player
 // @description     Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
 // @description:ru-RU Taskbar Fluent Media Player — это мод Windhawk, который интегрирует современный медиаплеер в стиле Fluent Design прямо в панель задач Windows 11. Он позволяет управлять музыкой и просматривать информацию о треке без прерывания работы.
@@ -7,7 +7,7 @@
 // @author          Salyts
 // @github          https://github.com/Salyts
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -83,8 +83,8 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
       - "taskbar_after_search_right": "Панель задач - Справа от кнопки Поиск"
       - "taskbar_after_taskview_left": "Панель задач - Слева от кнопки Представление задач"
       - "taskbar_after_taskview_right": "Панель задач - Справа от кнопки Представление задач"
-      - "taskbar_after_widgets_left": "Панель задач - Слева от кнопки Мини-приложения"
-      - "taskbar_after_widgets_right": "Панель задач - Справа от кнопки Мини-приложения"
+      - "taskbar_after_widgets_left": "Панель задач - Слева от кнопки Мини-приложений"
+      - "taskbar_after_widgets_right": "Панель задач - Справа от кнопки Мини-приложений"
       - "tray_left": "Трей - Край слева"
       - "tray_right": "Трей - Край справа"
       - "tray_before_clock": "Трей - Слева от часов"
@@ -877,6 +877,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Graphics.Imaging.h>
 #include <robuffer.h>
+#include <shcore.h>
 
 #include <windows.h>
 #include <shellapi.h>
@@ -892,7 +893,6 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 
-#include <propsys.h>
 #include <propkey.h>
 
 #include <atomic>
@@ -2023,7 +2023,7 @@ static AlbumPalette ExtractAlbumPalette(const std::vector<BYTE>& thumbBytes) {
         for (uint32_t y = 0; y < h; y += 4) {
             for (uint32_t x = 0; x < w; x += 4) {
                 uint32_t idx = (y * w + x) * 4;
-                if (idx + 3 >= pixels.size()) continue;
+                if (idx + 4 > pixels.size()) continue;
 
                 BYTE pb = pixels[idx];
                 BYTE pg = pixels[idx + 1];
@@ -2954,20 +2954,23 @@ static std::vector<BYTE> FetchAppIconBytes(const std::wstring& appUserModelId, i
             }
 
             if (!c->exactIcon && !c->fuzzyIcon) {
-                DWORD pid = 0;
-                std::wstring procPath;
-                if (AppIdMatchesProcess(*c->aumid, hWnd, &pid, &procPath)) {
-                    HICON icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_BIG,   0);
-                    if (!icon) icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0);
-                    if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
-                    if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
-                    if (icon) {
-                        c->fuzzyIcon = icon;
-                        c->fuzzyPid  = pid;
-                        c->fuzzyPath = procPath;
-                    } else if (!c->fuzzyPid) {
-                        c->fuzzyPid  = pid;
-                        c->fuzzyPath = procPath;
+                std::wstring windowAumid = GetWindowAppUserModelId(hWnd);
+                if (windowAumid.empty()) {
+                    DWORD pid = 0;
+                    std::wstring procPath;
+                    if (AppIdMatchesProcess(*c->aumid, hWnd, &pid, &procPath)) {
+                        HICON icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_BIG,   0);
+                        if (!icon) icon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0);
+                        if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
+                        if (!icon) icon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
+                        if (icon) {
+                            c->fuzzyIcon = icon;
+                            c->fuzzyPid  = pid;
+                            c->fuzzyPath = procPath;
+                        } else if (!c->fuzzyPid) {
+                            c->fuzzyPid  = pid;
+                            c->fuzzyPath = procPath;
+                        }
                     }
                 }
             }
@@ -3349,6 +3352,7 @@ static void AttachToSession(GlobalSystemMediaTransportControlsSession session) {
             }
         }
     }
+    (void)needsReattach;
 
     try {
         std::wstring appId = session.SourceAppUserModelId().c_str();
@@ -3357,11 +3361,7 @@ static void AttachToSession(GlobalSystemMediaTransportControlsSession session) {
         Wh_Log(L"AttachToSession: Attaching to new session (app ID unavailable)");
     }
 
-    if (needsReattach) {
-        DetachCurrentSession();
-    } else {
-        DetachCurrentSession();
-    }
+    DetachCurrentSession();
 
     {
         std::lock_guard<std::mutex> lk(g_mediaMtx);
@@ -3610,7 +3610,27 @@ static DWORD WINAPI TimerThreadProc(void*) {
         bool needsUpdate = g_needsUiUpdate.exchange(false);
         if (needsUpdate) {
             RunFromWindowThread(hWnd, [](void*) {
-                if (!g_unloading && !g_applyingSettings && g_playerGrid) {
+                if (g_unloading || g_applyingSettings) return;
+                if (!g_playerGrid) {
+                    static std::atomic<int> s_skipCounter{0};
+                    int fails = g_hookFailCount.load();
+                    int backoffTicks = (fails <= 1) ? 1 : (fails < 16 ? fails : 16);
+                    int skip = s_skipCounter.fetch_add(1);
+                    if (fails > 0 && (skip % backoffTicks) != 0) {
+                        g_needsUiUpdate = true;
+                        return;
+                    }
+                    Wh_Log(L"TimerThread: g_playerGrid is null, attempting re-inject (failCount=%d)", fails);
+                    ApplySettings();
+                    if (g_playerGrid) {
+                        g_hookFailCount = 0;
+                        s_skipCounter   = 0;
+                    } else {
+                        g_hookFailCount.fetch_add(1);
+                        g_needsUiUpdate = true;
+                    }
+                } else {
+                    g_hookFailCount = 0;
                     RefreshPlayerContents();
                     UpdateVisibility();
                 }
@@ -3901,7 +3921,7 @@ static Button MakeControlButton(int cmd, bool isPlaying, winrt::Windows::UI::Col
         btn.VerticalAlignment(VerticalAlignment::Center);
         btn.HorizontalAlignment(HorizontalAlignment::Center);
 
-        const wchar_t* glyph = L"";
+        const wchar_t* glyph = GetGlyph(cmd, isPlaying);
 
         double opacity = 1.0;
         if (cmd == 7 && !g_shuffleEnabled.load()) {
@@ -5577,6 +5597,7 @@ static void RemovePlayerGrid() {
         g_cachedAlbumTitle.clear();
         g_cachedAlbumArtist.clear();
         g_cachedThumbnailBytes.clear();
+        g_cachedPaletteHash = 0;
         g_blurBgCache.Invalidate();
         g_cachedAppIconSize = -1;
     } catch (...) {
@@ -5587,6 +5608,7 @@ static void RemovePlayerGrid() {
         g_cachedAlbumTitle.clear();
         g_cachedAlbumArtist.clear();
         g_cachedThumbnailBytes.clear();
+        g_cachedPaletteHash = 0;
         g_blurBgCache.Invalidate();
         g_cachedAppIconSize = -1;
     }
@@ -5600,6 +5622,7 @@ static void RefreshPlayerContents() {
     bool              isPlaying = false, hasMedia = false;
     std::vector<BYTE> thumbBytes;
     std::vector<BYTE> appIconBytes;
+    uint64_t          thumbHash = 0;
     bool              canSkipPrevious = true, canSkipNext = true;
     bool              canShuffle = true, canRepeat = true, canSeek = true;
     {
@@ -5609,6 +5632,7 @@ static void RefreshPlayerContents() {
         isPlaying    = g_media.isPlaying;
         hasMedia     = g_media.hasMedia;
         thumbBytes   = g_media.thumbnailBytes;
+        thumbHash    = g_media.thumbnailHash;
         appIconBytes = g_media.appIconBytes;
         canSkipPrevious = g_media.canSkipPrevious;
         canSkipNext     = g_media.canSkipNext;
@@ -5850,10 +5874,7 @@ static void RefreshPlayerContents() {
                                    artist == g_cachedAlbumArtist &&
                                    thumbBytes == g_cachedThumbnailBytes);
 
-                size_t newHash = 0;
-                for (const auto& byte : thumbBytes) {
-                    newHash = newHash * 31 + byte;
-                }
+                size_t newHash = (size_t)thumbHash;
                 if (newHash != g_cachedPaletteHash && newHash != 0) {
                     g_cachedAlbumPalette = ExtractAlbumPalette(thumbBytes);
                     g_cachedPaletteHash = newHash;
@@ -5862,45 +5883,53 @@ static void RefreshPlayerContents() {
 
                 if (!isSameAlbum) {
                     try {
-                        auto stream = winrt::Windows::Storage::Streams::InMemoryRandomAccessStream();
-                        DataWriter writer(stream);
-                        writer.WriteBytes(winrt::array_view<const BYTE>(thumbBytes));
-                        auto storeOp = writer.StoreAsync();
-                        if (storeOp.wait_for(std::chrono::milliseconds(100)) == winrt::Windows::Foundation::AsyncStatus::Completed) {
-                            writer.DetachStream();
-                            stream.Seek(0);
-                            BitmapImage bmp;
+                        IStream* pRawStream = SHCreateMemStream(
+                            thumbBytes.data(), static_cast<UINT>(thumbBytes.size()));
+                        if (pRawStream) {
+                            winrt::com_ptr<IStream> comStream;
+                            comStream.attach(pRawStream);
 
-                            if (g_settings.albumArtQuality == L"low") {
-                                int baseHeight = g_settings.albumArtMaxHeight > 0 ? g_settings.albumArtMaxHeight : 64;
-                                int decodeHeight = baseHeight / 2;
-                                if (decodeHeight < 16) decodeHeight = 16; 
-                                bmp.DecodePixelHeight(decodeHeight);
-                            } else if (g_settings.albumArtQuality == L"medium") {
-                                if (g_settings.albumArtMaxHeight > 0) {
-                                    bmp.DecodePixelHeight(g_settings.albumArtMaxHeight);
+                            winrt::Windows::Storage::Streams::IRandomAccessStream rasStream{ nullptr };
+                            ::CreateRandomAccessStreamOverStream(
+                                comStream.get(),
+                                BSOS_DEFAULT,
+                                winrt::guid_of<winrt::Windows::Storage::Streams::IRandomAccessStream>(),
+                                winrt::put_abi(rasStream));
+
+                            if (rasStream) {
+                                BitmapImage bmp;
+
+                                if (g_settings.albumArtQuality == L"low") {
+                                    int baseHeight = g_settings.albumArtMaxHeight > 0 ? g_settings.albumArtMaxHeight : 64;
+                                    int decodeHeight = baseHeight / 2;
+                                    if (decodeHeight < 16) decodeHeight = 16;
+                                    bmp.DecodePixelHeight(decodeHeight);
+                                } else if (g_settings.albumArtQuality == L"medium") {
+                                    if (g_settings.albumArtMaxHeight > 0) {
+                                        bmp.DecodePixelHeight(g_settings.albumArtMaxHeight);
+                                    }
                                 }
-                            }
 
-                            bmp.SetSourceAsync(stream);
-                            img.Source(bmp);
-                            img.Visibility(Visibility::Visible);
+                                img.Source(bmp);
+                                bmp.SetSourceAsync(rasStream);
+                                img.Visibility(Visibility::Visible);
 
-                            g_cachedAlbumTitle = title;
-                            g_cachedAlbumArtist = artist;
-                            g_cachedThumbnailBytes = thumbBytes;
+                                g_cachedAlbumTitle = title;
+                                g_cachedAlbumArtist = artist;
+                                g_cachedThumbnailBytes = thumbBytes;
 
-                            if (auto parent = VisualTreeHelper::GetParent(img)) {
-                                if (auto container = parent.try_as<FrameworkElement>()) {
-                                    if (auto grandParent = VisualTreeHelper::GetParent(container)) {
-                                        if (auto artContainer = grandParent.try_as<Grid>()) {
-                                            artContainer.Visibility(Visibility::Visible);
-                                            for (uint32_t i = 0; i < artContainer.Children().Size(); ++i) {
-                                                auto child = artContainer.Children().GetAt(i);
-                                                if (auto border = child.try_as<Border>()) {
-                                                    if (border.Name() == L"EmptyIconBorder") {
-                                                        border.Visibility(Visibility::Collapsed);
-                                                        break;
+                                if (auto parent = VisualTreeHelper::GetParent(img)) {
+                                    if (auto container = parent.try_as<FrameworkElement>()) {
+                                        if (auto grandParent = VisualTreeHelper::GetParent(container)) {
+                                            if (auto artContainer = grandParent.try_as<Grid>()) {
+                                                artContainer.Visibility(Visibility::Visible);
+                                                for (uint32_t i = 0; i < artContainer.Children().Size(); ++i) {
+                                                    auto child = artContainer.Children().GetAt(i);
+                                                    if (auto border = child.try_as<Border>()) {
+                                                        if (border.Name() == L"EmptyIconBorder") {
+                                                            border.Visibility(Visibility::Collapsed);
+                                                            break;
+                                                        }
                                                     }
                                                 }
                                             }
@@ -6336,8 +6365,8 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     Wh_Log(L"TrayUI_StartTaskbar_Hook: Called");
     TrayUI_StartTaskbar_Original(pThis);
 
-    if (g_unloading || g_playerGrid) {
-        Wh_Log(L"TrayUI_StartTaskbar_Hook: Already initialized or unloading");
+    if (g_unloading) {
+        Wh_Log(L"TrayUI_StartTaskbar_Hook: Unloading, skipping");
         return;
     }
 
@@ -6347,18 +6376,36 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
         return;
     }
 
+    Wh_Log(L"TrayUI_StartTaskbar_Hook: Reinitializing (hWnd=%p, prev=%p)", hWnd, g_taskbarWnd);
+    g_playerGrid      = nullptr;
+    g_injectionParent = nullptr;
+    g_playerColumn    = -1;
+    g_trackedElement  = nullptr;
+    g_hasTrackedElementOriginalMargin = false;
+    g_trackPosition   = L"";
+    g_layoutUpdateToken = {};
     g_taskbarWnd = hWnd;
-    Wh_Log(L"TrayUI_StartTaskbar_Hook: Found taskbar window %p", hWnd);
 
-    ApplySettings();
+    g_cachedAlbumTitle.clear();
+    g_cachedAlbumArtist.clear();
+    g_cachedThumbnailBytes.clear();
+    g_cachedPaletteHash = 0;
+    g_cachedAppIconSize = -1;
+    g_blurBgCache.Invalidate();
+
+    g_hookFailCount = 0;
+    RunFromWindowThread(hWnd, [](void*) {
+        Wh_Log(L"TrayUI_StartTaskbar_Hook: Calling ApplySettings from window thread");
+        ApplySettings();
+    }, nullptr);
 }
 
 static void* WINAPI IconView_IconView_Hook(void* pThis) {
     Wh_Log(L"IconView_IconView_Hook: Called (fallback)");
     auto r = IconView_IconView_Original(pThis);
 
-    if (g_unloading || g_playerGrid) {
-        Wh_Log(L"IconView_IconView_Hook: Already initialized or unloading");
+    if (g_unloading) {
+        Wh_Log(L"IconView_IconView_Hook: Unloading, skipping");
         return r;
     }
 
@@ -6368,8 +6415,22 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
         return r;
     }
 
+    Wh_Log(L"IconView_IconView_Hook: Reinitializing (hWnd=%p, prev=%p)", hWnd, g_taskbarWnd);
+    g_playerGrid      = nullptr;
+    g_injectionParent = nullptr;
+    g_playerColumn    = -1;
+    g_trackedElement  = nullptr;
+    g_hasTrackedElementOriginalMargin = false;
+    g_trackPosition   = L"";
+    g_layoutUpdateToken = {};
     g_taskbarWnd = hWnd;
-    Wh_Log(L"IconView_IconView_Hook: Found taskbar window %p", hWnd);
+
+    g_cachedAlbumTitle.clear();
+    g_cachedAlbumArtist.clear();
+    g_cachedThumbnailBytes.clear();
+    g_cachedPaletteHash = 0;
+    g_cachedAppIconSize = -1;
+    g_blurBgCache.Invalidate();
 
     ApplySettings();
     return r;
@@ -6400,37 +6461,27 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags
         }
         if (isCandidate) {
             Wh_Log(L"LoadLibraryExW_Hook: Found candidate module: %s", base);
-            WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
-                {LR"(void __cdecl TrayUI_StartTaskbar(void *))"},
-                &TrayUI_StartTaskbar_Original,
-                TrayUI_StartTaskbar_Hook,
+            // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+            WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+                {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
+                &IconView_IconView_Original,
+                IconView_IconView_Hook,
             }};
-            if (WindhawkUtils::HookSymbols(h, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks))) {
-                Wh_Log(L"LoadLibraryExW_Hook: Successfully hooked TrayUI_StartTaskbar");
+            if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
+                Wh_Log(L"LoadLibraryExW_Hook: Successfully hooked IconView::IconView as fallback");
                 g_taskbarViewDllLoaded = true;
                 Wh_ApplyHookOperations();
 
                 HWND hWnd = FindCurrentProcessTaskbarWnd();
                 if (hWnd && !g_playerGrid) {
-                    Wh_Log(L"LoadLibraryExW_Hook: TrayUI_StartTaskbar already called, manually initializing");
+                    Wh_Log(L"LoadLibraryExW_Hook: IconView already constructed, manually initializing");
                     g_taskbarWnd = hWnd;
                     RunFromWindowThread(hWnd, [](void*) {
                         ApplySettings();
                     }, nullptr);
                 }
             } else {
-                Wh_Log(L"LoadLibraryExW_Hook: Failed to hook, trying fallback");
-                // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
-                WindhawkUtils::SYMBOL_HOOK hooks[] = {{
-                    {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
-                    &IconView_IconView_Original,
-                    IconView_IconView_Hook,
-                }};
-                if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
-                    Wh_Log(L"LoadLibraryExW_Hook: Successfully hooked IconView::IconView as fallback");
-                    g_taskbarViewDllLoaded = true;
-                    Wh_ApplyHookOperations();
-                }
+                Wh_Log(L"LoadLibraryExW_Hook: Failed to hook IconView fallback");
             }
         }
     }
@@ -6456,47 +6507,31 @@ static bool HookTaskbarDllSymbols() {
          &TaskbarHost_FrameHeight_Original},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
          &Std_Ref_Decref_Original},
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
+         &TrayUI_StartTaskbar_Original,
+         TrayUI_StartTaskbar_Hook},
     };
     if (!WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         return FALSE;
     }
+    g_taskbarViewDllLoaded = true;
     return TRUE;
 }
 
 static bool HookTaskbarViewDllSymbols(HMODULE h) {
-    Wh_Log(L"HookTaskbarViewDllSymbols: Attempting to hook TrayUI_StartTaskbar");
-    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
-        {{LR"(void __cdecl TrayUI_StartTaskbar(void *))"},
-         &TrayUI_StartTaskbar_Original,
-         TrayUI_StartTaskbar_Hook},
-    };
-    if (WindhawkUtils::HookSymbols(h, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks))) {
-        Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked TrayUI_StartTaskbar");
-        g_taskbarViewDllLoaded = true;
+    if (g_taskbarViewDllLoaded) {
+        Wh_Log(L"HookTaskbarViewDllSymbols: TrayUI hook already installed, skipping");
         return true;
     }
 
-    Wh_Log(L"HookTaskbarViewDllSymbols: First signature failed, trying alternative");
+    Wh_Log(L"HookTaskbarViewDllSymbols: Attempting IconView::IconView fallback hook");
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {{LR"(void __cdecl TrayUI_StartTaskbar(struct WINAPI *))"},
-         &TrayUI_StartTaskbar_Original,
-         TrayUI_StartTaskbar_Hook},
-    };
-    if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
-        Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked TrayUI_StartTaskbar (alt signature)");
-        g_taskbarViewDllLoaded = true;
-        return true;
-    }
-
-    Wh_Log(L"HookTaskbarViewDllSymbols: All signatures failed, falling back to IconView hook");
-    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK hooks2[] = {{
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
         {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
         &IconView_IconView_Original,
         IconView_IconView_Hook,
     }};
-    if (WindhawkUtils::HookSymbols(h, hooks2, ARRAYSIZE(hooks2))) {
+    if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked IconView::IconView as fallback");
         g_taskbarViewDllLoaded = true;
         return true;
@@ -6604,6 +6639,12 @@ void Wh_ModAfterInit() {
         Wh_Log(L"Wh_ModAfterInit: Found taskbar window, running ApplySettings from window thread");
         RunFromWindowThread(g_taskbarWnd, [](void*) {
             Wh_Log(L"Wh_ModAfterInit: Inside window thread callback");
+            g_cachedAlbumTitle.clear();
+            g_cachedAlbumArtist.clear();
+            g_cachedThumbnailBytes.clear();
+            g_cachedPaletteHash = 0;
+            g_cachedAppIconSize = -1;
+            g_blurBgCache.Invalidate();
             ApplySettings();
             if (g_playerGrid) {
                 Wh_Log(L"Wh_ModAfterInit: Player grid exists, refreshing UI");
@@ -6677,6 +6718,11 @@ void Wh_ModSettingsChanged() {
             RunFromWindowThread(data2->hWnd, [](void*) {
                 try {
                     RemovePlayerGrid();
+                    g_cachedAlbumTitle.clear();
+                    g_cachedAlbumArtist.clear();
+                    g_cachedThumbnailBytes.clear();
+                    g_cachedPaletteHash = 0;
+                    g_blurBgCache.Invalidate();
                     g_applyingSettings = false;
                     if (!g_unloading) {
                         InjectPlayerGrid();
@@ -6700,6 +6746,11 @@ void Wh_ModSettingsChanged() {
     } else {
         try {
             RemovePlayerGrid();
+            g_cachedAlbumTitle.clear();
+            g_cachedAlbumArtist.clear();
+            g_cachedThumbnailBytes.clear();
+            g_cachedPaletteHash = 0;
+            g_blurBgCache.Invalidate();
             g_applyingSettings = false;
             if (!g_unloading) {
                 InjectPlayerGrid();
