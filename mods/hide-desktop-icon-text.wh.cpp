@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-👉 PLS GIB MONI FOR 2X SPEED BOOST: https://www.patreon.com/c/kivsak
+👉 PLEASE BUY ME A CHEESE SANDWICH: https://www.patreon.com/c/kivsak
 
 Tired of the stiff, boring default text labels cluttering your beautiful wallpaper? Inspired by minimalist aesthetic setups and clean UI design, this cinema-grade mod completely overhauls how your desktop icons are displayed.
 
