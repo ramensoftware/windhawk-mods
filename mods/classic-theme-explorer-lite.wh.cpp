@@ -2,7 +2,7 @@
 // @id              classic-theme-explorer-lite
 // @name            Classic Theme Explorer Lite
 // @description     Classic Theme mitigations for Explorer ported from Explorer Patcher
-// @version         1.1.2
+// @version         1.2
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -296,6 +296,8 @@ HRESULT DrawThemeBackgroundHook(HTHEME hTheme, HDC hdc, int iPartId, int iStateI
 }
 
 BOOL Wh_ModInit() {
+
+    if (IsThemeActive()) return FALSE;
 
     HMODULE hUxtheme = GetModuleHandle(L"uxtheme.dll");
 

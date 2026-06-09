@@ -2,7 +2,7 @@
 // @id              add-virtual-folders-to-nav-top
 // @name            Add This PC and Desktop to Nav Top
 // @description     Adds This PC and Desktop to the top of Explorer's nav
-// @version         1.2.1
+// @version         1.3.1
 // @author          Rod Boev
 // @github          https://github.com/rodboev
 // @include         *
@@ -205,11 +205,17 @@ static void ResetSepColor() {
     g_logSepDraw = true;
 }
 
-static COLORREF DeriveSepColor(HWND hTree)
+static COLORREF GetTreeBgColor(HWND hTree)
 {
     COLORREF bg = (COLORREF)SendMessageW(hTree, TVM_GETBKCOLOR, 0, 0);
     if (bg == CLR_INVALID || (int)bg == -1)
         bg = GetSysColor(COLOR_WINDOW);
+    return bg;
+}
+
+static COLORREF DeriveSepColor(HWND hTree)
+{
+    COLORREF bg = GetTreeBgColor(hTree);
     int sum = GetRValue(bg) + GetGValue(bg) + GetBValue(bg);
     int d = (sum < 384) ? 56 : -41;
     auto cl = [](int v) { return (BYTE)(v < 0 ? 0 : (v > 255 ? 255 : v)); };
@@ -236,6 +242,8 @@ struct TreeState {
     HTREEITEM homeSpacerItem = nullptr;
     HTREEITEM boundaryItem = nullptr;
     HTREEITEM belowQAItem = nullptr;
+    bool belowQADiscovered = false;
+    bool freshFromAppend = false;
     uint8_t pendingWork = 0;   // bitmask of PendingWork flags
     int sepRetries = 0;
     bool ownsNscRef = false;
@@ -338,6 +346,8 @@ static void ResetTreeCleanup(TreeState& ts)
     ts.homeSpacerItem = nullptr;
     ts.boundaryItem = nullptr;
     ts.belowQAItem = nullptr;
+    ts.belowQADiscovered = false;
+    ts.freshFromAppend = false;
     ts.triedHomeSpacer = false;
     ts.pendingWork = WORK_QA_CLEANUP | WORK_HG_CLEANUP | WORK_DUP_COLLAPSE;
 }
@@ -605,6 +615,18 @@ HRESULT THISCALL AppendRoot_hook(void *pThis, IShellItem *psiRoot, unsigned long
 
         g_inCustomAppend = false;
         g_ins.forTree = nullptr;
+
+        TreeState* tsPost = GetTree(hForTree);
+        if (tsPost)
+        {
+            tsPost->freshFromAppend = true;
+            tsPost->belowQAItem = nullptr;
+            tsPost->belowQADiscovered = false;
+            tsPost->boundaryItem = nullptr;
+            tsPost->hiddenDuplicate = nullptr;
+            tsPost->pendingWork |= WORK_QA_CLEANUP | WORK_HG_CLEANUP | WORK_DUP_COLLAPSE;
+            PostMessage(hForTree, WM_DEFERRED_REBUILD, 0, 0);
+        }
     }
 
     return hr;
@@ -675,6 +697,7 @@ static void DrawChevron(HDC hdc, const RECT *r, int partId, int stateId)
 
 static thread_local bool g_inTreePaint = false;
 static thread_local int g_inSubclassProc = 0;
+static thread_local bool g_inOurSelect = false;
 static thread_local int g_lastSepY = -1;
 static thread_local int g_firstSepY = -1;
 
@@ -1429,7 +1452,14 @@ static void RedrawSeps(HWND hTree, HDC hdc, TreeState& ts)
                 else if (ts.belowQAItem && h == ts.belowQAItem)
                 {
                     foundBelowQA = true;
-                    tag = L'Q';
+                    if (isTall && !g_settings.removeSepBelowQA)
+                    {
+                        drawSep = true;
+                        sepY = rc.top + baseHeight / 2;
+                        tag = L'S';
+                    }
+                    else
+                        tag = L'Q';
                 }
                 else if (foundBoundary && isTall && !foundBelowQA)
                 {
@@ -1468,9 +1498,29 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         LPNMHDR hdr = (LPNMHDR)lParam;
         if (hdr && hdr->hwndFrom == hTree)
         {
-            if ((hdr->code == TVN_SELCHANGEDW || hdr->code == TVN_SELCHANGEDA) &&
-                hTree == g_mutatingTree)
-                return 0;
+            if (hdr->code == TVN_SELCHANGINGW || hdr->code == TVN_SELCHANGINGA)
+            {
+                if (hTree == g_mutatingTree || g_inOurSelect || AreWeMutating())
+                    return 0;
+                LPNMTREEVIEWW nm = (LPNMTREEVIEWW)lParam;
+                if (nm->action != TVC_BYMOUSE && nm->action != TVC_BYKEYBOARD &&
+                    nm->itemNew.hItem && IsDepth1Item(hTree, nm->itemNew.hItem))
+                {
+                    Wh_Log(L"[SEL-BLOCK] tree=%04X item=%04X action=%d",
+                           PTR4(hTree), PTR4(nm->itemNew.hItem), nm->action);
+                    return TRUE;
+                }
+            }
+
+            if (hdr->code == TVN_SELCHANGEDW || hdr->code == TVN_SELCHANGEDA)
+            {
+                if (hTree == g_mutatingTree)
+                    return 0;
+                LPNMTREEVIEWW nm = (LPNMTREEVIEWW)lParam;
+                if (nm->action != TVC_BYMOUSE && nm->action != TVC_BYKEYBOARD &&
+                    nm->itemNew.hItem && IsDepth1Item(hTree, nm->itemNew.hItem))
+                    return 0;
+            }
 
             if (hdr->code == (UINT)NM_CUSTOMDRAW && hTree != g_mutatingTree)
             {
@@ -1513,9 +1563,7 @@ static LRESULT CALLBACK SepParentSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                             HDC hdc = cd->nmcd.hdc;
                             RECT client;
                             GetClientRect(hTree, &client);
-                            COLORREF bg = GetPixel(hdc, 1, rcHide.top + 2);
-                            if (bg == CLR_INVALID)
-                                bg = GetSysColor(COLOR_WINDOW);
+                            COLORREF bg = GetTreeBgColor(hTree);
                             HBRUSH bgBrush = CreateSolidBrush(bg);
                             if (bgBrush)
                             {
@@ -1783,43 +1831,25 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 TreeState* ts = GetTree(hWnd);
                 if (ts && IsDepth1Item(hWnd, hNew))
                 {
-                    if (g_settings.items[NAV_HOME].hide || g_settings.items[NAV_GALLERY].hide)
+                    WCHAR itemText[64] = {};
+                    GetItemText(hWnd, hNew, itemText, ARRAYSIZE(itemText));
+                    bool isHome = g_navItems[NAV_HOME].label[0] &&
+                                  wcscmp(itemText, g_navItems[NAV_HOME].label) == 0;
+                    bool isGallery = g_navItems[NAV_GALLERY].label[0] &&
+                                     wcscmp(itemText, g_navItems[NAV_GALLERY].label) == 0;
+                    if ((isHome && g_settings.items[NAV_HOME].hide) ||
+                        (isGallery && g_settings.items[NAV_GALLERY].hide))
                     {
-                        WCHAR itemText[64] = {};
-                        GetItemText(hWnd, hNew, itemText, ARRAYSIZE(itemText));
-                        bool isHome = g_settings.items[NAV_HOME].hide &&
-                                      g_navItems[NAV_HOME].label[0] &&
-                                      wcscmp(itemText, g_navItems[NAV_HOME].label) == 0;
-                        bool isGallery = g_settings.items[NAV_GALLERY].hide &&
-                                         g_navItems[NAV_GALLERY].label[0] &&
-                                         wcscmp(itemText, g_navItems[NAV_GALLERY].label) == 0;
-                        if (isHome || isGallery)
-                        {
-                            bool nearOurSection = false;
-                            HTREEITEM hPrev = hNew;
-                            for (int walk = 0; walk < 6 && hPrev; walk++)
-                            {
-                                hPrev = (HTREEITEM)SendMessageW(hWnd, TVM_GETNEXTITEM, TVGN_PREVIOUS, (LPARAM)hPrev);
-                                if (hPrev && IsOurSection(*ts, hPrev))
-                                {
-                                    nearOurSection = true;
-                                    break;
-                                }
-                            }
-                            if (nearOurSection)
-                            {
-                                ts->pendingWork |= WORK_HG_CLEANUP;
-                                Wh_Log(L"[INSERT] '%s' item=%04X tree=%04X",
-                                       itemText, PTR4(hNew), PTR4(hWnd));
-                            }
-                        }
+                        ts->pendingWork |= WORK_HG_CLEANUP;
+                        Wh_Log(L"[INSERT] '%s' item=%04X tree=%04X",
+                               itemText, PTR4(hNew), PTR4(hWnd));
                     }
                     bool hasOurItems = false;
                     for (int i = NAV_THISPC; i <= NAV_DESKTOP; i++)
                         if (ts->hItems[i]) { hasOurItems = true; break; }
 
-                    if (hasOurItems && !AreWeMutating() && !g_inTreePaint &&
-                        !(ts->pendingWork & WORK_FULL_REBUILD))
+                    if (hasOurItems && !(isHome || isGallery) && !AreWeMutating() && !g_inTreePaint &&
+                        !(ts->pendingWork & WORK_FULL_REBUILD) && !ts->freshFromAppend)
                     {
                         ts->pendingWork |= WORK_FULL_REBUILD;
                         PostMessage(hWnd, WM_DEFERRED_REBUILD, 0, 0);
@@ -1909,7 +1939,11 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 HTREEITEM hNext = (HTREEITEM)SendMessageW(hWnd, TVM_GETNEXTITEM,
                                                             dir, (LPARAM)hSel);
                 if (hNext)
+                {
+                    g_inOurSelect = true;
                     SendMessageW(hWnd, TVM_SELECTITEM, TVGN_CARET, (LPARAM)hNext);
+                    g_inOurSelect = false;
+                }
             }
             return r;
         }
@@ -1943,6 +1977,11 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         ts = RunDeferredWork(hWnd, ts, WORK_EXPAND, ExpandStartExpandedItems);
         ts = RunDeferredWork(hWnd, ts, WORK_HOME_SPACER, InsertHomeSpacer);
 
+        if (ts)
+        {
+            ts->freshFromAppend = false;
+            ts->sepRetries = 0;
+        }
         g_inSubclassProc--;
         DrainPendingRebuilds();
         return 0;
@@ -1971,6 +2010,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         {
             ts->boundaryItem = nullptr;
             ts->belowQAItem = nullptr;
+            ts->belowQADiscovered = false;
             ts->pendingWork |= WORK_QA_CLEANUP;
             RefreshNavPane(hWnd);
         }
@@ -1996,6 +2036,7 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             {
                 ts->boundaryItem = nullptr;
                 ts->belowQAItem = nullptr;
+                ts->belowQADiscovered = false;
             }
 
             InvalidateRect(hWnd, nullptr, TRUE);
@@ -2028,9 +2069,14 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         SectionLayout layout = {};
         if (g_settings.hasItemsAtTop && ts)
         {
+            if (ts->belowQAItem)
+            {
+                RECT rcCheck = {};
+                if (!GetItemRect(hWnd, ts->belowQAItem, &rcCheck))
+                    ts->belowQAItem = nullptr;
+            }
             layout = FindSectionLayout(hWnd, *ts);
             ts->boundaryItem = layout.boundary;
-            ts->belowQAItem = nullptr;
 
             bool desktopAtBottom = ts->hItems[NAV_DESKTOP] &&
                 (!ts->hItems[NAV_THISPC] || !g_settings.desktopAboveThisPC);
@@ -2057,14 +2103,23 @@ LRESULT CALLBACK SubClassTreeWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                        (int)ts->triedHomeSpacer);
         }
 
-        if (g_settings.hasItemsAtTop && g_sepColor != CLR_INVALID && ts)
+        if (g_settings.hasItemsAtTop && ts)
         {
             if (layout.boundary && (g_settings.removeSepBelowNav || GetHiddenItem(*ts)))
                 CollapseItemIntegral(hWnd, layout.boundary);
-            if (g_settings.removeSepBelowQA && layout.belowQA)
+            bool treeSettled = !g_deferredOpInProgress && !ts->freshFromAppend && !ts->pendingWork;
+            if (layout.belowQA)
             {
-                CollapseItemIntegral(hWnd, layout.belowQA);
+                if (g_settings.removeSepBelowQA)
+                    CollapseItemIntegral(hWnd, layout.belowQA);
+                else if (treeSettled && ts->belowQADiscovered &&
+                         layout.belowQA != ts->belowQAItem)
+                    CollapseItemIntegral(hWnd, layout.belowQA);
+            }
+            if (!ts->belowQADiscovered && treeSettled)
+            {
                 ts->belowQAItem = layout.belowQA;
+                ts->belowQADiscovered = true;
             }
         }
 
@@ -2389,6 +2444,8 @@ static void CheckLateLoadExplorerFrame(LPCWSTR lpLibFileName, HMODULE hModule)
     if (_wcsicmp(name, L"ExplorerFrame.dll") != 0 ||
         g_explorerFrameLoaded.exchange(true, std::memory_order_acq_rel))
         return;
+    HMODULE pin = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN, L"ExplorerFrame.dll", &pin);
     Wh_Log(L"ExplorerFrame.dll loaded late, installing hooks");
     if (!InitializeModCore(hModule))
     {
@@ -2415,12 +2472,14 @@ BOOL Wh_ModInit()
 {
     HMODULE hExplorerFrame = GetModuleHandleW(L"ExplorerFrame.dll");
     if (!hExplorerFrame)
-        hExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hExplorerFrame)
     {
-        WindhawkUtils::SetFunctionHook(LoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
+        auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(
+            GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW");
+        WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_hook, &LoadLibraryExW_orig);
         return TRUE;
     }
+    HMODULE pin = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN, L"ExplorerFrame.dll", &pin);
     g_explorerFrameLoaded.store(true, std::memory_order_relaxed);
     return InitializeModCore(hExplorerFrame) ? TRUE : FALSE;
 }
