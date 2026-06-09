@@ -1,3 +1,7 @@
+## 1.1.0 ([Jun 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a8455db085a55422d905bb666c1ebc8f6e63481a/mods/office-ui-reverter-universal.wh.cpp))
+
+* Added support for splash screen.
+
 ## 1.0.1 ([Mar 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/930d54229ce6b8af9f00da0307d8dcf0024d6800/mods/office-ui-reverter-universal.wh.cpp))
 
 Ditched async hook for better reliability and avoid fetching for online symbol cache

@@ -1,3 +1,7 @@
+## 1.2.5 ([Jun 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d86f12704aeb84ff7ed2e42838d3ad2bdbf44f10/mods/classic-theme-enable.wh.cpp))
+
+Update readme
+
 ## 1.2.4 ([May 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6d9ee12a3235a734856adc0fa9326d16ff5e19a3/mods/classic-theme-enable.wh.cpp))
 
 Updated version number and added new mod instructions.
