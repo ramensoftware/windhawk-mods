@@ -1,3 +1,32 @@
+## 1.1.0 ([Jun 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/20aea8bd8a1224edf15d725d671a55cf158f2577/mods/transparent-desktop-icons-spotlight.wh.cpp))
+
+**NEW FEATURE**
+*   Double-click on empty desktop background to hide or show the overlay
+
+**Added:**
+*   Native WIC image decoding (`-lwindowscodecs`).
+*   COM integration (`IDesktopWallpaper`) for accurate Fit/Position enums.
+*   Registry Watcher thread for instant theme/wallpaper detection.
+*   Native Window Subclassing for desktop icon interaction.
+*   Support for Solid Colour backgrounds and Centre/Fit letterboxing.
+
+**Changed:**
+*   Refactored thread safety: Split `g_stateMutex` (UI) and `g_renderMutex` (Render).
+*   Replaced GDI `CaptureWallpaperBitmap` with WIC `LoadWallpaperBitmap`.
+*   Optimized render loop sleep states for high-refresh-rate (144Hz+) monitors.
+*   Replaced global DispatchMessageW hook with a thread-local WH_GETMESSAGE bootstrap
+*   Replaced hardcoded WM_APP macros with dynamic RegisterWindowMessageW routing
+*   Replaced per-frame WindowFromPoint Z-order traversal with native TrackMouseEvent (TME_LEAVE) on desktop subclasses.
+*   Replaced per-frame WindowFromPoint Z-order traversal with native TrackMouseEvent (TME_LEAVE) on desktop subclasses. This eliminates hundreds of Win32 global lock acquisitions per second, dropping idle CPU usage to absolute zero and preventing micro-stutters on high-refresh-rate monitors.
+*   Added bounds checking and path validation to TranscodedImageCache parsing to prevent std::bad_alloc crashes from corrupted registry data, and added ERROR_SUCCESS validation to the Registry Watcher thread to prevent undefined behaviour from null handles.
+
+**Fixed:**
+*   Wallpaper "Fill" mode misalignment across all DPI scales.
+*   Spotlight/Selection masks bleeding through the wallpaper overlay.
+*   Overlay turning solid black/colour after DPI scaling changes.
+*   Micro-stutters caused by UI thread mutex contention during D2D rendering.
+*   Icon selection not moving from keyboard input and clean-up code
+
 ## 1.0.1 ([Jun 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7b8cbb03327c369d4eb77030b8dd7c0a9c7ee242/mods/transparent-desktop-icons-spotlight.wh.cpp))
 
 ### 🚀 Architecture Updates & Optimizations

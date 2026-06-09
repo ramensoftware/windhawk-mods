@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-09T07:51:07.000Z</updated>
+    <updated>2026-06-09T10:17:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Transparent Desktop Icons with Spotlight 1.1.0]]></title>
+        <id>https://windhawk.net/mods/transparent-desktop-icons-spotlight#20aea8bd8a1224edf15d725d671a55cf158f2577</id>
+        <link href="https://windhawk.net/mods/transparent-desktop-icons-spotlight"/>
+        <updated>2026-06-09T10:17:42.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>NEW FEATURE</strong></p>
+<ul>
+<li>Double-click on empty desktop background to hide or show the overlay</li>
+</ul>
+<p><strong>Added:</strong></p>
+<ul>
+<li>Native WIC image decoding (<code>-lwindowscodecs</code>).</li>
+<li>COM integration (<code>IDesktopWallpaper</code>) for accurate Fit/Position enums.</li>
+<li>Registry Watcher thread for instant theme/wallpaper detection.</li>
+<li>Native Window Subclassing for desktop icon interaction.</li>
+<li>Support for Solid Colour backgrounds and Centre/Fit letterboxing.</li>
+</ul>
+<p><strong>Changed:</strong></p>
+<ul>
+<li>Refactored thread safety: Split <code>g_stateMutex</code> (UI) and <code>g_renderMutex</code> (Render).</li>
+<li>Replaced GDI <code>CaptureWallpaperBitmap</code> with WIC <code>LoadWallpaperBitmap</code>.</li>
+<li>Optimized render loop sleep states for high-refresh-rate (144Hz+) monitors.</li>
+<li>Replaced global DispatchMessageW hook with a thread-local WH_GETMESSAGE bootstrap</li>
+<li>Replaced hardcoded WM_APP macros with dynamic RegisterWindowMessageW routing</li>
+<li>Replaced per-frame WindowFromPoint Z-order traversal with native TrackMouseEvent (TME_LEAVE) on desktop subclasses.</li>
+<li>Replaced per-frame WindowFromPoint Z-order traversal with native TrackMouseEvent (TME_LEAVE) on desktop subclasses. This eliminates hundreds of Win32 global lock acquisitions per second, dropping idle CPU usage to absolute zero and preventing micro-stutters on high-refresh-rate monitors.</li>
+<li>Added bounds checking and path validation to TranscodedImageCache parsing to prevent std::bad<em>alloc crashes from corrupted registry data, and added ERROR</em>SUCCESS validation to the Registry Watcher thread to prevent undefined behaviour from null handles.</li>
+</ul>
+<p><strong>Fixed:</strong></p>
+<ul>
+<li>Wallpaper "Fill" mode misalignment across all DPI scales.</li>
+<li>Spotlight/Selection masks bleeding through the wallpaper overlay.</li>
+<li>Overlay turning solid black/colour after DPI scaling changes.</li>
+<li>Micro-stutters caused by UI thread mutex contention during D2D rendering.</li>
+<li>Icon selection not moving from keyboard input and clean-up code</li>
+</ul>]]></content>
+        <author>
+            <name>drgutman</name>
+            <uri>https://github.com/drgutman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dynamic Island for Windows 1.1.1]]></title>
         <id>https://windhawk.net/mods/dynamic-island-for-windows#f9abdadf12d052e7120571bdf52f578ad98c4333</id>
@@ -384,30 +425,6 @@ list.</p>]]></content>
         <author>
             <name>SilverAmd</name>
             <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Desktop Icon Text and Shortcut Arrows 1.5.0]]></title>
-        <id>https://windhawk.net/mods/hide-desktop-icon-text#01fbe027ae353a48edeb7cb6c0b74643429f57d6</id>
-        <link href="https://windhawk.net/mods/hide-desktop-icon-text"/>
-        <updated>2026-06-04T11:32:41.000Z</updated>
-        <content type="html"><![CDATA[<p>Provides options to hide desktop icon labels (keeping folder names) and remove the shortcut arrow overlay.</p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Hide Icon Text</strong>: Hides text labels for files and shortcuts on the desktop while preserving folder names.</li>
-<li><strong>Hide Shortcut Arrows</strong>: Removes the standard shortcut arrow overlay live without requiring registry edits or administrator rights.</li>
-</ul>
-<h3 id="notes">Notes</h3>
-<ul>
-<li>The shortcut arrow removal affects the entire running Explorer session because the overlay resides in the shared system image list.</li>
-<li>Disabling the shortcut arrow feature (or the mod itself) restores the arrows only after Explorer restarts or the icon cache refreshes.</li>
-</ul>
-<h3 id="knownlimitation">Known limitation</h3>
-<p>Folder detection matches the drawn text against actual desktop folder names. If a <em>file</em> has
-exactly the same name as a <em>folder</em> on the desktop, that file's label will also be kept.</p>]]></content>
-        <author>
-            <name>kivsak</name>
-            <uri>https://github.com/kivsak</uri>
         </author>
     </entry>
 </feed>

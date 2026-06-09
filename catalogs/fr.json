@@ -11938,7 +11938,7 @@
                     12
                 ],
                 "ratingUsers": 15,
-                "updated": 1780660891000,
+                "updated": 1781000262000,
                 "users": 66
             },
             "metadata": {
@@ -11946,7 +11946,7 @@
                     "x86-64"
                 ],
                 "author": "drgutman",
-                "compilerOptions": "-lcomctl32 -ldxgi -ld2d1 -ld3d11 -ldcomp -lgdi32 -lshcore",
+                "compilerOptions": "-lcomctl32 -ldxgi -ld2d1 -ld3d11 -ldcomp -lgdi32 -lshcore -lwindowscodecs -lole32 -luuid -lshell32 -ladvapi32",
                 "description": "Make desktop icons transparent when idle with an interactive spotlight effect. Hover over the desktop or select icons to reveal them with full clarity and customizable transitions.",
                 "github": "https://github.com/drgutman",
                 "homepage": "https://instagram.com/drgutman",
@@ -11954,7 +11954,7 @@
                     "explorer.exe"
                 ],
                 "name": "Transparent Desktop Icons with Spotlight",
-                "version": "1.0.1"
+                "version": "1.1.0"
             }
         },
         "transparent-screensaver-fix": {
