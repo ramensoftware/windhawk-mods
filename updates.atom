@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-09T10:17:42.000Z</updated>
+    <updated>2026-06-09T10:23:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Files 2 Folders 2.1]]></title>
+        <id>https://windhawk.net/mods/files-2-folders#b0dd6aa46438ea0f3e7c9130f92772831dcbd22c</id>
+        <link href="https://windhawk.net/mods/files-2-folders"/>
+        <updated>2026-06-09T10:23:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Copy operation mode.</strong> The old Fast/Slow move toggle becomes a single <strong>Operation</strong> setting with three choices: <em>Move - fast</em> (<code>MoveFileExW</code>), <em>Move - safe</em> (<code>IFileOperation::MoveItem</code>, with progress/undo/UAC), and <em>Copy</em> (<code>IFileOperation::CopyItem</code>, leaving the originals in place). The dialog radio labels read "Copy" vs "Move" to match the selected operation.</li>
+<li><strong>Context-menu positioning.</strong> A new <strong>Right-click menu position</strong> setting: <em>Top of menu</em> (default) or <em>Between Cut and Copy</em> — inserted just after the shell Cut/Copy block (matched by command id, so it is locale-independent), falling back to the top of the menu on the modern Windows 11 flyout where Cut/Copy are not real menu items.</li>
+</ul>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Transparent Desktop Icons with Spotlight 1.1.0]]></title>
         <id>https://windhawk.net/mods/transparent-desktop-icons-spotlight#20aea8bd8a1224edf15d725d671a55cf158f2577</id>
@@ -413,18 +427,6 @@ list.</p>]]></content>
         <author>
             <name>Rod Boev</name>
             <uri>https://github.com/rodboev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Monitor Sleep Button 1.1.1]]></title>
-        <id>https://windhawk.net/mods/monitor-sleep-button#7911f2ed2e772be13cb019231beb8a2d397dc15b</id>
-        <link href="https://windhawk.net/mods/monitor-sleep-button"/>
-        <updated>2026-06-04T19:29:28.000Z</updated>
-        <content type="html"><![CDATA[<p>Monitor Sleep Button now uses the actual Shell_NotifyIconGetRect rectangle for mouse wheel hit testing instead of expanding the tray icon rectangle. The rectangle is refreshed before handling mouse wheel events.</p>
-<p>Tested with an adjacent tray icon. Monitor Sleep Button now only changes the countdown when scrolling over its own tray icon.</p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>

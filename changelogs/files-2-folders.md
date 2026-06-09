@@ -1,3 +1,8 @@
+## 2.1 ([Jun 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b0dd6aa46438ea0f3e7c9130f92772831dcbd22c/mods/files-2-folders.wh.cpp))
+
+- **Copy operation mode.** The old Fast/Slow move toggle becomes a single **Operation** setting with three choices: *Move - fast* (`MoveFileExW`), *Move - safe* (`IFileOperation::MoveItem`, with progress/undo/UAC), and *Copy* (`IFileOperation::CopyItem`, leaving the originals in place). The dialog radio labels read "Copy" vs "Move" to match the selected operation.
+- **Context-menu positioning.** A new **Right-click menu position** setting: *Top of menu* (default) or *Between Cut and Copy* — inserted just after the shell Cut/Copy block (matched by command id, so it is locale-independent), falling back to the top of the menu on the modern Windows 11 flyout where Cut/Copy are not real menu items.
+
 ## 2.0 ([Jun 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ad19ef246bb802bc953cbd0d171ca2f8eeba204d/mods/files-2-folders.wh.cpp))
 
 * Fixed: the "Files 2 Folder..." menu entry now appears and works on the desktop (previously only inside Explorer folder windows).
