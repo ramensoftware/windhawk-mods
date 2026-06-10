@@ -940,7 +940,7 @@ struct ModSettings {
     bool         showAlbumArt         = true;
     std::wstring albumArtEmptyBehavior = L"show";
     std::wstring albumArtQuality      = L"medium";
-    bool         showPauseOverlay     = false;
+    bool         showPauseOverlay     = true;
     int          pauseOverlayOpacity  = 60;
     int          albumArtMinWidth     = 32;
     int          albumArtMaxWidth     = 64;
@@ -953,7 +953,7 @@ struct ModSettings {
     bool         showFullTitleOnHover = true;
     bool         showTrackArtist      = true;
     bool         swapTitleArtist      = false;
-    std::wstring iconStyle            = L"fluent_filled";
+    std::wstring iconStyle            = L"fluent_outline";
     bool         showAppIcon          = false;
     std::wstring appIconCorner        = L"bottom_right";
     int          appIconSize          = 12;
@@ -975,8 +975,8 @@ struct ModSettings {
     int          idleHideSeconds      = 0;
     bool         autoTheme            = true;
     std::wstring backgroundType       = L"none";
-    int          blurOpacity          = 100;
-    int          blurRadius           = 10;
+    int          blurOpacity          = 65;
+    int          blurRadius           = 11;
     int          cornerRadius         = 4;
     int          albumArtCornerRadius = 4;
     int          buttonSpacing        = 0;
@@ -996,19 +996,19 @@ struct ModSettings {
     int          titleCharacterSpacing  = 0;
     int          artistCharacterSpacing = 0;
     int          textSpacing          = 1;
-    std::wstring solidColor           = L"32 32 32";
-    std::wstring solidColor2          = L"64 64 64";
-    int          solidOpacity         = 80;
-    int          gradientAngle        = 0;
+    std::wstring solidColor           = L"35 35 35";
+    std::wstring solidColor2          = L"128 128 128";
+    int          solidOpacity         = 100;
+    int          gradientAngle        = 50;
     int          gradientBalance      = 50;
-    int          acrylicTintOpacity   = 60;
-    int          micaOpacity          = 20;
+    int          acrylicTintOpacity   = 50;
+    int          micaOpacity          = 50;
     std::wstring buttonColor          = L"255 255 255";
     int          buttonColorOpacity   = 100;
     std::wstring titleColor           = L"255 255 255";
-    int          titleColorOpacity    = 90;
-    std::wstring artistColor          = L"200 200 200";
-    int          artistColorOpacity   = 60;
+    int          titleColorOpacity    = 100;
+    std::wstring artistColor          = L"255 255 255";
+    int          artistColorOpacity   = 80;
     std::wstring ignoredProcesses     = L"";
     bool         enableTreeDump       = false;
     bool         showDebugBorders     = false;
@@ -1387,7 +1387,6 @@ static CTaskBand_GetTaskbarHost_t  CTaskBand_GetTaskbarHost_Original  = nullptr;
 static TaskbarHost_FrameHeight_t   TaskbarHost_FrameHeight_Original   = nullptr;
 static Std_Ref_Decref_t            Std_Ref_Decref_Original            = nullptr;
 static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
-static bool                        g_taskbarViewDllLoaded             = false;
 
 using WindowThreadProc = void(*)(void*);
 
@@ -3613,25 +3612,7 @@ static DWORD WINAPI TimerThreadProc(void*) {
         if (needsUpdate) {
             RunFromWindowThread(hWnd, [](void*) {
                 if (g_unloading || g_applyingSettings) return;
-                if (!g_playerGrid) {
-                    static std::atomic<int> s_skipCounter{0};
-                    int fails = g_hookFailCount.load();
-                    int backoffTicks = (fails <= 1) ? 1 : (fails < 16 ? fails : 16);
-                    int skip = s_skipCounter.fetch_add(1);
-                    if (fails > 0 && (skip % backoffTicks) != 0) {
-                        g_needsUiUpdate = true;
-                        return;
-                    }
-                    Wh_Log(L"TimerThread: g_playerGrid is null, attempting re-inject (failCount=%d)", fails);
-                    ApplySettings();
-                    if (g_playerGrid) {
-                        g_hookFailCount = 0;
-                        s_skipCounter   = 0;
-                    } else {
-                        g_hookFailCount.fetch_add(1);
-                        g_needsUiUpdate = true;
-                    }
-                } else {
+                if (g_playerGrid) {
                     g_hookFailCount = 0;
                     RefreshPlayerContents();
                     UpdateVisibility();
@@ -6359,32 +6340,48 @@ static void ApplySettings() {
     }
     Wh_Log(L"ApplySettings: Finished, g_playerGrid exists = %d", g_playerGrid ? 1 : 0);
 }
+
+
+static void ApplySettingsWithRetry(FrameworkElement xamlRootContent) {
+    auto retry = [&]() {
+        auto timer = DispatcherTimer();
+        timer.Interval(winrt::Windows::Foundation::TimeSpan{
+            std::chrono::milliseconds(100)});
+        auto tickToken = std::make_shared<winrt::event_token>();
+        *tickToken = timer.Tick(
+            [timer, tickToken, xamlRootContent](
+                winrt::Windows::Foundation::IInspectable const&,
+                winrt::Windows::Foundation::IInspectable const&) {
+                timer.Stop();
+                timer.Tick(*tickToken);
+                ApplySettingsWithRetry(xamlRootContent);
+            });
+        timer.Start();
+    };
+
+    if (g_unloading) {
+        return;
+    }
+
+    auto systemTrayFrame = FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
+    if (!systemTrayFrame) {
+        Wh_Log(L"SystemTrayFrame not found, retrying...");
+        retry();
+        return;
+    }
+
+    auto systemTrayFrameGrid = FindChildByName(systemTrayFrame, L"SystemTrayFrameGrid");
+    if (!systemTrayFrameGrid) {
+        Wh_Log(L"SystemTrayFrameGrid not found, retrying...");
+        retry();
+        return;
+    }
+
+    ApplySettings();
+}
+
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
 static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
-
-using IconView_IconView_t = void*(WINAPI*)(void*);
-static IconView_IconView_t IconView_IconView_Original = nullptr;
-
-static bool IsTrayGridReady(HWND hWnd) {
-    try {
-        auto xamlRoot = GetTaskbarXamlRoot(hWnd);
-        if (!xamlRoot) return false;
-        auto root = xamlRoot.Content().try_as<FrameworkElement>();
-        if (!root) return false;
-        auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
-        if (!trayFrame) return false;
-        auto trayGrid = trayFrame.try_as<Grid>();
-        if (!trayGrid) return false;
-        int n = VisualTreeHelper::GetChildrenCount(trayGrid);
-        for (int i = 0; i < n; ++i) {
-            auto child = VisualTreeHelper::GetChild(trayGrid, i).try_as<FrameworkElement>();
-            if (child && !child.Name().empty()) return true;
-        }
-        return false;
-    } catch (...) {
-        return false;
-    }
-}
 
 static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     Wh_Log(L"TrayUI_StartTaskbar_Hook: Called");
@@ -6420,126 +6417,19 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 
     g_hookFailCount = 0;
 
-    std::thread([hWnd]() {
-        constexpr int kMaxAttempts = 30;
-        constexpr DWORD kStepMs    = 100;
-        for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
-            if (g_unloading) return;
-            if (attempt > 0) Sleep(kStepMs);
-
-            bool ready = false;
-            RunFromWindowThread(hWnd, [](void* pReady) {
-                *reinterpret_cast<bool*>(pReady) = IsTrayGridReady(g_taskbarWnd);
-            }, &ready);
-
-            if (!ready) {
-                Wh_Log(L"TrayUI_StartTaskbar_Hook: Tray grid not ready yet (attempt %d/%d)",
-                       attempt + 1, kMaxAttempts);
-                continue;
-            }
-
-            Wh_Log(L"TrayUI_StartTaskbar_Hook: Tray grid ready, calling ApplySettings (attempt %d)",
-                   attempt + 1);
-            RunFromWindowThread(hWnd, [](void*) {
-                if (!g_unloading) ApplySettings();
-            }, nullptr);
-            return;
-        }
-
-        Wh_Log(L"TrayUI_StartTaskbar_Hook: Tray grid not ready after %d attempts, trying anyway",
-               kMaxAttempts);
-        RunFromWindowThread(hWnd, [](void*) {
-            if (!g_unloading) ApplySettings();
-        }, nullptr);
-    }).detach();
-}
-
-static void* WINAPI IconView_IconView_Hook(void* pThis) {
-    Wh_Log(L"IconView_IconView_Hook: Called (fallback)");
-    auto r = IconView_IconView_Original(pThis);
-
-    if (g_unloading) {
-        Wh_Log(L"IconView_IconView_Hook: Unloading, skipping");
-        return r;
+    auto xamlRoot = GetTaskbarXamlRoot(hWnd);
+    if (!xamlRoot) {
+        Wh_Log(L"InjectPlayerGrid: Failed to get XAML root");
+        return;
     }
 
-    HWND hWnd = FindCurrentProcessTaskbarWnd();
-    if (!hWnd) {
-        Wh_Log(L"IconView_IconView_Hook: Taskbar window not found");
-        return r;
+    auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+    if (!xamlRootContent) {
+        Wh_Log(L"InjectPlayerGrid: Failed to get XAML root content");
+        return;
     }
 
-    Wh_Log(L"IconView_IconView_Hook: Reinitializing (hWnd=%p, prev=%p)", hWnd, g_taskbarWnd);
-    g_playerGrid      = nullptr;
-    g_injectionParent = nullptr;
-    g_playerColumn    = -1;
-    g_trackedElement  = nullptr;
-    g_hasTrackedElementOriginalMargin = false;
-    g_trackPosition   = L"";
-    g_layoutUpdateToken = {};
-    g_taskbarWnd = hWnd;
-
-    g_cachedAlbumTitle.clear();
-    g_cachedAlbumArtist.clear();
-    g_cachedThumbnailBytes.clear();
-    g_cachedPaletteHash = 0;
-    g_cachedAppIconSize = -1;
-    g_blurBgCache.Invalidate();
-
-    ApplySettings();
-    return r;
-}
-
-using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
-static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
-
-static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen);
-
-static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
-    HMODULE h = LoadLibraryExW_Original(path, file, flags);
-    if (h && path && !g_taskbarViewDllLoaded) {
-        const wchar_t* base = wcsrchr(path, L'\\');
-        base = base ? base + 1 : path;
-        bool isCandidate = false;
-        if (_wcsicmp(base, L"SystemTray.dll") == 0 ||
-            _wcsicmp(base, L"ExplorerExtensions.dll") == 0) {
-            isCandidate = true;
-        } else if (_wcsicmp(base, L"Taskbar.View.dll") == 0) {
-            VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(h, nullptr);
-            WORD moduleMajor = fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
-            if (!moduleMajor || moduleMajor < 2604) {
-                isCandidate = true;
-            } else {
-                Wh_Log(L"LoadLibraryExW_Hook: Skipping Taskbar.View.dll version %d (symbols moved to SystemTray.dll)", moduleMajor);
-            }
-        }
-        if (isCandidate) {
-            Wh_Log(L"LoadLibraryExW_Hook: Found candidate module: %s", base);
-            // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
-            WindhawkUtils::SYMBOL_HOOK hooks[] = {{
-                {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
-                &IconView_IconView_Original,
-                IconView_IconView_Hook,
-            }};
-            if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
-                Wh_Log(L"LoadLibraryExW_Hook: Successfully hooked IconView::IconView as fallback");
-                g_taskbarViewDllLoaded = true;
-                Wh_ApplyHookOperations();
-
-                HWND hWnd = FindCurrentProcessTaskbarWnd();
-                if (hWnd && !g_playerGrid) {
-                    Wh_Log(L"LoadLibraryExW_Hook: IconView already constructed, manually initializing");
-                    g_taskbarWnd = hWnd;
-                    RunFromWindowThread(hWnd, [](void*) {
-                        ApplySettings();
-                    }, nullptr);
-                }
-            } else {
-                Wh_Log(L"LoadLibraryExW_Hook: Failed to hook IconView fallback");
-            }
-        }
-    }
-    return h;
+    ApplySettingsWithRetry(xamlRootContent);
 }
 
 static bool HookTaskbarDllSymbols() {
@@ -6568,64 +6458,7 @@ static bool HookTaskbarDllSymbols() {
     if (!WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         return FALSE;
     }
-    g_taskbarViewDllLoaded = true;
     return TRUE;
-}
-
-static bool HookTaskbarViewDllSymbols(HMODULE h) {
-    if (g_taskbarViewDllLoaded) {
-        Wh_Log(L"HookTaskbarViewDllSymbols: TrayUI hook already installed, skipping");
-        return true;
-    }
-
-    Wh_Log(L"HookTaskbarViewDllSymbols: Attempting IconView::IconView fallback hook");
-    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
-        {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
-        &IconView_IconView_Original,
-        IconView_IconView_Hook,
-    }};
-    if (WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
-        Wh_Log(L"HookTaskbarViewDllSymbols: Successfully hooked IconView::IconView as fallback");
-        g_taskbarViewDllLoaded = true;
-        return true;
-    }
-
-    Wh_Log(L"HookTaskbarViewDllSymbols: Failed to hook any symbols");
-    return false;
-}
-
-static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
-    void* pVersionData = nullptr;
-    HRSRC hResource = FindResourceW(hModule, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
-    if (hResource) {
-        HGLOBAL hGlobal = LoadResource(hModule, hResource);
-        if (hGlobal) {
-            pVersionData = LockResource(hGlobal);
-        }
-    }
-    if (!pVersionData) return nullptr;
-    VS_FIXEDFILEINFO* pFixedFileInfo = nullptr;
-    UINT uPtrLen = 0;
-    if (!VerQueryValueW(pVersionData, L"\\", (LPVOID*)&pFixedFileInfo, &uPtrLen))
-        return nullptr;
-    if (puPtrLen) *puPtrLen = uPtrLen;
-    return pFixedFileInfo;
-}
-
-static HMODULE GetTaskbarViewModule() {
-    if (HMODULE h = GetModuleHandleW(L"SystemTray.dll")) return h;
-    if (HMODULE h = GetModuleHandleW(L"Taskbar.View.dll")) {
-        VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(h, nullptr);
-        WORD moduleMajor = fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
-        if (!moduleMajor || moduleMajor < 2604) {
-            return h;
-        }
-        Wh_Log(L"GetTaskbarViewModule: Skipping Taskbar.View.dll version %d (symbols moved to SystemTray.dll)", moduleMajor);
-    }
-
-    if (HMODULE h = GetModuleHandleW(L"ExplorerExtensions.dll")) return h;
-    return nullptr;
 }
 
 BOOL Wh_ModInit() {
@@ -6634,7 +6467,6 @@ BOOL Wh_ModInit() {
     g_applyingSettings = false;
     g_hookInjectionInProgress = false;
     g_hookFailCount = 0;
-    g_taskbarViewDllLoaded = false;
     g_taskbarWnd = nullptr;
     g_needsUiUpdate = false;
 
@@ -6646,23 +6478,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"Wh_ModInit: Checking for TaskbarView module");
-    if (HMODULE h = GetTaskbarViewModule()) {
-        Wh_Log(L"Wh_ModInit: TaskbarView module found, hooking symbols");
-        if (!HookTaskbarViewDllSymbols(h)) {
-            Wh_Log(L"Wh_ModInit: HookTaskbarViewDllSymbols failed");
-            return FALSE;
-        }
-        Wh_Log(L"Wh_ModInit: TaskbarView symbols hooked successfully");
-    } else {
-        Wh_Log(L"Wh_ModInit: TaskbarView module not found, setting up LoadLibraryExW hook");
-        HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
-        auto pLLEW = kb ? (LoadLibraryExW_t)GetProcAddress(kb, "LoadLibraryExW") : nullptr;
-        if (pLLEW)
-            Wh_SetFunctionHook((void*)pLLEW, (void*)LoadLibraryExW_Hook,
-                               (void**)&LoadLibraryExW_Original);
-    }
-
     Wh_Log(L"Wh_ModInit: Completed successfully");
     return TRUE;
 }
@@ -6670,15 +6485,6 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
 
     Wh_Log(L"Wh_ModAfterInit: Starting initialization");
-
-    if (!g_taskbarViewDllLoaded) {
-        Wh_Log(L"Wh_ModAfterInit: TaskbarView not loaded yet, attempting to hook");
-        if (HMODULE h = GetTaskbarViewModule()) {
-            HookTaskbarViewDllSymbols(h);
-        } else {
-            Wh_Log(L"Wh_ModAfterInit: TaskbarView module still not found");
-        }
-    }
 
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
     Wh_Log(L"Wh_ModAfterInit: Taskbar window = %p", g_taskbarWnd);
