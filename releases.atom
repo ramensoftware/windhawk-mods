@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-09T20:31:17.000Z</updated>
+    <updated>2026-06-10T19:13:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Settings Styler 1.0]]></title>
+        <id>https://windhawk.net/mods/windows-11-settings-styler#6ae9513b383f5e9a7870a5d22696203d4657bcec</id>
+        <link href="https://windhawk.net/mods/windows-11-settings-styler"/>
+        <updated>2026-06-10T19:13:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11settingsstyler">Windows 11 Settings Styler</h1>
+<p>Customize the Windows Settings app (Win+I) with themes contributed by others or
+create your own.</p>
+<p>Also check out the <strong>Windows 11 Start Menu Styler</strong>, <strong>Windows 11 Taskbar
+Styler</strong>, <strong>Windows 11 Notification Center Styler</strong> mods.</p>
+<h2 id="themes">Themes</h2>
+<p>Themes are collections of styles. The following themes are integrated into the
+mod and can be selected in the settings:</p>
+<p>[<img src="https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/Densy/screenshot.png" alt="Densy" /></p>
+<p>Densy](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/Densy/README.md)</p>
+<p>More themes can be found in the <strong>Themes</strong> section of <a href="https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/README.md#themes">The Windows 11 Settings
+styling
+guide</a></p>
+<h2 id="advancedstyling">Advanced styling</h2>
+<p>See the same section of the <strong>Windows 11 Start Menu Styler</strong>
+<a href="https://windhawk.net/mods/windows-11-start-menu-styler">mod</a></p>
+<h2 id="implementationnotes">Implementation notes</h2>
+<p>The VisualTreeWatcher implementation is based on the
+<a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
+code from the <strong>TranslucentTB</strong> project.</p>
+<p>The <code>WindhawkBlur</code> brush object implementation is based on
+<a href="https://github.com/TranslucentTB/TranslucentTB/blob/release/ExplorerTAP/XamlBlurBrush.cpp">XamlBlurBrush</a>
+from the <strong>TranslucentTB</strong> project.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.1]]></title>
         <id>https://windhawk.net/mods/settings-to-control-panel#1ac6e9fec2eed8fc9df2082f410e528b70dc1720</id>
@@ -722,154 +755,6 @@ Keep in mind that these animation can use a lot of cpu power but from my experie
         <author>
             <name>winui64</name>
             <uri>https://github.com/winui64</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Calendar Live Overlay 0.0.1]]></title>
-        <id>https://windhawk.net/mods/calendar-live-overlay#8422b6be0bd211cdb967c20f14a6e171cf629499</id>
-        <link href="https://windhawk.net/mods/calendar-live-overlay"/>
-        <updated>2026-05-25T21:35:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="calendarliveoverlay">Calendar Live Overlay</h1>
-<p>Displays a customizable monthly calendar directly on the desktop behind the desktop icons.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/A3gcKe0.png" alt="Calendar Live Overlay preview 1" /></p>
-<p><img src="https://i.imgur.com/AuCGcoP.png" alt="Calendar Live Overlay preview 2" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Shows the current month as a clean desktop overlay</li>
-<li>Runs behind desktop icons, based on the Desktop Live Overlay method</li>
-<li>Designed to visually match Desktop Live Overlay Mod https://windhawk.net/mods/desktop-live-overlay</li>
-<li>Custom absolute X/Y positioning</li>
-<li>Optional percentage-based positioning</li>
-<li>Multi-monitor support</li>
-<li>Adjustable font size, font family, font weight and font style</li>
-<li>Custom text color with alpha transparency</li>
-<li>Optional German or English month/day names</li>
-<li>Optional Monday or Sunday week start</li>
-<li>Optional month header</li>
-<li>Optional week numbers</li>
-<li>Optional leading zero day numbers</li>
-<li>Optional box drawing border</li>
-<li>Adjustable border content offset</li>
-<li>Highlight today's date with custom color</li>
-<li>Optional bold style for today's date</li>
-<li>Optional underline for today's date</li>
-<li>Highlight weekends with custom color and opacity</li>
-<li>Optional custom color for week numbers</li>
-<li>Optional custom color for weekday names</li>
-<li>Adjustable column and row spacing</li>
-<li>Header alignment: left, center or right</li>
-<li>Optional background with color, padding, rounded corners, border and blur</li>
-<li>Optional background border with custom color and size</li>
-<li>Automatic refresh shortly after each minute change</li>
-</ul>
-<h2 id="usage">Usage</h2>
-<p>Enable the mod and adjust the position and appearance in the mod settings.</p>
-<p>For best alignment, use a monospaced font such as Cascadia Mono, Consolas, JetBrains Mono, or Courier New.</p>
-<h2 id="colorformat">Color Format</h2>
-<p>Colors use hexadecimal format:</p>
-<ul>
-<li><code>#RRGGBB</code></li>
-<li><code>#AARRGGBB</code></li>
-</ul>
-<p>Examples:</p>
-<ul>
-<li><code>#FFFFFFFF</code> = white, fully visible</li>
-<li><code>#80FFFFFF</code> = white, 50% transparent</li>
-<li><code>#FFFF6060</code> = red, fully visible</li>
-<li><code>#FFFFB060</code> = orange, fully visible</li>
-<li><code>#30000000</code> = black, very transparent</li>
-</ul>
-<p>In <code>#AARRGGBB</code>:</p>
-<ul>
-<li><code>AA</code> = alpha / transparency</li>
-<li><code>RR</code> = red</li>
-<li><code>GG</code> = green</li>
-<li><code>BB</code> = blue</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<h3 id="calendar">Calendar</h3>
-<ul>
-<li>Show week numbers</li>
-<li>Week starts on Monday or Sunday</li>
-<li>Use German names</li>
-<li>Show month header</li>
-<li>Leading zero day numbers</li>
-<li>Use box drawing border</li>
-<li>Border content offset</li>
-<li>Column spacing</li>
-<li>Row spacing</li>
-<li>Header alignment</li>
-</ul>
-<h3 id="highlighting">Highlighting</h3>
-<ul>
-<li>Highlight today</li>
-<li>Today color</li>
-<li>Today bold</li>
-<li>Today underline</li>
-<li>Highlight weekends</li>
-<li>Weekend color</li>
-<li>Weekend opacity</li>
-<li>Highlight week numbers</li>
-<li>Week number color</li>
-<li>Highlight weekday names</li>
-<li>Weekday name color</li>
-</ul>
-<h3 id="position">Position</h3>
-<ul>
-<li>Use absolute X/Y position</li>
-<li>X-Position</li>
-<li>Y-Position</li>
-<li>Vertical position percent</li>
-<li>Horizontal position percent</li>
-<li>Monitor</li>
-</ul>
-<h3 id="font">Font</h3>
-<ul>
-<li>Font size</li>
-<li>Text color</li>
-<li>Font family</li>
-<li>Font weight</li>
-<li>Font style</li>
-</ul>
-<p>For best alignment, use a monospaced font.</p>
-<p>Recommended:</p>
-<ul>
-<li>Cascadia Mono</li>
-<li>Consolas</li>
-<li>JetBrains Mono</li>
-<li>Courier New</li>
-</ul>
-<p>Proportional fonts such as Arial, Calibri or Verdana can distort the calendar layout because the calendar uses fixed-width text alignment.</p>
-<h3 id="background">Background</h3>
-<ul>
-<li>Enable background</li>
-<li>Background color</li>
-<li>Background padding</li>
-<li>Background corner radius</li>
-<li>Background blur</li>
-<li>Background border size</li>
-<li>Background border color</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Based on and inspired by Desktop Live Overlay by m417z.</p>
-<p>Special thanks to m417z for the original overlay implementation and the Windhawk ecosystem.</p>
-<p>Additional development help and debugging guidance: ChatGPT by OpenAI.</p>
-<h2 id="notes">Notes</h2>
-<p>This mod is injected into <code>explorer.exe</code> and creates the calendar overlay as part of the desktop window structure.</p>
-<p>If the desktop does not refresh correctly after changing settings, restart Explorer or disable and re-enable the mod.</p>
-<p>The calendar refreshes automatically shortly after each minute change, which is enough to update the highlighted day after midnight.</p>
-<p>For best alignment, use a monospaced font such as:</p>
-<ul>
-<li>Cascadia Mono</li>
-<li>Consolas</li>
-<li>JetBrains Mono</li>
-<li>Courier New</li>
-</ul>
-<p>The mod does not open a normal application window and does not appear in the taskbar.</p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>

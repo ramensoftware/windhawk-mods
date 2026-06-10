@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-09T20:31:17.000Z</updated>
+    <updated>2026-06-10T19:13:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Settings Styler 1.0]]></title>
+        <id>https://windhawk.net/mods/windows-11-settings-styler#6ae9513b383f5e9a7870a5d22696203d4657bcec</id>
+        <link href="https://windhawk.net/mods/windows-11-settings-styler"/>
+        <updated>2026-06-10T19:13:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11settingsstyler">Windows 11 Settings Styler</h1>
+<p>Customize the Windows Settings app (Win+I) with themes contributed by others or
+create your own.</p>
+<p>Also check out the <strong>Windows 11 Start Menu Styler</strong>, <strong>Windows 11 Taskbar
+Styler</strong>, <strong>Windows 11 Notification Center Styler</strong> mods.</p>
+<h2 id="themes">Themes</h2>
+<p>Themes are collections of styles. The following themes are integrated into the
+mod and can be selected in the settings:</p>
+<p>[<img src="https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/Densy/screenshot.png" alt="Densy" /></p>
+<p>Densy](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/Densy/README.md)</p>
+<p>More themes can be found in the <strong>Themes</strong> section of <a href="https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/README.md#themes">The Windows 11 Settings
+styling
+guide</a></p>
+<h2 id="advancedstyling">Advanced styling</h2>
+<p>See the same section of the <strong>Windows 11 Start Menu Styler</strong>
+<a href="https://windhawk.net/mods/windows-11-start-menu-styler">mod</a></p>
+<h2 id="implementationnotes">Implementation notes</h2>
+<p>The VisualTreeWatcher implementation is based on the
+<a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
+code from the <strong>TranslucentTB</strong> project.</p>
+<p>The <code>WindhawkBlur</code> brush object implementation is based on
+<a href="https://github.com/TranslucentTB/TranslucentTB/blob/release/ExplorerTAP/XamlBlurBrush.cpp">XamlBlurBrush</a>
+from the <strong>TranslucentTB</strong> project.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.1]]></title>
         <id>https://windhawk.net/mods/settings-to-control-panel#1ac6e9fec2eed8fc9df2082f410e528b70dc1720</id>
@@ -460,22 +493,6 @@ list.</p>]]></content>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Nav DragOver Fix 1.2.6]]></title>
-        <id>https://windhawk.net/mods/explorer-nav-dragover-fix#e7fac19e6a1d29ee72e53d93318a4de19250769a</id>
-        <link href="https://windhawk.net/mods/explorer-nav-dragover-fix"/>
-        <updated>2026-06-04T21:48:59.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix transient collapse skipped after nav wheel scroll (drag session id vs generation).</li>
-<li>Fix preserve-on-drop ancestor check for successful drops.</li>
-<li>Edge-scroll acceleration during drag.</li>
-<li>Transient expansion tracking, staggered collapse, reconcile pass, <code>lParam</code> re-resolution.</li>
-</ul>]]></content>
-        <author>
-            <name>tonythethompson</name>
-            <uri>https://github.com/tonythethompson</uri>
         </author>
     </entry>
 </feed>
