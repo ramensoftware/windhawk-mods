@@ -4,8 +4,8 @@
 // @description  A premium desktop hardware monitor overlay. Supports all local and Google Fonts with optimized ClearType rendering.
 // @version      1.0.0
 // @author       Random Author
-// @github       https://github.com/agarwaladvit96-coder/
-// @homepage     https://github.com/agarwaladvit96-coder/
+// @github       https://github.com/agarwaladvit96-coder
+// @homepage     https://github.com/agarwaladvit96-coder
 // @include      explorer.exe
 // @compilerOptions -lpdh -lgdi32
 // ==/WindhawkMod==
