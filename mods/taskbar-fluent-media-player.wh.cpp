@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              taskbar-fluent-media-player
+// @id              taskbar-fluent-media-player3
 // @name            Taskbar Fluent Media Player
 // @description     Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
 // @description:ru-RU Taskbar Fluent Media Player — это мод Windhawk, который интегрирует современный медиаплеер в стиле Fluent Design прямо в панель задач Windows 11. Он позволяет управлять музыкой и просматривать информацию о треке без прерывания работы.
@@ -6361,6 +6361,27 @@ static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
 using IconView_IconView_t = void*(WINAPI*)(void*);
 static IconView_IconView_t IconView_IconView_Original = nullptr;
 
+static bool IsTrayGridReady(HWND hWnd) {
+    try {
+        auto xamlRoot = GetTaskbarXamlRoot(hWnd);
+        if (!xamlRoot) return false;
+        auto root = xamlRoot.Content().try_as<FrameworkElement>();
+        if (!root) return false;
+        auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
+        if (!trayFrame) return false;
+        auto trayGrid = trayFrame.try_as<Grid>();
+        if (!trayGrid) return false;
+        int n = VisualTreeHelper::GetChildrenCount(trayGrid);
+        for (int i = 0; i < n; ++i) {
+            auto child = VisualTreeHelper::GetChild(trayGrid, i).try_as<FrameworkElement>();
+            if (child && !child.Name().empty()) return true;
+        }
+        return false;
+    } catch (...) {
+        return false;
+    }
+}
+
 static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     Wh_Log(L"TrayUI_StartTaskbar_Hook: Called");
     TrayUI_StartTaskbar_Original(pThis);
@@ -6394,10 +6415,39 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     g_blurBgCache.Invalidate();
 
     g_hookFailCount = 0;
-    RunFromWindowThread(hWnd, [](void*) {
-        Wh_Log(L"TrayUI_StartTaskbar_Hook: Calling ApplySettings from window thread");
-        ApplySettings();
-    }, nullptr);
+
+    std::thread([hWnd]() {
+        constexpr int kMaxAttempts = 30;
+        constexpr DWORD kStepMs    = 100;
+        for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+            if (g_unloading) return;
+            if (attempt > 0) Sleep(kStepMs);
+
+            bool ready = false;
+            RunFromWindowThread(hWnd, [](void* pReady) {
+                *reinterpret_cast<bool*>(pReady) = IsTrayGridReady(g_taskbarWnd);
+            }, &ready);
+
+            if (!ready) {
+                Wh_Log(L"TrayUI_StartTaskbar_Hook: Tray grid not ready yet (attempt %d/%d)",
+                       attempt + 1, kMaxAttempts);
+                continue;
+            }
+
+            Wh_Log(L"TrayUI_StartTaskbar_Hook: Tray grid ready, calling ApplySettings (attempt %d)",
+                   attempt + 1);
+            RunFromWindowThread(hWnd, [](void*) {
+                if (!g_unloading) ApplySettings();
+            }, nullptr);
+            return;
+        }
+
+        Wh_Log(L"TrayUI_StartTaskbar_Hook: Tray grid not ready after %d attempts, trying anyway",
+               kMaxAttempts);
+        RunFromWindowThread(hWnd, [](void*) {
+            if (!g_unloading) ApplySettings();
+        }, nullptr);
+    }).detach();
 }
 
 static void* WINAPI IconView_IconView_Hook(void* pThis) {
