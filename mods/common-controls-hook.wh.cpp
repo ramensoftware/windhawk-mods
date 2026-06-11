@@ -25,12 +25,6 @@ Common Controls Hook is a Windhawk mod designed to force-enable Common Controls 
 - Hooks functions such as `CreateWindowEx`, `DialogBoxParam`, `CreateDialogParam`, and `MessageBox` in User32 to ensure the v6 activation context is enabled upon invocation.
 - Dynamically creates activation contexts to avoid modifying system files, maintaining a clean and stable system environment.
 
-## Usage
-1. Download and install Windhawk.
-2. Place the Common Controls Hook mod file into the Windhawk Mods directory.
-3. Launch Windhawk, locate the Common Controls Hook mod, and enable it.
-4. Restart the applications for which you want to enable v6 styles and enjoy the improved interface.
-
 ## Notes
 - This mod functions by hooking User32 APIs and may conflict with certain security software; please ensure you trust the mod before enabling it.
 - This mod targets applications using legacy Common Controls; it has no effect on applications that already utilize v6 styles.
