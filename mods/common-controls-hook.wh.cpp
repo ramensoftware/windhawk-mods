@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id              common-controls-hook
 // @name            Common Controls Hook
-// @description     为旧版 Win32 应用程序强制启用 Common Controls v6 视觉样式。完美移植自 LuicdLabs/comctl32v6hook。
+// @description     Force-enable Common Controls v6 visual styles for legacy Win32 applications. Perfectly ported from LucidLabs/comctl32v6hook.
 // @version         1.0.0
 // @author          LucidLabs
-// @github          https://github.com/LuicdLabs
+// @github          https://github.com/LucidLabs
 // @include         *
 // @exclude         conhost.exe
 // @exclude         cmd.exe
@@ -12,6 +12,39 @@
 // @exclude         explorer.exe
 // @compilerOptions -luser32
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Common Controls Hook
+Force-enable Common Controls v6 visual styles for legacy Win32 applications. Perfectly ported from LucidLabs/comctl32v6hook.
+
+## Introduction
+Common Controls Hook is a Windhawk mod designed to force-enable Common Controls v6 visual styles for legacy Win32 applications. By hooking relevant User32 APIs, it ensures that applications correctly load v6 styles when creating windows and dialog boxes, thereby improving interface aesthetics and consistency.
+
+## Features
+- Hooks functions such as `CreateWindowEx`, `DialogBoxParam`, `CreateDialogParam`, and `MessageBox` in User32 to ensure the v6 activation context is enabled upon invocation.
+- Dynamically creates activation contexts to avoid modifying system files, maintaining a clean and stable system environment.
+
+## Usage
+1. Download and install Windhawk.
+2. Place the Common Controls Hook mod file into the Windhawk Mods directory.
+3. Launch Windhawk, locate the Common Controls Hook mod, and enable it.
+4. Restart the applications for which you want to enable v6 styles and enjoy the improved interface.
+
+## Notes
+- This mod functions by hooking User32 APIs and may conflict with certain security software; please ensure you trust the mod before enabling it.
+- This mod targets applications using legacy Common Controls; it has no effect on applications that already utilize v6 styles.
+- If you encounter any issues or have suggestions for improvement, please visit the GitHub repository to submit an issue or pull request.
+- Special thanks to LucidLabs for the original project `comctl32v6hook`, which provided valuable references and implementation concepts.
+- License: MIT License
+
+## Changelog
+- 1.0.0: Initial release.
+
+## Contact
+- GitHub: https://github.com/LucidLabs
+*/
+// ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <commctrl.h>
