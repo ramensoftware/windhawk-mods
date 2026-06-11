@@ -36,6 +36,18 @@ Common Controls Hook is a Windhawk mod designed to force-enable Common Controls 
 
 ## Contact
 - **GitHub**: [LucidLabs](https://github.com/LucidLabs)
+
+## Support
+If you need help or want to report a bug, please send a message in the official Windhawk Discord server or create an issue in the Windhawk Mods GitHub repository.
+
+## Credits
+
+| User | Contribution |
+| --- | --- |
+| **LucidLabs** | Original implementation of the Common Controls v6 hook, which served as the basis for this Windhawk mod. Their work on `comctl32v6hook` provided essential insights and code references that enabled the successful porting of this functionality to Windhawk. |
+| **Windhawk Team** | For creating and maintaining the Windhawk modding framework, which allows for easy creation and distribution of mods like this one. |
+| **Community Contributors** | For testing, feedback, and suggestions that helped improve the mod. |
+
 */
 // ==/WindhawkModReadme==
 
