@@ -32,10 +32,10 @@ Common Controls Hook is a Windhawk mod designed to force-enable Common Controls 
 - Special thanks to LucidLabs for the original project `comctl32v6hook`, which provided valuable references and implementation concepts.
 
 ## Changelog
-- 1.0.0: Initial release.
+- **1.0.0**: Initial release.
 
 ## Contact
-- GitHub: https://github.com/LucidLabs
+- **GitHub**: [LucidLabs](https://github.com/LucidLabs)
 */
 // ==/WindhawkModReadme==
 
