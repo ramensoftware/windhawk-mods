@@ -38,16 +38,13 @@ of your selected file.
       $description: The text to show in the context menu.
     - command: ""
       $name: Command
-      $description: The command line to execute. Use %1 for the selected file
-path.
+      $description: The command line to execute. Use %1 for the selected file path.
     - extensions: ""
       $name: File Extensions (Optional)
-      $description: Comma-separated list of extensions (e.g., .mp4, .mkv). Leave
-empty for all files.
+      $description: Comma-separated list of extensions (e.g., .mp4, .mkv). Leave empty for all files.
     - allowFolders: true
       $name: Show on Folders
-      $description: Toggle whether this option should appear when right-clicking
-folders or folder backgrounds.
+      $description: Toggle whether this option should appear when right-clicking folders or folder backgrounds.
 */
 // ==/WindhawkModSettings==
 
