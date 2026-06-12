@@ -62,6 +62,7 @@ Notes:
 namespace {
 
 constexpr int kRunEditId = 0x3E9;
+constexpr int kRunCommandComboId = 0x300A;
 constexpr int kRunSavedButtonId = 0x51A7;
 
 constexpr int kSavedListId = 0x6001;
@@ -602,80 +603,47 @@ bool IsDialogClass(HWND hwnd) {
     return wcscmp(className, L"#32770") == 0;
 }
 
-bool IsRunCommandControl(HWND hwnd) {
+bool IsWindowClass(HWND hwnd, PCWSTR expectedClassName) {
     wchar_t className[32] = {};
     if (!hwnd || !GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
         return false;
     }
 
-    return _wcsicmp(className, L"Edit") == 0 ||
-           _wcsicmp(className, L"ComboBox") == 0 ||
-           _wcsicmp(className, L"ComboBoxEx32") == 0;
+    return _wcsicmp(className, expectedClassName) == 0;
 }
 
-struct CommandControlSearch {
-    HWND runDialog;
-    HWND bestControl;
-    int bestScore;
-};
+bool IsRunCommandEdit(HWND hwnd) {
+    return IsWindowVisible(hwnd) && IsWindowClass(hwnd, L"Edit");
+}
 
-BOOL CALLBACK FindCommandControlProc(HWND child, LPARAM lParam) {
-    auto search = reinterpret_cast<CommandControlSearch*>(lParam);
-    if (!search || !IsWindowVisible(child) || !IsRunCommandControl(child)) {
-        return TRUE;
-    }
-
-    if (GetDlgCtrlID(child) == kRunSavedButtonId) {
-        return TRUE;
-    }
-
-    RECT rect = {};
-    RECT parentRect = {};
-    if (!GetWindowRect(child, &rect) ||
-        !GetWindowRect(search->runDialog, &parentRect)) {
-        return TRUE;
-    }
-
-    int width = rect.right - rect.left;
-    int height = rect.bottom - rect.top;
-    if (width <= 80 || height <= 12) {
-        return TRUE;
-    }
-
-    int score = width;
-    if (GetParent(child) == search->runDialog) {
-        score += 10000;
-    }
-
-    int parentHeight = parentRect.bottom - parentRect.top;
-    int topFromParent = rect.top - parentRect.top;
-    if (topFromParent > 0 && topFromParent < parentHeight * 2 / 3) {
-        score += 2000;
-    }
-
-    if (GetDlgCtrlID(child) == kRunEditId) {
-        score += 50000;
-    }
-
-    if (score > search->bestScore) {
-        search->bestScore = score;
-        search->bestControl = child;
-    }
-
-    return TRUE;
+bool IsRunCommandCombo(HWND hwnd) {
+    return IsWindowVisible(hwnd) &&
+           (IsWindowClass(hwnd, L"ComboBox") ||
+            IsWindowClass(hwnd, L"ComboBoxEx32"));
 }
 
 HWND FindRunCommandControl(HWND runDialog) {
     HWND control = GetDlgItem(runDialog, kRunEditId);
-    if (IsRunCommandControl(control)) {
+    if (IsRunCommandEdit(control) || IsRunCommandCombo(control)) {
         return control;
     }
 
-    CommandControlSearch search = {runDialog, nullptr, 0};
-    EnumChildWindows(runDialog, FindCommandControlProc,
-                     reinterpret_cast<LPARAM>(&search));
+    HWND combo = GetDlgItem(runDialog, kRunCommandComboId);
+    if (!IsRunCommandCombo(combo)) {
+        return nullptr;
+    }
 
-    return search.bestControl;
+    HWND edit = GetDlgItem(combo, kRunEditId);
+    if (IsRunCommandEdit(edit)) {
+        return edit;
+    }
+
+    edit = FindWindowExW(combo, nullptr, L"Edit", nullptr);
+    if (IsRunCommandEdit(edit)) {
+        return edit;
+    }
+
+    return combo;
 }
 
 void ChildRectToParent(HWND parent, HWND child, RECT* rect) {
@@ -874,7 +842,7 @@ void RemoveRunButton(HWND hwnd) {
 }
 
 bool InstallRunButton(HWND hwnd) {
-    if (IsUnloading() || !IsRunDialog(hwnd)) {
+    if (IsUnloading() || !IsWindow(hwnd)) {
         return false;
     }
 
@@ -1922,7 +1890,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     }
 
     HWND candidate = IsDialogClass(hwnd) ? hwnd : GetAncestor(hwnd, GA_ROOT);
-    if (!candidate || !IsRunDialog(candidate)) {
+    if (!candidate) {
         return;
     }
 
@@ -1938,13 +1906,6 @@ void StartWinEventHook() {
         SetWinEventHook(EVENT_SYSTEM_DIALOGSTART, EVENT_SYSTEM_DIALOGSTART,
                         g_hModule, WinEventProc, GetCurrentProcessId(), 0,
                         WINEVENT_INCONTEXT);
-    if (!g_dialogStartWinEventHook) {
-        g_dialogStartWinEventHook =
-            SetWinEventHook(EVENT_SYSTEM_DIALOGSTART, EVENT_SYSTEM_DIALOGSTART,
-                            nullptr, WinEventProc, GetCurrentProcessId(), 0,
-                            WINEVENT_OUTOFCONTEXT);
-    }
-
     if (!g_dialogStartWinEventHook) {
         Wh_Log(L"SetWinEventHook failed, error %u", GetLastError());
     }
