@@ -158,7 +158,8 @@ std::vector<std::wstring> GetSelectedPaths(HWND hwndTarget) {
     if (!pBrowser) return paths;
 
     IShellView* pShellView = nullptr;
-    if (SUCCEEDED(pBrowser->QueryActiveViewer(&pShellView)) && pShellView) {
+    // Fixed: Changed QueryActiveViewer to QueryActiveShellView
+    if (SUCCEEDED(pBrowser->QueryActiveShellView(&pShellView)) && pShellView) {
         IDataObject* pDataObject = nullptr;
         if (SUCCEEDED(pShellView->GetItemObject(SVGIO_SELECTION, IID_PPV_ARGS(&pDataObject))) && pDataObject) {
             FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
