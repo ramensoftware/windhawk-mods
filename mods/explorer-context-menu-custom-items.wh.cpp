@@ -2,9 +2,9 @@
 // @id              explorer-context-menu-custom-items
 // @name            Explorer Context Menu Custom Items
 // @description     Adds filtered custom user-defined options to the classic (Show more options) context menu.
-// @version         1.0.1
-// @author          Deepak Santharaju
-// @github          https://github.com/ramensoftware
+// @version         1.0
+// @author          Deepak
+// @github          https://github.com/deepak-raven
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
