@@ -3,7 +3,7 @@
 // @name            Taskbar Fluent Media Player
 // @description     Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
 // @description:ru-RU Taskbar Fluent Media Player — это мод Windhawk, который интегрирует современный медиаплеер в стиле Fluent Design прямо в панель задач Windows 11. Он позволяет управлять музыкой и просматривать информацию о треке без прерывания работы.
-// @version         1.2.0
+// @version         1.3.0
 // @author          Salyts
 // @github          https://github.com/Salyts
 // @include         explorer.exe
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Fluent Media Player 1.2.0
+# Taskbar Fluent Media Player 1.3.0
 
 **Taskbar Fluent Media Player —** is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
 
@@ -157,9 +157,43 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
     - textAreaMargin: "5 5"
       $name: Text area margin (left right)
       $name:ru-RU: Отступ текстовой области (left right)
-    - textSpacing: 1
+    - textSpacing: -1
       $name: Spacing between title and artist
       $name:ru-RU: Отступ между названием и исполнителем
+    - enableTitleScrolling: true
+      $name: Enable track title scrolling
+      $name:ru-RU: Включить прокрутку названия трека
+      $description: When enabled, the track title will scroll horizontally if it overflows the text area.
+      $description:ru-RU: Если включено, название трека будет прокручиваться горизонтально при переполнении текстовой области.
+    - enableArtistScrolling: false
+      $name: Enable artist name scrolling
+      $name:ru-RU: Включить прокрутку имени исполнителя
+      $description: When enabled, the artist name will scroll horizontally if it overflows the text area.
+      $description:ru-RU: Если включено, имя исполнителя будет прокручиваться горизонтально при переполнении текстовой области.
+    - scrollSpeed: 1
+      $name: Scroll speed (1-10)
+      $name:ru-RU: Скорость прокрутки (1-10)
+      $description: Controls how fast the text scrolls. 1 = slowest, 10 = fastest.
+      $description:ru-RU: Управляет скоростью прокрутки текста. 1 = медленнее всего, 10 = быстрее всего.
+    - scrollPauseDuration: 1000
+      $name: Pause duration at edges (ms)
+      $name:ru-RU: Пауза на краях (мс)
+      $description: How long (in milliseconds) scrolling pauses at the start and end before reversing direction.
+      $description:ru-RU: Сколько миллисекунд прокрутка делает паузу на начале и конце перед сменой направления.
+    - scrollMode: "bounce"
+      $name: Scroll mode
+      $name:ru-RU: Режим прокрутки
+      $options:
+      - "bounce": "Bounce (back and forth)"
+      - "loop":   "Loop (continuous)"
+      $options:ru-RU:
+      - "bounce": "Отскок (туда-обратно)"
+      - "loop":   "Петля (непрерывная)"
+    - loopGap: 40
+      $name: Loop gap (px)
+      $name:ru-RU: Отступ между повторами (пикс.)
+      $description: Distance in pixels between the end of the text and the beginning of its copy in Loop mode.
+      $description:ru-RU: Расстояние в пикселях между концом текста и началом его копии в режиме «Петля».
     $name: Text area
     $name:ru-RU: Текстовая область
 
@@ -262,9 +296,11 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
     - blurRadius: 11
       $name: Album art blur strength (1-50)
       $name:ru-RU: "'Размытая обложка альбома' Сила размытия (1-50)"
-    - cornerRadius: 4
+    - cornerRadius: "4"
       $name: Media player corner radius
       $name:ru-RU: Радиус скругления медиаплеера
+      $description: "Use single value (e.g., '4' for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
+      $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - enablePlayerHoverEffect: "auto"
       $name: Player hover effect
       $name:ru-RU: Эффект при наведении на плеер
@@ -313,9 +349,11 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
       - "fluent_filled":  "Segoe Fluent Icons (Заполненный)"
       - "mdl2_outline":   "Segoe MDL2 Assets (Контур)"
       - "mdl2_filled":    "Segoe MDL2 Assets (Заполненный)"
-    - buttonCornerRadius: 4
+    - buttonCornerRadius: "4"
       $name: Media buttons corner radius
       $name:ru-RU: Скругление кнопок управления
+      $description: "Use single value (e.g., '4' for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
+      $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - buttonColor: "255 255 255"
       $name: Media buttons icons color (RGB)
       $name:ru-RU: Цвет иконок для кнопок управления (RGB)
@@ -575,9 +613,11 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
     - albumArtOpacity: 100
       $name: Album art opacity (0-100)
       $name:ru-RU: Прозрачность обложки альбома (0-100)
-    - albumArtCornerRadius: 4
+    - albumArtCornerRadius: "4"
       $name: Album art corner radius
       $name:ru-RU: Радиус скругления обложки альбома
+      $description: "Use single value (e.g., '4' for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
+      $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - showAppIcon: false
       $name: Show media app icon overlay
       $name:ru-RU: Показывать значок медиаприложения поверх обложки
@@ -899,6 +939,8 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
 
 #include <atomic>
 #include <functional>
+#include <memory>
+#include <utility>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -977,12 +1019,21 @@ struct ModSettings {
     std::wstring backgroundType       = L"none";
     int          blurOpacity          = 65;
     int          blurRadius           = 11;
-    int          cornerRadius         = 4;
-    int          albumArtCornerRadius = 4;
+    double       cornerRadiusTL       = 4;
+    double       cornerRadiusTR       = 4;
+    double       cornerRadiusBR       = 4;
+    double       cornerRadiusBL       = 4;
+    double       albumArtCornerRadiusTL = 4;
+    double       albumArtCornerRadiusTR = 4;
+    double       albumArtCornerRadiusBR = 4;
+    double       albumArtCornerRadiusBL = 4;
     int          buttonSpacing        = 0;
     int          buttonSize           = 28;
     int          buttonIconSize       = 12;
-    int          buttonCornerRadius   = 4;
+    double       buttonCornerRadiusTL = 4;
+    double       buttonCornerRadiusTR = 4;
+    double       buttonCornerRadiusBR = 4;
+    double       buttonCornerRadiusBL = 4;
     int          titleFontSize        = 12;
     int          artistFontSize       = 11;
     std::wstring titleFont            = L"segoe_ui_variable";
@@ -995,7 +1046,13 @@ struct ModSettings {
     std::wstring artistFontStyle      = L"";
     int          titleCharacterSpacing  = 0;
     int          artistCharacterSpacing = 0;
-    int          textSpacing          = 1;
+    int          textSpacing          = -1;
+    bool         enableArtistScrolling = false;
+    bool         enableTitleScrolling = true;
+    int          scrollSpeed          = 1;
+    int          scrollPauseDuration  = 1000;
+    std::wstring scrollMode           = L"bounce";
+    int          loopGap              = 40;
     std::wstring solidColor           = L"35 35 35";
     std::wstring solidColor2          = L"128 128 128";
     int          solidOpacity         = 100;
@@ -1109,6 +1166,44 @@ static void LoadSettings() {
             } catch (...) { left = right = 0; }
         }
     };
+    auto ParseCornerRadius = [&Str](const wchar_t* key, const wchar_t* def, double& tl, double& tr, double& br, double& bl) {
+        std::wstring val = Str(key, def);
+        std::vector<double> values;
+        try {
+            size_t pos = 0;
+            while (pos < val.length()) {
+                size_t space = val.find(L' ', pos);
+                if (space == std::wstring::npos) space = val.length();
+                std::wstring part = val.substr(pos, space - pos);
+                if (!part.empty()) {
+                    double v = std::stod(part);
+                    values.push_back(v < 0.0 ? 0.0 : v);
+                }
+                pos = space + 1;
+            }
+        } catch (...) {}
+
+        if (values.empty()) {
+            try {
+                std::wstring d(def);
+                double v = std::stod(d);
+                values.push_back(v < 0.0 ? 0.0 : v);
+            } catch (...) {
+                values.push_back(4.0);
+            }
+        }
+
+        if (values.size() == 1) {
+            tl = tr = br = bl = values[0];
+        } else if (values.size() == 4) {
+            tl = values[0];
+            tr = values[1];
+            br = values[2];
+            bl = values[3];
+        } else {
+            tl = tr = br = bl = values[0];
+        }
+    };
     auto HoverMode = [&Str](const wchar_t* key) -> std::wstring {
         std::wstring mode = Str(key, L"auto");
         if (mode == L"black") return L"black";
@@ -1152,13 +1247,19 @@ static void LoadSettings() {
     g_settings.backgroundType       = Str(L"AppearanceSettings.BackgroundStyleSettings.backgroundType", L"none");
     g_settings.blurOpacity          = Int(L"AppearanceSettings.BackgroundStyleSettings.blurOpacity",           0, 100, 65);
     g_settings.blurRadius           = Int(L"AppearanceSettings.BackgroundStyleSettings.blurRadius",            1,  50,  11);
-    g_settings.cornerRadius         = Int(L"AppearanceSettings.BackgroundStyleSettings.cornerRadius",          0,  24,   4);
+    ParseCornerRadius(L"AppearanceSettings.BackgroundStyleSettings.cornerRadius", L"4",
+                      g_settings.cornerRadiusTL, g_settings.cornerRadiusTR,
+                      g_settings.cornerRadiusBR, g_settings.cornerRadiusBL);
     g_settings.albumArtOpacity      = Int(L"AppearanceSettings.AlbumArtDisplaySettings.albumArtOpacity",       0, 100, 100);
-    g_settings.albumArtCornerRadius = Int(L"AppearanceSettings.AlbumArtDisplaySettings.albumArtCornerRadius",  0,  24,   4);
+    ParseCornerRadius(L"AppearanceSettings.AlbumArtDisplaySettings.albumArtCornerRadius", L"4",
+                      g_settings.albumArtCornerRadiusTL, g_settings.albumArtCornerRadiusTR,
+                      g_settings.albumArtCornerRadiusBR, g_settings.albumArtCornerRadiusBL);
     g_settings.buttonSpacing        = Wh_GetIntSetting(L"MainSettings.MediaButtonsSettings.buttonSpacing");
     g_settings.buttonSize           = Int(L"MainSettings.MediaButtonsSettings.buttonSize",          16,  48,  28);
     g_settings.buttonIconSize       = Int(L"MainSettings.MediaButtonsSettings.buttonIconSize",       8,  32,  12);
-    g_settings.buttonCornerRadius   = Int(L"AppearanceSettings.MediaButtonsStyleSettings.buttonCornerRadius",   0,  24,  4);
+    ParseCornerRadius(L"AppearanceSettings.MediaButtonsStyleSettings.buttonCornerRadius", L"4",
+                      g_settings.buttonCornerRadiusTL, g_settings.buttonCornerRadiusTR,
+                      g_settings.buttonCornerRadiusBR, g_settings.buttonCornerRadiusBL);
     g_settings.titleFontSize        = Int(L"AppearanceSettings.TitleTextStyleSettings.titleFontSize",         7,  24,  12);
     g_settings.titleFont            = MapFontName(Str(L"AppearanceSettings.TitleTextStyleSettings.titleFont", L"segoe_ui_variable"));
     g_settings.titleFontFamily      = Str(L"AppearanceSettings.TitleTextStyleSettings.titleFontFamily", L"");
@@ -1172,6 +1273,12 @@ static void LoadSettings() {
     g_settings.artistFontStyle      = Str(L"AppearanceSettings.ArtistTextStyleSettings.artistFontStyle", L"");
     g_settings.artistCharacterSpacing = Wh_GetIntSetting(L"AppearanceSettings.ArtistTextStyleSettings.artistCharacterSpacing");
     g_settings.textSpacing          = Wh_GetIntSetting(L"MainSettings.TextAreaSetting.textSpacing");
+    g_settings.enableArtistScrolling = Wh_GetIntSetting(L"MainSettings.TextAreaSetting.enableArtistScrolling") != 0;
+    g_settings.enableTitleScrolling = Wh_GetIntSetting(L"MainSettings.TextAreaSetting.enableTitleScrolling") != 1;
+    g_settings.scrollSpeed          = Int(L"MainSettings.TextAreaSetting.scrollSpeed", 1, 10, 1);
+    g_settings.scrollPauseDuration  = Int(L"MainSettings.TextAreaSetting.scrollPauseDuration", 0, 10000, 1000);
+    g_settings.scrollMode           = Str(L"MainSettings.TextAreaSetting.scrollMode", L"bounce");
+    g_settings.loopGap              = Int(L"MainSettings.TextAreaSetting.loopGap", 0, 500, 40);
     g_settings.solidColor           = Str(L"AppearanceSettings.BackgroundStyleSettings.solidColor", L"35 35 35");
     g_settings.solidColor2          = Str(L"AppearanceSettings.BackgroundStyleSettings.solidColor2", L"128 128 128");
     g_settings.solidOpacity         = Int(L"AppearanceSettings.BackgroundStyleSettings.solidOpacity", 0, 100, 100);
@@ -1458,6 +1565,9 @@ static std::wstring g_cachedAlbumArtist;
 static std::vector<BYTE> g_cachedThumbnailBytes;
 static int g_cachedAppIconSize = -1;
 
+static std::wstring g_scrollCachedTitle;
+static std::wstring g_scrollCachedArtist;
+
 struct BlurBgCache {
     std::vector<BYTE>  blurredPixels;
     int                width  = 0;
@@ -1531,23 +1641,30 @@ static bool IsHoverLightTheme(std::wstring const& mode) {
 
 static winrt::Windows::UI::Color GetSystemButtonHoverColor(std::wstring const& mode) {
     if (IsHoverLightTheme(mode)) {
-        return winrt::Windows::UI::Color{0xCC, 0xFF, 0xFF, 0xFF};
-    }
-    return winrt::Windows::UI::Color{0x1A, 0xFF, 0xFF, 0xFF};
-}
-
-static winrt::Windows::UI::Color GetSystemButtonPressedColor(std::wstring const& mode) {
-    if (IsHoverLightTheme(mode)) {
-        return winrt::Windows::UI::Color{0xE6, 0xFF, 0xFF, 0xFF};
+        return winrt::Windows::UI::Color{0x99, 0xFF, 0xFF, 0xFF};
     }
     return winrt::Windows::UI::Color{0x0F, 0xFF, 0xFF, 0xFF};
 }
 
+static winrt::Windows::UI::Color GetSystemButtonPressedColor(std::wstring const& mode) {
+    if (IsHoverLightTheme(mode)) {
+        return winrt::Windows::UI::Color{0x4D, 0xFF, 0xFF, 0xFF};
+    }
+    return winrt::Windows::UI::Color{0x0A, 0xFF, 0xFF, 0xFF};
+}
+
 static winrt::Windows::UI::Color GetSystemButtonBorderColor(std::wstring const& mode) {
     if (IsHoverLightTheme(mode)) {
-        return winrt::Windows::UI::Color{0xCC, 0xFF, 0xFF, 0xFF};
+        return winrt::Windows::UI::Color{0x08, 0x00, 0x00, 0x00};
     }
     return winrt::Windows::UI::Color{0x14, 0xFF, 0xFF, 0xFF};
+}
+
+static winrt::Windows::UI::Color GetSystemButtonBorderPressedColor(std::wstring const& mode) {
+    if (IsHoverLightTheme(mode)) {
+        return winrt::Windows::UI::Color{0x05, 0x00, 0x00, 0x00};
+    }
+    return winrt::Windows::UI::Color{0x0A, 0xFF, 0xFF, 0xFF};
 }
 
 static SolidColorBrush g_mediaHoverBrush   = nullptr;
@@ -1555,6 +1672,7 @@ static SolidColorBrush g_mediaPressedBrush = nullptr;
 static SolidColorBrush g_playerHoverBrush   = nullptr;
 static SolidColorBrush g_playerPressedBrush = nullptr;
 static SolidColorBrush g_playerBorderBrush  = nullptr;
+static SolidColorBrush g_playerBorderPressedBrush = nullptr;
 
 static void EnsureHoverBrushes() {
     if (!g_mediaHoverBrush) {
@@ -1565,6 +1683,7 @@ static void EnsureHoverBrushes() {
         g_playerHoverBrush   = SolidColorBrush(GetSystemButtonHoverColor(g_settings.playerHoverEffectMode));
         g_playerPressedBrush = SolidColorBrush(GetSystemButtonPressedColor(g_settings.playerHoverEffectMode));
         g_playerBorderBrush  = SolidColorBrush(GetSystemButtonBorderColor(g_settings.playerHoverEffectMode));
+        g_playerBorderPressedBrush = SolidColorBrush(GetSystemButtonBorderPressedColor(g_settings.playerHoverEffectMode));
     }
 }
 
@@ -1594,6 +1713,11 @@ static void UpdateHoverBrushColors() {
         try { g_playerBorderBrush.Color(GetSystemButtonBorderColor(g_settings.playerHoverEffectMode)); } catch (...) {}
     } else {
         try { g_playerBorderBrush = SolidColorBrush(GetSystemButtonBorderColor(g_settings.playerHoverEffectMode)); } catch (...) {}
+    }
+    if (g_playerBorderPressedBrush) {
+        try { g_playerBorderPressedBrush.Color(GetSystemButtonBorderPressedColor(g_settings.playerHoverEffectMode)); } catch (...) {}
+    } else {
+        try { g_playerBorderPressedBrush = SolidColorBrush(GetSystemButtonBorderPressedColor(g_settings.playerHoverEffectMode)); } catch (...) {}
     }
 }
 
@@ -1818,7 +1942,7 @@ static void ApplyPlayerButtonState(Button const& btn, Brush const& normalBg, boo
         EnsureHoverBrushes();
         if (pressed) {
             root.Background(g_playerPressedBrush);
-            root.BorderBrush(g_playerBorderBrush);
+            root.BorderBrush(g_playerBorderPressedBrush);
         } else if (hovered) {
             root.Background(g_playerHoverBrush);
             root.BorderBrush(g_playerBorderBrush);
@@ -2398,6 +2522,22 @@ static void SendMediaCommandAsync(int cmd) {
         winrt::uninit_apartment();
     }).detach();
 }
+
+struct TextScrollState {
+    double offset    = 0.0;
+    double textWidth = 0.0;
+    double viewWidth = 0.0;
+    bool   forward   = true;
+    bool   active    = false;
+    bool   pausing   = false;
+    int    pauseTick = 0;
+    int    tickMs    = 16;
+};
+
+static TextScrollState g_titleScroll;
+static TextScrollState g_artistScroll;
+
+static void ResetScrollState(TextScrollState& s);
 
 static void FetchMediaPropertiesAsync();
 static void FetchPlaybackInfoAsync();
@@ -3371,6 +3511,9 @@ static void AttachToSession(GlobalSystemMediaTransportControlsSession session) {
     }
     g_cachedAppIconSize = -1;
 
+    ResetScrollState(g_titleScroll);
+    ResetScrollState(g_artistScroll);
+
     {
         std::lock_guard<std::mutex> lk(g_sessionMtx);
         g_currentSession = session;
@@ -3531,6 +3674,173 @@ static HANDLE g_timerThread    = nullptr;
 static HANDLE g_timerStopEvent = nullptr;
 static HANDLE g_timerUpdateEvent = nullptr;
 
+static HANDLE g_scrollTimerThread    = nullptr;
+static HANDLE g_scrollTimerStopEvent = nullptr;
+
+static void TickScrollState(TextScrollState& s, int stepPx, int pauseMs, const std::wstring& mode) {
+    if (!s.active) return;
+
+    if (s.pausing) {
+        s.pauseTick -= s.tickMs;
+        if (s.pauseTick <= 0) {
+            s.pausing = false;
+            s.pauseTick = 0;
+        }
+        return;
+    }
+
+    double maxOff = s.textWidth - s.viewWidth + 10.0;
+    if (maxOff < 0.0) maxOff = 0.0;
+
+    if (mode == L"loop") {
+        s.offset += stepPx;
+        if (s.offset >= s.textWidth + g_settings.loopGap) {
+            s.offset = 0.0;
+        }
+    } else {
+
+        if (s.forward) {
+            s.offset += stepPx;
+            if (s.offset >= maxOff) {
+                s.offset = maxOff;
+                s.forward = false;
+                s.pausing = true;
+                s.pauseTick = pauseMs;
+            }
+        } else {
+            s.offset -= stepPx;
+            if (s.offset <= 0.0) {
+                s.offset = 0.0;
+                s.forward = true;
+                s.pausing = true;
+                s.pauseTick = pauseMs;
+            }
+        }
+    }
+}
+
+static void UpdateScrollTransforms();
+
+static DWORD WINAPI ScrollTimerThreadProc(void*) {
+    while (!g_unloading) {
+        DWORD wait = WaitForSingleObject(g_scrollTimerStopEvent, 16);
+        if (wait == WAIT_OBJECT_0) break;
+        if (g_applyingSettings) continue;
+
+        bool needsScroll = (g_titleScroll.active || g_artistScroll.active);
+        if (!needsScroll) continue;
+
+        HWND hWnd = g_taskbarWnd;
+        if (!hWnd || !IsWindow(hWnd)) continue;
+
+        int stepPx = std::max(1, g_settings.scrollSpeed);
+        int pauseMs = g_settings.scrollPauseDuration;
+
+        TickScrollState(g_titleScroll, stepPx, pauseMs, g_settings.scrollMode);
+        TickScrollState(g_artistScroll, stepPx, pauseMs, g_settings.scrollMode);
+
+        RunFromWindowThread(hWnd, [](void*) {
+            if (g_unloading || g_applyingSettings) return;
+            UpdateScrollTransforms();
+        }, nullptr);
+    }
+    return 0;
+}
+
+static void StartScrollTimer() {
+    if (g_scrollTimerThread) return;
+    g_scrollTimerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_scrollTimerStopEvent) return;
+    g_scrollTimerThread = CreateThread(nullptr, 0, ScrollTimerThreadProc, nullptr, 0, nullptr);
+    if (!g_scrollTimerThread) {
+        CloseHandle(g_scrollTimerStopEvent);
+        g_scrollTimerStopEvent = nullptr;
+    }
+}
+
+static void StopScrollTimer() {
+    if (g_scrollTimerStopEvent) SetEvent(g_scrollTimerStopEvent);
+    if (g_scrollTimerThread) {
+        WaitForSingleObject(g_scrollTimerThread, 1000);
+        CloseHandle(g_scrollTimerThread);
+        g_scrollTimerThread = nullptr;
+    }
+    if (g_scrollTimerStopEvent) {
+        CloseHandle(g_scrollTimerStopEvent);
+        g_scrollTimerStopEvent = nullptr;
+    }
+}
+
+static void ResetScrollState(TextScrollState& s) {
+    s.offset    = 0.0;
+    s.textWidth = 0.0;
+    s.viewWidth = 0.0;
+    s.forward   = true;
+    s.active    = false;
+    if (g_settings.scrollMode == L"loop") {
+        s.pausing  = false;
+        s.pauseTick = 0;
+    } else {
+        s.pausing  = true;
+        s.pauseTick = g_settings.scrollPauseDuration;
+    }
+}
+
+static constexpr wchar_t kTitleScrollViewName[]  = L"FluentMedia_TitleScrollView";
+static constexpr wchar_t kArtistScrollViewName[] = L"FluentMedia_ArtistScrollView";
+static constexpr wchar_t kTitleCloneName[]       = L"FluentMedia_TitleClone";
+static constexpr wchar_t kArtistCloneName[]      = L"FluentMedia_ArtistClone";
+
+
+static void UpdateScrollTransforms() {
+    if (!g_playerGrid || (!g_settings.enableTitleScrolling && !g_settings.enableArtistScrolling)) return;
+    bool isLoop = (g_settings.scrollMode == L"loop");
+
+    if (g_settings.enableTitleScrolling) {
+        try {
+            if (auto fe = FindChildByName(g_playerGrid, kTitleScrollViewName)) {
+                if (auto cv = fe.try_as<Canvas>()) {
+                    int n = VisualTreeHelper::GetChildrenCount(cv);
+                    for (int i = 0; i < n; i++) {
+                        auto child = VisualTreeHelper::GetChild(cv, i);
+                        if (auto tb = child.try_as<TextBlock>()) {
+                            auto name = tb.Name();
+                            if (name == kTitleBlockName) {
+                                Canvas::SetLeft(tb, -g_titleScroll.offset);
+                            } else if (isLoop && name == kTitleCloneName) {
+                                double gap = g_titleScroll.textWidth + g_settings.loopGap;
+                                Canvas::SetLeft(tb, gap - g_titleScroll.offset);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (...) {}
+    }
+
+    if (g_settings.enableArtistScrolling) {
+        try {
+            if (auto fe = FindChildByName(g_playerGrid, kArtistScrollViewName)) {
+                if (auto cv = fe.try_as<Canvas>()) {
+                    int n = VisualTreeHelper::GetChildrenCount(cv);
+                    for (int i = 0; i < n; i++) {
+                        auto child = VisualTreeHelper::GetChild(cv, i);
+                        if (auto ab = child.try_as<TextBlock>()) {
+                            auto name = ab.Name();
+                            if (name == kArtistBlockName) {
+                                Canvas::SetLeft(ab, -g_artistScroll.offset);
+                            } else if (isLoop && name == kArtistCloneName) {
+                                double gap = g_artistScroll.textWidth + g_settings.loopGap;
+                                Canvas::SetLeft(ab, gap - g_artistScroll.offset);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (...) {}
+    }
+}
+
 static void DispatchMediaUpdate() {
     bool unloading = g_unloading;
     bool applyingSettings = g_applyingSettings;
@@ -3637,8 +3947,10 @@ static void StartTimerThread() {
         CloseHandle(g_timerUpdateEvent);
         g_timerUpdateEvent = nullptr;
     }
+    StartScrollTimer();
 }
 static void StopTimerThread() {
+    StopScrollTimer();
     if (g_timerStopEvent) SetEvent(g_timerStopEvent);
     if (g_timerThread) {
         DWORD tid = GetCurrentThreadId();
@@ -3898,8 +4210,12 @@ static Button MakeControlButton(int cmd, bool isPlaying, winrt::Windows::UI::Col
         btn.Width((double)g_settings.buttonSize);
         btn.Height((double)g_settings.buttonSize);
         btn.Padding({1,1,1,1});
-        double cr = (double)g_settings.buttonCornerRadius;
-        btn.CornerRadius({cr,cr,cr,cr});
+        btn.CornerRadius({
+            g_settings.buttonCornerRadiusTL,
+            g_settings.buttonCornerRadiusTR,
+            g_settings.buttonCornerRadiusBR,
+            g_settings.buttonCornerRadiusBL
+        });
         btn.BorderThickness({0,0,0,0});
         btn.VerticalAlignment(VerticalAlignment::Center);
         btn.HorizontalAlignment(HorizontalAlignment::Center);
@@ -4047,7 +4363,6 @@ static Grid BuildPlayerGrid() {
         auto artistClr = ArtistColor();
         auto buttonClr = ButtonColor();
         auto bgBrush = MakeBackgroundBrush();
-        double cr    = (double)g_settings.cornerRadius;
         double phMin = (double)g_settings.playerMinHeight;
         double phMax = (double)g_settings.playerMaxHeight;
 
@@ -4055,9 +4370,12 @@ static Grid BuildPlayerGrid() {
 
         Border backgroundBorder;
         backgroundBorder.Name(L"FluentMedia_Background");
-        if (cr > 0) {
-            backgroundBorder.CornerRadius({cr, cr, cr, cr});
-        }
+        backgroundBorder.CornerRadius({
+            g_settings.cornerRadiusTL,
+            g_settings.cornerRadiusTR,
+            g_settings.cornerRadiusBR,
+            g_settings.cornerRadiusBL
+        });
         backgroundBorder.HorizontalAlignment(HorizontalAlignment::Stretch);
         backgroundBorder.VerticalAlignment(VerticalAlignment::Stretch);
         backgroundBorder.IsHitTestVisible(false);
@@ -4065,11 +4383,12 @@ static Grid BuildPlayerGrid() {
 
         Button playerButton;
         playerButton.Name(L"FluentMedia_OuterBorder");
-        if (cr > 0) {
-            playerButton.CornerRadius({cr, cr, cr, cr});
-        } else {
-            playerButton.CornerRadius({0, 0, 0, 0});
-        }
+        playerButton.CornerRadius({
+            g_settings.cornerRadiusTL,
+            g_settings.cornerRadiusTR,
+            g_settings.cornerRadiusBR,
+            g_settings.cornerRadiusBL
+        });
         playerButton.BorderThickness({0, 0, 0, 0});
         playerButton.UseSystemFocusVisuals(false);
         playerButton.IsHitTestVisible(false);
@@ -4136,7 +4455,6 @@ static Grid BuildPlayerGrid() {
         Grid artContainer{nullptr};
 
         if (g_settings.showAlbumArt) {
-            double acr = (double)g_settings.albumArtCornerRadius;
             int iconSz = g_settings.appIconSize;
 
             artContainer = Grid();
@@ -4173,13 +4491,22 @@ static Grid BuildPlayerGrid() {
 
             winrt::Windows::UI::Xaml::Shapes::Rectangle placeholder;
             placeholder.Fill(MakeBrush({0x40,0x80,0x80,0x80}));
-            placeholder.RadiusX(acr); placeholder.RadiusY(acr);
+
+            double maxRadius = std::max({g_settings.albumArtCornerRadiusTL, g_settings.albumArtCornerRadiusTR,
+                                         g_settings.albumArtCornerRadiusBR, g_settings.albumArtCornerRadiusBL});
+            placeholder.RadiusX(maxRadius);
+            placeholder.RadiusY(maxRadius);
             placeholder.HorizontalAlignment(HorizontalAlignment::Stretch);
             placeholder.VerticalAlignment(VerticalAlignment::Stretch);
             artContainer.Children().Append(placeholder);
 
             Border artBorder;
-            artBorder.CornerRadius({acr,acr,acr,acr});
+            artBorder.CornerRadius({
+                g_settings.albumArtCornerRadiusTL,
+                g_settings.albumArtCornerRadiusTR,
+                g_settings.albumArtCornerRadiusBR,
+                g_settings.albumArtCornerRadiusBL
+            });
             artBorder.HorizontalAlignment(HorizontalAlignment::Stretch);
             artBorder.VerticalAlignment(VerticalAlignment::Stretch);
 
@@ -4196,7 +4523,12 @@ static Grid BuildPlayerGrid() {
             artContainer.Children().Append(artBorder);
 
             Border artRing;
-            artRing.CornerRadius({acr,acr,acr,acr});
+            artRing.CornerRadius({
+                g_settings.albumArtCornerRadiusTL,
+                g_settings.albumArtCornerRadiusTR,
+                g_settings.albumArtCornerRadiusBR,
+                g_settings.albumArtCornerRadiusBL
+            });
             artRing.BorderThickness({1,1,1,1});
             artRing.BorderBrush(MakeBrush({0x25,0x80,0x80,0x80}));
             artContainer.Children().Append(artRing);
@@ -4247,7 +4579,12 @@ static Grid BuildPlayerGrid() {
                 pauseBorder.Name(L"PauseIconOverlay");
                 pauseBorder.HorizontalAlignment(HorizontalAlignment::Stretch);
                 pauseBorder.VerticalAlignment(VerticalAlignment::Stretch);
-                pauseBorder.CornerRadius({acr + 1, acr + 1, acr + 1, acr + 1});
+                pauseBorder.CornerRadius({
+                    g_settings.albumArtCornerRadiusTL + 1,
+                    g_settings.albumArtCornerRadiusTR + 1,
+                    g_settings.albumArtCornerRadiusBR + 1,
+                    g_settings.albumArtCornerRadiusBL + 1
+                });
                 BYTE opacity = (BYTE)((g_settings.pauseOverlayOpacity * 255) / 100);
                 pauseBorder.Background(MakeBrush({opacity, 0x00, 0x00, 0x00}));
                 pauseBorder.Visibility(Visibility::Collapsed);
@@ -4368,6 +4705,7 @@ static Grid BuildPlayerGrid() {
             if (g_settings.textAreaMinWidth > 0) {
                 textContainer.MinWidth((double)g_settings.textAreaMinWidth);
             }
+
             if (g_settings.textAreaMaxWidth > 0) {
                 textContainer.MaxWidth((double)g_settings.textAreaMaxWidth);
             }
@@ -4391,7 +4729,12 @@ static Grid BuildPlayerGrid() {
             textStack.Name(kTextStackName);
             textStack.Orientation(Orientation::Vertical);
             textStack.VerticalAlignment(VerticalAlignment::Center);
-            textStack.HorizontalAlignment(g_settings.mirrorLayout ? HorizontalAlignment::Right : HorizontalAlignment::Left);
+
+            if (g_settings.enableTitleScrolling || g_settings.enableArtistScrolling) {
+                textStack.HorizontalAlignment(HorizontalAlignment::Stretch);
+            } else {
+                textStack.HorizontalAlignment(g_settings.mirrorLayout ? HorizontalAlignment::Right : HorizontalAlignment::Left);
+            }
             textStack.Spacing((double)g_settings.textSpacing);
 
             if (g_settings.showTrackTitle || g_settings.showTrackArtist) {
@@ -4494,12 +4837,102 @@ static Grid BuildPlayerGrid() {
                     artistBlock.TextAlignment(g_settings.mirrorLayout ? TextAlignment::Right : TextAlignment::Left);
                 }
 
+                auto MakeScrollView = [&](Canvas& scrollView, TextBlock& block, const wchar_t* viewName, const wchar_t* blockName, const wchar_t* cloneName) {
+                    scrollView = Canvas();
+                    scrollView.Name(viewName);
+                    scrollView.VerticalAlignment(VerticalAlignment::Center);
+                    scrollView.HorizontalAlignment(g_settings.mirrorLayout ? HorizontalAlignment::Right : HorizontalAlignment::Left);
+
+                    scrollView.Width(100.0);
+                    block.Name(blockName);
+                    block.TextTrimming(TextTrimming::None);
+                    block.TextWrapping(TextWrapping::NoWrap);
+                    Canvas::SetLeft(block, 0.0);
+                    Canvas::SetTop(block, 0.0);
+                    scrollView.Children().Append(block);
+
+                    if (g_settings.scrollMode == L"loop") {
+                        TextBlock clone;
+                        clone.Name(cloneName);
+                        clone.Text(block.Text());
+                        clone.FontSize(block.FontSize());
+                        clone.FontFamily(block.FontFamily());
+                        clone.FontWeight(block.FontWeight());
+                        clone.FontStyle(block.FontStyle());
+                        clone.CharacterSpacing(block.CharacterSpacing());
+                        clone.Foreground(block.Foreground());
+                        clone.TextWrapping(TextWrapping::NoWrap);
+                        clone.TextTrimming(TextTrimming::None);
+                        clone.TextAlignment(block.TextAlignment());
+                        Canvas::SetLeft(clone, 9999.0);
+                        Canvas::SetTop(clone, 0.0);
+                        scrollView.Children().Append(clone);
+                    }
+
+                    auto geo = winrt::Windows::UI::Xaml::Media::RectangleGeometry();
+                    scrollView.Clip(geo);
+                    block.SizeChanged([scrollView, geo](winrt::Windows::Foundation::IInspectable const&, SizeChangedEventArgs const& e) mutable {
+                        try {
+                            double h = e.NewSize().Height;
+                            if (h < 1.0) h = 16.0;
+                            double w = scrollView.Width();
+                            scrollView.Height(h);
+                            geo.Rect({0, 0, (float)w, (float)h});
+                        } catch (...) {}
+                    });
+                };
+
+
                 if (g_settings.swapTitleArtist) {
-                    if (artistBlock) textStack.Children().Append(artistBlock);
-                    if (titleBlock)  textStack.Children().Append(titleBlock);
+                    if (artistBlock) {
+                        if (g_settings.enableArtistScrolling) {
+                            Canvas artistScrollView;
+                            MakeScrollView(artistScrollView, artistBlock, kArtistScrollViewName, kArtistBlockName, kArtistCloneName);
+                            textStack.Children().Append(artistScrollView);
+                        } else {
+                            if (g_settings.enableTitleScrolling && g_settings.textAreaMaxWidth > 0) {
+                                artistBlock.MaxWidth((double)g_settings.textAreaMaxWidth);
+                            }
+                            textStack.Children().Append(artistBlock);
+                        }
+                    }
+                    if (titleBlock) {
+                        if (g_settings.enableTitleScrolling) {
+                            Canvas titleScrollView;
+                            MakeScrollView(titleScrollView, titleBlock, kTitleScrollViewName, kTitleBlockName, kTitleCloneName);
+                            textStack.Children().Append(titleScrollView);
+                        } else {
+                            if (g_settings.enableArtistScrolling && g_settings.textAreaMaxWidth > 0) {
+                                titleBlock.MaxWidth((double)g_settings.textAreaMaxWidth);
+                            }
+                            textStack.Children().Append(titleBlock);
+                        }
+                    }
                 } else {
-                    if (titleBlock)  textStack.Children().Append(titleBlock);
-                    if (artistBlock) textStack.Children().Append(artistBlock);
+                    if (titleBlock) {
+                        if (g_settings.enableTitleScrolling) {
+                            Canvas titleScrollView;
+                            MakeScrollView(titleScrollView, titleBlock, kTitleScrollViewName, kTitleBlockName, kTitleCloneName);
+                            textStack.Children().Append(titleScrollView);
+                        } else {
+                            if (g_settings.enableArtistScrolling && g_settings.textAreaMaxWidth > 0) {
+                                titleBlock.MaxWidth((double)g_settings.textAreaMaxWidth);
+                            }
+                            textStack.Children().Append(titleBlock);
+                        }
+                    }
+                    if (artistBlock) {
+                        if (g_settings.enableArtistScrolling) {
+                            Canvas artistScrollView;
+                            MakeScrollView(artistScrollView, artistBlock, kArtistScrollViewName, kArtistBlockName, kArtistCloneName);
+                            textStack.Children().Append(artistScrollView);
+                        } else {
+                            if (g_settings.enableTitleScrolling && g_settings.textAreaMaxWidth > 0) {
+                                artistBlock.MaxWidth((double)g_settings.textAreaMaxWidth);
+                            }
+                            textStack.Children().Append(artistBlock);
+                        }
+                    }
                 }
             }
 
@@ -5583,6 +6016,12 @@ static void RemovePlayerGrid() {
         g_cachedPaletteHash = 0;
         g_blurBgCache.Invalidate();
         g_cachedAppIconSize = -1;
+
+        g_scrollCachedTitle.clear();
+        g_scrollCachedArtist.clear();
+
+        ResetScrollState(g_titleScroll);
+        ResetScrollState(g_artistScroll);
     } catch (...) {
         g_playerGrid      = nullptr;
         g_injectionParent = nullptr;
@@ -5594,6 +6033,9 @@ static void RemovePlayerGrid() {
         g_cachedPaletteHash = 0;
         g_blurBgCache.Invalidate();
         g_cachedAppIconSize = -1;
+
+        ResetScrollState(g_titleScroll);
+        ResetScrollState(g_artistScroll);
     }
 }
 
@@ -5629,6 +6071,33 @@ static void RefreshPlayerContents() {
     bool hasSession = false;
     { std::lock_guard<std::mutex> lk(g_sessionMtx); hasSession = (g_currentSession != nullptr); }
 
+    if (title != g_scrollCachedTitle || artist != g_scrollCachedArtist) {
+        g_scrollCachedTitle  = title;
+        g_scrollCachedArtist = artist;
+        ResetScrollState(g_titleScroll);
+        ResetScrollState(g_artistScroll);
+        try {
+            if (auto fe = FindChildByName(g_playerGrid, kTitleCloneName))
+                if (auto cl = fe.try_as<TextBlock>())
+                    cl.Visibility(Visibility::Collapsed);
+        } catch (...) {}
+        try {
+            if (auto fe = FindChildByName(g_playerGrid, kArtistCloneName))
+                if (auto cl = fe.try_as<TextBlock>())
+                    cl.Visibility(Visibility::Collapsed);
+        } catch (...) {}
+        try {
+            if (auto fe = FindChildByName(g_playerGrid, kTitleBlockName))
+                if (auto tb = fe.try_as<TextBlock>())
+                    Canvas::SetLeft(tb, 0.0);
+        } catch (...) {}
+        try {
+            if (auto fe = FindChildByName(g_playerGrid, kArtistBlockName))
+                if (auto ab = fe.try_as<TextBlock>())
+                    Canvas::SetLeft(ab, 0.0);
+        } catch (...) {}
+    }
+
     if (auto fe = FindChildByName(g_playerGrid, kTitleBlockName))
         if (auto tb = fe.try_as<TextBlock>())
             try {
@@ -5649,6 +6118,60 @@ static void RefreshPlayerContents() {
                 } else {
                     ToolTipService::SetToolTip(tb, nullptr);
                 }
+
+                if (g_settings.enableTitleScrolling && visible) {
+                    tb.UpdateLayout();
+                    double textW = tb.DesiredSize().Width;
+                    if (auto viewFe = FindChildByName(g_playerGrid, kTitleScrollViewName)) {
+                        if (auto viewCanvas = viewFe.try_as<Canvas>()) {
+                            double minW = (double)g_settings.textAreaMinWidth;
+                            double maxW = (double)g_settings.textAreaMaxWidth;
+                            double viewW = textW;
+
+                            if (maxW > 0 && viewW > maxW) viewW = maxW;
+                            if (minW > 0 && viewW < minW) viewW = minW;
+                            if (std::abs(viewCanvas.Width() - viewW) > 0.5) {
+                                viewCanvas.Width(viewW);
+                                try {
+                                    if (auto geo = viewCanvas.Clip().try_as<winrt::Windows::UI::Xaml::Media::RectangleGeometry>()) {
+                                        auto r = geo.Rect();
+                                        geo.Rect({0, 0, (float)viewW, r.Height});
+                                    }
+                                } catch (...) {}
+                            }
+                            bool wasActive = g_titleScroll.active;
+                            g_titleScroll.textWidth = textW;
+                            g_titleScroll.viewWidth = viewW;
+                            g_titleScroll.active = (textW > viewW + 2.0);
+                            if (!g_titleScroll.active) {
+                                g_titleScroll.offset = 0.0;
+                                g_titleScroll.forward = true;
+                                Canvas::SetLeft(tb, 0.0);
+                            } else if (!wasActive) {
+                                g_titleScroll.offset = 0.0;
+                                g_titleScroll.forward = true;
+                                if (g_settings.scrollMode == L"loop") {
+                                    g_titleScroll.pausing  = false;
+                                    g_titleScroll.pauseTick = 0;
+                                } else {
+                                    g_titleScroll.pausing  = true;
+                                    g_titleScroll.pauseTick = g_settings.scrollPauseDuration;
+                                }
+                            }
+                            if (auto cloneFe = FindChildByName(g_playerGrid, kTitleCloneName)) {
+                                if (auto clone = cloneFe.try_as<TextBlock>()) {
+                                    clone.Text(tb.Text());
+                                    clone.Foreground(tb.Foreground());
+                                    clone.Visibility(g_settings.scrollMode == L"loop" && g_titleScroll.active
+                                        ? Visibility::Visible : Visibility::Collapsed);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    g_titleScroll.active = false;
+                    g_titleScroll.offset = 0.0;
+                }
             } catch (...) {}
 
     if (auto fe = FindChildByName(g_playerGrid, kArtistBlockName))
@@ -5668,6 +6191,60 @@ static void RefreshPlayerContents() {
                     ToolTipService::SetPlacement(ab, Controls::Primitives::PlacementMode::Top);
                 } else {
                     ToolTipService::SetToolTip(ab, nullptr);
+                }
+
+                if (g_settings.enableArtistScrolling && visible) {
+                    ab.UpdateLayout();
+                    double textW = ab.DesiredSize().Width;
+                    if (auto viewFe = FindChildByName(g_playerGrid, kArtistScrollViewName)) {
+                        if (auto viewCanvas = viewFe.try_as<Canvas>()) {
+                            double minW = (double)g_settings.textAreaMinWidth;
+                            double maxW = (double)g_settings.textAreaMaxWidth;
+                            double viewW = textW;
+
+                            if (maxW > 0 && viewW > maxW) viewW = maxW;
+                            if (minW > 0 && viewW < minW) viewW = minW;
+                            if (std::abs(viewCanvas.Width() - viewW) > 0.5) {
+                                viewCanvas.Width(viewW);
+                                try {
+                                    if (auto geo = viewCanvas.Clip().try_as<winrt::Windows::UI::Xaml::Media::RectangleGeometry>()) {
+                                        auto r = geo.Rect();
+                                        geo.Rect({0, 0, (float)viewW, r.Height});
+                                    }
+                                } catch (...) {}
+                            }
+                            bool wasActive = g_artistScroll.active;
+                            g_artistScroll.textWidth = textW;
+                            g_artistScroll.viewWidth = viewW;
+                            g_artistScroll.active = (textW > viewW + 2.0);
+                            if (!g_artistScroll.active) {
+                                g_artistScroll.offset = 0.0;
+                                g_artistScroll.forward = true;
+                                Canvas::SetLeft(ab, 0.0);
+                            } else if (!wasActive) {
+                                g_artistScroll.offset = 0.0;
+                                g_artistScroll.forward = true;
+                                if (g_settings.scrollMode == L"loop") {
+                                    g_artistScroll.pausing  = false;
+                                    g_artistScroll.pauseTick = 0;
+                                } else {
+                                    g_artistScroll.pausing  = true;
+                                    g_artistScroll.pauseTick = g_settings.scrollPauseDuration;
+                                }
+                            }
+                            if (auto cloneFe = FindChildByName(g_playerGrid, kArtistCloneName)) {
+                                if (auto clone = cloneFe.try_as<TextBlock>()) {
+                                    clone.Text(ab.Text());
+                                    clone.Foreground(ab.Foreground());
+                                    clone.Visibility(g_settings.scrollMode == L"loop" && g_artistScroll.active
+                                        ? Visibility::Visible : Visibility::Collapsed);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    g_artistScroll.active = false;
+                    g_artistScroll.offset = 0.0;
                 }
             } catch (...) {}
 
@@ -6024,11 +6601,15 @@ static void RefreshPlayerContents() {
                                         }
 
                                         if (!iconBorder) {
-                                            double acr = (double)g_settings.albumArtCornerRadius;
                                             iconBorder = Border();
                                             iconBorder.Name(L"EmptyIconBorder");
                                             iconBorder.Background(MakeBrush({0x40, 0x80, 0x80, 0x80}));
-                                            iconBorder.CornerRadius({acr, acr, acr, acr});
+                                            iconBorder.CornerRadius({
+                                                g_settings.albumArtCornerRadiusTL,
+                                                g_settings.albumArtCornerRadiusTR,
+                                                g_settings.albumArtCornerRadiusBR,
+                                                g_settings.albumArtCornerRadiusBL
+                                            });
                                             iconBorder.HorizontalAlignment(HorizontalAlignment::Stretch);
                                             iconBorder.VerticalAlignment(VerticalAlignment::Stretch);
                                             Canvas::SetZIndex(iconBorder, 5);
@@ -6541,6 +7122,7 @@ void Wh_ModUninit() {
             g_playerHoverBrush  = nullptr;
             g_playerPressedBrush = nullptr;
             g_playerBorderBrush  = nullptr;
+            g_playerBorderPressedBrush = nullptr;
         }, nullptr);
     else {
         g_mediaHoverBrush   = nullptr;
@@ -6548,6 +7130,7 @@ void Wh_ModUninit() {
         g_playerHoverBrush  = nullptr;
         g_playerPressedBrush = nullptr;
         g_playerBorderBrush  = nullptr;
+        g_playerBorderPressedBrush = nullptr;
     }
 
     CleanupAudioDeviceEnumerator();
