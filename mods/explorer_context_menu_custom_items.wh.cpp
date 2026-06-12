@@ -2,7 +2,6 @@
 // @id              explorer-context-menu-custom-items
 // @name            Explorer Context Menu Custom Items
 // @description     Adds filtered custom user-defined options to the classic
-// (Show more options) File Explorer context menu.
 // @version         1.0
 // @author          Deepak
 // @github          https://github.com/deepak-raven
