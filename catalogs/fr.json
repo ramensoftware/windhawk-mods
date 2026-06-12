@@ -3967,6 +3967,34 @@
                 "version": "1.0.2"
             }
         },
+        "explorer-context-menu-custom-items": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781281403000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781281403000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Deepak",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -luuid",
+                "description": "Adds filtered custom user-defined options to the classic (Show more options) context menu.",
+                "github": "https://github.com/deepak-raven",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer Context Menu Custom Items",
+                "version": "1.0"
+            }
+        },
         "explorer-ctrln-newfile": {
             "details": {
                 "defaultSorting": 3200,
