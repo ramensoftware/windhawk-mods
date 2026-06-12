@@ -1897,27 +1897,6 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     MaybeSubclassDialog(candidate);
 }
 
-void StartWinEventHook() {
-    if (g_dialogStartWinEventHook) {
-        return;
-    }
-
-    g_dialogStartWinEventHook =
-        SetWinEventHook(EVENT_SYSTEM_DIALOGSTART, EVENT_SYSTEM_DIALOGSTART,
-                        g_hModule, WinEventProc, GetCurrentProcessId(), 0,
-                        WINEVENT_INCONTEXT);
-    if (!g_dialogStartWinEventHook) {
-        Wh_Log(L"SetWinEventHook failed, error %u", GetLastError());
-    }
-}
-
-void StopWinEventHook() {
-    if (g_dialogStartWinEventHook) {
-        UnhookWinEvent(g_dialogStartWinEventHook);
-        g_dialogStartWinEventHook = nullptr;
-    }
-}
-
 BOOL CALLBACK UnsubclassWindowsProc(HWND hwnd, LPARAM lParam) {
     DWORD windowProcessId = 0;
     GetWindowThreadProcessId(hwnd, &windowProcessId);
@@ -1983,14 +1962,23 @@ BOOL Wh_ModInit() {
     LoadSettings();
     LoadCommandsFromFile();
 
-    StartWinEventHook();
+    g_dialogStartWinEventHook =
+        SetWinEventHook(EVENT_SYSTEM_DIALOGSTART, EVENT_SYSTEM_DIALOGSTART,
+                        g_hModule, WinEventProc, GetCurrentProcessId(), 0,
+                        WINEVENT_INCONTEXT);
+    if (!g_dialogStartWinEventHook) {
+        Wh_Log(L"SetWinEventHook failed, error %u", GetLastError());
+    }
 
     return TRUE;
 }
 
 void Wh_ModBeforeUninit() {
     SetUnloading();
-    StopWinEventHook();
+    if (g_dialogStartWinEventHook) {
+        UnhookWinEvent(g_dialogStartWinEventHook);
+        g_dialogStartWinEventHook = nullptr;
+    }
     CloseSavedCommandsWindow();
     UnsubclassRunDialogs();
     SaveCommandsToFile();
