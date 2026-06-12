@@ -4,8 +4,9 @@
 // @description     Adds a compact saved commands list to the Windows Run dialog.
 // @version         1.0.0
 // @author          communism420
+// @github          communism420
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -lgdi32 -lshell32
+// @compilerOptions -std=c++20 -lcomctl32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,8 +22,16 @@ Saved commands can be edited with the "Update selected" button.
 Multiple saved commands can be selected and deleted at once.
 Each saved command has a per-row "Run as administrator" checkbox.
 
+## Screenshots
+
+![Windows Run dialog with the Saved Run Commands button](https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28button%29.png)
+
+![Saved Commands window](https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28window%29.png)
+
 Notes:
 - Commands are stored as one line per command in the mod storage folder.
+- Elevated commands expand environment variables before a best-effort
+  ShellExecute runas launch.
 - The UI added by this mod is intentionally English-only.
 */
 // ==/WindhawkModReadme==
@@ -43,7 +52,7 @@ Notes:
 #include <windowsx.h>
 #include <commctrl.h>
 #include <shellapi.h>
-#include <tlhelp32.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <cwctype>
@@ -63,64 +72,31 @@ constexpr int kTypedCommandEditId = 0x6005;
 constexpr int kSaveTypedButtonId = 0x6006;
 constexpr int kUpdateSelectedButtonId = 0x6007;
 
-constexpr UINT_PTR kRunDialogSubclassId = 1;
 constexpr UINT_PTR kCommandsListSubclassId = 2;
 constexpr UINT_PTR kTypedCommandEditSubclassId = 3;
-constexpr UINT kMsgUnsubclassRunDialog = WM_APP + 0x5A0;
-constexpr UINT kMsgRefreshSavedList = WM_APP + 0x5A1;
-constexpr UINT kMsgExecuteSelectedCommand = WM_APP + 0x5A2;
-constexpr UINT kMsgProbeRunDialog = WM_APP + 0x5A3;
 
 const wchar_t kSavedWindowClass[] = L"WindhawkSavedRunCommandsWindow";
 const wchar_t kRunButtonInstalledProp[] =
     L"WindhawkSavedRunCommandsButtonInstalled";
 const wchar_t kCommandsFileName[] = L"commands.txt";
 
-struct ThreadHook {
-    DWORD threadId;
-    HHOOK cbtHook;
-    HHOOK callWndHook;
-    HHOOK getMsgHook;
-};
-
 HMODULE g_hModule;
 std::vector<std::wstring> g_commands;
 std::vector<BYTE> g_runAsAdmin;
-std::vector<ThreadHook> g_cbtHooks;
 CRITICAL_SECTION g_commandsLock;
-CRITICAL_SECTION g_hooksLock;
 bool g_commandsLockInitialized;
-bool g_hooksLockInitialized;
+bool g_savedWindowClassRegistered;
 volatile LONG g_unloading;
-int g_maxCommands = 40;
-HWND g_savedCommandsWindow;
-HANDLE g_hookInstallerStopEvent;
-HANDLE g_hookInstallerThread;
-HWINEVENTHOOK g_winEventHook;
+volatile LONG g_maxCommands = 40;
+PVOID volatile g_savedCommandsWindow;
+UINT g_msgRefreshSavedList;
+UINT g_msgExecuteSelectedCommand;
 HWINEVENTHOOK g_dialogStartWinEventHook;
 
 void MaybeSubclassDialog(HWND hwnd);
-void ProbeExistingRunDialogs();
 bool IsDialogClass(HWND hwnd);
-void InstallHooksForThread(DWORD threadId);
-void ProbeRunDialogSoon(HWND hwnd, DWORD threadId);
 std::wstring GetListCommandAt(HWND savedWindow, int index);
 void SelectSingleCommand(HWND savedWindow, int index);
-
-using CreateWindowExW_t = HWND(WINAPI*)(DWORD,
-                                        LPCWSTR,
-                                        LPCWSTR,
-                                        DWORD,
-                                        int,
-                                        int,
-                                        int,
-                                        int,
-                                        HWND,
-                                        HMENU,
-                                        HINSTANCE,
-                                        LPVOID);
-
-CreateWindowExW_t g_originalCreateWindowExW;
 
 int ClampInt(int value, int minValue, int maxValue) {
     if (value < minValue) {
@@ -142,38 +118,35 @@ void SetUnloading() {
     InterlockedExchange(&g_unloading, 1);
 }
 
-HWND WINAPI CreateWindowExW_Hook(DWORD exStyle,
-                                 LPCWSTR className,
-                                 LPCWSTR windowName,
-                                 DWORD style,
-                                 int x,
-                                 int y,
-                                 int width,
-                                 int height,
-                                 HWND parent,
-                                 HMENU menu,
-                                 HINSTANCE instance,
-                                 LPVOID param) {
-    HWND hwnd = g_originalCreateWindowExW(
-        exStyle, className, windowName, style, x, y, width, height, parent, menu,
-        instance, param);
+int GetMaxCommands() {
+    return static_cast<int>(InterlockedCompareExchange(&g_maxCommands, 0, 0));
+}
 
-    if (!hwnd || IsUnloading()) {
-        return hwnd;
+void SetMaxCommands(int maxCommands) {
+    InterlockedExchange(&g_maxCommands, maxCommands);
+}
+
+HWND GetSavedCommandsWindow() {
+    return static_cast<HWND>(InterlockedCompareExchangePointer(
+        &g_savedCommandsWindow, nullptr, nullptr));
+}
+
+void SetSavedCommandsWindow(HWND hwnd) {
+    InterlockedExchangePointer(&g_savedCommandsWindow, hwnd);
+}
+
+bool InitRegisteredMessages() {
+    g_msgRefreshSavedList = RegisterWindowMessageW(
+        L"Windhawk_SavedRunCommands_Refresh_saved-run-commands");
+    g_msgExecuteSelectedCommand = RegisterWindowMessageW(
+        L"Windhawk_SavedRunCommands_ExecuteSelected_saved-run-commands");
+
+    if (!g_msgRefreshSavedList || !g_msgExecuteSelectedCommand) {
+        Wh_Log(L"RegisterWindowMessageW failed, error %u", GetLastError());
+        return false;
     }
 
-    HWND candidate = nullptr;
-    if (IsDialogClass(hwnd)) {
-        candidate = hwnd;
-    } else if (parent && IsDialogClass(parent)) {
-        candidate = parent;
-    }
-
-    if (candidate) {
-        ProbeRunDialogSoon(candidate, GetWindowThreadProcessId(candidate, nullptr));
-    }
-
-    return hwnd;
+    return true;
 }
 
 UINT GetDpiForWindowCompat(HWND hwnd) {
@@ -228,13 +201,15 @@ void NormalizeCommandFlagsLocked() {
 }
 
 void TrimCommandsToLimitLocked() {
-    if (g_maxCommands < 1) {
-        g_maxCommands = 40;
+    int maxCommands = GetMaxCommands();
+    if (maxCommands < 1) {
+        maxCommands = 40;
+        SetMaxCommands(maxCommands);
     }
 
     NormalizeCommandFlagsLocked();
 
-    while (static_cast<int>(g_commands.size()) > g_maxCommands) {
+    while (static_cast<int>(g_commands.size()) > maxCommands) {
         g_commands.pop_back();
         g_runAsAdmin.pop_back();
     }
@@ -246,7 +221,7 @@ void LoadSettings() {
         maxCommands = 40;
     }
 
-    g_maxCommands = ClampInt(maxCommands, 1, 500);
+    SetMaxCommands(ClampInt(maxCommands, 1, 500));
 }
 
 bool GetStorageFolder(std::wstring* folder) {
@@ -370,9 +345,10 @@ bool TryParseCommandLine(const std::wstring& line,
 ParsedCommands ParseCommands(const std::wstring& text) {
     ParsedCommands parsed;
     size_t pos = 0;
+    int maxCommands = GetMaxCommands();
 
     while (pos < text.size() &&
-           static_cast<int>(parsed.commands.size()) < g_maxCommands) {
+           static_cast<int>(parsed.commands.size()) < maxCommands) {
         size_t lineEnd = text.find_first_of(L"\r\n", pos);
         std::wstring line = TrimString(
             text.substr(pos, lineEnd == std::wstring::npos ? lineEnd
@@ -944,16 +920,20 @@ void FillCommandsList(HWND savedWindow) {
         return;
     }
 
-    SendMessageW(list, WM_SETREDRAW, FALSE, 0);
-    SendMessageW(list, LB_RESETCONTENT, 0, 0);
+    std::vector<std::wstring> commands;
 
     EnterCriticalSection(&g_commandsLock);
     NormalizeCommandFlagsLocked();
-    for (const std::wstring& command : g_commands) {
+    commands = g_commands;
+    LeaveCriticalSection(&g_commandsLock);
+
+    SendMessageW(list, WM_SETREDRAW, FALSE, 0);
+    SendMessageW(list, LB_RESETCONTENT, 0, 0);
+
+    for (const std::wstring& command : commands) {
         SendMessageW(list, LB_ADDSTRING, 0,
                      reinterpret_cast<LPARAM>(command.c_str()));
     }
-    LeaveCriticalSection(&g_commandsLock);
 
     SendMessageW(list, WM_SETREDRAW, TRUE, 0);
     InvalidateRect(list, nullptr, TRUE);
@@ -1205,13 +1185,43 @@ bool CanResolveExecutable(const std::wstring& candidate) {
                                static_cast<DWORD>(buffer.size()), buffer.data(),
                                nullptr);
     if (result > 0 && result < buffer.size()) {
-        return true;
+        DWORD attributes = GetFileAttributesW(buffer.data());
+        return attributes != INVALID_FILE_ATTRIBUTES &&
+               (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
     }
 
     result = SearchPathW(nullptr, candidate.c_str(), L".exe",
                          static_cast<DWORD>(buffer.size()), buffer.data(),
                          nullptr);
-    return result > 0 && result < buffer.size();
+    if (result <= 0 || result >= buffer.size()) {
+        return false;
+    }
+
+    DWORD attributes = GetFileAttributesW(buffer.data());
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+std::wstring ExpandEnvironmentStringsInCommand(const std::wstring& command) {
+    if (command.empty()) {
+        return {};
+    }
+
+    DWORD requiredChars = ExpandEnvironmentStringsW(command.c_str(), nullptr, 0);
+    if (requiredChars == 0) {
+        Wh_Log(L"ExpandEnvironmentStringsW failed, error %u", GetLastError());
+        return command;
+    }
+
+    std::vector<wchar_t> buffer(requiredChars);
+    DWORD copiedChars = ExpandEnvironmentStringsW(
+        command.c_str(), buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (copiedChars == 0 || copiedChars > buffer.size()) {
+        Wh_Log(L"ExpandEnvironmentStringsW failed, error %u", GetLastError());
+        return command;
+    }
+
+    return TrimString(buffer.data());
 }
 
 void SplitCommandForShellExecute(const std::wstring& command,
@@ -1258,9 +1268,11 @@ void SplitCommandForShellExecute(const std::wstring& command,
 }
 
 bool RunCommandAsAdministrator(const std::wstring& command) {
+    std::wstring expandedCommand = ExpandEnvironmentStringsInCommand(command);
+
     std::wstring executable;
     std::wstring parameters;
-    SplitCommandForShellExecute(command, &executable, &parameters);
+    SplitCommandForShellExecute(expandedCommand, &executable, &parameters);
 
     HINSTANCE result = ShellExecuteW(
         nullptr, L"runas", executable.c_str(),
@@ -1522,7 +1534,7 @@ LRESULT CALLBACK CommandsListSubclassProc(HWND hwnd,
             LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
 
             if (clickedItem && IsWindow(savedWindow)) {
-                PostMessageW(savedWindow, kMsgExecuteSelectedCommand,
+                PostMessageW(savedWindow, g_msgExecuteSelectedCommand,
                              LOWORD(hitTest), 0);
             }
 
@@ -1553,7 +1565,7 @@ LRESULT CALLBACK CommandsListSubclassProc(HWND hwnd,
             if (wParam == VK_RETURN && IsWindow(savedWindow)) {
                 int index =
                     static_cast<int>(SendMessageW(hwnd, LB_GETCARETINDEX, 0, 0));
-                PostMessageW(savedWindow, kMsgExecuteSelectedCommand, index, 0);
+                PostMessageW(savedWindow, g_msgExecuteSelectedCommand, index, 0);
                 return 0;
             }
 
@@ -1578,6 +1590,16 @@ LRESULT CALLBACK SavedCommandsWndProc(HWND hwnd,
                                       UINT msg,
                                       WPARAM wParam,
                                       LPARAM lParam) {
+    if (g_msgRefreshSavedList && msg == g_msgRefreshSavedList) {
+        FillCommandsList(hwnd);
+        return 0;
+    }
+
+    if (g_msgExecuteSelectedCommand && msg == g_msgExecuteSelectedCommand) {
+        ExecuteListCommand(hwnd, static_cast<int>(wParam));
+        return 0;
+    }
+
     switch (msg) {
         case WM_NCCREATE: {
             auto createStruct = reinterpret_cast<CREATESTRUCTW*>(lParam);
@@ -1689,14 +1711,6 @@ LRESULT CALLBACK SavedCommandsWndProc(HWND hwnd,
             }
             break;
 
-        case kMsgRefreshSavedList:
-            FillCommandsList(hwnd);
-            return 0;
-
-        case kMsgExecuteSelectedCommand:
-            ExecuteListCommand(hwnd, static_cast<int>(wParam));
-            return 0;
-
         case WM_COMMAND: {
             int id = LOWORD(wParam);
             int notification = HIWORD(wParam);
@@ -1739,8 +1753,8 @@ LRESULT CALLBACK SavedCommandsWndProc(HWND hwnd,
             return 0;
 
         case WM_DESTROY:
-            if (g_savedCommandsWindow == hwnd) {
-                g_savedCommandsWindow = nullptr;
+            if (GetSavedCommandsWindow() == hwnd) {
+                SetSavedCommandsWindow(nullptr);
             }
             return 0;
     }
@@ -1749,6 +1763,10 @@ LRESULT CALLBACK SavedCommandsWndProc(HWND hwnd,
 }
 
 bool RegisterSavedWindowClass() {
+    if (g_savedWindowClassRegistered) {
+        return true;
+    }
+
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
     windowClass.lpfnWndProc = SavedCommandsWndProc;
@@ -1758,14 +1776,11 @@ bool RegisterSavedWindowClass() {
     windowClass.lpszClassName = kSavedWindowClass;
 
     if (RegisterClassExW(&windowClass)) {
+        g_savedWindowClassRegistered = true;
         return true;
     }
 
     DWORD error = GetLastError();
-    if (error == ERROR_CLASS_ALREADY_EXISTS) {
-        return true;
-    }
-
     Wh_Log(L"RegisterClassExW failed, error %u", error);
     return false;
 }
@@ -1784,18 +1799,22 @@ void ClampWindowToWorkArea(HWND owner, int width, int height, int* x, int* y) {
 }
 
 void ShowSavedCommandsWindow(HWND runDialog) {
-    if (!RegisterSavedWindowClass()) {
+    if (!g_savedWindowClassRegistered) {
+        Wh_Log(L"Saved Commands window class isn't registered");
         return;
     }
 
-    if (g_savedCommandsWindow && IsWindow(g_savedCommandsWindow)) {
-        SetWindowLongPtrW(g_savedCommandsWindow, GWLP_USERDATA,
+    HWND savedWindow = GetSavedCommandsWindow();
+    if (savedWindow && IsWindow(savedWindow)) {
+        SetWindowLongPtrW(savedWindow, GWLP_USERDATA,
                           reinterpret_cast<LONG_PTR>(runDialog));
-        FillCommandsList(g_savedCommandsWindow);
-        ShowWindow(g_savedCommandsWindow, SW_SHOWNORMAL);
-        SetForegroundWindow(g_savedCommandsWindow);
+        FillCommandsList(savedWindow);
+        ShowWindow(savedWindow, SW_SHOWNORMAL);
+        SetForegroundWindow(savedWindow);
         return;
     }
+
+    SetSavedCommandsWindow(nullptr);
 
     int width = ScaleForWindow(runDialog, 540);
     int height = ScaleForWindow(runDialog, 285);
@@ -1817,7 +1836,7 @@ void ShowSavedCommandsWindow(HWND runDialog) {
         return;
     }
 
-    g_savedCommandsWindow = hwnd;
+    SetSavedCommandsWindow(hwnd);
     SetForegroundWindow(hwnd);
 }
 
@@ -1825,9 +1844,7 @@ LRESULT CALLBACK RunDialogSubclassProc(HWND hwnd,
                                        UINT msg,
                                        WPARAM wParam,
                                        LPARAM lParam,
-                                       UINT_PTR subclassId,
                                        DWORD_PTR refData) {
-    (void)subclassId;
     (void)refData;
 
     switch (msg) {
@@ -1861,20 +1878,8 @@ LRESULT CALLBACK RunDialogSubclassProc(HWND hwnd,
             }
             break;
 
-        case kMsgProbeRunDialog:
-            InstallRunButton(hwnd);
-            return 0;
-
-        case kMsgUnsubclassRunDialog:
-            RemoveRunButton(hwnd);
-            RemoveWindowSubclass(hwnd, RunDialogSubclassProc,
-                                 kRunDialogSubclassId);
-            return 0;
-
         case WM_NCDESTROY:
             RemoveRunButton(hwnd);
-            RemoveWindowSubclass(hwnd, RunDialogSubclassProc,
-                                 kRunDialogSubclassId);
             break;
     }
 
@@ -1890,204 +1895,13 @@ void MaybeSubclassDialog(HWND hwnd) {
         return;
     }
 
-    if (!SetWindowSubclass(hwnd, RunDialogSubclassProc, kRunDialogSubclassId,
-                           0)) {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd,
+                                                       RunDialogSubclassProc,
+                                                       0)) {
         return;
     }
 
     InstallRunButton(hwnd);
-}
-
-LRESULT CALLBACK CbtHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    if ((code == HCBT_CREATEWND || code == HCBT_ACTIVATE) && !IsUnloading()) {
-        MaybeSubclassDialog(reinterpret_cast<HWND>(wParam));
-    }
-
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-LRESULT CALLBACK CallWndHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code >= 0 && !IsUnloading()) {
-        auto cwp = reinterpret_cast<CWPSTRUCT*>(lParam);
-        if (cwp && cwp->hwnd &&
-            (cwp->message == WM_INITDIALOG ||
-             cwp->message == WM_SHOWWINDOW ||
-             cwp->message == WM_WINDOWPOSCHANGED ||
-             cwp->message == WM_SETTEXT || cwp->message == WM_ACTIVATE ||
-             cwp->message == kMsgProbeRunDialog)) {
-            MaybeSubclassDialog(cwp->hwnd);
-        }
-    }
-
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-LRESULT CALLBACK GetMsgHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code >= 0 && !IsUnloading()) {
-        auto msg = reinterpret_cast<MSG*>(lParam);
-        if (msg && msg->hwnd &&
-            (msg->message == kMsgProbeRunDialog ||
-             msg->message == WM_WINDOWPOSCHANGED ||
-             msg->message == WM_SHOWWINDOW || msg->message == WM_ACTIVATE)) {
-            MaybeSubclassDialog(msg->hwnd);
-        }
-    }
-
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-int FindThreadHookIndexLocked(DWORD threadId) {
-    for (size_t i = 0; i < g_cbtHooks.size(); i++) {
-        const ThreadHook& threadHook = g_cbtHooks[i];
-        if (threadHook.threadId == threadId) {
-            return static_cast<int>(i);
-        }
-    }
-
-    return -1;
-}
-
-void InstallHooksForThread(DWORD threadId) {
-    if (!threadId || IsUnloading() || !g_hooksLockInitialized) {
-        return;
-    }
-
-    bool needsCbtHook = true;
-    bool needsCallWndHook = true;
-    bool needsGetMsgHook = true;
-
-    EnterCriticalSection(&g_hooksLock);
-    int existingIndex = FindThreadHookIndexLocked(threadId);
-    if (existingIndex >= 0) {
-        needsCbtHook = g_cbtHooks[existingIndex].cbtHook == nullptr;
-        needsCallWndHook = g_cbtHooks[existingIndex].callWndHook == nullptr;
-        needsGetMsgHook = g_cbtHooks[existingIndex].getMsgHook == nullptr;
-    }
-    LeaveCriticalSection(&g_hooksLock);
-
-    if (!needsCbtHook && !needsCallWndHook && !needsGetMsgHook) {
-        return;
-    }
-
-    HHOOK cbtHook =
-        needsCbtHook ? SetWindowsHookExW(WH_CBT, CbtHookProc, nullptr, threadId)
-                     : nullptr;
-    HHOOK callWndHook =
-        needsCallWndHook
-            ? SetWindowsHookExW(WH_CALLWNDPROC, CallWndHookProc, nullptr,
-                                threadId)
-            : nullptr;
-    HHOOK getMsgHook =
-        needsGetMsgHook
-            ? SetWindowsHookExW(WH_GETMESSAGE, GetMsgHookProc, nullptr,
-                                threadId)
-            : nullptr;
-
-    if (!cbtHook && !callWndHook && !getMsgHook) {
-        return;
-    }
-
-    EnterCriticalSection(&g_hooksLock);
-    existingIndex = FindThreadHookIndexLocked(threadId);
-    if (existingIndex >= 0) {
-        if (cbtHook && !g_cbtHooks[existingIndex].cbtHook) {
-            g_cbtHooks[existingIndex].cbtHook = cbtHook;
-            cbtHook = nullptr;
-        }
-
-        if (callWndHook && !g_cbtHooks[existingIndex].callWndHook) {
-            g_cbtHooks[existingIndex].callWndHook = callWndHook;
-            callWndHook = nullptr;
-        }
-
-        if (getMsgHook && !g_cbtHooks[existingIndex].getMsgHook) {
-            g_cbtHooks[existingIndex].getMsgHook = getMsgHook;
-            getMsgHook = nullptr;
-        }
-    } else {
-        g_cbtHooks.push_back({threadId, cbtHook, callWndHook, getMsgHook});
-        cbtHook = nullptr;
-        callWndHook = nullptr;
-        getMsgHook = nullptr;
-    }
-    LeaveCriticalSection(&g_hooksLock);
-
-    if (cbtHook) {
-        UnhookWindowsHookEx(cbtHook);
-    }
-
-    if (callWndHook) {
-        UnhookWindowsHookEx(callWndHook);
-    }
-
-    if (getMsgHook) {
-        UnhookWindowsHookEx(getMsgHook);
-    }
-}
-
-void ProbeRunDialogSoon(HWND hwnd, DWORD threadId) {
-    if (!hwnd || IsUnloading()) {
-        return;
-    }
-
-    InstallHooksForThread(threadId);
-
-    if (threadId == GetCurrentThreadId()) {
-        MaybeSubclassDialog(hwnd);
-    }
-
-    DWORD_PTR ignored = 0;
-    SendMessageTimeoutW(hwnd, kMsgProbeRunDialog, 0, 0, SMTO_ABORTIFHUNG, 50,
-                        &ignored);
-    PostMessageW(hwnd, kMsgProbeRunDialog, 0, 0);
-}
-
-void InstallCbtHooksForProcessThreads() {
-    if (IsUnloading() || !g_hooksLockInitialized) {
-        return;
-    }
-
-    DWORD currentProcessId = GetCurrentProcessId();
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"CreateToolhelp32Snapshot failed, error %u", GetLastError());
-        return;
-    }
-
-    THREADENTRY32 threadEntry = {};
-    threadEntry.dwSize = sizeof(threadEntry);
-
-    if (Thread32First(snapshot, &threadEntry)) {
-        do {
-            if (threadEntry.th32OwnerProcessID != currentProcessId) {
-                continue;
-            }
-
-            DWORD threadId = threadEntry.th32ThreadID;
-
-            InstallHooksForThread(threadId);
-        } while (Thread32Next(snapshot, &threadEntry));
-    }
-
-    CloseHandle(snapshot);
-}
-
-BOOL CALLBACK ProbeRunDialogsProc(HWND hwnd, LPARAM lParam) {
-    DWORD windowProcessId = 0;
-    DWORD threadId = GetWindowThreadProcessId(hwnd, &windowProcessId);
-    if (windowProcessId != static_cast<DWORD>(lParam)) {
-        return TRUE;
-    }
-
-    if (IsRunDialog(hwnd)) {
-        ProbeRunDialogSoon(hwnd, threadId);
-    }
-
-    return TRUE;
-}
-
-void ProbeExistingRunDialogs() {
-    EnumWindows(ProbeRunDialogsProc, static_cast<LPARAM>(GetCurrentProcessId()));
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK hook,
@@ -2100,6 +1914,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
     (void)hook;
     (void)event;
     (void)childId;
+    (void)eventThread;
     (void)eventTime;
 
     if (IsUnloading() || !hwnd || objectId != OBJID_WINDOW) {
@@ -2111,11 +1926,11 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hook,
         return;
     }
 
-    ProbeRunDialogSoon(candidate, eventThread);
+    MaybeSubclassDialog(candidate);
 }
 
 void StartWinEventHook() {
-    if (g_winEventHook || g_dialogStartWinEventHook) {
+    if (g_dialogStartWinEventHook) {
         return;
     }
 
@@ -2130,18 +1945,7 @@ void StartWinEventHook() {
                             WINEVENT_OUTOFCONTEXT);
     }
 
-    g_winEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW,
-                                     g_hModule, WinEventProc,
-                                     GetCurrentProcessId(), 0,
-                                     WINEVENT_INCONTEXT);
-    if (!g_winEventHook) {
-        g_winEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW,
-                                         nullptr, WinEventProc,
-                                         GetCurrentProcessId(), 0,
-                                         WINEVENT_OUTOFCONTEXT);
-    }
-
-    if (!g_winEventHook && !g_dialogStartWinEventHook) {
+    if (!g_dialogStartWinEventHook) {
         Wh_Log(L"SetWinEventHook failed, error %u", GetLastError());
     }
 }
@@ -2150,80 +1954,6 @@ void StopWinEventHook() {
     if (g_dialogStartWinEventHook) {
         UnhookWinEvent(g_dialogStartWinEventHook);
         g_dialogStartWinEventHook = nullptr;
-    }
-
-    if (g_winEventHook) {
-        UnhookWinEvent(g_winEventHook);
-        g_winEventHook = nullptr;
-    }
-}
-
-DWORD WINAPI HookInstallerThreadProc(void*) {
-    while (!IsUnloading()) {
-        InstallCbtHooksForProcessThreads();
-        ProbeExistingRunDialogs();
-
-        DWORD waitResult = WaitForSingleObject(g_hookInstallerStopEvent, 2000);
-        if (waitResult != WAIT_TIMEOUT) {
-            break;
-        }
-    }
-
-    return 0;
-}
-
-void StartHookInstallerThread() {
-    g_hookInstallerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_hookInstallerStopEvent) {
-        Wh_Log(L"CreateEventW failed, error %u", GetLastError());
-        return;
-    }
-
-    g_hookInstallerThread =
-        CreateThread(nullptr, 0, HookInstallerThreadProc, nullptr, 0, nullptr);
-    if (!g_hookInstallerThread) {
-        Wh_Log(L"CreateThread failed, error %u", GetLastError());
-        CloseHandle(g_hookInstallerStopEvent);
-        g_hookInstallerStopEvent = nullptr;
-    }
-}
-
-void StopHookInstallerThread() {
-    if (g_hookInstallerStopEvent) {
-        SetEvent(g_hookInstallerStopEvent);
-    }
-
-    if (g_hookInstallerThread) {
-        WaitForSingleObject(g_hookInstallerThread, 3000);
-        CloseHandle(g_hookInstallerThread);
-        g_hookInstallerThread = nullptr;
-    }
-
-    if (g_hookInstallerStopEvent) {
-        CloseHandle(g_hookInstallerStopEvent);
-        g_hookInstallerStopEvent = nullptr;
-    }
-}
-
-void UninstallCbtHooks() {
-    std::vector<ThreadHook> hooks;
-
-    EnterCriticalSection(&g_hooksLock);
-    hooks.swap(g_cbtHooks);
-    LeaveCriticalSection(&g_hooksLock);
-
-    for (const ThreadHook& threadHook : hooks) {
-        if (threadHook.cbtHook) {
-            UnhookWindowsHookEx(threadHook.cbtHook);
-        }
-
-        if (threadHook.callWndHook) {
-            UnhookWindowsHookEx(threadHook.callWndHook);
-        }
-
-        if (threadHook.getMsgHook) {
-            UnhookWindowsHookEx(threadHook.getMsgHook);
-        }
     }
 }
 
@@ -2235,8 +1965,8 @@ BOOL CALLBACK UnsubclassWindowsProc(HWND hwnd, LPARAM lParam) {
     }
 
     if (IsDialogClass(hwnd)) {
-        SendMessageTimeoutW(hwnd, kMsgUnsubclassRunDialog, 0, 0,
-                            SMTO_ABORTIFHUNG, 1000, nullptr);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd,
+                                                         RunDialogSubclassProc);
     }
 
     return TRUE;
@@ -2248,13 +1978,13 @@ void UnsubclassRunDialogs() {
 }
 
 void CloseSavedCommandsWindow() {
-    HWND hwnd = g_savedCommandsWindow;
+    HWND hwnd = GetSavedCommandsWindow();
     if (hwnd && IsWindow(hwnd)) {
         SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 1000,
                             nullptr);
     }
 
-    g_savedCommandsWindow = nullptr;
+    SetSavedCommandsWindow(nullptr);
 }
 
 void InitModuleHandle() {
@@ -2278,52 +2008,39 @@ BOOL Wh_ModInit() {
     initCommonControls.dwICC = ICC_STANDARD_CLASSES;
     InitCommonControlsEx(&initCommonControls);
 
+    if (!InitRegisteredMessages()) {
+        return FALSE;
+    }
+
+    if (!RegisterSavedWindowClass()) {
+        return FALSE;
+    }
+
     InitializeCriticalSection(&g_commandsLock);
     g_commandsLockInitialized = true;
-    InitializeCriticalSection(&g_hooksLock);
-    g_hooksLockInitialized = true;
 
     LoadSettings();
     LoadCommandsFromFile();
 
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(CreateWindowExW),
-                            reinterpret_cast<void*>(CreateWindowExW_Hook),
-                            reinterpret_cast<void**>(
-                                &g_originalCreateWindowExW))) {
-        Wh_Log(L"Wh_SetFunctionHook for CreateWindowExW failed");
-    }
-
     StartWinEventHook();
-    InstallCbtHooksForProcessThreads();
-    ProbeExistingRunDialogs();
-    StartHookInstallerThread();
 
     return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    InstallCbtHooksForProcessThreads();
-    ProbeExistingRunDialogs();
 }
 
 void Wh_ModBeforeUninit() {
     SetUnloading();
     StopWinEventHook();
-    StopHookInstallerThread();
-    UninstallCbtHooks();
     CloseSavedCommandsWindow();
     UnsubclassRunDialogs();
     SaveCommandsToFile();
 }
 
 void Wh_ModUninit() {
-    if (g_hModule) {
-        UnregisterClassW(kSavedWindowClass, g_hModule);
-    }
-
-    if (g_hooksLockInitialized) {
-        DeleteCriticalSection(&g_hooksLock);
-        g_hooksLockInitialized = false;
+    if (g_hModule && g_savedWindowClassRegistered) {
+        if (!UnregisterClassW(kSavedWindowClass, g_hModule)) {
+            Wh_Log(L"UnregisterClassW failed, error %u", GetLastError());
+        }
+        g_savedWindowClassRegistered = false;
     }
 
     if (g_commandsLockInitialized) {
@@ -2341,7 +2058,8 @@ void Wh_ModSettingsChanged() {
 
     SaveCommandsToFile();
 
-    if (g_savedCommandsWindow && IsWindow(g_savedCommandsWindow)) {
-        PostMessageW(g_savedCommandsWindow, kMsgRefreshSavedList, 0, 0);
+    HWND savedWindow = GetSavedCommandsWindow();
+    if (savedWindow && IsWindow(savedWindow)) {
+        PostMessageW(savedWindow, g_msgRefreshSavedList, 0, 0);
     }
 }
