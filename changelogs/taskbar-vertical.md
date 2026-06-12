@@ -1,3 +1,8 @@
+## 1.3.12 ([Jun 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5f93b4a2abaadfe2d2ac2f39fd020f9e989d0060/mods/taskbar-vertical.wh.cpp))
+
+* Fixed some supplementary language tray icons being rotated.
+* Improved compatibility with recent Windows 11 versions.
+
 ## 1.3.11 ([May 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8a1f76c14f1a5089841348d37e838c85123bb26f/mods/taskbar-vertical.wh.cpp))
 
 * Fixed compatibility with recent Windows 11 versions.
