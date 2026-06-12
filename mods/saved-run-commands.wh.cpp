@@ -79,6 +79,8 @@ constexpr UINT_PTR kTypedCommandEditSubclassId = 3;
 const wchar_t kSavedWindowClass[] = L"WindhawkSavedRunCommandsWindow";
 const wchar_t kRunButtonInstalledProp[] =
     L"WindhawkSavedRunCommandsButtonInstalled";
+const wchar_t kRunDialogSubclassedProp[] =
+    L"WindhawkSavedRunCommandsDialogSubclassed";
 const wchar_t kCommandsFileName[] = L"commands.txt";
 
 HMODULE g_hModule;
@@ -92,9 +94,17 @@ volatile LONG g_maxCommands = 40;
 PVOID volatile g_savedCommandsWindow;
 UINT g_msgRefreshSavedList;
 UINT g_msgExecuteSelectedCommand;
-HWINEVENTHOOK g_dialogStartWinEventHook;
+thread_local HHOOK g_runFileDlgCbtHook;
 
-void MaybeSubclassDialog(HWND hwnd);
+using RunFileDlg_t = void(WINAPI*)(HWND,
+                                   HICON,
+                                   LPCWSTR,
+                                   LPCWSTR,
+                                   LPCWSTR,
+                                   UINT);
+RunFileDlg_t g_originalRunFileDlg;
+
+void SubclassRunFileDialog(HWND hwnd, bool installIfReady);
 bool IsDialogClass(HWND hwnd);
 std::wstring GetListCommandAt(HWND savedWindow, int index);
 void SelectSingleCommand(HWND savedWindow, int index);
@@ -1848,53 +1858,96 @@ LRESULT CALLBACK RunDialogSubclassProc(HWND hwnd,
 
         case WM_NCDESTROY:
             RemoveRunButton(hwnd);
+            RemovePropW(hwnd, kRunDialogSubclassedProp);
             break;
     }
 
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-void MaybeSubclassDialog(HWND hwnd) {
+void SubclassRunFileDialog(HWND hwnd, bool installIfReady) {
     if (IsUnloading() || !IsWindow(hwnd) || !IsDialogClass(hwnd)) {
         return;
     }
 
-    if (!IsRunDialog(hwnd)) {
-        return;
+    if (!GetPropW(hwnd, kRunDialogSubclassedProp)) {
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hwnd, RunDialogSubclassProc, 0)) {
+            return;
+        }
+
+        SetPropW(hwnd, kRunDialogSubclassedProp, reinterpret_cast<HANDLE>(1));
     }
 
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd,
-                                                       RunDialogSubclassProc,
-                                                       0)) {
-        return;
+    if (installIfReady && IsRunDialog(hwnd)) {
+        InstallRunButton(hwnd);
     }
-
-    InstallRunButton(hwnd);
 }
 
-void CALLBACK WinEventProc(HWINEVENTHOOK hook,
-                           DWORD event,
-                           HWND hwnd,
-                           LONG objectId,
-                           LONG childId,
-                           DWORD eventThread,
-                           DWORD eventTime) {
-    (void)hook;
-    (void)event;
-    (void)childId;
-    (void)eventThread;
-    (void)eventTime;
+LRESULT CALLBACK RunFileDlgCbtHookProc(int code, WPARAM wParam, LPARAM lParam) {
+    (void)lParam;
 
-    if (IsUnloading() || !hwnd || objectId != OBJID_WINDOW) {
-        return;
+    if (!IsUnloading() && code == HCBT_CREATEWND) {
+        SubclassRunFileDialog(reinterpret_cast<HWND>(wParam), false);
+    } else if (!IsUnloading() && code == HCBT_ACTIVATE) {
+        SubclassRunFileDialog(reinterpret_cast<HWND>(wParam), true);
     }
 
-    HWND candidate = IsDialogClass(hwnd) ? hwnd : GetAncestor(hwnd, GA_ROOT);
-    if (!candidate) {
-        return;
+    return CallNextHookEx(g_runFileDlgCbtHook, code, wParam, lParam);
+}
+
+void WINAPI RunFileDlg_Hook(HWND owner,
+                            HICON icon,
+                            LPCWSTR directory,
+                            LPCWSTR title,
+                            LPCWSTR description,
+                            UINT flags) {
+    HHOOK cbtHook = nullptr;
+
+    // RunFileDlg is modal, so the CBT hook is scoped to this one call.
+    if (!IsUnloading() && !g_runFileDlgCbtHook) {
+        cbtHook = SetWindowsHookExW(WH_CBT, RunFileDlgCbtHookProc, nullptr,
+                                    GetCurrentThreadId());
+        g_runFileDlgCbtHook = cbtHook;
     }
 
-    MaybeSubclassDialog(candidate);
+    g_originalRunFileDlg(owner, icon, directory, title, description, flags);
+
+    if (cbtHook) {
+        UnhookWindowsHookEx(cbtHook);
+        if (g_runFileDlgCbtHook == cbtHook) {
+            g_runFileDlgCbtHook = nullptr;
+        }
+    }
+}
+
+bool HookRunFileDlg() {
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+    if (!shell32) {
+        shell32 = LoadLibraryExW(L"shell32.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+
+    if (!shell32) {
+        Wh_Log(L"Failed to load shell32.dll, error %u", GetLastError());
+        return false;
+    }
+
+    auto runFileDlg = reinterpret_cast<RunFileDlg_t>(
+        GetProcAddress(shell32, MAKEINTRESOURCEA(61)));
+    if (!runFileDlg) {
+        Wh_Log(L"Failed to find shell32!RunFileDlg ordinal 61, error %u",
+               GetLastError());
+        return false;
+    }
+
+    if (!WindhawkUtils::SetFunctionHook(runFileDlg, RunFileDlg_Hook,
+                                        &g_originalRunFileDlg)) {
+        Wh_Log(L"Failed to hook shell32!RunFileDlg");
+        return false;
+    }
+
+    return true;
 }
 
 BOOL CALLBACK UnsubclassWindowsProc(HWND hwnd, LPARAM lParam) {
@@ -1905,6 +1958,7 @@ BOOL CALLBACK UnsubclassWindowsProc(HWND hwnd, LPARAM lParam) {
     }
 
     if (IsDialogClass(hwnd)) {
+        RemovePropW(hwnd, kRunDialogSubclassedProp);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd,
                                                          RunDialogSubclassProc);
     }
@@ -1962,12 +2016,8 @@ BOOL Wh_ModInit() {
     LoadSettings();
     LoadCommandsFromFile();
 
-    g_dialogStartWinEventHook =
-        SetWinEventHook(EVENT_SYSTEM_DIALOGSTART, EVENT_SYSTEM_DIALOGSTART,
-                        g_hModule, WinEventProc, GetCurrentProcessId(), 0,
-                        WINEVENT_INCONTEXT);
-    if (!g_dialogStartWinEventHook) {
-        Wh_Log(L"SetWinEventHook failed, error %u", GetLastError());
+    if (!HookRunFileDlg()) {
+        return FALSE;
     }
 
     return TRUE;
@@ -1975,10 +2025,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModBeforeUninit() {
     SetUnloading();
-    if (g_dialogStartWinEventHook) {
-        UnhookWinEvent(g_dialogStartWinEventHook);
-        g_dialogStartWinEventHook = nullptr;
-    }
     CloseSavedCommandsWindow();
     UnsubclassRunDialogs();
     SaveCommandsToFile();
