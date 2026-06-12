@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id            custom-animations
-// @name          Animation & Wobbly Mod (Pure D2D)
+// @name          Animation & Wobbly Mod
 // @description   Ultra-smooth Open/Close/Minimize animation combined with Wobbly Windows physics. Fully powered by Direct2D.
 // @version       1.3.1
 // @author        Shoaib Hassan
