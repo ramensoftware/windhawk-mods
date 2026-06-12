@@ -4,9 +4,9 @@
 // @description     Adds a compact saved commands list to the Windows Run dialog.
 // @version         1.0.0
 // @author          communism420
-// @github          communism420
+// @github          https://github.com/communism420
 // @include         explorer.exe
-// @compilerOptions -std=c++20 -lcomctl32 -lgdi32 -lshell32
+// @compilerOptions -lcomctl32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
