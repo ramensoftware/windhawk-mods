@@ -2,7 +2,7 @@
 // @id              taskbar-desktop-indicator
 // @name            Taskbar Desktop Indicator
 // @description     Displays the current virtual desktop as a number or marker in the Windows 11 taskbar clock area
-// @version         1.2.1
+// @version         1.3
 // @author          Simon Benedict
 // @github          https://github.com/simon-ami
 // @include         explorer.exe
@@ -20,11 +20,13 @@ Displays the current virtual desktop as a number or marker in the Windows 11 tas
 ## Features
 
 * Number mode or workspace markers mode
+* Current desktop name mode
 * Workspace markers mode with `⬤` markers by default
 * Roman or Arabic numbering in number mode
 * Custom marker symbol and inactive-marker dimming in workspace markers mode \
   Example symbols: `⬤`, `●`, `•`, `○`, `◉`
 * Optional custom colors for the active indicator and inactive markers
+* Optional hiding of the indicator when only one desktop exists
 * Configurable indicator weight and size
 * Configurable spacing and padding
 * Centered side indicator layout for two-line clock/date taskbar clocks
@@ -60,6 +62,7 @@ _Number mode (example)_
   $options:
     - number: Current desktop number
     - markers: Workspace markers
+    - desktopName: Current desktop name
 - markerSymbol: ⬤
   $name: Marker symbol
   $description: Symbol or short text used for each workspace marker in workspace markers mode. E.g. ┃, ⬤, ●, •, ○, ◉, ⎕, ∎, ◆, ♦, ★ [Default ⬤]
@@ -77,6 +80,9 @@ _Number mode (example)_
   $description: >-
     Optional custom color for inactive workspace markers. Use #RRGGBB or
     #AARRGGBB. Leave empty to use opacity-based dimming. [Default empty]
+- hideWhenSingleDesktop: false
+  $name: Hide when using a single desktop
+  $description: Hide the indicator while only one virtual desktop exists. [Default false]
 - numberingFormat: roman
   $name: Numbering format
   $description: Choose whether the desktop indicator uses Roman or Arabic numerals in number mode. [Default Roman numerals]
@@ -143,6 +149,7 @@ namespace Documents = winrt::Windows::UI::Xaml::Documents;
 enum class IndicatorMode {
     Number,
     Markers,
+    DesktopName,
 };
 
 enum class IndicatorSegmentStyle {
@@ -191,6 +198,7 @@ struct ModSettings {
     std::wstring markerSymbol = L"\u2b24";
     std::wstring activeIndicatorColor;
     std::wstring inactiveMarkerColor;
+    bool hideWhenSingleDesktop = false;
     NumberingFormat numberingFormat = NumberingFormat::Roman;
     int leftPadding = 6;
     int rightPadding = 0;
@@ -244,7 +252,7 @@ struct VirtualDesktopNotificationObject {
 WinVersion g_winVersion = WinVersion::Unsupported;
 WORD g_explorerBuildNumber = 0;
 WORD g_explorerRevisionNumber = 0;
-std::atomic<bool> g_taskbarViewDllLoaded = false;
+std::atomic<bool> g_systemTrayModuleHooked = false;
 std::atomic<bool> g_unloading = false;
 std::atomic<int> g_currentDesktopNumber = 1;
 std::atomic<int> g_pollIntervalMs = 0;
@@ -499,9 +507,27 @@ std::wstring BuildMarkerSequenceText(int desktopCount) {
     return result;
 }
 
-std::wstring BuildIndicatorCoreText(int currentDesktopNumber, int desktopCount) {
+std::wstring FormatDesktopNameOrNumber(
+    int value,
+    const std::vector<std::wstring>& desktopNames) {
+    if (value > 0 && static_cast<size_t>(value) <= desktopNames.size() &&
+        !desktopNames[value - 1].empty()) {
+        return desktopNames[value - 1];
+    }
+
+    return FormatDesktopNumber(value);
+}
+
+std::wstring BuildIndicatorCoreText(
+    int currentDesktopNumber,
+    int desktopCount,
+    const std::vector<std::wstring>& desktopNames) {
     if (g_settings.indicatorMode == IndicatorMode::Markers) {
         return BuildMarkerSequenceText(desktopCount);
+    }
+
+    if (g_settings.indicatorMode == IndicatorMode::DesktopName) {
+        return FormatDesktopNameOrNumber(currentDesktopNumber, desktopNames);
     }
 
     return FormatDesktopNumber(currentDesktopNumber);
@@ -820,10 +846,81 @@ int ReadDesktopCountFromRegistry() {
     return desktopIds.empty() ? 1 : static_cast<int>(desktopIds.size());
 }
 
+std::wstring ReadRegistryStringValue(HKEY root,
+                                     const std::wstring& subKey,
+                                     const std::wstring& valueName) {
+    DWORD type = 0;
+    auto buffer = ReadRegistryValue(root, subKey, valueName, &type);
+    if ((type != REG_SZ && type != REG_EXPAND_SZ) ||
+        buffer.size() < sizeof(wchar_t)) {
+        return {};
+    }
+
+    std::wstring value(reinterpret_cast<const wchar_t*>(buffer.data()),
+                       buffer.size() / sizeof(wchar_t));
+    while (!value.empty() && value.back() == L'\0') {
+        value.pop_back();
+    }
+
+    return value;
+}
+
+std::wstring GuidToRegistryString(const GUID& guid) {
+    wchar_t guidText[39] = {};
+    if (StringFromGUID2(guid, guidText, ARRAYSIZE(guidText)) == 0) {
+        return {};
+    }
+
+    return guidText;
+}
+
+std::wstring ReadVirtualDesktopName(const GUID& desktopId) {
+    DWORD sessionId = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+
+    std::wstring desktopIdText = GuidToRegistryString(desktopId);
+    if (desktopIdText.empty()) {
+        return {};
+    }
+
+    std::wstring sessionPath =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\SessionInfo\\" +
+        std::to_wstring(sessionId) + L"\\VirtualDesktops\\Desktops\\" +
+        desktopIdText;
+
+    for (const auto& path : {
+             std::wstring(
+                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VirtualDesktops\\Desktops\\") +
+                 desktopIdText,
+             sessionPath,
+         }) {
+        std::wstring name = ReadRegistryStringValue(HKEY_CURRENT_USER, path, L"Name");
+        if (!name.empty()) {
+            return name;
+        }
+    }
+
+    return {};
+}
+
+std::vector<std::wstring> ReadVirtualDesktopNames() {
+    std::vector<std::wstring> names;
+    auto desktopIds = ReadVirtualDesktopIds();
+    names.reserve(desktopIds.size());
+
+    for (const auto& desktopId : desktopIds) {
+        names.push_back(ReadVirtualDesktopName(desktopId));
+    }
+
+    return names;
+}
+
 void LoadSettings() {
     StringSetting indicatorMode = StringSetting::make(L"indicatorMode");
     if (wcscmp(indicatorMode.get(), L"number") == 0) {
         g_settings.indicatorMode = IndicatorMode::Number;
+    } else if (wcscmp(indicatorMode.get(), L"desktopName") == 0) {
+        g_settings.indicatorMode = IndicatorMode::DesktopName;
     } else {
         g_settings.indicatorMode = IndicatorMode::Markers;
     }
@@ -839,6 +936,8 @@ void LoadSettings() {
 
     StringSetting inactiveMarkerColor = StringSetting::make(L"inactiveMarkerColor");
     g_settings.inactiveMarkerColor = inactiveMarkerColor.get();
+
+    g_settings.hideWhenSingleDesktop = Wh_GetIntSetting(L"hideWhenSingleDesktop");
 
     StringSetting numberingFormat = StringSetting::make(L"numberingFormat");
     if (wcscmp(numberingFormat.get(), L"arabic") == 0) {
@@ -1358,12 +1457,15 @@ std::vector<IndicatorSegment> BuildMarkerSuffixSegments(bool hasBaseText,
 IndicatorLayout BuildIndicatorLayout(const Controls::TextBlock& source,
                                      bool hasBaseText,
                                      int currentDesktopNumber,
-                                     int desktopCount) {
+                                     int desktopCount,
+                                     const std::vector<std::wstring>& desktopNames) {
     IndicatorLayout layout;
 
     if (g_settings.indicatorMode == IndicatorMode::Markers) {
         layout.renderedSuffix = BuildIndicatorSuffix(
-            hasBaseText, BuildIndicatorCoreText(currentDesktopNumber, desktopCount));
+            hasBaseText,
+            BuildIndicatorCoreText(currentDesktopNumber, desktopCount,
+                                   desktopNames));
         layout.widestSuffixWidth = MeasureSingleRunTextWidth(
             source, layout.renderedSuffix, GetConfiguredIndicatorFontWeight());
         layout.suffixSegments = BuildMarkerSuffixSegments(
@@ -1372,15 +1474,20 @@ IndicatorLayout BuildIndicatorLayout(const Controls::TextBlock& source,
     }
 
     std::wstring visibleSuffix = BuildIndicatorSuffix(
-        hasBaseText, BuildIndicatorCoreText(currentDesktopNumber, desktopCount));
+        hasBaseText,
+        BuildIndicatorCoreText(currentDesktopNumber, desktopCount, desktopNames));
 
     double currentWidth = MeasureSingleRunTextWidth(
         source, visibleSuffix, GetConfiguredIndicatorFontWeight());
     layout.widestSuffixWidth = currentWidth;
 
     for (int i = 1; i <= desktopCount; ++i) {
-        std::wstring candidateSuffix =
-            BuildIndicatorSuffix(hasBaseText, FormatDesktopNumber(i));
+        std::wstring candidateText =
+            g_settings.indicatorMode == IndicatorMode::DesktopName
+                ? FormatDesktopNameOrNumber(i, desktopNames)
+                : FormatDesktopNumber(i);
+        std::wstring candidateSuffix = BuildIndicatorSuffix(hasBaseText,
+                                                            candidateText);
         double candidateWidth = MeasureSingleRunTextWidth(
             source, candidateSuffix, GetConfiguredIndicatorFontWeight());
         if (candidateWidth > layout.widestSuffixWidth) {
@@ -1714,7 +1821,8 @@ Controls::TextBlock EnsureSeparateIndicatorTextBlock(
 void ApplySeparateIndicator(const ClockEntryPtr& entry,
                             Controls::TextBlock sourceTextBlock,
                             int currentDesktopNumber,
-                            int desktopCount) {
+                            int desktopCount,
+                            const std::vector<std::wstring>& desktopNames) {
     auto indicatorTextBlock =
         EnsureSeparateIndicatorTextBlock(entry, sourceTextBlock);
     if (!indicatorTextBlock) {
@@ -1723,14 +1831,15 @@ void ApplySeparateIndicator(const ClockEntryPtr& entry,
 
     IndicatorLayout layout =
         BuildIndicatorLayout(sourceTextBlock, true, currentDesktopNumber,
-                             desktopCount);
+                             desktopCount, desktopNames);
     indicatorTextBlock.MinWidth(layout.widestSuffixWidth);
     SetIndicatorTextBlockContent(indicatorTextBlock, L"", layout);
 }
 
 void EnsureReservedWidth(const ClockEntryPtr& entry,
                          Controls::TextBlock targetTextBlock,
-                         const std::wstring& baseText) {
+                         const std::wstring& baseText,
+                         const std::vector<std::wstring>& desktopNames) {
     if (!targetTextBlock) {
         return;
     }
@@ -1743,14 +1852,22 @@ void EnsureReservedWidth(const ClockEntryPtr& entry,
             targetTextBlock, baseText,
             BuildIndicatorSuffix(!baseText.empty(), BuildMarkerSequenceText(desktopCount)));
     } else {
+        auto getCandidateText = [&](int desktopNumber) {
+            if (g_settings.indicatorMode == IndicatorMode::DesktopName) {
+                return FormatDesktopNameOrNumber(desktopNumber, desktopNames);
+            }
+
+            return FormatDesktopNumber(desktopNumber);
+        };
+
         widestWidth = MeasureIndicatorTextWidth(
             targetTextBlock, baseText,
-            BuildIndicatorSuffix(!baseText.empty(), FormatDesktopNumber(1)));
+            BuildIndicatorSuffix(!baseText.empty(), getCandidateText(1)));
 
         for (int i = 2; i <= desktopCount; ++i) {
             double candidateWidth = MeasureIndicatorTextWidth(
                 targetTextBlock, baseText,
-                BuildIndicatorSuffix(!baseText.empty(), FormatDesktopNumber(i)));
+                BuildIndicatorSuffix(!baseText.empty(), getCandidateText(i)));
             if (candidateWidth > widestWidth) {
                 widestWidth = candidateWidth;
             }
@@ -1810,8 +1927,22 @@ void ApplyIndicator(const ClockEntryPtr& entry) {
 
     int currentDesktopNumber = g_currentDesktopNumber.load();
     int desktopCount = ReadDesktopCountFromRegistry();
+    std::vector<std::wstring> desktopNames =
+        g_settings.indicatorMode == IndicatorMode::DesktopName
+            ? ReadVirtualDesktopNames()
+            : std::vector<std::wstring>{};
 
     std::lock_guard<std::mutex> lock(entry->mutex);
+
+    if (g_settings.hideWhenSingleDesktop && desktopCount <= 1) {
+        if (!entry->lastAppliedSuffix.empty()) {
+            RestoreInlineClockTextOnly(entry);
+        }
+        if (entry->usingSeparateIndicator) {
+            RestoreSeparateIndicatorOnly(entry);
+        }
+        return;
+    }
 
     if (ShouldUseSeparateIndicator(entry)) {
         if (!entry->lastAppliedSuffix.empty()) {
@@ -1820,7 +1951,7 @@ void ApplyIndicator(const ClockEntryPtr& entry) {
 
         auto sourceTextBlock = dateTextBlock ? dateTextBlock : timeTextBlock;
         ApplySeparateIndicator(entry, sourceTextBlock, currentDesktopNumber,
-                               desktopCount);
+                               desktopCount, desktopNames);
         return;
     }
 
@@ -1836,16 +1967,20 @@ void ApplyIndicator(const ClockEntryPtr& entry) {
     if (useDateLine) {
         IndicatorLayout layout =
             BuildIndicatorLayout(dateTextBlock, !entry->baseDateText.empty(),
-                                 currentDesktopNumber, desktopCount);
-        EnsureReservedWidth(entry, dateTextBlock, entry->baseDateText);
+                                 currentDesktopNumber, desktopCount,
+                                 desktopNames);
+        EnsureReservedWidth(entry, dateTextBlock, entry->baseDateText,
+                            desktopNames);
         EnsureStableTextAlignment(entry, dateTextBlock);
         SetIndicatorTextBlockContent(dateTextBlock, entry->baseDateText, layout);
         entry->lastAppliedSuffix = layout.renderedSuffix;
     } else if (timeTextBlock) {
         IndicatorLayout layout =
             BuildIndicatorLayout(timeTextBlock, !entry->baseTimeText.empty(),
-                                 currentDesktopNumber, desktopCount);
-        EnsureReservedWidth(entry, timeTextBlock, entry->baseTimeText);
+                                 currentDesktopNumber, desktopCount,
+                                 desktopNames);
+        EnsureReservedWidth(entry, timeTextBlock, entry->baseTimeText,
+                            desktopNames);
         EnsureStableTextAlignment(entry, timeTextBlock);
         SetIndicatorTextBlockContent(timeTextBlock, entry->baseTimeText, layout);
         entry->lastAppliedSuffix = layout.renderedSuffix;
@@ -2043,8 +2178,24 @@ HRESULT WINAPI BadgeIconContent_get_ViewModel_Hook(LPVOID pThis, LPVOID pArgs) {
     return hr;
 }
 
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandleW(L"Taskbar.View.dll");
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandleW(L"SystemTray.dll");
+
+    if (!module) {
+        module = GetModuleHandleW(L"Taskbar.View.dll");
+        // First known Taskbar.View.dll version without SystemTray symbols:
+        // 2604.8002.200.6000.
+        if (module) {
+            VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+
+            if (!moduleMajor || moduleMajor >= 2604) {
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
+                module = nullptr;
+            }
+        }
+    }
     if (!module) {
         module = GetModuleHandleW(L"ExplorerExtensions.dll");
     }
@@ -2052,9 +2203,9 @@ HMODULE GetTaskbarViewModuleHandle() {
     return module;
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
             &ClockSystemTrayIconDataModel_RefreshIcon_Original,
@@ -2080,8 +2231,21 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    if (!HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
+    if (!HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
         Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+bool TryHookSystemTrayModule(HMODULE module) {
+    if (!module || g_systemTrayModuleHooked.exchange(true)) {
+        return false;
+    }
+
+    if (!HookSystemTraySymbols(module)) {
+        g_systemTrayModuleHooked = false;
         return false;
     }
 
@@ -2212,15 +2376,19 @@ void RefreshLiveTaskbarClock() {
         reinterpret_cast<LPARAM>(&enumWindowsProc));
 }
 
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR moduleName) {
-    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
-        GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
-        Wh_Log(L"Loaded %s", moduleName);
-        if (HookTaskbarViewDllSymbols(module)) {
-            Wh_ApplyHookOperations();
-            RefreshLiveTaskbarClock();
-        }
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR moduleName) {
+    if (g_winVersion < WinVersion::Win11 || g_systemTrayModuleHooked) {
+        return;
+    }
+
+    if (GetSystemTrayModuleHandle() != module) {
+        return;
+    }
+
+    Wh_Log(L"Loaded %s", moduleName);
+
+    if (TryHookSystemTrayModule(module)) {
+        Wh_ApplyHookOperations();
     }
 }
 
@@ -2232,7 +2400,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR libFileName,
                                    DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(libFileName, file, flags);
     if (module) {
-        HandleLoadedModuleIfTaskbarView(module, libFileName);
+        HandleLoadedModuleIfSystemTray(module, libFileName);
     }
 
     return module;
@@ -2318,11 +2486,13 @@ BOOL Wh_ModInit() {
 
     HookExplorerExeSymbols();
 
-    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-        g_taskbarViewDllLoaded = true;
-        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+    if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+        if (!TryHookSystemTrayModule(systemTrayModule)) {
+            Wh_Log(L"System tray symbols not found in initial module");
             return FALSE;
         }
+    } else {
+        Wh_Log(L"System tray module not loaded yet");
     }
 
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
@@ -2348,10 +2518,9 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModAfterInit() {
-    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true) &&
-                HookTaskbarViewDllSymbols(taskbarViewModule)) {
+    if (g_winVersion >= WinVersion::Win11 && !g_systemTrayModuleHooked) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (TryHookSystemTrayModule(systemTrayModule)) {
                 Wh_ApplyHookOperations();
             }
         }
