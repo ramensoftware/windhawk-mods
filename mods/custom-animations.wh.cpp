@@ -2,7 +2,7 @@
 // @id            custom-animations
 // @name          Animation & Wobbly Mod (Pure D2D)
 // @description   Ultra-smooth Open/Close/Minimize animation combined with Wobbly Windows physics. Fully powered by Direct2D.
-// @version       1.3.0
+// @version       1.3.1
 // @author        Shoaib Hassan
 // @github        https://github.com/shoaibhassan2
 // @include       *
@@ -110,14 +110,12 @@ using CreateWindowExA_t = HWND(WINAPI*)(DWORD, LPCSTR, LPCSTR, DWORD, int, int, 
 CreateWindowExA_t CreateWindowExA_Original;
 
 // -------------------------------------------------------------------------
-// Global D2D Factory
+// Globals
 // -------------------------------------------------------------------------
 ID2D1Factory* g_d2dFactory = nullptr;
 
-// -------------------------------------------------------------------------
-// Custom Animations Data
-// -------------------------------------------------------------------------
 struct GhostAnimData {
+    HWND hGhost;
     HWND hRealWnd;
     HBITMAP hBitmap;
     void* pBits; 
@@ -135,6 +133,7 @@ struct GhostAnimData {
 };
 
 std::unordered_map<HWND, std::pair<HBITMAP, void*>> g_SnapshotCache;
+std::unordered_map<HWND, RECT> g_RectCache;
 std::unordered_map<HWND, int> g_IconPositions; 
 std::mutex g_CacheMutex;
 
@@ -145,7 +144,7 @@ std::atomic<int> g_bounceStrength{30};
 std::atomic<int> g_bounceDurationMs{300};
 
 // -------------------------------------------------------------------------
-// Wobbly Windows Data (D2D Ported)
+// Wobbly Windows State
 // -------------------------------------------------------------------------
 bool g_engineInitialized = false;
 
@@ -178,7 +177,6 @@ static LONG_PTR g_oldExStyle = 0;
 static int g_screenX, g_screenY, g_screenW, g_screenH;
 static Geometry g_currentRect = { 0 };
 
-// D2D specific Wobbly Resources
 ID2D1DCRenderTarget* g_wobblyRT = nullptr;
 ID2D1BitmapBrush* g_wobblyBrush = nullptr;
 HBITMAP g_wobblyTargetBmp = NULL;
@@ -187,7 +185,7 @@ HDC g_wobblyMemDC = NULL;
 
 
 // -------------------------------------------------------------------------
-// Global Setting Loader
+// Utils
 // -------------------------------------------------------------------------
 void LoadSettings() {
     int ms = Wh_GetIntSetting(L"duration_ms");
@@ -225,9 +223,6 @@ void SetDwmTransitions(HWND hWnd, BOOL enable) {
     DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disable, sizeof(disable));
 }
 
-// =========================================================================
-// SHARED D2D MATH & GEOMETRY HELPERS
-// =========================================================================
 static ID2D1PathGeometry* CreateQuadGeo(
     ID2D1Factory* factory,
     D2D1_POINT_2F p0, D2D1_POINT_2F p1,
@@ -255,9 +250,9 @@ static D2D1_POINT_2F BloatPoint(D2D1_POINT_2F p, D2D1_POINT_2F c) {
     return D2D1::Point2F(p.x + (dx/len)*0.5f, p.y + (dy/len)*0.5f);
 }
 
-// =========================================================================
-// CUSTOM ANIMATION ENGINE (DIRECT2D)
-// =========================================================================
+// -------------------------------------------------------------------------
+// Custom Animation Engine
+// -------------------------------------------------------------------------
 static inline float CubicEaseIn(float t) { return t * t * t; }
 static inline float CubicEaseOut(float t) { float t1 = t - 1.0f; return t1 * t1 * t1 + 1.0f; }
 
@@ -345,6 +340,51 @@ static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry
     *outY = w.y + y + offsetY;
 }
 
+void ShowGhostSync(GhostAnimData* data) {
+    if (!data || !data->hGhost) return;
+    
+    int vLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int vWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int vHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    HDC hScreenDC = GetDC(NULL);
+    HDC hMemDC = CreateCompatibleDC(hScreenDC);
+    
+    BITMAPINFO bmi = {{0}};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = vWidth;
+    bmi.bmiHeader.biHeight = -vHeight; 
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pTargetBits = nullptr;
+    HBITMAP hTargetBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pTargetBits, NULL, 0);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hTargetBmp);
+
+    HDC hSnapDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hOldSnap = (HBITMAP)SelectObject(hSnapDC, data->hBitmap);
+    
+    BitBlt(hMemDC, data->targetRect.left - vLeft, data->targetRect.top - vTop, data->width, data->height, hSnapDC, 0, 0, SRCCOPY);
+    
+    SelectObject(hSnapDC, hOldSnap);
+    DeleteDC(hSnapDC);
+
+    POINT ptDst = { vLeft, vTop };
+    SIZE sz = { vWidth, vHeight };
+    POINT ptSrc = { 0, 0 };
+    BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    
+    UpdateLayeredWindow(data->hGhost, NULL, &ptDst, &sz, hMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
+    ShowWindow(data->hGhost, SW_SHOWNOACTIVATE);
+
+    SelectObject(hMemDC, hOldBmp);
+    DeleteObject(hTargetBmp);
+    DeleteDC(hMemDC);
+    ReleaseDC(NULL, hScreenDC);
+}
+
 DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GhostAnimData* data = (GhostAnimData*)lpParam;
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
@@ -359,12 +399,7 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     int vHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
-    HWND hGhost = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
-        L"STATIC", NULL, WS_POPUP,
-        vLeft, vTop, vWidth, vHeight,
-        NULL, NULL, NULL, NULL
-    );
+    HWND hGhost = data->hGhost;
 
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -432,8 +467,8 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     QueryPerformanceCounter(&qpcStart);
 
     std::vector<std::vector<D2D1_POINT_2F>> grid(yTiles + 1, std::vector<D2D1_POINT_2F>(xTiles + 1));
-    BOOL firstFrame = TRUE;
     MSG msg;
+    BOOL firstFrame = TRUE;
 
     for (;;) {
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -596,7 +631,6 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
             ShowWindow(hGhost, SW_SHOWNOACTIVATE);
             firstFrame = FALSE;
         }
-
         if (lastFrame) break;
         DwmFlush();
     }
@@ -619,23 +653,45 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     DeleteObject(data->hBitmap);
     DeleteDC(hMemDC);
     ReleaseDC(NULL, hScreenDC);
-    DestroyWindow(hGhost);
+    
+    // Cross-thread teardown
+    ShowWindow(hGhost, SW_HIDE);
+    PostMessage(hGhost, WM_CLOSE, 0, 0);
     delete data;
+    
     return 0;
 }
 
-void StartGenieAnim(HWND hWnd, BOOL rising) {
-    RECT rect;
-    GetWindowRect(hWnd, &rect);
+GhostAnimData* PrepareGenieAnim(HWND hWnd, BOOL rising) {
+    RECT winRect;
+    GetWindowRect(hWnd, &winRect);
+    
+    RECT rect = winRect;
     RECT extRect;
     if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &extRect, sizeof(extRect)))) {
         rect = extRect;
     }
 
+    if (rising) {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        if (g_RectCache.count(hWnd)) {
+            rect = g_RectCache[hWnd];
+        }
+    } else {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_RectCache[hWnd] = rect;
+    }
+
     int w = rect.right - rect.left;
     int h = rect.bottom - rect.top;
 
-    if (w <= 0 || h <= 0) return;
+    int offsetX = rect.left - winRect.left;
+    int offsetY = rect.top - winRect.top;
+    
+    int rawW = winRect.right - winRect.left;
+    int rawH = winRect.bottom - winRect.top;
+
+    if (w <= 0 || h <= 0) return nullptr;
 
     POINT pt;
     GetCursorPos(&pt);
@@ -680,20 +736,44 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    HDC hMemDC = CreateCompatibleDC(hScreenDC);
     data->hBitmap = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &(data->pBits), NULL, 0);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, data->hBitmap);
+
+    auto CopyAndFixAlpha = [&](void* srcBits, void* dstBits) {
+        DWORD* src = (DWORD*)srcBits;
+        DWORD* dst = (DWORD*)dstBits;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int sx = x + offsetX;
+                int sy = y + offsetY;
+                
+                if (sx >= 0 && sx < rawW && sy >= 0 && sy < rawH) {
+                    DWORD p = src[sy * rawW + sx];
+                    BYTE a = (p >> 24) & 0xFF;
+                    
+                    if (a == 0) {
+                        dst[y * w + x] = 0;
+                    } else if (a == 255) {
+                        dst[y * w + x] = p;
+                    } else {
+                        BYTE r = (p >> 16) & 0xFF;
+                        BYTE g = (p >> 8) & 0xFF;
+                        BYTE b = p & 0xFF;
+                        dst[y * w + x] = (a << 24) | (((r * a) / 255) << 16) | (((g * a) / 255) << 8) | ((b * a) / 255);
+                    }
+                } else {
+                    dst[y * w + x] = 0;
+                }
+            }
+        }
+    };
 
     if (rising) {
         BOOL fromCache = FALSE;
         {
             std::lock_guard<std::mutex> lock(g_CacheMutex);
             if (g_SnapshotCache.count(hWnd)) {
-                HDC hCacheDC = CreateCompatibleDC(hScreenDC);
-                HBITMAP hOldCacheBmp = (HBITMAP)SelectObject(hCacheDC, g_SnapshotCache[hWnd].first);
-                BitBlt(hMemDC, 0, 0, w, h, hCacheDC, 0, 0, SRCCOPY);
-                SelectObject(hCacheDC, hOldCacheBmp);
-                DeleteDC(hCacheDC);
+                void* pCacheBits = g_SnapshotCache[hWnd].second;
+                memcpy(data->pBits, pCacheBits, w * h * 4);
 
                 DeleteObject(g_SnapshotCache[hWnd].first);
                 g_SnapshotCache.erase(hWnd);
@@ -701,10 +781,42 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
             }
         }
         if (!fromCache) {
-            PrintWindow(hWnd, hMemDC, PW_CLIENTONLY | 0x00000002);
+            HDC hTempDC = CreateCompatibleDC(hScreenDC);
+            BITMAPINFO bmiTemp = bmi;
+            bmiTemp.bmiHeader.biWidth = rawW;
+            bmiTemp.bmiHeader.biHeight = -rawH;
+            
+            void* pTempBits = nullptr;
+            HBITMAP hTempBmp = CreateDIBSection(hScreenDC, &bmiTemp, DIB_RGB_COLORS, &pTempBits, NULL, 0);
+            HBITMAP hOldTempBmp = (HBITMAP)SelectObject(hTempDC, hTempBmp);
+            
+            PrintWindow(hWnd, hTempDC, PW_CLIENTONLY | 0x00000002);
+            GdiFlush();
+            
+            CopyAndFixAlpha(pTempBits, data->pBits);
+            
+            SelectObject(hTempDC, hOldTempBmp);
+            DeleteObject(hTempBmp);
+            DeleteDC(hTempDC);
         }
     } else {
-        BitBlt(hMemDC, 0, 0, w, h, hScreenDC, rect.left, rect.top, SRCCOPY);
+        HDC hTempDC = CreateCompatibleDC(hScreenDC);
+        BITMAPINFO bmiTemp = bmi;
+        bmiTemp.bmiHeader.biWidth = rawW;
+        bmiTemp.bmiHeader.biHeight = -rawH;
+        
+        void* pTempBits = nullptr;
+        HBITMAP hTempBmp = CreateDIBSection(hScreenDC, &bmiTemp, DIB_RGB_COLORS, &pTempBits, NULL, 0);
+        HBITMAP hOldTempBmp = (HBITMAP)SelectObject(hTempDC, hTempBmp);
+
+        PrintWindow(hWnd, hTempDC, PW_RENDERFULLCONTENT);
+        GdiFlush();
+
+        CopyAndFixAlpha(pTempBits, data->pBits);
+
+        SelectObject(hTempDC, hOldTempBmp);
+        DeleteObject(hTempBmp);
+        DeleteDC(hTempDC);
 
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         if (g_SnapshotCache.count(hWnd)) {
@@ -713,29 +825,32 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
         
         void* pCacheBits = nullptr;
         HBITMAP hCacheBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pCacheBits, NULL, 0);
-        HDC hCacheDC = CreateCompatibleDC(hScreenDC);
-        HBITMAP hOldCacheBmp = (HBITMAP)SelectObject(hCacheDC, hCacheBmp);
-        BitBlt(hCacheDC, 0, 0, w, h, hMemDC, 0, 0, SRCCOPY);
-        SelectObject(hCacheDC, hOldCacheBmp);
-        DeleteDC(hCacheDC);
+        
+        memcpy(pCacheBits, data->pBits, w * h * 4);
         
         g_SnapshotCache[hWnd] = { hCacheBmp, pCacheBits };
     }
 
-    BYTE* pixels = (BYTE*)data->pBits;
-    for (int i = 0; i < w * h; i++) {
-        pixels[i * 4 + 3] = 255;
-    }
-
-    SelectObject(hMemDC, hOldBmp);
-    DeleteDC(hMemDC);
     ReleaseDC(NULL, hScreenDC);
-    CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+    
+    int vLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int vWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int vHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    data->hGhost = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
+        L"STATIC", NULL, WS_POPUP,
+        vLeft, vTop, vWidth, vHeight,
+        NULL, NULL, NULL, NULL
+    );
+
+    return data;
 }
 
-// =========================================================================
-// WOBBLY WINDOWS ENGINE (D2D PORT)
-// =========================================================================
+// -------------------------------------------------------------------------
+// Wobbly Windows Engine
+// -------------------------------------------------------------------------
 static void CaptureWindowForWobbly(HWND hwnd) {
     RECT rcWin, rcExt;
     GetWindowRect(hwnd, &rcWin);
@@ -761,7 +876,7 @@ static void CaptureWindowForWobbly(HWND hwnd) {
     
     PrintWindow(hwnd, hdcMem, PW_RENDERFULLCONTENT);
 
-    // D2D needs Pre-multiplied Alpha. This guarantees native rounded corners (Win 11) retain transparency
+    // Pre-multiply alpha for D2D (fixes Win11 rounded corners)
     BYTE* pRaw = (BYTE*)rawBits;
     for (int i = 0; i < rawW * rawH; i++) {
         BYTE a = pRaw[i * 4 + 3];
@@ -938,7 +1053,6 @@ static void DrawOverlayFrameD2D() {
     float vLeft = (float)g_screenX;
     float vTop = (float)g_screenY;
 
-    // Build the outer bounding geometry to mask off seams/tearing during massive deformations
     ID2D1PathGeometry* outlineGeo = nullptr;
     g_d2dFactory->CreatePathGeometry(&outlineGeo);
     if (outlineGeo) {
@@ -972,7 +1086,6 @@ static void DrawOverlayFrameD2D() {
         layerParams.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
         g_wobblyRT->PushLayer(&layerParams, layer);
 
-        // Draw internal meshed tiles
         for (int y = 0; y < Y_TILES; y++) {
             for (int x = 0; x < X_TILES; x++) {
                 float tx1 = (float)x / X_TILES, ty1 = (float)y / Y_TILES;
@@ -993,13 +1106,11 @@ static void DrawOverlayFrameD2D() {
                     BloatPoint(p1, c), BloatPoint(p2, c), BloatPoint(p4, c), BloatPoint(p3, c));
 
                 if (quadGeo) {
-                    // Adjust Source coordinates based on cropped frame offsets
                     float sx = (float)g_capX + tx1 * g_capW;
                     float sy = (float)g_capY + ty1 * g_capH;
                     float sw = (float)g_capW / X_TILES;
                     float sh = (float)g_capH / Y_TILES;
 
-                    // Compute Affine Texture Mapping matrix
                     float m11 = (p2.x - p1.x) / sw;
                     float m12 = (p2.y - p1.y) / sw;
                     float m21 = (p3.x - p1.x) / sh;
@@ -1031,7 +1142,6 @@ static void DrawOverlayFrameD2D() {
 
 static void CleanupWobblyD2D() {
     if (g_wobblyBrush) { g_wobblyBrush->Release(); g_wobblyBrush = nullptr; }
-    // Do not clean g_wobblyRT and memDC here to retain them per-session for performance, clean up in Uninit.
 }
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -1186,9 +1296,9 @@ static void OnExitSizeMove(HWND hwnd) {
     }
 }
 
-// =========================================================================
-// HOOKS & SUBCLASSING
-// =========================================================================
+// -------------------------------------------------------------------------
+// Hooks & Subclassing
+// -------------------------------------------------------------------------
 LRESULT CALLBACK WobblySubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     if (msg == WM_ENTERSIZEMOVE) {
         OnEnterSizeMove(hwnd);
@@ -1280,18 +1390,32 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_SHOWMINNOACTIVE) {
         if (g_d2dFactory) {
             SetDwmTransitions(hWnd, FALSE);
-            StartGenieAnim(hWnd, FALSE);
+            GhostAnimData* data = PrepareGenieAnim(hWnd, FALSE);
+            if (data) {
+                ShowGhostSync(data);
+                
+                LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+                SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+                
+                CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+            }
         }
         return ShowWindow_Original(hWnd, nCmdShow);
     }
     else if (nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWNORMAL) {
         if (IsIconic(hWnd) && g_d2dFactory) {
             SetDwmTransitions(hWnd, FALSE);
+            
+            GhostAnimData* data = PrepareGenieAnim(hWnd, TRUE);
+            
             LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
             SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+            
             BOOL res = ShowWindow_Original(hWnd, nCmdShow);
-            StartGenieAnim(hWnd, TRUE);
+            
+            if (data) CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
             return res;
         }
     }
@@ -1308,6 +1432,9 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
         if (g_IconPositions.count(hWnd)) {
             g_IconPositions.erase(hWnd);
         }
+        if (g_RectCache.count(hWnd)) {
+            g_RectCache.erase(hWnd);
+        }
     }
 
     if (Msg == WM_SYSCOMMAND) {
@@ -1318,7 +1445,16 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             }
             if (g_d2dFactory) {
                 SetDwmTransitions(hWnd, FALSE);
-                StartGenieAnim(hWnd, FALSE);
+                GhostAnimData* data = PrepareGenieAnim(hWnd, FALSE);
+                if (data) {
+                    ShowGhostSync(data);
+                    
+                    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+                    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+                    SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+                    
+                    CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+                }
             }
             return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
         }
@@ -1328,11 +1464,16 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             }
             if (g_d2dFactory) {
                 SetDwmTransitions(hWnd, FALSE);
+                
+                GhostAnimData* data = PrepareGenieAnim(hWnd, TRUE);
+                
                 LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
                 SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+                
                 LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
-                StartGenieAnim(hWnd, TRUE);
+                
+                if (data) CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
                 return res;
             }
         }
@@ -1340,9 +1481,9 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
     return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
 }
 
-// =========================================================================
-// MOD LIFECYCLE
-// =========================================================================
+// -------------------------------------------------------------------------
+// Mod Lifecycle
+// -------------------------------------------------------------------------
 BOOL Wh_ModInit() {
     Wh_Log(L"Custom Animations & Wobbly Mod Loading...");
     LoadSettings();
@@ -1400,4 +1541,5 @@ void Wh_ModUninit() {
     }
     g_SnapshotCache.clear();
     g_IconPositions.clear();
+    g_RectCache.clear();
 }
