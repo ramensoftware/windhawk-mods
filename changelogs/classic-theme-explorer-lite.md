@@ -1,3 +1,7 @@
+## 1.3 ([Jun 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc18d87f7414ade8a50bf593007beecbd82cbff6/mods/classic-theme-explorer-lite.wh.cpp))
+
+Make adding Clientedge optional for people who dislike it or add via other means (DLL patching, resource redirect, etc)
+
 ## 1.2 ([Jun 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/55ef89214517d9be74807b9e1d38d00365155a14/mods/classic-theme-explorer-lite.wh.cpp))
 
 Apply fixes only under Classic theme
