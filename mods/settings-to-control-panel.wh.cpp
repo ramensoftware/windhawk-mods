@@ -2,10 +2,11 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.1
+// @version        10.0.2
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
+// @compilerOptions -lshell32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -28,12 +29,14 @@ corresponding classic Control Panel applets using only native Windows components
 - Redirects numerous `ms-settings:` URIs to classic Control Panel
 - Anti-loop protection
 - Configurable fallback modes
+- **NEW in 10.0.2: Option to redirect Audio & Network system tray icons to classic panels**
 
 ---
 
 ## Configuration
 
 - **EnableRedirects** – Turn the mod on or off
+- **RedirectSystemTray** – Redirects volume and network tray context menus to classic Control Panel applets (mmsys.cpl / ncpa.cpl)
 - **UIOnlyRedirects** – Only redirect clicks (safer, may miss some)
 - **FallbackMode** – What to do when no classic page exists:
   - `0` = ignore (do nothing)
@@ -45,7 +48,6 @@ corresponding classic Control Panel applets using only native Windows components
 ---
 ## Limitations
 
-- System tray icons (audio/network) use DCOM activation and cannot be intercepted (This could change in future)
 - Windows 11 support is limited due to Microsoft's architectural changes and some redirects might change based on versions.
 
 ---
@@ -56,6 +58,7 @@ The mod hooks:
 - `ShellExecuteExW` / `ShellExecuteW`
 - `CreateProcessW`
 - `IShellDispatch2::ShellExecute`
+- `TrackPopupMenuEx` (for the system tray redirect)
 
 When a `ms-settings:` URI is detected, it launches the corresponding classic
 Control Panel target instead of the modern Settings app.
@@ -67,6 +70,7 @@ Control Panel target instead of the modern Settings app.
 - m417z – Code reviews and feedback
 - Anixx – Testing on Windows 11 23H2
 - dbilanoski – CLSID documentation
+- cerdopalo & AI – System tray redirect logic
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -74,6 +78,9 @@ Control Panel target instead of the modern Settings app.
 - EnableRedirects: true
   $name: Enable Redirects
   $description: "Turns the mod on or off. When off, all Settings calls open normally."
+- RedirectSystemTray: false
+  $name: Redirect System Tray Audio/Network to Control Panel
+  $description: "If true, right-clicking the volume or network icon in the system tray will open the classic Sound (mmsys.cpl) or Network Connections (ncpa.cpl) panels instead of the modern Settings."
 - UIOnlyRedirects: false
   $name: Non-Invasive UI Mode
   $description: "Only intercepts ShellExecute* calls. Leaves CreateProcessW alone."
@@ -96,6 +103,7 @@ Control Panel target instead of the modern Settings app.
 #include <windhawk_api.h>
 #include <windows.h>
 #include <objbase.h>
+#include <shellapi.h>
 #include <string>
 #include <algorithm>
 #include <unordered_map>
@@ -112,6 +120,10 @@ static HMODULE g_hOle32 = nullptr;
 // IShellDispatch2 vtable hook
 using IShellDispatch2_ShellExecute_t = HRESULT(WINAPI*)(void* pThis, BSTR File, void* vArgs, void* vDir, void* vOperation, void* vShow);
 static IShellDispatch2_ShellExecute_t IShellDispatch2_ShellExecute_orig = nullptr;
+
+// TrackPopupMenuEx hook
+using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
+static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 
 // Constants
 static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
@@ -133,6 +145,18 @@ using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCW
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
 static ShellExecuteW_t ShellExecuteW_orig = nullptr;
+
+// ID dei comandi Audio e Rete per il menu contestuale della tray
+static constexpr UINT CMD_OPEN_SOUND_SETTINGS   = 40012;
+static constexpr UINT CMD_SOUNDS                = 40007;
+static constexpr UINT CMD_OPEN_NETWORK_SETTINGS = 3109;
+
+// Mappatura dei comandi del menu contestuale della tray
+static const std::unordered_map<UINT, std::wstring> g_trayCommandMappings = {
+    {CMD_OPEN_SOUND_SETTINGS, L"rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,0"},
+    {CMD_SOUNDS, L"rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,0"},
+    {CMD_OPEN_NETWORK_SETTINGS, L"control.exe ncpa.cpl"}
+};
 
 // Core resolve logic struct - MUST be defined before use
 struct ResolveResult {
@@ -175,6 +199,7 @@ static bool IsChildProcess() {
 // Settings
 struct ModSettings {
     bool enableRedirects = true;
+    bool redirectSystemTray = false; // Nuova opzione
     bool uiOnlyRedirects = false;
     int fallbackMode = 2;
     bool win11CompatibilityMode = false;
@@ -185,6 +210,7 @@ static ModSettings g_settings;
 
 static void LoadSettings() {
     g_settings.enableRedirects = Wh_GetIntSetting(L"EnableRedirects") != 0;
+    g_settings.redirectSystemTray = Wh_GetIntSetting(L"RedirectSystemTray") != 0; // Carica la nuova opzione
     g_settings.uiOnlyRedirects = Wh_GetIntSetting(L"UIOnlyRedirects") != 0;
 
     PCWSTR fallbackStr = Wh_GetStringSetting(L"FallbackMode");
@@ -201,8 +227,8 @@ static void LoadSettings() {
     int ml = Wh_GetIntSetting(L"MaxLaunchesPerUri");
     g_settings.maxLaunchesPerUri = (ml >= 0 && ml <= 20) ? ml : 3;
 
-    Wh_Log(L"EnableRedirects=%d UIOnly=%d SmartPers=always_on Fallback=%d Win11Compat=%d MaxLaunches=%d",
-        (int)g_settings.enableRedirects, (int)g_settings.uiOnlyRedirects,
+    Wh_Log(L"EnableRedirects=%d RedirectSystemTray=%d UIOnly=%d SmartPers=always_on Fallback=%d Win11Compat=%d MaxLaunches=%d",
+        (int)g_settings.enableRedirects, (int)g_settings.redirectSystemTray, (int)g_settings.uiOnlyRedirects,
         g_settings.fallbackMode,
         (int)g_settings.win11CompatibilityMode, g_settings.maxLaunchesPerUri);
 }
@@ -548,13 +574,95 @@ static void InitMappings() {
         
         // Control Panel All Tasks
         {L"ms-settings:controlpanel", L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}"},
+        // Redirects to netplwiz
+        {L"ms-settings:signinoptions", L"netplwiz"},
+        {L"ms-settings:accounts-signinoptions", L"netplwiz"},
+        {L"ms-settings:accounts-users", L"netplwiz"},
+        {L"ms-settings:family-users", L"netplwiz"},
+                // Sound Control Panel
+        {L"ms-settings:sound-control-panel", L"control.exe /name Microsoft.Sound"},
+        
+        // Sound Playback
+        {L"ms-settings:sound-playback", L"control.exe mmsys.cpl,,0"},
+        
+        // Sound Recording
+        {L"ms-settings:sound-recording", L"control.exe mmsys.cpl,,1"},
+        
+        // Sound Sounds
+        {L"ms-settings:sound-sounds", L"control.exe mmsys.cpl,,2"},
+        
+        // Sound Volume Flyout
+        {L"ms-settings:sound-volume-flyout", L"sndvol.exe -f"},
+        
+        // Sound Devices
+        {L"ms-settings:sound-devices", L"control.exe mmsys.cpl,,0"},
+        
+        // Sound Output
+        {L"ms-settings:sound-output", L"control.exe mmsys.cpl,,0"},
+        
+        // Sound Input
+        {L"ms-settings:sound-input", L"control.exe mmsys.cpl,,1"},
+        
+        // Apps Volume
+        {L"ms-settings:apps-volume", L"control.exe mmsys.cpl,,0"},
+        
+        // Sound (generic)
+        {L"ms-settings:sound", L"control.exe mmsys.cpl,,0"},
+        
+        // System Settings
+        {L"ms-settings:system-settings", L"shell:::{025A5937-A6BE-4686-A844-36FE4BEC8B6D}\\pageGlobalSettings"},
+        
+        // Network Places
+        {L"ms-settings:network-places", L"shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
+        
+        // Your Info Profile
+        {L"ms-settings:yourinfo-profile", L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}"},
+        
+        // Netplwiz
+        {L"ms-settings:netplwiz", L"shell:::{7A9D77BD-5403-11d2-8785-2E0420524153}"},
+        
+        // Workplace
+        {L"ms-settings:workplace", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ECDB0924-4208-451E-8EE0-373C0956DE16}"},
+        
+        // Date and Time Region
+        {L"ms-settings:dateandtime-region", L"timedate.cpl"},
+        
+        // Date and Time Add Clocks
+        {L"ms-settings:dateandtime-addclocks", L"timedate.cpl,,1"},
+        
+        // Keyboard Advanced
+        {L"ms-settings:keyboard-advanced", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
+        
+        // Keyboard Properties
+        {L"ms-settings:keyboard-properties", L"shell:::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
+        
+        // Privacy Feedback
+        {L"ms-settings:privacy-feedback", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReportDetails"},
+        
+        // Problem Reporting Settings
+        {L"ms-settings:problem-reporting-settings", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageSettings"},
+        
+        // Problem Reports (list)
+        {L"ms-settings:problem-reports", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageProblems"},
+        
+        // Reliability Monitor
+        {L"ms-settings:reliability", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReliabilityView"},
+        
+        // Speech Properties
+        {L"ms-settings:speech", L"shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}"},
+        
+        // Search Diagnostics
+        {L"ms-settings:search-diagnostics", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\searchPage"},
+        
+        // Control Panel All Tasks
+        {L"ms-settings:controlpanel", L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}"},
+        
     };
     
     // Additional Windows 11 24H2 specific mappings
     if (g_isWin11) {
         g_mappings[L"ms-settings:power"] = L"powercfg.cpl";
         g_mappings[L"ms-settings:display-hdr"] = L"colorcpl.exe";
-        g_mappings[L"ms-settings:taskbar"] = NOTIF_AREA_CLSID;
         g_mappings[L"ms-settings:personalization-taskbar"] = NOTIF_AREA_CLSID;
         g_mappings[L"ms-settings:multitasking"] = L"control.exe";
         g_mappings[L"ms-settings:storage"] = L"control.exe";
@@ -562,6 +670,8 @@ static void InitMappings() {
         g_mappings[L"ms-settings:backup"] = L"control.exe /name Microsoft.BackupAndRestore";
         g_mappings[L"ms-settings:network-advancedsettings"] = L"control.exe /name Microsoft.NetworkAndSharingCenter";
         g_mappings[L"ms-settings:recovery"] = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{9FE63AFD-59CF-4419-9775-ABCC3849F861}";
+    // New mappings
+    
     }
 }
 
@@ -791,6 +901,61 @@ static void LaunchTarget(const std::wstring& command) {
     }
 }
 
+// Funzione per eseguire il comando mappato dal menu contestuale della tray
+static void ExecuteMappedCommand(const std::wstring& command) {
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.lpVerb = L"open";
+    sei.nShow = SW_SHOWNORMAL;
+    
+    // Separa il programma dai parametri
+    size_t spacePos = command.find(L' ');
+    if (spacePos != std::wstring::npos) {
+        std::wstring program = command.substr(0, spacePos);
+        std::wstring params = command.substr(spacePos + 1);
+        sei.lpFile = program.c_str();
+        sei.lpParameters = params.c_str();
+    } else {
+        sei.lpFile = command.c_str();
+    }
+    
+    ShellExecuteExW_orig(&sei);
+}
+
+// Hook per il menu contestuale della tray
+BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
+                                  HWND hWnd, const TPMPARAMS* lptpm) {
+    // Se il redirect della tray non è abilitato o siamo in un processo figlio, comportamento standard
+    if (!g_settings.redirectSystemTray || IsChildProcess()) {
+        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+
+    HookGuard guard;
+    if (guard.IsReentrant()) {
+        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+    
+    UINT modifiedFlags = uFlags | TPM_RETURNCMD;
+    BOOL result = g_origTrackPopupMenuEx(hMenu, modifiedFlags, x, y, hWnd, lptpm);
+
+    if (result > 0) {
+        UINT cmd = (UINT)result;
+        
+        // Verifica se il comando è nei nostri mapping
+        auto it = g_trayCommandMappings.find(cmd);
+        if (it != g_trayCommandMappings.end()) {
+            ExecuteMappedCommand(it->second);
+            return 0;
+        }
+        
+        // Ripristino comportamento originale per gli altri comandi
+        if (!(uFlags & TPM_RETURNCMD)) {
+            SendMessageW(hWnd, WM_COMMAND, (WPARAM)cmd, 0);
+            return TRUE;
+        }
+    }
+    return result;
+}
+
 // Personalization detection
 static bool IsPersonalizationWindow(HWND hwnd) {
     if (!hwnd) {
@@ -954,7 +1119,18 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
         if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
         return TRUE;
     }
-
+    // exception for taskbar properties
+    std::wstring checkUri;
+    if (IsMsSettings(pei->lpFile))
+        checkUri = NormalizeUri(pei->lpFile);
+    else if (IsMsSettings(pei->lpParameters))
+        checkUri = NormalizeUri(pei->lpParameters);
+    
+    if (!checkUri.empty() && checkUri.find(L"ms-settings:taskbar") == 0) {
+        Wh_Log(L"ShellExecuteExW: passing through ms-settings:taskbar for Classic Taskbar Properties mod");
+        return ShellExecuteExW_orig(pei);
+    }
+    // FINE ECCEZIONE
     std::wstring uri;
     if (IsMsSettings(pei->lpFile))
         uri = NormalizeUri(pei->lpFile);
@@ -1017,7 +1193,17 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
         return SHELL_EXECUTE_SUCCESS;
     }
-
+    // exception for ms-settings:taskbar 
+    std::wstring checkUri;
+    if (IsMsSettings(file))
+        checkUri = NormalizeUri(file);
+    else if (IsMsSettings(params))
+        checkUri = NormalizeUri(params);
+    
+    if (!checkUri.empty() && checkUri.find(L"ms-settings:taskbar") == 0) {
+        Wh_Log(L"ShellExecuteW: passing through ms-settings:taskbar for Classic Taskbar Properties mod");
+        return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
+    }
     std::wstring uri;
     if (IsMsSettings(file))
         uri = NormalizeUri(file);
@@ -1138,7 +1324,7 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
 
 // Windhawk entry points
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.1");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.2");
     
     // Load COM dynamically for IShellDispatch2 hook
     g_hOle32 = LoadLibraryW(L"ole32.dll");
@@ -1190,8 +1376,26 @@ BOOL Wh_ModInit() {
         }
     }
 
-    Wh_Log(L"Ready — EnableRedirects=%d UIOnly=%d SmartPers=always_active Fallback=%d Win11Compat=%d MaxLaunches=%d",
-        (int)g_settings.enableRedirects, (int)g_settings.uiOnlyRedirects,
+    // Install TrackPopupMenuEx hook for system tray redirect
+    if (g_settings.redirectSystemTray) {
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
+        if (hUser32) {
+            void* pTrackPopupMenuEx = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
+            if (pTrackPopupMenuEx) {
+                if (Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx)) {
+                    Wh_Log(L"TrackPopupMenuEx hook installed for system tray redirect");
+                } else {
+                    Wh_Log(L"ERROR: Failed to install TrackPopupMenuEx hook");
+                }
+            } else {
+                Wh_Log(L"TrackPopupMenuEx not found in user32.dll");
+            }
+        }
+    }
+
+    Wh_Log(L"Ready — EnableRedirects=%d RedirectSystemTray=%d UIOnly=%d SmartPers=always_active Fallback=%d Win11Compat=%d MaxLaunches=%d",
+        (int)g_settings.enableRedirects, (int)g_settings.redirectSystemTray, (int)g_settings.uiOnlyRedirects,
         g_settings.fallbackMode, (int)g_settings.win11CompatibilityMode, g_settings.maxLaunchesPerUri);
 
     return TRUE;
@@ -1202,7 +1406,7 @@ void Wh_ModUninit() {
         FreeLibrary(g_hOle32);
         g_hOle32 = nullptr;
     }
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.1 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.2 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
