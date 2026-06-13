@@ -3674,8 +3674,9 @@ static HANDLE g_timerThread    = nullptr;
 static HANDLE g_timerStopEvent = nullptr;
 static HANDLE g_timerUpdateEvent = nullptr;
 
-static HANDLE g_scrollTimerThread    = nullptr;
-static HANDLE g_scrollTimerStopEvent = nullptr;
+static winrt::Windows::UI::Xaml::DispatcherTimer g_scrollDispatcherTimer{nullptr};
+static winrt::event_token                        g_scrollDispatcherTimerToken{};
+static bool                                       g_scrollDispatcherTimerHasToken = false;
 
 static void TickScrollState(TextScrollState& s, int stepPx, int pauseMs, const std::wstring& mode) {
     if (!s.active) return;
@@ -3721,72 +3722,76 @@ static void TickScrollState(TextScrollState& s, int stepPx, int pauseMs, const s
 
 static void UpdateScrollTransforms();
 
-static DWORD WINAPI ScrollTimerThreadProc(void*) {
-    while (!g_unloading) {
-        DWORD wait = WaitForSingleObject(g_scrollTimerStopEvent, 16);
-        if (wait == WAIT_OBJECT_0) break;
-        if (g_applyingSettings) continue;
+// Drives the scroll animation directly on the UI thread via a
+// DispatcherTimer, instead of a separate worker thread that had to
+// SendMessage into the UI thread (with a temporary WH_CALLWNDPROC hook)
+// 60 times per second. This avoids both the continuous per-frame
+// cross-thread overhead and the teardown race that could orphan the
+// worker thread / install a duplicate timer.
+static void ScrollTimerTick(winrt::Windows::Foundation::IInspectable const&,
+                             winrt::Windows::Foundation::IInspectable const&) {
+    if (g_unloading || g_applyingSettings) return;
 
-        bool needsScroll = (g_titleScroll.active || g_artistScroll.active);
-        if (!needsScroll) continue;
+    bool needsScroll = (g_titleScroll.active || g_artistScroll.active);
+    if (!needsScroll) return;
 
-        HWND hWnd = g_taskbarWnd;
-        if (!hWnd || !IsWindow(hWnd)) continue;
+    int stepPx = std::max(1, g_settings.scrollSpeed);
+    int pauseMs = g_settings.scrollPauseDuration;
 
-        int stepPx = std::max(1, g_settings.scrollSpeed);
-        int pauseMs = g_settings.scrollPauseDuration;
+    TickScrollState(g_titleScroll, stepPx, pauseMs, g_settings.scrollMode);
+    TickScrollState(g_artistScroll, stepPx, pauseMs, g_settings.scrollMode);
 
-        TickScrollState(g_titleScroll, stepPx, pauseMs, g_settings.scrollMode);
-        TickScrollState(g_artistScroll, stepPx, pauseMs, g_settings.scrollMode);
-
-        RunFromWindowThread(hWnd, [](void*) {
-            if (g_unloading || g_applyingSettings) return;
-            UpdateScrollTransforms();
-        }, nullptr);
-    }
-    return 0;
+    UpdateScrollTransforms();
 }
 
 static void StartScrollTimer() {
-    if (g_scrollTimerThread) return;
-    g_scrollTimerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_scrollTimerStopEvent) return;
-    g_scrollTimerThread = CreateThread(nullptr, 0, ScrollTimerThreadProc, nullptr, 0, nullptr);
-    if (!g_scrollTimerThread) {
-        CloseHandle(g_scrollTimerStopEvent);
-        g_scrollTimerStopEvent = nullptr;
-    }
+    HWND hWnd = g_taskbarWnd;
+    if (!hWnd || !IsWindow(hWnd)) return;
+
+    // Creating/starting the DispatcherTimer must happen on the UI thread
+    // (it's a no-op SendMessage-free direct call if we're already there).
+    RunFromWindowThread(hWnd, [](void*) {
+        try {
+            if (!g_scrollDispatcherTimer) {
+                g_scrollDispatcherTimer = winrt::Windows::UI::Xaml::DispatcherTimer();
+                g_scrollDispatcherTimer.Interval(
+                    winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(16)});
+                g_scrollDispatcherTimerToken = g_scrollDispatcherTimer.Tick(&ScrollTimerTick);
+                g_scrollDispatcherTimerHasToken = true;
+            }
+            g_scrollDispatcherTimer.Start();
+        } catch (...) {}
+    }, nullptr);
 }
 
 static void StopScrollTimer() {
-    if (g_scrollTimerStopEvent) SetEvent(g_scrollTimerStopEvent);
-    if (g_scrollTimerThread) {
-        DWORD tid = GetCurrentThreadId();
-        HWND hTaskbar = g_taskbarWnd;
-        bool isUiThread = hTaskbar && (GetWindowThreadProcessId(hTaskbar, nullptr) == tid);
-        if (isUiThread) {
-            DWORD result = WAIT_TIMEOUT;
-            DWORD deadline = GetTickCount() + 1000;
-            while (result == WAIT_TIMEOUT && GetTickCount() < deadline) {
-                result = MsgWaitForMultipleObjects(1, &g_scrollTimerThread, FALSE, 50, QS_SENDMESSAGE);
-                if (result == WAIT_OBJECT_0 + 1) {
-                    MSG msg;
-                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
-                        TranslateMessage(&msg);
-                        DispatchMessageW(&msg);
+    HWND hWnd = g_taskbarWnd;
+
+    auto stop = [](void*) {
+        try {
+            if (g_scrollDispatcherTimer) {
+                g_scrollDispatcherTimer.Stop();
+                if (g_unloading) {
+                    if (g_scrollDispatcherTimerHasToken) {
+                        g_scrollDispatcherTimer.Tick(g_scrollDispatcherTimerToken);
+                        g_scrollDispatcherTimerHasToken = false;
                     }
-                    result = WAIT_TIMEOUT;
+                    g_scrollDispatcherTimer = nullptr;
                 }
             }
-        } else {
-            WaitForSingleObject(g_scrollTimerThread, 1000);
-        }
-        CloseHandle(g_scrollTimerThread);
-        g_scrollTimerThread = nullptr;
-    }
-    if (g_scrollTimerStopEvent) {
-        CloseHandle(g_scrollTimerStopEvent);
-        g_scrollTimerStopEvent = nullptr;
+        } catch (...) {}
+    };
+
+    if (hWnd && IsWindow(hWnd)) {
+        // RunFromWindowThread calls directly (no SendMessage/hook) when
+        // already on the UI thread, and there's nothing to wait/join on
+        // since DispatcherTimer::Stop() is synchronous and UI-thread-only.
+        RunFromWindowThread(hWnd, stop, nullptr);
+    } else {
+        // No taskbar window to marshal onto (e.g. during teardown after the
+        // window is gone); best effort, only safe if called from the UI
+        // thread that owns the timer.
+        stop(nullptr);
     }
 }
 
@@ -3811,8 +3816,14 @@ static constexpr wchar_t kTitleCloneName[]       = L"FluentMedia_TitleClone";
 static constexpr wchar_t kArtistCloneName[]      = L"FluentMedia_ArtistClone";
 static constexpr wchar_t kPanelGridName[]        = L"FluentMedia_PanelGrid";
 
+// Computes how much horizontal space is actually available for the
+// scrolling title/artist text area, based on the current rendered size of
+// the player panel minus the album art column and the media buttons column.
+// Returns 0.0 if it can't be determined yet (e.g. before first layout pass).
 static double GetAvailableScrollTextAreaWidth() {
     try {
+        // playerMaxWidth == 0 means "no limit" - the player is free to grow
+        // to fit its content, so don't constrain the scrolling text area.
         if (g_settings.playerMaxWidth <= 0) return 0.0;
 
         if (!g_playerGrid) return 0.0;
@@ -3827,6 +3838,9 @@ static double GetAvailableScrollTextAreaWidth() {
         auto cols = panelGrid.ColumnDefinitions();
         double used = 0.0;
         for (uint32_t i = 0; i < cols.Size(); i++) {
+            // Column index 1 is the text column itself; everything else
+            // (album art column, spacer, buttons column) eats into the
+            // space available for the text.
             if (i == 1) continue;
             used += cols.GetAt(i).ActualWidth();
         }
