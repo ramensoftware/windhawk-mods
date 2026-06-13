@@ -3722,12 +3722,6 @@ static void TickScrollState(TextScrollState& s, int stepPx, int pauseMs, const s
 
 static void UpdateScrollTransforms();
 
-// Drives the scroll animation directly on the UI thread via a
-// DispatcherTimer, instead of a separate worker thread that had to
-// SendMessage into the UI thread (with a temporary WH_CALLWNDPROC hook)
-// 60 times per second. This avoids both the continuous per-frame
-// cross-thread overhead and the teardown race that could orphan the
-// worker thread / install a duplicate timer.
 static void ScrollTimerTick(winrt::Windows::Foundation::IInspectable const&,
                              winrt::Windows::Foundation::IInspectable const&) {
     if (g_unloading || g_applyingSettings) return;
@@ -3748,8 +3742,6 @@ static void StartScrollTimer() {
     HWND hWnd = g_taskbarWnd;
     if (!hWnd || !IsWindow(hWnd)) return;
 
-    // Creating/starting the DispatcherTimer must happen on the UI thread
-    // (it's a no-op SendMessage-free direct call if we're already there).
     RunFromWindowThread(hWnd, [](void*) {
         try {
             if (!g_scrollDispatcherTimer) {
@@ -3783,14 +3775,8 @@ static void StopScrollTimer() {
     };
 
     if (hWnd && IsWindow(hWnd)) {
-        // RunFromWindowThread calls directly (no SendMessage/hook) when
-        // already on the UI thread, and there's nothing to wait/join on
-        // since DispatcherTimer::Stop() is synchronous and UI-thread-only.
         RunFromWindowThread(hWnd, stop, nullptr);
     } else {
-        // No taskbar window to marshal onto (e.g. during teardown after the
-        // window is gone); best effort, only safe if called from the UI
-        // thread that owns the timer.
         stop(nullptr);
     }
 }
@@ -3816,14 +3802,8 @@ static constexpr wchar_t kTitleCloneName[]       = L"FluentMedia_TitleClone";
 static constexpr wchar_t kArtistCloneName[]      = L"FluentMedia_ArtistClone";
 static constexpr wchar_t kPanelGridName[]        = L"FluentMedia_PanelGrid";
 
-// Computes how much horizontal space is actually available for the
-// scrolling title/artist text area, based on the current rendered size of
-// the player panel minus the album art column and the media buttons column.
-// Returns 0.0 if it can't be determined yet (e.g. before first layout pass).
 static double GetAvailableScrollTextAreaWidth() {
     try {
-        // playerMaxWidth == 0 means "no limit" - the player is free to grow
-        // to fit its content, so don't constrain the scrolling text area.
         if (g_settings.playerMaxWidth <= 0) return 0.0;
 
         if (!g_playerGrid) return 0.0;
@@ -3838,9 +3818,6 @@ static double GetAvailableScrollTextAreaWidth() {
         auto cols = panelGrid.ColumnDefinitions();
         double used = 0.0;
         for (uint32_t i = 0; i < cols.Size(); i++) {
-            // Column index 1 is the text column itself; everything else
-            // (album art column, spacer, buttons column) eats into the
-            // space available for the text.
             if (i == 1) continue;
             used += cols.GetAt(i).ActualWidth();
         }
