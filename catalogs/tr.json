@@ -4147,6 +4147,36 @@
                 "version": "4"
             }
         },
+        "explorer-folder-hover-menu": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781380795000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781380795000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lgdi32 -lgdiplus -ladvapi32 -luiautomationcore",
+                "description": "Hover a folder in File Explorer to get an expand button that opens a cascading menu of the folder's contents",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Folder Hover Menu",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "explorer-font-changer": {
             "details": {
                 "defaultSorting": 24156,
@@ -11504,7 +11534,7 @@
                     524
                 ],
                 "ratingUsers": 645,
-                "updated": 1781269294000,
+                "updated": 1781380705000,
                 "users": 19148
             },
             "featured": true,
@@ -11525,7 +11555,7 @@
                 ],
                 "name": "Vertical Taskbar for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3.12"
+                "version": "1.3.13"
             }
         },
         "taskbar-volume-control": {

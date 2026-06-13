@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-13T18:51:09.000Z</updated>
+    <updated>2026-06-13T19:59:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Folder Hover Menu 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-folder-hover-menu#86665e6c477b0e5ba1f8058d8e4b448faa2a5f13</id>
+        <link href="https://windhawk.net/mods/explorer-folder-hover-menu"/>
+        <updated>2026-06-13T19:59:55.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="folderhovermenu">Folder Hover Menu</h1>
+<p>When you hover the mouse over a folder in the File Explorer file list, a small
+expand button appears in the bottom-right corner of that folder. Click it to pop
+up a cascading menu of the folder's contents. You can navigate into sub-folders
+and launch items straight from the menu, without opening the folder first.</p>
+<p>Inspired by <a href="https://qttabbar.wikidot.com/">QTTabBar</a>.</p>
+<p><img src="https://i.imgur.com/ZPceXoZ.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar AI Quota Bars 0.9.1]]></title>
         <id>https://windhawk.net/mods/taskbar-ai-quota#abc86d1f587043340096e5fafc9019caa29cc2e7</id>
@@ -710,27 +727,6 @@ the original function is called normally.</p>
         <author>
             <name>Townrain</name>
             <uri>https://github.com/Townrain</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Console Quick Paste 1.0.0]]></title>
-        <id>https://windhawk.net/mods/console-quick-paste#490dfae0c155a142237630390237447d258de0d8</id>
-        <link href="https://windhawk.net/mods/console-quick-paste"/>
-        <updated>2026-05-30T12:05:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="consolequickpaste">Console Quick Paste</h1>
-<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/CQP.png" alt="Console Quick Paste" /></p>
-<p>Brings a "Quick Commands" submenu to Windows Terminal, giving you one-click access to your most-used PowerShell and Command Prompt snippets. To open it, right-click the empty space on the tab bar.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><code>Quick Commands Submenu</code>: Always pinned to the top of the context menu, separated from the built-in items by a divider.</li>
-<li><code>Configurable Command List</code>: Define as many commands as you like. Each entry has:</li>
-<li><code>Label</code>: The display name shown in the submenu. Falls back to the command itself when left blank.</li>
-<li><code>Command</code>: The string that will be pasted into the console.</li>
-<li><code>Auto-Enter</code>: When enabled, an <code>Enter</code> key is sent immediately after pasting so the command executes automatically.</li>
-</ul>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>

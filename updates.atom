@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-13T18:51:09.000Z</updated>
+    <updated>2026-06-13T19:59:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Folder Hover Menu 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-folder-hover-menu#86665e6c477b0e5ba1f8058d8e4b448faa2a5f13</id>
+        <link href="https://windhawk.net/mods/explorer-folder-hover-menu"/>
+        <updated>2026-06-13T19:59:55.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="folderhovermenu">Folder Hover Menu</h1>
+<p>When you hover the mouse over a folder in the File Explorer file list, a small
+expand button appears in the bottom-right corner of that folder. Click it to pop
+up a cascading menu of the folder's contents. You can navigate into sub-folders
+and launch items straight from the menu, without opening the folder first.</p>
+<p>Inspired by <a href="https://qttabbar.wikidot.com/">QTTabBar</a>.</p>
+<p><img src="https://i.imgur.com/ZPceXoZ.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.13]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#79aee20d8e1ca2e951026060ecde060242d41ff0</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2026-06-13T19:58:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed ARM64 support in recent Windows 11 versions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar AI Quota Bars 0.9.1]]></title>
         <id>https://windhawk.net/mods/taskbar-ai-quota#abc86d1f587043340096e5fafc9019caa29cc2e7</id>
@@ -466,33 +496,6 @@ Control Panel target instead of the modern Settings app.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Music Lounge 4.0.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-music-lounge#5f8afab7b38a553578e8e963b7b30c62bf918d17</id>
-        <link href="https://windhawk.net/mods/taskbar-music-lounge"/>
-        <updated>2026-06-06T17:35:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed settings such as width not being applied until the mod is reloaded.</li>
-</ul>]]></content>
-        <author>
-            <name>Hashah2311</name>
-            <uri>https://github.com/Hashah2311</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control 1.3.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control#131f90d6611b96811af101f4b8177dd24e40ed13</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control"/>
-        <updated>2026-06-06T16:10:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the "Middle click to mute" option in recent Windows 11 versions.</li>
-<li>The Win and Alt modifier keys are now suppressed after scrolling. This fixes e.g. the Start menu opening after Win+scrolling to change the volume.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
