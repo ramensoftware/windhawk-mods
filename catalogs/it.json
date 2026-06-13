@@ -9990,7 +9990,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1781376669000,
+                "updated": 1781393256000,
                 "users": 0
             },
             "metadata": {
@@ -10006,7 +10006,7 @@
                 ],
                 "license": "MIT",
                 "name": "Taskbar AI Quota Bars",
-                "version": "0.9.1"
+                "version": "0.9.2"
             }
         },
         "taskbar-auto-hide-custom-activation-area": {
