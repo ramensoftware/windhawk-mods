@@ -299,7 +299,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
     - cornerRadius: "4"
       $name: Media player corner radius
       $name:ru-RU: Радиус скругления медиаплеера
-      $description: "Use single value (e.g., '4' for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
+      $description: "Use single value (e.g., '4') for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
       $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - enablePlayerHoverEffect: "auto"
       $name: Player hover effect
@@ -352,7 +352,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
     - buttonCornerRadius: "4"
       $name: Media buttons corner radius
       $name:ru-RU: Скругление кнопок управления
-      $description: "Use single value (e.g., '4' for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
+      $description: "Use single value (e.g., '4') for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
       $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - buttonColor: "255 255 255"
       $name: Media buttons icons color (RGB)
@@ -616,7 +616,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
     - albumArtCornerRadius: "4"
       $name: Album art corner radius
       $name:ru-RU: Радиус скругления обложки альбома
-      $description: "Use single value (e.g., '4' for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
+      $description: "Use single value (e.g., '4') for uniform corners, or four space-separated values (e.g., '4 2 4 2') for individual corners."
       $description:ru-RU: "Используйте одно значение (например, '4') для одинаковых углов, или четыре значения через пробел (например, '4 2 4 2') для каждого угла отдельно."
     - showAppIcon: false
       $name: Show media app icon overlay
@@ -1274,7 +1274,7 @@ static void LoadSettings() {
     g_settings.artistCharacterSpacing = Wh_GetIntSetting(L"AppearanceSettings.ArtistTextStyleSettings.artistCharacterSpacing");
     g_settings.textSpacing          = Wh_GetIntSetting(L"MainSettings.TextAreaSetting.textSpacing");
     g_settings.enableArtistScrolling = Wh_GetIntSetting(L"MainSettings.TextAreaSetting.enableArtistScrolling") != 0;
-    g_settings.enableTitleScrolling = Wh_GetIntSetting(L"MainSettings.TextAreaSetting.enableTitleScrolling") != 1;
+    g_settings.enableTitleScrolling = Wh_GetIntSetting(L"MainSettings.TextAreaSetting.enableTitleScrolling") != 0;
     g_settings.scrollSpeed          = Int(L"MainSettings.TextAreaSetting.scrollSpeed", 1, 10, 1);
     g_settings.scrollPauseDuration  = Int(L"MainSettings.TextAreaSetting.scrollPauseDuration", 0, 10000, 1000);
     g_settings.scrollMode           = Str(L"MainSettings.TextAreaSetting.scrollMode", L"bounce");
@@ -3761,7 +3761,26 @@ static void StartScrollTimer() {
 static void StopScrollTimer() {
     if (g_scrollTimerStopEvent) SetEvent(g_scrollTimerStopEvent);
     if (g_scrollTimerThread) {
-        WaitForSingleObject(g_scrollTimerThread, 1000);
+        DWORD tid = GetCurrentThreadId();
+        HWND hTaskbar = g_taskbarWnd;
+        bool isUiThread = hTaskbar && (GetWindowThreadProcessId(hTaskbar, nullptr) == tid);
+        if (isUiThread) {
+            DWORD result = WAIT_TIMEOUT;
+            DWORD deadline = GetTickCount() + 1000;
+            while (result == WAIT_TIMEOUT && GetTickCount() < deadline) {
+                result = MsgWaitForMultipleObjects(1, &g_scrollTimerThread, FALSE, 50, QS_SENDMESSAGE);
+                if (result == WAIT_OBJECT_0 + 1) {
+                    MSG msg;
+                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                    result = WAIT_TIMEOUT;
+                }
+            }
+        } else {
+            WaitForSingleObject(g_scrollTimerThread, 1000);
+        }
         CloseHandle(g_scrollTimerThread);
         g_scrollTimerThread = nullptr;
     }
@@ -3790,6 +3809,38 @@ static constexpr wchar_t kTitleScrollViewName[]  = L"FluentMedia_TitleScrollView
 static constexpr wchar_t kArtistScrollViewName[] = L"FluentMedia_ArtistScrollView";
 static constexpr wchar_t kTitleCloneName[]       = L"FluentMedia_TitleClone";
 static constexpr wchar_t kArtistCloneName[]      = L"FluentMedia_ArtistClone";
+static constexpr wchar_t kPanelGridName[]        = L"FluentMedia_PanelGrid";
+
+static double GetAvailableScrollTextAreaWidth() {
+    try {
+        if (g_settings.playerMaxWidth <= 0) return 0.0;
+
+        if (!g_playerGrid) return 0.0;
+        auto panelFe = FindChildByName(g_playerGrid, kPanelGridName);
+        if (!panelFe) return 0.0;
+        auto panelGrid = panelFe.try_as<Grid>();
+        if (!panelGrid) return 0.0;
+
+        double total = panelGrid.ActualWidth();
+        if (total <= 0.0) return 0.0;
+
+        auto cols = panelGrid.ColumnDefinitions();
+        double used = 0.0;
+        for (uint32_t i = 0; i < cols.Size(); i++) {
+            if (i == 1) continue;
+            used += cols.GetAt(i).ActualWidth();
+        }
+
+        double leftMargin  = (double)g_settings.textAreaLeftMargin;
+        double rightMargin = (double)g_settings.textAreaRightMargin;
+
+        double available = total - used - leftMargin - rightMargin;
+        if (available < 0.0) available = 0.0;
+        return available;
+    } catch (...) {
+        return 0.0;
+    }
+}
 
 
 static void UpdateScrollTransforms() {
@@ -3947,7 +3998,10 @@ static void StartTimerThread() {
         CloseHandle(g_timerUpdateEvent);
         g_timerUpdateEvent = nullptr;
     }
-    StartScrollTimer();
+
+    if (g_settings.enableTitleScrolling || g_settings.enableArtistScrolling) {
+        StartScrollTimer();
+    }
 }
 static void StopTimerThread() {
     StopScrollTimer();
@@ -4417,6 +4471,7 @@ static Grid BuildPlayerGrid() {
         }
 
         Grid panel;
+        panel.Name(kPanelGridName);
         panel.VerticalAlignment(VerticalAlignment::Center);
         panel.HorizontalAlignment(HorizontalAlignment::Stretch);
         if (hasTextOrButtons) {
@@ -6129,6 +6184,12 @@ static void RefreshPlayerContents() {
                             double viewW = textW;
 
                             if (maxW > 0 && viewW > maxW) viewW = maxW;
+
+                            double availW = GetAvailableScrollTextAreaWidth();
+                            if (availW > 0.0 && viewW > availW) {
+                                viewW = (minW > 0.0) ? std::max(availW, minW) : availW;
+                            }
+
                             if (minW > 0 && viewW < minW) viewW = minW;
                             if (std::abs(viewCanvas.Width() - viewW) > 0.5) {
                                 viewCanvas.Width(viewW);
@@ -6203,6 +6264,12 @@ static void RefreshPlayerContents() {
                             double viewW = textW;
 
                             if (maxW > 0 && viewW > maxW) viewW = maxW;
+
+                            double availW = GetAvailableScrollTextAreaWidth();
+                            if (availW > 0.0 && viewW > availW) {
+                                viewW = (minW > 0.0) ? std::max(availW, minW) : availW;
+                            }
+
                             if (minW > 0 && viewW < minW) viewW = minW;
                             if (std::abs(viewCanvas.Width() - viewW) > 0.5) {
                                 viewCanvas.Width(viewW);
