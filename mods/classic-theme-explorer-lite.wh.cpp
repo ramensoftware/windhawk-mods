@@ -310,7 +310,7 @@ HRESULT DrawThemeBackgroundHook(HTHEME hTheme, HDC hdc, int iPartId, int iStateI
 }
 
 void Wh_ModSettingsChanged() {
-    settings.clientedge_3d_borders = Wh_GetIntSetting(L"clientedge_3d_borders", 1);
+    settings.clientedge_3d_borders = Wh_GetIntSetting(L"clientedge_3d_borders");
 }
 
 BOOL Wh_ModInit() {
@@ -318,7 +318,7 @@ BOOL Wh_ModInit() {
     if (IsThemeActive()) return FALSE;
 
     // Загрузка настроек
-    settings.clientedge_3d_borders = Wh_GetIntSetting(L"clientedge_3d_borders", 1);
+    settings.clientedge_3d_borders = Wh_GetIntSetting(L"clientedge_3d_borders");
 
     HMODULE hUxtheme = GetModuleHandle(L"uxtheme.dll");
 
