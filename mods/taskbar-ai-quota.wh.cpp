@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
-// @version         0.9.1
+// @version         0.9.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -103,6 +103,12 @@ own auth files if requests start returning `401`.
   $options:
     - stacked: Stacked Horizontal
     - vertical: Vertical
+- barMode: used
+  $name: Bar mode
+  $description: 'Default: Used. Used fills bars as quota is consumed; Remaining fills bars with the quota left and shows "X% remaining" in tooltips.'
+  $options:
+    - used: Used
+    - remaining: Remaining
 - showLabels: true
   $name: Show labels
   $description: 'Default: true'
@@ -221,11 +227,17 @@ enum class BarLayout {
     Vertical,
 };
 
+enum class BarMode {
+    Used,
+    Remaining,
+};
+
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
     ClickAction clickAction = ClickAction::Refresh;
     BarLayout barLayout = BarLayout::Stacked;
+    BarMode barMode = BarMode::Used;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 10;
     int barLength = 100;
@@ -1979,6 +1991,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     int intervalMin, barLength, yellowThreshold, orangeThreshold, redThreshold;
     bool showPercentText, showCodexSparkInTooltip, colorblindMode, showStaleWarning;
     BarLayout barLayout;
+    BarMode barMode;
     ClickAction clickAction;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -1986,6 +1999,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
         intervalMin = g_settings.pollMinutes;
         clickAction = g_settings.clickAction;
         barLayout = g_settings.barLayout;
+        barMode = g_settings.barMode;
         barLength = g_settings.barLength;
         yellowThreshold = g_settings.yellowThreshold;
         orangeThreshold = g_settings.orangeThreshold;
@@ -2009,6 +2023,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     bool refreshing = g_refreshing.load();
     int refreshAccountIndex = g_refreshAccountIndex.load();
     bool verticalBars = barLayout == BarLayout::Vertical;
+    // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged.
+    auto displayPct = [&](double pct) {
+        return barMode == BarMode::Remaining && pct >= 0 ? std::clamp(100.0 - pct, 0.0, 100.0) : pct;
+    };
+    const wchar_t* remainingSuffix = barMode == BarMode::Remaining ? L" remaining" : L"";
     try {
         for (size_t i = 0; i < data.size(); i++) {
             const AccountData& d = data[i];
@@ -2021,7 +2040,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
             for (int w = 0; w < 2; w++) {
                 const WindowUsage& wu = w == 0 ? d.win5h : d.winWeek;
-                int px = wu.pct > 0 ? std::clamp((int)std::lround(barLength * wu.pct / 100.0), 2, barLength) : 0;
+                double dispPct = displayPct(wu.pct);
+                int px = dispPct > 0 ? std::clamp((int)std::lround(barLength * dispPct / 100.0), 2, barLength) : 0;
+                // Color stays keyed to actual usage so depleting quota still reds out.
                 auto c = UsageColor(wu.pct, stale, yellowThreshold, orangeThreshold, redThreshold,
                                     colorblindMode);
                 uint32_t cv = ((uint32_t)c.A << 24) | ((uint32_t)c.R << 16) |
@@ -2049,15 +2070,15 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             }
             wchar_t line[160];
             if (d.win5h.pct >= 0) {
-                swprintf(line, ARRAYSIZE(line), L"\n5h: %.0f%% | resets %s", d.win5h.pct,
-                         FormatReset(d.win5h.resetUnixMs).c_str());
+                swprintf(line, ARRAYSIZE(line), L"\n5h: %.0f%%%s | resets %s", displayPct(d.win5h.pct),
+                         remainingSuffix, FormatReset(d.win5h.resetUnixMs).c_str());
                 tip += line;
             } else {
                 tip += L"\n5h: n/a";
             }
             if (d.winWeek.pct >= 0) {
-                swprintf(line, ARRAYSIZE(line), L"\nweek: %.0f%% | resets %s", d.winWeek.pct,
-                         FormatReset(d.winWeek.resetUnixMs).c_str());
+                swprintf(line, ARRAYSIZE(line), L"\nweek: %.0f%%%s | resets %s", displayPct(d.winWeek.pct),
+                         remainingSuffix, FormatReset(d.winWeek.resetUnixMs).c_str());
                 tip += line;
             } else {
                 tip += L"\nweek: n/a";
@@ -2100,11 +2121,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 std::wstring percentText;
                 if (d.win5h.pct >= 0 && d.winWeek.pct >= 0) {
                     wchar_t text[32];
-                    swprintf(text, ARRAYSIZE(text), L"%.0f/%.0f", d.win5h.pct, d.winWeek.pct);
+                    swprintf(text, ARRAYSIZE(text), L"%.0f/%.0f", displayPct(d.win5h.pct), displayPct(d.winWeek.pct));
                     percentText = text;
                 } else if (d.win5h.pct >= 0 || d.winWeek.pct >= 0) {
                     wchar_t text[32];
-                    swprintf(text, ARRAYSIZE(text), L"%.0f%%", d.win5h.pct >= 0 ? d.win5h.pct : d.winWeek.pct);
+                    swprintf(text, ARRAYSIZE(text), L"%.0f%%", displayPct(d.win5h.pct >= 0 ? d.win5h.pct : d.winWeek.pct));
                     percentText = text;
                 }
                 if (percentText != ap.percentText) {
@@ -2547,6 +2568,8 @@ static void LoadSettings() {
     s.clickAction = clickAction == L"open-dashboard" ? ClickAction::OpenDashboard : ClickAction::Refresh;
     std::wstring barLayout = getSettingText(L"barLayout");
     s.barLayout = barLayout == L"vertical" ? BarLayout::Vertical : BarLayout::Stacked;
+    std::wstring barMode = getSettingText(L"barMode");
+    s.barMode = barMode == L"remaining" ? BarMode::Remaining : BarMode::Used;
     int taskbarMonitorNumber = getIntSetting(L"taskbarMonitorNumber", 1);
 
     s.pollMinutes = std::clamp(pollMinutes > 0 ? pollMinutes : 10, 2, 24 * 60);
