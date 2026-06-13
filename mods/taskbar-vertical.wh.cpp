@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
-// @version         1.3.12
+// @version         1.3.13
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -2056,8 +2056,9 @@ void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(void* pThis) {
     DateTimeIconContent_OnApplyTemplate_Original(pThis);
 
     FrameworkElement dateTimeIconContent = nullptr;
-    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                                           winrt::put_abi(dateTimeIconContent));
+    ((IUnknown*)pThis)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(dateTimeIconContent));
     if (!dateTimeIconContent) {
         return;
     }
@@ -4588,7 +4589,7 @@ bool HookSystemTraySymbols(HMODULE module) {
             IconView_IconView_Hook,
         },
         {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
             &DateTimeIconContent_OnApplyTemplate_Original,
             DateTimeIconContent_OnApplyTemplate_Hook,
         },
@@ -4780,7 +4781,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
             IconView_IconView_Hook,
         },
         {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
             &DateTimeIconContent_OnApplyTemplate_Original,
             DateTimeIconContent_OnApplyTemplate_Hook,
         },
