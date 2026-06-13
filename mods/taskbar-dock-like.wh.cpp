@@ -2,14 +2,14 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock.
-// @version         1.5.223
+// @version         1.5.231
 // @author          DarkionAvey
-// @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
+// @github          https://github.com/DarkionAvey
 // @include         explorer.exe
 // @include         StartMenuExperienceHost.exe
 // @include         ShellHost.exe
 // @include         ShellExperienceHost.exe
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols -DWINVER=0x0A00 -lversion
+// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols -DWINVER=0x0A00 -lversion
 // @architecture    x86-64
 // ==/WindhawkMod==
 // This mod is based on code released under the GNU General Public License v3.0.
@@ -20,6 +20,8 @@
 ![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.gif)
 # TAI (Taskbar as (an) island) for Windows 11
 TAI lets you transform your Windows 11 taskbar into a smooth floating dock without losing any of the original taskbar functionality!
+# Bug reports
+Please file bug reports here: https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/issues
 ---
 ## 🚀 How to Install (Development Build)
 ⚠️ **Note:** Please disable any mods that affect taskbar height or taskbar icons—this mod already includes those
@@ -46,6 +48,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - [`TranslucentTB team`](https://github.com/translucenttb/translucenttb)
 ---
 ## 🔥 Recommended Mods
+- [Taskbar Fluent Media Player](https://windhawk.net/mods/taskbar-fluent-media-player) \[Set player position to Tray\]
 - [Smart Auto Hide for Taskbar](https://windhawk.net/mods/taskbar-auto-hide-when-maximized)
 - [Taskbar Auto-Hide Speed/Frame Rate](https://windhawk.net/mods/taskbar-auto-hide-speed)
 - [Show All Tray Icons](https://windhawk.net/mods/taskbar-notification-icons-show-all)
@@ -2147,7 +2150,7 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
     g_applyingSettings = false;
 }
 bool HookSystemTraySymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK SystemTray_TaskbarViewDll_hooks[] = {
         {
             {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
             &SystemTrayController_GetFrameSize_Original,
@@ -2179,7 +2182,7 @@ bool HookSystemTraySymbols(HMODULE module) {
             true,  // From Windows 11 version 22H2.
         },
     };
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookSymbols(module, SystemTray_TaskbarViewDll_hooks, ARRAYSIZE(SystemTray_TaskbarViewDll_hooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
@@ -2194,7 +2197,7 @@ bool HookSystemTraySymbols(HMODULE module) {
 }
 bool HookTaskbarViewDllSymbols(HMODULE module,
                                bool hookSystemTraySymbolsInline) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
+    WindhawkUtils::SYMBOL_HOOK TaskbarViewDll_hooks[] =  //
         {
             {
                 {LR"(__real@4048000000000000)"},
@@ -2344,7 +2347,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
                 true,  // From Windows 11 version 22H2.
             },
         };
-    WindhawkUtils::SYMBOL_HOOK symbolHooksSystemTray[] = {
+    WindhawkUtils::SYMBOL_HOOK SystemTray_TaskbarViewDll_hooks[] = {
         {
             {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
             &SystemTrayController_GetFrameSize_Original,
@@ -2378,13 +2381,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
     };
     using COMBINED_SH = WindhawkUtils::SYMBOL_HOOK;
     COMBINED_SH allHooks[  //
-        ARRAYSIZE(symbolHooks) + ARRAYSIZE(symbolHooksSystemTray)];
+        ARRAYSIZE(TaskbarViewDll_hooks) + ARRAYSIZE(SystemTray_TaskbarViewDll_hooks)];
     int index = 0;
-    for (auto& hook : symbolHooks) {
+    for (auto& hook : TaskbarViewDll_hooks) {
         allHooks[index++] = std::move(hook);
     }
     if (hookSystemTraySymbolsInline) {
-        for (auto& hook : symbolHooksSystemTray) {
+        for (auto& hook : SystemTray_TaskbarViewDll_hooks) {
             allHooks[index++] = std::move(hook);
         }
     }
@@ -2432,7 +2435,7 @@ WindhawkUtils::Wh_SetFunctionHookT(
     return true;
 }
 bool HookSearchUxUiDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK SearchUxUiDll_hooks[] = {
         {
             {LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IMap<struct winrt::Windows::UI::Xaml::ResourceDictionary,struct winrt::Windows::Foundation::IInspectable,struct winrt::Windows::Foundation::IInspectable>::Lookup(struct winrt::Windows::Foundation::IInspectable const &)const )"},
             &ResourceDictionary_Lookup_SearchUxUi_Original,
@@ -2444,7 +2447,7 @@ bool HookSearchUxUiDllSymbols(HMODULE module) {
             SearchButtonBase_UpdateButtonPadding_Hook,
         },
     };
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookSymbols(module, SearchUxUiDll_hooks, ARRAYSIZE(SearchUxUiDll_hooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
@@ -2461,7 +2464,7 @@ bool HookTaskbarDllSymbolsTBIconSize() {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDll_hooks[] = {
         {
             {LR"(void __cdecl IconUtils::GetIconSize(bool,enum IconUtils::IconType,struct tagSIZE *))"},
             &IconUtils_GetIconSize_Original,
@@ -2504,7 +2507,7 @@ bool HookTaskbarDllSymbolsTBIconSize() {
             TrayUI__HandleSettingChange_Hook,
         },
     };
-if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+if (!HookSymbols(module, taskbarDll_hooks, ARRAYSIZE(taskbarDll_hooks))) {
         Wh_Log(L"HookSymbols failed");
         if (loadedTaskbarDllForHooking) {
             FreeLibrary(module);
@@ -3384,7 +3387,7 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{LR"(public: virtual void __cdecl CTaskBand::RemoveIcon(struct ITaskItem *))"}, &CTaskBand_RemoveIcon_WithArgs_Original, CTaskBand_RemoveIcon_WithArgs_Hook},
+    WindhawkUtils::SYMBOL_HOOK TaskbarDll_hooks[] = {{{LR"(public: virtual void __cdecl CTaskBand::RemoveIcon(struct ITaskItem *))"}, &CTaskBand_RemoveIcon_WithArgs_Original, CTaskBand_RemoveIcon_WithArgs_Hook},
     {{LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *))"}, &CTaskBand__UpdateItemIcon_WithArgs_Original, CTaskBand__UpdateItemIcon_WithArgs_Hook},
     {
         {LR"(protected: static __int64 __cdecl CImpWndProc::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
@@ -3488,7 +3491,7 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
             &std__Ref_count_base__Decref_Original,
         },
     };
-     if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+     if (!HookSymbols(module, TaskbarDll_hooks, ARRAYSIZE(TaskbarDll_hooks))) {
         Wh_Log(L"HookSymbols failed");
         if (loadedTaskbarDllForHooking) {
             FreeLibrary(module);
@@ -3534,7 +3537,7 @@ static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook
   return;
 }
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
+    WindhawkUtils::SYMBOL_HOOK TaskbarViewDll_hooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartItemPlateEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemPlateEntranceAnimation, Hook_StartItemPlateEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"}, &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartEntranceAnimationCompleted(void))"}, &TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook},
@@ -3554,7 +3557,7 @@ bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
             AugmentedEntryPointButton_UpdateButtonPadding_Hook_StartButtonPosition,
         },
     };
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    return HookSymbols(module, TaskbarViewDll_hooks, ARRAYSIZE(TaskbarViewDll_hooks));
 }
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
     if (!g_taskbarViewDllLoadedStartButtonPosition && GetTaskbarViewModuleHandle() == module &&
@@ -8837,8 +8840,8 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Not explorer.exe; setting g_PartialMode to true");
     HMODULE moduleStartDocked = GetModuleHandle(L"StartDocked.dll");
     if (moduleStartDocked) {
-      WindhawkUtils::SYMBOL_HOOK hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"}, &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original, StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
-      return WindhawkUtils::HookSymbols(moduleStartDocked, hook, ARRAYSIZE(hook));
+      WindhawkUtils::SYMBOL_HOOK StartDockedDll_hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"}, &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original, StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
+      return WindhawkUtils::HookSymbols(moduleStartDocked, StartDockedDll_hook, ARRAYSIZE(StartDockedDll_hook));
     }
     return true;
   }
