@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              files-2-folders
 // @name            Files 2 Folders
-// @description     Move one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         2.0
+// @description     Move or copy one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
+// @version         2.1
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -50,17 +50,35 @@ strings, so they appear in your OS language automatically.
 ## Silent mode
 Enable **Silent mode (right-click menu)** in settings to skip the dialog
 entirely: choosing **Move to a folder...** from the right-click menu then
-moves the selection immediately, using the **Default selected mode** (and default
-subfolder name / date format) from settings. The hotkey workaround is
-unaffected and always shows the dialog.
+moves (or copies — see **Operation** below) the selection immediately, using
+the **Default selected mode** (and default subfolder name / date format) from
+settings. The hotkey workaround is unaffected and always shows the dialog.
 
-## Fast vs. slow mode
-By default the mod uses `MoveFileExW` directly, which is essentially instant
-for same-volume moves. Enable **Slow mode (shell-integrated)** in settings to
-route moves through `IFileOperation` instead — that gives you the standard
-Windows progress dialog, **Ctrl+Z undo**, UAC elevation prompts for protected
-paths, and conflict-resolution dialogs, at the cost of significantly slower
-operation on large selections.
+## Right-click menu position
+By default the entry sits at the top of the context menu with a separator
+below it. Set **Right-click menu position** to **Between Cut and Copy** to
+insert it just after the shell's Cut/Copy block (between Copy and Paste)
+instead. This only applies to the classic context menu (Shift+right-click on
+Windows 11, or the stock Windows 10 / StartAllBack / ExplorerPatcher menu) —
+the modern Windows 11 flyout can't be modified, so the entry falls back to the
+top there.
+
+## Operation: move (fast), move (safe), or copy
+The **Operation** setting controls what happens to the selection:
+
+- **Move — fast** (default): uses `MoveFileExW` directly, which is essentially
+  instant for same-volume moves, but there's no progress bar, no **Ctrl+Z**
+  undo, and no UAC prompt if a destination needs admin rights (it just fails).
+- **Move — safe**: routes moves through `IFileOperation` instead — that gives
+  you the standard Windows progress dialog, **Ctrl+Z undo**, UAC elevation
+  prompts for protected paths, and conflict-resolution dialogs, at the cost of
+  significantly slower operation on large selections.
+- **Copy**: copies the selection into the subfolder via `IFileOperation`,
+  leaving the originals in place. Same shell progress / undo / conflict UI as
+  the safe move.
+
+In copy mode the dialog options say "Copy" rather than "Move", so you can tell
+the configured operation at a glance.
 
 ## Workaround for other programs
 A configurable global hotkey (default **Ctrl+Alt+F**) makes the mod usable
@@ -126,17 +144,32 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
   - auto: "Auto (follow Windows app theme)"
   - light: "Light"
   - dark: "Dark"
+- menuPosition: top
+  $name: "Right-click menu position"
+  $description: |-
+    Where the "Move to a folder (F2F)" entry appears in the right-click menu.
+    Top (default): at the very top of the menu, with a separator below it.
+    Between Cut and Copy: inserted just above the shell's "Copy" item (so it sits between Cut and Copy). Only the classic context menu has Cut/Copy as real menu items — the modern Windows 11 flyout can't be modified, and folders/shells where Cut/Copy can't be located fall back to Top.
+  $options:
+  - top: "Top of menu"
+  - betweenCutCopy: "Between Cut and Copy"
 - silentMode: false
   $name: "Silent mode (right-click menu)"
   $description: |-
     On: choosing "Move to a folder..." from the right-click menu skips the dialog and immediately moves the selection, using the "Default selected mode" (with the default subfolder name / date format) from these settings.
     Off (default): the dialog is shown first.
     The hotkey workaround is unaffected — it always shows the dialog.
-- slowMode: false
-  $name: "Slow mode (safer, with undo)"
+- operation: moveFast
+  $name: "Operation"
   $description: |-
-    On: moves go through the standard Windows file-operation system, so you get the familiar progress dialog, Ctrl+Z undo, the "Replace or skip files?" prompt for conflicts, and a UAC prompt when needed. The trade-off is that it's noticeably slower, especially with hundreds of files.
-    Off (default): moves are instant — but there's no Ctrl+Z to undo, no progress bar, and no prompt if a destination needs admin rights (it just fails).
+    What to do with the selected items:
+    Move - fast (default): instant same-volume rename via MoveFileExW — but no Ctrl+Z undo, no progress bar, and no prompt if a destination needs admin rights (it just fails).
+    Move - safe: moves go through the standard Windows file-operation system, so you get the familiar progress dialog, Ctrl+Z undo, the "Replace or skip files?" prompt for conflicts, and a UAC prompt when needed. Noticeably slower, especially with hundreds of files.
+    Copy: copies the items into the subfolder and leaves the originals in place (same shell progress / undo / conflict UI as the safe move).
+  $options:
+  - moveFast: "Move - fast (instant)"
+  - moveSafe: "Move - safe (progress, Ctrl+Z undo)"
+  - copy: "Copy (leave originals)"
 - hotkeyEnabled: true
   $name: "Workaround for other programs"
   $description: |-
@@ -257,6 +290,32 @@ static F2FMode ModeFromKey(const std::wstring& key) {
 }
 
 // ============================================================
+//  The operation applied to the selection. Keys MUST match the
+//  "operation" $options keys in the settings block above.
+//    F2F_MOVE_FAST -> MoveFileExW         (instant, no shell UI)
+//    F2F_MOVE_SAFE -> IFileOperation::MoveItem (progress/undo/UAC)
+//    F2F_COPY      -> IFileOperation::CopyItem (leaves originals)
+// ============================================================
+enum F2FOperation {
+    F2F_MOVE_FAST = 0,
+    F2F_MOVE_SAFE = 1,
+    F2F_COPY      = 2,
+};
+
+static const struct { const wchar_t* key; F2FOperation op; } kOperationKeys[] = {
+    { L"moveFast", F2F_MOVE_FAST },
+    { L"moveSafe", F2F_MOVE_SAFE },
+    { L"copy",     F2F_COPY },
+};
+
+static F2FOperation OperationFromKey(const std::wstring& key) {
+    for (auto& e : kOperationKeys)
+        if (key == e.key) return e.op;
+    Wh_Log(L"Files2Folders: unknown operation key '%s', using moveFast", key.c_str());
+    return F2F_MOVE_FAST;
+}
+
+// ============================================================
 //  Settings
 // ============================================================
 struct ModSettings {
@@ -264,7 +323,8 @@ struct ModSettings {
     bool fixedNameReuse;
     std::wstring dateFormat;
     int defaultMode;
-    bool slowMode;
+    int operation;
+    bool menuBetweenCutCopy;
     bool silentMode;
     std::wstring theme;
     bool hotkeyEnabled;
@@ -298,7 +358,16 @@ static void LoadSettings() {
     if (dm) Wh_FreeStringSetting(dm);
     g_settings.defaultMode = ModeFromKey(dmStr);
 
-    g_settings.slowMode = Wh_GetIntSetting(L"slowMode") != 0;
+    // operation is a string dropdown; OperationFromKey maps it to F2FOperation.
+    PCWSTR opKey = Wh_GetStringSetting(L"operation");
+    std::wstring opStr = opKey ? opKey : L"";
+    if (opKey) Wh_FreeStringSetting(opKey);
+    g_settings.operation = OperationFromKey(opStr);
+
+    PCWSTR mp = Wh_GetStringSetting(L"menuPosition");
+    g_settings.menuBetweenCutCopy = (mp && !wcscmp(mp, L"betweenCutCopy"));
+    if (mp) Wh_FreeStringSetting(mp);
+
     g_settings.silentMode = Wh_GetIntSetting(L"silentMode") != 0;
 
     PCWSTR th = Wh_GetStringSetting(L"theme");
@@ -326,6 +395,13 @@ void Wh_ModSettingsChanged() {
 //  Custom command id we inject into the shell context menu
 // ============================================================
 static const UINT F2F_MENU_CMD = 0xBF20;  // unlikely to clash with shell ids
+
+// The Cut/Copy command ids vary by menu surface: FCIDM_SHVIEW_CUT/COPY =
+// 31001/31002 in the shell view's own menu, or 25/26 in some legacy menus.
+// One source of truth for the "Between Cut and Copy" insert position.
+static bool IsCutCopyId(UINT id) {
+    return id == 31001 || id == 31002 || id == 25 || id == 26;
+}
 
 // State for the currently-tracked menu. thread_local because TrackPopupMenuEx
 // and the matching PostMessageW(WM_COMMAND) always run on the same UI thread,
@@ -677,11 +753,15 @@ static int MoveItemsFast(HWND owner,
 }
 
 // ============================================================
-//  Slow path — IFileOperation. Gives undo, UAC, progress UI,
+//  Shell path — IFileOperation. Gives undo, UAC, progress UI,
 //  conflict-resolution dialogs. Single PerformOperations() call.
+//  Handles both the "safe move" and the "copy" operations: when
+//  copy is true we queue CopyItem (originals stay put), otherwise
+//  MoveItem.
 // ============================================================
-static int MoveItemsShell(HWND owner,
-                          const std::vector<std::pair<std::wstring, std::wstring>>& moves)
+static int RunItemsShell(HWND owner,
+                         const std::vector<std::pair<std::wstring, std::wstring>>& moves,
+                         bool copy)
 {
     if (moves.empty()) return 0;
 
@@ -707,7 +787,9 @@ static int MoveItemsShell(HWND owner,
         IShellItem* pDst = nullptr;
         if (SUCCEEDED(SHCreateItemFromParsingName(m.second.c_str(), nullptr,
                                                   IID_PPV_ARGS(&pDst))) && pDst) {
-            if (SUCCEEDED(op->MoveItem(pSrc, pDst, nullptr, nullptr)))
+            HRESULT hr = copy ? op->CopyItem(pSrc, pDst, nullptr, nullptr)
+                              : op->MoveItem(pSrc, pDst, nullptr, nullptr);
+            if (SUCCEEDED(hr))
                 queued++;
             pDst->Release();
         }
@@ -791,10 +873,19 @@ static void DoFiles2Folder(HWND owner,
         }
     }
 
-    if (g_settings.slowMode) {
-        MoveItemsShell(owner, moves);
-    } else {
-        MoveItemsFast(owner, moves, silent);
+    // Move - fast goes straight through MoveFileExW; both Move - safe and Copy
+    // route through IFileOperation (Copy leaves the originals in place).
+    switch ((F2FOperation)g_settings.operation) {
+        case F2F_MOVE_SAFE:
+            RunItemsShell(owner, moves, /*copy=*/false);
+            break;
+        case F2F_COPY:
+            RunItemsShell(owner, moves, /*copy=*/true);
+            break;
+        case F2F_MOVE_FAST:
+        default:
+            MoveItemsFast(owner, moves, silent);
+            break;
     }
 
     // One notification for the source folder, plus one per unique destination.
@@ -966,6 +1057,7 @@ struct DlgState {
     bool ok;
     bool singleItem;
     size_t itemCount;
+    bool copy;   // true when the operation is Copy (labels read "Copy" not "Move")
 };
 
 // IDs
@@ -1016,18 +1108,31 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
         InitDlgTheme(ctx->theme, dark);
         ApplyDarkTitleBar(hDlg, dark);
         if (dark) ApplyDarkChildTheme(hDlg);
+        // The radio labels describe the layout; the leading verb (Move/Copy)
+        // reflects the configured operation so Copy mode doesn't say "Move".
+        const wchar_t* V = s->copy ? L"Copy" : L"Move";
+        WCHAR lbl[160];
         if (s->singleItem) {
             SetDlgItemTextW(hDlg, IDC_HEADER,
                 L"You have selected one item.  What would you like to do?");
-            SetDlgItemTextW(hDlg, IDC_RB_FIXED,
-                L"Move the selected item into a subfolder named:");
-            SetDlgItemTextW(hDlg, IDC_RB_PERNAME,
-                L"Move the file into a subfolder based on its name");
-            SetDlgItemTextW(hDlg, IDC_RB_PEREXT,
-                L"Move the file into a subfolder based on its file extension");
-            SetDlgItemTextW(hDlg, IDC_RB_DATE,
-                L"Move the selected item to a date-named subfolder:");
+            wsprintfW(lbl, L"%s the selected item into a subfolder named:", V);
+            SetDlgItemTextW(hDlg, IDC_RB_FIXED, lbl);
+            wsprintfW(lbl, L"%s the file into a subfolder based on its name", V);
+            SetDlgItemTextW(hDlg, IDC_RB_PERNAME, lbl);
+            wsprintfW(lbl, L"%s the file into a subfolder based on its file extension", V);
+            SetDlgItemTextW(hDlg, IDC_RB_PEREXT, lbl);
+            wsprintfW(lbl, L"%s the selected item to a date-named subfolder:", V);
+            SetDlgItemTextW(hDlg, IDC_RB_DATE, lbl);
         } else {
+            wsprintfW(lbl, L"%s all selected items into a subfolder named:", V);
+            SetDlgItemTextW(hDlg, IDC_RB_FIXED, lbl);
+            wsprintfW(lbl, L"%s each file to an individual subfolder based on its name", V);
+            SetDlgItemTextW(hDlg, IDC_RB_PERNAME, lbl);
+            wsprintfW(lbl, L"%s each file to a subfolder based on its file extension", V);
+            SetDlgItemTextW(hDlg, IDC_RB_PEREXT, lbl);
+            wsprintfW(lbl, L"%s all selected items to a date-named subfolder:", V);
+            SetDlgItemTextW(hDlg, IDC_RB_DATE, lbl);
+
             WCHAR header[128];
             wsprintfW(header,
                 L"You have selected %u items.  What would you like to do?",
@@ -1287,6 +1392,7 @@ static void RunFiles2Folder(HWND owner,
     state.dateText = FormatNow(g_settings.dateFormat);
     state.singleItem = (items.size() == 1);
     state.itemCount = items.size();
+    state.copy = ((F2FOperation)g_settings.operation == F2F_COPY);
 
     if (!ShowF2FDialog(owner, state)) return;
 
@@ -1322,8 +1428,24 @@ static bool MenuHasF2FItem(HMENU hmenu) {
     return false;
 }
 
-// Insert the "Files 2 Folder" command at the top of the right-click context
-// menu, followed by a separator.
+// Index just past the last Cut/Copy item, or -1 if the menu has neither.
+// We match Cut/Copy by command ID (IsCutCopyId), which is locale-independent
+// and reliable, rather than by localized text.
+static int MenuPosAfterCutCopy(HMENU hmenu) {
+    int pos = -1;
+    int count = GetMenuItemCount(hmenu);
+    for (int i = 0; i < count; ++i)
+        if (IsCutCopyId(GetMenuItemID(hmenu, i))) pos = i + 1;
+    return pos;
+}
+
+// Insert the "Files 2 Folder" command into the right-click context menu.
+//   betweenCutCopy off: top of menu + separator below it.
+//   betweenCutCopy on : just after the Cut/Copy block (between Copy and Paste).
+//                       Falls back to the top when Cut/Copy can't be found
+//                       (modern Win11 flyout, or a menu without those verbs).
+// The label is always the localized "Move to a folder" string regardless of the
+// configured operation — the dialog already shows whether it's a move or copy.
 static void InsertF2FMenuItem(HMENU hmenu) {
     if (MenuHasF2FItem(hmenu)) return;
 
@@ -1351,6 +1473,33 @@ static void InsertF2FMenuItem(HMENU hmenu) {
         while (!base.empty() && base.back() == L' ') base.pop_back();
         return base + L" (F2F)" + ellipsis;
     }();
+
+    // "Between Cut and Copy": insert just after the Cut/Copy block (landing
+    // between Copy and Paste). Falls back to the top when Cut/Copy can't be
+    // found (modern Win11 flyout, or a menu without those verbs).
+    if (g_settings.menuBetweenCutCopy) {
+        int insertPos = MenuPosAfterCutCopy(hmenu);
+        if (insertPos >= 0) {
+            InsertMenuW(hmenu, insertPos, MF_BYPOSITION | MF_STRING,
+                        F2F_MENU_CMD, label.c_str());
+            // Only add a trailing separator if the item we pushed down isn't
+            // already one — Explorer normally has a separator after the
+            // Cut/Copy/Paste block, and adding ours would double it.
+            bool nextIsSeparator = false;
+            if (insertPos + 1 < GetMenuItemCount(hmenu)) {
+                MENUITEMINFOW mii = { sizeof(mii) };
+                mii.fMask = MIIM_FTYPE;
+                if (GetMenuItemInfoW(hmenu, insertPos + 1, TRUE, &mii))
+                    nextIsSeparator = (mii.fType & MFT_SEPARATOR) != 0;
+            }
+            if (!nextIsSeparator)
+                InsertMenuW(hmenu, insertPos + 1, MF_BYPOSITION | MF_SEPARATOR,
+                            0, nullptr);
+            return;
+        }
+    }
+
+    // Default: top of the menu, with a separator below it.
     InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
     InsertMenuW(hmenu, 0, MF_BYPOSITION | MF_STRING,
                 F2F_MENU_CMD, label.c_str());
