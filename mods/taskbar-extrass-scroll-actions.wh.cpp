@@ -2,7 +2,7 @@
 // @id              taskbar-extrass-scroll-actions
 // @name            Taskbar Extras Scroll Actions
 // @description     Assign actions for scrolling over the taskbar: virtual desktops, brightness (with HDR/SDR support), microphone volume, and system volume
-// @version         2.1
+// @version         2.2
 // @author          Nairodorian (merged with mods by m417z)
 // @github          https://github.com/NairoDorian
 // @include         explorer.exe
@@ -102,10 +102,11 @@ slider as Windows Settings > System > Display > HDR > SDR brightness balance.
 ## Software dimming overlay
 
 When enabled, scrolling brightness below 0% smoothly applies a black overlay.
-The overlay alpha animates at ~60 FPS for a butter-smooth transition. The
-maximum opacity is configurable (default 230/255 — almost black but still
-showing the screen faintly). On OLED panels this physically reduces pixel
-emission for true deeper blacks, lower burn-in risk, and extended battery life.
+Scrolling above 100% applies a white super-brightness overlay. The overlay alpha
+animates at ~60 FPS for a butter-smooth transition. The maximum opacity is
+configurable (default 254/255 — almost solid). On OLED panels black dim
+physically reduces pixel emission for true deeper blacks, lower burn-in risk,
+and extended battery life.
 
 ## Notes
 
@@ -222,12 +223,18 @@ gesture often works as a fallback.
     On OLED laptops this means deeper blacks, less burn-in, and longer
     battery life. On IPS/VA panels this reduces eye strain at night
     when even 0% is still too bright.
-- maxOverlayAlpha: 230
+- maxOverlayAlpha: 254
   $name: Max overlay darkness (0-255)
   $description: >-
     How dark the overlay can go. 200 = very dark but still visible.
-    230 = almost black (default). 255 = completely black screen.
-    For OLED use 240-255, for IPS 200-230 is usually enough.
+    254 = almost black (default). 255 = completely black screen.
+    For OLED use 240-255, for IPS 200-254 is usually enough.
+- whiteOverlayEnabled: true
+  $name: White super-brightness overlay
+  $description: >-
+    Adds a white overlay that goes ABOVE maximum hardware brightness.
+    When brightness is at 100% and you keep scrolling up, a white
+    overlay brightens the screen further. Same darkness slider applies.
 - oldTaskbarOnWin11: false
   $name: Old taskbar on Windows 11
   $description: Enable if you're using the old Windows 10 taskbar on Windows 11 (Explorer Patcher)
@@ -353,6 +360,7 @@ struct {
     // Software dimming overlay
     bool softwareDimmingEnabled;
     int maxOverlayAlpha;
+    bool whiteOverlayEnabled;
 } g_settings;
 
 // -----------------------------------------------------------------------------
@@ -2449,25 +2457,42 @@ void Cleanup() {
 namespace DimOverlay {
 
 PCWSTR kDimClassName = L"WhTaskbarExtraDimOverlay";
-HWND g_hDimWnd;
+PCWSTR kWhiteDimClassName = L"WhTaskbarExtraWhiteOverlay";
 ATOM g_dimClassAtom;
-int g_dimAlphaTarget;    // 0..maxOverlayAlpha
-float g_dimAlphaSmooth;  // lerped towards target
+ATOM g_whiteDimClassAtom;
 
-void EnsureDimWindowCreated() {
-    if (g_hDimWnd && IsWindow(g_hDimWnd)) return;
-    g_hDimWnd = nullptr;
+struct PerMonitor {
+    HWND hWnd = nullptr;          // black dim window
+    int alphaTarget = 0;          // 0..maxOverlayAlpha
+    float alphaSmooth = 0.0f;     // lerped towards target
+    HWND hWndWhite = nullptr;     // white brightness window
+    int whiteAlphaTarget = 0;     // 0..maxOverlayAlpha
+    float whiteAlphaSmooth = 0.0f;
+};
+std::unordered_map<HMONITOR, PerMonitor> g_monitors;
 
-    if (!g_dimClassAtom) {
+void EnsureWindowCreated(HMONITOR hMonitor, bool white) {
+    if (!hMonitor) return;
+    auto& pm = g_monitors[hMonitor];
+    HWND& hWnd = white ? pm.hWndWhite : pm.hWnd;
+    ATOM& classAtom = white ? g_whiteDimClassAtom : g_dimClassAtom;
+    PCWSTR className = white ? kWhiteDimClassName : kDimClassName;
+    HBRUSH bgBrush = white ? (HBRUSH)GetStockObject(WHITE_BRUSH)
+                           : (HBRUSH)GetStockObject(BLACK_BRUSH);
+
+    if (hWnd && IsWindow(hWnd)) return;
+    hWnd = nullptr;
+
+    if (!classAtom) {
         WNDCLASSEX wcex = {sizeof(wcex)};
         wcex.lpfnWndProc = DefWindowProc;
         wcex.hInstance = GetModuleHandle(nullptr);
-        wcex.lpszClassName = kDimClassName;
-        wcex.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-        g_dimClassAtom = RegisterClassEx(&wcex);
-        if (!g_dimClassAtom) {
+        wcex.lpszClassName = className;
+        wcex.hbrBackground = bgBrush;
+        classAtom = RegisterClassEx(&wcex);
+        if (!classAtom) {
             if (GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
-                g_dimClassAtom = (ATOM)1;
+                classAtom = (ATOM)1;
             } else {
                 Wh_Log(L"DimOverlay: failed to register class (err=%lu)",
                        GetLastError());
@@ -2476,70 +2501,170 @@ void EnsureDimWindowCreated() {
         }
     }
 
-    g_hDimWnd = CreateWindowEx(
+    MONITORINFO mi = {sizeof(mi)};
+    if (!GetMonitorInfo(hMonitor, &mi)) {
+        Wh_Log(L"DimOverlay: GetMonitorInfo failed for hMon=%p (err=%lu)",
+               hMonitor, GetLastError());
+        return;
+    }
+
+    hWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED |
             WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        kDimClassName, L"", WS_POPUP,
-        GetSystemMetrics(SM_XVIRTUALSCREEN),
-        GetSystemMetrics(SM_YVIRTUALSCREEN),
-        GetSystemMetrics(SM_CXVIRTUALSCREEN),
-        GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        className, L"", WS_POPUP,
+        mi.rcMonitor.left, mi.rcMonitor.top,
+        mi.rcMonitor.right - mi.rcMonitor.left,
+        mi.rcMonitor.bottom - mi.rcMonitor.top,
         nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
 
-    if (g_hDimWnd) {
-        SetLayeredWindowAttributes(g_hDimWnd, 0, 0, LWA_ALPHA);
-        ShowWindow(g_hDimWnd, SW_SHOWNOACTIVATE);
+    if (hWnd) {
+        SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+        ShowWindow(hWnd, SW_SHOWNOACTIVATE);
+        RedrawWindow(hWnd, NULL, NULL,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+        Wh_Log(L"DimOverlay: created %s window %p for monitor %p at (%d,%d %dx%d)",
+               white ? L"white" : L"black", hWnd, hMonitor,
+               mi.rcMonitor.left, mi.rcMonitor.top,
+               mi.rcMonitor.right - mi.rcMonitor.left,
+               mi.rcMonitor.bottom - mi.rcMonitor.top);
     } else {
         Wh_Log(L"DimOverlay: failed to create window (err=%lu)",
                GetLastError());
     }
 }
 
-void SetDimAlpha(int alpha) {
+void EnsureDimWindowCreated(HMONITOR hMonitor) {
+    EnsureWindowCreated(hMonitor, false);
+}
+
+void SetDimAlpha(HMONITOR hMonitor, int alpha) {
     if (!g_settings.softwareDimmingEnabled) return;
-    g_dimAlphaTarget = std::clamp(alpha, 0, g_settings.maxOverlayAlpha);
+    if (!hMonitor) return;
+    int clamped = std::clamp(alpha, 0, g_settings.maxOverlayAlpha);
+    auto& pm = g_monitors[hMonitor];
+    pm.alphaTarget = clamped;
+    if (clamped > 0 && (!pm.hWnd || !IsWindow(pm.hWnd))) {
+        EnsureDimWindowCreated(hMonitor);
+    }
+    // Clear white overlay when black dim is active.
+    if (clamped > 0) {
+        pm.whiteAlphaTarget = 0;
+    }
+    Wh_Log(L"DimOverlay: SetDimAlpha hMon=%p alpha=%d hWnd=%p alphaTarget=%d",
+           hMonitor, alpha, pm.hWnd, pm.alphaTarget);
+}
+
+void SetWhiteDimAlpha(HMONITOR hMonitor, int alpha) {
+    if (!g_settings.softwareDimmingEnabled) return;
+    if (!hMonitor) return;
+    int clamped = std::clamp(alpha, 0, g_settings.maxOverlayAlpha);
+    if (!g_settings.whiteOverlayEnabled && clamped > 0) return;
+    auto& pm = g_monitors[hMonitor];
+    pm.whiteAlphaTarget = clamped;
+    if (clamped > 0 && (!pm.hWndWhite || !IsWindow(pm.hWndWhite))) {
+        EnsureWindowCreated(hMonitor, true);
+    }
+    // Clear black overlay when white is active.
+    if (clamped > 0) {
+        pm.alphaTarget = 0;
+    }
+    Wh_Log(L"DimOverlay: SetWhiteDimAlpha hMon=%p alpha=%d hWnd=%p alphaTarget=%d",
+           hMonitor, alpha, pm.hWndWhite, pm.whiteAlphaTarget);
+}
+
+int GetDimAlpha(HMONITOR hMonitor) {
+    if (!hMonitor) return 0;
+    auto it = g_monitors.find(hMonitor);
+    return it != g_monitors.end() ? it->second.alphaTarget : 0;
+}
+
+int GetWhiteDimAlpha(HMONITOR hMonitor) {
+    if (!hMonitor) return 0;
+    auto it = g_monitors.find(hMonitor);
+    return it != g_monitors.end() ? it->second.whiteAlphaTarget : 0;
 }
 
 void TickAnimation() {
-    if (!g_hDimWnd || !IsWindow(g_hDimWnd)) {
-        if (g_dimAlphaTarget > 0) EnsureDimWindowCreated();
-        if (!g_hDimWnd || !IsWindow(g_hDimWnd)) return;
-    }
+    for (auto it = g_monitors.begin(); it != g_monitors.end(); ) {
+        HMONITOR hMon = it->first;
+        auto& pm = it->second;
 
-    float t = (float)g_dimAlphaTarget;
-    float d = t - g_dimAlphaSmooth;
-    if (d > 0.5f || d < -0.5f) {
-        g_dimAlphaSmooth += d * 0.25f;
-    } else if (g_dimAlphaSmooth != t) {
-        g_dimAlphaSmooth = t;
-    } else {
-        // Idle — hide window when fully transparent to save resources.
-        if (g_dimAlphaTarget == 0 && g_dimAlphaSmooth < 0.5f) {
-            ShowWindow(g_hDimWnd, SW_HIDE);
+        // --- Black dim overlay ---
+        if (!pm.hWnd || !IsWindow(pm.hWnd)) {
+            if (pm.alphaTarget <= 0 && pm.whiteAlphaTarget <= 0) {
+                it = g_monitors.erase(it);
+                continue;
+            }
+            if (pm.alphaTarget > 0) EnsureDimWindowCreated(hMon);
         }
-        return;
+        if (pm.hWnd && IsWindow(pm.hWnd)) {
+            float t = (float)pm.alphaTarget;
+            float d = t - pm.alphaSmooth;
+            if (d > 0.5f || d < -0.5f) {
+                pm.alphaSmooth += d * 0.25f;
+            } else if (pm.alphaSmooth != t) {
+                pm.alphaSmooth = t;
+            } else {
+                if (pm.alphaTarget == 0 && pm.alphaSmooth < 0.5f) {
+                    ShowWindow(pm.hWnd, SW_HIDE);
+                }
+            }
+            if (pm.alphaTarget > 0 || pm.alphaSmooth >= 0.5f) {
+                ShowWindow(pm.hWnd, SW_SHOWNOACTIVATE);
+                SetLayeredWindowAttributes(pm.hWnd, 0,
+                    (BYTE)(pm.alphaSmooth + 0.5f), LWA_ALPHA);
+                RedrawWindow(pm.hWnd, NULL, NULL,
+                             RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+                SetWindowPos(pm.hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+
+        // --- White brightness overlay ---
+        if (!pm.hWndWhite || !IsWindow(pm.hWndWhite)) {
+            if (pm.whiteAlphaTarget > 0) EnsureWindowCreated(hMon, true);
+        }
+        if (pm.hWndWhite && IsWindow(pm.hWndWhite)) {
+            float t = (float)pm.whiteAlphaTarget;
+            float d = t - pm.whiteAlphaSmooth;
+            if (d > 0.5f || d < -0.5f) {
+                pm.whiteAlphaSmooth += d * 0.25f;
+            } else if (pm.whiteAlphaSmooth != t) {
+                pm.whiteAlphaSmooth = t;
+            } else {
+                if (pm.whiteAlphaTarget == 0 && pm.whiteAlphaSmooth < 0.5f) {
+                    ShowWindow(pm.hWndWhite, SW_HIDE);
+                }
+            }
+            if (pm.whiteAlphaTarget > 0 || pm.whiteAlphaSmooth >= 0.5f) {
+                ShowWindow(pm.hWndWhite, SW_SHOWNOACTIVATE);
+                SetLayeredWindowAttributes(pm.hWndWhite, 0,
+                    (BYTE)(pm.whiteAlphaSmooth + 0.5f), LWA_ALPHA);
+                RedrawWindow(pm.hWndWhite, NULL, NULL,
+                             RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+                SetWindowPos(pm.hWndWhite, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+
+        ++it;
     }
-
-    ShowWindow(g_hDimWnd, SW_SHOWNOACTIVATE);
-    SetLayeredWindowAttributes(g_hDimWnd, 0,
-                               (BYTE)(g_dimAlphaSmooth + 0.5f), LWA_ALPHA);
-
-    // Bring back to topmost periodically (other apps may steal this).
-    SetWindowPos(g_hDimWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
 void Cleanup() {
-    if (g_hDimWnd) {
-        DestroyWindow(g_hDimWnd);
-        g_hDimWnd = nullptr;
+    for (auto it = g_monitors.begin(); it != g_monitors.end(); ++it) {
+        if (it->second.hWnd) DestroyWindow(it->second.hWnd);
+        if (it->second.hWndWhite) DestroyWindow(it->second.hWndWhite);
     }
+    g_monitors.clear();
     if (g_dimClassAtom) {
         UnregisterClass(kDimClassName, GetModuleHandle(nullptr));
         g_dimClassAtom = 0;
     }
-    g_dimAlphaTarget = 0;
-    g_dimAlphaSmooth = 0.0f;
+    if (g_whiteDimClassAtom) {
+        UnregisterClass(kWhiteDimClassName, GetModuleHandle(nullptr));
+        g_whiteDimClassAtom = 0;
+    }
 }
 
 }  // namespace DimOverlay
@@ -2556,7 +2681,9 @@ int g_lastScrollActionIndex = -1;
 // Dim-overlay helper. Dim overlay is orthogonal to hardware brightness:
 // scrolling below 0% keeps hardware at 0 and darkens the overlay instead.
 // Scrolling up from a dimmed state reduces overlay before raising hardware.
-int ApplyBrightnessWithDim(HWND hWnd, int clicks) {
+// Above 100%, a white overlay brightens the screen further.
+// hMonitor identifies which screen the dim overlay applies to.
+int ApplyBrightnessWithDim(HWND hWnd, HMONITOR hMonitor, int clicks) {
     if (!g_settings.softwareDimmingEnabled) {
         int newVal = -1;
         AdjustBrightness(hWnd, clicks, &newVal);
@@ -2564,15 +2691,33 @@ int ApplyBrightnessWithDim(HWND hWnd, int clicks) {
     }
 
     int newHwVal = -1;
-    int curDim = DimOverlay::g_dimAlphaTarget;
+    int curDim = DimOverlay::GetDimAlpha(hMonitor);
+    int curWhite = DimOverlay::GetWhiteDimAlpha(hMonitor);
     int dimStep = std::max(1, g_settings.maxOverlayAlpha / 20);
+
+    // Scrolling down while white overlay active: reduce white first.
+    if (curWhite > 0 && clicks < 0) {
+        int whiteReduction = (-clicks) * dimStep;
+        int newWhite = curWhite - whiteReduction;
+        if (newWhite < 0) newWhite = 0;
+        DimOverlay::SetWhiteDimAlpha(hMonitor, newWhite);
+        int whiteClicksConsumed = (curWhite - newWhite + dimStep - 1) / dimStep;
+        int remainingClicks = (-clicks) - whiteClicksConsumed;
+        if (remainingClicks > 0 && newWhite == 0) {
+            AdjustBrightness(hWnd, -remainingClicks, &newHwVal);
+            g_lastBrightnessInputMs = GetTickCount();
+        } else {
+            newHwVal = 100;
+        }
+        return newHwVal >= 0 ? newHwVal : -1;
+    }
 
     if (curDim > 0 && clicks > 0) {
         // Scrolling up while dimmed: reduce overlay first.
         int dimReduction = clicks * dimStep;
         int newDim = curDim - dimReduction;
         if (newDim < 0) newDim = 0;
-        DimOverlay::SetDimAlpha(newDim);
+        DimOverlay::SetDimAlpha(hMonitor, newDim);
         int dimClicksConsumed = (curDim - newDim + dimStep - 1) / dimStep;
         int remainingClicks = clicks - dimClicksConsumed;
         if (remainingClicks > 0 && newDim == 0) {
@@ -2590,11 +2735,21 @@ int ApplyBrightnessWithDim(HWND hWnd, int clicks) {
         // At hardware minimum and still scrolling down: apply dim overlay.
         int newDim = std::min(curDim + (-clicks) * dimStep,
                               g_settings.maxOverlayAlpha);
-        DimOverlay::SetDimAlpha(newDim);
+        DimOverlay::SetDimAlpha(hMonitor, newDim);
+    }
+
+    if (newHwVal == 100 && clicks > 0 && g_settings.softwareDimmingEnabled) {
+        // At hardware maximum and still scrolling up: apply white overlay.
+        int newWhite = std::min(curWhite + clicks * dimStep,
+                                g_settings.maxOverlayAlpha);
+        DimOverlay::SetWhiteDimAlpha(hMonitor, newWhite);
     }
 
     if (newHwVal > 0) {
-        DimOverlay::SetDimAlpha(0);
+        DimOverlay::SetDimAlpha(hMonitor, 0);
+    }
+    if (newHwVal < 100) {
+        DimOverlay::SetWhiteDimAlpha(hMonitor, 0);
     }
 
     return newHwVal >= 0 ? newHwVal : -1;
@@ -2602,16 +2757,21 @@ int ApplyBrightnessWithDim(HWND hWnd, int clicks) {
 
 // Reset dim overlay if brightness changed externally (Windows slider, etc.).
 void MaybeSyncDimOverlay() {
-    if (DimOverlay::g_dimAlphaTarget == 0) return;
+    if (DimOverlay::g_monitors.empty()) return;
     DWORD now = GetTickCount();
     if (now - g_lastBrightnessWriteMs < 5000) return;
     if (now - g_lastBrightnessInputMs < 8000) return;
+    if (now - g_lastActionTime < 8000) return;
 
     int real = ReadBrightnessIoctl();
     if (real < 0) real = GetBrightnessWmi();
     if (real > 0) {
-        // Brightness was raised externally — clear the dim overlay.
-        DimOverlay::SetDimAlpha(0);
+        // Brightness was raised externally - clear the dim overlay on all monitors.
+        for (auto it = DimOverlay::g_monitors.begin();
+             it != DimOverlay::g_monitors.end(); ++it) {
+            DimOverlay::SetDimAlpha(it->first, 0);
+            DimOverlay::SetWhiteDimAlpha(it->first, 0);
+        }
     }
 }
 
@@ -2676,7 +2836,7 @@ void InvokeScrollAction(HWND hWnd,
                 break;
 
             case ScrollAction::brightnessChange: {
-                int displayVal = ApplyBrightnessWithDim(hWnd, clicks);
+                int displayVal = ApplyBrightnessWithDim(hWnd, hMonitor, clicks);
                 if (showOsd && displayVal >= 0) {
                     OsdOverlay::Show(OsdOverlay::Kind::Brightness,
                                      displayVal / 100.0, displayVal);
@@ -2685,15 +2845,100 @@ void InvokeScrollAction(HWND hWnd,
             }
 
             case ScrollAction::sdrToHdrBrightnessChange: {
-                if (AdjustSdrToHdrBrightness(clicks, hMonitor) && showOsd) {
-                    double range = g_settings.maxSdrBrightness -
-                                   Constants::kSdrMinBrightness;
-                    double norm =
-                        (range > 0.0001)
-                            ? (g_currentSdrToHdrBrightness -
-                               Constants::kSdrMinBrightness) /
-                                  range
-                            : 0.0;
+                bool adjusted = false;
+
+                if (g_settings.softwareDimmingEnabled) {
+                    int curDim = DimOverlay::GetDimAlpha(hMonitor);
+                    int curWhite = DimOverlay::GetWhiteDimAlpha(hMonitor);
+                    int dimStep = std::max(1, g_settings.maxOverlayAlpha / 20);
+
+                    // White overlay (above maximum) - handle first.
+                    if (clicks < 0 && curWhite > 0) {
+                        int wr = (-clicks) * dimStep;
+                        int nw = std::max(0, curWhite - wr);
+                        DimOverlay::SetWhiteDimAlpha(hMonitor, nw);
+                        int wc = (curWhite - nw + dimStep - 1) / dimStep;
+                        int rem = (-clicks) - wc;
+                        if (rem > 0 && nw == 0)
+                            AdjustSdrToHdrBrightness(-rem, hMonitor);
+                        adjusted = true;
+                        g_lastBrightnessInputMs = GetTickCount();
+                    }
+                    else if (clicks > 0 && g_currentSdrToHdrBrightness >= g_settings.maxSdrBrightness) {
+                        int nw = std::min(curWhite + clicks * dimStep, g_settings.maxOverlayAlpha);
+                        DimOverlay::SetWhiteDimAlpha(hMonitor, nw);
+                        adjusted = true;
+                        g_lastBrightnessInputMs = GetTickCount();
+                    }
+                    // Black dim (below minimum).
+                    else {
+                    // Detect downward scroll at/below SDR minimum.
+                    bool atMin = g_currentSdrToHdrBrightness <= Constants::kSdrMinBrightness;
+
+                    if (clicks < 0 && atMin) {
+                        // Already at minimum - every downward click applies dim.
+                        int newDim = std::min(curDim + (-clicks) * dimStep,
+                                              g_settings.maxOverlayAlpha);
+                        DimOverlay::SetDimAlpha(hMonitor, newDim);
+                        adjusted = true;
+                        g_lastBrightnessInputMs = GetTickCount();
+                    } else if (clicks < 0) {
+                        double next = g_currentSdrToHdrBrightness + clicks * Constants::kSdrStep;
+                        if (next <= Constants::kSdrMinBrightness) {
+                            // Some clicks bring SDR to minimum; the rest go to dim.
+                            double drop = g_currentSdrToHdrBrightness - Constants::kSdrMinBrightness;
+                            int clicksToMin = (int)(drop / Constants::kSdrStep) + 1;
+                            g_currentSdrToHdrBrightness = Constants::kSdrMinBrightness;
+                            if (g_pDwmpSDRToHDRBoost)
+                                g_pDwmpSDRToHDRBoost(hMonitor, Constants::kSdrMinBrightness);
+                            if (g_settings.storeCurrentSdrToHdrBrightness)
+                                Wh_SetIntValue(L"CurrentSdrToHdrBrightness",
+                                               (int)(g_currentSdrToHdrBrightness * 10));
+                            int dimClicks = (-clicks) - clicksToMin;
+                            if (dimClicks < 1) dimClicks = 1;
+                            int newDim = std::min(curDim + dimClicks * dimStep,
+                                                  g_settings.maxOverlayAlpha);
+                            DimOverlay::SetDimAlpha(hMonitor, newDim);
+                            adjusted = true;
+                            g_lastBrightnessInputMs = GetTickCount();
+                        }
+                    } else if (clicks > 0 && curDim > 0) {
+                        // Scrolling up from dimmed: reduce overlay first.
+                        int dimReduction = clicks * dimStep;
+                        int newDim = std::max(0, curDim - dimReduction);
+                        DimOverlay::SetDimAlpha(hMonitor, newDim);
+                        int dimClicksConsumed = (curDim - newDim + dimStep - 1) / dimStep;
+                        int remainingClicks = clicks - dimClicksConsumed;
+                        if (remainingClicks > 0 && newDim == 0) {
+                            AdjustSdrToHdrBrightness(remainingClicks, hMonitor);
+                        }
+                        adjusted = true;
+                        g_lastBrightnessInputMs = GetTickCount();
+                    }
+                    }  // end dim else
+                }
+
+                if (!adjusted) {
+                    adjusted = AdjustSdrToHdrBrightness(clicks, hMonitor);
+                }
+
+                if (adjusted && showOsd) {
+                    int curDim = DimOverlay::GetDimAlpha(hMonitor);
+                    int curWhite = DimOverlay::GetWhiteDimAlpha(hMonitor);
+                    double norm;
+                    if (curDim > 0) {
+                        norm = 0.0;
+                    } else if (curWhite > 0) {
+                        norm = 1.0;
+                    } else {
+                        double range = g_settings.maxSdrBrightness -
+                                       Constants::kSdrMinBrightness;
+                        norm = (range > 0.0001)
+                                   ? (g_currentSdrToHdrBrightness -
+                                      Constants::kSdrMinBrightness) /
+                                         range
+                                   : 0.0;
+                    }
                     OsdOverlay::Show(OsdOverlay::Kind::SdrToHdrBrightness, norm,
                                      (int)(norm * 100));
                 }
@@ -2705,20 +2950,101 @@ void InvokeScrollAction(HWND hWnd,
                 Wh_Log(L"Master brightness on monitor %p (HDR: %s)", hMonitor,
                        isHdr ? L"yes" : L"no");
                 if (isHdr) {
-                    if (AdjustSdrToHdrBrightness(clicks, hMonitor) && showOsd) {
-                        double range = g_settings.maxSdrBrightness -
-                                       Constants::kSdrMinBrightness;
-                        double norm =
-                            (range > 0.0001)
-                                ? (g_currentSdrToHdrBrightness -
-                                   Constants::kSdrMinBrightness) /
-                                      range
-                                : 0.0;
+                    bool adjusted = false;
+
+                    if (g_settings.softwareDimmingEnabled) {
+                        int curDim = DimOverlay::GetDimAlpha(hMonitor);
+                        int curWhite = DimOverlay::GetWhiteDimAlpha(hMonitor);
+                        int dimStep = std::max(1, g_settings.maxOverlayAlpha / 20);
+
+                        // White overlay (above maximum) - handle first.
+                        if (clicks < 0 && curWhite > 0) {
+                            int wr = (-clicks) * dimStep;
+                            int nw = std::max(0, curWhite - wr);
+                            DimOverlay::SetWhiteDimAlpha(hMonitor, nw);
+                            int wc = (curWhite - nw + dimStep - 1) / dimStep;
+                            int rem = (-clicks) - wc;
+                            if (rem > 0 && nw == 0)
+                                AdjustSdrToHdrBrightness(-rem, hMonitor);
+                            adjusted = true;
+                            g_lastBrightnessInputMs = GetTickCount();
+                        }
+                        else if (clicks > 0 && g_currentSdrToHdrBrightness >= g_settings.maxSdrBrightness) {
+                            int nw = std::min(curWhite + clicks * dimStep, g_settings.maxOverlayAlpha);
+                            DimOverlay::SetWhiteDimAlpha(hMonitor, nw);
+                            adjusted = true;
+                            g_lastBrightnessInputMs = GetTickCount();
+                        }
+                        // Black dim (below minimum).
+                        else {
+                        bool atMin = g_currentSdrToHdrBrightness <= Constants::kSdrMinBrightness;
+
+                        if (clicks < 0 && atMin) {
+                            int newDim = std::min(curDim + (-clicks) * dimStep,
+                                                  g_settings.maxOverlayAlpha);
+                            DimOverlay::SetDimAlpha(hMonitor, newDim);
+                            adjusted = true;
+                            g_lastBrightnessInputMs = GetTickCount();
+                        } else if (clicks < 0) {
+                            double next = g_currentSdrToHdrBrightness + clicks * Constants::kSdrStep;
+                            if (next <= Constants::kSdrMinBrightness) {
+                                double drop = g_currentSdrToHdrBrightness - Constants::kSdrMinBrightness;
+                                int clicksToMin = (int)(drop / Constants::kSdrStep) + 1;
+                                g_currentSdrToHdrBrightness = Constants::kSdrMinBrightness;
+                                if (g_pDwmpSDRToHDRBoost)
+                                    g_pDwmpSDRToHDRBoost(hMonitor, Constants::kSdrMinBrightness);
+                                if (g_settings.storeCurrentSdrToHdrBrightness)
+                                    Wh_SetIntValue(L"CurrentSdrToHdrBrightness",
+                                                   (int)(g_currentSdrToHdrBrightness * 10));
+                                int dimClicks = (-clicks) - clicksToMin;
+                                if (dimClicks < 1) dimClicks = 1;
+                                int newDim = std::min(curDim + dimClicks * dimStep,
+                                                      g_settings.maxOverlayAlpha);
+                                DimOverlay::SetDimAlpha(hMonitor, newDim);
+                                adjusted = true;
+                                g_lastBrightnessInputMs = GetTickCount();
+                            }
+                        } else if (clicks > 0 && curDim > 0) {
+                            int dimReduction = clicks * dimStep;
+                            int newDim = std::max(0, curDim - dimReduction);
+                            DimOverlay::SetDimAlpha(hMonitor, newDim);
+                            int dimClicksConsumed = (curDim - newDim + dimStep - 1) / dimStep;
+                            int remainingClicks = clicks - dimClicksConsumed;
+                            if (remainingClicks > 0 && newDim == 0) {
+                                AdjustSdrToHdrBrightness(remainingClicks, hMonitor);
+                            }
+                            adjusted = true;
+                            g_lastBrightnessInputMs = GetTickCount();
+                        }
+                        }  // end dim else
+                    }
+
+                    if (!adjusted) {
+                        adjusted = AdjustSdrToHdrBrightness(clicks, hMonitor);
+                    }
+
+                    if (adjusted && showOsd) {
+                        int curDim = DimOverlay::GetDimAlpha(hMonitor);
+                        int curWhite = DimOverlay::GetWhiteDimAlpha(hMonitor);
+                        double norm;
+                        if (curDim > 0) {
+                            norm = 0.0;
+                        } else if (curWhite > 0) {
+                            norm = 1.0;
+                        } else {
+                            double range = g_settings.maxSdrBrightness -
+                                           Constants::kSdrMinBrightness;
+                            norm = (range > 0.0001)
+                                       ? (g_currentSdrToHdrBrightness -
+                                          Constants::kSdrMinBrightness) /
+                                             range
+                                       : 0.0;
+                        }
                         OsdOverlay::Show(OsdOverlay::Kind::SdrToHdrBrightness,
                                          norm, (int)(norm * 100));
                     }
                 } else {
-                    int displayVal = ApplyBrightnessWithDim(hWnd, clicks);
+                    int displayVal = ApplyBrightnessWithDim(hWnd, hMonitor, clicks);
                     if (showOsd && displayVal >= 0) {
                         OsdOverlay::Show(OsdOverlay::Kind::Brightness,
                                          displayVal / 100.0, displayVal);
@@ -3788,6 +4114,8 @@ void LoadSettings() {
     if (maxAlpha < 0) maxAlpha = 0;
     if (maxAlpha > 255) maxAlpha = 255;
     g_settings.maxOverlayAlpha = maxAlpha;
+    g_settings.whiteOverlayEnabled =
+        Wh_GetIntSetting(L"whiteOverlayEnabled");
 
     // Eager-init SDR-on-HDR if any entry needs it.
     for (const auto& entry : g_settings.scrollActions) {
