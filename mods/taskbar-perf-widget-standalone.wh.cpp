@@ -6,7 +6,7 @@
 // @author          Agarciao10
 // @include         explorer.exe
 // @compilerOptions -lpdh -lole32 -ldwmapi -lgdi32 -luser32 -lshcore -lgdiplus -lshell32
-// @github           https://github.com/Agarciao10/taskbar-perf-widget-standalone
+// @github           https://github.com/AngelGarciaODiana
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
