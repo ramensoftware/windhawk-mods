@@ -2381,6 +2381,36 @@
                 "version": "1.0.0"
             }
         },
+        "common-controls-hook": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781390733000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781390733000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "description": "Force-enable Common Controls v6 visual styles for legacy Win32 applications",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "Common Controls Hook",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "confirm-closing-multiple-explorer-tabs": {
             "details": {
                 "defaultSorting": 2810,

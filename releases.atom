@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-13T19:59:55.000Z</updated>
+    <updated>2026-06-13T22:45:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Common Controls Hook 1.0]]></title>
+        <id>https://windhawk.net/mods/common-controls-hook#b02dade50ac82c10c15af1cccbd935ff314c0a53</id>
+        <link href="https://windhawk.net/mods/common-controls-hook"/>
+        <updated>2026-06-13T22:45:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="commoncontrolshook">Common Controls Hook</h1>
+<p>This mod forces legacy GUI processes into the Common Controls version 6
+activation context at the moment they create windows, dialogs, and message
+boxes.</p>
+<p>The practical goal is simple: make old Win32 UI surfaces, including VBScript
+<code>MsgBox</code> and classic dialog-based applications, use themed visual styles instead
+of the pre-XP <code>comctl32.dll</code> version 5 look.</p>
+<p><img src="https://i.imgur.com/4oVsYi7.png" alt="Screenshot" /></p>
+<h2 id="credits">Credits</h2>
+<p>This mod is a Windhawk port of
+<a href="https://github.com/LuicdLabs/comctl32v6hook">comctl32v6hook</a>, a standalone
+user-mode DLL by LuicdLabs.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Folder Hover Menu 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-folder-hover-menu#86665e6c477b0e5ba1f8058d8e4b448faa2a5f13</id>
@@ -684,49 +706,6 @@ IMEs to their native mode. Best experience when used together.</p>
         <author>
             <name>ZeonXr</name>
             <uri>https://github.com/ZeonXr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Block SMB Quick Access 1.2]]></title>
-        <id>https://windhawk.net/mods/block-smb-quick-access#ab9754b6038bca2df2ffd75fc3f8f13e3ac15359</id>
-        <link href="https://windhawk.net/mods/block-smb-quick-access"/>
-        <updated>2026-05-30T14:11:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="blocksmbquickaccess">Block SMB Quick Access</h1>
-<p>Prevents SMB/UNC network paths (<code>\\server\share</code>) from being added to Quick Access
-in Windows Explorer. Local paths continue to work normally.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Selective blocking</strong>: Only blocks SMB/UNC network paths, local paths work normally</li>
-<li><strong>Comprehensive SHARD support</strong>: Handles all SHARD types (PATHA, PATHW, PIDL, SHELLITEM, LINK, APPIDINFO, APPIDINFOIDLIST, APPIDINFOLINK)</li>
-<li><strong>UNC priority</strong>: Uses <code>SLGP_UNCPRIORITY</code> to correctly detect mapped drive letters</li>
-<li><strong>Silent operation</strong>: Runs in background without UI</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks the <code>SHAddToRecentDocs</code> function in <code>shell32.dll</code>. When Explorer calls
-this function to add a file to Quick Access, the hook checks if the path is a UNC
-network path (starts with <code>\\</code>). If it is, the call is silently dropped. Otherwise,
-the original function is called normally.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 10 or Windows 11 (64-bit)</li>
-<li>Windhawk 1.4 or newer</li>
-</ul>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Does not block paths added via other mechanisms (e.g., registry manipulation)</li>
-<li>Some virtual folder PIDLs may not resolve to paths and will be allowed through</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If the mod doesn't seem to work:</p>
-<ol>
-<li>Enable debug logging in Windhawk settings (Settings &gt; Advanced &gt; Debug logging)</li>
-<li>Check Windhawk debug logs for <code>[NOSMB]</code> entries</li>
-<li>Verify the mod is enabled for explorer.exe in Windhawk settings</li>
-<li>Restart Explorer or log out/in after enabling the mod</li>
-</ol>]]></content>
-        <author>
-            <name>Townrain</name>
-            <uri>https://github.com/Townrain</uri>
         </author>
     </entry>
 </feed>
