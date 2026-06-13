@@ -2,14 +2,14 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock.
-// @version         1.5.244
+// @version         1.5.247
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey
 // @include         explorer.exe
 // @include         StartMenuExperienceHost.exe
 // @include         ShellHost.exe
 // @include         ShellExperienceHost.exe
-// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols -DWINVER=0x0A00 -lversion
+// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -lversion
 // @architecture    x86-64
 // ==/WindhawkMod==
 // This mod is based on code released under the GNU General Public License v3.0.
