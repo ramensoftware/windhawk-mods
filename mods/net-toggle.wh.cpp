@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              net-toggle
 // @name            Net-Toggle
-// @description     Network toggle + DNS reachability monitor in your system tray
-// @version         2.0.0
+// @description     Internet kill switch with primary/secondary DNS monitoring in your system tray
+// @version         2.1.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
@@ -13,12 +13,35 @@
 // ==WindhawkModSettings==
 /*
 - dnsServer: "8.8.8.8"
-  $name: DNS Server IP
-  $description: IP address to ping for DNS reachability (leave blank to disable DNS monitoring)
+  $name: Primary DNS server
+  $description: IPv4 address of the DNS server to monitor (leave blank to disable DNS monitoring)
+
+- dnsProbe: udp
+  $name: Primary DNS check method
+  $description: >-
+    Real DNS query is the most accurate. The TCP options only verify that the
+    port accepts connections — pick 853/443 for DoT/DoH endpoints like NextDNS.
+  $options:
+  - udp: Real DNS query (UDP 53)
+  - tcp: TCP connect (port 53)
+  - dot: DNS-over-TLS endpoint (TCP 853)
+  - doh: DNS-over-HTTPS endpoint (TCP 443)
+
+- dnsServer2: ""
+  $name: Secondary DNS server
+  $description: Optional fallback DNS server, monitored alongside the primary
+
+- dnsProbe2: udp
+  $name: Secondary DNS check method
+  $options:
+  - udp: Real DNS query (UDP 53)
+  - tcp: TCP connect (port 53)
+  - dot: DNS-over-TLS endpoint (TCP 853)
+  - doh: DNS-over-HTTPS endpoint (TCP 443)
 
 - pingInterval: 10
-  $name: Ping Interval (seconds)
-  $description: How often to check DNS reachability
+  $name: Check interval (seconds)
+  $description: How often to check DNS reachability (minimum 5)
 */
 // ==/WindhawkModSettings==
 
@@ -36,30 +59,34 @@ One click drops your connection. Click it again, and you're back online.
 
 **🔴 Red** — Network is OFF
 
-![Red](https://i.imgur.com/ilyJM0R.png)
+![Red](https://i.imgur.com/1jOe8EE.png)
 
 **🟡 Yellow** — Network toggle or reset is in progress
 
-![Yellow](https://i.imgur.com/jBnpNRK.png)
-
-**🔵 Blue** — Network is ON, no DNS server configured
-
-![Blue](https://i.imgur.com/hMRbXyu.png)
+![Yellow](https://i.imgur.com/rvXLTas.png)
 
 **🟢 Green** — Network is ON, DNS is reachable
 
-![Green](https://i.imgur.com/4KACqME.png)
+![Green](https://i.imgur.com/nA2DWu9.png)
+
+**🟠 Orange** — Network is ON, primary DNS is down — the secondary (fallback) DNS is still answering
+
+![Orange](https://i.imgur.com/3H49bgH.png)
 
 **⚪ Grey** — Network is ON, DNS is unreachable
 
-![Grey](https://i.imgur.com/xoZgdiH.png)
+![Grey](https://i.imgur.com/EWrbzpv.png)
+
+**🔵 Blue** — Network is ON, no DNS server configured
+
+![Blue](https://i.imgur.com/sOQK6Cp.png)
 
 ## How to Use It
 
 1. **Find the Icon:** Look in your system tray (bottom right of your screen, next to the clock) for the little `^` arrow. Hit it and look for the network icon.
 2. **Left-click to Toggle:** Give the icon a single click.
 3. **Middle-click for Full Reset:** Middle-click the icon to run a full network cycle reset — disables all adapters, flushes DNS, then re-enables them. This cuts all active connections.
-4. **Right-click for Menu:** Disable/Enable network, open Network Settings, or exit.
+4. **Right-click for Menu:** Disable/Enable network, open Network Settings, or open Windhawk.
 5. **Approve the Prompt (on toggle/reset):** Windows will pop up a quick UAC screen asking for permission. Click **Yes**.
 
    > **Why do I need to accept the UAC?**
@@ -68,16 +95,32 @@ One click drops your connection. Click it again, and you're back online.
    >
    > This is a built-in security feature to stop rogue background apps from doing this secretly.
 
-6. **Configure DNS Monitoring:** In Windhawk mod settings, enter a DNS server IP (e.g. `8.8.8.8`) to enable reachability monitoring. The dot turns green when reachable, grey when not.
+6. (optional) **Configure DNS Monitoring:** In Windhawk mod settings, enter your primary DNS server IP (e.g. `8.8.8.8`) — and optionally a secondary (e.g. `8.8.4.4`). Pick a check method per server: a **real DNS query** (default, most accurate), or a TCP reachability check on port 53, 853 (DNS-over-TLS) or 443 (DNS-over-HTTPS) for endpoints like NextDNS.
+
+   > **Which check method should I pick?**
+   >
+   > - **Real DNS Query** *(default)* — Actually resolves a name; most accurate, right for almost everyone.
+   > - **TCP 53** — Just checks if the DNS port responds; use if your network blocks real queries but allows plain connections.
+   > - **DNS-over-TLS (853)** — Checks an encrypted DoT endpoint; use if your provider is set up for DoT.
+   > - **DNS-over-HTTPS (443)** — Checks a DoH endpoint; use when your provider is only reachable over HTTPS (e.g. NextDNS, Cloudflare).
 
 ## Changelog
+
+### v2.1.0
+- New: **Secondary DNS server** — monitor a primary + fallback pair (Google, Cloudflare, NextDNS all publish two IPs). New **Orange** icon state when only the fallback is answering.
+- New: **Check method per server** — real DNS query (default), TCP 53, or DNS-over-TLS (853) / DNS-over-HTTPS (443) endpoint reachability for providers like NextDNS.
+- Improved: the default check now sends a **real DNS query** instead of a bare TCP connect — fixes false "DNS unreachable" results on networks that filter TCP port 53.
+- Improved: tray tooltip shows per-server ✓ / ✗ status.
+- Improved: right after the network comes back up, the icon shows green ("checking") instead of flashing grey until the first check completes.
+- Fixed: a rare timing issue that could briefly show outdated DNS status right after changing settings.
+- Fixed: a possible freeze when disabling the mod or restarting Explorer while a network toggle was in progress.
 
 ### v2.0.0
 - **Complete rebuild.** Mod renamed to Net-Toggle.
 - New: **DNS Monitoring** — The icon monitors your connection and changes color if your internet drops out (configurable in Mod Settings).
 - New: **WiFi-style tray icon** with 5 color states (Red / Yellow / Blue / Green / Grey).
 - New: Middle-click → **Full Network Reset** — disables all adapters, flushes DNS, re-enables them. Cuts all active connections.
-- New: Right-click context menu — toggle network, open Network Settings, or exit.
+- New: Right-click context menu — toggle network, open Network Settings, open Windhawk.
 - New: Donate button on the mod page.
 - Improved: Tray icon is now independent from the Windhawk app and no longer groups with it in the taskbar.
 - Improved: Tray icon persists reliably across Explorer restarts.
@@ -125,8 +168,11 @@ static const DWORD POWERSHELL_TIMEOUT_MS  = 60000;  // 60s max for any PS comman
 static const DWORD NETWATCH_POLL_INTERVAL = 15000;  // 15s per fallback poll tick
 static const DWORD NETWATCH_POLL_RETRIES  = 4;      // 4 × 15s = 60s then retry NotifyAddrChange
 static const int   MIN_PING_INTERVAL_SEC  = 5;
-static const int   DNS_TCP_TIMEOUT_SEC    = 2;
-static const int   DNS_TCP_TIMEOUT_USEC   = 500000; // 0.5s (total 2.5s)
+static const int   DNS_PROBE_TIMEOUT_SEC  = 2;       // TCP connect deadline…
+static const int   DNS_PROBE_TIMEOUT_USEC = 500000;  // …2.5s total
+static const int   DNS_UDP_ATTEMPTS       = 2;       // query + 1 retransmit
+static const int   DNS_UDP_WAIT_SEC       = 1;       // per-attempt reply wait…
+static const int   DNS_UDP_WAIT_USEC      = 250000;  // …1.25s each, 2.5s worst case
 
 static volatile LONG g_isProcessingClick = 0;
 static volatile LONG g_trayIconInstalled = 0;
@@ -138,11 +184,13 @@ static volatile DWORD g_lastClickTime = 0;
 static UINT g_taskbarCreatedMsg = 0;
 static HANDLE g_activeWorkerThread = nullptr;
 
-// DNS monitoring
-static volatile DWORD g_dnsServerIp = 0;
+// DNS monitoring — two probe slots: [0] = primary, [1] = secondary.
+static volatile LONG g_dnsIp[2]    = {0, 0};    // IPv4, network byte order; 0 = unconfigured
+static volatile LONG g_dnsProbe[2] = {0, 0};    // DnsProbeMethod per slot
+static volatile LONG g_dnsUp[2]    = {-1, -1};  // -1 = not checked yet, 0 = down, 1 = up
 static DWORD g_pingIntervalMs = 10000;
-static volatile LONG g_dnsIsReachable = 0;
 static volatile LONG g_dnsWorkerRunning = 0;
+static HANDLE g_dnsWorkerThread = nullptr;
 
 // Network watch thread
 static HANDLE g_netWatchThread = nullptr;
@@ -277,18 +325,36 @@ BOOL RunPowerShellCommand(LPCWSTR psCommand, BOOL targetState) {
 }
 
 // ==============================================================================
-// Feature B — ICMP DNS Ping
+// Feature B — DNS Reachability Probes
 // ==============================================================================
 
-BOOL PingIp(DWORD ipAddr) {
-    // Uses a TCP connect to port 53 instead of IcmpSendEcho.
-    // IcmpCreateFile fails with ERROR_INVALID_HANDLE (6) inside this process
-    // after Disable-NetAdapter removes all adapters from the IP stack — the ICMP
-    // kernel device path doesn't recover until the process restarts. Winsock TCP
-    // sockets are not affected by adapter disable/enable cycles.
+enum DnsProbeMethod : LONG {
+    PROBE_UDP_DNS = 0,  // real DNS query over UDP 53 (default)
+    PROBE_TCP_53  = 1,  // bare TCP connect to port 53
+    PROBE_TCP_853 = 2,  // DNS-over-TLS endpoint reachability
+    PROBE_TCP_443 = 3,  // DNS-over-HTTPS endpoint reachability
+};
+
+// Overall DNS health derived from the per-slot results.
+enum DnsOverall {
+    DNS_NONE,      // no server configured — monitoring disabled
+    DNS_CHECKING,  // configured but no probe has completed yet
+    DNS_OK,        // effective primary is answering
+    DNS_DEGRADED,  // primary down, fallback answering
+    DNS_DOWN,      // every configured server failed its probe
+};
+
+// TCP handshake to the given port. Success only when the connect completes —
+// for DoT (853) / DoH (443) endpoints and explicit TCP:53 checks, a refused
+// connection means the service is down. ICMP (IcmpSendEcho) is deliberately
+// avoided: IcmpCreateFile fails with ERROR_INVALID_HANDLE (6) inside this
+// process after Disable-NetAdapter removes all adapters from the IP stack —
+// the ICMP kernel device path doesn't recover until the process restarts.
+// Winsock sockets are not affected by adapter disable/enable cycles.
+static BOOL ProbeTcpConnect(DWORD ipAddr, WORD port) {
     SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sock == INVALID_SOCKET) {
-        Wh_Log(L"PingIp: socket() failed (%d)", WSAGetLastError());
+        Wh_Log(L"ProbeTcpConnect: socket() failed (%d)", WSAGetLastError());
         return FALSE;
     }
 
@@ -298,7 +364,7 @@ BOOL PingIp(DWORD ipAddr) {
     sockaddr_in addr = {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = ipAddr;  // network byte order from InetPtonW
-    addr.sin_port = htons(53);
+    addr.sin_port = htons(port);
 
     int connectResult = connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
     int connectErr = (connectResult == SOCKET_ERROR) ? WSAGetLastError() : 0;
@@ -312,23 +378,133 @@ BOOL PingIp(DWORD ipAddr) {
         FD_ZERO(&exceptSet);
         FD_SET(sock, &writeSet);
         FD_SET(sock, &exceptSet);
-        TIMEVAL tv = {DNS_TCP_TIMEOUT_SEC, DNS_TCP_TIMEOUT_USEC};
+        TIMEVAL tv = {DNS_PROBE_TIMEOUT_SEC, DNS_PROBE_TIMEOUT_USEC};
         int sel = select(0, nullptr, &writeSet, &exceptSet, &tv);
         if (sel > 0 && FD_ISSET(sock, &writeSet)) {
             int sockErr = 0;
             int optLen = sizeof(sockErr);
             getsockopt(sock, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&sockErr), &optLen);
-            // CONNREFUSED means the host is up but port 53 closed (extremely unlikely for 8.8.8.8)
-            reachable = (sockErr == 0 || sockErr == WSAECONNREFUSED);
+            reachable = (sockErr == 0);
         } else {
-            Wh_Log(L"PingIp: TCP:53 timed out or select error (%d)", WSAGetLastError());
+            Wh_Log(L"ProbeTcpConnect: TCP:%u timed out or select error (%d)", port, WSAGetLastError());
         }
     } else {
-        Wh_Log(L"PingIp: connect() failed immediately (%d)", connectErr);
+        Wh_Log(L"ProbeTcpConnect: connect() failed immediately (%d)", connectErr);
     }
 
     closesocket(sock);
     return reachable;
+}
+
+// Sends a real DNS query (NS for the root zone) and waits for any reply with a
+// matching transaction ID. Any response — even REFUSED — proves a resolver is
+// alive at that address. This is more accurate than a TCP probe: many networks
+// filter TCP:53 while UDP DNS works fine, which previously caused false
+// "DNS unreachable" reports. One retransmit guards against packet loss.
+static BOOL ProbeDnsUdp(DWORD ipAddr) {
+    SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock == INVALID_SOCKET) {
+        Wh_Log(L"ProbeDnsUdp: socket() failed (%d)", WSAGetLastError());
+        return FALSE;
+    }
+
+    u_long nonBlocking = 1;
+    ioctlsocket(sock, FIONBIO, &nonBlocking);
+
+    sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = ipAddr;  // network byte order from InetPtonW
+    addr.sin_port = htons(53);
+
+    // Connected UDP: the stack filters replies by peer address and surfaces
+    // ICMP port-unreachable as a recv error instead of silence.
+    if (connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == SOCKET_ERROR) {
+        Wh_Log(L"ProbeDnsUdp: connect() failed (%d)", WSAGetLastError());
+        closesocket(sock);
+        return FALSE;
+    }
+
+    WORD txnId = (WORD)(GetTickCount() ^ (GetCurrentThreadId() << 1));
+    if (txnId == 0) txnId = 0x4E54;  // any nonzero value
+
+    // 12-byte header (RD set, QDCOUNT=1) + root QNAME + QTYPE=NS + QCLASS=IN.
+    BYTE query[17] = {
+        (BYTE)(txnId >> 8), (BYTE)(txnId & 0xFF),
+        0x01, 0x00,                          // flags: recursion desired
+        0x00, 0x01,                          // QDCOUNT = 1
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // ANCOUNT / NSCOUNT / ARCOUNT
+        0x00,                                // QNAME = root
+        0x00, 0x02,                          // QTYPE = NS
+        0x00, 0x01,                          // QCLASS = IN
+    };
+
+    BOOL reachable = FALSE;
+    for (int attempt = 0; attempt < DNS_UDP_ATTEMPTS && !reachable; attempt++) {
+        if (send(sock, reinterpret_cast<const char*>(query), sizeof(query), 0) == SOCKET_ERROR) {
+            Wh_Log(L"ProbeDnsUdp: send() failed (%d)", WSAGetLastError());
+            break;
+        }
+
+        fd_set readSet;
+        FD_ZERO(&readSet);
+        FD_SET(sock, &readSet);
+        TIMEVAL tv = {DNS_UDP_WAIT_SEC, DNS_UDP_WAIT_USEC};
+        int sel = select(0, &readSet, nullptr, nullptr, &tv);
+        if (sel <= 0 || !FD_ISSET(sock, &readSet)) continue;  // no reply yet — retransmit
+
+        BYTE resp[512];
+        int len = recv(sock, reinterpret_cast<char*>(resp), sizeof(resp), 0);
+        if (len == SOCKET_ERROR) {
+            if (WSAGetLastError() == WSAEMSGSIZE) {
+                // A larger-than-buffer datagram still arrived from the server.
+                len = sizeof(resp);
+            } else {
+                // e.g. WSAECONNRESET = ICMP port unreachable — try again.
+                continue;
+            }
+        }
+        // Valid reply: full header, matching transaction ID, QR bit set.
+        if (len >= 12 &&
+            resp[0] == (BYTE)(txnId >> 8) && resp[1] == (BYTE)(txnId & 0xFF) &&
+            (resp[2] & 0x80)) {
+            reachable = TRUE;
+        }
+    }
+
+    closesocket(sock);
+    return reachable;
+}
+
+// Routes a probe to the method configured for the slot.
+static BOOL ProbeDnsServer(DWORD ipAddr, LONG method) {
+    switch (method) {
+        case PROBE_TCP_53:  return ProbeTcpConnect(ipAddr, 53);
+        case PROBE_TCP_853: return ProbeTcpConnect(ipAddr, 853);
+        case PROBE_TCP_443: return ProbeTcpConnect(ipAddr, 443);
+        case PROBE_UDP_DNS:
+        default:            return ProbeDnsUdp(ipAddr);
+    }
+}
+
+static BOOL AnyDnsConfigured() {
+    return InterlockedOr(&g_dnsIp[0], 0) != 0 || InterlockedOr(&g_dnsIp[1], 0) != 0;
+}
+
+static DnsOverall GetDnsOverall() {
+    int configured = 0;
+    int firstUp = -1;  // position (0-based, configured-only) of the first answering server
+    bool anyUnknown = false;
+    for (int i = 0; i < 2; i++) {
+        if (InterlockedOr(&g_dnsIp[i], 0) == 0) continue;
+        LONG up = InterlockedOr(&g_dnsUp[i], 0);
+        int pos = configured++;
+        if (up == 1 && firstUp < 0) firstUp = pos;
+        if (up == -1) anyUnknown = true;
+    }
+    if (configured == 0) return DNS_NONE;
+    if (firstUp == 0) return DNS_OK;       // effective primary answering
+    if (firstUp > 0) return DNS_DEGRADED;  // only the fallback is answering
+    return anyUnknown ? DNS_CHECKING : DNS_DOWN;
 }
 
 // ==============================================================================
@@ -418,16 +594,18 @@ static void DrawWifiIcon(DWORD* px, int W, int H, BYTE r, BYTE g, BYTE b) {
     }
 }
 
-HICON CreateColoredDotIcon(BOOL netUp, BOOL dnsUp, BOOL hasDns, BOOL pending) {
+HICON CreateColoredDotIcon(BOOL netUp, DnsOverall dns, BOOL pending) {
     int cx = GetSystemMetrics(SM_CXSMICON);
     int cy = GetSystemMetrics(SM_CYSMICON);
 
     COLORREF iconColor;
-    if (pending)         iconColor = RGB(240, 180, 0);   // Yellow
-    else if (!netUp)     iconColor = RGB(220, 50,  50);  // Red
-    else if (!hasDns)    iconColor = RGB(70,  130, 255); // Blue
-    else if (dnsUp)      iconColor = RGB(60,  220, 60);  // Green
-    else                 iconColor = RGB(160, 160, 160); // Grey
+    if (pending)                   iconColor = RGB(240, 180, 0);   // Yellow — toggle/reset in progress
+    else if (!netUp)               iconColor = RGB(220, 50,  50);  // Red — network off
+    else if (dns == DNS_NONE)      iconColor = RGB(70,  130, 255); // Blue — no DNS configured
+    else if (dns == DNS_OK ||
+             dns == DNS_CHECKING)  iconColor = RGB(60,  220, 60);  // Green — healthy (or first check pending)
+    else if (dns == DNS_DEGRADED)  iconColor = RGB(255, 120, 0);   // Orange — only the fallback DNS answers
+    else                           iconColor = RGB(160, 160, 160); // Grey — DNS unreachable
 
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
@@ -475,12 +653,28 @@ HICON CreateColoredDotIcon(BOOL netUp, BOOL dnsUp, BOOL hasDns, BOOL pending) {
 // Tray Icon
 // ==============================================================================
 
+// Appends a "\nDNS1 8.8.8.8 ✓" status line to the tooltip (bounds-checked).
+static void AppendDnsTipLine(WCHAR* tip, size_t cap, int slot, LPCWSTR label) {
+    LONG ip = InterlockedOr(&g_dnsIp[slot], 0);
+    if (ip == 0) return;
+    LONG up = InterlockedOr(&g_dnsUp[slot], 0);
+
+    IN_ADDR ia = {};
+    ia.s_addr = (ULONG)ip;
+    WCHAR ipStr[16] = L"?";
+    InetNtopW(AF_INET, &ia, ipStr, ARRAYSIZE(ipStr));
+
+    LPCWSTR mark = (up == 1) ? L"✓" : (up == 0) ? L"✗" : L"…";
+    size_t len = wcslen(tip);
+    if (len + 24 >= cap) return;  // "\nDNS2 255.255.255.255 ✗" worst case
+    swprintf_s(tip + len, cap - len, L"\n%s %s %s", label, ipStr, mark);
+}
+
 void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
-    BOOL dnsUp = (g_dnsIsReachable == 1);
-    BOOL hasDns = (g_dnsServerIp != 0);
+    DnsOverall dns = GetDnsOverall();
     BOOL pending = (g_isProcessingClick != 0);
 
-    HICON hNewIcon = CreateColoredDotIcon(enabled, dnsUp, hasDns, pending);
+    HICON hNewIcon = CreateColoredDotIcon(enabled, dns, pending);
     if (!hNewIcon) {
         Wh_Log(L"AddOrUpdateTrayIcon: CreateColoredDotIcon failed");
         return;
@@ -502,15 +696,21 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
         wsprintfW(nid.szTip, L"Net-Toggle: toggling\u2026");
     } else if (g_isProcessingClick == 2) {
         wsprintfW(nid.szTip, L"Net-Toggle: refreshing\u2026");
-    } else if (enabled) {
-        if (!hasDns)
-            wsprintfW(nid.szTip, L"Net-Toggle: ON");
-        else if (dnsUp)
-            wsprintfW(nid.szTip, L"Net-Toggle: ON | DNS reachable");
-        else
-            wsprintfW(nid.szTip, L"Net-Toggle: ON | DNS unreachable");
-    } else {
+    } else if (!enabled) {
         wsprintfW(nid.szTip, L"Net-Toggle: OFF (click to enable)");
+    } else {
+        switch (dns) {
+            case DNS_OK:       wsprintfW(nid.szTip, L"Net-Toggle: ON | DNS OK"); break;
+            case DNS_DEGRADED: wsprintfW(nid.szTip, L"Net-Toggle: ON | DNS degraded"); break;
+            case DNS_DOWN:     wsprintfW(nid.szTip, L"Net-Toggle: ON | DNS unreachable"); break;
+            case DNS_CHECKING: wsprintfW(nid.szTip, L"Net-Toggle: ON | checking DNS\u2026"); break;
+            case DNS_NONE:
+            default:           wsprintfW(nid.szTip, L"Net-Toggle: ON"); break;
+        }
+        if (dns != DNS_NONE) {
+            AppendDnsTipLine(nid.szTip, ARRAYSIZE(nid.szTip), 0, L"DNS1");
+            AppendDnsTipLine(nid.szTip, ARRAYSIZE(nid.szTip), 1, L"DNS2");
+        }
     }
 
     nid.hIcon = hNewIcon;
@@ -657,14 +857,13 @@ void ProcessNetworkReset() {
         PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)g_networkIsUp, 0);
     }
 
-    if (g_activeWorkerThread) {
-        CloseHandle(g_activeWorkerThread);
-        g_activeWorkerThread = nullptr;
-    }
-    
     DWORD threadId;
-    g_activeWorkerThread = CreateThread(nullptr, 0, ResetWorkerThreadProc, nullptr, 0, &threadId);
-    if (!g_activeWorkerThread) {
+    HANDLE hNewThread = CreateThread(nullptr, 0, ResetWorkerThreadProc, nullptr, 0, &threadId);
+    HANDLE hOldThread = (HANDLE)InterlockedExchangePointer((PVOID*)&g_activeWorkerThread, hNewThread);
+    if (hOldThread) {
+        CloseHandle(hOldThread);
+    }
+    if (!hNewThread) {
         InterlockedExchange(&g_isProcessingClick, 0);
     }
 }
@@ -692,14 +891,13 @@ void ProcessTrayClick() {
         PostMessageW(g_trayHwnd, WM_UPDATE_TRAY_STATE, (WPARAM)g_networkIsUp, 0);
     }
 
-    if (g_activeWorkerThread) {
-        CloseHandle(g_activeWorkerThread);
-        g_activeWorkerThread = nullptr;
-    }
-
     DWORD threadId;
-    g_activeWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, (LPVOID)(UINT_PTR)targetState, 0, &threadId);
-    if (!g_activeWorkerThread) {
+    HANDLE hNewThread = CreateThread(nullptr, 0, WorkerThreadProc, (LPVOID)(UINT_PTR)targetState, 0, &threadId);
+    HANDLE hOldThread = (HANDLE)InterlockedExchangePointer((PVOID*)&g_activeWorkerThread, hNewThread);
+    if (hOldThread) {
+        CloseHandle(hOldThread);
+    }
+    if (!hNewThread) {
         InterlockedExchange(&g_isProcessingClick, 0);
     }
 }
@@ -708,10 +906,24 @@ void ProcessTrayClick() {
 // DNS Ping Handler
 // ==============================================================================
 
-DWORD WINAPI DnsPingWorkerProc(LPVOID lpParam) {
-    DWORD ipAddr = (DWORD)(UINT_PTR)lpParam;
-    BOOL reachable = PingIp(ipAddr);
-    InterlockedExchange(&g_dnsIsReachable, reachable ? 1 : 0);
+DWORD WINAPI DnsPingWorkerProc(LPVOID) {
+    // Probe each configured slot in priority order. Results publish per slot
+    // so the tooltip can show ✓/✗ per server and GetDnsOverall() can derive
+    // OK / DEGRADED / DOWN.
+    for (int i = 0; i < 2; i++) {
+        LONG ip = InterlockedOr(&g_dnsIp[i], 0);
+        if (ip == 0) {
+            InterlockedExchange(&g_dnsUp[i], -1);
+            continue;
+        }
+        // Bail out if the network dropped or the mod is unloading mid-pass.
+        if (InterlockedOr(&g_networkIsUp, 0) == 0) break;
+        if (g_shutdownEvent && WaitForSingleObject(g_shutdownEvent, 0) == WAIT_OBJECT_0) break;
+
+        BOOL up = ProbeDnsServer((DWORD)ip, InterlockedOr(&g_dnsProbe[i], 0));
+        InterlockedExchange(&g_dnsUp[i], up ? 1 : 0);
+    }
+
     HWND hwnd = g_trayHwnd;
     if (hwnd) {
         PostMessageW(hwnd, WM_UPDATE_TRAY_STATE,
@@ -722,29 +934,81 @@ DWORD WINAPI DnsPingWorkerProc(LPVOID lpParam) {
 }
 
 void OnDnsPingTimer(HWND hWnd) {
-    if (g_dnsServerIp == 0) return;
+    if (!AnyDnsConfigured()) return;
 
     if (InterlockedOr(&g_networkIsUp, 0) == 0) {
-        Wh_Log(L"Network is OFF, skipping DNS ping");
-        InterlockedExchange(&g_dnsIsReachable, 0);
+        Wh_Log(L"Network is OFF, skipping DNS check");
+        // Status is unknowable while offline; mark unchecked so the icon shows
+        // "checking" (not a stale ✗) when the network comes back.
+        InterlockedExchange(&g_dnsUp[0], -1);
+        InterlockedExchange(&g_dnsUp[1], -1);
         PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
         return;
     }
 
     if (InterlockedCompareExchange(&g_dnsWorkerRunning, 1, 0) != 0) {
-        Wh_Log(L"DNS ping already in progress, skipping");
+        Wh_Log(L"DNS check already in progress, skipping");
         return;
     }
 
     Wh_Log(L"Triggering DNS reachability check...");
-    DWORD ipAddr = g_dnsServerIp;
-    HANDLE hThread = CreateThread(nullptr, 0, DnsPingWorkerProc,
-                                  (LPVOID)(UINT_PTR)ipAddr, 0, nullptr);
+    HANDLE hThread = CreateThread(nullptr, 0, DnsPingWorkerProc, nullptr, 0, nullptr);
     if (!hThread) {
         InterlockedExchange(&g_dnsWorkerRunning, 0);
     } else {
-        CloseHandle(hThread);
+        // Track the handle so mod unload can wait for an in-flight check.
+        HANDLE hOld = (HANDLE)InterlockedExchangePointer((PVOID*)&g_dnsWorkerThread, hThread);
+        if (hOld) CloseHandle(hOld);
     }
+}
+
+// ==============================================================================
+// Settings
+// ==============================================================================
+
+// Parses one "server + check method" settings pair into a probe slot.
+static void LoadDnsSlotSetting(int slot, LPCWSTR serverKey, LPCWSTR probeKey) {
+    DWORD newIp = 0;
+    auto server = WindhawkUtils::StringSetting::make(serverKey);
+    if (server.get()[0]) {
+        if (InetPtonW(AF_INET, server.get(), &newIp) != 1) {
+            Wh_Log(L"Invalid DNS server IP '%s' — slot %d disabled", server.get(), slot + 1);
+            newIp = 0;
+        } else {
+            Wh_Log(L"DNS slot %d: %s", slot + 1, server.get());
+        }
+    }
+
+    LONG method = PROBE_UDP_DNS;
+    auto probe = WindhawkUtils::StringSetting::make(probeKey);
+    if (wcscmp(probe.get(), L"tcp") == 0)      method = PROBE_TCP_53;
+    else if (wcscmp(probe.get(), L"dot") == 0) method = PROBE_TCP_853;
+    else if (wcscmp(probe.get(), L"doh") == 0) method = PROBE_TCP_443;
+
+    InterlockedExchange(&g_dnsIp[slot], (LONG)newIp);
+    InterlockedExchange(&g_dnsProbe[slot], method);
+    InterlockedExchange(&g_dnsUp[slot], -1);  // force a fresh probe result
+}
+
+static void LoadDnsSettings() {
+    LoadDnsSlotSetting(0, L"dnsServer", L"dnsProbe");
+    LoadDnsSlotSetting(1, L"dnsServer2", L"dnsProbe2");
+
+    // An identical duplicate adds no signal — keep only the primary copy.
+    if (InterlockedOr(&g_dnsIp[1], 0) != 0 &&
+        InterlockedOr(&g_dnsIp[1], 0) == InterlockedOr(&g_dnsIp[0], 0) &&
+        InterlockedOr(&g_dnsProbe[1], 0) == InterlockedOr(&g_dnsProbe[0], 0)) {
+        Wh_Log(L"Secondary DNS duplicates primary — ignoring secondary");
+        InterlockedExchange(&g_dnsIp[1], 0);
+    }
+
+    if (!AnyDnsConfigured()) {
+        Wh_Log(L"No DNS server configured — DNS monitoring disabled");
+    }
+
+    int intervalSec = Wh_GetIntSetting(L"pingInterval");
+    if (intervalSec < MIN_PING_INTERVAL_SEC) intervalSec = MIN_PING_INTERVAL_SEC;
+    g_pingIntervalMs = (DWORD)intervalSec * 1000;
 }
 
 // ==============================================================================
@@ -839,29 +1103,15 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         return 0;
     } else if (msg == WM_SETTINGS_CHANGED) {
         // Re-read settings on the tray thread
-        DWORD newIp = 0;
-        {
-            auto dnsIp = WindhawkUtils::StringSetting::make(L"dnsServer");
-            if (dnsIp.get()[0]) {
-                if (InetPtonW(AF_INET, dnsIp.get(), &newIp) != 1) {
-                    Wh_Log(L"Invalid DNS server IP '%s' — DNS monitoring disabled", dnsIp.get());
-                    newIp = 0;
-                }
-            }
-        }
-        
-        InterlockedExchange(&g_dnsServerIp, newIp);
-        int intervalSec = Wh_GetIntSetting(L"pingInterval");
-        if (intervalSec < MIN_PING_INTERVAL_SEC) intervalSec = MIN_PING_INTERVAL_SEC;
-        g_pingIntervalMs = (DWORD)intervalSec * 1000;
+        LoadDnsSettings();
 
         KillTimer(hWnd, DNS_PING_TIMER_ID);
-        if (newIp != 0) {
+        if (AnyDnsConfigured()) {
             SetTimer(hWnd, DNS_PING_TIMER_ID, g_pingIntervalMs, nullptr);
-            // Immediate first ping
+            // Immediate first check
             OnDnsPingTimer(hWnd);
         }
-        AddOrUpdateTrayIcon(hWnd, (BOOL)(g_networkIsUp == 1), FALSE);
+        AddOrUpdateTrayIcon(hWnd, (BOOL)(InterlockedOr(&g_networkIsUp, 0) == 1), FALSE);
         return 0;
     } else if (msg == WM_TIMER) {
         if (wParam == DNS_PING_TIMER_ID) {
@@ -888,7 +1138,7 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     } else if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         Wh_Log(L"Explorer restarted — re-adding tray icon");
         AddOrUpdateTrayIcon(hWnd, (BOOL)(g_networkIsUp == 1), TRUE);
-        if (g_dnsServerIp != 0) OnDnsPingTimer(hWnd);  // verify state asynchronously
+        if (AnyDnsConfigured()) OnDnsPingTimer(hWnd);  // verify state asynchronously
         return 0;
     }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -1038,10 +1288,10 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     AddOrUpdateTrayIcon(hWnd, initialState, TRUE);
     Wh_Log(L"Tray icon installed. Initial state: %s", initialState ? L"ON" : L"OFF");
 
-    // Start DNS ping timer if configured
-    if (g_dnsServerIp != 0) {
+    // Start DNS check timer if configured
+    if (AnyDnsConfigured()) {
         SetTimer(hWnd, DNS_PING_TIMER_ID, g_pingIntervalMs, nullptr);
-        // Immediate first ping
+        // Immediate first check
         OnDnsPingTimer(hWnd);
     }
 
@@ -1124,25 +1374,7 @@ BOOL WhTool_ModInit() {
     }
 
     // Read initial settings
-    {
-        DWORD newIp = 0;
-        auto dnsIp = WindhawkUtils::StringSetting::make(L"dnsServer");
-        if (dnsIp.get()[0]) {
-            if (InetPtonW(AF_INET, dnsIp.get(), &newIp) != 1) {
-                Wh_Log(L"Invalid DNS server IP '%s' — DNS monitoring disabled", dnsIp.get());
-                newIp = 0;
-            } else {
-                Wh_Log(L"DNS server configured: %s", dnsIp.get());
-            }
-        } else {
-            Wh_Log(L"No DNS server configured — DNS monitoring disabled");
-        }
-        InterlockedExchange(&g_dnsServerIp, newIp);
-    }
-
-    int intervalSec = Wh_GetIntSetting(L"pingInterval");
-    if (intervalSec < MIN_PING_INTERVAL_SEC) intervalSec = MIN_PING_INTERVAL_SEC;
-    g_pingIntervalMs = (DWORD)intervalSec * 1000;
+    LoadDnsSettings();
 
     // Create shutdown event (manual-reset, initially non-signalled)
     g_shutdownEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -1192,11 +1424,19 @@ void WhTool_ModUninit() {
     }
 
     // Step 3: wait for threads
-    HANDLE waitThreads[3] = {};
+    // Atomically take ownership of the worker handles so a concurrent
+    // ProcessTrayClick/ProcessNetworkReset/OnDnsPingTimer on the tray thread
+    // can't be racing us on the same handle (each does its own
+    // InterlockedExchangePointer when spawning a new worker).
+    HANDLE hActiveWorker = (HANDLE)InterlockedExchangePointer((PVOID*)&g_activeWorkerThread, nullptr);
+    HANDLE hDnsWorker    = (HANDLE)InterlockedExchangePointer((PVOID*)&g_dnsWorkerThread, nullptr);
+
+    HANDLE waitThreads[4] = {};
     DWORD waitCount = 0;
     if (g_trayThread) waitThreads[waitCount++] = g_trayThread;
     if (g_netWatchThread) waitThreads[waitCount++] = g_netWatchThread;
-    if (g_activeWorkerThread) waitThreads[waitCount++] = g_activeWorkerThread;
+    if (hActiveWorker) waitThreads[waitCount++] = hActiveWorker;
+    if (hDnsWorker) waitThreads[waitCount++] = hDnsWorker;
 
     if (waitCount > 0) {
         Wh_Log(L"Waiting for %d threads to exit...", waitCount);
@@ -1219,9 +1459,11 @@ void WhTool_ModUninit() {
         CloseHandle(g_shutdownEvent);
         g_shutdownEvent = nullptr;
     }
-    if (g_activeWorkerThread) {
-        CloseHandle(g_activeWorkerThread);
-        g_activeWorkerThread = nullptr;
+    if (hActiveWorker) {
+        CloseHandle(hActiveWorker);
+    }
+    if (hDnsWorker) {
+        CloseHandle(hDnsWorker);
     }
 
     // Step 5: destroy current icon safely
