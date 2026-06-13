@@ -9181,6 +9181,34 @@
                 "version": "1.0"
             }
         },
+        "saved-run-commands": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781342518000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781342518000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "communism420",
+                "compilerOptions": "-lcomctl32 -lgdi32 -lshell32",
+                "description": "Adds a compact saved commands list to the Windows Run dialog.",
+                "github": "https://github.com/communism420",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Saved Run Commands",
+                "version": "1.0.0"
+            }
+        },
         "scroll-window-opacity": {
             "details": {
                 "defaultSorting": 1400,

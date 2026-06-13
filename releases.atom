@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-12T16:23:23.000Z</updated>
+    <updated>2026-06-13T09:21:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Saved Run Commands 1.0.0]]></title>
+        <id>https://windhawk.net/mods/saved-run-commands#3fea50c0b2dad77305ca50376a7683b232443903</id>
+        <link href="https://windhawk.net/mods/saved-run-commands"/>
+        <updated>2026-06-13T09:21:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="savedruncommands">Saved Run Commands</h1>
+<p>Adds a small button to the standard Windows Run dialog. The button opens a
+compact "Saved Commands" window. A double click on a saved command inserts it
+into the Run edit box and immediately executes it.
+The Saved Commands window can also save either the current Run command or a
+command typed directly into its own input field.
+Saved commands can be edited with the "Update selected" button.
+Multiple saved commands can be selected and deleted at once.
+Each saved command has a per-row "Run as administrator" checkbox.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28button%29.png" alt="Windows Run dialog with the Saved Run Commands button" /></p>
+<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28window%29.png" alt="Saved Commands window" /></p>
+<p>Notes:</p>
+<ul>
+<li>Commands are stored as one line per command in the mod storage folder.</li>
+<li>Elevated commands expand environment variables before a best-effort
+ShellExecute runas launch.</li>
+<li>The UI added by this mod is intentionally English-only.</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Context Menu Custom Items 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-context-menu-custom-items#19bc5c4ed26f7fae503df45a5415ab60fec6311e</id>
@@ -721,22 +750,6 @@ scoped to the root window identified by GetGUIThreadInfo / GetForegroundWindow
         <author>
             <name>VitalS</name>
             <uri>https://github.com/VitalSkib</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Genie Animation Mod 1.0.0]]></title>
-        <id>https://windhawk.net/mods/genie-minimize-animation#4e24d3c633491a476404255c01c4b49194e9847b</id>
-        <link href="https://windhawk.net/mods/genie-minimize-animation"/>
-        <updated>2026-05-29T12:07:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="genieanimationmod">Genie Animation Mod</h1>
-<p>This is a mod that adds a genie like minimize animation.
-Since I don't know C++ yet, this mode was written by gemini and claude.
-This mod isn't perfect but windows isn't giving me a lot to work with. (windows animation api is almost 20 years old)
-Keep in mind that these animation can use a lot of cpu power but from my experience this only spikes when you spam the animations.</p>
-<p>I'll try to add settings for this mod later.</p>]]></content>
-        <author>
-            <name>lolstijl</name>
-            <uri>https://github.com/lolstijl</uri>
         </author>
     </entry>
 </feed>

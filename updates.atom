@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-12T16:23:23.000Z</updated>
+    <updated>2026-06-13T09:21:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Saved Run Commands 1.0.0]]></title>
+        <id>https://windhawk.net/mods/saved-run-commands#3fea50c0b2dad77305ca50376a7683b232443903</id>
+        <link href="https://windhawk.net/mods/saved-run-commands"/>
+        <updated>2026-06-13T09:21:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="savedruncommands">Saved Run Commands</h1>
+<p>Adds a small button to the standard Windows Run dialog. The button opens a
+compact "Saved Commands" window. A double click on a saved command inserts it
+into the Run edit box and immediately executes it.
+The Saved Commands window can also save either the current Run command or a
+command typed directly into its own input field.
+Saved commands can be edited with the "Update selected" button.
+Multiple saved commands can be selected and deleted at once.
+Each saved command has a per-row "Run as administrator" checkbox.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28button%29.png" alt="Windows Run dialog with the Saved Run Commands button" /></p>
+<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28window%29.png" alt="Saved Commands window" /></p>
+<p>Notes:</p>
+<ul>
+<li>Commands are stored as one line per command in the mod storage folder.</li>
+<li>Elevated commands expand environment variables before a best-effort
+ShellExecute runas launch.</li>
+<li>The UI added by this mod is intentionally English-only.</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Context Menu Custom Items 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-context-menu-custom-items#19bc5c4ed26f7fae503df45a5415ab60fec6311e</id>
@@ -504,27 +533,6 @@ list.</p>]]></content>
         <author>
             <name>aimagist</name>
             <uri>https://github.com/aimagist</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Transparent Desktop Icons with Spotlight 1.0.1]]></title>
-        <id>https://windhawk.net/mods/transparent-desktop-icons-spotlight#7b8cbb03327c369d4eb77030b8dd7c0a9c7ee242</id>
-        <link href="https://windhawk.net/mods/transparent-desktop-icons-spotlight"/>
-        <updated>2026-06-05T12:01:31.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="architectureupdatesoptimizations">🚀 Architecture Updates &amp; Optimizations</h3>
-<ul>
-<li><strong>Robust Thread-Safe Initialization:</strong> Fixed early-boot race conditions and cold-start bugs. Implemented a throttled desktop discovery loop with an exponential backoff system that safely triggers native overlay initialization on the correct desktop thread.</li>
-<li><strong>0% CPU Deep Sleep:</strong> Replaced active rendering poll loops with an event-driven <code>WaitForSingleObject</code> wait. The background thread drops into an <code>INFINITE</code> sleep state (0.00% CPU/GPU) when the desktop is fully idle.</li>
-<li><strong>Zero-Latency Mouse Wake:</strong> Bypassed Windows timer throttling by intercepting hardware-level mouse events (<code>WM_MOUSEFIRST/LAST</code> and pointer updates) in the message dispatch hook to wake the render thread instantly.</li>
-<li><strong>Refactored Wallpaper Capture:</strong> Refined the background capture routine to target the correct <code>WorkerW</code> sibling and cleanly hide transient layers, resolving theme-change ghosting and recursive rendering bugs.</li>
-<li><strong>UX & Stability Fixes:</strong> <ul>
-<li>Keeps the spotlight fully illuminated while renaming desktop icons (F2 edit controls).</li>
-<li>Added robust DXGI device loss recovery to rebuild the DirectX pipeline after GPU resets or system sleep.</li>
-<li>Minor settings description changes for better readability</li></ul></li>
-</ul>]]></content>
-        <author>
-            <name>drgutman</name>
-            <uri>https://github.com/drgutman</uri>
         </author>
     </entry>
 </feed>
