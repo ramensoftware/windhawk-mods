@@ -14,6 +14,8 @@
 /*
 # MicroManager
 
+![Screenshot](https://i.imgur.com/yDHoq9N.png)
+
 A lightweight tray icon that shows a mini task manager popup with live CPU, GPU
 and RAM usage, plus the single top-consuming process for each.
 
@@ -158,6 +160,7 @@ typedef NTSTATUS (WINAPI *NtQuerySystemInformation_t)(ULONG, PVOID, ULONG, PULON
 static HANDLE              g_trayThread   = nullptr;
 static volatile HWND       g_trayHwnd     = nullptr;
 static HWND                g_popupHwnd    = nullptr;
+static ULONGLONG           g_lastPopupCloseTime = 0;
 static HINSTANCE           g_hInstance    = nullptr;
 static WCHAR               g_windhawkPath[MAX_PATH] = {};
 static WCHAR               g_ddoresDllPath[MAX_PATH] = {};
@@ -167,7 +170,6 @@ static int                 g_dpi          = 96;   // popup DPI, refreshed per sh
 static ULONGLONG           g_totalPhys    = 0;    // total physical RAM, bytes
 
 // Cached stats (updated on timer, read on popup paint)
-static CRITICAL_SECTION    g_statsLock;
 static int                 g_totalCpu     = -1;
 static int                 g_topCpuPct    = 0;
 static WCHAR               g_topCpuName[64] = {};
@@ -198,7 +200,7 @@ static struct {
     DWORD  pid;
     LONGLONG time;
     WCHAR  name[64];
-} g_prevProcs[MAX_PROCESSES];
+} g_prevProcs[MAX_PROCESSES], g_curProcs[MAX_PROCESSES];
 static int                 g_prevProcCount = 0;
 static BOOL                g_hasPrevSample = FALSE;
 
@@ -344,6 +346,7 @@ static void CollectGpuStats(int* outTotal, int* outTopPct, WCHAR* outTopName, in
     }
     free(items);
 
+    if (grandTotal > 100.0) grandTotal = 100.0;
     *outTotal = (int)(grandTotal + 0.5);
 
     // Find top GPU process
@@ -355,21 +358,15 @@ static void CollectGpuStats(int* outTotal, int* outTopPct, WCHAR* outTopName, in
             topIdx = i;
         }
     }
+    if (topVal > 100.0) topVal = 100.0;
     if (topIdx >= 0) {
         *outTopPct = (int)(topVal + 0.5);
 
-        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (snap != INVALID_HANDLE_VALUE) {
-            PROCESSENTRY32W pe = {sizeof(pe)};
-            if (Process32FirstW(snap, &pe)) {
-                do {
-                    if (pe.th32ProcessID == g_gpuProcs[topIdx].pid) {
-                        wcscpy_s(outTopName, nameLen, pe.szExeFile);
-                        break;
-                    }
-                } while (Process32NextW(snap, &pe));
+        for (int i = 0; i < g_prevProcCount; i++) {
+            if (g_prevProcs[i].pid == g_gpuProcs[topIdx].pid) {
+                wcscpy_s(outTopName, nameLen, g_prevProcs[i].name);
+                break;
             }
-            CloseHandle(snap);
         }
     }
 }
@@ -446,14 +443,14 @@ static void RefreshData() {
                 }
 
                 if (count < MAX_PROCESSES) {
-                    g_prevProcs[count].pid = (DWORD)(ULONG_PTR)p->UniqueProcessId;
-                    g_prevProcs[count].time = curTime;
+                    g_curProcs[count].pid = (DWORD)(ULONG_PTR)p->UniqueProcessId;
+                    g_curProcs[count].time = curTime;
                     if (p->ImageName.Buffer) {
-                        wcsncpy_s(g_prevProcs[count].name, p->ImageName.Buffer,
+                        wcsncpy_s(g_curProcs[count].name, p->ImageName.Buffer,
                             MIN(p->ImageName.Length / sizeof(WCHAR), 63));
-                        g_prevProcs[count].name[63] = L'\0';
+                        g_curProcs[count].name[63] = L'\0';
                     } else {
-                        g_prevProcs[count].name[0] = L'\0';
+                        g_curProcs[count].name[0] = L'\0';
                     }
                     count++;
                 }
@@ -461,6 +458,7 @@ static void RefreshData() {
                 if (p->NextEntryOffset == 0) break;
                 p = (MY_SYSTEM_PROCESS_INFO*)((BYTE*)p + p->NextEntryOffset);
             }
+            memcpy(g_prevProcs, g_curProcs, count * sizeof(g_prevProcs[0]));
             g_prevProcCount = count;
 
             if (bestTime > 0) {
@@ -486,7 +484,6 @@ static void RefreshData() {
 
     CollectGpuStats(&newTotalGpu, &newTopGpuPct, newTopGpuName, 64);
 
-    EnterCriticalSection(&g_statsLock);
     g_totalCpu = newTotalCpu;
     g_topCpuPct = newTopCpuPct;
     wcscpy_s(g_topCpuName, newTopCpuName);
@@ -496,7 +493,6 @@ static void RefreshData() {
     g_totalRam = newTotalRam;
     g_topRamPct = newTopRamPct;
     wcscpy_s(g_topRamName, newTopRamName);
-    LeaveCriticalSection(&g_statsLock);
 
     if (g_popupHwnd && IsWindowVisible(g_popupHwnd)) {
         InvalidateRect(g_popupHwnd, nullptr, TRUE);
@@ -530,6 +526,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE) {
                 ShowWindow(hWnd, SW_HIDE);
+                g_lastPopupCloseTime = GetTickCount64();
             }
             return 0;
 
@@ -537,11 +534,9 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             // Snapshot stats under the lock, then paint without holding it.
             int totals[POPUP_ROWS], topPcts[POPUP_ROWS];
             WCHAR topNames[POPUP_ROWS][64];
-            EnterCriticalSection(&g_statsLock);
             totals[0] = g_totalCpu; topPcts[0] = g_topCpuPct; wcscpy_s(topNames[0], g_topCpuName);
             totals[1] = g_totalGpu; topPcts[1] = g_topGpuPct; wcscpy_s(topNames[1], g_topGpuName);
             totals[2] = g_totalRam; topPcts[2] = g_topRamPct; wcscpy_s(topNames[2], g_topRamName);
-            LeaveCriticalSection(&g_statsLock);
 
             static const PCWSTR kLabels[POPUP_ROWS]    = { L"CPU", L"GPU", L"RAM" };
             static const PCWSTR kEmptyText[POPUP_ROWS] = { L"Idle", L"Idle", L"\x2014" };
@@ -642,6 +637,10 @@ static void ShowPopup(HWND hTrayWnd) {
             WS_POPUP | WS_BORDER,
             0, 0, Sc(POPUP_WIDTH), Sc(POPUP_HEIGHT),
             nullptr, nullptr, g_hInstance, nullptr);
+        if (!g_popupHwnd) {
+            UnregisterClassW(L"MicroManagerPopupClass", g_hInstance);
+            return;
+        }
     }
 
     if (!g_popupHwnd) return;
@@ -652,6 +651,8 @@ static void ShowPopup(HWND hTrayWnd) {
     EnsureFont();
 
     NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
+    nii.hWnd = hTrayWnd;
+    nii.uID = TRAY_ICON_ID;
     nii.guidItem = MICROMANAGER_TRAY_GUID;  // icon is registered with NIF_GUID
     RECT iconRect;
     int w = Sc(POPUP_WIDTH), h = Sc(POPUP_HEIGHT);
@@ -704,19 +705,11 @@ static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
 }
 
 static void SaveIntervalMs(DWORD ms) {
-    HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\BlackPaw\\MicroManager",
-            0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-        RegSetValueExW(hKey, L"UpdateIntervalMs", 0, REG_DWORD, (BYTE*)&ms, sizeof(ms));
-        RegCloseKey(hKey);
-    }
+    Wh_SetIntValue(L"UpdateIntervalMs", (int)ms);
 }
 
 static DWORD LoadIntervalMs() {
-    DWORD ms = 1000, size = sizeof(ms);
-    RegGetValueW(HKEY_CURRENT_USER, L"Software\\BlackPaw\\MicroManager",
-        L"UpdateIntervalMs", RRF_RT_REG_DWORD, nullptr, &ms, &size);
-    // Clamp to valid options in case registry has a stale value
+    DWORD ms = (DWORD)Wh_GetIntValue(L"UpdateIntervalMs", 1000);
     if (ms != 300 && ms != 500 && ms != 1000 && ms != 3000) ms = 1000;
     return ms;
 }
@@ -741,8 +734,11 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                 case WM_LBUTTONUP:
                     if (g_popupHwnd && IsWindowVisible(g_popupHwnd)) {
                         ShowWindow(g_popupHwnd, SW_HIDE);
+                        g_lastPopupCloseTime = GetTickCount64();
                     } else {
-                        ShowPopup(hWnd);
+                        if (GetTickCount64() - g_lastPopupCloseTime > 200) {
+                            ShowPopup(hWnd);
+                        }
                     }
                     break;
 
@@ -750,11 +746,9 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                     HMENU hMenu = CreatePopupMenu();
 
                     WCHAR statusText[128];
-                    EnterCriticalSection(&g_statsLock);
                     int cpu = g_totalCpu;
                     int gpu = g_totalGpu;
                     int ram = g_totalRam;
-                    LeaveCriticalSection(&g_statsLock);
 
                     if (cpu >= 0 && gpu >= 0 && ram >= 0)
                         swprintf_s(statusText, L"CPU: %d%%  GPU: %d%%  RAM: %d%%", cpu, gpu, ram);
@@ -876,7 +870,7 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
     wc.lpszClassName = L"MicroManagerTrayClass";
     if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
         Wh_Log(L"Tray RegisterClassW failed (%u)", GetLastError());
-        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
 
@@ -886,7 +880,7 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
         WS_POPUP,
         0, 0, 1, 1, nullptr, nullptr, g_hInstance, nullptr);
     if (!g_trayHwnd) {
-        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
 
@@ -931,7 +925,7 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
     }
 
     g_trayHwnd = nullptr;
-    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
@@ -940,7 +934,6 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     Wh_Log(L"MicroManager Init");
 
-    InitializeCriticalSection(&g_statsLock);
     g_updateMs = LoadIntervalMs();
 
     MEMORYSTATUSEX mem = {sizeof(mem)};
@@ -1011,8 +1004,6 @@ void WhTool_ModUninit() {
     if (g_iconEnabled) { DestroyIcon(g_iconEnabled); g_iconEnabled = nullptr; }
     if (g_hPopupFont) { DeleteObject(g_hPopupFont); g_hPopupFont = nullptr; }
     if (g_gpuQuery) { PdhCloseQuery(g_gpuQuery); g_gpuQuery = nullptr; g_gpuCounter = nullptr; }
-
-    DeleteCriticalSection(&g_statsLock);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
