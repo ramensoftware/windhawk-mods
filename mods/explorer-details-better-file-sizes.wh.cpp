@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.11
+// @version         1.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -136,11 +136,13 @@ KiB?](https://devblogs.microsoft.com/oldnewthing/20090611-00/?p=17933).
 
 #include <windhawk_utils.h>
 
+#include <algorithm>
 #include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -149,6 +151,7 @@ using namespace std::string_view_literals;
 #include <initguid.h>
 
 #include <comutil.h>
+#include <ntstatus.h>
 #include <propsys.h>
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -1526,7 +1529,19 @@ std::vector<BYTE> PIDLToVector(const ITEMIDLIST* pidl) {
     return std::vector<BYTE>(ptr, ptr + size);
 }
 
-thread_local winrt::com_ptr<IShellFolder2> g_cacheShellFolder;
+std::vector<BYTE> GetVectorFromIShellFolder(IShellFolder2* shellFolder) {
+    LPITEMIDLIST pidl;
+    HRESULT hr = SHGetIDListFromObject(shellFolder, &pidl);
+    if (FAILED(hr)) {
+        return {};
+    }
+
+    std::vector<BYTE> pidlVector = PIDLToVector(pidl);
+    CoTaskMemFree(pidl);
+    return pidlVector;
+}
+
+thread_local std::vector<BYTE> g_cacheShellFolder;
 thread_local std::map<std::vector<BYTE>, std::optional<ULONGLONG>>
     g_cacheShellFolderSizes;
 thread_local DWORD g_cacheShellFolderLastUsedTickCount;
@@ -1721,12 +1736,15 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
         return S_OK;
     }
 
-    if (shellFolder2 != g_cacheShellFolder ||
+    auto shellFolder2Vector = GetVectorFromIShellFolder(shellFolder2.get());
+    if (shellFolder2Vector.empty() ||
+        shellFolder2Vector != g_cacheShellFolder ||
         GetTickCount() - g_cacheShellFolderLastUsedTickCount > 1000) {
+        Wh_Log(L"Clearing cache");
         g_cacheShellFolderSizes.clear();
     }
 
-    g_cacheShellFolder = shellFolder2;
+    g_cacheShellFolder = std::move(shellFolder2Vector);
 
     auto [cacheIt, cacheMissing] = g_cacheShellFolderSizes.try_emplace(
         PIDLToVector(itemidChild), std::nullopt);
@@ -1899,6 +1917,324 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     } else {
         return 0;
     }
+}
+
+bool StartsWithCaseInsensitive(std::wstring_view str,
+                               std::wstring_view prefix) {
+    return str.size() >= prefix.size() &&
+           _wcsnicmp(str.data(), prefix.data(), prefix.size()) == 0;
+}
+
+// https://github.com/valinet/wh-mods/blob/61319815c7e018e392a08077dc364559548ade02/mods/valinet-unserver.wh.cpp#L95
+// https://stackoverflow.com/questions/937044/determine-path-to-registry-key-from-hkey-handle-in-c
+std::wstring GetPathFromHKEY(HKEY key) {
+    if (!key) {
+        return {};
+    }
+
+    using NtQueryKey_t = NTSTATUS(NTAPI*)(
+        HANDLE KeyHandle, int KeyInformationClass, PVOID KeyInformation,
+        ULONG Length, PULONG ResultLength);
+    static NtQueryKey_t pNtQueryKey = []() {
+        HMODULE hNtdll = GetModuleHandle(L"ntdll.dll");
+        if (hNtdll) {
+            return (NtQueryKey_t)GetProcAddress(hNtdll, "NtQueryKey");
+        }
+        return (NtQueryKey_t) nullptr;
+    }();
+
+    if (!pNtQueryKey) {
+        return {};
+    }
+
+    constexpr int kKeyNameInformation = 3;
+
+    ULONG size = 0;
+    NTSTATUS result = pNtQueryKey(key, kKeyNameInformation, nullptr, 0, &size);
+    if (result != STATUS_BUFFER_TOO_SMALL) {
+        return {};
+    }
+
+    std::vector<BYTE> buffer(size);
+    result = pNtQueryKey(key, kKeyNameInformation, buffer.data(), size, &size);
+    if (result != STATUS_SUCCESS || size < sizeof(ULONG)) {
+        return {};
+    }
+
+    // The buffer contains a KEY_NAME_INFORMATION structure:
+    // ULONG NameLength (4 bytes) + WCHAR Name[1].
+    ULONG nameLength = *reinterpret_cast<ULONG*>(buffer.data());
+    if (size < sizeof(ULONG) + nameLength) {
+        return {};
+    }
+
+    PCWSTR name = reinterpret_cast<PCWSTR>(buffer.data() + sizeof(ULONG));
+    return std::wstring(name, nameLength / sizeof(WCHAR));
+}
+
+bool MatchesClassSubkey(HKEY hKey, std::wstring_view classSubKey) {
+    std::wstring keyPath = GetPathFromHKEY(hKey);
+    std::wstring_view keyPathSuffix = keyPath;
+
+    constexpr std::wstring_view kRegistryMachinePrefix =
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\"sv;
+    constexpr std::wstring_view kRegistryUserPrefix = L"\\REGISTRY\\USER\\"sv;
+
+    if (StartsWithCaseInsensitive(keyPathSuffix, kRegistryMachinePrefix)) {
+        // Remove "\REGISTRY\MACHINE\SOFTWARE\Classes\" prefix.
+        keyPathSuffix.remove_prefix(kRegistryMachinePrefix.size());
+    } else if (StartsWithCaseInsensitive(keyPathSuffix, kRegistryUserPrefix)) {
+        // Remove "\REGISTRY\USER\" prefix.
+        keyPathSuffix.remove_prefix(kRegistryUserPrefix.size());
+
+        // Remove "<SID>_Classes\" prefix for non-empty SID.
+        size_t firstBackslash = keyPathSuffix.find(L'\\');
+        if (firstBackslash == std::wstring_view::npos) {
+            return false;
+        }
+
+        constexpr std::wstring_view kClassesSuffix = L"_Classes"sv;
+        if (firstBackslash > kClassesSuffix.size() &&
+            _wcsnicmp(
+                keyPathSuffix.data() + firstBackslash - kClassesSuffix.size(),
+                kClassesSuffix.data(), kClassesSuffix.size()) == 0) {
+            keyPathSuffix.remove_prefix(firstBackslash + 1);
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    return keyPathSuffix.size() == classSubKey.size() &&
+           _wcsnicmp(keyPathSuffix.data(), classSubKey.data(),
+                     classSubKey.size()) == 0;
+}
+
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+RegQueryValueExW_t RegQueryValueExW_Original;
+LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey,
+                                     LPCWSTR lpValueName,
+                                     LPDWORD lpReserved,
+                                     LPDWORD lpType,
+                                     LPBYTE lpData,
+                                     LPDWORD lpcbData) {
+    // Improve support for folder sizes in:
+    // * Folder views (in addition to details): Tiles, Content
+    // * Details pane (enabled via OldNewExplorer)
+    // * Status bar
+    //
+    // https://github.com/ramensoftware/windhawk-mods/issues/2491#issuecomment-3762519795
+    static const struct {
+        PCWSTR name;
+        std::wstring_view classSubkey;
+        DWORD (*getMaxSize)();
+        std::optional<std::wstring_view> (*getReplacementData)(
+            std::wstring_view existingData);
+    } replacements[]{
+        {
+            L"ContentViewModeForBrowse",
+            L"Folder"sv,
+            []() -> DWORD {
+                return sizeof(
+                    LR"(prop:~System.ItemNameDisplay;~System.LayoutPattern.PlaceHolder;~System.LayoutPattern.PlaceHolder;~System.LayoutPattern.PlaceHolder;System.DateModified;System.Size)");
+            },
+            [](std::wstring_view existingData)
+                -> std::optional<std::wstring_view> {
+                if (existingData ==
+                    LR"(prop:~System.ItemNameDisplay;~System.LayoutPattern.PlaceHolder;~System.LayoutPattern.PlaceHolder;~System.LayoutPattern.PlaceHolder;System.DateModified)"sv) {
+                    return LR"(prop:~System.ItemNameDisplay;~System.LayoutPattern.PlaceHolder;~System.LayoutPattern.PlaceHolder;~System.LayoutPattern.PlaceHolder;System.DateModified;System.Size)"sv;
+                }
+                return std::nullopt;
+            },
+        },
+        {
+            L"ContentViewModeForSearch",
+            L"Folder"sv,
+            []() -> DWORD {
+                return sizeof(
+                    LR"(prop:~System.ItemNameDisplay;System.DateModified;~System.ItemFolderPathDisplay;System.Size)");
+            },
+            [](std::wstring_view existingData)
+                -> std::optional<std::wstring_view> {
+                if (existingData ==
+                    LR"(prop:~System.ItemNameDisplay;System.DateModified;~System.ItemFolderPathDisplay)"sv) {
+                    return LR"(prop:~System.ItemNameDisplay;System.DateModified;~System.ItemFolderPathDisplay;System.Size)"sv;
+                }
+                return std::nullopt;
+            },
+        },
+        {
+            L"TileInfo",
+            L"Folder"sv,
+            []() -> DWORD {
+                return sizeof(
+                    LR"(prop:System.Title;System.HomeGroupSharingStatus;System.Size)");
+            },
+            [](std::wstring_view existingData)
+                -> std::optional<std::wstring_view> {
+                if (existingData == LR"(prop:System.Title)"sv) {
+                    return LR"(prop:System.Title;System.Size)"sv;
+                }
+                if (existingData ==
+                    LR"(prop:System.Title;System.HomeGroupSharingStatus)"sv) {
+                    return LR"(prop:System.Title;System.HomeGroupSharingStatus;System.Size)"sv;
+                }
+                return std::nullopt;
+            },
+        },
+        {
+            L"PreviewDetails",
+            L"Directory"sv,
+            []() -> DWORD {
+                return sizeof(
+                    LR"(prop:System.DateModified;System.Size;System.DateCreated;*System.SharedWith;*System.StorageProviderState;*System.OfflineAvailability;*System.OfflineStatus)");
+            },
+            [](std::wstring_view existingData)
+                -> std::optional<std::wstring_view> {
+                if (existingData ==
+                    LR"(prop:System.DateModified;*System.SharedWith;*System.StorageProviderState;*System.OfflineAvailability;*System.OfflineStatus)"sv) {
+                    return LR"(prop:System.DateModified;System.Size;System.DateCreated;*System.SharedWith;*System.StorageProviderState;*System.OfflineAvailability;*System.OfflineStatus)"sv;
+                }
+                return std::nullopt;
+            },
+        },
+        {
+            L"StatusBar",
+            L"Directory"sv,
+            []() -> DWORD {
+                return sizeof(
+                    LR"(prop:~System.StatusBarViewItemCount;~System.Size;~System.StatusBarSelectedItemCount;~System.StatusBarItemAvailability;System.StatusBarStorageProviderError;System.StatusIcons;System.Sync.ItemState;~System.Sync.GlobalActivityMessage;~System.Sync.LastSyncedMessage)");
+            },
+            [](std::wstring_view existingData)
+                -> std::optional<std::wstring_view> {
+                if (existingData.empty()) {
+                    return LR"(prop:~System.StatusBarViewItemCount;~System.Size;~System.StatusBarSelectedItemCount;~System.StatusBarItemAvailability;System.StatusBarStorageProviderError;System.StatusIcons;System.Sync.ItemState;~System.Sync.GlobalActivityMessage;~System.Sync.LastSyncedMessage)"sv;
+                }
+                return std::nullopt;
+            },
+        },
+    };
+
+    // Save the original buffer size before calling the original function, as
+    // lpcbData is overwritten with the actual data size on output.
+    DWORD dataBufferSize = (lpData && lpcbData) ? *lpcbData : 0;
+
+    LSTATUS ret = RegQueryValueExW_Original(hKey, lpValueName, lpReserved,
+                                            lpType, lpData, lpcbData);
+    if (ret != ERROR_SUCCESS && ret != ERROR_MORE_DATA &&
+        ret != ERROR_FILE_NOT_FOUND) {
+        return ret;
+    }
+
+    if (!lpValueName) {
+        return ret;
+    }
+
+    const auto replacementIt =
+        std::find_if(std::begin(replacements), std::end(replacements),
+                     [lpValueName](const auto& replacement) {
+                         return _wcsicmp(lpValueName, replacement.name) == 0;
+                     });
+    if (replacementIt == std::end(replacements)) {
+        return ret;
+    }
+
+    const auto& replacement = *replacementIt;
+
+    if (ret == ERROR_FILE_NOT_FOUND && !replacement.getReplacementData(L"")) {
+        return ret;
+    }
+
+    if (!MatchesClassSubkey(hKey, replacement.classSubkey)) {
+        return ret;
+    }
+
+    if (ret == ERROR_FILE_NOT_FOUND) {
+        auto replacementData = replacement.getReplacementData(L"");
+        if (!replacementData) {
+            return ret;
+        }
+
+        Wh_Log(L"%s value is absent, providing replacement", replacement.name);
+
+        DWORD requiredSize = (replacementData->size() + 1) * sizeof(WCHAR);
+
+        if (lpType) {
+            *lpType = REG_SZ;
+        }
+
+        if (!lpData || !lpcbData) {
+            if (lpData && !lpcbData) {
+                // Shouldn't happen per documentation.
+                return ret;
+            }
+            if (lpcbData) {
+                *lpcbData = requiredSize;
+            }
+            return ERROR_SUCCESS;
+        }
+
+        if (dataBufferSize < requiredSize) {
+            Wh_Log(L"Not enough space for %s, available=%u", replacement.name,
+                   dataBufferSize);
+            *lpcbData = requiredSize;
+            return ERROR_MORE_DATA;
+        }
+
+        Wh_Log(L"Returning value for %s: %.*s", replacement.name,
+               static_cast<int>(replacementData->size()),
+               replacementData->data());
+
+        memcpy(lpData, replacementData->data(),
+               replacementData->size() * sizeof(WCHAR));
+        reinterpret_cast<PWSTR>(lpData)[replacementData->size()] = L'\0';
+        *lpcbData = requiredSize;
+
+        return ERROR_SUCCESS;
+    }
+
+    Wh_Log(L"%s value is queried, providing replacement", replacement.name);
+
+    if (ret == ERROR_MORE_DATA || !lpData || !lpcbData) {
+        if (lpcbData) {
+            *lpcbData = std::max(*lpcbData, replacement.getMaxSize());
+        }
+        return ret;
+    }
+
+    // Check if the retrieved value matches the expected value.
+    PCWSTR retrievedValue = reinterpret_cast<PCWSTR>(lpData);
+    if (*lpcbData < sizeof(WCHAR) ||
+        retrievedValue[*lpcbData / sizeof(WCHAR) - 1] != L'\0') {
+        Wh_Log(L"Retrieved value is not null-terminated for %s",
+               replacement.name);
+        return ret;
+    }
+
+    auto replacementData = replacement.getReplacementData(retrievedValue);
+    if (!replacementData) {
+        Wh_Log(L"Not replacing %s value: %s", replacement.name, retrievedValue);
+        return ret;
+    }
+
+    // Check if there's enough space to append the value.
+    DWORD requiredSize = (replacementData->size() + 1) * sizeof(WCHAR);
+    if (dataBufferSize < requiredSize) {
+        Wh_Log(L"Not enough space to append, available=%u", dataBufferSize);
+        *lpcbData = requiredSize;
+        return ERROR_MORE_DATA;
+    }
+
+    // Replace the value.
+    Wh_Log(L"Replacing %s value: %s -> %.*s", replacement.name, retrievedValue,
+           static_cast<int>(replacementData->size()), replacementData->data());
+    memcpy(lpData, replacementData->data(),
+           replacementData->size() * sizeof(WCHAR));
+    reinterpret_cast<PWSTR>(lpData)[replacementData->size()] = L'\0';
+    *lpcbData = requiredSize;
+
+    return ret;
 }
 
 using SHOpenFolderAndSelectItems_t = decltype(&SHOpenFolderAndSelectItems);
@@ -2105,27 +2441,39 @@ int WINAPI LoadStringW_Hook(HINSTANCE hInstance,
         return ret;
     }
 
-    PCWSTR newStr = nullptr;
-    if (wcscmp(lpBuffer, L"%s KB") == 0) {
-        newStr = L"%s KiB";
-    } else if (wcscmp(lpBuffer, L"%s MB") == 0) {
-        newStr = L"%s MiB";
-    } else if (wcscmp(lpBuffer, L"%s GB") == 0) {
-        newStr = L"%s GiB";
-    } else if (wcscmp(lpBuffer, L"%s TB") == 0) {
-        newStr = L"%s TiB";
-    } else if (wcscmp(lpBuffer, L"%s PB") == 0) {
-        newStr = L"%s PiB";
-    } else if (wcscmp(lpBuffer, L"%s EB") == 0) {
-        newStr = L"%s EiB";
-    }
-
-    if (!newStr) {
+    // Check if the string matches the regex: "%s( |\u00A0)?[KMGTPE]B".
+    PWSTR p = lpBuffer;
+    if (*p++ != '%' || *p++ != 's') {
         return ret;
     }
 
-    Wh_Log(L"> Overriding string %u: %s -> %s", uID, lpBuffer, newStr);
-    wcsncpy_s(lpBuffer, cchBufferMax, newStr, cchBufferMax - 1);
+    // Skip space or non-breaking space.
+    if (*p == ' ' || *p == L'\u00A0') {
+        p++;
+    }
+
+    if (*p != 'K' && *p != 'M' && *p != 'G' && *p != 'T' && *p != 'P' &&
+        *p != 'E') {
+        return ret;
+    }
+    p++;
+
+    if (*p++ != 'B' || *p != '\0') {
+        return ret;
+    }
+
+    Wh_Log(L"> Overriding string %u: %s", uID, lpBuffer);
+
+    size_t originalStringLen = p - lpBuffer;
+
+    // Override "B" to "iB".
+    p[-1] = 'i';
+
+    if ((size_t)cchBufferMax >= originalStringLen + 2) {
+        p[0] = 'B';
+        p[1] = '\0';
+    }
+
     return wcslen(lpBuffer);
 }
 
@@ -2212,8 +2560,10 @@ bool HookWindowsStorageSymbols() {
 // A workaround for https://github.com/mstorsjo/llvm-mingw/issues/459.
 // Separate mod implementation:
 // https://gist.github.com/m417z/f0cdf071868a6f31210e84dd0d444055.
-// This workaround will be included in Windhawk in future versions.
+// The workaround is no longer needed for Windhawk v1.6 and newer.
+#if __has_include(<cxxabi.h>)
 #include <cxxabi.h>
+#endif
 #include <locale.h>
 namespace ProcessShutdownMessageBoxFix {
 
@@ -2457,6 +2807,17 @@ BOOL Wh_ModInit() {
         if (!HookWindowsStorageSymbols()) {
             Wh_Log(L"Failed hooking Windows Storage symbols");
             return false;
+        }
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        if (kernelBaseModule) {
+            auto pRegQueryValueExW = (RegQueryValueExW_t)GetProcAddress(
+                kernelBaseModule, "RegQueryValueExW");
+            if (pRegQueryValueExW) {
+                WindhawkUtils::Wh_SetFunctionHookT(pRegQueryValueExW,
+                                                   RegQueryValueExW_Hook,
+                                                   &RegQueryValueExW_Original);
+            }
         }
     }
 

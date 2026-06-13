@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              msg-box-font-fix
 // @name            Message Box Fix
-// @description     Fixes the MessageBox font size and optionally make them like Windows XP
-// @version         2.1.1
+// @description     Reverts message boxes to their behavior from before Windows 10 1709
+// @version         2.3.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -13,33 +13,43 @@
 /*
 # Message Box Fix
 Starting with Windows 10 1709, message boxes render their font size 1pt less than the
-user-defined size. You cannot just set this size higher, as many applications still query
-the font with the user-defined size, and will show up with bigger fonts. Also, starting with
-Windows Vista, message boxes got a visual overhaul.
+user-defined size. This mod aims to replicate the behavior of message boxes from various
+versions before Windows 10 1709.
 
-This mod fixes both of those things.
+## Styles
 
-**Before:**
+- **Windows 7-10 1703**: Fixes the font size
+- **Windows Vista**: Same as Windows 7-10 1703, but message boxes with no icon will play
+  the "Default Beep" sound
+- **Windows 2000/XP**: Same as Windows Vista, but with different sizes and positions, as well as
+  a solid background.
+- **Windows 95/98/Me**: Same as Windows 2000-XP, but the close button is disabled on message boxes
+  with only OK.
+- **Windows NT 4.0**: Same as Windows 98-XP, but button widths are dynamic (typically smaller).
+
+## Before
 
 ![Before](https://raw.githubusercontent.com/aubymori/images/main/message-box-font-fix-before.png)
 ![Before (classic)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-before-classic.png)
 
-**After:**
+## After
 
 ![After](https://raw.githubusercontent.com/aubymori/images/main/message-box-font-fix-after.png)
 ![After (classic)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-classic.png)
-![After (Windows 95/NT 4.0)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-nt4.png)
+![After (Windows NT 4.0)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-nt4.png)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- style: vista
+- style: seven
   $name: Message box style
   $options:
-  - nt4: Windows 95/NT 4.0
-  - xp: Windows 98-XP
-  - vista: Windows Vista-10 1703
+  - nt4: Windows NT 4.0
+  - 9x: Windows 95/98/Me
+  - xp: Windows 2000/XP
+  - vista: Windows Vista
+  - seven: Windows 7-10 1703
 */
 // ==/WindhawkModSettings==
 
@@ -49,9 +59,11 @@ HMODULE g_hUser32 = NULL;
 enum MESSAGEBOXSTYLE
 {
     MBS_NT4,
+    MBS_9X,
     MBS_XP,
     MBS_VISTA,
-} g_mbStyle = MBS_VISTA;
+    MBS_SEVEN,
+} g_mbStyle = MBS_SEVEN;
 
 /* Only available in Windows 10 version 1607 and greater. */
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hWnd);
@@ -706,7 +718,7 @@ INT_PTR CALLBACK MB_DlgProc(
 
         hwndT = hwndDlg;
 
-        if (lpmb->CancelId == 0) {
+        if (lpmb->CancelId == 0 || (g_mbStyle == MBS_9X && lpmb->CancelId == IDOK)) {
             HMENU hMenu;
 
             if (hMenu = GetSystemMenu(hwndDlg, FALSE)) {
@@ -1230,8 +1242,20 @@ SMB_Exit:
 int (WINAPI *SoftModalMessageBox_orig)(LPMSGBOXDATA);
 int WINAPI SoftModalMessageBox_hook(LPMSGBOXDATA lpmb)
 {
-    if (g_mbStyle != MBS_VISTA)
+    if (g_mbStyle < MBS_VISTA)
+    {
         return SoftModalMessageBox_XP(lpmb);
+    }
+
+    if (g_mbStyle == MBS_VISTA
+    && lpmb
+    && (lpmb->dwStyle & MB_ICONMASK) == 0)
+    {
+        if (NtUserMessageBeep)
+            NtUserMessageBeep(0);
+        else
+            NtUserCallOneParam(0, SFI_PLAYEVENTSOUND);
+    }
     return SoftModalMessageBox_orig(lpmb);
 }
 
@@ -1244,13 +1268,21 @@ void LoadSettings(void)
     {
         g_mbStyle = MBS_NT4;
     }
+    else if (0 == wcscmp(pszStyle, L"9x"))
+    {
+        g_mbStyle = MBS_9X;
+    }
     else if (0 == wcscmp(pszStyle, L"xp"))
     {
         g_mbStyle = MBS_XP;
     }
-    else
+    else if (0 == wcscmp(pszStyle, L"vista"))
     {
         g_mbStyle = MBS_VISTA;
+    }
+    else
+    {
+        g_mbStyle = MBS_SEVEN;
     }
     Wh_FreeStringSetting(pszStyle);
 }

@@ -2,7 +2,7 @@
 // @id              classic-progress-bars
 // @name            Classic Progress Bars
 // @description     Reverts progress bars to how they looked in Windows XP and before
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -680,8 +680,8 @@ const WindhawkUtils::SYMBOL_HOOK comctl32DllHooks[] = {
             STDCALL_STR
             L" Progress_SetHighlightTimer(struct PRO_DATA *,bool)"
         },
-        &Progress_SetAnimateTimer_orig,
-        Progress_SetAnimateTimer_hook,
+        &Progress_SetHighlightTimer_orig,
+        Progress_SetHighlightTimer_hook,
         false
     },
     {

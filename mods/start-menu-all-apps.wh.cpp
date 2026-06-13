@@ -2,7 +2,7 @@
 // @id              start-menu-all-apps
 // @name            Show all apps by default in start menu
 // @description     When the Windows 11 start menu is opened, show all apps right away
-// @version         1.0.4
+// @version         1.0.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -37,6 +37,10 @@ After (when the start menu is opened):
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
+
+#include <atomic>
+
+std::atomic<bool> g_startMenuDllLoaded;
 
 bool g_inStartInnerFrameConstructor;
 void* g_IDockedStartControllerOverrides_as_pThis;
@@ -104,42 +108,7 @@ void* WINAPI IDockedStartControllerOverrides_as_Hook(void* pThis,
     return ret;
 }
 
-BOOL Wh_ModInit() {
-    Wh_Log(L">");
-
-    WCHAR szWindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectory(szWindowsDirectory,
-                             ARRAYSIZE(szWindowsDirectory))) {
-        Wh_Log(L"GetWindowsDirectory failed");
-        return FALSE;
-    }
-
-    HMODULE module;
-
-    // Try the path for Windows 11 version 22H2.
-    WCHAR szStartmenuDllPath[MAX_PATH];
-    wcscpy_s(szStartmenuDllPath, szWindowsDirectory);
-    wcscat_s(
-        szStartmenuDllPath,
-        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\StartMenu.dll)");
-    if (GetFileAttributes(szStartmenuDllPath) != INVALID_FILE_ATTRIBUTES) {
-        module = LoadLibraryEx(szStartmenuDllPath, nullptr,
-                               LOAD_WITH_ALTERED_SEARCH_PATH);
-    } else {
-        // Try the path for Windows 11 before version 22H2.
-        wcscpy_s(szStartmenuDllPath, szWindowsDirectory);
-        wcscat_s(
-            szStartmenuDllPath,
-            LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\StartMenu.dll)");
-        module = LoadLibraryEx(szStartmenuDllPath, nullptr,
-                               LOAD_WITH_ALTERED_SEARCH_PATH);
-    }
-
-    if (!module) {
-        Wh_Log(L"LoadLibrary failed");
-        return FALSE;
-    }
-
+bool HookStartMenuDllSymbols(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK startMenuDllHooks[] = {
         {
             {
@@ -179,8 +148,78 @@ BOOL Wh_ModInit() {
 
     if (!HookSymbols(module, startMenuDllHooks, ARRAYSIZE(startMenuDllHooks))) {
         Wh_Log(L"HookSymbols failed");
-        return FALSE;
+        return false;
     }
 
+    return true;
+}
+
+HMODULE GetStartMenuModuleHandle() {
+    return GetModuleHandle(L"StartMenu.dll");
+}
+
+void HandleLoadedModuleIfStartMenu(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_startMenuDllLoaded && GetStartMenuModuleHandle() == module &&
+        !g_startMenuDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookStartMenuDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfStartMenu(module, lpLibFileName);
+    }
+
+    return module;
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    if (HMODULE startMenuModule = GetStartMenuModuleHandle()) {
+        g_startMenuDllLoaded = true;
+        if (!HookStartMenuDllSymbols(startMenuModule)) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"StartMenu.dll not loaded yet");
+    }
+
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    if (!g_startMenuDllLoaded) {
+        if (HMODULE startMenuModule = GetStartMenuModuleHandle()) {
+            if (!g_startMenuDllLoaded.exchange(true)) {
+                Wh_Log(L"Got StartMenu.dll");
+
+                if (HookStartMenuDllSymbols(startMenuModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
 }

@@ -2,14 +2,14 @@
 // @id              taskbar-notification-icon-spacing
 // @name            Taskbar tray icon spacing and grid
 // @description     Reduce or increase the spacing between tray icons on the taskbar, optionally have a grid of tray icons (Windows 11 only)
-// @version         1.2
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -53,6 +53,40 @@ versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
   $name: Tray icon rows
   $description: >-
     Allows having a grid of tray icons
+- gridArrangement: rowFirstLeftToRight
+  $name: Grid arrangement
+  $description: >-
+    The order in which tray icons are arranged when using multiple rows.
+    Row-first fills each row before moving to the next.
+    Column-first fills each column before moving to the next.
+    Examples with icons A-G and 2 rows:
+
+      Row-first, left-to-right:
+        A B C D
+        E F G
+
+      Column-first, top-to-bottom:
+        A C E G
+        B D F
+
+      Row-first, bottom row first:
+        E F G
+        A B C D
+
+      Column-first, bottom-to-top:
+        B D F
+        A C E G
+
+      Column-first, bottom-to-top, right-to-left:
+        _ F D B
+        G E C A
+  $options:
+  - rowFirstLeftToRight: Row-first, left-to-right
+  - columnFirstTopToBottom: Column-first, top-to-bottom
+  - rowFirstBottomRowFirst: Row-first, bottom row first
+  - columnFirstBottomToTop: Column-first, bottom-to-top
+  - columnFirstBottomToTopRightToLeft: >-
+      Column-first, bottom-to-top, right-to-left
 - overflowIconWidth: 32
   $name: Tray overflow icon width
   $description: >-
@@ -72,6 +106,7 @@ versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 #include <windhawk_utils.h>
 
 #include <atomic>
+#include <cmath>
 #include <functional>
 #include <list>
 
@@ -84,14 +119,23 @@ versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
 using namespace winrt::Windows::UI::Xaml;
 
+enum class GridArrangement {
+    rowFirstLeftToRight,
+    columnFirstTopToBottom,
+    rowFirstBottomRowFirst,
+    columnFirstBottomToTop,
+    columnFirstBottomToTopRightToLeft,
+};
+
 struct {
     int notificationIconWidth;
     int notificationIconRows;
+    GridArrangement gridArrangement;
     int overflowIconWidth;
     int overflowIconsPerRow;
 } g_settings;
 
-std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_systemTrayModuleHooked;
 std::atomic<bool> g_unloading;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
@@ -264,14 +308,20 @@ void ApplyNotifyIconsStackPanelGridStyle(FrameworkElement stackPanel,
     if (rows > 1) {
         double stackPanelHeight = stackPanel.ActualHeight();
         double gap = stackPanelHeight - 16 * rows;
-        double gapPerItem = std::max(gap, 0.0) / (rows + 1);
+        double gapPerItem = std::fmax(gap, 0.0) / (rows + 1);
         // Force the gap to be an even number to prevent blurry icons.
         int gapPerItemEven = static_cast<int>(gapPerItem) / 2 * 2;
         itemHeight = 16 + gapPerItemEven;
     }
 
+    // Count children first for row-first arrangements.
+    int childCount = Media::VisualTreeHelper::GetChildrenCount(stackPanel);
+    int cols = (childCount + rows - 1) / rows;
+
+    GridArrangement arrangement = g_settings.gridArrangement;
+
     int indexIter = 0;
-    EnumChildElements(stackPanel, [width, rows, itemHeight,
+    EnumChildElements(stackPanel, [width, rows, itemHeight, cols, arrangement,
                                    &indexIter](FrameworkElement child) {
         int index = indexIter++;
 
@@ -285,13 +335,36 @@ void ApplyNotifyIconsStackPanelGridStyle(FrameworkElement stackPanel,
         if (rows > 1) {
             child.Height(itemHeight);
 
+            int col, row;
+            switch (arrangement) {
+                case GridArrangement::rowFirstLeftToRight:
+                    col = index % cols;
+                    row = index / cols;
+                    break;
+                case GridArrangement::columnFirstTopToBottom:
+                    col = index / rows;
+                    row = index % rows;
+                    break;
+                case GridArrangement::rowFirstBottomRowFirst:
+                    col = index % cols;
+                    row = (rows - 1) - (index / cols);
+                    break;
+                case GridArrangement::columnFirstBottomToTop:
+                    col = index / rows;
+                    row = (rows - 1) - (index % rows);
+                    break;
+                case GridArrangement::columnFirstBottomToTopRightToLeft:
+                    col = (cols - 1) - (index / rows);
+                    row = (rows - 1) - (index % rows);
+                    break;
+            }
+
             Media::TranslateTransform transform;
 
-            int xOffset = width * (-index + index / rows);
+            int xOffset = width * (col - index);
             transform.X(xOffset);
 
-            double yOffset =
-                itemHeight * (index % rows) - itemHeight * (rows - 1) / 2;
+            double yOffset = itemHeight * row - itemHeight * (rows - 1) / 2;
             transform.Y(yOffset);
 
             child.RenderTransform(transform);
@@ -842,6 +915,22 @@ void LoadSettings() {
         std::max(Wh_GetIntSetting(L"notificationIconWidth"), 1);
     g_settings.notificationIconRows =
         std::max(Wh_GetIntSetting(L"notificationIconRows"), 1);
+
+    PCWSTR gridArrangement = Wh_GetStringSetting(L"gridArrangement");
+    g_settings.gridArrangement = GridArrangement::rowFirstLeftToRight;
+    if (wcscmp(gridArrangement, L"columnFirstTopToBottom") == 0) {
+        g_settings.gridArrangement = GridArrangement::columnFirstTopToBottom;
+    } else if (wcscmp(gridArrangement, L"rowFirstBottomRowFirst") == 0) {
+        g_settings.gridArrangement = GridArrangement::rowFirstBottomRowFirst;
+    } else if (wcscmp(gridArrangement, L"columnFirstBottomToTop") == 0) {
+        g_settings.gridArrangement = GridArrangement::columnFirstBottomToTop;
+    } else if (wcscmp(gridArrangement, L"columnFirstBottomToTopRightToLeft") ==
+               0) {
+        g_settings.gridArrangement =
+            GridArrangement::columnFirstBottomToTopRightToLeft;
+    }
+    Wh_FreeStringSetting(gridArrangement);
+
     g_settings.overflowIconWidth =
         std::max(Wh_GetIntSetting(L"overflowIconWidth"), 1);
     g_settings.overflowIconsPerRow =
@@ -883,7 +972,7 @@ void ApplySettings() {
             }
 
             if (!ApplyStyle(xamlRoot, param.rows, param.width)) {
-                Wh_Log(L"ApplyStyles failed");
+                Wh_Log(L"ApplyStyle failed");
             }
 
             if (auto overflowRootGrid = g_overflowRootGrid.get()) {
@@ -893,8 +982,8 @@ void ApplySettings() {
         &param);
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
+bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
@@ -913,24 +1002,71 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+// Returns the module that hosts winrt::SystemTray::* in the current build.
+// Order matters: SystemTray.dll is the new home (Win11 Insider 26200+);
+// Taskbar.View.dll is kept as fallbacks so this still works on older builds.
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
     if (!module) {
-        module = GetModuleHandle(L"ExplorerExtensions.dll");
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            // First known module version without SystemTray is Taskbar.View.dll
+            // 2604.8002.200.6000.
+            VS_FIXEDFILEINFO* fixedFileInfo =
+                GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
+                module = nullptr;
+            }
+        }
     }
 
     return module;
 }
 
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_systemTrayModuleHooked && GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayModuleHooked.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
-        if (HookTaskbarViewDllSymbols(module)) {
+        if (HookSystemTraySymbols(module)) {
             Wh_ApplyHookOperations();
         }
     }
@@ -943,7 +1079,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+        HandleLoadedModuleIfSystemTray(module, lpLibFileName);
     }
 
     return module;
@@ -984,13 +1120,13 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-        g_taskbarViewDllLoaded = true;
-        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+    if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+        g_systemTrayModuleHooked = true;
+        if (!HookSystemTraySymbols(systemTrayModule)) {
             return FALSE;
         }
     } else {
-        Wh_Log(L"Taskbar view module not loaded yet");
+        Wh_Log(L"System tray module not loaded yet");
 
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         auto pKernelBaseLoadLibraryExW =
@@ -1011,12 +1147,12 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"Got Taskbar.View.dll");
+    if (!g_systemTrayModuleHooked) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayModuleHooked.exchange(true)) {
+                Wh_Log(L"Got system tray module");
 
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                if (HookSystemTraySymbols(systemTrayModule)) {
                     Wh_ApplyHookOperations();
                 }
             }

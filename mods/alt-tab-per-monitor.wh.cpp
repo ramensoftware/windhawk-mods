@@ -2,7 +2,7 @@
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
 // @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.1.0
+// @version         1.2
 // @author          L3r0y
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
@@ -14,18 +14,79 @@
 /*
 # Alt+Tab per monitor
 
-When you press the Alt+Tab combination, the window switcher will appear on the
-primary display, showing all open windows across all monitors. This mod
-customizes the behavior to display the switcher on the monitor where the cursor
-is currently located, showing only the windows present on that specific monitor.
+By default, pressing Alt+Tab shows all open windows on the primary display. This
+mod customizes the behavior so that Alt+Tab displays the switcher on the monitor
+where the cursor is located, showing only the windows on that monitor.
+
+Both Alt+Tab and Win+Alt+Tab can be independently configured with:
+
+- **Display location**: Primary monitor or monitor where cursor is located.
+- **Windows to show**: All monitors, cursor's monitor only, or cursor's monitor
+  with an exception for the primary monitor (shows all windows when cursor is on
+  the primary monitor).
 
 ![Gif](https://i.imgur.com/Hpg8TKh.gif)
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- altTabLocation: cursor
+  $name: "Alt+Tab: Display location"
+  $description: Choose which monitor the Alt+Tab switcher appears on
+  $options:
+  - cursor: Monitor where cursor is located
+  - primary: Primary monitor
+- altTabWindows: cursorMonitor
+  $name: "Alt+Tab: Windows to show"
+  $description: Choose which windows to show when using Alt+Tab
+  $options:
+  - cursorMonitor: Windows from the monitor where cursor is located
+  - allMonitors: Windows from all monitors
+  - cursorMonitorExceptPrimary: >-
+      Windows from cursor's monitor, but all windows when on primary
+- winAltTabLocation: primary
+  $name: "Win+Alt+Tab: Display location"
+  $description: >-
+    Choose which monitor the Alt+Tab switcher appears on when using Win+Alt+Tab
+  $options:
+  - primary: Primary monitor
+  - cursor: Monitor where cursor is located
+- winAltTabWindows: allMonitors
+  $name: "Win+Alt+Tab: Windows to show"
+  $description: Choose which windows to show when using Win+Alt+Tab
+  $options:
+  - allMonitors: Windows from all monitors
+  - cursorMonitor: Windows from the monitor where cursor is located
+  - cursorMonitorExceptPrimary: >-
+      Windows from cursor's monitor, but all windows when on primary
+*/
+// ==/WindhawkModSettings==
+
 #include <windhawk_utils.h>
 
+#include <atomic>
+#include <functional>
+
 #include <winrt/windows.foundation.collections.h>
+
+enum class Location {
+    primary,
+    cursor,
+};
+
+enum class WindowsToShow {
+    allMonitors,
+    cursorMonitor,
+    cursorMonitorExceptPrimary,
+};
+
+struct {
+    Location altTabLocation;
+    WindowsToShow altTabWindows;
+    Location winAltTabLocation;
+    WindowsToShow winAltTabWindows;
+} g_settings;
 
 enum class WinVersion {
     Unsupported,
@@ -38,7 +99,7 @@ WinVersion g_winVersion;
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
 std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
 std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
-ULONGLONG g_CreateInstance_TickCount;
+std::atomic<ULONGLONG> g_CreateInstance_TickCount;
 constexpr ULONGLONG kDeltaThreshold = 200;
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -94,7 +155,18 @@ WinVersion GetWindowsVersion() {
     return WinVersion::Unsupported;
 }
 
+bool IsWinKeyPressed() {
+    return GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0;
+}
+
 bool HandleAltTabWindow(RECT* rect) {
+    auto location = IsWinKeyPressed() ? g_settings.winAltTabLocation
+                                      : g_settings.altTabLocation;
+
+    if (location == Location::primary) {
+        return false;
+    }
+
     POINT pt;
     if (!GetCursorPos(&pt)) {
         return false;
@@ -210,6 +282,7 @@ HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* pThis,
                                             void* param1,
                                             int param2,
                                             void* param3) {
+    Wh_Log(L">");
     g_threadIdForAltTabShowWindow = GetCurrentThreadId();
     HRESULT ret =
         XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
@@ -287,6 +360,35 @@ HRESULT WINAPI CMultitaskingViewFrame_CreateFrame_Hook(void* pThis,
     return ret;
 }
 
+HRESULT CreateInstanceHook(std::function<HRESULT()> original) {
+    auto windows = IsWinKeyPressed() ? g_settings.winAltTabWindows
+                                     : g_settings.altTabWindows;
+
+    if (windows == WindowsToShow::allMonitors) {
+        return original();
+    }
+
+    if (windows == WindowsToShow::cursorMonitorExceptPrimary) {
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO monInfo;
+            monInfo.cbSize = sizeof(MONITORINFO);
+            if (GetMonitorInfo(hMon, &monInfo) &&
+                (monInfo.dwFlags & MONITORINFOF_PRIMARY)) {
+                return original();
+            }
+        }
+    }
+
+    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_CreateInstance_TickCount = GetTickCount64();
+    HRESULT ret = original();
+    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
+    return ret;
+}
+
 using XamlAltTabViewHost_CreateInstance_t = HRESULT(WINAPI*)(void* pThis,
                                                              void* param1,
                                                              void* param2,
@@ -296,13 +398,11 @@ HRESULT WINAPI XamlAltTabViewHost_CreateInstance_Hook(void* pThis,
                                                       void* param1,
                                                       void* param2,
                                                       void* param3) {
-    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_CreateInstance_TickCount = GetTickCount64();
-    HRESULT ret = XamlAltTabViewHost_CreateInstance_Original(pThis, param1,
-                                                             param2, param3);
-    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
-    return ret;
+    Wh_Log(L">");
+    return CreateInstanceHook([=]() {
+        return XamlAltTabViewHost_CreateInstance_Original(pThis, param1, param2,
+                                                          param3);
+    });
 }
 
 using CAltTabViewHost_CreateInstance_t = HRESULT(WINAPI*)(void* pThis,
@@ -330,14 +430,12 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Hook(void* pThis,
                                                    void* param9,
                                                    void* param10,
                                                    void* param11) {
-    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_CreateInstance_TickCount = GetTickCount64();
-    HRESULT ret = CAltTabViewHost_CreateInstance_Original(
-        pThis, param1, param2, param3, param4, param5, param6, param7, param8,
-        param9, param10, param11);
-    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
-    return ret;
+    Wh_Log(L">");
+    return CreateInstanceHook([=]() {
+        return CAltTabViewHost_CreateInstance_Original(
+            pThis, param1, param2, param3, param4, param5, param6, param7,
+            param8, param9, param10, param11);
+    });
 }
 
 using CAltTabViewHost_CreateInstance_Win11_t = HRESULT(WINAPI*)(void* pThis,
@@ -364,18 +462,55 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Win11_Hook(void* pThis,
                                                          void* param8,
                                                          void* param9,
                                                          void* param10) {
-    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_CreateInstance_TickCount = GetTickCount64();
-    HRESULT ret = CAltTabViewHost_CreateInstance_Win11_Original(
-        pThis, param1, param2, param3, param4, param5, param6, param7, param8,
-        param9, param10);
-    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
-    return ret;
+    Wh_Log(L">");
+    return CreateInstanceHook([=]() {
+        return CAltTabViewHost_CreateInstance_Win11_Original(
+            pThis, param1, param2, param3, param4, param5, param6, param7,
+            param8, param9, param10);
+    });
+}
+
+void LoadSettings() {
+    auto loadLocation = [](PCWSTR name, Location defaultVal) {
+        PCWSTR val = Wh_GetStringSetting(name);
+        Location result = defaultVal;
+        if (wcscmp(val, L"primary") == 0) {
+            result = Location::primary;
+        } else if (wcscmp(val, L"cursor") == 0) {
+            result = Location::cursor;
+        }
+        Wh_FreeStringSetting(val);
+        return result;
+    };
+
+    auto loadWindows = [](PCWSTR name, WindowsToShow defaultVal) {
+        PCWSTR val = Wh_GetStringSetting(name);
+        WindowsToShow result = defaultVal;
+        if (wcscmp(val, L"allMonitors") == 0) {
+            result = WindowsToShow::allMonitors;
+        } else if (wcscmp(val, L"cursorMonitor") == 0) {
+            result = WindowsToShow::cursorMonitor;
+        } else if (wcscmp(val, L"cursorMonitorExceptPrimary") == 0) {
+            result = WindowsToShow::cursorMonitorExceptPrimary;
+        }
+        Wh_FreeStringSetting(val);
+        return result;
+    };
+
+    g_settings.altTabLocation =
+        loadLocation(L"altTabLocation", Location::cursor);
+    g_settings.altTabWindows =
+        loadWindows(L"altTabWindows", WindowsToShow::cursorMonitor);
+    g_settings.winAltTabLocation =
+        loadLocation(L"winAltTabLocation", Location::primary);
+    g_settings.winAltTabWindows =
+        loadWindows(L"winAltTabWindows", WindowsToShow::allMonitors);
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    LoadSettings();
 
     g_winVersion = GetWindowsVersion();
 
@@ -503,4 +638,10 @@ BOOL Wh_ModInit() {
     }
 
     return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+
+    LoadSettings();
 }
