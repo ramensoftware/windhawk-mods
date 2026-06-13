@@ -7243,20 +7243,20 @@
                     5
                 ],
                 "ratingUsers": 5,
-                "updated": 1780679998000,
+                "updated": 1781342832000,
                 "users": 110
             },
             "metadata": {
                 "author": "BlackPaw",
                 "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32 -ladvapi32 -DWIN32_LEAN_AND_MEAN",
-                "description": "Network toggle + DNS reachability monitor in your system tray",
+                "description": "Internet kill switch with primary/secondary DNS monitoring in your system tray",
                 "donateUrl": "https://ko-fi.com/blackpaw21",
                 "github": "https://github.com/BlackPaw21",
                 "include": [
                     "windhawk.exe"
                 ],
                 "name": "Net-Toggle",
-                "version": "2.0.0"
+                "version": "2.1.0"
             }
         },
         "never-auto-expand-explorer-tree-items": {

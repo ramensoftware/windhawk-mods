@@ -1,3 +1,12 @@
+## 2.1.0 ([Jun 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/962908f1a96bfd70d2e01f45873eaef3117aeef4/mods/net-toggle.wh.cpp))
+
+- Add secondary (fallback) DNS server support
+- New default check: real DNS query (fixes false "unreachable" on networks that block TCP/53) — fixes #4288
+- New per-server check methods: UDP DNS / TCP 53 / DoT 853 / DoH 443
+- New Orange icon state: primary down, fallback still up
+- Tooltip shows per-server status
+- Minor reliability fixes (DNS state reads, shutdown handle cleanup)
+
 ## 2.0.0 ([Jun 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c750ebdd82eef330bdfe48831fa1b5fda89c2192/mods/net-toggle.wh.cpp))
 
 - **Complete rebuild.** Mod renamed to Net-Toggle.
