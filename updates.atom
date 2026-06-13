@@ -2,12 +2,49 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-13T09:27:12.000Z</updated>
+    <updated>2026-06-13T17:28:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MicroManager 1.0.0]]></title>
+        <id>https://windhawk.net/mods/micromanager#7f6a9d164aae1027702ac4603ff218928a53661b</id>
+        <link href="https://windhawk.net/mods/micromanager"/>
+        <updated>2026-06-13T17:28:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="micromanager">MicroManager</h1>
+<p><img src="https://i.imgur.com/yDHoq9N.png" alt="Screenshot" /></p>
+<p>A lightweight tray icon that shows a mini task manager popup with live CPU, GPU
+and RAM usage, plus the single top-consuming process for each.</p>
+<h2 id="howtouse">How to Use</h2>
+<ol>
+<li><strong>Left-click</strong> the tray icon to open the popup showing:</li>
+</ol>
+<ul>
+<li>Total CPU usage and the top CPU-consuming process</li>
+<li>Total GPU usage and the top GPU-consuming process</li>
+<li>Total RAM usage and the top RAM-consuming process</li>
+</ul>
+<ol>
+<li><strong>Click anywhere outside</strong> the popup (or press <strong>Esc</strong>) to close it</li>
+<li><strong>Hover</strong> the tray icon to see a live <code>CPU / GPU / RAM</code> summary tooltip</li>
+<li><strong>Right-click</strong> the tray icon for options</li>
+</ol>
+<h2 id="configuration">Configuration</h2>
+<p>Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).</p>
+<h2 id="changelog">Changelog</h2>
+<h3 id="v100">v1.0.0</h3>
+<ul>
+<li>Initial release.</li>
+<li>Left-click to see live CPU and GPU usage with the top process for each.</li>
+<li>Right-click for options. Update interval adjustable in Settings.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Net-Toggle 2.1.0]]></title>
         <id>https://windhawk.net/mods/net-toggle#962908f1a96bfd70d2e01f45873eaef3117aeef4</id>
@@ -515,29 +552,6 @@ list.</p>]]></content>
         <author>
             <name>Asteski</name>
             <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Net-Toggle 2.0.0]]></title>
-        <id>https://windhawk.net/mods/net-toggle#c750ebdd82eef330bdfe48831fa1b5fda89c2192</id>
-        <link href="https://windhawk.net/mods/net-toggle"/>
-        <updated>2026-06-05T17:19:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Complete rebuild.</strong> Mod renamed to Net-Toggle.</li>
-<li>New: <strong>DNS Monitoring</strong> — The icon monitors your connection and changes color if your internet drops out (configurable in Mod Settings).</li>
-<li>New: <strong>WiFi-style tray icon</strong> with 5 color states (Red / Yellow / Blue / Green / Grey).</li>
-<li>New: Middle-click → <strong>Full Network Reset</strong> (flush DNS, release/renew, winsock + IP reset).</li>
-<li>New: Right-click context menu — toggle network, open Network Settings, or exit.</li>
-<li>New: Donate button on the mod page.</li>
-<li>Improved: Tray icon is now independent from the Windhawk app and no longer groups with it in the taskbar.</li>
-<li>Improved: Tray icon persists reliably across Explorer restarts.</li>
-<li>Improved: Icon stays in sync even if you disable your adapter directly in Windows Settings.</li>
-<li>Fixed: Occasional hangs during network toggles or timeouts.</li>
-<li>Fixed: Tray icon could show the wrong state if a toggle failed.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

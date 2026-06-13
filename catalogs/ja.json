@@ -6871,6 +6871,35 @@
                 "version": "1.14"
             }
         },
+        "micromanager": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781371689000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781371689000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "BlackPaw",
+                "compilerOptions": "-lpdh -lshell32 -lgdi32 -luser32 -lole32 -luuid -ladvapi32 -ldwmapi",
+                "description": "Mini task manager tray icon showing CPU, GPU and RAM usage with top consumers.",
+                "donateUrl": "https://ko-fi.com/blackpaw21",
+                "github": "https://github.com/BlackPaw21",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "MicroManager",
+                "version": "1.0.0"
+            }
+        },
         "microswap": {
             "details": {
                 "defaultSorting": 342,
