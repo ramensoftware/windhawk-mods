@@ -2,12 +2,49 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-13T17:28:09.000Z</updated>
+    <updated>2026-06-13T18:51:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar AI Quota Bars 0.9.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-ai-quota#abc86d1f587043340096e5fafc9019caa29cc2e7</id>
+        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
+        <updated>2026-06-13T18:51:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbaraiquotabars">Taskbar AI Quota Bars</h1>
+<p>Shows Anthropic Claude and OpenAI/Codex AI agent and LLM subscription quota usage as
+compact bars on the Windows 11 taskbar, next to the system tray.
+Can show on the primary taskbar only, all taskbars, or one specific monitor.</p>
+<p><img src="https://i.imgur.com/LD0K31E.png" alt="Taskbar AI Quota Bars" />
+<img src="https://i.imgur.com/H7agnz2.png" alt="Taskbar AI Quota Bars Detail" /></p>
+<p>Each account gets one compact column:</p>
+<ul>
+<li>stacked layout: stacked horizontal bars, filling left-to-right</li>
+<li>vertical layout: side-by-side bars, filling bottom-up</li>
+</ul>
+<p>Hover for exact percentages and reset times. Click a column to refresh that account
+or open the provider dashboard, depending on settings. Right-click for Refresh all
+and Open dashboard.
+Bars use configurable green/yellow/orange/red thresholds, with a colorblind palette option.
+Stale errors can mark labels/tooltips with <code>!</code>.</p>
+<p>Optionally fires a Windows notification when an account first crosses the red threshold
+(5-hour or weekly), so you don't have to keep glancing at the bars.</p>
+<p>Supported credential sources:</p>
+<ul>
+<li>OpenCode: <code>%USERPROFILE%\.local\share\opencode\auth.json</code></li>
+<li>Claude Code: <code>%USERPROFILE%\.claude\.credentials.json</code></li>
+<li>Codex: <code>%USERPROFILE%\.codex\auth.json</code></li>
+</ul>
+<p>Credentials are read-only. The mod never refreshes or rewrites tokens, and never sends
+refresh tokens as bearer tokens. Run OpenCode, Claude Code, or Codex to refresh their
+own auth files if requests start returning <code>401</code>.</p>]]></content>
+        <author>
+            <name>Cleroth</name>
+            <uri>https://github.com/Cleroth</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MicroManager 1.0.0]]></title>
         <id>https://windhawk.net/mods/micromanager#7f6a9d164aae1027702ac4603ff218928a53661b</id>
@@ -694,34 +731,6 @@ the original function is called normally.</p>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[URL Blocker 0.1]]></title>
-        <id>https://windhawk.net/mods/url-blocker#9652ca93368edbfbd1274ae2ccc7524025adf302</id>
-        <link href="https://windhawk.net/mods/url-blocker"/>
-        <updated>2026-05-30T10:31:36.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="whatitdoes">What it does</h2>
-<p>This mod prevents selected applications from opening web links in your default browser. It is mainly intended for cases where programs open unnecessary pages such as post-update "thank you" screens, release notes, promotional pages, or similar unwanted redirects.</p>
-<p>The mod works by intercepting <code>ShellExecuteW</code> and <code>ShellExecuteA</code> calls and ignoring calls that try to open URLs (starting with <code>http</code>). Regular file paths are left alone, so opening local files will continue to work as usual.</p>
-<h2 id="configuration">Configuration</h2>
-<p>This mod doesn't automatically target any processes. Add the programs for which you want to block URL calls under:</p>
-<p><code>Details</code> -&gt; <code>Advanced</code> -&gt; <code>Custom process inclusion list</code></p>
-<p>Only the processes in that list will have URL calls blocked.</p>
-<p><strong><em>No guarantee that it will work on all programs!</em></strong></p>
-<h2 id="notesandlimitations">Notes and limitations</h2>
-<ul>
-<li>The mod only blocks URL launches that go through <code>ShellExecuteW</code> or <code>ShellExecuteA</code>.</li>
-<li>Programs that use another API or an embedded browser may still be able to open web pages.</li>
-<li>The mod is not intended for system-wide URL filtering.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Inspired by the <code>F1 Blocker</code> mod from <a href="https://github.com/d0gkiller87">d0gkiller87</a>.</p>
-<h2 id="bugreportfeaturerequest">Bug Report / Feature Request</h2>
-<p>Open an issue / discussion on https://github.com/ramensoftware/windhawk-mods and tag <code>@CrazyTim71</code></p>]]></content>
-        <author>
-            <name>CrazyTim71</name>
-            <uri>https://github.com/CrazyTim71</uri>
         </author>
     </entry>
 </feed>
