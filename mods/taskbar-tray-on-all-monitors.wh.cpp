@@ -7,6 +7,7 @@
 // @github          https://github.com/RYJASM
 // @include         explorer.exe
 // @architecture    x86-64
+// @architecture    arm64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -luuid
 // ==/WindhawkMod==
 
@@ -1030,6 +1031,11 @@ void TryPopulateOneSecondary(SecondaryInfo& si) {
            si.frame.ActualWidth(), si.frame.ActualHeight());
 
     Wh_Log(L"=== POPULATION ATTEMPT COMPLETE ===");
+
+    // Schedule a deferred refresh to re-sync width after layout settles.
+    // During monitor hot-plug or DPI changes, the primary frame's ActualWidth
+    // may not reflect the final value yet at population time.
+    RefreshSecondaryTray();
 }
 
 // ─── Process a loaded IconView element ──────────────────────────────────────
