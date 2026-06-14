@@ -461,7 +461,8 @@ BOOL Wh_ModInit()
         void* ep = (BYTE*)dos + nt->OptionalHeader.AddressOfEntryPoint;
         Wh_SetFunctionHook(ep, (void*)EntryPoint_Hook, nullptr);
 
-        return WhTool_ModInit();
+        if (!WhTool_ModInit()) return FALSE;
+        return TRUE;
     }
 
     if (isToolMod) return FALSE;
