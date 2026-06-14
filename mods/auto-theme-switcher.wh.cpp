@@ -2,10 +2,10 @@
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
 // @description     Automatically switch between light and dark appearance/wallpapers/themes based on a schedule with hotkey and custom script support
-// @version         1.3.0
+// @version         1.3.1
 // @author          tinodin
 // @github          https://github.com/tinodin
-// @include         explorer.exe
+// @include         windhawk.exe
 // @license         GPL-3.0
 // @compilerOptions -lole32 -loleaut32 -lwindowsapp -lruntimeobject -lkernel32 -luser32 -lshell32
 // ==/WindhawkMod==
@@ -1192,7 +1192,7 @@ void WhTool_ModUninit() {
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk-mods/pull/1916
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
 //
@@ -1212,7 +1212,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -1223,8 +1229,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -1241,7 +1249,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
