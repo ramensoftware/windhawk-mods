@@ -6,7 +6,7 @@
 // @author          Salyts
 // @github          https://github.com/Salyts
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lgdi32 -ldwmapi
+// @compilerOptions -luser32 -ldwmapi
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -84,6 +84,9 @@ Examples: `Shift+F9`, `Win+Alt+C`, `Ctrl+F1`
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <algorithm>
+#include <cwctype>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -222,11 +225,6 @@ static void DoCenterWindow(HWND w)
     Wh_Log(L"Center hwnd=%p -> (%d,%d)", w, x, y);
 }
 
-static int Clamp(int v, int lo, int hi)
-{
-    return v < lo ? lo : (v > hi ? hi : v);
-}
-
 static void DoResizeCenter(HWND w, int pctW, int pctH, bool doCenter)
 {
     if (!w || !IsWindow(w) || IsIconic(w)) return;
@@ -242,8 +240,8 @@ static void DoResizeCenter(HWND w, int pctW, int pctH, bool doCenter)
     WindowGeometry g;
     if (!GetWindowGeometry(w, g)) return;
 
-    pctW = Clamp(pctW, 0, 100);
-    pctH = Clamp(pctH, 0, 100);
+    pctW = std::clamp(pctW, 0, 100);
+    pctH = std::clamp(pctH, 0, 100);
 
     int newVisW = (pctW > 0) ? (g.monitorWidth  * pctW / 100) : g.visibleWidth;
     int newVisH = (pctH > 0) ? (g.monitorHeight * pctH / 100) : g.visibleHeight;
@@ -327,6 +325,8 @@ static DWORD WINAPI HookThreadProc(LPVOID)
 {
     Wh_Log(L"Hook thread started");
 
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     RegisterHotkeys();
 
     MSG msg;
@@ -372,16 +372,15 @@ static DWORD WINAPI HookThreadProc(LPVOID)
     return 0;
 }
 
-BOOL WhTool_ModInit()
+static void WhTool_ModInit()
 {
     LoadAllSettings();
 
     g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookTid);
     if (!g_hookThread) {
         Wh_Log(L"CreateThread failed %lu", GetLastError());
-        return FALSE;
+        ExitProcess(1);
     }
-    return TRUE;
 }
 
 void WhTool_ModSettingsChanged()
@@ -409,10 +408,7 @@ void WhTool_ModUninit()
 
 void WINAPI EntryPoint_Hook()
 {
-    if (WhTool_ModInit()) {
-        WaitForSingleObject(g_hookThread, INFINITE);
-    }
-    WhTool_ModUninit();
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -463,6 +459,8 @@ BOOL Wh_ModInit()
             (IMAGE_NT_HEADERS*)((BYTE*)dos + dos->e_lfanew);
         void* ep = (BYTE*)dos + nt->OptionalHeader.AddressOfEntryPoint;
         Wh_SetFunctionHook(ep, (void*)EntryPoint_Hook, nullptr);
+
+        WhTool_ModInit();
         return TRUE;
     }
 
