@@ -131,6 +131,7 @@ DWORD g_workerThreadId = 0;
 std::atomic<bool> g_stopWorker = false;
 bool g_hotkeyRegistered = false;
 bool g_isToolModProcessLauncher = false;
+bool g_modActive = false;
 HANDLE g_toolModProcessMutex = nullptr;
 
 int ClampInt(int value, int minValue, int maxValue) {
@@ -854,8 +855,9 @@ DWORD WINAPI WorkerThreadProc(void*) {
         return 1;
     }
 
-    g_toolWindow = CreateWindowExW(0, kToolWindowClass, L"MiniSnip", 0, 0, 0, 0,
-                                   0, HWND_MESSAGE, nullptr,
+    g_toolWindow = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                   kToolWindowClass, L"MiniSnip", WS_POPUP, 0,
+                                   0, 0, 0, nullptr, nullptr,
                                    GetModuleHandleW(nullptr), nullptr);
     if (!g_toolWindow) {
         Wh_Log(L"CreateWindowExW tool window failed: %lu", GetLastError());
@@ -973,6 +975,49 @@ ToolProcessKind GetToolProcessKind() {
     return kind;
 }
 
+bool CommandLineHasNoArguments() {
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        return false;
+    }
+
+    bool result = argc <= 1;
+    LocalFree(argv);
+    return result;
+}
+
+bool CurrentProcessOwnsWindow(HWND hwnd) {
+    if (!hwnd) {
+        return false;
+    }
+
+    DWORD windowProcessId = 0;
+    GetWindowThreadProcessId(hwnd, &windowProcessId);
+    return windowProcessId == GetCurrentProcessId();
+}
+
+bool IsShellExplorerProcess() {
+    HWND shellWindow = GetShellWindow();
+    HWND taskbarWindow = FindWindowW(L"Shell_TrayWnd", nullptr);
+
+    if (CurrentProcessOwnsWindow(shellWindow) ||
+        CurrentProcessOwnsWindow(taskbarWindow)) {
+        return true;
+    }
+
+    if (!shellWindow && !taskbarWindow) {
+        return CommandLineHasNoArguments();
+    }
+
+    return false;
+}
+
+bool ShouldRunInThisProcess() {
+    return GetToolProcessKind() == ToolProcessKind::NormalExplorer &&
+           IsShellExplorerProcess();
+}
+
 bool LaunchToolModProcess() {
     WCHAR currentProcessPath[MAX_PATH]{};
     DWORD length = GetModuleFileNameW(nullptr, currentProcessPath,
@@ -1028,55 +1073,31 @@ bool LaunchToolModProcess() {
 }  // namespace
 
 BOOL Wh_ModInit() {
-    ToolProcessKind kind = GetToolProcessKind();
-    if (kind == ToolProcessKind::Excluded ||
-        kind == ToolProcessKind::OtherToolMod) {
-        return FALSE;
-    }
-
-    if (kind == ToolProcessKind::CurrentToolMod) {
-        g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex ||
-            GetLastError() == ERROR_ALREADY_EXISTS) {
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        auto* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        void* entryPoint =
-            reinterpret_cast<BYTE*>(dosHeader) +
-            ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook),
-                           nullptr);
+    if (!ShouldRunInThisProcess()) {
         return TRUE;
     }
 
-    g_isToolModProcessLauncher = true;
+    g_modActive = true;
+    if (!WhTool_ModInit()) {
+        g_modActive = false;
+        return FALSE;
+    }
+
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (g_isToolModProcessLauncher) {
-        LaunchToolModProcess();
-    }
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) {
+    if (g_modActive) {
         WhTool_ModSettingsChanged();
     }
 }
 
 void Wh_ModUninit() {
-    if (!g_isToolModProcessLauncher) {
+    if (g_modActive) {
         WhTool_ModUninit();
-        ExitProcess(0);
+        g_modActive = false;
     }
 }
