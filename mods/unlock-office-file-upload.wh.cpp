@@ -2,7 +2,7 @@
 // @id              unlock-office-file-upload
 // @name            Unlock Office Files for Upload
 // @description     Transparently copies locked Office files (docx, xlsx, pptx, etc.) to a temp location when an upload or send is attempted while they're open in Word/Excel/PowerPoint. The OS deletes the copy automatically via FILE_FLAG_DELETE_ON_CLOSE.
-// @version         0.2
+// @version         0.3
 // @author          Loerei
 // @github          https://github.com/loerei
 // @homepage        https://github.com/loerei/windhawk-unlock-office-file-upload
@@ -31,15 +31,27 @@ crash or abnormal exit.
 **What you get:** The uploader receives the last-saved version of the file with
 no prompts and no need to close Word first.
 
-**Limitation:** The copy reflects the last *saved* state. Unsaved in-memory
-edits in Word are not included — this is inherent to how Windows file locking
-works.
+## Known Limitations
 
-**Scope note:** The mod injects into all processes (required since the uploader
-can be any app). `SearchIndexer.exe` and `explorer.exe` are excluded via
-`@exclude`. Session 0 (system service) processes are skipped at init time. The
+**Unsaved edits not included.** The copy reflects the last *saved* state.
+Unsaved in-memory edits in Word are not captured — this is inherent to how
+Windows file locking works.
+
+**Deny-read locks not bypassed.** The redirect only works when the existing
+lock permits shared reads (Word's usual `FILE_SHARE_READ` lock). Legacy
+formats (`.doc`, `.xls`, `.ppt`) held by some applications may deny all reads
+outright, in which case `CopyFileW` also fails and the mod re-surfaces the
+original sharing violation error.
+
+## Scope Note
+
+The mod injects into all processes (required since the uploader can be any
+app). `SearchIndexer.exe` and `explorer.exe` are excluded via `@exclude`.
+Session 0 (system service) processes are skipped at init time. The
 `CreateFileW` hook has near-zero overhead on the success path — it returns
-immediately when the original call succeeds.
+immediately when the original call succeeds. A `thread_local` reentrancy
+guard ensures that `CopyFileW`'s own internal `CreateFileW` calls do not
+re-enter the hook logic.
 */
 // ==/WindhawkModReadme==
 
@@ -94,15 +106,6 @@ void LoadSettings() {
                        [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
         fresh.push_back(std::move(ext));
         ++count;
-    }
-
-    // Fallback defaults if settings are empty (first run / no settings file).
-    if (fresh.empty()) {
-        for (auto* e : {L".docx", L".docm", L".doc",
-                        L".xlsx", L".xlsm", L".xls",
-                        L".pptx", L".pptm", L".ppt"}) {
-            fresh.push_back(e);
-        }
     }
 
     std::unique_lock lock(g_extensionsMutex);
@@ -167,13 +170,19 @@ HANDLE WINAPI CreateFileW_Hook(
     DWORD                 dwFlagsAndAttributes,
     HANDLE                hTemplateFile)
 {
+    // Reentrancy guard: CopyFileW (below) calls CreateFileW internally. On
+    // modern Windows, GetProcAddress("CreateFileW") resolves to the kernelbase
+    // implementation that CopyFileW also uses, so the hook re-enters itself.
+    // The guard ensures the inner call passes straight through to the original.
+    thread_local bool inHook = false;
+
     // Fast path: let everything through first. Zero cost on success.
     HANDLE h = CreateFileW_Original(
         lpFileName, dwDesiredAccess, dwShareMode,
         lpSecurityAttributes, dwCreationDisposition,
         dwFlagsAndAttributes, hTemplateFile);
 
-    if (h != INVALID_HANDLE_VALUE)
+    if (h != INVALID_HANDLE_VALUE || inHook)
         return h;
 
     if (GetLastError() != ERROR_SHARING_VIOLATION)
@@ -205,7 +214,11 @@ HANDLE WINAPI CreateFileW_Hook(
     // CopyFileW opens the source with permissive share flags that are
     // compatible with Word's lock (FILE_SHARE_READ).
     // bFailIfExists=FALSE overwrites the empty placeholder from GetTempFileNameW.
-    if (!CopyFileW(lpFileName, tempPath, /*bFailIfExists=*/FALSE)) {
+    inHook = true;
+    bool copied = CopyFileW(lpFileName, tempPath, /*bFailIfExists=*/FALSE);
+    inHook = false;
+
+    if (!copied) {
         DWORD err = GetLastError();
         Wh_Log(L"CopyFileW failed for %s (err=%u)", lpFileName, err);
         DeleteFileW(tempPath);
@@ -234,7 +247,8 @@ HANDLE WINAPI CreateFileW_Hook(
 
     Wh_Log(L"Redirected %s -> %s (delete-on-close)", lpFileName, tempPath);
 
-    SetLastError(ERROR_SUCCESS);
+    // Let the last-error from the temp-file open propagate naturally rather
+    // than unconditionally advertising ERROR_SUCCESS.
     return hTemp;
 }
 
