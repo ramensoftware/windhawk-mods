@@ -103,6 +103,8 @@ namespace {
 constexpr PCWSTR kMainTaskbarClass = L"Shell_TrayWnd";
 constexpr PCWSTR kSecondaryTaskbarClass = L"Shell_SecondaryTrayWnd";
 constexpr PCWSTR kMiniWallpaperClass = L"MiniWallpaperWindhawkWindow";
+constexpr int kCombinedButtonWidth = 44;
+constexpr int kLabeledButtonWidth = 160;
 constexpr UINT kMsgReloadSettings = WM_APP + 1;
 constexpr DWORD kWinEventOutOfContext = WINEVENT_OUTOFCONTEXT;
 constexpr DWORD kWinEventSkipOwnProcess = WINEVENT_SKIPOWNPROCESS;
@@ -178,6 +180,7 @@ std::atomic<bool> g_stopWorker = false;
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
 bool g_isToolModProcessLauncher = false;
+bool g_modActive = false;
 HANDLE g_toolModProcessMutex = nullptr;
 
 HWINEVENTHOOK g_taskbarHook = nullptr;
@@ -244,6 +247,11 @@ bool RectEquals(const RECT& left, const RECT& right) {
            left.right == right.right && left.bottom == right.bottom;
 }
 
+int ScaleForWindow(HWND hwnd, int value) {
+    UINT dpi = GetDpiForWindow(hwnd);
+    return MulDiv(value, dpi ? static_cast<int>(dpi) : 96, 96);
+}
+
 std::wstring GetClassNameString(HWND hwnd) {
     wchar_t className[128]{};
     GetClassNameW(hwnd, className, ARRAYSIZE(className));
@@ -287,6 +295,35 @@ bool HaveSameHandles(const std::vector<HWND>& left,
     return true;
 }
 
+HWND FindDescendantWindow(HWND root, PCWSTR className) {
+    if (!root) {
+        return nullptr;
+    }
+
+    HWND direct = FindWindowExW(root, nullptr, className, nullptr);
+    if (direct) {
+        return direct;
+    }
+
+    struct FindDescendantData {
+        PCWSTR className;
+        HWND found;
+    } data{className, nullptr};
+
+    EnumChildWindows(
+        root,
+        [](HWND hwnd, LPARAM lParam) -> BOOL {
+            auto* data = reinterpret_cast<FindDescendantData*>(lParam);
+            if (GetClassNameString(hwnd) == data->className) {
+                data->found = hwnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&data));
+    return data.found;
+}
+
 struct AccentPolicy {
     AccentState accentState;
     int accentFlags;
@@ -326,6 +363,79 @@ bool TrySetAccent(HWND hwnd, AccentState accentState) {
     return setWindowCompositionAttribute(hwnd, &data) != FALSE;
 }
 
+bool IsWindowCloaked(HWND hwnd) {
+    BOOL cloaked = FALSE;
+    return SUCCEEDED(DwmGetWindowAttribute(
+               hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+           cloaked;
+}
+
+bool IsApplicationWindow(HWND hwnd) {
+    if ((!IsWindowVisible(hwnd) && !IsIconic(hwnd)) || GetWindow(hwnd, GW_OWNER) ||
+        IsWindowCloaked(hwnd)) {
+        return false;
+    }
+
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if ((exStyle & WS_EX_TOOLWINDOW) != 0) {
+        return false;
+    }
+
+    std::wstring className = GetClassNameString(hwnd);
+    if (className.empty() || className == kMainTaskbarClass ||
+        className == kSecondaryTaskbarClass || className == L"Progman" ||
+        className == L"WorkerW" || className == kMiniWallpaperClass ||
+        className == L"Shell_TrayWnd" ||
+        className == L"Shell_SecondaryTrayWnd") {
+        return false;
+    }
+
+    RECT rect{};
+    return GetWindowRect(hwnd, &rect) && RectWidth(rect) > 0 &&
+           RectHeight(rect) > 0;
+}
+
+int CountApplicationWindowsForTaskbar() {
+    int count = 0;
+    EnumWindows(
+        [](HWND hwnd, LPARAM lParam) -> BOOL {
+            if (IsApplicationWindow(hwnd)) {
+                (*reinterpret_cast<int*>(lParam))++;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&count));
+    return std::max(count, 1);
+}
+
+bool TaskbarLabelsHidden() {
+    DWORD value = 0;
+    DWORD valueSize = sizeof(value);
+    LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        L"TaskbarGlomLevel", RRF_RT_REG_DWORD, nullptr, &value, &valueSize);
+    return status != ERROR_SUCCESS || value == 0;
+}
+
+int EstimateApplicationGroupWidth(HWND taskbar, bool horizontal) {
+    int buttonWidth = TaskbarLabelsHidden() ? kCombinedButtonWidth
+                                            : kLabeledButtonWidth;
+    int count = CountApplicationWindowsForTaskbar();
+    int width = ScaleForWindow(taskbar, buttonWidth) * count;
+
+    RECT taskbarRect{};
+    if (GetWindowRect(taskbar, &taskbarRect)) {
+        int taskbarSize = horizontal ? RectWidth(taskbarRect)
+                                     : RectHeight(taskbarRect);
+        width = ClampInt(width, ScaleForWindow(taskbar, buttonWidth),
+                         std::max(ScaleForWindow(taskbar, buttonWidth),
+                                  taskbarSize * 3 / 4));
+    }
+
+    return width;
+}
+
 void ApplyAccent(const std::vector<HWND>& taskbars, AccentState accent) {
     for (HWND taskbar : taskbars) {
         TrySetAccent(taskbar, accent);
@@ -334,12 +444,12 @@ void ApplyAccent(const std::vector<HWND>& taskbars, AccentState accent) {
 
 bool TryFindLayout(HWND taskbar, TaskbarLayout* layout) {
     HWND rebar = FindWindowExW(taskbar, nullptr, L"ReBarWindow32", nullptr);
-    HWND parent = FindWindowExW(rebar, nullptr, L"MSTaskSwWClass", nullptr);
-    HWND taskList = FindWindowExW(parent, nullptr, L"MSTaskListWClass", nullptr);
+    HWND parent = FindDescendantWindow(rebar, L"MSTaskSwWClass");
+    HWND taskList = FindDescendantWindow(parent, L"MSTaskListWClass");
 
     if (!taskList) {
-        parent = FindWindowExW(taskbar, nullptr, L"WorkerW", nullptr);
-        taskList = FindWindowExW(parent, nullptr, L"MSTaskListWClass", nullptr);
+        parent = FindDescendantWindow(taskbar, L"WorkerW");
+        taskList = FindDescendantWindow(parent, L"MSTaskListWClass");
     }
 
     if (!parent || !taskList) {
@@ -379,8 +489,7 @@ bool SelectCentralAnchor(std::vector<ButtonBounds>* buttons,
         }
     }
 
-    const ButtonBounds& middle = unique[(unique.size() - 1) / 2];
-    *anchorCenterTimesFour = 2 * (middle.start + middle.end);
+    *anchorCenterTimesFour = 2 * (unique.front().start + unique.back().end);
     return true;
 }
 
@@ -403,12 +512,13 @@ int CalculateCenteredOffset(int taskbarStart,
     return targetListStart - parentStart;
 }
 
-bool TryGetCentralApplicationAnchor(HWND taskList,
-                                    bool horizontal,
-                                    int* anchorCenterTimesFour) {
+bool TryGetCentralApplicationAnchorFromObject(HWND taskList,
+                                              LONG objectId,
+                                              bool horizontal,
+                                              int* anchorCenterTimesFour) {
     IAccessible* accessible = nullptr;
     HRESULT hr = AccessibleObjectFromWindow(
-        taskList, OBJID_CLIENT, IID_IAccessible,
+        taskList, static_cast<DWORD>(objectId), IID_IAccessible,
         reinterpret_cast<void**>(&accessible));
     if (FAILED(hr) || !accessible) {
         return false;
@@ -445,6 +555,15 @@ bool TryGetCentralApplicationAnchor(HWND taskList,
 
     accessible->Release();
     return SelectCentralAnchor(&buttons, anchorCenterTimesFour);
+}
+
+bool TryGetCentralApplicationAnchor(HWND taskList,
+                                    bool horizontal,
+                                    int* anchorCenterTimesFour) {
+    return TryGetCentralApplicationAnchorFromObject(
+               taskList, kObjIdClient, horizontal, anchorCenterTimesFour) ||
+           TryGetCentralApplicationAnchorFromObject(
+               taskList, kObjIdWindow, horizontal, anchorCenterTimesFour);
 }
 
 int CalculateSlidePosition(int start,
@@ -486,19 +605,26 @@ bool CenterTaskbar(HWND taskbar, bool force, bool animate, const Settings& s) {
     }
 
     int anchorCenterTimesFour = 0;
-    if (!TryGetCentralApplicationAnchor(layout.taskList, layout.horizontal,
-                                        &anchorCenterTimesFour)) {
-        return false;
-    }
-
     int taskbarStart = layout.horizontal ? taskbarRect.left : taskbarRect.top;
     int taskbarSize = layout.horizontal ? RectWidth(taskbarRect)
                                         : RectHeight(taskbarRect);
     int parentStart = layout.horizontal ? parentRect.left : parentRect.top;
     int taskListStart = layout.horizontal ? taskListRect.left : taskListRect.top;
-    int relativeOffset = CalculateCenteredOffset(
-        taskbarStart, taskbarSize, parentStart, taskListStart,
-        anchorCenterTimesFour);
+
+    int relativeOffset = 0;
+    if (TryGetCentralApplicationAnchor(layout.taskList, layout.horizontal,
+                                       &anchorCenterTimesFour)) {
+        relativeOffset = CalculateCenteredOffset(
+            taskbarStart, taskbarSize, parentStart, taskListStart,
+            anchorCenterTimesFour);
+    } else {
+        int estimatedGroupWidth =
+            EstimateApplicationGroupWidth(taskbar, layout.horizontal);
+        int targetScreenStart =
+            taskbarStart + (taskbarSize - estimatedGroupWidth) / 2;
+        relativeOffset = targetScreenStart - parentStart;
+    }
+
     int expectedScreenStart = parentStart + relativeOffset;
 
     CenterState& state = g_centerStates[layout.taskList];
@@ -592,8 +718,9 @@ bool IsForegroundFullscreen() {
            CoversMonitor(windowRect, monitorInfo.rcMonitor);
 }
 
-BOOL CALLBACK FindMiniWallpaperWorkerProc(HWND hwnd, LPARAM lParam) {
-    if (GetClassNameString(hwnd) != L"WorkerW") {
+BOOL CALLBACK FindMiniWallpaperHostProc(HWND hwnd, LPARAM lParam) {
+    std::wstring className = GetClassNameString(hwnd);
+    if (className != L"WorkerW" && className != L"Progman") {
         return TRUE;
     }
 
@@ -607,11 +734,11 @@ BOOL CALLBACK FindMiniWallpaperWorkerProc(HWND hwnd, LPARAM lParam) {
 }
 
 HWND FindWallpaperSource() {
-    HWND animatedWorker = nullptr;
-    EnumWindows(FindMiniWallpaperWorkerProc,
-                reinterpret_cast<LPARAM>(&animatedWorker));
-    if (animatedWorker) {
-        return animatedWorker;
+    HWND animatedHost = nullptr;
+    EnumWindows(FindMiniWallpaperHostProc,
+                reinterpret_cast<LPARAM>(&animatedHost));
+    if (animatedHost) {
+        return animatedHost;
     }
 
     HWND progman = FindWindowW(L"Progman", nullptr);
@@ -1119,6 +1246,49 @@ ToolProcessKind GetToolProcessKind() {
     return kind;
 }
 
+bool CommandLineHasNoArguments() {
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        return false;
+    }
+
+    bool result = argc <= 1;
+    LocalFree(argv);
+    return result;
+}
+
+bool CurrentProcessOwnsWindow(HWND hwnd) {
+    if (!hwnd) {
+        return false;
+    }
+
+    DWORD windowProcessId = 0;
+    GetWindowThreadProcessId(hwnd, &windowProcessId);
+    return windowProcessId == GetCurrentProcessId();
+}
+
+bool IsShellExplorerProcess() {
+    HWND shellWindow = GetShellWindow();
+    HWND taskbarWindow = FindWindowW(L"Shell_TrayWnd", nullptr);
+
+    if (CurrentProcessOwnsWindow(shellWindow) ||
+        CurrentProcessOwnsWindow(taskbarWindow)) {
+        return true;
+    }
+
+    if (!shellWindow && !taskbarWindow) {
+        return CommandLineHasNoArguments();
+    }
+
+    return false;
+}
+
+bool ShouldRunInThisProcess() {
+    return GetToolProcessKind() == ToolProcessKind::NormalExplorer &&
+           IsShellExplorerProcess();
+}
+
 bool LaunchToolModProcess() {
     WCHAR currentProcessPath[MAX_PATH]{};
     DWORD length = GetModuleFileNameW(nullptr, currentProcessPath,
@@ -1172,55 +1342,31 @@ bool LaunchToolModProcess() {
 }  // namespace
 
 BOOL Wh_ModInit() {
-    ToolProcessKind kind = GetToolProcessKind();
-    if (kind == ToolProcessKind::Excluded ||
-        kind == ToolProcessKind::OtherToolMod) {
-        return FALSE;
-    }
-
-    if (kind == ToolProcessKind::CurrentToolMod) {
-        g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex ||
-            GetLastError() == ERROR_ALREADY_EXISTS) {
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        auto* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        void* entryPoint =
-            reinterpret_cast<BYTE*>(dosHeader) +
-            ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook),
-                           nullptr);
+    if (!ShouldRunInThisProcess()) {
         return TRUE;
     }
 
-    g_isToolModProcessLauncher = true;
+    g_modActive = true;
+    if (!WhTool_ModInit()) {
+        g_modActive = false;
+        return FALSE;
+    }
+
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (g_isToolModProcessLauncher) {
-        LaunchToolModProcess();
-    }
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) {
+    if (g_modActive) {
         WhTool_ModSettingsChanged();
     }
 }
 
 void Wh_ModUninit() {
-    if (!g_isToolModProcessLauncher) {
+    if (g_modActive) {
         WhTool_ModUninit();
-        ExitProcess(0);
+        g_modActive = false;
     }
 }
