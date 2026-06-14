@@ -535,13 +535,25 @@ extern SystemTraySecondaryController_UpdateFrameSize_t SystemTraySecondaryContro
 static bool g_primaryFrameSearchDone = false;
 static bool g_secondaryFrameSearchDone = false;
 
+// Check if a pointer range is readable using VirtualQuery
+static bool IsReadableMemory(const void* ptr, size_t size) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery(ptr, &mbi, sizeof(mbi))) return false;
+    if (mbi.State != MEM_COMMIT) return false;
+    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
+    // Ensure the entire range fits within this region
+    uintptr_t regionEnd = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+    uintptr_t rangeEnd = (uintptr_t)ptr + size;
+    return rangeEnd <= regionEnd;
+}
+
 FrameworkElement TryExtractFrameFromController(void* controller,
                                                 const wchar_t* label) {
     uintptr_t* slots = (uintptr_t*)controller;
 
     for (int i = 2; i < 48; i++) {
-        // Check slot is readable
-        if (IsBadReadPtr(&slots[i], sizeof(uintptr_t))) break;
+        // Check that the slot itself is readable
+        if (!IsReadableMemory(&slots[i], sizeof(uintptr_t))) break;
 
         uintptr_t value = slots[i];
 
@@ -549,16 +561,16 @@ FrameworkElement TryExtractFrameFromController(void* controller,
         if (value < 0x10000) continue;
         if ((value & 0x7) != 0) continue;  // must be 8-byte aligned
 
-        // Check pointed-to memory is readable (object header / vtable ptr)
-        if (IsBadReadPtr((void*)value, 2 * sizeof(void*))) continue;
-
-        // Check vtable pointer itself is readable
+        // Read vtable pointer safely
+        if (!IsReadableMemory((void*)value, sizeof(uintptr_t))) continue;
         uintptr_t vtablePtr = *(uintptr_t*)value;
-        if (vtablePtr < 0x10000) continue;
-        if (IsBadReadPtr((void*)vtablePtr, 3 * sizeof(void*))) continue;
 
-        // Check first vtable entry (QueryInterface) points to executable code
+        if (vtablePtr < 0x10000) continue;
+
+        // Check first vtable entry points to executable code
+        if (!IsReadableMemory((void*)vtablePtr, sizeof(uintptr_t))) continue;
         uintptr_t qiAddr = *(uintptr_t*)vtablePtr;
+
         MEMORY_BASIC_INFORMATION mbi;
         if (!VirtualQuery((void*)qiAddr, &mbi, sizeof(mbi))) continue;
         if (!(mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ |
@@ -566,7 +578,7 @@ FrameworkElement TryExtractFrameFromController(void* controller,
                              PAGE_EXECUTE_WRITECOPY)))
             continue;
 
-        // Looks like a valid COM vtable - try QI for FrameworkElement
+        // Try QI for FrameworkElement
         try {
             FrameworkElement fe{nullptr};
             HRESULT hr = ((IUnknown*)value)->QueryInterface(
@@ -591,6 +603,22 @@ FrameworkElement TryExtractFrameFromController(void* controller,
 
 void HandleExtractedFrame(FrameworkElement frame, bool isSecondary) {
     const wchar_t* label = isSecondary ? L"SECONDARY" : L"PRIMARY";
+
+    // Check if the XAML tree is actually built yet (has SystemTrayFrameGrid)
+    auto grid = FindChildByName(frame, L"SystemTrayFrameGrid");
+    if (!grid) {
+        Wh_Log(L"[%s] Frame found via controller scan but XAML tree not "
+               L"ready yet (no SystemTrayFrameGrid) — deferring to IconView",
+               label);
+        // Save the frame reference but don't mark tree as dumped,
+        // so IconView::Loaded can still capture properly
+        if (isSecondary) {
+            g_secondarySystemTrayFrame = frame;
+        } else {
+            g_primarySystemTrayFrame = frame;
+        }
+        return;
+    }
 
     if (isSecondary) {
         g_secondarySystemTrayFrame = frame;
@@ -680,10 +708,23 @@ static const wchar_t* g_stackContainers[] = {
     L"ShowDesktopStack",
 };
 
+void TryPopulateSecondaryTrayImpl();
+
 void TryPopulateSecondaryTray() {
     if (g_populationAttempted) return;
     g_populationAttempted = true;
 
+    try {
+        TryPopulateSecondaryTrayImpl();
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Population failed (hresult): 0x%08X %s",
+               (unsigned)ex.code(), ex.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Population failed (unknown exception)");
+    }
+}
+
+void TryPopulateSecondaryTrayImpl() {
     Wh_Log(L"=== ATTEMPTING TO POPULATE SECONDARY TRAY ===");
 
     auto primaryGrid =
@@ -691,7 +732,8 @@ void TryPopulateSecondaryTray() {
     auto secondaryGrid =
         FindChildByName(g_secondarySystemTrayFrame, L"SystemTrayFrameGrid");
     if (!primaryGrid || !secondaryGrid) {
-        Wh_Log(L"Missing grid(s), aborting");
+        Wh_Log(L"Missing grid(s), aborting (will retry)");
+        g_populationAttempted = false;  // allow retry once grids are ready
         return;
     }
 
@@ -922,31 +964,33 @@ void TryPopulateSecondaryTray() {
            SizeChangedEventArgs const& args) {
             if (g_unloading || !g_secondarySystemTrayFrame) return;
 
-            double newWidth = args.NewSize().Width;
-            double oldWidth = args.PreviousSize().Width;
-            if (newWidth == oldWidth) return;
+            try {
+                double newWidth = args.NewSize().Width;
+                double oldWidth = args.PreviousSize().Width;
+                if (newWidth == oldWidth) return;
 
-            Wh_Log(L"[PrimarySizeChanged] %.0f -> %.0f", oldWidth, newWidth);
+                Wh_Log(L"[PrimarySizeChanged] %.0f -> %.0f", oldWidth, newWidth);
 
-            // Update the cached primary size
-            g_lastPrimaryFrameSize = newWidth;
+                g_lastPrimaryFrameSize = newWidth;
 
-            // Apply to secondary frame
-            double secWidth = g_secondarySystemTrayFrame.Width();
-            if (secWidth != newWidth) {
-                Wh_Log(L"[PrimarySizeChanged] Syncing secondary: %.0f -> %.0f",
-                       secWidth, newWidth);
-                g_secondarySystemTrayFrame.Width(newWidth);
-                g_secondarySystemTrayFrame.InvalidateMeasure();
-                g_secondarySystemTrayFrame.InvalidateArrange();
-                auto parent = Media::VisualTreeHelper::GetParent(
-                    g_secondarySystemTrayFrame).try_as<FrameworkElement>();
-                while (parent) {
-                    parent.InvalidateMeasure();
-                    parent.InvalidateArrange();
-                    parent = Media::VisualTreeHelper::GetParent(parent)
-                        .try_as<FrameworkElement>();
+                double secWidth = g_secondarySystemTrayFrame.Width();
+                if (secWidth != newWidth) {
+                    Wh_Log(L"[PrimarySizeChanged] Syncing secondary: %.0f -> %.0f",
+                           secWidth, newWidth);
+                    g_secondarySystemTrayFrame.Width(newWidth);
+                    g_secondarySystemTrayFrame.InvalidateMeasure();
+                    g_secondarySystemTrayFrame.InvalidateArrange();
+                    auto parent = Media::VisualTreeHelper::GetParent(
+                        g_secondarySystemTrayFrame).try_as<FrameworkElement>();
+                    while (parent) {
+                        parent.InvalidateMeasure();
+                        parent.InvalidateArrange();
+                        parent = Media::VisualTreeHelper::GetParent(parent)
+                            .try_as<FrameworkElement>();
+                    }
                 }
+            } catch (...) {
+                Wh_Log(L"[PrimarySizeChanged] Exception during sync");
             }
         });
     Wh_Log(L"[SizeChanged] Registered on primary frame");
@@ -994,11 +1038,48 @@ void HandleLoadedIconView(FrameworkElement iconView) {
 
 // ─── SystemTrayController hooks ─────────────────────────────────────────────
 
+// Reset all XAML state — called when a new controller is created (explorer restart)
+static void ResetXamlState() {
+    Wh_Log(L"Resetting XAML state (new controller detected)");
+
+    // Unregister SizeChanged before releasing the reference
+    if (g_primarySystemTrayFrame && g_primarySizeChangedToken.value) {
+        try {
+            g_primarySystemTrayFrame.SizeChanged(g_primarySizeChangedToken);
+        } catch (...) {}
+        g_primarySizeChangedToken = {};
+    }
+
+    UninstallFlyoutHook();
+    g_autoRevokerList.clear();
+
+    g_primarySystemTrayFrame = nullptr;
+    g_secondarySystemTrayFrame = nullptr;
+    g_primaryTreeDumped = false;
+    g_secondaryTreeDumped = false;
+    g_primaryFrameSearchDone = false;
+    g_secondaryFrameSearchDone = false;
+    g_populationAttempted = false;
+    g_secondaryContainersUncollapsed = false;
+    g_lastPrimaryFrameSize = 0;
+    g_primaryController = nullptr;
+    g_secondaryControllerCount = 0;
+    memset(g_secondaryControllers, 0, sizeof(g_secondaryControllers));
+}
+
 // Constructor: captures primary controller this pointer
 using SystemTrayController_ctor_t = void*(WINAPI*)(void* pThis, void* taskbarModel);
 SystemTrayController_ctor_t SystemTrayController_ctor_Original;
 void* WINAPI SystemTrayController_ctor_Hook(void* pThis, void* taskbarModel) {
-    Wh_Log(L">>> SystemTrayController::ctor this=%p", pThis);
+    Wh_Log(L">>> SystemTrayController::ctor this=%p (prev=%p)", pThis,
+           g_primaryController);
+
+    // Always reset if we already had a controller — explorer may reuse the
+    // same heap address after restart, so pointer comparison is unreliable
+    if (g_primaryController) {
+        ResetXamlState();
+    }
+
     g_primaryController = pThis;
     void* ret = SystemTrayController_ctor_Original(pThis, taskbarModel);
     Wh_Log(L">>> SystemTrayController::ctor done, ret=%p", ret);
@@ -1078,10 +1159,12 @@ void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis) {
     // Re-apply width override after the original sets it to native value
     if (g_populationAttempted && g_secondarySystemTrayFrame &&
         g_lastPrimaryFrameSize > 0 && !g_unloading) {
-        double currentWidth = g_secondarySystemTrayFrame.Width();
-        if (currentWidth != g_lastPrimaryFrameSize) {
-            g_secondarySystemTrayFrame.Width(g_lastPrimaryFrameSize);
-        }
+        try {
+            double currentWidth = g_secondarySystemTrayFrame.Width();
+            if (currentWidth != g_lastPrimaryFrameSize) {
+                g_secondarySystemTrayFrame.Width(g_lastPrimaryFrameSize);
+            }
+        } catch (...) {}
     }
 }
 
@@ -1115,40 +1198,43 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
 
     if (g_unloading) return ret;
 
-    // Get FrameworkElement from IconView WinRT object
-    // WinRT implementation objects have IInspectable at ((IUnknown**)pThis)[1]
-    FrameworkElement iconView = nullptr;
-    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                                           winrt::put_abi(iconView));
-    if (!iconView) {
-        return ret;
+    try {
+        // Get FrameworkElement from IconView WinRT object
+        FrameworkElement iconView = nullptr;
+        ((IUnknown**)pThis)[1]->QueryInterface(
+            winrt::guid_of<FrameworkElement>(), winrt::put_abi(iconView));
+        if (!iconView) {
+            return ret;
+        }
+
+        Wh_Log(L">>> IconView created: %p", pThis);
+
+        // Hook the Loaded event to explore the tree once in the visual tree
+        g_autoRevokerList.emplace_back();
+        auto autoRevokerIt = g_autoRevokerList.end();
+        --autoRevokerIt;
+
+        *autoRevokerIt = iconView.Loaded(
+            winrt::auto_revoke_t{},
+            [autoRevokerIt](
+                winrt::Windows::Foundation::IInspectable const& sender,
+                RoutedEventArgs const& e) {
+                g_autoRevokerList.erase(autoRevokerIt);
+
+                if (g_unloading) return;
+
+                try {
+                    auto iconView = sender.try_as<FrameworkElement>();
+                    if (!iconView) return;
+
+                    HandleLoadedIconView(iconView);
+                } catch (...) {
+                    Wh_Log(L"Exception in IconView Loaded handler");
+                }
+            });
+    } catch (...) {
+        Wh_Log(L"Exception in IconView_IconView_Hook");
     }
-
-    Wh_Log(L">>> IconView created: %p", pThis);
-
-    // Hook the Loaded event to explore the tree once the element is in the visual tree
-    g_autoRevokerList.emplace_back();
-    auto autoRevokerIt = g_autoRevokerList.end();
-    --autoRevokerIt;
-
-    *autoRevokerIt = iconView.Loaded(
-        winrt::auto_revoke_t{},
-        [autoRevokerIt](winrt::Windows::Foundation::IInspectable const& sender,
-                        RoutedEventArgs const& e) {
-            g_autoRevokerList.erase(autoRevokerIt);
-
-            if (g_unloading) return;
-
-            auto iconView = sender.try_as<FrameworkElement>();
-            if (!iconView) return;
-
-            auto className = winrt::get_class_name(iconView);
-            auto name = iconView.Name();
-            Wh_Log(L">>> IconView Loaded: class=%s name=%s",
-                   className.c_str(), name.c_str());
-
-            HandleLoadedIconView(iconView);
-        });
 
     return ret;
 }
@@ -1383,27 +1469,34 @@ void Wh_ModUninit() {
 static void RefreshSecondaryTray() {
     if (g_unloading) return;
 
-    if (g_primarySystemTrayFrame && g_secondarySystemTrayFrame) {
-        double primaryWidth = g_primarySystemTrayFrame.ActualWidth();
-        if (primaryWidth > 0) {
-            Wh_Log(L"[Refresh] Syncing secondary width to %.0f", primaryWidth);
-            g_lastPrimaryFrameSize = primaryWidth;
-            g_secondarySystemTrayFrame.Width(primaryWidth);
-            g_secondarySystemTrayFrame.InvalidateMeasure();
-            g_secondarySystemTrayFrame.InvalidateArrange();
+    try {
+        if (g_primarySystemTrayFrame && g_secondarySystemTrayFrame) {
+            double primaryWidth = g_primarySystemTrayFrame.ActualWidth();
+            if (primaryWidth > 0) {
+                Wh_Log(L"[Refresh] Syncing secondary width to %.0f", primaryWidth);
+                g_lastPrimaryFrameSize = primaryWidth;
+                g_secondarySystemTrayFrame.Width(primaryWidth);
+                g_secondarySystemTrayFrame.InvalidateMeasure();
+                g_secondarySystemTrayFrame.InvalidateArrange();
 
-            // Walk up the visual tree to force parent re-layout
-            auto parent = Media::VisualTreeHelper::GetParent(
-                g_secondarySystemTrayFrame).try_as<FrameworkElement>();
-            while (parent) {
-                parent.InvalidateMeasure();
-                parent.InvalidateArrange();
-                parent = Media::VisualTreeHelper::GetParent(parent)
-                    .try_as<FrameworkElement>();
+                // Walk up the visual tree to force parent re-layout
+                auto parent = Media::VisualTreeHelper::GetParent(
+                    g_secondarySystemTrayFrame).try_as<FrameworkElement>();
+                while (parent) {
+                    parent.InvalidateMeasure();
+                    parent.InvalidateArrange();
+                    parent = Media::VisualTreeHelper::GetParent(parent)
+                        .try_as<FrameworkElement>();
+                }
+
+                g_secondarySystemTrayFrame.UpdateLayout();
             }
-
-            g_secondarySystemTrayFrame.UpdateLayout();
         }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"[Refresh] Failed (hresult): 0x%08X %s",
+               (unsigned)ex.code(), ex.message().c_str());
+    } catch (...) {
+        Wh_Log(L"[Refresh] Failed (unknown exception)");
     }
 }
 
