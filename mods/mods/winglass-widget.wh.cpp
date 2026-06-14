@@ -2,16 +2,26 @@
 // @id              mods/winglass-widget.wh.cpp
 // @name            JonaOS Liquid Glass Widgets
 // @description     Achieve that Premium Glass morph widgets and elevate your Windows Display to look Clean, Professional, High-end and Futuristic.
-// @version         3.3
+// @version         3.4
 // @author          Jona like It, Code It
 // @github          https://github.com/SeniorMajor7
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lgdi32 -luxtheme -ldwmapi -lgdiplus -lole32 -luuid -lshell32 -lshlwapi
 // @license         MIT
 // @architecture    x86-64
-// @architecture    amd64
-// @architecture    arm64
 // ==/WindhawkMod==
+// ==WindhawkModReadme==
+// JonaOS Liquid Glass Widgets
+// "Achieve that Premium Glass morph widgets and elevate your Windows Display to look Clean, Professional, High-end and Futuristic".
+//"<img width="478" height="376" alt="Image" src="https://github.com/user-attachments/assets/afa6c355-4a19-40d8-b055-a3a5a7d7b2a5" /> "Light mode"
+//<img width="479" height="370" alt="Image" src="https://github.com/user-attachments/assets/f0fdf3c9-e95d-4701-92ee-165c981f4eda" /> "Dark mode"
+//<img width="475" height="362" alt="Image" src="https://github.com/user-attachments/assets/a90c3cf5-ee5a-4d24-90ab-1e53ffa7ef61" /> "Acrylic/Translucent"
+//<img width="475" height="369" alt="Image" src="https://github.com/user-attachments/assets/497b525c-ea6f-4d2e-b113-e97c1bd3c5d8" /> "Mica"
+//<img width="484" height="363" alt="Image" src="https://github.com/user-attachments/assets/358af692-960e-4269-91a5-bf1acc3a8e0b" /> "Tabbed Mica"
+//<img width="476" height="371" alt="Image" src="https://github.com/user-attachments/assets/38353d6d-321c-4331-b4c5-224b68cf18f7" /> "No DWM Background"
+//" Change the Appearance mode. Corner roundness. Switch off any widget"
+// "It is better to leave all settings in default since they are designed perfectly except for the appearance mode which the user can change according to their tastes and preferance
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
