@@ -1242,6 +1242,7 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
 // ─── module hooking ─────────────────────────────────────────────────────────
 
 bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         // Primary controller
         {
