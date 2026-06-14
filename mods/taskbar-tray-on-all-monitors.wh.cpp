@@ -23,13 +23,16 @@ Mirrors the system tray from the primary taskbar onto all secondary monitor
 taskbars — including the clock, volume, network, battery, notification area
 icons, input indicator, overflow chevron, and Show Desktop button.
 
+Supports any number of monitors (2, 3, 4, etc.).
+
 **Only Windows 11 (build 26200+) is supported.**
 
 ## Features
 
-- All system tray icons visible on secondary taskbars (click, hover,
+- All system tray icons visible on every secondary taskbar (click, hover,
   right-click context menus work natively)
-- Dynamic width syncing — secondary tray resizes automatically when icons
+- Multi-monitor support — works with 3+ displays, not just 2
+- Dynamic width syncing — all secondary trays resize automatically when icons
   are added or removed on the primary
 - Show Desktop button synced to match primary visibility
 - Flyout repositioning — Quick Settings, notification panels, and context
@@ -40,8 +43,8 @@ icons, input indicator, overflow chevron, and Show Desktop button.
 
 Hooks into `SystemTrayController` and `SystemTraySecondaryController` in
 `SystemTray.dll`, then shares XAML `ItemsSource` bindings from the primary
-tray containers to the secondary ones. A `SizeChanged` event on the primary
-frame keeps the secondary width in sync at runtime.
+tray containers to each secondary. A `SizeChanged` event on the primary
+frame keeps all secondary widths in sync at runtime.
 */
 // ==/WindhawkModReadme==
 
@@ -59,6 +62,7 @@ frame keeps the secondary width in sync at runtime.
 #include <atomic>
 #include <functional>
 #include <list>
+#include <vector>
 
 using namespace winrt::Windows::UI::Xaml;
 
@@ -66,21 +70,28 @@ using namespace winrt::Windows::UI::Xaml;
 
 static std::atomic<bool> g_unloading{false};
 
-// Captured controller pointers
+// Captured primary controller pointer
 static void* g_primaryController = nullptr;
-static void* g_secondaryControllers[8] = {};
-static int   g_secondaryControllerCount = 0;
 
-// Track whether we've dumped the XAML tree for primary/secondary
+// Track whether we've dumped the primary XAML tree
 static bool g_primaryTreeDumped = false;
-static bool g_secondaryTreeDumped = false;
 
-// Saved XAML tree references for primary/secondary SystemTrayFrame
+// Primary SystemTrayFrame reference
 static FrameworkElement g_primarySystemTrayFrame{nullptr};
-static FrameworkElement g_secondarySystemTrayFrame{nullptr};
-static bool g_populationAttempted = false;
 static double g_lastPrimaryFrameSize = 0;
 static winrt::event_token g_primarySizeChangedToken{};
+
+// Per-secondary-controller state
+struct SecondaryInfo {
+    void* controller = nullptr;
+    FrameworkElement frame{nullptr};
+    bool treeDumped = false;
+    bool frameSearchDone = false;
+    bool populated = false;
+    bool containersUncollapsed = false;
+};
+
+static std::vector<SecondaryInfo> g_secondaries;
 
 // Hidden window for display change notifications
 static HWND g_displayChangeWindow = nullptr;
@@ -244,7 +255,7 @@ static void TrackFlyout(HWND hwnd, HMONITOR target) {
 }
 
 static void UntrackFlyout(HWND hwnd) {
-    for (int i = 0; i < g_trackedCount; i++) {
+    for (int i = 0; i < g_trackedCount;  i++) {
         if (g_trackedFlyouts[i] == hwnd) {
             g_trackedFlyouts[i] = g_trackedFlyouts[--g_trackedCount];
             g_trackedTargets[i] = g_trackedTargets[g_trackedCount];
@@ -533,7 +544,6 @@ extern SystemTraySecondaryController_UpdateFrameSize_t SystemTraySecondaryContro
 // Used when mod is loaded after startup (no new IconViews being created).
 
 static bool g_primaryFrameSearchDone = false;
-static bool g_secondaryFrameSearchDone = false;
 
 // Check if a pointer range is readable using VirtualQuery
 static bool IsReadableMemory(const void* ptr, size_t size) {
@@ -601,7 +611,25 @@ FrameworkElement TryExtractFrameFromController(void* controller,
     return nullptr;
 }
 
-void HandleExtractedFrame(FrameworkElement frame, bool isSecondary) {
+// Find or create a SecondaryInfo for a given controller
+static SecondaryInfo* FindOrCreateSecondary(void* controller) {
+    for (auto& si : g_secondaries) {
+        if (si.controller == controller) return &si;
+    }
+    g_secondaries.push_back({controller});
+    return &g_secondaries.back();
+}
+
+// Find the SecondaryInfo that owns a given frame
+static SecondaryInfo* FindSecondaryByFrame(FrameworkElement frame) {
+    for (auto& si : g_secondaries) {
+        if (si.frame == frame) return &si;
+    }
+    return nullptr;
+}
+
+void HandleExtractedFrame(FrameworkElement frame, bool isSecondary,
+                          void* controller = nullptr) {
     const wchar_t* label = isSecondary ? L"SECONDARY" : L"PRIMARY";
 
     // Check if the XAML tree is actually built yet (has SystemTrayFrameGrid)
@@ -610,21 +638,29 @@ void HandleExtractedFrame(FrameworkElement frame, bool isSecondary) {
         Wh_Log(L"[%s] Frame found via controller scan but XAML tree not "
                L"ready yet (no SystemTrayFrameGrid) — deferring to IconView",
                label);
-        // Save the frame reference but don't mark tree as dumped,
-        // so IconView::Loaded can still capture properly
-        if (isSecondary) {
-            g_secondarySystemTrayFrame = frame;
-        } else {
+        if (isSecondary && controller) {
+            auto* si = FindOrCreateSecondary(controller);
+            si->frame = frame;
+        } else if (!isSecondary) {
             g_primarySystemTrayFrame = frame;
         }
         return;
     }
 
     if (isSecondary) {
-        g_secondarySystemTrayFrame = frame;
-        if (!g_secondaryTreeDumped) {
-            g_secondaryTreeDumped = true;
-            Wh_Log(L"=== SECONDARY TASKBAR XAML TREE (via controller scan) ===");
+        SecondaryInfo* si = controller ? FindOrCreateSecondary(controller)
+                                       : FindSecondaryByFrame(frame);
+        if (!si) {
+            // No controller association yet — create one with nullptr controller
+            // (will be associated later via UpdateFrameSize)
+            g_secondaries.push_back({nullptr, frame});
+            si = &g_secondaries.back();
+        }
+        si->frame = frame;
+        if (!si->treeDumped) {
+            si->treeDumped = true;
+            Wh_Log(L"=== SECONDARY TASKBAR XAML TREE (via controller scan) [%zu] ===",
+                   g_secondaries.size());
             DumpXamlTree(frame, 0, 8);
             ProbeContainerInterfaces(frame, label);
         }
@@ -638,7 +674,7 @@ void HandleExtractedFrame(FrameworkElement frame, bool isSecondary) {
         }
     }
 
-    if (g_primarySystemTrayFrame && g_secondarySystemTrayFrame) {
+    if (g_primarySystemTrayFrame) {
         TryPopulateSecondaryTray();
     }
 }
@@ -687,9 +723,6 @@ void ProbeContainerInterfaces(FrameworkElement systemTrayFrame,
 
 // ─── Try to populate secondary tray from primary ────────────────────────────
 
-// Track what we changed so we can undo on unload
-static bool g_secondaryContainersUncollapsed = false;
-
 // Containers whose visibility is synced between primary and secondary
 static const wchar_t* g_syncedContainers[] = {
     L"ControlCenterButton",
@@ -708,42 +741,95 @@ static const wchar_t* g_stackContainers[] = {
     L"ShowDesktopStack",
 };
 
-void TryPopulateSecondaryTrayImpl();
+void TryPopulateOneSecondary(SecondaryInfo& si);
 
 void TryPopulateSecondaryTray() {
-    if (g_populationAttempted) return;
-    g_populationAttempted = true;
+    if (!g_primarySystemTrayFrame) return;
 
-    try {
-        TryPopulateSecondaryTrayImpl();
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Population failed (hresult): 0x%08X %s",
-               (unsigned)ex.code(), ex.message().c_str());
-    } catch (...) {
-        Wh_Log(L"Population failed (unknown exception)");
+    bool anyPopulated = false;
+    for (auto& si : g_secondaries) {
+        if (si.populated || !si.frame) continue;
+
+        try {
+            TryPopulateOneSecondary(si);
+            if (si.populated) anyPopulated = true;
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Population failed (hresult): 0x%08X %s",
+                   (unsigned)ex.code(), ex.message().c_str());
+        } catch (...) {
+            Wh_Log(L"Population failed (unknown exception)");
+        }
+    }
+
+    // Register SizeChanged on primary (once) if any secondary got populated
+    if (anyPopulated && !g_primarySizeChangedToken.value) {
+        g_primarySizeChangedToken = g_primarySystemTrayFrame.SizeChanged(
+            [](winrt::Windows::Foundation::IInspectable const& sender,
+               SizeChangedEventArgs const& args) {
+                if (g_unloading) return;
+
+                try {
+                    double newWidth = args.NewSize().Width;
+                    double oldWidth = args.PreviousSize().Width;
+                    if (newWidth == oldWidth) return;
+
+                    Wh_Log(L"[PrimarySizeChanged] %.0f -> %.0f",
+                           oldWidth, newWidth);
+                    g_lastPrimaryFrameSize = newWidth;
+
+                    for (auto& si : g_secondaries) {
+                        if (!si.populated || !si.frame) continue;
+                        try {
+                            double secWidth = si.frame.Width();
+                            if (secWidth != newWidth) {
+                                si.frame.Width(newWidth);
+                                si.frame.InvalidateMeasure();
+                                si.frame.InvalidateArrange();
+                                auto parent = Media::VisualTreeHelper::GetParent(
+                                    si.frame).try_as<FrameworkElement>();
+                                while (parent) {
+                                    parent.InvalidateMeasure();
+                                    parent.InvalidateArrange();
+                                    parent = Media::VisualTreeHelper::GetParent(
+                                        parent).try_as<FrameworkElement>();
+                                }
+                            }
+                        } catch (...) {}
+                    }
+                } catch (...) {
+                    Wh_Log(L"[PrimarySizeChanged] Exception during sync");
+                }
+            });
+        Wh_Log(L"[SizeChanged] Registered on primary frame");
+    }
+
+    // Install flyout repositioning hook once any secondary is populated
+    if (anyPopulated) {
+        InstallFlyoutHook();
     }
 }
 
-void TryPopulateSecondaryTrayImpl() {
-    Wh_Log(L"=== ATTEMPTING TO POPULATE SECONDARY TRAY ===");
+void TryPopulateOneSecondary(SecondaryInfo& si) {
+    Wh_Log(L"=== ATTEMPTING TO POPULATE SECONDARY TRAY (controller=%p) ===",
+           si.controller);
 
     auto primaryGrid =
         FindChildByName(g_primarySystemTrayFrame, L"SystemTrayFrameGrid");
     auto secondaryGrid =
-        FindChildByName(g_secondarySystemTrayFrame, L"SystemTrayFrameGrid");
+        FindChildByName(si.frame, L"SystemTrayFrameGrid");
     if (!primaryGrid || !secondaryGrid) {
         Wh_Log(L"Missing grid(s), aborting (will retry)");
-        g_populationAttempted = false;  // allow retry once grids are ready
-        return;
+        return;  // si.populated stays false — will retry
     }
 
-    // Log primary frame dimensions for reference
+    si.populated = true;
+
     double primaryFrameWidth = g_primarySystemTrayFrame.ActualWidth();
-    double secondaryFrameWidth = g_secondarySystemTrayFrame.ActualWidth();
+    double secondaryFrameWidth = si.frame.ActualWidth();
     Wh_Log(L"Frame widths - primary:%.0f secondary:%.0f",
            primaryFrameWidth, secondaryFrameWidth);
 
-    // Step 1: Sync visibility of containers between primary and secondary
+    // Step 1: Sync visibility of containers
     for (auto containerName : g_syncedContainers) {
         auto primaryContainer = FindChildByName(primaryGrid, containerName);
         auto secondaryContainer = FindChildByName(secondaryGrid, containerName);
@@ -765,21 +851,18 @@ void TryPopulateSecondaryTrayImpl() {
                secondaryW, secondaryContainer.ActualHeight(),
                secondaryVis == Visibility::Collapsed ? L"COLLAPSED" : L"Visible");
 
-        // Sync visibility: match secondary to primary
         if (primaryVis == Visibility::Visible &&
             secondaryVis == Visibility::Collapsed) {
             Wh_Log(L"[%s] Uncollapsing secondary container", containerName);
             secondaryContainer.Visibility(Visibility::Visible);
-            g_secondaryContainersUncollapsed = true;
+            si.containersUncollapsed = true;
         } else if (primaryVis == Visibility::Collapsed &&
                    secondaryVis == Visibility::Visible) {
             Wh_Log(L"[%s] Collapsing secondary to match primary", containerName);
             secondaryContainer.Visibility(Visibility::Collapsed);
-            g_secondaryContainersUncollapsed = true;
+            si.containersUncollapsed = true;
         }
 
-        // If secondary is visible but very narrow (< 5px), it might be
-        // effectively hidden - log this for diagnosis
         if (secondaryVis == Visibility::Visible && secondaryW < 5 &&
             primaryW > 5) {
             Wh_Log(L"[%s] Secondary is visible but very narrow (%.0f vs %.0f)",
@@ -787,9 +870,7 @@ void TryPopulateSecondaryTrayImpl() {
         }
     }
 
-    // Step 2: Share NotificationAreaIcons ItemsSource for third-party tray icons
-    // NotificationAreaIcons is a DIRECT child of SystemTrayFrameGrid (sibling
-    // of NotifyIconStack, not inside it)
+    // Step 2: Share NotificationAreaIcons ItemsSource
     auto primaryNAI = FindChildByName(primaryGrid, L"NotificationAreaIcons");
     auto secondaryNAI = FindChildByName(secondaryGrid, L"NotificationAreaIcons");
 
@@ -819,7 +900,6 @@ void TryPopulateSecondaryTrayImpl() {
                 }
             }
 
-            // Uncollapse if needed
             if (secondaryNAI.Visibility() == Visibility::Collapsed &&
                 primaryNAI.Visibility() == Visibility::Visible) {
                 secondaryNAI.Visibility(Visibility::Visible);
@@ -832,8 +912,7 @@ void TryPopulateSecondaryTrayImpl() {
                secondaryNAI ? L"found" : L"MISSING");
     }
 
-    // Step 3: Share ItemsSource for ControlCenterButton and
-    //         NotificationCenterButton (in case secondary has 0 items)
+    // Step 3: Share ItemsSource for ControlCenterButton and NotificationCenterButton
     const wchar_t* icContainers[] = {
         L"ControlCenterButton",
         L"NotificationCenterButton",
@@ -864,14 +943,11 @@ void TryPopulateSecondaryTrayImpl() {
     }
 
     // Step 3b: Share StackListView ItemsSource for Stack containers
-    // SystemTray.Stack is NOT an ItemsControl, but it contains a child
-    // StackListView (via Content grid > IconStack) which IS an ItemsControl.
     for (auto stackName : g_stackContainers) {
         auto primaryStack = FindChildByName(primaryGrid, stackName);
         auto secondaryStack = FindChildByName(secondaryGrid, stackName);
         if (!primaryStack || !secondaryStack) continue;
 
-        // Drill down: Stack > Content (Grid) > IconStack (StackListView)
         auto primaryContent = FindChildByName(primaryStack, L"Content");
         auto secondaryContent = FindChildByName(secondaryStack, L"Content");
         if (!primaryContent || !secondaryContent) continue;
@@ -913,27 +989,25 @@ void TryPopulateSecondaryTrayImpl() {
     }
 
     // Step 4: Set the secondary frame width to match primary
-    // (GetFrameSize symbol may not exist, so set Width directly)
     if (primaryFrameWidth > secondaryFrameWidth) {
         Wh_Log(L"Setting secondary frame Width: %.0f -> %.0f",
                secondaryFrameWidth, primaryFrameWidth);
-        g_secondarySystemTrayFrame.Width(primaryFrameWidth);
+        si.frame.Width(primaryFrameWidth);
     }
 
     // Force the secondary controller to recalculate frame size
-    if (g_secondaryControllerCount > 0 &&
+    if (si.controller &&
         SystemTraySecondaryController_UpdateFrameSize_Original) {
-        Wh_Log(L"Forcing UpdateFrameSize on secondary controller");
-        SystemTraySecondaryController_UpdateFrameSize_Original(
-            g_secondaryControllers[0]);
+        Wh_Log(L"Forcing UpdateFrameSize on secondary controller %p",
+               si.controller);
+        SystemTraySecondaryController_UpdateFrameSize_Original(si.controller);
     }
 
-    // Also force layout update on secondary frame
-    g_secondarySystemTrayFrame.InvalidateMeasure();
-    g_secondarySystemTrayFrame.InvalidateArrange();
-    g_secondarySystemTrayFrame.UpdateLayout();
+    // Force layout update on secondary frame
+    si.frame.InvalidateMeasure();
+    si.frame.InvalidateArrange();
+    si.frame.UpdateLayout();
 
-    // Also invalidate the grid
     secondaryGrid.InvalidateMeasure();
     secondaryGrid.InvalidateArrange();
     secondaryGrid.UpdateLayout();
@@ -953,50 +1027,9 @@ void TryPopulateSecondaryTrayImpl() {
                child.Visibility() == Visibility::Collapsed ? L"COLLAPSED" : L"Visible");
     }
     Wh_Log(L"Secondary frame size now: %.0fx%.0f",
-           g_secondarySystemTrayFrame.ActualWidth(),
-           g_secondarySystemTrayFrame.ActualHeight());
+           si.frame.ActualWidth(), si.frame.ActualHeight());
 
     Wh_Log(L"=== POPULATION ATTEMPT COMPLETE ===");
-
-    // Step 6: Watch primary frame for size changes so we can sync to secondary
-    g_primarySizeChangedToken = g_primarySystemTrayFrame.SizeChanged(
-        [](winrt::Windows::Foundation::IInspectable const& sender,
-           SizeChangedEventArgs const& args) {
-            if (g_unloading || !g_secondarySystemTrayFrame) return;
-
-            try {
-                double newWidth = args.NewSize().Width;
-                double oldWidth = args.PreviousSize().Width;
-                if (newWidth == oldWidth) return;
-
-                Wh_Log(L"[PrimarySizeChanged] %.0f -> %.0f", oldWidth, newWidth);
-
-                g_lastPrimaryFrameSize = newWidth;
-
-                double secWidth = g_secondarySystemTrayFrame.Width();
-                if (secWidth != newWidth) {
-                    Wh_Log(L"[PrimarySizeChanged] Syncing secondary: %.0f -> %.0f",
-                           secWidth, newWidth);
-                    g_secondarySystemTrayFrame.Width(newWidth);
-                    g_secondarySystemTrayFrame.InvalidateMeasure();
-                    g_secondarySystemTrayFrame.InvalidateArrange();
-                    auto parent = Media::VisualTreeHelper::GetParent(
-                        g_secondarySystemTrayFrame).try_as<FrameworkElement>();
-                    while (parent) {
-                        parent.InvalidateMeasure();
-                        parent.InvalidateArrange();
-                        parent = Media::VisualTreeHelper::GetParent(parent)
-                            .try_as<FrameworkElement>();
-                    }
-                }
-            } catch (...) {
-                Wh_Log(L"[PrimarySizeChanged] Exception during sync");
-            }
-        });
-    Wh_Log(L"[SizeChanged] Registered on primary frame");
-
-    // Install flyout repositioning hook now that secondary tray is populated
-    InstallFlyoutHook();
 }
 
 // ─── Process a loaded IconView element ──────────────────────────────────────
@@ -1013,10 +1046,25 @@ void HandleLoadedIconView(FrameworkElement iconView) {
     bool isSecondary = IsSecondaryTaskbar(systemTrayFrame);
 
     if (isSecondary) {
-        if (!g_secondaryTreeDumped) {
-            g_secondaryTreeDumped = true;
-            g_secondarySystemTrayFrame = systemTrayFrame;
-            Wh_Log(L"=== SECONDARY TASKBAR XAML TREE ===");
+        // Find existing SecondaryInfo with this frame, or find one without
+        // a frame yet, or create a new one
+        SecondaryInfo* si = FindSecondaryByFrame(systemTrayFrame);
+        if (!si) {
+            // Try to find a secondary entry that has no frame yet
+            for (auto& s : g_secondaries) {
+                if (!s.frame) { si = &s; break; }
+            }
+            if (!si) {
+                g_secondaries.push_back({nullptr, systemTrayFrame});
+                si = &g_secondaries.back();
+            } else {
+                si->frame = systemTrayFrame;
+            }
+        }
+        if (!si->treeDumped) {
+            si->treeDumped = true;
+            Wh_Log(L"=== SECONDARY TASKBAR XAML TREE [%zu] ===",
+                   g_secondaries.size());
             DumpXamlTree(systemTrayFrame, 0, 8);
             ProbeContainerInterfaces(systemTrayFrame, L"SECONDARY");
         }
@@ -1030,8 +1078,7 @@ void HandleLoadedIconView(FrameworkElement iconView) {
         }
     }
 
-    // Once we have both, try to populate the secondary tray
-    if (g_primarySystemTrayFrame && g_secondarySystemTrayFrame) {
+    if (g_primarySystemTrayFrame) {
         TryPopulateSecondaryTray();
     }
 }
@@ -1054,17 +1101,16 @@ static void ResetXamlState() {
     g_autoRevokerList.clear();
 
     g_primarySystemTrayFrame = nullptr;
-    g_secondarySystemTrayFrame = nullptr;
     g_primaryTreeDumped = false;
-    g_secondaryTreeDumped = false;
     g_primaryFrameSearchDone = false;
-    g_secondaryFrameSearchDone = false;
-    g_populationAttempted = false;
-    g_secondaryContainersUncollapsed = false;
     g_lastPrimaryFrameSize = 0;
     g_primaryController = nullptr;
-    g_secondaryControllerCount = 0;
-    memset(g_secondaryControllers, 0, sizeof(g_secondaryControllers));
+
+    // Clear all secondary state
+    for (auto& si : g_secondaries) {
+        si.frame = nullptr;
+    }
+    g_secondaries.clear();
 }
 
 // Constructor: captures primary controller this pointer
@@ -1123,9 +1169,7 @@ SystemTraySecondaryController_ctor_t SystemTraySecondaryController_ctor_Original
 void* WINAPI SystemTraySecondaryController_ctor_Hook(void* pThis, void* taskbarModel) {
     Wh_Log(L">>> SystemTraySecondaryController::ctor this=%p", pThis);
 
-    if (g_secondaryControllerCount < 8) {
-        g_secondaryControllers[g_secondaryControllerCount++] = pThis;
-    }
+    FindOrCreateSecondary(pThis);
 
     void* ret = SystemTraySecondaryController_ctor_Original(pThis, taskbarModel);
     Wh_Log(L">>> SystemTraySecondaryController::ctor done, ret=%p", ret);
@@ -1136,33 +1180,34 @@ void* WINAPI SystemTraySecondaryController_ctor_Hook(void* pThis, void* taskbarM
 using SystemTraySecondaryController_UpdateFrameSize_t = void(WINAPI*)(void* pThis);
 SystemTraySecondaryController_UpdateFrameSize_t SystemTraySecondaryController_UpdateFrameSize_Original;
 void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis) {
-    // Track this secondary controller
-    bool found = false;
-    for (int i = 0; i < g_secondaryControllerCount; i++) {
-        if (g_secondaryControllers[i] == pThis) { found = true; break; }
-    }
-    if (!found && g_secondaryControllerCount < 8) {
-        g_secondaryControllers[g_secondaryControllerCount++] = pThis;
-        Wh_Log(L">>> Secondary controller captured via UpdateFrameSize: %p", pThis);
-    }
+    // Ensure this controller is tracked
+    auto* si = FindOrCreateSecondary(pThis);
+
     SystemTraySecondaryController_UpdateFrameSize_Original(pThis);
 
     // Fallback: extract frame from controller if not yet captured
-    if (!g_secondarySystemTrayFrame && !g_secondaryFrameSearchDone && !g_unloading) {
-        g_secondaryFrameSearchDone = true;
+    if (!si->frame && !si->frameSearchDone && !g_unloading) {
+        si->frameSearchDone = true;
         auto frame = TryExtractFrameFromController(pThis, L"SECONDARY");
         if (frame) {
-            HandleExtractedFrame(frame, true);
+            HandleExtractedFrame(frame, true, pThis);
         }
     }
 
-    // Re-apply width override after the original sets it to native value
-    if (g_populationAttempted && g_secondarySystemTrayFrame &&
-        g_lastPrimaryFrameSize > 0 && !g_unloading) {
+    // Re-apply width override after the original sets it to native value.
+    // Re-read the primary frame's actual width rather than using the cached
+    // g_lastPrimaryFrameSize, because during DPI changes the cache may be
+    // stale (still holding the old-DPI value).
+    if (si->populated && si->frame &&
+        g_primarySystemTrayFrame && !g_unloading) {
         try {
-            double currentWidth = g_secondarySystemTrayFrame.Width();
-            if (currentWidth != g_lastPrimaryFrameSize) {
-                g_secondarySystemTrayFrame.Width(g_lastPrimaryFrameSize);
+            double primaryWidth = g_primarySystemTrayFrame.ActualWidth();
+            if (primaryWidth > 0) {
+                g_lastPrimaryFrameSize = primaryWidth;
+                double currentWidth = si->frame.Width();
+                if (currentWidth != primaryWidth) {
+                    si->frame.Width(primaryWidth);
+                }
             }
         } catch (...) {}
     }
@@ -1182,8 +1227,12 @@ SystemTraySecondaryController_GetFrameSize_t SystemTraySecondaryController_GetFr
 double WINAPI SystemTraySecondaryController_GetFrameSize_Hook(void* pThis, int enumTaskbarSize) {
     double originalSize = SystemTraySecondaryController_GetFrameSize_Original(pThis, enumTaskbarSize);
 
-    if (g_populationAttempted && g_lastPrimaryFrameSize > originalSize) {
-        return g_lastPrimaryFrameSize;
+    // Check if this controller's secondary has been populated
+    for (auto& si : g_secondaries) {
+        if (si.controller == pThis && si.populated &&
+            g_lastPrimaryFrameSize > originalSize) {
+            return g_lastPrimaryFrameSize;
+        }
     }
 
     return originalSize;
@@ -1383,7 +1432,7 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
     Wh_Log(L"Primary controller: %p", g_primaryController);
-    Wh_Log(L"Secondary controllers: %d", g_secondaryControllerCount);
+    Wh_Log(L"Secondary controllers: %zu", g_secondaries.size());
 
     // If the mod was loaded after the taskbar is already running, we need to
     // force the taskbar to rebuild so our constructor and UpdateFrameSize
@@ -1419,24 +1468,19 @@ void Wh_ModBeforeUninit() {
     // Clear loaded event revokers
     g_autoRevokerList.clear();
 
-    // Restore secondary tray to original state
-    if (g_secondaryContainersUncollapsed && g_secondarySystemTrayFrame) {
+    // Restore all secondary trays to original state
+    for (auto& si : g_secondaries) {
+        if (!si.containersUncollapsed || !si.frame) continue;
         try {
-            auto grid = FindChildByName(g_secondarySystemTrayFrame,
-                                         L"SystemTrayFrameGrid");
+            auto grid = FindChildByName(si.frame, L"SystemTrayFrameGrid");
             if (grid) {
-                // Re-collapse containers that we modified
                 for (auto name : g_syncedContainers) {
                     auto child = FindChildByName(grid, name);
                     if (child && child.ActualWidth() > 0) {
-                        // Only re-collapse if it was originally collapsed
-                        // (we can't perfectly know, but narrow ones likely were)
                         child.Visibility(Visibility::Collapsed);
                     }
                 }
 
-                // Clear shared ItemsSource on NotificationAreaIcons
-                // (it's a direct child of SystemTrayFrameGrid)
                 auto nai = FindChildByName(grid, L"NotificationAreaIcons");
                 if (nai) {
                     auto ic = nai.try_as<Controls::ItemsControl>();
@@ -1445,20 +1489,22 @@ void Wh_ModBeforeUninit() {
                     }
                 }
 
-                // Restore frame width and force layout update
-                g_secondarySystemTrayFrame.ClearValue(
-                    FrameworkElement::WidthProperty());
-                g_secondarySystemTrayFrame.InvalidateMeasure();
-                g_secondarySystemTrayFrame.UpdateLayout();
+                si.frame.ClearValue(FrameworkElement::WidthProperty());
+                si.frame.InvalidateMeasure();
+                si.frame.UpdateLayout();
             }
         } catch (...) {
-            Wh_Log(L"Error during cleanup");
+            Wh_Log(L"Error during cleanup of secondary controller %p",
+                   si.controller);
         }
     }
 
     // Release XAML references
     g_primarySystemTrayFrame = nullptr;
-    g_secondarySystemTrayFrame = nullptr;
+    for (auto& si : g_secondaries) {
+        si.frame = nullptr;
+    }
+    g_secondaries.clear();
 }
 
 void Wh_ModUninit() {
@@ -1467,22 +1513,27 @@ void Wh_ModUninit() {
 
 // ─── refresh helper ─────────────────────────────────────────────────────────
 
-static void RefreshSecondaryTray() {
+static void RefreshSecondaryTrayImpl() {
     if (g_unloading) return;
+    if (!g_primarySystemTrayFrame) return;
 
     try {
-        if (g_primarySystemTrayFrame && g_secondarySystemTrayFrame) {
-            double primaryWidth = g_primarySystemTrayFrame.ActualWidth();
-            if (primaryWidth > 0) {
-                Wh_Log(L"[Refresh] Syncing secondary width to %.0f", primaryWidth);
-                g_lastPrimaryFrameSize = primaryWidth;
-                g_secondarySystemTrayFrame.Width(primaryWidth);
-                g_secondarySystemTrayFrame.InvalidateMeasure();
-                g_secondarySystemTrayFrame.InvalidateArrange();
+        double primaryWidth = g_primarySystemTrayFrame.ActualWidth();
+        if (primaryWidth <= 0) return;
 
-                // Walk up the visual tree to force parent re-layout
+        Wh_Log(L"[Refresh] Syncing %zu secondaries to width %.0f",
+               g_secondaries.size(), primaryWidth);
+        g_lastPrimaryFrameSize = primaryWidth;
+
+        for (auto& si : g_secondaries) {
+            if (!si.populated || !si.frame) continue;
+            try {
+                si.frame.Width(primaryWidth);
+                si.frame.InvalidateMeasure();
+                si.frame.InvalidateArrange();
+
                 auto parent = Media::VisualTreeHelper::GetParent(
-                    g_secondarySystemTrayFrame).try_as<FrameworkElement>();
+                    si.frame).try_as<FrameworkElement>();
                 while (parent) {
                     parent.InvalidateMeasure();
                     parent.InvalidateArrange();
@@ -1490,14 +1541,43 @@ static void RefreshSecondaryTray() {
                         .try_as<FrameworkElement>();
                 }
 
-                g_secondarySystemTrayFrame.UpdateLayout();
-            }
+                si.frame.UpdateLayout();
+            } catch (...) {}
         }
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"[Refresh] Failed (hresult): 0x%08X %s",
                (unsigned)ex.code(), ex.message().c_str());
     } catch (...) {
         Wh_Log(L"[Refresh] Failed (unknown exception)");
+    }
+}
+
+// Timer ID for deferred refresh after DPI/display changes
+static UINT_PTR g_refreshTimerId = 0;
+
+static void CALLBACK RefreshTimerProc(HWND hwnd, UINT msg, UINT_PTR id,
+                                       DWORD time) {
+    KillTimer(hwnd, id);
+    g_refreshTimerId = 0;
+    Wh_Log(L"[Refresh] Deferred refresh firing");
+    RefreshSecondaryTrayImpl();
+}
+
+static void RefreshSecondaryTray() {
+    if (g_unloading) return;
+
+    // During DPI/display changes the primary frame hasn't re-laid-out yet
+    // when the notification arrives. Defer the refresh so ActualWidth()
+    // returns the new DPI-scaled value.
+    if (g_displayChangeWindow) {
+        if (g_refreshTimerId) {
+            KillTimer(g_displayChangeWindow, g_refreshTimerId);
+        }
+        g_refreshTimerId = SetTimer(g_displayChangeWindow, 1, 250,
+                                     RefreshTimerProc);
+        Wh_Log(L"[Refresh] Deferred refresh scheduled (250ms)");
+    } else {
+        RefreshSecondaryTrayImpl();
     }
 }
 
@@ -1560,6 +1640,10 @@ static void InstallDisplayChangeListener() {
 
 static void UninstallDisplayChangeListener() {
     if (g_displayChangeWindow) {
+        if (g_refreshTimerId) {
+            KillTimer(g_displayChangeWindow, g_refreshTimerId);
+            g_refreshTimerId = 0;
+        }
         DestroyWindow(g_displayChangeWindow);
         g_displayChangeWindow = nullptr;
     }
