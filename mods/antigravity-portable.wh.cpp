@@ -3,7 +3,7 @@
 // @name            Antigravity IDE Portable
 // @description     Make Antigravity IDE portable by redirecting user data and extensions directories.
 // @description:zh-CN 使 Antigravity IDE 成为便携版，重定向数据与扩展目录。
-// @version         1.0
+// @version         1.0.260614
 // @author          easyatm
 // @github          https://github.com/easyatm
 // @include         Antigravity IDE.exe
@@ -22,7 +22,20 @@
 
 // ==WindhawkModReadme==
 /*
-# Antigravity IDE Portable (便携版)
+# Antigravity IDE Portable
+
+Make Antigravity IDE portable by redirecting user data and extensions directories via hooking `GetCommandLineW`.
+
+## Features
+- Uses `../data/` relative to the exe directory as the default data directory.
+- Automatically converts relative paths to absolute paths to ensure the program recognizes them correctly.
+- Keeps original parameters unchanged if `--user-data-dir` or `--extensions-dir` is already present.
+- Detects and skips child processes (those with `--type=` or `--node-ipc` in their command line).
+- Supports configuring the data directory in Windhawk settings.
+
+---
+
+# Antigravity IDE 便携版
 
 这个 Mod 为 Antigravity IDE 制作便携版。通过 Hook `GetCommandLineW` 在启动参数中注入 `--user-data-dir` 和 `--extensions-dir`。
 
@@ -58,26 +71,39 @@ void LoadSettings() {
     Wh_Log(L"Antigravity 便携版 - 加载设置: 数据目录 = %s", g_settingsDataDir.c_str());
 }
 
-// 辅助函数：将相对路径转换为绝对路径
-std::wstring GetAbsoluteFullPath(const std::wstring& relativePath) {
-    wchar_t exePath[MAX_PATH];
-    DWORD len = GetModuleFileNameW(NULL, exePath, MAX_PATH);
-    if (len == 0 || len >= MAX_PATH) {
-        Wh_Log(L"Antigravity 便携版 - 转换绝对路径失败: 无法获取模块文件名或路径过长");
-        return L"";
+// 辅助函数：将相对路径或绝对路径解析为规范的绝对路径
+std::wstring GetAbsoluteFullPath(const std::wstring& relativeOrAbsolutePath) {
+    // 判断是否已经是绝对路径（例如以 C:\ 或 \\ 开头）
+    bool isAbsolute = false;
+    if (relativeOrAbsolutePath.size() >= 2 && iswalpha(relativeOrAbsolutePath[0]) && relativeOrAbsolutePath[1] == L':') {
+        isAbsolute = true;
+    } else if (relativeOrAbsolutePath.size() >= 2 && relativeOrAbsolutePath[0] == L'\\' && relativeOrAbsolutePath[1] == L'\\') {
+        isAbsolute = true;
     }
 
-    // 获取 exe 所在的目录
-    std::wstring pathStr(exePath);
-    size_t pos = pathStr.find_last_of(L"\\/");
-    if (pos == std::wstring::npos) {
-        Wh_Log(L"Antigravity 便携版 - 转换绝对路径失败: exe 路径无效 %s", exePath);
-        return L"";
-    }
-    std::wstring dir = pathStr.substr(0, pos);
+    std::wstring combined;
+    if (isAbsolute) {
+        combined = relativeOrAbsolutePath;
+    } else {
+        wchar_t exePath[MAX_PATH];
+        DWORD len = GetModuleFileNameW(NULL, exePath, MAX_PATH);
+        if (len == 0 || len >= MAX_PATH) {
+            Wh_Log(L"Antigravity 便携版 - 转换绝对路径失败: 无法获取模块文件名或路径过长");
+            return L"";
+        }
 
-    // 拼接相对路径
-    std::wstring combined = dir + L"\\" + relativePath;
+        // 获取 exe 所在的目录
+        std::wstring pathStr(exePath);
+        size_t pos = pathStr.find_last_of(L"\\/");
+        if (pos == std::wstring::npos) {
+            Wh_Log(L"Antigravity 便携版 - 转换绝对路径失败: exe 路径无效 %s", exePath);
+            return L"";
+        }
+        std::wstring dir = pathStr.substr(0, pos);
+
+        // 拼接相对路径
+        combined = dir + L"\\" + relativeOrAbsolutePath;
+    }
 
     // 规范化为绝对路径
     wchar_t fullPath[MAX_PATH * 2];
@@ -87,7 +113,7 @@ std::wstring GetAbsoluteFullPath(const std::wstring& relativePath) {
         return L"";
     }
 
-    Wh_Log(L"Antigravity 便携版 - 路径转换成功: 将相对路径 %s 解析为绝对路径 %s", relativePath.c_str(), fullPath);
+    Wh_Log(L"Antigravity 便携版 - 路径转换成功: 将 %s 解析为绝对路径 %s", relativeOrAbsolutePath.c_str(), fullPath);
     return std::wstring(fullPath);
 }
 
@@ -127,7 +153,7 @@ BOOL Wh_ModInit() {
 
     for (int i = 0; i < argc; ++i) {
         std::wstring arg(argv[i]);
-        Wh_Log(L"Antigravity 便携版 - 已解析参数[%d]: %s", i, arg.c_str());
+        
         // 如果是子进程则不修改
         if (arg.find(L"--type=") != std::wstring::npos) {
             isSubProcess = true;
@@ -150,7 +176,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Antigravity 便携版 - 无需修改命令行: 检测到子进程 (%s)", subProcessReason.c_str());
         return TRUE;
     }
-    if (hasUserDataDir && hasExtensionsDir) {
+    if (hasUserDataDir || hasExtensionsDir) {
         Wh_Log(L"Antigravity 便携版 - 无需修改命令行: --user-data-dir 和 --extensions-dir 已同时存在");
         return TRUE;
     }
