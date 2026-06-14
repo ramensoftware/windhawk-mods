@@ -8,7 +8,7 @@
 // @homepage        https://github.com/Mirochill/mini-wallpaper
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lgdi32 -lgdiplus -lshell32 -lcomdlg32 -lole32 -loleaut32 -lstrmiids -lshlwapi
+// @compilerOptions -ldwmapi -lgdi32 -lgdiplus -lshell32 -lcomdlg32 -lole32 -loleaut32 -lstrmiids -lshlwapi -ld3d9
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -25,7 +25,7 @@ from settings. Supported direct inputs include common video files, animated
 GIFs, and static image formats supported by GDI+.
 
 If FFmpeg is available and optimization is enabled, supported video/GIF input
-is transcoded into a deterministic MP4 cache under the Windhawk mod storage
+is transcoded into a deterministic WMV cache under the Windhawk mod storage
 directory. The original file is never modified.
 
 ## Notes
@@ -60,7 +60,7 @@ directory. The original file is never modified.
 
 - optimizeMedia: true
   $name: Optimize media with FFmpeg
-  $description: Create a cached MP4 copy for video/GIF input when ffmpeg.exe is available.
+  $description: Create a cached DirectShow-friendly WMV copy for video/GIF input when ffmpeg.exe is available.
 
 - ffmpegPath: ""
   $name: FFmpeg path
@@ -68,11 +68,11 @@ directory. The original file is never modified.
 
 - maxFps: 30
   $name: Optimized max FPS
-  $description: FPS cap for generated MP4 wallpaper copies.
+  $description: FPS cap for generated WMV wallpaper copies.
 
 - crf: 23
-  $name: Optimized CRF
-  $description: H.264 CRF quality value for generated MP4 copies.
+  $name: Legacy quality value
+  $description: Kept for cache fingerprint compatibility. WMV cache output uses a fixed bitrate.
 
 - muteAudio: true
   $name: Mute audio
@@ -93,6 +93,8 @@ directory. The original file is never modified.
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <dshow.h>
+#include <d3d9.h>
+#include <vmr9.h>
 #include <commdlg.h>
 #include <shellapi.h>
 #include <shlwapi.h>
@@ -111,6 +113,7 @@ constexpr UINT kMsgTrayCallback = WM_APP + 1;
 constexpr UINT kMsgGraphEvent = WM_APP + 2;
 constexpr UINT kMsgReloadSettings = WM_APP + 3;
 constexpr UINT_PTR kGifTimerId = 1;
+constexpr UINT_PTR kAttachTimerId = 2;
 constexpr UINT kTrayIconId = 1;
 constexpr UINT kMenuChoose = 1001;
 constexpr UINT kMenuPause = 1002;
@@ -146,6 +149,7 @@ std::atomic<bool> g_stopWorker = false;
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
 bool g_isToolModProcessLauncher = false;
+bool g_modActive = false;
 HANDLE g_toolModProcessMutex = nullptr;
 
 HWND g_wallpaperWindow = nullptr;
@@ -163,6 +167,8 @@ IVideoWindow* g_videoWindow = nullptr;
 IMediaSeeking* g_mediaSeeking = nullptr;
 IBasicAudio* g_basicAudio = nullptr;
 IBasicVideo* g_basicVideo = nullptr;
+IBaseFilter* g_vmr9Filter = nullptr;
+IVMRWindowlessControl9* g_vmr9Windowless = nullptr;
 
 Gdiplus::Image* g_image = nullptr;
 GUID g_frameDimension{};
@@ -385,7 +391,7 @@ std::wstring OptimizedFileName(const std::wstring& source,
                RectHeight(screen), settings.maxFps, settings.crf);
 
     wchar_t fileName[64]{};
-    swprintf_s(fileName, L"%016llx.mp4", Fnv1a64(fingerprint));
+    swprintf_s(fileName, L"%016llx.wmv", Fnv1a64(fingerprint));
     return fileName;
 }
 
@@ -439,7 +445,7 @@ std::wstring PrepareWallpaper(const std::wstring& source,
         return optimizedPath;
     }
 
-    std::wstring tempPath = optimizedPath + L".tmp.mp4";
+    std::wstring tempPath = optimizedPath + L".tmp.wmv";
     DeleteFileW(tempPath.c_str());
 
     RECT screen = GetVirtualScreenRect();
@@ -451,9 +457,7 @@ std::wstring PrepareWallpaper(const std::wstring& source,
 
     std::wstring commandLine =
         Quote(ffmpeg) + L" -y -i " + Quote(source) + L" -vf " +
-        Quote(filter) + L" -c:v libx264 -preset slow -crf " +
-        std::to_wstring(settings.crf) +
-        L" -pix_fmt yuv420p -movflags +faststart -an " + Quote(tempPath);
+        Quote(filter) + L" -c:v wmv2 -b:v 6M -an " + Quote(tempPath);
 
     bool ok = RunHiddenProcess(commandLine);
     if (ok && FileExists(tempPath)) {
@@ -486,6 +490,8 @@ void StopVideo() {
         g_videoWindow->put_Owner(NULL);
     }
 
+    SafeRelease(reinterpret_cast<IUnknown**>(&g_vmr9Windowless));
+    SafeRelease(reinterpret_cast<IUnknown**>(&g_vmr9Filter));
     SafeRelease(reinterpret_cast<IUnknown**>(&g_basicVideo));
     SafeRelease(reinterpret_cast<IUnknown**>(&g_basicAudio));
     SafeRelease(reinterpret_cast<IUnknown**>(&g_mediaSeeking));
@@ -531,13 +537,14 @@ RECT CalculateDrawRect(int sourceWidth,
 }
 
 void ResizeVideoWindow() {
-    if (!g_videoWindow || !g_wallpaperWindow) {
+    if ((!g_videoWindow && !g_vmr9Windowless) || !g_wallpaperWindow) {
         return;
     }
 
     RECT client{};
     GetClientRect(g_wallpaperWindow, &client);
     RECT videoRect = client;
+    bool sizedFromVideo = false;
 
     if (g_basicVideo) {
         long videoWidth = 0;
@@ -551,12 +558,82 @@ void ResizeVideoWindow() {
                 RectWidth(client),
                 RectHeight(client),
                 settings.stretchMode == L"contain");
+            sizedFromVideo = true;
         }
     }
 
-    g_videoWindow->SetWindowPosition(videoRect.left, videoRect.top,
-                                     RectWidth(videoRect),
-                                     RectHeight(videoRect));
+    if (!sizedFromVideo && g_vmr9Windowless) {
+        LONG nativeWidth = 0;
+        LONG nativeHeight = 0;
+        LONG aspectWidth = 0;
+        LONG aspectHeight = 0;
+        if (SUCCEEDED(g_vmr9Windowless->GetNativeVideoSize(
+                &nativeWidth, &nativeHeight, &aspectWidth, &aspectHeight)) &&
+            nativeWidth > 0 && nativeHeight > 0) {
+            Settings settings = GetSettingsSnapshot();
+            videoRect = CalculateDrawRect(
+                static_cast<int>(nativeWidth), static_cast<int>(nativeHeight),
+                RectWidth(client), RectHeight(client),
+                settings.stretchMode == L"contain");
+        }
+    }
+
+    if (g_vmr9Windowless) {
+        g_vmr9Windowless->SetVideoPosition(nullptr, &videoRect);
+    }
+    if (g_videoWindow) {
+        g_videoWindow->SetWindowPosition(videoRect.left, videoRect.top,
+                                         RectWidth(videoRect),
+                                         RectHeight(videoRect));
+    }
+}
+
+bool AddVmr9Renderer() {
+    if (!g_graph || !g_wallpaperWindow) {
+        return false;
+    }
+
+    IBaseFilter* renderer = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_VideoMixingRenderer9, nullptr,
+                                  CLSCTX_INPROC_SERVER, IID_IBaseFilter,
+                                  reinterpret_cast<void**>(&renderer));
+    if (FAILED(hr) || !renderer) {
+        return false;
+    }
+
+    IVMRFilterConfig9* config = nullptr;
+    hr = renderer->QueryInterface(IID_IVMRFilterConfig9,
+                                  reinterpret_cast<void**>(&config));
+    if (FAILED(hr) || !config) {
+        renderer->Release();
+        return false;
+    }
+
+    hr = config->SetRenderingMode(VMR9Mode_Windowless);
+    config->Release();
+    if (FAILED(hr)) {
+        renderer->Release();
+        return false;
+    }
+
+    hr = g_graph->AddFilter(renderer, L"Mini Wallpaper VMR9");
+    if (FAILED(hr)) {
+        renderer->Release();
+        return false;
+    }
+
+    hr = renderer->QueryInterface(IID_IVMRWindowlessControl9,
+                                  reinterpret_cast<void**>(&g_vmr9Windowless));
+    if (FAILED(hr) || !g_vmr9Windowless) {
+        g_graph->RemoveFilter(renderer);
+        renderer->Release();
+        return false;
+    }
+
+    g_vmr9Windowless->SetVideoClippingWindow(g_wallpaperWindow);
+    g_vmr9Windowless->SetAspectRatioMode(VMR9ARMode_None);
+    g_vmr9Filter = renderer;
+    return true;
 }
 
 bool StartVideo(const std::wstring& path, const Settings& settings) {
@@ -568,6 +645,8 @@ bool StartVideo(const std::wstring& path, const Settings& settings) {
     if (FAILED(hr) || !g_graph) {
         return false;
     }
+
+    bool usingWindowlessRenderer = AddVmr9Renderer();
 
     hr = g_graph->RenderFile(path.c_str(), nullptr);
     if (FAILED(hr)) {
@@ -587,15 +666,18 @@ bool StartVideo(const std::wstring& path, const Settings& settings) {
                             reinterpret_cast<void**>(&g_basicAudio));
     g_graph->QueryInterface(IID_IBasicVideo,
                             reinterpret_cast<void**>(&g_basicVideo));
-    if (!g_mediaControl || !g_videoWindow) {
+    if (!g_mediaControl || (!g_videoWindow && !g_vmr9Windowless)) {
         StopPlayback();
         return false;
     }
 
-    g_videoWindow->put_Owner(reinterpret_cast<OAHWND>(g_wallpaperWindow));
-    g_videoWindow->put_WindowStyle(WS_CHILD | WS_CLIPSIBLINGS);
-    g_videoWindow->put_MessageDrain(reinterpret_cast<OAHWND>(g_wallpaperWindow));
-    g_videoWindow->put_Visible(OATRUE);
+    if (g_videoWindow && !usingWindowlessRenderer) {
+        g_videoWindow->put_Owner(reinterpret_cast<OAHWND>(g_wallpaperWindow));
+        g_videoWindow->put_WindowStyle(WS_CHILD | WS_CLIPSIBLINGS);
+        g_videoWindow->put_MessageDrain(
+            reinterpret_cast<OAHWND>(g_wallpaperWindow));
+        g_videoWindow->put_Visible(OATRUE);
+    }
     ResizeVideoWindow();
 
     if (g_basicAudio) {
@@ -758,6 +840,10 @@ void ChooseWallpaperFromDialog() {
 
 HWND FindDesktopWorker() {
     HWND progman = FindWindowW(L"Progman", nullptr);
+    if (!progman) {
+        return nullptr;
+    }
+
     DWORD_PTR result = 0;
     SendMessageTimeoutW(progman, kSpawnWorkerW, 0, 0, SMTO_NORMAL, 1000,
                         &result);
@@ -782,15 +868,39 @@ HWND FindDesktopWorker() {
     return worker ? worker : progman;
 }
 
-void AttachWallpaperWindowToDesktop(HWND hwnd) {
+bool AttachWallpaperWindowToDesktop(HWND hwnd) {
     HWND desktop = FindDesktopWorker();
-    if (desktop) {
-        SetParent(hwnd, desktop);
+    RECT screen = GetVirtualScreenRect();
+
+    if (!desktop) {
+        return false;
     }
 
-    RECT screen = GetVirtualScreenRect();
-    SetWindowPos(hwnd, HWND_BOTTOM, screen.left, screen.top, RectWidth(screen),
-                 RectHeight(screen), SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME);
+    style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+    SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    exStyle &= ~WS_EX_APPWINDOW;
+    exStyle |= WS_EX_NOACTIVATE;
+    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle);
+
+    SetLastError(ERROR_SUCCESS);
+    SetParent(hwnd, desktop);
+    DWORD error = GetLastError();
+    if (error != ERROR_SUCCESS) {
+        Wh_Log(L"SetParent desktop failed: %lu", error);
+        return false;
+    }
+
+    RECT desktopRect{};
+    GetWindowRect(desktop, &desktopRect);
+    SetWindowPos(hwnd, HWND_BOTTOM, screen.left - desktopRect.left,
+                 screen.top - desktopRect.top, RectWidth(screen),
+                 RectHeight(screen),
+                 SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    return true;
 }
 
 void AddOrUpdateTrayIcon() {
@@ -948,10 +1058,19 @@ LRESULT CALLBACK WallpaperWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             ResizeVideoWindow();
             return 0;
 
+        case WM_DISPLAYCHANGE:
+            if (g_vmr9Windowless) {
+                g_vmr9Windowless->DisplayModeChanged();
+            }
+            ResizeVideoWindow();
+            return 0;
+
         case WM_PAINT: {
             PAINTSTRUCT ps{};
             HDC dc = BeginPaint(hwnd, &ps);
-            if (g_playbackKind == PlaybackKind::Image ||
+            if (g_playbackKind == PlaybackKind::Video && g_vmr9Windowless) {
+                g_vmr9Windowless->RepaintVideo(hwnd, dc);
+            } else if (g_playbackKind == PlaybackKind::Image ||
                 g_playbackKind == PlaybackKind::Gif ||
                 g_playbackKind == PlaybackKind::None) {
                 PaintImage(hwnd, dc);
@@ -963,6 +1082,12 @@ LRESULT CALLBACK WallpaperWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         case WM_TIMER:
             if (wParam == kGifTimerId) {
                 AdvanceGifFrame();
+                return 0;
+            }
+            if (wParam == kAttachTimerId) {
+                if (AttachWallpaperWindowToDesktop(hwnd)) {
+                    KillTimer(hwnd, kAttachTimerId);
+                }
                 return 0;
             }
             break;
@@ -1060,7 +1185,7 @@ DWORD WINAPI WorkerThreadProc(void*) {
     RECT screen = GetVirtualScreenRect();
     g_wallpaperWindow = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kWallpaperWindowClass,
-        L"Mini Wallpaper", WS_POPUP | WS_VISIBLE, screen.left, screen.top,
+        L"Mini Wallpaper", WS_POPUP, screen.left, screen.top,
         RectWidth(screen), RectHeight(screen), nullptr, nullptr,
         GetModuleHandleW(nullptr), nullptr);
     if (!g_wallpaperWindow) {
@@ -1068,7 +1193,9 @@ DWORD WINAPI WorkerThreadProc(void*) {
         return 1;
     }
 
-    AttachWallpaperWindowToDesktop(g_wallpaperWindow);
+    if (!AttachWallpaperWindowToDesktop(g_wallpaperWindow)) {
+        SetTimer(g_wallpaperWindow, kAttachTimerId, 500, nullptr);
+    }
     AddOrUpdateTrayIcon();
     LoadInitialWallpaper();
 
@@ -1169,6 +1296,49 @@ ToolProcessKind GetToolProcessKind() {
     return kind;
 }
 
+bool CommandLineHasNoArguments() {
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        return false;
+    }
+
+    bool result = argc <= 1;
+    LocalFree(argv);
+    return result;
+}
+
+bool CurrentProcessOwnsWindow(HWND hwnd) {
+    if (!hwnd) {
+        return false;
+    }
+
+    DWORD windowProcessId = 0;
+    GetWindowThreadProcessId(hwnd, &windowProcessId);
+    return windowProcessId == GetCurrentProcessId();
+}
+
+bool IsShellExplorerProcess() {
+    HWND shellWindow = GetShellWindow();
+    HWND taskbarWindow = FindWindowW(L"Shell_TrayWnd", nullptr);
+
+    if (CurrentProcessOwnsWindow(shellWindow) ||
+        CurrentProcessOwnsWindow(taskbarWindow)) {
+        return true;
+    }
+
+    if (!shellWindow && !taskbarWindow) {
+        return CommandLineHasNoArguments();
+    }
+
+    return false;
+}
+
+bool ShouldRunInThisProcess() {
+    return GetToolProcessKind() == ToolProcessKind::NormalExplorer &&
+           IsShellExplorerProcess();
+}
+
 bool LaunchToolModProcess() {
     WCHAR currentProcessPath[MAX_PATH]{};
     DWORD length = GetModuleFileNameW(nullptr, currentProcessPath,
@@ -1219,55 +1389,31 @@ bool LaunchToolModProcess() {
 }  // namespace
 
 BOOL Wh_ModInit() {
-    ToolProcessKind kind = GetToolProcessKind();
-    if (kind == ToolProcessKind::Excluded ||
-        kind == ToolProcessKind::OtherToolMod) {
-        return FALSE;
-    }
-
-    if (kind == ToolProcessKind::CurrentToolMod) {
-        g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex ||
-            GetLastError() == ERROR_ALREADY_EXISTS) {
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        auto* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        void* entryPoint =
-            reinterpret_cast<BYTE*>(dosHeader) +
-            ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook),
-                           nullptr);
+    if (!ShouldRunInThisProcess()) {
         return TRUE;
     }
 
-    g_isToolModProcessLauncher = true;
+    g_modActive = true;
+    if (!WhTool_ModInit()) {
+        g_modActive = false;
+        return FALSE;
+    }
+
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (g_isToolModProcessLauncher) {
-        LaunchToolModProcess();
-    }
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) {
+    if (g_modActive) {
         WhTool_ModSettingsChanged();
     }
 }
 
 void Wh_ModUninit() {
-    if (!g_isToolModProcessLauncher) {
+    if (g_modActive) {
         WhTool_ModUninit();
-        ExitProcess(0);
+        g_modActive = false;
     }
 }
