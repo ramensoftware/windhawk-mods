@@ -3,7 +3,7 @@
 // @name            Classic Taskbar and Start Menu Properties
 // @description     Restores the classic Windows 7-style "Taskbar and Start Menu Properties" dialog with full functionality. Includes all three tabs (Taskbar, Start Menu, Toolbars). Primarily designed for Windows 10. Windows 11 support may be limited.
 // @version         2.0.0
-// @author          babamohammed2022
+// @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -lcomctl32 -luser32 -lole32 -lshlwapi -lshell32
