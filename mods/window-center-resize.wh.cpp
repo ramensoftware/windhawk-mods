@@ -372,15 +372,16 @@ static DWORD WINAPI HookThreadProc(LPVOID)
     return 0;
 }
 
-static void WhTool_ModInit()
+BOOL WhTool_ModInit()
 {
     LoadAllSettings();
 
     g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookTid);
     if (!g_hookThread) {
         Wh_Log(L"CreateThread failed %lu", GetLastError());
-        ExitProcess(1);
+        return FALSE;
     }
+    return TRUE;
 }
 
 void WhTool_ModSettingsChanged()
@@ -460,8 +461,7 @@ BOOL Wh_ModInit()
         void* ep = (BYTE*)dos + nt->OptionalHeader.AddressOfEntryPoint;
         Wh_SetFunctionHook(ep, (void*)EntryPoint_Hook, nullptr);
 
-        WhTool_ModInit();
-        return TRUE;
+        return WhTool_ModInit();
     }
 
     if (isToolMod) return FALSE;
