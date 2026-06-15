@@ -2,13 +2,13 @@
 // @id              taskbar-tray-on-all-monitors
 // @name            Taskbar tray on all monitors
 // @description     Mirrors the system tray (clock, volume, network, battery, notification icons) from the primary taskbar onto all secondary monitor taskbars
-// @version         1.0
+// @version         1.1
 // @author          RYJASM
 // @github          https://github.com/RYJASM
 // @include         explorer.exe
+// @include         ShellHost.exe
 // @architecture    x86-64
-// @architecture    arm64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -luuid
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -luuid -lshcore -lcomctl32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -51,15 +51,21 @@ frame keeps all secondary widths in sync at runtime.
 
 #include <windhawk_utils.h>
 
+#include <commctrl.h>
+#include <shellapi.h>
+#include <ShellScalingApi.h>
+#include <windowsx.h>
 #include <winrt/base.h>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <list>
@@ -81,6 +87,21 @@ static bool g_primaryTreeDumped = false;
 static FrameworkElement g_primarySystemTrayFrame{nullptr};
 static double g_lastPrimaryFrameSize = 0;
 static winrt::event_token g_primarySizeChangedToken{};
+static winrt::Windows::UI::Core::CoreDispatcher g_xamlDispatcher{nullptr};
+
+struct TrayMetrics {
+    double notifyIconStack = 0;
+    double notificationAreaIcons = 0;
+    double mainStack = 0;
+    double nonActivatableStack = 0;
+    double controlCenterButton = 0;
+    double notificationCenterButton = 0;
+    double showDesktopStack = 0;
+    double frameWidth = 0;
+    bool valid = false;
+};
+
+static TrayMetrics g_trayMetrics{};
 
 // Per-secondary-controller state
 struct SecondaryInfo {
@@ -163,6 +184,53 @@ FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
     });
 }
 
+static double GetChildWidthByName(FrameworkElement parent, PCWSTR name) {
+    auto child = FindChildByName(parent, name);
+    return child ? child.ActualWidth() : 0;
+}
+
+static void UpdateTrayMetricsFromFrame(FrameworkElement frame,
+                                       const wchar_t* reason) {
+    if (!frame) return;
+
+    auto grid = FindChildByName(frame, L"SystemTrayFrameGrid");
+    if (!grid) return;
+
+    TrayMetrics metrics = {};
+    metrics.notifyIconStack = GetChildWidthByName(grid, L"NotifyIconStack");
+    metrics.notificationAreaIcons =
+        GetChildWidthByName(grid, L"NotificationAreaIcons");
+    metrics.mainStack = GetChildWidthByName(grid, L"MainStack");
+    metrics.nonActivatableStack =
+        GetChildWidthByName(grid, L"NonActivatableStack");
+    metrics.controlCenterButton =
+        GetChildWidthByName(grid, L"ControlCenterButton");
+    metrics.notificationCenterButton =
+        GetChildWidthByName(grid, L"NotificationCenterButton");
+    metrics.showDesktopStack = GetChildWidthByName(grid, L"ShowDesktopStack");
+    metrics.frameWidth = frame.ActualWidth();
+
+    double measuredWidth =
+        metrics.notifyIconStack +
+        metrics.notificationAreaIcons +
+        metrics.mainStack +
+        metrics.nonActivatableStack +
+        metrics.controlCenterButton +
+        metrics.notificationCenterButton +
+        metrics.showDesktopStack;
+
+    metrics.valid = measuredWidth > 0 && metrics.frameWidth > 0;
+    g_trayMetrics = metrics;
+
+    Wh_Log(L"[TrayMetrics:%s] frame=%.0f sum=%.0f show=%.0f notif=%.0f "
+           L"cc=%.0f nonAct=%.0f main=%.0f nai=%.0f overflow=%.0f valid=%d",
+           reason, metrics.frameWidth, measuredWidth,
+           metrics.showDesktopStack, metrics.notificationCenterButton,
+           metrics.controlCenterButton, metrics.nonActivatableStack,
+           metrics.mainStack, metrics.notificationAreaIcons,
+           metrics.notifyIconStack, metrics.valid);
+}
+
 FrameworkElement EnumParentElements(
     FrameworkElement element,
     std::function<bool(FrameworkElement)> enumCallback) {
@@ -220,301 +288,1032 @@ void DumpXamlTree(FrameworkElement element, int depth, int maxDepth) {
     }
 }
 
-// ─── Flyout repositioning ──────────────────────────────────────────────────
-// Detects flyout windows that appear on the primary monitor when the cursor
-// is on a secondary monitor, and repositions them to the correct monitor.
-// Uses EVENT_OBJECT_LOCATIONCHANGE to persistently reposition windows that
-// the system moves back to primary (e.g. Quick Settings XAML island).
+// ─── Flyout repositioning (proactive hook-based) ────────────────────────────
+//
+// ## Overview
+// When a user clicks a tray icon on a secondary monitor, the system normally
+// opens the corresponding flyout on the primary monitor. We intercept the
+// Win32 APIs that control flyout placement so they open on the correct monitor.
+//
+// ## Architecture
+// 1. A Win32 subclass on each Shell_SecondaryTrayWnd detects clicks and arms
+//    a short-lived FlyoutContext with the target monitor, anchor point, and
+//    flyout kind.
+// 2. MonitorFrom* hooks redirect monitor queries to the target monitor so
+//    the system's own layout code picks the right display.
+// 3. SetWindowPos/MoveWindow/DeferWindowPos hooks intercept the final window
+//    placement and call TranslateFlyoutRect to compute the correct position.
+// 4. TrackPopupMenuEx hook handles Win32 popup menus (#32768 class) which
+//    bypass SetWindowPos entirely — e.g. "Safely Remove Hardware".
+//
+// ## Flyout kinds and their positioning behavior
+// - kControlCenter / kNotificationCenter: Full-height panels (Quick Settings,
+//   Notification Center). The system sizes these to fill the work area height,
+//   and ShellHost.exe already computes dimensions at the target monitor's DPI
+//   thanks to our MonitorFrom* redirections. No DPI rescaling needed — only
+//   X/Y translation to the target monitor.
+// - kOverflowTray: Fixed-size popup (overflow tray chevron). The system
+//   computes the window size using the primary monitor's DPI. When the target
+//   monitor has a different DPI, dimensions must be rescaled.
+// - kTrayPopup: Context menus and other small popups from tray icons. Same
+//   rescaling behavior as kOverflowTray.
+//
+// ## Cross-DPI scaling
+// When primary and secondary monitors have different DPI (e.g. 200% vs 150%),
+// fixed-size flyouts (kOverflowTray, kTrayPopup) are computed at the primary
+// DPI but displayed on the secondary. We rescale: newDim = MulDiv(dim,
+// targetDpi, primaryDpi). Full-height panels (kControlCenter,
+// kNotificationCenter) don't need this because the system sizes them to the
+// work area after our MonitorFrom* hooks tell it the correct monitor.
+//
+// Note: We always look up the PRIMARY monitor's DPI as the source, not the
+// requested rect's monitor, because our MonitorFrom* hooks may have already
+// redirected the system to compute coordinates on the target monitor.
 
-static HWINEVENTHOOK g_winEventHook = nullptr;
-
-// Track repositioned flyouts so we can fight back on LOCATIONCHANGE
-static HWND g_trackedFlyouts[4] = {};
-static HMONITOR g_trackedTargets[4] = {};
-static DWORD g_trackedTimes[4] = {};
-static int g_trackedCount = 0;
+// Returns the DPI for a monitor, falling back to 96 on failure.
+static UINT GetMonitorDpi(HMONITOR hMon) {
+    UINT dpiX = 96, dpiY = 96;
+    GetDpiForMonitor(hMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+    return dpiX;
+}
 
 static bool IsPrimaryMonitor(HMONITOR hMon) {
     MONITORINFO mi = {sizeof(mi)};
     return GetMonitorInfo(hMon, &mi) && (mi.dwFlags & MONITORINFOF_PRIMARY);
 }
 
-static void TrackFlyout(HWND hwnd, HMONITOR target) {
-    for (int i = 0; i < g_trackedCount; i++) {
-        if (g_trackedFlyouts[i] == hwnd) {
-            g_trackedTargets[i] = target;
-            g_trackedTimes[i] = GetTickCount();
-            return;
-        }
+// ─── Flyout context ─────────────────────────────────────────────────────────
+
+asm(".section .shared,\"dws\"\n");
+#define SHARED_SECTION __attribute__((section(".shared")))
+
+// Flyout kinds — determines positioning and DPI scaling behavior.
+// Full-height panels (kControlCenter, kNotificationCenter) are sized by the
+// system to fill the work area; no DPI rescaling needed, only X/Y translation.
+// Fixed-size popups (kOverflowTray, kTrayPopup) need DPI rescaling when the
+// target monitor has a different DPI than the primary.
+constexpr int kFlyoutNone          = 0;  // No flyout
+constexpr int kControlCenter       = 1;  // Quick Settings panel (full-height)
+constexpr int kOverflowTray        = 2;  // Overflow tray popup (fixed-size, needs DPI rescale)
+constexpr int kNotificationCenter  = 3;  // Notification Center panel (full-height)
+constexpr int kTrayPopup           = 4;  // Context menus, tray icon popups (fixed-size, needs DPI rescale)
+
+// Context durations (milliseconds)
+constexpr DWORD kControlCenterContextMs  = 1800;
+constexpr DWORD kOverflowTrayContextMs   = 800;
+constexpr DWORD kAfterPlacementMs        = 650;
+
+// Hit-test metrics (logical pixels at 96 DPI)
+constexpr int kShowDesktopWidth        = 2;
+constexpr int kNotificationCenterWidth = 78;
+constexpr int kControlCenterWidth      = 117;
+constexpr int kNotifyIconStackWidth    = 32;
+constexpr int kHitSlop                 = 8;
+
+struct FlyoutContext {
+    HMONITOR targetMonitor;
+    HWND     taskbarWnd;
+    POINT    anchorPoint;
+    RECT     taskbarRect;
+    UINT     targetDpi;
+    volatile DWORD expireTick;
+    int      flyoutKind;
+};
+
+FlyoutContext g_flyoutCtx SHARED_SECTION = {};
+
+// Suppression depth — incremented while our own hooks call Original functions
+// to prevent re-entrant redirection.
+static thread_local int g_flyoutRedirectionSuppressed = 0;
+
+struct FlyoutRedirectionGuard {
+    FlyoutRedirectionGuard() { g_flyoutRedirectionSuppressed++; }
+    ~FlyoutRedirectionGuard() { g_flyoutRedirectionSuppressed--; }
+};
+
+static void ArmFlyoutContext(HWND taskbarWnd, int kind, POINT anchor) {
+    // Clear first so MonitorFromRect below doesn't get redirected by stale context
+    g_flyoutCtx.expireTick = 0;
+
+    RECT tbRect = {};
+    GetWindowRect(taskbarWnd, &tbRect);
+    // Use suppression guard + plain API call. expireTick is already 0 so
+    // our hook would fall through anyway, but the guard is extra safety.
+    FlyoutRedirectionGuard guard;
+    HMONITOR mon = MonitorFromRect(&tbRect, MONITOR_DEFAULTTONEAREST);
+
+    DWORD durationMs = (kind == kControlCenter || kind == kNotificationCenter)
+                           ? kControlCenterContextMs
+                           : kOverflowTrayContextMs;
+
+    g_flyoutCtx.targetMonitor = mon;
+    g_flyoutCtx.taskbarWnd    = taskbarWnd;
+    g_flyoutCtx.anchorPoint   = anchor;
+    g_flyoutCtx.taskbarRect   = tbRect;
+    g_flyoutCtx.targetDpi     = GetMonitorDpi(mon);
+    g_flyoutCtx.flyoutKind    = kind;
+    // Write expireTick last with a store barrier so readers see
+    // all fields populated before expiry becomes valid.
+    MemoryBarrier();
+    g_flyoutCtx.expireTick    = GetTickCount() + durationMs;
+
+    MONITORINFOEX armMi = {};
+    armMi.cbSize = sizeof(armMi);
+    GetMonitorInfo(mon, &armMi);
+    APPBARDATA abd = {sizeof(abd)};
+    UINT abState = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+    Wh_Log(L"[FlyoutCtx] Armed kind=%d mon=%p \"%s\" dpi=%u anchor=(%d,%d) "
+           L"duration=%u taskbar=(%d,%d,%d,%d) monWork=(%d,%d,%d,%d) "
+           L"autoHide=%s",
+           kind, mon, armMi.szDevice, g_flyoutCtx.targetDpi,
+           anchor.x, anchor.y, durationMs,
+           tbRect.left, tbRect.top, tbRect.right, tbRect.bottom,
+           armMi.rcWork.left, armMi.rcWork.top,
+           armMi.rcWork.right, armMi.rcWork.bottom,
+           (abState & ABS_AUTOHIDE) ? L"YES" : L"NO");
+}
+
+static void ClearFlyoutContext() {
+    g_flyoutCtx.expireTick = 0;
+    g_flyoutCtx.flyoutKind = kFlyoutNone;
+    g_flyoutCtx.targetMonitor = nullptr;
+}
+
+static FlyoutContext* GetActiveFlyoutContext() {
+    DWORD expire = g_flyoutCtx.expireTick;
+    if (!expire) return nullptr;
+    if (GetTickCount() > expire) {
+        Wh_Log(L"[FlyoutCtx] Context EXPIRED kind=%d (tick=%u expire=%u)",
+               g_flyoutCtx.flyoutKind, GetTickCount(), expire);
+        g_flyoutCtx.expireTick = 0;
+        return nullptr;
     }
-    if (g_trackedCount < 4) {
-        g_trackedFlyouts[g_trackedCount] = hwnd;
-        g_trackedTargets[g_trackedCount] = target;
-        g_trackedTimes[g_trackedCount] = GetTickCount();
-        g_trackedCount++;
+    if (!g_flyoutCtx.targetMonitor) return nullptr;
+    return &g_flyoutCtx;
+}
+
+static void ShortenFlyoutContext(DWORD newDurationMs) {
+    DWORD newExpire = GetTickCount() + newDurationMs;
+    DWORD currentExpire = g_flyoutCtx.expireTick;
+    if (currentExpire && newExpire < currentExpire) {
+        g_flyoutCtx.expireTick = newExpire;
     }
 }
 
-static void UntrackFlyout(HWND hwnd) {
-    for (int i = 0; i < g_trackedCount;  i++) {
-        if (g_trackedFlyouts[i] == hwnd) {
-            g_trackedFlyouts[i] = g_trackedFlyouts[--g_trackedCount];
-            g_trackedTargets[i] = g_trackedTargets[g_trackedCount];
-            g_trackedTimes[i] = g_trackedTimes[g_trackedCount];
-            return;
-        }
-    }
-}
+// ─── Known flyout window identification ─────────────────────────────────────
 
-static bool IsTrayFlyoutClass(const wchar_t* className) {
+static bool IsKnownFlyoutWindow(HWND hWnd, wchar_t* outClass = nullptr,
+                                 int outClassSize = 0) {
+    wchar_t className[128] = {};
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className)))
+        return false;
+
+    if (outClass && outClassSize > 0)
+        wcsncpy_s(outClass, outClassSize, className, _TRUNCATE);
+
     if (wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0)
         return true;
     if (wcscmp(className, L"ControlCenterWindow") == 0)
         return true;
+    // Note: Xaml_WindowedPopupClass is excluded — it matches tooltips and
+    // small XAML popups that the system positions correctly. Real CC/overflow
+    // flyouts use ControlCenterWindow or TopLevelWindowForOverflowXamlIsland.
     if (wcscmp(className, L"#32768") == 0)
-        return true;
-    if (wcscmp(className, L"Shell_LightDismissOverlay") == 0)
         return true;
     if (wcscmp(className, L"XamlExplorerHostIslandWindow") == 0)
         return true;
     if (wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0)
         return true;
-    if (wcscmp(className, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0)
-        return true;
+    // Note: Windows.UI.Composition.DesktopWindowContentBridge is excluded —
+    // it's the taskbar's own XAML bridge, not a flyout popup.
     return false;
 }
 
-static void RepositionFlyoutToMonitor(HWND hwnd, HMONITOR fromMon,
-                                       HMONITOR toMon) {
-    RECT wr;
-    if (!GetWindowRect(hwnd, &wr)) return;
+// ─── TranslateFlyoutRect — core DPI-aware position translation ──────────────
+//
+// Translates a flyout window's requested rect from its system-computed
+// position (typically on/near the primary monitor) to the correct position
+// on the target secondary monitor.
+//
+// For fixed-size flyouts (overflow tray, tray popups), rescales the window
+// dimensions from primary DPI to target DPI. For full-height panels (Control
+// Center, Notification Center), preserves the system's dimensions since they
+// already span the work area correctly.
+//
+// Positioning strategy: center horizontally on the anchor point (where the
+// user clicked), pin the bottom edge flush against the taskbar top.
 
-    MONITORINFO fromMi = {sizeof(fromMi)};
-    MONITORINFO toMi = {sizeof(toMi)};
-    if (!GetMonitorInfo(fromMon, &fromMi)) return;
-    if (!GetMonitorInfo(toMon, &toMi)) return;
+// Original function pointers (set during hook installation)
+static decltype(&MonitorFromPoint)  MonitorFromPoint_Original  = nullptr;
+static decltype(&MonitorFromRect)   MonitorFromRect_Original   = nullptr;
+static decltype(&MonitorFromWindow) MonitorFromWindow_Original = nullptr;
+static decltype(&SetWindowPos)      SetWindowPos_Original      = nullptr;
+static decltype(&MoveWindow)        MoveWindow_Original        = nullptr;
+static decltype(&DeferWindowPos)    DeferWindowPos_Original    = nullptr;
+static decltype(&TrackPopupMenuEx)  TrackPopupMenuEx_Original  = nullptr;
 
-    int ww = wr.right - wr.left;
-    int wh = wr.bottom - wr.top;
-    int fromMonW = fromMi.rcMonitor.right - fromMi.rcMonitor.left;
-    int fromMonH = fromMi.rcMonitor.bottom - fromMi.rcMonitor.top;
+static bool TranslateFlyoutRect(HWND hWnd, const RECT& requested,
+                                 RECT* translated) {
+    auto* ctx = GetActiveFlyoutContext();
+    if (!ctx) return false;
 
-    // Log extended style to understand rendering mode
-    LONG exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-    Wh_Log(L"[Flyout] hwnd=%p style=0x%08X exStyle=0x%08X "
-           L"WS_EX_NOREDIRECTIONBITMAP=%s",
-           hwnd, GetWindowLong(hwnd, GWL_STYLE), exStyle,
-           (exStyle & 0x00200000 /*WS_EX_NOREDIRECTIONBITMAP*/) ? L"YES" : L"NO");
+    HMONITOR targetMon = ctx->targetMonitor;
+    MONITORINFO targetMi = {sizeof(targetMi)};
+    if (!GetMonitorInfo(targetMon, &targetMi)) return false;
+    const RECT& targetWork = targetMi.rcWork;
 
-    // Check if this is a full-screen overlay (e.g. Quick Settings XAML island)
-    if (ww >= fromMonW && wh >= fromMonH) {
-        // If the overlay already spans multiple monitors (e.g.
-        // Shell_LightDismissOverlay at (0,0,7680,7680)), it already covers
-        // the secondary monitor — don't resize/move it or we'll break the
-        // internal coordinate system of popups rendered within it.
-        int totalW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        int totalH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-        if (ww > fromMonW || wh > fromMonH) {
-            Wh_Log(L"[Flyout] Multi-monitor overlay (%dx%d vs virtual %dx%d)"
-                   L" — skipping reposition",
-                   ww, wh, totalW, totalH);
-            return;
-        }
+    LONG width  = requested.right - requested.left;
+    LONG height = requested.bottom - requested.top;
+    if (width <= 0 || height <= 0) return false;
 
-        int toMonW = toMi.rcMonitor.right - toMi.rcMonitor.left;
-        int toMonH = toMi.rcMonitor.bottom - toMi.rcMonitor.top;
+    UINT targetDpi = ctx->targetDpi;
+    if (!targetDpi) targetDpi = GetMonitorDpi(targetMon);
+    if (!targetDpi) targetDpi = 96;
 
-        Wh_Log(L"[Flyout] Full-screen overlay: moving to (%d,%d %dx%d)",
-               toMi.rcMonitor.left, toMi.rcMonitor.top, toMonW, toMonH);
-
-        // Try hide-move-show to force re-render on new monitor
-        ShowWindow(hwnd, SW_HIDE);
-        BOOL ok = SetWindowPos(hwnd, nullptr,
-                               toMi.rcMonitor.left, toMi.rcMonitor.top,
-                               toMonW, toMonH,
-                               SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-
-        // Verify the move
-        RECT afterRect;
-        GetWindowRect(hwnd, &afterRect);
-        Wh_Log(L"[Flyout] SetWindowPos returned %d, error=%d, "
-               L"after rect=(%d,%d,%d,%d)",
-               ok, GetLastError(),
-               afterRect.left, afterRect.top,
-               afterRect.right, afterRect.bottom);
-        return;
+    // The system computes flyout window size at the PRIMARY monitor's DPI,
+    // regardless of which monitor the flyout will appear on (because the
+    // XAML layout engine runs at the primary DPI). We need to find the
+    // primary monitor's DPI to rescale correctly.
+    // Note: we can't use the requested rect position to find the source
+    // monitor because our MonitorFrom* hooks may have already redirected
+    // the coordinates to the target monitor.
+    UINT sourceDpi = 96;
+    {
+        FlyoutRedirectionGuard guard;
+        POINT origin = {0, 0};
+        HMONITOR primaryMon = MonitorFromPoint_Original
+            ? MonitorFromPoint_Original(origin, MONITOR_DEFAULTTOPRIMARY)
+            : MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+        sourceDpi = GetMonitorDpi(primaryMon);
+        if (!sourceDpi) sourceDpi = 96;
     }
 
-    // Normal flyout: position relative to taskbar
-    int offRight = fromMi.rcWork.right - wr.right;
-    int newX = toMi.rcWork.right - ww - offRight;
-
-    // Find the secondary taskbar to align above it (handles auto-hide)
-    int taskbarTop = toMi.rcWork.bottom;
-    HWND findHwnd = nullptr;
-    while ((findHwnd = FindWindowEx(nullptr, findHwnd,
-                                     L"Shell_SecondaryTrayWnd",
-                                     nullptr)) != nullptr) {
-        HMONITOR trayMon =
-            MonitorFromWindow(findHwnd, MONITOR_DEFAULTTONEAREST);
-        if (trayMon == toMon) {
-            RECT trayRect;
-            if (GetWindowRect(findHwnd, &trayRect)) {
-                taskbarTop = trayRect.top;
-            }
-            break;
-        }
+    // Rescale dimensions if source and target monitors have different DPI.
+    // Only rescale for fixed-size flyouts (overflow tray, tray popups).
+    // Control Center and Notification Center fill the work area height and
+    // are already sized correctly by the system for the target monitor.
+    bool shouldRescale = (sourceDpi != targetDpi) &&
+        (ctx->flyoutKind == kOverflowTray || ctx->flyoutKind == kTrayPopup);
+    if (shouldRescale) {
+        width  = MulDiv(width, targetDpi, sourceDpi);
+        height = MulDiv(height, targetDpi, sourceDpi);
     }
 
-    int newY = taskbarTop - wh;
+    // Get class name for kind-specific placement
+    wchar_t className[128] = {};
+    GetClassName(hWnd, className, ARRAYSIZE(className));
 
-    Wh_Log(L"[Flyout] Repositioning from (%d,%d) to (%d,%d)",
-           wr.left, wr.top, newX, newY);
+    Wh_Log(L"[Translate] class=%s kind=%d anchor=(%d,%d) "
+           L"targetMon=%p srcDpi=%u tgtDpi=%u "
+           L"taskbar=(%d,%d,%d,%d) targetWork=(%d,%d,%d,%d) "
+           L"requested=(%d,%d,%d,%d) scaledSize=(%d,%d)",
+           className, ctx->flyoutKind,
+           ctx->anchorPoint.x, ctx->anchorPoint.y,
+           targetMon, sourceDpi, targetDpi,
+           ctx->taskbarRect.left, ctx->taskbarRect.top,
+           ctx->taskbarRect.right, ctx->taskbarRect.bottom,
+           targetWork.left, targetWork.top,
+           targetWork.right, targetWork.bottom,
+           requested.left, requested.top,
+           requested.right, requested.bottom,
+           width, height);
 
-    SetWindowPos(hwnd, nullptr, newX, newY, 0, 0,
-                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    // Position flyout: center horizontally on anchor, pin bottom to taskbar top.
+    // Width and height have already been rescaled to the target monitor's DPI,
+    // so this positions the correctly-sized flyout flush against the taskbar.
+    LONG newX = ctx->anchorPoint.x - width / 2;
+    LONG newY = ctx->taskbarRect.top - height;
+
+    Wh_Log(L"[Translate] Anchor: newX=%d newY=%d tbTop=%d w=%d h=%d srcDpi=%u tgtDpi=%u",
+           newX, newY, ctx->taskbarRect.top, width, height, sourceDpi, targetDpi);
+
+    // Clamp into target work area
+    if (newX + width > targetWork.right)
+        newX = targetWork.right - width;
+    if (newX < targetWork.left)
+        newX = targetWork.left;
+    if (newY + height > targetWork.bottom)
+        newY = targetWork.bottom - height;
+    if (newY < targetWork.top)
+        newY = targetWork.top;
+
+    translated->left   = newX;
+    translated->top    = newY;
+    translated->right  = newX + width;
+    translated->bottom = newY + height;
+
+    // Shorten context after successful placement
+    ShortenFlyoutContext(kAfterPlacementMs);
+
+    bool changed = (translated->left != requested.left ||
+                    translated->top != requested.top ||
+                    translated->right != requested.right ||
+                    translated->bottom != requested.bottom);
+
+    if (changed) {
+        Wh_Log(L"[Translate] %s: (%d,%d,%d,%d) -> (%d,%d,%d,%d) kind=%d",
+               className,
+               requested.left, requested.top,
+               requested.right, requested.bottom,
+               translated->left, translated->top,
+               translated->right, translated->bottom,
+               ctx->flyoutKind);
+    }
+
+    return changed;
 }
 
-static void CALLBACK FlyoutWinEventProc(HWINEVENTHOOK hWinEventHook,
-                                         DWORD event, HWND hwnd,
-                                         LONG idObject, LONG idChild,
-                                         DWORD idEventThread,
-                                         DWORD dwmsEventTime) {
-    if (g_unloading) return;
-    if (!hwnd || idObject != 0 || idChild != 0) return;
+// ─── Cursor rescue fallback ─────────────────────────────────────────────────
+// For cases where click detection missed (pen/touch, icon shifts), detect
+// that a flyout is about to open on the wrong monitor and arm a context.
 
-    // EVENT_OBJECT_HIDE: stop tracking
-    if (event == EVENT_OBJECT_HIDE) {
-        UntrackFlyout(hwnd);
-        return;
+static bool TryCursorRescue(HWND hWnd, const RECT& requestedRect) {
+    wchar_t className[128] = {};
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className)))
+        return false;
+
+    int kind = kFlyoutNone;
+    if (wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0)
+        kind = kOverflowTray;
+    else if (wcscmp(className, L"ControlCenterWindow") == 0)
+        kind = kControlCenter;
+    else if (wcscmp(className, L"#32768") == 0 ||
+             wcscmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
+             wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0)
+        kind = kTrayPopup;
+    else
+        return false;
+
+    POINT cursorPos = {};
+    if (!GetCursorPos(&cursorPos)) return false;
+
+    // Find the taskbar window under the cursor
+    FlyoutRedirectionGuard guard;
+    HWND cursorWnd = WindowFromPoint(cursorPos);
+    HWND rootWnd = cursorWnd ? GetAncestor(cursorWnd, GA_ROOT) : nullptr;
+    if (!rootWnd) return false;
+
+    // Must be a secondary taskbar
+    wchar_t rootClass[128] = {};
+    GetClassName(rootWnd, rootClass, ARRAYSIZE(rootClass));
+    if (wcscmp(rootClass, L"Shell_SecondaryTrayWnd") != 0) {
+        Wh_Log(L"[CursorRescue] Skip: root class=%s (not secondary taskbar) "
+               L"cursor=(%d,%d) class=%s",
+               rootClass, cursorPos.x, cursorPos.y, className);
+        return false;
     }
 
-    // EVENT_OBJECT_LOCATIONCHANGE: reposition tracked flyouts that moved
-    // back to primary (system fighting our SetWindowPos)
-    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
-        for (int i = 0; i < g_trackedCount; i++) {
-            if (g_trackedFlyouts[i] != hwnd) continue;
+    Wh_Log(L"[CursorRescue] Arming for class=%s kind=%d taskbar=%p "
+           L"cursor=(%d,%d)",
+           className, kind, rootWnd, cursorPos.x, cursorPos.y);
 
-            // Expire tracking after 3 seconds
-            if (GetTickCount() - g_trackedTimes[i] > 3000) {
-                UntrackFlyout(hwnd);
-                return;
-            }
-
-            RECT wr;
-            if (!GetWindowRect(hwnd, &wr)) return;
-            HMONITOR windowMon =
-                MonitorFromRect(&wr, MONITOR_DEFAULTTONEAREST);
-            if (IsPrimaryMonitor(windowMon)) {
-                RepositionFlyoutToMonitor(
-                    hwnd, windowMon, g_trackedTargets[i]);
-            }
-            return;
-        }
-        return;
-    }
-
-    // EVENT_OBJECT_SHOW: detect new flyouts
-    if (event != EVENT_OBJECT_SHOW) return;
-    if (!IsWindowVisible(hwnd)) return;
-
-    LONG style = GetWindowLong(hwnd, GWL_STYLE);
-    if (style & WS_CHILD) return;
-
-    // Check cursor is on a secondary monitor
-    POINT cursorPos;
-    GetCursorPos(&cursorPos);
-    HMONITOR cursorMon =
-        MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
-    if (IsPrimaryMonitor(cursorMon)) return;
-
-    // Check window is on the primary monitor
-    RECT wr;
-    if (!GetWindowRect(hwnd, &wr)) return;
-    HMONITOR windowMon = MonitorFromRect(&wr, MONITOR_DEFAULTTONEAREST);
-    if (!IsPrimaryMonitor(windowMon)) return;
-
-    // Mismatch: cursor on secondary, window on primary
-    wchar_t className[256] = {};
-    GetClassName(hwnd, className, ARRAYSIZE(className));
-
-    DWORD ownerPid = 0;
-    GetWindowThreadProcessId(hwnd, &ownerPid);
-    Wh_Log(L"[Flyout] Show on primary while cursor on secondary: "
-           L"class='%s' hwnd=%p pid=%u rect=(%d,%d,%d,%d)",
-           className, hwnd, ownerPid, wr.left, wr.top, wr.right, wr.bottom);
-
-    if (IsTrayFlyoutClass(className)) {
-        int ww = wr.right - wr.left;
-        int wh = wr.bottom - wr.top;
-
-        // Skip multi-monitor overlays — they already cover the secondary
-        // monitor and repositioning them breaks internal popup coordinates
-        MONITORINFO wmi = {sizeof(wmi)};
-        GetMonitorInfo(windowMon, &wmi);
-        int monW = wmi.rcMonitor.right - wmi.rcMonitor.left;
-        int monH = wmi.rcMonitor.bottom - wmi.rcMonitor.top;
-        if (ww > monW || wh > monH) {
-            Wh_Log(L"[Flyout] Multi-monitor overlay (%dx%d vs mon %dx%d)"
-                   L" — skipping",
-                   ww, wh, monW, monH);
-        } else if (ww > 0 && wh > 0) {
-            // Window has real dimensions — reposition now
-            RepositionFlyoutToMonitor(hwnd, windowMon, cursorMon);
-            TrackFlyout(hwnd, cursorMon);
-        } else {
-            // Zero-sized at SHOW time — will be positioned later,
-            // LOCATIONCHANGE will handle it
-            Wh_Log(L"[Flyout] Zero-sized at SHOW, deferring to LOCATIONCHANGE");
-            TrackFlyout(hwnd, cursorMon);
-        }
-    }
-
-    // Also scan for any XamlExplorerHostIslandWindow on primary that we
-    // might have missed (pre-existing windows that didn't fire SHOW)
-    HWND found = nullptr;
-    while ((found = FindWindowEx(nullptr, found,
-                                  L"XamlExplorerHostIslandWindow",
-                                  nullptr)) != nullptr) {
-        if (found == hwnd) continue;  // already handled above
-        RECT fr;
-        if (!GetWindowRect(found, &fr)) continue;
-        if (!IsWindowVisible(found)) continue;
-        HMONITOR fMon = MonitorFromRect(&fr, MONITOR_DEFAULTTONEAREST);
-        if (IsPrimaryMonitor(fMon)) {
-            Wh_Log(L"[Flyout] SCAN: found extra XamlExplorerHostIslandWindow "
-                   L"hwnd=%p rect=(%d,%d,%d,%d) on primary",
-                   found, fr.left, fr.top, fr.right, fr.bottom);
-        }
-    }
+    ArmFlyoutContext(rootWnd, kind, cursorPos);
+    return true;
 }
 
-static void InstallFlyoutHook() {
-    if (g_winEventHook) return;
+// ─── MonitorFrom* hooks — redirect to target monitor ────────────────────────
 
-    // Cover SHOW (0x8002) through LOCATIONCHANGE (0x800B) to also
-    // catch HIDE (0x8003) for cleanup and LOCATIONCHANGE for persistent
-    // repositioning of flyouts that the system moves back to primary.
-    g_winEventHook = SetWinEventHook(
-        EVENT_OBJECT_SHOW, EVENT_OBJECT_LOCATIONCHANGE,
-        nullptr, FlyoutWinEventProc,
-        0, 0, WINEVENT_OUTOFCONTEXT);
+static bool ShouldForceForPoint(POINT pt, HMONITOR targetMon) {
+    if (!targetMon) return false;
+    // Ambiguous origin queries
+    if (pt.x == 0 && pt.y == 0) return true;
+    // Only redirect if the point resolves to the target monitor already,
+    // or to primary (where the system would normally place the flyout)
+    FlyoutRedirectionGuard guard;
+    HMONITOR actualMon = MonitorFromPoint_Original
+        ? MonitorFromPoint_Original(pt, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    if (!actualMon) return true;
+    bool force = (actualMon == targetMon || IsPrimaryMonitor(actualMon));
+    if (!force) {
+        Wh_Log(L"[ShouldForcePoint] REJECTED pt=(%d,%d) actualMon=%p "
+               L"targetMon=%p (not target or primary)",
+               pt.x, pt.y, actualMon, targetMon);
+    }
+    return force;
+}
 
-    if (g_winEventHook) {
-        Wh_Log(L"[Flyout] WinEvent hook installed (SHOW+LOCATIONCHANGE)");
+static bool ShouldForceForRect(LPCRECT rect, HMONITOR targetMon) {
+    if (!targetMon) return false;
+    if (!rect || (rect->left == 0 && rect->top == 0 &&
+                  rect->right == 0 && rect->bottom == 0))
+        return true;
+    FlyoutRedirectionGuard guard;
+    HMONITOR actualMon = MonitorFromRect_Original
+        ? MonitorFromRect_Original(rect, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromRect(rect, MONITOR_DEFAULTTONEAREST);
+    if (!actualMon) return true;
+    bool force = (actualMon == targetMon || IsPrimaryMonitor(actualMon));
+    if (!force) {
+        Wh_Log(L"[ShouldForceRect] REJECTED rect=(%d,%d,%d,%d) actualMon=%p "
+               L"targetMon=%p (not target or primary)",
+               rect->left, rect->top, rect->right, rect->bottom,
+               actualMon, targetMon);
+    }
+    return force;
+}
+
+static HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD flags) {
+    if (!g_flyoutRedirectionSuppressed && !g_unloading) {
+        if (auto* ctx = GetActiveFlyoutContext()) {
+            if (ShouldForceForPoint(pt, ctx->targetMonitor)) {
+                Wh_Log(L"[MFP_Hook] Redirecting pt=(%d,%d) -> mon=%p kind=%d",
+                       pt.x, pt.y, ctx->targetMonitor, ctx->flyoutKind);
+                return ctx->targetMonitor;
+            }
+        }
+    }
+    return MonitorFromPoint_Original(pt, flags);
+}
+
+static HMONITOR WINAPI MonitorFromRect_Hook(LPCRECT rect, DWORD flags) {
+    if (!g_flyoutRedirectionSuppressed && !g_unloading) {
+        if (auto* ctx = GetActiveFlyoutContext()) {
+            if (ShouldForceForRect(rect, ctx->targetMonitor)) {
+                Wh_Log(L"[MFR_Hook] Redirecting rect=(%d,%d,%d,%d) -> mon=%p kind=%d",
+                       rect ? rect->left : 0, rect ? rect->top : 0,
+                       rect ? rect->right : 0, rect ? rect->bottom : 0,
+                       ctx->targetMonitor, ctx->flyoutKind);
+                return ctx->targetMonitor;
+            }
+        }
+    }
+    return MonitorFromRect_Original(rect, flags);
+}
+
+// Auto-arm: when a known flyout class queries its monitor and cursor is over
+// a secondary taskbar, arm the context. This replaces click-based arming since
+// XAML islands consume input before WM_LBUTTONDOWN reaches the Win32 parent.
+static bool TryAutoArmFromCursor(HWND flyoutWnd, const wchar_t* className) {
+    POINT cursorPos = {};
+    if (!GetCursorPos(&cursorPos)) return false;
+
+    FlyoutRedirectionGuard guard;
+    HWND cursorWnd = WindowFromPoint(cursorPos);
+    HWND rootWnd = cursorWnd ? GetAncestor(cursorWnd, GA_ROOT) : nullptr;
+    if (!rootWnd) return false;
+
+    wchar_t rootClass[128] = {};
+    GetClassName(rootWnd, rootClass, ARRAYSIZE(rootClass));
+    if (wcscmp(rootClass, L"Shell_SecondaryTrayWnd") != 0)
+        return false;
+
+    int kind = kFlyoutNone;
+    if (wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0)
+        kind = kOverflowTray;
+    else if (wcscmp(className, L"ControlCenterWindow") == 0)
+        kind = kControlCenter;
+    // Note: Xaml_WindowedPopupClass is NOT auto-armed here — it matches both
+    // real CC sub-popups and small tooltips. CC flow starts with
+    // ControlCenterWindow which sets context; sub-popups inherit it.
+    else if (wcscmp(className, L"#32768") == 0 ||
+             wcscmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
+             wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0)
+        kind = kTrayPopup;
+    else
+        return false;
+
+    Wh_Log(L"[AutoArm] Arming from cursor for class=%s kind=%d "
+           L"taskbar=%p cursor=(%d,%d)",
+           className, kind, rootWnd, cursorPos.x, cursorPos.y);
+
+    ArmFlyoutContext(rootWnd, kind, cursorPos);
+    return true;
+}
+
+static HMONITOR WINAPI MonitorFromWindow_Hook(HWND hWnd, DWORD flags) {
+    if (!g_flyoutRedirectionSuppressed && !g_unloading) {
+        // Check for active context first
+        auto* ctx = GetActiveFlyoutContext();
+
+        // If no context, try auto-arming from cursor position when we see
+        // a known flyout class. This handles the case where XAML islands
+        // consume clicks before they reach the Win32 subclass.
+        if (!ctx && hWnd) {
+            wchar_t className[128] = {};
+            if (IsKnownFlyoutWindow(hWnd, className, ARRAYSIZE(className))) {
+                if (TryAutoArmFromCursor(hWnd, className)) {
+                    ctx = GetActiveFlyoutContext();
+                }
+            }
+        }
+
+        if (ctx) {
+            wchar_t className[128] = {};
+            bool isFlyoutPopup = false;
+            if (hWnd) {
+                isFlyoutPopup = IsKnownFlyoutWindow(hWnd, className, ARRAYSIZE(className));
+            }
+            bool isClickedTaskbar = (hWnd == ctx->taskbarWnd);
+
+            if (isFlyoutPopup || isClickedTaskbar) {
+                Wh_Log(L"[MFW_Hook] Redirecting class=%s hwnd=%p -> mon=%p "
+                       L"kind=%d (flyout=%d taskbar=%d)",
+                       className, hWnd, ctx->targetMonitor, ctx->flyoutKind,
+                       isFlyoutPopup, isClickedTaskbar);
+                // Shorten context when placement is clearly happening
+                if (wcscmp(className, L"ControlCenterWindow") == 0 ||
+                    wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0) {
+                    ShortenFlyoutContext(kAfterPlacementMs);
+                }
+                return ctx->targetMonitor;
+            } else if (className[0] != L'\0') {
+                // Log unmatched top-level popup windows to spot missing flyout types
+                LONG style = GetWindowLong(hWnd, GWL_STYLE);
+                HWND parent = GetParent(hWnd);
+                if (!parent && (style & WS_POPUP)) {
+                    Wh_Log(L"[MFW_Hook] SKIPPED popup class=%s hwnd=%p "
+                           L"style=0x%X kind=%d",
+                           className, hWnd, style, ctx->flyoutKind);
+                }
+            }
+        }
+    }
+    return MonitorFromWindow_Original(hWnd, flags);
+}
+
+// ─── Placement hooks — translate flyout coordinates ─────────────────────────
+
+static bool ShouldTranslatePlacement(UINT uFlags) {
+    // Skip pure z-order / activation changes
+    if ((uFlags & SWP_NOMOVE) && (uFlags & SWP_NOSIZE))
+        return false;
+    return true;
+}
+
+static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter,
+                                      int X, int Y, int cx, int cy,
+                                      UINT uFlags) {
+    if (!g_unloading && !g_flyoutRedirectionSuppressed) {
+        bool isFlyout = IsKnownFlyoutWindow(hWnd);
+
+        if (isFlyout && ShouldTranslatePlacement(uFlags)) {
+            bool hasContext = (GetActiveFlyoutContext() != nullptr);
+            wchar_t cls[128] = {};
+            GetClassName(hWnd, cls, ARRAYSIZE(cls));
+            Wh_Log(L"[SWP_Hook] class=%s hwnd=%p pos=(%d,%d) size=(%d,%d) "
+                   L"flags=0x%X hasCtx=%d",
+                   cls, hWnd, X, Y, cx, cy, uFlags, hasContext);
+
+            RECT currentRect = {};
+            GetWindowRect(hWnd, &currentRect);
+
+            LONG width = (uFlags & SWP_NOSIZE) ? currentRect.right - currentRect.left : cx;
+            LONG height = (uFlags & SWP_NOSIZE) ? currentRect.bottom - currentRect.top : cy;
+            RECT requested = {
+                (uFlags & SWP_NOMOVE) ? currentRect.left : X,
+                (uFlags & SWP_NOMOVE) ? currentRect.top : Y,
+                ((uFlags & SWP_NOMOVE) ? currentRect.left : X) + width,
+                ((uFlags & SWP_NOMOVE) ? currentRect.top : Y) + height,
+            };
+
+            // If no context, try auto-arm then cursor rescue
+            if (!hasContext) {
+                TryAutoArmFromCursor(hWnd, cls);
+                hasContext = (GetActiveFlyoutContext() != nullptr);
+            }
+            if (!hasContext) {
+                TryCursorRescue(hWnd, requested);
+                hasContext = (GetActiveFlyoutContext() != nullptr);
+            }
+
+            if (hasContext) {
+                RECT translated = {};
+                if (TranslateFlyoutRect(hWnd, requested, &translated)) {
+                    Wh_Log(L"[SWP_Hook] TRANSLATED (%d,%d,%d,%d) -> (%d,%d,%d,%d)",
+                           requested.left, requested.top,
+                           requested.right, requested.bottom,
+                           translated.left, translated.top,
+                           translated.right, translated.bottom);
+                    uFlags &= ~(SWP_NOMOVE | SWP_NOSIZE);
+                    X  = translated.left;
+                    Y  = translated.top;
+                    cx = translated.right - translated.left;
+                    cy = translated.bottom - translated.top;
+                }
+            }
+        }
+    }
+    return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+}
+
+static BOOL WINAPI MoveWindow_Hook(HWND hWnd, int X, int Y,
+                                    int nWidth, int nHeight, BOOL bRepaint) {
+    if (!g_unloading && !g_flyoutRedirectionSuppressed) {
+        bool isFlyout = IsKnownFlyoutWindow(hWnd);
+
+        if (isFlyout) {
+            bool hasContext = (GetActiveFlyoutContext() != nullptr);
+            wchar_t cls[128] = {};
+            GetClassName(hWnd, cls, ARRAYSIZE(cls));
+            Wh_Log(L"[MW_Hook] class=%s hwnd=%p pos=(%d,%d) size=(%d,%d) "
+                   L"hasCtx=%d",
+                   cls, hWnd, X, Y, nWidth, nHeight, hasContext);
+
+            RECT requested = {X, Y, X + nWidth, Y + nHeight};
+
+            if (!hasContext) {
+                TryAutoArmFromCursor(hWnd, cls);
+                hasContext = (GetActiveFlyoutContext() != nullptr);
+            }
+            if (!hasContext) {
+                TryCursorRescue(hWnd, requested);
+                hasContext = (GetActiveFlyoutContext() != nullptr);
+            }
+
+            if (hasContext) {
+                RECT translated = {};
+                if (TranslateFlyoutRect(hWnd, requested, &translated)) {
+                    Wh_Log(L"[MW_Hook] TRANSLATED (%d,%d,%d,%d) -> (%d,%d,%d,%d)",
+                           requested.left, requested.top,
+                           requested.right, requested.bottom,
+                           translated.left, translated.top,
+                           translated.right, translated.bottom);
+                    X       = translated.left;
+                    Y       = translated.top;
+                    nWidth  = translated.right - translated.left;
+                    nHeight = translated.bottom - translated.top;
+                }
+            }
+        }
+    }
+    return MoveWindow_Original(hWnd, X, Y, nWidth, nHeight, bRepaint);
+}
+
+static HDWP WINAPI DeferWindowPos_Hook(HDWP hWinPosInfo, HWND hWnd,
+                                        HWND hWndInsertAfter,
+                                        int x, int y, int cx, int cy,
+                                        UINT uFlags) {
+    if (!g_unloading && !g_flyoutRedirectionSuppressed) {
+        bool isFlyout = IsKnownFlyoutWindow(hWnd);
+
+        if (isFlyout && ShouldTranslatePlacement(uFlags)) {
+            bool hasContext = (GetActiveFlyoutContext() != nullptr);
+            wchar_t cls[128] = {};
+            GetClassName(hWnd, cls, ARRAYSIZE(cls));
+            Wh_Log(L"[DWP_Hook] class=%s hwnd=%p pos=(%d,%d) size=(%d,%d) "
+                   L"flags=0x%X hasCtx=%d",
+                   cls, hWnd, x, y, cx, cy, uFlags, hasContext);
+
+            RECT currentRect = {};
+            GetWindowRect(hWnd, &currentRect);
+
+            LONG width = (uFlags & SWP_NOSIZE) ? currentRect.right - currentRect.left : cx;
+            LONG height = (uFlags & SWP_NOSIZE) ? currentRect.bottom - currentRect.top : cy;
+            RECT requested = {
+                (uFlags & SWP_NOMOVE) ? currentRect.left : x,
+                (uFlags & SWP_NOMOVE) ? currentRect.top : y,
+                ((uFlags & SWP_NOMOVE) ? currentRect.left : x) + width,
+                ((uFlags & SWP_NOMOVE) ? currentRect.top : y) + height,
+            };
+
+            if (!hasContext) {
+                TryAutoArmFromCursor(hWnd, cls);
+                hasContext = (GetActiveFlyoutContext() != nullptr);
+            }
+            if (!hasContext) {
+                TryCursorRescue(hWnd, requested);
+                hasContext = (GetActiveFlyoutContext() != nullptr);
+            }
+
+            if (hasContext) {
+                RECT translated = {};
+                if (TranslateFlyoutRect(hWnd, requested, &translated)) {
+                    Wh_Log(L"[DWP_Hook] TRANSLATED (%d,%d,%d,%d) -> (%d,%d,%d,%d)",
+                           requested.left, requested.top,
+                           requested.right, requested.bottom,
+                           translated.left, translated.top,
+                           translated.right, translated.bottom);
+                    uFlags &= ~(SWP_NOMOVE | SWP_NOSIZE);
+                    x  = translated.left;
+                    y  = translated.top;
+                    cx = translated.right - translated.left;
+                    cy = translated.bottom - translated.top;
+                }
+            }
+        }
+    }
+    return DeferWindowPos_Original(hWinPosInfo, hWnd, hWndInsertAfter,
+                                    x, y, cx, cy, uFlags);
+}
+
+// ─── TrackPopupMenuEx hook — intercept Win32 popup menu positioning ──────────
+// Win32 popup menus (window class #32768) — e.g. "Safely Remove Hardware" —
+// are positioned internally by TrackPopupMenuEx. Unlike XAML flyouts, these
+// never call SetWindowPos/MoveWindow, so our placement hooks don't see them.
+// This hook translates the (x, y) coordinates to the anchor point on the
+// target monitor. The menu auto-sizes itself, so no DPI rescaling is needed.
+
+static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags,
+                                          int x, int y,
+                                          HWND hWnd, LPTPMPARAMS lptpm) {
+    if (!g_unloading && !g_flyoutRedirectionSuppressed) {
+        auto* ctx = GetActiveFlyoutContext();
+
+        // If no context, check if cursor is over a secondary taskbar
+        if (!ctx) {
+            POINT cursorPos = {};
+            if (GetCursorPos(&cursorPos)) {
+                FlyoutRedirectionGuard guard;
+                HWND cursorWnd = WindowFromPoint(cursorPos);
+                HWND rootWnd = cursorWnd ? GetAncestor(cursorWnd, GA_ROOT) : nullptr;
+                if (rootWnd) {
+                    wchar_t rootClass[128] = {};
+                    GetClassName(rootWnd, rootClass, ARRAYSIZE(rootClass));
+                    if (wcscmp(rootClass, L"Shell_SecondaryTrayWnd") == 0) {
+                        Wh_Log(L"[TPM_Hook] Auto-arming from cursor at (%d,%d) "
+                               L"taskbar=%p", cursorPos.x, cursorPos.y, rootWnd);
+                        ArmFlyoutContext(rootWnd, kTrayPopup, cursorPos);
+                        ctx = GetActiveFlyoutContext();
+                    }
+                }
+            }
+        }
+
+        if (ctx) {
+            // Translate popup menu to the anchor point on the target monitor.
+            // Keep the system's original alignment flags and Y coordinate
+            // strategy — just shift X to the anchor and Y to the same
+            // offset from the taskbar on the target monitor.
+            int newX = ctx->anchorPoint.x;
+            int newY = y;
+
+            // The system's Y is relative to the primary tray position.
+            // Translate: compute offset from primary taskbar top, apply to target.
+            // Primary taskbar top == targetWork.bottom for same-DPI monitors.
+            // Original y was in absolute coords near the primary taskbar.
+            // Use anchor Y (cursor position near taskbar) for a reliable Y.
+            newY = ctx->anchorPoint.y;
+
+            Wh_Log(L"[TPM_Hook] Translating popup menu: (%d,%d) -> (%d,%d) "
+                   L"flags=0x%X anchor=(%d,%d) kind=%d",
+                   x, y, newX, newY, uFlags,
+                   ctx->anchorPoint.x, ctx->anchorPoint.y,
+                   ctx->flyoutKind);
+
+            ShortenFlyoutContext(kAfterPlacementMs);
+            return TrackPopupMenuEx_Original(hMenu, uFlags, newX, newY,
+                                              hWnd, lptpm);
+        }
+    }
+    return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
+}
+
+// ─── Hit-test for secondary taskbar tray clicks ─────────────────────────────
+
+static int PhysicalPixelsToDips(UINT dpi, int pixels) {
+    return MulDiv(pixels, 96, dpi ? dpi : 96);
+}
+
+static int DipsToPhysicalPixels(UINT dpi, double dips) {
+    return MulDiv((int)(dips + 0.5), dpi ? dpi : 96, 96);
+}
+
+static UINT GetWindowDpi(HWND hWnd) {
+    // GetDpiForWindow requires Windows 10 1607+
+    UINT dpi = GetDpiForWindow(hWnd);
+    return dpi ? dpi : 96;
+}
+
+static int HitTestTrayClick(HWND hWnd, LPARAM lParam) {
+    RECT clientRect = {};
+    if (!GetClientRect(hWnd, &clientRect)) return kFlyoutNone;
+
+    int width  = clientRect.right - clientRect.left;
+    int height = clientRect.bottom - clientRect.top;
+
+    // Only handle horizontal taskbars
+    if (width <= height) return kFlyoutNone;
+
+    int x = GET_X_LPARAM(lParam);
+    UINT dpi = GetWindowDpi(hWnd);
+    int xFromRight = clientRect.right - x;
+    int xFromRightDip = PhysicalPixelsToDips(dpi, xFromRight);
+
+    int showDesktopEnd = 0;
+    int notifCenterEnd = 0;
+    int controlCenterEnd = 0;
+    int trayIconsStart = 0;
+    int trayIconsEnd = 0;
+    int overflowStart = 0;
+    int overflowEnd = 0;
+
+    if (g_trayMetrics.valid) {
+        showDesktopEnd = (int)(g_trayMetrics.showDesktopStack + 0.5);
+        notifCenterEnd = showDesktopEnd +
+            (int)(g_trayMetrics.notificationCenterButton + 0.5);
+        controlCenterEnd = notifCenterEnd +
+            (int)(g_trayMetrics.controlCenterButton + 0.5);
+        trayIconsStart = controlCenterEnd +
+            (int)(g_trayMetrics.nonActivatableStack + 0.5) +
+            (int)(g_trayMetrics.mainStack + 0.5);
+        trayIconsEnd = trayIconsStart +
+            (int)(g_trayMetrics.notificationAreaIcons + 0.5);
+        overflowStart = trayIconsEnd;
+        overflowEnd = overflowStart +
+            (int)(g_trayMetrics.notifyIconStack + 0.5);
     } else {
-        Wh_Log(L"[Flyout] Failed to install WinEvent hook: error %d",
-               GetLastError());
+        showDesktopEnd = kShowDesktopWidth;
+        notifCenterEnd = showDesktopEnd + kNotificationCenterWidth;
+        controlCenterEnd = notifCenterEnd + kControlCenterWidth;
+        trayIconsStart = controlCenterEnd;
+        trayIconsEnd = trayIconsStart + 100;
+        overflowStart = trayIconsEnd;
+        overflowEnd = overflowStart + kNotifyIconStackWidth;
+    }
+
+    int slop = kHitSlop;
+
+    // Overflow tray chevron
+    if (xFromRightDip >= overflowStart - slop &&
+        xFromRightDip < overflowEnd + slop) {
+        Wh_Log(L"[HitTest] -> kOverflowTray");
+        return kOverflowTray;
+    }
+
+    // Promoted tray icons
+    if (xFromRightDip >= trayIconsStart - slop &&
+        xFromRightDip < trayIconsEnd + slop) {
+        return kTrayPopup;
+    }
+
+    // Control center (volume/wifi/battery)
+    if (xFromRightDip >= notifCenterEnd - slop &&
+        xFromRightDip < controlCenterEnd + slop) {
+        Wh_Log(L"[HitTest] -> kControlCenter");
+        return kControlCenter;
+    }
+
+    // Notification center (clock/date)
+    if (xFromRightDip >= showDesktopEnd - slop &&
+        xFromRightDip < notifCenterEnd + slop) {
+        Wh_Log(L"[HitTest] -> kNotificationCenter");
+        return kNotificationCenter;
+    }
+
+    Wh_Log(L"[HitTest] -> kFlyoutNone (no zone matched)");
+    return kFlyoutNone;
+}
+
+static bool GetFlyoutAnchorPoint(HWND hWnd, LPARAM lParam, int flyoutKind,
+                                  POINT* anchor) {
+    RECT clientRect = {};
+    if (!GetClientRect(hWnd, &clientRect)) return false;
+
+    LONG clientX = GET_X_LPARAM(lParam);
+    LONG origClientX = clientX;
+    UINT dpi = GetWindowDpi(hWnd);
+
+    if (flyoutKind == kOverflowTray) {
+        // Compute chevron midpoint from metrics
+        double overflowStart = 0;
+        double overflowW = kNotifyIconStackWidth;
+        if (g_trayMetrics.valid) {
+            overflowStart =
+                g_trayMetrics.showDesktopStack +
+                g_trayMetrics.notificationCenterButton +
+                g_trayMetrics.controlCenterButton +
+                g_trayMetrics.nonActivatableStack +
+                g_trayMetrics.mainStack +
+                g_trayMetrics.notificationAreaIcons;
+            overflowW = g_trayMetrics.notifyIconStack;
+        } else {
+            overflowStart =
+                kShowDesktopWidth +
+                kNotificationCenterWidth +
+                kControlCenterWidth;
+        }
+        int overflowMidPx =
+            DipsToPhysicalPixels(dpi, overflowStart + overflowW / 2);
+        clientX = clientRect.right - overflowMidPx;
+        if (clientX < clientRect.left) clientX = clientRect.left;
+        if (clientX >= clientRect.right) clientX = clientRect.right - 1;
+        Wh_Log(L"[Anchor] Overflow chevron: origX=%d computedX=%d "
+               L"overflowStart=%.0f overflowW=%.0f midPx=%d "
+               L"clientRight=%d",
+               origClientX, clientX, overflowStart, overflowW,
+               overflowMidPx, clientRect.right);
+    }
+
+    POINT pt = {clientX, (clientRect.top + clientRect.bottom) / 2};
+    if (!ClientToScreen(hWnd, &pt)) return false;
+
+    Wh_Log(L"[Anchor] kind=%d client=(%d,%d) screen=(%d,%d)",
+           flyoutKind, clientX, (clientRect.top + clientRect.bottom) / 2,
+           pt.x, pt.y);
+
+    *anchor = pt;
+    return true;
+}
+
+// ─── Taskbar subclass ───────────────────────────────────────────────────────
+
+static constexpr UINT_PTR kTaskbarSubclassId = 0x54524159; // 'TRAY'
+
+// Track subclassed windows for cleanup
+static std::vector<HWND> g_subclassedTaskbars;
+
+static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg,
+                                             WPARAM wParam, LPARAM lParam,
+                                             UINT_PTR uIdSubclass,
+                                             DWORD_PTR dwRefData) {
+    if (g_unloading) {
+        if (uMsg == WM_NCDESTROY) {
+            RemoveWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId);
+        }
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    bool isDown = false;
+    bool isRight = false;
+
+    if (uMsg == WM_LBUTTONDOWN) {
+        isDown = true;
+    } else if (uMsg == WM_RBUTTONDOWN) {
+        isDown = true;
+        isRight = true;
+    } else if (uMsg == WM_PARENTNOTIFY) {
+        WORD event = LOWORD(wParam);
+        if (event == WM_LBUTTONDOWN) {
+            isDown = true;
+        } else if (event == WM_RBUTTONDOWN) {
+            isDown = true;
+            isRight = true;
+        }
+    }
+
+    if (isDown) {
+        int kind = HitTestTrayClick(hWnd, lParam);
+        if (kind != kFlyoutNone) {
+            if (isRight && kind != kOverflowTray) {
+                kind = kTrayPopup;
+            }
+            POINT anchor = {};
+            GetFlyoutAnchorPoint(hWnd, lParam, kind, &anchor);
+            ArmFlyoutContext(hWnd, kind, anchor);
+        } else {
+            ClearFlyoutContext();
+        }
+    }
+
+    if (uMsg == WM_NCDESTROY) {
+        RemoveWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId);
+        auto it = std::find(g_subclassedTaskbars.begin(),
+                            g_subclassedTaskbars.end(), hWnd);
+        if (it != g_subclassedTaskbars.end())
+            g_subclassedTaskbars.erase(it);
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+static void InstallTaskbarSubclass(HWND hWnd) {
+    if (SetWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId, 0)) {
+        g_subclassedTaskbars.push_back(hWnd);
+        RECT winRect = {};
+        GetWindowRect(hWnd, &winRect);
+        RECT clientRect = {};
+        GetClientRect(hWnd, &clientRect);
+        UINT dpi = GetWindowDpi(hWnd);
+        HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+        Wh_Log(L"[Subclass] Installed on hwnd=%p mon=%p dpi=%u "
+               L"winRect=(%d,%d,%d,%d) clientSize=(%dx%d)",
+               hWnd, hMon, dpi,
+               winRect.left, winRect.top, winRect.right, winRect.bottom,
+               clientRect.right - clientRect.left,
+               clientRect.bottom - clientRect.top);
+    } else {
+        Wh_Log(L"[Subclass] Failed for hwnd=%p error=%d",
+               hWnd, GetLastError());
     }
 }
 
-static void UninstallFlyoutHook() {
-    if (g_winEventHook) {
-        UnhookWinEvent(g_winEventHook);
-        g_winEventHook = nullptr;
-        g_trackedCount = 0;
-        Wh_Log(L"[Flyout] WinEvent hook removed");
+static void RemoveAllTaskbarSubclasses() {
+    for (HWND hwnd : g_subclassedTaskbars) {
+        if (IsWindow(hwnd)) {
+            RemoveWindowSubclass(hwnd, TaskbarSubclassProc, kTaskbarSubclassId);
+        }
+    }
+    g_subclassedTaskbars.clear();
+}
+
+// Install subclasses on all Shell_SecondaryTrayWnd windows
+static void InstallFlyoutHooks() {
+    HWND tbWnd = nullptr;
+    while ((tbWnd = FindWindowEx(nullptr, tbWnd,
+                                  L"Shell_SecondaryTrayWnd",
+                                  nullptr)) != nullptr) {
+        // Check if already subclassed
+        bool alreadySubclassed = false;
+        for (HWND existing : g_subclassedTaskbars) {
+            if (existing == tbWnd) {
+                alreadySubclassed = true;
+                break;
+            }
+        }
+        if (!alreadySubclassed) {
+            InstallTaskbarSubclass(tbWnd);
+        }
     }
 }
 
@@ -667,6 +1466,8 @@ void HandleExtractedFrame(FrameworkElement frame, bool isSecondary,
         }
     } else {
         g_primarySystemTrayFrame = frame;
+        g_xamlDispatcher = frame.Dispatcher();
+        UpdateTrayMetricsFromFrame(frame, L"primary-extracted");
         if (!g_primaryTreeDumped) {
             g_primaryTreeDumped = true;
             Wh_Log(L"=== PRIMARY TASKBAR XAML TREE (via controller scan) ===");
@@ -742,6 +1543,80 @@ static const wchar_t* g_stackContainers[] = {
     L"ShowDesktopStack",
 };
 
+static void SyncTrayState(SecondaryInfo& si) {
+    auto primaryGrid = FindChildByName(g_primarySystemTrayFrame, L"SystemTrayFrameGrid");
+    auto secondaryGrid = FindChildByName(si.frame, L"SystemTrayFrameGrid");
+    if (!primaryGrid || !secondaryGrid) return;
+
+    for (auto containerName : g_syncedContainers) {
+        auto primaryContainer = FindChildByName(primaryGrid, containerName);
+        auto secondaryContainer = FindChildByName(secondaryGrid, containerName);
+        if (!primaryContainer || !secondaryContainer) continue;
+
+        auto primaryVis = primaryContainer.Visibility();
+        auto secondaryVis = secondaryContainer.Visibility();
+        if (primaryVis == Visibility::Visible && secondaryVis == Visibility::Collapsed) {
+            secondaryContainer.Visibility(Visibility::Visible);
+            si.containersUncollapsed = true;
+        } else if (primaryVis == Visibility::Collapsed && secondaryVis == Visibility::Visible) {
+            secondaryContainer.Visibility(Visibility::Collapsed);
+            si.containersUncollapsed = true;
+        }
+    }
+
+    auto primaryNAI = FindChildByName(primaryGrid, L"NotificationAreaIcons");
+    auto secondaryNAI = FindChildByName(secondaryGrid, L"NotificationAreaIcons");
+    if (primaryNAI && secondaryNAI) {
+        auto primaryIC = primaryNAI.try_as<Controls::ItemsControl>();
+        auto secondaryIC = secondaryNAI.try_as<Controls::ItemsControl>();
+        if (primaryIC && secondaryIC) {
+            auto pSource = primaryIC.ItemsSource();
+            if (pSource && secondaryIC.ItemsSource() != pSource) {
+                try { secondaryIC.ItemsSource(pSource); } catch (...) {}
+            }
+        }
+    }
+
+    const wchar_t* icContainers[] = {
+        L"ControlCenterButton",
+        L"NotificationCenterButton",
+    };
+    for (auto name : icContainers) {
+        auto primaryC = FindChildByName(primaryGrid, name);
+        auto secondaryC = FindChildByName(secondaryGrid, name);
+        if (!primaryC || !secondaryC) continue;
+        auto pIC = primaryC.try_as<Controls::ItemsControl>();
+        auto sIC = secondaryC.try_as<Controls::ItemsControl>();
+        if (pIC && sIC) {
+            auto pSource = pIC.ItemsSource();
+            if (pSource && sIC.ItemsSource() != pSource) {
+                try { sIC.ItemsSource(pSource); } catch (...) {}
+            }
+        }
+    }
+
+    for (auto stackName : g_stackContainers) {
+        auto primaryStack = FindChildByName(primaryGrid, stackName);
+        auto secondaryStack = FindChildByName(secondaryGrid, stackName);
+        if (!primaryStack || !secondaryStack) continue;
+        auto primaryContent = FindChildByName(primaryStack, L"Content");
+        auto secondaryContent = FindChildByName(secondaryStack, L"Content");
+        if (!primaryContent || !secondaryContent) continue;
+        auto primaryIconStack = FindChildByName(primaryContent, L"IconStack");
+        auto secondaryIconStack = FindChildByName(secondaryContent, L"IconStack");
+        if (!primaryIconStack || !secondaryIconStack) continue;
+
+        auto pIC = primaryIconStack.try_as<Controls::ItemsControl>();
+        auto sIC = secondaryIconStack.try_as<Controls::ItemsControl>();
+        if (pIC && sIC) {
+            auto pSource = pIC.ItemsSource();
+            if (pSource && sIC.ItemsSource() != pSource) {
+                try { sIC.ItemsSource(pSource); } catch (...) {}
+            }
+        }
+    }
+}
+
 void TryPopulateOneSecondary(SecondaryInfo& si);
 
 void TryPopulateSecondaryTray() {
@@ -777,9 +1652,12 @@ void TryPopulateSecondaryTray() {
                     Wh_Log(L"[PrimarySizeChanged] %.0f -> %.0f",
                            oldWidth, newWidth);
                     g_lastPrimaryFrameSize = newWidth;
+                    UpdateTrayMetricsFromFrame(g_primarySystemTrayFrame,
+                                               L"primary-size");
 
                     for (auto& si : g_secondaries) {
                         if (!si.populated || !si.frame) continue;
+                        SyncTrayState(si);
                         try {
                             double secWidth = si.frame.Width();
                             if (secWidth != newWidth) {
@@ -804,9 +1682,9 @@ void TryPopulateSecondaryTray() {
         Wh_Log(L"[SizeChanged] Registered on primary frame");
     }
 
-    // Install flyout repositioning hook once any secondary is populated
+    // Install taskbar subclasses for flyout redirection
     if (anyPopulated) {
-        InstallFlyoutHook();
+        InstallFlyoutHooks();
     }
 }
 
@@ -830,164 +1708,7 @@ void TryPopulateOneSecondary(SecondaryInfo& si) {
     Wh_Log(L"Frame widths - primary:%.0f secondary:%.0f",
            primaryFrameWidth, secondaryFrameWidth);
 
-    // Step 1: Sync visibility of containers
-    for (auto containerName : g_syncedContainers) {
-        auto primaryContainer = FindChildByName(primaryGrid, containerName);
-        auto secondaryContainer = FindChildByName(secondaryGrid, containerName);
-
-        if (!primaryContainer || !secondaryContainer) {
-            Wh_Log(L"[%s] Missing on one side", containerName);
-            continue;
-        }
-
-        auto primaryVis = primaryContainer.Visibility();
-        auto secondaryVis = secondaryContainer.Visibility();
-        double primaryW = primaryContainer.ActualWidth();
-        double secondaryW = secondaryContainer.ActualWidth();
-
-        Wh_Log(L"[%s] primary: %.0fx%.0f %s | secondary: %.0fx%.0f %s",
-               containerName,
-               primaryW, primaryContainer.ActualHeight(),
-               primaryVis == Visibility::Collapsed ? L"COLLAPSED" : L"Visible",
-               secondaryW, secondaryContainer.ActualHeight(),
-               secondaryVis == Visibility::Collapsed ? L"COLLAPSED" : L"Visible");
-
-        if (primaryVis == Visibility::Visible &&
-            secondaryVis == Visibility::Collapsed) {
-            Wh_Log(L"[%s] Uncollapsing secondary container", containerName);
-            secondaryContainer.Visibility(Visibility::Visible);
-            si.containersUncollapsed = true;
-        } else if (primaryVis == Visibility::Collapsed &&
-                   secondaryVis == Visibility::Visible) {
-            Wh_Log(L"[%s] Collapsing secondary to match primary", containerName);
-            secondaryContainer.Visibility(Visibility::Collapsed);
-            si.containersUncollapsed = true;
-        }
-
-        if (secondaryVis == Visibility::Visible && secondaryW < 5 &&
-            primaryW > 5) {
-            Wh_Log(L"[%s] Secondary is visible but very narrow (%.0f vs %.0f)",
-                   containerName, secondaryW, primaryW);
-        }
-    }
-
-    // Step 2: Share NotificationAreaIcons ItemsSource
-    auto primaryNAI = FindChildByName(primaryGrid, L"NotificationAreaIcons");
-    auto secondaryNAI = FindChildByName(secondaryGrid, L"NotificationAreaIcons");
-
-    if (primaryNAI && secondaryNAI) {
-        auto primaryIC = primaryNAI.try_as<Controls::ItemsControl>();
-        auto secondaryIC = secondaryNAI.try_as<Controls::ItemsControl>();
-
-        if (primaryIC && secondaryIC) {
-            int pCount = (int)primaryIC.Items().Size();
-            int sCount = (int)secondaryIC.Items().Size();
-            auto pSource = primaryIC.ItemsSource();
-
-            Wh_Log(L"[NotificationAreaIcons] primary:%d secondary:%d "
-                   L"primarySource:%s",
-                   pCount, sCount, pSource ? L"YES" : L"NO");
-
-            if (pSource && sCount == 0 && pCount > 0) {
-                try {
-                    secondaryIC.ItemsSource(pSource);
-                    int newCount = (int)secondaryIC.Items().Size();
-                    Wh_Log(L"[NotificationAreaIcons] ItemsSource shared! "
-                           L"Secondary now has %d items",
-                           newCount);
-                } catch (winrt::hresult_error const& ex) {
-                    Wh_Log(L"[NotificationAreaIcons] Share failed: 0x%08X %s",
-                           (unsigned)ex.code(), ex.message().c_str());
-                }
-            }
-
-            if (secondaryNAI.Visibility() == Visibility::Collapsed &&
-                primaryNAI.Visibility() == Visibility::Visible) {
-                secondaryNAI.Visibility(Visibility::Visible);
-                Wh_Log(L"[NotificationAreaIcons] Uncollapsed secondary");
-            }
-        }
-    } else {
-        Wh_Log(L"[NotificationAreaIcons] Not found (primary:%s secondary:%s)",
-               primaryNAI ? L"found" : L"MISSING",
-               secondaryNAI ? L"found" : L"MISSING");
-    }
-
-    // Step 3: Share ItemsSource for ControlCenterButton and NotificationCenterButton
-    const wchar_t* icContainers[] = {
-        L"ControlCenterButton",
-        L"NotificationCenterButton",
-    };
-    for (auto name : icContainers) {
-        auto primaryC = FindChildByName(primaryGrid, name);
-        auto secondaryC = FindChildByName(secondaryGrid, name);
-        if (!primaryC || !secondaryC) continue;
-
-        auto pIC = primaryC.try_as<Controls::ItemsControl>();
-        auto sIC = secondaryC.try_as<Controls::ItemsControl>();
-        if (!pIC || !sIC) continue;
-
-        int pCount = (int)pIC.Items().Size();
-        int sCount = (int)sIC.Items().Size();
-        auto pSource = pIC.ItemsSource();
-
-        if (pSource && sCount == 0 && pCount > 0) {
-            try {
-                sIC.ItemsSource(pSource);
-                Wh_Log(L"[%s] ItemsSource shared! Secondary now has %d items",
-                       name, (int)sIC.Items().Size());
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"[%s] ItemsSource share failed: 0x%08X",
-                       name, (unsigned)ex.code());
-            }
-        }
-    }
-
-    // Step 3b: Share StackListView ItemsSource for Stack containers
-    for (auto stackName : g_stackContainers) {
-        auto primaryStack = FindChildByName(primaryGrid, stackName);
-        auto secondaryStack = FindChildByName(secondaryGrid, stackName);
-        if (!primaryStack || !secondaryStack) continue;
-
-        auto primaryContent = FindChildByName(primaryStack, L"Content");
-        auto secondaryContent = FindChildByName(secondaryStack, L"Content");
-        if (!primaryContent || !secondaryContent) continue;
-
-        auto primaryIconStack = FindChildByName(primaryContent, L"IconStack");
-        auto secondaryIconStack = FindChildByName(secondaryContent, L"IconStack");
-        if (!primaryIconStack || !secondaryIconStack) continue;
-
-        auto pIC = primaryIconStack.try_as<Controls::ItemsControl>();
-        auto sIC = secondaryIconStack.try_as<Controls::ItemsControl>();
-
-        Wh_Log(L"[%s/IconStack] primary IC:%s secondary IC:%s",
-               stackName,
-               pIC ? L"YES" : L"NO",
-               sIC ? L"YES" : L"NO");
-
-        if (pIC && sIC) {
-            int pCount = (int)pIC.Items().Size();
-            int sCount = (int)sIC.Items().Size();
-            auto pSource = pIC.ItemsSource();
-
-            Wh_Log(L"[%s/IconStack] primary:%d secondary:%d source:%s",
-                   stackName, pCount, sCount, pSource ? L"YES" : L"NO");
-
-            if (pSource && sCount == 0 && pCount > 0) {
-                try {
-                    sIC.ItemsSource(pSource);
-                    int newCount = (int)sIC.Items().Size();
-                    Wh_Log(L"[%s/IconStack] ItemsSource shared! "
-                           L"Secondary now has %d items",
-                           stackName, newCount);
-                } catch (winrt::hresult_error const& ex) {
-                    Wh_Log(L"[%s/IconStack] Share failed: 0x%08X %s",
-                           stackName, (unsigned)ex.code(),
-                           ex.message().c_str());
-                }
-            }
-        }
-    }
+    SyncTrayState(si);
 
     // Step 4: Set the secondary frame width to match primary
     if (primaryFrameWidth > secondaryFrameWidth) {
@@ -1078,6 +1799,8 @@ void HandleLoadedIconView(FrameworkElement iconView) {
         if (!g_primaryTreeDumped) {
             g_primaryTreeDumped = true;
             g_primarySystemTrayFrame = systemTrayFrame;
+            g_xamlDispatcher = systemTrayFrame.Dispatcher();
+            UpdateTrayMetricsFromFrame(systemTrayFrame, L"primary-loaded");
             Wh_Log(L"=== PRIMARY TASKBAR XAML TREE ===");
             DumpXamlTree(systemTrayFrame, 0, 8);
             ProbeContainerInterfaces(systemTrayFrame, L"PRIMARY");
@@ -1103,10 +1826,13 @@ static void ResetXamlState() {
         g_primarySizeChangedToken = {};
     }
 
-    UninstallFlyoutHook();
+    RemoveAllTaskbarSubclasses();
+    ClearFlyoutContext();
     g_autoRevokerList.clear();
 
     g_primarySystemTrayFrame = nullptr;
+    g_xamlDispatcher = nullptr;
+    g_trayMetrics = {};
     g_primaryTreeDumped = false;
     g_primaryFrameSearchDone = false;
     g_lastPrimaryFrameSize = 0;
@@ -1200,22 +1926,13 @@ void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis) {
         }
     }
 
-    // Re-apply width override after the original sets it to native value.
-    // Re-read the primary frame's actual width rather than using the cached
-    // g_lastPrimaryFrameSize, because during DPI changes the cache may be
-    // stale (still holding the old-DPI value).
+    // Schedule a deferred refresh rather than immediately re-applying width.
+    // During DPI changes, the primary frame hasn't re-laid-out yet when this
+    // hook fires, so ActualWidth() returns the old-DPI value. A deferred
+    // refresh lets layout settle before reading the correct width.
     if (si->populated && si->frame &&
         g_primarySystemTrayFrame && !g_unloading) {
-        try {
-            double primaryWidth = g_primarySystemTrayFrame.ActualWidth();
-            if (primaryWidth > 0) {
-                g_lastPrimaryFrameSize = primaryWidth;
-                double currentWidth = si->frame.Width();
-                if (currentWidth != primaryWidth) {
-                    si->frame.Width(primaryWidth);
-                }
-            }
-        } catch (...) {}
+        RefreshSecondaryTray();
     }
 }
 
@@ -1235,9 +1952,18 @@ double WINAPI SystemTraySecondaryController_GetFrameSize_Hook(void* pThis, int e
 
     // Check if this controller's secondary has been populated
     for (auto& si : g_secondaries) {
-        if (si.controller == pThis && si.populated &&
-            g_lastPrimaryFrameSize > originalSize) {
-            return g_lastPrimaryFrameSize;
+        if (si.controller == pThis && si.populated) {
+            // Read live primary width to avoid returning stale DPI values
+            double primaryWidth = g_lastPrimaryFrameSize;
+            if (g_primarySystemTrayFrame) {
+                try {
+                    double live = g_primarySystemTrayFrame.ActualWidth();
+                    if (live > 0) primaryWidth = live;
+                } catch (...) {}
+            }
+            if (primaryWidth > originalSize) {
+                return primaryWidth;
+            }
         }
     }
 
@@ -1413,24 +2139,121 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    HMODULE systemTrayModule = GetSystemTrayModuleHandle();
-    if (systemTrayModule) {
-        Wh_Log(L"SystemTray module already loaded");
-        if (!HookSystemTraySymbols(systemTrayModule)) {
-            Wh_Log(L"Failed to hook SystemTray symbols");
-            return FALSE;
-        }
-    } else {
-        Wh_Log(L"SystemTray module not loaded yet, hooking LoadLibraryExW");
+    wchar_t modulePath[MAX_PATH];
+    GetModuleFileName(nullptr, modulePath, ARRAYSIZE(modulePath));
+    PCWSTR fileName = wcsrchr(modulePath, L'\\');
+    fileName = fileName ? fileName + 1 : modulePath;
 
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-        auto pKernelBaseLoadLibraryExW =
-            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
-                                                      "LoadLibraryExW");
-        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    bool isExplorer = _wcsicmp(fileName, L"explorer.exe") == 0;
+
+    if (isExplorer) {
+        HMODULE systemTrayModule = GetSystemTrayModuleHandle();
+        if (systemTrayModule) {
+            Wh_Log(L"SystemTray module already loaded");
+            if (!HookSystemTraySymbols(systemTrayModule)) {
+                Wh_Log(L"Failed to hook SystemTray symbols");
+                return FALSE;
+            }
+        } else {
+            Wh_Log(L"SystemTray module not loaded yet, hooking LoadLibraryExW");
+    
+            HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+            auto pKernelBaseLoadLibraryExW =
+                (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                          "LoadLibraryExW");
+            WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                           LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
+        }
     }
+
+    // Hook Win32 APIs for proactive flyout repositioning in ALL included processes (explorer.exe and ShellHost.exe).
+    HMODULE user32 = GetModuleHandle(L"user32.dll");
+    if (user32) {
+        auto pMonitorFromPoint = (decltype(&MonitorFromPoint))
+            GetProcAddress(user32, "MonitorFromPoint");
+        auto pMonitorFromRect = (decltype(&MonitorFromRect))
+            GetProcAddress(user32, "MonitorFromRect");
+        auto pMonitorFromWindow = (decltype(&MonitorFromWindow))
+            GetProcAddress(user32, "MonitorFromWindow");
+        auto pSetWindowPos = (decltype(&SetWindowPos))
+            GetProcAddress(user32, "SetWindowPos");
+        auto pMoveWindow = (decltype(&MoveWindow))
+            GetProcAddress(user32, "MoveWindow");
+        auto pDeferWindowPos = (decltype(&DeferWindowPos))
+            GetProcAddress(user32, "DeferWindowPos");
+        auto pTrackPopupMenuEx = (decltype(&TrackPopupMenuEx))
+            GetProcAddress(user32, "TrackPopupMenuEx");
+
+        if (pMonitorFromPoint)
+            WindhawkUtils::SetFunctionHook(pMonitorFromPoint,
+                                           MonitorFromPoint_Hook,
+                                           &MonitorFromPoint_Original);
+        if (pMonitorFromRect)
+            WindhawkUtils::SetFunctionHook(pMonitorFromRect,
+                                           MonitorFromRect_Hook,
+                                           &MonitorFromRect_Original);
+        if (pMonitorFromWindow)
+            WindhawkUtils::SetFunctionHook(pMonitorFromWindow,
+                                           MonitorFromWindow_Hook,
+                                           &MonitorFromWindow_Original);
+        if (pSetWindowPos)
+            WindhawkUtils::SetFunctionHook(pSetWindowPos,
+                                           SetWindowPos_Hook,
+                                           &SetWindowPos_Original);
+        if (pMoveWindow)
+            WindhawkUtils::SetFunctionHook(pMoveWindow,
+                                           MoveWindow_Hook,
+                                           &MoveWindow_Original);
+        if (pDeferWindowPos)
+            WindhawkUtils::SetFunctionHook(pDeferWindowPos,
+                                           DeferWindowPos_Hook,
+                                           &DeferWindowPos_Original);
+        if (pTrackPopupMenuEx)
+            WindhawkUtils::SetFunctionHook(pTrackPopupMenuEx,
+                                           TrackPopupMenuEx_Hook,
+                                           &TrackPopupMenuEx_Original);
+
+        Wh_Log(L"Win32 flyout hooks: MFP=%p MFR=%p MFW=%p SWP=%p MW=%p DWP=%p TPM=%p",
+               MonitorFromPoint_Original, MonitorFromRect_Original,
+               MonitorFromWindow_Original, SetWindowPos_Original,
+               MoveWindow_Original, DeferWindowPos_Original,
+               TrackPopupMenuEx_Original);
+    }
+
+    // Log taskbar auto-hide state
+    {
+        APPBARDATA abd = {sizeof(abd)};
+        UINT state = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+        Wh_Log(L"[Taskbar] auto-hide=%s always-on-top=%s",
+               (state & ABS_AUTOHIDE) ? L"YES" : L"NO",
+               (state & ABS_ALWAYSONTOP) ? L"YES" : L"NO");
+    }
+
+    // Log all monitor geometries for diagnostics
+    Wh_Log(L"[MonitorEnum] Enumerating all displays:");
+    EnumDisplayMonitors(nullptr, nullptr,
+        [](HMONITOR hMon, HDC, LPRECT, LPARAM) -> BOOL {
+            MONITORINFOEX mi = {};
+            mi.cbSize = sizeof(mi);
+            if (GetMonitorInfo(hMon, &mi)) {
+                UINT dpiX = 96, dpiY = 96;
+                GetDpiForMonitor(hMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+                int scale = MulDiv(dpiX, 100, 96);
+                Wh_Log(L"[MonitorEnum] hMon=%p \"%s\"%s "
+                       L"full=(%d,%d,%d,%d) work=(%d,%d,%d,%d) "
+                       L"dpi=%u scale=%d%%",
+                       hMon, mi.szDevice,
+                       (mi.dwFlags & MONITORINFOF_PRIMARY)
+                           ? L" [PRIMARY]" : L"",
+                       mi.rcMonitor.left, mi.rcMonitor.top,
+                       mi.rcMonitor.right, mi.rcMonitor.bottom,
+                       mi.rcWork.left, mi.rcWork.top,
+                       mi.rcWork.right, mi.rcWork.bottom,
+                       dpiX, scale);
+            }
+            return TRUE;
+        }, 0);
 
     return TRUE;
 }
@@ -1462,8 +2285,9 @@ void Wh_ModBeforeUninit() {
     // Remove display change listener
     UninstallDisplayChangeListener();
 
-    // Remove flyout repositioning hook
-    UninstallFlyoutHook();
+    // Remove flyout subclasses and clear context
+    RemoveAllTaskbarSubclasses();
+    ClearFlyoutContext();
 
     // Remove SizeChanged listener from primary frame
     if (g_primarySystemTrayFrame && g_primarySizeChangedToken.value) {
@@ -1507,6 +2331,8 @@ void Wh_ModBeforeUninit() {
 
     // Release XAML references
     g_primarySystemTrayFrame = nullptr;
+    g_xamlDispatcher = nullptr;
+    g_trayMetrics = {};
     for (auto& si : g_secondaries) {
         si.frame = nullptr;
     }
@@ -1558,15 +2384,47 @@ static void RefreshSecondaryTrayImpl() {
     }
 }
 
-// Timer ID for deferred refresh after DPI/display changes
+static void RefreshSecondaryTrayOnXamlThread() {
+    if (g_unloading) return;
+
+    try {
+        if (g_xamlDispatcher) {
+            if (g_xamlDispatcher.HasThreadAccess()) {
+                RefreshSecondaryTrayImpl();
+            } else {
+                g_xamlDispatcher.TryRunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+                    winrt::Windows::UI::Core::DispatchedHandler([]() {
+                        RefreshSecondaryTrayImpl();
+                    }));
+            }
+            return;
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"[Refresh] Dispatcher marshal failed: 0x%08X %s",
+               (unsigned)ex.code(), ex.message().c_str());
+    } catch (...) {
+        Wh_Log(L"[Refresh] Dispatcher marshal failed (unknown exception)");
+    }
+
+    RefreshSecondaryTrayImpl();
+}
+
+// Timer IDs for deferred refresh after DPI/display changes
 static UINT_PTR g_refreshTimerId = 0;
+static UINT_PTR g_refreshTimerId2 = 0;
 
 static void CALLBACK RefreshTimerProc(HWND hwnd, UINT msg, UINT_PTR id,
                                        DWORD time) {
     KillTimer(hwnd, id);
-    g_refreshTimerId = 0;
-    Wh_Log(L"[Refresh] Deferred refresh firing");
-    RefreshSecondaryTrayImpl();
+    if (id == 1) {
+        g_refreshTimerId = 0;
+        Wh_Log(L"[Refresh] Deferred refresh firing (pass 1)");
+    } else {
+        g_refreshTimerId2 = 0;
+        Wh_Log(L"[Refresh] Deferred refresh firing (pass 2)");
+    }
+    RefreshSecondaryTrayOnXamlThread();
 }
 
 static void RefreshSecondaryTray() {
@@ -1574,16 +2432,22 @@ static void RefreshSecondaryTray() {
 
     // During DPI/display changes the primary frame hasn't re-laid-out yet
     // when the notification arrives. Defer the refresh so ActualWidth()
-    // returns the new DPI-scaled value.
+    // returns the new DPI-scaled value. A second pass at 1000ms catches
+    // cases where layout settles late (e.g. complex DPI transitions).
     if (g_displayChangeWindow) {
         if (g_refreshTimerId) {
             KillTimer(g_displayChangeWindow, g_refreshTimerId);
         }
-        g_refreshTimerId = SetTimer(g_displayChangeWindow, 1, 250,
+        g_refreshTimerId = SetTimer(g_displayChangeWindow, 1, 350,
                                      RefreshTimerProc);
-        Wh_Log(L"[Refresh] Deferred refresh scheduled (250ms)");
+
+        if (g_refreshTimerId2) {
+            KillTimer(g_displayChangeWindow, g_refreshTimerId2);
+        }
+        g_refreshTimerId2 = SetTimer(g_displayChangeWindow, 2, 1000,
+                                      RefreshTimerProc);
     } else {
-        RefreshSecondaryTrayImpl();
+        RefreshSecondaryTrayOnXamlThread();
     }
 }
 
@@ -1650,9 +2514,12 @@ static void UninstallDisplayChangeListener() {
             KillTimer(g_displayChangeWindow, g_refreshTimerId);
             g_refreshTimerId = 0;
         }
+        if (g_refreshTimerId2) {
+            KillTimer(g_displayChangeWindow, g_refreshTimerId2);
+            g_refreshTimerId2 = 0;
+        }
         DestroyWindow(g_displayChangeWindow);
         g_displayChangeWindow = nullptr;
     }
     UnregisterClass(g_displayChangeClassName, GetModuleHandle(nullptr));
 }
-
