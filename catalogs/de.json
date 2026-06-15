@@ -7132,6 +7132,35 @@
                 "version": "1.0"
             }
         },
+        "mouse-button-remap": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781532978000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781532978000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "wygodad",
+                "compilerOptions": "-lgdi32 -lshell32",
+                "description": "Remap mouse buttons (side, middle, left, right) to keyboard keys with optional modifiers, double-click actions, a master toggle hotkey and game mode",
+                "github": "https://github.com/wygodad",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Mouse Button Remapper",
+                "version": "1.7.2"
+            }
+        },
         "move-window-to-monitor": {
             "details": {
                 "defaultSorting": 910,
@@ -12247,6 +12276,35 @@
                 ],
                 "name": "Transparent Screensaver Fix",
                 "version": "1.0.0"
+            }
+        },
+        "tray-hover-expand": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781532890000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781532890000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "wygodad",
+                "compilerOptions": "-lole32 -loleaut32 -lshell32",
+                "description": "Open the hidden tray icons flyout on hover instead of clicking the chevron; optionally collapse it when the cursor leaves",
+                "github": "https://github.com/wygodad",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Tray hover expand",
+                "version": "1.4.2"
             }
         },
         "two-sided-snapping": {
