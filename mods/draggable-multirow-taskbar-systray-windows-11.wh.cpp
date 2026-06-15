@@ -9,7 +9,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -DEDGE_RESIZE_FRAME_HOOKS_ONLY=1 -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshcore -lversion -ladvapi32 -ld2d1 -lgdi32
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshcore -lversion -ladvapi32 -ld2d1 -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -73,6 +73,18 @@ platform that makes this kind of taskbar customization possible.
 // This single mod composes coordinated taskbar height, multirow taskbar,
 // notification-area wrapping, and taskbar styling behavior behind one Windhawk
 // mod ID.
+
+#ifndef WINVER
+#define WINVER 0x0A00
+#endif
+
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
+
+#ifndef EDGE_RESIZE_FRAME_HOOKS_ONLY
+#define EDGE_RESIZE_FRAME_HOOKS_ONLY 1
+#endif
 
 #include <windhawk_utils.h>
 
