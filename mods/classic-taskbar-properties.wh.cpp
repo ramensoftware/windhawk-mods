@@ -23,6 +23,9 @@ This Windhawk mod restores the classic "Taskbar and Start Menu Properties" dialo
 - **Configure Aero Peek**
 - **Start Menu customization** — only settings that actually work on Windows 10 are included
 - **Toolbars tab** — Address, Links, Tablet PC Input Panel, Desktop
+## Screenshots
+
+![Classic Taskbar Properties Dialog](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/pic.PNG)
 
 ## Start Menu Settings (Windows 10)
 
