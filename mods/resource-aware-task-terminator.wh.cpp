@@ -1621,15 +1621,15 @@ static void WINAPI EntryPoint_Hook() {
     ExitThread(0);
 }
 
-bool WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
     g_hThread = CreateThread(NULL, 0, HotkeyThread, NULL, 0, &g_dwThreadId);
     if (!g_hThread) {
         Wh_Log(L"[AI Counsel] Failed to create hotkey thread in tool host (%lu).", GetLastError());
-        return false;
+        return FALSE;
     }
     Wh_Log(L"[AI Counsel] Tool hotkey host started. PID=%lu thread=%lu.", GetCurrentProcessId(), g_dwThreadId);
-    return true;
+    return TRUE;
 }
 
 void WhTool_ModUninit() {
