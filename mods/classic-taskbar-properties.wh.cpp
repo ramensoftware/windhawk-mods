@@ -82,7 +82,6 @@ static HBRUSH        g_hBrushWindow    = NULL;
 static HBRUSH        g_hBrushBtnFace   = NULL;
 static LONG volatile g_dialogOpen      = 0;
 static int           g_currentTab      = 0;
-static WNDPROC       g_origTabProc     = nullptr;
 
 static HWND          g_hwndStartCustom = NULL;
 static LONG volatile g_startCustomOpen = 0;
@@ -475,7 +474,7 @@ static void InitLocalization() {
         wcscpy_safe(g_str.toolbar_desktop,     32, L"Desktop");
         wcscpy_safe(g_str.about_title,         64, L"Informazioni sulla mod");
         wcscpy_safe(g_str.about_text,        4096,
-            L"Classic Taskbar Properties (Windows 7 Style)\r\n\r\n"
+            L"Classic Taskbar Properties\r\n\r\n"
             L"Questa mod per Windhawk ripristina la classica finestra "
             L"\"Proprieta' della barra delle applicazioni e del menu Start\" "
             L"ispirata a Windows 7.\r\n\r\n"
@@ -487,7 +486,6 @@ static void InitLocalization() {
             L"- Configura la combinazione dei pulsanti della barra delle applicazioni\r\n"
             L"- Configura Aero Peek\r\n"
             L"- Accesso rapido alle impostazioni dell'area di notifica\r\n"
-            L"- Personalizzazione completa del menu Start\r\n"
             L"\r\n"
             L"Limitazioni note:\r\n"
             L"\r\n"
@@ -498,6 +496,7 @@ static void InitLocalization() {
             L"imprevisti o instabilita' di Explorer. Il supporto potrebbe essere "
             L"aggiunto in una versione futura.\r\n"
             L"\r\n"
+            L"- Personalizzazione del menu Start è limitata\r\n"
             L"- Le barre degli strumenti classiche (Indirizzo, Collegamenti, Desktop "
             L"e altre) non sono supportate. Microsoft ha progressivamente rimosso o "
             L"modificato queste funzionalita' nelle versioni piu' recenti di Windows, "
@@ -582,7 +581,7 @@ static void InitLocalization() {
         wcscpy_safe(g_str.toolbar_desktop,     32, L"Desktop");
         wcscpy_safe(g_str.about_title,         64, L"About this mod");
         wcscpy_safe(g_str.about_text,        4096,
-            L"Classic Taskbar Properties (Windows 7 Style)\r\n\r\n"
+            L"Classic Taskbar Properties\r\n\r\n"
             L"This Windhawk mod restores the classic "
             L"\"Taskbar and Start Menu Properties\" dialog "
             L"inspired by Windows 7.\r\n\r\n"
@@ -594,7 +593,7 @@ static void InitLocalization() {
             L"- Configure taskbar button grouping\r\n"
             L"- Configure Aero Peek\r\n"
             L"- Quick access to notification area settings\r\n"
-            L"- Full Start menu customization\r\n"
+
             L"\r\n"
             L"Known limitations:\r\n"
             L"\r\n"
@@ -610,6 +609,7 @@ static void InitLocalization() {
             L"redesigned these features in recent Windows versions, "
             L"making full implementation significantly more complex.\r\n"
             L"\r\n"
+            L"- The Start menu customization is limited\r\n"
             L"- Some Start Menu settings may require Explorer restart "
             L"or logout to be fully applied.\r\n"
             L"\r\n"
@@ -736,39 +736,6 @@ static void BalanceTextAndCombo(HWND hwndDlg, int idStatic, int idCombo) {
     }
     SetWindowPos(hStatic, NULL, rcStatic.left, rcStatic.top, newStaticWidth, rcStatic.bottom - rcStatic.top, SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(hCombo,  NULL, newComboX,     rcCombo.top,  newComboWidth,  rcCombo.bottom  - rcCombo.top,  SWP_NOZORDER | SWP_NOACTIVATE);
-}
-
-static LRESULT CALLBACK TabSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_PAINT) {
-        LRESULT r = CallWindowProcW(g_origTabProc, hwnd, msg, wp, lp);
-        HDC hdc = GetDC(hwnd);
-        if (hdc) {
-            RECT rcClient; GetClientRect(hwnd, &rcClient);
-            int tabCount = TabCtrl_GetItemCount(hwnd);
-            RECT rcLastTab = {};
-            if (tabCount > 0) TabCtrl_GetItemRect(hwnd, tabCount - 1, &rcLastTab);
-            RECT rcFill;
-            rcFill.left = rcLastTab.right; rcFill.top = rcClient.top;
-            rcFill.right = rcClient.right; rcFill.bottom = rcLastTab.bottom;
-            if (rcFill.left < rcFill.right && rcFill.top < rcFill.bottom) {
-                FillRect(hdc, &rcFill, GetSysColorBrush(COLOR_WINDOW));
-                HPEN hPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_3DSHADOW));
-                HPEN hOld = (HPEN)SelectObject(hdc, hPen);
-                MoveToEx(hdc, rcLastTab.right, rcClient.top, NULL);
-                LineTo(hdc, rcLastTab.right, rcLastTab.bottom);
-                SelectObject(hdc, hOld);
-                DeleteObject(hPen);
-            }
-            ReleaseDC(hwnd, hdc);
-        }
-        return r;
-    }
-    if (msg == WM_ERASEBKGND) {
-        HDC hdc = (HDC)wp; RECT rc; GetClientRect(hwnd, &rc);
-        FillRect(hdc, &rc, GetSysColorBrush(COLOR_WINDOW));
-        return 1;
-    }
-    return CallWindowProcW(g_origTabProc, hwnd, msg, wp, lp);
 }
 
 static void ApplySettings(HWND hwnd) {
@@ -1085,7 +1052,6 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         addTab(0, g_str.tab_taskbar);
         addTab(1, g_str.tab_start);
         addTab(2, g_str.tab_toolbars);
-        g_origTabProc = (WNDPROC)SetWindowLongPtrW(hTab, GWLP_WNDPROC, (LONG_PTR)TabSubclassProc);
 
         const DialogControlBinding bindings[] = {
             { IDC_GRP_APPEARANCE,  g_str.grp_appearance  }, { IDC_CHK_LOCK,        g_str.chk_lock       },
@@ -1230,11 +1196,6 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         break;
     }
     case WM_DESTROY:
-        if (g_origTabProc) {
-            HWND hTab = GetDlgItem(hwnd, IDC_TAB_MAIN);
-            if (hTab) SetWindowLongPtrW(hTab, GWLP_WNDPROC, (LONG_PTR)g_origTabProc);
-            g_origTabProc = nullptr;
-        }
         if (g_hFontUi)      { DeleteObject(g_hFontUi);      g_hFontUi      = NULL; }
         if (g_hBrushBtnFace){ DeleteObject(g_hBrushBtnFace); g_hBrushBtnFace= NULL; }
         if (g_hBrushWindow) { DeleteObject(g_hBrushWindow);  g_hBrushWindow = NULL; }
