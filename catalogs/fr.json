@@ -339,6 +339,34 @@
                 "version": "1.0"
             }
         },
+        "antigravity-portable": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781530749000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781530749000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "easyatm",
+                "compilerOptions": "-lshell32",
+                "description": "Make Antigravity IDE portable by redirecting user data and extensions directories.",
+                "github": "https://github.com/easyatm",
+                "include": [
+                    "Antigravity IDE.exe"
+                ],
+                "name": "Antigravity IDE Portable",
+                "version": "1.0.260614"
+            }
+        },
         "app-theme-crash-fixer": {
             "details": {
                 "defaultSorting": 1420,

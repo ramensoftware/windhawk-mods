@@ -336,6 +336,37 @@
                 "version": "1.0"
             }
         },
+        "antigravity-portable": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781530749000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781530749000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "easyatm",
+                "compilerOptions": "-lshell32",
+                "description": "使 Antigravity IDE 成为便携版，重定向数据与扩展目录。",
+                "github": "https://github.com/easyatm",
+                "include": [
+                    "Antigravity IDE.exe"
+                ],
+                "name": "Antigravity IDE Portable",
+                "version": "1.0.260614"
+            },
+            "metadataEnglish": {
+                "description": "Make Antigravity IDE portable by redirecting user data and extensions directories."
+            }
+        },
         "app-theme-crash-fixer": {
             "details": {
                 "defaultSorting": 1420,
