@@ -2,7 +2,7 @@
 // @id              explorer-folder-hover-menu
 // @name            Folder Hover Menu
 // @description     Hover a folder in File Explorer to get an expand button that opens a cascading menu of the folder's contents
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -125,7 +125,8 @@ static HANDLE g_workerReadyEvent;
 static winrt::com_ptr<IUIAutomation> g_workerUia;  // Worker thread only.
 static winrt::com_ptr<IUIAutomationElement>
     g_workerContainer;                      // Worker thread only.
-static HWND g_workerContainerRoot;          // Worker thread only.
+static HWND g_workerContainerTab;           // Worker thread only: the tab the
+                                            // cached container belongs to.
 static PIDLIST_ABSOLUTE g_workerFolderAbs;  // Worker thread only: the folder
 static bool g_workerFolderIsDesktop;        // the shared children map holds.
 static bool g_workerChildrenValid;
@@ -166,7 +167,8 @@ struct CachedItem {
 // rebuilds it off-thread on request.
 static CRITICAL_SECTION g_snapshotLock;
 static bool g_snapValid;
-static HWND g_snapRoot;
+static HWND
+    g_snapTab;  // The tab (see GetExplorerTabWindow) the snapshot holds.
 static bool g_snapIsDesktop;
 static std::vector<CachedItem> g_snapItems;
 static LONG g_snapNameColumnRight;  // Right edge of the name column, 0 if none.
@@ -177,7 +179,7 @@ static std::unordered_map<std::wstring, PIDLIST_ABSOLUTE> g_snapChildren;
 
 // Refresh request, UI thread -> worker (guarded by g_snapshotLock).
 static bool g_refreshRequested;
-static HWND g_reqRoot;
+static HWND g_reqTab;
 static bool g_reqIsDesktop;
 static POINT g_reqPoint;
 
@@ -514,14 +516,36 @@ static void WorkerBuildItems(std::vector<CachedItem>& items,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Shell: resolve the current folder of an Explorer window and look up a child.
+// Shell: resolve the current folder of an Explorer tab and look up a child.
 
-// Finds the active shell view of the given top-level Explorer window and
-// returns its current folder as an IShellFolder plus the folder's absolute pidl
-// (the caller frees the pidl with ILFree; the folder is owned by the com_ptr).
-static bool GetFolderForExplorerWindow(HWND root,
-                                       winrt::com_ptr<IShellFolder>& outFolder,
-                                       PIDLIST_ABSOLUTE* outFolderAbs) {
+// File Explorer tabs share a single CabinetWClass top-level window; each tab is
+// a separate ShellTabWindowClass child of it, and the visible tab is the
+// topmost child. Identify the tab a window belongs to by the top-level window's
+// direct child that contains it. For a non-tabbed Explorer window (older
+// builds) or the desktop there is no per-tab child, but the returned window is
+// still a stable per-view identity, so the same matching works everywhere. Used
+// to tell tabs apart so the hover button and its menu act on the tab actually
+// under the cursor, not on whichever tab enumerates first.
+static HWND GetExplorerTabWindow(HWND hwnd) {
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (!root || hwnd == root) {
+        return root;
+    }
+    HWND child = hwnd;
+    HWND parent = GetParent(child);
+    while (parent && parent != root) {
+        child = parent;
+        parent = GetParent(child);
+    }
+    return parent == root ? child : root;
+}
+
+// Finds the shell view that belongs to the given Explorer tab and returns its
+// current folder as an IShellFolder plus the folder's absolute pidl (the caller
+// frees the pidl with ILFree; the folder is owned by the com_ptr).
+static bool GetFolderForExplorerTab(HWND tab,
+                                    winrt::com_ptr<IShellFolder>& outFolder,
+                                    PIDLIST_ABSOLUTE* outFolderAbs) {
     outFolder = nullptr;
     *outFolderAbs = nullptr;
 
@@ -564,7 +588,7 @@ static bool GetFolderForExplorerWindow(HWND root,
 
         HWND viewHwnd = nullptr;
         if (FAILED(view->GetWindow(&viewHwnd)) || !viewHwnd ||
-            GetAncestor(viewHwnd, GA_ROOT) != root) {
+            GetExplorerTabWindow(viewHwnd) != tab) {
             continue;
         }
 
@@ -772,7 +796,7 @@ static bool EnsureWorkerUia() {
 // Builds a fresh snapshot for the given window/point and installs it for the UI
 // thread to hit-test. The expensive UIA + shell work happens here, off the UI
 // thread; only the brief install is done under the lock.
-static void WorkerBuildSnapshot(HWND root, bool isDesktop, POINT pt) {
+static void WorkerBuildSnapshot(HWND tab, bool isDesktop, POINT pt) {
     ULONGLONG tick = GetTickCount64();
 
     winrt::com_ptr<IShellFolder> folder;
@@ -780,7 +804,7 @@ static void WorkerBuildSnapshot(HWND root, bool isDesktop, POINT pt) {
     if (isDesktop) {
         SHGetDesktopFolder(folder.put());
     } else {
-        GetFolderForExplorerWindow(root, folder, &folderAbs);
+        GetFolderForExplorerTab(tab, folder, &folderAbs);
     }
 
     if (!folder) {
@@ -789,7 +813,7 @@ static void WorkerBuildSnapshot(HWND root, bool isDesktop, POINT pt) {
         EnterCriticalSection(&g_snapshotLock);
         g_snapItems.clear();
         g_snapNameColumnRight = 0;
-        g_snapRoot = root;
+        g_snapTab = tab;
         g_snapIsDesktop = isDesktop;
         g_snapBuiltTick = tick;
         g_snapValid = true;
@@ -803,10 +827,10 @@ static void WorkerBuildSnapshot(HWND root, bool isDesktop, POINT pt) {
                      !g_workerFolderAbs || !folderAbs ||
                      !ILIsEqual(g_workerFolderAbs, folderAbs));
 
-    // (Re)acquire the list element when the window changed.
-    if (root != g_workerContainerRoot || !g_workerContainer) {
+    // (Re)acquire the list element when the tab changed.
+    if (tab != g_workerContainerTab || !g_workerContainer) {
         g_workerContainer = FindContainerFromPoint(pt);
-        g_workerContainerRoot = g_workerContainer ? root : nullptr;
+        g_workerContainerTab = g_workerContainer ? tab : nullptr;
     }
 
     std::vector<CachedItem> items;
@@ -819,7 +843,7 @@ static void WorkerBuildSnapshot(HWND root, bool isDesktop, POINT pt) {
         auto container = FindContainerFromPoint(pt);
         if (container) {
             g_workerContainer = std::move(container);
-            g_workerContainerRoot = root;
+            g_workerContainerTab = tab;
             WorkerBuildItems(items, nameColumnRight);
         }
     }
@@ -836,7 +860,7 @@ static void WorkerBuildSnapshot(HWND root, bool isDesktop, POINT pt) {
     EnterCriticalSection(&g_snapshotLock);
     g_snapItems.swap(items);
     g_snapNameColumnRight = nameColumnRight;
-    g_snapRoot = root;
+    g_snapTab = tab;
     g_snapIsDesktop = isDesktop;
     g_snapBuiltTick = tick;
     g_snapValid = true;
@@ -891,13 +915,13 @@ static DWORD WINAPI WorkerThreadProc(LPVOID param) {
             continue;
         }
         if (msg.hwnd == nullptr && msg.message == WM_APP_DO_REFRESH) {
-            HWND root = nullptr;
+            HWND tab = nullptr;
             bool isDesktop = false;
             POINT pt = {};
             bool have = false;
             EnterCriticalSection(&g_snapshotLock);
             if (g_refreshRequested) {
-                root = g_reqRoot;
+                tab = g_reqTab;
                 isDesktop = g_reqIsDesktop;
                 pt = g_reqPoint;
                 g_refreshRequested = false;
@@ -905,7 +929,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID param) {
             }
             LeaveCriticalSection(&g_snapshotLock);
             if (have) {
-                WorkerBuildSnapshot(root, isDesktop, pt);
+                WorkerBuildSnapshot(tab, isDesktop, pt);
                 if (g_sinkWnd) {
                     PostMessageW(g_sinkWnd, WM_APP_REFRESH_DONE, 0, 0);
                 }
@@ -1364,7 +1388,7 @@ static void Evaluate(bool forceRefresh) {
     }
 
     bool onButton = g_chevronVisible && PtInRect(&g_chevronRect, pt);
-    HWND root = nullptr;
+    HWND tab = nullptr;
     bool isDesktop = false;
 
     if (onButton) {
@@ -1379,12 +1403,15 @@ static void Evaluate(bool forceRefresh) {
     } else {
         // Cheap window-level gate: only consider the file list area.
         HWND under = WindowFromPoint(pt);
-        root = under ? GetAncestor(under, GA_ROOT) : nullptr;
+        HWND root = under ? GetAncestor(under, GA_ROOT) : nullptr;
         if (!under || !root || !IsExplorerOrDesktopRoot(root, &isDesktop) ||
             !IsWithinClass(under, L"SHELLDLL_DefView", 8)) {
             HideChevron();
             return;
         }
+        // Identify the specific tab under the cursor so the snapshot and folder
+        // lookup track it, not whichever tab of this window enumerates first.
+        tab = GetExplorerTabWindow(under);
     }
 
     PIDLIST_ABSOLUTE childAbs = nullptr;
@@ -1398,11 +1425,11 @@ static void Evaluate(bool forceRefresh) {
             LeaveCriticalSection(&g_snapshotLock);
             return;
         }
-        root = g_snapRoot;
+        tab = g_snapTab;
         isDesktop = g_snapIsDesktop;
     }
     bool snapMatches =
-        g_snapValid && g_snapRoot == root && g_snapIsDesktop == isDesktop;
+        g_snapValid && g_snapTab == tab && g_snapIsDesktop == isDesktop;
     if (snapMatches) {
         for (const CachedItem& item : g_snapItems) {
             RECT r = item.rect;
@@ -1428,7 +1455,7 @@ static void Evaluate(bool forceRefresh) {
     }
 
     if (requestRefresh) {
-        g_reqRoot = root;
+        g_reqTab = tab;
         g_reqIsDesktop = isDesktop;
         g_reqPoint = pt;
         g_refreshRequested = true;
