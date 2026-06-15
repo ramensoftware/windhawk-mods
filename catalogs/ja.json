@@ -9274,19 +9274,20 @@
                     1
                 ],
                 "ratingUsers": 2,
-                "updated": 1781342518000,
+                "updated": 1781530235000,
                 "users": 40
             },
             "metadata": {
                 "author": "communism420",
                 "compilerOptions": "-lcomctl32 -lgdi32 -lshell32",
-                "description": "Adds a compact saved commands list to the Windows Run dialog.",
+                "description": "Adds a compact saved commands list to Run-style dialogs.",
                 "github": "https://github.com/communism420",
                 "include": [
-                    "explorer.exe"
+                    "explorer.exe",
+                    "Taskmgr.exe"
                 ],
                 "name": "Saved Run Commands",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "scroll-window-opacity": {
