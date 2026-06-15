@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-15T14:16:18.000Z</updated>
+    <updated>2026-06-15T16:21:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Folder Hover Menu 1.0.1]]></title>
+        <id>https://windhawk.net/mods/explorer-folder-hover-menu#b472df5c5691d1a660d2e77cd61e142bf448d59e</id>
+        <link href="https://windhawk.net/mods/explorer-folder-hover-menu"/>
+        <updated>2026-06-15T16:21:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a brief white flash in dark mode.</li>
+<li>Fixed the expand button staying in place after navigating to another folder.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mouse Button Remapper 1.7.2]]></title>
         <id>https://windhawk.net/mods/mouse-button-remap#073f0f0f798ceab2c0f67e6d7fb2a9a1b11ac201</id>
@@ -712,67 +726,6 @@ from the <strong>TranslucentTB</strong> project.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.1]]></title>
-        <id>https://windhawk.net/mods/settings-to-control-panel#1ac6e9fec2eed8fc9df2082f410e528b70dc1720</id>
-        <link href="https://windhawk.net/mods/settings-to-control-panel"/>
-        <updated>2026-06-09T20:31:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="redirectsettingscontrolpanel">Redirect Settings → Control Panel</h1>
-<p>This mod intercepts modern <code>ms-settings:</code> URIs and redirects them to their
-corresponding classic Control Panel applets using only native Windows components.</p>
-<hr />
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li><strong>Windows 10</strong> – Mostly complete support</li>
-<li><strong>Windows 11</strong> – Partial support (some redirects may vary by build)</li>
-</ul>
-<hr />
-<h2 id="features">Features</h2>
-<ul>
-<li>Redirects numerous <code>ms-settings:</code> URIs to classic Control Panel</li>
-<li>Anti-loop protection</li>
-<li>Configurable fallback modes</li>
-</ul>
-<hr />
-<h2 id="configuration">Configuration</h2>
-<ul>
-<li><strong>EnableRedirects</strong> – Turn the mod on or off</li>
-<li><strong>UIOnlyRedirects</strong> – Only redirect clicks (safer, may miss some)</li>
-<li><strong>FallbackMode</strong> – What to do when no classic page exists:</li>
-<li><code>0</code> = ignore (do nothing)</li>
-<li><code>1</code> = open Control Panel</li>
-<li><code>2</code> = open modern Settings (default)</li>
-<li><strong>Win11CompatibilityMode</strong> – Extra safety for Windows 11</li>
-<li><strong>MaxLaunchesPerUri</strong> – Prevents infinite loops (default: 3 launches per 5 seconds)</li>
-</ul>
-<hr />
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>System tray icons (audio/network) use DCOM activation and cannot be intercepted (This could change in future)</li>
-<li>Windows 11 support is limited due to Microsoft's architectural changes and some redirects might change based on versions.</li>
-</ul>
-<hr />
-<h2 id="howitworks">How It Works</h2>
-<p>The mod hooks:</p>
-<ul>
-<li><code>ShellExecuteExW</code> / <code>ShellExecuteW</code></li>
-<li><code>CreateProcessW</code></li>
-<li><code>IShellDispatch2::ShellExecute</code></li>
-</ul>
-<p>When a <code>ms-settings:</code> URI is detected, it launches the corresponding classic
-Control Panel target instead of the modern Settings app.</p>
-<hr />
-<h2 id="credits">Credits</h2>
-<ul>
-<li>m417z – Code reviews and feedback</li>
-<li>Anixx – Testing on Windows 11 23H2</li>
-<li>dbilanoski – CLSID documentation</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
