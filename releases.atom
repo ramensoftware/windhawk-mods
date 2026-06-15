@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-15T13:39:09.000Z</updated>
+    <updated>2026-06-15T13:43:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Unlock Office Files for Upload 0.3]]></title>
+        <id>https://windhawk.net/mods/unlock-office-file-upload#06beab5c4cba54e96b03ab52864709da6c2c1a33</id>
+        <link href="https://windhawk.net/mods/unlock-office-file-upload"/>
+        <updated>2026-06-15T13:43:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="unlockinuseofficefilesforupload">Unlock In-Use Office Files for Upload</h1>
+<p>When you try to upload or attach a <code>.docx</code>, <code>.xlsx</code>, <code>.pptx</code> (or their legacy
+variants) while the file is open in Word/Excel/PowerPoint, you get:</p>
+<blockquote>
+  <p><strong>This file is in use. Enter a new name or close the file that's open in
+another program.</strong></p>
+</blockquote>
+<p>This mod silently intercepts that failure in the uploading process (Chrome,
+Edge, Outlook, Teams, Discord, etc.), makes a temporary copy of the file, and
+redirects the open call to the copy. The OS deletes the copy automatically when
+the caller closes the handle (<code>FILE_FLAG_DELETE_ON_CLOSE</code>) — even on process
+crash or abnormal exit.</p>
+<p><strong>What you get:</strong> The uploader receives the last-saved version of the file with
+no prompts and no need to close Word first.</p>
+<h2 id="knownlimitations">Known Limitations</h2>
+<p><strong>Unsaved edits not included.</strong> The copy reflects the last <em>saved</em> state.
+Unsaved in-memory edits in Word are not captured — this is inherent to how
+Windows file locking works.</p>
+<p><strong>Deny-read locks not bypassed.</strong> The redirect only works when the existing
+lock permits shared reads (Word's usual <code>FILE_SHARE_READ</code> lock). Legacy
+formats (<code>.doc</code>, <code>.xls</code>, <code>.ppt</code>) held by some applications may deny all reads
+outright, in which case <code>CopyFileW</code> also fails and the mod re-surfaces the
+original sharing violation error.</p>
+<h2 id="scopenote">Scope Note</h2>
+<p>The mod injects into all processes (required since the uploader can be any
+app). <code>SearchIndexer.exe</code> and <code>explorer.exe</code> are excluded via <code>@exclude</code>.
+Session 0 (system service) processes are skipped at init time. The
+<code>CreateFileW</code> hook has near-zero overhead on the success path — it returns
+immediately when the original call succeeds. A <code>thread_local</code> reentrancy
+guard ensures that <code>CopyFileW</code>'s own internal <code>CreateFileW</code> calls do not
+re-enter the hook logic.</p>]]></content>
+        <author>
+            <name>Loerei</name>
+            <uri>https://github.com/loerei</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Antigravity IDE Portable 1.0.260614]]></title>
         <id>https://windhawk.net/mods/antigravity-portable#7b625ccab8e0688bdd65265724b76a02b5e9728d</id>
@@ -682,40 +723,6 @@ the way it was in Windows 95, before Windows 98.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[IME Native Mode Lock 0.1]]></title>
-        <id>https://windhawk.net/mods/ime-mode-lock#6f1478f3ddcca4a45d5a1930a2d500db8738a386</id>
-        <link href="https://windhawk.net/mods/ime-mode-lock"/>
-        <updated>2026-05-30T18:56:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="imenativemodelock">IME Native Mode Lock</h1>
-<p>Forces supported IMEs to stay in their native input mode, blocking
-both system-initiated and user-initiated mode switches.</p>
-<p>By default, Windows automatically switches input modes when changing
-window focus or switching between applications. This mod blocks that
-behavior, keeping your IME in its native mode at all times.</p>
-<h2 id="supportedimes">Supported IMEs</h2>
-<ul>
-<li><strong>Simplified Chinese</strong> (Microsoft Pinyin, etc.) — always stays in Chinese mode</li>
-<li>More languages can be added in future updates</li>
-</ul>
-<p><strong>Pair with</strong> Caps IME Switcher (<code>caps-ime-switcher</code>) — short-press
-Caps Lock to switch input languages, long-press for Caps Lock.</p>
-<hr />
-<p>强制支持的输入法保持在原生输入模式，同时阻止系统自动切换和用户主动切换。</p>
-<p>默认情况下，Windows 在切换窗口焦点或应用程序时会自动切换输入模式。
-此 mod 阻止该行为，始终保持输入法在原生输入模式。</p>
-<h2 id="">支持的输入法</h2>
-<ul>
-<li><strong>简体中文</strong>（微软拼音等）— 始终保持中文模式</li>
-<li>未来可添加更多语言支持</li>
-</ul>
-<p><strong>推荐搭配</strong> Caps IME Switcher (<code>caps-ime-switcher</code>) — 可使用 Caps Lock
-短按切换输入语言，长按触发大小写锁定，配合本 mod 体验更佳。</p>]]></content>
-        <author>
-            <name>ZeonXr</name>
-            <uri>https://github.com/ZeonXr</uri>
         </author>
     </entry>
 </feed>

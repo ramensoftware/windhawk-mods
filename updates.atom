@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-15T13:39:09.000Z</updated>
+    <updated>2026-06-15T13:43:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Unlock Office Files for Upload 0.3]]></title>
+        <id>https://windhawk.net/mods/unlock-office-file-upload#06beab5c4cba54e96b03ab52864709da6c2c1a33</id>
+        <link href="https://windhawk.net/mods/unlock-office-file-upload"/>
+        <updated>2026-06-15T13:43:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="unlockinuseofficefilesforupload">Unlock In-Use Office Files for Upload</h1>
+<p>When you try to upload or attach a <code>.docx</code>, <code>.xlsx</code>, <code>.pptx</code> (or their legacy
+variants) while the file is open in Word/Excel/PowerPoint, you get:</p>
+<blockquote>
+  <p><strong>This file is in use. Enter a new name or close the file that's open in
+another program.</strong></p>
+</blockquote>
+<p>This mod silently intercepts that failure in the uploading process (Chrome,
+Edge, Outlook, Teams, Discord, etc.), makes a temporary copy of the file, and
+redirects the open call to the copy. The OS deletes the copy automatically when
+the caller closes the handle (<code>FILE_FLAG_DELETE_ON_CLOSE</code>) — even on process
+crash or abnormal exit.</p>
+<p><strong>What you get:</strong> The uploader receives the last-saved version of the file with
+no prompts and no need to close Word first.</p>
+<h2 id="knownlimitations">Known Limitations</h2>
+<p><strong>Unsaved edits not included.</strong> The copy reflects the last <em>saved</em> state.
+Unsaved in-memory edits in Word are not captured — this is inherent to how
+Windows file locking works.</p>
+<p><strong>Deny-read locks not bypassed.</strong> The redirect only works when the existing
+lock permits shared reads (Word's usual <code>FILE_SHARE_READ</code> lock). Legacy
+formats (<code>.doc</code>, <code>.xls</code>, <code>.ppt</code>) held by some applications may deny all reads
+outright, in which case <code>CopyFileW</code> also fails and the mod re-surfaces the
+original sharing violation error.</p>
+<h2 id="scopenote">Scope Note</h2>
+<p>The mod injects into all processes (required since the uploader can be any
+app). <code>SearchIndexer.exe</code> and <code>explorer.exe</code> are excluded via <code>@exclude</code>.
+Session 0 (system service) processes are skipped at init time. The
+<code>CreateFileW</code> hook has near-zero overhead on the success path — it returns
+immediately when the original call succeeds. A <code>thread_local</code> reentrancy
+guard ensures that <code>CopyFileW</code>'s own internal <code>CreateFileW</code> calls do not
+re-enter the hook logic.</p>]]></content>
+        <author>
+            <name>Loerei</name>
+            <uri>https://github.com/loerei</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Antigravity IDE Portable 1.0.260614]]></title>
         <id>https://windhawk.net/mods/antigravity-portable#7b625ccab8e0688bdd65265724b76a02b5e9728d</id>
@@ -493,37 +534,6 @@ Control Panel target instead of the modern Settings app.</p>
         <author>
             <name>drgutman</name>
             <uri>https://github.com/drgutman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Island for Windows 1.1.1]]></title>
-        <id>https://windhawk.net/mods/dynamic-island-for-windows#f9abdadf12d052e7120571bdf52f578ad98c4333</id>
-        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
-        <updated>2026-06-09T07:51:07.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="fixes">Fixes</h2>
-<ul>
-<li>Fixed a browser error that could occur when clicking on the Dynamic Island widget.</li>
-<li>Fixed mouse wheel scrolling issues, including delayed responses and unintended looping behavior.</li>
-<li>Fixed an issue where widgets could disappear after clicking on the desktop or using Win + D.</li>
-</ul>
-<h2 id="improvements">Improvements</h2>
-<h3 id="weather">Weather</h3>
-<ul>
-<li>Improved the Weather UI.</li>
-<li>Added support for Imperial units (°F, mph, etc.).</li>
-<li>Added auto-hide functionality.</li>
-<li>Added hover behavior settings.</li>
-</ul>
-<h3 id="mediacontrols">Media Controls</h3>
-<ul>
-<li>Added click-to-expand functionality for the media widget.</li>
-<li>Added a persistent media pill option.</li>
-<li>Centered media playback controls for better alignment.</li>
-<li>Added click animations to media control buttons for improved feedback.</li>
-</ul>]]></content>
-        <author>
-            <name>Himanshu</name>
-            <uri>https://github.com/devcode90</uri>
         </author>
     </entry>
 </feed>

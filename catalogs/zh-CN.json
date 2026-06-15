@@ -12405,6 +12405,39 @@
                 "version": "2.1"
             }
         },
+        "unlock-office-file-upload": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781530999000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781530999000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Loerei",
+                "description": "Transparently copies locked Office files (docx, xlsx, pptx, etc.) to a temp location when an upload or send is attempted while they're open in Word/Excel/PowerPoint. The OS deletes the copy automatically via FILE_FLAG_DELETE_ON_CLOSE.",
+                "exclude": [
+                    "SearchIndexer.exe",
+                    "explorer.exe"
+                ],
+                "github": "https://github.com/loerei",
+                "homepage": "https://github.com/loerei/windhawk-unlock-office-file-upload",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "Unlock Office Files for Upload",
+                "version": "0.3"
+            }
+        },
         "unlock-taskmgr-server": {
             "details": {
                 "defaultSorting": 1160,
