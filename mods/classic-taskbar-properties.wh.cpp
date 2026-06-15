@@ -2,7 +2,7 @@
 // @id              classic-taskbar-properties
 // @name            Classic Taskbar and Start Menu Properties
 // @description     Restores the classic Windows 7-style "Taskbar and Start Menu Properties" dialog with full functionality. Includes all three tabs (Taskbar, Start Menu, Toolbars). Primarily designed for Windows 10. Windows 11 support may be limited.
-// @version         2.0.0
+// @version         2.0.2
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -55,10 +55,23 @@ This Windhawk mod restores the classic "Taskbar and Start Menu Properties" dialo
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- language: auto
+  $name: Lingua / Language
+  $description: User interface language. Use "auto" for automatic detection.
+  $options:
+    - auto: Automatica / Auto
+    - it: Italiano
+    - en: English
+*/
+// ==/WindhawkModSettings==
+
 #include <windows.h>
 #include <commctrl.h>
 #include <shlwapi.h>
 #include <shellapi.h>
+#include <strsafe.h>
 
 #ifndef SIID_TASKBAR
 #define SIID_TASKBAR 39
@@ -76,6 +89,46 @@ namespace DialogSizes {
     constexpr short START_HEIGHT = 310;
 }
 
+// Costante per ShellExecute successo (presa da settings-to-control-panel)
+static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
+
+// Anti-rientranza hook (preso da settings-to-control-panel)
+static thread_local int g_hookDepth = 0;
+
+struct HookGuard {
+    HookGuard() { ++g_hookDepth; }
+    ~HookGuard() { --g_hookDepth; }
+    bool IsReentrant() const { return g_hookDepth > 1; }
+};
+
+// Controllo processo figlio (preso da settings-to-control-panel)
+static wchar_t g_childEnvBlock[32768] = {0};
+
+static void BuildChildEnvironment() {
+    LPWCH curEnv = GetEnvironmentStringsW();
+    size_t pos = 0;
+    if (curEnv) {
+        LPWCH p = curEnv;
+        while (*p && pos < sizeof(g_childEnvBlock)/sizeof(wchar_t) - 100) {
+            size_t len = wcslen(p);
+            if (wcsncmp(p, L"WH_CTP_NOREDIRECT=", 19) != 0) {
+                wcscpy_s(g_childEnvBlock + pos, sizeof(g_childEnvBlock)/sizeof(wchar_t) - pos, p);
+                pos += len;
+                g_childEnvBlock[pos++] = L'\0';
+            }
+            p += len + 1;
+        }
+        FreeEnvironmentStringsW(curEnv);
+    }
+    wcscpy_s(g_childEnvBlock + pos, sizeof(g_childEnvBlock)/sizeof(wchar_t) - pos, L"WH_CTP_NOREDIRECT=1\0");
+    g_childEnvBlock[pos + 19] = L'\0';
+    g_childEnvBlock[pos + 20] = L'\0';
+}
+
+static bool IsChildProcess() {
+    return GetEnvironmentVariableW(L"WH_CTP_NOREDIRECT", nullptr, 0) > 0;
+}
+
 static HWND          g_hwndMain        = NULL;
 static HFONT         g_hFontUi         = NULL;
 static HBRUSH        g_hBrushWindow    = NULL;
@@ -90,12 +143,11 @@ static HBRUSH        g_hStartBrushWindow = NULL;
 
 static HANDLE        g_dialogThread    = NULL;
 
-using SHAppBarMessage_t = UINT_PTR(WINAPI*)(DWORD dwMessage, PAPPBARDATA pData);
-static SHAppBarMessage_t Real_SHAppBarMessage = nullptr;
-static LONG volatile g_desiredEdge = 3;
-
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
+
+using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
+static ShellExecuteW_t ShellExecuteW_orig = nullptr;
 
 static constexpr LPCWSTR kAdvKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 static constexpr LPCWSTR kPolicyKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer";
@@ -196,6 +248,7 @@ struct Strings {
 };
 
 static Strings g_str;
+static WCHAR g_language[8] = L"auto";
 
 struct StartSetting {
     LPCWSTR regKey;
@@ -243,13 +296,6 @@ static void ShowStartCustomDialog(HWND parent);
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 static DWORD WINAPI DialogThreadProc(LPVOID);
-
-static void wcscpy_safe(WCHAR* dst, size_t dstSize, const WCHAR* src) {
-    if (!dst || !src || dstSize == 0) return;
-    size_t i = 0;
-    while (i < dstSize - 1 && src[i]) { dst[i] = src[i]; i++; }
-    dst[i] = 0;
-}
 
 class TaskbarSettingsProvider {
 public:
@@ -399,14 +445,6 @@ static void SetStartSettingState(const StartSetting& s, bool enabled) {
     TaskbarSettingsProvider::RegSetDWordSafe(HKEY_CURRENT_USER, s.regKey, s.regValue, v);
 }
 
-UINT_PTR WINAPI Hook_SHAppBarMessage(DWORD dwMessage, PAPPBARDATA pData) {
-    if (pData && (dwMessage == ABM_QUERYPOS || dwMessage == ABM_SETPOS)) {
-        DWORD edge = InterlockedCompareExchange(&g_desiredEdge, 0, 0);
-        if (edge <= 3) pData->uEdge = edge;
-    }
-    return Real_SHAppBarMessage(dwMessage, pData);
-}
-
 static HICON GetSystemIcon(int iconId) {
     SHSTOCKICONINFO info = {};
     info.cbSize = sizeof(info);
@@ -425,60 +463,69 @@ static void SetFontAllChildren(HWND hwnd, HFONT hf) {
 }
 
 static void InitLocalization() {
-    bool it = ((GetUserDefaultUILanguage() & 0xFF) == 0x10);
-    if (it) {
-        wcscpy_safe(g_str.title,              128, L"Propriet\u00e0 della barra delle applicazioni e del menu Start");
-        wcscpy_safe(g_str.tab_taskbar,         64, L"Barra delle applicazioni");
-        wcscpy_safe(g_str.tab_start,           64, L"Menu Start");
-        wcscpy_safe(g_str.tab_toolbars,        64, L"Barre degli strumenti");
-        wcscpy_safe(g_str.btn_ok,              32, L"OK");
-        wcscpy_safe(g_str.btn_cancel,          32, L"Annulla");
-        wcscpy_safe(g_str.btn_apply,           32, L"Applica");
-        wcscpy_safe(g_str.grp_appearance,      64, L"Aspetto della barra delle applicazioni");
-        wcscpy_safe(g_str.chk_lock,            64, L"Blocca la barra delle applicazioni");
-        wcscpy_safe(g_str.chk_hide,            64, L"Nascondi automaticamente la barra delle applicazioni");
-        wcscpy_safe(g_str.chk_small,           64, L"Usa icone piccole");
-        wcscpy_safe(g_str.txt_location,        64, L"Posizione sullo schermo:");
-        wcscpy_safe(g_str.txt_buttons,         64, L"Pulsanti della barra\ndelle applicazioni:");
-        wcscpy_safe(g_str.grp_notif,           64, L"Area di notifica");
-        wcscpy_safe(g_str.txt_notif,          128, L"Personalizzare le icone e le notifiche visualizzate nell'area di notifica.");
-        wcscpy_safe(g_str.btn_cust_notif,      32, L"Personalizza...");
-        wcscpy_safe(g_str.grp_aero,            64, L"Anteprima del desktop con Aero Peek");
-        wcscpy_safe(g_str.txt_aero,           256, L"Consente di visualizzare temporaneamente il desktop portando il puntatore sul pulsante Mostra desktop alla fine della barra delle applicazioni.");
-        wcscpy_safe(g_str.chk_aero,            64, L"Usa Aero Peek per visualizzare l'anteprima del desktop");
-        wcscpy_safe(g_str.link_help,          128, L"<a>Personalizzazione della barra delle applicazioni</a>");
-        wcscpy_safe(g_str.pos_left,            32, L"A sinistra");
-        wcscpy_safe(g_str.pos_top,             32, L"In alto");
-        wcscpy_safe(g_str.pos_right,           32, L"A destra");
-        wcscpy_safe(g_str.pos_bottom,          32, L"In basso");
-        wcscpy_safe(g_str.btn_always_combine,  64, L"Combina sempre, nascondi etichette");
-        wcscpy_safe(g_str.btn_combine_full,    64, L"Combina se la barra \u00e8 piena");
-        wcscpy_safe(g_str.btn_never_combine,   64, L"Mai combinare");
-        wcscpy_safe(g_str.start_info,         256, L"Per personalizzare l'aspetto dei collegamenti, delle icone e dei menu nel menu Start, fare clic su Personalizza.");
-        wcscpy_safe(g_str.btn_start_cust,      32, L"Personalizza...");
-        wcscpy_safe(g_str.txt_power_label,     64, L"Azione alimentazione:");
-        wcscpy_safe(g_str.power_shutdown,      32, L"Arresta il sistema");
-        wcscpy_safe(g_str.power_restart,       32, L"Riavvia");
-        wcscpy_safe(g_str.power_sleep,         32, L"Sospensione");
-        wcscpy_safe(g_str.power_hibernate,     32, L"Ibernazione");
-        wcscpy_safe(g_str.power_logoff,        32, L"Disconnetti");
-        wcscpy_safe(g_str.power_lock,          32, L"Blocca");
-        wcscpy_safe(g_str.power_switchuser,    32, L"Cambia utente");
-        wcscpy_safe(g_str.grp_privacy,         32, L"Privacy");
-        wcscpy_safe(g_str.chk_mru_prog,       128, L"Archivia e visualizza i programmi aperti di recente nel menu Start");
-        wcscpy_safe(g_str.chk_mru_items,      128, L"Archivia e visualizza gli elementi aperti di recente nel menu Start e nella barra delle applicazioni");
-        wcscpy_safe(g_str.toolbars_info,      128, L"Selezionare le barre degli strumenti da aggiungere alla barra delle applicazioni.");
-        wcscpy_safe(g_str.toolbar_address,     32, L"Indirizzo");
-        wcscpy_safe(g_str.toolbar_links,       32, L"Collegamenti");
-        wcscpy_safe(g_str.toolbar_tabletpc,    32, L"Pannello input Tablet PC");
-        wcscpy_safe(g_str.toolbar_desktop,     32, L"Desktop");
-        wcscpy_safe(g_str.about_title,         64, L"Informazioni sulla mod");
-        wcscpy_safe(g_str.about_text,        4096,
+    bool useItalian = false;
+    
+    if (wcscmp(g_language, L"it") == 0) {
+        useItalian = true;
+    } else if (wcscmp(g_language, L"en") == 0) {
+        useItalian = false;
+    } else {
+        useItalian = ((GetUserDefaultUILanguage() & 0xFF) == 0x10);
+    }
+
+    if (useItalian) {
+        StringCchCopyW(g_str.title,              128, L"Propriet\u00e0 della barra delle applicazioni e del menu Start");
+        StringCchCopyW(g_str.tab_taskbar,         64, L"Barra delle applicazioni");
+        StringCchCopyW(g_str.tab_start,           64, L"Menu Start");
+        StringCchCopyW(g_str.tab_toolbars,        64, L"Barre degli strumenti");
+        StringCchCopyW(g_str.btn_ok,              32, L"OK");
+        StringCchCopyW(g_str.btn_cancel,          32, L"Annulla");
+        StringCchCopyW(g_str.btn_apply,           32, L"Applica");
+        StringCchCopyW(g_str.grp_appearance,      64, L"Aspetto della barra delle applicazioni");
+        StringCchCopyW(g_str.chk_lock,            64, L"Blocca la barra delle applicazioni");
+        StringCchCopyW(g_str.chk_hide,            64, L"Nascondi automaticamente la barra delle applicazioni");
+        StringCchCopyW(g_str.chk_small,           64, L"Usa icone piccole");
+        StringCchCopyW(g_str.txt_location,        64, L"Posizione sullo schermo:");
+        StringCchCopyW(g_str.txt_buttons,         64, L"Pulsanti della barra\ndelle applicazioni:");
+        StringCchCopyW(g_str.grp_notif,           64, L"Area di notifica");
+        StringCchCopyW(g_str.txt_notif,          128, L"Consente di personalizzare le icone e le notifiche nell'area di notifica.");
+        StringCchCopyW(g_str.btn_cust_notif,      32, L"Personalizza...");
+        StringCchCopyW(g_str.grp_aero,            64, L"Anteprima del desktop con Aero Peek");
+        StringCchCopyW(g_str.txt_aero,           256, L"Consente di visualizzare temporaneamente il desktop portando il puntatore sul pulsante Mostra desktop alla fine della barra delle applicazioni.");
+        StringCchCopyW(g_str.chk_aero,            64, L"Usa Aero Peek per visualizzare l'anteprima del desktop");
+        StringCchCopyW(g_str.link_help,          128, L"<a>Personalizzazione della barra delle applicazioni</a>");
+        StringCchCopyW(g_str.pos_left,            32, L"A sinistra");
+        StringCchCopyW(g_str.pos_top,             32, L"In alto");
+        StringCchCopyW(g_str.pos_right,           32, L"A destra");
+        StringCchCopyW(g_str.pos_bottom,          32, L"In basso");
+        StringCchCopyW(g_str.btn_always_combine,  64, L"Combina sempre, nascondi etichette");
+        StringCchCopyW(g_str.btn_combine_full,    64, L"Combina se la barra \u00e8 piena");
+        StringCchCopyW(g_str.btn_never_combine,   64, L"Mai combinare");
+        StringCchCopyW(g_str.start_info,         256, L"Per personalizzare l'aspetto dei collegamenti, delle icone e dei menu nel menu Start, fare clic su Personalizza.");
+        StringCchCopyW(g_str.btn_start_cust,      32, L"Personalizza...");
+        StringCchCopyW(g_str.txt_power_label,     64, L"Azione pulsante di alimentazione:");
+        StringCchCopyW(g_str.power_shutdown,      32, L"Arresta il sistema");
+        StringCchCopyW(g_str.power_restart,       32, L"Riavvia");
+        StringCchCopyW(g_str.power_sleep,         32, L"Sospensione");
+        StringCchCopyW(g_str.power_hibernate,     32, L"Ibernazione");
+        StringCchCopyW(g_str.power_logoff,        32, L"Disconnetti");
+        StringCchCopyW(g_str.power_lock,          32, L"Blocca");
+        StringCchCopyW(g_str.power_switchuser,    32, L"Cambia utente");
+        StringCchCopyW(g_str.grp_privacy,         32, L"Privacy");
+        StringCchCopyW(g_str.chk_mru_prog,       128, L"Archivia e visualizza i programmi aperti di recente nel menu Start");
+        StringCchCopyW(g_str.chk_mru_items,      128, L"Archivia e visualizza gli elementi aperti di recente nel menu Start e nella barra delle applicazioni");
+        StringCchCopyW(g_str.toolbars_info,      128, L"Selezionare le barre degli strumenti da aggiungere alla barra delle applicazioni.");
+        StringCchCopyW(g_str.toolbar_address,     32, L"Indirizzo");
+        StringCchCopyW(g_str.toolbar_links,       32, L"Collegamenti");
+        StringCchCopyW(g_str.toolbar_tabletpc,    32, L"Pannello input Tablet PC");
+        StringCchCopyW(g_str.toolbar_desktop,     32, L"Desktop");
+        StringCchCopyW(g_str.about_title,         64, L"Informazioni sulla mod");
+        StringCchCopyW(g_str.about_text,        4096,
             L"Classic Taskbar Properties\r\n\r\n"
             L"Questa mod per Windhawk ripristina la classica finestra "
-            L"\"Proprieta' della barra delle applicazioni e del menu Start\" "
+            L"\"Propriet\u00e0 della barra delle applicazioni e del menu Start\" "
             L"ispirata a Windows 7.\r\n\r\n"
-            L"Funzionalita' attualmente disponibili:\r\n"
+            L"Funzionalit\u00e0 attualmente disponibili:\r\n"
             L"\r\n"
             L"- Blocca la barra delle applicazioni\r\n"
             L"- Nascondi automaticamente la barra delle applicazioni\r\n"
@@ -489,98 +536,84 @@ static void InitLocalization() {
             L"\r\n"
             L"Limitazioni note:\r\n"
             L"\r\n"
-            L"- La modifica della posizione della barra delle applicazioni non e' "
-            L"attualmente disponibile. Le versioni moderne di Windows gestiscono "
-            L"questa impostazione tramite strutture interne e valori di registro "
-            L"complessi. Una modifica non corretta potrebbe causare comportamenti "
-            L"imprevisti o instabilita' di Explorer. Il supporto potrebbe essere "
-            L"aggiunto in una versione futura.\r\n"
-            L"\r\n"
-            L"- Personalizzazione del menu Start è limitata\r\n"
-            L"- Le barre degli strumenti classiche (Indirizzo, Collegamenti, Desktop "
-            L"e altre) non sono supportate. Microsoft ha progressivamente rimosso o "
-            L"modificato queste funzionalita' nelle versioni piu' recenti di Windows, "
-            L"rendendone l'implementazione completa particolarmente complessa.\r\n"
-            L"\r\n"
-            L"- Alcune impostazioni del Menu Start potrebbero richiedere il riavvio "
-            L"di Explorer o il logout per essere applicate completamente.\r\n"
-            L"\r\n"
-            L"L'obiettivo principale di questa mod e' ripristinare l'aspetto e "
-            L"parte dell'esperienza utente della finestra classica di Windows 7 "
-            L"mantenendo la compatibilita' con le versioni moderne di Windows.");
-        wcscpy_safe(g_str.warn_position_title, 64, L"Posizione barra delle applicazioni");
-        wcscpy_safe(g_str.warn_position_text, 256, L"La modifica della posizione verr\u00e0 applicata al prossimo riavvio di Explorer.");
-        wcscpy_safe(g_str.start_custom_title,  64, L"Personalizza menu Start");
-        wcscpy_safe(g_str.start_grp_tiles,     64, L"Riquadri e comportamento");
-        wcscpy_safe(g_str.start_chk_more_tiles,64, L"Mostra pi\u00f9 riquadri nel menu Start");
-        wcscpy_safe(g_str.start_chk_app_list,  64, L"Mostra elenco app nel menu Start");
-        wcscpy_safe(g_str.start_chk_recent_apps,64,L"Mostra app aggiunte di recente");
-        wcscpy_safe(g_str.start_chk_fullscreen,64, L"Usa Start a schermo intero");
-        wcscpy_safe(g_str.start_chk_recent_items,64,L"Mostra elementi recenti nelle Jump List");
-        wcscpy_safe(g_str.start_chk_account_notif,64,L"Mostra notifiche account");
-        wcscpy_safe(g_str.start_grp_search,    64, L"Ricerca");
-        wcscpy_safe(g_str.start_chk_search_programs,64,L"Includi programmi nei risultati di ricerca");
-        wcscpy_safe(g_str.start_chk_search_files,  64,L"Includi file nei risultati di ricerca");
-        wcscpy_safe(g_str.start_grp_folders,   64, L"Cartelle da visualizzare in Start");
-        wcscpy_safe(g_str.start_chk_folder_settings,32,L"Impostazioni");
-        wcscpy_safe(g_str.start_chk_folder_docs,    32,L"Documenti");
-        wcscpy_safe(g_str.start_chk_folder_downloads,32,L"Download");
-        wcscpy_safe(g_str.start_chk_folder_music,  32,L"Musica");
-        wcscpy_safe(g_str.start_chk_folder_pics,   32,L"Immagini");
-        wcscpy_safe(g_str.start_chk_folder_videos, 32,L"Video");
-        wcscpy_safe(g_str.start_chk_folder_network,32,L"Rete");
-        wcscpy_safe(g_str.start_chk_folder_personal,32,L"Cartella personale");
-        wcscpy_safe(g_str.start_info_restart,  256, L"Nota: alcune modifiche potrebbero richiedere il riavvio di Explorer per essere applicate.");
-        wcscpy_safe(g_str.start_msg_saved,     512, L"Impostazioni del menu Start salvate.\n\nAlcune modifiche potrebbero richiedere il logout o il riavvio di Explorer.");
-        wcscpy_safe(g_str.start_msg_saved_title,64, L"Impostazioni salvate");
+            L"- La modifica della posizione della barra delle applicazioni non \u00e8 "
+            L"attualmente disponibile.\r\n"
+            L"- Personalizzazione del menu Start \u00e8 limitata.\r\n"
+            L"- Le barre degli strumenti classiche hanno supporto limitato.\r\n"
+            L"- Alcune impostazioni richiedono il riavvio di Explorer.");
+        StringCchCopyW(g_str.warn_position_title, 64, L"Posizione barra delle applicazioni");
+        StringCchCopyW(g_str.warn_position_text, 256, L"La modifica della posizione verr\u00e0 applicata al prossimo riavvio di Explorer.");
+        StringCchCopyW(g_str.start_custom_title,  64, L"Personalizza menu Start");
+        StringCchCopyW(g_str.start_grp_tiles,     64, L"Riquadri e comportamento");
+        StringCchCopyW(g_str.start_chk_more_tiles,64, L"Mostra pi\u00f9 riquadri nel menu Start");
+        StringCchCopyW(g_str.start_chk_app_list,  64, L"Mostra elenco app nel menu Start");
+        StringCchCopyW(g_str.start_chk_recent_apps,64,L"Mostra app aggiunte di recente");
+        StringCchCopyW(g_str.start_chk_fullscreen,64, L"Usa Start a schermo intero");
+        StringCchCopyW(g_str.start_chk_recent_items,64,L"Mostra elementi recenti nelle Jump List");
+        StringCchCopyW(g_str.start_chk_account_notif,64,L"Mostra notifiche account");
+        StringCchCopyW(g_str.start_grp_search,    64, L"Ricerca");
+        StringCchCopyW(g_str.start_chk_search_programs,64,L"Includi programmi nei risultati di ricerca");
+        StringCchCopyW(g_str.start_chk_search_files,  64,L"Includi file nei risultati di ricerca");
+        StringCchCopyW(g_str.start_grp_folders,   64, L"Cartelle da visualizzare in Start");
+        StringCchCopyW(g_str.start_chk_folder_settings,32,L"Impostazioni");
+        StringCchCopyW(g_str.start_chk_folder_docs,    32,L"Documenti");
+        StringCchCopyW(g_str.start_chk_folder_downloads,32,L"Download");
+        StringCchCopyW(g_str.start_chk_folder_music,  32,L"Musica");
+        StringCchCopyW(g_str.start_chk_folder_pics,   32,L"Immagini");
+        StringCchCopyW(g_str.start_chk_folder_videos, 32,L"Video");
+        StringCchCopyW(g_str.start_chk_folder_network,32,L"Rete");
+        StringCchCopyW(g_str.start_chk_folder_personal,32,L"Cartella personale");
+        StringCchCopyW(g_str.start_info_restart,  256, L"Nota: alcune modifiche potrebbero richiedere il riavvio di Explorer per essere applicate.");
+        StringCchCopyW(g_str.start_msg_saved,     512, L"Impostazioni del menu Start salvate.\n\nAlcune modifiche potrebbero richiedere il logout o il riavvio di Explorer.");
+        StringCchCopyW(g_str.start_msg_saved_title,64, L"Impostazioni salvate");
     } else {
-        wcscpy_safe(g_str.title,              128, L"Taskbar and Start Menu Properties");
-        wcscpy_safe(g_str.tab_taskbar,         64, L"Taskbar");
-        wcscpy_safe(g_str.tab_start,           64, L"Start Menu");
-        wcscpy_safe(g_str.tab_toolbars,        64, L"Toolbars");
-        wcscpy_safe(g_str.btn_ok,              32, L"OK");
-        wcscpy_safe(g_str.btn_cancel,          32, L"Cancel");
-        wcscpy_safe(g_str.btn_apply,           32, L"Apply");
-        wcscpy_safe(g_str.grp_appearance,      64, L"Taskbar appearance");
-        wcscpy_safe(g_str.chk_lock,            64, L"Lock the taskbar");
-        wcscpy_safe(g_str.chk_hide,            64, L"Auto-hide the taskbar");
-        wcscpy_safe(g_str.chk_small,           64, L"Use small icons");
-        wcscpy_safe(g_str.txt_location,        64, L"Taskbar location:");
-        wcscpy_safe(g_str.txt_buttons,         64, L"Taskbar buttons:");
-        wcscpy_safe(g_str.grp_notif,           64, L"Notification area");
-        wcscpy_safe(g_str.txt_notif,          128, L"Customize which icons and notifications appear.");
-        wcscpy_safe(g_str.btn_cust_notif,      32, L"Customize...");
-        wcscpy_safe(g_str.grp_aero,            64, L"Preview desktop with Aero Peek");
-        wcscpy_safe(g_str.txt_aero,           256, L"Temporarily view the desktop when you move your mouse to the Show desktop button.");
-        wcscpy_safe(g_str.chk_aero,            64, L"Use Aero Peek to preview the desktop");
-        wcscpy_safe(g_str.link_help,          128, L"<a>How do I customize the taskbar?</a>");
-        wcscpy_safe(g_str.pos_left,            32, L"Left");
-        wcscpy_safe(g_str.pos_top,             32, L"Top");
-        wcscpy_safe(g_str.pos_right,           32, L"Right");
-        wcscpy_safe(g_str.pos_bottom,          32, L"Bottom");
-        wcscpy_safe(g_str.btn_always_combine,  64, L"Always combine, hide labels");
-        wcscpy_safe(g_str.btn_combine_full,    64, L"Combine when taskbar is full");
-        wcscpy_safe(g_str.btn_never_combine,   64, L"Never combine");
-        wcscpy_safe(g_str.start_info,         256, L"To customize how links, icons, and menus look in the Start menu, click Customize.");
-        wcscpy_safe(g_str.btn_start_cust,      32, L"Customize...");
-        wcscpy_safe(g_str.txt_power_label,     64, L"Power button action:");
-        wcscpy_safe(g_str.power_shutdown,      32, L"Shut down");
-        wcscpy_safe(g_str.power_restart,       32, L"Restart");
-        wcscpy_safe(g_str.power_sleep,         32, L"Sleep");
-        wcscpy_safe(g_str.power_hibernate,     32, L"Hibernate");
-        wcscpy_safe(g_str.power_logoff,        32, L"Log off");
-        wcscpy_safe(g_str.power_lock,          32, L"Lock");
-        wcscpy_safe(g_str.power_switchuser,    32, L"Switch user");
-        wcscpy_safe(g_str.grp_privacy,         32, L"Privacy");
-        wcscpy_safe(g_str.chk_mru_prog,       128, L"Store and display recently opened programs in the Start menu");
-        wcscpy_safe(g_str.chk_mru_items,      128, L"Store and display recently opened items in the Start menu and the taskbar");
-        wcscpy_safe(g_str.toolbars_info,      128, L"Select which toolbars to add to the taskbar.");
-        wcscpy_safe(g_str.toolbar_address,     32, L"Address");
-        wcscpy_safe(g_str.toolbar_links,       32, L"Links");
-        wcscpy_safe(g_str.toolbar_tabletpc,    32, L"Tablet PC Input Panel");
-        wcscpy_safe(g_str.toolbar_desktop,     32, L"Desktop");
-        wcscpy_safe(g_str.about_title,         64, L"About this mod");
-        wcscpy_safe(g_str.about_text,        4096,
+        StringCchCopyW(g_str.title,              128, L"Taskbar and Start Menu Properties");
+        StringCchCopyW(g_str.tab_taskbar,         64, L"Taskbar");
+        StringCchCopyW(g_str.tab_start,           64, L"Start Menu");
+        StringCchCopyW(g_str.tab_toolbars,        64, L"Toolbars");
+        StringCchCopyW(g_str.btn_ok,              32, L"OK");
+        StringCchCopyW(g_str.btn_cancel,          32, L"Cancel");
+        StringCchCopyW(g_str.btn_apply,           32, L"Apply");
+        StringCchCopyW(g_str.grp_appearance,      64, L"Taskbar appearance");
+        StringCchCopyW(g_str.chk_lock,            64, L"Lock the taskbar");
+        StringCchCopyW(g_str.chk_hide,            64, L"Auto-hide the taskbar");
+        StringCchCopyW(g_str.chk_small,           64, L"Use small icons");
+        StringCchCopyW(g_str.txt_location,        64, L"Taskbar location:");
+        StringCchCopyW(g_str.txt_buttons,         64, L"Taskbar buttons:");
+        StringCchCopyW(g_str.grp_notif,           64, L"Notification area");
+        StringCchCopyW(g_str.txt_notif,          128, L"Customize which icons and notifications appear.");
+        StringCchCopyW(g_str.btn_cust_notif,      32, L"Customize...");
+        StringCchCopyW(g_str.grp_aero,            64, L"Preview desktop with Aero Peek");
+        StringCchCopyW(g_str.txt_aero,           256, L"Temporarily view the desktop when you move your mouse to the Show desktop button.");
+        StringCchCopyW(g_str.chk_aero,            64, L"Use Aero Peek to preview the desktop");
+        StringCchCopyW(g_str.link_help,          128, L"<a>How do I customize the taskbar?</a>");
+        StringCchCopyW(g_str.pos_left,            32, L"Left");
+        StringCchCopyW(g_str.pos_top,             32, L"Top");
+        StringCchCopyW(g_str.pos_right,           32, L"Right");
+        StringCchCopyW(g_str.pos_bottom,          32, L"Bottom");
+        StringCchCopyW(g_str.btn_always_combine,  64, L"Always combine, hide labels");
+        StringCchCopyW(g_str.btn_combine_full,    64, L"Combine when taskbar is full");
+        StringCchCopyW(g_str.btn_never_combine,   64, L"Never combine");
+        StringCchCopyW(g_str.start_info,         256, L"To customize how links, icons, and menus look in the Start menu, click Customize.");
+        StringCchCopyW(g_str.btn_start_cust,      32, L"Customize...");
+        StringCchCopyW(g_str.txt_power_label,     64, L"Power button action:");
+        StringCchCopyW(g_str.power_shutdown,      32, L"Shut down");
+        StringCchCopyW(g_str.power_restart,       32, L"Restart");
+        StringCchCopyW(g_str.power_sleep,         32, L"Sleep");
+        StringCchCopyW(g_str.power_hibernate,     32, L"Hibernate");
+        StringCchCopyW(g_str.power_logoff,        32, L"Log off");
+        StringCchCopyW(g_str.power_lock,          32, L"Lock");
+        StringCchCopyW(g_str.power_switchuser,    32, L"Switch user");
+        StringCchCopyW(g_str.grp_privacy,         32, L"Privacy");
+        StringCchCopyW(g_str.chk_mru_prog,       128, L"Store and display recently opened programs in the Start menu");
+        StringCchCopyW(g_str.chk_mru_items,      128, L"Store and display recently opened items in the Start menu and the taskbar");
+        StringCchCopyW(g_str.toolbars_info,      128, L"Select which toolbars to add to the taskbar.");
+        StringCchCopyW(g_str.toolbar_address,     32, L"Address");
+        StringCchCopyW(g_str.toolbar_links,       32, L"Links");
+        StringCchCopyW(g_str.toolbar_tabletpc,    32, L"Tablet PC Input Panel");
+        StringCchCopyW(g_str.toolbar_desktop,     32, L"Desktop");
+        StringCchCopyW(g_str.about_title,         64, L"About this mod");
+        StringCchCopyW(g_str.about_text,        4096,
             L"Classic Taskbar Properties\r\n\r\n"
             L"This Windhawk mod restores the classic "
             L"\"Taskbar and Start Menu Properties\" dialog "
@@ -588,62 +621,56 @@ static void InitLocalization() {
             L"Currently available features:\r\n"
             L"\r\n"
             L"- Lock the taskbar\r\n"
-            L"- Automatically hide the taskbar\r\n"
+            L"- Auto-hide the taskbar\r\n"
             L"- Use small icons\r\n"
             L"- Configure taskbar button grouping\r\n"
             L"- Configure Aero Peek\r\n"
             L"- Quick access to notification area settings\r\n"
-
             L"\r\n"
             L"Known limitations:\r\n"
             L"\r\n"
-            L"- Changing the taskbar position is currently unavailable. "
-            L"Modern versions of Windows manage this setting through "
-            L"complex internal structures and registry data. Incorrect "
-            L"modifications may result in unexpected Explorer behavior "
-            L"or system instability. Support may be added in a future "
-            L"release.\r\n"
-            L"\r\n"
-            L"- Classic toolbars (Address, Links, Desktop and others) "
-            L"are not supported. Microsoft has gradually removed or "
-            L"redesigned these features in recent Windows versions, "
-            L"making full implementation significantly more complex.\r\n"
-            L"\r\n"
-            L"- The Start menu customization is limited\r\n"
-            L"- Some Start Menu settings may require Explorer restart "
-            L"or logout to be fully applied.\r\n"
-            L"\r\n"
-            L"The primary goal of this mod is to restore the appearance "
-            L"and part of the user experience of the classic Windows 7 "
-            L"properties dialog while maintaining compatibility with "
-            L"modern Windows versions.");
-        wcscpy_safe(g_str.warn_position_title, 64, L"Taskbar position");
-        wcscpy_safe(g_str.warn_position_text, 256, L"The taskbar position change will be applied after restarting Explorer.");
-        wcscpy_safe(g_str.start_custom_title,  64, L"Customize Start Menu");
-        wcscpy_safe(g_str.start_grp_tiles,     64, L"Tiles and behavior");
-        wcscpy_safe(g_str.start_chk_more_tiles,64, L"Show more tiles on Start");
-        wcscpy_safe(g_str.start_chk_app_list,  64, L"Show app list in Start menu");
-        wcscpy_safe(g_str.start_chk_recent_apps,64,L"Show recently added apps");
-        wcscpy_safe(g_str.start_chk_fullscreen,64, L"Use Start full screen");
-        wcscpy_safe(g_str.start_chk_recent_items,64,L"Show recently opened items in Jump Lists");
-        wcscpy_safe(g_str.start_chk_account_notif,64,L"Show account notifications");
-        wcscpy_safe(g_str.start_grp_search,    64, L"Search");
-        wcscpy_safe(g_str.start_chk_search_programs,64,L"Include programs in search results");
-        wcscpy_safe(g_str.start_chk_search_files,  64,L"Include files in search results");
-        wcscpy_safe(g_str.start_grp_folders,   64, L"Folders to show on Start");
-        wcscpy_safe(g_str.start_chk_folder_settings,32,L"Settings");
-        wcscpy_safe(g_str.start_chk_folder_docs,    32,L"Documents");
-        wcscpy_safe(g_str.start_chk_folder_downloads,32,L"Downloads");
-        wcscpy_safe(g_str.start_chk_folder_music,  32,L"Music");
-        wcscpy_safe(g_str.start_chk_folder_pics,   32,L"Pictures");
-        wcscpy_safe(g_str.start_chk_folder_videos, 32,L"Videos");
-        wcscpy_safe(g_str.start_chk_folder_network,32,L"Network");
-        wcscpy_safe(g_str.start_chk_folder_personal,32,L"Personal folder");
-        wcscpy_safe(g_str.start_info_restart,  256, L"Note: some changes may require an Explorer restart or logout to take full effect.");
-        wcscpy_safe(g_str.start_msg_saved,     512, L"Start menu settings saved.\n\nSome changes may require logout or Explorer restart to take full effect.");
-        wcscpy_safe(g_str.start_msg_saved_title,64, L"Settings saved");
+            L"- Taskbar position change is unavailable.\r\n"
+            L"- Start menu customization is limited.\r\n"
+            L"- Classic toolbars have limited support.\r\n"
+            L"- Some settings require Explorer restart.");
+        StringCchCopyW(g_str.warn_position_title, 64, L"Taskbar position");
+        StringCchCopyW(g_str.warn_position_text, 256, L"The taskbar position change will be applied after restarting Explorer.");
+        StringCchCopyW(g_str.start_custom_title,  64, L"Customize Start Menu");
+        StringCchCopyW(g_str.start_grp_tiles,     64, L"Tiles and behavior");
+        StringCchCopyW(g_str.start_chk_more_tiles,64, L"Show more tiles on Start");
+        StringCchCopyW(g_str.start_chk_app_list,  64, L"Show app list in Start menu");
+        StringCchCopyW(g_str.start_chk_recent_apps,64,L"Show recently added apps");
+        StringCchCopyW(g_str.start_chk_fullscreen,64, L"Use Start full screen");
+        StringCchCopyW(g_str.start_chk_recent_items,64,L"Show recently opened items in Jump Lists");
+        StringCchCopyW(g_str.start_chk_account_notif,64,L"Show account notifications");
+        StringCchCopyW(g_str.start_grp_search,    64, L"Search");
+        StringCchCopyW(g_str.start_chk_search_programs,64,L"Include programs in search results");
+        StringCchCopyW(g_str.start_chk_search_files,  64,L"Include files in search results");
+        StringCchCopyW(g_str.start_grp_folders,   64, L"Folders to show on Start");
+        StringCchCopyW(g_str.start_chk_folder_settings,32,L"Settings");
+        StringCchCopyW(g_str.start_chk_folder_docs,    32,L"Documents");
+        StringCchCopyW(g_str.start_chk_folder_downloads,32,L"Downloads");
+        StringCchCopyW(g_str.start_chk_folder_music,  32,L"Music");
+        StringCchCopyW(g_str.start_chk_folder_pics,   32,L"Pictures");
+        StringCchCopyW(g_str.start_chk_folder_videos, 32,L"Videos");
+        StringCchCopyW(g_str.start_chk_folder_network,32,L"Network");
+        StringCchCopyW(g_str.start_chk_folder_personal,32,L"Personal folder");
+        StringCchCopyW(g_str.start_info_restart,  256, L"Note: some changes may require an Explorer restart or logout to take full effect.");
+        StringCchCopyW(g_str.start_msg_saved,     512, L"Start menu settings saved.\n\nSome changes may require logout or Explorer restart to take full effect.");
+        StringCchCopyW(g_str.start_msg_saved_title,64, L"Settings saved");
     }
 }
+
+static void LoadLanguageSetting() {
+    LPCWSTR lang = Wh_GetStringSetting(L"language");
+    if (lang && wcslen(lang) > 0 && wcslen(lang) < 8) {
+        StringCchCopyW(g_language, 8, lang);
+    } else {
+        StringCchCopyW(g_language, 8, L"auto");
+    }
+    Wh_FreeStringSetting(lang);
+}
+
 static void ApplyToolbars(bool addr, bool links, bool tablet, bool desk) {
     TaskbarSettingsProvider::SetToolbarEnabled(L"Address",  addr);
     TaskbarSettingsProvider::SetToolbarEnabled(L"Links",    links);
@@ -833,7 +860,6 @@ static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
             SetFontAllChildren(hwnd, g_hStartFontUi);
         }
 
-        // Load tile/behavior settings
         for (const auto& s : g_startSettings) {
             bool state  = GetStartSettingState(s);
             bool locked = s.policyValue && IsSettingLockedByPolicy(s.policyValue);
@@ -844,7 +870,6 @@ static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
             }
         }
 
-        // Load folder visibility settings (Win10: individual DWORD per folder)
         for (const auto& f : g_startFolders) {
             bool state = TaskbarSettingsProvider::GetStartFolderVisible(f.folderRegValue);
             HWND hCtrl = GetDlgItem(hwnd, f.controlId);
@@ -893,7 +918,6 @@ static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
         } else if (id == IDCANCEL) {
             DestroyWindow(hwnd);
         } else if (id == IDC_START_BTN_APPLY) {
-            // Save tile/behavior settings
             for (const auto& s : g_startSettings) {
                 HWND hCtrl = GetDlgItem(hwnd, s.controlId);
                 if (hCtrl && IsWindowEnabled(hCtrl)) {
@@ -901,7 +925,6 @@ static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
                     SetStartSettingState(s, checked);
                 }
             }
-            // Save folder visibility settings
             for (const auto& f : g_startFolders) {
                 HWND hCtrl = GetDlgItem(hwnd, f.controlId);
                 if (hCtrl) {
@@ -935,10 +958,7 @@ static void ShowStartCustomDialog(HWND parent) {
         return;
     }
 
-    // Build the dialog template in memory.
-    // Total controls: 1 group tiles + 6 checkboxes tiles + 1 group search + 2 checkboxes search
-    //                 + 1 group folders + 8 checkboxes folders + 1 static info + 3 buttons = 23
-    BYTE* buf = new BYTE[10000];
+    BYTE* buf = new BYTE[4096];
     BYTE* p   = buf;
     auto align4 = [](BYTE*& ptr) { ptr = (BYTE*)(((UINT_PTR)ptr + 3) & ~3); };
 
@@ -950,11 +970,11 @@ static void ShowStartCustomDialog(HWND parent) {
     pDlg->cx             = DialogSizes::START_WIDTH;
     pDlg->cy             = DialogSizes::START_HEIGHT;
     p += sizeof(DLGTEMPLATE);
-    *(WORD*)p = 0; p += 2;  // menu
-    *(WORD*)p = 0; p += 2;  // class
-    wcscpy((WCHAR*)p, L""); p += 2;
-    *(WORD*)p = 8; p += 2;  // font size
-    wcscpy((WCHAR*)p, L"Segoe UI");
+    *(WORD*)p = 0; p += 2;
+    *(WORD*)p = 0; p += 2;
+    StringCchCopyW((WCHAR*)p, 1, L""); p += 2;
+    *(WORD*)p = 8; p += 2;
+    StringCchCopyW((WCHAR*)p, 10, L"Segoe UI");
     p += (lstrlenW(L"Segoe UI") + 1) * 2;
 
     auto addCtrl = [&](DWORD style, DWORD exStyle, short x, short y, short cx, short cy,
@@ -965,12 +985,13 @@ static void ShowStartCustomDialog(HWND parent) {
         pi->dwExtendedStyle = exStyle;
         pi->x = x; pi->y = y; pi->cx = cx; pi->cy = cy; pi->id = id;
         p += sizeof(DLGITEMTEMPLATE);
-        wcscpy((WCHAR*)p, cls); p += (lstrlenW(cls) + 1) * 2;
-        wcscpy((WCHAR*)p, cap); p += (lstrlenW(cap) + 1) * 2;
+        StringCchCopyW((WCHAR*)p, lstrlenW(cls) + 1, cls);
+        p += (lstrlenW(cls) + 1) * 2;
+        StringCchCopyW((WCHAR*)p, lstrlenW(cap) + 1, cap);
+        p += (lstrlenW(cap) + 1) * 2;
         *(WORD*)p = 0; p += 2;
     };
 
-    // Tiles & behavior group (y=4..121)
     addCtrl(BS_GROUPBOX, 0, 6, 4, 240, 102, IDC_START_GRP_TILES, L"Button", g_str.start_grp_tiles);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 16,  226, 11, IDC_CHK_MORE_TILES,    L"Button", g_str.start_chk_more_tiles);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 29,  226, 11, IDC_CHK_APP_LIST,      L"Button", g_str.start_chk_app_list);
@@ -979,12 +1000,10 @@ static void ShowStartCustomDialog(HWND parent) {
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 68,  226, 11, IDC_CHK_RECENT_ITEMS,  L"Button", g_str.start_chk_recent_items);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 81,  226, 11, IDC_CHK_ACCOUNT_NOTIF, L"Button", g_str.start_chk_account_notif);
 
-    // Search group (y=109..146)
     addCtrl(BS_GROUPBOX, 0, 6, 109, 240, 44, IDC_GRP_SEARCH, L"Button", g_str.start_grp_search);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 121, 226, 11, IDC_CHK_SEARCH_PROGRAMS, L"Button", g_str.start_chk_search_programs);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 134, 226, 11, IDC_CHK_SEARCH_FILES,    L"Button", g_str.start_chk_search_files);
 
-    // Folders group (y=157..258) - two columns
     addCtrl(BS_GROUPBOX, 0, 6, 157, 240, 107, IDC_START_GRP_FOLDERS, L"Button", g_str.start_grp_folders);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 169, 110, 11, IDC_CHK_FOLDER_SETTINGS,  L"Button", g_str.start_chk_folder_settings);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 182, 110, 11, IDC_CHK_FOLDER_DOCS,       L"Button", g_str.start_chk_folder_docs);
@@ -995,7 +1014,6 @@ static void ShowStartCustomDialog(HWND parent) {
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 130, 195, 110, 11, IDC_CHK_FOLDER_NETWORK,   L"Button", g_str.start_chk_folder_network);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 130, 208, 110, 11, IDC_CHK_FOLDER_PERSONAL,  L"Button", g_str.start_chk_folder_personal);
 
-    // Info static + buttons
     addCtrl(SS_LEFT, 0, 8, 268, 236, 18, IDC_START_STATIC_INFO, L"Static", L"");
     addCtrl(BS_DEFPUSHBUTTON | WS_TABSTOP, 0,  54, 291, 60, 13, IDOK,               L"Button", g_str.btn_ok);
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP,    0, 118, 291, 60, 13, IDCANCEL,           L"Button", g_str.btn_cancel);
@@ -1210,23 +1228,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static HWND BuildAndShowDialog() {
-    static bool registered = false;
-    if (!registered) {
-        WNDCLASSEXW wc   = {};
-        wc.cbSize        = sizeof(wc);
-        wc.style         = CS_DBLCLKS;
-        wc.lpfnWndProc   = DefDlgProcW;
-        wc.cbWndExtra    = DLGWINDOWEXTRA;
-        wc.hInstance     = GetModuleHandleW(NULL);
-        wc.hIcon         = LoadIconW(NULL, IDI_APPLICATION);
-        wc.hCursor       = LoadCursorW(NULL, IDC_ARROW);
-        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-        wc.lpszClassName = L"TaskbarPropertiesDlg";
-        RegisterClassExW(&wc);
-        registered = true;
-    }
-
-    BYTE* buf = new BYTE[12000];
+    BYTE* buf = new BYTE[4096];
     BYTE* p   = buf;
     auto align4 = [](BYTE*& ptr) { ptr = (BYTE*)(((UINT_PTR)ptr + 3) & ~3); };
 
@@ -1240,9 +1242,9 @@ static HWND BuildAndShowDialog() {
     p += sizeof(DLGTEMPLATE);
     *(WORD*)p = 0; p += 2;
     *(WORD*)p = 0; p += 2;
-    wcscpy((WCHAR*)p, L""); p += 2;
+    StringCchCopyW((WCHAR*)p, 1, L""); p += 2;
     *(WORD*)p = 9; p += 2;
-    wcscpy((WCHAR*)p, L"Segoe UI");
+    StringCchCopyW((WCHAR*)p, 10, L"Segoe UI");
     p += (lstrlenW(L"Segoe UI") + 1) * 2;
 
     auto addCtrl = [&](DWORD style, DWORD exStyle, short x, short y, short cx, short cy,
@@ -1253,15 +1255,14 @@ static HWND BuildAndShowDialog() {
         pi->dwExtendedStyle  = exStyle;
         pi->x = x; pi->y = y; pi->cx = cx; pi->cy = cy; pi->id = id;
         p += sizeof(DLGITEMTEMPLATE);
-        wcscpy((WCHAR*)p, cls); p += (lstrlenW(cls) + 1) * 2;
-        wcscpy((WCHAR*)p, cap); p += (lstrlenW(cap) + 1) * 2;
+        StringCchCopyW((WCHAR*)p, lstrlenW(cls) + 1, cls);
+        p += (lstrlenW(cls) + 1) * 2;
+        StringCchCopyW((WCHAR*)p, lstrlenW(cap) + 1, cap);
+        p += (lstrlenW(cap) + 1) * 2;
         *(WORD*)p = 0; p += 2;
     };
 
-    // Tab control
     addCtrl(TCS_TABS | WS_TABSTOP, 0, 6, 6, 250, 246, IDC_TAB_MAIN, L"SysTabControl32", L"");
-
-    // Taskbar tab controls
     addCtrl(BS_GROUPBOX, 0, 12, 22, 238, 96, IDC_GRP_APPEARANCE, L"Button", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 33, 226, 10, IDC_CHK_LOCK,  L"Button", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 45, 226, 10, IDC_CHK_HIDE,  L"Button", L"");
@@ -1277,13 +1278,9 @@ static HWND BuildAndShowDialog() {
     addCtrl(SS_LEFT, 0, 18, 179, 226, 30, IDC_TXT_AERO, L"Static", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 213, 226, 12, IDC_CHK_AEROPEEK, L"Button", L"");
     addCtrl(WS_TABSTOP, 0, 12, 238, 238, 10, IDC_LINK_HELP, L"SysLink", L"");
-
-    // OK / Cancel / Apply
     addCtrl(BS_DEFPUSHBUTTON | WS_TABSTOP, 0,  84, 271, 52, 14, IDOK,         L"Button", L"OK");
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP,    0, 140, 271, 52, 14, IDCANCEL,     L"Button", L"Cancel");
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP,    0, 196, 271, 58, 14, IDC_BTN_APPLY,L"Button", L"Apply");
-
-    // Start Menu tab controls
     addCtrl(SS_LEFT, 0, 14,  22, 162, 26, IDC_TXT_START_INFO,  L"Static",   L"");
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 180, 22, 66, 14, IDC_BTN_START_CUST, L"Button", L"");
     addCtrl(SS_LEFT, 0, 14, 56, 100, 10, IDC_TXT_POWER_LABEL, L"Static", L"");
@@ -1291,8 +1288,6 @@ static HWND BuildAndShowDialog() {
     addCtrl(BS_GROUPBOX, 0, 12, 74, 238, 62, IDC_GRP_PRIVACY, L"Button", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18,  86, 226, 18, IDC_CHK_MRU_PROG,  L"Button", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 108, 226, 18, IDC_CHK_MRU_ITEMS, L"Button", L"");
-
-    // Toolbars tab controls
     addCtrl(SS_LEFT, 0, 14, 22, 234, 18, IDC_TXT_TOOLBARS_INFO, L"Static", L"");
     addCtrl(LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP,
             0, 16, 44, 230, 165, IDC_LST_TOOLBARS, L"SysListView32", L"");
@@ -1337,44 +1332,70 @@ static void ShowTaskbarProperties() {
     g_dialogThread = CreateThread(NULL, 0, DialogThreadProc, NULL, 0, NULL);
 }
 
-// Hook: intercept ShellExecuteExW calls that open ms-settings:taskbar
+// Hook: ShellExecuteExW
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
+    if (IsChildProcess()) return ShellExecuteExW_orig(pei);
+    HookGuard guard;
+    if (guard.IsReentrant()) return ShellExecuteExW_orig(pei);
+    
     if (pei && pei->lpFile) {
-        WCHAR path[256] = {};
-        lstrcpynW(path, pei->lpFile, 256);
-        CharLowerW(path);
-        if (wcsstr(path, L"ms-settings:taskbar") || wcsstr(path, L"taskbar")) {
+        if (_wcsnicmp(pei->lpFile, L"ms-settings:taskbar", 19) == 0) {
+            Wh_Log(L"Classic Taskbar Properties: ShellExecuteExW intercepted ms-settings:taskbar");
             ShowTaskbarProperties();
             if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = NULL;
-            pei->hInstApp = (HINSTANCE)(UINT_PTR)32;
+            pei->hInstApp = SHELL_EXECUTE_SUCCESS;
             return TRUE;
         }
     }
     return ShellExecuteExW_orig(pei);
 }
 
+// Hook: ShellExecuteW
+HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFile,
+                                     LPCWSTR lpParameters, LPCWSTR lpDirectory, INT nShowCmd) {
+    if (IsChildProcess()) return ShellExecuteW_orig(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd);
+    HookGuard guard;
+    if (guard.IsReentrant()) return ShellExecuteW_orig(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd);
+    
+    if (lpFile && _wcsnicmp(lpFile, L"ms-settings:taskbar", 19) == 0) {
+        Wh_Log(L"Classic Taskbar Properties: ShellExecuteW intercepted ms-settings:taskbar");
+        ShowTaskbarProperties();
+        return SHELL_EXECUTE_SUCCESS;
+    }
+    return ShellExecuteW_orig(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd);
+}
+
 BOOL Wh_ModInit() {
+    Wh_Log(L"Classic Taskbar Properties v2.0.2 initializing...");
+    
     InterlockedExchange(&g_dialogOpen,      0);
     InterlockedExchange(&g_startCustomOpen, 0);
+    
+    BuildChildEnvironment();
+    
+    LoadLanguageSetting();
     InitLocalization();
-
-    Wh_SetFunctionHook(
-        (void*)GetProcAddress(GetModuleHandleW(L"shell32.dll"), "ShellExecuteExW"),
-        (void*)ShellExecuteExW_hook,
-        (void**)&ShellExecuteExW_orig);
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (hShell32) {
-        void* pSHAppBarMessage = (void*)GetProcAddress(hShell32, "SHAppBarMessage");
-        if (pSHAppBarMessage)
-            Wh_SetFunctionHook(pSHAppBarMessage, (void*)Hook_SHAppBarMessage, (void**)&Real_SHAppBarMessage);
+        Wh_SetFunctionHook(
+            (void*)GetProcAddress(hShell32, "ShellExecuteExW"),
+            (void*)ShellExecuteExW_hook,
+            (void**)&ShellExecuteExW_orig);
+
+        Wh_SetFunctionHook(
+            (void*)GetProcAddress(hShell32, "ShellExecuteW"),
+            (void*)ShellExecuteW_hook,
+            (void**)&ShellExecuteW_orig);
     }
 
-    InterlockedExchange(&g_desiredEdge, TaskbarSettingsProvider::GetTaskbarEdge());
+    Wh_Log(L"Classic Taskbar Properties initialized successfully");
     return TRUE;
 }
 
 void Wh_ModUninit() {
+    Wh_Log(L"Classic Taskbar Properties unloading...");
+    
     if (g_hwndMain       && IsWindow(g_hwndMain))        PostMessageW(g_hwndMain,        WM_CLOSE, 0, 0);
     if (g_hwndStartCustom&& IsWindow(g_hwndStartCustom)) PostMessageW(g_hwndStartCustom, WM_CLOSE, 0, 0);
     if (g_dialogThread) {
@@ -1387,4 +1408,16 @@ void Wh_ModUninit() {
     if (g_hBrushWindow)     { DeleteObject(g_hBrushWindow);     g_hBrushWindow     = NULL; }
     if (g_hBrushBtnFace)    { DeleteObject(g_hBrushBtnFace);    g_hBrushBtnFace    = NULL; }
     if (g_hStartBrushWindow){ DeleteObject(g_hStartBrushWindow);g_hStartBrushWindow= NULL; }
+    
+    Wh_Log(L"Classic Taskbar Properties unloaded");
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"Settings changed, reloading...");
+    LoadLanguageSetting();
+    InitLocalization();
+    
+    if (g_hwndMain && IsWindow(g_hwndMain)) {
+        PostMessageW(g_hwndMain, WM_CLOSE, 0, 0);
+    }
 }
